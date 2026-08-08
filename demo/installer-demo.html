@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ROLANPRO Демо монтажника</title>
+    <link rel="stylesheet" href="./demo.css" />
+  </head>
+  <body class="theme-mobile">
+    <main class="phone-stage">
+      <section class="phone-shell">
+        <header class="mobile-top">
+          <div>
+            <p class="eyebrow">Приложение монтажника</p>
+            <h1>Мои задачи</h1>
+          </div>
+          <div class="user-chip">Сэм</div>
+        </header>
+
+        <section class="mobile-summary">
+          <div>
+            <span class="summary-label">Сегодня</span>
+            <strong>3 назначенные задачи</strong>
+          </div>
+          <div>
+            <span class="summary-label">Текущий статус</span>
+            <strong>В пути</strong>
+          </div>
+        </section>
+
+        <section class="job-list">
+          <article class="mobile-job active">
+            <div>
+              <strong>PRJ-101</strong>
+              <p>Офис в центре</p>
+            </div>
+            <div class="job-meta">
+              <span>09:00</span>
+              <span class="status status-ready">Готово</span>
+            </div>
+          </article>
+          <article class="mobile-job">
+            <div>
+              <strong>PRJ-088</strong>
+              <p>Резиденция Беверли</p>
+            </div>
+            <div class="job-meta">
+              <span>11:00</span>
+              <span class="status status-progress">В пути</span>
+            </div>
+          </article>
+          <article class="mobile-job">
+            <div>
+              <strong>PRJ-073</strong>
+              <p>Ритейл Smart Film</p>
+            </div>
+            <div class="job-meta">
+              <span>14:00</span>
+              <span class="status status-danger">Проблема</span>
+            </div>
+          </article>
+        </section>
+
+        <section class="mobile-detail">
+          <div class="detail-head">
+            <div>
+              <p class="eyebrow">Детали задачи</p>
+              <h2>PRJ-101 Офис в центре</h2>
+            </div>
+            <span class="badge ok">назначено</span>
+          </div>
+
+          <section class="detail-card">
+            <p class="eyebrow">Полный адрес</p>
+            <p>1250 S Hope St, Los Angeles, CA 90017</p>
+            <div class="inline-actions">
+              <button class="primary-btn small-btn">Навигация</button>
+              <button class="ghost-btn small-btn">Позвонить клиенту</button>
+            </div>
+            <p class="dim-copy">Телефон клиента: (555) 201-1102</p>
+          </section>
+
+          <section class="detail-card">
+            <p class="eyebrow">Назначенные позиции</p>
+            <ul class="plain-list">
+              <li>Солнечная пленка</li>
+              <li>Демонтаж</li>
+            </ul>
+          </section>
+
+          <section class="detail-card">
+            <p class="eyebrow">Что взять</p>
+            <p>лестница, герметик, блок управления</p>
+            <p class="eyebrow top-gap">Заметки менеджера</p>
+            <p>Использовать вход через зону разгрузки. Сначала южный фасад.</p>
+          </section>
+
+          <section class="detail-card">
+            <p class="eyebrow">Трекинг времени</p>
+            <div class="time-grid">
+              <div><span>Выехал</span><strong>08:21</strong></div>
+              <div><span>Начал</span><strong>09:03</strong></div>
+              <div><span>Пауза</span><strong>--</strong></div>
+              <div><span>Завершил</span><strong>--</strong></div>
+            </div>
+          </section>
+
+          <section class="detail-card">
+            <p class="eyebrow">Фото и чеклист</p>
+            <div class="check-row">
+              <span>Фото до начала работ</span>
+              <span class="badge warning">обязательно</span>
+            </div>
+            <div class="check-row">
+              <span>Фото после завершения</span>
+              <span class="badge warning">обязательно</span>
+            </div>
+            <div class="check-row">
+              <span>Чеклист</span>
+              <span class="badge neutral">открыт</span>
+            </div>
+            <label class="comment-box">
+              <span>Комментарий монтажника</span>
+              <textarea rows="3">Зона разгрузки свободна. Жду контакт клиента.</textarea>
+            </label>
+          </section>
+        </section>
+
+        <footer class="mobile-actions">
+          <button class="ghost-btn">В пути</button>
+          <button class="ghost-btn">Пауза</button>
+          <button class="primary-btn">Начать</button>
+          <button class="danger-btn">Сообщить о проблеме</button>
+        </footer>
+      </section>
+    </main>
+  </body>
+</html>

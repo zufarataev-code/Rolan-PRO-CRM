@@ -1,0 +1,355 @@
+<!doctype html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      :root {
+        --bg: #f7f9fc;
+        --panel: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --line: #d9e2ef;
+        --accent: #1f4e79;
+        --danger: #b91c1c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 14px;
+        background: var(--bg);
+        color: var(--text);
+        font: 13px/1.45 Arial, sans-serif;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      form {
+        display: grid;
+        gap: 10px;
+      }
+
+      label {
+        display: grid;
+        gap: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--text);
+        padding: 8px;
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 66px;
+        resize: vertical;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .wide {
+        grid-column: 1 / -1;
+      }
+
+      .hint {
+        color: var(--danger);
+        font-size: 12px;
+        display: none;
+      }
+
+      .hint.show {
+        display: block;
+      }
+
+      button {
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #ffffff;
+        padding: 10px 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        opacity: .6;
+        cursor: wait;
+      }
+
+      .status {
+        min-height: 20px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .status.error {
+        color: var(--danger);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Быстрый ввод</h1>
+    <form id="entryForm">
+      <div class="row">
+        <label>
+          Дата
+          <input name="date" type="date">
+        </label>
+        <label>
+          Сумма
+          <input name="amount" type="number" step="0.01" min="0.01" required>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>
+          Контур
+          <select name="scope" id="scope"></select>
+        </label>
+        <label>
+          Тип
+          <select name="type" id="type"></select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>
+          Валюта
+          <select name="currency" id="currency"></select>
+        </label>
+        <label>
+          Метод
+          <select name="method" id="method"></select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>
+          Откуда
+          <select name="from" id="from"></select>
+        </label>
+        <label>
+          Куда
+          <select name="to" id="to"></select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>
+          Категория
+          <select name="category" id="category"></select>
+        </label>
+        <label>
+          Подкатегория
+          <input name="subcategory">
+        </label>
+      </div>
+
+      <div class="row">
+        <label>
+          Заказ
+          <select name="order" id="order"></select>
+        </label>
+        <label>
+          Подписка
+          <select name="subscription" id="subscription"></select>
+        </label>
+      </div>
+
+      <label>
+        Кредит/карта
+        <select name="cardOrLoan" id="cardOrLoan"></select>
+      </label>
+
+      <label>
+        Контрагент
+        <input name="counterparty">
+      </label>
+
+      <label>
+        Теги
+        <input name="tags" id="tags" list="tagList">
+        <datalist id="tagList"></datalist>
+      </label>
+
+      <div class="row">
+        <label>
+          Документ
+          <input name="document" placeholder="https://...">
+        </label>
+        <label>
+          Учет
+          <input name="accountingRef" placeholder="invoice / PO / job ID">
+        </label>
+      </div>
+
+      <div id="businessHint" class="hint">Для бизнес-расхода нужен заказ или поле "Учет".</div>
+
+      <label>
+        Комментарий
+        <textarea name="note"></textarea>
+      </label>
+
+      <button id="submitBtn" type="submit">Сохранить</button>
+      <div id="status" class="status"></div>
+    </form>
+
+    <script>
+      let meta = null;
+
+      const form = document.getElementById('entryForm');
+      const statusEl = document.getElementById('status');
+      const submitBtn = document.getElementById('submitBtn');
+      const businessHint = document.getElementById('businessHint');
+      submitBtn.disabled = true;
+
+      function setStatus(text, isError) {
+        statusEl.textContent = text || '';
+        statusEl.className = isError ? 'status error' : 'status';
+      }
+
+      function fillSelect(id, items, includeBlank) {
+        const select = document.getElementById(id);
+        select.innerHTML = '';
+        if (includeBlank) select.appendChild(new Option('', ''));
+        (items || []).forEach((item) => {
+          if (typeof item === 'string' || typeof item === 'number') {
+            select.appendChild(new Option(String(item), String(item)));
+          } else {
+            select.appendChild(new Option(`${item.id} - ${item.name}`, item.id));
+          }
+        });
+      }
+
+      function setToday() {
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        form.elements.date.value = `${yyyy}-${mm}-${dd}`;
+      }
+
+      function refreshCategories() {
+        if (!meta) return;
+        const scope = form.elements.scope.value;
+        const categories = scope === 'Бизнес' ? meta.categoriesBusiness : meta.categoriesFamily;
+        fillSelect('category', categories, true);
+        updateBusinessHint();
+      }
+
+      function updateBusinessHint() {
+        const isBusinessExpense = form.elements.scope.value === 'Бизнес' && form.elements.type.value === 'Расход';
+        const missingLink = !form.elements.order.value && !form.elements.accountingRef.value.trim();
+        businessHint.classList.toggle('show', isBusinessExpense && missingLink);
+      }
+
+      function validatePayload(payload) {
+        if (payload.type === 'Приход' && !payload.to) return 'Для прихода выберите счет в поле "Куда".';
+        if ((payload.type === 'Расход' || payload.type === 'Платеж по кредиту' || payload.type === 'Погашение карты') && !payload.from) {
+          return 'Для расхода или платежа выберите счет списания в поле "Откуда".';
+        }
+        if ((payload.type === 'Перевод' || payload.type === 'Платеж по кредиту' || payload.type === 'Погашение карты') && !payload.to) {
+          return 'Для перевода или платежа выберите счет назначения в поле "Куда".';
+        }
+        if ((payload.type === 'Перевод' || payload.type === 'Платеж по кредиту' || payload.type === 'Погашение карты') && payload.from && payload.from === payload.to) {
+          return 'Счет списания и счет назначения должны отличаться.';
+        }
+        if (payload.scope === 'Бизнес' && payload.type === 'Расход' && !payload.order && !payload.accountingRef.trim()) {
+          return 'Нужен заказ или учетная ссылка для бизнес-расхода.';
+        }
+        return '';
+      }
+
+      function loadMeta() {
+        setStatus('Загружаю справочники...');
+        google.script.run
+          .withSuccessHandler((data) => {
+            meta = data;
+            fillSelect('scope', data.scopes, false);
+            fillSelect('type', data.operationTypes, false);
+            fillSelect('currency', data.currencies, false);
+            fillSelect('from', data.accounts, true);
+            fillSelect('to', data.accounts, true);
+            fillSelect('order', data.orders, true);
+            fillSelect('subscription', data.subscriptions, true);
+            fillSelect('cardOrLoan', data.cardsAndLoans, true);
+            fillSelect('method', data.paymentMethods, true);
+            fillSelect('category', data.categoriesFamily, true);
+            document.getElementById('tagList').innerHTML = '';
+            data.tags.forEach((tag) => document.getElementById('tagList').appendChild(new Option(tag)));
+            form.elements.scope.value = 'Семья';
+            form.elements.type.value = 'Расход';
+            form.elements.currency.value = data.currencies[0] || 'USD';
+            setToday();
+            refreshCategories();
+            submitBtn.disabled = false;
+            setStatus('');
+          })
+          .withFailureHandler((err) => {
+            submitBtn.disabled = true;
+            setStatus(err.message || String(err), true);
+          })
+          .getFinanceMeta();
+      }
+
+      form.addEventListener('change', (event) => {
+        if (event.target.name === 'scope') refreshCategories();
+        updateBusinessHint();
+      });
+
+      form.addEventListener('input', updateBusinessHint);
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        updateBusinessHint();
+        const payload = Object.fromEntries(new FormData(form).entries());
+        const error = validatePayload(payload);
+        if (error) {
+          setStatus(error, true);
+          return;
+        }
+
+        submitBtn.disabled = true;
+        setStatus('Сохраняю...');
+        google.script.run
+          .withSuccessHandler((result) => {
+            setStatus(result.message || 'Сохранено.');
+            ['amount', 'subcategory', 'counterparty', 'tags', 'document', 'accountingRef', 'note'].forEach((name) => {
+              form.elements[name].value = '';
+            });
+            ['order', 'subscription', 'cardOrLoan', 'to'].forEach((name) => {
+              form.elements[name].value = '';
+            });
+            updateBusinessHint();
+            submitBtn.disabled = false;
+          })
+          .withFailureHandler((err) => {
+            setStatus(err.message || String(err), true);
+            submitBtn.disabled = false;
+          })
+          .addTransactionFromSidebar(payload);
+      });
+
+      loadMeta();
+    </script>
+  </body>
+</html>

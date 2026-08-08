@@ -1,0 +1,1118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  user_id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                   String           @unique @db.VarChar(191)
+  full_name               String           @db.VarChar(160)
+  password_hash           String?          @db.Text
+  must_change_password    Boolean          @default(true)
+  legacy_user_ids         String[]         @default([])
+  is_active               Boolean          @default(true)
+  last_login_at           DateTime?        @db.Timestamptz(6)
+  created_at              DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime         @updatedAt @db.Timestamptz(6)
+  user_accesses           UserAccess[]
+  leads_assigned          Lead[]           @relation("lead_manager")
+  deals_assigned          Deal[]           @relation("deal_manager")
+  managed_projects        Project[]        @relation("project_manager")
+  led_projects            Project[]        @relation("project_lead_installer")
+  assigned_calendar_events CalendarEvent[] @relation("calendar_event_assignee")
+  installer_jobs          InstallerJob[]   @relation("installer_job_user")
+  uploaded_files          AttachmentFile[] @relation("attachment_uploaded_by")
+  created_documents       Document[]       @relation("document_created_by")
+  activity_logs           ActivityLog[]    @relation("activity_actor")
+  received_notifications  Notification[]   @relation("notification_recipient")
+  actor_notifications     Notification[]   @relation("notification_actor")
+  created_email_actions   EmailAction[]    @relation("email_action_created_by")
+  created_follow_ups      FollowUp[]       @relation("follow_up_created_by")
+  assigned_follow_ups     FollowUp[]       @relation("follow_up_assigned_to")
+  created_tasks           Task[]           @relation("task_created_by")
+  assigned_tasks          Task[]           @relation("task_assigned_to")
+  assigned_consultations  Consultation[]   @relation("consultation_assigned_consultant")
+  managed_consultations   Consultation[]   @relation("consultation_assigned_manager")
+  created_consultations   Consultation[]   @relation("consultation_created_by")
+  created_proposals       Proposal[]       @relation("proposal_created_by")
+  proposal_events         ProposalEvent[]  @relation("proposal_event_actor")
+  updated_legacy_workspaces LegacyWorkspace[] @relation("legacy_workspace_updated_by")
+  gmail_connections       GmailConnection[] @relation("gmail_connection_connected_by")
+
+  @@map("users")
+}
+
+model Role {
+  role_id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code             String       @unique @db.VarChar(50)
+  name_ru          String       @db.VarChar(120)
+  name_en          String       @db.VarChar(120)
+  description_ru   String?      @db.Text
+  description_en   String?      @db.Text
+  is_system        Boolean      @default(true)
+  is_active        Boolean      @default(true)
+  sort_order       Int          @default(0)
+  created_at       DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime     @updatedAt @db.Timestamptz(6)
+  user_accesses    UserAccess[]
+
+  @@map("roles")
+}
+
+model UserAccess {
+  user_access_id   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String    @db.Uuid
+  role_id          String    @db.Uuid
+  is_primary       Boolean   @default(false)
+  is_active        Boolean   @default(true)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @updatedAt @db.Timestamptz(6)
+  user             User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  role             Role      @relation(fields: [role_id], references: [role_id], onDelete: Restrict)
+
+  @@unique([user_id, role_id])
+  @@index([role_id])
+  @@map("user_access")
+}
+
+model ServiceType {
+  service_type_id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  service_code                 String               @unique @db.VarChar(50)
+  name_ru                      String               @db.VarChar(120)
+  name_en                      String               @db.VarChar(120)
+  unit_type                    String               @db.VarChar(50)
+  base_price                   Decimal              @default(0) @db.Decimal(12, 2)
+  min_price                    Decimal              @default(0) @db.Decimal(12, 2)
+  material_cost_per_sqft       Decimal              @default(0) @db.Decimal(12, 2)
+  installation_cost_per_sqft   Decimal              @default(0) @db.Decimal(12, 2)
+  block_revenue_price          Decimal              @default(0) @db.Decimal(12, 2)
+  block_cost_price             Decimal              @default(0) @db.Decimal(12, 2)
+  is_active                    Boolean              @default(true)
+  sort_order                   Int                  @default(0)
+  created_at                   DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime             @updatedAt @db.Timestamptz(6)
+  service_field_configs        ServiceFieldConfig[]
+  service_addons               ServiceAddon[]
+  project_positions            ProjectPosition[]
+  survey_recommendations       SurveyRecommendation[]
+  proposal_items               ProposalItem[]
+
+  @@map("service_types")
+}
+
+model ServiceFieldConfig {
+  service_field_config_id      String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  service_type_id              String      @db.Uuid
+  field_key                    String      @db.VarChar(80)
+  field_label_ru               String      @db.VarChar(160)
+  field_label_en               String      @db.VarChar(160)
+  input_type                   String      @db.VarChar(50)
+  data_type                    String      @db.VarChar(50)
+  dropdown_source              String?     @db.VarChar(80)
+  is_required                  Boolean     @default(false)
+  default_value                Json?
+  sort_order                   Int         @default(0)
+  is_active                    Boolean     @default(true)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  service_type                 ServiceType @relation(fields: [service_type_id], references: [service_type_id], onDelete: Cascade)
+
+  @@unique([service_type_id, field_key])
+  @@map("service_field_config")
+}
+
+model ServiceAddon {
+  service_addon_id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  service_type_id              String      @db.Uuid
+  addon_code                   String      @db.VarChar(50)
+  name_ru                      String      @db.VarChar(120)
+  name_en                      String      @db.VarChar(120)
+  unit_type                    String      @db.VarChar(50)
+  default_price                Decimal     @default(0) @db.Decimal(12, 2)
+  min_price                    Decimal     @default(0) @db.Decimal(12, 2)
+  cost_price                   Decimal     @default(0) @db.Decimal(12, 2)
+  is_active                    Boolean     @default(true)
+  sort_order                   Int         @default(0)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  service_type                 ServiceType @relation(fields: [service_type_id], references: [service_type_id], onDelete: Cascade)
+  position_addons              ProjectPositionAddon[]
+
+  @@unique([service_type_id, addon_code])
+  @@map("service_addons")
+}
+
+model FilmCatalog {
+  film_id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category_code                String            @db.VarChar(50)
+  category_name_ru             String            @db.VarChar(120)
+  category_name_en             String            @db.VarChar(120)
+  brand_code                   String            @db.VarChar(50)
+  brand_name_ru                String            @db.VarChar(120)
+  brand_name_en                String            @db.VarChar(120)
+  model_code                   String            @unique @db.VarChar(80)
+  model_name_ru                String            @db.VarChar(120)
+  model_name_en                String            @db.VarChar(120)
+  thickness                    String?           @db.VarChar(50)
+  unit                         String            @db.VarChar(30)
+  is_active                    Boolean           @default(true)
+  sort_order                   Int               @default(0)
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  project_positions            ProjectPosition[]
+  survey_recommendations       SurveyRecommendation[]
+  proposal_items               ProposalItem[]
+
+  @@map("film_catalog")
+}
+
+model ProjectStatus {
+  project_status_id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  status_code                  String      @unique @db.VarChar(50)
+  name_ru                      String      @db.VarChar(120)
+  name_en                      String      @db.VarChar(120)
+  color_token                  String?     @db.VarChar(50)
+  is_closed                    Boolean     @default(false)
+  is_active                    Boolean     @default(true)
+  sort_order                   Int         @default(0)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  projects                     Project[]
+
+  @@map("project_statuses")
+}
+
+model PaymentStatus {
+  payment_status_id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  status_code                  String      @unique @db.VarChar(50)
+  name_ru                      String      @db.VarChar(120)
+  name_en                      String      @db.VarChar(120)
+  color_token                  String?     @db.VarChar(50)
+  is_closed                    Boolean     @default(false)
+  is_active                    Boolean     @default(true)
+  sort_order                   Int         @default(0)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  projects                     Project[]
+
+  @@map("payment_statuses")
+}
+
+model PositionStatus {
+  position_status_id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  status_code                  String            @unique @db.VarChar(50)
+  name_ru                      String            @db.VarChar(120)
+  name_en                      String            @db.VarChar(120)
+  color_token                  String?           @db.VarChar(50)
+  is_closed                    Boolean           @default(false)
+  is_active                    Boolean           @default(true)
+  sort_order                   Int               @default(0)
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  project_positions            ProjectPosition[]
+
+  @@map("position_statuses")
+}
+
+model EventType {
+  event_type_id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_code                   String            @unique @db.VarChar(50)
+  name_ru                      String            @db.VarChar(120)
+  name_en                      String            @db.VarChar(120)
+  color_token                  String?           @db.VarChar(50)
+  is_active                    Boolean           @default(true)
+  sort_order                   Int               @default(0)
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  calendar_events              CalendarEvent[]
+
+  @@map("event_types")
+}
+
+model EventTrack {
+  event_track_id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  track_code                   String            @unique @db.VarChar(50)
+  name_ru                      String            @db.VarChar(120)
+  name_en                      String            @db.VarChar(120)
+  color_token                  String?           @db.VarChar(50)
+  is_active                    Boolean           @default(true)
+  sort_order                   Int               @default(0)
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  calendar_events              CalendarEvent[]
+
+  @@map("event_tracks")
+}
+
+model ComplexityLevel {
+  complexity_level_id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  level_code                   String            @unique @db.VarChar(50)
+  name_ru                      String            @db.VarChar(120)
+  name_en                      String            @db.VarChar(120)
+  numeric_rank                 Int               @default(1)
+  multiplier                   Decimal           @default(1) @db.Decimal(6, 2)
+  color_token                  String?           @db.VarChar(50)
+  is_active                    Boolean           @default(true)
+  sort_order                   Int               @default(0)
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  project_positions            ProjectPosition[]
+  measurements                 Measurement[]
+
+  @@map("complexity_levels")
+}
+
+model City {
+  city_id                      String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  city_code                    String      @unique @db.VarChar(50)
+  name_ru                      String      @db.VarChar(120)
+  name_en                      String      @db.VarChar(120)
+  state_code                   String?     @db.VarChar(20)
+  default_zip_code             String?     @db.VarChar(20)
+  is_active                    Boolean     @default(true)
+  sort_order                   Int         @default(0)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  leads                        Lead[]
+  clients                      Client[]
+  projects                     Project[]
+
+  @@map("cities")
+}
+
+model DocumentType {
+  document_type_id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  document_code                String      @unique @db.VarChar(50)
+  name_ru                      String      @db.VarChar(120)
+  name_en                      String      @db.VarChar(120)
+  requires_signature           Boolean     @default(false)
+  is_active                    Boolean     @default(true)
+  sort_order                   Int         @default(0)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  documents                    Document[]
+
+  @@map("document_types")
+}
+
+model PipelineStatus {
+  pipeline_status_id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  status_code                   String      @unique @db.VarChar(60)
+  name_ru                       String      @db.VarChar(140)
+  name_en                       String      @db.VarChar(140)
+  stage_group                   String      @db.VarChar(40)
+  color_token                   String?     @db.VarChar(50)
+  is_closed                     Boolean     @default(false)
+  sort_order                    Int         @default(0)
+  is_active                     Boolean     @default(true)
+  created_at                    DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime    @updatedAt @db.Timestamptz(6)
+  leads                         Lead[]
+  deals                         Deal[]
+
+  @@map("pipeline_statuses")
+}
+
+model Lead {
+  lead_id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_code                    String?           @unique @db.VarChar(40)
+  name                         String            @db.VarChar(160)
+  phone                        String?           @db.VarChar(40)
+  email                        String?           @db.VarChar(191)
+  source                       String?           @db.VarChar(120)
+  pipeline_status_id           String            @db.Uuid
+  city_id                      String?           @db.Uuid
+  assigned_manager_id          String?           @db.Uuid
+  notes                        String?           @db.Text
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  city                         City?             @relation(fields: [city_id], references: [city_id], onDelete: SetNull)
+  pipeline_status              PipelineStatus    @relation(fields: [pipeline_status_id], references: [pipeline_status_id], onDelete: Restrict)
+  assigned_manager             User?             @relation("lead_manager", fields: [assigned_manager_id], references: [user_id], onDelete: SetNull)
+  deals                        Deal[]
+  calendar_events              CalendarEvent[]
+  attachments_files            AttachmentFile[]
+  follow_ups                   FollowUp[]
+  tasks                        Task[]
+  consultations                Consultation[]
+
+  @@index([assigned_manager_id])
+  @@index([city_id])
+  @@index([pipeline_status_id])
+  @@map("leads")
+}
+
+model Client {
+  client_id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_code                  String?           @unique @db.VarChar(40)
+  name                         String            @db.VarChar(160)
+  phone                        String?           @db.VarChar(40)
+  email                        String?           @db.VarChar(191)
+  billing_address              String?           @db.Text
+  service_address              String?           @db.Text
+  city_id                      String?           @db.Uuid
+  zip_code                     String?           @db.VarChar(20)
+  notes                        String?           @db.Text
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  city                         City?             @relation(fields: [city_id], references: [city_id], onDelete: SetNull)
+  deals                        Deal[]
+  projects                     Project[]
+  documents                    Document[]
+  consultations                Consultation[]
+  proposals                    Proposal[]
+
+  @@index([city_id])
+  @@map("clients")
+}
+
+model Deal {
+  deal_id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deal_code                    String?           @unique @db.VarChar(40)
+  lead_id                      String?           @db.Uuid
+  client_id                    String?           @db.Uuid
+  assigned_manager_id          String?           @db.Uuid
+  pipeline_status_id           String            @db.Uuid
+  title                        String            @db.VarChar(160)
+  estimated_value              Decimal           @default(0) @db.Decimal(12, 2)
+  currency                     String            @default("USD") @db.VarChar(3)
+  notes                        String?           @db.Text
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  lead                         Lead?             @relation(fields: [lead_id], references: [lead_id], onDelete: SetNull)
+  client                       Client?           @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
+  assigned_manager             User?             @relation("deal_manager", fields: [assigned_manager_id], references: [user_id], onDelete: SetNull)
+  pipeline_status              PipelineStatus    @relation(fields: [pipeline_status_id], references: [pipeline_status_id], onDelete: Restrict)
+  projects                     Project[]
+  calendar_events              CalendarEvent[]
+  attachments_files            AttachmentFile[]
+  documents                    Document[]
+  follow_ups                   FollowUp[]
+  tasks                        Task[]
+  consultations                Consultation[]
+  proposals                    Proposal[]
+
+  @@index([lead_id])
+  @@index([client_id])
+  @@index([assigned_manager_id])
+  @@index([pipeline_status_id])
+  @@map("deals")
+}
+
+model Project {
+  project_id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_code                 String?           @unique @db.VarChar(40)
+  client_id                    String            @db.Uuid
+  deal_id                      String?           @db.Uuid
+  proposal_id                  String?           @unique @db.Uuid
+  manager_id                   String?           @db.Uuid
+  lead_installer_id            String?           @db.Uuid
+  project_status_id            String            @db.Uuid
+  payment_status_id            String?           @db.Uuid
+  city_id                      String?           @db.Uuid
+  title                        String            @db.VarChar(160)
+  address                      String?           @db.Text
+  zip_code                     String?           @db.VarChar(20)
+  install_date                 DateTime?         @db.Date
+  start_time                   DateTime?         @db.Time(6)
+  end_time                     DateTime?         @db.Time(6)
+  priority                     String            @default("normal") @db.VarChar(30)
+  problem_flag                 Boolean           @default(false)
+  manager_notes                String?           @db.Text
+  installer_notes              String?           @db.Text
+  what_to_bring                String?           @db.Text
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  client                       Client            @relation(fields: [client_id], references: [client_id], onDelete: Restrict)
+  deal                         Deal?             @relation(fields: [deal_id], references: [deal_id], onDelete: SetNull)
+  proposal                     Proposal?         @relation(fields: [proposal_id], references: [proposal_id], onDelete: SetNull)
+  manager                      User?             @relation("project_manager", fields: [manager_id], references: [user_id], onDelete: SetNull)
+  lead_installer               User?             @relation("project_lead_installer", fields: [lead_installer_id], references: [user_id], onDelete: SetNull)
+  project_status               ProjectStatus     @relation(fields: [project_status_id], references: [project_status_id], onDelete: Restrict)
+  payment_status               PaymentStatus?    @relation(fields: [payment_status_id], references: [payment_status_id], onDelete: SetNull)
+  city                         City?             @relation(fields: [city_id], references: [city_id], onDelete: SetNull)
+  project_positions            ProjectPosition[]
+  schedule_assignment          ScheduleAssignment?
+  calendar_events              CalendarEvent[]
+  installer_jobs               InstallerJob[]
+  attachments_files            AttachmentFile[]
+  documents                    Document[]
+  activity_logs                ActivityLog[]
+  consultations                Consultation[]
+
+  @@index([client_id])
+  @@index([deal_id])
+  @@index([proposal_id])
+  @@index([manager_id])
+  @@index([lead_installer_id])
+  @@index([project_status_id])
+  @@index([payment_status_id])
+  @@index([city_id])
+  @@map("projects")
+}
+
+model ProjectPosition {
+  position_id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id                   String            @db.Uuid
+  proposal_item_id             String?           @unique @db.Uuid
+  service_type_id              String            @db.Uuid
+  film_id                      String?           @db.Uuid
+  position_status_id           String            @db.Uuid
+  complexity_level_id          String?           @db.Uuid
+  title                        String?           @db.VarChar(160)
+  dynamic_fields               Json?
+  pricing_source               String            @default("manual") @db.VarChar(50)
+  base_price                   Decimal           @default(0) @db.Decimal(12, 2)
+  min_price                    Decimal           @default(0) @db.Decimal(12, 2)
+  actual_price                 Decimal           @default(0) @db.Decimal(12, 2)
+  notes                        String?           @db.Text
+  sort_order                   Int               @default(0)
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  project                      Project           @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
+  proposal_item                ProposalItem?     @relation(fields: [proposal_item_id], references: [proposal_item_id], onDelete: SetNull)
+  service_type                 ServiceType       @relation(fields: [service_type_id], references: [service_type_id], onDelete: Restrict)
+  film                         FilmCatalog?      @relation(fields: [film_id], references: [film_id], onDelete: SetNull)
+  position_status              PositionStatus    @relation(fields: [position_status_id], references: [position_status_id], onDelete: Restrict)
+  complexity_level             ComplexityLevel?  @relation(fields: [complexity_level_id], references: [complexity_level_id], onDelete: SetNull)
+  installer_job                InstallerJob?
+  attachments_files            AttachmentFile[]
+  position_addons              ProjectPositionAddon[]
+
+  @@index([project_id])
+  @@index([proposal_item_id])
+  @@index([service_type_id])
+  @@index([film_id])
+  @@index([position_status_id])
+  @@index([complexity_level_id])
+  @@map("project_positions")
+}
+
+model ProjectPositionAddon {
+  position_addon_id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  position_id                  String        @db.Uuid
+  service_addon_id             String        @db.Uuid
+  quantity                     Decimal       @default(1) @db.Decimal(10, 2)
+  unit_price                   Decimal       @default(0) @db.Decimal(12, 2)
+  total_price                  Decimal       @default(0) @db.Decimal(12, 2)
+  notes                        String?       @db.Text
+  created_at                   DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime      @updatedAt @db.Timestamptz(6)
+  position                     ProjectPosition @relation(fields: [position_id], references: [position_id], onDelete: Cascade)
+  service_addon                ServiceAddon  @relation(fields: [service_addon_id], references: [service_addon_id], onDelete: Restrict)
+
+  @@unique([position_id, service_addon_id])
+  @@index([position_id])
+  @@index([service_addon_id])
+  @@map("project_position_addons")
+}
+
+model Crew {
+  crew_id                      String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                         String               @db.VarChar(120)
+  active                       Boolean              @default(true)
+  created_at                   DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime             @updatedAt @db.Timestamptz(6)
+  schedule_assignments         ScheduleAssignment[]
+  installer_jobs               InstallerJob[]
+
+  @@index([active])
+  @@map("crews")
+}
+
+model ScheduleAssignment {
+  schedule_assignment_id       String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id                   String      @unique @db.Uuid
+  date                         DateTime    @db.Date
+  start_time                   DateTime?   @db.Time(6)
+  end_time                     DateTime?   @db.Time(6)
+  crew_id                      String      @db.Uuid
+  planning_tags                Json?
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  project                      Project     @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
+  crew                         Crew        @relation(fields: [crew_id], references: [crew_id], onDelete: Restrict)
+  installer_jobs               InstallerJob[]
+
+  @@index([date])
+  @@index([crew_id])
+  @@map("schedule_assignments")
+}
+
+model CalendarEvent {
+  calendar_event_id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_type_id                String            @db.Uuid
+  event_track_id               String?           @db.Uuid
+  lead_id                      String?           @db.Uuid
+  deal_id                      String?           @db.Uuid
+  project_id                   String?           @db.Uuid
+  assigned_user_id             String?           @db.Uuid
+  title                        String            @db.VarChar(160)
+  starts_at                    DateTime          @db.Timestamptz(6)
+  ends_at                      DateTime          @db.Timestamptz(6)
+  status                       String            @default("scheduled") @db.VarChar(50)
+  color_token                  String?           @db.VarChar(50)
+  is_all_day                   Boolean           @default(false)
+  problem_flag                 Boolean           @default(false)
+  metadata                     Json?
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  event_type                   EventType         @relation(fields: [event_type_id], references: [event_type_id], onDelete: Restrict)
+  event_track                  EventTrack?       @relation(fields: [event_track_id], references: [event_track_id], onDelete: SetNull)
+  lead                         Lead?             @relation(fields: [lead_id], references: [lead_id], onDelete: SetNull)
+  deal                         Deal?             @relation(fields: [deal_id], references: [deal_id], onDelete: SetNull)
+  project                      Project?          @relation(fields: [project_id], references: [project_id], onDelete: SetNull)
+  assigned_user                User?             @relation("calendar_event_assignee", fields: [assigned_user_id], references: [user_id], onDelete: SetNull)
+  installer_jobs               InstallerJob[]
+  attachments_files            AttachmentFile[]
+  consultation                 Consultation?
+
+  @@index([event_type_id])
+  @@index([event_track_id])
+  @@index([lead_id])
+  @@index([deal_id])
+  @@index([project_id])
+  @@index([assigned_user_id])
+  @@map("calendar_events")
+}
+
+model InstallerJob {
+  installer_job_id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id                   String            @db.Uuid
+  project_position_id          String?           @db.Uuid
+  schedule_assignment_id       String?           @db.Uuid
+  crew_id                      String?           @db.Uuid
+  calendar_event_id            String?           @db.Uuid
+  installer_id                 String            @db.Uuid
+  status                       String            @default("assigned") @db.VarChar(50)
+  on_the_way_at                DateTime?         @db.Timestamptz(6)
+  started_at                   DateTime?         @db.Timestamptz(6)
+  paused_at                    DateTime?         @db.Timestamptz(6)
+  completed_at                 DateTime?         @db.Timestamptz(6)
+  before_photos_required       Boolean           @default(false)
+  after_photos_required        Boolean           @default(false)
+  checklist_completed          Boolean           @default(false)
+  completion_confirmed         Boolean           @default(false)
+  installer_comment            String?           @db.Text
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
+  project                      Project           @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
+  position                     ProjectPosition?  @relation(fields: [project_position_id], references: [position_id], onDelete: SetNull)
+  schedule_assignment          ScheduleAssignment? @relation(fields: [schedule_assignment_id], references: [schedule_assignment_id], onDelete: SetNull)
+  crew                         Crew?             @relation(fields: [crew_id], references: [crew_id], onDelete: SetNull)
+  calendar_event               CalendarEvent?    @relation(fields: [calendar_event_id], references: [calendar_event_id], onDelete: SetNull)
+  installer                    User              @relation("installer_job_user", fields: [installer_id], references: [user_id], onDelete: Restrict)
+  attachments_files            AttachmentFile[]
+
+  @@index([project_id])
+  @@unique([project_position_id])
+  @@index([schedule_assignment_id])
+  @@index([crew_id])
+  @@index([calendar_event_id])
+  @@index([installer_id])
+  @@map("installer_jobs")
+}
+
+model Consultation {
+  consultation_id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  calendar_event_id            String?     @unique @db.Uuid
+  lead_id                      String?     @db.Uuid
+  deal_id                      String?     @db.Uuid
+  client_id                    String?     @db.Uuid
+  project_id                   String?     @db.Uuid
+  assigned_consultant_id       String      @db.Uuid
+  assigned_manager_id          String?     @db.Uuid
+  created_by                   String      @db.Uuid
+  title                        String      @db.VarChar(180)
+  location_address             String?     @db.Text
+  scheduled_start_at           DateTime    @db.Timestamptz(6)
+  scheduled_end_at             DateTime    @db.Timestamptz(6)
+  status                       String      @default("scheduled") @db.VarChar(50)
+  manager_notes                String?     @db.Text
+  consultant_notes             String?     @db.Text
+  completed_at                 DateTime?   @db.Timestamptz(6)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  calendar_event               CalendarEvent? @relation(fields: [calendar_event_id], references: [calendar_event_id], onDelete: SetNull)
+  lead                         Lead?       @relation(fields: [lead_id], references: [lead_id], onDelete: SetNull)
+  deal                         Deal?       @relation(fields: [deal_id], references: [deal_id], onDelete: SetNull)
+  client                       Client?     @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
+  project                      Project?    @relation(fields: [project_id], references: [project_id], onDelete: SetNull)
+  assigned_consultant          User        @relation("consultation_assigned_consultant", fields: [assigned_consultant_id], references: [user_id], onDelete: Restrict)
+  assigned_manager             User?       @relation("consultation_assigned_manager", fields: [assigned_manager_id], references: [user_id], onDelete: SetNull)
+  created_by_user              User        @relation("consultation_created_by", fields: [created_by], references: [user_id], onDelete: Restrict)
+  survey                       Survey?
+  attachments_files            AttachmentFile[]
+
+  @@index([calendar_event_id])
+  @@index([lead_id])
+  @@index([deal_id])
+  @@index([client_id])
+  @@index([project_id])
+  @@index([assigned_consultant_id])
+  @@index([assigned_manager_id])
+  @@index([created_by])
+  @@index([scheduled_start_at])
+  @@map("consultations")
+}
+
+model Survey {
+  survey_id                    String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  consultation_id              String      @unique @db.Uuid
+  status                       String      @default("draft") @db.VarChar(50)
+  summary_notes                String?     @db.Text
+  electrical_notes             String?     @db.Text
+  smart_recommended            Boolean     @default(false)
+  solar_recommended            Boolean     @default(false)
+  safety_recommended           Boolean     @default(false)
+  completed_at                 DateTime?   @db.Timestamptz(6)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  consultation                 Consultation @relation(fields: [consultation_id], references: [consultation_id], onDelete: Cascade)
+  measurements                 Measurement[]
+  recommendations              SurveyRecommendation[]
+  attachments_files            AttachmentFile[]
+  proposals                    Proposal[]
+
+  @@index([status])
+  @@map("surveys")
+}
+
+model Measurement {
+  measurement_id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  survey_id                    String      @db.Uuid
+  room_name                    String      @db.VarChar(160)
+  office_name                  String?     @db.VarChar(160)
+  zone_name                    String?     @db.VarChar(160)
+  floor                        String?     @db.VarChar(80)
+  window_id                    String?     @db.VarChar(80)
+  width                        Decimal?    @db.Decimal(10, 2)
+  height                       Decimal?    @db.Decimal(10, 2)
+  sqft                         Decimal?    @db.Decimal(10, 2)
+  quantity                     Decimal     @default(1) @db.Decimal(10, 2)
+  glass_type                   String?     @db.VarChar(120)
+  orientation                  String?     @db.VarChar(80)
+  access_type                  String?     @db.VarChar(80)
+  complexity_level_id          String?     @db.Uuid
+  notes                        String?     @db.Text
+  drawing_data                 Json?
+  sort_order                   Int         @default(0)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  survey                       Survey      @relation(fields: [survey_id], references: [survey_id], onDelete: Cascade)
+  complexity_level             ComplexityLevel? @relation(fields: [complexity_level_id], references: [complexity_level_id], onDelete: SetNull)
+  recommendations              SurveyRecommendation[]
+  attachments_files            AttachmentFile[]
+  proposal_items               ProposalItem[]
+
+  @@index([survey_id])
+  @@index([complexity_level_id])
+  @@map("measurements")
+}
+
+model Proposal {
+  proposal_id                  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  proposal_code                String?        @unique @db.VarChar(40)
+  deal_id                      String         @db.Uuid
+  client_id                    String         @db.Uuid
+  survey_id                    String?        @db.Uuid
+  created_by                   String         @db.Uuid
+  title                        String         @db.VarChar(180)
+  status                       String         @default("draft") @db.VarChar(50)
+  access_token                 String         @unique @db.VarChar(120)
+  currency                     String         @default("USD") @db.VarChar(3)
+  subtotal_amount              Decimal        @default(0) @db.Decimal(12, 2)
+  selected_total_amount        Decimal        @default(0) @db.Decimal(12, 2)
+  client_message               String?        @db.Text
+  notes                        String?        @db.Text
+  sent_at                      DateTime?      @db.Timestamptz(6)
+  client_viewed_at             DateTime?      @db.Timestamptz(6)
+  client_updated_at            DateTime?      @db.Timestamptz(6)
+  expires_at                   DateTime?      @db.Timestamptz(6)
+  created_at                   DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime       @updatedAt @db.Timestamptz(6)
+  deal                         Deal           @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+  client                       Client         @relation(fields: [client_id], references: [client_id], onDelete: Restrict)
+  survey                       Survey?        @relation(fields: [survey_id], references: [survey_id], onDelete: SetNull)
+  created_by_user              User           @relation("proposal_created_by", fields: [created_by], references: [user_id], onDelete: Restrict)
+  proposal_items               ProposalItem[]
+  proposal_events              ProposalEvent[]
+  agreement                    Agreement?
+  deposit                      Deposit?
+  project                      Project?
+
+  @@index([deal_id])
+  @@index([client_id])
+  @@index([survey_id])
+  @@index([created_by])
+  @@index([status])
+  @@map("proposals")
+}
+
+model ProposalItem {
+  proposal_item_id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  proposal_id                  String         @db.Uuid
+  measurement_id               String?        @db.Uuid
+  service_type_id              String         @db.Uuid
+  film_id                      String?        @db.Uuid
+  item_kind                    String         @default("service") @db.VarChar(40)
+  room_name                    String?        @db.VarChar(160)
+  zone_name                    String?        @db.VarChar(160)
+  window_id                    String?        @db.VarChar(80)
+  title_ru                     String         @db.VarChar(180)
+  title_en                     String         @db.VarChar(180)
+  description_ru               String?        @db.Text
+  description_en               String?        @db.Text
+  measurement_snapshot         Json?
+  dynamic_fields               Json?
+  addons_snapshot              Json?
+  quantity                     Decimal        @default(1) @db.Decimal(12, 2)
+  unit_label                   String?        @db.VarChar(50)
+  line_price                   Decimal        @default(0) @db.Decimal(12, 2)
+  is_optional                  Boolean        @default(false)
+  client_selected              Boolean        @default(true)
+  selection_updated_at         DateTime?      @db.Timestamptz(6)
+  sort_order                   Int            @default(0)
+  created_at                   DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime       @updatedAt @db.Timestamptz(6)
+  proposal                     Proposal       @relation(fields: [proposal_id], references: [proposal_id], onDelete: Cascade)
+  measurement                  Measurement?   @relation(fields: [measurement_id], references: [measurement_id], onDelete: SetNull)
+  service_type                 ServiceType    @relation(fields: [service_type_id], references: [service_type_id], onDelete: Restrict)
+  film                         FilmCatalog?   @relation(fields: [film_id], references: [film_id], onDelete: SetNull)
+  project_position             ProjectPosition?
+
+  @@index([proposal_id])
+  @@index([measurement_id])
+  @@index([service_type_id])
+  @@index([film_id])
+  @@map("proposal_items")
+}
+
+model Deposit {
+  deposit_id                   String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  proposal_id                  String         @unique @db.Uuid
+  amount                       Decimal        @default(0) @db.Decimal(12, 2)
+  status                       String         @default("pending") @db.VarChar(20)
+  paid_at                      DateTime?      @db.Timestamptz(6)
+  created_at                   DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime       @updatedAt @db.Timestamptz(6)
+  proposal                     Proposal       @relation(fields: [proposal_id], references: [proposal_id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("deposits")
+}
+
+model ProposalEvent {
+  proposal_event_id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  proposal_id                  String         @db.Uuid
+  actor_user_id                String?        @db.Uuid
+  actor_type                   String         @default("manager") @db.VarChar(30)
+  event_key                    String         @db.VarChar(80)
+  message                      String         @db.Text
+  metadata                     Json?
+  created_at                   DateTime       @default(now()) @db.Timestamptz(6)
+  proposal                     Proposal       @relation(fields: [proposal_id], references: [proposal_id], onDelete: Cascade)
+  actor_user                   User?          @relation("proposal_event_actor", fields: [actor_user_id], references: [user_id], onDelete: SetNull)
+
+  @@index([proposal_id])
+  @@index([actor_user_id])
+  @@map("proposal_events")
+}
+
+model Agreement {
+  agreement_id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  proposal_id                  String         @unique @db.Uuid
+  status                       String         @default("pending") @db.VarChar(40)
+  signer_name                  String?        @db.VarChar(160)
+  signer_email                 String?        @db.VarChar(191)
+  signer_title                 String?        @db.VarChar(160)
+  signature_text               String?        @db.Text
+  client_notes                 String?        @db.Text
+  accepted_terms               Boolean        @default(false)
+  signed_at                    DateTime?      @db.Timestamptz(6)
+  created_at                   DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime       @updatedAt @db.Timestamptz(6)
+  proposal                     Proposal       @relation(fields: [proposal_id], references: [proposal_id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("agreements")
+}
+
+model SurveyRecommendation {
+  survey_recommendation_id     String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  survey_id                    String      @db.Uuid
+  measurement_id               String?     @db.Uuid
+  service_type_id              String      @db.Uuid
+  film_id                      String?     @db.Uuid
+  is_primary                   Boolean     @default(false)
+  sort_order                   Int         @default(0)
+  recommendation_notes         String?     @db.Text
+  electrical_notes             String?     @db.Text
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  survey                       Survey      @relation(fields: [survey_id], references: [survey_id], onDelete: Cascade)
+  measurement                  Measurement? @relation(fields: [measurement_id], references: [measurement_id], onDelete: SetNull)
+  service_type                 ServiceType @relation(fields: [service_type_id], references: [service_type_id], onDelete: Restrict)
+  film                         FilmCatalog? @relation(fields: [film_id], references: [film_id], onDelete: SetNull)
+
+  @@index([survey_id])
+  @@index([measurement_id])
+  @@index([service_type_id])
+  @@index([film_id])
+  @@map("survey_recommendations")
+}
+
+model AttachmentFile {
+  file_id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id                      String?           @db.Uuid
+  deal_id                      String?           @db.Uuid
+  project_id                   String?           @db.Uuid
+  position_id                  String?           @db.Uuid
+  calendar_event_id            String?           @db.Uuid
+  consultation_id              String?           @db.Uuid
+  survey_id                    String?           @db.Uuid
+  measurement_id               String?           @db.Uuid
+  installer_job_id             String?           @db.Uuid
+  uploaded_by                  String            @db.Uuid
+  file_type                    String            @db.VarChar(50)
+  original_name                String            @db.VarChar(255)
+  storage_provider             String            @default("s3") @db.VarChar(50)
+  storage_bucket               String?           @db.VarChar(120)
+  storage_key                  String            @db.VarChar(255)
+  file_url                     String            @db.Text
+  mime_type                    String?           @db.VarChar(120)
+  size_bytes                   BigInt?
+  created_at                   DateTime          @default(now()) @db.Timestamptz(6)
+  lead                         Lead?             @relation(fields: [lead_id], references: [lead_id], onDelete: SetNull)
+  deal                         Deal?             @relation(fields: [deal_id], references: [deal_id], onDelete: SetNull)
+  project                      Project?          @relation(fields: [project_id], references: [project_id], onDelete: SetNull)
+  position                     ProjectPosition?  @relation(fields: [position_id], references: [position_id], onDelete: SetNull)
+  calendar_event               CalendarEvent?    @relation(fields: [calendar_event_id], references: [calendar_event_id], onDelete: SetNull)
+  consultation                 Consultation?     @relation(fields: [consultation_id], references: [consultation_id], onDelete: SetNull)
+  survey                       Survey?           @relation(fields: [survey_id], references: [survey_id], onDelete: SetNull)
+  measurement                  Measurement?      @relation(fields: [measurement_id], references: [measurement_id], onDelete: SetNull)
+  installer_job                InstallerJob?     @relation(fields: [installer_job_id], references: [installer_job_id], onDelete: SetNull)
+  uploaded_by_user             User              @relation("attachment_uploaded_by", fields: [uploaded_by], references: [user_id], onDelete: Restrict)
+  document_links               Document[]
+
+  @@index([lead_id])
+  @@index([deal_id])
+  @@index([project_id])
+  @@index([position_id])
+  @@index([calendar_event_id])
+  @@index([consultation_id])
+  @@index([survey_id])
+  @@index([measurement_id])
+  @@index([installer_job_id])
+  @@index([uploaded_by])
+  @@map("attachments_files")
+}
+
+model Document {
+  document_id                  String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id                    String?       @db.Uuid
+  deal_id                      String?       @db.Uuid
+  project_id                   String?       @db.Uuid
+  document_type_id             String        @db.Uuid
+  file_id                      String?       @db.Uuid
+  title                        String        @db.VarChar(180)
+  language_code                String        @default("en") @db.VarChar(5)
+  status                       String        @default("draft") @db.VarChar(50)
+  created_by                   String        @db.Uuid
+  created_at                   DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime      @updatedAt @db.Timestamptz(6)
+  client                       Client?       @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
+  deal                         Deal?         @relation(fields: [deal_id], references: [deal_id], onDelete: SetNull)
+  project                      Project?      @relation(fields: [project_id], references: [project_id], onDelete: SetNull)
+  document_type                DocumentType  @relation(fields: [document_type_id], references: [document_type_id], onDelete: Restrict)
+  file                         AttachmentFile? @relation(fields: [file_id], references: [file_id], onDelete: SetNull)
+  created_by_user              User          @relation("document_created_by", fields: [created_by], references: [user_id], onDelete: Restrict)
+
+  @@index([client_id])
+  @@index([deal_id])
+  @@index([project_id])
+  @@index([document_type_id])
+  @@index([file_id])
+  @@index([created_by])
+  @@map("documents")
+}
+
+model ActivityLog {
+  activity_id                  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actor_user_id                String?     @db.Uuid
+  entity_type                  String      @db.VarChar(60)
+  entity_id                    String?     @db.Uuid
+  project_id                   String?     @db.Uuid
+  action_key                   String      @db.VarChar(80)
+  message                      String      @db.Text
+  metadata                     Json?
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  actor_user                   User?       @relation("activity_actor", fields: [actor_user_id], references: [user_id], onDelete: SetNull)
+  project                      Project?    @relation(fields: [project_id], references: [project_id], onDelete: SetNull)
+
+  @@index([actor_user_id])
+  @@index([project_id])
+  @@map("activity_log")
+}
+
+model Notification {
+  notification_id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipient_user_id            String      @db.Uuid
+  actor_user_id                String?     @db.Uuid
+  entity_type                  String?     @db.VarChar(60)
+  entity_id                    String?     @db.Uuid
+  type_key                     String      @db.VarChar(80)
+  title                        String      @db.VarChar(180)
+  message                      String      @db.Text
+  is_read                      Boolean     @default(false)
+  read_at                      DateTime?   @db.Timestamptz(6)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  recipient_user               User        @relation("notification_recipient", fields: [recipient_user_id], references: [user_id], onDelete: Cascade)
+  actor_user                   User?       @relation("notification_actor", fields: [actor_user_id], references: [user_id], onDelete: SetNull)
+
+  @@index([recipient_user_id])
+  @@index([actor_user_id])
+  @@map("notifications")
+}
+
+model EmailAction {
+  email_action_id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entity_type                  String      @db.VarChar(60)
+  entity_id                    String?     @db.Uuid
+  recipient_email              String      @db.VarChar(191)
+  subject                      String      @db.VarChar(255)
+  status                       String      @default("pending") @db.VarChar(50)
+  created_by                   String      @db.Uuid
+  sent_at                      DateTime?   @db.Timestamptz(6)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  created_by_user              User        @relation("email_action_created_by", fields: [created_by], references: [user_id], onDelete: Restrict)
+
+  @@index([created_by])
+  @@map("email_actions")
+}
+
+model GmailConnection {
+  gmail_connection_id     String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connection_key          String         @unique @default("primary") @db.VarChar(80)
+  email_address           String         @db.VarChar(191)
+  access_token_encrypted  String         @db.Text
+  refresh_token_encrypted String         @db.Text
+  token_expires_at        DateTime?      @db.Timestamptz(6)
+  scope                   String?        @db.Text
+  history_id              String?        @db.VarChar(80)
+  last_synced_at          DateTime?      @db.Timestamptz(6)
+  sync_error              String?        @db.Text
+  is_active               Boolean        @default(true)
+  connected_by            String         @db.Uuid
+  created_at              DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime       @updatedAt @db.Timestamptz(6)
+  connected_by_user       User           @relation("gmail_connection_connected_by", fields: [connected_by], references: [user_id], onDelete: Restrict)
+  messages                GmailMessage[]
+
+  @@index([connected_by])
+  @@map("gmail_connections")
+}
+
+model GmailMessage {
+  gmail_message_id        String          @id @db.VarChar(120)
+  gmail_thread_id         String          @db.VarChar(120)
+  gmail_connection_id     String          @db.Uuid
+  direction               String          @db.VarChar(20)
+  sender_email            String?         @db.VarChar(191)
+  sender_name             String?         @db.VarChar(191)
+  recipient_emails        String[]        @default([])
+  cc_emails               String[]        @default([])
+  subject                 String          @default("") @db.VarChar(500)
+  snippet                 String          @default("") @db.Text
+  body_text               String          @default("") @db.Text
+  label_ids               String[]        @default([])
+  is_unread               Boolean         @default(false)
+  sent_at                 DateTime         @db.Timestamptz(6)
+  legacy_client_id        String?          @db.VarChar(120)
+  legacy_order_id         String?          @db.VarChar(120)
+  raw_headers             Json?
+  attachment_meta         Json?
+  created_at              DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime         @updatedAt @db.Timestamptz(6)
+  connection              GmailConnection @relation(fields: [gmail_connection_id], references: [gmail_connection_id], onDelete: Cascade)
+
+  @@index([gmail_connection_id, sent_at])
+  @@index([gmail_thread_id])
+  @@index([legacy_client_id])
+  @@index([legacy_order_id])
+  @@index([is_unread])
+  @@map("gmail_messages")
+}
+
+model FollowUp {
+  follow_up_id                 String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id                      String?     @db.Uuid
+  deal_id                      String?     @db.Uuid
+  type_key                     String      @db.VarChar(50)
+  status                       String      @default("scheduled") @db.VarChar(40)
+  due_at                       DateTime    @db.Timestamptz(6)
+  notes                        String?     @db.Text
+  outcome                      String?     @db.Text
+  assigned_to                  String?     @db.Uuid
+  created_by                   String      @db.Uuid
+  completed_at                 DateTime?   @db.Timestamptz(6)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  lead                         Lead?       @relation(fields: [lead_id], references: [lead_id], onDelete: Cascade)
+  deal                         Deal?       @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+  assigned_to_user             User?       @relation("follow_up_assigned_to", fields: [assigned_to], references: [user_id], onDelete: SetNull)
+  created_by_user              User        @relation("follow_up_created_by", fields: [created_by], references: [user_id], onDelete: Restrict)
+
+  @@index([lead_id])
+  @@index([deal_id])
+  @@index([assigned_to])
+  @@index([created_by])
+  @@index([due_at])
+  @@map("follow_ups")
+}
+
+model Task {
+  task_id                      String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id                      String?     @db.Uuid
+  deal_id                      String?     @db.Uuid
+  entity_type                  String?     @db.VarChar(60)
+  entity_id                    String?     @db.Uuid
+  title                        String      @db.VarChar(180)
+  description                  String?     @db.Text
+  status                       String      @default("open") @db.VarChar(40)
+  priority                     String      @default("normal") @db.VarChar(30)
+  due_at                       DateTime?   @db.Timestamptz(6)
+  assigned_to                  String?     @db.Uuid
+  created_by                   String      @db.Uuid
+  completed_at                 DateTime?   @db.Timestamptz(6)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+  lead                         Lead?       @relation(fields: [lead_id], references: [lead_id], onDelete: Cascade)
+  deal                         Deal?       @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+  assigned_to_user             User?       @relation("task_assigned_to", fields: [assigned_to], references: [user_id], onDelete: SetNull)
+  created_by_user              User        @relation("task_created_by", fields: [created_by], references: [user_id], onDelete: Restrict)
+
+  @@index([lead_id])
+  @@index([deal_id])
+  @@index([assigned_to])
+  @@index([created_by])
+  @@index([due_at])
+  @@map("tasks")
+}
+
+model LegacyWorkspace {
+  workspace_id    String    @id @default("primary") @db.VarChar(50)
+  payload         Json
+  revision        Int       @default(1)
+  updated_by      String?   @db.Uuid
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @updatedAt @db.Timestamptz(6)
+  updated_by_user User?     @relation("legacy_workspace_updated_by", fields: [updated_by], references: [user_id], onDelete: SetNull)
+
+  @@index([updated_by])
+  @@map("legacy_workspaces")
+}

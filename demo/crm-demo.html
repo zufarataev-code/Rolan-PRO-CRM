@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ROLANPRO CRM Демо</title>
+    <link rel="stylesheet" href="./demo.css" />
+  </head>
+  <body class="theme-desktop">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-lockup">
+          <div class="brand-mark"></div>
+          <div>
+            <div class="brand-name">ROLANPRO</div>
+            <div class="brand-subtitle">Операционная CRM</div>
+          </div>
+        </div>
+
+        <nav class="main-nav">
+          <a class="nav-link active" href="#dashboard">Дашборд</a>
+          <a class="nav-link" href="#projects">Проекты</a>
+          <a class="nav-link" href="#schedule">Расписание</a>
+          <a class="nav-link" href="#clients">Клиенты</a>
+          <a class="nav-link" href="#crew">Сотрудники</a>
+          <a class="nav-link" href="#docs">Документы</a>
+          <a class="nav-link" href="#settings">Настройки</a>
+        </nav>
+
+        <div class="sidebar-note">
+          <p class="eyebrow">Фокус на диспетчеризации</p>
+          <p>Мультисервисные проекты, планирование бригад, выездные работы и контроль проблем в одном интерфейсе.</p>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Живое демо</p>
+            <h1>Центр управления установками</h1>
+          </div>
+
+          <div class="topbar-tools">
+            <label class="search">
+              <span>Поиск по проектам, клиентам и бригадам</span>
+              <input type="text" value="Офис в центре" />
+            </label>
+            <div class="pill">24 марта 2026</div>
+            <div class="pill alert-pill">3 уведомления</div>
+            <div class="user-chip">Менеджер</div>
+          </div>
+        </header>
+
+        <section class="hero-strip">
+          <div>
+            <p class="eyebrow">Главные точки внимания на сегодня</p>
+            <h2>Проект "Офис в центре" полностью укомплектован, для "Ритейл Smart Film" еще не хватает материалов, и две задачи уже просрочены.</h2>
+          </div>
+          <div class="hero-actions">
+            <button class="primary-btn">Открыть расписание</button>
+            <button class="ghost-btn">Создать проект</button>
+          </div>
+        </section>
+
+        <section class="kpi-grid" id="dashboard">
+          <article class="kpi-card accent">
+            <span class="kpi-label">Активные проекты</span>
+            <strong class="kpi-value">42</strong>
+            <span class="kpi-note">11 сейчас на стадии монтажа</span>
+          </article>
+          <article class="kpi-card">
+            <span class="kpi-label">Установки сегодня</span>
+            <strong class="kpi-value">9</strong>
+            <span class="kpi-note">4 бригады и 12 монтажников</span>
+          </article>
+          <article class="kpi-card warn">
+            <span class="kpi-label">Неназначенные проекты</span>
+            <strong class="kpi-value">4</strong>
+            <span class="kpi-note">2 заблокированы из-за нехватки бригады</span>
+          </article>
+          <article class="kpi-card danger">
+            <span class="kpi-label">Просроченные задачи</span>
+            <strong class="kpi-value">3</strong>
+            <span class="kpi-note">1 ожидает фото до начала работ</span>
+          </article>
+          <article class="kpi-card">
+            <span class="kpi-label">Проблемные флаги</span>
+            <strong class="kpi-value">5</strong>
+            <span class="kpi-note">Материалы, доступ, опоздание бригады</span>
+          </article>
+          <article class="kpi-card">
+            <span class="kpi-label">Ожидают оплаты</span>
+            <strong class="kpi-value">7</strong>
+            <span class="kpi-note">Видно в операционке, рассчитывается на сервере</span>
+          </article>
+        </section>
+
+        <section class="panel-grid">
+          <article class="surface panel-wide">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Сегодня по монтажникам</p>
+                <h3>Загрузка монтажников</h3>
+              </div>
+              <div class="mini-pills">
+                <span class="pill">12 активных монтажников</span>
+                <span class="pill">2 поздних старта</span>
+              </div>
+            </div>
+
+            <div class="installer-rows">
+              <div class="installer-row">
+                <div class="installer-person">
+                  <span class="avatar">MI</span>
+                  <div>
+                    <strong>Mike Alvarez</strong>
+                    <p>Старший монтажник · Бригада A</p>
+                  </div>
+                </div>
+                <div class="installer-stats">
+                  <span>2 задачи</span>
+                  <span>09:00 / 14:00</span>
+                  <span class="status status-progress">1 в работе</span>
+                </div>
+              </div>
+              <div class="installer-row">
+                <div class="installer-person">
+                  <span class="avatar">AL</span>
+                  <div>
+                    <strong>Alex Chen</strong>
+                    <p>Помощник · Бригада A</p>
+                  </div>
+                </div>
+                <div class="installer-stats">
+                  <span>1 задача</span>
+                  <span>11:00</span>
+                  <span class="status status-ready">готово</span>
+                </div>
+              </div>
+              <div class="installer-row">
+                <div class="installer-person">
+                  <span class="avatar">SM</span>
+                  <div>
+                    <strong>Sam Morton</strong>
+                    <p>Старший монтажник · Бригада B</p>
+                  </div>
+                </div>
+                <div class="installer-stats">
+                  <span>3 задачи</span>
+                  <span>08:00 / 12:00 / 16:00</span>
+                  <span class="status status-danger">1 просрочена</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="surface panel-rail">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Живая лента</p>
+                <h3>Уведомления</h3>
+              </div>
+            </div>
+
+            <ul class="event-list compact">
+              <li>
+                <span class="event-bullet event-warn"></span>
+                Бригада переназначена на PRJ-101
+              </li>
+              <li>
+                <span class="event-bullet event-danger"></span>
+                Не загружены фото до начала работ по PRJ-055
+              </li>
+              <li>
+                <span class="event-bullet event-accent"></span>
+                Клиент уведомлен о задержке по PRJ-073
+              </li>
+            </ul>
+          </article>
+        </section>
+
+        <section class="panel-grid second-row">
+          <article class="surface panel-board" id="schedule">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Доска расписания</p>
+                <h3>Вид по дням</h3>
+              </div>
+              <div class="mini-pills">
+                <span class="pill active-pill">День</span>
+                <span class="pill">Неделя</span>
+                <span class="pill">Перетаскивание включено</span>
+              </div>
+            </div>
+
+            <div class="board-layout">
+              <div class="time-col">
+                <span>08:00</span>
+                <span>10:00</span>
+                <span>12:00</span>
+                <span>14:00</span>
+              </div>
+              <div class="crew-col">
+                <div class="crew-head">Бригада A</div>
+                <article class="schedule-card selected">
+                  <strong>PRJ-101 Офис в центре</strong>
+                  <p>Окно прибытия 8-9 · Старший Майк · Алекс · Джон</p>
+                  <div class="badges">
+                    <span class="badge ok">подтверждено</span>
+                    <span class="badge neutral">материалы готовы</span>
+                  </div>
+                </article>
+                <article class="schedule-card warning">
+                  <strong>PRJ-073 Ритейл Smart Film</strong>
+                  <p>12:00 · Проблемный флаг · ожидание материалов</p>
+                  <div class="badges">
+                    <span class="badge danger">нет материалов</span>
+                  </div>
+                </article>
+              </div>
+              <div class="crew-col">
+                <div class="crew-head">Бригада B</div>
+                <article class="schedule-card">
+                  <strong>PRJ-088 Резиденция Беверли</strong>
+                  <p>10:00 · Сэм · Лео</p>
+                  <div class="badges">
+                    <span class="badge ok">запланировано</span>
+                  </div>
+                </article>
+              </div>
+              <div class="crew-col rail-col">
+                <div class="crew-head">Свободно / Не назначено</div>
+                <article class="schedule-card plain">
+                  <strong>PRJ-120</strong>
+                  <p>Не назначен старший монтажник</p>
+                  <div class="badges">
+                    <span class="badge warning">не назначено</span>
+                  </div>
+                </article>
+                <article class="schedule-card plain">
+                  <strong>PRJ-131</strong>
+                  <p>Склад удерживает smart film-пленку</p>
+                  <div class="badges">
+                    <span class="badge danger">нет материалов</span>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </article>
+
+          <article class="surface panel-rail">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Движок конфликтов</p>
+                <h3>Предупреждения диспетчера</h3>
+              </div>
+            </div>
+
+            <ul class="event-list">
+              <li>
+                <span class="event-bullet event-danger"></span>
+                Майк уже назначен на 09:00-13:00
+              </li>
+              <li>
+                <span class="event-bullet event-warn"></span>
+                У бригады B пересечение с PRJ-088 в 10:00-12:00
+              </li>
+              <li>
+                <span class="event-bullet event-accent"></span>
+                Перенос в конфликтный слот требует подтверждения
+              </li>
+            </ul>
+
+            <button class="primary-btn block-btn">Разрешить конфликт</button>
+          </article>
+        </section>
+
+        <section class="panel-grid third-row" id="projects">
+          <article class="surface panel-wide">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Проекты</p>
+                <h3>Операционная таблица</h3>
+              </div>
+              <div class="mini-pills">
+                <span class="pill">Город</span>
+                <span class="pill">Сложность</span>
+                <span class="pill">Проблемный флаг</span>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table class="project-table">
+                <thead>
+                  <tr>
+                    <th>PRJ</th>
+                    <th>Клиент</th>
+                    <th>Город</th>
+                    <th>Сводка услуг</th>
+                    <th>Сложность</th>
+                    <th>Помощники</th>
+                    <th>Оплата</th>
+                    <th>Флаг</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="active-row">
+                    <td>101</td>
+                    <td>Acme</td>
+                    <td>Лос-Анджелес</td>
+                    <td>Солнечная пленка / Демонтаж / Электрика</td>
+                    <td>4</td>
+                    <td>2</td>
+                    <td>Депозит оплачен</td>
+                    <td>Нет</td>
+                  </tr>
+                  <tr>
+                    <td>088</td>
+                    <td>Nova</td>
+                    <td>Глендейл</td>
+                    <td>Smart Film / Силикон</td>
+                    <td>3</td>
+                    <td>1</td>
+                    <td>Ожидается</td>
+                    <td>Нет</td>
+                  </tr>
+                  <tr>
+                    <td>073</td>
+                    <td>Peak</td>
+                    <td>Пасадена</td>
+                    <td>Защитная пленка / Демонтаж</td>
+                    <td>5</td>
+                    <td>3</td>
+                    <td>Оплачено</td>
+                    <td>Да</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="surface panel-rail">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Быстрый просмотр</p>
+                <h3>Выбранный проект</h3>
+              </div>
+            </div>
+            <div class="preview-stack">
+              <strong>PRJ-101 Офис в центре</strong>
+              <p>1250 S Hope St, Los Angeles, CA 90017</p>
+              <p>Старший Майк · Помощники 2 · Высокий приоритет</p>
+              <p>Что взять: лестница, герметик, блок управления</p>
+              <button class="ghost-btn block-btn">Открыть карточку проекта</button>
+            </div>
+          </article>
+        </section>
+
+        <section class="project-card-demo">
+          <div class="project-card-shell">
+            <div class="project-header">
+              <div>
+                <p class="eyebrow">Карточка проекта</p>
+                <h2>PRJ-101 Офис в центре</h2>
+                <p class="subline">Готово · Депозит оплачен · Высокий приоритет · 24 марта · 09:00-13:00</p>
+              </div>
+              <div class="header-badges">
+                <span class="badge ok">готово</span>
+                <span class="badge neutral">депозит оплачен</span>
+                <span class="badge warning">высокий приоритет</span>
+              </div>
+            </div>
+
+            <div class="project-body">
+              <div class="project-main">
+                <div class="tab-strip">
+                  <span class="tab active">Обзор</span>
+                  <span class="tab">Позиции</span>
+                  <span class="tab">Расписание</span>
+                  <span class="tab">Файлы</span>
+                  <span class="tab">Документы</span>
+                  <span class="tab">Активность</span>
+                </div>
+
+                <div class="overview-band">
+                  <div>
+                    <p class="eyebrow">Что взять</p>
+                    <p>лестница, герметик, блок управления, формы доступа</p>
+                  </div>
+                  <div>
+                    <p class="eyebrow">Заметки менеджера</p>
+                    <p>Использовать вход через зону разгрузки. Сначала южный фасад. Клиент доступен после 8:30.</p>
+                  </div>
+                </div>
+
+                <div class="position-stack">
+                  <article class="position-row">
+                    <div class="position-title">
+                      <strong>Солнечная пленка</strong>
+                      <span class="status status-ready">Готово</span>
+                    </div>
+                    <p>Категория: оконная пленка · Бренд: 3M · Модель: Prestige 70</p>
+                    <p>420 sqft · 3 зоны · 18 окон · Клиент $8400 · Доп. расходы $250</p>
+                    <p>Назначены: Mike, Alex · Сложность 4</p>
+                    <p class="note-line">Заметки: сначала южный фасад</p>
+                  </article>
+                  <article class="position-row">
+                    <div class="position-title">
+                      <strong>Демонтаж</strong>
+                      <span class="status status-progress">Запланировано</span>
+                    </div>
+                    <p>Категория: демонтаж · Бренд: - · Модель: -</p>
+                    <p>12 qty · Клиент $1200 · Доп. расходы $120</p>
+                    <p>Назначен: Jon · Сложность 2</p>
+                    <p class="note-line">Заметки: демонтировать старую пленку</p>
+                  </article>
+                </div>
+
+                <div class="dual-columns">
+                  <section class="inner-panel">
+                    <p class="eyebrow">Файлы</p>
+                    <ul class="plain-list">
+                      <li>Фото до начала работ</li>
+                      <li>Фото после завершения</li>
+                      <li>Фото проблем</li>
+                      <li>Чеки</li>
+                    </ul>
+                  </section>
+                  <section class="inner-panel">
+                    <p class="eyebrow">Документы</p>
+                    <ul class="plain-list">
+                      <li>Договор</li>
+                      <li>Коммерческое предложение</li>
+                      <li>Подписанное согласование</li>
+                      <li>Лист объема работ</li>
+                    </ul>
+                  </section>
+                </div>
+              </div>
+
+              <aside class="project-side">
+                <section class="inner-panel">
+                  <p class="eyebrow">Назначение бригады</p>
+                  <strong>Старший Mike</strong>
+                  <p>Помощник 1 Alex</p>
+                  <p>Помощник 2 Jon</p>
+                  <p>Назначено сотрудников: 3</p>
+                  <button class="ghost-btn block-btn">Переназначить бригаду</button>
+                </section>
+
+                <section class="inner-panel">
+                  <p class="eyebrow">Активность</p>
+                  <ul class="event-list compact">
+                    <li><span class="event-bullet event-accent"></span>бригада изменена</li>
+                    <li><span class="event-bullet event-ok"></span>загружены фото до начала работ</li>
+                    <li><span class="event-bullet event-warn"></span>расписание перенесено на 09:00</li>
+                  </ul>
+                </section>
+              </aside>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

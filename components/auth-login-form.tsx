@@ -1,0 +1,86 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+
+import styles from "./auth-card.module.css";
+
+type LoginResponse = {
+  data?: {
+    user?: {
+      must_change_password?: boolean;
+    };
+  };
+  errors?: Array<{ message?: string }>;
+};
+
+export function AuthLoginForm() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setPending(true);
+
+    try {
+      const response = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const payload = (await response.json()) as LoginResponse;
+
+      if (!response.ok) {
+        setError(payload.errors?.[0]?.message || "Не удалось войти.");
+        return;
+      }
+
+      window.location.assign(
+        payload.data?.user?.must_change_password ? "/change-password" : "/legacy-crm",
+      );
+    } catch {
+      setError("Сервер недоступен. Попробуйте ещё раз.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <main className={styles.shell}>
+      <section className={styles.card}>
+        <h1 className={styles.brand}>ROLANPRO CRM</h1>
+        <p className={styles.subtitle}>Единый вход для команды</p>
+        <form className={styles.form} onSubmit={submit}>
+          <label className={styles.label}>
+            Email
+            <input
+              className={styles.input}
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
+          </label>
+          <label className={styles.label}>
+            Пароль
+            <input
+              className={styles.input}
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+          </label>
+          {error ? <p className={styles.error}>{error}</p> : null}
+          <button className={styles.button} disabled={pending} type="submit">
+            {pending ? "Входим…" : "Войти"}
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}

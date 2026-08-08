@@ -1,0 +1,1743 @@
+{
+  "users": [
+    {
+      "active": true,
+      "commissionPct": 0,
+      "hourlyRate": 0,
+      "lang": "ru",
+      "payConfig": {},
+      "phone": "",
+      "pin": "",
+      "telegramChatId": "",
+      "title": "Owner",
+      "id": "u_o1",
+      "name": "Zufar",
+      "role": "owner"
+    },
+    {
+      "active": true,
+      "commissionPct": 0,
+      "hourlyRate": 0,
+      "lang": "ru",
+      "payConfig": {},
+      "phone": "",
+      "pin": "",
+      "telegramChatId": "",
+      "title": "Manager",
+      "id": "u_m1",
+      "name": "Danil",
+      "role": "manager"
+    },
+    {
+      "active": true,
+      "commissionPct": 0,
+      "hourlyRate": 0,
+      "lang": "ru",
+      "payConfig": {},
+      "phone": "",
+      "pin": "",
+      "telegramChatId": "",
+      "title": "Measurer",
+      "id": "u_z1",
+      "name": "Zufar Ataev",
+      "role": "measurer"
+    },
+    {
+      "active": true,
+      "commissionPct": 0,
+      "hourlyRate": 0,
+      "lang": "ru",
+      "payConfig": {},
+      "phone": "",
+      "pin": "",
+      "telegramChatId": "",
+      "title": "Installer",
+      "id": "u_i1",
+      "name": "Zufar Ataev",
+      "role": "installer"
+    }
+  ],
+  "clients": [],
+  "orders": [],
+  "notifications": [],
+  "reviews": [],
+  "settings": {
+    "companyName": "RolanPRO",
+    "telegramBotToken": "",
+    "currency": "$",
+    "pricePerM2": 120,
+    "filmTypes": [
+      "Solar Control 35%",
+      "Solar Control 50%",
+      "Solar Control 70%",
+      "Security 4 mil",
+      "Security 8 mil",
+      "Automotive Tint 5%",
+      "Automotive Tint 20%",
+      "Automotive Tint 50%",
+      "Frosted / Matte",
+      "Decorative",
+      "Smart PDLC Film"
+    ],
+    "referralReward": 50,
+    "notificationChannelsDefault": [
+      "inapp",
+      "telegram"
+    ],
+    "catalog": [
+      {
+        "id": "pwqgzumr",
+        "brand": "RolanPRO",
+        "model": "Titan Prime™",
+        "category": "solar",
+        "sku": "RP-SOL-TTN",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 16,
+        "costPerSqft": 5.4,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "gpws4uid",
+        "brand": "RolanPRO",
+        "model": "Ceramic Prime™",
+        "category": "solar",
+        "sku": "RP-SOL-CER",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 15,
+        "costPerSqft": 5,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "o5x8jtaq",
+        "brand": "RolanPRO",
+        "model": "Crystal Prime™",
+        "category": "solar",
+        "sku": "RP-SOL-CRY",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 17,
+        "costPerSqft": 5.7,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "1kdba5kj",
+        "brand": "RolanPRO",
+        "model": "Neutral Prime™",
+        "category": "solar",
+        "sku": "RP-SOL-NEU",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 13,
+        "costPerSqft": 4.2,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "67us5wgt",
+        "brand": "RolanPRO",
+        "model": "Black Prime™",
+        "category": "solar",
+        "sku": "RP-SOL-BLK",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 12,
+        "costPerSqft": 3.8,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "jre6vrgj",
+        "brand": "RolanPRO",
+        "model": "Silver Prime™",
+        "category": "solar",
+        "sku": "RP-SOL-SLV",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 11,
+        "costPerSqft": 3.5,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "3nvo1qm1",
+        "brand": "RolanPRO",
+        "model": "Dual Prime™",
+        "category": "solar",
+        "sku": "RP-SOL-DUAL",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 12.5,
+        "costPerSqft": 4,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "g9dzvfjs",
+        "brand": "RolanPRO",
+        "model": "Safety Prime™ 4",
+        "category": "protective",
+        "sku": "RP-SAF-04",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 10,
+        "costPerSqft": 3,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10,
+        "vendorId": ""
+      },
+      {
+        "id": "yv5bg2fg",
+        "brand": "RolanPRO",
+        "model": "Safety Prime™ 8",
+        "category": "protective",
+        "sku": "RP-SAF-08",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 13.5,
+        "costPerSqft": 4.3,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10,
+        "vendorId": ""
+      },
+      {
+        "id": "hh02xwpo",
+        "brand": "RolanPRO",
+        "model": "Safety Prime™ 12",
+        "category": "protective",
+        "sku": "RP-SAF-12",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 17,
+        "costPerSqft": 5.8,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10,
+        "vendorId": ""
+      },
+      {
+        "id": "pkxdi00j",
+        "brand": "RolanPRO",
+        "model": "Safety Prime™ 16",
+        "category": "protective",
+        "sku": "RP-SAF-16",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 21,
+        "costPerSqft": 7.3,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10,
+        "vendorId": ""
+      },
+      {
+        "id": "s5tsjd4q",
+        "brand": "RolanPRO",
+        "model": "Safety Prime™ Max",
+        "category": "protective",
+        "sku": "RP-SAF-MAX",
+        "tier": "Ultra",
+        "isPrime": true,
+        "retailPerSqft": 25,
+        "costPerSqft": 9,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10,
+        "vendorId": ""
+      },
+      {
+        "id": "qhc4nvvb",
+        "brand": "RolanPRO",
+        "model": "Smart Vision Prime™",
+        "category": "smart",
+        "sku": "RP-SMV-PRM",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 28,
+        "costPerSqft": 12,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.55,
+        "wastePct": 15,
+        "vendorId": ""
+      },
+      {
+        "id": "ztd74bh2",
+        "brand": "RolanPRO",
+        "model": "Smart Vision Elite™",
+        "category": "smart",
+        "sku": "RP-SMV-ELT",
+        "tier": "Elite",
+        "isPrime": true,
+        "retailPerSqft": 34,
+        "costPerSqft": 15,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.55,
+        "wastePct": 15,
+        "vendorId": ""
+      },
+      {
+        "id": "jfgbyjth",
+        "brand": "RolanPRO",
+        "model": "Smart Vision Ultra™",
+        "category": "smart",
+        "sku": "RP-SMV-ULT",
+        "tier": "Ultra",
+        "isPrime": true,
+        "retailPerSqft": 42,
+        "costPerSqft": 19,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.55,
+        "wastePct": 15,
+        "vendorId": ""
+      },
+      {
+        "id": "e2wq36o2",
+        "brand": "RolanPRO",
+        "model": "Decor Prime Frost™",
+        "category": "decorative",
+        "sku": "RP-DEC-FRO",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 9,
+        "costPerSqft": 2.8,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "3dbqjldm",
+        "brand": "RolanPRO",
+        "model": "Decor Prime Matte™",
+        "category": "decorative",
+        "sku": "RP-DEC-MAT",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 9.5,
+        "costPerSqft": 3,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "bqzbffo9",
+        "brand": "RolanPRO",
+        "model": "Decor Prime Gradient™",
+        "category": "decorative",
+        "sku": "RP-DEC-GRD",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 11,
+        "costPerSqft": 3.5,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "81sbk0m0",
+        "brand": "RolanPRO",
+        "model": "Decor Prime Linen™",
+        "category": "decorative",
+        "sku": "RP-DEC-LIN",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 12,
+        "costPerSqft": 3.8,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "lvv008xt",
+        "brand": "RolanPRO",
+        "model": "Decor Prime Silk™",
+        "category": "decorative",
+        "sku": "RP-DEC-SLK",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 12.5,
+        "costPerSqft": 4,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "7ej77s4l",
+        "brand": "RolanPRO",
+        "model": "Privacy Prime Black™",
+        "category": "privacy",
+        "sku": "RP-PRV-BLK",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 11,
+        "costPerSqft": 3.5,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "pviwwohw",
+        "brand": "RolanPRO",
+        "model": "Privacy Prime Silver™",
+        "category": "privacy",
+        "sku": "RP-PRV-SLV",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 12,
+        "costPerSqft": 3.8,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "v71uvlzu",
+        "brand": "RolanPRO",
+        "model": "Privacy Prime Mirror™",
+        "category": "privacy",
+        "sku": "RP-PRV-MIR",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 13,
+        "costPerSqft": 4.2,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "i0xuqts3",
+        "brand": "RolanPRO",
+        "model": "Privacy Prime Night™",
+        "category": "privacy",
+        "sku": "RP-PRV-NGT",
+        "tier": "Prime",
+        "isPrime": true,
+        "retailPerSqft": 14,
+        "costPerSqft": 4.5,
+        "salePricePerM": null,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12,
+        "vendorId": ""
+      },
+      {
+        "id": "n2j7rq0w",
+        "brand": "Madico",
+        "model": "Sunscape Select 10",
+        "category": "solar",
+        "retailPerSqft": 8,
+        "costPerSqft": 2.4,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "1wjr9dbo",
+        "brand": "Madico",
+        "model": "Sunscape Select 25",
+        "category": "solar",
+        "retailPerSqft": 8.5,
+        "costPerSqft": 2.6,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "zww268bh",
+        "brand": "Madico",
+        "model": "Sunscape Select 35",
+        "category": "solar",
+        "retailPerSqft": 9,
+        "costPerSqft": 2.8,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "prs47jnm",
+        "brand": "Madico",
+        "model": "Sunscape Select 50",
+        "category": "solar",
+        "retailPerSqft": 9.5,
+        "costPerSqft": 3,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "q802vd7l",
+        "brand": "Madico",
+        "model": "Sunscape Select 70",
+        "category": "solar",
+        "retailPerSqft": 11,
+        "costPerSqft": 3.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "4jln5zfb",
+        "brand": "Madico",
+        "model": "SafetyShield 4 mil",
+        "category": "protective",
+        "retailPerSqft": 10,
+        "costPerSqft": 3.2,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "kwsbkxf4",
+        "brand": "Madico",
+        "model": "SafetyShield 7 mil",
+        "category": "protective",
+        "retailPerSqft": 12,
+        "costPerSqft": 3.8,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "o1yl7uaa",
+        "brand": "Madico",
+        "model": "SafetyShield 8 mil",
+        "category": "protective",
+        "retailPerSqft": 13,
+        "costPerSqft": 4.2,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "xzv7jnd9",
+        "brand": "Madico",
+        "model": "SafetyShield 12 mil",
+        "category": "protective",
+        "retailPerSqft": 16,
+        "costPerSqft": 5.5,
+        "installerRatePerSqft": 0.35,
+        "wastePct": 10
+      },
+      {
+        "id": "pbg76gp7",
+        "brand": "Madico",
+        "model": "SafetyShield 14 mil",
+        "category": "protective",
+        "retailPerSqft": 18,
+        "costPerSqft": 6.5,
+        "installerRatePerSqft": 0.35,
+        "wastePct": 10
+      },
+      {
+        "id": "dt067mc7",
+        "brand": "Madico",
+        "model": "Casper Cloaking",
+        "category": "privacy",
+        "retailPerSqft": 14,
+        "costPerSqft": 4.5,
+        "installerRatePerSqft": 0.3,
+        "wastePct": 10
+      },
+      {
+        "id": "m977p7du",
+        "brand": "Madico",
+        "model": "Optitune Frosted",
+        "category": "decorative",
+        "retailPerSqft": 9,
+        "costPerSqft": 2.8,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 10
+      },
+      {
+        "id": "4kouaxjc",
+        "brand": "Madico",
+        "model": "Optitune Gradient",
+        "category": "decorative",
+        "retailPerSqft": 11,
+        "costPerSqft": 3.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 10
+      },
+      {
+        "id": "fvf32lk7",
+        "brand": "LLumar",
+        "model": "ATR 5",
+        "category": "solar",
+        "retailPerSqft": 9,
+        "costPerSqft": 2.7,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "3n2xvdv9",
+        "brand": "LLumar",
+        "model": "ATR 15",
+        "category": "solar",
+        "retailPerSqft": 9.5,
+        "costPerSqft": 2.9,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "jk865y5f",
+        "brand": "LLumar",
+        "model": "ATR 35",
+        "category": "solar",
+        "retailPerSqft": 11,
+        "costPerSqft": 3.3,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "or5idjp5",
+        "brand": "LLumar",
+        "model": "ATR 50",
+        "category": "solar",
+        "retailPerSqft": 12,
+        "costPerSqft": 3.6,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "7qmvbp7b",
+        "brand": "LLumar",
+        "model": "ATR 70",
+        "category": "solar",
+        "retailPerSqft": 14,
+        "costPerSqft": 4.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "ranb7s41",
+        "brand": "LLumar",
+        "model": "Vista NRE 30",
+        "category": "solar",
+        "retailPerSqft": 14,
+        "costPerSqft": 4.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "qnfaggad",
+        "brand": "LLumar",
+        "model": "Vista NRE 50",
+        "category": "solar",
+        "retailPerSqft": 15,
+        "costPerSqft": 5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "9qrpd97y",
+        "brand": "LLumar",
+        "model": "Vista NRE 65",
+        "category": "solar",
+        "retailPerSqft": 16,
+        "costPerSqft": 5.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "026bvge3",
+        "brand": "LLumar",
+        "model": "Vista NRE 75",
+        "category": "solar",
+        "retailPerSqft": 18,
+        "costPerSqft": 6,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "cb6ti0ak",
+        "brand": "LLumar",
+        "model": "SCL SR PS 4 mil",
+        "category": "protective",
+        "retailPerSqft": 11,
+        "costPerSqft": 3.4,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "0oy0sqhb",
+        "brand": "LLumar",
+        "model": "SCL SR PS 7 mil",
+        "category": "protective",
+        "retailPerSqft": 13,
+        "costPerSqft": 4,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "ltn3ezu5",
+        "brand": "LLumar",
+        "model": "SCL SR PS 8 mil",
+        "category": "protective",
+        "retailPerSqft": 14,
+        "costPerSqft": 4.4,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "atnlos67",
+        "brand": "LLumar",
+        "model": "SCL SR PS 11 mil",
+        "category": "protective",
+        "retailPerSqft": 17,
+        "costPerSqft": 5.8,
+        "installerRatePerSqft": 0.35,
+        "wastePct": 10
+      },
+      {
+        "id": "rerguc3c",
+        "brand": "LLumar",
+        "model": "SCL SR PS 14 mil",
+        "category": "protective",
+        "retailPerSqft": 20,
+        "costPerSqft": 7,
+        "installerRatePerSqft": 0.35,
+        "wastePct": 10
+      },
+      {
+        "id": "izce1v9f",
+        "brand": "LLumar",
+        "model": "DR Premium",
+        "category": "solar",
+        "retailPerSqft": 22,
+        "costPerSqft": 7.5,
+        "installerRatePerSqft": 0.3,
+        "wastePct": 10
+      },
+      {
+        "id": "5v8kavtg",
+        "brand": "LLumar",
+        "model": "NDF Frosted",
+        "category": "decorative",
+        "retailPerSqft": 9.5,
+        "costPerSqft": 3,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 10
+      },
+      {
+        "id": "wpvahhlu",
+        "brand": "LLumar",
+        "model": "NDF Linen",
+        "category": "decorative",
+        "retailPerSqft": 10,
+        "costPerSqft": 3.2,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 10
+      },
+      {
+        "id": "jzbm73n7",
+        "brand": "Johnson",
+        "model": "Stainless Steel SS-05",
+        "category": "solar",
+        "retailPerSqft": 9,
+        "costPerSqft": 2.8,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "j6imz7w0",
+        "brand": "Johnson",
+        "model": "Stainless Steel SS-15",
+        "category": "solar",
+        "retailPerSqft": 9.5,
+        "costPerSqft": 3,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "ie4xyy6m",
+        "brand": "Johnson",
+        "model": "Stainless Steel SS-20",
+        "category": "solar",
+        "retailPerSqft": 10,
+        "costPerSqft": 3.2,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "5a6grbfq",
+        "brand": "Johnson",
+        "model": "Stainless Steel SS-35",
+        "category": "solar",
+        "retailPerSqft": 11,
+        "costPerSqft": 3.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "zlejjp27",
+        "brand": "Johnson",
+        "model": "Traditional 5",
+        "category": "solar",
+        "retailPerSqft": 6,
+        "costPerSqft": 1.8,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "4097evmz",
+        "brand": "Johnson",
+        "model": "Traditional 35",
+        "category": "solar",
+        "retailPerSqft": 7,
+        "costPerSqft": 2,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "ff232q6l",
+        "brand": "Johnson",
+        "model": "Traditional 50",
+        "category": "solar",
+        "retailPerSqft": 7.5,
+        "costPerSqft": 2.2,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "4j9y0xex",
+        "brand": "Johnson",
+        "model": "Optishield 4 mil",
+        "category": "protective",
+        "retailPerSqft": 10,
+        "costPerSqft": 3,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "5q36032d",
+        "brand": "Johnson",
+        "model": "Optishield 8 mil",
+        "category": "protective",
+        "retailPerSqft": 13,
+        "costPerSqft": 4,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "9dac5xr7",
+        "brand": "Johnson",
+        "model": "Insulshield Low-E",
+        "category": "solar",
+        "retailPerSqft": 16,
+        "costPerSqft": 5.5,
+        "installerRatePerSqft": 0.3,
+        "wastePct": 10
+      },
+      {
+        "id": "lx9ozqgx",
+        "brand": "Solar Gard",
+        "model": "Quantum 27",
+        "category": "solar",
+        "retailPerSqft": 14,
+        "costPerSqft": 4.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "x53oh6a9",
+        "brand": "Solar Gard",
+        "model": "Quantum 38",
+        "category": "solar",
+        "retailPerSqft": 14.5,
+        "costPerSqft": 4.7,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "k4plohl0",
+        "brand": "Solar Gard",
+        "model": "Quantum 47",
+        "category": "solar",
+        "retailPerSqft": 15,
+        "costPerSqft": 4.9,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "yly5srqe",
+        "brand": "Solar Gard",
+        "model": "Quantum 60",
+        "category": "solar",
+        "retailPerSqft": 16,
+        "costPerSqft": 5.3,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "2bq4ptxh",
+        "brand": "Solar Gard",
+        "model": "Quantum 80",
+        "category": "solar",
+        "retailPerSqft": 18,
+        "costPerSqft": 6,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "g0f94piu",
+        "brand": "Solar Gard",
+        "model": "Silver 15",
+        "category": "solar",
+        "retailPerSqft": 8,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "mf1m113o",
+        "brand": "Solar Gard",
+        "model": "Silver 20",
+        "category": "solar",
+        "retailPerSqft": 8.5,
+        "costPerSqft": 2.7,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "fptzxybk",
+        "brand": "Solar Gard",
+        "model": "Silver 35",
+        "category": "solar",
+        "retailPerSqft": 9,
+        "costPerSqft": 2.9,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "bf3s80xo",
+        "brand": "Solar Gard",
+        "model": "Silver 50",
+        "category": "solar",
+        "retailPerSqft": 9.5,
+        "costPerSqft": 3.1,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "wjf448lz",
+        "brand": "Solar Gard",
+        "model": "Silver 70",
+        "category": "solar",
+        "retailPerSqft": 11,
+        "costPerSqft": 3.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "yykof5e7",
+        "brand": "Solar Gard",
+        "model": "LX 70",
+        "category": "solar",
+        "retailPerSqft": 16,
+        "costPerSqft": 5.5,
+        "installerRatePerSqft": 0.3,
+        "wastePct": 10
+      },
+      {
+        "id": "fwtz1tm4",
+        "brand": "Solar Gard",
+        "model": "LX 80",
+        "category": "solar",
+        "retailPerSqft": 17,
+        "costPerSqft": 5.8,
+        "installerRatePerSqft": 0.3,
+        "wastePct": 10
+      },
+      {
+        "id": "ob2nuajs",
+        "brand": "Solar Gard",
+        "model": "Armorcoat 4 mil",
+        "category": "protective",
+        "retailPerSqft": 10,
+        "costPerSqft": 3,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "aeaba3hm",
+        "brand": "Solar Gard",
+        "model": "Armorcoat 8 mil",
+        "category": "protective",
+        "retailPerSqft": 13,
+        "costPerSqft": 4,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "oa1gmf0n",
+        "brand": "Solar Gard",
+        "model": "Armorcoat 14 mil",
+        "category": "protective",
+        "retailPerSqft": 19,
+        "costPerSqft": 6.5,
+        "installerRatePerSqft": 0.35,
+        "wastePct": 10
+      },
+      {
+        "id": "4q771aah",
+        "brand": "Solar Gard",
+        "model": "Armorcoat 16 mil",
+        "category": "protective",
+        "retailPerSqft": 22,
+        "costPerSqft": 7.5,
+        "installerRatePerSqft": 0.35,
+        "wastePct": 10
+      },
+      {
+        "id": "g5d1siys",
+        "brand": "Solar Gard",
+        "model": "Solyx Frosted",
+        "category": "decorative",
+        "retailPerSqft": 9,
+        "costPerSqft": 2.8,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 10
+      },
+      {
+        "id": "b3ji0pg2",
+        "brand": "Solar Gard",
+        "model": "Solyx Pattern",
+        "category": "decorative",
+        "retailPerSqft": 12,
+        "costPerSqft": 3.8,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 10
+      },
+      {
+        "id": "v4v8szdd",
+        "brand": "3M",
+        "model": "Crystalline 40",
+        "category": "solar",
+        "retailPerSqft": 18,
+        "costPerSqft": 6,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "u5qxeuj6",
+        "brand": "3M",
+        "model": "Crystalline 50",
+        "category": "solar",
+        "retailPerSqft": 19,
+        "costPerSqft": 6.3,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "w3aji91v",
+        "brand": "3M",
+        "model": "Crystalline 70",
+        "category": "solar",
+        "retailPerSqft": 22,
+        "costPerSqft": 7.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "zprythpl",
+        "brand": "3M",
+        "model": "Night Vision 35",
+        "category": "solar",
+        "retailPerSqft": 12,
+        "costPerSqft": 3.6,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "hr04yz28",
+        "brand": "3M",
+        "model": "Night Vision 25",
+        "category": "solar",
+        "retailPerSqft": 11,
+        "costPerSqft": 3.4,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "reygt357",
+        "brand": "3M",
+        "model": "Prestige 70",
+        "category": "solar",
+        "retailPerSqft": 20,
+        "costPerSqft": 7,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "po5yzrva",
+        "brand": "3M",
+        "model": "Safety S140",
+        "category": "protective",
+        "retailPerSqft": 14,
+        "costPerSqft": 4.5,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "majungzz",
+        "brand": "3M",
+        "model": "Safety Ultra S600",
+        "category": "protective",
+        "retailPerSqft": 22,
+        "costPerSqft": 7.8,
+        "installerRatePerSqft": 0.35,
+        "wastePct": 10
+      },
+      {
+        "id": "04jgti06",
+        "brand": "SunTek",
+        "model": "CXP 35",
+        "category": "solar",
+        "retailPerSqft": 11,
+        "costPerSqft": 3.3,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "dcsnsq04",
+        "brand": "SunTek",
+        "model": "CXP 50",
+        "category": "solar",
+        "retailPerSqft": 11.5,
+        "costPerSqft": 3.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "8b0lpcao",
+        "brand": "SunTek",
+        "model": "Carbon 50",
+        "category": "solar",
+        "retailPerSqft": 9,
+        "costPerSqft": 2.7,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 13
+      },
+      {
+        "id": "3r8zqn0t",
+        "brand": "PDLC",
+        "model": "Smart Film 60in clear→opaque",
+        "category": "smart",
+        "retailPerSqft": 60,
+        "costPerSqft": 18,
+        "installerRatePerSqft": 0.55,
+        "wastePct": 8
+      },
+      {
+        "id": "iufiycsm",
+        "brand": "PDLC",
+        "model": "Smart Film 72in clear→opaque",
+        "category": "smart",
+        "retailPerSqft": 65,
+        "costPerSqft": 20,
+        "installerRatePerSqft": 0.55,
+        "wastePct": 8
+      },
+      {
+        "id": "y11qs2jf",
+        "brand": "Generic",
+        "model": "Frosted Matte",
+        "category": "decorative",
+        "retailPerSqft": 7,
+        "costPerSqft": 2.2,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 10
+      },
+      {
+        "id": "5hn9dtjs",
+        "brand": "Generic",
+        "model": "Privacy Mirror",
+        "category": "privacy",
+        "retailPerSqft": 10,
+        "costPerSqft": 3,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      },
+      {
+        "id": "pfnyydkg",
+        "brand": "Generic",
+        "model": "Anti-Graffiti 6 mil",
+        "category": "protective",
+        "retailPerSqft": 9,
+        "costPerSqft": 2.8,
+        "installerRatePerSqft": 0.32,
+        "wastePct": 10
+      },
+      {
+        "id": "42vrew7s",
+        "brand": "Custom",
+        "model": "Solar Control 35%",
+        "category": "solar",
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.23,
+        "wastePct": 12
+      },
+      {
+        "id": "mtslub6m",
+        "brand": "Custom",
+        "model": "Solar Control 50%",
+        "category": "solar",
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.23,
+        "wastePct": 12
+      },
+      {
+        "id": "fw2uhefn",
+        "brand": "Custom",
+        "model": "Solar Control 70%",
+        "category": "solar",
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.23,
+        "wastePct": 12
+      },
+      {
+        "id": "vmkxwor1",
+        "brand": "Custom",
+        "model": "Security 4 mil",
+        "category": "protective",
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.23,
+        "wastePct": 12
+      },
+      {
+        "id": "rvl505xw",
+        "brand": "Custom",
+        "model": "Security 8 mil",
+        "category": "protective",
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.23,
+        "wastePct": 12
+      },
+      {
+        "id": "ntinsjjo",
+        "brand": "Custom",
+        "model": "Automotive Tint 5%",
+        "category": "solar",
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.23,
+        "wastePct": 12
+      },
+      {
+        "id": "pdnbv7go",
+        "brand": "Custom",
+        "model": "Automotive Tint 20%",
+        "category": "solar",
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.23,
+        "wastePct": 12
+      },
+      {
+        "id": "o2tofpys",
+        "brand": "Custom",
+        "model": "Automotive Tint 50%",
+        "category": "solar",
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.23,
+        "wastePct": 12
+      },
+      {
+        "id": "pxdxbd72",
+        "brand": "Custom",
+        "model": "Frosted / Matte",
+        "category": "decorative",
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.23,
+        "wastePct": 12
+      },
+      {
+        "id": "l8idzib2",
+        "brand": "Custom",
+        "model": "Decorative",
+        "category": "decorative",
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.23,
+        "wastePct": 12
+      },
+      {
+        "id": "du2kjkp0",
+        "brand": "Custom",
+        "model": "Smart PDLC Film",
+        "category": "smart",
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.23,
+        "wastePct": 12
+      },
+      {
+        "id": "ayf2t6u7",
+        "brand": "New",
+        "model": "Model",
+        "category": "solar",
+        "vendorId": null,
+        "retailPerSqft": 10,
+        "costPerSqft": 2.5,
+        "installerRatePerSqft": 0.27,
+        "wastePct": 12
+      }
+    ],
+    "inputUnits": "inches",
+    "displayUnit": "sqft",
+    "complexityCoefs": {
+      "standard": 1,
+      "ladder": 1.2,
+      "tower": 1.4,
+      "alpinism": 2
+    },
+    "pricingDefaults": {
+      "managerPct": 5,
+      "measurerPct": 3,
+      "gasPerKm": 0.5,
+      "consumablesPerSqft": 0.15,
+      "siliconePerSqft": 0.2,
+      "napkinsPerSqft": 0.05,
+      "helperPerJob": 30,
+      "siliconistPerSqft": 0.4,
+      "rentByComplexity": {
+        "standard": 0,
+        "ladder": 30,
+        "tower": 80,
+        "alpinism": 200
+      }
+    },
+    "filmRolls": {
+      "widths": [
+        1524,
+        1829
+      ],
+      "defaultWidth": 1524,
+      "bleedMm": 76,
+      "allowanceIn": 3
+    },
+    "inventoryAlerts": {
+      "reorderBelowM": 5,
+      "criticalBelowM": 2
+    },
+    "stripe": {
+      "secretKey": "",
+      "publishableKey": "",
+      "currency": "usd",
+      "mode": "manual"
+    },
+    "followUps": {
+      "enabled": true,
+      "rules": [
+        {
+          "id": "fu_review_24h",
+          "label": "Запрос отзыва через 24 ч после монтажа",
+          "enabled": true,
+          "triggerField": "installationDoneAt",
+          "daysAfter": 1,
+          "action": "sms",
+          "template": "RolanPRO: Спасибо за заказ {orderNo}! Будем очень благодарны за отзыв в Google: {googleReview}",
+          "once": true
+        },
+        {
+          "id": "fu_check_6m",
+          "label": "Check-in через 6 месяцев после монтажа",
+          "enabled": true,
+          "triggerField": "installationDoneAt",
+          "daysAfter": 180,
+          "action": "email",
+          "template": "Здравствуйте, {client}!\n\nПрошло полгода с монтажа плёнки в вашем заказе {orderNo}. Всё ли работает как ожидалось? Если есть вопросы — мы рядом.\n\n— {company}",
+          "once": true
+        },
+        {
+          "id": "fu_anniv_1y",
+          "label": "Годовщина: благодарность через 1 год",
+          "enabled": true,
+          "triggerField": "installationDoneAt",
+          "daysAfter": 365,
+          "action": "email",
+          "template": "Здравствуйте, {client}!\n\n🎉 Год назад мы установили вам плёнку (заказ {orderNo}). Спасибо что выбрали нас!\n\nЕсли решите расширить или обновить — скидка 10% по коду THANKYOU.\n\n— {company}",
+          "once": true
+        },
+        {
+          "id": "fu_reactivate_3y",
+          "label": "Реактивация через 3 года",
+          "enabled": false,
+          "triggerField": "installationDoneAt",
+          "daysAfter": 1095,
+          "action": "email",
+          "template": "Здравствуйте, {client}!\n\nПрошло 3 года с нашей последней работы. Технологии плёнок шагнули вперёд — современные опции дают на 20-30% лучшую защиту от UV и теплоизоляцию.\n\nСвяжитесь с нами для бесплатной консультации. {portalUrl}\n\n— {company}",
+          "once": true
+        },
+        {
+          "id": "fu_nurture_d1",
+          "label": "🔥 Разогрев лида: день 1",
+          "enabled": true,
+          "triggerField": "createdAt",
+          "daysAfter": 1,
+          "action": "sms",
+          "onlyStatus": "new",
+          "template": "RolanPRO: Здравствуйте, {client}! Вы интересовались оконными плёнками. Запишем вас на бесплатный замер? Ответьте или позвоните нам.",
+          "once": true
+        },
+        {
+          "id": "fu_nurture_d3",
+          "label": "🔥 Разогрев лида: день 3",
+          "enabled": true,
+          "triggerField": "createdAt",
+          "daysAfter": 3,
+          "action": "sms",
+          "onlyStatus": "new",
+          "template": "RolanPRO: {client}, слоты на бесплатный замер на этой неделе ещё есть. Плёнка снижает жару до 80% и окупается экономией на кондиционере. Записать вас?",
+          "once": true
+        },
+        {
+          "id": "fu_nurture_d7",
+          "label": "🔥 Разогрев лида: день 7 (последний)",
+          "enabled": true,
+          "triggerField": "createdAt",
+          "daysAfter": 7,
+          "action": "sms",
+          "onlyStatus": "new",
+          "template": "RolanPRO: {client}, последнее напоминание 🙂 Бесплатный замер без обязательств + расчёт за 24 часа. Если актуально — просто ответьте ДА.",
+          "once": true
+        }
+      ],
+      "_lastCheckedAt": "2026-07-31T20:07:11.639Z"
+    },
+    "ai": {
+      "apiKey": "",
+      "model": "claude-haiku-4-5-20251001",
+      "enabled": true,
+      "systemPersona": "Ты деловой ассистент в RolanPRO CRM (тонировка окон и защитные плёнки в Лос-Анджелесе). Отвечаешь на русском, кратко и по делу. Числа в долларах с символом $. Площади в sqft."
+    },
+    "sms": {
+      "method": "textbelt",
+      "twilio": {
+        "accountSid": "",
+        "authToken": "",
+        "fromNumber": "",
+        "apiKeySid": "",
+        "apiKeySecret": "",
+        "verifyServiceSid": ""
+      },
+      "textbelt": {
+        "apiKey": "",
+        "senderNumber": "",
+        "profileId": "",
+        "profileName": "",
+        "testTo": ""
+      },
+      "autoSend": true,
+      "templates": {
+        "proposal_sent": "RolanPRO: КП {orderNo} на {sum} готово. Подтвердите: {portalUrl}",
+        "proposal_accepted": "RolanPRO: Спасибо за подтверждение КП {orderNo}! Реквизиты для аванса в портале: {portalUrl}",
+        "installation_scheduled": "RolanPRO: Монтаж {orderNo} назначен на {date}. Будем у вас по адресу.",
+        "installation_done": "RolanPRO: Монтаж {orderNo} выполнен. Спасибо! Оставьте отзыв: {portalUrl}",
+        "payment_received": "RolanPRO: Оплата по {orderNo} получена. Спасибо!",
+        "consultation_scheduled": "RolanPRO: Консультация по {orderNo} назначена. {portalUrl}",
+        "measurement_scheduled": "RolanPRO: Замер по {orderNo} запланирован. {portalUrl}",
+        "measurement_done": "RolanPRO: Замер по {orderNo} выполнен. КП готовим.",
+        "installation_in_progress": "RolanPRO: Бригада начала работу по {orderNo}.",
+        "act_signed": "RolanPRO: Акт по {orderNo} подписан. Спасибо!",
+        "completed": "RolanPRO: Заказ {orderNo} завершён. Реферальная программа: {portalUrl}",
+        "review_request": "RolanPRO: Будем благодарны за отзыв о {orderNo}: {portalUrl}",
+        "installation_accepted": "RolanPRO: Монтажник принял ваш заказ {orderNo} и готовится к выезду. 👷",
+        "installation_en_route": "RolanPRO: Бригада выехала к вам по заказу {orderNo}! 🚗 Скоро будем."
+      }
+    },
+    "email": {
+      "method": "emailjs",
+      "emailjs": {
+        "publicKey": "3xQvrOEoRXWPFbEuu",
+        "serviceId": "service_a41s4rn",
+        "templateId": "template_k1ebot9"
+      },
+      "autoSend": true,
+      "templates": {
+        "proposal_sent": {
+          "subject": "КП по заказу {orderNo} — на сумму {sum}",
+          "body": "Здравствуйте, {client}!\n\nВысылаем коммерческое предложение по заказу {orderNo} на сумму {sum}.\n\n👉 Чтобы зарезервировать дату монтажа, подтвердите КП в один клик:\n{portalUrl}\n\nПосле подтверждения откроется окно с реквизитами для аванса.\n\n— {company}"
+        },
+        "installation_scheduled": {
+          "subject": "Назначен монтаж {orderNo}",
+          "body": "Здравствуйте, {client}!\n\nМонтаж по заказу {orderNo} назначен. Подробности: {portalUrl}\n\n— {company}"
+        },
+        "installation_done": {
+          "subject": "Монтаж выполнен — {orderNo}",
+          "body": "Здравствуйте, {client}!\n\nМонтаж по заказу {orderNo} завершён. Спасибо за доверие!\n{portalUrl}\n\n— {company}"
+        },
+        "review_request": {
+          "subject": "Ваш отзыв о работе — {orderNo}",
+          "body": "Здравствуйте, {client}!\n\nБудем благодарны, если вы поделитесь впечатлениями: {portalUrl}\n\n— {company}"
+        },
+        "consultation_scheduled": {
+          "subject": "✅ Консультация назначена — заказ {orderNo}",
+          "body": "Здравствуйте, {client}!\n\nКонсультация по заказу {orderNo} назначена. Наш специалист свяжется с вами.\n\nОтслеживание: {portalUrl}\n\n— {company}"
+        },
+        "measurement_scheduled": {
+          "subject": "📐 Замер назначен — {orderNo}",
+          "body": "Здравствуйте, {client}!\n\nЗамер по заказу {orderNo} запланирован.\n\n{portalUrl}\n\n— {company}"
+        },
+        "measurement_done": {
+          "subject": "✓ Замер выполнен — {orderNo}",
+          "body": "Здравствуйте, {client}!\n\nЗамер по заказу {orderNo} выполнен. Готовим КП.\n\n— {company}"
+        },
+        "proposal_accepted": {
+          "subject": "🎉 КП подтверждено — {orderNo}",
+          "body": "Спасибо, {client}!\n\nРеквизиты для аванса: {portalUrl}\n\n— {company}"
+        },
+        "installation_in_progress": {
+          "subject": "⚙️ Монтаж начат — {orderNo}",
+          "body": "Здравствуйте, {client}!\n\nБригада приступила к работе по заказу {orderNo}.\n\n— {company}"
+        },
+        "act_signed": {
+          "subject": "📝 Акт подписан — {orderNo}",
+          "body": "Здравствуйте, {client}!\n\nАкт по заказу {orderNo} подписан. Спасибо!\n\n— {company}"
+        },
+        "payment_received": {
+          "subject": "💰 Оплата получена — {orderNo}",
+          "body": "Здравствуйте, {client}!\n\nМы получили оплату по заказу {orderNo} на сумму {sum}. Спасибо!\n\n— {company}"
+        },
+        "completed": {
+          "subject": "🎯 Заказ {orderNo} завершён",
+          "body": "Здравствуйте, {client}!\n\nЗаказ {orderNo} завершён. Реферальная программа: {portalUrl}\n\n— {company}"
+        }
+      }
+    },
+    "installerRates": {
+      "_defaults": {
+        "protective": 3,
+        "decorative": 2.5,
+        "solar": 2.5,
+        "smart": 5,
+        "privacy": 2.5,
+        "other": 2.5
+      },
+      "types": {}
+    },
+    "defaultMapCenter": {
+      "lat": 34.15958280857147,
+      "lon": -118.83855867979103,
+      "zoom": 12
+    },
+    "officeAddress": "615 Hampshire Road Westlake Village CA 91361",
+    "advancePct": 50,
+    "paymentInstructions": "Реквизиты для оплаты:\n\nЗолотая карта/перевод: укажите свои реквизиты в Настройки → Оплата.\n\nПосле перевода пришлите чек на email или WhatsApp.",
+    "integrations": {
+      "googleVoiceNumber": "",
+      "gmailAddress": "",
+      "mapsEnabled": true,
+      "leadBackendUrl": "https://rolanpro-backend-production.up.railway.app",
+      "leadBackendKey": "",
+      "facebook": {
+        "pageId": "",
+        "pageName": "",
+        "connected": false
+      },
+      "ai": {
+        "apiKey": "",
+        "model": "claude-sonnet-4-6"
+      },
+      "googleMapsApiKey": ""
+    },
+    "logoDataUrl": "data:image/png;base64,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",
+    "googleReviewUrl": "",
+    "googleMapsKey": "",
+    "salesCounter": 1,
+    "academyProgress": {},
+    "academyVideoLinks": {},
+    "academyExamResults": {},
+    "communication": {
+      "quietMode": true,
+      "autoOnSchedule": true,
+      "autoOnStatus": true,
+      "channels": {
+        "sms": true,
+        "email": true,
+        "whatsapp": true,
+        "telegram": true,
+        "inapp": true
+      },
+      "whatsapp": {
+        "mode": "manual_queue",
+        "endpoint": ""
+      },
+      "agent": {
+        "enabled": true,
+        "mode": "draft",
+        "objective": "Назначить бесплатный замер, снять возражения и довести клиента до аванса.",
+        "followUpDays": "1,3,7"
+      }
+    },
+    "googleMapsApiKey": ""
+  },
+  "inventory": [],
+  "vendors": [
+    {
+      "id": "v_3m",
+      "name": "3M",
+      "contact": "",
+      "leadTimeDays": 7
+    },
+    {
+      "id": "v_suntek",
+      "name": "SunTek",
+      "contact": "",
+      "leadTimeDays": 7
+    },
+    {
+      "id": "v_llumar",
+      "name": "LLumar",
+      "contact": "",
+      "leadTimeDays": 10
+    },
+    {
+      "id": "v_xpel",
+      "name": "XPEL",
+      "contact": "",
+      "leadTimeDays": 5
+    },
+    {
+      "id": "v_solargard",
+      "name": "Solar Gard",
+      "contact": "",
+      "leadTimeDays": 7
+    }
+  ],
+  "opex": [],
+  "_wizBootstrappedAt": 2,
+  "_realTeamApplied": true,
+  "geocache": {},
+  "_historicalFollowUpsBlocked": true,
+  "tasks": [],
+  "calls": [],
+  "smsLog": [],
+  "products": [
+    {
+      "id": "p_silicone",
+      "sku": "SIL-300",
+      "name": "Силикон структурный (туба)",
+      "category": "consumable",
+      "unit": "шт",
+      "stock": 20,
+      "costPrice": 8,
+      "salePrice": 25,
+      "vendorId": "",
+      "reorderBelow": 5,
+      "addedAt": "2026-07-22T19:12:00.175Z"
+    },
+    {
+      "id": "p_bus",
+      "sku": "BUS-100",
+      "name": "Шина токопроводящая (шт)",
+      "category": "consumable",
+      "unit": "шт",
+      "stock": 50,
+      "costPrice": 3,
+      "salePrice": 12,
+      "vendorId": "",
+      "reorderBelow": 10,
+      "addedAt": "2026-07-22T19:12:00.176Z"
+    },
+    {
+      "id": "p_pwr30",
+      "sku": "PWR-30W",
+      "name": "Блок питания Smart 30W",
+      "category": "hardware",
+      "unit": "шт",
+      "stock": 8,
+      "costPrice": 45,
+      "salePrice": 120,
+      "vendorId": "",
+      "reorderBelow": 2,
+      "addedAt": "2026-07-22T19:12:00.176Z"
+    },
+    {
+      "id": "p_pwr100",
+      "sku": "PWR-100W",
+      "name": "Блок питания Smart 100W",
+      "category": "hardware",
+      "unit": "шт",
+      "stock": 4,
+      "costPrice": 90,
+      "salePrice": 240,
+      "vendorId": "",
+      "reorderBelow": 2,
+      "addedAt": "2026-07-22T19:12:00.176Z"
+    },
+    {
+      "id": "p_ctrl",
+      "sku": "CTRL-433",
+      "name": "Контроллер 433MHz + пульт",
+      "category": "hardware",
+      "unit": "шт",
+      "stock": 12,
+      "costPrice": 18,
+      "salePrice": 55,
+      "vendorId": "",
+      "reorderBelow": 3,
+      "addedAt": "2026-07-22T19:12:00.176Z"
+    },
+    {
+      "id": "p_switch",
+      "sku": "SW-WALL",
+      "name": "Настенный выключатель Smart",
+      "category": "hardware",
+      "unit": "шт",
+      "stock": 15,
+      "costPrice": 10,
+      "salePrice": 35,
+      "vendorId": "",
+      "reorderBelow": 4,
+      "addedAt": "2026-07-22T19:12:00.176Z"
+    }
+  ],
+  "sales": [],
+  "schemaVersion": 2,
+  "companies": [],
+  "contacts": [],
+  "properties": [],
+  "manualReview": [],
+  "_migrationLog": [
+    {
+      "version": 2,
+      "at": "2026-07-25T15:21:43.993Z",
+      "report": {
+        "companiesCreated": 125,
+        "contactsCreated": 299,
+        "propertiesCreated": 428,
+        "duplicatesFound": 8,
+        "ordersUpdated": 599,
+        "manualReviewCount": 126
+      },
+      "backupKey": "rolanpro_crm_backup_preV2_2026-07-25T15-21-43-949Z"
+    }
+  ],
+  "proposals": [],
+  "messages": []
+}

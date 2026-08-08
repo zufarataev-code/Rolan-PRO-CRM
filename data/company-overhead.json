@@ -1,0 +1,12 @@
+{
+  "office_rent_monthly": 2600,
+  "admin_payroll_monthly": 2200,
+  "sales_payroll_monthly": 1800,
+  "ops_payroll_monthly": 1400,
+  "marketing_monthly": 700,
+  "software_monthly": 250,
+  "transport_monthly": 450,
+  "utilities_monthly": 150,
+  "misc_monthly": 200,
+  "updated_at": "2026-04-13T12:59:06.268Z"
+}
