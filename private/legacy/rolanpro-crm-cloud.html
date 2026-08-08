@@ -3297,6 +3297,45 @@
     padding: 0.85rem;
     break-inside: avoid;
   }
+  .smart-install-plan {
+    margin: 0 0 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 14px;
+    background: #f8fbff;
+    padding: 1rem;
+  }
+  .smart-install-plan-head,
+  .smart-room-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+  }
+  .smart-install-plan-head h2 { font-size: 1.05rem; font-weight: 950; }
+  .smart-room-plan { margin-top: .8rem; break-inside: avoid; }
+  .smart-room-title {
+    justify-content: flex-start;
+    border-bottom: 1px solid #dbeafe;
+    padding-bottom: .45rem;
+  }
+  .smart-room-title span {
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    display: inline-grid;
+    place-items: center;
+    background: #1d4ed8;
+    color: #fff;
+    font-size: .74rem;
+    font-weight: 900;
+  }
+  .smart-room-title small { color: #64748b; margin-left: auto; }
+  .smart-room-diagrams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; margin-top: .65rem; }
+  .smart-room-diagram { border: 1px solid #dbeafe; border-radius: 10px; background: #fff; padding: .6rem; break-inside: avoid; }
+  .smart-install-svg { display: block; width: 100%; height: auto; }
+  .smart-room-route { margin-top: .35rem; color: #334155; font-size: .72rem; line-height: 1.45; }
+  .smart-install-inline { max-width: 500px; border: 1px solid #bfdbfe; border-radius: 10px; background: #fff; padding: .4rem; }
+  .pdf-footer { margin-top: 1rem; padding-top: .55rem; border-top: 1px solid #cbd5e1; color: #64748b; font-size: .66rem; text-align: center; }
   @media (max-width: 1100px) {
     .measure-modal { width: 100vw; max-width: 100vw; }
     .measure-studio { grid-template-columns: 1fr; max-height: calc(96vh - 74px); }
@@ -3312,6 +3351,7 @@
     .measure-scope-grid { grid-template-columns: 1fr; }
     .measure-head { align-items: flex-start; flex-direction: column; }
     .measure-head-actions { width: 100%; justify-content: flex-start; }
+    .smart-room-diagrams { grid-template-columns: 1fr; }
   }
   /* === Orders Kanban Funnel === */
   .orders-command-panel {
@@ -4473,7 +4513,20 @@
     }
   }
   /* === Print === */
-  @media print { .no-print { display: none !important; } }
+  @page { size: Letter portrait; margin: 0.55in; }
+  @media print {
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print, .pp-btn, .sidebar, .topbar, .ai-sidebar { display: none !important; }
+    body, #app, .pp-body { margin: 0 !important; padding: 0 !important; background: #fff !important; color: #0f172a !important; }
+    .pp-cover { min-height: auto; padding: 28px; border-radius: 0; break-after: page; page-break-after: always; }
+    .pp-section { max-width: none; padding: 0 0 18px; }
+    .pp-grid { grid-template-columns: 1fr; gap: 12px; }
+    .pp-sticky { position: static; }
+    .pp-panel, .pp-room, .pp-window, .pp-service, .pp-product, .pp-payment-card {
+      break-inside: avoid; page-break-inside: avoid; box-shadow: none !important;
+    }
+    .pp-room:hover, .pp-service:hover, .pp-product:hover { transform: none; }
+  }
   /* === Inter font === */
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 </style>
@@ -6375,6 +6428,18 @@ function migrateSchema() {
         if (w.actualWidth == null) w.actualWidth = w.width;
         if (w.actualHeight == null) w.actualHeight = w.height;
         if (w.actualQty == null) w.actualQty = w.qty;
+        if (w.smart) {
+          if (!w.smart.connectionPointSide) w.smart.connectionPointSide = w.smart.busbarSide || 'top';
+          if (!w.smart.busbarSide) w.smart.busbarSide = w.smart.connectionPointSide;
+          if (!w.smart.blockPlacement) {
+            const location = String(w.smart.powerSupplyLocation || '').toLowerCase();
+            w.smart.blockPlacement = location.includes('server') || location.includes('low-voltage') ? 'server_room'
+              : location.includes('closet') ? 'closet'
+              : location.includes('door') ? 'above_door'
+              : 'ceiling';
+          }
+          if (w.smart.connectionPointDetail == null) w.smart.connectionPointDetail = '';
+        }
         // Resolve filmType to catalogId if possible
         if (w.filmType && !w.catalogId) {
           const found = s.catalog.find(c => `${c.brand} ${c.model}` === w.filmType || c.model === w.filmType);
@@ -7700,6 +7765,28 @@ const SMART_CONTROL_TYPES = [
   'Smart home relay',
   'Multi-zone controller',
 ];
+const SMART_CONNECTION_POINTS = [
+  { id: 'top', label: 'Сверху', short: 'ВЕРХ' },
+  { id: 'bottom', label: 'Снизу', short: 'НИЗ' },
+  { id: 'left', label: 'Слева', short: 'ЛЕВО' },
+  { id: 'right', label: 'Справа', short: 'ПРАВО' },
+  { id: 'custom', label: 'Особая точка', short: 'СВОЯ' },
+];
+const SMART_BLOCK_PLACEMENTS = [
+  { id: 'ceiling', label: 'За потолком / ceiling access' },
+  { id: 'closet', label: 'В шкафу / service closet' },
+  { id: 'wall', label: 'На стене / service panel' },
+  { id: 'above_door', label: 'Над дверью' },
+  { id: 'server_room', label: 'Server / low-voltage room' },
+  { id: 'cabinet', label: 'В мебели / cabinet' },
+  { id: 'custom', label: 'Другое место' },
+];
+function smartConnectionPointInfo(id = 'top') {
+  return SMART_CONNECTION_POINTS.find(item => item.id === id) || SMART_CONNECTION_POINTS[0];
+}
+function smartBlockPlacementInfo(id = 'ceiling') {
+  return SMART_BLOCK_PLACEMENTS.find(item => item.id === id) || SMART_BLOCK_PLACEMENTS[0];
+}
 const SMART_PROJECT_STAGES = [
   { id: 'retrofit', label: 'Готовый дом / retrofit' },
   { id: 'construction', label: 'Стройка / pre-wire' },
@@ -8828,14 +8915,20 @@ function openEngineeringMeasureStudio(orderId) {
               </div>
               <label class="mt-2">Контроллер</label>
               <select id="ms-controller">${SMART_CONTROL_TYPES.map(v => `<option value="${v}" ${(smart.controllerType || 'Wall switch') === v ? 'selected' : ''}>${v}</option>`).join('')}</select>
-              <label class="mt-2">Где блок питания</label>
-              <input id="ms-power-location" value="${academyEsc(smart.powerSupplyLocation || smartTemplate.blockLocation || '')}" placeholder="Closet / ceiling / above door">
+              <div class="grid grid-cols-2 gap-2 mt-2">
+                <div><label>Размещение блока</label><select id="ms-block-placement">
+                  ${SMART_BLOCK_PLACEMENTS.map(v => `<option value="${v.id}" ${(smart.blockPlacement || 'ceiling') === v.id ? 'selected' : ''}>${academyEsc(v.label)}</option>`).join('')}
+                </select></div>
+                <div><label>Точное место блока</label><input id="ms-power-location" value="${academyEsc(smart.powerSupplyLocation || smartTemplate.blockLocation || '')}" placeholder="Closet A, above north door"></div>
+              </div>
               <label class="mt-2">Трасса провода</label>
               <input id="ms-wire-path" value="${academyEsc(smart.wirePath || smartTemplate.wirePath || '')}" placeholder="Left jamb → ceiling → controller">
               <div class="grid grid-cols-2 gap-2 mt-2">
                 <div><label>Conduit</label><select id="ms-conduit"><option value="none" ${(smart.conduit || smartTemplate.conduit) === 'none' ? 'selected' : ''}>Нет</option><option value="1/2 in" ${(smart.conduit || smartTemplate.conduit || '1/2 in') === '1/2 in' ? 'selected' : ''}>1/2 in</option><option value="3/4 in" ${smart.conduit === '3/4 in' ? 'selected' : ''}>3/4 in</option></select></div>
-                <div><label>Busbar</label><select id="ms-busbar">${['left','right','top','bottom','custom'].map(v => `<option value="${v}" ${(smart.busbarSide || 'top') === v ? 'selected' : ''}>${{left:'Left',right:'Right',top:'Top',bottom:'Bottom',custom:'Custom'}[v]}</option>`).join('')}</select></div>
+                <div><label>Точка подключения к стеклу</label><select id="ms-connection-point">${SMART_CONNECTION_POINTS.map(v => `<option value="${v.id}" ${(smart.connectionPointSide || smart.busbarSide || 'top') === v.id ? 'selected' : ''}>${academyEsc(v.label)}</option>`).join('')}</select></div>
               </div>
+              <label class="mt-2">Уточнение точки подключения</label>
+              <input id="ms-connection-detail" value="${academyEsc(smart.connectionPointDetail || '')}" placeholder="Например: верхний левый угол, 4 in от рамы">
               <div class="grid grid-cols-2 gap-2 mt-2">
                 <div><label>Wire length ft</label><input id="ms-wire-length" type="number" step="1" value="${smart.wireLengthFt || ''}"></div>
                 <div><label>Block distance ft</label><input id="ms-block-distance" type="number" step="1" value="${smart.blockDistanceFt || ''}" oninput="measureStudioPreview()"></div>
@@ -8909,6 +9002,7 @@ function measureStudioSetSmartTemplate(templateId) {
   };
   setValue('ms-project-stage', tpl.projectStage, true);
   setValue('ms-controller', tpl.controllerType, true);
+  setValue('ms-block-placement', tpl.projectStage === 'construction' ? 'server_room' : (tpl.id === 'distributed_room_blocks' ? 'closet' : 'ceiling'), true);
   setValue('ms-power-location', tpl.blockLocation, false);
   setValue('ms-wire-path', tpl.wirePath, false);
   setValue('ms-conduit', tpl.conduit || '1/2 in', true);
@@ -9062,10 +9156,13 @@ function measureStudioFormWindow() {
     transformerOutput: `${parseFloat(document.getElementById('ms-voltage')?.value) || 48}V AC`,
     blocks: parseInt(document.getElementById('ms-blocks')?.value) || 1,
     controllerType: (document.getElementById('ms-controller')?.value || '').trim(),
+    blockPlacement: document.getElementById('ms-block-placement')?.value || 'ceiling',
     powerSupplyLocation: (document.getElementById('ms-power-location')?.value || '').trim(),
     wirePath: (document.getElementById('ms-wire-path')?.value || '').trim(),
     conduit: document.getElementById('ms-conduit')?.value || '1/2 in',
-    busbarSide: document.getElementById('ms-busbar')?.value || 'top',
+    connectionPointSide: document.getElementById('ms-connection-point')?.value || 'top',
+    connectionPointDetail: (document.getElementById('ms-connection-detail')?.value || '').trim(),
+    busbarSide: document.getElementById('ms-connection-point')?.value || 'top',
     wireLengthFt: parseFloat(document.getElementById('ms-wire-length')?.value) || null,
     blockDistanceFt: parseFloat(document.getElementById('ms-block-distance')?.value) || null,
     signalPlan: document.getElementById('ms-signal-plan')?.value || 'local_remote',
@@ -9187,7 +9284,7 @@ function measureStudioNewWindow(orderId) {
   document.getElementById('ms-access').value = 'normal';
   document.getElementById('ms-notes').value = '';
   document.querySelectorAll('[data-glass-signal]').forEach(x => x.checked = false);
-  ['ms-smart-zone','ms-server-room','ms-power-location','ms-wire-path','ms-wire-length','ms-block-distance','ms-smart-notes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['ms-smart-zone','ms-server-room','ms-power-location','ms-wire-path','ms-wire-length','ms-block-distance','ms-connection-detail','ms-smart-notes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   if (document.getElementById('ms-smart-template')) measureStudioSetSmartTemplate('retrofit_local_block');
   if (document.getElementById('ms-project-stage')) document.getElementById('ms-project-stage').value = 'retrofit';
   if (document.getElementById('ms-signal-plan')) document.getElementById('ms-signal-plan').value = 'local_remote';
@@ -9196,7 +9293,8 @@ function measureStudioNewWindow(orderId) {
   if (document.getElementById('ms-blocks')) document.getElementById('ms-blocks').value = 1;
   if (document.getElementById('ms-controller')) document.getElementById('ms-controller').value = 'Wall switch';
   if (document.getElementById('ms-conduit')) document.getElementById('ms-conduit').value = '1/2 in';
-  if (document.getElementById('ms-busbar')) document.getElementById('ms-busbar').value = 'top';
+  if (document.getElementById('ms-block-placement')) document.getElementById('ms-block-placement').value = 'ceiling';
+  if (document.getElementById('ms-connection-point')) document.getElementById('ms-connection-point').value = 'top';
   if (document.getElementById('ms-electrician')) document.getElementById('ms-electrician').checked = false;
   const img = document.getElementById('ms-photo-img');
   const empty = document.getElementById('ms-photo-empty');
@@ -9435,13 +9533,65 @@ function renderTechScopeDetails(win) {
   }
   return '';
 }
+function smartInstallationDiagramSvg(win, roomName = '') {
+  const smart = win.smart || {};
+  const side = smart.connectionPointSide || smart.busbarSide || 'top';
+  const points = {
+    top: { x: 108, y: 28, tx: 108, ty: 10 },
+    bottom: { x: 108, y: 144, tx: 108, ty: 166 },
+    left: { x: 36, y: 86, tx: 12, ty: 88 },
+    right: { x: 180, y: 86, tx: 204, ty: 88 },
+    custom: { x: 108, y: 28, tx: 108, ty: 10 },
+  };
+  const point = points[side] || points.top;
+  const pointLabel = smartConnectionPointInfo(side).short;
+  const blockLabel = smartBlockPlacementInfo(smart.blockPlacement || 'ceiling').label.split(' / ')[0];
+  return `<svg class="smart-install-svg" viewBox="0 0 430 180" role="img" aria-label="Монтажная схема ${academyEsc(roomName)} ${academyEsc(win.name || '')}" xmlns="http://www.w3.org/2000/svg">
+    <defs><marker id="smart-arrow-${academyEsc(win.id || 'window')}" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"/></marker></defs>
+    <rect x="36" y="28" width="144" height="116" rx="8" fill="#eff6ff" stroke="#1d4ed8" stroke-width="3"/>
+    <line x1="108" y1="28" x2="108" y2="144" stroke="#bfdbfe" stroke-width="2"/>
+    <circle cx="${point.x}" cy="${point.y}" r="8" fill="#f97316" stroke="#fff" stroke-width="3"/>
+    <text x="${point.tx}" y="${point.ty}" text-anchor="middle" font-size="11" font-weight="900" fill="#c2410c">${academyEsc(pointLabel)}</text>
+    <path d="M ${point.x} ${point.y} C 230 ${point.y}, 226 88, 276 88" fill="none" stroke="#2563eb" stroke-width="4" stroke-dasharray="8 5" marker-end="url(#smart-arrow-${academyEsc(win.id || 'window')})"/>
+    <rect x="278" y="48" width="132" height="80" rx="12" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+    <text x="344" y="72" text-anchor="middle" font-size="11" font-weight="900" fill="#93c5fd">POWER BLOCK</text>
+    <text x="344" y="92" text-anchor="middle" font-size="12" font-weight="800" fill="#fff">${academyEsc(blockLabel)}</text>
+    <text x="344" y="111" text-anchor="middle" font-size="10" fill="#cbd5e1">${academyEsc(smart.controllerType || 'controller TBD')}</text>
+    <text x="108" y="173" text-anchor="middle" font-size="11" font-weight="800" fill="#334155">${academyEsc(win.name || 'Window')} · ${academyEsc(smart.zone || roomName || 'Zone')}</text>
+  </svg>`;
+}
+function renderSmartRoomInstallationPlans(order) {
+  const roomPlans = (order?.measurements?.rooms || []).map(room => ({
+    room,
+    windows: (room.windows || []).filter(win => win.measureScope === 'smart_film' || windowCatalog(win)?.category === 'smart'),
+  })).filter(item => item.windows.length);
+  if (!roomPlans.length) return '';
+  return `
+    <section class="smart-install-plan">
+      <div class="smart-install-plan-head">
+        <div><div class="text-xs font-bold text-blue-700">SMART FILM INSTALLATION MAP</div><h2>Монтажная схема по помещениям</h2></div>
+        <div class="text-xs text-slate-500">Точка подключения → трасса → блок → управление</div>
+      </div>
+      ${roomPlans.map(({ room, windows }, roomIndex) => `
+        <div class="smart-room-plan">
+          <div class="smart-room-title"><span>${roomIndex + 1}</span><b>${academyEsc(room.name || 'Room')}</b><small>${windows.length} зон(ы)</small></div>
+          <div class="smart-room-diagrams">
+            ${windows.map(win => `<div class="smart-room-diagram">
+              ${smartInstallationDiagramSvg(win, room.name)}
+              <div class="smart-room-route"><b>Точка:</b> ${academyEsc(smartConnectionPointInfo(win.smart?.connectionPointSide || win.smart?.busbarSide).label)}${win.smart?.connectionPointDetail ? ` · ${academyEsc(win.smart.connectionPointDetail)}` : ''}<br><b>Блок:</b> ${academyEsc(smartBlockPlacementInfo(win.smart?.blockPlacement).label)} · ${academyEsc(win.smart?.powerSupplyLocation || 'точное место не указано')}<br><b>Трасса:</b> ${academyEsc(win.smart?.wirePath || 'не указана')}</div>
+            </div>`).join('')}
+          </div>
+        </div>`).join('')}
+    </section>`;
+}
 function renderSmartTechnicalAssignment(win) {
   const smart = win.smart || {};
   const tpl = smartConnectionTemplateInfo(smart.connectionTemplate);
+  const connectionSide = smart.connectionPointSide || smart.busbarSide || 'top';
   const route = [
-    smart.busbarSide ? `Busbar: ${smart.busbarSide}` : '',
+    `Подключение: ${smartConnectionPointInfo(connectionSide).label}${smart.connectionPointDetail ? ` (${smart.connectionPointDetail})` : ''}`,
     smart.wirePath ? `Трасса: ${smart.wirePath}` : tpl.wirePath,
-    smart.powerSupplyLocation ? `Блок: ${smart.powerSupplyLocation}` : tpl.blockLocation,
+    `Блок: ${smartBlockPlacementInfo(smart.blockPlacement).label}${smart.powerSupplyLocation ? ` — ${smart.powerSupplyLocation}` : ''}`,
     smart.controllerType ? `Управление: ${smart.controllerType}` : tpl.controllerType,
   ].filter(Boolean).join(' → ');
   const repeater = smartNeedsRepeater(smart);
@@ -9460,6 +9610,7 @@ function renderSmartTechnicalAssignment(win) {
         <div><b>Conduit:</b> ${academyEsc(smart.conduit || tpl.conduit || '—')} · <b>wire:</b> ${smart.wireLengthFt || '—'} ft</div>
         <div><b>Distance:</b> ${smart.blockDistanceFt || '—'} ft · <b>signal:</b> ${academyEsc(smartSignalPlanLabel(smart.signalPlan || tpl.signalPlan))}</div>
       </div>
+      <div class="smart-install-inline mt-3">${smartInstallationDiagramSvg(win, smart.zone || '')}</div>
       <div class="mt-2 text-xs"><b>Схема:</b> ${academyEsc(route)}</div>
       <div class="mt-2">
         <div class="text-xs font-bold text-blue-900 mb-1">Шаги для заказ-наряда</div>
@@ -9476,12 +9627,12 @@ function renderTechnicalSheetHtml(order, printMode = false) {
   const rows = measureAllWindows(order);
   const smart = technicalSheetSmartSummary(order);
   return `
-    <div class="tech-sheet ${printMode ? '' : 'p-5'}">
+    <div class="tech-sheet pdf-document ${printMode ? '' : 'p-5'}">
       <div class="flex items-start justify-between gap-4 mb-5">
         <div>
           <div class="text-xs font-bold text-blue-700">ROLANPRO TECHNICAL SHEET</div>
           <h1 class="text-2xl font-black">${academyEsc(order.number)} · ${academyEsc(client.name || '')}</h1>
-          <div class="text-sm text-gray-600 mt-1">${academyEsc(client.address || '')}</div>
+          <div class="text-sm text-gray-600 mt-1">${academyEsc(orderAddress(order, client) || '')}</div>
         </div>
         <div class="text-right text-sm">
           <div><b>Услуга:</b> ${academyEsc(orderServiceTypeLabel(order.serviceType))}</div>
@@ -9495,6 +9646,7 @@ function renderTechnicalSheetHtml(order, printMode = false) {
         <div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Smart блоки</div><div class="font-black text-lg">${smart.blocks || '—'}</div></div>
         ${smart.windows ? `<div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Repeater zones</div><div class="font-black text-lg">${smart.repeaters || '—'}</div></div>` : ''}
       </div>
+      ${renderSmartRoomInstallationPlans(order)}
       ${rows.length ? rows.map(({ room, win }, idx) => {
         const cat = windowCatalog(win);
         const scope = measureScopeInfo(win.measureScope || measureScopeByCatalog(cat));
@@ -9526,6 +9678,7 @@ function renderTechnicalSheetHtml(order, printMode = false) {
         `;
       }).join('') : `<div class="p-5 rounded-lg bg-slate-50 border text-center text-gray-500">Замеры ещё не добавлены.</div>`}
       ${renderCutSheetHtml(order, printMode, true)}
+      <footer class="pdf-footer">ROLANPRO · ${academyEsc(order.number)} · Технический лист сформирован ${academyEsc(new Date().toLocaleDateString('ru-RU'))}</footer>
     </div>
   `;
 }
@@ -9817,7 +9970,7 @@ function openTechnicalSheet(orderId) {
             <h3 class="text-xl font-black">Технический лист для КП и монтажа</h3>
           </div>
           <div class="flex gap-2 flex-wrap justify-end">
-            <button class="btn-ghost" onclick="printTechnicalSheet('${order.id}')">🖨 Печать</button>
+            <button class="btn-ghost" onclick="printTechnicalSheet('${order.id}')">📄 PDF / Печать</button>
             <button class="btn-ghost" onclick="openCutSheet('${order.id}')">🎞 Лист раскроя</button>
             ${canManage ? `<button class="btn-primary bg-slate-900 hover:bg-slate-800" onclick="generatePremiumProposal('${order.id}')">✦ Передать в КП</button>` : ''}
             <button class="btn-ghost" onclick="closeModal()">✕</button>
@@ -9828,12 +9981,43 @@ function openTechnicalSheet(orderId) {
     </div>`;
   render();
 }
+function rolanDocumentPrintCss() {
+  return `
+    @page { size: Letter portrait; margin: 0.55in; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { width: 100%; margin: 0; padding: 0; background: #fff; color: #0f172a; }
+    body { font-family: Inter, Arial, Helvetica, sans-serif; font-size: 11px; line-height: 1.42; }
+    .pdf-document { width: 100%; max-width: none; margin: 0; padding: 0; }
+    h1, h2, h3, p { orphans: 3; widows: 3; }
+    h1 { font-size: 21px; line-height: 1.15; } h2 { font-size: 16px; line-height: 1.2; }
+    .tech-window { display: grid; grid-template-columns: 145px minmax(0,1fr); gap: 12px; border: 1px solid #dbe4ef; border-radius: 10px; padding: 11px; margin: 0 0 10px; break-inside: avoid; page-break-inside: avoid; }
+    .tech-window > div:first-child svg { max-width: 140px; max-height: 150px; }
+    .tag { display: inline-flex; padding: 3px 8px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 10px; font-weight: 800; }
+    .tech-panel-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; }
+    .tech-panel-chip { border: 1px solid #e2e8f0; border-radius: 7px; padding: 6px 8px; background: #f8fafc; font-size: 10px; }
+    .smart-install-plan { margin: 0 0 12px; border: 1px solid #bfdbfe; border-radius: 11px; background: #f8fbff; padding: 11px; }
+    .smart-install-plan-head, .smart-room-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .smart-room-plan, .smart-room-diagram, .smart-install-inline { break-inside: avoid; page-break-inside: avoid; }
+    .smart-room-title { justify-content: flex-start; border-bottom: 1px solid #dbeafe; padding: 7px 0 5px; }
+    .smart-room-title span { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; background: #1d4ed8; color: #fff; font-weight: 900; }
+    .smart-room-title small { margin-left: auto; color: #64748b; }
+    .smart-room-diagrams { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; margin-top: 7px; }
+    .smart-room-diagram { border: 1px solid #dbeafe; border-radius: 8px; background: #fff; padding: 6px; }
+    .smart-install-svg { display: block; width: 100%; height: auto; }
+    .smart-room-route { color: #334155; font-size: 9px; line-height: 1.4; }
+    .smart-install-inline { max-width: 390px; border: 1px solid #bfdbfe; border-radius: 8px; background: #fff; padding: 4px; }
+    .cut-sheet { break-before: page; page-break-before: always; }
+    .cut-sheet-strip, .cut-roll-run { break-inside: avoid; page-break-inside: avoid; }
+    .pdf-footer { margin-top: 10px; padding-top: 6px; border-top: 1px solid #cbd5e1; color: #64748b; font-size: 8px; text-align: center; }
+    button, .no-print { display: none !important; }
+  `;
+}
 function printTechnicalSheet(orderId) {
   const order = getOrder(orderId);
   if (!order) return;
   const w = window.open('', '_blank');
   if (!w) { alert('Браузер заблокировал печать. Разрешите pop-up для CRM.'); return; }
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${academyEsc(order.number)} Technical Sheet</title><script src="https://cdn.tailwindcss.com"><\\/script><style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;padding:24px;color:#0f172a}.tech-window{display:grid;grid-template-columns:190px 1fr;gap:14px;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:12px;break-inside:avoid}.tag{display:inline-flex;padding:3px 9px;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:700}.tech-panel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px}.tech-panel-chip{border:1px solid #e2e8f0;border-radius:8px;padding:7px 9px;background:#f8fafc;font-size:12px}@media print{button{display:none}.tech-window{break-inside:avoid}}</style></head><body>${renderTechnicalSheetHtml(order, true)}<script>setTimeout(()=>window.print(),300)<\\/script></body></html>`);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${academyEsc(order.number)} Technical Sheet</title><script src="https://cdn.tailwindcss.com"><\\/script><style>${rolanDocumentPrintCss()}</style><style>${cutSheetVerticalPrintCss()}</style><style>${cutSheetContinuousPrintCss()}</style></head><body>${renderTechnicalSheetHtml(order, true)}<script>setTimeout(()=>window.print(),700)<\\/script></body></html>`);
   w.document.close();
 }
 
@@ -10080,6 +10264,7 @@ function openClassicProfessionalKP(oid) {
           <div class="kp-win-row"><span>Площадь:</span> ${area.toFixed(2)} sqft</div>
           <div class="kp-win-row"><span>Плёнка:</span> ${cat ? `${cat.brand} ${cat.model} <em>(${catLabel(cat.category)})</em>` : (w.filmType || '— уточняется —')}</div>
           <div class="kp-win-row"><span>Цена:</span> $${(+price).toFixed(2)}/sqft</div>
+          ${w.smart ? `<div class="kp-win-row"><span>Smart:</span> зона ${academyEsc(w.smart.zone || r.name || '—')} · подключение ${academyEsc(smartConnectionPointInfo(w.smart.connectionPointSide || w.smart.busbarSide).label.toLowerCase())} · блок ${academyEsc(smartBlockPlacementInfo(w.smart.blockPlacement).label)}</div>` : ''}
           <div class="kp-win-sum">${fmtMoney(sum)}</div>
         </div>
       </div>`;
@@ -10100,7 +10285,9 @@ function openClassicProfessionalKP(oid) {
   win.document.write(`<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>КП ${o.number} — RolanPRO</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family:'Helvetica Neue',Arial,sans-serif; color:#0f172a; padding:48px 52px; max-width:900px; margin:0 auto; }
+    @page { size: Letter portrait; margin: 0.55in; }
+    html, body { width:100%; background:#fff; }
+    body { font-family:'Helvetica Neue',Arial,sans-serif; color:#0f172a; padding:0; max-width:none; margin:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .kp-head { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid #1e3a5f; padding-bottom:20px; }
     .kp-logo { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
     .kp-logo small { display:block; font-size:11px; font-weight:400; letter-spacing:3px; color:#64748b; margin-top:2px; }
@@ -10126,8 +10313,9 @@ function openClassicProfessionalKP(oid) {
     .kp-terms { font-size:12px; color:#64748b; line-height:1.9; border-top:1px solid #e2e8f0; padding-top:16px; }
     .kp-sign { display:flex; justify-content:space-between; margin-top:40px; font-size:13px; }
     .kp-sign div { width:44%; border-top:1px solid #0f172a; padding-top:6px; color:#475569; }
+    .kp-closing { break-inside:avoid; page-break-inside:avoid; }
     .kp-print { position:fixed; top:14px; right:14px; padding:10px 22px; background:#1e3a5f; color:#fff; border:none; border-radius:9px; font-size:14px; cursor:pointer; }
-    @media print { .kp-print { display:none; } body { padding:20px 0; } }
+    @media print { .kp-print { display:none; } body { zoom:.92; } .kp-room,.kp-win,.kp-total-box,.kp-terms,.kp-closing { break-inside:avoid; page-break-inside:avoid; } .kp-room{margin-bottom:18px}.kp-sign{margin-top:28px} }
   </style></head><body>
   <button class="kp-print" onclick="window.print()">🖨 Печать / PDF</button>
   <div class="kp-head">
@@ -10148,15 +10336,17 @@ function openClassicProfessionalKP(oid) {
   ${roomsHtml || '<p style="color:#94a3b8">Замеры не внесены.</p>'}
   ${complexityCoef !== 1 ? `<div style="font-size:13px;color:#64748b;margin-bottom:8px;">Коэффициент сложности работ: ×${complexityCoef.toFixed(2)} (учтён в ценах)</div>` : ''}
   <div class="kp-total"><div class="kp-total-box"><div class="lbl">ИТОГО ПО ОБЪЕКТУ</div><div class="val">${fmtMoney(grand)}</div></div></div>
-  <div class="kp-terms">
-    • Аванс ${s.advance?.percent || 30}% при подписании, остаток — по завершении монтажа.<br>
-    • Монтаж выполняется сертифицированными специалистами за 1 день (для типовых объектов).<br>
-    • Гарантия на плёнку — по спецификации производителя (до 10 лет), на работы — 12 месяцев.<br>
-    • Предложение действительно 14 дней. Финальная стоимость подтверждается после согласования.
-  </div>
-  <div class="kp-sign">
-    <div>Подпись заказчика / дата</div>
-    <div>RolanPRO / представитель</div>
+  <div class="kp-closing">
+    <div class="kp-terms">
+      • Аванс ${s.advance?.percent || 30}% при подписании, остаток — по завершении монтажа.<br>
+      • Монтаж выполняется сертифицированными специалистами за 1 день (для типовых объектов).<br>
+      • Гарантия на плёнку — по спецификации производителя (до 10 лет), на работы — 12 месяцев.<br>
+      • Предложение действительно 14 дней. Финальная стоимость подтверждается после согласования.
+    </div>
+    <div class="kp-sign">
+      <div>Подпись заказчика / дата</div>
+      <div>RolanPRO / представитель</div>
+    </div>
   </div>
   </body></html>`);
   win.document.close();
@@ -21415,10 +21605,15 @@ function premiumWindowEngineeringBlock(window) {
   const summary = measureWindowEngineeringSummary(window);
   const smart = window.smart;
   if (!summary && !smart) return '';
+  const smartRoute = smart ? [
+    `connection ${smartConnectionPointInfo(smart.connectionPointSide || smart.busbarSide).label.toLowerCase()}`,
+    `block ${smartBlockPlacementInfo(smart.blockPlacement).label}`,
+    smart.powerSupplyLocation || '',
+  ].filter(Boolean).join(' → ') : '';
   return `
     <div class="text-xs text-slate-400 mt-1">
       Engineering: ${premiumEsc(summary || 'Measured technical details attached')}
-      ${smart ? `<br>Smart zone: ${premiumEsc(smart.zone || window.filmZone || '—')} · ${premiumEsc(smart.voltageVac || 48)}V AC · ${Math.round(smart.calculatedW || measureSmartLoad(window))}W · ${premiumEsc(smart.controllerType || 'controller TBD')}` : ''}
+      ${smart ? `<br>Smart zone: ${premiumEsc(smart.zone || window.filmZone || '—')} · ${premiumEsc(smart.voltageVac || 48)}V AC · ${Math.round(smart.calculatedW || measureSmartLoad(window))}W · ${premiumEsc(smart.controllerType || 'controller TBD')}<br>Install route: ${premiumEsc(smartRoute)}` : ''}
     </div>
   `;
 }
