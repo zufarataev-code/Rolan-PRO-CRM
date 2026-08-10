@@ -48,7 +48,10 @@ export function SmsConsentForm() {
       form.reset();
       setState({
         kind: "success",
-        message: "Thank you. Your SMS consent and service request have been recorded.",
+        message:
+          data.get("smsConsent") === "on"
+            ? "Thank you. Your service request and optional SMS consent have been recorded."
+            : "Thank you. Your service request has been recorded. You did not enroll in SMS updates.",
       });
     } catch {
       setState({ kind: "error", message: "We could not save your request. Please try again." });
@@ -79,12 +82,13 @@ export function SmsConsentForm() {
       </div>
 
       <label className="sms-optin-consent">
-        <input name="smsConsent" type="checkbox" required />
+        <input name="smsConsent" type="checkbox" />
         <span>
-          I agree to receive customer-care and transactional SMS messages from RolanPRO about my quote,
-          consultation, measurement appointment, installation schedule, project updates, payment balance,
-          and support. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or
-          HELP for help. Consent is not a condition of purchase.
+          <strong>Optional SMS updates.</strong> I agree to receive customer-care and transactional SMS
+          messages from RolanPRO about my quote, consultation, measurement appointment, installation
+          schedule, project updates, payment balance, and support. Message frequency varies. Message and
+          data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of
+          purchase. I can submit this service request without checking this box.
         </span>
       </label>
 
@@ -102,7 +106,7 @@ export function SmsConsentForm() {
       </p>
 
       <button className="sms-optin-submit" disabled={submitting} type="submit">
-        {submitting ? "Submitting…" : "Submit request and SMS consent"}
+        {submitting ? "Submitting…" : "Submit service request"}
       </button>
 
       {state.kind !== "idle" ? (

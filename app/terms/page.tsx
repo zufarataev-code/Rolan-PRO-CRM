@@ -58,6 +58,10 @@ export default function TermsPage() {
           . We do not sell or share mobile information or SMS consent with third parties or affiliates for
           marketing or promotional purposes.
         </p>
+        <p>
+          All the above categories exclude text messaging originator opt-in data and consent; this information
+          won&apos;t be shared with any third parties.
+        </p>
       </section>
     </main>
   );

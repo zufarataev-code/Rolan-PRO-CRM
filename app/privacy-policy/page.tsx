@@ -44,6 +44,10 @@ export default function PrivacyPolicyPage() {
           only as needed to deliver RolanPRO communications and may not use that information for their own
           marketing.
         </p>
+        <p>
+          All the above categories exclude text messaging originator opt-in data and consent; this information
+          won&apos;t be shared with any third parties.
+        </p>
 
         <h2>Opt out</h2>
         <p>
