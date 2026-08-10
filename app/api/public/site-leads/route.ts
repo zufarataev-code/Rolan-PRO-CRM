@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { buildSiteLeadNotes } from "@/features/leads/site-lead-notes";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 
 type SiteLeadPayload = {
@@ -12,9 +13,6 @@ type SiteLeadPayload = {
   smsConsent?: boolean;
   consentSource?: string;
 };
-
-const smsConsentDisclosure =
-  "I agree to receive SMS messages from RolanPRO about my quote, appointment, project updates, and customer support. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as SiteLeadPayload | null;
@@ -35,10 +33,6 @@ export async function POST(request: Request) {
 
   if (!phone) {
     return apiError(400, "invalid_payload", "Please enter your phone number.");
-  }
-
-  if (!smsConsent) {
-    return apiError(400, "sms_consent_required", "Please confirm SMS consent so we can text you about this request.");
   }
 
   if (name.length > 160 || phone.length > 40 || (email && email.length > 191)) {
@@ -67,18 +61,14 @@ export async function POST(request: Request) {
     return apiError(500, "missing_pipeline_status", "Pipeline status for new leads is not configured.");
   }
 
-  const notes = [
-    consentSource === "sms_consent_page" ? "Website SMS opt-in request" : "Website landing inquiry",
-    serviceType ? `Service: ${serviceType}` : null,
-    propertyType ? `Property: ${propertyType}` : null,
-    city ? `City / Area: ${city}` : null,
-    message ? `Message: ${message}` : null,
-    "SMS consent: yes",
-    `SMS consent captured at: ${new Date().toISOString()}`,
-    `SMS disclosure shown: ${smsConsentDisclosure}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const notes = buildSiteLeadNotes({
+    consentSource,
+    smsConsent,
+    serviceType,
+    propertyType,
+    city,
+    message,
+  });
 
   const lead = await prisma.lead.create({
     data: {
@@ -96,5 +86,6 @@ export async function POST(request: Request) {
 
   return apiSuccess({
     lead_id: lead.lead_id,
+    sms_consent: smsConsent,
   });
 }

@@ -566,8 +566,7 @@ const landingContent = {
       honeypotMessage: "Thanks. Your request has been received.",
       consentNote: "By sending the form, you allow Rolan Pro to contact you about your estimate request.",
       smsConsentLabel:
-        "I agree to receive SMS messages from RolanPRO about my quote, appointment, project updates, and customer support. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.",
-      smsConsentErrorMessage: "Please confirm SMS consent so we can text you about this request.",
+        "Optional SMS updates: I agree to receive SMS messages from RolanPRO about my quote, appointment, project updates, and customer support. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase. You can submit this request without checking this box.",
       privacyPolicyLabel: "Privacy Policy",
       termsLabel: "Terms",
       companyLabel: "Company",
@@ -853,8 +852,7 @@ const landingContent = {
       honeypotMessage: "Спасибо. Ваша заявка получена.",
       consentNote: "Отправляя форму, вы разрешаете Rolan Pro связаться с вами по вашему запросу.",
       smsConsentLabel:
-        "Я согласен получать SMS от RolanPRO по заявке, консультации, замеру, статусу проекта и поддержке. Частота сообщений может меняться. Возможна тарификация оператора. Для отказа ответьте STOP, для помощи HELP. Согласие не является условием покупки.",
-      smsConsentErrorMessage: "Подтвердите SMS-согласие, чтобы мы могли писать вам по этой заявке.",
+        "Необязательно — SMS-обновления: я согласен получать SMS от RolanPRO по заявке, консультации, замеру, статусу проекта и поддержке. Частота сообщений может меняться. Возможна тарификация оператора. Для отказа ответьте STOP, для помощи HELP. Согласие не является условием покупки. Заявку можно отправить без этой галочки.",
       privacyPolicyLabel: "Privacy Policy",
       termsLabel: "Terms",
       companyLabel: "Компания",

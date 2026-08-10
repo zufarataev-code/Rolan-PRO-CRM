@@ -35,7 +35,6 @@ export type LeadCaptureFormCopy = {
   honeypotMessage: string;
   consentNote: string;
   smsConsentLabel: string;
-  smsConsentErrorMessage: string;
   privacyPolicyLabel: string;
   termsLabel: string;
   companyLabel: string;
@@ -136,14 +135,6 @@ export function LeadCaptureForm({
       message: String(formData.get("message") ?? "").trim(),
       smsConsent: formData.get("smsConsent") === "on",
     };
-
-    if (!payload.smsConsent) {
-      setSubmitState({
-        kind: "error",
-        message: copy.smsConsentErrorMessage,
-      });
-      return;
-    }
 
     setSubmitState({ kind: "idle", message: "" });
 
@@ -269,7 +260,7 @@ export function LeadCaptureForm({
       </div>
 
       <label className={styles.smsConsentBox}>
-        <input name="smsConsent" type="checkbox" required />
+        <input name="smsConsent" type="checkbox" />
         <span>{copy.smsConsentLabel}</span>
       </label>
 
