@@ -15,7 +15,7 @@ export default function TermsPage() {
         </Link>
         <p className="legal-kicker">Terms</p>
         <h1>RolanPRO Terms and SMS Messaging Terms</h1>
-        <p className="legal-muted">Last updated: July 30, 2026</p>
+        <p className="legal-muted">Last updated: August 9, 2026</p>
 
         <h2>Service requests</h2>
         <p>
@@ -28,6 +28,13 @@ export default function TermsPage() {
           By checking the SMS consent box on a RolanPRO form, you agree to receive customer-care and
           transactional SMS messages from RolanPRO about your quote, appointment, project updates, payment
           links, balances, and customer support. Consent is not a condition of purchase.
+        </p>
+
+        <h2>Program name and message types</h2>
+        <p>
+          The program name is RolanPRO Customer Care SMS. Messages may include quote follow-up,
+          consultation and measurement scheduling, installation reminders, project status, payment balance,
+          and support communications. RolanPRO does not use this program for third-party advertising.
         </p>
 
         <h2>Message frequency and cost</h2>
@@ -44,11 +51,12 @@ export default function TermsPage() {
 
         <h2>Privacy</h2>
         <p>
-          SMS opt-in data and consent are handled according to our{" "}
+          Mobile information, SMS opt-in data, and consent are handled according to our{" "}
           <Link className="legal-inline-link" href="/privacy-policy">
             Privacy Policy
           </Link>
-          . We do not sell or share SMS opt-in data with third parties for their marketing purposes.
+          . We do not sell or share mobile information or SMS consent with third parties or affiliates for
+          marketing or promotional purposes.
         </p>
       </section>
     </main>

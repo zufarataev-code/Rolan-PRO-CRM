@@ -257,6 +257,144 @@ select option {
   text-underline-offset: 3px;
 }
 
+.sms-optin-card {
+  width: min(920px, 100%);
+}
+
+.sms-optin-card h1 {
+  max-width: 18ch;
+}
+
+.sms-optin-intro {
+  margin-top: 18px !important;
+  max-width: 66ch;
+}
+
+.sms-optin-form {
+  display: grid;
+  gap: 20px;
+  margin-top: 30px;
+}
+
+.sms-optin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.sms-optin-grid label {
+  display: grid;
+  gap: 8px;
+  color: #203b54;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.sms-optin-full {
+  grid-column: 1 / -1;
+}
+
+.sms-optin-grid input,
+.sms-optin-grid textarea {
+  width: 100%;
+  border: 1px solid #bdcddd;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 13px 14px;
+  outline: none;
+}
+
+.sms-optin-grid input:focus,
+.sms-optin-grid textarea:focus {
+  border-color: #167faa;
+  box-shadow: 0 0 0 3px rgba(22, 127, 170, 0.13);
+}
+
+.sms-optin-consent {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 18px;
+  border: 1px solid #9fbfd4;
+  border-radius: 16px;
+  background: #f1f8fc;
+  color: #203b54;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.sms-optin-consent input {
+  width: 19px;
+  height: 19px;
+  margin: 3px 0 0;
+}
+
+.sms-optin-disclosure {
+  font-size: 14px !important;
+}
+
+.sms-optin-submit {
+  width: fit-content;
+  min-height: 48px;
+  border: 0;
+  border-radius: 12px;
+  background: #10253a;
+  color: #ffffff;
+  padding: 0 20px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sms-optin-submit:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.sms-optin-status {
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.sms-optin-status-success {
+  background: #e8f7ef;
+  color: #17683e !important;
+}
+
+.sms-optin-status-error {
+  background: #fff0ef;
+  color: #a3342c !important;
+}
+
+.sms-optin-contact {
+  display: grid;
+  gap: 4px;
+  margin-top: 34px;
+  padding-top: 22px;
+  border-top: 1px solid #d8e2eb;
+  color: #4c6176;
+  font-size: 14px;
+}
+
+.sms-optin-contact strong {
+  color: #10253a;
+}
+
+@media (max-width: 640px) {
+  .sms-optin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sms-optin-full {
+    grid-column: auto;
+  }
+
+  .sms-optin-submit {
+    width: 100%;
+  }
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;

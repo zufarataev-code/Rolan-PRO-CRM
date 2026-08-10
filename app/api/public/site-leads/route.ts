@@ -10,6 +10,7 @@ type SiteLeadPayload = {
   city?: string;
   message?: string;
   smsConsent?: boolean;
+  consentSource?: string;
 };
 
 const smsConsentDisclosure =
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
   const city = body?.city?.trim();
   const message = body?.message?.trim();
   const smsConsent = body?.smsConsent === true;
+  const consentSource = body?.consentSource === "sms_consent_page" ? "sms_consent_page" : "website_landing";
 
   if (!name) {
     return apiError(400, "invalid_payload", "Please enter your name.");
@@ -66,7 +68,7 @@ export async function POST(request: Request) {
   }
 
   const notes = [
-    "Website landing inquiry",
+    consentSource === "sms_consent_page" ? "Website SMS opt-in request" : "Website landing inquiry",
     serviceType ? `Service: ${serviceType}` : null,
     propertyType ? `Property: ${propertyType}` : null,
     city ? `City / Area: ${city}` : null,
@@ -83,7 +85,7 @@ export async function POST(request: Request) {
       name,
       phone,
       email: email || null,
-      source: "website_landing",
+      source: consentSource,
       notes: notes || null,
       pipeline_status_id: newLeadStatus.pipeline_status_id,
     },
