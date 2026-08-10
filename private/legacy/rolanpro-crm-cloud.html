@@ -12460,6 +12460,11 @@ function currentUser() { return state.currentUserId ? getUser(state.currentUserI
 function orderUserCanManage(user = currentUser()) {
   return !!user && (user.role === 'manager' || user.role === 'owner');
 }
+function orderUserOwns(order, user = currentUser()) {
+  if (!order || !user) return false;
+  if (user.role === 'owner') return true;
+  return user.role === 'manager' && order.managerId === user.id;
+}
 function orderUserCanMeasure(order, user = currentUser()) {
   return !!order && !!user && user.role === 'measurer' && order.measurerId === user.id;
 }
@@ -12467,10 +12472,21 @@ function orderUserCanInstall(order, user = currentUser()) {
   return !!order && !!user && user.role === 'installer' && (order.installerIds || []).includes(user.id);
 }
 function orderUserCanAccess(order, user = currentUser()) {
-  return orderUserCanManage(user) || orderUserCanMeasure(order, user) || orderUserCanInstall(order, user);
+  return orderUserOwns(order, user) || orderUserCanMeasure(order, user) || orderUserCanInstall(order, user);
 }
 function orderUserCanSeeMoney(order, user = currentUser()) {
-  return orderUserCanManage(user) || orderUserCanInstall(order, user);
+  return orderUserOwns(order, user) || orderUserCanInstall(order, user);
+}
+function visibleOrdersForUser(user = currentUser()) {
+  return (db?.orders || []).filter(order => orderUserCanAccess(order, user));
+}
+function visibleClientIdsForUser(user = currentUser()) {
+  return new Set(visibleOrdersForUser(user).map(order => order.clientId).filter(Boolean));
+}
+function visibleClientsForUser(user = currentUser()) {
+  if (user?.role === 'owner') return db?.clients || [];
+  const clientIds = visibleClientIdsForUser(user);
+  return (db?.clients || []).filter(client => clientIds.has(client.id));
 }
 const ORDER_FINANCIAL_TIMELINE_KEYS = new Set([
   'deposit_received', 'payment_received', 'stripe_paid', 'payout_paid',
@@ -12478,7 +12494,7 @@ const ORDER_FINANCIAL_TIMELINE_KEYS = new Set([
 ]);
 function orderTimelineForUser(order, user = currentUser()) {
   const items = order?.timeline || [];
-  if (orderUserCanManage(user)) return items;
+  if (orderUserOwns(order, user)) return items;
   return items.filter(ev => !ORDER_FINANCIAL_TIMELINE_KEYS.has(ev.key));
 }
 function windowArea(w) { return windowAreaSqft(w) * M2_PER_SQFT; } // sqft -> m², panel-aware
@@ -13692,25 +13708,29 @@ function renderOwnerPanel() {
 function renderManagerDashboard() {
   const u = currentUser();
   const ownerPanel = u.role === 'owner' ? renderOwnerPanel() : '';
-  const active = db.orders.filter(o => !['completed','review_received'].includes(o.status));
-  const thisMonthDone = db.orders.filter(o => {
+  const orders = visibleOrdersForUser(u);
+  const clients = visibleClientsForUser(u);
+  const visibleOrderIds = new Set(orders.map(o => o.id));
+  const reviews = (db.reviews || []).filter(review => visibleOrderIds.has(review.orderId));
+  const active = orders.filter(o => !['completed','review_received'].includes(o.status));
+  const thisMonthDone = orders.filter(o => {
     if (!o.paidAt) return false;
     const d = new Date(o.paidAt);
     const n = new Date();
     return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
   });
   const revenue = thisMonthDone.reduce((s,o) => s + orderPrice(o), 0);
-  const avgRating = db.reviews.length ? (db.reviews.reduce((s,r)=>s+r.rating,0)/db.reviews.length).toFixed(1) : '—';
+  const avgRating = reviews.length ? (reviews.reduce((s,r)=>s+r.rating,0)/reviews.length).toFixed(1) : '—';
   const pipeline = STATUSES.filter(s => !['review_received'].includes(s.key)).map(s => ({
-    key: s.key, count: db.orders.filter(o => o.status === s.key).length
+    key: s.key, count: orders.filter(o => o.status === s.key).length
   }));
-  const upcoming = db.orders.filter(o => o.installationAt && new Date(o.installationAt) > new Date())
+  const upcoming = orders.filter(o => o.installationAt && new Date(o.installationAt) > new Date())
                    .sort((a,b) => a.installationAt.localeCompare(b.installationAt)).slice(0, 5);
 
   // ---- LIVE INSTALLATION BOARD (Uber-style dispatcher view) ----
   const UBER_STEPS = ['installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done'];
   const UBER_ICONS = { installation_scheduled:'📅', installation_accepted:'👷', installation_en_route:'🚗', installation_in_progress:'⚙️', installation_done:'✅' };
-  const liveInstalls = db.orders
+  const liveInstalls = orders
     .filter(o => UBER_STEPS.slice(0,4).includes(o.status)) // всё, что назначено но не сдано
     .sort((a,b) => (a.installationAt||'9999').localeCompare(b.installationAt||'9999'));
   function stepTime(o, key) {
@@ -13761,7 +13781,7 @@ function renderManagerDashboard() {
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
     <div class="card"><div class="text-sm text-gray-500">${T('activeOrders')}</div><div class="text-3xl font-bold text-slate-800">${active.length}</div></div>
     <div class="card"><div class="text-sm text-gray-500">${T('revenue')} (${T('thisMonth')})</div><div class="text-3xl font-bold text-emerald-600">${fmtMoney(revenue)}</div></div>
-    <div class="card"><div class="text-sm text-gray-500">${T('totalClients')}</div><div class="text-3xl font-bold text-slate-800">${db.clients.length}</div></div>
+    <div class="card"><div class="text-sm text-gray-500">${u.role === 'owner' ? T('totalClients') : 'Мои клиенты'}</div><div class="text-3xl font-bold text-slate-800">${clients.length}</div></div>
     <div class="card"><div class="text-sm text-gray-500">${T('avgRating')}</div><div class="text-3xl font-bold text-amber-500">${avgRating} ${avgRating!=='—'?'⭐':''}</div></div>
   </div>
 
@@ -13775,7 +13795,7 @@ function renderManagerDashboard() {
       </div>
       <div class="space-y-2">
         ${pipeline.map(p => {
-          const pct = active.length ? (p.count / Math.max(1, db.orders.length) * 100) : 0;
+          const pct = active.length ? (p.count / Math.max(1, orders.length) * 100) : 0;
           const s = STATUSES.find(x=>x.key===p.key);
           return `
           <div class="flex items-center gap-3">
@@ -14116,10 +14136,11 @@ function renderOrderKanbanCard(o) {
 }
 
 function renderOrders() {
-  const filtered = db.orders
+  const u = currentUser();
+  const filtered = visibleOrdersForUser(u)
     .filter(o => {
       if (state.statusFilter && o.status !== state.statusFilter) return false;
-      if (state.managerFilter && o.managerId !== state.managerFilter) return false;
+      if (u?.role === 'owner' && state.managerFilter && o.managerId !== state.managerFilter) return false;
       if (state.dateFrom && o.createdAt < new Date(state.dateFrom).toISOString()) return false;
       if (state.dateTo) {
         const to = new Date(state.dateTo); to.setHours(23,59,59,999);
@@ -14137,7 +14158,7 @@ function renderOrders() {
   const ordersView = state.ordersView || 'kanban';
   const totalArea = filtered.reduce((s,o)=>s+(orderActualAreaSqft(o) || orderPlannedAreaSqft(o)),0);
   const totalSum  = filtered.reduce((s,o)=>s+orderKanbanRevenue(o),0);
-  const hasFilters = state.search || state.statusFilter || state.managerFilter || state.dateFrom || state.dateTo;
+  const hasFilters = state.search || state.statusFilter || (u?.role === 'owner' && state.managerFilter) || state.dateFrom || state.dateTo;
   const periodLabel = ordersPeriodLabel();
 
   return `
@@ -14177,13 +14198,13 @@ function renderOrders() {
           ${STATUSES.map(s => `<option value="${s.key}" ${state.statusFilter===s.key?'selected':''}>${T(s.key)}</option>`).join('')}
         </select>
       </div>
-      <div class="orders-filter-field">
+      ${u?.role === 'owner' ? `<div class="orders-filter-field">
         <label>${T('manager')}</label>
         <select onchange="state.managerFilter=this.value; render();">
           <option value="">${T('allManagers')}</option>
           ${usersByRole('manager').map(m => `<option value="${m.id}" ${state.managerFilter===m.id?'selected':''}>${m.name}</option>`).join('')}
         </select>
-      </div>
+      </div>` : ''}
       <div class="orders-filter-field">
         <label>${T('dateFrom')}</label>
         <input type="date" value="${state.dateFrom}" onchange="setOrdersDateFrom(this.value)">
@@ -14259,8 +14280,11 @@ function renderOrders() {
 
 // ---------- MANAGER: CLIENTS ----------
 function renderClients() {
+  const u = currentUser();
+  const clients = visibleClientsForUser(u);
+  const orders = visibleOrdersForUser(u);
   const segFilter = state.clientSegmentFilter || 'all';
-  const filtered = db.clients.filter(c => {
+  const filtered = clients.filter(c => {
     const accountType = clientAccountType(c);
     const relationship = clientRelationshipType(c);
     if (segFilter === 'b2b' && accountType !== 'b2b') return false;
@@ -14277,15 +14301,15 @@ function renderClients() {
     }
     return true;
   });
-  const b2bCount = db.clients.filter(c => clientAccountType(c) === 'b2b').length;
-  const b2cCount = db.clients.filter(c => clientAccountType(c) === 'b2c').length;
-  const regularCount = db.clients.filter(c => clientRelationshipType(c) === 'regular').length;
+  const b2bCount = clients.filter(c => clientAccountType(c) === 'b2b').length;
+  const b2cCount = clients.filter(c => clientAccountType(c) === 'b2c').length;
+  const regularCount = clients.filter(c => clientRelationshipType(c) === 'regular').length;
   return `
   <div class="card mb-4">
     <div class="flex items-center gap-3 flex-wrap">
       <input placeholder="🔎 Поиск по имени / телефону / email / адресу" value="${state.search||''}" oninput="state.search=this.value; render();" class="max-w-md flex-1">
       <div class="inline-flex rounded-lg border overflow-hidden text-sm">
-        <button class="px-3 py-1.5 ${segFilter==='all'?'bg-blue-600 text-white':'bg-white'}" onclick="state.clientSegmentFilter='all'; render();">Все (${db.clients.length})</button>
+        <button class="px-3 py-1.5 ${segFilter==='all'?'bg-blue-600 text-white':'bg-white'}" onclick="state.clientSegmentFilter='all'; render();">${u?.role === 'owner' ? 'Все' : 'Мои'} (${clients.length})</button>
         <button class="px-3 py-1.5 ${segFilter==='b2c'?'bg-blue-600 text-white':'bg-white'}" onclick="state.clientSegmentFilter='b2c'; render();">🏠 B2C (${b2cCount})</button>
         <button class="px-3 py-1.5 ${segFilter==='b2b'?'bg-blue-600 text-white':'bg-white'}" onclick="state.clientSegmentFilter='b2b'; render();">🏢 B2B (${b2bCount})</button>
         <button class="px-3 py-1.5 ${segFilter==='regular'?'bg-blue-600 text-white':'bg-white'}" onclick="state.clientSegmentFilter='regular'; render();">⭐ Постоянные (${regularCount})</button>
@@ -14297,15 +14321,15 @@ function renderClients() {
 
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
     ${filtered.length === 0 ? `<div class="empty-state col-span-full"><div class="icon">👥</div><div>Не найдено</div></div>` : filtered.map(c => {
-      const orders = db.orders.filter(o => o.clientId === c.id);
+      const clientOrders = orders.filter(o => o.clientId === c.id);
       const refBy = c.referredBy ? getClient(c.referredBy) : null;
       const accountType = clientAccountType(c);
       const relationship = clientRelationshipType(c);
       const isB2B = accountType === 'b2b';
       const addresses = clientAddressBook(c);
       const primary = clientAddressById(c, c.primaryAddressId);
-      const revenue = orders.reduce((s,o)=>s+orderRevenue(o),0);
-      const debt = orders.reduce((s,o)=>s+orderDebt(o),0);
+      const revenue = clientOrders.reduce((s,o)=>s+orderRevenue(o),0);
+      const debt = clientOrders.reduce((s,o)=>s+orderDebt(o),0);
       return `
       <div class="card">
         <div class="flex items-start justify-between">
@@ -17759,7 +17783,9 @@ function confirmScheduleInstallation(oid) {
 
 function openAssignTeam(oid) {
   const o = getOrder(oid);
-  const managers = usersByRole('manager');
+  const viewer = currentUser();
+  if (!orderUserOwns(o, viewer)) { alert('Нет доступа к этому заказу'); return; }
+  const managers = viewer?.role === 'owner' ? usersByRole('manager') : usersByRole('manager').filter(m => m.id === viewer.id);
   const measurers = usersByRole('measurer');
   const installers = usersByRole('installer');
   state.modal = `
@@ -17784,7 +17810,9 @@ function openAssignTeam(oid) {
 }
 function saveTeamAssign(oid) {
   const o = getOrder(oid);
-  o.managerId = document.getElementById('a-mgr').value;
+  const viewer = currentUser();
+  if (!orderUserOwns(o, viewer)) { alert('Нет доступа к этому заказу'); return; }
+  if (viewer?.role === 'owner') o.managerId = document.getElementById('a-mgr').value;
   const nextMeasurerId = document.getElementById('a-meas').value;
   if (o.measurerId !== nextMeasurerId) delete o.measurementAcceptedAt;
   o.measurerId = nextMeasurerId;
@@ -18520,7 +18548,7 @@ function searchClientsFuzzy(q) {
   if (!q || !q.trim()) return [];
   const norm = s => (s || '').toLowerCase().replace(/[\s\-+()]/g, '');
   const nq = norm(q);
-  return db.clients
+  return visibleClientsForUser()
     .map(c => {
       const addressFields = clientAddressBook(c).flatMap(a => [a.label, a.address, a.street, a.unit, a.city, a.state, a.zip]);
       const score = [c.name, c.firstName, c.lastName, c.phone, c.email, c.address, c.addressStreet, c.addressUnit, c.addressCity, c.addressState, c.addressZip, ...addressFields].filter(Boolean)
@@ -18539,7 +18567,9 @@ function openOrderModal() {
   state._newOrderTags = [];
   state._newOrderService = 'smart_film';
   state._newOrderExecution = 'standard_project';
-  const managers = orderManagerCandidates();
+  const viewer = currentUser();
+  const allManagers = orderManagerCandidates();
+  const managers = viewer?.role === 'manager' ? allManagers.filter(u => u.id === viewer.id) : allManagers;
   const defaultManagerId = managers.some(u => u.id === state.currentUserId) ? state.currentUserId : (managers[0]?.id || '');
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
@@ -19086,7 +19116,9 @@ function createOrder() {
   const service = primaryServiceInfo(serviceId);
   const executionVariantId = document.getElementById('no-execution')?.value || state._newOrderExecution || 'standard_project';
   const executionVariant = orderExecutionVariantInfo(executionVariantId);
-  const managerId = (document.getElementById('no-mgr')?.value || '').trim();
+  const viewer = currentUser();
+  const requestedManagerId = (document.getElementById('no-mgr')?.value || '').trim();
+  const managerId = viewer?.role === 'manager' ? viewer.id : requestedManagerId;
   const complexity = document.getElementById('no-complexity')?.value || 'standard';
   const pickedTags = Array.from(document.getElementById('no-tags')?.selectedOptions || []).map(o => o.value);
 
@@ -19616,7 +19648,7 @@ function renderGlobalSearch() {
   const q = (state.globalSearch || '').trim().toLowerCase();
   if (!q) { dropdown.style.display = 'none'; dropdown.innerHTML = ''; return; }
 
-  const orders = db.orders.filter(o => {
+  const orders = visibleOrdersForUser().filter(o => {
     const c = getClient(o.clientId);
     return o.number.toLowerCase().includes(q)
       || c?.name.toLowerCase().includes(q)
@@ -19624,7 +19656,7 @@ function renderGlobalSearch() {
       || orderAddress(o, c).toLowerCase().includes(q);
   }).slice(0, 8);
 
-  const clients = db.clients.filter(c => {
+  const clients = visibleClientsForUser().filter(c => {
     const addressText = clientAddressBook(c).map(a => `${a.label} ${a.address}`).join(' ').toLowerCase();
     return c.name.toLowerCase().includes(q)
       || (c.phone || '').toLowerCase().includes(q)
@@ -22739,6 +22771,7 @@ function calendarRoleFilterValue() {
 function orderMatchesCalendarRole(o, eventType) {
   const u = currentUser();
   if (!u) return true;
+  if (!orderUserCanAccess(o, u)) return false;
   if (u.role === 'measurer') return eventType === 'measure' && o.measurerId === u.id;
   if (u.role === 'installer') return eventType === 'install' && (o.installerIds || []).includes(u.id);
   const filter = calendarRoleFilterValue();
@@ -22781,7 +22814,7 @@ function calItemsInRange(startDate, endDate) {
 function calActiveOrdersWithAddress() {
   const u = currentUser();
   if (!u || (u.role !== 'owner' && u.role !== 'manager')) return [];
-  return db.orders.filter(o => {
+  return visibleOrdersForUser(u).filter(o => {
     if (['completed','review_received'].includes(o.status)) return false;
     if (!['all','mine'].includes(calendarRoleFilterValue())) return false;
     if (calendarRoleFilterValue() === 'mine' && o.managerId !== u.id) return false;
@@ -24332,7 +24365,7 @@ function renderCalendar() {
       <div class="font-black text-slate-900 ml-1">${academyEsc(headerLabel)}</div>
       ${canRoleFilter ? `
         <select class="w-auto text-sm" onchange="state.calendarRoleFilter=this.value; render();">
-          <option value="all" ${calendarRoleFilterValue()==='all'?'selected':''}>Все события</option>
+          <option value="all" ${calendarRoleFilterValue()==='all'?'selected':''}>${u?.role === 'owner' ? 'Все события' : 'Все мои события'}</option>
           <option value="mine" ${calendarRoleFilterValue()==='mine'?'selected':''}>Мои заказы</option>
           <option value="consultations" ${calendarRoleFilterValue()==='consultations'?'selected':''}>Консультации</option>
           <option value="measurements" ${calendarRoleFilterValue()==='measurements'?'selected':''}>Замеры</option>
