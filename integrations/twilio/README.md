@@ -104,17 +104,18 @@ I agree to receive SMS messages from RolanPRO about my quote, appointment, proje
 Также нужны публичные страницы:
 
 ```text
-Privacy Policy: https://rolan-pro.com/privacy-policy/
-Terms: https://rolan-pro.com/terms/
+Public SMS opt-in form: https://rolanpro-crm.143-110-136-211.sslip.io/sms-consent
+Privacy Policy: https://rolanpro-crm.143-110-136-211.sslip.io/privacy-policy
+Terms: https://rolanpro-crm.143-110-136-211.sslip.io/terms
 ```
 
 В Twilio Toll-Free registration лучше указывать:
 
 ```text
 Opt-in type: Website form / Web form
-Opt-in proof URL: публичная страница с формой и SMS checkbox
-Privacy Policy URL: https://rolan-pro.com/privacy-policy/
-Terms and Conditions URL: https://rolan-pro.com/terms/
+Opt-in proof URL: https://rolanpro-crm.143-110-136-211.sslip.io/sms-consent
+Privacy Policy URL: https://rolanpro-crm.143-110-136-211.sslip.io/privacy-policy
+Terms and Conditions URL: https://rolanpro-crm.143-110-136-211.sslip.io/terms
 Use case: Customer care
 Opt-in keywords: START, YES, UNSTOP
 Age gated content: unchecked

@@ -15,7 +15,7 @@ export default function PrivacyPolicyPage() {
         </Link>
         <p className="legal-kicker">Privacy Policy</p>
         <h1>RolanPRO Privacy Policy</h1>
-        <p className="legal-muted">Last updated: July 30, 2026</p>
+        <p className="legal-muted">Last updated: August 9, 2026</p>
 
         <h2>Information we collect</h2>
         <p>
@@ -39,8 +39,10 @@ export default function PrivacyPolicyPage() {
           Message and data rates may apply. Reply STOP to opt out or HELP for help.
         </p>
         <p>
-          We do not sell, rent, or share SMS opt-in data or SMS consent with third parties for their marketing
-          purposes. Service providers may process messages only as needed to deliver RolanPRO communications.
+          We do not sell, rent, or share mobile information, SMS opt-in data, or SMS consent with third
+          parties or affiliates for marketing or promotional purposes. Service providers may process messages
+          only as needed to deliver RolanPRO communications and may not use that information for their own
+          marketing.
         </p>
 
         <h2>Opt out</h2>
