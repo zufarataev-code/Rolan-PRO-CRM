@@ -3586,7 +3586,7 @@
     border: 1px solid rgba(203,213,225,0.84);
     background: rgba(255,255,255,0.94);
     overflow: hidden;
-    cursor: pointer;
+    cursor: grab;
     box-shadow: 0 9px 24px rgba(15,23,42,0.08);
     transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
     animation: kanbanRise .22s ease both;
@@ -3606,6 +3606,13 @@
   .kanban-card.dragging {
     opacity: .56;
     transform: scale(.985);
+    cursor: grabbing;
+  }
+  .kanban-card[draggable="true"] .kanban-card-main {
+    -webkit-user-drag: none;
+  }
+  body.kanban-is-dragging {
+    user-select: none;
   }
   .kanban-card-top {
     height: 5px;
@@ -13978,30 +13985,105 @@ function openOrderFromKanban(orderId, event) {
   if (interactive) return;
   openOrder(orderId);
 }
+let kanbanDraggedOrderId = null;
+function kanbanColumnForStatus(status) {
+  return ORDER_KANBAN_FUNNEL.find(column => column.statuses.includes(status)) || null;
+}
+function kanbanMoveOrder(orderId, targetStatus) {
+  const o = getOrder(orderId);
+  const viewer = currentUser();
+  if (!o || !targetStatus) return false;
+  if (!orderUserOwns(o, viewer)) {
+    alert('Нет доступа к изменению этого заказа');
+    return false;
+  }
+  const currentColumn = kanbanColumnForStatus(o.status);
+  const targetColumn = kanbanColumnForStatus(targetStatus);
+  if (currentColumn && targetColumn && currentColumn.id === targetColumn.id) return false;
+  changeStatus(orderId, targetStatus, state.currentUserId);
+  return true;
+}
 function kanbanDragStart(event, orderId) {
-  event.dataTransfer.setData('text/plain', orderId);
-  event.dataTransfer.effectAllowed = 'move';
-  event.currentTarget.closest('.kanban-card')?.classList.add('dragging');
+  const blockedControl = event.target?.closest?.('button,input,select,textarea');
+  const handle = event.target?.closest?.('.kanban-drag-handle');
+  if (blockedControl && !handle) {
+    event.preventDefault();
+    return;
+  }
+  kanbanDraggedOrderId = orderId;
+  const card = event.currentTarget?.closest?.('.kanban-card') || event.currentTarget;
+  if (event.dataTransfer) {
+    event.dataTransfer.setData('application/x-rolanpro-order', orderId);
+    event.dataTransfer.setData('text/plain', orderId);
+    event.dataTransfer.effectAllowed = 'move';
+  }
+  card?.classList.add('dragging');
+  document.body.classList.add('kanban-is-dragging');
   event.stopPropagation();
 }
 function kanbanDragEnd(event) {
-  event.currentTarget.closest('.kanban-card')?.classList.remove('dragging');
+  const card = event.currentTarget?.closest?.('.kanban-card') || event.currentTarget;
+  card?.classList.remove('dragging');
+  document.querySelectorAll('.kanban-column.drag-over').forEach(column => column.classList.remove('drag-over'));
+  document.body.classList.remove('kanban-is-dragging');
+  kanbanDraggedOrderId = null;
   event.stopPropagation();
 }
 function kanbanDragOver(event) {
   event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
   event.currentTarget.classList.add('drag-over');
 }
 function kanbanDragLeave(event) {
+  if (event.relatedTarget && event.currentTarget.contains(event.relatedTarget)) return;
   event.currentTarget.classList.remove('drag-over');
 }
 function kanbanDropOrder(event, targetStatus) {
   event.preventDefault();
   event.currentTarget.classList.remove('drag-over');
-  const orderId = event.dataTransfer.getData('text/plain');
+  const orderId = event.dataTransfer?.getData('application/x-rolanpro-order')
+    || event.dataTransfer?.getData('text/plain')
+    || kanbanDraggedOrderId;
+  document.body.classList.remove('kanban-is-dragging');
+  kanbanDraggedOrderId = null;
+  if (!orderId) return;
+  kanbanMoveOrder(orderId, targetStatus);
+}
+function openKanbanStagePicker(orderId) {
   const o = getOrder(orderId);
-  if (!o || o.status === targetStatus) return;
-  changeStatus(orderId, targetStatus, state.currentUserId);
+  if (!o || !orderUserOwns(o)) {
+    alert('Нет доступа к изменению этого заказа');
+    return;
+  }
+  const currentColumn = kanbanColumnForStatus(o.status);
+  state.modal = `
+    <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+      <div class="modal-content workspace-modal p-6" style="max-width:620px">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <div class="text-xs font-bold text-blue-700">ЗАКАЗ ${premiumEsc(o.number)}</div>
+            <h3 class="font-black text-xl text-slate-900">Переместить на этап</h3>
+            <div class="text-sm text-gray-500 mt-1">Сейчас: ${premiumEsc(currentColumn?.title || T(o.status))}</div>
+          </div>
+          <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          ${ORDER_KANBAN_FUNNEL.map(column => `
+            <button class="${currentColumn?.id === column.id ? 'btn-ghost opacity-50' : 'btn-ghost'} text-left border p-3"
+              ${currentColumn?.id === column.id ? 'disabled' : ''}
+              onclick="moveKanbanOrderFromPicker('${o.id}','${column.dropStatus}')">
+              <div class="font-black">${column.icon} ${premiumEsc(column.title)}</div>
+              <div class="text-xs text-gray-500 mt-1">${currentColumn?.id === column.id ? 'Текущий этап' : 'Переместить сюда'}</div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    </div>`;
+  render();
+}
+function moveKanbanOrderFromPicker(orderId, targetStatus) {
+  state.modal = null;
+  kanbanMoveOrder(orderId, targetStatus);
 }
 function renderOrdersKanban(filtered, opts = {}) {
   const totalRevenue = filtered.reduce((s,o) => s + orderKanbanRevenue(o), 0);
@@ -14081,7 +14163,9 @@ function renderOrderKanbanCard(o) {
   const projectAddress = orderAddress(o, c);
   const text = `RolanPRO ${o.number}: ${clientPortalUrl(o.id) || location.href.split('#')[0] + '#/order/' + o.id}`;
   return `
-    <article class="kanban-card" data-open-order="${o.id}" style="--accent:${accent.color};--accent-soft:${accent.soft}">
+    <article class="kanban-card" data-open-order="${o.id}" draggable="true"
+      ondragstart="kanbanDragStart(event,'${o.id}')" ondragend="kanbanDragEnd(event)"
+      style="--accent:${accent.color};--accent-soft:${accent.soft}">
       <div class="kanban-card-top"></div>
       <div class="kanban-card-body">
         <a class="kanban-card-main" href="#/order/${o.id}" onclick="event.preventDefault(); openOrder('${o.id}')">
@@ -14123,7 +14207,8 @@ function renderOrderKanbanCard(o) {
         </div>
         </a>
         <div class="kanban-card-actions">
-          <span class="kanban-drag-handle" title="Перетащить" draggable="true" onclick="event.stopPropagation()" ondragstart="kanbanDragStart(event,'${o.id}')" ondragend="kanbanDragEnd(event)">↕</span>
+          <button class="kanban-drag-handle" title="Перетащить или выбрать этап" aria-label="Переместить заказ"
+            onclick="event.stopPropagation(); openKanbanStagePicker('${o.id}')">↕</button>
           <button class="kanban-icon-btn" title="Открыть заказ" onclick="event.stopPropagation(); openOrder('${o.id}')">↗</button>
           <a class="kanban-icon-btn" title="Позвонить" href="${callLink(c.phone)}" onclick="event.stopPropagation()">☎</a>
           <a class="kanban-icon-btn" title="WhatsApp" href="${whatsappLink(c.phone, text)}" target="_blank" onclick="event.stopPropagation()">WA</a>
