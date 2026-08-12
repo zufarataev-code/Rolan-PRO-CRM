@@ -3608,7 +3608,7 @@
     transform: scale(.985);
     cursor: grabbing;
   }
-  .kanban-card[draggable="true"] .kanban-card-main {
+  .kanban-card .kanban-card-main {
     -webkit-user-drag: none;
   }
   body.kanban-is-dragging {
@@ -3642,6 +3642,7 @@
     cursor: grab;
     flex: 0 0 auto;
     user-select: none;
+    touch-action: none;
   }
   .kanban-drag-handle:active { cursor: grabbing; }
   .kanban-chip {
@@ -13986,6 +13987,8 @@ function openOrderFromKanban(orderId, event) {
   openOrder(orderId);
 }
 let kanbanDraggedOrderId = null;
+let kanbanPointerDrag = null;
+let kanbanSuppressClickUntil = 0;
 function kanbanColumnForStatus(status) {
   return ORDER_KANBAN_FUNNEL.find(column => column.statuses.includes(status)) || null;
 }
@@ -14002,6 +14005,61 @@ function kanbanMoveOrder(orderId, targetStatus) {
   if (currentColumn && targetColumn && currentColumn.id === targetColumn.id) return false;
   changeStatus(orderId, targetStatus, state.currentUserId);
   return true;
+}
+function kanbanPointerStart(event, orderId) {
+  if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  const handle = event.target?.closest?.('.kanban-drag-handle');
+  const main = event.target?.closest?.('.kanban-card-main');
+  const interactive = event.target?.closest?.('a,button,input,select,textarea,label');
+  if (interactive && !handle && !main) return;
+  if (event.pointerType !== 'mouse' && !handle) return;
+  const card = event.currentTarget?.closest?.('.kanban-card') || event.currentTarget;
+  kanbanPointerDrag = {
+    pointerId: event.pointerId,
+    orderId,
+    card,
+    startX: event.clientX,
+    startY: event.clientY,
+    active: false,
+    targetStatus: '',
+  };
+  card?.setPointerCapture?.(event.pointerId);
+}
+function kanbanPointerMove(event) {
+  const drag = kanbanPointerDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  if (event.pointerType === 'mouse' && event.buttons === 0) {
+    kanbanPointerFinish(event, true);
+    return;
+  }
+  const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+  if (!drag.active && distance < 7) return;
+  if (!drag.active) {
+    drag.active = true;
+    drag.card?.classList.add('dragging');
+    document.body.classList.add('kanban-is-dragging');
+  }
+  if (event.cancelable) event.preventDefault();
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.kanban-column');
+  document.querySelectorAll('.kanban-column.drag-over').forEach(column => {
+    if (column !== target) column.classList.remove('drag-over');
+  });
+  target?.classList.add('drag-over');
+  drag.targetStatus = target?.dataset?.dropStatus || '';
+}
+function kanbanPointerFinish(event, cancelled = false) {
+  const drag = kanbanPointerDrag;
+  if (!drag || (event?.pointerId != null && drag.pointerId !== event.pointerId)) return;
+  if (drag.active) {
+    if (event?.cancelable) event.preventDefault();
+    kanbanSuppressClickUntil = Date.now() + 450;
+  }
+  drag.card?.classList.remove('dragging');
+  drag.card?.releasePointerCapture?.(drag.pointerId);
+  document.querySelectorAll('.kanban-column.drag-over').forEach(column => column.classList.remove('drag-over'));
+  document.body.classList.remove('kanban-is-dragging');
+  kanbanPointerDrag = null;
+  if (!cancelled && drag.active && drag.targetStatus) kanbanMoveOrder(drag.orderId, drag.targetStatus);
 }
 function kanbanDragStart(event, orderId) {
   const blockedControl = event.target?.closest?.('button,input,select,textarea');
@@ -14101,7 +14159,7 @@ function renderOrdersKanban(filtered, opts = {}) {
         const colRevenue = orders.reduce((s,o) => s + orderKanbanRevenue(o), 0);
         const colDebt = orders.reduce((s,o) => s + orderKanbanDebt(o), 0);
         return `
-          <section class="kanban-column" style="--lane:${col.color};--lane-soft:${col.soft}" ondragover="kanbanDragOver(event)" ondragleave="kanbanDragLeave(event)" ondrop="kanbanDropOrder(event,'${col.dropStatus}')">
+          <section class="kanban-column" data-drop-status="${col.dropStatus}" style="--lane:${col.color};--lane-soft:${col.soft}" ondragover="kanbanDragOver(event)" ondragleave="kanbanDragLeave(event)" ondrop="kanbanDropOrder(event,'${col.dropStatus}')">
             <div class="kanban-col-head">
               <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center gap-2 min-w-0">
@@ -14163,8 +14221,8 @@ function renderOrderKanbanCard(o) {
   const projectAddress = orderAddress(o, c);
   const text = `RolanPRO ${o.number}: ${clientPortalUrl(o.id) || location.href.split('#')[0] + '#/order/' + o.id}`;
   return `
-    <article class="kanban-card" data-open-order="${o.id}" draggable="true"
-      ondragstart="kanbanDragStart(event,'${o.id}')" ondragend="kanbanDragEnd(event)"
+    <article class="kanban-card" data-open-order="${o.id}"
+      onpointerdown="kanbanPointerStart(event,'${o.id}')"
       style="--accent:${accent.color};--accent-soft:${accent.soft}">
       <div class="kanban-card-top"></div>
       <div class="kanban-card-body">
@@ -25143,7 +25201,15 @@ function buildMarketingRoi() {
 function attachGlobalListeners() {
   if (window.__rolanGlobalListenersAttached) return;
   window.__rolanGlobalListenersAttached = true;
+  document.addEventListener('pointermove', kanbanPointerMove, { passive: false });
+  document.addEventListener('pointerup', event => kanbanPointerFinish(event));
+  document.addEventListener('pointercancel', event => kanbanPointerFinish(event, true));
   document.addEventListener('click', (event) => {
+    if (Date.now() < kanbanSuppressClickUntil) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const card = event.target.closest?.('[data-open-order]');
     if (!card) return;
     if (event.target.closest?.('a,button,input,select,textarea,label,.kanban-drag-handle')) return;
