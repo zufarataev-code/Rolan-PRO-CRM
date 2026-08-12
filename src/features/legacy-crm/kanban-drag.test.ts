@@ -33,6 +33,12 @@ test("a completed drag does not accidentally open the order", () => {
   assert.match(html, /Date\.now\(\) < kanbanSuppressClickUntil/);
 });
 
+test("narrow kanban auto-scrolls while dragging near an edge", () => {
+  assert.match(html, /function kanbanPointerAutoScroll\(\)/);
+  assert.match(html, /funnel\.scrollLeft \+= drag\.scrollSpeed/);
+  assert.match(html, /requestAnimationFrame\(kanbanPointerAutoScroll\)/);
+});
+
 test("dropping within the same grouped stage does not move an order backwards", () => {
   assert.match(
     html,
@@ -44,4 +50,6 @@ test("kanban has an accessible stage picker fallback", () => {
   assert.match(html, /function openKanbanStagePicker\(orderId\)/);
   assert.match(html, /aria-label="Переместить заказ"/);
   assert.match(html, /function moveKanbanOrderFromPicker\(orderId, targetStatus\)/);
+  assert.match(html, />↕ Этап<\/button>/);
+  assert.match(html, /Перетащите карточку или нажмите «Этап»/);
 });

@@ -3630,8 +3630,9 @@
     box-shadow: inset 0 0 0 3px rgba(37,99,235,.28);
   }
   .kanban-drag-handle {
-    width: 28px;
+    min-width: 58px;
     height: 28px;
+    padding: 0 8px;
     border-radius: 8px;
     display: inline-flex;
     align-items: center;
@@ -13989,6 +13990,7 @@ function openOrderFromKanban(orderId, event) {
 let kanbanDraggedOrderId = null;
 let kanbanPointerDrag = null;
 let kanbanSuppressClickUntil = 0;
+let kanbanPointerScrollFrame = 0;
 function kanbanColumnForStatus(status) {
   return ORDER_KANBAN_FUNNEL.find(column => column.statuses.includes(status)) || null;
 }
@@ -14022,8 +14024,32 @@ function kanbanPointerStart(event, orderId) {
     startY: event.clientY,
     active: false,
     targetStatus: '',
+    lastX: event.clientX,
+    lastY: event.clientY,
+    scrollSpeed: 0,
   };
   card?.setPointerCapture?.(event.pointerId);
+}
+function kanbanPointerUpdateTarget(drag, clientX, clientY) {
+  const target = document.elementFromPoint(clientX, clientY)?.closest?.('.kanban-column');
+  document.querySelectorAll('.kanban-column.drag-over').forEach(column => {
+    if (column !== target) column.classList.remove('drag-over');
+  });
+  target?.classList.add('drag-over');
+  drag.targetStatus = target?.dataset?.dropStatus || '';
+}
+function kanbanPointerAutoScroll() {
+  const drag = kanbanPointerDrag;
+  if (!drag?.active) {
+    kanbanPointerScrollFrame = 0;
+    return;
+  }
+  const funnel = drag.card?.closest?.('.kanban-funnel');
+  if (funnel && drag.scrollSpeed) {
+    funnel.scrollLeft += drag.scrollSpeed;
+    kanbanPointerUpdateTarget(drag, drag.lastX, drag.lastY);
+  }
+  kanbanPointerScrollFrame = requestAnimationFrame(kanbanPointerAutoScroll);
 }
 function kanbanPointerMove(event) {
   const drag = kanbanPointerDrag;
@@ -14038,14 +14064,19 @@ function kanbanPointerMove(event) {
     drag.active = true;
     drag.card?.classList.add('dragging');
     document.body.classList.add('kanban-is-dragging');
+    if (!kanbanPointerScrollFrame) kanbanPointerScrollFrame = requestAnimationFrame(kanbanPointerAutoScroll);
   }
   if (event.cancelable) event.preventDefault();
-  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.kanban-column');
-  document.querySelectorAll('.kanban-column.drag-over').forEach(column => {
-    if (column !== target) column.classList.remove('drag-over');
-  });
-  target?.classList.add('drag-over');
-  drag.targetStatus = target?.dataset?.dropStatus || '';
+  drag.lastX = event.clientX;
+  drag.lastY = event.clientY;
+  const funnel = drag.card?.closest?.('.kanban-funnel');
+  const bounds = funnel?.getBoundingClientRect();
+  const edge = bounds ? Math.min(90, bounds.width * .22) : 0;
+  drag.scrollSpeed = !bounds ? 0
+    : event.clientX > bounds.right - edge ? Math.max(7, (event.clientX - (bounds.right - edge)) * .28)
+    : event.clientX < bounds.left + edge ? -Math.max(7, ((bounds.left + edge) - event.clientX) * .28)
+    : 0;
+  kanbanPointerUpdateTarget(drag, event.clientX, event.clientY);
 }
 function kanbanPointerFinish(event, cancelled = false) {
   const drag = kanbanPointerDrag;
@@ -14058,6 +14089,8 @@ function kanbanPointerFinish(event, cancelled = false) {
   drag.card?.releasePointerCapture?.(drag.pointerId);
   document.querySelectorAll('.kanban-column.drag-over').forEach(column => column.classList.remove('drag-over'));
   document.body.classList.remove('kanban-is-dragging');
+  if (kanbanPointerScrollFrame) cancelAnimationFrame(kanbanPointerScrollFrame);
+  kanbanPointerScrollFrame = 0;
   kanbanPointerDrag = null;
   if (!cancelled && drag.active && drag.targetStatus) kanbanMoveOrder(drag.orderId, drag.targetStatus);
 }
@@ -14266,7 +14299,7 @@ function renderOrderKanbanCard(o) {
         </a>
         <div class="kanban-card-actions">
           <button class="kanban-drag-handle" title="Перетащить или выбрать этап" aria-label="Переместить заказ"
-            onclick="event.stopPropagation(); openKanbanStagePicker('${o.id}')">↕</button>
+            onclick="event.stopPropagation(); openKanbanStagePicker('${o.id}')">↕ Этап</button>
           <button class="kanban-icon-btn" title="Открыть заказ" onclick="event.stopPropagation(); openOrder('${o.id}')">↗</button>
           <a class="kanban-icon-btn" title="Позвонить" href="${callLink(c.phone)}" onclick="event.stopPropagation()">☎</a>
           <a class="kanban-icon-btn" title="WhatsApp" href="${whatsappLink(c.phone, text)}" target="_blank" onclick="event.stopPropagation()">WA</a>
@@ -14366,7 +14399,7 @@ function renderOrders() {
       <span>${T('area')}: <b class="text-slate-800">${totalArea.toFixed(0)} sqft</b></span>
       <span class="orders-summary-dot"></span>
       <span>${T('sum')}: <b class="text-emerald-600">${fmtMoney(totalSum)}</b></span>
-      ${ordersView === 'kanban' ? `<span class="orders-summary-dot"></span><span>Карточки можно перетаскивать между этапами</span>` : ''}
+      ${ordersView === 'kanban' ? `<span class="orders-summary-dot"></span><span>Перетащите карточку или нажмите «Этап»</span>` : ''}
     </div>
   </div>
 
