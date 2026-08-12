@@ -22792,7 +22792,7 @@ function renderAccounting() {
   const debt = (db.orders || []).reduce((s,o) => s + orderDebt(o), 0);
   const accounts = financeData().accounts.filter(a => a.active !== false);
   const accountTotal = accounts.reduce((s,a) => s + financeAccountBalance(a.id), 0);
-  const periodSelect = `<select onchange="state.accountingPeriod=this.value; render();" class="w-auto"><option value="this_month" ${range.mode==='this_month'?'selected':''}>Этот месяц</option><option value="last_month" ${range.mode==='last_month'?'selected':''}>Прошлый месяц</option><option value="this_year" ${range.mode==='this_year'?'selected':''}>Этот год</option><option value="all" ${range.mode==='all'?'selected':''}>Всё время</option></select>`;
+  const periodSelect = `<select onchange="state.accountingPeriod=this.value; render();" class="w-auto" style="background:#fff;color:#0f172a;border-color:rgba(255,255,255,.65)"><option value="this_month" ${range.mode==='this_month'?'selected':''}>Этот месяц</option><option value="last_month" ${range.mode==='last_month'?'selected':''}>Прошлый месяц</option><option value="this_year" ${range.mode==='this_year'?'selected':''}>Этот год</option><option value="all" ${range.mode==='all'?'selected':''}>Всё время</option></select>`;
   const tabButton = (key, label) => `<button class="ops-tab ${tab===key?'active':''}" onclick="state.accountingTab='${key}';render();">${label}</button>`;
   return `<div class="space-y-4">
     <div class="ops-hero">
