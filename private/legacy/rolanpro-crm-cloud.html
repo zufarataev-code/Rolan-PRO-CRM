@@ -5552,7 +5552,7 @@ async function runFollowUpScheduler() {
       const body = fillTemplate(rule.template, vars);
       try {
         if (rule.action === 'sms' && c.phone && !['native','googlevoice'].includes(db.settings.sms?.method)) {
-          if (db.settings.sms.method === 'twilio') await sendSmsViaTwilio(c.phone, body);
+          if (db.settings.sms.method === 'twilio') await sendSmsViaTwilio(c.phone, body, {orderId:o.id, clientId:c.id});
           else if (db.settings.sms.method === 'textbelt') await sendSmsViaTextBelt(c.phone, body);
         } else if (rule.action === 'email' && c.email && db.settings.email?.method === 'emailjs' && window.emailjs) {
           const cfg = db.settings.email.emailjs;
@@ -6275,9 +6275,7 @@ function migrateSchema() {
     if (s.sms.textbelt.profileId == null) s.sms.textbelt.profileId = '';
     if (s.sms.textbelt.profileName == null) s.sms.textbelt.profileName = '';
     if (s.sms.textbelt.testTo == null) s.sms.textbelt.testTo = '';
-    if (s.sms.method === 'native' && !s.sms._userPickedMethod) {
-      s.sms.method = 'textbelt';
-    }
+    if (s.sms.method === 'native' && !s.sms._userPickedMethod) s.sms.method = 'twilio';
   }
   if (s.sms && s.sms.twilio) {
     if (!s.sms.twilio.accountSid) s.sms.twilio.accountSid = '';
@@ -6287,11 +6285,9 @@ function migrateSchema() {
     if (!s.sms.twilio.apiKeySecret) s.sms.twilio.apiKeySecret = '';
     if (!s.sms.twilio.verifyServiceSid) s.sms.twilio.verifyServiceSid = '';
   }
-  // Force TextBelt as default until Twilio Toll-Free Verification is approved
-  // (Twilio toll-free numbers can't send SMS without verification — error 30032)
-  if (s.sms && !s.sms._userPickedMethod) {
-    s.sms.method = 'textbelt';
-  }
+  // Toll-Free Verification is approved. Twilio is the default manual SMS channel.
+  // Automatic campaigns remain off until the owner explicitly enables them.
+  if (s.sms && !s.sms._userPickedMethod) s.sms.method = 'twilio';
 
   // Patch existing email config: fill / refresh defaults
   if (s.email && s.email.emailjs) {
@@ -10559,6 +10555,9 @@ function toggleOrderCommunicationHub(orderId) {
 function communicationStatusLabel(status) {
   const map = {
     sent: 'отправлено',
+    delivered: 'доставлено',
+    received: 'получено',
+    undelivered: 'не доставлено',
     queued: 'очередь',
     manual_required: 'нужно отправить',
     failed: 'ошибка',
@@ -10570,9 +10569,9 @@ function communicationStatusLabel(status) {
   return map[status] || status || 'событие';
 }
 function communicationStatusClass(status) {
-  if (status === 'sent' || status === 'logged' || status === 'opened') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+  if (status === 'sent' || status === 'delivered' || status === 'received' || status === 'logged' || status === 'opened') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
   if (status === 'manual_required' || status === 'queued' || status === 'draft') return 'bg-amber-50 text-amber-700 border-amber-100';
-  if (status === 'failed') return 'bg-rose-50 text-rose-700 border-rose-100';
+  if (status === 'failed' || status === 'undelivered') return 'bg-rose-50 text-rose-700 border-rose-100';
   return 'bg-slate-50 text-slate-500 border-slate-100';
 }
 function recordCommunicationDispatch(o, channel, status, body, detail, meta = {}) {
@@ -10641,10 +10640,11 @@ async function dispatchClientCommunication(o, subject, body, timelineKey, opts =
     const smsCfg = db.settings.sms || {};
     if (smsCfg.autoSend && c.phone && ['twilio','textbelt'].includes(smsCfg.method)) {
       try {
-        if (smsCfg.method === 'twilio') await sendSmsViaTwilio(c.phone, body);
+        let providerResult = null;
+        if (smsCfg.method === 'twilio') providerResult = await sendSmsViaTwilio(c.phone, body, {orderId:o.id, clientId:c.id});
         else await sendSmsViaTextBelt(c.phone, body);
         logSms(o.clientId, o.id, c.phone, body, 'auto');
-        recordCommunicationDispatch(o, 'sms', 'sent', body, `SMS → ${c.phone}`);
+        recordCommunicationDispatch(o, 'sms', providerResult?.status || 'sent', body, `SMS → ${c.phone}`, providerResult ? {twilioSid:providerResult.sid} : {});
         notes.push(`SMS → ${c.phone}`);
       } catch (e) {
         const err = e.message || String(e);
@@ -10983,7 +10983,9 @@ async function sendOrderTelegramToTeam(orderId) {
 function orderCommunicationFeed(o, c, limit = 8) {
   const orderId = o?.id;
   const clientId = c?.id;
-  const rawMessages = communicationMessages()
+  const allMessages = [...communicationMessages(), ...twilioRemoteMessages]
+    .filter((item, index, items) => items.findIndex(other => other.id === item.id) === index);
+  const rawMessages = allMessages
     .filter(x => x.orderId === orderId || (!x.orderId && x.clientId === clientId));
   const smsMessageKeys = new Set(rawMessages
     .filter(x => x.channel === 'sms')
@@ -10992,7 +10994,7 @@ function orderCommunicationFeed(o, c, limit = 8) {
     .map(x => ({
       at: x.at,
       icon: x.channel === 'whatsapp' ? '💬' : x.channel === 'email' ? '✉️' : x.channel === 'telegram' ? '🔔' : x.channel === 'sms' ? '📱' : x.channel === 'agent' ? '🤖' : '📨',
-      title: `${x.channel || 'message'} · ${communicationStatusLabel(x.status)}`,
+      title: `${x.direction === 'in' ? 'Входящее' : 'Исходящее'} ${x.channel || 'message'} · ${communicationStatusLabel(x.status)}`,
       body: x.body || x.detail || '',
       by: x.by,
       status: x.status,
@@ -15445,25 +15447,19 @@ function renderSettings() {
         <p class="text-sm text-gray-600 mt-3">📱 SMS уходят с вашего номера Google Voice. У GV нет API, поэтому работает полуавтоматика: CRM <b>копирует текст в буфер</b> и <b>открывает чат GV</b> с номером клиента — остаётся вставить (Ctrl/⌘+V) и отправить. Каждая отправка пишется в журнал коммуникаций.<br>⚠️ Авто-SMS по статусам через GV невозможны — для автоматики используйте TextBelt/Twilio (можно комбинировать: авто через TextBelt, ручные через GV).</p>
       ` : ''}
       ${s.sms.method === 'twilio' ? `
-        <p class="text-sm text-gray-600 mt-3 mb-2">Зарегистрируйтесь на <a href="https://www.twilio.com/try-twilio" target="_blank" class="text-blue-600 underline">twilio.com</a>. Скопируйте Account SID и From-номер. Для аутентификации либо <b>API Key SID + Secret</b> (рекомендуется), либо <b>Auth Token</b>.</p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div><label>Account SID</label><input value="${s.sms.twilio.accountSid||''}" placeholder="ACxxxxxxxx..." onchange="db.settings.sms.twilio.accountSid=this.value.trim(); save();"></div>
-          <div><label>From Number</label><input value="${s.sms.twilio.fromNumber||''}" placeholder="+1XXXXXXXXXX" onchange="db.settings.sms.twilio.fromNumber=this.value.trim(); save();"></div>
-          <div><label>Auth Token (запасной)</label><input type="password" value="${s.sms.twilio.authToken||''}" placeholder="32 hex chars" onchange="db.settings.sms.twilio.authToken=this.value.trim(); save();"></div>
-        </div>
-        <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-          <div><label class="text-emerald-800">✅ API Key SID (рекомендуется)</label><input value="${s.sms.twilio.apiKeySid||''}" placeholder="SKxxxxxxxx..." onchange="db.settings.sms.twilio.apiKeySid=this.value.trim(); save();"></div>
-          <div><label class="text-emerald-800">API Key Secret</label><input type="password" value="${s.sms.twilio.apiKeySecret||''}" placeholder="..." onchange="db.settings.sms.twilio.apiKeySecret=this.value.trim(); save();"></div>
-        </div>
-        <p class="text-xs text-gray-500 mt-2">Если заполнены оба (API Key SID + Secret) — отправка идёт через них (можно отозвать ключ без смены пароля). Иначе используется Auth Token.</p>
-        <div class="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-          <label class="text-blue-800 font-medium">📲 Verify Service SID (для OTP-кодов)</label>
-          <input value="${s.sms.twilio.verifyServiceSid||''}" placeholder="VAxxxxxxxx..." onchange="db.settings.sms.twilio.verifyServiceSid=this.value.trim(); save();">
-          <p class="text-xs text-blue-700 mt-1">Twilio Verify работает <b>без Toll-Free Verification</b>. Используется для подтверждения номеров клиентов (OTP) и 2FA. Создать сервис: <a href="https://console.twilio.com/us1/develop/verify/services" target="_blank" class="underline">Verify Services</a>.</p>
-        </div>
-        <div class="flex gap-2 mt-3">
-          <button class="btn-ghost text-sm" onclick="testTwilioConnection()">🧪 Тест обычного SMS</button>
-          <button class="btn-ghost text-sm" onclick="testTwilioVerify()">📲 Тест Verify (OTP)</button>
+        <div class="mt-3 p-4 rounded-xl border ${twilioServerStatus?.connected ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="font-semibold ${twilioServerStatus?.connected ? 'text-emerald-900' : 'text-amber-900'}">${twilioServerStatus?.connected ? '✅ Twilio подключён к серверу CRM' : '⏳ Проверка подключения Twilio'}</div>
+              <p class="text-xs mt-1 ${twilioServerStatus?.connected ? 'text-emerald-700' : 'text-amber-700'}">Ключи защищены на сервере и никогда не сохраняются в браузере. ${twilioServerStatus?.sender ? `Отправитель: <b>${academyEsc(twilioServerStatus.sender)}</b>.` : ''}</p>
+            </div>
+            <button class="btn-ghost text-sm whitespace-nowrap" onclick="refreshTwilioStatus()">Обновить</button>
+          </div>
+          <div class="flex gap-2 mt-3 flex-wrap">
+            <button class="btn-primary text-sm" onclick="testTwilioConnection()" ${twilioServerStatus?.connected ? '' : 'disabled'}>🧪 Отправить тест</button>
+            <button class="btn-ghost text-sm" onclick="testTwilioVerify()" ${twilioServerStatus?.verifyEnabled ? '' : 'disabled'}>📲 Проверить OTP</button>
+          </div>
+          <p class="text-xs text-gray-500 mt-2">Входящие ответы и статусы доставки сохраняются в истории клиента. Автоматические рассылки включаются отдельно после проверки согласий.</p>
         </div>
       ` : ''}
       ${s.sms.method === 'textbelt' ? `
@@ -23949,29 +23945,46 @@ function smsVars(o) {
 function getSmsTemplate(statusKey) {
   return (db.settings.sms?.templates || {})[statusKey] || null;
 }
-async function sendSmsViaTwilio(to, body) {
-  const cfg = db.settings.sms?.twilio || {};
-  if (!cfg.accountSid || !cfg.fromNumber) {
-    throw new Error('Заполните Twilio Account SID и From Number в настройках');
+let twilioServerStatus = null;
+let twilioRemoteMessages = [];
+async function twilioApi(path, options = {}) {
+  const r = await fetch(`/api/v1/integrations/twilio${path}`, {
+    credentials: 'same-origin',
+    cache: 'no-store',
+    ...options,
+    headers: {'Content-Type': 'application/json', ...(options.headers || {})},
+  });
+  const payload = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(payload?.errors?.[0]?.message || `Twilio server ${r.status}`);
+  return payload?.data;
+}
+async function refreshTwilioStatus() {
+  try { twilioServerStatus = await twilioApi('/status'); }
+  catch (e) { twilioServerStatus = {connected:false, error:e.message}; }
+  render();
+}
+async function syncTwilioMessages() {
+  if (!ROLANPRO_CLOUD) return;
+  try {
+    const result = await twilioApi('/messages');
+    const next = Array.isArray(result?.messages) ? result.messages : [];
+    const before = twilioRemoteMessages.map(x => `${x.id}:${x.status}`).join('|');
+    const after = next.map(x => `${x.id}:${x.status}`).join('|');
+    twilioRemoteMessages = next;
+    if (before !== after) render();
+  } catch (e) {
+    console.warn('[Twilio] message sync failed', e);
   }
-  // Используем Netlify Function как прокси (решает CORS)
-  const proxyUrl = '/.netlify/functions/sms';
-  const r = await fetch(proxyUrl, {
+}
+async function sendSmsViaTwilio(to, body, context = {}) {
+  return twilioApi('/messages', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      to,
-      body,
-      accountSid: cfg.accountSid,
-      authToken: cfg.authToken,
-      apiKeySid: cfg.apiKeySid,
-      apiKeySecret: cfg.apiKeySecret,
-      fromNumber: cfg.fromNumber,
+      to, body,
+      orderId: context.orderId || null,
+      clientId: context.clientId || null,
     })
   });
-  const data = await r.json();
-  if (data.success) return {sid: data.sid};
-  throw new Error('Twilio: ' + (data.error || 'Ошибка отправки'));
 }
 async function aiTestConnection() {
   if (!db.settings.ai?.apiKey) { alert('Введите API key выше'); return; }
@@ -24084,44 +24097,17 @@ async function checkStripePayments() {
 }
 
 // ---------- TWILIO VERIFY (OTP — works without Toll-Free Verification) ----------
-function twilioBasicAuth() {
-  const cfg = db.settings.sms?.twilio || {};
-  // Default to Auth Token (most reliable) — API Key can have PKCV which breaks Basic Auth
-  if (cfg.accountSid && cfg.authToken) return btoa(`${cfg.accountSid}:${cfg.authToken}`);
-  if (cfg.apiKeySid && cfg.apiKeySecret) return btoa(`${cfg.apiKeySid}:${cfg.apiKeySecret}`);
-  return null;
-}
 async function sendVerifyOTP(phone, channel) {
-  channel = channel || 'sms';
-  const cfg = db.settings.sms?.twilio || {};
-  if (!cfg.verifyServiceSid) throw new Error('Verify Service SID не указан');
-  const auth = twilioBasicAuth();
-  if (!auth) throw new Error('Twilio credentials не указаны');
-  const url = `https://verify.twilio.com/v2/Services/${cfg.verifyServiceSid}/Verifications`;
-  const body = new URLSearchParams({ To: phone, Channel: channel });
-  const r = await fetch(url, {
+  return twilioApi('/verify/start', {
     method: 'POST',
-    headers: { 'Authorization': 'Basic ' + auth, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
+    body: JSON.stringify({to: phone, channel: channel || 'sms'}),
   });
-  const data = await r.json();
-  if (!r.ok) throw new Error('Verify: ' + (data.message || r.status));
-  return data; // { sid, status: 'pending', to, channel, ... }
 }
 async function checkVerifyOTP(phone, code) {
-  const cfg = db.settings.sms?.twilio || {};
-  if (!cfg.verifyServiceSid) throw new Error('Verify Service SID не указан');
-  const auth = twilioBasicAuth();
-  const url = `https://verify.twilio.com/v2/Services/${cfg.verifyServiceSid}/VerificationCheck`;
-  const body = new URLSearchParams({ To: phone, Code: code });
-  const r = await fetch(url, {
+  return twilioApi('/verify/check', {
     method: 'POST',
-    headers: { 'Authorization': 'Basic ' + auth, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
+    body: JSON.stringify({to: phone, code}),
   });
-  const data = await r.json();
-  if (!r.ok) throw new Error('Verify check: ' + (data.message || r.status));
-  return data; // { status: 'approved' | 'pending', valid: true/false, ... }
 }
 
 // UI flow: verify a client's phone in 2 steps
@@ -24179,6 +24165,7 @@ async function testTwilioConnection() {
   if (!to) return;
   try {
     const r = await sendSmsViaTwilio(to, '✅ RolanPRO CRM — тест Twilio. Если получили это — настройка верна.');
+    await syncTwilioMessages();
     alert('Отправлено! SID: ' + (r.sid || 'OK'));
   } catch (e) {
     alert('Ошибка: ' + e.message);
@@ -24368,7 +24355,8 @@ async function sendComposedSms(orderId) {
   }
   try {
     if (method === 'twilio') {
-      await sendSmsViaTwilio(c.phone, body);
+      const result = await sendSmsViaTwilio(c.phone, body, {orderId: o.id, clientId: c.id});
+      await syncTwilioMessages();
     } else if (method === 'textbelt') {
       await sendSmsViaTextBelt(c.phone, body);
     }
@@ -25772,6 +25760,8 @@ async function cloudBoot() {
     parseHash();
     render();
     cloudStatus('Сохранено', 'green');
+    syncTwilioMessages();
+    refreshTwilioStatus();
   } catch (error) {
     console.error('[Cloud CRM] boot failed', error);
     cloudStatus('CRM временно недоступна', 'red');
@@ -25782,6 +25772,7 @@ async function cloudBoot() {
 // ---------- BOOT ----------
 if (ROLANPRO_CLOUD) cloudBoot();
 else { load(); parseHash(); render(); }
+setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) syncTwilioMessages(); }, 15000);
 </script>
 
 

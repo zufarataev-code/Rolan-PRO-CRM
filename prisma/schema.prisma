@@ -42,6 +42,7 @@ model User {
   proposal_events         ProposalEvent[]  @relation("proposal_event_actor")
   updated_legacy_workspaces LegacyWorkspace[] @relation("legacy_workspace_updated_by")
   gmail_connections       GmailConnection[] @relation("gmail_connection_connected_by")
+  twilio_messages         TwilioMessage[]  @relation("twilio_message_actor")
 
   @@map("users")
 }
@@ -1115,4 +1116,26 @@ model LegacyWorkspace {
 
   @@index([updated_by])
   @@map("legacy_workspaces")
+}
+
+model TwilioMessage {
+  message_sid       String   @id @db.VarChar(64)
+  direction         String   @db.VarChar(20)
+  status            String   @db.VarChar(40)
+  from_number       String   @db.VarChar(32)
+  to_number         String   @db.VarChar(32)
+  body              String   @db.Text
+  legacy_client_id  String?  @db.VarChar(100)
+  legacy_order_id   String?  @db.VarChar(100)
+  actor_user_id     String?  @db.Uuid
+  error_code        String?  @db.VarChar(20)
+  raw_payload       Json?
+  sent_at           DateTime @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime @updatedAt @db.Timestamptz(6)
+  actor             User?    @relation("twilio_message_actor", fields: [actor_user_id], references: [user_id], onDelete: SetNull)
+
+  @@index([legacy_client_id])
+  @@index([legacy_order_id])
+  @@index([sent_at])
+  @@map("twilio_messages")
 }
