@@ -1,4 +1,4 @@
-import twilio from "twilio";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { prisma } from "@/lib/db";
 
@@ -53,13 +53,21 @@ export function getTwilioPublicStatus() {
   };
 }
 
-function getClient(config = getTwilioConfig()) {
-  if (!config.accountSid) throw new Error("TWILIO_ACCOUNT_SID is not configured.");
-  if (config.apiKeySid && config.apiKeySecret) {
-    return twilio(config.apiKeySid, config.apiKeySecret, { accountSid: config.accountSid });
-  }
-  if (config.authToken) return twilio(config.accountSid, config.authToken);
-  throw new Error("Twilio server credentials are not configured.");
+async function twilioRequest(url: string, body: URLSearchParams, config = getTwilioConfig()) {
+  const username = config.apiKeySid || config.accountSid;
+  const password = config.apiKeySecret || config.authToken;
+  if (!username || !password) throw new Error("Twilio server credentials are not configured.");
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: body.toString(),
+  });
+  const result = await response.json().catch(() => null) as JsonObject | null;
+  if (!response.ok) throw new Error(String(result?.message ?? `Twilio request failed (${response.status}).`));
+  return result ?? {};
 }
 
 export async function sendSms(input: {
@@ -77,29 +85,35 @@ export async function sendSms(input: {
   if (!body || body.length > 1600) throw new Error("SMS text must contain 1–1600 characters.");
 
   const callbackUrl = config.publicBaseUrl ? `${config.publicBaseUrl}/api/webhooks/twilio/status` : undefined;
-  const message = await getClient(config).messages.create({
-    to,
-    body,
-    ...(config.messagingServiceSid ? { messagingServiceSid: config.messagingServiceSid } : { from: config.fromNumber }),
-    ...(callbackUrl ? { statusCallback: callbackUrl } : {}),
-  });
+  const form = new URLSearchParams({ To: to, Body: body });
+  if (config.messagingServiceSid) form.set("MessagingServiceSid", config.messagingServiceSid);
+  else form.set("From", config.fromNumber);
+  if (callbackUrl) form.set("StatusCallback", callbackUrl);
+  const message = await twilioRequest(
+    `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Messages.json`,
+    form,
+    config,
+  );
+  const sid = String(message.sid ?? "");
+  const status = String(message.status ?? "queued");
+  if (!sid) throw new Error("Twilio did not return a message SID.");
   await prisma.twilioMessage.upsert({
-    where: { message_sid: message.sid },
+    where: { message_sid: sid },
     create: {
-      message_sid: message.sid,
+      message_sid: sid,
       direction: "out",
-      status: message.status || "queued",
-      from_number: message.from || config.fromNumber,
+      status,
+      from_number: String(message.from ?? config.fromNumber),
       to_number: to,
       body,
       legacy_order_id: input.orderId ?? null,
       legacy_client_id: input.clientId ?? null,
       actor_user_id: input.actorUserId ?? null,
-      sent_at: message.dateCreated || new Date(),
+      sent_at: message.date_created ? new Date(String(message.date_created)) : new Date(),
     },
-    update: { status: message.status || "queued" },
+    update: { status },
   });
-  return { sid: message.sid, status: message.status || "queued", to };
+  return { sid, status, to };
 }
 
 export async function listSmsMessages() {
@@ -122,17 +136,23 @@ export async function listSmsMessages() {
 export async function startVerification(toValue: string) {
   const config = getTwilioConfig();
   if (!config.verifyServiceSid) throw new Error("Twilio Verify is not configured.");
-  const result = await getClient(config).verify.v2.services(config.verifyServiceSid)
-    .verifications.create({ to: normalizePhone(toValue), channel: "sms" });
-  return { sid: result.sid, status: result.status, to: result.to };
+  const result = await twilioRequest(
+    `https://verify.twilio.com/v2/Services/${config.verifyServiceSid}/Verifications`,
+    new URLSearchParams({ To: normalizePhone(toValue), Channel: "sms" }),
+    config,
+  );
+  return { sid: String(result.sid ?? ""), status: String(result.status ?? "pending"), to: String(result.to ?? "") };
 }
 
 export async function checkVerification(toValue: string, code: string) {
   const config = getTwilioConfig();
   if (!config.verifyServiceSid) throw new Error("Twilio Verify is not configured.");
-  const result = await getClient(config).verify.v2.services(config.verifyServiceSid)
-    .verificationChecks.create({ to: normalizePhone(toValue), code: code.trim() });
-  return { status: result.status, valid: result.valid, to: result.to };
+  const result = await twilioRequest(
+    `https://verify.twilio.com/v2/Services/${config.verifyServiceSid}/VerificationCheck`,
+    new URLSearchParams({ To: normalizePhone(toValue), Code: code.trim() }),
+    config,
+  );
+  return { status: String(result.status ?? "pending"), valid: Boolean(result.valid), to: String(result.to ?? "") };
 }
 
 export function validateTwilioWebhook(request: Request, params: Record<string, string>) {
@@ -140,7 +160,10 @@ export function validateTwilioWebhook(request: Request, params: Record<string, s
   if (!config.authToken || !config.publicBaseUrl) return false;
   const signature = request.headers.get("x-twilio-signature") ?? "";
   const path = new URL(request.url).pathname;
-  return twilio.validateRequest(config.authToken, signature, `${config.publicBaseUrl}${path}`, params);
+  const data = `${config.publicBaseUrl}${path}` + Object.keys(params).sort().map((key) => `${key}${params[key]}`).join("");
+  const expected = createHmac("sha1", config.authToken).update(data).digest();
+  const supplied = Buffer.from(signature, "base64");
+  return expected.length === supplied.length && timingSafeEqual(expected, supplied);
 }
 
 async function resolveLegacyReferences(phone: string) {
