@@ -6048,6 +6048,23 @@ function migrateSchema() {
       { id: 'opx_ads',       name: 'Реклама (Google/Meta)', amount: 250, frequency: 'daily', category: 'marketing', active: true, addedAt: new Date().toISOString() },
     ];
   }
+  // ---- OWNER ACCOUNTING ----
+  // Orders, inventory and payroll remain the source of truth. This object stores
+  // only bank/cash accounts and actual movements that do not already live in an
+  // operational module. Keeping the read model separate prevents duplicated
+  // clients, projects and warehouse records.
+  if (!db.finance || typeof db.finance !== 'object') db.finance = {};
+  if (!Array.isArray(db.finance.accounts)) {
+    db.finance.accounts = [
+      { id: 'fin_unallocated', name: 'Не распределено', type: 'clearing', openingBalance: 0, active: true, color: '#64748b' },
+      { id: 'fin_business_checking', name: 'Business Checking', type: 'bank', openingBalance: 0, active: true, color: '#2563eb' },
+      { id: 'fin_cash', name: 'Cash', type: 'cash', openingBalance: 0, active: true, color: '#059669' },
+    ];
+  }
+  if (!Array.isArray(db.finance.transactions)) db.finance.transactions = [];
+  if (!Array.isArray(db.finance.importedSources)) db.finance.importedSources = [];
+  if (!db.finance.version) db.finance.version = 1;
+  if (!Array.isArray(db.payrollPayments)) db.payrollPayments = [];
 
   // ---- TASKS / PLANNER (reminders so nothing is forgotten) ----
   if (!db.tasks) {
@@ -13337,6 +13354,7 @@ function renderAppShell() {
     ['clients', T('clients'), '👥'],
     ['inventory', 'Склад', '🎞'],
     ['payroll', 'Зарплата', '💰'],
+    ...(role === 'owner' ? [['accounting', 'Учёт', '🧾']] : []),
     ['reports', T('reports'), '📈'],
     ['team', T('team'), '🧑‍🔧'],
     ['referrals', T('referralProgram'), '🎁'],
@@ -13373,7 +13391,7 @@ function renderAppShell() {
         </div>
         <button class="sidebar-toggle-btn ml-auto" onclick="toggleSidebar()" title="${collapsed ? 'Открыть меню' : 'Скрыть меню'}">${collapsed ? '☰' : '‹'}</button>
       </div>
-      <nav class="flex-1 p-3 space-y-1">
+      <nav class="flex-1 p-3 space-y-1" style="overflow-y:auto;min-height:0;">
         ${navItems.map(([key, label, icon]) => `
           <div class="nav-item ${state.view===key?'active':''}" title="${academyEsc(label)}" onclick="selectAppView('${key}')">
             <span class="nav-icon">${icon}</span>
@@ -13449,6 +13467,7 @@ function headerTitle() {
     case 'academy': return '🧭 Академия и процессы';
     case 'leads': return '📥 Новые лиды';
     case 'payroll': return '💰 Зарплата';
+    case 'accounting': return '🧾 Учёт';
     case 'reports': return T('reports');
     case 'mypay': return '💰 Моя зарплата';
     case 'team': return T('team');
@@ -13471,6 +13490,7 @@ function headerSubtitle() {
     case 'clients': return 'Клиенты, адреса объектов, B2B/B2C и постоянные аккаунты';
     case 'inventory': return 'Плёнка, расходники, остатки, приход и списание';
     case 'payroll': return 'Начисления, периоды, выплаты и задолженность по зарплате';
+    case 'accounting': return 'Деньги компании из заказов, склада, зарплаты и фактических операций';
     case 'measurements': return 'Задачи замерщика без финансовых данных';
     case 'installations': return 'Наряды монтажника, маршрут, приёмка и сдача работы';
     case 'academy': return 'Процессы компании, обучение, чек-листы и стандарты';
@@ -13491,6 +13511,7 @@ function renderView() {
       case 'clients': return renderClients();
       case 'inventory': return renderInventory();
       case 'payroll': return renderPayroll();
+      case 'accounting': return u.role === 'owner' ? renderAccounting() : `<div class="card">Доступ только владельцу</div>`;
       case 'reports': return renderReports();
       case 'team': return renderTeam();
       case 'referrals': return renderReferrals();
@@ -22468,6 +22489,357 @@ async function premiumCreateStripePaymentLink(token) {
   }
 }
 
+// ---------- OWNER ACCOUNTING ----------
+function financeData() {
+  db.finance = db.finance || { version: 1, accounts: [], transactions: [], importedSources: [] };
+  db.finance.accounts = Array.isArray(db.finance.accounts) ? db.finance.accounts : [];
+  db.finance.transactions = Array.isArray(db.finance.transactions) ? db.finance.transactions : [];
+  return db.finance;
+}
+
+function financeDate(value) {
+  const d = value ? new Date(value) : new Date();
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+function financePeriodRange() {
+  const mode = state.accountingPeriod || 'this_month';
+  const now = new Date();
+  let start = new Date(2000, 0, 1), end = new Date(2100, 0, 1);
+  if (mode === 'this_month') {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  } else if (mode === 'last_month') {
+    start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+  } else if (mode === 'this_year') {
+    start = new Date(now.getFullYear(), 0, 1);
+    end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+  }
+  return { mode, start, end };
+}
+
+function financeRowInPeriod(row, range) {
+  const d = financeDate(row.date);
+  return d >= range.start && d <= range.end;
+}
+
+function financeManualRows() {
+  return financeData().transactions.map(t => ({
+    ...t,
+    amount: Math.abs(Number(t.amount) || 0),
+    source: t.source || 'manual',
+    sourceLabel: t.source === 'legacy_tracker' ? 'Старый трекер' : 'Вручную',
+    editable: true,
+  }));
+}
+
+function financeLinkedAmount(rows, predicate) {
+  return rows.filter(predicate).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+}
+
+function financeSystemRows() {
+  const manual = financeManualRows();
+  const rows = [];
+  const unallocated = 'fin_unallocated';
+
+  // Client money: the order is authoritative. A linked manual bank operation
+  // allocates that receipt to an account and reduces the unallocated remainder.
+  (db.orders || []).forEach(o => {
+    const paid = Math.max(0, Number(o.paid) || 0);
+    const linked = financeLinkedAmount(manual, t => t.type === 'income' && t.orderId === o.id);
+    const remainder = Math.max(0, paid - linked);
+    if (remainder > 0) rows.push({
+      id: `sys_order_${o.id}`, type: 'income', amount: remainder,
+      date: o.paidAt || o.stripe?.paidAt || o.depositReceivedAt || o.updatedAt || o.createdAt,
+      accountId: unallocated, category: 'client_payment', orderId: o.id,
+      note: `Оплата клиента · ${o.number || o.id}`, source: 'orders', sourceLabel: 'Заказы', editable: false,
+    });
+  });
+
+  // Stock receipts represent actual purchases. Material consumption remains a
+  // project-cost metric and is not charged to cash a second time.
+  (db.inventory || []).forEach(r => {
+    const cost = Math.max(0, Number(r.costTotal) || 0);
+    const linked = financeLinkedAmount(manual, t => t.type === 'expense' && t.inventoryId === r.id);
+    const remainder = Math.max(0, cost - linked);
+    if (remainder > 0) rows.push({
+      id: `sys_inventory_${r.id}`, type: 'expense', amount: remainder,
+      date: r.dateReceived || r.createdAt, accountId: unallocated,
+      category: 'inventory_purchase', inventoryId: r.id,
+      note: `Закупка рулона${r.lotNumber ? ` · ${r.lotNumber}` : ''}`,
+      source: 'inventory', sourceLabel: 'Склад', editable: false,
+    });
+  });
+
+  // Only confirmed payouts are cash out. New payouts have a batch record so
+  // fixed salary (which is not tied to an order) is also captured correctly.
+  (db.payrollPayments || []).forEach(p => {
+    const linked = financeLinkedAmount(manual, t => t.type === 'expense' && t.payrollPaymentId === p.id);
+    const remainder = Math.max(0, (Number(p.amount) || 0) - linked);
+    if (remainder > 0) rows.push({
+      id: `sys_payroll_payment_${p.id}`, type: 'expense', amount: remainder,
+      date: p.paidAt, accountId: unallocated, category: 'payroll', payrollPaymentId: p.id,
+      note: `Выплата · ${getUser(p.userId)?.name || 'сотрудник'}`,
+      source: 'payroll', sourceLabel: 'Зарплата', editable: false,
+    });
+  });
+
+  // Compatibility with payouts created before payment batches existed.
+  (db.orders || []).forEach(o => {
+    const paidPayouts = (o.payouts || []).filter(p => p.paid && !p.paymentBatchId);
+    const total = paidPayouts.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const linked = financeLinkedAmount(manual, t => t.type === 'expense' && t.orderId === o.id && t.category === 'payroll');
+    const remainder = Math.max(0, total - linked);
+    if (remainder > 0) rows.push({
+      id: `sys_payroll_${o.id}`, type: 'expense', amount: remainder,
+      date: paidPayouts.map(p => p.paidAt).filter(Boolean).sort().pop() || o.installationDoneAt || o.createdAt,
+      accountId: unallocated, category: 'payroll', orderId: o.id,
+      note: `Выплаченная зарплата · ${o.number || o.id}`,
+      source: 'payroll', sourceLabel: 'Зарплата', editable: false,
+    });
+  });
+
+  // Extra project expenses are entered as actual costs in the order card.
+  (db.orders || []).forEach(o => {
+    const total = (o.extraExpenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const linked = financeLinkedAmount(manual, t => t.type === 'expense' && t.orderId === o.id && t.category === 'project_expense');
+    const remainder = Math.max(0, total - linked);
+    if (remainder > 0) rows.push({
+      id: `sys_expense_${o.id}`, type: 'expense', amount: remainder,
+      date: (o.extraExpenses || []).map(e => e.date || e.createdAt).filter(Boolean).sort().pop() || o.updatedAt || o.createdAt,
+      accountId: unallocated, category: 'project_expense', orderId: o.id,
+      note: `Расходы по объекту · ${o.number || o.id}`,
+      source: 'orders', sourceLabel: 'Заказы', editable: false,
+    });
+  });
+  return rows;
+}
+
+function financeAllRows() {
+  return [...financeManualRows(), ...financeSystemRows()]
+    .filter(row => (Number(row.amount) || 0) > 0)
+    .sort((a, b) => financeDate(b.date) - financeDate(a.date));
+}
+
+function financeAccountBalance(accountId) {
+  const account = financeData().accounts.find(a => a.id === accountId);
+  let balance = Number(account?.openingBalance) || 0;
+  financeAllRows().forEach(row => {
+    const amount = Number(row.amount) || 0;
+    if (row.type === 'income' && row.accountId === accountId) balance += amount;
+    if (row.type === 'expense' && row.accountId === accountId) balance -= amount;
+    if (row.type === 'transfer') {
+      if (row.accountId === accountId) balance -= amount;
+      if (row.toAccountId === accountId) balance += amount;
+    }
+  });
+  return balance;
+}
+
+function financeCategoryLabel(category) {
+  return ({
+    client_payment: 'Оплата клиента', inventory_purchase: 'Закупка склада', payroll: 'Зарплата',
+    project_expense: 'Расход по объекту', marketing: 'Реклама', rent: 'Аренда', software: 'Сервисы',
+    tax: 'Налоги', insurance: 'Страхование', utilities: 'Коммунальные', transfer: 'Перевод', other: 'Прочее',
+  })[category] || category || 'Прочее';
+}
+
+function financePayrollOwed(range = financePeriodRange()) {
+  const users = (db.users || []).filter(u => u.role !== 'owner' && u.active !== false);
+  const accrued = users.reduce((sum, user) => sum + calcUserPayoutForPeriod(user.id, range.start, range.end).total, 0);
+  const paid = users.reduce((sum, user) => sum + payrollPaidForPeriod(user.id, range.start, range.end), 0);
+  return Math.max(0, accrued - paid);
+}
+
+function financeStockValue() {
+  return Object.values(inventorySummary()).reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+}
+
+function financeOpenTransactionModal() {
+  const accounts = financeData().accounts.filter(a => a.active !== false);
+  const accountOptions = accounts.map(a => `<option value="${a.id}">${academyEsc(a.name)}</option>`).join('');
+  const orderOptions = (db.orders || []).slice().sort((a,b) => financeDate(b.createdAt)-financeDate(a.createdAt))
+    .map(o => `<option value="${o.id}">${academyEsc(o.number || o.id)} · ${academyEsc(getClient(o.clientId)?.name || '')}</option>`).join('');
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content p-6" style="max-width:38rem">
+    <div class="flex items-center justify-between gap-3 mb-3"><div><h3 class="font-semibold text-lg">Новая операция</h3><p class="text-xs text-gray-500">Только фактическое движение денег</p></div><button class="btn-ghost" onclick="closeModal()">✕</button></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div><label>Тип</label><select id="fin-type" onchange="financeTransactionTypeChanged()"><option value="income">Приход</option><option value="expense">Расход</option><option value="transfer">Перевод</option></select></div>
+      <div><label>Сумма ($)</label><input id="fin-amount" type="number" min="0" step="0.01" placeholder="0.00"></div>
+      <div><label>Дата</label><input id="fin-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div><label>Счёт / касса</label><select id="fin-account">${accountOptions}</select></div>
+      <div id="fin-to-wrap" style="display:none"><label>На счёт</label><select id="fin-to-account">${accountOptions}</select></div>
+      <div id="fin-category-wrap"><label>Категория</label><select id="fin-category"><option value="client_payment">Оплата клиента</option><option value="project_expense">Расход по объекту</option><option value="inventory_purchase">Закупка склада</option><option value="payroll">Зарплата</option><option value="marketing">Реклама</option><option value="rent">Аренда</option><option value="software">Сервисы</option><option value="tax">Налоги</option><option value="insurance">Страхование</option><option value="utilities">Коммунальные</option><option value="other">Прочее</option></select></div>
+      <div><label>Связать с заказом</label><select id="fin-order"><option value="">Без заказа</option>${orderOptions}</select></div>
+      <div class="md:col-span-2"><label>Комментарий</label><input id="fin-note" placeholder="Назначение платежа"></div>
+    </div>
+    <div class="flex justify-end gap-2 mt-4"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="financeSaveTransaction()">Сохранить операцию</button></div>
+  </div></div>`;
+  render();
+}
+
+function financeTransactionTypeChanged() {
+  const transfer = document.getElementById('fin-type')?.value === 'transfer';
+  const toWrap = document.getElementById('fin-to-wrap');
+  const categoryWrap = document.getElementById('fin-category-wrap');
+  if (toWrap) toWrap.style.display = transfer ? '' : 'none';
+  if (categoryWrap) categoryWrap.style.display = transfer ? 'none' : '';
+}
+
+function financeSaveTransaction() {
+  const type = document.getElementById('fin-type')?.value;
+  const amount = Math.abs(Number(document.getElementById('fin-amount')?.value) || 0);
+  const accountId = document.getElementById('fin-account')?.value;
+  const toAccountId = type === 'transfer' ? document.getElementById('fin-to-account')?.value : '';
+  if (!amount) return alert('Укажите сумму больше нуля');
+  if (!accountId) return alert('Выберите счёт');
+  if (type === 'transfer' && (!toAccountId || toAccountId === accountId)) return alert('Для перевода выберите другой счёт');
+  financeData().transactions.push({
+    id: 'fin_' + uid(), type, amount,
+    date: document.getElementById('fin-date')?.value || new Date().toISOString().slice(0,10),
+    accountId, toAccountId: toAccountId || null,
+    category: type === 'transfer' ? 'transfer' : (document.getElementById('fin-category')?.value || 'other'),
+    orderId: document.getElementById('fin-order')?.value || null,
+    note: document.getElementById('fin-note')?.value?.trim() || '',
+    source: 'manual', createdAt: new Date().toISOString(), createdBy: state.currentUserId,
+  });
+  save(); closeModal(); render();
+}
+
+function financeDeleteTransaction(id) {
+  const row = financeData().transactions.find(t => t.id === id);
+  if (!row || !confirm(`Удалить операцию ${fmtMoney(row.amount)}?`)) return;
+  db.finance.transactions = db.finance.transactions.filter(t => t.id !== id);
+  save(); render();
+}
+
+function financeOpenAccountModal() {
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content p-6" style="max-width:32rem">
+    <div class="flex items-center justify-between mb-3"><h3 class="font-semibold text-lg">Добавить счёт</h3><button class="btn-ghost" onclick="closeModal()">✕</button></div>
+    <div class="grid grid-cols-1 gap-3"><div><label>Название</label><input id="fin-account-name" placeholder="Например, Chase Business"></div><div><label>Тип</label><select id="fin-account-type"><option value="bank">Банковский счёт</option><option value="card">Карта</option><option value="cash">Наличные</option></select></div><div><label>Начальный остаток ($)</label><input id="fin-account-opening" type="number" step="0.01" value="0"></div></div>
+    <div class="flex justify-end gap-2 mt-4"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="financeSaveAccount()">Добавить</button></div>
+  </div></div>`;
+  render();
+}
+
+function financeSaveAccount() {
+  const name = document.getElementById('fin-account-name')?.value?.trim();
+  if (!name) return alert('Введите название счёта');
+  financeData().accounts.push({ id: 'facc_' + uid(), name, type: document.getElementById('fin-account-type')?.value || 'bank', openingBalance: Number(document.getElementById('fin-account-opening')?.value) || 0, active: true, color: '#2563eb' });
+  save(); closeModal(); render();
+}
+
+function financeImportTrackerClick() {
+  document.getElementById('finance-import-file')?.click();
+}
+
+function financeImportTracker(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const payload = JSON.parse(String(reader.result || '{}'));
+      if (!Array.isArray(payload.accounts) && !Array.isArray(payload.txns)) throw new Error('Это не резервная копия финансового трекера');
+      const marker = String(payload.exported || `${file.name}:${file.size}`);
+      if (financeData().importedSources.includes(marker)) return alert('Эта резервная копия уже импортирована');
+      const idMap = {};
+      (payload.accounts || []).forEach((a, index) => {
+        const legacyId = String(a.id || a.name || index);
+        const id = 'legacy_' + legacyId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        idMap[legacyId] = id;
+        if (!db.finance.accounts.some(x => x.id === id)) db.finance.accounts.push({ id, name: a.name || `Счёт ${index + 1}`, type: a.type || 'bank', openingBalance: Number(a.balance) || 0, active: true, color: a.color || '#64748b', legacyBalance: Number(a.balance) || 0 });
+      });
+      const importedTx = [];
+      (payload.txns || []).forEach((t, index) => {
+        const legacyAccount = String(t.account || '');
+        const typeText = String(t.type || t.catType || '').toLowerCase();
+        const type = typeText.includes('income') || typeText.includes('приход') ? 'income' : 'expense';
+        const tx = { id: `legacy_tx_${String(t.id || index).replace(/[^a-zA-Z0-9_-]/g, '_')}`, type, amount: Math.abs(Number(t.amount) || 0), date: t.date || new Date().toISOString().slice(0,10), accountId: idMap[legacyAccount] || 'fin_unallocated', category: t.category || 'other', note: t.note || '', source: 'legacy_tracker', createdAt: new Date().toISOString() };
+        if (!db.finance.transactions.some(x => x.id === tx.id)) { db.finance.transactions.push(tx); importedTx.push(tx); }
+      });
+      // Imported account.balance is a current balance. Back out imported history
+      // so replaying those transactions keeps the exact tracker balance.
+      (payload.accounts || []).forEach((a, index) => {
+        const legacyId = String(a.id || a.name || index);
+        const account = db.finance.accounts.find(x => x.id === idMap[legacyId]);
+        if (!account) return;
+        const net = importedTx.filter(t => t.accountId === account.id).reduce((sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount), 0);
+        account.openingBalance = (Number(a.balance) || 0) - net;
+      });
+      [...(payload.subs || []), ...(payload.pc_bills || [])].forEach((p, index) => {
+        const name = p.name || `Плановый расход ${index + 1}`;
+        if ((db.opex || []).some(x => x.name === name && Number(x.amount) === Number(p.amount))) return;
+        db.opex.push({ id: 'legacy_plan_' + String(p.id || uid()), name, amount: Math.abs(Number(p.amount) || 0), frequency: 'monthly', category: p.cat || 'other', active: p.active !== false, day: Number(p.day) || null, addedAt: new Date().toISOString(), importedFrom: marker });
+      });
+      db.finance.importedSources.push(marker);
+      save(); render();
+      alert(`Импорт завершён: счетов ${(payload.accounts || []).length}, операций ${(payload.txns || []).length}, планов ${(payload.subs || []).length + (payload.pc_bills || []).length}.`);
+    } catch (error) { alert('Не удалось импортировать файл: ' + error.message); }
+    finally { event.target.value = ''; }
+  };
+  reader.readAsText(file);
+}
+
+function renderAccounting() {
+  if (currentUser()?.role !== 'owner') return `<div class="card">Доступ только владельцу</div>`;
+  const tab = state.accountingTab || 'overview';
+  const range = financePeriodRange();
+  const rows = financeAllRows();
+  const periodRows = rows.filter(row => financeRowInPeriod(row, range));
+  const income = periodRows.filter(r => r.type === 'income').reduce((s,r) => s + r.amount, 0);
+  const expense = periodRows.filter(r => r.type === 'expense').reduce((s,r) => s + r.amount, 0);
+  const debt = (db.orders || []).reduce((s,o) => s + orderDebt(o), 0);
+  const accounts = financeData().accounts.filter(a => a.active !== false);
+  const accountTotal = accounts.reduce((s,a) => s + financeAccountBalance(a.id), 0);
+  const periodSelect = `<select onchange="state.accountingPeriod=this.value; render();" class="w-auto"><option value="this_month" ${range.mode==='this_month'?'selected':''}>Этот месяц</option><option value="last_month" ${range.mode==='last_month'?'selected':''}>Прошлый месяц</option><option value="this_year" ${range.mode==='this_year'?'selected':''}>Этот год</option><option value="all" ${range.mode==='all'?'selected':''}>Всё время</option></select>`;
+  const tabButton = (key, label) => `<button class="ops-tab ${tab===key?'active':''}" onclick="state.accountingTab='${key}';render();">${label}</button>`;
+  return `<div class="space-y-4">
+    <div class="ops-hero">
+      <div class="flex items-center justify-between gap-3 flex-wrap"><div><div class="text-xs opacity-80 font-semibold">ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА</div><h2 class="text-2xl font-black mt-1">Финансовый центр ROLANPRO</h2><p class="text-sm opacity-80 mt-1">Заказы, склад и зарплата подтягиваются автоматически. Вручную — только банк, касса и прочие реальные платежи.</p></div><div class="flex gap-2 flex-wrap"><button class="btn-primary" onclick="financeOpenTransactionModal()">+ Операция</button>${periodSelect}</div></div>
+    </div>
+    <div class="flex gap-2 flex-wrap">${tabButton('overview','Обзор')}${tabButton('operations','Операции')}${tabButton('accounts','Счета')}${tabButton('plans','Плановые расходы')}${tabButton('projects','По объектам')}</div>
+    ${tab === 'overview' ? `
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="card"><div class="text-sm text-gray-500">Фактически пришло</div><div class="kpi-value text-emerald-600">${fmtMoney(income)}</div><div class="text-xs text-gray-500 mt-1">по заказам и операциям</div></div>
+        <div class="card"><div class="text-sm text-gray-500">Фактически ушло</div><div class="kpi-value text-red-600">${fmtMoney(expense)}</div><div class="text-xs text-gray-500 mt-1">закупки, выплаты, расходы</div></div>
+        <div class="card"><div class="text-sm text-gray-500">Денежный поток</div><div class="kpi-value ${income-expense>=0?'text-emerald-600':'text-red-600'}">${fmtMoney(income-expense)}</div><div class="text-xs text-gray-500 mt-1">приход минус фактический расход</div></div>
+        <div class="card"><div class="text-sm text-gray-500">Остаток по счетам</div><div class="kpi-value text-blue-700">${fmtMoney(accountTotal)}</div><div class="text-xs text-gray-500 mt-1">включая нераспределённые операции</div></div>
+        <div class="card"><div class="text-sm text-gray-500">Должны клиенты</div><div class="kpi-value text-amber-600">${fmtMoney(debt)}</div><div class="text-xs text-gray-500 mt-1">выставлено минус оплачено</div></div>
+        <div class="card"><div class="text-sm text-gray-500">Зарплата к выплате</div><div class="kpi-value text-purple-700">${fmtMoney(financePayrollOwed())}</div><div class="text-xs text-gray-500 mt-1">завершённые работы без выплаты</div></div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card"><div class="flex items-center justify-between mb-3"><div><h3 class="font-semibold">Последние движения</h3><p class="text-xs text-gray-500">Фактические деньги, не расчётная себестоимость</p></div><button class="btn-ghost text-sm" onclick="state.accountingTab='operations';render();">Все →</button></div>${renderFinanceRows(periodRows.slice(0,8))}</div>
+        <div class="card"><h3 class="font-semibold mb-3">Что требует внимания</h3><div class="space-y-3"><div class="p-3 rounded-lg bg-amber-50"><div class="text-xs text-amber-700">Дебиторская задолженность</div><div class="font-bold text-xl text-amber-800">${fmtMoney(debt)}</div></div><div class="p-3 rounded-lg bg-purple-50"><div class="text-xs text-purple-700">Начислено, но не выплачено</div><div class="font-bold text-xl text-purple-800">${fmtMoney(financePayrollOwed())}</div></div><div class="p-3 rounded-lg bg-blue-50"><div class="text-xs text-blue-700">Стоимость остатка склада</div><div class="font-bold text-xl text-blue-800">${fmtMoney(financeStockValue())}</div></div><div class="p-3 rounded-lg bg-slate-50"><div class="text-xs text-slate-600">Плановая нагрузка в месяц</div><div class="font-bold text-xl text-slate-800">${fmtMoney(totalMonthlyBurn())}</div><div class="text-xs text-slate-500">не списывается из кассы до фактической оплаты</div></div></div></div>
+      </div>` : ''}
+    ${tab === 'operations' ? `<div class="card"><div class="flex items-center justify-between gap-3 flex-wrap mb-3"><div><h3 class="font-semibold">Журнал операций</h3><p class="text-xs text-gray-500">Системные строки приходят из рабочих модулей; ручные можно удалить и внести заново.</p></div><button class="btn-primary text-sm" onclick="financeOpenTransactionModal()">+ Операция</button></div>${renderFinanceRows(periodRows)}</div>` : ''}
+    ${tab === 'accounts' ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-4">${accounts.map(a => `<div class="card" style="border-top:4px solid ${a.color || '#2563eb'}"><div class="flex items-center justify-between"><div class="font-semibold">${academyEsc(a.name)}</div><span class="tag">${academyEsc(a.type || 'bank')}</span></div><div class="kpi-value mt-3 ${financeAccountBalance(a.id)>=0?'text-emerald-700':'text-red-600'}">${fmtMoney(financeAccountBalance(a.id))}</div><div class="text-xs text-gray-500 mt-1">Начальный остаток: ${fmtMoney(a.openingBalance || 0)}</div></div>`).join('')}<button class="card text-left" onclick="financeOpenAccountModal()" style="border:2px dashed #bfdbfe"><div class="text-3xl text-blue-600">＋</div><div class="font-semibold mt-2">Добавить счёт или кассу</div></button></div><div class="card mt-4"><div class="flex items-center justify-between gap-3 flex-wrap"><div><h3 class="font-semibold">Перенос из старого трекера</h3><p class="text-xs text-gray-500">Импортирует счета, операции и плановые платежи. Клиенты и проекты не дублируются.</p></div><button class="btn-ghost" onclick="financeImportTrackerClick()">Импортировать JSON</button><input id="finance-import-file" type="file" accept="application/json,.json" style="display:none" onchange="financeImportTracker(event)"></div></div>` : ''}
+    ${tab === 'plans' ? `<div class="card"><div class="flex items-center justify-between gap-3 flex-wrap mb-3"><div><h3 class="font-semibold">Плановые постоянные расходы</h3><p class="text-xs text-gray-500">Используются для прогноза. Касса изменится только после добавления фактической операции.</p></div><button class="btn-primary text-sm" onclick="addOpexItem()">+ Плановый расход</button></div><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500"><th class="text-left p-2">Активен</th><th class="text-left p-2">Название</th><th class="text-left p-2">Сумма</th><th class="text-left p-2">Период</th><th class="text-left p-2">В месяц</th><th></th></tr></thead><tbody>${(db.opex||[]).map((o,i)=>`<tr class="border-t ${o.active?'':'opacity-50'}"><td class="p-2"><input type="checkbox" ${o.active?'checked':''} onchange="db.opex[${i}].active=this.checked;save();render();"></td><td class="p-2"><input value="${academyEsc(o.name)}" onchange="db.opex[${i}].name=this.value;save();"></td><td class="p-2"><input type="number" value="${Number(o.amount)||0}" onchange="db.opex[${i}].amount=Number(this.value)||0;save();render();"></td><td class="p-2"><select onchange="db.opex[${i}].frequency=this.value;save();render();">${['daily','weekly','monthly','quarterly','yearly'].map(f=>`<option value="${f}" ${o.frequency===f?'selected':''}>${({daily:'день',weekly:'неделя',monthly:'месяц',quarterly:'квартал',yearly:'год'})[f]}</option>`).join('')}</select></td><td class="p-2 font-semibold">${fmtMoney(opexMonthly(o))}</td><td class="p-2"><button class="btn-ghost text-red-600" onclick="if(confirm('Удалить план?')){db.opex.splice(${i},1);save();render();}">✕</button></td></tr>`).join('')}<tr class="border-t font-bold"><td colspan="4" class="p-2">Всего план в месяц</td><td class="p-2">${fmtMoney(totalMonthlyBurn())}</td><td></td></tr></tbody></table></div></div>` : ''}
+    ${tab === 'projects' ? renderFinanceProjects(range) : ''}
+  </div>`;
+}
+
+function renderFinanceRows(rows) {
+  if (!rows.length) return `<div class="empty-state"><div class="icon">🧾</div><div>За выбранный период фактических операций нет.</div></div>`;
+  const accounts = financeData().accounts;
+  return `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500"><th class="text-left p-2">Дата</th><th class="text-left p-2">Операция</th><th class="text-left p-2">Источник</th><th class="text-left p-2">Счёт</th><th class="text-right p-2">Сумма</th><th></th></tr></thead><tbody>${rows.map(row => {
+    const order = row.orderId ? getOrder(row.orderId) : null;
+    const account = accounts.find(a => a.id === row.accountId);
+    const sign = row.type === 'income' ? '+' : row.type === 'expense' ? '−' : '↔';
+    const color = row.type === 'income' ? 'text-emerald-700' : row.type === 'expense' ? 'text-red-600' : 'text-blue-700';
+    return `<tr class="border-t"><td class="p-2 whitespace-nowrap">${fmtDate(row.date)}</td><td class="p-2"><div class="font-medium">${academyEsc(row.note || financeCategoryLabel(row.category))}</div><div class="text-xs text-gray-500">${academyEsc(financeCategoryLabel(row.category))}${order ? ` · <a class="text-blue-600 underline cursor-pointer" onclick="openOrder('${order.id}')">${academyEsc(order.number || order.id)}</a>` : ''}</div></td><td class="p-2"><span class="tag">${academyEsc(row.sourceLabel || row.source || 'CRM')}</span></td><td class="p-2">${academyEsc(account?.name || 'Не распределено')}${row.type==='transfer' ? ` → ${academyEsc(accounts.find(a=>a.id===row.toAccountId)?.name || '—')}` : ''}</td><td class="p-2 text-right font-bold ${color}">${sign} ${fmtMoney(row.amount)}</td><td class="p-2">${row.editable ? `<button class="btn-ghost text-red-600 text-xs" onclick="financeDeleteTransaction('${row.id}')">✕</button>` : ''}</td></tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+
+function renderFinanceProjects(range) {
+  const orders = (db.orders || []).filter(o => {
+    const d = financeDate(o.paidAt || o.installationDoneAt || o.createdAt);
+    return range.mode === 'all' || (d >= range.start && d <= range.end);
+  }).sort((a,b) => orderRevenue(b)-orderRevenue(a));
+  if (!orders.length) return `<div class="card empty-state"><div class="icon">📦</div><div>Нет заказов за выбранный период.</div></div>`;
+  return `<div class="card"><div class="mb-3"><h3 class="font-semibold">Экономика объектов</h3><p class="text-xs text-gray-500">Выручка и себестоимость — управленческий результат. Они не подменяют фактическое движение по счетам.</p></div><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500"><th class="text-left p-2">Заказ</th><th class="text-left p-2">Клиент</th><th class="text-right p-2">Выручка</th><th class="text-right p-2">Оплачено</th><th class="text-right p-2">Долг</th><th class="text-right p-2">Себестоимость</th><th class="text-right p-2">Маржа</th></tr></thead><tbody>${orders.map(o => { const c=getClient(o.clientId); const margin=orderMargin(o); return `<tr class="border-t cursor-pointer" onclick="openOrder('${o.id}')"><td class="p-2 font-semibold text-blue-700">${academyEsc(o.number||o.id)}</td><td class="p-2">${academyEsc(c?.name||'—')}</td><td class="p-2 text-right">${fmtMoney(orderRevenue(o))}</td><td class="p-2 text-right text-emerald-700">${fmtMoney(o.paid||0)}</td><td class="p-2 text-right text-amber-700">${fmtMoney(orderDebt(o))}</td><td class="p-2 text-right text-red-600">${fmtMoney(orderPSS(o).total)}</td><td class="p-2 text-right font-bold ${margin>=0?'text-emerald-700':'text-red-600'}">${fmtMoney(margin)}</td></tr>`; }).join('')}</tbody></table></div></div>`;
+}
+
 // ---------- REPORTS / ANALYTICS ----------
 function renderReports() {
   const me = currentUser();
@@ -24840,6 +25212,16 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
   return { total, breakdown };
 }
 
+function payrollPaidForPeriod(userId, startDate, endDate) {
+  const batches = (db.payrollPayments || [])
+    .filter(p => p.userId === userId && financeDate(p.periodStart || p.paidAt) <= endDate && financeDate(p.periodEnd || p.paidAt) >= startDate)
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const legacy = (db.orders || []).reduce((sum, o) => sum + (o.payouts || [])
+    .filter(p => p.userId === userId && p.paid && !p.paymentBatchId && financeDate(p.paidAt) >= startDate && financeDate(p.paidAt) <= endDate)
+    .reduce((s, p) => s + (Number(p.amount) || 0), 0), 0);
+  return batches + legacy;
+}
+
 function renderPayroll() {
   const u = currentUser();
   if (u.role !== 'owner' && u.role !== 'manager') return `<div class="card text-center text-gray-500">Доступ только для Owner/Manager</div>`;
@@ -24865,7 +25247,10 @@ function renderPayroll() {
   } else { start = new Date(now.getFullYear(), now.getMonth(), 1); end = now; }
 
   const users = db.users.filter(u => u.role !== 'owner' && u.active !== false);
-  const payouts = users.map(u => ({ user: u, ...calcUserPayoutForPeriod(u.id, start, end) }))
+  const payouts = users.map(u => {
+    const calc = calcUserPayoutForPeriod(u.id, start, end);
+    return { user: u, ...calc, total: Math.max(0, calc.total - payrollPaidForPeriod(u.id, start, end)) };
+  })
                        .filter(p => p.total > 0 || p.breakdown.length > 0)
                        .sort((a,b) => b.total - a.total);
   const totalPayroll = payouts.reduce((s,p) => s + p.total, 0);
@@ -24933,8 +25318,19 @@ function markPayoutPaid(userId, startISO, endISO) {
   const u = getUser(userId);
   const start = new Date(startISO), end = new Date(endISO);
   const calc = calcUserPayoutForPeriod(userId, start, end);
-  if (!confirm(`Подтвердить выплату ${fmtMoney(calc.total)} для ${u.name}?\n\nВ хронологию каждого заказа добавится запись.`)) return;
+  const amountDue = Math.max(0, calc.total - payrollPaidForPeriod(userId, start, end));
+  if (amountDue <= 0) return alert('За выбранный период всё уже выплачено.');
+  if (!confirm(`Подтвердить выплату ${fmtMoney(amountDue)} для ${u.name}?\n\nВ хронологию каждого заказа добавится запись.`)) return;
+  const paymentBatchId = 'pay_' + uid();
+  const paidAt = new Date().toISOString();
+  db.payrollPayments = db.payrollPayments || [];
+  db.payrollPayments.push({
+    id: paymentBatchId, userId, amount: amountDue, paidAt,
+    periodStart: startISO, periodEnd: endISO,
+    createdBy: state.currentUserId,
+  });
   calc.breakdown.forEach(b => {
+    if (b.paid) return;
     if (!b.orderId) return;
     const o = getOrder(b.orderId);
     if (!o) return;
@@ -24942,13 +25338,13 @@ function markPayoutPaid(userId, startISO, endISO) {
     o.payouts.push({
       id: uid(), userId, amount: b.amount,
       type: b.kind, label: b.label,
-      paid: true, paidAt: new Date().toISOString(),
+      paid: true, paidAt, paymentBatchId,
     });
     o.timeline = o.timeline || [];
     o.timeline.push({ at: new Date().toISOString(), key: 'payout_paid', by: state.currentUserId, note: `Выплачено ${u.name}: ${fmtMoney(b.amount)} (${b.label})` });
   });
   save();
-  alert(`Выплачено ${fmtMoney(calc.total)} → ${u.name}`);
+  alert(`Выплачено ${fmtMoney(amountDue)} → ${u.name}`);
   render();
 }
 
