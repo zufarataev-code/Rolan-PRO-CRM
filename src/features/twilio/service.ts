@@ -27,6 +27,29 @@ function normalizePhone(value: unknown) {
   return `+${digits}`;
 }
 
+const TERMINAL_TWILIO_STATUSES = new Set(["delivered", "undelivered", "failed", "canceled"]);
+
+export function resolveTwilioStatusUpdate(currentStatus: string, nextStatus: string, errorCode?: string | null) {
+  const current = currentStatus.trim().toLowerCase();
+  let next = nextStatus.trim().toLowerCase();
+  const error = String(errorCode ?? "").trim() || null;
+
+  // Twilio can deliver callbacks out of order. Never replace a final delivery
+  // result with an earlier queued/sent event. An error code always means that
+  // the message was not delivered, even if a stale callback says "queued".
+  if (error && !TERMINAL_TWILIO_STATUSES.has(next)) next = "undelivered";
+  if (TERMINAL_TWILIO_STATUSES.has(current)) {
+    return { status: current, errorCode: error };
+  }
+  return { status: next || current, errorCode: error };
+}
+
+function twilioErrorDetail(status: string, errorCode: string | null) {
+  if (!errorCode) return `Twilio: ${status}`;
+  if (errorCode === "30007") return "Не доставлено: оператор отфильтровал сообщение (Twilio 30007)";
+  return `Twilio ${status}, code ${errorCode}`;
+}
+
 export function getTwilioConfig() {
   const accountSid = env("TWILIO_ACCOUNT_SID");
   const authToken = env("TWILIO_AUTH_TOKEN");
@@ -128,7 +151,7 @@ export async function listSmsMessages() {
     direction: message.direction,
     status: message.status,
     body: message.body,
-    detail: message.error_code ? `Twilio ${message.status}, code ${message.error_code}` : `Twilio: ${message.status}`,
+    detail: twilioErrorDetail(message.status, message.error_code),
     meta: { twilioSid: message.message_sid, from: message.from_number, to: message.to_number },
   }));
 }
@@ -205,8 +228,14 @@ export async function updateMessageStatus(params: Record<string, string>) {
   const sid = String(params.MessageSid ?? params.SmsSid ?? "");
   const status = String(params.MessageStatus ?? params.SmsStatus ?? "");
   if (!sid || !status) return;
-  await prisma.twilioMessage.updateMany({
+  const current = await prisma.twilioMessage.findUnique({
     where: { message_sid: sid },
-    data: { status, error_code: params.ErrorCode || null },
+    select: { status: true, error_code: true },
+  });
+  if (!current) return;
+  const resolved = resolveTwilioStatusUpdate(current.status, status, params.ErrorCode || current.error_code);
+  await prisma.twilioMessage.update({
+    where: { message_sid: sid },
+    data: { status: resolved.status, error_code: resolved.errorCode },
   });
 }

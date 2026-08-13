@@ -6283,22 +6283,22 @@ function migrateSchema() {
       method: 'twilio',  // 'native' | 'twilio' | 'textbelt'
       twilio: { accountSid: '', authToken: '', fromNumber: '', apiKeySid: '', apiKeySecret: '', verifyServiceSid: '' },
       textbelt: { apiKey: '' },
-      autoSend: false,
+      autoSend: true,
       templates: {
-        consultation_scheduled: 'RolanPRO: Консультация по {orderNo} назначена. Свяжемся с вами. Подробнее: {portalUrl}',
-        measurement_scheduled: 'RolanPRO: Замер по {orderNo} запланирован. Замерщик прибудет в срок. {portalUrl}',
-        measurement_done: 'RolanPRO: Замер по {orderNo} выполнен. КП пришлём в ближайшее время.',
-        proposal_sent: 'RolanPRO: КП {orderNo} на {sum} готово. Подтвердите: {portalUrl}',
-        proposal_accepted: 'RolanPRO: Спасибо за подтверждение КП {orderNo}! Реквизиты для аванса в портале: {portalUrl}',
-        installation_scheduled: 'RolanPRO: Монтаж {orderNo} назначен на {date}. Будем у вас в указанное время.',
-        installation_accepted: 'RolanPRO: Монтажник принял ваш заказ {orderNo} и готовится к выезду. 👷',
-        installation_en_route: 'RolanPRO: Бригада выехала к вам по заказу {orderNo}! 🚗 Скоро будем.',
-        installation_in_progress: 'RolanPRO: Бригада начала работу по {orderNo}. ⚙️',
-        installation_done: 'RolanPRO: Монтаж {orderNo} выполнен. Спасибо! Оставьте отзыв: {portalUrl}',
-        act_signed: 'RolanPRO: Акт по {orderNo} подписан. Спасибо!',
-        payment_received: 'RolanPRO: Оплата по {orderNo} получена. Спасибо!',
-        completed: 'RolanPRO: Заказ {orderNo} завершён. Будем рады работать с вами снова. Реферальная программа: {portalUrl}',
-        review_request: 'RolanPRO: Будем благодарны за отзыв о {orderNo}: {portalUrl}',
+        consultation_scheduled: 'ROLANPRO: Your consultation for {orderNo} is scheduled. Reply STOP to opt out.',
+        measurement_scheduled: 'ROLANPRO: Your measurement visit for {orderNo} is scheduled for {date}.',
+        measurement_done: 'ROLANPRO: Measurements for {orderNo} are complete. We are preparing your proposal.',
+        proposal_sent: 'ROLANPRO: Proposal {orderNo} is ready. View it here: {portalUrl}',
+        proposal_accepted: 'ROLANPRO: Thank you. Proposal {orderNo} is approved. We will contact you about scheduling.',
+        installation_scheduled: 'ROLANPRO: Installation {orderNo} is scheduled for {date}.',
+        installation_accepted: 'ROLANPRO: Your installation team has accepted project {orderNo}.',
+        installation_en_route: 'ROLANPRO: Your installation team is on the way for project {orderNo}.',
+        installation_in_progress: 'ROLANPRO: Work has started on project {orderNo}.',
+        installation_done: 'ROLANPRO: Installation {orderNo} is complete. Thank you for choosing us.',
+        act_signed: 'ROLANPRO: Work acceptance for {orderNo} has been recorded.',
+        payment_received: 'ROLANPRO: Payment for {orderNo} was received. Thank you.',
+        completed: 'ROLANPRO: Project {orderNo} is complete. Thank you for choosing ROLANPRO.',
+        review_request: 'ROLANPRO: Thank you for project {orderNo}. Share your feedback: {googleReview}',
       },
     };
   }
@@ -6308,7 +6308,7 @@ function migrateSchema() {
     s.email = {
       method: 'mailto', // 'mailto' | 'emailjs'
       emailjs: { publicKey: '3xQvrOEoRXWPFbEuu', serviceId: 'service_a41s4rn', templateId: 'template_k1ebot9' },
-      autoSend: false,
+      autoSend: true,
       templates: {
         consultation_scheduled: { subject: '✅ Консультация назначена — заказ {orderNo}', body: 'Здравствуйте, {client}!\n\nКонсультация по заказу {orderNo} назначена. Наш специалист свяжется с вами в указанное время.\n\nОтслеживание заказа: {portalUrl}\n\n— {company}' },
         measurement_scheduled:  { subject: '📐 Замер назначен — заказ {orderNo}', body: 'Здравствуйте, {client}!\n\nЗамер по заказу {orderNo} запланирован. Наш замерщик прибудет в указанное время.\n\nОтслеживание: {portalUrl}\n\n— {company}' },
@@ -6316,6 +6316,8 @@ function migrateSchema() {
         proposal_sent:          { subject: '📄 КП по заказу {orderNo} — на сумму {sum}', body: 'Здравствуйте, {client}!\n\nВысылаем коммерческое предложение по заказу {orderNo} на сумму {sum}.\n\n👉 Чтобы зарезервировать дату монтажа, подтвердите КП в один клик:\n{portalUrl}\n\nПосле подтверждения откроется окно с реквизитами для аванса.\n\n— {company}' },
         proposal_accepted:      { subject: '🎉 КП подтверждено — заказ {orderNo}', body: 'Здравствуйте, {client}!\n\nСпасибо за подтверждение коммерческого предложения по заказу {orderNo}.\n\nДля резервирования даты монтажа внесите аванс согласно реквизитам в портале:\n{portalUrl}\n\n— {company}' },
         installation_scheduled: { subject: '🔧 Монтаж назначен — заказ {orderNo}', body: 'Здравствуйте, {client}!\n\nМонтаж по заказу {orderNo} назначен. Бригада прибудет к вам в указанное время. Будьте, пожалуйста, на месте.\n\nПодробности и обратная связь: {portalUrl}\n\n— {company}' },
+        installation_accepted:  { subject: 'Монтаж подтверждён — заказ {orderNo}', body: 'Здравствуйте, {client}!\n\nМонтажная бригада приняла заказ {orderNo} и готовится к работе.\n\n— {company}' },
+        installation_en_route:  { subject: 'Бригада в пути — заказ {orderNo}', body: 'Здравствуйте, {client}!\n\nМонтажная бригада выехала к вам по заказу {orderNo}.\n\n— {company}' },
         installation_in_progress: { subject: '⚙️ Монтаж начат — заказ {orderNo}', body: 'Здравствуйте, {client}!\n\nНаша бригада приступила к работе по заказу {orderNo}.\n\n— {company}' },
         installation_done:      { subject: '✅ Монтаж выполнен — заказ {orderNo}', body: 'Здравствуйте, {client}!\n\nМонтаж по заказу {orderNo} полностью завершён. Спасибо за доверие!\n\nВ течение 24 часов мы пришлём запрос на отзыв о нашей работе.\n\n{portalUrl}\n\n— {company}' },
         act_signed:             { subject: '📝 Акт подписан — заказ {orderNo}', body: 'Здравствуйте, {client}!\n\nАкт выполненных работ по заказу {orderNo} подписан. Спасибо за сотрудничество.\n\n— {company}' },
@@ -6377,6 +6379,8 @@ function migrateSchema() {
       measurement_scheduled:  { subject: '📐 Замер назначен — {orderNo}', body: 'Здравствуйте, {client}!\n\nЗамер по заказу {orderNo} запланирован.\n\n{portalUrl}\n\n— {company}' },
       measurement_done:       { subject: '✓ Замер выполнен — {orderNo}', body: 'Здравствуйте, {client}!\n\nЗамер по заказу {orderNo} выполнен. Готовим КП.\n\n— {company}' },
       proposal_accepted:      { subject: '🎉 КП подтверждено — {orderNo}', body: 'Спасибо, {client}!\n\nРеквизиты для аванса: {portalUrl}\n\n— {company}' },
+      installation_accepted:  { subject: 'Монтаж подтверждён — {orderNo}', body: 'Здравствуйте, {client}!\n\nМонтажная бригада приняла заказ {orderNo} и готовится к работе.\n\n— {company}' },
+      installation_en_route:  { subject: 'Бригада в пути — {orderNo}', body: 'Здравствуйте, {client}!\n\nМонтажная бригада выехала к вам по заказу {orderNo}.\n\n— {company}' },
       installation_in_progress: { subject: '⚙️ Монтаж начат — {orderNo}', body: 'Здравствуйте, {client}!\n\nБригада приступила к работе по заказу {orderNo}.\n\n— {company}' },
       act_signed:             { subject: '📝 Акт подписан — {orderNo}', body: 'Здравствуйте, {client}!\n\nАкт по заказу {orderNo} подписан. Спасибо!\n\n— {company}' },
       payment_received:       { subject: '💰 Оплата получена — {orderNo}', body: 'Здравствуйте, {client}!\n\nМы получили оплату по заказу {orderNo} на сумму {sum}. Спасибо!\n\n— {company}' },
@@ -6408,6 +6412,34 @@ function migrateSchema() {
     if (s.sms.autoSend !== false && (s.sms.method === 'textbelt' && s.sms.textbelt?.apiKey)) {
       s.sms.autoSend = true;
     }
+  }
+
+  // Client stage notifications: enable the verified Twilio + Gmail workflow once,
+  // and replace carrier-sensitive legacy SMS copy with short operational messages.
+  if (!db._clientStageNotificationsV1) {
+    const safeSmsTemplates = {
+      consultation_scheduled: 'ROLANPRO: Your consultation for {orderNo} is scheduled. Reply STOP to opt out.',
+      measurement_scheduled: 'ROLANPRO: Your measurement visit for {orderNo} is scheduled for {date}.',
+      measurement_done: 'ROLANPRO: Measurements for {orderNo} are complete. We are preparing your proposal.',
+      proposal_sent: 'ROLANPRO: Proposal {orderNo} is ready. View it here: {portalUrl}',
+      proposal_accepted: 'ROLANPRO: Thank you. Proposal {orderNo} is approved. We will contact you about scheduling.',
+      installation_scheduled: 'ROLANPRO: Installation {orderNo} is scheduled for {date}.',
+      installation_accepted: 'ROLANPRO: Your installation team has accepted project {orderNo}.',
+      installation_en_route: 'ROLANPRO: Your installation team is on the way for project {orderNo}.',
+      installation_in_progress: 'ROLANPRO: Work has started on project {orderNo}.',
+      installation_done: 'ROLANPRO: Installation {orderNo} is complete. Thank you for choosing us.',
+      act_signed: 'ROLANPRO: Work acceptance for {orderNo} has been recorded.',
+      payment_received: 'ROLANPRO: Payment for {orderNo} was received. Thank you.',
+      completed: 'ROLANPRO: Project {orderNo} is complete. Thank you for choosing ROLANPRO.',
+      review_request: 'ROLANPRO: Thank you for project {orderNo}. Share your feedback: {googleReview}',
+    };
+    s.sms.templates = { ...(s.sms.templates || {}), ...safeSmsTemplates };
+    s.sms.autoSend = true;
+    s.email.autoSend = true;
+    s.communication.autoOnStatus = true;
+    s.communication.channels.sms = true;
+    s.communication.channels.email = true;
+    db._clientStageNotificationsV1 = true;
   }
 
   // ---- INSTALLER RATES (legacy) ----
@@ -10623,6 +10655,7 @@ function communicationStatusLabel(status) {
     queued: 'очередь',
     manual_required: 'нужно отправить',
     failed: 'ошибка',
+    canceled: 'отменено',
     skipped: 'пропущено',
     opened: 'открыто',
     logged: 'записано',
@@ -10633,7 +10666,7 @@ function communicationStatusLabel(status) {
 function communicationStatusClass(status) {
   if (status === 'sent' || status === 'delivered' || status === 'received' || status === 'logged' || status === 'opened') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
   if (status === 'manual_required' || status === 'queued' || status === 'draft') return 'bg-amber-50 text-amber-700 border-amber-100';
-  if (status === 'failed' || status === 'undelivered') return 'bg-rose-50 text-rose-700 border-rose-100';
+  if (status === 'failed' || status === 'undelivered' || status === 'canceled') return 'bg-rose-50 text-rose-700 border-rose-100';
   return 'bg-slate-50 text-slate-500 border-slate-100';
 }
 function recordCommunicationDispatch(o, channel, status, body, detail, meta = {}) {
@@ -10686,6 +10719,8 @@ async function dispatchClientCommunication(o, subject, body, timelineKey, opts =
   if (!o || !c) return [];
   const cfg = communicationSettings();
   const notes = [];
+  const smsBody = String(opts.smsBody || body || '').trim();
+  const emailBody = String(opts.emailBody || body || '').trim();
   o.timeline = o.timeline || [];
   const shouldNotifyManager = cfg.channels?.inapp !== false && o.managerId;
 
@@ -10700,59 +10735,87 @@ async function dispatchClientCommunication(o, subject, body, timelineKey, opts =
 
   if (communicationChannelEnabled('sms')) {
     const smsCfg = db.settings.sms || {};
-    if (smsCfg.autoSend && c.phone && ['twilio','textbelt'].includes(smsCfg.method)) {
+    if (smsCfg.autoSend && c.phone && c.smsConsent === true && ['twilio','textbelt'].includes(smsCfg.method)) {
       try {
         let providerResult = null;
-        if (smsCfg.method === 'twilio') providerResult = await sendSmsViaTwilio(c.phone, body, {orderId:o.id, clientId:c.id});
-        else await sendSmsViaTextBelt(c.phone, body);
-        logSms(o.clientId, o.id, c.phone, body, 'auto');
-        recordCommunicationDispatch(o, 'sms', providerResult?.status || 'sent', body, `SMS → ${c.phone}`, providerResult ? {twilioSid:providerResult.sid} : {});
-        notes.push(`SMS → ${c.phone}`);
+        if (smsCfg.method === 'twilio') providerResult = await sendSmsViaTwilio(c.phone, smsBody, {orderId:o.id, clientId:c.id});
+        else await sendSmsViaTextBelt(c.phone, smsBody);
+        logSms(o.clientId, o.id, c.phone, smsBody, 'auto');
+        const status = smsCfg.method === 'twilio' ? (providerResult?.status || 'queued') : 'sent';
+        const dispatch = recordCommunicationDispatch(o, 'sms', status, smsBody, status === 'queued' ? `Twilio принял SMS; ждём статус доставки → ${c.phone}` : `SMS → ${c.phone}`, providerResult ? {twilioSid:providerResult.sid} : {});
+        if (providerResult?.sid) dispatch.id = `msg_${providerResult.sid}`;
+        notes.push(status === 'queued' ? `SMS в очереди Twilio → ${c.phone}` : `SMS → ${c.phone}`);
       } catch (e) {
         const err = e.message || String(e);
-        recordCommunicationDispatch(o, 'sms', 'failed', body, err);
+        recordCommunicationDispatch(o, 'sms', 'failed', smsBody, err);
         notes.push(`SMS ошибка: ${err}`);
       }
     } else {
-      const reason = !smsCfg.autoSend ? 'SMS auto выключен' : !c.phone ? 'нет телефона' : `SMS ${smsCfg.method || 'не выбран'} не автоматический`;
-      recordCommunicationDispatch(o, 'sms', c.phone ? 'manual_required' : 'skipped', body, reason, c.phone ? { url: smsLink(c.phone, body) } : {});
+      const reason = !smsCfg.autoSend ? 'SMS auto выключен' : !c.phone ? 'нет телефона' : c.smsConsent !== true ? 'нет согласия клиента на SMS' : `SMS ${smsCfg.method || 'не выбран'} не автоматический`;
+      const status = !c.phone || c.smsConsent !== true ? 'skipped' : 'manual_required';
+      recordCommunicationDispatch(o, 'sms', status, smsBody, reason, status === 'manual_required' ? { url: smsLink(c.phone, smsBody) } : {});
       notes.push(reason);
     }
   }
 
   if (communicationChannelEnabled('email')) {
     const emCfg = db.settings.email || {};
-    if (emCfg.autoSend && c.email && emCfg.method === 'emailjs' && window.emailjs) {
-      const ecfg = emCfg.emailjs || {};
-      if (ecfg.publicKey && ecfg.serviceId && ecfg.templateId) {
+    if (emCfg.autoSend && c.email && c.emailConsent === true) {
+      if (ROLANPRO_CLOUD) {
         try {
-          window.emailjs.init({ publicKey: ecfg.publicKey });
-          await window.emailjs.send(ecfg.serviceId, ecfg.templateId, {
-            to_email: c.email,
-            to_name: c.name,
-            subject,
-            message: body,
-            ...emailVars(o),
+          await workMailApi('/messages', {
+            method: 'POST',
+            body: JSON.stringify({
+              to: c.email,
+              subject,
+              body: emailBody,
+              legacy_order_id: o.id,
+              legacy_client_id: c.id,
+            }),
           });
-          recordCommunicationDispatch(o, 'email', 'sent', body, `Email → ${c.email}`, { subject });
+          recordCommunicationDispatch(o, 'email', 'sent', emailBody, `Gmail принял письмо → ${c.email}`, { subject });
           notes.push(`Email → ${c.email}`);
         } catch (e) {
-          const err = e.text || e.message || String(e);
-          recordCommunicationDispatch(o, 'email', 'failed', body, err, { subject });
+          const err = e.message || String(e);
+          recordCommunicationDispatch(o, 'email', 'failed', emailBody, err, { subject });
           notes.push(`Email ошибка: ${err}`);
         }
+      } else if (emCfg.method === 'emailjs' && window.emailjs) {
+        const ecfg = emCfg.emailjs || {};
+        if (ecfg.publicKey && ecfg.serviceId && ecfg.templateId) {
+          try {
+            window.emailjs.init({ publicKey: ecfg.publicKey });
+            await window.emailjs.send(ecfg.serviceId, ecfg.templateId, {
+              to_email: c.email,
+              to_name: c.name,
+              subject,
+              message: emailBody,
+              ...emailVars(o),
+            });
+            recordCommunicationDispatch(o, 'email', 'sent', emailBody, `Email → ${c.email}`, { subject });
+            notes.push(`Email → ${c.email}`);
+          } catch (e) {
+            const err = e.text || e.message || String(e);
+            recordCommunicationDispatch(o, 'email', 'failed', emailBody, err, { subject });
+            notes.push(`Email ошибка: ${err}`);
+          }
+        } else {
+          recordCommunicationDispatch(o, 'email', 'manual_required', emailBody, 'EmailJS ключи не заполнены', { subject, url: emailLink(c.email, subject, emailBody) });
+          notes.push('EmailJS ключи не заполнены');
+        }
       } else {
-        recordCommunicationDispatch(o, 'email', 'manual_required', body, 'EmailJS ключи не заполнены', { subject, url: emailLink(c.email, subject, body) });
-        notes.push('EmailJS ключи не заполнены');
+        recordCommunicationDispatch(o, 'email', 'manual_required', emailBody, 'Автоотправка email не настроена', { subject, url: emailLink(c.email, subject, emailBody) });
+        notes.push('Автоотправка email не настроена');
       }
     } else {
-      const reason = !emCfg.autoSend ? 'Email auto выключен' : !c.email ? 'нет email' : emCfg.method !== 'emailjs' ? 'email не EmailJS' : 'EmailJS SDK не загружен';
-      recordCommunicationDispatch(o, 'email', c.email ? 'manual_required' : 'skipped', body, reason, c.email ? { subject, url: emailLink(c.email, subject, body) } : { subject });
+      const reason = !emCfg.autoSend ? 'Email auto выключен' : !c.email ? 'нет email' : 'нет согласия клиента на Email';
+      const status = !c.email || c.emailConsent !== true ? 'skipped' : 'manual_required';
+      recordCommunicationDispatch(o, 'email', status, emailBody, reason, status === 'manual_required' ? { subject, url: emailLink(c.email, subject, emailBody) } : { subject });
       notes.push(reason);
     }
   }
 
-  if (communicationChannelEnabled('whatsapp')) {
+  if (communicationChannelEnabled('whatsapp') && opts.kind !== 'status') {
     const wa = cfg.whatsapp || {};
     if (!c.phone) {
       recordCommunicationDispatch(o, 'whatsapp', 'skipped', body, 'нет телефона');
@@ -11125,9 +11188,9 @@ function renderOrderCommunicationHub(o, c) {
     </div>
     <div class="flex flex-wrap gap-1 mt-3">
       ${channelChip(!!c?.phone, 'Телефон')}
-      ${channelChip(!!c?.phone && communicationChannelEnabled('sms'), 'SMS')}
+      ${channelChip(!!c?.phone && c?.smsConsent === true && communicationChannelEnabled('sms'), c?.smsConsent === true ? 'SMS' : 'SMS: нет согласия')}
       ${channelChip(!!c?.phone && communicationChannelEnabled('whatsapp'), 'WhatsApp')}
-      ${channelChip(!!c?.email && communicationChannelEnabled('email'), 'Email')}
+      ${channelChip(!!c?.email && c?.emailConsent === true && communicationChannelEnabled('email'), c?.emailConsent === true ? 'Email' : 'Email: нет согласия')}
       ${channelChip(teamTg > 0 && communicationChannelEnabled('telegram'), `Telegram ${teamTg}`)}
       ${manual.length ? `<span class="px-2 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">${manual.length} в очереди</span>` : ''}
     </div>
@@ -12595,6 +12658,10 @@ function orderPrice(o) { return orderArea(o) * (o.pricePerM2 || db.settings.pric
 function changeStatus(orderId, newStatus, by, opts = {}) {
   const o = getOrder(orderId);
   if (!o) return;
+  if (o.status === newStatus && !opts.force) {
+    render();
+    return;
+  }
   o.status = newStatus;
   o.timeline = o.timeline || [];
   o.timeline.push({ at: new Date().toISOString(), key: newStatus, by: by || state.currentUserId });
@@ -12663,12 +12730,18 @@ async function autoNotifyClient(o, statusKey) {
   const subject = emailTpl?.subject
     ? fillTemplate(emailTpl.subject, emailVars(o))
     : `RolanPRO · ${o.number} · ${T(statusKey)}`;
-  const body = emailTpl?.body
+  const smsBody = smsTpl
+    ? fillTemplate(smsTpl, smsVars(o, statusKey))
+    : orderCommunicationBody(o.id, 'status');
+  const emailBody = emailTpl?.body
     ? fillTemplate(emailTpl.body, emailVars(o))
-    : smsTpl
-      ? fillTemplate(smsTpl, smsVars(o))
-      : orderCommunicationBody(o.id, 'status');
-  await dispatchClientCommunication(o, subject, body, `${statusKey}_client_notice`, { statusKey, kind: 'status' });
+    : smsBody;
+  await dispatchClientCommunication(o, subject, emailBody, `${statusKey}_client_notice`, {
+    statusKey,
+    kind: 'status',
+    smsBody,
+    emailBody,
+  });
 }
 
 // ---------- NOTIFICATIONS ----------
@@ -24115,14 +24188,19 @@ async function aiAsk(text) {
 function aiClearHistory() { _aiHistory = []; render(); }
 
 // ---------- SMS ----------
-function smsVars(o) {
+function smsVars(o, statusKey = o.status) {
   const c = getClient(o.clientId) || {};
+  const scheduledAt = statusKey === 'consultation_scheduled'
+    ? o.consultationAt
+    : statusKey === 'measurement_scheduled'
+      ? o.measurementAt
+      : o.installationAt;
   return {
     client: c.name || '',
     orderNo: o.number,
     status: T(o.status),
     sum: fmtMoney(orderRevenue(o)),
-    date: o.installationAt ? fmtDate(o.installationAt) : '',
+    date: scheduledAt ? fmtDateTime(scheduledAt) : '',
     portalUrl: clientPortalUrl(o.id),
     company: db.settings.companyName || 'RolanPRO',
     googleReview: db.settings.googleReviewUrl || clientPortalUrl(o.id),
@@ -24549,10 +24627,11 @@ async function sendComposedSms(orderId) {
     if (method === 'twilio') {
       const result = await sendSmsViaTwilio(c.phone, body, {orderId: o.id, clientId: c.id});
       await syncTwilioMessages();
+      alert(`Twilio принял SMS (${communicationStatusLabel(result?.status || 'queued')}). Это ещё не подтверждение доставки — итоговый статус появится в истории сообщений.`);
     } else if (method === 'textbelt') {
       await sendSmsViaTextBelt(c.phone, body);
+      alert('SMS передано провайдеру');
     }
-    alert('SMS отправлено');
     // Log as timeline event + unified SMS log
     o.timeline = o.timeline || [];
     o.timeline.push({ at: new Date().toISOString(), key: 'sms_sent', by: state.currentUserId, note: body.slice(0, 80) });
@@ -25945,6 +26024,7 @@ async function cloudBoot() {
     cloudAllowedLegacyIds = Array.isArray(cloudCurrentUser.legacy_user_ids) ? cloudCurrentUser.legacy_user_ids : [];
     cloudRevision = stateResult.data.revision;
     db = stateResult.data.payload;
+    const persistClientNotificationMigration = !db._clientStageNotificationsV1;
     migrateSchema();
     normalizeClientAccountData();
     const firstAllowed = cloudAllowedLegacyIds.map(getUser).find(Boolean);
@@ -25952,6 +26032,7 @@ async function cloudBoot() {
     state.lang = firstAllowed?.lang || state.lang;
     cloudReady = true;
     localStorage.setItem('rolanpro_crm', JSON.stringify(db));
+    if (persistClientNotificationMigration) cloudScheduleSave();
     parseHash();
     render();
     cloudStatus('Сохранено', 'green');
