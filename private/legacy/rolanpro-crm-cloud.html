@@ -5514,6 +5514,8 @@ let state = {
 };
 
 let db = null;  // reactive store
+const ROLANPRO_PRODUCTION_URL = 'https://rolanpro-crm.143-110-136-211.sslip.io/legacy-crm';
+const ROLANPRO_LOCAL_FILE = location.protocol === 'file:';
 const ROLANPRO_CLOUD = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 let cloudRevision = 0;
 let cloudReady = false;
@@ -24132,6 +24134,9 @@ function getSmsTemplate(statusKey) {
 let twilioServerStatus = null;
 let twilioRemoteMessages = [];
 async function twilioApi(path, options = {}) {
+  if (ROLANPRO_LOCAL_FILE) {
+    throw new Error('Открыта локальная копия CRM. SMS работает только в рабочей CRM: ' + ROLANPRO_PRODUCTION_URL);
+  }
   const r = await fetch(`/api/v1/integrations/twilio${path}`, {
     credentials: 'same-origin',
     cache: 'no-store',
@@ -25959,8 +25964,22 @@ async function cloudBoot() {
   }
 }
 
+function renderLocalCloudFileGuard() {
+  document.getElementById('app').innerHTML = `
+    <div class="min-h-screen flex items-center justify-center p-6 bg-slate-950 text-white">
+      <div class="max-w-lg w-full rounded-2xl border border-slate-700 bg-slate-900 p-7 shadow-2xl text-center">
+        <div class="text-4xl">☁️</div>
+        <h1 class="text-2xl font-black mt-4">Это локальная копия CRM</h1>
+        <p class="mt-3 text-slate-300">Она не подключена к серверу, поэтому SMS, почта и общие данные сотрудников здесь не работают.</p>
+        <a class="btn-primary inline-flex mt-6" href="${ROLANPRO_PRODUCTION_URL}">Открыть рабочую RolanPRO CRM</a>
+        <p class="mt-4 text-xs text-slate-500">Используйте только адрес rolanpro-crm.143-110-136-211.sslip.io</p>
+      </div>
+    </div>`;
+}
+
 // ---------- BOOT ----------
-if (ROLANPRO_CLOUD) cloudBoot();
+if (ROLANPRO_LOCAL_FILE) renderLocalCloudFileGuard();
+else if (ROLANPRO_CLOUD) cloudBoot();
 else { load(); parseHash(); render(); }
 setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) syncTwilioMessages(); }, 15000);
 </script>
