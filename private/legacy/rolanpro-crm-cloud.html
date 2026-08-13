@@ -24493,7 +24493,7 @@ function openSmsComposer(orderId) {
         <button id="ai-sms-btn" class="btn-ghost" onclick="aiSmartCompose('sms','${orderId}')" style="background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);">✨ Адаптировать через AI</button>
         <div class="flex-1"></div>
         <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
-        <button class="btn-primary" onclick="sendComposedSms('${orderId}')">📱 Отправить</button>
+        <button id="sms-send-button" class="btn-primary" onclick="sendComposedSms('${orderId}')">📱 Отправить</button>
       </div>
     </div>
   </div>`;
@@ -24510,6 +24510,9 @@ async function sendComposedSms(orderId) {
   if (!c?.phone) { alert('У клиента нет телефона'); return; }
   const body = document.getElementById('sms-text').value;
   if (!body.trim()) { alert('Текст SMS пустой'); return; }
+  const sendButton = document.getElementById('sms-send-button');
+  if (sendButton?.disabled) return;
+  if (sendButton) { sendButton.disabled = true; sendButton.textContent = 'Отправляем…'; }
   const method = db.settings.sms?.method || 'native';
   if (method === 'native') {
     // sms: deep link — opens default messaging app
@@ -24553,6 +24556,9 @@ async function sendComposedSms(orderId) {
     closeModal();
   } catch (e) {
     alert('Ошибка отправки SMS:\n' + e.message);
+  } finally {
+    const activeButton = document.getElementById('sms-send-button');
+    if (activeButton) { activeButton.disabled = false; activeButton.textContent = '📱 Отправить'; }
   }
 }
 
@@ -25837,7 +25843,7 @@ function cloudStatus(text, tone = 'blue') {
   if (!node) {
     node = document.createElement('div');
     node.id = 'rolanpro-cloud-status';
-    node.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:99999;padding:8px 12px;border-radius:999px;font:700 12px/1.2 Inter,system-ui;color:white;box-shadow:0 8px 24px rgba(15,23,42,.25)';
+    node.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:99999;pointer-events:none;padding:8px 12px;border-radius:999px;font:700 12px/1.2 Inter,system-ui;color:white;box-shadow:0 8px 24px rgba(15,23,42,.25)';
     document.body.appendChild(node);
   }
   node.textContent = text;
