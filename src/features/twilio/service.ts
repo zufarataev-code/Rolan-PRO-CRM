@@ -189,7 +189,32 @@ export function validateTwilioWebhook(request: Request, params: Record<string, s
   return expected.length === supplied.length && timingSafeEqual(expected, supplied);
 }
 
+export function resolveConversationReferences(
+  outbound: { legacy_client_id: string | null; legacy_order_id: string | null } | null,
+  fallback: { clientId: string | null; orderId: string | null },
+) {
+  if (outbound?.legacy_client_id || outbound?.legacy_order_id) {
+    return {
+      clientId: outbound.legacy_client_id ?? fallback.clientId,
+      orderId: outbound.legacy_order_id ?? fallback.orderId,
+    };
+  }
+  return fallback;
+}
+
 async function resolveLegacyReferences(phone: string) {
+  // A phone number can exist in more than one imported client card. Thread an
+  // inbound reply to the most recent outbound conversation instead of the
+  // first matching client in the legacy workspace.
+  const outbound = await prisma.twilioMessage.findFirst({
+    where: {
+      direction: "out",
+      to_number: phone,
+      OR: [{ legacy_client_id: { not: null } }, { legacy_order_id: { not: null } }],
+    },
+    orderBy: { sent_at: "desc" },
+    select: { legacy_client_id: true, legacy_order_id: true },
+  });
   const workspace = await prisma.legacyWorkspace.findUnique({ where: { workspace_id: "primary" }, select: { payload: true } });
   const payload = asObject(workspace?.payload) ?? {};
   const client = asArray(payload.clients).find((item) => normalizePhone(item.phone) === phone) ?? null;
@@ -197,7 +222,10 @@ async function resolveLegacyReferences(phone: string) {
   const order = asArray(payload.orders)
     .filter((item) => String(item.clientId ?? "") === clientId)
     .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")))[0] ?? null;
-  return { clientId, orderId: order ? String(order.id ?? "") || null : null };
+  return resolveConversationReferences(outbound, {
+    clientId,
+    orderId: order ? String(order.id ?? "") || null : null,
+  });
 }
 
 export async function recordIncomingSms(params: Record<string, string>) {
