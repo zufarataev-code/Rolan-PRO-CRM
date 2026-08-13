@@ -10815,7 +10815,7 @@ async function dispatchClientCommunication(o, subject, body, timelineKey, opts =
     }
   }
 
-  if (communicationChannelEnabled('whatsapp') && opts.kind !== 'status') {
+  if (communicationChannelEnabled('whatsapp') && opts.manual === true) {
     const wa = cfg.whatsapp || {};
     if (!c.phone) {
       recordCommunicationDispatch(o, 'whatsapp', 'skipped', body, 'нет телефона');
@@ -12951,7 +12951,7 @@ function clientNoticePortalText(o) {
   const url = clientPortalUrl(o.id);
   return url ? `\nКабинет заказа: ${url}` : '\nЕсли нужно перенести или отменить визит, ответьте менеджеру RolanPRO.';
 }
-async function sendClientOperationalMessage(o, subject, body, timelineKey) {
+async function sendClientOperationalMessage(o, subject, body, timelineKey, opts = {}) {
   const c = getClient(o.clientId);
   if (!c) return;
   if (communicationSettings().autoOnSchedule === false && /client_notice/i.test(timelineKey || '')) {
@@ -12965,7 +12965,7 @@ async function sendClientOperationalMessage(o, subject, body, timelineKey) {
     save();
     return;
   }
-  await dispatchClientCommunication(o, subject, body, timelineKey, { kind: 'operational' });
+  await dispatchClientCommunication(o, subject, body, timelineKey, { ...opts, kind: 'operational' });
 }
 function notifyClientEventScheduled(orderId, type) {
   const o = getOrder(orderId);
@@ -12975,7 +12975,10 @@ function notifyClientEventScheduled(orderId, type) {
   const when = fmtDateTime(o[info.field]);
   const subject = `${info.title} RolanPRO назначен(а) — ${o.number}`;
   const body = `Здравствуйте, ${c.name || ''}!\n\n${info.title} по заказу ${o.number} назначен(а) на ${when}.\nАдрес: ${orderAddress(o, c) || 'уточняется'}.\n\nВы можете попросить перенос или отмену через кабинет заказа.${clientNoticePortalText(o)}\n\nRolanPRO`;
-  sendClientOperationalMessage(o, subject, body, `${type}_client_notice`);
+  const statusKey = type === 'consultation' ? 'consultation_scheduled' : type === 'measure' ? 'measurement_scheduled' : 'installation_scheduled';
+  const smsTemplate = getSmsTemplate(statusKey);
+  const smsBody = smsTemplate ? fillTemplate(smsTemplate, smsVars(o, statusKey)) : `ROLANPRO: ${info.title} for ${o.number} is scheduled for ${when}.`;
+  sendClientOperationalMessage(o, subject, body, `${type}_client_notice`, { smsBody, emailBody: body });
 }
 function notifyClientRequestResolved(orderId, requestId, accepted) {
   const o = getOrder(orderId);
