@@ -4028,6 +4028,41 @@
     color: #f8fafc;
     border-color: rgba(148,163,184,.35);
   }
+  .pp-btn.chase {
+    background: #0b5bd3;
+    color: #fff;
+    border-color: #2f7de1;
+    box-shadow: 0 12px 30px rgba(11,91,211,.28);
+  }
+  .pp-pay-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+  }
+  .pp-pay-option {
+    border: 1px solid rgba(148,163,184,.28);
+    border-radius: 16px;
+    background: rgba(15,23,42,.75);
+    padding: 18px;
+  }
+  .pp-pay-option.primary {
+    border-color: rgba(96,165,250,.72);
+    background: linear-gradient(145deg, rgba(11,91,211,.28), rgba(15,23,42,.9));
+  }
+  .pp-pay-copy {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(2,6,23,.72);
+    border: 1px solid rgba(148,163,184,.22);
+  }
+  .pp-pay-copy code { color: #fff; overflow-wrap: anywhere; }
+  @media (max-width: 720px) { .pp-pay-grid { grid-template-columns: 1fr; } }
   .pp-section {
     max-width: 1180px;
     margin: 0 auto;
@@ -6153,6 +6188,31 @@ function migrateSchema() {
       mode: 'manual',    // 'manual' = paste link per order, 'auto' = create via API
     };
   }
+  // ---- CLIENT PAYMENT OPTIONS ----
+  // Bank login and credentials never belong in CRM. Only client-facing payment
+  // aliases/instructions are stored here; actual receipt is confirmed by staff.
+  if (!s.clientPayments) {
+    s.clientPayments = {
+      primary: 'zelle',
+      zelleEnabled: false,
+      zelleRecipient: '',
+      zelleRecipientName: 'ROLANPRO',
+      achEnabled: false,
+      achInstructions: '',
+      chaseLinkEnabled: false,
+      chasePaymentLink: '',
+      cardEnabled: true,
+    };
+  }
+  if (s.clientPayments.primary == null) s.clientPayments.primary = 'zelle';
+  if (s.clientPayments.zelleEnabled == null) s.clientPayments.zelleEnabled = false;
+  if (s.clientPayments.zelleRecipient == null) s.clientPayments.zelleRecipient = '';
+  if (s.clientPayments.zelleRecipientName == null) s.clientPayments.zelleRecipientName = 'ROLANPRO';
+  if (s.clientPayments.achEnabled == null) s.clientPayments.achEnabled = false;
+  if (s.clientPayments.achInstructions == null) s.clientPayments.achInstructions = '';
+  if (s.clientPayments.chaseLinkEnabled == null) s.clientPayments.chaseLinkEnabled = false;
+  if (s.clientPayments.chasePaymentLink == null) s.clientPayments.chasePaymentLink = '';
+  if (s.clientPayments.cardEnabled == null) s.clientPayments.cardEnabled = true;
 
   // ---- ONE-SHOT FIX: prevent old imported orders from triggering follow-ups ----
   // If we have orders with installationDoneAt > 90 days ago and no _followUpLog → mark as processed
@@ -12951,10 +13011,10 @@ function renderOrderCommandCenter(o, c) {
   const moneyBody = `
     ${proposalStripeUrl ? `
       <div class="p-3 bg-emerald-50 rounded-lg text-xs border border-emerald-100">
-        <div class="font-black text-emerald-800">Stripe checkout привязан к КП</div>
+        <div class="font-black text-emerald-800">Ссылка для оплаты картой привязана к КП</div>
         <a href="${proposalStripeUrl}" target="_blank" class="text-blue-600 underline break-all">${proposalStripeUrl}</a>
         <div class="mt-1">${proposal?.stripe?.paid || o.stripe?.paid ? 'Оплачено' : `Ожидает оплату ${fmtMoney(proposalCalc.paymentDue)}`}</div>
-      </div>` : renderOrderActionCard({ icon: '💳', title: 'Оплата через КП', sub: hasDrawings ? 'Открыть единое КП и создать Stripe checkout' : 'Сначала внесите размеры, потом CRM соберет КП с оплатой', onclick: `openProfessionalKP('${o.id}')`, disabled: !hasDrawings, variant: hasDrawings ? 'primary' : 'soft' })}
+      </div>` : renderOrderActionCard({ icon: '💳', title: 'Оплата через КП', sub: hasDrawings ? 'Zelle / ACH / Chase / карта после подписания' : 'Сначала внесите размеры, потом CRM соберет КП с оплатой', onclick: `openProfessionalKP('${o.id}')`, disabled: !hasDrawings, variant: hasDrawings ? 'primary' : 'soft' })}
     ${!o.depositReceived ? renderOrderActionCard({ icon: '💰', title: 'Отметить аванс', sub: `Ожидаемый аванс ${fmtMoney(orderRevenue(o) * (db.settings.advancePct || 30) / 100)}`, onclick: `markDepositReceived('${o.id}')`, variant: 'warning' }) : renderOrderActionCard({ icon: '✅', title: 'Аванс получен', sub: fmtDateTime(o.depositReceivedAt), onclick: `openOrder('${o.id}')`, variant: 'success' })}
     ${['completed','payment_received'].includes(o.status) ? renderOrderActionCard({ icon: '⭐', title: 'Запросить отзыв', sub: 'Отправить клиенту ссылку на отзыв', onclick: `askForReview('${o.id}')` }) : ''}
   `;
@@ -15351,17 +15411,50 @@ function renderSettings() {
     </div>
 
     <div class="card">
-      <h3 class="font-semibold mb-3">💰 Аванс и реквизиты</h3>
-      <p class="text-sm text-gray-600 mb-3">После подтверждения КП клиент видит на портале сумму аванса и инструкции для оплаты.</p>
+      <h3 class="font-semibold mb-3">🏦 Оплата из КП · Chase, Zelle и карта</h3>
+      <p class="text-sm text-gray-600 mb-3">Клиент нажимает «Оплатить» в КП и выбирает способ. Логин и пароль Chase в CRM не вводятся. Перевод считается ожидающим проверки, пока сотрудник не подтвердит поступление в банке.</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label>Аванс, % от заказа</label>
           <input type="number" min="0" max="100" step="5" value="${s.advancePct||30}" onchange="db.settings.advancePct=parseInt(this.value)||30; save();">
         </div>
+        <div>
+          <label>Основной способ</label>
+          <select onchange="db.settings.clientPayments.primary=this.value; save();">
+            <option value="zelle" ${s.clientPayments?.primary==='zelle'?'selected':''}>Zelle → Chase (без доп. комиссии Chase)</option>
+            <option value="ach" ${s.clientPayments?.primary==='ach'?'selected':''}>ACH / банковский перевод</option>
+            <option value="chase" ${s.clientPayments?.primary==='chase'?'selected':''}>Ссылка Chase</option>
+            <option value="card" ${s.clientPayments?.primary==='card'?'selected':''}>Карта / Stripe</option>
+          </select>
+        </div>
       </div>
-      <div class="mt-3">
-        <label>Реквизиты / инструкции для клиента</label>
-        <textarea rows="5" onchange="db.settings.paymentInstructions=this.value; save();">${s.paymentInstructions||''}</textarea>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+        <div class="p-3 border rounded-lg bg-blue-50">
+          <label class="flex items-center gap-2"><input type="checkbox" ${s.clientPayments?.zelleEnabled?'checked':''} onchange="db.settings.clientPayments.zelleEnabled=this.checked; save(); render();" style="width:18px;height:18px"> Zelle на бизнес-счёт Chase</label>
+          <label class="mt-3">Получатель (email или телефон)</label>
+          <input value="${premiumEsc(s.clientPayments?.zelleRecipient||'')}" placeholder="billing@rolanpro.com или +1..." onchange="db.settings.clientPayments.zelleRecipient=this.value.trim(); save();">
+          <label class="mt-3">Имя получателя, которое увидит клиент</label>
+          <input value="${premiumEsc(s.clientPayments?.zelleRecipientName||'ROLANPRO')}" placeholder="ROLANPRO LLC" onchange="db.settings.clientPayments.zelleRecipientName=this.value.trim(); save();">
+        </div>
+        <div class="p-3 border rounded-lg bg-gray-50">
+          <label class="flex items-center gap-2"><input type="checkbox" ${s.clientPayments?.achEnabled?'checked':''} onchange="db.settings.clientPayments.achEnabled=this.checked; save(); render();" style="width:18px;height:18px"> ACH / банковский перевод</label>
+          <label class="mt-3">Инструкции клиенту</label>
+          <textarea rows="4" placeholder="Bank: Chase&#10;Account name: ...&#10;Routing: ...&#10;Account: ..." onchange="db.settings.clientPayments.achInstructions=this.value; save();">${premiumEsc(s.clientPayments?.achInstructions||'')}</textarea>
+          <p class="text-xs text-gray-500 mt-1">Не указывайте логин, пароль, PIN или одноразовые коды.</p>
+        </div>
+        <div class="p-3 border rounded-lg bg-gray-50">
+          <label class="flex items-center gap-2"><input type="checkbox" ${s.clientPayments?.chaseLinkEnabled?'checked':''} onchange="db.settings.clientPayments.chaseLinkEnabled=this.checked; save(); render();" style="width:18px;height:18px"> Ссылка Chase invoice / payment request</label>
+          <label class="mt-3">Безопасная ссылка Chase</label>
+          <input value="${premiumEsc(s.clientPayments?.chasePaymentLink||'')}" placeholder="https://...chase..." onchange="db.settings.clientPayments.chasePaymentLink=this.value.trim(); save();">
+        </div>
+        <div class="p-3 border rounded-lg bg-gray-50">
+          <label class="flex items-center gap-2"><input type="checkbox" ${s.clientPayments?.cardEnabled!==false?'checked':''} onchange="db.settings.clientPayments.cardEnabled=this.checked; save(); render();" style="width:18px;height:18px"> Оставить оплату картой / Stripe</label>
+          <p class="text-xs text-gray-500 mt-3">Карта остаётся запасным вариантом. Комиссию берёт процессинг; прямой Zelle/ACH обычно выгоднее.</p>
+        </div>
+      </div>
+      <div class="mt-4">
+        <label>Общие инструкции / способ отправки подтверждения</label>
+        <textarea rows="3" onchange="db.settings.paymentInstructions=this.value; save();">${s.paymentInstructions||''}</textarea>
       </div>
     </div>
 
@@ -16360,7 +16453,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const docsBody = `
     <div class="order-clean-mini-grid">
       ${renderOrderCleanMini('КП', proposal ? 'создано' : 'нет')}
-      ${renderOrderCleanMini('Stripe', proposalStripeUrl ? (proposal?.stripe?.paid || o.stripe?.paid ? 'оплачено' : 'ссылка есть') : 'нет ссылки')}
+      ${renderOrderCleanMini('Оплата', proposal?.paymentClaim?.status === 'pending_review' ? 'проверить Chase' : (proposalStripeUrl ? (proposal?.stripe?.paid || o.stripe?.paid ? 'оплачено' : 'карта готова') : 'Zelle / ACH / карта'))}
       ${renderOrderCleanMini('Техлист', hasMeasurements ? 'готов' : 'нужен замер')}
     </div>
     ${proposalStripeUrl ? `<div class="order-clean-note mt-3">Stripe checkout: <a class="text-blue-700 underline break-all" href="${proposalStripeUrl}" target="_blank">${proposalStripeUrl}</a></div>` : ''}
@@ -16445,7 +16538,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       <div class="order-clean-card-grid">
         ${pendingRequests.length ? renderOrderCleanCard({ icon: '⚠️', title: 'Запрос клиента', summary: 'перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), open: true }) : ''}
         ${renderOrderCleanCard({ icon: '📐', title: 'Замеры и материалы', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : 'размеры еще не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : 'нужно', body: measurementBody, open: !hasMeasurements })}
-        ${renderOrderCleanCard({ icon: '📄', title: 'КП, техлист, оплата', summary: proposal ? 'КП создано' : 'единый стандарт после замера', badge: proposalStripeUrl ? 'Stripe' : 'КП', body: docsBody })}
+        ${renderOrderCleanCard({ icon: '📄', title: 'КП, техлист, оплата', summary: proposal ? 'КП создано' : 'единый стандарт после замера', badge: proposal?.paymentClaim?.status === 'pending_review' ? 'Проверить оплату' : 'КП', body: docsBody })}
         ${renderOrderCleanCard({ icon: '📅', title: 'Календарь и команда', summary: events.length ? `${events.length} события` : 'события не назначены', badge: installers.length ? `${installers.length}` : 'команда', body: scheduleBody })}
         ${renderOrderCleanCard({ icon: '💵', title: 'Экономика', summary: canSeeMoney ? `долг ${fmtMoney(orderDebt(o))}` : 'скрыто по роли', badge: canSeeMoney ? `${(orderMarginPct(o)*100).toFixed(0)}%` : 'скрыто', body: financeBody })}
         ${renderOrderCleanCard({ icon: '🧭', title: 'Маршрут реализации', summary: service?.title || orderServiceTypeLabel(o.serviceType), badge: service?.short || 'этапы', body: routeBody })}
@@ -18771,7 +18864,7 @@ function openOrderModal() {
         <div>
           <div class="erp-intake-kicker">ROLANPRO ERP · Order Intake</div>
           <div class="erp-intake-title">Новый заказ</div>
-          <div class="erp-intake-sub">Фиксируем только ядро: клиент, объект, направление, менеджер и заметка. Замер, КП, допродажи, Stripe и монтаж открываются после создания из карточек заказа.</div>
+          <div class="erp-intake-sub">Фиксируем только ядро: клиент, объект, направление, менеджер и заметка. Замер, КП, допродажи, оплата и монтаж открываются после создания из карточек заказа.</div>
         </div>
         <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
       </div>
@@ -18943,7 +19036,7 @@ function openOrderModal() {
               <div class="erp-intake-checklist mt-3">
                 <div><span>✓</span><span>Менеджер назначит консультацию/замер.</span></div>
                 <div><span>✓</span><span>Замерщик увидит задачу без финансов.</span></div>
-                <div><span>✓</span><span>КП, Stripe, монтаж и склад живут в отдельных рабочих карточках.</span></div>
+                <div><span>✓</span><span>КП, оплата, монтаж и склад живут в отдельных рабочих карточках.</span></div>
               </div>
             </section>
             <details class="erp-intake-disclosure" open>
@@ -18967,7 +19060,7 @@ function openOrderModal() {
       </div>
 
       <div class="erp-intake-footer">
-        <div class="erp-intake-footer-note">Допуслуги, рекомендации пленки, раскрой и Stripe не убраны из CRM — они перенесены в правильные этапы после замера и КП.</div>
+        <div class="erp-intake-footer-note">Допуслуги, рекомендации пленки, раскрой и оплата не убраны из CRM — они перенесены в правильные этапы после замера и КП.</div>
         <div class="flex gap-2 justify-end">
           <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
           <button class="btn-primary" onclick="createOrder()">Создать заказ</button>
@@ -21730,6 +21823,88 @@ function premiumWindowDrawing(window) {
   else return windowSVG(window, { maxPx: 96, showDims: false });
   return `<svg viewBox="0 0 104 104" xmlns="http://www.w3.org/2000/svg">${shape}<text x="52" y="98" text-anchor="middle" fill="#cbd5e1" font-size="9">${baseW}x${baseH}</text></svg>`;
 }
+function premiumClientPaymentConfig() {
+  return db.settings.clientPayments || {};
+}
+function premiumPaymentMethods() {
+  const cfg = premiumClientPaymentConfig();
+  const methods = [];
+  if (cfg.zelleEnabled && String(cfg.zelleRecipient || '').trim()) methods.push('zelle');
+  if (cfg.achEnabled && String(cfg.achInstructions || '').trim()) methods.push('ach');
+  if (cfg.chaseLinkEnabled && /^https:\/\//i.test(String(cfg.chasePaymentLink || '').trim())) methods.push('chase');
+  if (cfg.cardEnabled !== false) methods.push('card');
+  return methods;
+}
+function premiumPrimaryPaymentMethod() {
+  const methods = premiumPaymentMethods();
+  const preferred = premiumClientPaymentConfig().primary || 'zelle';
+  return methods.includes(preferred) ? preferred : (methods[0] || 'card');
+}
+function premiumEncodeCopy(value) {
+  try { return btoa(unescape(encodeURIComponent(String(value || '')))); } catch (e) { return ''; }
+}
+async function premiumCopyEncoded(encoded, button) {
+  try {
+    const value = decodeURIComponent(escape(atob(encoded)));
+    await navigator.clipboard.writeText(value);
+    if (button) { const old = button.textContent; button.textContent = 'Copied'; setTimeout(() => { button.textContent = old; }, 1400); }
+  } catch (e) { alert('Copy failed. Please select and copy the value manually.'); }
+}
+function premiumClosePaymentOptions() {
+  document.getElementById('pp-payment-sheet')?.remove();
+}
+function premiumOpenPaymentOptions(token) {
+  const prop = getPremiumProposalByToken(token);
+  const order = getOrder(prop?.orderId);
+  if (!prop || !order) return;
+  if (!premiumProposalLocked(prop)) {
+    document.getElementById('pp-payment')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  const calc = premiumProposalCalc(prop);
+  const cfg = premiumClientPaymentConfig();
+  const methods = premiumPaymentMethods();
+  const primary = premiumPrimaryPaymentMethod();
+  const zelleMemo = order.number || prop.id;
+  const claim = prop.paymentClaim;
+  premiumClosePaymentOptions();
+  const sheet = document.createElement('div');
+  sheet.id = 'pp-payment-sheet';
+  sheet.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(2,6,23,.82);backdrop-filter:blur(12px);overflow:auto;padding:20px;';
+  sheet.onclick = event => { if (event.target === sheet) premiumClosePaymentOptions(); };
+  sheet.innerHTML = `<div class="pp-panel" style="max-width:820px;margin:4vh auto;background:#0b1220;box-shadow:0 30px 90px rgba(0,0,0,.55)">
+    <div class="flex items-start justify-between gap-4">
+      <div><div class="text-xs text-blue-200 font-bold">SECURE PAYMENT</div><h2 class="text-3xl font-black mt-1">Pay ${fmtMoney(calc.paymentDue)}</h2><p class="text-slate-300 mt-2">Choose how you want to pay ROLANPRO. Use <b>${premiumEsc(zelleMemo)}</b> as the payment memo.</p></div>
+      <button class="pp-btn ghost" onclick="premiumClosePaymentOptions()" aria-label="Close">✕</button>
+    </div>
+    ${claim?.status === 'pending_review' ? `<div class="mt-5 p-4 rounded-xl border border-amber-500/50 bg-amber-950/30"><div class="font-black text-amber-100">Payment submitted for review</div><div class="text-sm text-amber-200 mt-1">ROLANPRO will confirm it after the funds appear in the bank. Submitted ${fmtDateTime(claim.submittedAt)}.</div></div>` : ''}
+    <div class="pp-pay-grid">
+      ${methods.includes('zelle') ? `<div class="pp-pay-option ${primary === 'zelle' ? 'primary' : ''}"><div class="flex justify-between gap-2"><div><div class="text-xs text-blue-200 font-bold">RECOMMENDED · DIRECT TO CHASE</div><div class="text-xl font-black mt-1">Pay with Zelle</div></div><span class="pp-pill">No added Chase fee</span></div><p class="text-sm text-slate-300 mt-3">In your bank app, send exactly ${fmtMoney(calc.paymentDue)} to:</p><div class="pp-pay-copy"><code>${premiumEsc(cfg.zelleRecipient)}</code><button class="pp-btn ghost" onclick="premiumCopyEncoded('${premiumEncodeCopy(cfg.zelleRecipient)}',this)">Copy</button></div><div class="text-sm text-slate-300 mt-3">Recipient: <b>${premiumEsc(cfg.zelleRecipientName || 'ROLANPRO')}</b><br>Memo: <b>${premiumEsc(zelleMemo)}</b></div><button class="pp-btn chase w-full mt-4" onclick="premiumPaymentSubmitted('${token}','zelle')">I sent the Zelle payment</button></div>` : ''}
+      ${methods.includes('ach') ? `<div class="pp-pay-option ${primary === 'ach' ? 'primary' : ''}"><div class="text-xs text-blue-200 font-bold">DIRECT BANK TRANSFER</div><div class="text-xl font-black mt-1">ACH / bank transfer</div><p class="text-sm text-slate-300 mt-3 whitespace-pre-line">${premiumEsc(cfg.achInstructions)}</p><button class="pp-btn ghost w-full mt-4" onclick="premiumCopyEncoded('${premiumEncodeCopy(cfg.achInstructions)}',this)">Copy bank instructions</button><button class="pp-btn chase w-full mt-2" onclick="premiumPaymentSubmitted('${token}','ach')">I sent the bank transfer</button></div>` : ''}
+      ${methods.includes('chase') ? `<div class="pp-pay-option ${primary === 'chase' ? 'primary' : ''}"><div class="text-xs text-blue-200 font-bold">CHASE PAYMENT REQUEST</div><div class="text-xl font-black mt-1">Open Chase payment</div><p class="text-sm text-slate-300 mt-3">Continue on the secure Chase page supplied by ROLANPRO.</p><a class="pp-btn chase w-full mt-4" href="${premiumEsc(cfg.chasePaymentLink)}" target="_blank" rel="noopener">Continue to Chase</a></div>` : ''}
+      ${methods.includes('card') ? `<div class="pp-pay-option ${primary === 'card' ? 'primary' : ''}"><div class="text-xs text-slate-400 font-bold">CARD · PROCESSING FEE APPLIES TO ROLANPRO</div><div class="text-xl font-black mt-1">Pay securely by card</div><p class="text-sm text-slate-300 mt-3">Use this option if Zelle or bank transfer is not convenient.</p><button class="pp-btn w-full mt-4" onclick="premiumClosePaymentOptions(); premiumOpenStripeLink('${token}')">Pay by card</button></div>` : ''}
+    </div>
+    <p class="text-xs text-slate-400 mt-5">Never send your bank password, PIN or one-time security code. A submitted transfer is not marked paid until ROLANPRO verifies the deposit.</p>
+  </div>`;
+  document.body.appendChild(sheet);
+}
+function premiumPaymentSubmitted(token, method) {
+  const prop = getPremiumProposalByToken(token);
+  const order = getOrder(prop?.orderId);
+  if (!prop || !order) return;
+  const calc = premiumProposalCalc(prop);
+  const labels = { zelle: 'Zelle', ach: 'ACH / bank transfer', chase: 'Chase', card: 'card' };
+  if (!confirm(`Confirm that you sent ${fmtMoney(calc.paymentDue)} by ${labels[method] || method}?`)) return;
+  const submittedAt = new Date().toISOString();
+  prop.paymentClaim = { status: 'pending_review', method, amount: calc.paymentDue, submittedAt };
+  order.timeline = order.timeline || [];
+  order.timeline.push({ at: submittedAt, key: 'payment_submitted', by: null, note: `${labels[method] || method}: ${fmtMoney(calc.paymentDue)} — pending bank verification` });
+  (db.users || []).filter(u => ['owner','admin'].includes(u.role)).forEach(u => pushInAppNotification(u.id, 'Payment needs verification', `${order.number}: client reported ${fmtMoney(calc.paymentDue)} by ${labels[method] || method}. Verify it in Chase before marking paid.`, `#/order/${order.id}`));
+  save();
+  premiumClosePaymentOptions();
+  render();
+  setTimeout(() => premiumOpenPaymentOptions(token), 60);
+}
 function premiumRenderSummary(prop, calc) {
   const stripeUrl = prop.stripe?.paymentLinkUrl || calc.order?.stripe?.paymentLinkUrl || '';
   const locked = premiumProposalLocked(prop);
@@ -21775,24 +21950,24 @@ function premiumRenderSummary(prop, calc) {
           <div class="font-bold" id="pp-summary-balance">${fmtMoney(calc.balanceAfterPayment)}</div>
         </div>
       </div>
-      <div class="pp-payment-card ${stripeReady ? 'ready' : ''} mt-4">
+      <div class="pp-payment-card ${premiumPaymentMethods().length ? 'ready' : ''} mt-4">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <div class="text-xs text-blue-100 font-bold">SECURE CHECKOUT</div>
-            <div class="text-lg font-black mt-1">Stripe payment built into this proposal</div>
+            <div class="text-xs text-blue-100 font-bold">PAYMENT</div>
+            <div class="text-lg font-black mt-1">Choose bank or card</div>
           </div>
-          <span class="pp-pill">${checkoutStatus}</span>
+          <span class="pp-pill">${prop.paymentClaim?.status === 'pending_review' ? 'Verification pending' : (locked ? 'Ready' : 'After approval')}</span>
         </div>
         <div class="pp-payment-rail">
           <div><span>Due now</span><strong>${fmtMoney(calc.paymentDue)}</strong></div>
-          <div><span>Method</span><strong>${payMode === 'financing' ? 'Financing' : 'Card / ACH'}</strong></div>
+          <div><span>Method</span><strong>${payMode === 'financing' ? 'Financing' : 'Zelle / ACH / Card'}</strong></div>
           <div><span>Balance</span><strong>${fmtMoney(calc.balanceAfterPayment)}</strong></div>
         </div>
-        ${canCheckout && locked ? `<button class="pp-btn w-full mt-4" onclick="premiumOpenStripeLink('${prop.token}')">${stripeReady || stripeUrl ? 'Pay securely with Stripe' : 'Create secure checkout'}</button>` : ''}
-        ${!locked && canCheckout ? `<div class="text-xs text-slate-300 mt-4">Sign and approve below. CRM will open the correct Stripe checkout for ${fmtMoney(calc.paymentDue)} automatically.</div>` : ''}
+        ${canCheckout && locked ? `<button class="pp-btn chase w-full mt-4" onclick="premiumOpenPaymentOptions('${prop.token}')">Pay now · ${fmtMoney(calc.paymentDue)}</button>` : ''}
+        ${!locked && canCheckout ? `<div class="text-xs text-slate-300 mt-4">Sign and approve below. Then choose Zelle, ACH, Chase or card.</div>` : ''}
         ${payMode === 'financing' ? `<div class="text-xs text-blue-100 mt-4">Financing request is submitted first. Stripe checkout is used for card/ACH payments.</div>` : ''}
       </div>
-      <div class="text-xs text-slate-500 mt-3">The checkout amount is tied to the signed proposal version and refreshes when the payment option changes.</div>
+      <div class="text-xs text-slate-500 mt-3">Payment is tied to this signed proposal version. Bank transfers remain pending until verified by ROLANPRO.</div>
     </div>`;
 }
 function premiumRenderRoom(prop, order, room, idx, calc) {
@@ -21926,16 +22101,17 @@ function premiumRenderPayment(prop, calc) {
 	      </div>`;
 	  }
   const stripeReady = premiumStripeLinkFresh(prop, calc);
-  const canStripe = mode !== 'financing' && calc.paymentDue > 0;
+  const primaryMethod = premiumPrimaryPaymentMethod();
+  const methodLabels = { zelle: 'Zelle to Chase', ach: 'ACH bank transfer', chase: 'Chase payment', card: 'secure card payment' };
   const primaryAction = mode === 'financing'
     ? (locked
       ? `<button class="pp-btn" disabled>Financing request submitted</button>`
       : `<button class="pp-btn" onclick="premiumAcceptProposal('${prop.token}')">Submit financing request</button>`)
     : (locked
-      ? `<button class="pp-btn" onclick="premiumOpenStripeLink('${prop.token}')">${stripeReady ? 'Pay securely with Stripe' : 'Create secure Stripe checkout'}</button>`
-      : `<button class="pp-btn" onclick="premiumAcceptAndPay('${prop.token}')">Accept and pay securely</button>`);
+      ? `<button class="pp-btn chase" onclick="premiumOpenPaymentOptions('${prop.token}')">Pay now · ${fmtMoney(calc.paymentDue)}</button>`
+      : `<button class="pp-btn chase" onclick="premiumAcceptAndChoosePayment('${prop.token}')">Accept and continue to payment</button>`);
   return `
-    <div class="pp-panel">
+    <div class="pp-panel" id="pp-payment">
       <div class="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <div class="text-xs text-blue-200 font-bold">PAYMENT OPTIONS</div>
@@ -21969,13 +22145,13 @@ function premiumRenderPayment(prop, calc) {
         </div>
 	      ` : ''}
 	      ${mode === 'financing' ? `<div class="mt-4 p-4 rounded-lg bg-blue-950/60 border border-blue-800"><div class="font-black">Upgrade your home from ${fmtMoney(premiumFinancingMonthly(calc.total))}/month</div><div class="text-sm text-blue-100 mt-1">Subject to approval. Rates and terms may vary.</div></div>` : ''}
-	      <div class="pp-payment-card ${stripeReady ? 'ready' : ''} mt-5">
+	      <div class="pp-payment-card ${premiumPaymentMethods().length ? 'ready' : ''} mt-5">
 	        <div class="flex items-start justify-between gap-3">
 	          <div>
-	            <div class="text-xs text-blue-100 font-bold">CHECKOUT STEP</div>
-	            <div class="text-lg font-black mt-1">${mode === 'financing' ? 'Financing request first' : 'Stripe payment after approval'}</div>
+	            <div class="text-xs text-blue-100 font-bold">PAYMENT STEP</div>
+	            <div class="text-lg font-black mt-1">${mode === 'financing' ? 'Financing request first' : `${methodLabels[primaryMethod] || 'Choose payment method'} after approval`}</div>
 	          </div>
-	          <span class="pp-pill">${mode === 'financing' ? 'No card due now' : (stripeReady ? 'Link ready' : 'Auto-created')}</span>
+	          <span class="pp-pill">${mode === 'financing' ? 'No payment due now' : (prop.paymentClaim?.status === 'pending_review' ? 'Verification pending' : 'Bank or card')}</span>
 	        </div>
 	        <div class="pp-payment-rail">
 	          <div><span>Proposal total</span><strong>${fmtMoney(calc.total)}</strong></div>
@@ -21985,7 +22161,7 @@ function premiumRenderPayment(prop, calc) {
 	        <div class="text-xs text-slate-300 mt-4">
 	          ${mode === 'financing'
 	            ? 'After approval the request is locked for manager review. Payment schedule is confirmed separately.'
-	            : `After the client approves and signs, CRM opens Stripe checkout for exactly ${fmtMoney(calc.paymentDue)}.`}
+	            : `After approval, choose Zelle, ACH, Chase or card for exactly ${fmtMoney(calc.paymentDue)}. Bank payments are verified before the order is marked paid.`}
 	        </div>
 	      </div>
 	      <div class="grid md:grid-cols-2 gap-4 mt-6">
@@ -22103,7 +22279,7 @@ function renderPremiumProposalPortal(token) {
       </section>
       <div class="pp-mobile-summary">
         <div><div class="text-xs text-slate-400">Total</div><div class="font-black">${fmtMoney(calc.total)}</div></div>
-        <a class="pp-btn" href="#rooms">Review</a>
+        ${locked && prop.selections.paymentMode !== 'financing' && calc.paymentDue > 0 ? `<button class="pp-btn chase" onclick="premiumOpenPaymentOptions('${prop.token}')">Pay ${fmtMoney(calc.paymentDue)}</button>` : `<a class="pp-btn" href="#pp-payment">Review & approve</a>`}
       </div>
     </div>`;
 }
@@ -22347,6 +22523,14 @@ async function premiumAcceptAndPay(token) {
   if (!accepted || !premiumProposalLocked(accepted) || accepted.selections.paymentMode === 'financing') return;
   await premiumOpenStripeLink(token);
 }
+function premiumAcceptAndChoosePayment(token) {
+  const prop = getPremiumProposalByToken(token);
+  if (!prop) return;
+  if (!premiumProposalLocked(prop)) premiumAcceptProposal(token);
+  const accepted = getPremiumProposalByToken(token);
+  if (!accepted || !premiumProposalLocked(accepted) || accepted.selections.paymentMode === 'financing') return;
+  setTimeout(() => premiumOpenPaymentOptions(token), 80);
+}
 async function premiumOpenStripeLink(token) {
   const prop = getPremiumProposalByToken(token);
   const order = getOrder(prop?.orderId);
@@ -22412,7 +22596,7 @@ function openPremiumProposalManagerModal(token) {
         <div class="flex items-start justify-between gap-3">
           <div>
 	            <div class="text-xs text-blue-700 font-semibold">ROLANPRO Proposal Studio</div>
-	            <h3 class="font-black text-xl">Единое КП + Stripe · ${premiumEsc(order.number)}</h3>
+	            <h3 class="font-black text-xl">Единое КП + оплата · ${premiumEsc(order.number)}</h3>
 	            <p class="text-sm text-gray-600 mt-1">${premiumEsc(client.name || 'Client')} · ${fmtMoney(calc.total)} · ${premiumStatusLabel(prop.status)}</p>
 	          </div>
 	          <button class="btn-ghost" onclick="closeModal()">✕</button>
@@ -22429,17 +22613,17 @@ function openPremiumProposalManagerModal(token) {
 	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Rooms</div><div class="font-black text-lg">${calc.includedRooms}</div></div>
 	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Windows</div><div class="font-black text-lg">${calc.totalWindowsQty}</div></div>
 	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Payment due</div><div class="font-black text-lg">${fmtMoney(calc.paymentDue)}</div></div>
-	          <div class="p-3 rounded-lg ${stripeReady ? 'bg-emerald-50 border-emerald-200' : 'bg-blue-50 border-blue-200'} border"><div class="text-gray-500">Stripe</div><div class="font-black text-lg">${stripeStatus}</div></div>
+	          <div class="p-3 rounded-lg ${prop.paymentClaim?.status === 'pending_review' ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'} border"><div class="text-gray-500">Оплата</div><div class="font-black text-lg">${prop.paymentClaim?.status === 'pending_review' ? 'Проверить Chase' : (premiumPrimaryPaymentMethod() === 'zelle' ? 'Zelle → Chase' : 'Готово')}</div></div>
 	        </div>
-	        <div class="mt-4 p-4 rounded-xl ${stripeReady ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'} border">
+	        <div class="mt-4 p-4 rounded-xl ${prop.paymentClaim?.status === 'pending_review' ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} border">
 	          <div class="flex items-start justify-between gap-3 flex-wrap">
 	            <div>
-	              <div class="font-black text-slate-900">Платеж встроен в КП</div>
-	              <p class="text-sm text-slate-600 mt-1">Клиент открывает презентацию, выбирает состав, подписывает и оплачивает ${fmtMoney(calc.paymentDue)} через Stripe. Если сумма поменяется, checkout создается заново.</p>
+	              <div class="font-black text-slate-900">Оплата встроена в КП</div>
+	              <p class="text-sm text-slate-600 mt-1">Клиент подписывает КП и выбирает Zelle на Chase, ACH, ссылку Chase или карту. Перевод не закрывает долг автоматически — сначала проверьте поступление в Chase.</p>
 	            </div>
 	            <div class="flex gap-2 flex-wrap">
 	              ${stripeUrl ? `<a class="btn-ghost text-sm" href="${premiumEsc(stripeUrl)}" target="_blank">Open checkout</a>` : ''}
-	              <button class="btn-primary text-sm" onclick="premiumCreateStripePaymentLink('${prop.token}')">💳 ${stripeReady ? 'Check Stripe' : (stripeUrl ? 'Refresh Stripe checkout' : 'Create Stripe checkout')}</button>
+	              ${db.settings.clientPayments?.cardEnabled !== false ? `<button class="btn-ghost text-sm" onclick="premiumCreateStripePaymentLink('${prop.token}')">💳 ${stripeReady ? 'Проверить Stripe' : (stripeUrl ? 'Обновить ссылку карты' : 'Создать ссылку карты')}</button>` : ''}
 	            </div>
 	          </div>
 	        </div>
