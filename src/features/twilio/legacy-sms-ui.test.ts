@@ -27,3 +27,16 @@ test("Twilio acceptance is not presented as delivery", () => {
   assert.match(legacyCrm, /Это ещё не подтверждение доставки/);
   assert.doesNotMatch(legacyCrm, /alert\('SMS отправлено'\)/);
 });
+
+test("inbound SMS creates a prominent CRM notification and reply action", () => {
+  assert.match(legacyCrm, /📩 Новое SMS от/);
+  assert.match(legacyCrm, /📩 ОТВЕТ КЛИЕНТА/);
+  assert.match(legacyCrm, /openLatestInboundSms/);
+  assert.match(legacyCrm, /openSmsComposer\('\$\{o\.id\}'\)/);
+});
+
+test("email settings clearly separate Gmail correspondence from Resend broadcasts", () => {
+  assert.match(legacyCrm, /Google Workspace для личной работы с клиентом/);
+  assert.match(legacyCrm, /Resend Broadcasts/);
+  assert.match(legacyCrm, /Основная Gmail-почта здесь не используется/);
+});

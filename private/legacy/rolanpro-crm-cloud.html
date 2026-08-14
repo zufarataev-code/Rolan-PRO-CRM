@@ -10632,6 +10632,8 @@ function communicationSettings() {
   if (!s.agent.mode) s.agent.mode = 'draft';
   if (!s.agent.objective) s.agent.objective = 'Назначить бесплатный замер, снять возражения и довести клиента до аванса.';
   if (!s.agent.followUpDays) s.agent.followUpDays = '1,3,7';
+  if (!Array.isArray(s.processedInboundSmsIds)) s.processedInboundSmsIds = [];
+  if (!Array.isArray(s.inboundSmsReadIds)) s.inboundSmsReadIds = [];
   return s;
 }
 function communicationChannelEnabled(channel) {
@@ -10644,7 +10646,30 @@ function isOrderCommunicationOpen(orderId) {
 function toggleOrderCommunicationHub(orderId) {
   state.communicationOpenOrders = state.communicationOpenOrders || {};
   state.communicationOpenOrders[orderId] = !state.communicationOpenOrders[orderId];
+  if (state.communicationOpenOrders[orderId]) markInboundSmsReadForOrder(orderId);
   render();
+}
+function unreadInboundSmsMessages() {
+  const read = new Set(communicationSettings().inboundSmsReadIds || []);
+  return twilioRemoteMessages
+    .filter(x => x.direction === 'in' && !read.has(x.id))
+    .sort((a,b) => String(b.at).localeCompare(String(a.at)));
+}
+function markInboundSmsReadForOrder(orderId) {
+  const settings = communicationSettings();
+  const read = new Set(settings.inboundSmsReadIds || []);
+  twilioRemoteMessages.filter(x => x.direction === 'in' && x.orderId === orderId).forEach(x => read.add(x.id));
+  settings.inboundSmsReadIds = [...read].slice(-500);
+  save();
+}
+function openLatestInboundSms() {
+  const latest = unreadInboundSmsMessages()[0];
+  if (!latest) { state.view = 'notifications'; render(); return; }
+  markInboundSmsReadForOrder(latest.orderId);
+  state.communicationOpenOrders = state.communicationOpenOrders || {};
+  if (latest.orderId) state.communicationOpenOrders[latest.orderId] = true;
+  if (latest.orderId) location.hash = `#/order/${latest.orderId}`;
+  else { state.view = 'notifications'; render(); }
 }
 function communicationStatusLabel(status) {
   const map = {
@@ -10880,7 +10905,7 @@ async function sendAutomaticClientNotice(orderId, templateKey = 'appointment') {
   alert('Готово: CRM прошла по каналам, а всё что требует ручного клика попало в очередь коммуникаций.');
   render();
 }
-async function aiDraftSalesAgentMessage(orderId) {
+async function aiDraftSalesAgentMessage(orderId, openComposer = false) {
   const o = getOrder(orderId);
   const c = getClient(o?.clientId);
   if (!o || !c) return;
@@ -10888,6 +10913,11 @@ async function aiDraftSalesAgentMessage(orderId) {
   const fallback = orderCommunicationBody(orderId, o.status === 'proposal_sent' ? 'proposal' : 'status');
   let draft = fallback;
   try {
+    const conversation = orderCommunicationFeed(o, c, 10)
+      .slice()
+      .reverse()
+      .map(item => `${item.direction === 'in' ? 'Клиент' : 'ROLANPRO'}: ${item.body || item.title}`)
+      .join('\n');
     const context = [
       `Клиент: ${c.name || '—'}`,
       `Заказ: ${o.number}`,
@@ -10896,9 +10926,10 @@ async function aiDraftSalesAgentMessage(orderId) {
       `Адрес: ${orderAddress(o, c) || '—'}`,
       `Цель ассистента: ${cfg.objective || ''}`,
       `Остаток к оплате: ${fmtMoney(orderDebt(o))}`,
+      `Последняя переписка:\n${conversation || 'переписки пока нет'}`,
     ].join('\n');
     draft = await callClaude([
-      { role: 'user', content: `Составь короткое сообщение клиенту RolanPRO для WhatsApp/SMS. Без давления, профессионально, на английском если имя клиента американское, иначе нейтрально. Контекст:\n${context}` },
+      { role: 'user', content: `Ты сотрудник клиентского сервиса ROLANPRO. Подготовь естественный короткий ответ на последнее сообщение клиента для SMS. Учитывай всю историю, отвечай по существу, без выдуманных сроков, цен, скидок и обещаний. Если информации недостаточно — задай один уточняющий вопрос. Используй язык последнего сообщения клиента. Верни только готовый текст ответа.\n\nКонтекст:\n${context}` },
     ], { maxTokens: 220 });
   } catch (e) {
     draft = fallback;
@@ -10910,6 +10941,9 @@ async function aiDraftSalesAgentMessage(orderId) {
   }
   recordCommunicationDispatch(o, 'agent', 'draft', draft || fallback, 'ИИ подготовил черновик касания');
   save();
+  if (openComposer) {
+    openSmsComposer(orderId, (draft || fallback).trim());
+  }
 }
 function createSalesAgentFollowUp(orderId) {
   const o = getOrder(orderId);
@@ -11123,6 +11157,8 @@ function orderCommunicationFeed(o, c, limit = 8) {
       body: x.body || x.detail || '',
       by: x.by,
       status: x.status,
+      direction: x.direction || 'out',
+      channel: x.channel || '',
       detail: x.detail || '',
       meta: x.meta || {},
     }));
@@ -11226,15 +11262,15 @@ function renderOrderCommunicationHub(o, c) {
           ${feed.length ? `<div class="space-y-2">${feed.map(x => {
             const actor = getUser(x.by);
             const url = x.meta?.url || '';
-            return `<div class="p-2 rounded-lg bg-slate-50 border border-slate-100">
+            return `<div class="p-3 rounded-lg ${x.direction === 'in' ? 'bg-rose-50 border-2 border-rose-200 shadow-sm' : 'bg-slate-50 border border-slate-100'}">
               <div class="flex items-start justify-between gap-2">
-                <div class="text-xs font-bold text-slate-700">${x.icon} ${academyEsc(x.title)}</div>
+                <div class="text-xs font-bold ${x.direction === 'in' ? 'text-rose-800' : 'text-slate-700'}">${x.direction === 'in' ? '📩 ОТВЕТ КЛИЕНТА' : x.icon + ' ' + academyEsc(x.title)}</div>
                 <div class="text-[11px] text-slate-400 whitespace-nowrap">${fmtDateTime(x.at)}</div>
               </div>
               ${x.body ? `<div class="text-xs text-slate-600 mt-1 text-safe">${academyEsc(x.body)}</div>` : ''}
               <div class="flex items-center justify-between gap-2 mt-2">
                 <span class="tag border ${communicationStatusClass(x.status)}">${communicationStatusLabel(x.status)}</span>
-                ${url ? `<a class="text-xs font-bold text-blue-600 hover:underline" href="${url}" target="_blank" rel="noopener">Открыть канал</a>` : ''}
+                ${x.direction === 'in' && x.channel === 'sms' ? `<span class="flex gap-3"><button class="text-xs font-bold text-violet-700 hover:underline" onclick="aiDraftSalesAgentMessage('${o.id}', true)">✨ AI-ответ</button><button class="text-xs font-bold text-blue-600 hover:underline" onclick="openSmsComposer('${o.id}')">Ответить</button></span>` : url ? `<a class="text-xs font-bold text-blue-600 hover:underline" href="${url}" target="_blank" rel="noopener">Открыть канал</a>` : ''}
               </div>
               ${x.detail ? `<div class="text-[11px] text-slate-400 mt-1">${academyEsc(x.detail)}</div>` : ''}
               ${actor ? `<div class="text-[11px] text-slate-400 mt-1">${academyEsc(actor.name)}</div>` : ''}
@@ -13575,6 +13611,7 @@ function renderAppShell() {
         <div class="topbar-actions">
           <div class="topbar-user-pill" title="${academyEsc(u.name)}">${academyEsc(u.name)} · ${T(u.role)}</div>
           <button class="btn-ghost text-sm" onclick="logout()">Сменить</button>
+          ${unreadInboundSmsMessages().length ? `<button class="topbar-icon-btn relative bg-rose-50 text-rose-700 border border-rose-200" onclick="openLatestInboundSms()" title="Открыть новое SMS клиента">📩 <span class="font-black">${unreadInboundSmsMessages().length}</span><span class="hidden md:inline text-xs font-bold"> SMS</span></button>` : ''}
           <button class="topbar-icon-btn relative" onclick="state.view='notifications'; markAllRead();">
             🔔 ${unreadCount() > 0 ? `<span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">${unreadCount()}</span>` : ''}
           </button>
@@ -15147,6 +15184,48 @@ function renderReviews() {
 }
 
 // ---------- MANAGER: SETTINGS ----------
+function renderEmailChannelSettings(s) {
+  const gmailConnected = gmailServerStatus?.connected === true;
+  const marketingConnected = marketingEmailStatus?.configured === true;
+  const gmailAddress = gmailServerStatus?.email_address || 'info@rolan-pro.com';
+  return `
+    <div class="card">
+      <h3 class="font-black text-lg mb-1">✉️ Почта и переписка</h3>
+      <p class="text-sm text-gray-600 mb-4">Два отдельных канала: Google Workspace для личной работы с клиентом, Resend — только для массовых рассылок и акций.</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="p-4 rounded-xl border ${gmailConnected ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'}">
+          <div class="text-xs font-black uppercase ${gmailConnected ? 'text-emerald-700' : 'text-rose-700'}">Личная переписка</div>
+          <div class="font-black mt-1">Google Workspace</div>
+          <div class="text-sm mt-1">${gmailConnected ? `✅ Подключено: ${academyEsc(gmailAddress)}` : '❌ Gmail не подключён'}</div>
+          <div class="text-xs text-gray-500 mt-1">Письма клиентам, ответы, КП и обсуждение заказов.</div>
+          ${gmailServerStatus?.last_synced_at ? `<div class="text-xs text-gray-500 mt-2">Синхронизация: ${fmtDateTime(gmailServerStatus.last_synced_at)}</div>` : ''}
+          ${gmailServerStatus?.sync_error ? `<div class="text-xs text-rose-700 mt-2">${academyEsc(gmailServerStatus.sync_error)}</div>` : ''}
+          <div class="flex gap-2 mt-3 flex-wrap"><button class="btn-primary text-sm" onclick="location.href='/mail'">Открыть почту</button><button class="btn-ghost text-sm" onclick="refreshEmailChannelStatus(true)">Синхронизировать</button></div>
+        </div>
+        <div class="p-4 rounded-xl border ${marketingConnected ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}">
+          <div class="text-xs font-black uppercase ${marketingConnected ? 'text-emerald-700' : 'text-amber-700'}">Рассылки и акции</div>
+          <div class="font-black mt-1">Resend Broadcasts</div>
+          <div class="text-sm mt-1">${marketingConnected ? `✅ Подключено: ${academyEsc(marketingEmailStatus.from || '')}` : '⏳ Не настроено'}</div>
+          <div class="text-xs text-gray-500 mt-1">Поздравления, отзывы, follow-up, новости, акции и реактивация. Основная Gmail-почта здесь не используется.</div>
+          ${marketingConnected ? `<div class="text-xs text-gray-500 mt-2">Ответы клиентов: ${academyEsc(marketingEmailStatus.replyTo || gmailAddress)}</div>` : `<div class="text-xs text-amber-800 mt-2">Нужны API key Resend, подтверждённый поддомен updates.rolan-pro.com, Segment и Topic.</div>`}
+        </div>
+      </div>
+      <div class="mt-4 p-4 rounded-xl border border-violet-200 bg-violet-50">
+        <div class="font-black text-violet-900">🤖 AI-сотрудник переписки</div>
+        <p class="text-sm text-violet-800 mt-1">Читает историю заказа и готовит персональный ответ. Безопасный режим — менеджер проверяет текст и нажимает «Отправить». Полный автомат включается только после настройки серверного AI и правил эскалации.</p>
+        <div class="text-xs text-violet-700 mt-2">Режим сейчас: <b>${communicationSettings().agent?.mode === 'auto' ? 'автоматический' : communicationSettings().agent?.mode === 'supervised' ? 'с подтверждением менеджера' : 'черновики'}</b></div>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer mt-4">
+        <input type="checkbox" ${s.email.autoSend?'checked':''} onchange="db.settings.email.autoSend=this.checked; save();" style="width:18px;height:18px">
+        <span class="font-medium text-sm">Автоматические рабочие письма по этапам заказа через Google Workspace</span>
+      </label>
+      <div class="mt-4">
+        <div class="text-sm font-medium mb-2">Шаблоны рабочих писем</div>
+        ${Object.keys(s.email.templates).map(k => `<details class="mb-2 border rounded-lg p-3 bg-gray-50"><summary class="text-sm font-medium cursor-pointer">${T(k)}</summary><label class="text-xs mt-3">${T('emailSubject')}</label><input value="${academyEsc(s.email.templates[k].subject)}" onchange="db.settings.email.templates['${k}'].subject=this.value; save();"><label class="text-xs mt-2">${T('emailBody')}</label><textarea rows="3" onchange="db.settings.email.templates['${k}'].body=this.value; save();">${academyEsc(s.email.templates[k].body)}</textarea></details>`).join('')}
+      </div>
+    </div>`;
+}
+
 function renderSettings() {
   const s = db.settings;
   const comm = communicationSettings();
@@ -15257,9 +15336,10 @@ function renderSettings() {
         </div>
 
         <div class="p-3 border rounded-lg">
-          <div class="font-medium text-sm mb-1">✉️ Gmail (почта)</div>
-          <p class="text-xs text-gray-500 mb-2">Рабочий адрес Gmail. Клики по email клиентов будут открывать окно нового письма в Gmail. Если пусто — откроется почтовое приложение по умолчанию.</p>
-          <input id="int-gmail" value="${(s.integrations||{}).gmailAddress||''}" placeholder="info@rolanpro.com">
+          <div class="font-medium text-sm mb-1">✉️ Google Workspace</div>
+          <p class="text-xs text-gray-500 mb-2">Личная переписка работает через защищённый Gmail API на сервере. Пароли и ключи в браузере не хранятся.</p>
+          <input id="int-gmail" value="${academyEsc(gmailServerStatus?.email_address || (s.integrations||{}).gmailAddress || 'info@rolan-pro.com')}" readonly>
+          <div class="text-xs mt-2 ${gmailServerStatus?.connected ? 'text-emerald-700' : 'text-amber-700'}">${gmailServerStatus?.connected ? '✅ Подключено' : '⏳ Проверяем подключение'}</div>
         </div>
 
         <div class="p-3 border rounded-lg">
@@ -15671,42 +15751,7 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="card">
-      <h3 class="font-semibold mb-3">📧 ${T('emailIntegration')}</h3>
-      <label>${T('emailMethod')}</label>
-      <select onchange="db.settings.email.method=this.value; save(); render();">
-        <option value="mailto" ${s.email.method==='mailto'?'selected':''}>${T('emailMailto')}</option>
-        <option value="emailjs" ${s.email.method==='emailjs'?'selected':''}>${T('emailJs')}</option>
-      </select>
-      ${s.email.method === 'emailjs' ? `
-        <p class="text-sm text-gray-600 mt-3 mb-2">${T('emailJsHint')}</p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div><label>${T('emailJsKey')}</label><input value="${s.email.emailjs.publicKey}" onchange="db.settings.email.emailjs.publicKey=this.value.trim(); save();"></div>
-          <div><label>${T('emailJsService')}</label><input value="${s.email.emailjs.serviceId}" onchange="db.settings.email.emailjs.serviceId=this.value.trim(); save();"></div>
-          <div><label>${T('emailJsTemplate')}</label><input value="${s.email.emailjs.templateId}" onchange="db.settings.email.emailjs.templateId=this.value.trim(); save();"></div>
-        </div>
-      ` : ''}
-      <div class="mt-4 pt-4 border-t flex items-center gap-3">
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" ${s.email.autoSend?'checked':''} onchange="db.settings.email.autoSend=this.checked; save();" style="width:auto;">
-          <span class="font-medium text-sm">⚡ Авто-отправка email при смене статуса заказа</span>
-        </label>
-      </div>
-      <p class="text-xs text-gray-500 mt-1 mb-3">${s.email.method==='mailto' ? '⚠️ Mailto не поддерживает автоматику (открывает почтовый клиент). Выберите EmailJS.' : 'Когда статус заказа меняется на один из ниже, клиенту автоматически уйдёт email по соответствующему шаблону.'}</p>
-      <div class="mt-2">
-        <div class="text-sm font-medium mb-2">${T('emailTemplates')}</div>
-        <p class="text-xs text-gray-500 mb-3">${T('emailVarsHint')}</p>
-        ${Object.keys(s.email.templates).map(k => `
-          <div class="mb-3 border rounded-lg p-3 bg-gray-50">
-            <div class="text-sm font-medium text-slate-700 mb-2">${T(k)}</div>
-            <label class="text-xs">${T('emailSubject')}</label>
-            <input value="${s.email.templates[k].subject}" onchange="db.settings.email.templates['${k}'].subject=this.value; save();">
-            <label class="text-xs mt-2">${T('emailBody')}</label>
-            <textarea rows="3" onchange="db.settings.email.templates['${k}'].body=this.value; save();">${s.email.templates[k].body}</textarea>
-          </div>
-        `).join('')}
-      </div>
-    </div>
+    ${renderEmailChannelSettings(s)}
 
     <div class="card">
       <h3 class="font-semibold mb-3">${T('backupRestore')}</h3>
@@ -24214,6 +24259,8 @@ function getSmsTemplate(statusKey) {
 }
 let twilioServerStatus = null;
 let twilioRemoteMessages = [];
+let gmailServerStatus = null;
+let marketingEmailStatus = null;
 async function twilioApi(path, options = {}) {
   if (ROLANPRO_LOCAL_FILE) {
     throw new Error('Открыта локальная копия CRM. SMS работает только в рабочей CRM: ' + ROLANPRO_PRODUCTION_URL);
@@ -24241,10 +24288,60 @@ async function syncTwilioMessages() {
     const before = twilioRemoteMessages.map(x => `${x.id}:${x.status}`).join('|');
     const after = next.map(x => `${x.id}:${x.status}`).join('|');
     twilioRemoteMessages = next;
+    const comm = communicationSettings();
+    const processed = new Set(comm.processedInboundSmsIds || []);
+    const recentCutoff = Date.now() - 7 * 86400000;
+    const newInbound = next
+      .filter(x => x.direction === 'in' && !processed.has(x.id) && new Date(x.at).getTime() >= recentCutoff)
+      .sort((a,b) => String(a.at).localeCompare(String(b.at)));
+    if (newInbound.length) {
+      for (const message of newInbound) {
+        const o = getOrder(message.orderId);
+        const c = getClient(message.clientId || o?.clientId);
+        const recipients = new Set([
+          o?.managerId,
+          ...(db.users || []).filter(u => u.role === 'owner').map(u => u.id),
+        ].filter(Boolean));
+        recipients.forEach(userId => db.notifications.push({
+          id: 'sms_notice_' + message.id + '_' + userId,
+          userId,
+          title: `📩 Новое SMS от ${c?.name || message.meta?.from || 'клиента'}`,
+          body: `${o?.number ? o.number + ' · ' : ''}${String(message.body || '').slice(0, 180)}`,
+          link: message.orderId ? `#/order/${message.orderId}` : null,
+          readAt: null,
+          createdAt: message.at || new Date().toISOString(),
+        }));
+        processed.add(message.id);
+      }
+      comm.processedInboundSmsIds = [...processed].slice(-500);
+      state.latestInboundSms = newInbound[newInbound.length - 1];
+      save();
+    }
     if (before !== after) render();
   } catch (e) {
     console.warn('[Twilio] message sync failed', e);
   }
+}
+async function marketingEmailApi(path, options = {}) {
+  const r = await fetch(`/api/v1/integrations/marketing-email${path}`, {
+    credentials: 'same-origin', cache: 'no-store', ...options,
+    headers: {'Content-Type':'application/json', ...(options.headers || {})},
+  });
+  const payload = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(payload?.errors?.[0]?.message || `Marketing email ${r.status}`);
+  return payload?.data;
+}
+async function refreshEmailChannelStatus(sync = false) {
+  if (!ROLANPRO_CLOUD) return;
+  try {
+    if (sync) await workMailApi('/sync', { method: 'POST', body: '{}' });
+    gmailServerStatus = await workMailApi('/status');
+  } catch (e) {
+    gmailServerStatus = { connected:false, sync_error:e.message || String(e) };
+  }
+  try { marketingEmailStatus = await marketingEmailApi('/status'); }
+  catch (e) { marketingEmailStatus = { configured:false, error:e.message || String(e) }; }
+  render();
 }
 async function sendSmsViaTwilio(to, body, context = {}) {
   return twilioApi('/messages', {
@@ -24555,12 +24652,13 @@ async function validateTextBeltSettings(to) {
     alert('TextBelt недоступен:\n' + sanitizeSmsProviderError(e.message));
   }
 }
-function openSmsComposer(orderId) {
+function openSmsComposer(orderId, initialBody = '') {
   const o = getOrder(orderId);
   const c = getClient(o.clientId);
   if (!c?.phone) { alert('У клиента нет телефона'); return; }
   const templates = db.settings.sms?.templates || {};
   const keys = Object.keys(templates);
+  const defaultBody = initialBody || fillTemplate(templates[keys[0]] || '', smsVars(o));
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6" style="max-width: 32rem;">
@@ -24573,7 +24671,7 @@ function openSmsComposer(orderId) {
         }).join('')}
       </select>
       <label class="mt-3">Текст SMS <span class="text-xs text-gray-500" id="sms-len">0/160</span></label>
-      <textarea id="sms-text" rows="5" oninput="document.getElementById('sms-len').textContent = this.value.length + (/[А-яЁё]/.test(this.value) ? '/70' : '/160');">${fillTemplate(templates[keys[0]] || '', smsVars(o))}</textarea>
+      <textarea id="sms-text" rows="5" oninput="document.getElementById('sms-len').textContent = this.value.length + (/[А-яЁё]/.test(this.value) ? '/70' : '/160');">${academyEsc(defaultBody)}</textarea>
       <p class="text-xs text-gray-500 mt-1">Способ: <b>${db.settings.sms?.method || 'native'}</b>. Латиница: 160 симв, кириллица: 70 симв на одно SMS.</p>
       <div class="flex gap-2 mt-4 justify-end flex-wrap">
         <button id="ai-sms-btn" class="btn-ghost" onclick="aiSmartCompose('sms','${orderId}')" style="background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);">✨ Адаптировать через AI</button>
@@ -26041,6 +26139,7 @@ async function cloudBoot() {
     cloudStatus('Сохранено', 'green');
     syncTwilioMessages();
     refreshTwilioStatus();
+    refreshEmailChannelStatus(true);
   } catch (error) {
     console.error('[Cloud CRM] boot failed', error);
     cloudStatus('CRM временно недоступна', 'red');
@@ -26066,6 +26165,7 @@ if (ROLANPRO_LOCAL_FILE) renderLocalCloudFileGuard();
 else if (ROLANPRO_CLOUD) cloudBoot();
 else { load(); parseHash(); render(); }
 setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) syncTwilioMessages(); }, 15000);
+setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) refreshEmailChannelStatus(true); }, 300000);
 </script>
 
 
