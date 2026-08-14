@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+
+import styles from "./gmail-mailbox.module.css";
 
 type GmailStatus = {
   connected: boolean;
@@ -39,12 +41,7 @@ type ComposeState = {
   orderId?: string | null;
 };
 
-const panelStyle = {
-  border: "1px solid #dbe4f0",
-  borderRadius: 18,
-  background: "#fff",
-  boxShadow: "0 12px 35px rgba(15, 23, 42, 0.06)",
-} as const;
+type MailFolder = "inbox" | "sent" | "all";
 
 async function gmailApi<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/v1/integrations/gmail${path}`, {
@@ -66,13 +63,66 @@ function displayContact(message: GmailMessage) {
   return message.recipient_emails.join(", ") || "Получатель";
 }
 
-function displayDate(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+function displayAddress(message: GmailMessage) {
+  if (message.direction === "inbound") return message.sender_email || message.sender_name || "Клиент";
+  return message.recipient_emails.join(", ") || "Получатель";
+}
+
+function displayDate(value: string, compact = false) {
+  const date = new Date(value);
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  if (compact && sameDay) {
+    return new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(date);
+  }
+  return new Intl.DateTimeFormat("ru-RU", compact
+    ? { day: "numeric", month: "short" }
+    : { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" },
+  ).format(date);
+}
+
+function Icon({ children, size = 20 }: { children: ReactNode; size?: number }) {
+  return <span className={styles.icon} style={{ width: size, height: size }} aria-hidden="true">{children}</span>;
+}
+
+function SearchIcon() {
+  return <Icon><svg viewBox="0 0 24 24"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" /></svg></Icon>;
+}
+
+function MailIcon() {
+  return <Icon size={24}><svg viewBox="0 0 24 24"><path d="M3 6.5 12 13l9-6.5M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" /></svg></Icon>;
+}
+
+function InboxIcon() {
+  return <Icon><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 14h4l2 3h4l2-3h4" /></svg></Icon>;
+}
+
+function SentIcon() {
+  return <Icon><svg viewBox="0 0 24 24"><path d="m3 11 18-8-8 18-2-8-8-2Zm8 2 10-10" /></svg></Icon>;
+}
+
+function StackIcon() {
+  return <Icon><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5" /></svg></Icon>;
+}
+
+function PencilIcon() {
+  return <Icon><svg viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10L4 20Zm9.5-13 3.5 3.5M15 5.5l2-2a1.4 1.4 0 0 1 2 0L20.5 5a1.4 1.4 0 0 1 0 2l-2 2" /></svg></Icon>;
+}
+
+function RefreshIcon() {
+  return <Icon><svg viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5m10.2-3A8 8 0 0 0 5.7 6.3L4 8m16 8-1.7 1.7A8 8 0 0 1 4.8 14" /></svg></Icon>;
+}
+
+function BackIcon() {
+  return <Icon><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7M8 12h12" /></svg></Icon>;
+}
+
+function ReplyIcon() {
+  return <Icon><svg viewBox="0 0 24 24"><path d="m10 8-6 5 6 5v-3c5 0 8 1 10 4-1-6-4-9-10-9V8Z" /></svg></Icon>;
+}
+
+function CloseIcon() {
+  return <Icon><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg></Icon>;
 }
 
 export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
@@ -80,6 +130,7 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
   const [messages, setMessages] = useState<GmailMessage[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [folder, setFolder] = useState<MailFolder>("inbox");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [compose, setCompose] = useState<ComposeState | null>(null);
@@ -98,7 +149,6 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
       if (nextStatus.connected) {
         const result = await gmailApi<{ messages: GmailMessage[] }>("/messages");
         setMessages(result.messages || []);
-        setSelectedId((current) => current || result.messages?.[0]?.id || null);
       } else {
         setMessages([]);
       }
@@ -123,25 +173,35 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
     window.history.replaceState(null, "", "/mail");
   }, []);
 
+  const unreadCount = messages.filter((message) => message.direction === "inbound" && message.is_unread).length;
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return messages;
-    return messages.filter((message) => [
-      message.subject,
-      message.sender_email,
-      message.sender_name,
-      message.body,
-      ...message.recipient_emails,
-    ].join(" ").toLowerCase().includes(normalized));
-  }, [messages, query]);
+    return messages.filter((message) => {
+      if (folder === "inbox" && message.direction !== "inbound") return false;
+      if (folder === "sent" && message.direction !== "outbound") return false;
+      if (!normalized) return true;
+      return [
+        message.subject,
+        message.sender_email,
+        message.sender_name,
+        message.body,
+        ...message.recipient_emails,
+      ].join(" ").toLowerCase().includes(normalized);
+    });
+  }, [folder, messages, query]);
 
-  const selected = filtered.find((message) => message.id === selectedId) || filtered[0] || null;
+  const selected = messages.find((message) => message.id === selectedId) || null;
 
   async function selectMessage(message: GmailMessage) {
     setSelectedId(message.id);
     if (!message.is_unread) return;
     setMessages((current) => current.map((item) => item.id === message.id ? { ...item, is_unread: false } : item));
     await gmailApi(`/messages/${encodeURIComponent(message.id)}`, { method: "PATCH", body: "{}" }).catch(() => undefined);
+  }
+
+  function changeFolder(nextFolder: MailFolder) {
+    setFolder(nextFolder);
+    setSelectedId(null);
   }
 
   function reply(message: GmailMessage) {
@@ -175,6 +235,7 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
       });
       setCompose(null);
       await loadMailbox(false);
+      setFolder("sent");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Не удалось отправить письмо.");
     } finally {
@@ -182,63 +243,135 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
     }
   }
 
-  if (loading && !status) return <div style={{ ...panelStyle, padding: 28 }}>Загружаем рабочую почту…</div>;
+  if (loading && !status) {
+    return <div className={styles.loading}><span className={styles.spinner} />Загружаем рабочую почту…</div>;
+  }
 
   if (!status?.connected) {
     return (
-      <section style={{ ...panelStyle, maxWidth: 720, padding: 30 }}>
-        <div style={{ fontSize: 42 }}>✉️</div>
-        <h2 style={{ margin: "12px 0 8px", fontSize: 25 }}>Рабочая почта не подключена</h2>
-        <p style={{ color: "#64748b", lineHeight: 1.6 }}>Подключение идёт через Google OAuth. Пароль Gmail в CRM не сохраняется.</p>
-        {error ? <p style={{ color: "#b91c1c" }}>{error}</p> : null}
-        {canConnect ? <a href="/api/v1/integrations/gmail/connect" style={{ display: "inline-block", marginTop: 14, padding: "11px 18px", borderRadius: 10, background: "#2563eb", color: "white", fontWeight: 800 }}>Подключить Gmail</a> : null}
+      <section className={styles.connectPanel}>
+        <div className={styles.gmailMark}><MailIcon /></div>
+        <h2>Рабочая почта не подключена</h2>
+        <p>Подключение выполняется через Google. Пароль Gmail в CRM не сохраняется.</p>
+        {error ? <p className={styles.connectError}>{error}</p> : null}
+        {canConnect ? <a href="/api/v1/integrations/gmail/connect" className={styles.connectButton}>Подключить Google Mail</a> : null}
       </section>
     );
   }
 
+  const folderTitle = folder === "inbox" ? "Входящие" : folder === "sent" ? "Отправленные" : "Вся почта";
+
   return (
-    <>
-      {error ? <div style={{ marginBottom: 12, padding: 12, borderRadius: 10, background: "#fef2f2", color: "#b91c1c" }}>{error}</div> : null}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(300px, 390px) minmax(0, 1fr)", gap: 16, minHeight: "68vh" }}>
-        <section style={{ ...panelStyle, overflow: "hidden" }}>
-          <div style={{ padding: 18, borderBottom: "1px solid #e2e8f0" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-              <div><strong>{status.email_address}</strong><div style={{ marginTop: 4, color: "#64748b", fontSize: 12 }}>{messages.length} писем · {messages.filter((message) => message.is_unread).length} непрочитано</div></div>
-              <button type="button" onClick={() => void loadMailbox(true)} disabled={loading} style={{ padding: "8px 11px", border: "1px solid #cbd5e1", borderRadius: 9, background: "white", cursor: "pointer" }}>{loading ? "…" : "↻"}</button>
-            </div>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по почте…" style={{ width: "100%", marginTop: 14, padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 10 }} />
-            <button type="button" onClick={() => setCompose({ to: "", subject: "", body: "" })} style={{ width: "100%", marginTop: 10, padding: "10px 12px", border: 0, borderRadius: 10, background: "#2563eb", color: "white", fontWeight: 800, cursor: "pointer" }}>+ Новое письмо</button>
+    <div className={styles.mailApp}>
+      <header className={styles.mailHeader}>
+        <div className={styles.brand}><span className={styles.gmailMark}><MailIcon /></span><span>Почта</span></div>
+        <label className={styles.search}>
+          <SearchIcon />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск в почте" />
+          {query ? <button type="button" onClick={() => setQuery("")} aria-label="Очистить поиск"><CloseIcon /></button> : null}
+        </label>
+        <div className={styles.account} title={status.email_address || "Google Mail"}>
+          <span>{(status.email_address || "R").charAt(0).toUpperCase()}</span>
+        </div>
+      </header>
+
+      {error ? <div className={styles.errorBanner}>{error}<button type="button" onClick={() => setError("")}><CloseIcon /></button></div> : null}
+
+      <div className={styles.mailBody}>
+        <aside className={styles.sidebar}>
+          <button type="button" className={styles.composeButton} onClick={() => setCompose({ to: "", subject: "", body: "" })}>
+            <PencilIcon /> <span>Написать</span>
+          </button>
+          <nav aria-label="Папки почты">
+            <button type="button" className={folder === "inbox" ? styles.folderActive : styles.folder} onClick={() => changeFolder("inbox")}>
+              <InboxIcon /><span>Входящие</span>{unreadCount ? <strong>{unreadCount}</strong> : null}
+            </button>
+            <button type="button" className={folder === "sent" ? styles.folderActive : styles.folder} onClick={() => changeFolder("sent")}>
+              <SentIcon /><span>Отправленные</span>
+            </button>
+            <button type="button" className={folder === "all" ? styles.folderActive : styles.folder} onClick={() => changeFolder("all")}>
+              <StackIcon /><span>Вся почта</span>
+            </button>
+          </nav>
+          <div className={styles.mailboxMeta}>
+            <strong>{status.email_address}</strong>
+            <span>{messages.length} писем в CRM</span>
           </div>
-          <div style={{ maxHeight: "58vh", overflow: "auto" }}>
-            {filtered.map((message) => (
-              <button key={message.id} type="button" onClick={() => void selectMessage(message)} style={{ width: "100%", padding: 14, textAlign: "left", border: 0, borderBottom: "1px solid #e2e8f0", background: selected?.id === message.id ? "#eff6ff" : "white", cursor: "pointer" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><strong style={{ color: message.is_unread ? "#1d4ed8" : "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{message.direction === "inbound" ? "↙" : "↗"} {displayContact(message)}</strong><span style={{ color: "#94a3b8", fontSize: 11, whiteSpace: "nowrap" }}>{displayDate(message.sent_at)}</span></div>
-                <div style={{ marginTop: 6, fontSize: 14, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{message.subject || "(без темы)"}</div>
-                <div style={{ marginTop: 4, color: "#64748b", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{message.snippet || message.body}</div>
-              </button>
-            ))}
-          </div>
-        </section>
-        <section style={{ ...panelStyle, padding: 24, minWidth: 0 }}>
-          {selected ? <>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 16, borderBottom: "1px solid #e2e8f0", paddingBottom: 18 }}>
-              <div><div style={{ color: "#2563eb", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>{selected.direction === "inbound" ? "Входящее" : "Исходящее"}</div><h2 style={{ margin: "6px 0", fontSize: 22 }}>{selected.subject || "(без темы)"}</h2><div style={{ color: "#64748b" }}>{displayContact(selected)} · {displayDate(selected.sent_at)}</div></div>
-              <button type="button" onClick={() => reply(selected)} style={{ alignSelf: "flex-start", padding: "10px 15px", border: 0, borderRadius: 10, background: "#2563eb", color: "white", fontWeight: 800, cursor: "pointer" }}>Ответить</button>
-            </div>
-            <div style={{ marginTop: 22, whiteSpace: "pre-wrap", lineHeight: 1.7, color: "#334155" }}>{selected.body || selected.snippet}</div>
-            {selected.attachments?.length ? <div style={{ marginTop: 24, display: "flex", flexWrap: "wrap", gap: 8 }}>{selected.attachments.map((file, index) => file.attachment_id ? <a key={`${file.attachment_id}-${index}`} href={`/api/v1/integrations/gmail/messages/${encodeURIComponent(selected.id)}/attachments/${encodeURIComponent(file.attachment_id)}`} style={{ padding: "8px 11px", borderRadius: 9, background: "#f1f5f9", color: "#334155" }}>📎 {file.name || "Файл"}</a> : null)}</div> : null}
-          </> : <div style={{ color: "#64748b" }}>Выберите письмо слева.</div>}
-        </section>
+        </aside>
+
+        <main className={styles.workspace}>
+          {selected ? (
+            <article className={styles.reader}>
+              <div className={styles.readerToolbar}>
+                <button type="button" onClick={() => setSelectedId(null)} aria-label="Вернуться к списку"><BackIcon /></button>
+                <button type="button" onClick={() => void loadMailbox(true)} disabled={loading} aria-label="Обновить"><RefreshIcon /></button>
+              </div>
+              <div className={styles.readerContent}>
+                <div className={styles.readerTitleRow}>
+                  <h2>{selected.subject || "(без темы)"}</h2>
+                  {selected.legacy_order_id ? <span className={styles.orderBadge}>Заказ {selected.legacy_order_id}</span> : null}
+                </div>
+                <div className={styles.senderRow}>
+                  <div className={styles.senderAvatar}>{displayContact(selected).charAt(0).toUpperCase()}</div>
+                  <div className={styles.senderDetails}>
+                    <strong>{displayContact(selected)}</strong>
+                    <span>{selected.direction === "inbound" ? "кому: мне" : `кому: ${displayAddress(selected)}`}</span>
+                  </div>
+                  <time>{displayDate(selected.sent_at)}</time>
+                  <button type="button" className={styles.iconButton} onClick={() => reply(selected)} aria-label="Ответить"><ReplyIcon /></button>
+                </div>
+                <div className={styles.messageBody}>{selected.body || selected.snippet}</div>
+                {selected.attachments?.length ? (
+                  <div className={styles.attachments}>
+                    {selected.attachments.map((file, index) => file.attachment_id ? (
+                      <a key={`${file.attachment_id}-${index}`} href={`/api/v1/integrations/gmail/messages/${encodeURIComponent(selected.id)}/attachments/${encodeURIComponent(file.attachment_id)}`}>
+                        <span>📎</span>{file.name || "Файл"}
+                      </a>
+                    ) : null)}
+                  </div>
+                ) : null}
+                <button type="button" className={styles.replyButton} onClick={() => reply(selected)}><ReplyIcon /> Ответить</button>
+              </div>
+            </article>
+          ) : (
+            <section className={styles.inbox}>
+              <div className={styles.listToolbar}>
+                <h2>{folderTitle}</h2>
+                <div>
+                  <span>{filtered.length ? `1–${filtered.length} из ${filtered.length}` : "0 писем"}</span>
+                  <button type="button" onClick={() => void loadMailbox(true)} disabled={loading} aria-label="Обновить почту" className={loading ? styles.refreshing : ""}><RefreshIcon /></button>
+                </div>
+              </div>
+              <div className={styles.messageList}>
+                {filtered.length ? filtered.map((message) => (
+                  <button key={message.id} type="button" onClick={() => void selectMessage(message)} className={message.is_unread ? styles.messageUnread : styles.messageRow}>
+                    <span className={styles.unreadDot} />
+                    <strong className={styles.contact}>{displayContact(message)}</strong>
+                    <span className={styles.subject}>{message.subject || "(без темы)"}<span> — {message.snippet || message.body}</span></span>
+                    {message.attachments?.length ? <span className={styles.paperclip} aria-label="Есть вложение">⌕</span> : null}
+                    <time>{displayDate(message.sent_at, true)}</time>
+                  </button>
+                )) : (
+                  <div className={styles.emptyState}><MailIcon /><strong>Здесь пока нет писем</strong><span>{query ? "Попробуйте изменить запрос поиска." : "Новые письма появятся после синхронизации."}</span></div>
+                )}
+              </div>
+            </section>
+          )}
+        </main>
       </div>
-      {compose ? <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15,23,42,.55)", display: "grid", placeItems: "center", padding: 20 }}>
-        <section style={{ ...panelStyle, width: "min(680px, 100%)", padding: 24 }}>
-          <h2 style={{ marginTop: 0 }}>Новое письмо</h2>
-          <input value={compose.to} onChange={(event) => setCompose({ ...compose, to: event.target.value })} placeholder="Кому" style={{ width: "100%", padding: 11, border: "1px solid #cbd5e1", borderRadius: 9 }} />
-          <input value={compose.subject} onChange={(event) => setCompose({ ...compose, subject: event.target.value })} placeholder="Тема" style={{ width: "100%", marginTop: 10, padding: 11, border: "1px solid #cbd5e1", borderRadius: 9 }} />
-          <textarea value={compose.body} onChange={(event) => setCompose({ ...compose, body: event.target.value })} placeholder="Сообщение" rows={12} style={{ width: "100%", marginTop: 10, padding: 11, border: "1px solid #cbd5e1", borderRadius: 9, resize: "vertical" }} />
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}><button type="button" onClick={() => setCompose(null)} style={{ padding: "10px 15px", border: "1px solid #cbd5e1", borderRadius: 9, background: "white" }}>Отмена</button><button type="button" onClick={() => void sendMessage()} disabled={sending} style={{ padding: "10px 15px", border: 0, borderRadius: 9, background: "#2563eb", color: "white", fontWeight: 800 }}>{sending ? "Отправляем…" : "Отправить"}</button></div>
+
+      {compose ? (
+        <section className={styles.composeWindow} role="dialog" aria-modal="false" aria-label="Новое письмо">
+          <header><strong>{compose.threadId ? "Ответ" : "Новое сообщение"}</strong><button type="button" onClick={() => setCompose(null)} aria-label="Закрыть"><CloseIcon /></button></header>
+          <label><span>Кому</span><input value={compose.to} onChange={(event) => setCompose({ ...compose, to: event.target.value })} autoFocus /></label>
+          <label><span>Тема</span><input value={compose.subject} onChange={(event) => setCompose({ ...compose, subject: event.target.value })} /></label>
+          <textarea value={compose.body} onChange={(event) => setCompose({ ...compose, body: event.target.value })} placeholder="Напишите сообщение" />
+          <footer>
+            <button type="button" className={styles.sendButton} onClick={() => void sendMessage()} disabled={sending}>{sending ? "Отправляем…" : "Отправить"}</button>
+            <span>Отправка через {status.email_address}</span>
+          </footer>
         </section>
-      </div> : null}
-    </>
+      ) : null}
+    </div>
   );
 }
