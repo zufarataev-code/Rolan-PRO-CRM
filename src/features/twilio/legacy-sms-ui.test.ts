@@ -29,10 +29,18 @@ test("Twilio acceptance is not presented as delivery", () => {
 });
 
 test("inbound SMS creates a prominent CRM notification and reply action", () => {
-  assert.match(legacyCrm, /📩 Новое SMS от/);
+  assert.match(legacyCrm, /Новое SMS/);
   assert.match(legacyCrm, /📩 ОТВЕТ КЛИЕНТА/);
-  assert.match(legacyCrm, /openLatestInboundSms/);
-  assert.match(legacyCrm, /openSmsComposer\('\$\{o\.id\}'\)/);
+  assert.match(legacyCrm, /openLatestInboundMessage/);
+  assert.match(legacyCrm, /openClientConversation/);
+});
+
+test("client replies open a full conversation modal with SMS and WhatsApp", () => {
+  assert.match(legacyCrm, /Диалог с клиентом/);
+  assert.match(legacyCrm, /client-conversation-history/);
+  assert.match(legacyCrm, /sendClientConversationMessage/);
+  assert.match(legacyCrm, /sendWhatsAppViaTwilio/);
+  assert.match(legacyCrm, /TWILIO_WHATSAPP_FROM/);
 });
 
 test("email settings clearly separate Gmail correspondence from Resend broadcasts", () => {

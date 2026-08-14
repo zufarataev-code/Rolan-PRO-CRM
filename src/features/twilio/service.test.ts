@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveConversationReferences, resolveTwilioStatusUpdate } from "./service";
+import { detectTwilioChannel, resolveConversationReferences, resolveTwilioStatusUpdate, twilioWhatsAppAddress } from "./service";
+
+test("detects WhatsApp addresses without changing SMS numbers", () => {
+  assert.equal(detectTwilioChannel("whatsapp:+18185551212"), "whatsapp");
+  assert.equal(detectTwilioChannel("+18185551212"), "sms");
+  assert.equal(twilioWhatsAppAddress("+1 (818) 555-1212"), "whatsapp:+18185551212");
+});
 
 test("keeps a final Twilio delivery status when callbacks arrive out of order", () => {
   assert.deepEqual(resolveTwilioStatusUpdate("undelivered", "queued", null), {

@@ -10649,12 +10649,13 @@ function toggleOrderCommunicationHub(orderId) {
   if (state.communicationOpenOrders[orderId]) markInboundSmsReadForOrder(orderId);
   render();
 }
-function unreadInboundSmsMessages() {
+function unreadInboundClientMessages() {
   const read = new Set(communicationSettings().inboundSmsReadIds || []);
   return twilioRemoteMessages
     .filter(x => x.direction === 'in' && !read.has(x.id))
     .sort((a,b) => String(b.at).localeCompare(String(a.at)));
 }
+function unreadInboundSmsMessages() { return unreadInboundClientMessages(); }
 function markInboundSmsReadForOrder(orderId) {
   const settings = communicationSettings();
   const read = new Set(settings.inboundSmsReadIds || []);
@@ -10662,14 +10663,130 @@ function markInboundSmsReadForOrder(orderId) {
   settings.inboundSmsReadIds = [...read].slice(-500);
   save();
 }
-function openLatestInboundSms() {
-  const latest = unreadInboundSmsMessages()[0];
+function openLatestInboundMessage() {
+  const latest = unreadInboundClientMessages()[0];
   if (!latest) { state.view = 'notifications'; render(); return; }
-  markInboundSmsReadForOrder(latest.orderId);
-  state.communicationOpenOrders = state.communicationOpenOrders || {};
-  if (latest.orderId) state.communicationOpenOrders[latest.orderId] = true;
-  if (latest.orderId) location.hash = `#/order/${latest.orderId}`;
+  if (latest.orderId) openClientConversation(latest.orderId, latest.channel || 'sms');
   else { state.view = 'notifications'; render(); }
+}
+function openLatestInboundSms() { openLatestInboundMessage(); }
+function clientConversationMessages(orderId) {
+  return twilioRemoteMessages
+    .filter(x => x.orderId === orderId && ['sms','whatsapp'].includes(x.channel || 'sms'))
+    .sort((a,b) => String(a.at).localeCompare(String(b.at)));
+}
+function renderClientConversationMessages(orderId) {
+  const messages = clientConversationMessages(orderId);
+  if (!messages.length) return `<div class="h-full min-h-64 flex items-center justify-center text-center text-sm text-slate-400 p-8">Переписка пока пустая.<br>Напишите клиенту первое сообщение ниже.</div>`;
+  return messages.map(x => {
+    const incoming = x.direction === 'in';
+    const channel = x.channel === 'whatsapp' ? 'WhatsApp' : 'SMS';
+    return `<div class="flex ${incoming ? 'justify-start' : 'justify-end'} mb-3">
+      <div class="max-w-[82%] rounded-2xl px-4 py-3 ${incoming ? 'bg-white border border-slate-200 rounded-bl-md' : 'bg-blue-600 text-white rounded-br-md'} shadow-sm">
+        <div class="text-[11px] font-bold ${incoming ? 'text-emerald-700' : 'text-blue-100'} mb-1">${x.channel === 'whatsapp' ? '💬' : '📱'} ${channel} · ${incoming ? 'клиент' : 'ROLANPRO'}</div>
+        <div class="text-sm whitespace-pre-wrap break-words">${academyEsc(x.body || '')}</div>
+        <div class="text-[10px] mt-2 ${incoming ? 'text-slate-400' : 'text-blue-100'}">${fmtDateTime(x.at)}${incoming ? '' : ' · ' + communicationStatusLabel(x.status)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function refreshClientConversationDialog() {
+  const orderId = state.clientConversationOrderId;
+  if (!orderId) return;
+  const history = document.getElementById('client-conversation-history');
+  if (history) {
+    history.innerHTML = renderClientConversationMessages(orderId);
+    history.scrollTop = history.scrollHeight;
+  }
+}
+function openClientConversation(orderId, preferredChannel = 'sms') {
+  const o = getOrder(orderId);
+  const c = getClient(o?.clientId);
+  if (!o || !c) return;
+  const channel = preferredChannel === 'whatsapp' ? 'whatsapp' : 'sms';
+  state.clientConversationOrderId = orderId;
+  state.clientConversationChannel = channel;
+  markInboundSmsReadForOrder(orderId);
+  const waReady = twilioServerStatus?.whatsappConnected === true;
+  const phone = channel === 'whatsapp' ? (c.whatsappPhone || c.phone || '') : (c.phone || '');
+  state.modal = `
+    <div class="modal-backdrop" onclick="if(event.target===this) closeClientConversation()">
+      <div class="modal-content workspace-modal overflow-hidden p-0" style="max-width:54rem;height:min(760px,92vh);display:flex;flex-direction:column;">
+        <div class="flex items-start justify-between gap-3 px-5 py-4 border-b bg-white">
+          <div class="min-w-0"><div class="text-xs font-black text-blue-700 uppercase">Диалог с клиентом</div><h3 class="text-xl font-black truncate">${academyEsc(c.name || 'Клиент')}</h3><div class="text-xs text-slate-500 mt-1">${academyEsc(o.number)} · ${academyEsc(phone)}</div></div>
+          <button class="btn-ghost" onclick="closeClientConversation()">✕</button>
+        </div>
+        <div class="flex flex-wrap gap-2 px-4 sm:px-5 py-3 border-b bg-slate-50">
+          <button class="${channel === 'sms' ? 'btn-primary' : 'btn-ghost'} text-sm" onclick="switchClientConversationChannel('sms')">📱 SMS</button>
+          <button class="${channel === 'whatsapp' ? 'btn-primary' : 'btn-ghost'} text-sm" onclick="switchClientConversationChannel('whatsapp')" ${!waReady ? 'title="Сначала подключите WhatsApp Sender в Twilio"' : ''}>💬 WhatsApp ${waReady ? '✓' : '· настройка'}</button>
+          <div class="w-full sm:w-auto sm:ml-auto text-xs self-center ${channel === 'whatsapp' && !waReady ? 'text-amber-700' : 'text-emerald-700'}">${channel === 'whatsapp' ? (waReady ? 'Twilio подключён' : 'Twilio WhatsApp ещё не активирован') : 'Twilio SMS'}</div>
+        </div>
+        <div id="client-conversation-history" class="flex-1 overflow-y-auto bg-slate-100 p-5">${renderClientConversationMessages(orderId)}</div>
+        <div class="border-t bg-white p-4">
+          <div id="client-conversation-notice" class="hidden mb-2 rounded-lg p-2 text-sm"></div>
+          <textarea id="client-conversation-text" rows="3" class="w-full" placeholder="Напишите сообщение клиенту…" onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();sendClientConversationMessage();}">${academyEsc(state.clientConversationDraft || '')}</textarea>
+          <div class="flex flex-wrap items-center gap-2 mt-3"><span class="text-xs text-slate-400">⌘/Ctrl + Enter — отправить</span><div class="flex-1"></div><button class="btn-ghost text-sm" onclick="aiDraftClientConversationReply()">✨ AI-черновик</button><button id="client-conversation-send" class="btn-primary" onclick="sendClientConversationMessage()">Отправить ${channel === 'whatsapp' ? 'в WhatsApp' : 'SMS'}</button></div>
+        </div>
+      </div>
+    </div>`;
+  render();
+  setTimeout(refreshClientConversationDialog, 30);
+}
+function switchClientConversationChannel(channel) {
+  const input = document.getElementById('client-conversation-text');
+  state.clientConversationDraft = input?.value || '';
+  openClientConversation(state.clientConversationOrderId, channel);
+}
+function closeClientConversation() {
+  state.clientConversationOrderId = null;
+  state.clientConversationChannel = null;
+  state.clientConversationDraft = '';
+  closeModal();
+}
+async function sendClientConversationMessage() {
+  const o = getOrder(state.clientConversationOrderId);
+  const c = getClient(o?.clientId);
+  const channel = state.clientConversationChannel === 'whatsapp' ? 'whatsapp' : 'sms';
+  const input = document.getElementById('client-conversation-text');
+  const body = input?.value.trim() || '';
+  const phone = channel === 'whatsapp' ? (c?.whatsappPhone || c?.phone) : c?.phone;
+  if (!o || !c || !phone || !body) return;
+  const button = document.getElementById('client-conversation-send');
+  const notice = document.getElementById('client-conversation-notice');
+  if (button) { button.disabled = true; button.textContent = 'Отправляем…'; }
+  try {
+    if (channel === 'whatsapp') await sendWhatsAppViaTwilio(phone, body, {orderId:o.id, clientId:c.id});
+    else await sendSmsViaTwilio(phone, body, {orderId:o.id, clientId:c.id});
+    state.clientConversationDraft = '';
+    if (input) input.value = '';
+    await syncTwilioMessages();
+    refreshClientConversationDialog();
+    if (notice) { notice.className = 'mb-2 rounded-lg p-2 text-sm bg-emerald-50 text-emerald-700'; notice.textContent = 'Сообщение принято Twilio.'; }
+  } catch (e) {
+    if (notice) { notice.className = 'mb-2 rounded-lg p-2 text-sm bg-rose-50 text-rose-700'; notice.textContent = e.message || String(e); }
+  } finally {
+    if (button) { button.disabled = false; button.textContent = `Отправить ${channel === 'whatsapp' ? 'в WhatsApp' : 'SMS'}`; }
+  }
+}
+async function aiDraftClientConversationReply() {
+  const o = getOrder(state.clientConversationOrderId);
+  const c = getClient(o?.clientId);
+  const input = document.getElementById('client-conversation-text');
+  if (!o || !c || !input) return;
+  const history = clientConversationMessages(o.id).slice(-12)
+    .map(x => `${x.direction === 'in' ? 'Клиент' : 'ROLANPRO'} (${x.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'}): ${x.body}`)
+    .join('\n');
+  input.disabled = true;
+  try {
+    const draft = await callClaude([{ role:'user', content:`Ты сотрудник клиентского сервиса ROLANPRO. Напиши короткий естественный ответ на последнее сообщение клиента. Не выдумывай цены, сроки, скидки или обещания. Если данных не хватает — задай один уточняющий вопрос. Ответь на языке клиента и верни только текст сообщения.\n\nЗаказ: ${o.number}\nКлиент: ${c.name || ''}\nСтатус: ${T(o.status)}\nПереписка:\n${history || 'нет сообщений'}` }], { maxTokens:220 });
+    input.value = String(draft || '').trim();
+    input.focus();
+  } catch (e) {
+    const notice = document.getElementById('client-conversation-notice');
+    if (notice) { notice.className = 'mb-2 rounded-lg p-2 text-sm bg-rose-50 text-rose-700'; notice.textContent = e.message || String(e); }
+  } finally {
+    input.disabled = false;
+  }
 }
 function communicationStatusLabel(status) {
   const map = {
@@ -10845,6 +10962,16 @@ async function dispatchClientCommunication(o, subject, body, timelineKey, opts =
     if (!c.phone) {
       recordCommunicationDispatch(o, 'whatsapp', 'skipped', body, 'нет телефона');
       notes.push('WhatsApp: нет телефона');
+    } else if (wa.mode === 'twilio' && twilioServerStatus?.whatsappConnected) {
+      try {
+        const result = await sendWhatsAppViaTwilio(c.whatsappPhone || c.phone, body, {orderId:o.id, clientId:c.id});
+        recordCommunicationDispatch(o, 'whatsapp', result?.status || 'queued', body, `Twilio WhatsApp → ${c.whatsappPhone || c.phone}`, {twilioSid:result?.sid});
+        notes.push(`WhatsApp → ${c.whatsappPhone || c.phone}`);
+      } catch (e) {
+        const err = e.message || String(e);
+        recordCommunicationDispatch(o, 'whatsapp', 'failed', body, err);
+        notes.push(`WhatsApp ошибка: ${err}`);
+      }
     } else if (wa.mode === 'backend' && (wa.endpoint || '').trim()) {
       try {
         await sendWhatsAppViaBackend(c.phone, body, o, c, subject);
@@ -11248,9 +11375,8 @@ function renderOrderCommunicationHub(o, c) {
         </select>
         <textarea id="comm-text-${o.id}" rows="5" class="mt-2 text-sm" placeholder="Сообщение клиенту или команде...">${academyEsc(defaultBody)}</textarea>
         <div class="grid grid-cols-2 gap-2 mt-3">
+          <button class="btn-primary text-sm col-span-2" onclick="openClientConversation('${o.id}','${c?.preferredChannel === 'whatsapp' ? 'whatsapp' : 'sms'}')" ${!c?.phone ? 'disabled' : ''}>💬 Открыть диалог с клиентом</button>
           <button class="btn-ghost text-sm" onclick="startCall('${jsQuote(c?.phone || '')}','${c?.id || ''}','${o.id}')" ${!c?.phone ? 'disabled' : ''}>📞 Позвонить</button>
-          <button class="btn-ghost text-sm" onclick="openOrderWhatsApp('${o.id}')" ${!c?.phone ? 'disabled' : ''}>💬 WhatsApp</button>
-          <button class="btn-ghost text-sm" onclick="openSmsComposer('${o.id}')" ${!c?.phone ? 'disabled' : ''}>📱 SMS</button>
           <button class="btn-ghost text-sm" onclick="openOrderEmailFromHub('${o.id}')" ${!c?.email ? 'disabled' : ''}>✉️ Email</button>
           <button class="btn-primary text-sm col-span-2" onclick="sendAutomaticClientNotice('${o.id}', document.getElementById('comm-template-${o.id}')?.value || 'status')">⚡ Отправить по правилам CRM</button>
           <button class="btn-ghost text-sm" onclick="sendOrderTelegramToTeam('${o.id}')" ${!teamTg ? 'disabled' : ''}>🔔 Telegram команде</button>
@@ -11270,7 +11396,7 @@ function renderOrderCommunicationHub(o, c) {
               ${x.body ? `<div class="text-xs text-slate-600 mt-1 text-safe">${academyEsc(x.body)}</div>` : ''}
               <div class="flex items-center justify-between gap-2 mt-2">
                 <span class="tag border ${communicationStatusClass(x.status)}">${communicationStatusLabel(x.status)}</span>
-                ${x.direction === 'in' && x.channel === 'sms' ? `<span class="flex gap-3"><button class="text-xs font-bold text-violet-700 hover:underline" onclick="aiDraftSalesAgentMessage('${o.id}', true)">✨ AI-ответ</button><button class="text-xs font-bold text-blue-600 hover:underline" onclick="openSmsComposer('${o.id}')">Ответить</button></span>` : url ? `<a class="text-xs font-bold text-blue-600 hover:underline" href="${url}" target="_blank" rel="noopener">Открыть канал</a>` : ''}
+                ${x.direction === 'in' && ['sms','whatsapp'].includes(x.channel) ? `<button class="text-xs font-bold text-blue-600 hover:underline" onclick="openClientConversation('${o.id}','${x.channel}')">Открыть диалог</button>` : url ? `<a class="text-xs font-bold text-blue-600 hover:underline" href="${url}" target="_blank" rel="noopener">Открыть канал</a>` : ''}
               </div>
               ${x.detail ? `<div class="text-[11px] text-slate-400 mt-1">${academyEsc(x.detail)}</div>` : ''}
               ${actor ? `<div class="text-[11px] text-slate-400 mt-1">${academyEsc(actor.name)}</div>` : ''}
@@ -13611,7 +13737,7 @@ function renderAppShell() {
         <div class="topbar-actions">
           <div class="topbar-user-pill" title="${academyEsc(u.name)}">${academyEsc(u.name)} · ${T(u.role)}</div>
           <button class="btn-ghost text-sm" onclick="logout()">Сменить</button>
-          ${unreadInboundSmsMessages().length ? `<button class="topbar-icon-btn relative bg-rose-50 text-rose-700 border border-rose-200" onclick="openLatestInboundSms()" title="Открыть новое SMS клиента">📩 <span class="font-black">${unreadInboundSmsMessages().length}</span><span class="hidden md:inline text-xs font-bold"> SMS</span></button>` : ''}
+          ${unreadInboundClientMessages().length ? `<button class="topbar-icon-btn relative bg-rose-50 text-rose-700 border border-rose-200" onclick="openLatestInboundMessage()" title="Открыть новый ответ клиента">💬<span class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full min-w-5 h-5 px-1 flex items-center justify-center font-black">${unreadInboundClientMessages().length}</span></button>` : ''}
           <button class="topbar-icon-btn relative" onclick="state.view='notifications'; markAllRead();">
             🔔 ${unreadCount() > 0 ? `<span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">${unreadCount()}</span>` : ''}
           </button>
@@ -15303,12 +15429,13 @@ function renderSettings() {
       <div class="mt-4 p-3 rounded-lg border bg-slate-50">
         <div class="font-medium text-sm mb-2">WhatsApp</div>
         <select onchange="db.settings.communication.whatsapp.mode=this.value; save(); render();">
+          <option value="twilio" ${comm.whatsapp?.mode==='twilio'?'selected':''}>Twilio WhatsApp — диалог прямо в CRM</option>
           <option value="manual_queue" ${comm.whatsapp?.mode==='manual_queue'?'selected':''}>Очередь: CRM готовит текст, менеджер отправляет кликом</option>
           <option value="backend" ${comm.whatsapp?.mode==='backend'?'selected':''}>Backend API: отправлять автоматически через сервер</option>
         </select>
-        <label class="text-xs mt-2">Webhook / API endpoint для WhatsApp</label>
-        <input value="${academyEsc(comm.whatsapp?.endpoint||'')}" placeholder="https://.../api/whatsapp/send" onchange="db.settings.communication.whatsapp.endpoint=this.value.trim(); save();">
-        <p class="text-xs text-gray-500 mt-1">Секреты WhatsApp/Twilio лучше хранить на сервере, не в HTML-файле. Пока endpoint пустой, CRM создаёт готовые WhatsApp-задачи на отправку.</p>
+        ${comm.whatsapp?.mode === 'backend' ? `<label class="text-xs mt-2">Webhook / API endpoint для WhatsApp</label><input value="${academyEsc(comm.whatsapp?.endpoint||'')}" placeholder="https://.../api/whatsapp/send" onchange="db.settings.communication.whatsapp.endpoint=this.value.trim(); save();">` : ''}
+        <p class="text-xs mt-2 ${twilioServerStatus?.whatsappConnected ? 'text-emerald-700' : 'text-amber-700'}">${twilioServerStatus?.whatsappConnected ? `✅ Twilio WhatsApp подключён: ${academyEsc(twilioServerStatus.whatsappSender || '')}` : '⏳ Нужен одобренный WhatsApp Sender в Twilio и серверная переменная TWILIO_WHATSAPP_FROM.'}</p>
+        <p class="text-xs text-gray-500 mt-1">Входящий webhook: ${academyEsc(twilioServerStatus?.whatsappInboundWebhook || 'будет показан после подключения')}. Секреты остаются на сервере CRM.</p>
       </div>
       <div class="mt-4 p-3 rounded-lg border bg-violet-50">
         <div class="font-medium text-sm mb-2">🤖 AI-продавец</div>
@@ -24303,9 +24430,9 @@ async function syncTwilioMessages() {
           ...(db.users || []).filter(u => u.role === 'owner').map(u => u.id),
         ].filter(Boolean));
         recipients.forEach(userId => db.notifications.push({
-          id: 'sms_notice_' + message.id + '_' + userId,
+          id: 'client_message_notice_' + message.id + '_' + userId,
           userId,
-          title: `📩 Новое SMS от ${c?.name || message.meta?.from || 'клиента'}`,
+          title: `${message.channel === 'whatsapp' ? '💬 Новый WhatsApp' : '📩 Новое SMS'} от ${c?.name || message.meta?.from || 'клиента'}`,
           body: `${o?.number ? o.number + ' · ' : ''}${String(message.body || '').slice(0, 180)}`,
           link: message.orderId ? `#/order/${message.orderId}` : null,
           readAt: null,
@@ -24317,7 +24444,10 @@ async function syncTwilioMessages() {
       state.latestInboundSms = newInbound[newInbound.length - 1];
       save();
     }
-    if (before !== after) render();
+    if (before !== after) {
+      if (state.clientConversationOrderId) refreshClientConversationDialog();
+      else render();
+    }
   } catch (e) {
     console.warn('[Twilio] message sync failed', e);
   }
@@ -24348,6 +24478,16 @@ async function sendSmsViaTwilio(to, body, context = {}) {
     method: 'POST',
     body: JSON.stringify({
       to, body,
+      orderId: context.orderId || null,
+      clientId: context.clientId || null,
+    })
+  });
+}
+async function sendWhatsAppViaTwilio(to, body, context = {}) {
+  return twilioApi('/messages', {
+    method: 'POST',
+    body: JSON.stringify({
+      to, body, channel: 'whatsapp',
       orderId: context.orderId || null,
       clientId: context.clientId || null,
     })

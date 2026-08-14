@@ -19,12 +19,21 @@ function asArray(value: unknown): JsonObject[] {
 }
 
 function normalizePhone(value: unknown) {
-  const raw = String(value ?? "").trim();
+  const raw = String(value ?? "").trim().replace(/^whatsapp:/i, "");
   const digits = raw.replace(/\D/g, "");
   if (!digits) return "";
   if (raw.startsWith("+")) return `+${digits}`;
   if (digits.length === 10) return `+1${digits}`;
   return `+${digits}`;
+}
+
+export function detectTwilioChannel(value: unknown) {
+  return /^whatsapp:/i.test(String(value ?? "").trim()) ? "whatsapp" : "sms";
+}
+
+export function twilioWhatsAppAddress(value: unknown) {
+  const phone = normalizePhone(value);
+  return phone ? `whatsapp:${phone}` : "";
 }
 
 const TERMINAL_TWILIO_STATUSES = new Set(["delivered", "undelivered", "failed", "canceled"]);
@@ -58,11 +67,13 @@ export function getTwilioConfig() {
   const fromNumber = normalizePhone(env("TWILIO_FROM_NUMBER"));
   const messagingServiceSid = env("TWILIO_MESSAGING_SERVICE_SID");
   const verifyServiceSid = env("TWILIO_VERIFY_SERVICE_SID");
+  const whatsappFrom = normalizePhone(env("TWILIO_WHATSAPP_FROM"));
   const publicBaseUrl = (env("TWILIO_WEBHOOK_BASE_URL") || env("APP_URL")).replace(/\/$/, "");
   return {
     accountSid, authToken, apiKeySid, apiKeySecret, fromNumber,
-    messagingServiceSid, verifyServiceSid, publicBaseUrl,
+    messagingServiceSid, verifyServiceSid, whatsappFrom, publicBaseUrl,
     ready: Boolean(accountSid && (authToken || (apiKeySid && apiKeySecret)) && (fromNumber || messagingServiceSid)),
+    whatsappReady: Boolean(accountSid && (authToken || (apiKeySid && apiKeySecret)) && whatsappFrom),
   };
 }
 
@@ -73,6 +84,9 @@ export function getTwilioPublicStatus() {
     sender: config.fromNumber || (config.messagingServiceSid ? "Messaging Service" : ""),
     inboundWebhook: config.publicBaseUrl ? `${config.publicBaseUrl}/api/webhooks/twilio/inbound` : "",
     verifyEnabled: Boolean(config.verifyServiceSid),
+    whatsappConnected: config.whatsappReady,
+    whatsappSender: config.whatsappFrom ? twilioWhatsAppAddress(config.whatsappFrom) : "",
+    whatsappInboundWebhook: config.publicBaseUrl ? `${config.publicBaseUrl}/api/webhooks/twilio/inbound` : "",
   };
 }
 
@@ -139,6 +153,55 @@ export async function sendSms(input: {
   return { sid, status, to };
 }
 
+export async function sendWhatsApp(input: {
+  to: string;
+  body: string;
+  orderId?: string | null;
+  clientId?: string | null;
+  actorUserId?: string | null;
+}) {
+  const config = getTwilioConfig();
+  if (!config.whatsappReady) throw new Error("Twilio WhatsApp sender is not configured on the CRM server.");
+  const to = normalizePhone(input.to);
+  const body = input.body.trim();
+  if (!/^\+\d{8,15}$/.test(to)) throw new Error("Client WhatsApp number must be in international format.");
+  if (!body || body.length > 1600) throw new Error("WhatsApp text must contain 1–1600 characters.");
+
+  const callbackUrl = config.publicBaseUrl ? `${config.publicBaseUrl}/api/webhooks/twilio/status` : undefined;
+  const form = new URLSearchParams({
+    To: twilioWhatsAppAddress(to),
+    From: twilioWhatsAppAddress(config.whatsappFrom),
+    Body: body,
+  });
+  if (callbackUrl) form.set("StatusCallback", callbackUrl);
+  const message = await twilioRequest(
+    `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Messages.json`,
+    form,
+    config,
+  );
+  const sid = String(message.sid ?? "");
+  const status = String(message.status ?? "queued");
+  if (!sid) throw new Error("Twilio did not return a WhatsApp message SID.");
+  await prisma.twilioMessage.upsert({
+    where: { message_sid: sid },
+    create: {
+      message_sid: sid,
+      direction: "out",
+      status,
+      from_number: normalizePhone(message.from ?? config.whatsappFrom),
+      to_number: to,
+      body,
+      legacy_order_id: input.orderId ?? null,
+      legacy_client_id: input.clientId ?? null,
+      actor_user_id: input.actorUserId ?? null,
+      raw_payload: { channel: "whatsapp" },
+      sent_at: message.date_created ? new Date(String(message.date_created)) : new Date(),
+    },
+    update: { status, raw_payload: { channel: "whatsapp" } },
+  });
+  return { sid, status, to, channel: "whatsapp" };
+}
+
 export async function listSmsMessages() {
   const messages = await prisma.twilioMessage.findMany({ orderBy: { sent_at: "desc" }, take: 500 });
   return messages.map((message) => ({
@@ -147,7 +210,7 @@ export async function listSmsMessages() {
     by: message.actor_user_id,
     orderId: message.legacy_order_id,
     clientId: message.legacy_client_id,
-    channel: "sms",
+    channel: String(asObject(message.raw_payload)?.channel ?? "sms") === "whatsapp" ? "whatsapp" : "sms",
     direction: message.direction,
     status: message.status,
     body: message.body,
@@ -229,6 +292,7 @@ async function resolveLegacyReferences(phone: string) {
 }
 
 export async function recordIncomingSms(params: Record<string, string>) {
+  const channel = detectTwilioChannel(params.From || params.To);
   const from = normalizePhone(params.From);
   const to = normalizePhone(params.To);
   const sid = String(params.MessageSid ?? params.SmsSid ?? "");
@@ -245,10 +309,10 @@ export async function recordIncomingSms(params: Record<string, string>) {
       body: String(params.Body ?? "").slice(0, 1600),
       legacy_client_id: refs.clientId,
       legacy_order_id: refs.orderId,
-      raw_payload: { numMedia: Number(params.NumMedia ?? 0) },
+      raw_payload: { channel, numMedia: Number(params.NumMedia ?? 0) },
       sent_at: new Date(),
     },
-    update: { status: "received" },
+    update: { status: "received", raw_payload: { channel, numMedia: Number(params.NumMedia ?? 0) } },
   });
 }
 
