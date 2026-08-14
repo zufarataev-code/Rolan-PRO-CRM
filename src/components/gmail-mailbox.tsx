@@ -280,17 +280,17 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
       <div className={styles.mailBody}>
         <aside className={styles.sidebar}>
           <button type="button" className={styles.composeButton} onClick={() => setCompose({ to: "", subject: "", body: "" })}>
-            <PencilIcon /> <span>Написать</span>
+            <PencilIcon /> <span className={styles.buttonLabel}>Написать</span>
           </button>
           <nav aria-label="Папки почты">
             <button type="button" className={folder === "inbox" ? styles.folderActive : styles.folder} onClick={() => changeFolder("inbox")}>
-              <InboxIcon /><span>Входящие</span>{unreadCount ? <strong>{unreadCount}</strong> : null}
+              <InboxIcon /><span className={styles.folderLabel}>Входящие</span>{unreadCount ? <strong>{unreadCount}</strong> : null}
             </button>
             <button type="button" className={folder === "sent" ? styles.folderActive : styles.folder} onClick={() => changeFolder("sent")}>
-              <SentIcon /><span>Отправленные</span>
+              <SentIcon /><span className={styles.folderLabel}>Отправленные</span>
             </button>
             <button type="button" className={folder === "all" ? styles.folderActive : styles.folder} onClick={() => changeFolder("all")}>
-              <StackIcon /><span>Вся почта</span>
+              <StackIcon /><span className={styles.folderLabel}>Вся почта</span>
             </button>
           </nav>
           <div className={styles.mailboxMeta}>

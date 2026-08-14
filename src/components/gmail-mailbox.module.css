@@ -202,7 +202,7 @@
   .mailBody { grid-template-columns: 70px minmax(0, 1fr); min-height: calc(100vh - 218px); }
   .sidebar { padding-right: 6px; }
   .composeButton { min-width: 50px; width: 50px; padding: 0; justify-content: center; }
-  .composeButton span, .folder span, .folder strong, .mailboxMeta { display: none; }
+  .buttonLabel, .folderLabel, .folder strong, .folderActive strong, .mailboxMeta { display: none; }
   .folder, .folderActive { width: 46px; margin: 2px auto; padding: 0; display: flex; justify-content: center; border-radius: 50%; }
   .workspace { margin-right: 8px; }
   .messageRow, .messageUnread { grid-template-columns: 12px minmax(110px, 160px) minmax(170px, 1fr) 58px; }
