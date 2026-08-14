@@ -1,6 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import {
+  Archive,
+  ArrowLeft,
+  CheckSquare,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleHelp,
+  Clock3,
+  FileText,
+  Grid3X3,
+  Inbox,
+  Mail,
+  Menu,
+  MoreVertical,
+  Paperclip,
+  Pencil,
+  RefreshCw,
+  Reply,
+  Search,
+  Send,
+  Settings,
+  SlidersHorizontal,
+  Sparkles,
+  Star,
+  Tag,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import styles from "./gmail-mailbox.module.css";
 
@@ -11,11 +43,7 @@ type GmailStatus = {
   sync_error: string | null;
 };
 
-type GmailAttachment = {
-  name?: string;
-  mime_type?: string;
-  attachment_id?: string | null;
-};
+type GmailAttachment = { name?: string; mime_type?: string; attachment_id?: string | null };
 
 type GmailMessage = {
   id: string;
@@ -33,15 +61,9 @@ type GmailMessage = {
   attachments: GmailAttachment[] | null;
 };
 
-type ComposeState = {
-  to: string;
-  subject: string;
-  body: string;
-  threadId?: string;
-  orderId?: string | null;
-};
-
-type MailFolder = "inbox" | "sent" | "all";
+type ComposeState = { to: string; subject: string; body: string; threadId?: string; orderId?: string | null };
+type MailFolder = "inbox" | "starred" | "snoozed" | "sent" | "drafts" | "all";
+type InboxCategory = "primary" | "clients" | "updates" | "unread";
 
 async function gmailApi<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/v1/integrations/gmail${path}`, {
@@ -50,10 +72,7 @@ async function gmailApi<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
   });
-  const payload = await response.json().catch(() => null) as null | {
-    data?: T;
-    errors?: Array<{ message?: string }>;
-  };
+  const payload = await response.json().catch(() => null) as null | { data?: T; errors?: Array<{ message?: string }> };
   if (!response.ok) throw new Error(payload?.errors?.[0]?.message || `Gmail API ${response.status}`);
   return payload?.data as T;
 }
@@ -70,67 +89,34 @@ function displayAddress(message: GmailMessage) {
 
 function displayDate(value: string, compact = false) {
   const date = new Date(value);
-  const now = new Date();
-  const sameDay = date.toDateString() === now.toDateString();
-  if (compact && sameDay) {
-    return new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(date);
-  }
+  const sameDay = date.toDateString() === new Date().toDateString();
+  if (compact && sameDay) return new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(date);
   return new Intl.DateTimeFormat("ru-RU", compact
     ? { day: "numeric", month: "short" }
     : { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" },
   ).format(date);
 }
 
-function Icon({ children, size = 20 }: { children: ReactNode; size?: number }) {
-  return <span className={styles.icon} style={{ width: size, height: size }} aria-hidden="true">{children}</span>;
+function isClientMessage(message: GmailMessage) {
+  if (message.legacy_order_id) return true;
+  const address = `${message.sender_email || ""} ${message.sender_name || ""}`.toLowerCase();
+  return message.direction === "inbound" && !/(no.?reply|notification|notice|support|google|zadarma|newsletter|marketing)/i.test(address);
 }
 
-function SearchIcon() {
-  return <Icon><svg viewBox="0 0 24 24"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" /></svg></Icon>;
-}
-
-function MailIcon() {
-  return <Icon size={24}><svg viewBox="0 0 24 24"><path d="M3 6.5 12 13l9-6.5M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" /></svg></Icon>;
-}
-
-function InboxIcon() {
-  return <Icon><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 14h4l2 3h4l2-3h4" /></svg></Icon>;
-}
-
-function SentIcon() {
-  return <Icon><svg viewBox="0 0 24 24"><path d="m3 11 18-8-8 18-2-8-8-2Zm8 2 10-10" /></svg></Icon>;
-}
-
-function StackIcon() {
-  return <Icon><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5" /></svg></Icon>;
-}
-
-function PencilIcon() {
-  return <Icon><svg viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10L4 20Zm9.5-13 3.5 3.5M15 5.5l2-2a1.4 1.4 0 0 1 2 0L20.5 5a1.4 1.4 0 0 1 0 2l-2 2" /></svg></Icon>;
-}
-
-function RefreshIcon() {
-  return <Icon><svg viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5m10.2-3A8 8 0 0 0 5.7 6.3L4 8m16 8-1.7 1.7A8 8 0 0 1 4.8 14" /></svg></Icon>;
-}
-
-function BackIcon() {
-  return <Icon><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7M8 12h12" /></svg></Icon>;
-}
-
-function ReplyIcon() {
-  return <Icon><svg viewBox="0 0 24 24"><path d="m10 8-6 5 6 5v-3c5 0 8 1 10 4-1-6-4-9-10-9V8Z" /></svg></Icon>;
-}
-
-function CloseIcon() {
-  return <Icon><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg></Icon>;
+function isUpdateMessage(message: GmailMessage) {
+  return /(call|звон|record|запис|delivery|payment|оплат|order|заказ|appointment|встреч|schedule)/i.test(`${message.subject} ${message.snippet}`);
 }
 
 export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
   const [status, setStatus] = useState<GmailStatus | null>(null);
   const [messages, setMessages] = useState<GmailMessage[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [folder, setFolder] = useState<MailFolder>("inbox");
+  const [category, setCategory] = useState<InboxCategory>("primary");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [compose, setCompose] = useState<ComposeState | null>(null);
@@ -149,9 +135,7 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
       if (nextStatus.connected) {
         const result = await gmailApi<{ messages: GmailMessage[] }>("/messages");
         setMessages(result.messages || []);
-      } else {
-        setMessages([]);
-      }
+      } else setMessages([]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Не удалось загрузить почту.");
     } finally {
@@ -173,24 +157,29 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
     window.history.replaceState(null, "", "/mail");
   }, []);
 
+  const inboxCount = messages.filter((message) => message.direction === "inbound").length;
   const unreadCount = messages.filter((message) => message.direction === "inbound" && message.is_unread).length;
+  const clientCount = messages.filter(isClientMessage).length;
+  const updateCount = messages.filter(isUpdateMessage).length;
+
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return messages.filter((message) => {
       if (folder === "inbox" && message.direction !== "inbound") return false;
       if (folder === "sent" && message.direction !== "outbound") return false;
+      if (folder === "starred" && !starredIds.has(message.id)) return false;
+      if (folder === "snoozed" || folder === "drafts") return false;
+      if (folder === "inbox" && category === "clients" && !isClientMessage(message)) return false;
+      if (folder === "inbox" && category === "updates" && !isUpdateMessage(message)) return false;
+      if (folder === "inbox" && category === "unread" && !message.is_unread) return false;
       if (!normalized) return true;
-      return [
-        message.subject,
-        message.sender_email,
-        message.sender_name,
-        message.body,
-        ...message.recipient_emails,
-      ].join(" ").toLowerCase().includes(normalized);
+      return [message.subject, message.sender_email, message.sender_name, message.body, ...message.recipient_emails]
+        .join(" ").toLowerCase().includes(normalized);
     });
-  }, [folder, messages, query]);
+  }, [category, folder, messages, query, starredIds]);
 
   const selected = messages.find((message) => message.id === selectedId) || null;
+  const allVisibleSelected = filtered.length > 0 && filtered.every((message) => selectedIds.has(message.id));
 
   async function selectMessage(message: GmailMessage) {
     setSelectedId(message.id);
@@ -202,12 +191,38 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
   function changeFolder(nextFolder: MailFolder) {
     setFolder(nextFolder);
     setSelectedId(null);
+    setSelectedIds(new Set());
+    if (nextFolder !== "inbox") setCategory("primary");
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllVisible() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allVisibleSelected) filtered.forEach((message) => next.delete(message.id));
+      else filtered.forEach((message) => next.add(message.id));
+      return next;
+    });
+  }
+
+  function toggleStar(id: string) {
+    setStarredIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   }
 
   function reply(message: GmailMessage) {
-    const recipient = message.direction === "inbound" ? message.sender_email || "" : message.recipient_emails[0] || "";
     setCompose({
-      to: recipient,
+      to: message.direction === "inbound" ? message.sender_email || "" : message.recipient_emails[0] || "",
       subject: /^re:/i.test(message.subject) ? message.subject : `Re: ${message.subject}`,
       body: "",
       threadId: message.thread_id,
@@ -238,140 +253,145 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
       setFolder("sent");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Не удалось отправить письмо.");
-    } finally {
-      setSending(false);
-    }
+    } finally { setSending(false); }
   }
 
-  if (loading && !status) {
-    return <div className={styles.loading}><span className={styles.spinner} />Загружаем рабочую почту…</div>;
-  }
+  if (loading && !status) return <div className={styles.loading}><span className={styles.spinner} />Загружаем почту…</div>;
 
   if (!status?.connected) {
     return (
-      <section className={styles.connectPanel}>
-        <div className={styles.gmailMark}><MailIcon /></div>
-        <h2>Рабочая почта не подключена</h2>
-        <p>Подключение выполняется через Google. Пароль Gmail в CRM не сохраняется.</p>
-        {error ? <p className={styles.connectError}>{error}</p> : null}
-        {canConnect ? <a href="/api/v1/integrations/gmail/connect" className={styles.connectButton}>Подключить Google Mail</a> : null}
-      </section>
+      <main className={styles.connectPage}>
+        <Image src="/landing/rolan-logo.webp" alt="ROLANPRO" width={220} height={72} priority />
+        <section className={styles.connectPanel}>
+          <Mail size={42} strokeWidth={1.5} />
+          <h1>Рабочая почта не подключена</h1>
+          <p>Подключение выполняется через Google. Пароль Gmail в CRM не сохраняется.</p>
+          {error ? <p className={styles.connectError}>{error}</p> : null}
+          {canConnect ? <a href="/api/v1/integrations/gmail/connect" className={styles.connectButton}>Подключить Google Mail</a> : null}
+        </section>
+      </main>
     );
   }
 
-  const folderTitle = folder === "inbox" ? "Входящие" : folder === "sent" ? "Отправленные" : "Вся почта";
+  const folderTitle: Record<MailFolder, string> = {
+    inbox: "Входящие", starred: "Помеченные", snoozed: "Отложенные", sent: "Отправленные", drafts: "Черновики", all: "Вся почта",
+  };
 
   return (
-    <div className={styles.mailApp}>
-      <header className={styles.mailHeader}>
-        <div className={styles.brand}><span className={styles.gmailMark}><MailIcon /></span><span>Почта</span></div>
-        <label className={styles.search}>
-          <SearchIcon />
+    <main className={`${styles.gmailApp} ${sidebarOpen ? "" : styles.sidebarCompact}`}>
+      <header className={styles.topbar}>
+        <div className={styles.brandArea}>
+          <button type="button" className={styles.roundButton} onClick={() => setSidebarOpen((value) => !value)} aria-label="Главное меню"><Menu /></button>
+          <Link href="/legacy-crm" className={styles.brand} aria-label="Вернуться в ROLANPRO CRM">
+            <Image src="/landing/rolan-logo.webp" alt="ROLANPRO" width={112} height={38} priority />
+            <span>Почта</span>
+          </Link>
+        </div>
+        <label className={styles.searchBox}>
+          <Search />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск в почте" />
-          {query ? <button type="button" onClick={() => setQuery("")} aria-label="Очистить поиск"><CloseIcon /></button> : null}
+          {query ? <button type="button" onClick={() => setQuery("")} aria-label="Очистить поиск"><X /></button> : <SlidersHorizontal />}
         </label>
-        <div className={styles.account} title={status.email_address || "Google Mail"}>
-          <span>{(status.email_address || "R").charAt(0).toUpperCase()}</span>
+        <div className={styles.topActions}>
+          <button type="button" className={styles.roundButton} title="Помощь"><CircleHelp /></button>
+          <Link href={canConnect ? "/owner/settings" : "/manager"} className={styles.roundButton} title="Настройки"><Settings /></Link>
+          <button type="button" className={`${styles.roundButton} ${styles.geminiButton}`} title="AI-помощник"><Sparkles /></button>
+          <Link href="/legacy-crm" className={styles.roundButton} title="Приложения ROLANPRO"><Grid3X3 /></Link>
+          <div className={styles.avatar} title={status.email_address || "Google Mail"}>{(status.email_address || "R").charAt(0).toUpperCase()}</div>
         </div>
       </header>
 
-      {error ? <div className={styles.errorBanner}>{error}<button type="button" onClick={() => setError("")}><CloseIcon /></button></div> : null}
+      {error ? <div className={styles.errorBanner}>{error}<button type="button" onClick={() => setError("")}><X /></button></div> : null}
 
-      <div className={styles.mailBody}>
+      <div className={styles.appBody}>
         <aside className={styles.sidebar}>
-          <button type="button" className={styles.composeButton} onClick={() => setCompose({ to: "", subject: "", body: "" })}>
-            <PencilIcon /> <span className={styles.buttonLabel}>Написать</span>
-          </button>
+          <button type="button" className={styles.composeButton} onClick={() => setCompose({ to: "", subject: "", body: "" })}><Pencil /><span>Написать</span></button>
           <nav aria-label="Папки почты">
-            <button type="button" className={folder === "inbox" ? styles.folderActive : styles.folder} onClick={() => changeFolder("inbox")}>
-              <InboxIcon /><span className={styles.folderLabel}>Входящие</span>{unreadCount ? <strong>{unreadCount}</strong> : null}
-            </button>
-            <button type="button" className={folder === "sent" ? styles.folderActive : styles.folder} onClick={() => changeFolder("sent")}>
-              <SentIcon /><span className={styles.folderLabel}>Отправленные</span>
-            </button>
-            <button type="button" className={folder === "all" ? styles.folderActive : styles.folder} onClick={() => changeFolder("all")}>
-              <StackIcon /><span className={styles.folderLabel}>Вся почта</span>
-            </button>
+            <button type="button" className={folder === "inbox" ? styles.folderActive : styles.folder} onClick={() => changeFolder("inbox")}><Inbox /><span>Входящие</span><strong>{unreadCount || ""}</strong></button>
+            <button type="button" className={folder === "starred" ? styles.folderActive : styles.folder} onClick={() => changeFolder("starred")}><Star /><span>Помеченные</span></button>
+            <button type="button" className={folder === "snoozed" ? styles.folderActive : styles.folder} onClick={() => changeFolder("snoozed")}><Clock3 /><span>Отложенные</span></button>
+            <button type="button" className={folder === "sent" ? styles.folderActive : styles.folder} onClick={() => changeFolder("sent")}><Send /><span>Отправленные</span></button>
+            <button type="button" className={folder === "drafts" ? styles.folderActive : styles.folder} onClick={() => changeFolder("drafts")}><FileText /><span>Черновики</span><strong>0</strong></button>
+            <button type="button" className={folder === "all" ? styles.folderActive : styles.folder} onClick={() => changeFolder("all")}><Archive /><span>Вся почта</span></button>
+            <button type="button" className={styles.folder}><ChevronDown /><span>Ещё</span></button>
           </nav>
-          <div className={styles.mailboxMeta}>
-            <strong>{status.email_address}</strong>
-            <span>{messages.length} писем в CRM</span>
-          </div>
+          <div className={styles.labelsTitle}><strong>Ярлыки</strong><button type="button" aria-label="Добавить ярлык">+</button></div>
+          <div className={styles.labelItem}><Tag /><span>Клиенты CRM</span><strong>{clientCount}</strong></div>
+          <div className={styles.labelItem}><Tag /><span>Заказы</span><strong>{messages.filter((message) => message.legacy_order_id).length}</strong></div>
+          <div className={styles.accountMeta}><strong>{status.email_address}</strong><span>{messages.length} писем синхронизировано</span></div>
         </aside>
 
-        <main className={styles.workspace}>
+        <section className={styles.mailSurface}>
           {selected ? (
             <article className={styles.reader}>
-              <div className={styles.readerToolbar}>
-                <button type="button" onClick={() => setSelectedId(null)} aria-label="Вернуться к списку"><BackIcon /></button>
-                <button type="button" onClick={() => void loadMailbox(true)} disabled={loading} aria-label="Обновить"><RefreshIcon /></button>
+              <div className={styles.toolbar}>
+                <button type="button" onClick={() => setSelectedId(null)} aria-label="Назад"><ArrowLeft /></button>
+                <button type="button" aria-label="Архивировать"><Archive /></button>
+                <button type="button" aria-label="Удалить"><Trash2 /></button>
+                <button type="button" onClick={() => toggleStar(selected.id)} aria-label="Пометить"><Star className={starredIds.has(selected.id) ? styles.starred : ""} /></button>
+                <button type="button" aria-label="Другие действия"><MoreVertical /></button>
+                <div className={styles.toolbarSpacer} />
+                <button type="button" aria-label="Предыдущее письмо"><ChevronLeft /></button>
+                <button type="button" aria-label="Следующее письмо"><ChevronRight /></button>
               </div>
               <div className={styles.readerContent}>
-                <div className={styles.readerTitleRow}>
-                  <h2>{selected.subject || "(без темы)"}</h2>
-                  {selected.legacy_order_id ? <span className={styles.orderBadge}>Заказ {selected.legacy_order_id}</span> : null}
-                </div>
+                <div className={styles.readerTitleRow}><h1>{selected.subject || "(без темы)"}</h1>{selected.legacy_order_id ? <span>Заказ {selected.legacy_order_id}</span> : null}</div>
                 <div className={styles.senderRow}>
                   <div className={styles.senderAvatar}>{displayContact(selected).charAt(0).toUpperCase()}</div>
-                  <div className={styles.senderDetails}>
-                    <strong>{displayContact(selected)}</strong>
-                    <span>{selected.direction === "inbound" ? "кому: мне" : `кому: ${displayAddress(selected)}`}</span>
-                  </div>
+                  <div className={styles.senderDetails}><strong>{displayContact(selected)}</strong><span>{selected.direction === "inbound" ? "кому: мне" : `кому: ${displayAddress(selected)}`}</span></div>
                   <time>{displayDate(selected.sent_at)}</time>
-                  <button type="button" className={styles.iconButton} onClick={() => reply(selected)} aria-label="Ответить"><ReplyIcon /></button>
+                  <button type="button" onClick={() => toggleStar(selected.id)} aria-label="Пометить"><Star className={starredIds.has(selected.id) ? styles.starred : ""} /></button>
+                  <button type="button" onClick={() => reply(selected)} aria-label="Ответить"><Reply /></button>
+                  <button type="button" aria-label="Ещё"><MoreVertical /></button>
                 </div>
                 <div className={styles.messageBody}>{selected.body || selected.snippet}</div>
-                {selected.attachments?.length ? (
-                  <div className={styles.attachments}>
-                    {selected.attachments.map((file, index) => file.attachment_id ? (
-                      <a key={`${file.attachment_id}-${index}`} href={`/api/v1/integrations/gmail/messages/${encodeURIComponent(selected.id)}/attachments/${encodeURIComponent(file.attachment_id)}`}>
-                        <span>📎</span>{file.name || "Файл"}
-                      </a>
-                    ) : null)}
-                  </div>
-                ) : null}
-                <button type="button" className={styles.replyButton} onClick={() => reply(selected)}><ReplyIcon /> Ответить</button>
+                {selected.attachments?.length ? <div className={styles.attachments}>{selected.attachments.map((file, index) => file.attachment_id ? <a key={`${file.attachment_id}-${index}`} href={`/api/v1/integrations/gmail/messages/${encodeURIComponent(selected.id)}/attachments/${encodeURIComponent(file.attachment_id)}`}><Paperclip />{file.name || "Файл"}</a> : null)}</div> : null}
+                <button type="button" className={styles.replyButton} onClick={() => reply(selected)}><Reply />Ответить</button>
               </div>
             </article>
           ) : (
-            <section className={styles.inbox}>
-              <div className={styles.listToolbar}>
-                <h2>{folderTitle}</h2>
-                <div>
-                  <span>{filtered.length ? `1–${filtered.length} из ${filtered.length}` : "0 писем"}</span>
-                  <button type="button" onClick={() => void loadMailbox(true)} disabled={loading} aria-label="Обновить почту" className={loading ? styles.refreshing : ""}><RefreshIcon /></button>
-                </div>
+            <div className={styles.inboxView}>
+              <div className={styles.toolbar}>
+                <label className={styles.selectAll}><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Выбрать все письма" /><ChevronDown /></label>
+                <button type="button" onClick={() => void loadMailbox(true)} disabled={loading} aria-label="Обновить"><RefreshCw className={loading ? styles.spinning : ""} /></button>
+                <button type="button" aria-label="Другие действия"><MoreVertical /></button>
+                <div className={styles.toolbarSpacer} />
+                <span className={styles.range}>{filtered.length ? `1–${filtered.length} из ${filtered.length}` : "0 из 0"}</span>
+                <button type="button" aria-label="Предыдущая страница" disabled><ChevronLeft /></button>
+                <button type="button" aria-label="Следующая страница"><ChevronRight /></button>
               </div>
+
+              {folder === "inbox" ? <div className={styles.categories}>
+                <button type="button" className={category === "primary" ? styles.categoryActive : styles.category} onClick={() => setCategory("primary")}><Inbox /><span><strong>Основные</strong><small>{inboxCount} писем</small></span></button>
+                <button type="button" className={category === "clients" ? styles.categoryActive : styles.category} onClick={() => setCategory("clients")}><Users /><span><strong>Клиенты</strong><small>{clientCount} писем</small></span></button>
+                <button type="button" className={category === "updates" ? styles.categoryActive : styles.category} onClick={() => setCategory("updates")}><CheckSquare /><span><strong>Оповещения</strong><small>{updateCount} писем</small></span></button>
+                <button type="button" className={category === "unread" ? styles.categoryActive : styles.category} onClick={() => setCategory("unread")}><Mail /><span><strong>Непрочитанные</strong><small>{unreadCount} новых</small></span></button>
+              </div> : <div className={styles.folderHeading}>{folderTitle[folder]}</div>}
+
               <div className={styles.messageList}>
                 {filtered.length ? filtered.map((message) => (
-                  <button key={message.id} type="button" onClick={() => void selectMessage(message)} className={message.is_unread ? styles.messageUnread : styles.messageRow}>
-                    <span className={styles.unreadDot} />
+                  <div key={message.id} className={message.is_unread ? styles.messageUnread : styles.messageRow} role="button" tabIndex={0} onClick={() => void selectMessage(message)} onKeyDown={(event) => { if (event.key === "Enter") void selectMessage(message); }}>
+                    <input type="checkbox" checked={selectedIds.has(message.id)} onClick={(event) => event.stopPropagation()} onChange={() => toggleSelected(message.id)} aria-label={`Выбрать письмо от ${displayContact(message)}`} />
+                    <button type="button" onClick={(event) => { event.stopPropagation(); toggleStar(message.id); }} aria-label={starredIds.has(message.id) ? "Снять пометку" : "Пометить"}><Star className={starredIds.has(message.id) ? styles.starred : ""} /></button>
                     <strong className={styles.contact}>{displayContact(message)}</strong>
-                    <span className={styles.subject}>{message.subject || "(без темы)"}<span> — {message.snippet || message.body}</span></span>
-                    {message.attachments?.length ? <span className={styles.paperclip} aria-label="Есть вложение">⌕</span> : null}
+                    <span className={styles.subject}><strong>{message.subject || "(без темы)"}</strong><span> — {message.snippet || message.body}</span></span>
+                    {message.attachments?.length ? <Paperclip className={styles.paperclip} aria-label="Есть вложение" /> : <span />}
                     <time>{displayDate(message.sent_at, true)}</time>
-                  </button>
-                )) : (
-                  <div className={styles.emptyState}><MailIcon /><strong>Здесь пока нет писем</strong><span>{query ? "Попробуйте изменить запрос поиска." : "Новые письма появятся после синхронизации."}</span></div>
-                )}
+                  </div>
+                )) : <div className={styles.emptyState}><Mail /><strong>В папке нет писем</strong><span>{query ? "Измените запрос поиска." : "Письма появятся после синхронизации."}</span></div>}
               </div>
-            </section>
+            </div>
           )}
-        </main>
+        </section>
       </div>
 
-      {compose ? (
-        <section className={styles.composeWindow} role="dialog" aria-modal="false" aria-label="Новое письмо">
-          <header><strong>{compose.threadId ? "Ответ" : "Новое сообщение"}</strong><button type="button" onClick={() => setCompose(null)} aria-label="Закрыть"><CloseIcon /></button></header>
-          <label><span>Кому</span><input value={compose.to} onChange={(event) => setCompose({ ...compose, to: event.target.value })} autoFocus /></label>
-          <label><span>Тема</span><input value={compose.subject} onChange={(event) => setCompose({ ...compose, subject: event.target.value })} /></label>
-          <textarea value={compose.body} onChange={(event) => setCompose({ ...compose, body: event.target.value })} placeholder="Напишите сообщение" />
-          <footer>
-            <button type="button" className={styles.sendButton} onClick={() => void sendMessage()} disabled={sending}>{sending ? "Отправляем…" : "Отправить"}</button>
-            <span>Отправка через {status.email_address}</span>
-          </footer>
-        </section>
-      ) : null}
-    </div>
+      {compose ? <section className={styles.composeWindow} role="dialog" aria-label="Новое письмо">
+        <header><strong>{compose.threadId ? "Ответ" : "Новое сообщение"}</strong><button type="button" onClick={() => setCompose(null)} aria-label="Закрыть"><X /></button></header>
+        <label><span>Кому</span><input value={compose.to} onChange={(event) => setCompose({ ...compose, to: event.target.value })} autoFocus /></label>
+        <label><span>Тема</span><input value={compose.subject} onChange={(event) => setCompose({ ...compose, subject: event.target.value })} /></label>
+        <textarea value={compose.body} onChange={(event) => setCompose({ ...compose, body: event.target.value })} placeholder="Напишите сообщение" />
+        <footer><button type="button" onClick={() => void sendMessage()} disabled={sending}>{sending ? "Отправляем…" : "Отправить"}<ChevronDown /></button><span>Отправка через {status.email_address}</span></footer>
+      </section> : null}
+    </main>
   );
 }
