@@ -1805,6 +1805,253 @@
     font-size: 1.15rem;
     font-weight: 950;
   }
+  .manager-measure-progress {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .45rem;
+    margin-top: .85rem;
+  }
+  .manager-measure-progress-step {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: .5rem;
+    align-items: center;
+    border: 1px solid #dbe4ef;
+    border-radius: 10px;
+    background: #f8fafc;
+    padding: .5rem .6rem;
+    color: #64748b;
+  }
+  .manager-measure-progress-step.active {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+  .manager-measure-progress-step.done {
+    border-color: #a7f3d0;
+    background: #ecfdf5;
+    color: #047857;
+  }
+  .manager-measure-progress-no {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    border: 1px solid currentColor;
+    font-size: .72rem;
+    font-weight: 950;
+  }
+  .manager-measure-progress-label {
+    min-width: 0;
+    font-size: .7rem;
+    line-height: 1.15;
+    font-weight: 900;
+  }
+  .manager-measure-workspace {
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr);
+    gap: .85rem;
+    align-items: start;
+  }
+  .manager-measure-sidebar {
+    position: sticky;
+    top: 0;
+    display: grid;
+    gap: .65rem;
+  }
+  .manager-room-list {
+    display: grid;
+    gap: .4rem;
+  }
+  .manager-room-tab {
+    width: 100%;
+    border: 1px solid #dbe4ef;
+    border-radius: 10px;
+    background: #fff;
+    color: #334155;
+    padding: .65rem .7rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .5rem;
+    align-items: center;
+    text-align: left;
+  }
+  .manager-room-tab:hover {
+    border-color: #93c5fd;
+    background: #f8fbff;
+  }
+  .manager-room-tab.active {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.08);
+  }
+  .manager-room-tab-name {
+    font-size: .8rem;
+    font-weight: 950;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .manager-room-tab-meta {
+    margin-top: .15rem;
+    color: #64748b;
+    font-size: .66rem;
+    font-weight: 750;
+  }
+  .manager-room-tab-count {
+    min-width: 25px;
+    height: 25px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: .7rem;
+    font-weight: 950;
+  }
+  .manager-room-tab.active .manager-room-tab-count {
+    background: #2563eb;
+    color: #fff;
+  }
+  .manager-add-room-card {
+    border: 1px dashed #bfdbfe;
+    border-radius: 12px;
+    background: #f8fbff;
+    padding: .7rem;
+  }
+  .manager-measure-main {
+    min-width: 0;
+    display: grid;
+    gap: .75rem;
+  }
+  .manager-room-focus {
+    border: 1px solid #dbe4ef;
+    border-radius: 14px;
+    background: #fff;
+    overflow: hidden;
+    box-shadow: 0 12px 28px rgba(15,23,42,.05);
+  }
+  .manager-room-focus-head {
+    display: grid;
+    grid-template-columns: minmax(180px, .8fr) minmax(260px, 1.2fr) auto;
+    gap: .7rem;
+    align-items: end;
+    padding: .85rem;
+    border-bottom: 1px solid #eef2f7;
+    background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  }
+  .manager-window-cards {
+    display: grid;
+    gap: .65rem;
+    padding: .75rem .85rem .85rem;
+  }
+  .manager-window-card {
+    border: 1px solid #dbe4ef;
+    border-radius: 12px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .manager-window-card-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: .65rem;
+    align-items: center;
+    padding: .65rem .75rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #eef2f7;
+  }
+  .manager-window-card-title {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    min-width: 0;
+  }
+  .manager-window-card-title input {
+    min-width: 0;
+    max-width: 250px;
+    min-height: 36px;
+    font-weight: 900;
+  }
+  .manager-window-card-area {
+    color: #1d4ed8;
+    font-size: .78rem;
+    font-weight: 950;
+    white-space: nowrap;
+  }
+  .manager-window-card-body {
+    display: grid;
+    grid-template-columns: minmax(190px, 1.05fr) minmax(0, 1.95fr);
+    gap: .8rem;
+    padding: .75rem;
+  }
+  .manager-window-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .6rem;
+    align-content: start;
+  }
+  .manager-window-field label {
+    display: block;
+    margin-bottom: .25rem;
+    color: #64748b;
+    font-size: .66rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+  .manager-window-field input,
+  .manager-window-field select {
+    width: 100%;
+    min-height: 40px;
+  }
+  .manager-window-field.wide {
+    grid-column: 1 / -1;
+  }
+  .manager-room-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+    padding: .7rem .85rem;
+    border-top: 1px solid #eef2f7;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: .74rem;
+  }
+  .manager-results-panel {
+    border: 1px solid #dbe4ef;
+    border-radius: 12px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .manager-results-panel > summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .8rem .9rem;
+    color: #0f172a;
+    font-size: .82rem;
+    font-weight: 950;
+  }
+  .manager-results-panel > summary::-webkit-details-marker { display: none; }
+  .manager-results-panel > summary::after {
+    content: 'Показать';
+    color: #2563eb;
+    font-size: .72rem;
+  }
+  .manager-results-panel[open] > summary::after { content: 'Скрыть'; }
+  .manager-results-body {
+    padding: 0 .8rem .8rem;
+  }
   .manager-material-row {
     display: grid;
     grid-template-columns: minmax(220px, 1fr) repeat(5, minmax(92px, auto));
@@ -4246,6 +4493,12 @@
     .manager-add-type-wrap {
       grid-template-columns: 1fr;
     }
+    .manager-measure-workspace {
+      grid-template-columns: 220px minmax(0, 1fr);
+    }
+    .manager-window-card-body {
+      grid-template-columns: 180px minmax(0, 1fr);
+    }
     .manager-measure-table th:first-child,
     .manager-measure-table td:first-child {
       position: sticky;
@@ -4413,6 +4666,35 @@
     .manager-measure-kpis {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .manager-measure-progress {
+      display: flex;
+      overflow-x: auto;
+      padding-bottom: .2rem;
+    }
+    .manager-measure-progress-step {
+      flex: 0 0 145px;
+    }
+    .manager-measure-workspace {
+      grid-template-columns: 1fr;
+    }
+    .manager-measure-sidebar {
+      position: static;
+    }
+    .manager-room-list {
+      display: flex;
+      overflow-x: auto;
+      padding-bottom: .25rem;
+    }
+    .manager-room-tab {
+      flex: 0 0 180px;
+    }
+    .manager-room-focus-head,
+    .manager-window-card-body {
+      grid-template-columns: 1fr;
+    }
+    .manager-window-fields {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .manager-room-add-panel {
       margin: .6rem;
       padding: .65rem;
@@ -4489,6 +4771,31 @@
     .manager-measure-kpis,
     .calendar-kpi-grid {
       grid-template-columns: 1fr;
+    }
+    .manager-measure-kpis {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .manager-measure-kpi {
+      padding: .55rem;
+    }
+    .manager-measure-kpi div:last-child {
+      font-size: .95rem;
+    }
+    .manager-room-focus-head {
+      align-items: stretch;
+    }
+    .manager-window-card-head {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .manager-window-card-area {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+    .manager-window-fields {
+      grid-template-columns: 1fr 1fr;
+    }
+    .manager-window-field.wide {
+      grid-column: 1 / -1;
     }
     .manager-measure-table {
       min-width: 1000px;
@@ -17949,6 +18256,58 @@ function renderManagerMaterialPlan(o) {
       </div>
     </div>`;
 }
+function managerActiveRoom(order) {
+  const rooms = order?.measurements?.rooms || [];
+  state._managerActiveRoomByOrder = state._managerActiveRoomByOrder || {};
+  const savedId = state._managerActiveRoomByOrder[order?.id];
+  const room = rooms.find(r => r.id === savedId) || rooms[0] || null;
+  if (room && order?.id) state._managerActiveRoomByOrder[order.id] = room.id;
+  return room;
+}
+function managerSelectRoom(oid, rid) {
+  state._managerActiveRoomByOrder = state._managerActiveRoomByOrder || {};
+  state._managerActiveRoomByOrder[oid] = rid;
+  refreshManagerMeasureModal(oid);
+}
+function managerMeasureProgressHtml(order) {
+  const rooms = order?.measurements?.rooms || [];
+  const windows = rooms.flatMap(r => r.windows || []);
+  const hasRooms = rooms.length > 0;
+  const hasWindows = windows.length > 0;
+  const hasSizes = hasWindows && windows.every(w => Number(w.width) > 0 && Number(w.height) > 0 && Number(w.qty || 1) > 0);
+  const hasMaterials = hasWindows && windows.every(w => Boolean(w.catalogId));
+  const steps = [
+    { label: 'Комнаты', done: hasRooms },
+    { label: 'Окна и двери', done: hasWindows },
+    { label: 'Размеры', done: hasSizes },
+    { label: 'Материал и проверка', done: hasMaterials },
+  ];
+  const firstIncomplete = steps.findIndex(step => !step.done);
+  return `<div class="manager-measure-progress" aria-label="Прогресс замера">
+    ${steps.map((step, index) => {
+      const status = step.done ? 'done' : (index === firstIncomplete ? 'active' : '');
+      return `<div class="manager-measure-progress-step ${status}">
+        <span class="manager-measure-progress-no">${step.done ? '✓' : index + 1}</span>
+        <span class="manager-measure-progress-label">${academyEsc(step.label)}</span>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+function managerScopedCatalogOptionsHtml(selectedId = '', category = '') {
+  const items = db.settings.catalog
+    .filter(c => !category || c.category === category || c.id === selectedId)
+    .sort((a, b) => {
+      if (a.id === selectedId) return -1;
+      if (b.id === selectedId) return 1;
+      return `${a.brand} ${a.model}`.localeCompare(`${b.brand} ${b.model}`);
+    });
+  if (!items.length) return managerCatalogOptionsHtml(selectedId, category);
+  return `<option value="">— выбрать материал —</option>` + items.map(c => {
+    const stockM = inventoryByCatalogId(c.id).reduce((sum, roll) => sum + (Number(roll.remainingLengthM) || 0), 0);
+    const stock = stockM > 0 ? `склад ${stockM.toFixed(1)}м` : 'нет на складе';
+    return `<option value="${c.id}" ${selectedId === c.id ? 'selected' : ''}>${academyEsc(c.brand)} — ${academyEsc(c.model)} · $${Number(c.retailPerSqft || 0).toFixed(2)}/sqft · ${stock}</option>`;
+  }).join('');
+}
 function renderManagerMeasureModal(oid) {
   const o = getOrder(oid);
   if (!o) return '';
@@ -17956,124 +18315,120 @@ function renderManagerMeasureModal(oid) {
   const c = getClient(o.clientId);
   const scope = measureScopeInfo(orderMeasureScope(o));
   const plan = calcFilmPlan(o);
-  const pss = orderPSS(o);
   const preferredCategory = scope.catalogCategory;
+  const rooms = o.measurements.rooms || [];
+  const windows = rooms.flatMap(r => r.windows || []);
+  const activeRoom = managerActiveRoom(o);
   return `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal manager-measure-modal" onclick="event.stopPropagation()">
       <div class="manager-measure-header">
         <div class="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <div class="text-xs font-black text-blue-700">Manager Measurement Intake</div>
-            <div class="text-2xl font-black text-slate-900">Замеры по объекту · ${academyEsc(o.number)}</div>
+            <div class="text-xs font-black text-blue-700">ЗАМЕР ОБЪЕКТА</div>
+            <div class="text-2xl font-black text-slate-900">${academyEsc(o.number)} · ${academyEsc(scope.short)}</div>
             <div class="text-sm text-gray-500 mt-1">${academyEsc(c?.name || 'Без клиента')} · ${academyEsc(orderAddress(o, c) || 'адрес не указан')} · ${scope.icon} ${academyEsc(scope.short)}</div>
           </div>
           <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
         </div>
         <div class="manager-measure-kpis mt-3">
-          <div class="manager-measure-kpi"><div>Метраж по окнам</div><div>${orderActualAreaSqft(o).toFixed(2)} sqft</div></div>
-          <div class="manager-measure-kpi"><div>Расход рулона</div><div>${plan.consumedSqft.toFixed(2)} sqft</div></div>
-          <div class="manager-measure-kpi"><div>Материал / ПСС</div><div>${fmtMoney(orderFilmCost(o))} / ${fmtMoney(pss.total)}</div></div>
-          <div class="manager-measure-kpi"><div>Маржа проекта</div><div class="${orderMargin(o)>0?'text-emerald-600':'text-red-600'}">${fmtMoney(orderMargin(o))}</div></div>
+          <div class="manager-measure-kpi"><div>Комнаты</div><div>${rooms.length}</div></div>
+          <div class="manager-measure-kpi"><div>Элементы</div><div>${windows.reduce((sum, w) => sum + (Number(w.qty) || 1), 0)}</div></div>
+          <div class="manager-measure-kpi"><div>Площадь стекла</div><div>${orderActualAreaSqft(o).toFixed(2)} sqft</div></div>
         </div>
+        ${managerMeasureProgressHtml(o)}
       </div>
-      <div class="manager-measure-body space-y-3">
-        <div class="rounded-lg border bg-white p-3">
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-            <div>
-              <label class="text-xs">Комната из списка</label>
-              <select id="mm-room-preset">
+      <div class="manager-measure-body">
+        <div class="manager-measure-workspace">
+          <aside class="manager-measure-sidebar">
+            <div class="rounded-lg border bg-white p-3">
+              <div class="font-black text-sm text-slate-900">1. Выберите комнату</div>
+              <div class="text-xs text-gray-500 mt-1">Работаем только с одной комнатой за раз.</div>
+              <div class="manager-room-list mt-3">
+                ${rooms.map((room, index) => `<button type="button" class="manager-room-tab ${activeRoom?.id === room.id ? 'active' : ''}" onclick="managerSelectRoom('${oid}','${room.id}')">
+                  <span><span class="manager-room-tab-name">${index + 1}. ${academyEsc(room.name || ('Комната ' + (index + 1)))}</span><span class="manager-room-tab-meta">${(room.windows || []).length} элементов · ${roomActualAreaSqft(room).toFixed(1)} sqft</span></span>
+                  <span class="manager-room-tab-count">${(room.windows || []).length}</span>
+                </button>`).join('') || '<div class="text-xs text-gray-500">Комнат пока нет.</div>'}
+              </div>
+            </div>
+            <div class="manager-add-room-card">
+              <label class="text-xs">Добавить комнату</label>
+              <select id="mm-room-preset" class="mt-1">
                 ${MANAGER_ROOM_PRESETS.map(x => `<option value="${academyEsc(x)}">${academyEsc(x)}</option>`).join('')}
               </select>
+              <input id="mm-room-custom" class="mt-2" placeholder="Или свое название">
+              <button class="btn-primary w-full mt-2" onclick="managerAddRoomFromForm('${oid}')">Добавить комнату</button>
             </div>
-            <div class="md:col-span-2">
-              <label class="text-xs">Или свое название комнаты</label>
-              <input id="mm-room-custom" placeholder="Например: Master bathroom, офис 2 этаж...">
-            </div>
-            <button class="btn-primary" onclick="managerAddRoomFromForm('${oid}')">+ Добавить комнату</button>
-          </div>
-          <div class="text-xs text-gray-500 mt-2">Менеджер вводит только рабочие данные: комната, окно, тип, размеры, количество и пленка из каталога. Чертеж оставляем замерщику.</div>
-        </div>
+          </aside>
 
-        ${o.measurements.rooms.length ? o.measurements.rooms.map((r, ri) => {
-          const selectedRoomCatalog = managerRoomCatalogId(r);
-          const roomCatalog = selectedRoomCatalog ? getCatalogItem(selectedRoomCatalog) : null;
-          const roomScopeKey = roomCatalog ? measureScopeByCatalog(roomCatalog) : orderMeasureScope(o);
-          const showSolarFields = managerRoomNeedsSolarFields(o, r, roomScopeKey);
-          const emptyColspan = showSolarFields ? 11 : 9;
-          return `
-          <div class="manager-measure-room">
-            <div class="manager-measure-room-head">
-              <div>
-                <label class="text-xs">Комната / зона</label>
-                <input value="${academyEsc(r.name)}" onchange="managerUpdateRoomName('${oid}','${r.id}',this.value)">
-              </div>
-              <div>
-                <label class="text-xs">Пленка для комнаты</label>
-                <select id="mm-room-film-${r.id}" onchange="managerApplyFilmToRoom('${oid}','${r.id}',this.value)">
-                  ${managerCatalogOptionsHtml(selectedRoomCatalog, preferredCategory)}
-                </select>
-              </div>
-              <div class="flex gap-2">
-                <button class="btn-ghost text-sm text-red-600" onclick="managerDeleteRoom('${oid}','${r.id}')">Удалить</button>
-              </div>
-            </div>
-            ${managerRoomAddChooserHtml(oid, r, roomScopeKey)}
-            <div class="overflow-x-auto">
-              <table class="manager-measure-table ${showSolarFields ? 'solar' : ''}">
-                <thead>
-                  <tr>
-                    <th>Элемент</th>
-                    <th>Тип</th>
-                    <th>Ширина (${db.settings.inputUnits==='inches'?'in':'мм'})</th>
-                    <th>Высота (${db.settings.inputUnits==='inches'?'in':'мм'})</th>
-                    <th>Кол-во</th>
-                    <th>Пленка</th>
-                    ${showSolarFields ? `<th>Сторона фасада</th><th>Тип стекла</th>` : ''}
-                    <th>Площадь</th>
-                    <th>Сумма</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
+          <section class="manager-measure-main">
+            ${activeRoom ? (() => {
+              const r = activeRoom;
+              const selectedRoomCatalog = managerRoomCatalogId(r);
+              const roomCatalog = selectedRoomCatalog ? getCatalogItem(selectedRoomCatalog) : null;
+              const roomScopeKey = roomCatalog ? measureScopeByCatalog(roomCatalog) : orderMeasureScope(o);
+              const showSolarFields = managerRoomNeedsSolarFields(o, r, roomScopeKey);
+              const inUnits = db.settings.inputUnits === 'inches';
+              return `<div class="manager-room-focus">
+                <div class="manager-room-focus-head">
+                  <div>
+                    <label class="text-xs">Название комнаты / зоны</label>
+                    <input value="${academyEsc(r.name || '')}" onchange="managerUpdateRoomName('${oid}','${r.id}',this.value)">
+                  </div>
+                  <div>
+                    <label class="text-xs">Материал для всей комнаты</label>
+                    <select id="mm-room-film-${r.id}" onchange="managerApplyFilmToRoom('${oid}','${r.id}',this.value)">
+                      ${managerScopedCatalogOptionsHtml(selectedRoomCatalog, preferredCategory)}
+                    </select>
+                  </div>
+                  <button class="btn-ghost text-sm text-red-600" onclick="managerDeleteRoom('${oid}','${r.id}')">Удалить комнату</button>
+                </div>
+
+                ${managerRoomAddChooserHtml(oid, r, roomScopeKey)}
+
+                <div class="manager-window-cards">
                   ${(r.windows || []).length ? (r.windows || []).map((w, wi) => {
                     const cat = windowCatalog(w);
                     const scopeKey = w.measureScope || (cat ? measureScopeByCatalog(cat) : orderMeasureScope(o));
-                    const rowNeedsSolarFields = managerWindowNeedsSolarFields(o, w, roomScopeKey);
-                    const inUnits = db.settings.inputUnits === 'inches';
-                    return `
-                      <tr>
-                        <td><input value="${academyEsc(w.name || ('Window ' + (wi + 1)))}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','name',this.value)"></td>
-                        <td class="manager-window-type-cell">${managerWindowTypeCompactHtml(oid, r.id, w, scopeKey)}</td>
-                        <td><input type="number" step="${inUnits?'0.25':'1'}" value="${measureMmToInput(w.width || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></td>
-                        <td><input type="number" step="${inUnits?'0.25':'1'}" value="${measureMmToInput(w.height || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></td>
-                        <td><input type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></td>
-                        <td><select onchange="managerSetWinCatalog('${oid}','${r.id}','${w.id}',this.value)">${managerCatalogOptionsHtml(w.catalogId || '', preferredCategory)}</select></td>
-                        ${showSolarFields ? (rowNeedsSolarFields ? managerSolarFieldsHtml(oid, r.id, w) : `<td class="text-xs text-gray-400">—</td><td class="text-xs text-gray-400">—</td>`) : ''}
-                        <td class="font-bold text-blue-700 whitespace-nowrap">${windowActualAreaSqft(w).toFixed(2)} sqft</td>
-                        <td class="font-bold text-emerald-700 whitespace-nowrap">${fmtMoney(windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft))}</td>
-                        <td><button class="btn-ghost text-red-600 text-xs" onclick="managerDeleteWin('${oid}','${r.id}','${w.id}')">✕</button></td>
-                      </tr>`;
-                  }).join('') : `<tr><td colspan="${emptyColspan}" class="text-gray-500">В комнате пока нет элементов. Выберите сверху: окно, дверь или skylight.</td></tr>`}
-                </tbody>
-              </table>
-            </div>
-            <div class="p-3 text-xs text-gray-500 flex justify-between flex-wrap gap-2">
-              <span>Комната: <b>${roomActualAreaSqft(r).toFixed(2)} sqft</b></span>
-              <span>Добавление элементов находится сверху комнаты.</span>
-            </div>
-          </div>`;
-        }).join('') : `<div class="rounded-lg border bg-white p-6 text-center text-gray-500">Комнат пока нет. Добавьте первую комнату сверху.</div>`}
+                    const needsSolar = showSolarFields && managerWindowNeedsSolarFields(o, w, roomScopeKey);
+                    return `<article class="manager-window-card">
+                      <div class="manager-window-card-head">
+                        <div class="manager-window-card-title">
+                          <span class="manager-room-tab-count">${wi + 1}</span>
+                          <input aria-label="Название элемента" value="${academyEsc(w.name || ('Окно ' + (wi + 1)))}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','name',this.value)">
+                        </div>
+                        <div class="manager-window-card-area">${windowActualAreaSqft(w).toFixed(2)} sqft</div>
+                        <button class="btn-ghost text-red-600 text-xs" aria-label="Удалить элемент" onclick="managerDeleteWin('${oid}','${r.id}','${w.id}')">Удалить</button>
+                      </div>
+                      <div class="manager-window-card-body">
+                        <div>${managerWindowTypeCompactHtml(oid, r.id, w, scopeKey)}</div>
+                        <div class="manager-window-fields">
+                          <div class="manager-window-field"><label>Ширина (${inUnits ? 'in' : 'мм'})</label><input type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.width || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></div>
+                          <div class="manager-window-field"><label>Высота (${inUnits ? 'in' : 'мм'})</label><input type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.height || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></div>
+                          <div class="manager-window-field"><label>Количество</label><input type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></div>
+                          ${needsSolar ? `<div class="manager-window-field"><label>Сторона фасада</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','orientation',this.value)">${managerOrientationOptionsHtml(w.orientation || '')}</select></div><div class="manager-window-field wide"><label>Тип стекла</label>${managerGlassChipHtml(oid, r.id, w)}${managerSolarRiskHtml(w)}</div>` : ''}
+                        </div>
+                      </div>
+                    </article>`;
+                  }).join('') : `<div class="rounded-lg border border-dashed p-6 text-center text-sm text-gray-500">В этой комнате пока нет элементов. Выберите выше окно, дверь или skylight, затем нажмите «Добавить».</div>`}
+                </div>
+                <div class="manager-room-summary">
+                  <span>Комната: <b>${(r.windows || []).length} элементов · ${roomActualAreaSqft(r).toFixed(2)} sqft</b></span>
+                  <span>Все изменения сохраняются автоматически.</span>
+                </div>
+              </div>`;
+            })() : `<div class="rounded-lg border bg-white p-8 text-center"><div class="font-black text-slate-900">Начните с первой комнаты</div><div class="text-sm text-gray-500 mt-1">Добавьте комнату слева, затем окно или дверь и внесите размеры.</div></div>`}
 
-        ${renderManagerMaterialPlan(o)}
+            ${windows.length ? `<details class="manager-results-panel"><summary><span>4. Проверка материала и результат</span><span class="text-xs text-gray-500">Расход ${plan.consumedSqft.toFixed(1)} sqft</span></summary><div class="manager-results-body">${renderManagerMaterialPlan(o)}</div></details>` : ''}
+          </section>
+        </div>
       </div>
       <div class="manager-measure-footer flex items-center justify-between gap-2 flex-wrap">
-        <div class="text-xs text-gray-500">Сохраняется автоматически в заказ. Эти данные идут в КП, техлист, склад, ПСС и рентабельность.</div>
+        <div class="text-xs text-gray-500">Замер сохраняется автоматически и попадет в КП, техлист и склад.</div>
         <div class="flex gap-2">
-          ${plan.pieces.length ? `<button class="btn-ghost" onclick="openCutSheet('${oid}')">🎞 Лист раскроя</button>` : ''}
-          <button class="btn-ghost" onclick="openTechnicalSheet('${oid}')">📋 Техлист</button>
-          <button class="btn-primary bg-slate-800 hover:bg-slate-900" onclick="openProfessionalKP('${oid}')">📐 Единое КП</button>
-          <button class="btn-primary" onclick="closeModal(); openOrder('${oid}')">Готово</button>
+          ${plan.pieces.length ? `<button class="btn-ghost" onclick="openCutSheet('${oid}')">Лист раскроя</button>` : ''}
+          <button class="btn-ghost" onclick="openTechnicalSheet('${oid}')">Техлист</button>
+          <button class="btn-primary" onclick="closeModal(); openOrder('${oid}')">Завершить замер</button>
         </div>
       </div>
     </div>
@@ -18094,7 +18449,10 @@ function managerAddRoomFromForm(oid) {
   const preset = document.getElementById('mm-room-preset')?.value || T('room');
   const custom = (document.getElementById('mm-room-custom')?.value || '').trim();
   const name = custom || (preset === 'Custom room' ? T('room') + ' ' + (o.measurements.rooms.length + 1) : preset);
-  o.measurements.rooms.push({ id: uid(), name, windows: [], defaultCatalogId: defaultCatalogIdForOrder(o) || null });
+  const room = { id: uid(), name, windows: [], defaultCatalogId: defaultCatalogIdForOrder(o) || null };
+  o.measurements.rooms.push(room);
+  state._managerActiveRoomByOrder = state._managerActiveRoomByOrder || {};
+  state._managerActiveRoomByOrder[oid] = room.id;
   save();
   refreshManagerMeasureModal(oid);
 }
@@ -18108,6 +18466,8 @@ function managerDeleteRoom(oid, rid) {
   const o = getOrder(oid);
   if (!o || !confirm('Удалить комнату и все окна в ней?')) return;
   o.measurements.rooms = (o.measurements.rooms || []).filter(r => r.id !== rid);
+  state._managerActiveRoomByOrder = state._managerActiveRoomByOrder || {};
+  state._managerActiveRoomByOrder[oid] = o.measurements.rooms[0]?.id || '';
   save();
   refreshManagerMeasureModal(oid);
 }
