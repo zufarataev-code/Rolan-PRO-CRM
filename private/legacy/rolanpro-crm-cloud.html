@@ -1891,6 +1891,7 @@
     box-shadow: 0 0 0 3px rgba(37,99,235,.08);
   }
   .manager-room-tab-name {
+    display: block;
     font-size: .8rem;
     font-weight: 950;
     overflow: hidden;
@@ -1898,6 +1899,7 @@
     white-space: nowrap;
   }
   .manager-room-tab-meta {
+    display: block;
     margin-top: .15rem;
     color: #64748b;
     font-size: .66rem;
@@ -18333,7 +18335,7 @@ function renderManagerMeasureModal(oid) {
         </div>
         <div class="manager-measure-kpis mt-3">
           <div class="manager-measure-kpi"><div>Комнаты</div><div>${rooms.length}</div></div>
-          <div class="manager-measure-kpi"><div>Элементы</div><div>${windows.reduce((sum, w) => sum + (Number(w.qty) || 1), 0)}</div></div>
+          <div class="manager-measure-kpi"><div>Окна / двери</div><div>${windows.length}</div></div>
           <div class="manager-measure-kpi"><div>Площадь стекла</div><div>${orderActualAreaSqft(o).toFixed(2)} sqft</div></div>
         </div>
         ${managerMeasureProgressHtml(o)}
