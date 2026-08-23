@@ -4,12 +4,6 @@ on:
   issue_comment:
     types: [created]
 
-# v1 deliberately serializes every Builder run. This is stricter than task-scoped
-# concurrency and mechanically preserves the one-active-Builder invariant.
-concurrency:
-  group: claude-builder-${{ github.repository }}
-  cancel-in-progress: false
-
 jobs:
   preflight:
     if: >-
@@ -77,6 +71,11 @@ jobs:
 
   claude-build:
     needs: preflight
+    # Validate the trusted task before entering the shared Builder queue so
+    # unrelated issue comments cannot evict a pending valid build.
+    concurrency:
+      group: claude-builder-${{ github.repository }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -357,7 +356,7 @@ jobs:
 
             while IFS= read -r path; do
               case "$path" in
-                .github/*|*/.github/*|.claude-builder/*|*/.claude-builder/*|.claude/*|*/.claude/*|AGENTS.md|*/AGENTS.md|CLAUDE.md|*/CLAUDE.md|.env|.env.*|*/.env|*/.env.*|*.sql|*/dumps/*|*/uploads/*)
+                .github/*|*/.github/*|.claude-builder/*|*/.claude-builder/*|.claude/*|*/.claude/*|AGENTS.md|*/AGENTS.md|CLAUDE.md|*/CLAUDE.md|.env|.env.*|*/.env|*/.env.*|*.sql|dumps/*|*/dumps/*|uploads/*|*/uploads/*)
                   echo "::error::Claude Builder v1 cannot publish protected path: $path"
                   exit 1
                   ;;
