@@ -392,7 +392,7 @@ jobs:
           OPEN_QUESTIONS_JSON="$(jq -c '.open_questions' "$RESULT_FILE")"
           COMPLETED_WORK_JSON="$(jq -c '.completed_work' "$RESULT_FILE")"
           TESTS_JSON="$(jq -c '.tests' "$RESULT_FILE")"
-          CHANGED_FILES_JSON="$(jq -R -s -c 'split("\n") | map(select(length > 0))' "${RUNNER_TEMP}/published-files.txt")"
+          CHANGED_FILES_JSON="$(jq -R -s -c 'split("\u0000") | map(select(length > 0))' "${RUNNER_TEMP}/published-files.txt")"
           RISKS_JSON="$(jq -c --arg risk "Task risk level: ${RISK_LEVEL}" '.risks + [$risk] + (if (.blockers | length) > 0 then ["Builder-reported blockers: " + (.blockers | tojson)] else [] end)' "$RESULT_FILE")"
           APPROVAL_REQUIRED_BASE_JSON="$(task_list_json "$APPROVAL_REQUIREMENTS")"
           APPROVAL_REQUIRED_JSON="$(jq -cn --argjson base "$APPROVAL_REQUIRED_BASE_JSON" '$base + ["independent Codex review", "merge approval under repository/task policy"] | unique')"
