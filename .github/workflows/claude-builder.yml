@@ -58,7 +58,8 @@ jobs:
             exit 1
           fi
           case "$STATUS" in
-            READY_FOR_BUILD|FIX_REQUIRED) ;;
+            READY_FOR_BUILD) ;;
+            FIX_REQUIRED) echo "::error::FIX_REQUIRED continuation is not supported by Claude Builder v1; resume the existing implementation branch before retrying"; exit 1 ;;
             *) echo "::error::Task is not build-ready: status=$STATUS"; exit 1 ;;
           esac
           case "$RISK" in
