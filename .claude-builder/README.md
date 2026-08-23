@@ -19,7 +19,7 @@ The matching canonical record must exist at `.claude-builder/tasks/active/TASK-<
 - No autonomous merge, deployment, production database access, customer communication, credential changes, payments, or destructive actions.
 - The model job receives no repository-write credentials.
 - The deterministic publisher rejects changes to workflow, authority, instruction, secret, dump, and upload paths.
-- Claude Builder v1 rejects changes to `private/legacy/rolanpro-crm-cloud.html` until deterministic desktop and mobile browser validation is available.
+- Claude Builder v1 rejects changes under `private/legacy/` and `app/legacy-crm/` until deterministic desktop and mobile browser validation is available.
 - Every implementation pull request requires independent Codex review and Owner merge approval under repository policy.
 - Secrets must never be committed.
 
