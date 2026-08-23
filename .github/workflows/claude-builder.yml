@@ -71,11 +71,11 @@ jobs:
 
   claude-build:
     needs: preflight
-    # Validate the trusted task before entering the shared Builder queue so
-    # unrelated issue comments cannot evict a pending valid build.
-    concurrency:
-      group: claude-builder-${{ github.repository }}
-      cancel-in-progress: false
+    
+    
+
+
+
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -173,7 +173,7 @@ jobs:
 
           git add -A
           git diff --cached --binary --full-index "$BASE_SHA" -- > "${RUNNER_TEMP}/builder.patch"
-          git diff --cached --name-only "$BASE_SHA" -- > "${RUNNER_TEMP}/changed-files.txt"
+          git diff --cached --name-only --no-renames "$BASE_SHA" -- > "${RUNNER_TEMP}/changed-files.txt"
 
           if [[ "$OUTCOME" == "COMPLETED" ]]; then
             if [[ ! -s "${RUNNER_TEMP}/builder.patch" ]]; then
@@ -348,7 +348,7 @@ jobs:
           if [[ -s "$PATCH_FILE" ]]; then
             git switch -c "$BRANCH"
             git apply --index "$PATCH_FILE"
-            git diff --cached --name-only "$BASE_SHA" -- > "${RUNNER_TEMP}/published-files.txt"
+            git diff --cached --name-only --no-renames "$BASE_SHA" -- > "${RUNNER_TEMP}/published-files.txt"
             if [[ ! -s "${RUNNER_TEMP}/published-files.txt" ]]; then
               echo "::error::Non-empty patch applied without changed files"
               exit 1
