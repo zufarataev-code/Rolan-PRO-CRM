@@ -356,7 +356,7 @@ jobs:
 
             while IFS= read -r path; do
               case "$path" in
-                .github/*|*/.github/*|.claude-builder/*|*/.claude-builder/*|.claude/*|*/.claude/*|AGENTS.md|*/AGENTS.md|CLAUDE.md|*/CLAUDE.md|.env|.env.*|*/.env|*/.env.*|*.sql|dumps/*|*/dumps/*|uploads/*|*/uploads/*)
+                .github/*|*/.github/*|.claude-builder/*|*/.claude-builder/*|.claude/*|*/.claude/*|AGENTS.md|*/AGENTS.md|CLAUDE.md|*/CLAUDE.md|.env|.env.*|*/.env|*/.env.*|*.sql|*.sql.*|*.dump|*.dump.*|*.backup|*.backup.*|*.bak|*.bak.*|backup/*|*/backup/*|backups/*|*/backups/*|dumps/*|*/dumps/*|uploads/*|*/uploads/*)
                   echo "::error::Claude Builder v1 cannot publish protected path: $path"
                   exit 1
                   ;;
