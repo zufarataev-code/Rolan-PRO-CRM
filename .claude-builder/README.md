@@ -25,6 +25,8 @@ The matching canonical record must exist at `.claude-builder/tasks/active/TASK-<
 - Claude Builder v1 rejects changes under `private/legacy/` and `app/legacy-crm/` until deterministic desktop and mobile browser validation is available.
 - Every implementation pull request requires independent Codex review and Owner merge approval under repository policy.
 - Secrets must never be committed.
+- Completed patches are scanned deterministically for common credentials, and binary changes are rejected before publication.
+- Patches from `BLOCKED` outcomes are discarded and never published.
 
 ## Authentication and test environment
 
