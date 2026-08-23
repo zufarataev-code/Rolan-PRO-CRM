@@ -228,9 +228,9 @@ jobs:
           RESULT_FILE: ${{ runner.temp }}/builder-artifact/builder-result.json
         run: |
           set -euo pipefail
-          BRANCH="builder/${TASK_ID}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          BRANCH="claude/${TASK_ID}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           case "$BRANCH" in
-            builder/TASK-[0-9]*-*) ;;
+            claude/TASK-[0-9]*-*) ;;
             *) echo "::error::Refusing unexpected publisher branch name: $BRANCH"; exit 1 ;;
           esac
 
