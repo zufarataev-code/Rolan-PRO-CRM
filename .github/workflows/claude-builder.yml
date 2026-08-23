@@ -52,6 +52,11 @@ jobs:
           STATUS="$(field status)"
           RISK="$(field risk_level)"
           BUILDER="$(field builder)"
+          RECORD_TASK_ID="$(field task_id)"
+          if [[ "$RECORD_TASK_ID" != "$TASK_ID" ]]; then
+            echo "::error::Canonical task_id mismatch: expected $TASK_ID, found ${RECORD_TASK_ID:-missing}"
+            exit 1
+          fi
           case "$STATUS" in
             READY_FOR_BUILD|FIX_REQUIRED) ;;
             *) echo "::error::Task is not build-ready: status=$STATUS"; exit 1 ;;
