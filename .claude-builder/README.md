@@ -12,7 +12,7 @@ Only the repository owner may create the exact issue comment:
 
 `@claude build TASK-<numeric-id>`
 
-The matching canonical record must exist at `.claude-builder/tasks/active/TASK-<numeric-id>.md`, use status `READY_FOR_BUILD` or `FIX_REQUIRED`, risk level R0-R2, and builder `Claude Builder`.
+The matching canonical record must exist at `.claude-builder/tasks/active/TASK-<numeric-id>.md`, use status `READY_FOR_BUILD` only (v1 rejects `FIX_REQUIRED` until existing-branch continuation is implemented), risk level R0-R2, and builder `Claude Builder`.
 
 ## Safety boundaries
 
