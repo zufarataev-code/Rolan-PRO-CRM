@@ -451,7 +451,7 @@ jobs:
 
             while IFS= read -r -d '' path; do
               case "$path" in
-                .env.example|prisma/migrations/*/migration.sql) ;; .github/*|*/.github/*|.claude-builder/*|*/.claude-builder/*|.claude/*|*/.claude/*|AGENTS.md|*/AGENTS.md|CLAUDE.md|*/CLAUDE.md|.env|.env.*|*/.env|*/.env.*|*.sql|*.sql.*|*.dump|*.dump.*|*.backup|*.backup.*|*.bak|*.bak.*|backup/*|*/backup/*|backups/*|*/backups/*|dumps/*|*/dumps/*|uploads/*|*/uploads/*)
+                .env.example|prisma/migrations/*/migration.sql) ;; private/legacy/rolanpro-crm-cloud.html|.github/*|*/.github/*|.claude-builder/*|*/.claude-builder/*|.claude/*|*/.claude/*|AGENTS.md|*/AGENTS.md|CLAUDE.md|*/CLAUDE.md|.env|.env.*|*/.env|*/.env.*|*.sql|*.sql.*|*.dump|*.dump.*|*.backup|*.backup.*|*.bak|*.bak.*|backup/*|*/backup/*|backups/*|*/backups/*|dumps/*|*/dumps/*|uploads/*|*/uploads/*)
                   echo "::error::Claude Builder v1 cannot publish protected path: $path"
                   exit 1
                   ;;
