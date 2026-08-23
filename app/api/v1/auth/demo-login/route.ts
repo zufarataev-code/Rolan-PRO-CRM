@@ -24,6 +24,17 @@ const DEMO_ROLE_MAP = {
 } as const;
 
 export async function GET(request: NextRequest) {
+  if (!getEnv().demoLoginEnabled) {
+    return NextResponse.json(
+      {
+        data: null,
+        meta: {},
+        errors: [{ code: "not_found", message: "Demo login is not available." }],
+      },
+      { status: 404 },
+    );
+  }
+
   const role = request.nextUrl.searchParams.get("role")?.trim().toLowerCase() as
     | keyof typeof DEMO_ROLE_MAP
     | undefined;

@@ -17,6 +17,14 @@ export const ROUTE_ROLE_RULES: Array<{
     roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
   },
   {
+    prefix: "/legacy-crm",
+    roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
+  },
+  {
+    prefix: "/api/v1/legacy-crm",
+    roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
+  },
+  {
     prefix: "/projects",
     roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
   },
