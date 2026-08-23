@@ -196,8 +196,97 @@ jobs:
             ${{ runner.temp }}/builder-result.json
           retention-days: 1
 
-  publish:
+  validate:
     needs: [preflight, claude-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout validated base commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ needs.preflight.outputs.base_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download Builder patch artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: claude-builder-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/builder-artifact
+
+      - name: Prepare Builder patch for deterministic validation
+        id: prepare
+        shell: bash
+        env:
+          PATCH_FILE: ${{ runner.temp }}/builder-artifact/builder.patch
+          RESULT_FILE: ${{ runner.temp }}/builder-artifact/builder-result.json
+        run: |
+          set -euo pipefail
+          OUTCOME="$(jq -r '.outcome' "$RESULT_FILE")"
+          if [[ "$OUTCOME" == "BLOCKED" ]]; then
+            echo "should_validate=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$OUTCOME" != "COMPLETED" ]]; then
+            echo "::error::Unsupported Builder outcome: $OUTCOME"
+            exit 1
+          fi
+          if [[ ! -s "$PATCH_FILE" ]]; then
+            echo "::error::COMPLETED Builder outcome requires a validation patch"
+            exit 1
+          fi
+          git apply --index "$PATCH_FILE"
+          echo "should_validate=true" >> "$GITHUB_OUTPUT"
+
+      - name: Use pinned Node.js toolchain
+        if: steps.prepare.outputs.should_validate == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Install dependencies without lifecycle scripts
+        if: steps.prepare.outputs.should_validate == 'true'
+        shell: bash
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Generate Prisma client
+        if: steps.prepare.outputs.should_validate == 'true'
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://validation:validation@127.0.0.1:5432/validation?schema=public
+        run: ./node_modules/.bin/prisma generate
+
+      - name: Run TypeScript validation
+        if: steps.prepare.outputs.should_validate == 'true'
+        shell: bash
+        run: ./node_modules/.bin/tsc --noEmit
+
+      - name: Run deterministic unit tests
+        if: steps.prepare.outputs.should_validate == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' test_files < <(find src -name '*.test.ts' -print0)
+          if (( ${#test_files[@]} == 0 )); then
+            echo "::error::No TypeScript unit tests were found under src"
+            exit 1
+          fi
+          node --import tsx --test "${test_files[@]}"
+
+      - name: Build production bundle
+        if: steps.prepare.outputs.should_validate == 'true'
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://validation:validation@127.0.0.1:5432/validation?schema=public
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: ./node_modules/.bin/next build
+
+  publish:
+    needs: [preflight, claude-build, validate]
     runs-on: ubuntu-latest
     permissions:
       contents: write
