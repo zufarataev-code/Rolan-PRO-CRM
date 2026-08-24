@@ -1,0 +1,82 @@
+name: Deploy production
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Fast-forward production server
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Configure SSH
+        env:
+          PRODUCTION_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          PRODUCTION_SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$PRODUCTION_SSH_KEY"
+          test -n "$PRODUCTION_SSH_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$PRODUCTION_SSH_KEY" > "$HOME/.ssh/rolanpro_production"
+          chmod 600 "$HOME/.ssh/rolanpro_production"
+          printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Advance production to verified main commit
+        env:
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/rolanpro_production" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            runcloud@143.110.136.211 \
+            "EXPECTED_SHA='$EXPECTED_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          app_dir=/home/runcloud/webapps/rolanpro-crm
+          cd "$app_dir"
+          test "$(git branch --show-current)" = main
+          test -z "$(git status --porcelain)"
+          git fetch --prune origin main
+          fetched_sha="$(git rev-parse origin/main)"
+          test "$fetched_sha" = "$EXPECTED_SHA"
+          git merge --ff-only "$fetched_sha"
+          REMOTE
+
+      - name: Wait for server deployment
+        env:
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            deployed_sha="$(ssh -i "$HOME/.ssh/rolanpro_production" \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              runcloud@143.110.136.211 \
+              "awk 'NR == 1 {print \\$1}' /home/runcloud/.rolanpro-crm-active-release 2>/dev/null || true")"
+            if [ "$deployed_sha" = "$EXPECTED_SHA" ]; then
+              curl --fail --silent --show-error --max-time 15 \
+                https://rolanpro-crm.143-110-136-211.sslip.io/ >/dev/null
+              echo "Production is serving $EXPECTED_SHA"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Production did not activate $EXPECTED_SHA within 10 minutes" >&2
+          exit 1
