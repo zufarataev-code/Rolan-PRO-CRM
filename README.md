@@ -1,5 +1,11 @@
 # ROLANPRO SYSTEM
 
+Project synchronization:
+
+- Start every task with [`PROJECT_STATE.md`](./PROJECT_STATE.md).
+- Read [`DECISIONS.md`](./DECISIONS.md) before changing architecture or business workflow.
+- Follow [`AGENTS.md`](./AGENTS.md) for the required GitHub handoff protocol.
+
 Core product modules:
 
 - `CRM`
