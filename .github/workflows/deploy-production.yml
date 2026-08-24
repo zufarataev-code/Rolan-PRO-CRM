@@ -69,7 +69,7 @@ jobs:
               -o BatchMode=yes \
               -o IdentitiesOnly=yes \
               runcloud@143.110.136.211 \
-              "awk 'NR == 1 {print \\$1}' /home/runcloud/.rolanpro-crm-active-release 2>/dev/null || true")"
+              "head -n 1 /home/runcloud/.rolanpro-crm-active-release 2>/dev/null | cut -d ' ' -f 1 || true")"
             if [ "$deployed_sha" = "$EXPECTED_SHA" ]; then
               curl --fail --silent --show-error --max-time 15 \
                 https://rolanpro-crm.143-110-136-211.sslip.io/ >/dev/null
