@@ -17,7 +17,7 @@ Before doing any work:
 - Verified: 2026-08-24
 - Canonical repository: `zufarataev-code/Rolan-PRO-CRM`
 - Canonical code branch: `main`
-- Verified `origin/main` commit: `3506169` (`Merge pull request #16 from zufarataev-code/fix/deploy-marker-tab`)
+- Verified `origin/main` commit: `9a52e5b` (`Merge pull request #20 from zufarataev-code/codex/project-source-of-truth`)
 - Production status: not re-verified during this documentation change
 - Current phase: security stabilization, data consolidation, and removal of duplicate CRM workflows
 
@@ -73,18 +73,18 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Establish cross-device source of truth | `codex/project-source-of-truth` | Codex | In progress | Review and merge this documentation into `main` |
+| No active task recorded | — | — | Ready | Claim a task here before starting substantial work |
 
 Contributors must add a row before starting substantial work and update or remove it at handoff.
 
 ## Latest handoff
 
-- What changed: added the repository-wide synchronization protocol and canonical project-state documents.
+- What changed: added the repository-wide synchronization protocol and canonical project-state documents through PR #20.
 - Why: different devices and chats were relying on incomplete local context.
-- Verification: documentation links and Git diff checked; no application code or production data changed.
-- Branch: `codex/project-source-of-truth`
-- Blocker: the branch must be reviewed and merged into `main` before every device automatically receives it.
-- Next action: review the pull request, merge it, then require all future work to begin by reading this file.
+- Verification: GitHub CI passed; PR #20 was merged into `main`; no application code or production data changed.
+- Branch / PR: `codex/project-source-of-truth` / #20 (merged)
+- Blocker: none for synchronization setup.
+- Next action: review PRs #17, #18, and #19 in order, then continue CRM data consolidation.
 
 ## Completion rule
 
