@@ -2,6 +2,25 @@
 
 This repository is the single source of truth for ROLANPRO CRM. Codex, Claude, and human contributors work in this same codebase.
 
+## Mandatory synchronization protocol
+
+Every agent and contributor must do this before starting work:
+
+1. Fetch GitHub and start from the latest `origin/main`.
+2. Read `PROJECT_STATE.md` completely.
+3. Read `DECISIONS.md` completely before making an architectural or workflow decision.
+4. Check open pull requests and the current branch status so work is not duplicated.
+5. State which task is being worked on and which branch owns it.
+
+Before handing work to another device, chat, or contributor:
+
+1. Commit and push the work to a dedicated branch.
+2. Update `PROJECT_STATE.md` with the exact result, verification, branch/PR, blocker, and next action.
+3. Add a dated entry to `DECISIONS.md` only when a durable product or architecture decision changed.
+4. Never describe local-only work as shared, merged, deployed, or complete.
+
+`PROJECT_STATE.md` is the canonical live handoff. Chat history, local files, browser state, and an agent's memory are not sources of truth.
+
 ## Workflow
 
 1. Start from the latest `main`.
