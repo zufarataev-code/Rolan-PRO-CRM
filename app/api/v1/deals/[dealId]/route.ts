@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES } from "@/features/sales/api";
+import { buildDealAccessWhere, getRecordManagerScope, isCrossManagerAssignment } from "@/features/sales/access";
 import { getDealCardById } from "@/features/sales/service";
 
 type RouteContext = {
@@ -21,7 +22,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 
   const { dealId } = await context.params;
-  const data = await getDealCardById(dealId);
+  const managerId = getRecordManagerScope(auth.session);
+  const data = await getDealCardById(dealId, managerId);
 
   if (!data) {
     return apiError(404, "not_found", "Deal was not found.");
@@ -56,19 +58,27 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return apiError(400, "invalid_payload", "Request body is required.");
   }
 
-  const updated = await prisma.deal.update({
-    where: {
-      deal_id: dealId,
-    },
-    data: {
-      title: body.title?.trim(),
-      estimated_value: body.estimated_value,
-      currency: body.currency?.trim().toUpperCase(),
-      notes: body.notes?.trim() || body.notes || undefined,
-      client_id: body.client_id !== undefined ? body.client_id : undefined,
-      lead_id: body.lead_id !== undefined ? body.lead_id : undefined,
-      assigned_manager_id: body.assigned_manager_id !== undefined ? body.assigned_manager_id : undefined,
-    },
+  const managerId = getRecordManagerScope(auth.session);
+
+  if (isCrossManagerAssignment(managerId, body.assigned_manager_id)) {
+    return apiError(403, "forbidden", "Managers cannot reassign deals to another user.");
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.deal.updateMany({
+      where: buildDealAccessWhere(dealId, managerId),
+      data: {
+        title: body.title?.trim(),
+        estimated_value: body.estimated_value,
+        currency: body.currency?.trim().toUpperCase(),
+        notes: body.notes?.trim() || body.notes || undefined,
+        client_id: body.client_id !== undefined ? body.client_id : undefined,
+        lead_id: body.lead_id !== undefined ? body.lead_id : undefined,
+        assigned_manager_id: body.assigned_manager_id !== undefined ? body.assigned_manager_id : undefined,
+      },
+    });
+
+    return result.count === 1 ? tx.deal.findUnique({ where: { deal_id: dealId } }) : null;
   }).catch(() => null);
 
   if (!updated) {

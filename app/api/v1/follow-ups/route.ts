@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES, getManagerScope } from "@/features/sales/api";
+import { getRecordManagerScope, isCrossManagerAssignment } from "@/features/sales/access";
 import { listFollowUps } from "@/features/sales/service";
 
 export async function GET(request: NextRequest) {
@@ -46,6 +47,12 @@ export async function POST(request: NextRequest) {
     return apiError(400, "invalid_payload", "type_key and due_at are required.");
   }
 
+  const recordManagerId = getRecordManagerScope(auth.session);
+
+  if (isCrossManagerAssignment(recordManagerId, body.assigned_to)) {
+    return apiError(403, "forbidden", "Managers cannot assign follow-ups to another user.");
+  }
+
   const followUp = await prisma.followUp.create({
     data: {
       lead_id: body.lead_id ?? null,
@@ -55,7 +62,7 @@ export async function POST(request: NextRequest) {
       due_at: new Date(body.due_at),
       notes: body.notes?.trim() || null,
       outcome: body.outcome?.trim() || null,
-      assigned_to: body.assigned_to ?? auth.session.user.user_id,
+      assigned_to: recordManagerId ?? body.assigned_to ?? auth.session.user.user_id,
       created_by: auth.session.user.user_id,
     },
   });

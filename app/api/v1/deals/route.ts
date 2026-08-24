@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES, getManagerScope, getPipelineStatusId } from "@/features/sales/api";
+import { getRecordManagerScope, isCrossManagerAssignment } from "@/features/sales/access";
 import { listDeals } from "@/features/sales/service";
 import { onLeadCreated } from "@/features/core/events";
 
@@ -47,6 +48,12 @@ export async function POST(request: NextRequest) {
     return apiError(400, "invalid_payload", "Deal title is required.");
   }
 
+  const recordManagerId = getRecordManagerScope(auth.session);
+
+  if (isCrossManagerAssignment(recordManagerId, body.assigned_manager_id)) {
+    return apiError(403, "forbidden", "Managers cannot assign deals to another user.");
+  }
+
   const trimmedTitle = body.title.trim();
 
   const pipelineStatus =
@@ -57,9 +64,7 @@ export async function POST(request: NextRequest) {
     return apiError(500, "missing_pipeline_status", "Default pipeline status is not configured.");
   }
 
-  const assignedManagerId =
-    body.assigned_manager_id ??
-    (auth.session.roles.includes("MANAGER") ? auth.session.user.user_id : null);
+  const assignedManagerId = recordManagerId ?? body.assigned_manager_id ?? null;
 
   const deal = await prisma.$transaction(async (tx) => {
     const createdDeal = await tx.deal.create({

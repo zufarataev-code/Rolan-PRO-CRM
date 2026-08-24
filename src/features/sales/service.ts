@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { serializeClient, serializeDealCard, serializeFollowUp, serializeLead, serializeTask } from "@/features/sales/serializers";
 import { getAllowedStageTransitions, isValidStageTransition } from "@/features/sales/pipeline";
 import { ROLE_CODES } from "@/lib/auth/constants";
+import { buildClientAccessWhere, buildDealAccessWhere } from "@/features/sales/access";
 
 function toNumber(value: { toString(): string } | null | undefined) {
   return value ? Number(value.toString()) : 0;
@@ -327,11 +328,9 @@ export async function getPipelineStagesWithTransitions() {
   }));
 }
 
-export async function getDealCardById(dealId: string) {
-  const deal = await prisma.deal.findUnique({
-    where: {
-      deal_id: dealId,
-    },
+export async function getDealCardById(dealId: string, managerId?: string) {
+  const deal = await prisma.deal.findFirst({
+    where: buildDealAccessWhere(dealId, managerId),
     include: {
       lead: true,
       client: true,
@@ -591,8 +590,9 @@ export async function listLeads(managerId?: string) {
   return leads.map(serializeLead);
 }
 
-export async function listClients() {
+export async function listClients(managerId?: string) {
   const clients = await prisma.client.findMany({
+    where: buildClientAccessWhere(undefined, managerId),
     include: {
       city: {
         select: {
@@ -888,7 +888,7 @@ export async function moveDealStage(input: MoveDealStageInput) {
     });
   });
 
-  const updated = await getDealCardById(deal.deal_id);
+  const updated = await getDealCardById(deal.deal_id, input.managerScopeId);
 
   if (!updated) {
     return {

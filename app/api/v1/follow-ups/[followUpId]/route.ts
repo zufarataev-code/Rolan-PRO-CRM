@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES } from "@/features/sales/api";
+import { buildFollowUpAccessWhere, getRecordManagerScope, isCrossManagerAssignment } from "@/features/sales/access";
 
 type RouteContext = {
   params: Promise<{
@@ -26,19 +27,27 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return apiError(400, "invalid_payload", "Request body is required.");
   }
 
-  const followUp = await prisma.followUp.update({
-    where: {
-      follow_up_id: followUpId,
-    },
-    data: {
-      type_key: body.type_key || undefined,
-      status: body.status || undefined,
-      due_at: body.due_at ? new Date(body.due_at) : undefined,
-      notes: body.notes?.trim() || body.notes || undefined,
-      outcome: body.outcome?.trim() || body.outcome || undefined,
-      assigned_to: body.assigned_to !== undefined ? body.assigned_to : undefined,
-      completed_at: body.status === "completed" ? new Date() : undefined,
-    },
+  const managerId = getRecordManagerScope(auth.session);
+
+  if (isCrossManagerAssignment(managerId, body.assigned_to)) {
+    return apiError(403, "forbidden", "Managers cannot reassign follow-ups to another user.");
+  }
+
+  const followUp = await prisma.$transaction(async (tx) => {
+    const result = await tx.followUp.updateMany({
+      where: buildFollowUpAccessWhere(followUpId, managerId),
+      data: {
+        type_key: body.type_key || undefined,
+        status: body.status || undefined,
+        due_at: body.due_at ? new Date(body.due_at) : undefined,
+        notes: body.notes?.trim() || body.notes || undefined,
+        outcome: body.outcome?.trim() || body.outcome || undefined,
+        assigned_to: body.assigned_to !== undefined ? body.assigned_to : undefined,
+        completed_at: body.status === "completed" ? new Date() : undefined,
+      },
+    });
+
+    return result.count === 1 ? tx.followUp.findUnique({ where: { follow_up_id: followUpId } }) : null;
   }).catch(() => null);
 
   if (!followUp) {
