@@ -9,14 +9,19 @@ import {
   sanitizeLegacyPayload,
   validateLegacyPayload,
 } from "@/features/legacy-crm/sanitize";
+import { LEGACY_WORKSPACE_ROLES } from "@/features/legacy-crm/api";
 
 const WORKSPACE_ID = "primary";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireRequestSession(request);
+  const auth = await requireRequestSession(request, LEGACY_WORKSPACE_ROLES);
 
   if (!auth.ok) {
-    return apiError(401, "unauthorized", "Authentication is required.");
+    return apiError(
+      auth.reason === "forbidden" ? 403 : 401,
+      auth.reason,
+      "Legacy CRM workspace access denied.",
+    );
   }
 
   const workspace = await prisma.legacyWorkspace.findUnique({
@@ -35,10 +40,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireRequestSession(request);
+  const auth = await requireRequestSession(request, LEGACY_WORKSPACE_ROLES);
 
   if (!auth.ok) {
-    return apiError(401, "unauthorized", "Authentication is required.");
+    return apiError(
+      auth.reason === "forbidden" ? 403 : 401,
+      auth.reason,
+      "Legacy CRM workspace update denied.",
+    );
   }
 
   const body = (await request.json().catch(() => null)) as
