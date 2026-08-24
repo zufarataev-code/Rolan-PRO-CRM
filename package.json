@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "test": "find src -name '*.test.ts' -print0 | xargs -0 node --import tsx --test",
+    "typecheck": "tsc --noEmit",
     "start": "next start",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
