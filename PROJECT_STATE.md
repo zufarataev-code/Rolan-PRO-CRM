@@ -17,8 +17,8 @@ Before doing any work:
 - Verified: 2026-08-24
 - Canonical repository: `zufarataev-code/Rolan-PRO-CRM`
 - Canonical code branch: `main`
-- Verified `origin/main` commit: `9a52e5b` (`Merge pull request #20 from zufarataev-code/codex/project-source-of-truth`)
-- Production status: not re-verified during this documentation change
+- Verified `origin/main` commit: `3086998` (`Merge pull request #23 from zufarataev-code/codex/rotate-owner-temp-password`)
+- Production status: deploy run #16 succeeded for `3086998`; login page and owner access were verified
 - Current phase: security stabilization, data consolidation, and removal of duplicate CRM workflows
 
 ## Active pull requests
@@ -73,18 +73,18 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| No active task recorded | — | — | Ready | Claim a task here before starting substantial work |
+| Unify CRM navigation and create one polished proposal/PDF output | `codex/unify-crm-proposal-pdf` / pending | Codex | Ready for PR | Review the scoped navigation and print-layout change, then merge after CI passes |
 
 Contributors must add a row before starting substantial work and update or remove it at handoff.
 
 ## Latest handoff
 
-- What changed: added the repository-wide synchronization protocol and canonical project-state documents through PR #20.
-- Why: different devices and chats were relying on incomplete local context.
-- Verification: GitHub CI passed; PR #20 was merged into `main`; no application code or production data changed.
-- Branch / PR: `codex/project-source-of-truth` / #20 (merged)
-- Blocker: none for synchronization setup.
-- Next action: review PRs #17, #18, and #19 in order, then continue CRM data consolidation.
+- What changed: mail now returns owners to `/owner` and managers to `/manager` instead of opening `/legacy-crm`; the canonical public proposal has a dedicated Letter-size PDF layout with whole service cards, a protected total/closing block, signatures, and a one-click print/PDF action.
+- Why: the mail-to-legacy link looked like a second CRM, while the modern proposal needed a polished client PDF without individual sections splitting across pages.
+- Verification: 64 automated tests passed; TypeScript passed; production build passed; a representative 8-line proposal rendered to a two-page PDF and both pages were visually inspected with no clipped, overlapping, or split content.
+- Branch / PR: `codex/unify-crm-proposal-pdf` / pending.
+- Blocker: the old `/legacy-crm` route must remain available until its business records are fully migrated; this change removes the confusing mail entry point but does not delete legacy data.
+- Next action: open the PR, let GitHub CI pass, merge and verify production; then begin the separate system-services/API-control module.
 
 ## Completion rule
 
