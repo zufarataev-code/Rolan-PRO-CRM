@@ -14,7 +14,7 @@ Before doing any work:
 
 ## Last verified state
 
-- Verified: 2026-08-24
+- Verified: 2026-08-25
 - Canonical repository: `zufarataev-code/Rolan-PRO-CRM`
 - Canonical code branch: `main`
 - Verified `origin/main` commit: `3086998` (`Merge pull request #23 from zufarataev-code/codex/rotate-owner-temp-password`)
@@ -73,18 +73,18 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Unify CRM navigation and create one polished proposal/PDF output | `codex/unify-crm-proposal-pdf` / pending | Codex | Ready for PR | Review the scoped navigation and print-layout change, then merge after CI passes |
+| Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / pending | Codex | Ready for PR | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
 
 Contributors must add a row before starting substantial work and update or remove it at handoff.
 
 ## Latest handoff
 
-- What changed: mail now returns owners to `/owner` and managers to `/manager` instead of opening `/legacy-crm`; the canonical public proposal has a dedicated Letter-size PDF layout with whole service cards, a protected total/closing block, signatures, and a one-click print/PDF action.
-- Why: the mail-to-legacy link looked like a second CRM, while the modern proposal needed a polished client PDF without individual sections splitting across pages.
-- Verification: 64 automated tests passed; TypeScript passed; production build passed; a representative 8-line proposal rendered to a two-page PDF and both pages were visually inspected with no clipped, overlapping, or split content.
+- What changed: mail returns owners to `/owner` and managers to `/manager`; login and password-change flows now send every employee to the correct role workspace; legacy KP publishing creates or refreshes a canonical PostgreSQL proposal, produces a public `/proposal/<token>` link that does not require CRM login, and sends it through the connected corporate Gmail instead of opening `mailto`; the canonical public proposal keeps its dedicated Letter-size PDF layout and one-click PDF action.
+- Why: the old KP button exposed an authenticated `/legacy-crm/#/proposal/...` address and the Email button only opened a local mail composer, so clients could receive an inaccessible link and no server-confirmed company email. Role-based login also incorrectly sent all employees into the legacy owner/manager workspace.
+- Verification: 69 automated tests passed; TypeScript passed; production build passed. The earlier representative 8-line proposal PDF was visually inspected on both pages with no clipping, overlap, or split content. Actual Gmail delivery and public-link access still require a production smoke test after deployment so no test email is sent from development.
 - Branch / PR: `codex/unify-crm-proposal-pdf` / pending.
-- Blocker: the old `/legacy-crm` route must remain available until its business records are fully migrated; this change removes the confusing mail entry point but does not delete legacy data.
-- Next action: open the PR, let GitHub CI pass, merge and verify production; then begin the separate system-services/API-control module.
+- Blocker: the old `/legacy-crm` route must remain available until its business records are fully migrated; this change publishes legacy KP snapshots into the canonical proposal tables but does not yet migrate every legacy order or disable legacy writes.
+- Next action: open the PR, let GitHub CI pass, merge and deploy from `main`; in production, send one controlled KP to an internal address, open the public link in a signed-out browser, and verify PDF download before using it with clients.
 
 ## Completion rule
 

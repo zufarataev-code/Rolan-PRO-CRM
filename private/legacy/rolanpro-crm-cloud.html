@@ -13710,12 +13710,15 @@ function clientAccountPortalUrl(clientId) {
 }
 
 function premiumProposalUrl(proposalOrToken) {
+  const proposal = typeof proposalOrToken === 'string' ? getPremiumProposalByToken(proposalOrToken) : proposalOrToken;
+  if (proposal?.canonicalPublicUrl) return proposal.canonicalPublicUrl;
   const token = typeof proposalOrToken === 'string' ? proposalOrToken : proposalOrToken?.token;
   if (!token) return '';
-  const publicUrl = db.settings?.publicBaseUrl?.trim();
-  if (publicUrl) return publicUrl.replace(/\/+$/, '') + '#/proposal/' + token;
-  const base = location.origin === 'null' ? location.href.split('#')[0] : location.origin + location.pathname;
-  return `${base}#/proposal/${token}`;
+  const configured = db.settings?.publicBaseUrl?.trim();
+  const base = configured && /^https?:\/\//i.test(configured)
+    ? configured.replace(/\/legacy-crm\/?(?:#.*)?$/i, '').replace(/\/+$/, '')
+    : (location.origin === 'null' ? ROLANPRO_PRODUCTION_URL.replace(/\/legacy-crm\/?$/, '') : location.origin);
+  return `${base}/proposal/${encodeURIComponent(token)}`;
 }
 
 // ---------- ROUTING ----------
@@ -23166,19 +23169,131 @@ async function premiumOpenStripeLink(token) {
     alert('Stripe checkout не готов:\n' + e.message + '\n\nПроверьте настройки Stripe или создайте ссылку из окна КП.');
   }
 }
-function generatePremiumProposal(orderId) {
+function premiumCanonicalSnapshot(prop) {
+  const calc = premiumProposalCalc(prop);
+  const order = calc.order;
+  const client = getClient(order?.clientId) || {};
+  if (!order) throw new Error('Order was not found.');
+  const items = [];
+  (order.measurements?.rooms || []).forEach(room => {
+    if (!premiumRoomIncluded(prop, room.id)) return;
+    (room.windows || []).forEach(windowItem => {
+      if (!premiumWindowIncluded(prop, room.id, windowItem.id)) return;
+      const priced = calc.byWindow?.[windowItem.id] || premiumWindowPrice(prop, order, windowItem);
+      const catalog = priced.catalog || {};
+      const productName = [catalog.brand, catalog.model].filter(Boolean).join(' ') || windowItem.filmType || 'Window film';
+      items.push({
+        service_code: catalog.category === 'smart' ? 'SMART_FILM' : catalog.category === 'protective' ? 'SAFETY_FILM' : 'SOLAR_FILM',
+        room_name: room.name || 'Project area',
+        window_id: windowItem.id,
+        title_en: `${windowItem.name || 'Window'} — ${productName}`,
+        description_en: `${premiumNum(windowItem.width)} × ${premiumNum(windowItem.height)} · ${premiumNum(windowItem.actualQty != null ? windowItem.actualQty : (windowItem.qty || 1))} pcs`,
+        quantity: premiumNum(windowItem.actualQty != null ? windowItem.actualQty : (windowItem.qty || 1)) || 1,
+        unit_label: 'window',
+        line_price: premiumNum(priced.price),
+        measurement_snapshot: {
+          width: premiumNum(windowItem.width),
+          height: premiumNum(windowItem.height),
+          sqft: premiumNum(priced.area),
+          glass_type: windowItem.glassType || null,
+          installation_side: windowItem.side || null,
+        },
+        item_kind: 'film',
+      });
+    });
+  });
+  if (calc.legacyServices > 0) {
+    items.push({ service_code: 'SOLAR_FILM', title_en: 'Additional project services', quantity: 1, unit_label: 'project', line_price: calc.legacyServices, item_kind: 'service' });
+  }
+  (calc.selectedServices || []).forEach(service => {
+    items.push({
+      service_code: service.id === 'film_removal' ? 'REMOVAL' : service.id === 'structural_silicone' ? 'SILICONE' : service.id === 'electrical_installation' ? 'ELECTRICAL_WORK' : 'SOLAR_FILM',
+      title_en: service.name || service.title || service.id || 'Additional service',
+      quantity: 1,
+      unit_label: service.unit || 'service',
+      line_price: premiumNum(service.amount),
+      item_kind: 'service',
+    });
+  });
+  const rawTotal = items.reduce((sum, item) => sum + premiumNum(item.line_price), 0);
+  if (!items.length || rawTotal <= 0) throw new Error('Add measured windows or services before publishing the proposal.');
+  const factor = calc.total > 0 ? calc.total / rawTotal : 1;
+  let allocated = 0;
+  items.forEach((item, index) => {
+    const adjusted = index === items.length - 1
+      ? Math.max(0, Math.round((calc.total - allocated) * 100) / 100)
+      : Math.max(0, Math.round(item.line_price * factor * 100) / 100);
+    item.line_price = adjusted;
+    allocated += adjusted;
+  });
+  return {
+    token: prop.token,
+    legacy_order_id: order.id,
+    order_number: order.number,
+    title: `ROLANPRO Proposal ${order.number || ''}`.trim(),
+    client: {
+      legacy_client_id: client.id,
+      name: client.name || 'Client',
+      email: client.email || '',
+      phone: client.phone || '',
+      address: orderAddress(order, client),
+    },
+    items,
+  };
+}
+async function premiumPublishCanonicalProposal(prop) {
+  const response = await fetch('/api/v1/legacy-crm/proposals/publish', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(premiumCanonicalSnapshot(prop)),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.data?.proposal) {
+    throw new Error(payload?.errors?.[0]?.message || 'The client proposal could not be published.');
+  }
+  prop.canonicalProposalId = payload.data.proposal.proposal_id;
+  prop.canonicalPublicUrl = payload.data.proposal.public_url;
+  save();
+  return payload.data.proposal;
+}
+async function generatePremiumProposal(orderId) {
   const prop = ensurePremiumProposal(orderId);
   if (!prop) return;
   const order = getOrder(orderId);
-  if (!premiumProposalLocked(prop) && prop.status === 'Draft') {
-    prop.status = 'Sent';
-    prop.sentAt = new Date().toISOString();
-    order.timeline = order.timeline || [];
-    order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_sent', by: state.currentUserId, note: 'Premium proposal link generated' });
-    if (['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done'].includes(order.status)) order.status = 'proposal_sent';
-    save();
+  try {
+    await premiumPublishCanonicalProposal(prop);
+    if (!premiumProposalLocked(prop) && prop.status === 'Draft') {
+      prop.status = 'Sent';
+      prop.sentAt = new Date().toISOString();
+      order.timeline = order.timeline || [];
+      order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_sent', by: state.currentUserId, note: 'Public client proposal published' });
+      if (['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done'].includes(order.status)) order.status = 'proposal_sent';
+      save();
+    }
+    openPremiumProposalManagerModal(prop.token);
+  } catch (error) {
+    alert('КП не опубликовано:\n' + (error?.message || error));
   }
-  openPremiumProposalManagerModal(prop.token);
+}
+async function premiumSendCanonicalProposal(token) {
+  const prop = getPremiumProposalByToken(token);
+  const order = getOrder(prop?.orderId);
+  const client = getClient(order?.clientId) || {};
+  if (!prop || !order) return;
+  if (!client.email) { alert('Добавьте email клиента перед отправкой.'); return; }
+  try {
+    const published = await premiumPublishCanonicalProposal(prop);
+    const response = await fetch(`/api/v1/proposals/${encodeURIComponent(published.proposal_id)}/send`, { method: 'POST' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.errors?.[0]?.message || 'Email could not be sent.');
+    prop.status = 'Sent';
+    prop.sentAt = prop.sentAt || new Date().toISOString();
+    save();
+    openPremiumProposalManagerModal(token);
+    alert(`КП отправлено клиенту с корпоративной почты на ${client.email}.`);
+  } catch (error) {
+    alert('Ошибка отправки КП:\n' + (error?.message || error));
+  }
 }
 function openPremiumProposalManagerModal(token) {
   const prop = getPremiumProposalByToken(token);
@@ -23219,7 +23334,7 @@ function openPremiumProposalManagerModal(token) {
           <a class="btn-primary text-center" href="${url}" target="_blank">Open</a>
           <a class="btn-ghost text-center" href="${whatsappLink(client.phone, msg)}" target="_blank">WhatsApp</a>
           <a class="btn-ghost text-center" href="${smsLink(client.phone, msg)}">SMS</a>
-          ${client.email ? `<a class="btn-ghost text-center" href="${emailLink(client.email, 'Your ROLANPRO proposal', msg)}">Email</a>` : `<button class="btn-ghost" disabled>Email</button>`}
+          ${client.email ? `<button class="btn-ghost text-center" onclick="premiumSendCanonicalProposal('${prop.token}')">Email</button>` : `<button class="btn-ghost" disabled>Email</button>`}
         </div>
 	        <div class="grid md:grid-cols-4 gap-3 mt-5 text-sm">
 	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Rooms</div><div class="font-black text-lg">${calc.includedRooms}</div></div>
@@ -23249,16 +23364,21 @@ function openPremiumProposalManagerModal(token) {
     </div>`;
   render();
 }
-function newPremiumProposalVersion(orderId) {
+async function newPremiumProposalVersion(orderId) {
   const prop = ensurePremiumProposal(orderId, { newVersion: true });
   if (!prop) return;
-  prop.status = 'Sent';
-  prop.sentAt = new Date().toISOString();
-  const order = getOrder(orderId);
-  order.timeline = order.timeline || [];
-  order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_new_version', by: state.currentUserId, note: `Premium proposal v${prop.version || 1}` });
-  save();
-  openPremiumProposalManagerModal(prop.token);
+  try {
+    await premiumPublishCanonicalProposal(prop);
+    prop.status = 'Sent';
+    prop.sentAt = new Date().toISOString();
+    const order = getOrder(orderId);
+    order.timeline = order.timeline || [];
+    order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_new_version', by: state.currentUserId, note: `Premium proposal v${prop.version || 1}` });
+    save();
+    openPremiumProposalManagerModal(prop.token);
+  } catch (error) {
+    alert('Новая версия КП не опубликована:\n' + (error?.message || error));
+  }
 }
 async function premiumCreateStripePaymentLink(token) {
   const prop = getPremiumProposalByToken(token);

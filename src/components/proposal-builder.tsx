@@ -398,7 +398,7 @@ export function ProposalBuilder({ initialProposal, calculatorBootstrap }: Propos
       );
 
       setProposal(data.proposal);
-      setMessage("Proposal отправлен. Клиент видит строки, optional services и agreement.");
+      setMessage("КП отправлено с info@rolan-pro.com. Клиент получил публичную ссылку без входа в CRM и сможет скачать PDF.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось отправить proposal.");
     } finally {

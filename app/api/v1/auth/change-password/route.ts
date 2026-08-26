@@ -29,5 +29,5 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  return apiSuccess({ password_changed: true });
+  return apiSuccess({ password_changed: true, roles: auth.session.roles });
 }
