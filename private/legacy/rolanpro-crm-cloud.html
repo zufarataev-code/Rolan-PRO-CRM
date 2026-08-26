@@ -5845,11 +5845,11 @@ function brandDocumentLogoHtml(className = '') {
   return `<img src="${ROLANPRO_LOGO_SRC}" alt="ROLANPRO" class="${className}" style="display:block;height:46px;width:auto;max-width:230px;object-fit:contain;">`;
 }
 const CORE_LOGIN_ACCESS = {
-  'u_o1': { name: 'Rolan (Owner)', role: 'owner', pin: '0000' },
-  'u_m1': { name: 'Данилла', role: 'manager', pin: '1111' },
-  'u_z1': { name: 'Зуфар', role: 'measurer', pin: '2111' },
-  'u_i1': { name: 'Ринат', role: 'installer', pin: '3111' },
-  'u_i2': { name: 'Нурик', role: 'installer', pin: '3112' },
+  'u_o1': { name: 'Rolan (Owner)', role: 'owner' },
+  'u_m1': { name: 'Данилла', role: 'manager' },
+  'u_z1': { name: 'Зуфар', role: 'measurer' },
+  'u_i1': { name: 'Ринат', role: 'installer' },
+  'u_i2': { name: 'Нурик', role: 'installer' },
 };
 function load() {
   const raw = localStorage.getItem('rolanpro_crm');
@@ -6796,7 +6796,7 @@ function migrateSchema() {
   const hasOwner = db.users.some(u => u.role === 'owner');
   if (!hasOwner) {
     db.users.unshift({
-      id: 'u_o1', role: 'owner', name: 'Rolan (Owner)', pin: '0000',
+      id: 'u_o1', role: 'owner', name: 'Rolan (Owner)',
       phone: '+12125551100', email: '', telegramChatId: '', lang: 'ru',
       hourlyRate: 0, commissionPct: 0,
     });
@@ -6821,8 +6821,8 @@ function migrateSchema() {
     });
     db._realTeamApplied = true;
   }
-  // ---- CORE TEAM LOGIN SAFETY ----
-  // Keep the main working roles available even if older local data deactivated or stripped their PIN.
+  // ---- CORE TEAM SAFETY ----
+  // Keep the main working roles available. Authentication is handled by the cloud account.
   Object.entries(CORE_LOGIN_ACCESS).forEach(([uid, info]) => {
     let u = db.users.find(x => x.id === uid);
     if (!u) {
@@ -6832,8 +6832,9 @@ function migrateSchema() {
     u.name = u.name || info.name;
     u.role = info.role;
     u.active = true;
-    if (!normalizePin(u.pin)) u.pin = info.pin;
   });
+  // Legacy employee PINs are no longer authentication credentials.
+  (db.users || []).forEach(user => { if (user && 'pin' in user) delete user.pin; });
 
   // ---- ORDER fields migration ----
   (db.orders || []).forEach(o => {
@@ -12942,15 +12943,15 @@ function fmtMoney(n) {
 function seedDemo() {
   db = {
     users: [
-      { id: 'u_o1', role: 'owner',     name: 'Rolan (Owner)',   pin: '0000', phone: '+12125551100', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 0 },
-      { id: 'u_m1', role: 'manager',   name: 'Anna Ivanova',    pin: '1111', phone: '+12125551101', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 10 },
-      { id: 'u_m2', role: 'manager',   name: 'Oleg Petrov',     pin: '1112', phone: '+12125551102', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 10 },
-      { id: 'u_z1', role: 'measurer',  name: 'Rustam Karimov',  pin: '2111', phone: '+12125551103', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 5  },
-      { id: 'u_z2', role: 'measurer',  name: 'Farrukh Saidov',  pin: '2112', phone: '+12125551104', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 5  },
-      { id: 'u_i1', role: 'installer', name: 'Renat',           pin: '3111', phone: '+12125551105', telegramChatId: '', lang: 'ru', hourlyRate: 40, commissionPct: 0 },
-      { id: 'u_i2', role: 'installer', name: 'Nurik',           pin: '3112', phone: '+12125551106', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 0 },
-      { id: 'u_i3', role: 'installer', name: 'Данила',          pin: '3113', phone: '+12125551107', telegramChatId: '', lang: 'ru', hourlyRate: 35, commissionPct: 0 },
-      { id: 'u_i4', role: 'installer', name: 'Паша',            pin: '3114', phone: '+12125551108', telegramChatId: '', lang: 'ru', hourlyRate: 30, commissionPct: 0 },
+      { id: 'u_o1', role: 'owner',     name: 'Rolan (Owner)',   phone: '+12125551100', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 0 },
+      { id: 'u_m1', role: 'manager',   name: 'Anna Ivanova',    phone: '+12125551101', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 10 },
+      { id: 'u_m2', role: 'manager',   name: 'Oleg Petrov',     phone: '+12125551102', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 10 },
+      { id: 'u_z1', role: 'measurer',  name: 'Rustam Karimov',  phone: '+12125551103', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 5  },
+      { id: 'u_z2', role: 'measurer',  name: 'Farrukh Saidov',  phone: '+12125551104', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 5  },
+      { id: 'u_i1', role: 'installer', name: 'Renat',           phone: '+12125551105', telegramChatId: '', lang: 'ru', hourlyRate: 40, commissionPct: 0 },
+      { id: 'u_i2', role: 'installer', name: 'Nurik',           phone: '+12125551106', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 0 },
+      { id: 'u_i3', role: 'installer', name: 'Данила',          phone: '+12125551107', telegramChatId: '', lang: 'ru', hourlyRate: 35, commissionPct: 0 },
+      { id: 'u_i4', role: 'installer', name: 'Паша',            phone: '+12125551108', telegramChatId: '', lang: 'ru', hourlyRate: 30, commissionPct: 0 },
     ],
     clients: [
       { id: 'c1', name: 'Acme Business Tower',    phone: '+12135550101', address: 'Los Angeles, CA, 633 W 5th St',          email: 'office@acme.com',  type: 'commercial',  source: 'direct',    referralCode: 'ACM-4321', referredBy: null, createdAt: '2026-04-01T09:10:00Z' },
@@ -13752,6 +13753,13 @@ function render() {
 // ---------- LOGIN VIEW ----------
 function renderLogin() {
   if (ROLANPRO_CLOUD) return renderCloudRoleChooser();
+  location.assign(ROLANPRO_PRODUCTION_URL.replace(/\/legacy-crm\/?$/, '') + '/login');
+  return '<div class="min-h-screen flex items-center justify-center p-6"><div class="text-center"><h1 class="text-2xl font-black">Переход к безопасному входу…</h1><p class="mt-2 text-gray-500">Вход по PIN больше не используется.</p></div></div>';
+}
+
+// Retained only as an unreachable migration reference for old standalone snapshots.
+function renderLegacyPinLoginDisabled() {
+  if (ROLANPRO_CLOUD) return renderCloudRoleChooser();
   const roleOrder = ['owner','manager','measurer','installer'];
   const roleRank = role => {
     const idx = roleOrder.indexOf(role);
@@ -13856,14 +13864,12 @@ function selectLoginUser(userId, keepPin = false) {
   const pin = document.getElementById('login-pin');
   if (pin) { if (!keepPin) pin.value = ''; pin.focus(); }
 }
-function loginAsUser(u, pin) {
+function loginAsUser(u) {
   if (!u) return false;
   if (u.active === false) {
     alert(`Сотрудник ${u.name} сейчас выключен в CRM. Включите его в разделе Команда или выберите другого пользователя.`);
     return false;
   }
-  const cleanPin = normalizePin(pin || u.pin);
-  if (cleanPin) u.pin = cleanPin;
   state.currentUserId = u.id;
   state.lang = u.lang || state.lang;
   const orderLink = (location.hash || '').match(/^#\/order\/([^/]+)/);
@@ -13903,7 +13909,11 @@ function tryLogin() {
 
 function logout() {
   state.currentUserId = null;
-  render();
+  if (ROLANPRO_CLOUD) {
+    cloudServerLogout();
+    return;
+  }
+  location.assign(ROLANPRO_PRODUCTION_URL.replace(/\/legacy-crm\/?$/, '') + '/login');
 }
 
 // ---------- PIN MANAGEMENT (team login codes) ----------
@@ -15233,12 +15243,8 @@ function renderTeam() {
                 <span class="${u.telegramChatId?'text-green-600':'text-gray-400'}">${u.telegramChatId ? '✓' : '—'}</span>
               </div>
               <div class="mt-2 flex items-center justify-between text-xs gap-2">
-                <span class="text-gray-500">PIN-код:</span>
-                <div class="flex items-center gap-1">
-                  <input value="${u.pin}" maxlength="8" style="width:70px" class="text-center font-mono"
-                    onchange="updateUserPin('${u.id}', this.value)">
-                  <button class="btn-ghost text-xs" title="Сгенерировать новый PIN" onclick="regenerateUserPin('${u.id}')">🎲</button>
-                </div>
+                <span class="text-gray-500">Вход:</span>
+                <span class="text-emerald-700 font-semibold">почта и пароль</span>
               </div>
             </div>`;
           }).join('')}
@@ -26669,7 +26675,7 @@ function cloudSelectRole(userId) {
   if (!cloudAllowedLegacyIds.includes(userId)) return;
   const user = getUser(userId);
   if (!user) return;
-  loginAsUser(user, '');
+  loginAsUser(user);
   render();
 }
 
