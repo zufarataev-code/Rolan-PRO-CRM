@@ -3,11 +3,13 @@
 import { FormEvent, useState } from "react";
 
 import styles from "./auth-card.module.css";
+import { destinationForRoles } from "@/lib/auth/destination";
 
 type LoginResponse = {
   data?: {
     user?: {
       must_change_password?: boolean;
+      roles?: string[];
     };
   };
   errors?: Array<{ message?: string }>;
@@ -38,7 +40,9 @@ export function AuthLoginForm() {
       }
 
       window.location.assign(
-        payload.data?.user?.must_change_password ? "/change-password" : "/legacy-crm",
+        payload.data?.user?.must_change_password
+          ? "/change-password"
+          : destinationForRoles(payload.data?.user?.roles ?? []),
       );
     } catch {
       setError("Сервер недоступен. Попробуйте ещё раз.");

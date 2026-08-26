@@ -107,7 +107,7 @@ function isUpdateMessage(message: GmailMessage) {
   return /(call|звон|record|запис|delivery|payment|оплат|order|заказ|appointment|встреч|schedule)/i.test(`${message.subject} ${message.snippet}`);
 }
 
-export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
+export function GmailMailbox({ canConnect, homeHref }: { canConnect: boolean; homeHref: "/owner" | "/manager" }) {
   const [status, setStatus] = useState<GmailStatus | null>(null);
   const [messages, setMessages] = useState<GmailMessage[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -282,7 +282,7 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
       <header className={styles.topbar}>
         <div className={styles.brandArea}>
           <button type="button" className={styles.roundButton} onClick={() => setSidebarOpen((value) => !value)} aria-label="Главное меню"><Menu /></button>
-          <Link href="/legacy-crm" className={styles.brand} aria-label="Вернуться в ROLANPRO CRM">
+          <Link href={homeHref} className={styles.brand} aria-label="Вернуться в ROLANPRO CRM">
             <Image src="/landing/rolan-logo.webp" alt="ROLANPRO" width={112} height={38} priority />
             <span>Почта</span>
           </Link>
@@ -296,7 +296,7 @@ export function GmailMailbox({ canConnect }: { canConnect: boolean }) {
           <button type="button" className={styles.roundButton} title="Помощь"><CircleHelp /></button>
           <Link href={canConnect ? "/owner/settings" : "/manager"} className={styles.roundButton} title="Настройки"><Settings /></Link>
           <button type="button" className={`${styles.roundButton} ${styles.geminiButton}`} title="AI-помощник"><Sparkles /></button>
-          <Link href="/legacy-crm" className={styles.roundButton} title="Приложения ROLANPRO"><Grid3X3 /></Link>
+          <Link href={homeHref} className={styles.roundButton} title="Приложения ROLANPRO"><Grid3X3 /></Link>
           <div className={styles.avatar} title={status.email_address || "Google Mail"}>{(status.email_address || "R").charAt(0).toUpperCase()}</div>
         </div>
       </header>

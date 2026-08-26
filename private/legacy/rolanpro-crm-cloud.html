@@ -5845,11 +5845,11 @@ function brandDocumentLogoHtml(className = '') {
   return `<img src="${ROLANPRO_LOGO_SRC}" alt="ROLANPRO" class="${className}" style="display:block;height:46px;width:auto;max-width:230px;object-fit:contain;">`;
 }
 const CORE_LOGIN_ACCESS = {
-  'u_o1': { name: 'Rolan (Owner)', role: 'owner', pin: '0000' },
-  'u_m1': { name: 'Данилла', role: 'manager', pin: '1111' },
-  'u_z1': { name: 'Зуфар', role: 'measurer', pin: '2111' },
-  'u_i1': { name: 'Ринат', role: 'installer', pin: '3111' },
-  'u_i2': { name: 'Нурик', role: 'installer', pin: '3112' },
+  'u_o1': { name: 'Rolan (Owner)', role: 'owner' },
+  'u_m1': { name: 'Данилла', role: 'manager' },
+  'u_z1': { name: 'Зуфар', role: 'measurer' },
+  'u_i1': { name: 'Ринат', role: 'installer' },
+  'u_i2': { name: 'Нурик', role: 'installer' },
 };
 function load() {
   const raw = localStorage.getItem('rolanpro_crm');
@@ -6796,7 +6796,7 @@ function migrateSchema() {
   const hasOwner = db.users.some(u => u.role === 'owner');
   if (!hasOwner) {
     db.users.unshift({
-      id: 'u_o1', role: 'owner', name: 'Rolan (Owner)', pin: '0000',
+      id: 'u_o1', role: 'owner', name: 'Rolan (Owner)',
       phone: '+12125551100', email: '', telegramChatId: '', lang: 'ru',
       hourlyRate: 0, commissionPct: 0,
     });
@@ -6821,8 +6821,8 @@ function migrateSchema() {
     });
     db._realTeamApplied = true;
   }
-  // ---- CORE TEAM LOGIN SAFETY ----
-  // Keep the main working roles available even if older local data deactivated or stripped their PIN.
+  // ---- CORE TEAM SAFETY ----
+  // Keep the main working roles available. Authentication is handled by the cloud account.
   Object.entries(CORE_LOGIN_ACCESS).forEach(([uid, info]) => {
     let u = db.users.find(x => x.id === uid);
     if (!u) {
@@ -6832,8 +6832,9 @@ function migrateSchema() {
     u.name = u.name || info.name;
     u.role = info.role;
     u.active = true;
-    if (!normalizePin(u.pin)) u.pin = info.pin;
   });
+  // Legacy employee PINs are no longer authentication credentials.
+  (db.users || []).forEach(user => { if (user && 'pin' in user) delete user.pin; });
 
   // ---- ORDER fields migration ----
   (db.orders || []).forEach(o => {
@@ -12942,15 +12943,15 @@ function fmtMoney(n) {
 function seedDemo() {
   db = {
     users: [
-      { id: 'u_o1', role: 'owner',     name: 'Rolan (Owner)',   pin: '0000', phone: '+12125551100', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 0 },
-      { id: 'u_m1', role: 'manager',   name: 'Anna Ivanova',    pin: '1111', phone: '+12125551101', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 10 },
-      { id: 'u_m2', role: 'manager',   name: 'Oleg Petrov',     pin: '1112', phone: '+12125551102', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 10 },
-      { id: 'u_z1', role: 'measurer',  name: 'Rustam Karimov',  pin: '2111', phone: '+12125551103', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 5  },
-      { id: 'u_z2', role: 'measurer',  name: 'Farrukh Saidov',  pin: '2112', phone: '+12125551104', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 5  },
-      { id: 'u_i1', role: 'installer', name: 'Renat',           pin: '3111', phone: '+12125551105', telegramChatId: '', lang: 'ru', hourlyRate: 40, commissionPct: 0 },
-      { id: 'u_i2', role: 'installer', name: 'Nurik',           pin: '3112', phone: '+12125551106', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 0 },
-      { id: 'u_i3', role: 'installer', name: 'Данила',          pin: '3113', phone: '+12125551107', telegramChatId: '', lang: 'ru', hourlyRate: 35, commissionPct: 0 },
-      { id: 'u_i4', role: 'installer', name: 'Паша',            pin: '3114', phone: '+12125551108', telegramChatId: '', lang: 'ru', hourlyRate: 30, commissionPct: 0 },
+      { id: 'u_o1', role: 'owner',     name: 'Rolan (Owner)',   phone: '+12125551100', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 0 },
+      { id: 'u_m1', role: 'manager',   name: 'Anna Ivanova',    phone: '+12125551101', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 10 },
+      { id: 'u_m2', role: 'manager',   name: 'Oleg Petrov',     phone: '+12125551102', telegramChatId: '', lang: 'ru', hourlyRate: 0,  commissionPct: 10 },
+      { id: 'u_z1', role: 'measurer',  name: 'Rustam Karimov',  phone: '+12125551103', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 5  },
+      { id: 'u_z2', role: 'measurer',  name: 'Farrukh Saidov',  phone: '+12125551104', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 5  },
+      { id: 'u_i1', role: 'installer', name: 'Renat',           phone: '+12125551105', telegramChatId: '', lang: 'ru', hourlyRate: 40, commissionPct: 0 },
+      { id: 'u_i2', role: 'installer', name: 'Nurik',           phone: '+12125551106', telegramChatId: '', lang: 'ru', hourlyRate: 25, commissionPct: 0 },
+      { id: 'u_i3', role: 'installer', name: 'Данила',          phone: '+12125551107', telegramChatId: '', lang: 'ru', hourlyRate: 35, commissionPct: 0 },
+      { id: 'u_i4', role: 'installer', name: 'Паша',            phone: '+12125551108', telegramChatId: '', lang: 'ru', hourlyRate: 30, commissionPct: 0 },
     ],
     clients: [
       { id: 'c1', name: 'Acme Business Tower',    phone: '+12135550101', address: 'Los Angeles, CA, 633 W 5th St',          email: 'office@acme.com',  type: 'commercial',  source: 'direct',    referralCode: 'ACM-4321', referredBy: null, createdAt: '2026-04-01T09:10:00Z' },
@@ -13710,12 +13711,15 @@ function clientAccountPortalUrl(clientId) {
 }
 
 function premiumProposalUrl(proposalOrToken) {
+  const proposal = typeof proposalOrToken === 'string' ? getPremiumProposalByToken(proposalOrToken) : proposalOrToken;
+  if (proposal?.canonicalPublicUrl) return proposal.canonicalPublicUrl;
   const token = typeof proposalOrToken === 'string' ? proposalOrToken : proposalOrToken?.token;
   if (!token) return '';
-  const publicUrl = db.settings?.publicBaseUrl?.trim();
-  if (publicUrl) return publicUrl.replace(/\/+$/, '') + '#/proposal/' + token;
-  const base = location.origin === 'null' ? location.href.split('#')[0] : location.origin + location.pathname;
-  return `${base}#/proposal/${token}`;
+  const configured = db.settings?.publicBaseUrl?.trim();
+  const base = configured && /^https?:\/\//i.test(configured)
+    ? configured.replace(/\/legacy-crm\/?(?:#.*)?$/i, '').replace(/\/+$/, '')
+    : (location.origin === 'null' ? ROLANPRO_PRODUCTION_URL.replace(/\/legacy-crm\/?$/, '') : location.origin);
+  return `${base}/proposal/${encodeURIComponent(token)}`;
 }
 
 // ---------- ROUTING ----------
@@ -13748,6 +13752,13 @@ function render() {
 
 // ---------- LOGIN VIEW ----------
 function renderLogin() {
+  if (ROLANPRO_CLOUD) return renderCloudRoleChooser();
+  location.assign(ROLANPRO_PRODUCTION_URL.replace(/\/legacy-crm\/?$/, '') + '/login');
+  return '<div class="min-h-screen flex items-center justify-center p-6"><div class="text-center"><h1 class="text-2xl font-black">Переход к безопасному входу…</h1><p class="mt-2 text-gray-500">Вход по PIN больше не используется.</p></div></div>';
+}
+
+// Retained only as an unreachable migration reference for old standalone snapshots.
+function renderLegacyPinLoginDisabled() {
   if (ROLANPRO_CLOUD) return renderCloudRoleChooser();
   const roleOrder = ['owner','manager','measurer','installer'];
   const roleRank = role => {
@@ -13853,14 +13864,12 @@ function selectLoginUser(userId, keepPin = false) {
   const pin = document.getElementById('login-pin');
   if (pin) { if (!keepPin) pin.value = ''; pin.focus(); }
 }
-function loginAsUser(u, pin) {
+function loginAsUser(u) {
   if (!u) return false;
   if (u.active === false) {
     alert(`Сотрудник ${u.name} сейчас выключен в CRM. Включите его в разделе Команда или выберите другого пользователя.`);
     return false;
   }
-  const cleanPin = normalizePin(pin || u.pin);
-  if (cleanPin) u.pin = cleanPin;
   state.currentUserId = u.id;
   state.lang = u.lang || state.lang;
   const orderLink = (location.hash || '').match(/^#\/order\/([^/]+)/);
@@ -13900,7 +13909,11 @@ function tryLogin() {
 
 function logout() {
   state.currentUserId = null;
-  render();
+  if (ROLANPRO_CLOUD) {
+    cloudServerLogout();
+    return;
+  }
+  location.assign(ROLANPRO_PRODUCTION_URL.replace(/\/legacy-crm\/?$/, '') + '/login');
 }
 
 // ---------- PIN MANAGEMENT (team login codes) ----------
@@ -15230,12 +15243,8 @@ function renderTeam() {
                 <span class="${u.telegramChatId?'text-green-600':'text-gray-400'}">${u.telegramChatId ? '✓' : '—'}</span>
               </div>
               <div class="mt-2 flex items-center justify-between text-xs gap-2">
-                <span class="text-gray-500">PIN-код:</span>
-                <div class="flex items-center gap-1">
-                  <input value="${u.pin}" maxlength="8" style="width:70px" class="text-center font-mono"
-                    onchange="updateUserPin('${u.id}', this.value)">
-                  <button class="btn-ghost text-xs" title="Сгенерировать новый PIN" onclick="regenerateUserPin('${u.id}')">🎲</button>
-                </div>
+                <span class="text-gray-500">Вход:</span>
+                <span class="text-emerald-700 font-semibold">почта и пароль</span>
               </div>
             </div>`;
           }).join('')}
@@ -23166,19 +23175,131 @@ async function premiumOpenStripeLink(token) {
     alert('Stripe checkout не готов:\n' + e.message + '\n\nПроверьте настройки Stripe или создайте ссылку из окна КП.');
   }
 }
-function generatePremiumProposal(orderId) {
+function premiumCanonicalSnapshot(prop) {
+  const calc = premiumProposalCalc(prop);
+  const order = calc.order;
+  const client = getClient(order?.clientId) || {};
+  if (!order) throw new Error('Order was not found.');
+  const items = [];
+  (order.measurements?.rooms || []).forEach(room => {
+    if (!premiumRoomIncluded(prop, room.id)) return;
+    (room.windows || []).forEach(windowItem => {
+      if (!premiumWindowIncluded(prop, room.id, windowItem.id)) return;
+      const priced = calc.byWindow?.[windowItem.id] || premiumWindowPrice(prop, order, windowItem);
+      const catalog = priced.catalog || {};
+      const productName = [catalog.brand, catalog.model].filter(Boolean).join(' ') || windowItem.filmType || 'Window film';
+      items.push({
+        service_code: catalog.category === 'smart' ? 'SMART_FILM' : catalog.category === 'protective' ? 'SAFETY_FILM' : 'SOLAR_FILM',
+        room_name: room.name || 'Project area',
+        window_id: windowItem.id,
+        title_en: `${windowItem.name || 'Window'} — ${productName}`,
+        description_en: `${premiumNum(windowItem.width)} × ${premiumNum(windowItem.height)} · ${premiumNum(windowItem.actualQty != null ? windowItem.actualQty : (windowItem.qty || 1))} pcs`,
+        quantity: premiumNum(windowItem.actualQty != null ? windowItem.actualQty : (windowItem.qty || 1)) || 1,
+        unit_label: 'window',
+        line_price: premiumNum(priced.price),
+        measurement_snapshot: {
+          width: premiumNum(windowItem.width),
+          height: premiumNum(windowItem.height),
+          sqft: premiumNum(priced.area),
+          glass_type: windowItem.glassType || null,
+          installation_side: windowItem.side || null,
+        },
+        item_kind: 'film',
+      });
+    });
+  });
+  if (calc.legacyServices > 0) {
+    items.push({ service_code: 'SOLAR_FILM', title_en: 'Additional project services', quantity: 1, unit_label: 'project', line_price: calc.legacyServices, item_kind: 'service' });
+  }
+  (calc.selectedServices || []).forEach(service => {
+    items.push({
+      service_code: service.id === 'film_removal' ? 'REMOVAL' : service.id === 'structural_silicone' ? 'SILICONE' : service.id === 'electrical_installation' ? 'ELECTRICAL_WORK' : 'SOLAR_FILM',
+      title_en: service.name || service.title || service.id || 'Additional service',
+      quantity: 1,
+      unit_label: service.unit || 'service',
+      line_price: premiumNum(service.amount),
+      item_kind: 'service',
+    });
+  });
+  const rawTotal = items.reduce((sum, item) => sum + premiumNum(item.line_price), 0);
+  if (!items.length || rawTotal <= 0) throw new Error('Add measured windows or services before publishing the proposal.');
+  const factor = calc.total > 0 ? calc.total / rawTotal : 1;
+  let allocated = 0;
+  items.forEach((item, index) => {
+    const adjusted = index === items.length - 1
+      ? Math.max(0, Math.round((calc.total - allocated) * 100) / 100)
+      : Math.max(0, Math.round(item.line_price * factor * 100) / 100);
+    item.line_price = adjusted;
+    allocated += adjusted;
+  });
+  return {
+    token: prop.token,
+    legacy_order_id: order.id,
+    order_number: order.number,
+    title: `ROLANPRO Proposal ${order.number || ''}`.trim(),
+    client: {
+      legacy_client_id: client.id,
+      name: client.name || 'Client',
+      email: client.email || '',
+      phone: client.phone || '',
+      address: orderAddress(order, client),
+    },
+    items,
+  };
+}
+async function premiumPublishCanonicalProposal(prop) {
+  const response = await fetch('/api/v1/legacy-crm/proposals/publish', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(premiumCanonicalSnapshot(prop)),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.data?.proposal) {
+    throw new Error(payload?.errors?.[0]?.message || 'The client proposal could not be published.');
+  }
+  prop.canonicalProposalId = payload.data.proposal.proposal_id;
+  prop.canonicalPublicUrl = payload.data.proposal.public_url;
+  save();
+  return payload.data.proposal;
+}
+async function generatePremiumProposal(orderId) {
   const prop = ensurePremiumProposal(orderId);
   if (!prop) return;
   const order = getOrder(orderId);
-  if (!premiumProposalLocked(prop) && prop.status === 'Draft') {
-    prop.status = 'Sent';
-    prop.sentAt = new Date().toISOString();
-    order.timeline = order.timeline || [];
-    order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_sent', by: state.currentUserId, note: 'Premium proposal link generated' });
-    if (['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done'].includes(order.status)) order.status = 'proposal_sent';
-    save();
+  try {
+    await premiumPublishCanonicalProposal(prop);
+    if (!premiumProposalLocked(prop) && prop.status === 'Draft') {
+      prop.status = 'Sent';
+      prop.sentAt = new Date().toISOString();
+      order.timeline = order.timeline || [];
+      order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_sent', by: state.currentUserId, note: 'Public client proposal published' });
+      if (['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done'].includes(order.status)) order.status = 'proposal_sent';
+      save();
+    }
+    openPremiumProposalManagerModal(prop.token);
+  } catch (error) {
+    alert('КП не опубликовано:\n' + (error?.message || error));
   }
-  openPremiumProposalManagerModal(prop.token);
+}
+async function premiumSendCanonicalProposal(token) {
+  const prop = getPremiumProposalByToken(token);
+  const order = getOrder(prop?.orderId);
+  const client = getClient(order?.clientId) || {};
+  if (!prop || !order) return;
+  if (!client.email) { alert('Добавьте email клиента перед отправкой.'); return; }
+  try {
+    const published = await premiumPublishCanonicalProposal(prop);
+    const response = await fetch(`/api/v1/proposals/${encodeURIComponent(published.proposal_id)}/send`, { method: 'POST' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.errors?.[0]?.message || 'Email could not be sent.');
+    prop.status = 'Sent';
+    prop.sentAt = prop.sentAt || new Date().toISOString();
+    save();
+    openPremiumProposalManagerModal(token);
+    alert(`КП отправлено клиенту с корпоративной почты на ${client.email}.`);
+  } catch (error) {
+    alert('Ошибка отправки КП:\n' + (error?.message || error));
+  }
 }
 function openPremiumProposalManagerModal(token) {
   const prop = getPremiumProposalByToken(token);
@@ -23219,7 +23340,7 @@ function openPremiumProposalManagerModal(token) {
           <a class="btn-primary text-center" href="${url}" target="_blank">Open</a>
           <a class="btn-ghost text-center" href="${whatsappLink(client.phone, msg)}" target="_blank">WhatsApp</a>
           <a class="btn-ghost text-center" href="${smsLink(client.phone, msg)}">SMS</a>
-          ${client.email ? `<a class="btn-ghost text-center" href="${emailLink(client.email, 'Your ROLANPRO proposal', msg)}">Email</a>` : `<button class="btn-ghost" disabled>Email</button>`}
+          ${client.email ? `<button class="btn-ghost text-center" onclick="premiumSendCanonicalProposal('${prop.token}')">Email</button>` : `<button class="btn-ghost" disabled>Email</button>`}
         </div>
 	        <div class="grid md:grid-cols-4 gap-3 mt-5 text-sm">
 	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Rooms</div><div class="font-black text-lg">${calc.includedRooms}</div></div>
@@ -23249,16 +23370,21 @@ function openPremiumProposalManagerModal(token) {
     </div>`;
   render();
 }
-function newPremiumProposalVersion(orderId) {
+async function newPremiumProposalVersion(orderId) {
   const prop = ensurePremiumProposal(orderId, { newVersion: true });
   if (!prop) return;
-  prop.status = 'Sent';
-  prop.sentAt = new Date().toISOString();
-  const order = getOrder(orderId);
-  order.timeline = order.timeline || [];
-  order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_new_version', by: state.currentUserId, note: `Premium proposal v${prop.version || 1}` });
-  save();
-  openPremiumProposalManagerModal(prop.token);
+  try {
+    await premiumPublishCanonicalProposal(prop);
+    prop.status = 'Sent';
+    prop.sentAt = new Date().toISOString();
+    const order = getOrder(orderId);
+    order.timeline = order.timeline || [];
+    order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_new_version', by: state.currentUserId, note: `Premium proposal v${prop.version || 1}` });
+    save();
+    openPremiumProposalManagerModal(prop.token);
+  } catch (error) {
+    alert('Новая версия КП не опубликована:\n' + (error?.message || error));
+  }
 }
 async function premiumCreateStripePaymentLink(token) {
   const prop = getPremiumProposalByToken(token);
@@ -26549,7 +26675,7 @@ function cloudSelectRole(userId) {
   if (!cloudAllowedLegacyIds.includes(userId)) return;
   const user = getUser(userId);
   if (!user) return;
-  loginAsUser(user, '');
+  loginAsUser(user);
   render();
 }
 

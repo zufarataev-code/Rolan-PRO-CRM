@@ -14,11 +14,11 @@ Before doing any work:
 
 ## Last verified state
 
-- Verified: 2026-08-24
+- Verified: 2026-08-25
 - Canonical repository: `zufarataev-code/Rolan-PRO-CRM`
 - Canonical code branch: `main`
-- Verified `origin/main` commit: `9a52e5b` (`Merge pull request #20 from zufarataev-code/codex/project-source-of-truth`)
-- Production status: not re-verified during this documentation change
+- Verified `origin/main` commit: `3086998` (`Merge pull request #23 from zufarataev-code/codex/rotate-owner-temp-password`)
+- Production status: deploy run #16 succeeded for `3086998`; login page and owner access were verified
 - Current phase: security stabilization, data consolidation, and removal of duplicate CRM workflows
 
 ## Active pull requests
@@ -29,6 +29,7 @@ Before doing any work:
 | #18 | Enforce manager record scope | `security/enforce-manager-record-scope` | Open; review and merge still required |
 | #17 | Remove embedded customer export | `security/remove-embedded-wiz-data` | Open; review and merge still required |
 | #12 | Bootstrap Claude Builder transport | `feature/claude-builder-transport` | Open; completion state must be reviewed before reuse |
+| #24 | Unified proposal delivery, public PDF, employee routing, and removal of duplicate PIN login | `codex/unify-crm-proposal-pdf` | Open; local checks passed, GitHub review/CI and merge still required |
 
 Always re-check GitHub before acting; this table is a handoff snapshot, not a substitute for the live PR state.
 
@@ -73,18 +74,18 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| No active task recorded | — | — | Ready | Claim a task here before starting substantial work |
+| Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / #24 | Codex | PR open | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
 
 Contributors must add a row before starting substantial work and update or remove it at handoff.
 
 ## Latest handoff
 
-- What changed: added the repository-wide synchronization protocol and canonical project-state documents through PR #20.
-- Why: different devices and chats were relying on incomplete local context.
-- Verification: GitHub CI passed; PR #20 was merged into `main`; no application code or production data changed.
-- Branch / PR: `codex/project-source-of-truth` / #20 (merged)
-- Blocker: none for synchronization setup.
-- Next action: review PRs #17, #18, and #19 in order, then continue CRM data consolidation.
+- What changed: mail returns owners to `/owner` and managers to `/manager`; login and password-change flows now send every employee to the correct role workspace; legacy KP publishing creates or refreshes a canonical PostgreSQL proposal, produces a public `/proposal/<token>` link that does not require CRM login, and sends it through the connected corporate Gmail instead of opening `mailto`; the canonical public proposal keeps its dedicated Letter-size PDF layout and one-click PDF action. The server now removes the legacy pre-rendered PIN screen before serving `/legacy-crm`, legacy employee PINs are removed from seeded and stored workspace data, the Team view no longer manages PINs, and logout returns to the canonical email/password login.
+- Why: the old KP button exposed an authenticated `/legacy-crm/#/proposal/...` address and the Email button only opened a local mail composer, so clients could receive an inaccessible link and no server-confirmed company email. Role-based login also incorrectly sent all employees into the legacy owner/manager workspace. The legacy HTML additionally contained a second PIN login that could flash or remain visible before cloud authentication completed.
+- Verification: 72 automated tests passed; TypeScript passed; production build passed. A regression test runs the real legacy HTML through the server shell and confirms the pre-rendered PIN screen is absent. The earlier representative 8-line proposal PDF was visually inspected on both pages with no clipping, overlap, or split content. Actual Gmail delivery, public-link access, and cloud login behavior still require a production smoke test after deployment so no test email is sent from development.
+- Branch / PR: `codex/unify-crm-proposal-pdf` / #24 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/24`).
+- Blocker: the old `/legacy-crm` route must remain available until its business records are fully migrated; this change publishes legacy KP snapshots into the canonical proposal tables but does not yet migrate every legacy order or disable legacy writes.
+- Next action: open the PR, let GitHub CI pass, merge and deploy from `main`; in production, send one controlled KP to an internal address, open the public link in a signed-out browser, and verify PDF download before using it with clients.
 
 ## Completion rule
 

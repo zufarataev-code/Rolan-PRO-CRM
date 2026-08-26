@@ -8,6 +8,9 @@ import { AGREEMENT_STATUSES, DEPOSIT_STATUSES, PROPOSAL_STATUSES } from "@/featu
 import { onDepositPaid, onProposalApproved, onProposalSent } from "@/features/core/events";
 import { getServiceCalculatorBootstrap } from "@/features/calculator/bootstrap";
 import { calculateLineEconomics, calculateLineTotal, getServiceAddonById, getServiceTypeById } from "@/features/calculator/logic";
+import { buildProposalEmail } from "@/features/proposals/email";
+import { sendPrimaryGmail } from "@/features/gmail/service";
+import { getEnv } from "@/lib/env";
 import type { CalculatorCard } from "@/features/calculator/types";
 
 type SessionLike = {
@@ -1392,6 +1395,12 @@ export async function sendProposal(session: SessionLike, proposalId: string) {
           assigned_manager_id: true,
         },
       },
+      client: {
+        select: {
+          name: true,
+          email: true,
+        },
+      },
     },
   });
 
@@ -1402,6 +1411,24 @@ export async function sendProposal(session: SessionLike, proposalId: string) {
   if (isProposalApproved(proposal.status)) {
     return "locked" as const;
   }
+
+  const recipient = proposal.client.email?.trim().toLowerCase() || "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+    return "missing_email" as const;
+  }
+
+  const publicUrl = `${getEnv().appUrl.replace(/\/$/, "")}/proposal/${proposal.access_token}`;
+  const message = buildProposalEmail({
+    clientName: proposal.client.name,
+    proposalCode: proposal.proposal_code,
+    proposalTitle: proposal.title,
+    publicUrl,
+  });
+  const delivered = await sendPrimaryGmail({
+    to: recipient,
+    subject: message.subject,
+    body: message.body,
+  });
 
   await prisma.$transaction(async (tx) => {
     await tx.proposal.update({
@@ -1426,7 +1453,12 @@ export async function sendProposal(session: SessionLike, proposalId: string) {
       actorUserId: session.user.user_id,
       actorType: "manager",
       eventKey: "proposal.sent",
-      message: "Proposal отправлен клиенту для выбора услуг и подписания agreement.",
+      message: "Proposal отправлен клиенту через корпоративную Gmail для выбора услуг и подписания agreement.",
+      metadata: {
+        recipient,
+        public_url: publicUrl,
+        gmail_message_id: delivered.id ?? null,
+      },
     });
   });
 
@@ -1438,6 +1470,9 @@ export async function sendProposal(session: SessionLike, proposalId: string) {
     message: `Proposal отправлен клиенту по сделке ${proposal.deal.title}.`,
     metadata: {
       deal_id: proposal.deal_id,
+      recipient,
+      public_url: publicUrl,
+      gmail_message_id: delivered.id ?? null,
     },
   });
 

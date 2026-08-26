@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { GmailMailbox } from "@/components/gmail-mailbox";
+import { getMailHomeHref } from "@/features/gmail/navigation";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { requireAppSession } from "@/lib/auth/app-session";
 
@@ -12,5 +13,5 @@ export default async function MailPage() {
 
   const isOwner = session.roles.includes(ROLE_CODES.OWNER);
 
-  return <GmailMailbox canConnect={isOwner} />;
+  return <GmailMailbox canConnect={isOwner} homeHref={getMailHomeHref(session.roles)} />;
 }

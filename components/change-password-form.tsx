@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 
 import styles from "./auth-card.module.css";
+import { destinationForRoles } from "@/lib/auth/destination";
 
 export function ChangePasswordForm() {
   const [password, setPassword] = useState("");
@@ -33,7 +34,7 @@ export function ChangePasswordForm() {
         return;
       }
 
-      window.location.assign("/legacy-crm");
+      window.location.assign(destinationForRoles(payload.data?.roles ?? []));
     } catch {
       setError("Сервер недоступен. Попробуйте ещё раз.");
     } finally {

@@ -14,6 +14,23 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
+function formatDate(value: string | null | undefined) {
+  if (!value) {
+    return "Not specified";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Not specified";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
 async function parseProposal(response: Response) {
   const payload = (await response.json().catch(() => null)) as
     | {
@@ -131,6 +148,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
     (sum: number, item: any) => sum + (item.client_selected ? item.line_price : 0),
     0,
   );
+  const printableItems = proposal.items.filter((item: any) => item.client_selected);
 
   async function saveSelection() {
     setSaving(true);
@@ -194,6 +212,111 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
 
   return (
     <div className="client-proposal-shell">
+      <article className="proposal-print-document" aria-label="Printable ROLANPRO proposal">
+        <header className="proposal-print-header">
+          <div className="proposal-print-brand">
+            <span className="proposal-print-brand-mark">R</span>
+            <span>
+              <strong>ROLANPRO</strong>
+              <small>WINDOW FILM SOLUTIONS</small>
+            </span>
+          </div>
+          <div className="proposal-print-meta">
+            <strong>{proposal.proposal_code ?? "Proposal"}</strong>
+            <span>Prepared {formatDate(proposal.created_at)}</span>
+            <span>Valid through {formatDate(proposal.expires_at)}</span>
+          </div>
+        </header>
+
+        <section className="proposal-print-intro">
+          <div>
+            <div className="proposal-print-kicker">Project proposal</div>
+            <h1>{proposal.title}</h1>
+            <p>
+              A clear scope of selected services, materials, and project pricing prepared for your property.
+            </p>
+          </div>
+          <div className="proposal-print-client">
+            <span>Prepared for</span>
+            <strong>{proposal.client?.name ?? "Client"}</strong>
+            {proposal.client?.service_address ? <p>{proposal.client.service_address}</p> : null}
+            {proposal.client?.email ? <p>{proposal.client.email}</p> : null}
+          </div>
+        </section>
+
+        <section className="proposal-print-scope">
+          <div className="proposal-print-section-heading">
+            <div>
+              <span>Selected scope</span>
+              <h2>Services included in this proposal</h2>
+            </div>
+            <strong>{printableItems.length} line{printableItems.length === 1 ? "" : "s"}</strong>
+          </div>
+
+          <div className="proposal-print-items">
+            {printableItems.map((item: any, index: number) => {
+              const fieldSummary = getDynamicFieldSummary(item);
+              const addonSummary = getAddonSummary(item.addons_snapshot);
+
+              return (
+                <section key={item.proposal_item_id} className="proposal-print-item">
+                  <div className="proposal-print-item-number">{String(index + 1).padStart(2, "0")}</div>
+                  <div className="proposal-print-item-copy">
+                    <div className="proposal-print-item-heading">
+                      <div>
+                        <h3>{item.title}</h3>
+                        <p>{item.room_name ?? "General"} - {item.service_type?.name ?? "Service"}</p>
+                      </div>
+                      <strong>{formatCurrency(item.line_price)}</strong>
+                    </div>
+                    <p className="proposal-print-description">
+                      {item.film
+                        ? `${item.film.brand_name} ${item.film.model_name} - ${item.film.category_name}`
+                        : item.description ?? "Custom project service"}
+                    </p>
+                    {fieldSummary.length || addonSummary.length ? (
+                      <div className="proposal-print-facts">
+                        {[...fieldSummary, ...addonSummary].map((summary) => (
+                          <span key={summary}>{summary}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="proposal-print-closing">
+          <div className="proposal-print-note">
+            <span>Project note</span>
+            <p>{proposal.client_message || "Thank you for the opportunity to prepare this proposal."}</p>
+          </div>
+          <div className="proposal-print-total">
+            <span>Selected project total</span>
+            <strong>{formatCurrency(localSelectedTotal)}</strong>
+            <small>Final scope is based on the selected services above.</small>
+          </div>
+        </section>
+
+        <section className="proposal-print-signatures">
+          <div>
+            <span>{proposal.agreement?.signer_name || "Client approval"}</span>
+            <small>Signature / date</small>
+          </div>
+          <div>
+            <span>ROLANPRO representative</span>
+            <small>Signature / date</small>
+          </div>
+        </section>
+
+        <footer className="proposal-print-footer">
+          <strong>ROLANPRO</strong>
+          <span>Professional window film solutions - Los Angeles</span>
+        </footer>
+      </article>
+
       <section className="client-proposal-hero">
         <div>
           <div className="landing-kicker">ROLANPRO Proposal</div>
@@ -202,6 +325,9 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
             Review each service line, keep what you want, remove what you do not need, and sign the
             agreement when ready.
           </p>
+          <button type="button" className="secondary-button proposal-print-trigger" onClick={() => window.print()}>
+            Download polished PDF
+          </button>
         </div>
 
         <div className="client-proposal-summary">

@@ -19,7 +19,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const { proposalId } = await context.params;
-  const proposal = await sendProposal(auth.session, proposalId);
+  let proposal;
+  try {
+    proposal = await sendProposal(auth.session, proposalId);
+  } catch (error) {
+    return apiError(502, "proposal_email_failed", error instanceof Error ? error.message : "Proposal email could not be sent.");
+  }
 
   if (!proposal) {
     return apiError(404, "not_found", "Proposal was not found.");
@@ -27,6 +32,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   if (proposal === "locked") {
     return apiError(409, "proposal_locked", "Proposal is already approved and cannot be re-opened for edits.");
+  }
+
+  if (proposal === "missing_email") {
+    return apiError(409, "client_email_missing", "Add a valid client email before sending the proposal.");
   }
 
   return apiSuccess({
