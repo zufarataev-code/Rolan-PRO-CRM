@@ -37,6 +37,25 @@ function temporaryPassword() {
   return `${randomBytes(9).toString("base64url")}!aA7`;
 }
 
+/**
+ * Owner password override.
+ *
+ * Set ROLANPRO_OWNER_PASSWORD in the production environment to force the owner
+ * account password on the next boot. This makes owner access recoverable from
+ * server configuration instead of requiring a code change and a new release.
+ * Remove the variable once you have signed in and changed the password.
+ */
+function ownerPasswordOverride() {
+  const value = process.env.ROLANPRO_OWNER_PASSWORD?.trim();
+  if (!value) {
+    return null;
+  }
+  if (value.length < 12) {
+    throw new Error("ROLANPRO_OWNER_PASSWORD must be at least 12 characters long.");
+  }
+  return value;
+}
+
 export async function provisionLegacyCrm(
   prisma: PrismaClient,
   sourceWorkspacePath = workspacePath,
@@ -49,9 +68,16 @@ export async function provisionLegacyCrm(
 
   const createdCredentials: Array<{ email: string; temporaryPassword: string }> = [];
 
+  const overridePassword = ownerPasswordOverride();
+
   for (const account of accounts) {
     const existing = await prisma.user.findUnique({ where: { email: account.email } });
-    const password = existing?.password_hash ? null : temporaryPassword();
+    const isOwnerAccount = account.roles.some((role) => role === ROLE_CODES.OWNER);
+    const password = isOwnerAccount && overridePassword
+      ? overridePassword
+      : existing?.password_hash
+        ? null
+        : temporaryPassword();
     const passwordHash = password ? hashPassword(password) : existing?.password_hash;
     if (!passwordHash) {
       throw new Error(`Could not resolve a password hash for ${account.email}.`);
