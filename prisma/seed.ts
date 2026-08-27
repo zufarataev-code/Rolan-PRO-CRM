@@ -420,7 +420,15 @@ async function seedServiceReferences() {
     ["actual_film_sqft", "Фактический метраж плёнки", "Actual Film Sqft", "number", "decimal", null, true, 6],
     ["complexity_level_id", "Сложность монтажа", "Access Complexity", "select", "string", "complexity_levels", true, 7],
     ["windows_qty", "Кол-во окон", "Windows Qty", "number", "integer", null, true, 8],
-    ["extra_costs", "Доп. расходы", "Extra Costs", "number", "decimal", null, false, 9],
+
+    // Защита работает только вместе с креплением по периметру:
+    // без силикона плёнка удерживает осколки, но стекло вылетает из рамы.
+    ["risk_zones", "Опасные зоны", "Risk Zones", "textarea", "string", null, true, 9],
+    ["silicone_perimeter_m", "Силикон по периметру, м", "Silicone Perimeter m", "number", "decimal", null, true, 10],
+    ["frame_type", "Тип рамы", "Frame Type", "select", "string", "service_field_config", false, 11],
+    ["glass_type", "Тип остекления", "Glass Type", "select", "string", "service_field_config", true, 12],
+
+    ["extra_costs", "Доп. расходы", "Extra Costs", "number", "decimal", null, false, 20],
   ] as const;
 
   for (const [field_key, field_label_ru, field_label_en, input_type, data_type, dropdown_source, is_required, sort_order] of safetyFilmFields) {
