@@ -283,7 +283,8 @@ async function seedServiceReferences() {
   // Ключи совпадают с field_key, значения кладутся в default_value
   // и читаются формой замера. Коды остекления и сторон света
   // совпадают с allowed_glass_types / restricted_orientations в каталоге.
-  const fieldOptions: Record<string, Array<{ value: string; label_ru: string; label_en: string }>> = {
+  type FieldOption = { value: string; label_ru: string; label_en: string };
+  const fieldOptionValues: Record<string, FieldOption[]> = {
     orientation: [
       { value: "south", label_ru: "Юг", label_en: "South" },
       { value: "west", label_ru: "Запад", label_en: "West" },
@@ -372,16 +373,9 @@ async function seedServiceReferences() {
         dropdown_source,
         is_required,
         sort_order,
-        default_value:
-          field_key === "block_type"
-            ? {
-                options: [
-                  { value: "STANDARD", label_ru: "Стандартный", label_en: "Standard" },
-                  { value: "SLIM", label_ru: "Узкий", label_en: "Slim" },
-                  { value: "HEAVY_DUTY", label_ru: "Усиленный", label_en: "Heavy Duty" },
-                ],
-              }
-            : undefined,
+        default_value: fieldOptionValues[field_key]
+          ? { options: fieldOptionValues[field_key] }
+          : undefined,
       },
       create: {
         service_type_id: serviceTypeMap.SMART_FILM,
@@ -392,16 +386,9 @@ async function seedServiceReferences() {
         data_type,
         dropdown_source,
         is_required,
-        default_value:
-          field_key === "block_type"
-            ? {
-                options: [
-                  { value: "STANDARD", label_ru: "Стандартный", label_en: "Standard" },
-                  { value: "SLIM", label_ru: "Узкий", label_en: "Slim" },
-                  { value: "HEAVY_DUTY", label_ru: "Усиленный", label_en: "Heavy Duty" },
-                ],
-              }
-            : undefined,
+        default_value: fieldOptionValues[field_key]
+          ? { options: fieldOptionValues[field_key] }
+          : undefined,
         sort_order,
       },
     });
@@ -456,7 +443,9 @@ async function seedServiceReferences() {
         dropdown_source,
         is_required,
         sort_order,
-        default_value: fieldOptions[field_key] ?? undefined,
+        default_value: fieldOptionValues[field_key]
+          ? { options: fieldOptionValues[field_key] }
+          : undefined,
       },
       create: {
         service_type_id: serviceTypeMap.SOLAR_FILM,
@@ -508,7 +497,9 @@ async function seedServiceReferences() {
         dropdown_source,
         is_required,
         sort_order,
-        default_value: fieldOptions[field_key] ?? undefined,
+        default_value: fieldOptionValues[field_key]
+          ? { options: fieldOptionValues[field_key] }
+          : undefined,
       },
       create: {
         service_type_id: serviceTypeMap.SAFETY_FILM,
