@@ -464,10 +464,51 @@ async function seedServiceReferences() {
     });
   }
 
+  // Реальная линейка RolanPRO. MAGNITRONIC PRIME — основная плёнка,
+  // цифра в артикуле = заявленное светопропускание.
+  // Замеры прибором LS160A, август 2026.
+  //
+  // Коды остекления: single_tempered, single_annealed, dual_pane,
+  // low_e, skylight, panoramic. Стороны света: south, west, north, east.
   const films = [
-    ["SMART", "Смарт-плёнка", "Smart Film", "GAUZY", "Gauzy", "Gauzy", "VISION", "Vision", "Vision", null, "sqft", 1],
-    ["SOLAR", "Солнцезащитная", "Solar Film", "3M", "3M", "3M", "PRESTIGE_70", "Prestige 70", "Prestige 70", null, "sqft", 2],
-    ["SAFETY", "Защитная", "Safety Film", "LLUMAR", "Llumar", "Llumar", "SECURITY_8MIL", "Security 8 Mil", "Security 8 Mil", "8 mil", "sqft", 3],
+    // category, cat_ru, cat_en, brand, brand_ru, brand_en, model_code,
+    // model_ru, model_en, thickness, unit, sort, vlt, uv, ir, tser,
+    // allowed_glass, restricted_orientations, requires_review, note
+    ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
+     "MP05", "MP05", "MP05", null, "sqft", 1, "5.70", "100.00", "95.60", "93.30",
+     ["single_tempered"], ["south", "west"], false,
+     "Максимальное затемнение. Только закалённое одинарное стекло."],
+    ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
+     "MP15", "MP15", "MP15", null, "sqft", 2, "14.00", "99.90", "97.40", "88.50",
+     ["single_tempered", "single_annealed"], ["south", "west"], false,
+     "Тёмная. На стеклопакет не ставить."],
+    ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
+     "MP20", "MP20", "MP20", null, "sqft", 3, "23.50", "99.90", "98.30", "83.20",
+     ["single_tempered", "single_annealed", "dual_pane", "panoramic"], ["south", "west"], false,
+     "На стеклопакет и панораму только север и восток."],
+    ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
+     "MP35", "MP35", "MP35", null, "sqft", 4, "35.50", "99.80", "98.50", "77.10",
+     ["single_tempered", "single_annealed", "dual_pane", "panoramic"], [], false,
+     "Универсальный выбор для стеклопакета и панорамы."],
+    ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
+     "MP50", "MP50", "MP50", null, "sqft", 5, "58.10", "99.60", "99.20", "68.20",
+     ["single_tempered", "single_annealed", "dual_pane", "low_e", "skylight", "panoramic"], [], false,
+     "Безопасен для Low-E и skylight. Для Low-E зафиксировать поверхность покрытия."],
+    ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
+     "MP70", "MP70", "MP70", null, "sqft", 6, "68.00", "99.20", "99.40", "63.60",
+     ["single_tempered", "single_annealed", "dual_pane", "low_e", "skylight", "panoramic"], [], false,
+     "Максимально прозрачная. Подходит везде, включая skylight."],
+
+    // Защитная: три класса по толщине.
+    ["SAFETY", "Защитная", "Safety Film", "ROLANPRO", "RolanPRO", "RolanPRO",
+     "A1", "A1 — 8 mil", "A1 — 8 mil", "8 mil", "sqft", 11, null, null, null, null,
+     null, null, false, "Базовый класс. Силикон по периметру обязателен."],
+    ["SAFETY", "Защитная", "Safety Film", "ROLANPRO", "RolanPRO", "RolanPRO",
+     "A2", "A2 — 12 mil", "A2 — 12 mil", "12 mil", "sqft", 12, null, null, null, null,
+     null, null, false, "Средний класс. Силикон по периметру обязателен."],
+    ["SAFETY", "Защитная", "Safety Film", "ROLANPRO", "RolanPRO", "RolanPRO",
+     "A3", "A3 — 24 mil", "A3 — 24 mil", "24 mil", "sqft", 13, null, null, null, null,
+     null, null, false, "Максимальный класс. Силикон по периметру обязателен."],
   ] as const;
 
   for (const [
@@ -483,36 +524,41 @@ async function seedServiceReferences() {
     thickness,
     unit,
     sort_order,
+    vlt_percent,
+    uv_rejection_percent,
+    ir_rejection_percent,
+    tser_percent,
+    allowed_glass_types,
+    restricted_orientations,
+    requires_review,
+    selection_note_ru,
   ] of films) {
+    const specs = {
+      category_code,
+      category_name_ru,
+      category_name_en,
+      brand_code,
+      brand_name_ru,
+      brand_name_en,
+      model_name_ru,
+      model_name_en,
+      thickness,
+      unit,
+      sort_order,
+      vlt_percent,
+      uv_rejection_percent,
+      ir_rejection_percent,
+      tser_percent,
+      allowed_glass_types: allowed_glass_types ? [...allowed_glass_types] : undefined,
+      restricted_orientations: restricted_orientations ? [...restricted_orientations] : undefined,
+      requires_review,
+      selection_note_ru,
+    };
+
     await prisma.filmCatalog.upsert({
       where: { model_code },
-      update: {
-        category_code,
-        category_name_ru,
-        category_name_en,
-        brand_code,
-        brand_name_ru,
-        brand_name_en,
-        model_name_ru,
-        model_name_en,
-        thickness,
-        unit,
-        sort_order,
-      },
-      create: {
-        category_code,
-        category_name_ru,
-        category_name_en,
-        brand_code,
-        brand_name_ru,
-        brand_name_en,
-        model_code,
-        model_name_ru,
-        model_name_en,
-        thickness,
-        unit,
-        sort_order,
-      },
+      update: specs,
+      create: { model_code, ...specs },
     });
   }
 }
