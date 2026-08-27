@@ -160,6 +160,24 @@ model FilmCatalog {
   model_name_en                String            @db.VarChar(120)
   thickness                    String?           @db.VarChar(50)
   unit                         String            @db.VarChar(30)
+
+  // Оптические параметры для подбора плёнки на замере.
+  // Заполняются из спецификации производителя. Пустое значение
+  // означает "нет данных" и исключает модель из автоподбора.
+  vlt_percent                  Decimal?          @db.Decimal(5, 2)
+  uv_rejection_percent         Decimal?          @db.Decimal(5, 2)
+  ir_rejection_percent         Decimal?          @db.Decimal(5, 2)
+  tser_percent                 Decimal?          @db.Decimal(5, 2)
+
+  // Коды типов остекления, на которые модель разрешена:
+  // ["single_tempered","single_annealed","dual_pane","low_e","skylight","panoramic"]
+  allowed_glass_types          Json?
+  // Стороны света, где модель не рекомендуется: ["south","west"]
+  restricted_orientations      Json?
+  // true — замерщик не выбирает сам, решение принимает специалист
+  requires_review              Boolean           @default(false)
+  selection_note_ru            String?           @db.Text
+
   is_active                    Boolean           @default(true)
   sort_order                   Int               @default(0)
   created_at                   DateTime          @default(now()) @db.Timestamptz(6)
