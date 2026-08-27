@@ -10656,11 +10656,14 @@ function sketchSave() {
 
 // ---------- PROFESSIONAL PROPOSAL (КП) with window drawings per room ----------
 function openProfessionalKP(oid) {
+  const o = getOrder(oid);
+  if (!orderUserOwns(o)) { alert('Финансовые документы доступны только владельцу и назначенному менеджеру'); return; }
   generatePremiumProposal(oid);
 }
 
 function openClassicProfessionalKP(oid) {
   const o = getOrder(oid);
+  if (!orderUserOwns(o)) { alert('Финансовые документы доступны только владельцу и назначенному менеджеру'); return; }
   const c = getClient(o.clientId);
   const projectAddress = orderAddress(o, c);
   const s = db.settings;
@@ -13100,7 +13103,7 @@ function orderUserCanAccess(order, user = currentUser()) {
   return orderUserOwns(order, user) || orderUserCanMeasure(order, user) || orderUserCanInstall(order, user);
 }
 function orderUserCanSeeMoney(order, user = currentUser()) {
-  return orderUserOwns(order, user) || orderUserCanInstall(order, user);
+  return orderUserOwns(order, user);
 }
 function visibleOrdersForUser(user = currentUser()) {
   return (db?.orders || []).filter(order => orderUserCanAccess(order, user));
@@ -18914,6 +18917,7 @@ function printWorkOrder(oid) {
 
 function printProposal(oid) {
   const o = getOrder(oid);
+  if (!orderUserOwns(o)) { alert('Финансовые документы доступны только владельцу и назначенному менеджеру'); return; }
   const c = getClient(o.clientId);
   const projectAddress = orderAddress(o, c);
   const win = window.open('', '_blank');
@@ -25710,7 +25714,10 @@ function renderCalendarSummary(events, periodLabel = '') {
         <div class="calendar-kpi-value">${count}</div>
       </div>`;
   }).join('');
-  const revenue = Array.from(new Set(events.map(ev => ev.o.id))).map(id => getOrder(id)).filter(Boolean).reduce((s,o) => s + orderRevenue(o), 0);
+  const canSeeMoney = orderUserCanManage();
+  const revenue = canSeeMoney
+    ? Array.from(new Set(events.map(ev => ev.o.id))).map(id => getOrder(id)).filter(Boolean).reduce((s,o) => s + orderRevenue(o), 0)
+    : 0;
   return `
     <div class="calendar-kpi-grid">
       ${cells}
@@ -25718,10 +25725,10 @@ function renderCalendarSummary(events, periodLabel = '') {
         <div class="calendar-kpi-label">Период</div>
         <div class="calendar-kpi-value">${academyEsc(periodLabel || String(events.length))}</div>
       </div>
-      <div class="calendar-kpi" style="--event-color:#059669">
+      ${canSeeMoney ? `<div class="calendar-kpi" style="--event-color:#059669">
         <div class="calendar-kpi-label">Сумма заказов</div>
         <div class="calendar-kpi-value">${fmtMoney(revenue)}</div>
-      </div>
+      </div>` : ''}
     </div>`;
 }
 function renderCalendarLegend() {

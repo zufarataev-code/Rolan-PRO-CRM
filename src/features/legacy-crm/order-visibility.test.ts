@@ -40,9 +40,10 @@ function visibilityContext() {
     currentUser: () => null,
   });
 
-  vm.runInContext(`${html.slice(start, end)}\nthis.visibility = { orderUserCanAccess, visibleOrdersForUser, visibleClientsForUser };`, context);
+  vm.runInContext(`${html.slice(start, end)}\nthis.visibility = { orderUserCanAccess, orderUserCanSeeMoney, visibleOrdersForUser, visibleClientsForUser };`, context);
   return context.visibility as {
     orderUserCanAccess: (order: unknown, user: unknown) => boolean;
+    orderUserCanSeeMoney: (order: unknown, user: unknown) => boolean;
     visibleOrdersForUser: (user: unknown) => Array<{ id: string }>;
     visibleClientsForUser: (user: unknown) => Array<{ id: string }>;
   };
@@ -82,6 +83,24 @@ test("field roles see only explicitly assigned work", () => {
   assert.equal(visibility.orderUserCanAccess(fieldOrder, { id: "measurer-b", role: "measurer" }), false);
   assert.equal(visibility.orderUserCanAccess(fieldOrder, { id: "installer-a", role: "installer" }), true);
   assert.equal(visibility.orderUserCanAccess(fieldOrder, { id: "installer-b", role: "installer" }), false);
+});
+
+test("surveyors and installers never see project financial totals", () => {
+  const visibility = visibilityContext();
+  const fieldOrder = { managerId: "manager-a", measurerId: "measurer-a", installerIds: ["installer-a"] };
+
+  assert.equal(visibility.orderUserCanSeeMoney(fieldOrder, { id: "owner", role: "owner" }), true);
+  assert.equal(visibility.orderUserCanSeeMoney(fieldOrder, { id: "manager-a", role: "manager" }), true);
+  assert.equal(visibility.orderUserCanSeeMoney(fieldOrder, { id: "manager-b", role: "manager" }), false);
+  assert.equal(visibility.orderUserCanSeeMoney(fieldOrder, { id: "measurer-a", role: "measurer" }), false);
+  assert.equal(visibility.orderUserCanSeeMoney(fieldOrder, { id: "installer-a", role: "installer" }), false);
+});
+
+test("field-role calendar and proposal actions keep project totals hidden", () => {
+  assert.match(html, /function renderCalendarSummary[\s\S]*?const canSeeMoney = orderUserCanManage\(\);/);
+  assert.match(html, /\$\{canSeeMoney \? `<div class="calendar-kpi"[\s\S]*?Сумма заказов[\s\S]*?` : ''\}/);
+  assert.match(html, /function openProfessionalKP\(oid\)[\s\S]*?if \(!orderUserOwns\(o\)\)/);
+  assert.match(html, /function printProposal\(oid\)[\s\S]*?if \(!orderUserOwns\(o\)\)/);
 });
 
 test("manager-facing surfaces use the shared visibility helpers", () => {
