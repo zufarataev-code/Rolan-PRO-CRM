@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES, getPipelineStatusId } from "@/features/sales/api";
+import { buildLeadAccessWhere, getRecordManagerScope, isCrossManagerAssignment } from "@/features/sales/access";
 
 type RouteContext = {
   params: Promise<{
@@ -37,6 +38,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return apiError(400, "invalid_payload", "Request body is required.");
   }
 
+  const managerId = getRecordManagerScope(auth.session);
+
+  if (isCrossManagerAssignment(managerId, body.assigned_manager_id)) {
+    return apiError(403, "forbidden", "Managers cannot reassign leads to another user.");
+  }
+
   const data: {
     name?: string;
     phone?: string | null;
@@ -66,11 +73,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     data.pipeline_status_id = pipelineStatus.pipeline_status_id;
   }
 
-  const lead = await prisma.lead.update({
-    where: {
-      lead_id: leadId,
-    },
-    data,
+  const lead = await prisma.$transaction(async (tx) => {
+    const result = await tx.lead.updateMany({
+      where: buildLeadAccessWhere(leadId, managerId),
+      data,
+    });
+
+    return result.count === 1 ? tx.lead.findUnique({ where: { lead_id: leadId } }) : null;
   }).catch(() => null);
 
   if (!lead) {

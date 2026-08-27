@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES } from "@/features/sales/api";
+import { buildTaskAccessWhere, getRecordManagerScope, isCrossManagerAssignment } from "@/features/sales/access";
 
 type RouteContext = {
   params: Promise<{
@@ -26,19 +27,27 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return apiError(400, "invalid_payload", "Request body is required.");
   }
 
-  const task = await prisma.task.update({
-    where: {
-      task_id: taskId,
-    },
-    data: {
-      title: body.title?.trim() || undefined,
-      description: body.description?.trim() || body.description || undefined,
-      status: body.status || undefined,
-      priority: body.priority || undefined,
-      due_at: body.due_at ? new Date(body.due_at) : undefined,
-      assigned_to: body.assigned_to !== undefined ? body.assigned_to : undefined,
-      completed_at: body.status === "done" ? new Date() : undefined,
-    },
+  const managerId = getRecordManagerScope(auth.session);
+
+  if (isCrossManagerAssignment(managerId, body.assigned_to)) {
+    return apiError(403, "forbidden", "Managers cannot reassign tasks to another user.");
+  }
+
+  const task = await prisma.$transaction(async (tx) => {
+    const result = await tx.task.updateMany({
+      where: buildTaskAccessWhere(taskId, managerId),
+      data: {
+        title: body.title?.trim() || undefined,
+        description: body.description?.trim() || body.description || undefined,
+        status: body.status || undefined,
+        priority: body.priority || undefined,
+        due_at: body.due_at ? new Date(body.due_at) : undefined,
+        assigned_to: body.assigned_to !== undefined ? body.assigned_to : undefined,
+        completed_at: body.status === "done" ? new Date() : undefined,
+      },
+    });
+
+    return result.count === 1 ? tx.task.findUnique({ where: { task_id: taskId } }) : null;
   }).catch(() => null);
 
   if (!task) {

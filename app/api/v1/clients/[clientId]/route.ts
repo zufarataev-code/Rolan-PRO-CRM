@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES } from "@/features/sales/api";
+import { buildClientAccessWhere, getRecordManagerScope } from "@/features/sales/access";
 
 type RouteContext = {
   params: Promise<{
@@ -26,20 +27,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return apiError(400, "invalid_payload", "Request body is required.");
   }
 
-  const client = await prisma.client.update({
-    where: {
-      client_id: clientId,
-    },
-    data: {
-      name: body.name?.trim() || undefined,
-      phone: body.phone?.trim() || null,
-      email: body.email?.trim().toLowerCase() || null,
-      billing_address: body.billing_address?.trim() || null,
-      service_address: body.service_address?.trim() || null,
-      city_id: body.city_id || null,
-      zip_code: body.zip_code?.trim() || null,
-      notes: body.notes?.trim() || null,
-    },
+  const managerId = getRecordManagerScope(auth.session);
+  const client = await prisma.$transaction(async (tx) => {
+    const result = await tx.client.updateMany({
+      where: buildClientAccessWhere(clientId, managerId),
+      data: {
+        name: body.name?.trim() || undefined,
+        phone: body.phone?.trim() || null,
+        email: body.email?.trim().toLowerCase() || null,
+        billing_address: body.billing_address?.trim() || null,
+        service_address: body.service_address?.trim() || null,
+        city_id: body.city_id || null,
+        zip_code: body.zip_code?.trim() || null,
+        notes: body.notes?.trim() || null,
+      },
+    });
+
+    return result.count === 1 ? tx.client.findUnique({ where: { client_id: clientId } }) : null;
   }).catch(() => null);
 
   if (!client) {

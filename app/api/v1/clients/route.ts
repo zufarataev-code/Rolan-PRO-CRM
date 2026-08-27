@@ -4,7 +4,7 @@ import { requireRequestSession } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
-import { MANAGER_ROLES } from "@/features/sales/api";
+import { MANAGER_ROLES, getManagerScope } from "@/features/sales/api";
 import { listClients } from "@/features/sales/service";
 
 export async function GET(request: NextRequest) {
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Clients access denied.");
   }
 
-  const data = await listClients();
+  const data = await listClients(getManagerScope(request, auth.session));
 
   return apiSuccess({
     items: data,
