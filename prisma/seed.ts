@@ -289,7 +289,19 @@ async function seedServiceReferences() {
     ["zones_qty", "Кол-во зон", "Zones Qty", "number", "integer", null, true, 7],
     ["blocks_qty", "Кол-во блоков", "Blocks Qty", "number", "integer", null, false, 8],
     ["block_type", "Тип блока", "Block Type", "select", "string", "service_field_config", false, 9],
-    ["extra_costs", "Доп. расходы", "Extra Costs", "number", "decimal", null, false, 10],
+
+    // Электрика. Без этих ответов нельзя посчитать смету и спланировать
+    // первый заход бригады — именно электромонтаж делает смарт-проект дорогим.
+    ["power_unit_location", "Где ставим блок питания", "Power Unit Location", "text", "string", null, true, 10],
+    ["power_unit_access", "Доступ к блоку", "Power Unit Access", "select", "string", "service_field_config", true, 11],
+    ["wall_switch_needed", "Нужен настенный выключатель", "Wall Switch Needed", "checkbox", "boolean", null, true, 12],
+    ["wall_switch_qty", "Сколько выключателей", "Wall Switch Qty", "number", "integer", null, false, 13],
+    ["wall_switch_location", "Где выключатели", "Wall Switch Location", "text", "string", null, false, 14],
+    ["wiring_route", "Как идёт проводка", "Wiring Route", "text", "string", null, true, 15],
+    ["existing_conduit", "Есть готовая трасса", "Existing Conduit", "checkbox", "boolean", null, false, 16],
+    ["voice_control", "Голосовое управление", "Voice Control", "checkbox", "boolean", null, false, 17],
+
+    ["extra_costs", "Доп. расходы", "Extra Costs", "number", "decimal", null, false, 20],
   ] as const;
 
   for (const [field_key, field_label_ru, field_label_en, input_type, data_type, dropdown_source, is_required, sort_order] of smartFilmFields) {
@@ -363,7 +375,17 @@ async function seedServiceReferences() {
     ["actual_film_sqft", "Фактический метраж плёнки", "Actual Film Sqft", "number", "decimal", null, true, 5],
     ["complexity_level_id", "Сложность монтажа", "Access Complexity", "select", "string", "complexity_levels", true, 6],
     ["windows_qty", "Кол-во окон", "Windows Qty", "number", "integer", null, true, 7],
-    ["extra_costs", "Доп. расходы", "Extra Costs", "number", "decimal", null, false, 8],
+
+    // Подбор плёнки. Сторона света и тип стекла определяют, какая модель
+    // допустима: тёмная плёнка на южном стеклопакете колет стекло.
+    ["orientation", "Сторона света", "Orientation", "select", "string", "service_field_config", true, 8],
+    ["glass_type", "Тип остекления", "Glass Type", "select", "string", "service_field_config", true, 9],
+    ["glass_thickness_mm", "Толщина стекла, мм", "Glass Thickness mm", "number", "decimal", null, false, 10],
+    ["low_e_surface", "Поверхность Low-E покрытия", "Low-E Surface", "select", "string", "service_field_config", false, 11],
+    ["seam_expected", "Будет стык плёнки", "Seam Expected", "checkbox", "boolean", null, false, 12],
+    ["seam_position_agreed", "Место стыка согласовано с клиентом", "Seam Position Agreed", "checkbox", "boolean", null, false, 13],
+
+    ["extra_costs", "Доп. расходы", "Extra Costs", "number", "decimal", null, false, 20],
   ] as const;
 
   for (const [field_key, field_label_ru, field_label_en, input_type, data_type, dropdown_source, is_required, sort_order] of solarFilmFields) {
@@ -398,7 +420,15 @@ async function seedServiceReferences() {
     ["actual_film_sqft", "Фактический метраж плёнки", "Actual Film Sqft", "number", "decimal", null, true, 6],
     ["complexity_level_id", "Сложность монтажа", "Access Complexity", "select", "string", "complexity_levels", true, 7],
     ["windows_qty", "Кол-во окон", "Windows Qty", "number", "integer", null, true, 8],
-    ["extra_costs", "Доп. расходы", "Extra Costs", "number", "decimal", null, false, 9],
+
+    // Защита работает только вместе с креплением по периметру:
+    // без силикона плёнка удерживает осколки, но стекло вылетает из рамы.
+    ["risk_zones", "Опасные зоны", "Risk Zones", "textarea", "string", null, true, 9],
+    ["silicone_perimeter_m", "Силикон по периметру, м", "Silicone Perimeter m", "number", "decimal", null, true, 10],
+    ["frame_type", "Тип рамы", "Frame Type", "select", "string", "service_field_config", false, 11],
+    ["glass_type", "Тип остекления", "Glass Type", "select", "string", "service_field_config", true, 12],
+
+    ["extra_costs", "Доп. расходы", "Extra Costs", "number", "decimal", null, false, 20],
   ] as const;
 
   for (const [field_key, field_label_ru, field_label_en, input_type, data_type, dropdown_source, is_required, sort_order] of safetyFilmFields) {
