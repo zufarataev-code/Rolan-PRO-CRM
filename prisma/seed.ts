@@ -279,6 +279,58 @@ async function seedServiceReferences() {
     ).map((item) => [item.service_code, item.service_type_id]),
   );
 
+  // Значения выпадающих списков для полей замера.
+  // Ключи совпадают с field_key, значения кладутся в default_value
+  // и читаются формой замера. Коды остекления и сторон света
+  // совпадают с allowed_glass_types / restricted_orientations в каталоге.
+  const fieldOptions: Record<string, Array<{ value: string; label_ru: string; label_en: string }>> = {
+    orientation: [
+      { value: "south", label_ru: "Юг", label_en: "South" },
+      { value: "west", label_ru: "Запад", label_en: "West" },
+      { value: "east", label_ru: "Восток", label_en: "East" },
+      { value: "north", label_ru: "Север", label_en: "North" },
+      { value: "southwest", label_ru: "Юго-запад", label_en: "Southwest" },
+      { value: "southeast", label_ru: "Юго-восток", label_en: "Southeast" },
+      { value: "northwest", label_ru: "Северо-запад", label_en: "Northwest" },
+      { value: "northeast", label_ru: "Северо-восток", label_en: "Northeast" },
+    ],
+    glass_type: [
+      { value: "single_tempered", label_ru: "Одинарное закалённое", label_en: "Single tempered" },
+      { value: "single_annealed", label_ru: "Одинарное обычное", label_en: "Single annealed" },
+      { value: "dual_pane", label_ru: "Стеклопакет", label_en: "Dual pane" },
+      { value: "low_e", label_ru: "Стеклопакет Low-E", label_en: "Low-E dual pane" },
+      { value: "skylight", label_ru: "Skylight / потолочное", label_en: "Skylight" },
+      { value: "panoramic", label_ru: "Панорамное", label_en: "Panoramic" },
+      { value: "laminated", label_ru: "Триплекс", label_en: "Laminated" },
+      { value: "unknown", label_ru: "Не определён — передать специалисту", label_en: "Unknown — escalate" },
+    ],
+    low_e_surface: [
+      { value: "surface_2", label_ru: "Поверхность 2 (внутри камеры, наружное стекло)", label_en: "Surface 2" },
+      { value: "surface_3", label_ru: "Поверхность 3 (внутри камеры, внутреннее стекло)", label_en: "Surface 3" },
+      { value: "surface_4", label_ru: "Поверхность 4 (со стороны помещения)", label_en: "Surface 4" },
+      { value: "unknown", label_ru: "Не определена — передать специалисту", label_en: "Unknown — escalate" },
+    ],
+    power_unit_access: [
+      { value: "open", label_ru: "Открытый доступ", label_en: "Open access" },
+      { value: "cabinet", label_ru: "Шкаф или ниша", label_en: "Cabinet or niche" },
+      { value: "ceiling", label_ru: "За подвесным потолком", label_en: "Above ceiling" },
+      { value: "attic", label_ru: "Чердак — нужна защита и СИЗ", label_en: "Attic — PPE required" },
+      { value: "wall_opening", label_ru: "Требуется вскрытие стены", label_en: "Wall opening required" },
+    ],
+    block_type: [
+      { value: "standard_remote", label_ru: "Стандартный блок с пультом", label_en: "Standard unit with remote" },
+      { value: "timer", label_ru: "Блок с таймером", label_en: "Timer unit" },
+      { value: "smart_home", label_ru: "Блок с интеграцией умного дома", label_en: "Smart home unit" },
+    ],
+    frame_type: [
+      { value: "aluminum", label_ru: "Алюминий", label_en: "Aluminum" },
+      { value: "vinyl", label_ru: "Винил / ПВХ", label_en: "Vinyl" },
+      { value: "wood", label_ru: "Дерево", label_en: "Wood" },
+      { value: "steel", label_ru: "Сталь", label_en: "Steel" },
+      { value: "frameless", label_ru: "Без рамы", label_en: "Frameless" },
+    ],
+  };
+
   const smartFilmFields = [
     ["category", "Категория", "Category", "select", "string", "film_catalog", true, 1],
     ["brand", "Бренд", "Brand", "select", "string", "film_catalog", true, 2],
@@ -396,7 +448,16 @@ async function seedServiceReferences() {
           field_key,
         },
       },
-      update: { field_label_ru, field_label_en, input_type, data_type, dropdown_source, is_required, sort_order },
+      update: {
+        field_label_ru,
+        field_label_en,
+        input_type,
+        data_type,
+        dropdown_source,
+        is_required,
+        sort_order,
+        default_value: fieldOptions[field_key] ?? undefined,
+      },
       create: {
         service_type_id: serviceTypeMap.SOLAR_FILM,
         field_key,
@@ -439,7 +500,16 @@ async function seedServiceReferences() {
           field_key,
         },
       },
-      update: { field_label_ru, field_label_en, input_type, data_type, dropdown_source, is_required, sort_order },
+      update: {
+        field_label_ru,
+        field_label_en,
+        input_type,
+        data_type,
+        dropdown_source,
+        is_required,
+        sort_order,
+        default_value: fieldOptions[field_key] ?? undefined,
+      },
       create: {
         service_type_id: serviceTypeMap.SAFETY_FILM,
         field_key,
