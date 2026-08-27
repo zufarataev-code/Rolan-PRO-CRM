@@ -12178,53 +12178,22 @@ function orderServiceCardStyle(serviceId) {
 }
 
 const ORDER_EXECUTION_VARIANTS = [
-  {
-    id: 'consult_measure',
-    icon: '📞',
-    title: 'Консультация + замер',
-    short: 'Замер',
-    desc: 'Когда клиенту сначала нужно подобрать решение и снять размеры.',
-    color: '#f97316',
-    bg: '#fff7ed',
-    complexity: 'standard',
-    tags: ['follow-up'],
-    route: ['Консультация', 'Выездной замер', 'Единое КП'],
-  },
+  // Одна воронка на все направления. Раньше здесь было четыре «маршрута»,
+  // но они смешивали три разные вещи: наличие консультации, признаки заказа
+  // (VIP, срочно) и сложность монтажа. Менеджер выбирал то, что система
+  // выводит сама — из направления, сегмента и данных замера.
+  // Признаки теперь ставятся тегами, консультация появляется когда нужна.
   {
     id: 'standard_project',
     icon: '✅',
     title: 'Стандартный проект',
     short: 'Стандарт',
-    desc: 'Обычный путь: замер, КП, approval, монтаж, акт и оплата.',
+    desc: 'Единый путь для всех направлений: замер, КП, аванс, монтаж, акт, оплата.',
     color: '#2563eb',
     bg: '#eff6ff',
     complexity: 'standard',
     tags: [],
     route: ['Замер', 'Единое КП', 'Аванс', 'Монтаж', 'Акт'],
-  },
-  {
-    id: 'premium_engineering',
-    icon: '⭐',
-    title: 'Премиум / инженерный',
-    short: 'Премиум',
-    desc: 'Для больших домов, smart, сложных стёкол, дизайна и документации.',
-    color: '#7c3aed',
-    bg: '#f5f3ff',
-    complexity: 'tower',
-    tags: ['vip', 'big'],
-    route: ['Инженерный замер', 'Техлист', 'Единое КП', 'Approval', 'Монтаж'],
-  },
-  {
-    id: 'rush_b2b',
-    icon: '⚡',
-    title: 'Срочный / B2B',
-    short: 'Срочно',
-    desc: 'Быстрый запуск для бизнеса, витрин, управляющих и повторных клиентов.',
-    color: '#dc2626',
-    bg: '#fef2f2',
-    complexity: 'ladder',
-    tags: ['urgent'],
-    route: ['Приоритет', 'Замер/повтор', 'КП', 'График', 'Invoice'],
   },
 ];
 function orderExecutionVariantInfo(id) {
@@ -19665,17 +19634,8 @@ function openOrderModal() {
               </div>
             </section>
             <details class="erp-intake-disclosure" open>
-              <summary>Тип работы и маршрут</summary>
+              <summary>Что происходит дальше</summary>
               <div class="order-builder-strip mt-3">
-                <div class="order-variant-grid" id="no-execution-buttons">
-                  ${ORDER_EXECUTION_VARIANTS.map(v => `
-                    <button type="button" class="order-variant-card" style="${orderVariantCardStyle(v)}" data-exec="${v.id}" onclick="selectOrderExecution('${v.id}')">
-                      <div class="order-variant-icon">${v.icon}</div>
-                      <div class="font-black text-sm">${academyEsc(v.title)}</div>
-                      <div class="text-xs text-gray-500 mt-1">${academyEsc(v.desc)}</div>
-                    </button>
-                  `).join('')}
-                </div>
                 <input type="hidden" id="no-execution" value="standard_project">
                 <div id="no-order-builder-preview">${renderOrderBuilderPreview('smart_film', 'standard_project')}</div>
               </div>
