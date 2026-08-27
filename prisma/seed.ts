@@ -457,6 +457,9 @@ async function seedServiceReferences() {
         dropdown_source,
         is_required,
         sort_order,
+        default_value: fieldOptionValues[field_key]
+          ? { options: fieldOptionValues[field_key] }
+          : undefined,
       },
     });
   }
@@ -511,6 +514,9 @@ async function seedServiceReferences() {
         dropdown_source,
         is_required,
         sort_order,
+        default_value: fieldOptionValues[field_key]
+          ? { options: fieldOptionValues[field_key] }
+          : undefined,
       },
     });
   }
