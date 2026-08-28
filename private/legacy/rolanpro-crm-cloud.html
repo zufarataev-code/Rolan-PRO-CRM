@@ -15194,8 +15194,19 @@ function renderTeam() {
     { role: 'measurer', title: T('measurer') + 'и' },
     { role: 'installer', title: T('installer') + 'и' },
   ];
+  const canManage = currentUser()?.role === 'owner';
   return `
   <div class="space-y-6">
+    ${canManage ? `
+    <div class="card">
+      <div class="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h3 class="font-semibold text-slate-800">Сотрудники и доступы</h3>
+          <div class="text-xs text-gray-500 mt-1">Логин, пароль и роль задаются здесь. Пароль временный — сотрудник меняет его при первом входе.</div>
+        </div>
+        <button class="btn-primary text-sm" onclick="openTeamMemberForm()">+ Добавить сотрудника</button>
+      </div>
+    </div>` : ''}
     ${groups.map(g => `
       <div class="card">
         <h3 class="font-semibold mb-3 text-slate-800">${g.title} — ${usersByRole(g.role).length}</h3>
@@ -15216,6 +15227,7 @@ function renderTeam() {
                   <div class="text-xs text-gray-500">${u.phone||'—'}</div>
                 </div>
                 <button class="btn-ghost text-xs" onclick="openUserPayConfig('${u.id}')" title="Настроить зарплату">💰</button>
+                ${canManage ? `<button class="btn-ghost text-xs" onclick="openTeamMemberAccess('${u.id}')" title="Логин, пароль и роль">🔑</button>` : ''}
               </div>
               <div class="mt-2 flex items-center justify-between text-sm">
                 <span class="text-gray-500">${T('activeOrders')}:</span>
@@ -15246,6 +15258,199 @@ function renderTeam() {
     `).join('')}
   </div>
   `;
+}
+
+// ---------- СОТРУДНИКИ И ДОСТУПЫ ----------
+// Владелец заводит людей сам: почта, пароль и роль задаются здесь,
+// без обращения к разработчику. Пароль всегда временный —
+// сотрудник меняет его при первом входе, поэтому владелец не хранит
+// чужие постоянные пароли.
+
+const TEAM_ROLE_OPTIONS = [
+  { code: 'MANAGER', label: 'Менеджер — продажи, заказы, клиенты' },
+  { code: 'CONSULTANT', label: 'Замерщик — выезды и замеры, без финансов' },
+  { code: 'INSTALLER', label: 'Монтажник — свои работы и фотоотчёт' },
+  { code: 'OWNER', label: 'Владелец — полный доступ, включая деньги' },
+];
+
+function suggestTeamPassword() {
+  // Пароль читается вслух и передаётся лично, поэтому без похожих
+  // символов: ноль и O, единица и l путаются при диктовке.
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let out = '';
+  const random = crypto.getRandomValues(new Uint32Array(12));
+  for (let i = 0; i < 12; i += 1) out += alphabet[random[i] % alphabet.length];
+  return out;
+}
+
+function teamRoleCheckboxes(selected) {
+  return TEAM_ROLE_OPTIONS.map(r => `
+    <label class="flex items-start gap-2 p-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
+      <input type="checkbox" class="tm-role mt-1" value="${r.code}" ${selected.includes(r.code) ? 'checked' : ''}>
+      <span class="text-sm">${academyEsc(r.label)}</span>
+    </label>`).join('');
+}
+
+function openTeamMemberForm() {
+  const password = suggestTeamPassword();
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6">
+      <h3 class="font-semibold text-lg mb-1">Новый сотрудник</h3>
+      <p class="text-xs text-gray-500 mb-4">Передайте пароль лично. При первом входе система попросит сменить его.</p>
+
+      <label>Имя и фамилия</label>
+      <input id="tm-name" placeholder="Данил Петров">
+
+      <label class="mt-3">Почта для входа</label>
+      <input id="tm-email" type="email" placeholder="danil@rolan-pro.com">
+
+      <label class="mt-3">Временный пароль</label>
+      <div class="flex gap-2">
+        <input id="tm-password" value="${password}">
+        <button class="btn-ghost text-sm whitespace-nowrap" onclick="document.getElementById('tm-password').value = suggestTeamPassword()">Другой</button>
+      </div>
+
+      <label class="mt-3">Роли</label>
+      <div class="grid grid-cols-1 gap-2">${teamRoleCheckboxes(['MANAGER'])}</div>
+
+      <div id="tm-error" class="text-sm text-red-600 mt-3 hidden"></div>
+
+      <div class="flex gap-2 mt-5">
+        <button class="btn-primary flex-1" onclick="submitTeamMember()">Создать</button>
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
+function collectTeamRoles() {
+  return Array.from(document.querySelectorAll('.tm-role:checked')).map(el => el.value);
+}
+
+function showTeamError(message) {
+  const box = document.getElementById('tm-error');
+  if (!box) return;
+  box.textContent = message;
+  box.classList.remove('hidden');
+}
+
+async function submitTeamMember() {
+  const fullName = document.getElementById('tm-name')?.value.trim();
+  const email = document.getElementById('tm-email')?.value.trim();
+  const password = document.getElementById('tm-password')?.value.trim();
+  const roles = collectTeamRoles();
+
+  if (!fullName || !email) return showTeamError('Укажите имя и почту.');
+  if (!roles.length) return showTeamError('Выберите хотя бы одну роль.');
+  if (!password || password.length < 10) return showTeamError('Пароль должен быть не короче 10 символов.');
+
+  try {
+    const response = await fetch('/api/v1/team', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullName, email, password, roles }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      return showTeamError(data?.error?.message || 'Не удалось создать сотрудника.');
+    }
+
+    showTeamPasswordResult('Сотрудник создан', fullName, email, password);
+  } catch (error) {
+    showTeamError('Сервер не ответил. Попробуйте ещё раз.');
+  }
+}
+
+/**
+ * Показывает пароль один раз. Хранится он только хешем, посмотреть
+ * позже нельзя — поэтому окно нельзя закрыть случайным кликом мимо.
+ */
+function showTeamPasswordResult(title, name, email, password) {
+  state.modal = `
+  <div class="modal-backdrop">
+    <div class="modal-content workspace-modal p-6">
+      <h3 class="font-semibold text-lg mb-1">${academyEsc(title)}</h3>
+      <p class="text-xs text-gray-500 mb-4">Запишите пароль сейчас — позже посмотреть его будет нельзя.</p>
+
+      <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+        <div class="flex justify-between gap-3 text-sm">
+          <span class="text-gray-500">Сотрудник</span>
+          <span class="font-semibold">${academyEsc(name || '—')}</span>
+        </div>
+        <div class="flex justify-between gap-3 text-sm">
+          <span class="text-gray-500">Логин</span>
+          <span class="font-semibold">${academyEsc(email || '—')}</span>
+        </div>
+        <div class="flex justify-between gap-3 text-sm items-center">
+          <span class="text-gray-500">Пароль</span>
+          <span class="font-mono font-bold text-base">${academyEsc(password)}</span>
+        </div>
+      </div>
+
+      <button class="btn-primary w-full mt-4" onclick="navigator.clipboard?.writeText('${password}'); closeModal(); render();">Скопировать и закрыть</button>
+    </div>
+  </div>`;
+  render();
+}
+
+async function openTeamMemberAccess(legacyUserId) {
+  const user = getUser(legacyUserId);
+  if (!user) return;
+
+  const password = suggestTeamPassword();
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6">
+      <h3 class="font-semibold text-lg mb-1">Доступ: ${academyEsc(user.name)}</h3>
+      <p class="text-xs text-gray-500 mb-4">Новый пароль заменит старый. Сотрудник сменит его при входе.</p>
+
+      <label>Новый пароль</label>
+      <div class="flex gap-2">
+        <input id="tm-password" value="${password}">
+        <button class="btn-ghost text-sm whitespace-nowrap" onclick="document.getElementById('tm-password').value = suggestTeamPassword()">Другой</button>
+      </div>
+
+      <div id="tm-error" class="text-sm text-red-600 mt-3 hidden"></div>
+
+      <div class="flex gap-2 mt-5">
+        <button class="btn-primary flex-1" onclick="submitTeamPassword('${user.email || ''}')">Сменить пароль</button>
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
+async function submitTeamPassword(email) {
+  const password = document.getElementById('tm-password')?.value.trim();
+
+  if (!password || password.length < 10) return showTeamError('Пароль должен быть не короче 10 символов.');
+  if (!email) return showTeamError('У сотрудника не указана почта — сначала добавьте её.');
+
+  try {
+    const list = await fetch('/api/v1/team').then(r => r.json());
+    const member = (list?.data || []).find(m => m.email?.toLowerCase() === email.toLowerCase());
+
+    if (!member) return showTeamError('Сотрудник не найден в системе доступов.');
+
+    const response = await fetch(`/api/v1/team/${member.userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      return showTeamError(data?.error?.message || 'Не удалось сменить пароль.');
+    }
+
+    showTeamPasswordResult('Пароль изменён', member.fullName, member.email, password);
+  } catch (error) {
+    showTeamError('Сервер не ответил. Попробуйте ещё раз.');
+  }
 }
 
 // ---------- TASKS / PLANNER (so nothing gets forgotten: calls, purchases, follow-ups) ----------
