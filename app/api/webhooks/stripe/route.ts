@@ -73,8 +73,10 @@ export async function POST(request: Request) {
   await prisma.proposalEvent.create({
     data: {
       proposal_id: deposit.proposal_id,
-      event_type: "deposit_paid",
-      payload: {
+      actor_type: "system",
+      event_key: "deposit_paid",
+      message: "Аванс оплачен через Stripe",
+      metadata: {
         source: "stripe",
         session_id: typeof session.id === "string" ? session.id : null,
         amount_total: session.amount_total ?? null,
