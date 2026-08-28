@@ -1988,7 +1988,7 @@
   }
   .manager-window-card-body {
     display: grid;
-    grid-template-columns: minmax(190px, 1.05fr) minmax(0, 1.95fr);
+    grid-template-columns: minmax(170px, 0.85fr) minmax(0, 2.15fr);
     gap: .8rem;
     padding: .75rem;
   }
@@ -3985,9 +3985,13 @@
     overflow: auto;
   }
   .modal-content.measure-modal {
-    width: min(94vw, 72rem);
-    max-width: 72rem;
-    max-height: 88svh;
+    /* Замер — самый плотный экран в системе: список комнат, выбор типа
+       окна, поля размеров и подбор стекла одновременно. При 88svh
+       нижние поля уходили за край, и замерщик их не видел. */
+    width: min(96vw, 84rem);
+    max-width: 84rem;
+    height: 94svh;
+    max-height: 94svh;
     overflow: hidden;
   }
   .modal-content.workspace-modal .measure-head,
@@ -18298,17 +18302,16 @@ function managerPanelDimensionLabel(p) {
   return `${Math.round(w)}×${Math.round(h)} мм`;
 }
 function managerWindowPanelSummaryHtml(w) {
+  // Замерщику нужен габарит проёма, а не разбор на створки: сколько
+  // полотен — видно по типу окна, а размеры каждого считает раскрой.
+  // Раньше здесь выводился список всех полотен с размерами, и на
+  // экране замера он занимал больше места, чем сами поля ввода.
   const panels = measureWindowPanels(w);
-  if (!panels.length) return `<div class="manager-panel-summary-title">Панели появятся после ввода ширины и высоты</div>`;
-  const visible = panels.slice(0, 6);
-  const more = panels.length > visible.length ? ` +${panels.length - visible.length}` : '';
+  if (!panels.length) return '';
+  if (panels.length < 2) return '';
   return `
     <div class="manager-panel-summary">
-      <div class="manager-panel-summary-title">${measurePanelSummary(w)} · CRM режет каждое полотно отдельно</div>
-      <div>
-        ${visible.map((p, idx) => `<span class="manager-panel-chip">${academyEsc(p.label || ('Panel ' + (idx + 1)))} · ${managerPanelDimensionLabel(p)}</span>`).join('')}
-        ${more ? `<span class="manager-panel-chip">${more}</span>` : ''}
-      </div>
+      <div class="manager-panel-summary-title">${measurePanelSummary(w)} · раскрой посчитает CRM</div>
     </div>`;
 }
 function managerWindowTypePickerHtml(oid, rid, w, scopeKey) {
