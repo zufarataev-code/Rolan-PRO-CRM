@@ -85,9 +85,11 @@ function millimetresToInches(value: number) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-function localizeItemText(text: unknown) {
+function localizeItemText(text: unknown): string {
   if (typeof text !== "string" || !text.trim()) {
-    return text ?? "";
+    // Возвращаемый тип объявлен явно: при strict вывод из `text ?? ""`
+    // давал {} вместо string, и разметка отказывалась это принимать.
+    return "";
   }
 
   let result = text;
