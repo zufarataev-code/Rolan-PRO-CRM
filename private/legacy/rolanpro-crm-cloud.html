@@ -9113,7 +9113,7 @@ function openEngineeringMeasureStudio(orderId) {
           </div>
           <div class="measure-head-actions">
             <span id="ms-mode-pill" class="tag" style="background:${scope.accent}14;border-color:${scope.accent}44;color:${scope.accent}">${academyEsc(scope.short)} режим</span>
-            <button class="btn-ghost" onclick="openTechnicalSheet('${order.id}')">📋 Техлист</button>
+            <button class="btn-ghost" onclick="openWorkOrder('${order.id}')">Заказ-наряд</button>
             ${canManage ? `<button class="btn-primary bg-slate-900 hover:bg-slate-800" onclick="generatePremiumProposal('${order.id}')">✦ КП</button>` : ''}
             <button class="btn-ghost" onclick="closeModal()">✕</button>
           </div>
@@ -10027,6 +10027,224 @@ function renderSmartTechnicalAssignment(win) {
       ${smart.notes ? `<div class="text-xs mt-2"><b>Заметка:</b> ${academyEsc(smart.notes)}</div>` : ''}
     </div>`;
 }
+// ---------- ЗАКАЗ-НАРЯД ----------
+// Один документ вместо четырёх кнопок вокруг одних данных замера.
+// Раньше бригада собирала работу по кускам: размеры в техлисте,
+// адрес в карточке заказа, комментарии замерщика в третьем месте,
+// фотографии в четвёртом.
+//
+// Монтажник НЕ ВИДИТ ДЕНЕГ: ни сумм, ни маржи, ни стоимости материалов.
+// Наряд строится как последовательность действий, а не таблица
+// характеристик: куда ехать, во сколько, что делать, чем подтвердить.
+
+function orderWorkPlanRows(order) {
+  const items = Array.isArray(order.workItems) ? order.workItems : [];
+  if (!items.length) return '';
+  return items.map(item => {
+    const type = workTypeById(item.typeId);
+    const people = (item.userIds || []).map(id => getUser(id)?.name).filter(Boolean);
+    return `
+      <div class="wo-work-row" style="border-left:4px solid ${type.color}">
+        <div class="wo-work-name">${academyEsc(type.name)}</div>
+        <div class="wo-work-meta">
+          ${item.at ? fmtDateTime(item.at) : 'дата не назначена'}
+          ${people.length ? ' · ' + academyEsc(people.join(', ')) : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderWorkOrderHtml(order, printMode = false) {
+  const client = getClient(order.clientId) || {};
+  const rows = measureAllWindows(order);
+  const photos = Array.isArray(order.photos) ? order.photos : [];
+  const notes = order.notes || '';
+  const workPlan = orderWorkPlanRows(order);
+
+  const totalWindows = rows.reduce((s, x) => s + (Number(x.win.qty) || 1), 0);
+
+  return `
+    <div class="work-order pdf-document ${printMode ? '' : 'p-5'}">
+
+      <div class="wo-head">
+        <div>
+          <div class="wo-label">ЗАКАЗ-НАРЯД</div>
+          <h1 class="wo-number">${academyEsc(order.number)}</h1>
+          <div class="wo-service">${academyEsc(orderServiceTypeLabel(order.serviceType))}</div>
+        </div>
+        <div class="wo-when">
+          <div class="wo-when-label">Выезд</div>
+          <div class="wo-when-value">${order.installationAt ? fmtDateTime(order.installationAt) : 'не назначен'}</div>
+        </div>
+      </div>
+
+      <div class="wo-block wo-address">
+        <div class="wo-block-title">Куда ехать</div>
+        <div class="wo-address-value">${academyEsc(orderAddress(order, client) || 'адрес не указан')}</div>
+        <div class="wo-contact">
+          ${academyEsc(client.name || '')}
+          ${client.phone ? ' · ' + academyEsc(client.phone) : ''}
+        </div>
+      </div>
+
+      ${workPlan ? `
+      <div class="wo-block">
+        <div class="wo-block-title">План работ</div>
+        ${workPlan}
+      </div>` : ''}
+
+      ${notes ? `
+      <div class="wo-block wo-notes">
+        <div class="wo-block-title">Особенности объекта</div>
+        <div>${academyEsc(notes)}</div>
+      </div>` : ''}
+
+      <div class="wo-block">
+        <div class="wo-block-title">Объём: ${totalWindows} проёмов · ${orderPlannedAreaSqft(order).toFixed(2)} sqft</div>
+        ${renderWorkOrderWindows(order, rows)}
+      </div>
+
+      <div class="wo-block">
+        <div class="wo-block-title">Раскрой</div>
+        ${renderCutSheetHtml(order, true)}
+      </div>
+
+      ${photos.length ? `
+      <div class="wo-block">
+        <div class="wo-block-title">Фото с замера</div>
+        <div class="wo-photos">
+          ${photos.slice(0, 12).map(p => `<img src="${p.url || p}" alt="">`).join('')}
+        </div>
+      </div>` : ''}
+
+      <div class="wo-block wo-checklist">
+        <div class="wo-block-title">Перед началом работ</div>
+        <label><input type="checkbox"> Стёкла осмотрены вместе с клиентом, повреждения сняты на фото</label>
+        <label><input type="checkbox"> Полы укрыты, мебель отодвинута</label>
+        <label><input type="checkbox"> Материал получен по наряду, количество сверено</label>
+        <div class="wo-block-title mt-3">После работ</div>
+        <label><input type="checkbox"> Каждый проём сфотографирован</label>
+        <label><input type="checkbox"> Обход с клиентом при дневном свете</label>
+        <label><input type="checkbox"> Акт подписан</label>
+      </div>
+
+      <div class="wo-sign">
+        <div><div class="wo-sign-line"></div>Подпись клиента</div>
+        <div><div class="wo-sign-line"></div>Подпись бригадира</div>
+      </div>
+    </div>`;
+}
+
+/** Список проёмов без денежных полей — монтажнику цены не показываем. */
+/** Размер проёма в тех единицах, которые выбраны в настройках. */
+function workOrderSizeLabel(w) {
+  const width = Number(w?.width) || 0;
+  const height = Number(w?.height) || 0;
+  if (!width || !height) return 'размер не снят';
+  if (db.settings.inputUnits === 'inches') {
+    return `${mm_to_inches(width).toFixed(1)} × ${mm_to_inches(height).toFixed(1)} in`;
+  }
+  return `${Math.round(width)} × ${Math.round(height)} мм`;
+}
+
+function renderWorkOrderWindows(order, rows) {
+  return rows.map((r, idx) => {
+    const w = r.win;
+    const cat = windowCatalog(w);
+    return `
+      <div class="wo-window">
+        <div class="wo-window-head">
+          <span class="wo-window-num">${idx + 1}</span>
+          <span class="wo-window-name">${academyEsc(r.room?.name || '')} · ${academyEsc(w.name || '')}</span>
+          <span class="wo-window-area">${windowActualAreaSqft(w).toFixed(2)} sqft</span>
+        </div>
+        <div class="wo-window-body">
+          <span>${workOrderSizeLabel(w)}</span>
+          <span>${academyEsc(measureWindowTypeShortName(winTypeInfo(w.winType)))}</span>
+          ${w.qty > 1 ? `<span>×${w.qty}</span>` : ''}
+          ${cat ? `<span class="wo-window-film">${academyEsc(cat.brand + ' ' + cat.model)}</span>` : '<span class="wo-window-film wo-missing">плёнка не выбрана</span>'}
+          ${w.side ? `<span>${academyEsc(w.side)}</span>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openWorkOrder(orderId) {
+  const order = getOrder(orderId);
+  if (!order) return;
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content measure-modal">
+      <div class="measure-head flex items-center justify-between gap-3 p-4 border-b bg-white">
+        <div>
+          <div class="text-xs font-bold text-blue-700">ЗАКАЗ-НАРЯД</div>
+          <h3 class="text-xl font-black">${academyEsc(order.number)}</h3>
+        </div>
+        <div class="flex gap-2 flex-wrap justify-end">
+          <button class="btn-ghost" onclick="printWorkOrder('${order.id}')">Печать</button>
+          <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
+        </div>
+      </div>
+      <div data-scroll-key="work-order" style="max-height:80vh;overflow:auto;">
+        ${renderWorkOrderHtml(order)}
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
+function printWorkOrder(orderId) {
+  const order = getOrder(orderId);
+  if (!order) return;
+  const win = window.open('', '_blank');
+  if (!win) { alert('Разрешите всплывающие окна для печати'); return; }
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8">
+    <title>Заказ-наряд ${academyEsc(order.number)}</title>
+    <style>${workOrderPrintCss()}</style></head>
+    <body>${renderWorkOrderHtml(order, true)}
+    <script>setTimeout(()=>window.print(), 400);</${'script'}></body></html>`);
+  win.document.close();
+}
+
+function workOrderPrintCss() {
+  return `
+    body { font-family: -apple-system, Arial, sans-serif; margin: 0; padding: 14mm; color: #0f172a; }
+    .wo-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+               border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; }
+    .wo-label { font-size: 10px; font-weight: 800; letter-spacing: .08em; color: #2563eb; }
+    .wo-number { font-size: 24px; font-weight: 900; margin: 2px 0; }
+    .wo-service { font-size: 13px; color: #475569; }
+    .wo-when { text-align: right; }
+    .wo-when-label { font-size: 10px; color: #64748b; }
+    .wo-when-value { font-size: 15px; font-weight: 800; }
+    .wo-block { margin-bottom: 14px; break-inside: avoid; }
+    .wo-block-title { font-size: 11px; font-weight: 800; color: #2563eb;
+                      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+    .wo-address-value { font-size: 16px; font-weight: 800; }
+    .wo-contact { font-size: 13px; color: #475569; margin-top: 2px; }
+    .wo-notes { padding: 8px 10px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; }
+    .wo-work-row { padding: 6px 10px; margin-bottom: 4px; background: #f8fafc; }
+    .wo-work-name { font-weight: 800; font-size: 13px; }
+    .wo-work-meta { font-size: 11px; color: #64748b; }
+    .wo-window { border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 9px; margin-bottom: 5px; break-inside: avoid; }
+    .wo-window-head { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; }
+    .wo-window-num { display: inline-flex; align-items: center; justify-content: center;
+                     width: 20px; height: 20px; border-radius: 5px; background: #0f172a; color: #fff; font-size: 11px; }
+    .wo-window-name { flex: 1; min-width: 0; }
+    .wo-window-area { color: #2563eb; }
+    .wo-window-body { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: #475569; margin-top: 3px; }
+    .wo-window-film { font-weight: 700; color: #0f172a; }
+    .wo-missing { color: #dc2626; }
+    .wo-photos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+    .wo-photos img { width: 100%; height: 90px; object-fit: cover; border-radius: 5px; }
+    .wo-checklist label { display: block; font-size: 13px; margin: 4px 0; }
+    .wo-sign { display: flex; gap: 40px; margin-top: 26px; font-size: 11px; color: #64748b; }
+    .wo-sign > div { flex: 1; }
+    .wo-sign-line { border-bottom: 1px solid #0f172a; height: 34px; margin-bottom: 4px; }
+    @media print { body { padding: 10mm; } }
+  `;
+}
+
 function renderTechnicalSheetHtml(order, printMode = false) {
   const client = getClient(order.clientId) || {};
   const rows = measureAllWindows(order);
@@ -10336,7 +10554,7 @@ function openCutSheet(orderId) {
           </div>
           <div class="flex gap-2 flex-wrap justify-end">
             <button class="btn-ghost" onclick="printCutSheet('${order.id}')">🖨 Печать</button>
-            <button class="btn-ghost" onclick="openTechnicalSheet('${order.id}')">📋 Техлист</button>
+            <button class="btn-ghost" onclick="openWorkOrder('${order.id}')">Заказ-наряд</button>
             <button class="btn-ghost" onclick="closeModal()">✕</button>
           </div>
         </div>
@@ -16783,7 +17001,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
     ? `openManagerMeasureModal('${o.id}')`
     : canMeasure
       ? `openMeasurerV25ForOrder('${o.id}')`
-      : `openTechnicalSheet('${o.id}')`;
+      : `openWorkOrder('${o.id}')`;
   const measureSub = hasMeasurements ? `${rooms} комн. · ${windows} окон` : 'добавить комнаты и окна';
   const proposalDisabled = !canManage || !hasMeasurements;
   const routeHref = address ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}` : '';
@@ -16820,7 +17038,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
           <div class="order-passport-action-grid">
             ${renderOrderPassportAction({ icon: '📐', title: 'Размеры', sub: measureSub, onclick: measureAction, primary: true })}
             ${renderOrderPassportAction({ icon: '📄', title: 'КП', sub: hasMeasurements ? 'единый стандарт ROLANPRO' : 'сначала внесите размеры', onclick: `openProfessionalKP('${o.id}')`, disabled: proposalDisabled })}
-            ${renderOrderPassportAction({ icon: '📋', title: 'Техлист', sub: hasMeasurements ? 'для монтажников' : 'после замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasMeasurements })}
+            ${renderOrderPassportAction({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
             ${renderOrderPassportAction({ icon: '🧭', title: 'Маршрут', sub: address ? 'Google Maps' : 'адрес не указан', href: routeHref, disabled: !address })}
           </div>
           ${canSeeMoney ? `
@@ -17010,7 +17228,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     ? `openManagerMeasureModal('${o.id}')`
     : canMeasure
       ? `openMeasurerV25ForOrder('${o.id}')`
-      : `openTechnicalSheet('${o.id}')`;
+      : `openWorkOrder('${o.id}')`;
   const measureActionTitle = canManage ? 'Внести / проверить замеры' : canMeasure ? 'Открыть модуль замерщика' : 'Смотреть техлист';
 
   const clientInitials = String(c?.name || 'К').split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
@@ -17042,7 +17260,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ${renderOrderActionCard({ icon: '📐', title: measureActionTitle, sub: hasMeasurements ? `${rooms.length} комн. · ${windows.length} окон` : 'добавить комнаты и окна', onclick: measureAction, variant: 'primary' })}
       ${renderOrderActionCard({ icon: '🧭', title: 'Полевой модуль v2.5', sub: 'планшет: комнаты, окна, компас, фото, JSON', onclick: `openMeasurerV25ForOrder('${o.id}')`, variant: canMeasure ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '⬆️', title: 'Импорт JSON v2.5', sub: 'забрать выездной замер в CRM', onclick: `openMeasurerV25Import('${o.id}')`, disabled: !canManage })}
-      ${renderOrderActionCard({ icon: '📋', title: 'Техлист', sub: hasMeasurements ? 'наряд для монтажников' : 'после замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasMeasurements })}
+      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
       ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.consumedSqft.toFixed(1)} sqft расход` : 'после размеров', onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
       ${renderOrderActionCard({ icon: '🖨', title: 'Печать наряда', sub: 'рабочий лист', onclick: `printWorkOrder('${o.id}')` })}
     </div>`;
@@ -17254,7 +17472,7 @@ function renderOrderDetails(id) {
             ${canMeasure && !o.measurementAcceptedAt && o.status === 'measurement_scheduled' ? `<button class="btn-primary text-sm bg-emerald-600 hover:bg-emerald-700" onclick="acceptMeasurementTask('${o.id}', true)">✓ Принять замер</button>` : ''}
             ${canManage ? `<button class="btn-primary text-sm" onclick="openManagerMeasureModal('${o.id}')">➕ Замеры по объекту</button>` : ''}
             ${canMeasure ? `<button class="btn-primary text-sm bg-slate-900 hover:bg-slate-800" onclick="openMeasurerV25ForOrder('${o.id}')">🧭 Модуль замерщика v2.5</button>` : ''}
-            <button class="btn-ghost text-sm" onclick="openTechnicalSheet('${o.id}')">📋 Техлист</button>
+            <button class="btn-ghost text-sm" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button>
             ${canManage ? `<button class="btn-ghost text-sm" onclick="openWindowTemplateModal('${o.id}')">📋 Шаблон раскладки</button>` : ''}
             ${canManage ? `<button class="btn-primary text-sm" onclick="addRoom('${o.id}')">+ ${T('addRoom')}</button>` : ''}
             ${canManage && (o.measurements?.rooms||[]).some(r => (r.windows||[]).length) ? `<button class="btn-primary text-sm bg-slate-700 hover:bg-slate-800" onclick="openProfessionalKP('${o.id}')">📐 Единое КП</button>` : ''}
@@ -18463,10 +18681,9 @@ function renderManagerMeasureModal(oid) {
         </div>
       </div>
       <div class="manager-measure-footer flex items-center justify-between gap-2 flex-wrap">
-        <div class="text-xs text-gray-500">Замер сохраняется автоматически и попадет в КП, техлист и склад.</div>
+        <div class="text-xs text-gray-500">Замер сохраняется автоматически и попадёт в КП, заказ-наряд и склад.</div>
         <div class="flex gap-2">
-          ${plan.pieces.length ? `<button class="btn-ghost" onclick="openCutSheet('${oid}')">Лист раскроя</button>` : ''}
-          <button class="btn-ghost" onclick="openTechnicalSheet('${oid}')">Техлист</button>
+          <button class="btn-ghost" onclick="openWorkOrder('${oid}')">Заказ-наряд</button>
           <button class="btn-primary" onclick="closeModal(); openOrder('${oid}')">Завершить замер</button>
         </div>
       </div>
@@ -23572,7 +23789,7 @@ function openPremiumProposalManagerModal(token) {
 	        </div>
 	        <div class="flex gap-2 mt-5 justify-end flex-wrap">
 	          ${premiumProposalLocked(prop) ? `<button class="btn-ghost" onclick="newPremiumProposalVersion('${order.id}')">+ New Version</button>` : ''}
-	          <button class="btn-ghost" onclick="openTechnicalSheet('${order.id}')">📋 Technical sheet</button>
+	          <button class="btn-ghost" onclick="openWorkOrder('${order.id}')">Заказ-наряд</button>
 	          <button class="btn-primary" onclick="navigator.clipboard.writeText('${url.replace(/'/g, "\\'")}'); this.textContent='Copied';">Copy link</button>
 	        </div>
         <p class="text-xs text-gray-500 mt-4">Signed proposals are locked. Create a new version for any later change.</p>
