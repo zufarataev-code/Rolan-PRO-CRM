@@ -41,9 +41,6 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install Codex CLI
-        run: npm install -g @openai/codex
-
       - name: Answer as architect
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
