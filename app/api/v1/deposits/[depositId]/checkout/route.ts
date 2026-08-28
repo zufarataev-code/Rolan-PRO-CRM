@@ -1,7 +1,16 @@
-import { getSessionUser } from "@/lib/auth/server";
+import { NextRequest } from "next/server";
+
+import { PROPOSAL_MANAGER_ROLES } from "@/features/proposals/api";
+import { requireRequestSession } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { createCheckoutSession, isStripeConfigured } from "@/lib/payments/stripe";
+
+type RouteContext = {
+  params: Promise<{
+    depositId: string;
+  }>;
+};
 
 /**
  * Выдаёт клиенту ссылку на оплату аванса.
@@ -9,21 +18,18 @@ import { createCheckoutSession, isStripeConfigured } from "@/lib/payments/stripe
  * Ссылка сохраняется в самом авансе: менеджер может отправить её повторно,
  * не создавая новый платёж, а клиент — вернуться к незавершённой оплате.
  */
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ depositId: string }> },
-) {
-  const session = await getSessionUser();
+export async function POST(request: NextRequest, context: RouteContext) {
+  const auth = await requireRequestSession(request, PROPOSAL_MANAGER_ROLES);
 
-  if (!session) {
-    return apiError(401, "unauthorized", "Требуется вход.");
+  if (!auth.ok) {
+    return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Deposit checkout denied.");
   }
 
   if (!isStripeConfigured()) {
     return apiError(503, "payments_not_configured", "Приём платежей не настроен.");
   }
 
-  const { depositId } = await params;
+  const { depositId } = await context.params;
 
   const deposit = await prisma.deposit.findUnique({
     where: { deposit_id: depositId },
