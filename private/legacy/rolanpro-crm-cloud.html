@@ -1484,8 +1484,21 @@
     background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
     border-bottom: 1px solid #eef2f7;
   }
+  /* Общее правило: длинное содержимое переносится, а не растягивает
+     блок. Двадцать случаев переполнения в системе были вызваны тем,
+     что вёрстка задавала размер вместо того, чтобы позволить
+     содержимому его определить. */
+  .card, .modal-content, .kanban-card, .manager-window-card,
+  .work-item-card, .order-action-card, .orders-kpi-card {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   .manager-measure-table {
-    min-width: 940px;
+    /* Была min-width 940px: таблица не помещалась даже в широкое окно
+       и всегда требовала горизонтальной прокрутки. Колонки ужимаются
+       по содержимому, а перенос длинных значений разрешён ниже. */
+    min-width: 0;
     width: 100%;
     border-collapse: collapse;
     font-size: .83rem;
@@ -1515,12 +1528,14 @@
     font-size: .78rem;
   }
   .manager-window-type-cell {
-    min-width: 220px;
+    /* Было 220px при контейнере 410px: в ряд помещалась одна карточка
+       и обрезок второй. Теперь три карточки видны целиком. */
+    min-width: 118px;
   }
   .manager-window-type-grid {
     display: flex;
     gap: .38rem;
-    max-width: 410px;
+    max-width: 100%;
     overflow-x: auto;
     padding: .1rem .05rem .35rem;
     scrollbar-width: thin;
@@ -1711,7 +1726,7 @@
     font-weight: 900;
   }
   .manager-solar-field {
-    min-width: 150px;
+    min-width: 0;
   }
   .manager-solar-field select {
     width: 100%;
@@ -2984,8 +2999,13 @@
     padding: .85rem;
   }
   .calendar-lanes {
+    /* Было repeat(4, minmax(210px, 1fr)) = 840px минимум.
+       Единица fr заставляет браузер ужимать колонки под окно,
+       и последняя обрезается. Фиксированная ширина честнее:
+       колонка либо видна целиком, либо до неё скроллят. */
     display: grid;
-    grid-template-columns: repeat(4, minmax(210px, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(210px, 260px);
     gap: .7rem;
     overflow-x: auto;
   }
@@ -4924,7 +4944,7 @@
       flex: 1;
     }
     .calendar-month-grid {
-      min-width: 720px;
+      min-width: 0;
     }
     .ai-sidebar {
       width: 100vw;
@@ -6003,7 +6023,7 @@ const M2_PER_SQFT = 0.09290304;
 const SQFT_PER_M2 = 10.7639104;
 const MM_PER_INCH = 25.4;
 function mm2_to_sqft(mm2) { return (mm2 / 1_000_000) * SQFT_PER_M2; }
-function sqft_to_mm2(sqft) { return sqft * M2_PER_SQFT * 1_000_000; }
+
 function inches_to_mm(inch) { return inch * MM_PER_INCH; }
 function mm_to_inches(mm) { return mm / MM_PER_INCH; }
 
@@ -6253,117 +6273,7 @@ function buildArchitecturalCatalog() {
 }
 
 // Original return — kept for backward-compat fallback
-function _originalCatalogReturn() {
-  return [
-    // ════════════════════════ MADICO ════════════════════════
-    // Sunscape — solar control
-    c('Madico', 'Sunscape Select 10', 'solar', 8, 2.4, 0.27, 13),
-    c('Madico', 'Sunscape Select 25', 'solar', 8.5, 2.6, 0.27, 13),
-    c('Madico', 'Sunscape Select 35', 'solar', 9, 2.8, 0.27, 13),
-    c('Madico', 'Sunscape Select 50', 'solar', 9.5, 3.0, 0.27, 13),
-    c('Madico', 'Sunscape Select 70', 'solar', 11, 3.5, 0.27, 13),
-    // SafetyShield — security/protective
-    c('Madico', 'SafetyShield 4 mil', 'protective', 10, 3.2, 0.32, 10),
-    c('Madico', 'SafetyShield 7 mil', 'protective', 12, 3.8, 0.32, 10),
-    c('Madico', 'SafetyShield 8 mil', 'protective', 13, 4.2, 0.32, 10),
-    c('Madico', 'SafetyShield 12 mil', 'protective', 16, 5.5, 0.35, 10),
-    c('Madico', 'SafetyShield 14 mil', 'protective', 18, 6.5, 0.35, 10),
-    // Casper — privacy that blocks LED screens
-    c('Madico', 'Casper Cloaking', 'privacy', 14, 4.5, 0.30, 10),
-    // Decorative
-    c('Madico', 'Optitune Frosted', 'decorative', 9, 2.8, 0.27, 10),
-    c('Madico', 'Optitune Gradient', 'decorative', 11, 3.5, 0.27, 10),
 
-    // ════════════════════════ LLUMAR ════════════════════════
-    // ATR — air-treated ceramic, premium solar
-    c('LLumar', 'ATR 5', 'solar', 9, 2.7, 0.27, 12),
-    c('LLumar', 'ATR 15', 'solar', 9.5, 2.9, 0.27, 12),
-    c('LLumar', 'ATR 35', 'solar', 11, 3.3, 0.27, 12),
-    c('LLumar', 'ATR 50', 'solar', 12, 3.6, 0.27, 12),
-    c('LLumar', 'ATR 70', 'solar', 14, 4.5, 0.27, 12),
-    // Vista NRE — premium spectrally selective
-    c('LLumar', 'Vista NRE 30', 'solar', 14, 4.5, 0.27, 12),
-    c('LLumar', 'Vista NRE 50', 'solar', 15, 5.0, 0.27, 12),
-    c('LLumar', 'Vista NRE 65', 'solar', 16, 5.5, 0.27, 12),
-    c('LLumar', 'Vista NRE 75', 'solar', 18, 6.0, 0.27, 12),
-    // SCL SR PS — Safety + Scratch Resistant
-    c('LLumar', 'SCL SR PS 4 mil', 'protective', 11, 3.4, 0.32, 10),
-    c('LLumar', 'SCL SR PS 7 mil', 'protective', 13, 4.0, 0.32, 10),
-    c('LLumar', 'SCL SR PS 8 mil', 'protective', 14, 4.4, 0.32, 10),
-    c('LLumar', 'SCL SR PS 11 mil', 'protective', 17, 5.8, 0.35, 10),
-    c('LLumar', 'SCL SR PS 14 mil', 'protective', 20, 7.0, 0.35, 10),
-    // DR — daylight redirecting
-    c('LLumar', 'DR Premium', 'solar', 22, 7.5, 0.30, 10),
-    // Decorative NDF
-    c('LLumar', 'NDF Frosted', 'decorative', 9.5, 3.0, 0.27, 10),
-    c('LLumar', 'NDF Linen', 'decorative', 10, 3.2, 0.27, 10),
-
-    // ════════════════════════ JOHNSON WINDOW FILMS ════════════════════════
-    // Stainless Steel — premium reflective
-    c('Johnson', 'Stainless Steel SS-05', 'solar', 9, 2.8, 0.27, 12),
-    c('Johnson', 'Stainless Steel SS-15', 'solar', 9.5, 3.0, 0.27, 12),
-    c('Johnson', 'Stainless Steel SS-20', 'solar', 10, 3.2, 0.27, 12),
-    c('Johnson', 'Stainless Steel SS-35', 'solar', 11, 3.5, 0.27, 12),
-    // Trad — traditional dyed
-    c('Johnson', 'Traditional 5', 'solar', 6, 1.8, 0.27, 13),
-    c('Johnson', 'Traditional 35', 'solar', 7, 2.0, 0.27, 13),
-    c('Johnson', 'Traditional 50', 'solar', 7.5, 2.2, 0.27, 13),
-    // Optishield — security
-    c('Johnson', 'Optishield 4 mil', 'protective', 10, 3.0, 0.32, 10),
-    c('Johnson', 'Optishield 8 mil', 'protective', 13, 4.0, 0.32, 10),
-    // Insulshield — Low-E
-    c('Johnson', 'Insulshield Low-E', 'solar', 16, 5.5, 0.30, 10),
-
-    // ════════════════════════ SOLAR GARD ════════════════════════
-    // Quantum — premium ceramic
-    c('Solar Gard', 'Quantum 27', 'solar', 14, 4.5, 0.27, 12),
-    c('Solar Gard', 'Quantum 38', 'solar', 14.5, 4.7, 0.27, 12),
-    c('Solar Gard', 'Quantum 47', 'solar', 15, 4.9, 0.27, 12),
-    c('Solar Gard', 'Quantum 60', 'solar', 16, 5.3, 0.27, 12),
-    c('Solar Gard', 'Quantum 80', 'solar', 18, 6.0, 0.27, 12),
-    // Silver — reflective sputtered
-    c('Solar Gard', 'Silver 15', 'solar', 8, 2.5, 0.27, 13),
-    c('Solar Gard', 'Silver 20', 'solar', 8.5, 2.7, 0.27, 13),
-    c('Solar Gard', 'Silver 35', 'solar', 9, 2.9, 0.27, 13),
-    c('Solar Gard', 'Silver 50', 'solar', 9.5, 3.1, 0.27, 13),
-    c('Solar Gard', 'Silver 70', 'solar', 11, 3.5, 0.27, 13),
-    // LX Low-E
-    c('Solar Gard', 'LX 70', 'solar', 16, 5.5, 0.30, 10),
-    c('Solar Gard', 'LX 80', 'solar', 17, 5.8, 0.30, 10),
-    // Armorcoat — security
-    c('Solar Gard', 'Armorcoat 4 mil', 'protective', 10, 3.0, 0.32, 10),
-    c('Solar Gard', 'Armorcoat 8 mil', 'protective', 13, 4.0, 0.32, 10),
-    c('Solar Gard', 'Armorcoat 14 mil', 'protective', 19, 6.5, 0.35, 10),
-    c('Solar Gard', 'Armorcoat 16 mil', 'protective', 22, 7.5, 0.35, 10),
-    // Solyx Decorative
-    c('Solar Gard', 'Solyx Frosted', 'decorative', 9, 2.8, 0.27, 10),
-    c('Solar Gard', 'Solyx Pattern', 'decorative', 12, 3.8, 0.27, 10),
-
-    // ════════════════════════ 3M (existing) ════════════════════════
-    c('3M', 'Crystalline 40', 'solar', 18, 6.0, 0.27, 12),
-    c('3M', 'Crystalline 50', 'solar', 19, 6.3, 0.27, 12),
-    c('3M', 'Crystalline 70', 'solar', 22, 7.5, 0.27, 12),
-    c('3M', 'Night Vision 35', 'solar', 12, 3.6, 0.27, 13),
-    c('3M', 'Night Vision 25', 'solar', 11, 3.4, 0.27, 13),
-    c('3M', 'Prestige 70', 'solar', 20, 7.0, 0.27, 12),
-    c('3M', 'Safety S140', 'protective', 14, 4.5, 0.32, 10),
-    c('3M', 'Safety Ultra S600', 'protective', 22, 7.8, 0.35, 10),
-
-    // ════════════════════════ SUNTEK (existing) ════════════════════════
-    c('SunTek', 'CXP 35', 'solar', 11, 3.3, 0.27, 13),
-    c('SunTek', 'CXP 50', 'solar', 11.5, 3.5, 0.27, 13),
-    c('SunTek', 'Carbon 50', 'solar', 9, 2.7, 0.27, 13),
-
-    // ════════════════════════ SMART / PDLC ════════════════════════
-    c('PDLC', 'Smart Film 60in clear→opaque', 'smart', 60, 18, 0.55, 8),
-    c('PDLC', 'Smart Film 72in clear→opaque', 'smart', 65, 20, 0.55, 8),
-
-    // ════════════════════════ GENERIC PRIVACY ════════════════════════
-    c('Generic', 'Frosted Matte', 'decorative', 7, 2.2, 0.27, 10),
-    c('Generic', 'Privacy Mirror', 'privacy', 10, 3.0, 0.27, 12),
-    c('Generic', 'Anti-Graffiti 6 mil', 'protective', 9, 2.8, 0.32, 10),
-  ];
-}
 
 function migrateSchema() {
   if (Array.isArray(db.users)) {
@@ -10730,125 +10640,7 @@ function openProfessionalKP(oid) {
   generatePremiumProposal(oid);
 }
 
-function openClassicProfessionalKP(oid) {
-  const o = getOrder(oid);
-  if (!orderUserOwns(o)) { alert('Финансовые документы доступны только владельцу и назначенному менеджеру'); return; }
-  const c = getClient(o.clientId);
-  const projectAddress = orderAddress(o, c);
-  const s = db.settings;
-  const rooms = o.measurements?.rooms || [];
-  const complexityCoef = (o.complexity && o.complexity !== 'standard') ? (s.complexityCoefs?.[o.complexity] || 1) : 1;
-  let grand = 0;
 
-  const roomsHtml = rooms.map((r, ri) => {
-    let roomTotal = 0, roomArea = 0;
-    const winCards = (r.windows || []).map(w => {
-      const cat = windowCatalog(w);
-      const area = windowAreaSqft(w);
-      const sum = windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft);
-      roomTotal += sum; roomArea += area;
-      const inUnits = s.inputUnits === 'inches';
-      const dims = inUnits
-        ? `${mm_to_inches(w.width||0).toFixed(1)}" × ${mm_to_inches(w.height||0).toFixed(1)}"`
-        : `${w.width} × ${w.height} мм`;
-      const price = w.pricePerSqft ?? o.priceOverridePerSqft ?? cat?.retailPerSqft ?? 0;
-      return `
-      <div class="kp-win">
-        <div class="kp-win-svg">${windowSVG(w, { maxPx: 120 })}</div>
-        <div class="kp-win-info">
-          <div class="kp-win-name">${w.name}</div>
-          <div class="kp-win-row"><span>Тип:</span> ${winTypeInfo(w.winType).label}</div>
-          <div class="kp-win-row"><span>Размер:</span> ${dims} &nbsp;·&nbsp; ${w.qty||1} шт</div>
-          <div class="kp-win-row"><span>Площадь:</span> ${area.toFixed(2)} sqft</div>
-          <div class="kp-win-row"><span>Плёнка:</span> ${cat ? `${cat.brand} ${cat.model} <em>(${catLabel(cat.category)})</em>` : (w.filmType || '— уточняется —')}</div>
-          <div class="kp-win-row"><span>Цена:</span> $${(+price).toFixed(2)}/sqft</div>
-          ${w.smart ? `<div class="kp-win-row"><span>Smart:</span> зона ${academyEsc(w.smart.zone || r.name || '—')} · подключение ${academyEsc(smartConnectionPointInfo(w.smart.connectionPointSide || w.smart.busbarSide).label.toLowerCase())} · блок ${academyEsc(smartBlockPlacementInfo(w.smart.blockPlacement).label)}</div>` : ''}
-          <div class="kp-win-sum">${fmtMoney(sum)}</div>
-        </div>
-      </div>`;
-    }).join('');
-    grand += roomTotal;
-    return `
-    <div class="kp-room">
-      <div class="kp-room-head">
-        <div class="kp-room-title">${ri+1}. ${r.name}</div>
-        <div class="kp-room-total">${roomArea.toFixed(1)} sqft · <b>${fmtMoney(roomTotal)}</b></div>
-      </div>
-      <div class="kp-wins">${winCards || '<div style="color:#94a3b8;font-size:13px;">Окна не добавлены</div>'}</div>
-    </div>`;
-  }).join('');
-
-  const validUntil = new Date(Date.now() + 14*24*3600*1000).toLocaleDateString('ru-RU');
-  const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>КП ${o.number} — RolanPRO</title>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    @page { size: Letter portrait; margin: 0.55in; }
-    html, body { width:100%; background:#fff; }
-    body { font-family:'Helvetica Neue',Arial,sans-serif; color:#0f172a; padding:0; max-width:none; margin:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    .kp-head { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid #1e3a5f; padding-bottom:20px; }
-    .kp-logo { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
-    .kp-logo small { display:block; font-size:11px; font-weight:400; letter-spacing:3px; color:#64748b; margin-top:2px; }
-    .kp-meta { text-align:right; font-size:13px; color:#475569; line-height:1.7; }
-    .kp-title { font-size:22px; font-weight:700; margin:28px 0 4px; color:#1e3a5f; }
-    .kp-sub { font-size:13px; color:#64748b; margin-bottom:22px; }
-    .kp-client { background:#f8fafc; border-left:4px solid #1e3a5f; padding:14px 18px; font-size:14px; line-height:1.8; margin-bottom:26px; }
-    .kp-room { margin-bottom:26px; page-break-inside:avoid; }
-    .kp-room-head { display:flex; justify-content:space-between; align-items:baseline; background:#1e3a5f; color:#fff; padding:9px 16px; border-radius:8px 8px 0 0; }
-    .kp-room-title { font-size:15px; font-weight:600; }
-    .kp-room-total { font-size:14px; }
-    .kp-wins { border:1px solid #e2e8f0; border-top:none; border-radius:0 0 8px 8px; padding:14px; display:flex; flex-wrap:wrap; gap:14px; }
-    .kp-win { display:flex; gap:12px; border:1px solid #e8eef4; border-radius:10px; padding:10px; width:calc(50% - 7px); page-break-inside:avoid; }
-    .kp-win-svg { flex-shrink:0; }
-    .kp-win-info { font-size:12.5px; line-height:1.65; flex:1; }
-    .kp-win-name { font-weight:700; font-size:13.5px; margin-bottom:3px; color:#1e3a5f; }
-    .kp-win-row span { color:#64748b; }
-    .kp-win-sum { font-weight:700; font-size:15px; color:#047857; margin-top:4px; }
-    .kp-total { display:flex; justify-content:flex-end; margin:8px 0 26px; }
-    .kp-total-box { background:#1e3a5f; color:#fff; padding:16px 26px; border-radius:12px; text-align:right; }
-    .kp-total-box .lbl { font-size:12px; opacity:.8; letter-spacing:1px; }
-    .kp-total-box .val { font-size:28px; font-weight:800; }
-    .kp-terms { font-size:12px; color:#64748b; line-height:1.9; border-top:1px solid #e2e8f0; padding-top:16px; }
-    .kp-sign { display:flex; justify-content:space-between; margin-top:40px; font-size:13px; }
-    .kp-sign div { width:44%; border-top:1px solid #0f172a; padding-top:6px; color:#475569; }
-    .kp-closing { break-inside:avoid; page-break-inside:avoid; }
-    .kp-print { position:fixed; top:14px; right:14px; padding:10px 22px; background:#1e3a5f; color:#fff; border:none; border-radius:9px; font-size:14px; cursor:pointer; }
-    @media print { .kp-print { display:none; } body { zoom:.92; } .kp-room,.kp-win,.kp-total-box,.kp-terms,.kp-closing { break-inside:avoid; page-break-inside:avoid; } .kp-room{margin-bottom:18px}.kp-sign{margin-top:28px} }
-  </style></head><body>
-  <button class="kp-print" onclick="window.print()">🖨 Печать / PDF</button>
-  <div class="kp-head">
-    <div class="kp-logo">${brandDocumentLogoHtml('kp-brand-logo')}<small>WINDOW FILM SOLUTIONS · LOS ANGELES</small></div>
-    <div class="kp-meta">
-      Коммерческое предложение <b>№ ${o.number}</b><br>
-      Дата: ${new Date().toLocaleDateString('ru-RU')}<br>
-      Действительно до: <b>${validUntil}</b>
-    </div>
-  </div>
-  <div class="kp-title">Коммерческое предложение</div>
-  <div class="kp-sub">Профессиональная установка оконных плёнок · Замер выполнен: ${o.measurementDoneAt ? fmtDate(o.measurementDoneAt) : fmtDate(new Date().toISOString())}</div>
-  <div class="kp-client">
-    <b>Заказчик:</b> ${c?.name || '—'}<br>
-    ${projectAddress ? `<b>Объект:</b> ${projectAddress}<br>` : ''}
-    ${c?.phone ? `<b>Телефон:</b> ${c.phone}` : ''} ${c?.email ? ` · <b>Email:</b> ${c.email}` : ''}
-  </div>
-  ${roomsHtml || '<p style="color:#94a3b8">Замеры не внесены.</p>'}
-  ${complexityCoef !== 1 ? `<div style="font-size:13px;color:#64748b;margin-bottom:8px;">Коэффициент сложности работ: ×${complexityCoef.toFixed(2)} (учтён в ценах)</div>` : ''}
-  <div class="kp-total"><div class="kp-total-box"><div class="lbl">ИТОГО ПО ОБЪЕКТУ</div><div class="val">${fmtMoney(grand)}</div></div></div>
-  <div class="kp-closing">
-    <div class="kp-terms">
-      • Аванс ${s.advance?.percent || 30}% при подписании, остаток — по завершении монтажа.<br>
-      • Монтаж выполняется сертифицированными специалистами за 1 день (для типовых объектов).<br>
-      • Гарантия на плёнку — по спецификации производителя (до 10 лет), на работы — 12 месяцев.<br>
-      • Предложение действительно 14 дней. Финальная стоимость подтверждается после согласования.
-    </div>
-    <div class="kp-sign">
-      <div>Подпись заказчика / дата</div>
-      <div>RolanPRO / представитель</div>
-    </div>
-  </div>
-  </body></html>`);
-  win.document.close();
-}
 
 // ---------- INTEGRATION HELPERS (Google Voice / Gmail / Google Maps) ----------
 // Работают сразу, без API-ключей: генерируют правильные ссылки.
@@ -13861,70 +13653,7 @@ function renderLogin() {
 }
 
 // Retained only as an unreachable migration reference for old standalone snapshots.
-function renderLegacyPinLoginDisabled() {
-  if (ROLANPRO_CLOUD) return renderCloudRoleChooser();
-  const roleOrder = ['owner','manager','measurer','installer'];
-  const roleRank = role => {
-    const idx = roleOrder.indexOf(role);
-    return idx === -1 ? 99 : idx;
-  };
-  const activeLoginUsers = db.users.filter(u => u.active !== false);
-  const loginUsers = (activeLoginUsers.length ? activeLoginUsers : db.users).slice()
-    .sort((a,b) => roleRank(a.role) - roleRank(b.role));
-  const firstLoginUserId = loginUsers[0]?.id || '';
-  return `
-  <div class="min-h-screen brand-gradient flex items-center justify-center p-4">
-    <div class="max-w-md w-full bg-white rounded-2xl shadow-2xl overflow-hidden">
-      <div class="p-6 text-center bg-white">
-        ${brandLogoHtml('brand-logo-login')}
-        <div class="text-sm text-slate-500 mt-3">${T('tagline')}</div>
-      </div>
-      <div class="p-6">
-        <div class="flex justify-end mb-3">
-          <select onchange="state.lang=this.value; save(); render();" class="w-auto text-sm">
-            <option value="ru" ${state.lang==='ru'?'selected':''}>RU</option>
-            <option value="en" ${state.lang==='en'?'selected':''}>EN</option>
-          </select>
-        </div>
-        <label class="text-sm font-semibold mb-2">Быстрый вход — выберите сотрудника или просто введите его PIN:</label>
-        <div id="login-selected-user" class="mb-3 text-sm bg-blue-50 text-blue-800 border border-blue-100 rounded-lg p-2">
-          Выбран: <b>${academyEsc(loginUsers[0]?.name || '—')}</b> · ${T(loginUsers[0]?.role || '')}
-        </div>
-        <div class="grid grid-cols-2 gap-2 mb-3">
-          ${(() => {
-            const icons = { owner: '👑', manager: '🧑‍💼', measurer: '📐', installer: '🔧' };
-            const colors = { owner: 'bg-gradient-to-br from-amber-400 to-amber-600 text-white', manager: 'bg-gradient-to-br from-blue-500 to-blue-700 text-white', measurer: 'bg-gradient-to-br from-indigo-500 to-indigo-700 text-white', installer: 'bg-gradient-to-br from-purple-500 to-purple-700 text-white' };
-            return loginUsers.map(u => `
-              <button data-login-card="${u.id}" class="${colors[u.role]||'bg-gray-200'} p-3 rounded-lg text-left hover:scale-105 transition ${u.id===firstLoginUserId?'ring-4 ring-blue-200':''}" onclick="selectLoginUser('${u.id}')">
-                <div class="text-2xl">${icons[u.role]||'👤'}</div>
-                <div class="text-xs opacity-90 mt-1">${T(u.role)}</div>
-                <div class="font-semibold text-sm truncate">${academyEsc(u.name)}</div>
-              </button>
-            `).join('');
-          })()}
-        </div>
-        <details class="mb-3">
-          <summary class="text-xs text-gray-500 cursor-pointer">Все пользователи списком ↓</summary>
-          <div class="mt-2">
-            <select id="login-user" onchange="selectLoginUser(this.value, true)">
-              ${loginUsers.map(u => `<option value="${u.id}">${academyEsc(u.name)} — ${T(u.role)}</option>`).join('')}
-            </select>
-          </div>
-        </details>
-        <input type="hidden" id="login-user-hidden" value="${firstLoginUserId}">
-        <div class="mt-3">
-          <label>${T('loginPin')}</label>
-          <input type="password" id="login-pin" maxlength="12" inputmode="numeric" autocomplete="one-time-code" placeholder="••••" oninput="this.value=normalizePin(this.value)" onkeydown="if(event.key==='Enter') tryLogin();">
-        </div>
-        <button class="btn-primary w-full mt-4" onclick="tryLogin()">${T('loginBtn')}</button>
-        <div class="mt-4 text-xs text-gray-500 border-t pt-4">
-          <div class="font-semibold mb-1">PIN для входа:</div>
-          ${loginUsers.map(u => `<div>${T(u.role)} · <b>${academyEsc(u.name)}</b> — <b>${academyEsc(loginPinHint(u))}</b></div>`).join('')}
-        </div>
-      </div>
-    </div>
-  </div>`;
-}
+
 
 function normalizePin(val) {
   return String(val ?? '').replace(/[^0-9]/g, '').slice(0, 8);
@@ -14029,15 +13758,7 @@ function updateUserPin(userId, val) {
   u.pin = pin;
   save(); render();
 }
-function regenerateUserPin(userId) {
-  const u = getUser(userId); if (!u) return;
-  let pin;
-  do { pin = String(Math.floor(1000 + Math.random() * 9000)); }
-  while (db.users.some(x => x.id !== userId && pinMatches(x.pin, pin)));
-  u.pin = pin;
-  save(); render();
-  alert(`Новый PIN для ${u.name}: ${pin}`);
-}
+
 
 // ---------- APP SHELL ----------
 function isCompactViewport() {
