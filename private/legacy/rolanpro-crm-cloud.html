@@ -1575,6 +1575,21 @@
     color: #334155;
     text-align: center;
   }
+/* Телефон: якорение прокрутки не даёт содержимому прыгать при
+     подгрузке, инерция делает прокрутку привычной для iOS. */
+  html { overflow-anchor: auto; }
+  body { -webkit-overflow-scrolling: touch; }
+  [data-scroll-key] {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  /* Поля не должны вызывать масштабирование при фокусе — iOS
+     увеличивает страницу, если размер шрифта меньше 16px, и это
+     читается как рывок. */
+  @media (max-width: 840px) {
+    input, select, textarea { font-size: 16px; }
+  }
+
   .work-people {
     display: grid;
     gap: .3rem;
@@ -13849,6 +13864,8 @@ function restoreRenderPosition(snapshot) {
   }
 }
 
+let __lastRenderedHtml = '';
+
 function render() {
   const root = document.getElementById('app');
   const snapshot = captureRenderPosition();
@@ -13858,7 +13875,22 @@ function render() {
   if (state.clientPortalOrderId) { root.innerHTML = renderClientPortal(); return; }
   if (!state.currentUserId) { root.innerHTML = renderLogin(); return; }
 
-  root.innerHTML = renderAppShell();
+  const html = renderAppShell();
+
+  // Тридцать обработчиков вызывают render() при каждом изменении поля,
+  // но большинство изменений не меняют то, что на экране: ввод размера
+  // окна не влияет на список комнат слева. Замена полутора мегабайт
+  // разметки в таких случаях бессмысленна, а на телефоне видна глазом.
+  //
+  // Сравнение строк дешевле, чем перестроение дерева документа:
+  // если разметка та же, DOM не трогаем вообще.
+  if (html === __lastRenderedHtml) {
+    restoreRenderPosition(snapshot);
+    return;
+  }
+
+  __lastRenderedHtml = html;
+  root.innerHTML = html;
   attachGlobalListeners();
   restoreRenderPosition(snapshot);
 }
@@ -17036,10 +17068,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
         <div class="order-passport-side">
           <div class="order-passport-side-title">Быстрые действия по заказу</div>
           <div class="order-passport-action-grid">
-            ${renderOrderPassportAction({ icon: '📐', title: 'Размеры', sub: measureSub, onclick: measureAction, primary: true })}
-            ${renderOrderPassportAction({ icon: '📄', title: 'КП', sub: hasMeasurements ? 'единый стандарт ROLANPRO' : 'сначала внесите размеры', onclick: `openProfessionalKP('${o.id}')`, disabled: proposalDisabled })}
-            ${renderOrderPassportAction({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
-            ${renderOrderPassportAction({ icon: '🧭', title: 'Маршрут', sub: address ? 'Google Maps' : 'адрес не указан', href: routeHref, disabled: !address })}
+            ${orderPassportActions(o, { measureSub, measureAction, hasMeasurements, proposalDisabled, address, routeHref })}
           </div>
           ${canSeeMoney ? `
             <div class="order-passport-money">
@@ -17051,6 +17080,65 @@ function renderOrderPassport(o, c, u, opts = {}) {
         </div>
       </div>
     </section>`;
+}
+
+/**
+ * Быстрые действия по заказу — в порядке воронки.
+ *
+ * Раньше первым и подсвеченным стояли «Размеры», то есть замер, а
+ * консультации не было вовсе. Заказ в статусе «Новый» подталкивал
+ * сразу к замеру, хотя по процессу сначала консультация:
+ * консультация → замер → КП → монтаж → акт → оплата.
+ *
+ * Подсвечивается то действие, которое соответствует текущему этапу,
+ * а не всегда одно и то же.
+ */
+function orderPassportActions(o, ctx) {
+  const done = {
+    consultation: Boolean(o.consultationAt) || o.status !== 'new',
+    measure: ctx.hasMeasurements,
+    proposal: ['proposal_sent','proposal_accepted','installation_scheduled','installation_accepted',
+               'installation_en_route','installation_in_progress','installation_done',
+               'act_signed','payment_received','completed','review_received'].includes(o.status),
+    install: Boolean(o.installationAt),
+  };
+
+  // Первое незакрытое действие и есть следующий шаг.
+  const stage = !done.consultation ? 'consultation'
+              : !done.measure      ? 'measure'
+              : !done.proposal     ? 'proposal'
+              : !done.install      ? 'install'
+              : 'closing';
+
+  const actions = [
+    { key: 'consultation', icon: '☎', title: 'Консультация',
+      sub: o.consultationAt ? fmtDateTime(o.consultationAt) : 'назначить время',
+      onclick: `scheduleConsultationPrompt('${o.id}')` },
+
+    { key: 'measure', icon: '📐', title: 'Замер',
+      sub: ctx.measureSub, onclick: ctx.measureAction },
+
+    { key: 'proposal', icon: '📄', title: 'КП',
+      sub: ctx.hasMeasurements ? 'единый стандарт ROLANPRO' : 'сначала замер',
+      onclick: `openProfessionalKP('${o.id}')`, disabled: ctx.proposalDisabled },
+
+    { key: 'install', icon: '▣', title: 'Монтаж',
+      sub: o.installationAt ? fmtDateTime(o.installationAt) : 'запланировать',
+      onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.proposal },
+
+    { key: 'workorder', icon: '📋', title: 'Заказ-наряд',
+      sub: ctx.hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера',
+      onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements },
+
+    { key: 'route', icon: '🧭', title: 'Маршрут',
+      sub: ctx.address ? 'Google Maps' : 'адрес не указан',
+      href: ctx.routeHref, disabled: !ctx.address },
+  ];
+
+  return actions.map(a => renderOrderPassportAction({
+    ...a,
+    primary: a.key === stage,
+  })).join('');
 }
 
 function renderOrderCleanMini(label, value, cls = '') {
