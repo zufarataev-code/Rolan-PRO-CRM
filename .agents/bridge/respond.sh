@@ -1,80 +1,88 @@
 #!/usr/bin/env bash
-# Ответ Codex на задачу или пулл-реквест.
+# Ответ архитектора на задачу или пулл-реквест.
 #
-# Владелец в цепочке не участвует: Claude ставит задачу, Codex отвечает,
-# Claude читает ответ и строит.
-set -euo pipefail
+# Запрос идёт прямо в OpenAI, без Codex CLI: у инструмента командной
+# строки свои настройки и режимы одобрения, из-за которых он молча
+# завершался успехом, ничего не опубликовав.
+set -uo pipefail
 
-if [ -z "${OPENAI_API_KEY:-}" ]; then
-  echo "OPENAI_API_KEY не задан — мост не настроен. Пропускаем."
-  exit 0
-fi
+fail() { echo "МОСТ: $1"; exit 0; }
 
-if [ -z "${ISSUE_NUMBER:-}" ]; then
-  echo "Событие без номера задачи. Пропускаем."
-  exit 0
-fi
+[ -n "${OPENAI_API_KEY:-}" ] || fail "ключ OPENAI_API_KEY не задан"
+[ -n "${ISSUE_NUMBER:-}" ]   || fail "событие без номера задачи"
 
-WORKDIR="$(mktemp -d)"
-CONTEXT="$WORKDIR/context.md"
-ANSWER="$WORKDIR/answer.md"
+WORK="$(mktemp -d)"
 
-# Собираем контекст: сама задача и вся переписка по ней.
+# Контекст: сама задача и переписка по ней.
 {
-  echo "## Задача #$ISSUE_NUMBER"
-  gh issue view "$ISSUE_NUMBER" --json title,body,labels \
-    --template '{{.title}}{{"\n\n"}}{{.body}}' 2>/dev/null \
-    || gh pr view "$ISSUE_NUMBER" --json title,body \
-       --template '{{.title}}{{"\n\n"}}{{.body}}'
+  gh issue view "$ISSUE_NUMBER" --json title,body \
+     --template '{{.title}}{{"\n\n"}}{{.body}}' 2>/dev/null \
+  || gh pr view "$ISSUE_NUMBER" --json title,body \
+     --template '{{.title}}{{"\n\n"}}{{.body}}' 2>/dev/null \
+  || echo "не удалось прочитать задачу"
 
   echo
-  echo "## Переписка"
-  gh issue view "$ISSUE_NUMBER" --comments 2>/dev/null | tail -n 120 || true
-} > "$CONTEXT"
+  echo "--- переписка ---"
+  gh issue view "$ISSUE_NUMBER" --comments 2>/dev/null | tail -n 100 || true
+} > "$WORK/context.md"
 
-PROMPT=$(cat <<'EOF'
-Ты архитектор проекта RolanPRO CRM. Роли описаны в .agents/PROTOCOL.md:
-решение и путь задаёшь ты, Claude строит по твоему решению.
+SYSTEM='Ты архитектор проекта RolanPRO CRM — система для компании по установке оконных плёнок в Лос-Анджелесе.
 
-Прочитай задачу и переписку ниже. Ответь как архитектор:
+Роли: решение и путь задаёшь ты, Claude строит по твоему решению.
 
-1. Согласен ли ты с постановкой. Если нет — что не так.
-2. Твоё решение: что именно менять и почему. Конкретно, а не общими словами.
+Отвечай на задачу как архитектор:
+1. Согласен ли с постановкой. Если нет — что не так.
+2. Решение: что менять и почему. Конкретно.
 3. Порядок действий и что не трогать.
 4. Критерий готовности — проверяемое условие.
 
-Если для решения нужно посмотреть код — посмотри, репозиторий рядом.
-Если задача поставлена неверно, скажи это прямо и предложи свою.
+Если задача поставлена неверно, скажи прямо и предложи свою.
+По-русски, коротко, без вступлений и пересказа задачи.'
 
-Пиши по-русски, коротко и по делу. Без вступлений и без пересказа задачи.
-EOF
-)
+# Собираем запрос через jq, чтобы не сломаться на кавычках в тексте.
+jq -n --arg s "$SYSTEM" --arg u "$(cat "$WORK/context.md")" '{
+  model: "gpt-4o",
+  messages: [
+    {role: "system", content: $s},
+    {role: "user", content: $u}
+  ]
+}' > "$WORK/request.json"
 
-echo "$PROMPT" > "$WORKDIR/prompt.md"
-cat "$CONTEXT" >> "$WORKDIR/prompt.md"
+HTTP=$(curl -sS -o "$WORK/response.json" -w '%{http_code}' \
+  https://api.openai.com/v1/chat/completions \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @"$WORK/request.json")
 
-# Codex в неинтерактивном режиме: читает репозиторий, ничего не меняет.
-codex exec --full-auto --skip-git-repo-check \
-  "$(cat "$WORKDIR/prompt.md")" > "$ANSWER" 2>"$WORKDIR/err.log" || {
-    echo "Codex не ответил:"
-    tail -n 40 "$WORKDIR/err.log"
-    exit 0
-  }
+if [ "$HTTP" != "200" ]; then
+  ERR=$(jq -r '.error.message // "неизвестная ошибка"' "$WORK/response.json" 2>/dev/null)
+  echo "МОСТ: OpenAI ответил $HTTP — $ERR"
+  # Нехватка средств — частая причина, пишем об этом в задачу,
+  # иначе владелец видит зелёную галочку и пустую задачу.
+  if echo "$ERR" | grep -qiE 'quota|billing|insufficient'; then
+    gh issue comment "$ISSUE_NUMBER" --body \
+"<!-- codex-bridge -->
+**Мост не смог ответить**
 
-if [ ! -s "$ANSWER" ]; then
-  echo "Пустой ответ, комментарий не публикуем."
+OpenAI отклонил запрос: $ERR
+
+Нужно пополнить баланс API на platform.openai.com — это отдельная оплата от подписки ChatGPT." 2>/dev/null || true
+  fi
   exit 0
 fi
 
-# Метка нужна, чтобы мост не отвечал на собственные сообщения.
+jq -r '.choices[0].message.content // ""' "$WORK/response.json" > "$WORK/answer.md"
+[ -s "$WORK/answer.md" ] || fail "пустой ответ модели"
+
 {
   echo "<!-- codex-bridge -->"
   echo "**Решение архитектора**"
   echo
-  cat "$ANSWER"
-} > "$WORKDIR/comment.md"
+  cat "$WORK/answer.md"
+} > "$WORK/comment.md"
 
-gh issue comment "$ISSUE_NUMBER" --body-file "$WORKDIR/comment.md" \
-  || gh pr comment "$ISSUE_NUMBER" --body-file "$WORKDIR/comment.md"
+gh issue comment "$ISSUE_NUMBER" --body-file "$WORK/comment.md" 2>/dev/null \
+  || gh pr comment "$ISSUE_NUMBER" --body-file "$WORK/comment.md" 2>/dev/null \
+  || fail "не удалось опубликовать комментарий"
 
-echo "Ответ опубликован в #$ISSUE_NUMBER"
+echo "МОСТ: ответ опубликован в #$ISSUE_NUMBER"
