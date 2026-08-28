@@ -3,14 +3,22 @@ import test from "node:test";
 
 import { destinationForRoles } from "./destination";
 
-test("employees land in the workspace for their role", () => {
-  assert.equal(destinationForRoles(["OWNER"]), "/owner");
-  assert.equal(destinationForRoles(["MANAGER"]), "/manager");
+test("владелец и менеджер попадают в рабочую CRM", () => {
+  assert.equal(destinationForRoles(["OWNER"]), "/legacy-crm");
+  assert.equal(destinationForRoles(["MANAGER"]), "/legacy-crm");
+});
+
+test("полевые роли попадают в свои экраны", () => {
   assert.equal(destinationForRoles(["CONSULTANT"]), "/survey");
   assert.equal(destinationForRoles(["INSTALLER"]), "/installer");
 });
 
-test("the more privileged operational role wins when a user has several roles", () => {
+test("при нескольких ролях выигрывает более широкая", () => {
   assert.equal(destinationForRoles(["INSTALLER", "CONSULTANT"]), "/survey");
-  assert.equal(destinationForRoles(["MANAGER", "CONSULTANT"]), "/manager");
+  assert.equal(destinationForRoles(["MANAGER", "CONSULTANT"]), "/legacy-crm");
+});
+
+test("без известных ролей пользователь остаётся на входе", () => {
+  assert.equal(destinationForRoles([]), "/login");
+  assert.equal(destinationForRoles(["UNKNOWN"]), "/login");
 });
