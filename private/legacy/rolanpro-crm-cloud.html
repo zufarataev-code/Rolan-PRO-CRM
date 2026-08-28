@@ -2729,24 +2729,28 @@
     background: rgba(37,99,235,.10);
     font-size: 1rem;
   }
-  .order-action-card.primary .order-action-icon,
+  .order-action-card.primary .order-action-card.primary .order-action-icon,
   .order-action-card.success .order-action-icon {
     background: rgba(255,255,255,.18);
   }
   .order-action-title {
+    /* Заголовок и подпись — соседние span, поэтому без display:block
+       они слипались в одну строку: «Назначить консультациюСобытие...» */
+    display: block;
     font-size: .9rem;
     line-height: 1.15;
     font-weight: 850;
     letter-spacing: 0;
   }
   .order-action-sub {
+    display: block;
     margin-top: .2rem;
     font-size: .72rem;
     line-height: 1.25;
     color: #64748b;
     overflow-wrap: anywhere;
   }
-  .order-action-card.primary .order-action-sub,
+  .order-action-card.primary .order-action-card.primary .order-action-sub,
   .order-action-card.success .order-action-sub {
     color: rgba(255,255,255,.82);
   }
