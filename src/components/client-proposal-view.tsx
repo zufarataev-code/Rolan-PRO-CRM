@@ -66,6 +66,65 @@ function parseNumber(value: unknown) {
   return 0;
 }
 
+/**
+ * Клиент компании находится в США и читает документ на английском.
+ *
+ * Позиции приходят из старой системы, где размеры записаны в
+ * миллиметрах, а названия проёмов по-русски: «Окно 1 · 1016 × 1778».
+ * Американский клиент не понимает ни того, ни другого — в договоре на
+ * несколько тысяч долларов это выглядит как чужой документ.
+ *
+ * Переводим при показе, не трогая данные: перевод в базе потребовал бы
+ * переноса всех прежних предложений и сломал бы уже отправленные.
+ */
+const MM_PER_INCH = 25.4;
+
+function millimetresToInches(value: number) {
+  const inches = value / MM_PER_INCH;
+  const rounded = Math.round(inches * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function localizeItemText(text: unknown) {
+  if (typeof text !== "string" || !text.trim()) {
+    return text ?? "";
+  }
+
+  let result = text;
+
+  // «1016 × 1778» → «40 × 70 in». Размеры меньше 50 считаем уже
+  // дюймами: окно шириной 30 мм не существует, а 30 дюймов обычно.
+  result = result.replace(
+    /(\d{2,5})(?:[.,]\d+)?\s*[×x]\s*(\d{2,5})(?:[.,]\d+)?(?!\s*(?:in|")\b)/gi,
+    (match, rawWidth: string, rawHeight: string) => {
+      const width = Number(rawWidth);
+      const height = Number(rawHeight);
+
+      if (!Number.isFinite(width) || !Number.isFinite(height)) return match;
+      if (width < 50 || height < 50) return match;
+
+      return `${millimetresToInches(width)} × ${millimetresToInches(height)} in`;
+    },
+  );
+
+  // Граница слова \b в JavaScript опирается на латиницу, поэтому с
+  // кириллицей не срабатывает: /\bОкно\b/ не находит «Окно».
+  // Используем проверку на соседние буквы любого алфавита.
+  const words: Array<[RegExp, string]> = [
+    [/(?<!\p{L})Окно(?!\p{L})/gu, "Window"],
+    [/(?<!\p{L})Дверь(?!\p{L})/gu, "Door"],
+    [/(?<!\p{L})Перегородка(?!\p{L})/gu, "Partition"],
+    [/(?<!\p{L})Витрина(?!\p{L})/gu, "Storefront"],
+    [/(?<!\p{L})шт\.?(?!\p{L})/gu, "pcs"],
+  ];
+
+  for (const [pattern, replacement] of words) {
+    result = result.replace(pattern, replacement);
+  }
+
+  return result;
+}
+
 function getDynamicFieldSummary(item: any) {
   const fields = item?.dynamic_fields;
 
@@ -359,7 +418,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
                   <article key={item.proposal_item_id} className="client-item-card">
                     <div className="client-item-top">
                       <div>
-                        <div className="row-title">{item.title}</div>
+                        <div className="row-title">{localizeItemText(item.title)}</div>
                         <div className="row-meta">
                           {item.room_name ?? "General"} · {item.service_type?.name ?? "Service"}
                         </div>
@@ -370,7 +429,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
                     <div className="row-meta">
                       {item.film
                         ? `${item.film.brand_name} ${item.film.model_name} · ${item.film.category_name}`
-                        : item.description ?? "Custom line item"}
+                        : localizeItemText(item.description) || "Custom line item"}
                     </div>
 
                     {fieldSummary.length > 0 && (
