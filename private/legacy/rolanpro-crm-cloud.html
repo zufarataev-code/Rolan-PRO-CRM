@@ -13737,14 +13737,76 @@ function parseHash() {
 window.addEventListener('hashchange', () => { parseHash(); render(); });
 
 // ---------- RENDER ----------
+/**
+ * Перерисовка приложения.
+ *
+ * Экран собирается целиком в innerHTML, поэтому браузер теряет
+ * положение прокрутки и фокус: после каждого добавления окна или
+ * комнаты страница прыгала наверх, а курсор вылетал из поля.
+ *
+ * Перед перерисовкой запоминаем, где стоял пользователь, и
+ * возвращаем это состояние сразу после. Восстановление идёт
+ * синхронно, до отрисовки кадра, иначе прыжок всё равно заметен.
+ */
+function captureRenderPosition() {
+  const active = document.activeElement;
+  const scrollers = [];
+
+  document.querySelectorAll('[data-scroll-key]').forEach(el => {
+    if (el.scrollTop || el.scrollLeft) {
+      scrollers.push({ key: el.getAttribute('data-scroll-key'), top: el.scrollTop, left: el.scrollLeft });
+    }
+  });
+
+  return {
+    windowTop: window.scrollY || document.documentElement.scrollTop || 0,
+    scrollers,
+    focusId: active && active.id ? active.id : null,
+    selectionStart: active && 'selectionStart' in active ? active.selectionStart : null,
+    selectionEnd: active && 'selectionEnd' in active ? active.selectionEnd : null,
+  };
+}
+
+function restoreRenderPosition(snapshot) {
+  if (!snapshot) return;
+
+  window.scrollTo(0, snapshot.windowTop);
+
+  snapshot.scrollers.forEach(item => {
+    const el = document.querySelector(`[data-scroll-key="${item.key}"]`);
+    if (!el) return;
+    el.scrollTop = item.top;
+    el.scrollLeft = item.left;
+  });
+
+  if (!snapshot.focusId) return;
+
+  const field = document.getElementById(snapshot.focusId);
+  if (!field || typeof field.focus !== 'function') return;
+
+  field.focus({ preventScroll: true });
+
+  if (snapshot.selectionStart !== null && 'setSelectionRange' in field) {
+    try {
+      field.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+    } catch {
+      // Поля вроде number не поддерживают выделение — это не ошибка.
+    }
+  }
+}
+
 function render() {
   const root = document.getElementById('app');
+  const snapshot = captureRenderPosition();
+
   if (state.premiumProposalToken) { root.innerHTML = renderPremiumProposalPortal(state.premiumProposalToken); return; }
   if (state.clientAccountPortalClientId) { root.innerHTML = renderClientAccountPortal(); return; }
   if (state.clientPortalOrderId) { root.innerHTML = renderClientPortal(); return; }
   if (!state.currentUserId) { root.innerHTML = renderLogin(); return; }
+
   root.innerHTML = renderAppShell();
   attachGlobalListeners();
+  restoreRenderPosition(snapshot);
 }
 
 // ---------- LOGIN VIEW ----------
@@ -14035,7 +14097,7 @@ function renderAppShell() {
     </aside>
 
     <!-- Main -->
-    <main class="app-main">
+    <main class="app-main" data-scroll-key="app-main">
       <header class="app-topbar">
         <button class="topbar-icon-btn" onclick="toggleSidebar()" title="${collapsed ? 'Открыть меню' : 'Скрыть меню'}">☰</button>
         <div class="topbar-title">
@@ -14829,7 +14891,7 @@ function renderOrdersKanban(filtered, opts = {}) {
       <div class="p-3 rounded-lg border bg-white"><div class="text-xs text-gray-500">Остаток к оплате</div><div class="text-xl font-black ${totalDebt>0?'text-red-600':'text-slate-800'}">${fmtMoney(totalDebt)}</div></div>
       <div class="p-3 rounded-lg border bg-white"><div class="text-xs text-gray-500">Средний чек</div><div class="text-xl font-black">${fmtMoney(filtered.length ? totalRevenue / filtered.length : 0)}</div></div>
     </div>`}
-    <div class="kanban-funnel">
+    <div class="kanban-funnel" data-scroll-key="kanban">
       ${ORDER_KANBAN_FUNNEL.map(col => {
         const orders = filtered.filter(o => col.statuses.includes(o.status));
         const colRevenue = orders.reduce((s,o) => s + orderKanbanRevenue(o), 0);
@@ -18550,7 +18612,7 @@ function renderManagerMeasureModal(oid) {
         </div>
         ${managerMeasureProgressHtml(o)}
       </div>
-      <div class="manager-measure-body">
+      <div class="manager-measure-body" data-scroll-key="measure-body">
         <div class="manager-measure-workspace">
           <aside class="manager-measure-sidebar">
             <div class="rounded-lg border bg-white p-3">
