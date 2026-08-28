@@ -17085,17 +17085,18 @@ function renderOrderPassport(o, c, u, opts = {}) {
 /**
  * Быстрые действия по заказу — в порядке воронки.
  *
- * Раньше первым и подсвеченным стояли «Размеры», то есть замер, а
- * консультации не было вовсе. Заказ в статусе «Новый» подталкивал
- * сразу к замеру, хотя по процессу сначала консультация:
- * консультация → замер → КП → монтаж → акт → оплата.
+ * Консультации здесь намеренно нет. Она происходит ДО создания заказа:
+ * клиент оставляет заявку, бот записывает, менеджер перезванивает.
+ * Менеджер заводит клиента в CRM только после этого разговора, поэтому
+ * к моменту существования заказа консультация уже состоялась.
+ *
+ * Выезд консультанта и замер — один визит, а не два события.
  *
  * Подсвечивается то действие, которое соответствует текущему этапу,
- * а не всегда одно и то же.
+ * а не всегда одно и то же: пока нет замера — замер, после КП — монтаж.
  */
 function orderPassportActions(o, ctx) {
   const done = {
-    consultation: Boolean(o.consultationAt) || o.status !== 'new',
     measure: ctx.hasMeasurements,
     proposal: ['proposal_sent','proposal_accepted','installation_scheduled','installation_accepted',
                'installation_en_route','installation_in_progress','installation_done',
@@ -17104,17 +17105,12 @@ function orderPassportActions(o, ctx) {
   };
 
   // Первое незакрытое действие и есть следующий шаг.
-  const stage = !done.consultation ? 'consultation'
-              : !done.measure      ? 'measure'
-              : !done.proposal     ? 'proposal'
-              : !done.install      ? 'install'
+  const stage = !done.measure   ? 'measure'
+              : !done.proposal  ? 'proposal'
+              : !done.install   ? 'install'
               : 'closing';
 
   const actions = [
-    { key: 'consultation', icon: '☎', title: 'Консультация',
-      sub: o.consultationAt ? fmtDateTime(o.consultationAt) : 'назначить время',
-      onclick: `scheduleConsultationPrompt('${o.id}')` },
-
     { key: 'measure', icon: '📐', title: 'Замер',
       sub: ctx.measureSub, onclick: ctx.measureAction },
 
