@@ -23129,19 +23129,51 @@ function premiumPaymentDue(prop, calc) {
 function premiumFinancingMonthly(total) {
   return Math.max(299, Math.round(total / 24));
 }
+/**
+ * Характеристики плёнки для КП клиенту.
+ *
+ * Раньше VLT угадывался по первой цифре в названии: «LLumar ATR 35»
+ * давало 35%, а «Titan Prime» — «Project spec». UV был зашит как 99%
+ * для всего подряд, теплоотражение выводилось из категории.
+ *
+ * Эти значения уходили клиенту в предложение на десятки тысяч долларов
+ * и в договор. Совпадение цифры в названии с реальным светопропусканием
+ * — не факт, а совпадение: у «Safety Prime 4» цифра означает толщину в
+ * милах, а не VLT.
+ *
+ * Теперь показываем только то, что действительно хранится в записи
+ * каталога. Пустое поле в КП честнее выдуманного: клиент спросит, и
+ * менеджер ответит по паспорту производителя.
+ *
+ * Поля vlt/uv/heat появятся в каталоге отдельной задачей — для
+ * линейки MAGNITRONIC PRIME у владельца есть реальные замеры.
+ */
+/**
+ * Собирает подпись из тех характеристик, которые действительно есть.
+ * Пустые пропускаются, чтобы в КП не было «VLT — · UV —».
+ */
+function premiumSpecLine(spec, extra = []) {
+  const parts = [
+    spec.vlt && spec.vlt !== '—' ? `VLT ${spec.vlt}` : '',
+    spec.uv && spec.uv !== '—' ? `UV ${spec.uv}` : '',
+    spec.heat && spec.heat !== '—' ? `Heat ${spec.heat}` : '',
+    spec.warranty && spec.warranty !== '—' ? `Warranty ${spec.warranty}` : '',
+    ...extra,
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
+
 function premiumProductSpec(catalog) {
+  const unknown = '—';
   if (!catalog) {
-    return { vlt: 'Project spec', uv: '99%', heat: 'Project spec', warranty: 'Standard', category: 'Custom' };
+    return { vlt: unknown, uv: unknown, heat: unknown, warranty: unknown, category: 'Custom' };
   }
-  const text = `${catalog.brand} ${catalog.model}`;
-  const match = text.match(/\b(\d{1,2})\b/);
-  const category = catLabel(catalog.category);
   return {
-    vlt: catalog.category === 'smart' ? 'Clear / Private' : (match ? match[1] + '%' : 'Project spec'),
-    uv: '99%',
-    heat: catalog.category === 'solar' ? 'Up to 79%' : catalog.category === 'protective' ? 'Impact package' : 'Project spec',
-    warranty: catalog.category === 'smart' ? '5 years' : 'Lifetime residential',
-    category,
+    vlt: catalog.vlt ? String(catalog.vlt) : (catalog.category === 'smart' ? 'Clear / Private' : unknown),
+    uv: catalog.uvBlock ? String(catalog.uvBlock) : unknown,
+    heat: catalog.tser ? String(catalog.tser) : unknown,
+    warranty: catalog.warranty ? String(catalog.warranty) : unknown,
+    category: catLabel(catalog.category),
   };
 }
 function premiumProductOptions(selectedId) {
@@ -23431,7 +23463,7 @@ function premiumRenderWindow(prop, order, room, window, idx, calc) {
             <select onchange="premiumSetWindowProduct('${prop.token}','${window.id}',this.value)" ${locked || !included ? 'disabled' : ''}>
               ${premiumProductOptions(selectedId)}
             </select>
-            <div class="text-xs text-slate-400 mt-1">${premiumEsc(cat ? `${cat.brand} ${cat.model}` : (window.filmType || 'Custom film'))} · VLT ${spec.vlt} · UV ${spec.uv} · Heat ${spec.heat} · Warranty ${spec.warranty}</div>
+            <div class="text-xs text-slate-400 mt-1">${premiumEsc(cat ? `${cat.brand} ${cat.model}` : (window.filmType || 'Custom film'))} · ${premiumSpecLine(spec)}</div>
           </div>
           <div class="text-right">
             <div class="text-xs text-slate-400">Window cost</div>
@@ -23648,7 +23680,7 @@ function renderPremiumProposalPortal(token) {
                   const items = (db.settings.catalog || []).filter(c => c.category === cat).slice(0, 3);
                   return `<div class="pp-product"><div class="text-xs text-blue-200 font-bold">${premiumEsc(catLabel(cat))}</div>${items.map(c => {
                     const spec = premiumProductSpec(c);
-                    return `<div class="mt-3"><div class="font-black">${premiumEsc(c.brand)} ${premiumEsc(c.model)}</div><div class="text-xs text-slate-400">VLT ${spec.vlt} · UV ${spec.uv} · ${fmtMoney(c.retailPerSqft)}/sqft</div></div>`;
+                    return `<div class="mt-3"><div class="font-black">${premiumEsc(c.brand)} ${premiumEsc(c.model)}</div><div class="text-xs text-slate-400">${premiumSpecLine(spec, [fmtMoney(c.retailPerSqft) + '/sqft'])}</div></div>`;
                   }).join('') || '<div class="text-sm text-slate-400 mt-3">No products in catalog</div>'}</div>`;
                 }).join('')}
               </div>
@@ -27232,34 +27264,132 @@ function renderInventory() {
   </div>
 
   <div class="card mt-4">
-    <h3 class="font-semibold mb-3">🎞 Каталог плёнок по поставщикам</h3>
-    <p class="text-sm text-gray-500 mb-3">У каждого поставщика — свой ассортимент. Категория плёнки подсвечена цветом для быстрого визуального распознавания.</p>
-    ${(() => {
-      const groups = catalogByVendor();
-      const order = [...db.vendors.map(v => v.id), '_none'];
-      return order.filter(vid => groups[vid] && groups[vid].length).map(vid => {
-        const vendor = vid === '_none' ? null : db.vendors.find(v => v.id === vid);
-        const items = groups[vid];
-        return `
-        <div class="mb-4 border rounded-lg p-3">
-          <div class="flex items-center justify-between mb-2">
-            <div class="font-semibold text-sm">${vendor ? '🏭 ' + vendor.name : '— Без привязки к поставщику —'}</div>
-            <button class="btn-ghost text-xs" onclick="addCatalogItem(${vendor ? `'${vendor.id}'` : 'null'})">+ Добавить плёнку</button>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            ${items.map(c => `
-              <div class="flex items-center gap-2 px-2 py-1 rounded-lg" style="background:${catColor(c.category).bg}">
-                <span style="width:8px;height:8px;border-radius:50%;background:${catColor(c.category).dot};display:inline-block;"></span>
-                <span class="text-xs font-medium" style="color:${catColor(c.category).text}">${c.brand} — ${c.model}</span>
-                <span class="text-xs opacity-70" style="color:${catColor(c.category).text}">(${catLabel(c.category)})</span>
-              </div>
-            `).join('')}
-          </div>
-        </div>`;
-      }).join('') || '<div class="empty-state"><div class="icon">🎞</div><div>Каталог пуст.</div></div>';
-    })()}
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-3">
+      <div>
+        <h3 class="font-semibold">🎞 Каталог плёнок</h3>
+        <p class="text-sm text-gray-500">Поиск по бренду и модели, фильтры по поставщику и категории. Ширина рулона и остаток — сразу в строке.</p>
+      </div>
+      <button class="btn-primary text-sm" onclick="addCatalogItem(null)">+ Добавить плёнку</button>
+    </div>
+    ${renderCatalogBrowser()}
   </div>
   `;
+}
+
+/**
+ * Каталог плёнок: поиск, фильтры, параметры в строке.
+ *
+ * Раньше все ~150 позиций выводились подряд плоским набором «таблеток»
+ * вида «Бренд — Модель (Категория)». Найти конкретную плёнку было
+ * невозможно, а ширину рулона и остаток приходилось искать в других
+ * разделах.
+ *
+ * Технических характеристик (VLT, TSER, толщина) в базе пока нет —
+ * показываем то, что действительно хранится: ширину рулона, цену и
+ * остаток. Выдуманных значений здесь нет намеренно.
+ */
+function renderCatalogBrowser() {
+  const query = (state.catalogQuery || '').trim().toLowerCase();
+  const vendorFilter = state.catalogVendor || 'all';
+  const categoryFilter = state.catalogCategory || 'all';
+
+  const stockByCatalog = {};
+  db.inventory.forEach(roll => {
+    const id = roll.catalogId;
+    if (!id) return;
+    stockByCatalog[id] = (stockByCatalog[id] || 0) + (roll.lengthM || 0);
+  });
+
+  const categories = [...new Set(db.catalog.map(c => c.category).filter(Boolean))];
+
+  const matches = db.catalog.filter(c => {
+    if (vendorFilter !== 'all') {
+      const vid = c.vendorId || '_none';
+      if (vid !== vendorFilter) return false;
+    }
+    if (categoryFilter !== 'all' && c.category !== categoryFilter) return false;
+    if (!query) return true;
+    return `${c.brand} ${c.model} ${catLabel(c.category)}`.toLowerCase().includes(query);
+  });
+
+  // Внутри отфильтрованного — по-прежнему группируем по поставщику,
+  // чтобы был виден чей это ассортимент.
+  const byVendor = {};
+  matches.forEach(c => {
+    const vid = c.vendorId || '_none';
+    (byVendor[vid] = byVendor[vid] || []).push(c);
+  });
+  const order = [...db.vendors.map(v => v.id), '_none'].filter(vid => byVendor[vid]?.length);
+
+  const controls = `
+  <div class="flex gap-2 flex-wrap mb-3">
+    <input id="catalog-search" value="${academyEsc(state.catalogQuery || '')}"
+           placeholder="🔎 Бренд или модель: ATR, Titan, Safety..."
+           oninput="state.catalogQuery=this.value; render();"
+           style="flex:1;min-width:200px;">
+    <select class="w-auto text-sm" onchange="state.catalogVendor=this.value; render();">
+      <option value="all" ${vendorFilter==='all'?'selected':''}>Все поставщики</option>
+      ${db.vendors.map(v => `<option value="${v.id}" ${vendorFilter===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}
+      <option value="_none" ${vendorFilter==='_none'?'selected':''}>Без поставщика</option>
+    </select>
+    <select class="w-auto text-sm" onchange="state.catalogCategory=this.value; render();">
+      <option value="all" ${categoryFilter==='all'?'selected':''}>Все категории</option>
+      ${categories.map(k => `<option value="${k}" ${categoryFilter===k?'selected':''}>${catLabel(k)}</option>`).join('')}
+    </select>
+    ${(query || vendorFilter!=='all' || categoryFilter!=='all')
+      ? `<button class="btn-ghost text-sm" onclick="state.catalogQuery=''; state.catalogVendor='all'; state.catalogCategory='all'; render();">✕ Сбросить</button>`
+      : ''}
+    <span class="tag self-center">${matches.length} из ${db.catalog.length}</span>
+  </div>`;
+
+  if (!matches.length) {
+    return controls + `<div class="empty-state"><div class="icon">🔎</div><div>Ничего не найдено. Измените запрос или сбросьте фильтры.</div></div>`;
+  }
+
+  const rows = order.map(vid => {
+    const vendor = vid === '_none' ? null : db.vendors.find(v => v.id === vid);
+    const items = byVendor[vid];
+    return `
+    <div class="mb-3 border rounded-lg overflow-hidden">
+      <div class="flex items-center justify-between px-3 py-2 bg-gray-50 border-b">
+        <div class="font-semibold text-sm">${vendor ? '🏭 ' + academyEsc(vendor.name) : '— Без поставщика —'}</div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-gray-500">${items.length}</span>
+          <button class="btn-ghost text-xs" onclick="addCatalogItem(${vendor ? `'${vendor.id}'` : 'null'})">+ Плёнка</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr class="text-xs text-gray-500 border-b">
+            <th class="text-left p-2">Плёнка</th>
+            <th class="text-left p-2">Категория</th>
+            <th class="text-left p-2">Ширина рулона</th>
+            <th class="text-left p-2">Цена</th>
+            <th class="text-left p-2">На складе</th>
+          </tr></thead>
+          <tbody>
+            ${items.map(c => {
+              const pal = catColor(c.category);
+              const stock = stockByCatalog[c.id] || 0;
+              return `
+              <tr class="border-t">
+                <td class="p-2">
+                  <span style="width:8px;height:8px;border-radius:50%;background:${pal.dot};display:inline-block;margin-right:6px;"></span>
+                  <span class="font-medium">${academyEsc(c.brand)} — ${academyEsc(c.model)}</span>
+                </td>
+                <td class="p-2"><span class="tag" style="background:${pal.bg};color:${pal.text}">${catLabel(c.category)}</span></td>
+                <td class="p-2 whitespace-nowrap">${c.rollWidth ? c.rollWidth + '"' : '<span class="text-gray-400">—</span>'}</td>
+                <td class="p-2 whitespace-nowrap">${c.retailPerSqft ? '$' + c.retailPerSqft + '/sqft' : '<span class="text-gray-400">—</span>'}</td>
+                <td class="p-2 whitespace-nowrap ${stock > 0 ? 'text-emerald-700 font-semibold' : 'text-gray-400'}">${stock > 0 ? stock.toFixed(1) + ' м' : 'нет'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  return controls + rows;
 }
 
 function openAddRollModal(presetCatId) {
