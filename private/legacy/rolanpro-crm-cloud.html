@@ -13046,7 +13046,207 @@ function orderMarginPct(o) {
   const r = orderRevenue(o);
   return r > 0 ? orderMargin(o) / r : 0;
 }
+/**
+ * ПОСТУПЛЕНИЯ ПО ЗАКАЗУ
+ *
+ * Раньше оплата была одной цифрой `o.paid`: аванс и доплата не
+ * различались, способ и дата не сохранялись. Для карты этого хватало —
+ * её отмечает процессинг. Но Zelle и банковский перевод приходят на
+ * счёт напрямую, и подтверждает их владелец руками.
+ *
+ * Теперь платежи хранятся списком: сумма, дата, способ, кто отметил.
+ * Старое поле `o.paid` остаётся ведущим для совместимости — оно
+ * пересчитывается из списка, поэтому весь расчёт долга, канбан и
+ * отчёты продолжают работать без изменений.
+ */
+const PAYMENT_METHODS = [
+  { id: 'zelle', label: 'Zelle' },
+  { id: 'wire', label: 'Банковский перевод' },
+  { id: 'card', label: 'Карта / ACH' },
+  { id: 'check', label: 'Чек' },
+  { id: 'cash', label: 'Наличные' },
+];
+
+function paymentMethodLabel(id) {
+  return PAYMENT_METHODS.find(m => m.id === id)?.label || id || '—';
+}
+
+function orderPayments(o) {
+  if (!o) return [];
+  if (!Array.isArray(o.payments)) o.payments = [];
+  return o.payments;
+}
+
+function orderPaidTotal(o) {
+  return orderPayments(o).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+}
+
+/**
+ * Держит `o.paid` в согласии со списком платежей.
+ *
+ * Если платежей нет, а `o.paid` уже стоял (заказ отмечен до появления
+ * списка), цифру не трогаем — иначе потеряли бы отметку об оплате.
+ */
+function syncOrderPaid(o) {
+  if (!o) return;
+  const payments = orderPayments(o);
+  if (!payments.length) return;
+  o.paid = orderPaidTotal(o);
+}
+
+function addOrderPayment(orderId, data) {
+  const o = getOrder(orderId);
+  if (!o) return;
+  orderPayments(o).push({
+    id: 'pay_' + uid(),
+    amount: Number(data.amount) || 0,
+    date: data.date || new Date().toISOString().slice(0, 10),
+    method: data.method || 'zelle',
+    note: data.note || '',
+    recordedBy: state.currentUserId || null,
+    recordedAt: new Date().toISOString(),
+  });
+  syncOrderPaid(o);
+  save();
+}
+
+function deleteOrderPayment(orderId, paymentId) {
+  const o = getOrder(orderId);
+  if (!o) return;
+  if (!confirm('Удалить отметку о поступлении?')) return;
+  o.payments = orderPayments(o).filter(p => p.id !== paymentId);
+  o.paid = orderPaidTotal(o);
+  save();
+  render();
+}
+
+/**
+ * Окно отметки поступления. Сумма подставляется остатком долга —
+ * чаще всего приходит именно он.
+ */
+function openPaymentModal(orderId) {
+  const o = getOrder(orderId);
+  if (!o) return;
+  const c = getClient(o.clientId);
+  const due = Math.max(0, orderRevenue(o) - orderPaidTotal(o));
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6" style="max-width:30rem;">
+      <h3 class="font-semibold text-lg mb-1">Отметить поступление</h3>
+      <p class="text-xs text-gray-500 mb-4">${academyEsc(o.number)} · ${academyEsc(c?.name || '')} · к оплате ${fmtMoney(due)}</p>
+
+      <label>Сумма</label>
+      <input id="pay-amount" type="number" step="0.01" value="${due > 0 ? due.toFixed(2) : ''}">
+
+      <label class="mt-3">Способ</label>
+      <select id="pay-method">
+        ${PAYMENT_METHODS.map(m => `<option value="${m.id}">${m.label}</option>`).join('')}
+      </select>
+
+      <label class="mt-3">Дата поступления</label>
+      <input id="pay-date" type="date" value="${new Date().toISOString().slice(0,10)}">
+
+      <label class="mt-3">Заметка</label>
+      <input id="pay-note" placeholder="Номер платежа, от кого, за что">
+
+      <div class="flex gap-2 mt-5">
+        <button class="btn-primary flex-1" onclick="confirmPayment('${o.id}')">Отметить</button>
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
+function confirmPayment(orderId) {
+  const amount = parseFloat(document.getElementById('pay-amount')?.value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    alert('Укажите сумму поступления.');
+    return;
+  }
+  addOrderPayment(orderId, {
+    amount,
+    method: document.getElementById('pay-method')?.value,
+    date: document.getElementById('pay-date')?.value,
+    note: document.getElementById('pay-note')?.value,
+  });
+  closeModal();
+  render();
+}
+
+/**
+ * Раздел «Ожидают оплаты» — список того, что должно прийти.
+ *
+ * Владелец открывает его и отмечает пришедшее одним проходом, вместо
+ * поиска по заказам. Карта отмечается процессингом, здесь — переводы,
+ * Zelle, чеки и наличные.
+ */
+function renderPaymentsDue() {
+  const canRecord = currentUser()?.role === 'owner';
+  const orders = db.orders
+    .filter(o => !['cancelled'].includes(o.status))
+    .map(o => ({ o, revenue: orderRevenue(o), paid: orderPaidTotal(o) }))
+    .filter(x => x.revenue > 0 && x.paid < x.revenue - 0.01)
+    .sort((a, b) => (b.revenue - b.paid) - (a.revenue - a.paid));
+
+  const totalDue = orders.reduce((s, x) => s + (x.revenue - x.paid), 0);
+
+  if (!orders.length) {
+    return `<div class="card"><div class="empty-state"><div class="icon">✅</div><div>Все заказы оплачены.</div></div></div>`;
+  }
+
+  return `
+  <div class="card">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <div>
+        <h3 class="font-semibold">💵 Ожидают оплаты <span class="text-sm font-normal text-gray-500">· ${orders.length} · ${fmtMoney(totalDue)}</span></h3>
+        <p class="text-sm text-gray-500">Zelle, переводы, чеки и наличные отмечаются здесь вручную. Карта — автоматически.</p>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-xs text-gray-500 border-b">
+          <th class="text-left p-2">Заказ</th>
+          <th class="text-left p-2">Клиент</th>
+          <th class="text-left p-2">Сумма</th>
+          <th class="text-left p-2">Получено</th>
+          <th class="text-left p-2">Осталось</th>
+          <th class="text-left p-2">Платежи</th>
+          ${canRecord ? '<th class="text-left p-2"></th>' : ''}
+        </tr></thead>
+        <tbody>
+          ${orders.map(({ o, revenue, paid }) => {
+            const c = getClient(o.clientId);
+            const due = revenue - paid;
+            const payments = orderPayments(o);
+            return `
+            <tr class="border-t">
+              <td class="p-2"><button class="btn-ghost text-xs" onclick="openOrder('${o.id}')">${academyEsc(o.number)}</button></td>
+              <td class="p-2">${academyEsc(c?.name || '—')}</td>
+              <td class="p-2 whitespace-nowrap">${fmtMoney(revenue)}</td>
+              <td class="p-2 whitespace-nowrap ${paid > 0 ? 'text-emerald-700' : 'text-gray-400'}">${fmtMoney(paid)}</td>
+              <td class="p-2 whitespace-nowrap font-semibold text-red-600">${fmtMoney(due)}</td>
+              <td class="p-2">
+                ${payments.length ? payments.map(p => `
+                  <div class="text-xs text-gray-600">
+                    ${fmtMoney(p.amount)} · ${paymentMethodLabel(p.method)} · ${fmtDate(p.date)}
+                    ${canRecord ? `<button class="btn-ghost text-xs text-red-600" onclick="deleteOrderPayment('${o.id}','${p.id}')">✕</button>` : ''}
+                  </div>`).join('') : '<span class="text-xs text-gray-400">нет</span>'}
+              </td>
+              ${canRecord ? `<td class="p-2"><button class="btn-primary text-xs" onclick="openPaymentModal('${o.id}')">+ Поступление</button></td>` : ''}
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
 function orderDebt(o) {
+  const payments = Array.isArray(o?.payments) ? o.payments : [];
+  if (payments.length) {
+    return Math.max(0, orderRevenue(o) - orderPaidTotal(o));
+  }
   if (o.paid == null) return 0;
   return Math.max(0, orderRevenue(o) - (Number(o.paid) || 0));
 }
@@ -14152,6 +14352,7 @@ function renderAppShell() {
     ['clients', T('clients'), '👥'],
     ['inventory', 'Склад', '🎞'],
     ['payroll', 'Зарплата', '💰'],
+    ...(role === 'owner' ? [['paymentsdue', 'Ожидают оплаты', '💵']] : []),
     ...(role === 'owner' ? [['accounting', 'Учёт', '🧾']] : []),
     ['reports', T('reports'), '📈'],
     ['team', T('team'), '🧑‍🔧'],
@@ -14263,6 +14464,7 @@ function headerTitle() {
     case 'orders': return T('orders');
     case 'calendar': return T('calendar');
     case 'clients': return T('clients');
+    case 'paymentsdue': return '💵 Ожидают оплаты';
     case 'inventory': return '🎞 Склад плёнок';
     case 'tasks': return '✅ Задачи';
     case 'academy': return '🧭 Академия и процессы';
@@ -14292,6 +14494,7 @@ function headerSubtitle() {
     case 'inventory': return 'Плёнка, расходники, остатки, приход и списание';
     case 'payroll': return 'Начисления, периоды, выплаты и задолженность по зарплате';
     case 'accounting': return 'Деньги компании из заказов, склада, зарплаты и фактических операций';
+    case 'paymentsdue': return 'Zelle, переводы, чеки и наличные — отметить поступление';
     case 'measurements': return 'Задачи замерщика без финансовых данных';
     case 'installations': return 'Наряды монтажника, маршрут, приёмка и сдача работы';
     case 'academy': return 'Процессы компании, обучение, чек-листы и стандарты';
@@ -14324,6 +14527,7 @@ function renderView() {
   } else if (u.role === 'measurer') {
     switch (state.view) {
       case 'dashboard': return renderMeasurerDashboard();
+      case 'paymentsdue': return renderPaymentsDue();
       case 'measurements': return renderMeasurerTasks();
       case 'calendar': return renderCalendar();
       case 'tasks': return renderTasksView();
