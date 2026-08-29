@@ -6,16 +6,6 @@ type AppEnv = {
   sessionTtlHours: number;
   appUrl: string;
   nodeEnv: string;
-  /**
-   * Реквизиты для оплаты мимо процессинга. Карта берёт процент с
-   * каждой транзакции, перевод и Zelle приходят на счёт компании
-   * напрямую — на проекте в десятки тысяч разница ощутима.
-   *
-   * Не заданы — блок оплаты в предложении не показывается.
-   */
-  paymentsZelle: string | null;
-  paymentsWire: string | null;
-  paymentsAchEnabled: boolean;
 };
 
 const INSECURE_AUTH_SECRETS = new Set([
@@ -49,8 +39,5 @@ export function getEnv(): AppEnv {
     sessionTtlHours: Number(process.env.SESSION_TTL_HOURS ?? "168"),
     appUrl: process.env.APP_URL ?? "http://localhost:3000",
     nodeEnv,
-    paymentsZelle: process.env.ROLANPRO_PAYMENTS_ZELLE?.trim() || null,
-    paymentsWire: process.env.ROLANPRO_PAYMENTS_WIRE?.trim() || null,
-    paymentsAchEnabled: process.env.ROLANPRO_PAYMENTS_ACH?.trim().toLowerCase() !== "off",
   };
 }
