@@ -411,6 +411,12 @@ const proposalItemInclude = {
       model_name_ru: true,
       model_name_en: true,
       thickness: true,
+      // Характеристики уже хранятся в FilmCatalog, но раньше не
+      // выбирались — поэтому клиент видел только название плёнки.
+      vlt_percent: true,
+      uv_rejection_percent: true,
+      ir_rejection_percent: true,
+      tser_percent: true,
     },
   },
 } as const;
