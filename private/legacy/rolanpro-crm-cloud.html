@@ -16711,6 +16711,54 @@ function renderSettings() {
     </div>
 
     <div class="card">
+      <h3 class="font-semibold mb-1">💵 Как клиент платит</h3>
+      <p class="text-xs text-gray-500 mb-3">
+        Показывается клиенту в предложении. Zelle и перевод идут прямо на счёт компании
+        без процента; карта удобнее клиенту, но процессинг берёт около 2,9% плюс 30¢ —
+        на проекте в $26 000 это порядка $780.
+        Логины и пароли банка здесь не хранятся и храниться не должны: только то,
+        что клиент видит.
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" ${s.clientPayments.zelleEnabled?'checked':''} onchange="db.settings.clientPayments.zelleEnabled=this.checked; save(); render();">
+            <span>Zelle — без комиссии, приходит за минуты</span>
+          </label>
+          <input value="${academyEsc(s.clientPayments.zelleRecipient||'')}" placeholder="Телефон или почта для Zelle"
+                 onchange="db.settings.clientPayments.zelleRecipient=this.value.trim(); save();">
+          <input class="mt-2" value="${academyEsc(s.clientPayments.zelleRecipientName||'')}" placeholder="Имя получателя, как в банке"
+                 onchange="db.settings.clientPayments.zelleRecipientName=this.value.trim(); save();">
+          <div class="text-xs text-gray-400 mt-1">Лимит банка обычно несколько тысяч в день — подходит для аванса.</div>
+        </div>
+        <div>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" ${s.clientPayments.achEnabled?'checked':''} onchange="db.settings.clientPayments.achEnabled=this.checked; save(); render();">
+            <span>Банковский перевод — фиксированная комиссия</span>
+          </label>
+          <textarea rows="4" placeholder="Название компании, номер счёта, routing number, адрес банка"
+                    onchange="db.settings.clientPayments.achInstructions=this.value; save();">${academyEsc(s.clientPayments.achInstructions||'')}</textarea>
+          <div class="text-xs text-gray-400 mt-1">Выгоднее карты на крупных суммах: $20–30 вместо процента.</div>
+        </div>
+        <div>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" ${s.clientPayments.cardEnabled?'checked':''} onchange="db.settings.clientPayments.cardEnabled=this.checked; save(); render();">
+            <span>Карта — удобно клиенту, но с процентом</span>
+          </label>
+          <div class="text-xs text-gray-400 mt-1">Ссылка на оплату вставляется в заказе. Ключи Stripe прописывает владелец на сервере.</div>
+        </div>
+        <div>
+          <label class="text-xs">Какой способ предлагать первым</label>
+          <select onchange="db.settings.clientPayments.primary=this.value; save();">
+            <option value="zelle" ${s.clientPayments.primary==='zelle'?'selected':''}>Zelle</option>
+            <option value="ach" ${s.clientPayments.primary==='ach'?'selected':''}>Банковский перевод</option>
+            <option value="card" ${s.clientPayments.primary==='card'?'selected':''}>Карта</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
       <h3 class="font-semibold mb-3">${T('pricingDefaults')}</h3>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div><label>${T('managerPctDefault')} %</label><input type="number" step="0.5" value="${s.pricingDefaults.managerPct}" onchange="db.settings.pricingDefaults.managerPct=parseFloat(this.value)||0; save();"></div>
