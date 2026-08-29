@@ -3850,7 +3850,10 @@
     gap: 14px;
     overflow-x: auto;
     padding: 4px 2px 14px;
-    scroll-snap-type: x proximity;
+    /* scroll-snap убран намеренно. После перерисовки мы восстанавливаем
+       scrollLeft, а браузер тут же доводил его до ближайшей точки
+       притяжения — позиция уезжала. Отсюда «прокрутка работает не
+       всегда»: срабатывало, когда доска стояла между колонками. */
   }
   .kanban-fullscreen {
     position: fixed;
@@ -3885,8 +3888,15 @@
     box-shadow: 0 12px 28px rgba(15,23,42,.08);
   }
   .kanban-column {
-    min-height: 520px;
-    scroll-snap-align: start;
+    /* Раньше колонка только росла вниз: десять заказов в стадии тянули
+       за собой всю страницу, и пользователь прокручивал документ, а не
+       доску. Ощущалось как «прокрутка не работает» — прокручивалось не то.
+       Теперь длинная стадия прокручивается внутри себя. */
+    min-height: 320px;
+    max-height: calc(100vh - 260px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     border-radius: 12px;
     border: 1px solid rgba(148,163,184,0.24);
     background:
@@ -13867,7 +13877,35 @@ function restoreRenderPosition(snapshot) {
 
 let __lastRenderedHtml = '';
 
+/**
+ * Перерисовка не чаще одного раза за кадр.
+ *
+ * В коде 235 вызовов render(), из них 63 прямо в обработчиках. Одно
+ * действие пользователя часто вызывает несколько: обработчик поля,
+ * затем сохранение, затем обновление счётчика. Каждый такой вызов
+ * пересобирал всю разметку приложения заново.
+ *
+ * Теперь подряд идущие вызовы схлопываются в одну перерисовку перед
+ * следующим кадром. Для вызывающего кода ничего не меняется — он
+ * по-прежнему пишет render().
+ */
+let __renderScheduled = false;
+
 function render() {
+  if (__renderScheduled) return;
+  __renderScheduled = true;
+  requestAnimationFrame(() => {
+    __renderScheduled = false;
+    renderNow();
+  });
+}
+
+/**
+ * Немедленная перерисовка. Нужна там, где сразу после render() код
+ * читает готовый DOM — например, ставит фокус в только что созданное
+ * поле. Внутри системы вызывается только из render().
+ */
+function renderNow() {
   const root = document.getElementById('app');
   const snapshot = captureRenderPosition();
 
