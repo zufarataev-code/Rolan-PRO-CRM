@@ -85,6 +85,26 @@ function millimetresToInches(value: number) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
+/**
+ * Характеристики плёнки для клиента.
+ *
+ * Показываются только заполненные: у собственной линейки MAGNITRONIC
+ * PRIME есть реальные замеры, у чужих брендов данных может не быть.
+ * Пустое поле честнее выдуманного — раньше система угадывала VLT по
+ * цифре в названии и отправляла догадку в документ, по которому
+ * клиент платит.
+ */
+function filmSpecChips(film: any): string[] {
+  if (!film) return [];
+  const chips: string[] = [];
+  if (film.vlt_percent != null) chips.push(`Visible light ${film.vlt_percent}%`);
+  if (film.tser_percent != null) chips.push(`Heat rejected ${film.tser_percent}%`);
+  if (film.uv_rejection_percent != null) chips.push(`UV blocked ${film.uv_rejection_percent}%`);
+  if (film.ir_rejection_percent != null) chips.push(`Infrared blocked ${film.ir_rejection_percent}%`);
+  if (film.thickness) chips.push(String(film.thickness));
+  return chips;
+}
+
 function localizeItemText(text: unknown): string {
   if (typeof text !== "string" || !text.trim()) {
     // Возвращаемый тип объявлен явно: при strict вывод из `text ?? ""`
@@ -335,6 +355,11 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
                         ? `${item.film.brand_name} ${item.film.model_name} - ${item.film.category_name}`
                         : item.description ?? "Custom project service"}
                     </p>
+                    {filmSpecChips(item.film).length > 0 && (
+                      <p className="proposal-print-description">
+                        {filmSpecChips(item.film).join(" · ")}
+                      </p>
+                    )}
                     {fieldSummary.length || addonSummary.length ? (
                       <div className="proposal-print-facts">
                         {[...fieldSummary, ...addonSummary].map((summary) => (
@@ -433,6 +458,16 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
                         ? `${item.film.brand_name} ${item.film.model_name} · ${item.film.category_name}`
                         : localizeItemText(item.description) || "Custom line item"}
                     </div>
+
+                    {filmSpecChips(item.film).length > 0 && (
+                      <div className="proposal-detail-chips">
+                        {filmSpecChips(item.film).map((spec) => (
+                          <span key={spec} className="chip chip-spec">
+                            {spec}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {fieldSummary.length > 0 && (
                       <div className="proposal-detail-chips">
@@ -580,6 +615,61 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
               </button>
             </div>
           </section>
+
+          {/*
+            Способы оплаты. Карта идёт через процессинг и берёт процент с
+            каждой транзакции; перевод и Zelle приходят на счёт компании
+            напрямую. На проекте в десятки тысяч разница ощутима, поэтому
+            клиенту показываются оба пути, а выбор остаётся за ним.
+
+            Реквизиты берутся из настроек и показываются только когда
+            заполнены — иначе блок не выводится вовсе.
+          */}
+          {(proposal.payment_options?.ach_enabled ||
+            proposal.payment_options?.zelle_handle ||
+            proposal.payment_options?.wire_details) && (
+            <section className="surface">
+              <h2 className="surface-title">Payment options</h2>
+              <p className="landing-text">
+                Card payments are processed securely online. Bank transfer and Zelle go
+                directly to our account — no processing fee.
+              </p>
+
+              <div className="proposal-detail-list">
+                {proposal.payment_options?.zelle_handle && (
+                  <div className="client-item-card">
+                    <div className="row-title">Zelle</div>
+                    <div className="row-meta">{proposal.payment_options.zelle_handle}</div>
+                    <div className="row-meta">No fees. Best for the deposit.</div>
+                  </div>
+                )}
+
+                {proposal.payment_options?.wire_details && (
+                  <div className="client-item-card">
+                    <div className="row-title">Bank transfer</div>
+                    <div className="row-meta" style={{ whiteSpace: "pre-line" }}>
+                      {proposal.payment_options.wire_details}
+                    </div>
+                    <div className="row-meta">Flat bank fee, best for larger amounts.</div>
+                  </div>
+                )}
+
+                {proposal.payment_options?.ach_enabled && (
+                  <div className="client-item-card">
+                    <div className="row-title">Card or bank debit (ACH)</div>
+                    <div className="row-meta">
+                      A secure payment link is sent by your project manager after signing.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <p className="landing-text">
+                Please include proposal {proposal.proposal_number ?? ""} in the payment
+                reference so we can match it to your project.
+              </p>
+            </section>
+          )}
         </aside>
       </section>
     </div>
