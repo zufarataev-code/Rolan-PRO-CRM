@@ -551,7 +551,11 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
 
             <label className="calculator-notes">
               <span>Client Notes</span>
+              {/* rows задан явно: без него браузер тянул поле вниз, и блок
+                  подтверждения согласия наезжал на него поверх. В остальных
+                  местах системы у этого класса rows тоже проставлен. */}
               <textarea
+                rows={4}
                 value={agreement.client_notes}
                 disabled={isLocked || saving}
                 onChange={(event) => setAgreement((current) => ({ ...current, client_notes: event.target.value }))}
