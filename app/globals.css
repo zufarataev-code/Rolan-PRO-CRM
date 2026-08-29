@@ -1562,6 +1562,7 @@ select option {
 .calculator-notes {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .calculator-field span,
@@ -1593,14 +1594,20 @@ select option {
 }
 
 .calculator-checkbox-field {
+  /* Тема тёмная — белая заливка делала подпись нечитаемой, как это было
+     с карточками КП в #61. И inline-flex с фиксированной высотой не давал
+     длинной подписи переноситься: она вылезала за края блока. */
   min-height: 44px;
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
-  padding: 0 14px;
+  padding: 10px 14px;
   border-radius: 16px;
-  border: 1px solid rgba(24, 22, 19, 0.12);
-  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--ink);
+  max-width: 100%;
 }
 
 .calculator-addon-band {
