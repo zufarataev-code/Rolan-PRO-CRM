@@ -94,6 +94,91 @@ function millimetresToInches(value: number) {
  * цифре в названии и отправляла догадку в документ, по которому
  * клиент платит.
  */
+/**
+ * Описание услуги по направлению.
+ *
+ * Клиент принимает решение на десятки тысяч, видя только строку
+ * «Window 1 — Titan Prime, $311». Он не знает, что именно делают,
+ * сколько это занимает и что получится в итоге.
+ *
+ * Тексты постоянные и одинаковы для всех предложений одного
+ * направления, поэтому живут в коде, а не пишутся менеджером заново.
+ */
+const SERVICE_INTROS: Record<string, { title: string; body: string; points: string[] }> = {
+  solar: {
+    title: "Solar control film",
+    body:
+      "A multi-layer film applied to the inside of your existing glass. It reflects heat and blocks ultraviolet light while keeping the view clear.",
+    points: [
+      "Rooms stay cooler in the afternoon, air conditioning runs less",
+      "Blocks 99% of UV — floors, art and furniture stop fading",
+      "Glass stays clear: no mirrored look unless you choose one",
+      "Installed from inside, no scaffolding, no mess",
+    ],
+  },
+  protective: {
+    title: "Safety & security film",
+    body:
+      "A thick laminate bonded to the glass. On impact the glass still breaks, but the fragments stay attached to the film instead of falling.",
+    points: [
+      "Holds broken glass in place — protects people below",
+      "Slows down forced entry through the window",
+      "Sealed to the frame for full-perimeter strength",
+      "Invisible once installed",
+    ],
+  },
+  smart: {
+    title: "Smart switchable film",
+    body:
+      "A film that turns from clear to opaque with electricity. Privacy on demand, without blinds or curtains.",
+    points: [
+      "Clear to private in under a second",
+      "Control by switch, remote or phone",
+      "Doubles as a projection surface when opaque",
+      "Installed in three visits: wiring, film, connection and handover",
+    ],
+  },
+  decorative: {
+    title: "Decorative film",
+    body:
+      "Patterned or frosted film that changes how glass looks and how much is seen through it, without replacing the glass.",
+    points: [
+      "Frosted, patterned, gradient or custom-cut designs",
+      "Adds privacy while keeping natural light",
+      "Far cheaper than replacing glass with textured panels",
+      "Reversible — can be changed later",
+    ],
+  },
+};
+
+function serviceIntroFor(items: any[]) {
+  for (const item of items || []) {
+    const raw = `${item?.film?.category_name ?? ""} ${item?.service_type?.name ?? ""}`.toLowerCase();
+    if (raw.includes("smart")) return SERVICE_INTROS.smart;
+    if (raw.includes("safety") || raw.includes("security") || raw.includes("protect")) return SERVICE_INTROS.protective;
+    if (raw.includes("decor")) return SERVICE_INTROS.decorative;
+    if (raw.includes("solar") || raw.includes("sun")) return SERVICE_INTROS.solar;
+  }
+  return null;
+}
+
+/**
+ * Плёнки, встречающиеся в предложении, с их характеристиками —
+ * для отдельного технического блока. Одна плёнка на десять окон
+ * показывается один раз, а не десять.
+ */
+function uniqueFilmsWithSpecs(items: any[]) {
+  const seen = new Map<string, any>();
+  for (const item of items || []) {
+    const film = item?.film;
+    if (!film?.film_id) continue;
+    if (seen.has(film.film_id)) continue;
+    if (!filmSpecChips(film).length) continue;
+    seen.set(film.film_id, film);
+  }
+  return [...seen.values()];
+}
+
 function filmSpecChips(film: any): string[] {
   if (!film) return [];
   const chips: string[] = [];
@@ -290,6 +375,8 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
   }
 
   const isLocked = proposal.status === "agreement_signed" || proposal.status === "approved";
+  const serviceIntro = serviceIntroFor(proposal.items);
+  const filmsWithSpecs = uniqueFilmsWithSpecs(proposal.items);
 
   return (
     <div className="client-proposal-shell">
@@ -489,9 +576,12 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
                       </div>
                     )}
 
-                    <div className="row-meta">
-                      {item.measurement?.sqft ? `${item.measurement.sqft} sqft` : item.unit_label ?? "line item"}
-                    </div>
+                    {/* Раньше здесь при отсутствии площади печаталось unit_label —
+                        служебное «window». Клиенту оно ничего не говорит, а в
+                        документе на десятки тысяч выглядит как недоделка. */}
+                    {item.measurement?.sqft ? (
+                      <div className="row-meta">{item.measurement.sqft} sqft</div>
+                    ) : null}
 
                     <label className="client-item-toggle">
                       <input
@@ -516,6 +606,42 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
               })}
             </div>
           </section>
+
+          {/* Технический блок: характеристики плёнок, встречающихся в
+              предложении. Одна плёнка на десять окон показывается один
+              раз, а не под каждой позицией. Плёнки без заполненных
+              характеристик сюда не попадают — пустой блок хуже, чем
+              его отсутствие. */}
+          {filmsWithSpecs.length > 0 && (
+            <section className="surface">
+              <h2 className="surface-title">Technical specification</h2>
+              <p className="surface-subtitle">
+                Measured performance of the films selected for your project.
+              </p>
+              <div className="client-item-list">
+                {filmsWithSpecs.map((film: any) => (
+                  <div key={film.film_id} className="client-item-card">
+                    <div className="row-title">
+                      {film.brand_name} {film.model_name}
+                    </div>
+                    <div className="row-meta">{film.category_name}</div>
+                    <div className="proposal-detail-chips">
+                      {filmSpecChips(film).map((spec) => (
+                        <span key={spec} className="chip">
+                          {spec}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="landing-text">
+                Visible light is how much daylight passes through. Heat rejected is the
+                share of solar energy kept out of the room. UV blocking protects floors,
+                furniture and artwork from fading.
+              </p>
+            </section>
+          )}
 
           <section className="surface">
             <h2 className="surface-title">Questions / Notes</h2>
