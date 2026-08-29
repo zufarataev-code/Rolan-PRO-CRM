@@ -3047,6 +3047,17 @@
     gap: .5rem;
     padding: .7rem;
   }
+  /* Дни недели остаются видны при прокрутке вниз: без этого,
+     дойдя до строки монтажей, невозможно понять, какой столбец
+     какой день. z-index выше ячеек, но ниже закреплённой левой
+     колонки — иначе на пересечении шапка перекрывает её. */
+  .calendar-sticky-head th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f9fafb;
+  }
+
   .calendar-month-grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -26676,10 +26687,20 @@ function renderCalendar() {
       ${renderCalendarLegend()}
     </div>
   </div>
-  ${state.calendarShowMap ? renderCalendarMap(anchor, mode) : ''}`;
+  `;
+
+  /**
+   * Карта показывается ПОД графиком, а не над ним.
+   *
+   * Раньше она стояла сразу после панели и занимала весь первый экран:
+   * карточки событий — то, ради чего календарь открывают — оказывались
+   * ниже сгиба, и до них нужно было прокручивать мимо карты.
+   * Для планирования маршрута карта нужна, но не первой.
+   */
+  const mapBlock = state.calendarShowMap ? renderCalendarMap(anchor, mode) : '';
 
   if (mode === 'day') {
-    return toolbar + renderCalendarDayView(anchor);
+    return toolbar + renderCalendarDayView(anchor) + mapBlock;
   }
 
   if (mode === 'week') {
@@ -26698,11 +26719,14 @@ function renderCalendar() {
 
     return toolbar + `
     <div class="mb-4">${renderCalendarSummary(periodEvents, `${periodEvents.length} событ.`)}</div>
-    <div class="card p-0 overflow-x-auto">
+    <!-- max-height + overflow-y делают обёртку прокручиваемым родителем:
+         без него sticky на шапке считался бы относительно окна и не
+         сработал бы внутри уже существующего overflow-x. -->
+    <div class="card p-0 overflow-x-auto" style="max-height:70vh;overflow-y:auto;">
       <table class="w-full text-sm" style="min-width: 900px;">
-        <thead class="bg-gray-50 border-b">
+        <thead class="bg-gray-50 border-b calendar-sticky-head">
           <tr>
-            <th class="text-left px-3 py-2 w-52 sticky left-0 bg-gray-50">Линия графика</th>
+            <th class="text-left px-3 py-2 w-52 sticky left-0 bg-gray-50" style="z-index:3;">Линия графика</th>
             ${days.map((d,i) => {
               const isToday = d.getTime() === today.getTime();
               return `<th class="px-2 py-2 text-center text-xs ${isToday?'bg-blue-50 text-blue-700':'text-gray-500'}">
@@ -26770,7 +26794,7 @@ function renderCalendar() {
           `).join('') : ''}
         </tbody>
       </table>
-    </div>`;
+    </div>` + mapBlock;
   }
 
   // Month view
@@ -26788,8 +26812,10 @@ function renderCalendar() {
 
   return toolbar + `
   <div class="mb-4">${renderCalendarSummary(periodEvents, `${periodEvents.length} событ.`)}</div>
-  <div class="card p-0">
-    <div class="grid grid-cols-7 border-b bg-gray-50">
+  <div class="card p-0" style="max-height:75vh;overflow-y:auto;">
+    <!-- Шапка месяца — не таблица, а сетка, поэтому закрепляется сама,
+         а не через calendar-sticky-head. -->
+    <div class="grid grid-cols-7 border-b bg-gray-50" style="position:sticky;top:0;z-index:2;">
       ${monNames.map(k => `<div class="px-3 py-2 text-xs uppercase text-gray-500 text-center font-medium border-r">${T(k)}</div>`).join('')}
     </div>
     <div class="calendar-month-grid">
@@ -26807,7 +26833,7 @@ function renderCalendar() {
         </div>`;
       }).join('')}
     </div>
-  </div>`;
+  </div>` + mapBlock;
 }
 
 // ============================================================================
