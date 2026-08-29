@@ -6090,20 +6090,49 @@ const MAGNITRONIC_PRIME_SPECS = {
 };
 
 /**
- * Проставляет замеренные характеристики позициям линейки MP.
+ * Проставляет замеренные характеристики плёнкам RolanPRO.
  *
- * Ищет код модели (MP05…MP70) в названии, поэтому работает и для
- * «MAGNITRONIC PRIME MP35», и для «RolanPRO — MP35». Уже заполненные
- * вручную значения не трогает — владелец мог уточнить их сам.
+ * Первая версия искала только код MP05…MP70 — и не находила ничего:
+ * в каталоге 170 позиций чужих брендов, а собственные плёнки владелец
+ * завёл под витринными именами («Titan Prime», «Silver Prime»),
+ * без кода модели. Витрина была построена, товар на неё не выложен.
+ *
+ * Теперь ищем и код, и витринное имя. Соответствие имени модели MP
+ * задано ниже — оно взято из уровня светопропускания: Titan самый
+ * тёмный, Crystal самый светлый.
+ *
+ * Уже заполненные значения не трогаем: владелец мог уточнить их сам
+ * или вписать из паспорта производителя.
  */
+/**
+ * Соответствие витринных имён кодам MP.
+ *
+ * ПУСТО НАМЕРЕННО. Какая из плёнок RolanPRO соответствует какому коду
+ * MP, знает только владелец — по названию это не выводится. «Titan»
+ * звучит темнее «Crystal», но догадка в документе, по которому клиент
+ * платит десятки тысяч, недопустима: ровно так же система раньше
+ * угадывала VLT по цифре в названии.
+ *
+ * Заполняется, когда владелец назовёт соответствие. До тех пор
+ * характеристики вносятся вручную кнопкой «Характеристики» в складе.
+ */
+const ROLANPRO_MODEL_TO_MP = {};
+
 function applyMagnitronicSpecs(catalog) {
   if (!Array.isArray(catalog)) return 0;
   let filled = 0;
   catalog.forEach(item => {
     if (!item) return;
     const text = `${item.brand || ''} ${item.model || ''}`.toUpperCase();
-    const code = Object.keys(MAGNITRONIC_PRIME_SPECS).find(key => text.includes(key));
+
+    // Сначала прямой код модели, затем витринное имя.
+    let code = Object.keys(MAGNITRONIC_PRIME_SPECS).find(key => text.includes(key));
+    if (!code) {
+      const named = Object.keys(ROLANPRO_MODEL_TO_MP).find(name => text.includes(name));
+      if (named) code = ROLANPRO_MODEL_TO_MP[named];
+    }
     if (!code) return;
+
     const spec = MAGNITRONIC_PRIME_SPECS[code];
     if (item.vlt == null) { item.vlt = spec.vlt; filled++; }
     if (item.tser == null) item.tser = spec.tser;
