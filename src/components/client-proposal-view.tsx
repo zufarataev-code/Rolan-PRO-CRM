@@ -616,60 +616,6 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
             </div>
           </section>
 
-          {/*
-            Способы оплаты. Карта идёт через процессинг и берёт процент с
-            каждой транзакции; перевод и Zelle приходят на счёт компании
-            напрямую. На проекте в десятки тысяч разница ощутима, поэтому
-            клиенту показываются оба пути, а выбор остаётся за ним.
-
-            Реквизиты берутся из настроек и показываются только когда
-            заполнены — иначе блок не выводится вовсе.
-          */}
-          {(proposal.payment_options?.ach_enabled ||
-            proposal.payment_options?.zelle_handle ||
-            proposal.payment_options?.wire_details) && (
-            <section className="surface">
-              <h2 className="surface-title">Payment options</h2>
-              <p className="landing-text">
-                Card payments are processed securely online. Bank transfer and Zelle go
-                directly to our account — no processing fee.
-              </p>
-
-              <div className="proposal-detail-list">
-                {proposal.payment_options?.zelle_handle && (
-                  <div className="client-item-card">
-                    <div className="row-title">Zelle</div>
-                    <div className="row-meta">{proposal.payment_options.zelle_handle}</div>
-                    <div className="row-meta">No fees. Best for the deposit.</div>
-                  </div>
-                )}
-
-                {proposal.payment_options?.wire_details && (
-                  <div className="client-item-card">
-                    <div className="row-title">Bank transfer</div>
-                    <div className="row-meta" style={{ whiteSpace: "pre-line" }}>
-                      {proposal.payment_options.wire_details}
-                    </div>
-                    <div className="row-meta">Flat bank fee, best for larger amounts.</div>
-                  </div>
-                )}
-
-                {proposal.payment_options?.ach_enabled && (
-                  <div className="client-item-card">
-                    <div className="row-title">Card or bank debit (ACH)</div>
-                    <div className="row-meta">
-                      A secure payment link is sent by your project manager after signing.
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <p className="landing-text">
-                Please include proposal {proposal.proposal_number ?? ""} in the payment
-                reference so we can match it to your project.
-              </p>
-            </section>
-          )}
         </aside>
       </section>
     </div>

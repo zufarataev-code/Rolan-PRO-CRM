@@ -267,17 +267,6 @@ export function serializePublicProposal(proposal: any) {
     proposal_id: proposal.proposal_id,
     proposal_code: proposal.proposal_code,
     proposal_number: proposal.proposal_code,
-    // Способы оплаты берутся из переменных окружения, а не из базы:
-    // это реквизиты компании, одни на все предложения. Пустые не
-    // передаются — блок оплаты тогда не показывается вовсе.
-    payment_options: (() => {
-      const env = getEnv();
-      return {
-        ach_enabled: env.paymentsAchEnabled,
-        zelle_handle: env.paymentsZelle,
-        wire_details: env.paymentsWire,
-      };
-    })(),
     title: proposal.title,
     status: proposal.status,
     currency: proposal.currency,
