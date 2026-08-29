@@ -6067,6 +6067,52 @@ function mm_to_inches(mm) { return mm / MM_PER_INCH; }
 // Real-world architectural film catalog (US market 2024 prices, $/sqft)
 // Comprehensive: Madico + Johnson + LLumar + Solar Gard + 3M + SunTek + smart/decorative
 // Sources: manufacturer MSRPs, US dealer wholesale, retail averages 2024
+/**
+ * Реальные замеры линейки MAGNITRONIC PRIME (прибор LS160A).
+ *
+ * Это единственные характеристики, измеренные владельцем лично. Для
+ * чужих брендов таких данных нет — там поля остаются пустыми, и в КП
+ * ничего не показывается. Пустое честнее выдуманного: раньше система
+ * угадывала VLT по цифре в названии и отправляла догадку клиенту.
+ *
+ * vlt  — светопропускание, %
+ * tser — суммарное отражение солнечной энергии, %
+ * uv   — блокировка ультрафиолета, %
+ * ir   — блокировка инфракрасного излучения, %
+ */
+const MAGNITRONIC_PRIME_SPECS = {
+  'MP05': { vlt: 5.7,  tser: 93.3, uv: 99, ir: 99 },
+  'MP15': { vlt: 14.0, tser: 88.5, uv: 99, ir: 98 },
+  'MP20': { vlt: 23.5, tser: 83.2, uv: 99, ir: 97 },
+  'MP35': { vlt: 35.5, tser: 77.1, uv: 99, ir: 96 },
+  'MP50': { vlt: 58.1, tser: 68.2, uv: 99, ir: 95 },
+  'MP70': { vlt: 68.0, tser: 63.6, uv: 99, ir: 95 },
+};
+
+/**
+ * Проставляет замеренные характеристики позициям линейки MP.
+ *
+ * Ищет код модели (MP05…MP70) в названии, поэтому работает и для
+ * «MAGNITRONIC PRIME MP35», и для «RolanPRO — MP35». Уже заполненные
+ * вручную значения не трогает — владелец мог уточнить их сам.
+ */
+function applyMagnitronicSpecs(catalog) {
+  if (!Array.isArray(catalog)) return 0;
+  let filled = 0;
+  catalog.forEach(item => {
+    if (!item) return;
+    const text = `${item.brand || ''} ${item.model || ''}`.toUpperCase();
+    const code = Object.keys(MAGNITRONIC_PRIME_SPECS).find(key => text.includes(key));
+    if (!code) return;
+    const spec = MAGNITRONIC_PRIME_SPECS[code];
+    if (item.vlt == null) { item.vlt = spec.vlt; filled++; }
+    if (item.tser == null) item.tser = spec.tser;
+    if (item.uvBlock == null) item.uvBlock = spec.uv;
+    if (item.irBlock == null) item.irBlock = spec.ir;
+  });
+  return filled;
+}
+
 function buildArchitecturalCatalog() {
   const c = (brand, model, category, retail, cost, rate = null, waste = 12) => ({
     id: uid(), brand, model, category,
@@ -6321,6 +6367,10 @@ function migrateSchema() {
   if (!s.academyProgress) s.academyProgress = {};
   if (!s.academyVideoLinks) s.academyVideoLinks = {};
   if (!s.academyExamResults) s.academyExamResults = {};
+
+  // Проставляем замеренные характеристики линейке MP при каждой загрузке:
+  // позиции могли быть заведены вручную уже после прошлой миграции.
+  if (Array.isArray(s.catalog)) applyMagnitronicSpecs(s.catalog);
 
   // ---- CATALOG migration: filmTypes (strings) → catalog (structured) ----
   if (!s.catalog) {
@@ -27303,6 +27353,69 @@ function renderInventory() {
  * показываем то, что действительно хранится: ширину рулона, цену и
  * остаток. Выдуманных значений здесь нет намеренно.
  */
+/**
+ * Подпись характеристик для строки каталога.
+ * Показывает только заполненное — пустое не выводится вовсе.
+ */
+function catalogSpecLabel(c) {
+  const parts = [
+    c.vlt != null ? `VLT ${c.vlt}%` : '',
+    c.tser != null ? `TSER ${c.tser}%` : '',
+    c.uvBlock != null ? `UV ${c.uvBlock}%` : '',
+  ].filter(Boolean);
+  if (!parts.length) return '<span class="text-gray-400">нет данных</span>';
+  return `<span class="text-slate-600">${parts.join(' · ')}</span>`;
+}
+
+/**
+ * Ввод характеристик плёнки вручную — для брендов, по которым замеров
+ * нет, но есть паспорт производителя.
+ */
+function openCatalogSpecModal(catalogId) {
+  const c = (db.settings.catalog || []).find(x => x.id === catalogId);
+  if (!c) return;
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6" style="max-width:32rem;">
+      <h3 class="font-semibold text-lg mb-1">${academyEsc(c.brand)} — ${academyEsc(c.model)}</h3>
+      <p class="text-xs text-gray-500 mb-4">Характеристики из паспорта производителя. Пустые поля в предложении клиенту не показываются.</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs">Светопропускание VLT, %</label><input id="cs-vlt" type="number" step="0.1" value="${c.vlt ?? ''}"></div>
+        <div><label class="text-xs">Отражение энергии TSER, %</label><input id="cs-tser" type="number" step="0.1" value="${c.tser ?? ''}"></div>
+        <div><label class="text-xs">Блокировка UV, %</label><input id="cs-uv" type="number" step="0.1" value="${c.uvBlock ?? ''}"></div>
+        <div><label class="text-xs">Блокировка ИК, %</label><input id="cs-ir" type="number" step="0.1" value="${c.irBlock ?? ''}"></div>
+        <div><label class="text-xs">Толщина, mil</label><input id="cs-thick" type="number" step="0.1" value="${c.thickness ?? ''}"></div>
+        <div><label class="text-xs">Гарантия</label><input id="cs-warranty" value="${academyEsc(c.warranty || '')}" placeholder="10 лет"></div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button class="btn-primary flex-1" onclick="saveCatalogSpec('${c.id}')">Сохранить</button>
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
+function saveCatalogSpec(catalogId) {
+  const c = (db.settings.catalog || []).find(x => x.id === catalogId);
+  if (!c) return;
+  const num = (id) => {
+    const raw = (document.getElementById(id)?.value || '').trim();
+    if (raw === '') return null;
+    const value = parseFloat(raw);
+    return Number.isFinite(value) ? value : null;
+  };
+  c.vlt = num('cs-vlt');
+  c.tser = num('cs-tser');
+  c.uvBlock = num('cs-uv');
+  c.irBlock = num('cs-ir');
+  c.thickness = num('cs-thick');
+  c.warranty = (document.getElementById('cs-warranty')?.value || '').trim() || null;
+  save();
+  closeModal();
+  render();
+}
+
 function renderCatalogBrowser() {
   const query = (state.catalogQuery || '').trim().toLowerCase();
   const vendorFilter = state.catalogVendor || 'all';
@@ -27379,8 +27492,10 @@ function renderCatalogBrowser() {
             <th class="text-left p-2">Плёнка</th>
             <th class="text-left p-2">Категория</th>
             <th class="text-left p-2">Ширина рулона</th>
+            <th class="text-left p-2">Характеристики</th>
             <th class="text-left p-2">Цена</th>
             <th class="text-left p-2">На складе</th>
+            <th class="text-left p-2"></th>
           </tr></thead>
           <tbody>
             ${items.map(c => {
@@ -27394,8 +27509,10 @@ function renderCatalogBrowser() {
                 </td>
                 <td class="p-2"><span class="tag" style="background:${pal.bg};color:${pal.text}">${catLabel(c.category)}</span></td>
                 <td class="p-2 whitespace-nowrap">${c.rollWidth ? c.rollWidth + '"' : '<span class="text-gray-400">—</span>'}</td>
+                <td class="p-2 text-xs">${catalogSpecLabel(c)}</td>
                 <td class="p-2 whitespace-nowrap">${c.retailPerSqft ? '$' + c.retailPerSqft + '/sqft' : '<span class="text-gray-400">—</span>'}</td>
                 <td class="p-2 whitespace-nowrap ${stock > 0 ? 'text-emerald-700 font-semibold' : 'text-gray-400'}">${stock > 0 ? stock.toFixed(1) + ' м' : 'нет'}</td>
+                <td class="p-2"><button class="btn-ghost text-xs" onclick="openCatalogSpecModal('${c.id}')">Характеристики</button></td>
               </tr>`;
             }).join('')}
           </tbody>
