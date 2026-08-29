@@ -281,6 +281,7 @@
     height: 40px;
     flex: 0 0 40px;
     border-radius: 12px;
+    overflow: hidden;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -14099,7 +14100,9 @@ function renderAppShell() {
       </nav>
       <div class="p-3 border-t border-slate-700">
         <div class="sidebar-user">
-          <div class="sidebar-avatar">${academyEsc((u.name || '?')[0])}</div>
+          <div class="sidebar-avatar">${u.photo
+            ? `<img src="${u.photo}" alt="" style="width:100%;height:100%;border-radius:inherit;object-fit:cover;display:block;">`
+            : academyEsc((u.name || '?')[0])}</div>
           <div class="sidebar-user-meta flex-1 min-w-0">
             <div class="text-sm font-medium truncate">${u.name}</div>
             <div class="text-xs text-slate-400">${T(u.role)}</div>
@@ -15302,11 +15305,14 @@ function renderTeam() {
             return `
             <div class="p-3 bg-gray-50 rounded-lg">
               <div class="flex items-center gap-3">
-                <div class="w-12 h-12 rounded-full brand-gradient text-white flex items-center justify-center font-semibold">${u.name[0]}</div>
+                ${teamAvatarHtml(u, 48)}
                 <div class="flex-1 min-w-0">
                   <div class="font-medium truncate">${u.name}</div>
                   <div class="text-xs text-gray-500">${u.phone||'—'}</div>
                 </div>
+                ${canManage || currentUser()?.id === u.id
+                  ? `<button class="btn-ghost text-xs" onclick="openTeamMemberEdit('${u.id}')" title="Имя, телефон, почта, фото">✏️</button>`
+                  : ''}
                 <button class="btn-ghost text-xs" onclick="openUserPayConfig('${u.id}')" title="Настроить зарплату">💰</button>
                 ${canManage ? `<button class="btn-ghost text-xs" onclick="openTeamMemberAccess('${u.id}')" title="Логин, пароль и роль">🔑</button>` : ''}
               </div>
@@ -15370,6 +15376,166 @@ function teamRoleCheckboxes(selected) {
       <input type="checkbox" class="tm-role mt-1" value="${r.code}" ${selected.includes(r.code) ? 'checked' : ''}>
       <span class="text-sm">${academyEsc(r.label)}</span>
     </label>`).join('');
+}
+
+/**
+ * Фотография сотрудника: сжатие в браузере до загрузки.
+ *
+ * Фото с телефона — 3–5 МБ, в base64 разрастается ещё на треть. Вся
+ * база выгружается целиком при каждом входе (cloudBoot тянет
+ * /api/v1/legacy-crm/state), поэтому несжатые портреты замедлили бы
+ * запуск CRM для всех. 200×200 и качество 0.7 дают 10–20 КБ на
+ * человека — этого достаточно для кружка в списке и в меню.
+ */
+function compressTeamPhoto(file, size = 200) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Это не похоже на изображение'));
+      img.onload = () => {
+        // Берём квадрат по центру, чтобы лицо не съезжало в кружке.
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Кружок сотрудника: фотография, если загружена, иначе первая буква имени.
+ */
+function teamAvatarHtml(user, px = 48) {
+  const initial = academyEsc((user?.name || '?')[0]);
+  if (user?.photo) {
+    return `<img src="${user.photo}" alt="${academyEsc(user?.name || '')}"
+      style="width:${px}px;height:${px}px;border-radius:9999px;object-fit:cover;flex:none;">`;
+  }
+  return `<div class="rounded-full brand-gradient text-white flex items-center justify-center font-semibold"
+    style="width:${px}px;height:${px}px;flex:none;">${initial}</div>`;
+}
+
+function teamPhotoPickerClick(userId) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const file = (inp.files || [])[0];
+    if (!file) return;
+    try {
+      const dataUrl = await compressTeamPhoto(file);
+      const preview = document.getElementById('tm-photo-preview');
+      if (preview) preview.innerHTML = `<img src="${dataUrl}" style="width:64px;height:64px;border-radius:9999px;object-fit:cover;">`;
+      const hidden = document.getElementById('tm-photo-data');
+      if (hidden) hidden.value = dataUrl;
+    } catch (error) {
+      alert(error.message || 'Не удалось обработать фотографию');
+    }
+  };
+  inp.click();
+}
+
+function teamPhotoRemove() {
+  const hidden = document.getElementById('tm-photo-data');
+  if (hidden) hidden.value = '';
+  const preview = document.getElementById('tm-photo-preview');
+  if (preview) preview.innerHTML = '<div class="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center text-slate-400">нет</div>';
+}
+
+/**
+ * Карточка сотрудника: имя, телефон, фотография.
+ *
+ * Логин, пароль и роли остаются в openTeamMemberAccess — это разные
+ * по смыслу вещи: здесь личные данные, там доступ в систему.
+ *
+ * Владелец правит любого сотрудника, сотрудник — только себя.
+ */
+function openTeamMemberEdit(userId) {
+  const u = getUser(userId);
+  if (!u) return;
+  const viewer = currentUser();
+  const isOwner = viewer?.role === 'owner';
+  if (!isOwner && viewer?.id !== u.id) {
+    alert('Редактировать можно только свои данные.');
+    return;
+  }
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6">
+      <h3 class="font-semibold text-lg mb-1">${academyEsc(u.name)}</h3>
+      <p class="text-xs text-gray-500 mb-4">Личные данные. Логин, пароль и роли — в разделе «Доступ».</p>
+
+      <div class="flex items-center gap-3 mb-4">
+        <div id="tm-photo-preview">${u.photo
+          ? `<img src="${u.photo}" style="width:64px;height:64px;border-radius:9999px;object-fit:cover;">`
+          : '<div class="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center text-slate-400">нет</div>'}</div>
+        <div class="flex flex-col gap-1">
+          <button class="btn-ghost text-xs" onclick="teamPhotoPickerClick('${u.id}')">Загрузить фото</button>
+          <button class="btn-ghost text-xs text-red-600" onclick="teamPhotoRemove()">Убрать</button>
+        </div>
+      </div>
+      <input type="hidden" id="tm-photo-data" value="${u.photo || ''}">
+
+      <label>Имя и фамилия</label>
+      <input id="tm-edit-name" value="${academyEsc(u.name || '')}">
+
+      <label class="mt-3">Телефон</label>
+      <input id="tm-edit-phone" value="${academyEsc(u.phone || '')}" placeholder="+1 818...">
+
+      <label class="mt-3">Почта для входа</label>
+      <input value="${academyEsc(u.email || '—')}" disabled
+             style="opacity:.6;cursor:not-allowed;">
+      <div class="text-xs text-gray-400 mt-1">Почта — это логин на сервере. Менять её здесь нельзя: смена пароля перестанет находить сотрудника.</div>
+
+      <div id="tm-edit-error" class="text-sm text-red-600 mt-3 hidden"></div>
+
+      <div class="flex gap-2 mt-5">
+        <button class="btn-primary flex-1" onclick="submitTeamMemberEdit('${u.id}')">Сохранить</button>
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
+function submitTeamMemberEdit(userId) {
+  const u = getUser(userId);
+  if (!u) return;
+  const viewer = currentUser();
+  if (viewer?.role !== 'owner' && viewer?.id !== u.id) return;
+
+  const name = (document.getElementById('tm-edit-name')?.value || '').trim();
+  const phone = (document.getElementById('tm-edit-phone')?.value || '').trim();
+  const photo = document.getElementById('tm-photo-data')?.value || '';
+  const err = document.getElementById('tm-edit-error');
+
+  const fail = (message) => {
+    if (err) { err.textContent = message; err.classList.remove('hidden'); }
+    else alert(message);
+  };
+
+  if (!name) return fail('Укажите имя сотрудника.');
+
+  // Почта намеренно не меняется: она же логин на сервере, и связь
+  // между записью в CRM и учётной записью идёт именно по ней.
+  u.name = name;
+  u.phone = phone;
+  if (photo) u.photo = photo;
+  else delete u.photo;
+
+  save();
+  closeModal();
+  render();
 }
 
 function openTeamMemberForm() {
