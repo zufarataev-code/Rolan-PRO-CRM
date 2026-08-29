@@ -20027,46 +20027,30 @@ function openOrderModal() {
               </div>
               <div id="no-client-selected" class="mt-2"></div>
               <div id="no-newclient" class="hidden space-y-3 mt-3 border-t border-slate-200 pt-3">
-                <div class="erp-intake-note">Новый клиент создается только с обязательными данными: имя, фамилия, телефон, email, сегмент, источник и полный адрес объекта.</div>
+                <div class="erp-intake-note">Достаточно имени, телефона и адреса объекта. Остальное можно дозаполнить позже — в карточке клиента или на замере.</div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
                     <label class="text-xs">Имя <span class="order-required">*</span></label>
                     <input id="nc-first" placeholder="Имя">
                   </div>
                   <div>
-                    <label class="text-xs">Фамилия <span class="order-required">*</span></label>
-                    <input id="nc-last" placeholder="Фамилия">
-                  </div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div>
                     <label class="text-xs">Телефон <span class="order-required">*</span></label>
                     <input id="nc-phone" placeholder="+1 818...">
                   </div>
-                  <div>
-                    <label class="text-xs">Почта <span class="order-required">*</span></label>
-                    <input id="nc-email" placeholder="client@email.com">
-                  </div>
                 </div>
+                <!-- Сегмент виден всегда: менеджер слышит с первой фразы,
+                     кто звонит — владелец дома или управляющая компания.
+                     Одно нажатие, вопроса клиенту не требует. -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
-                    <label class="text-xs">Сегмент <span class="order-required">*</span></label>
+                    <label class="text-xs">Сегмент</label>
                     <select id="nc-type">
                       <option value="residential">🏠 B2C — частный клиент</option>
                       <option value="commercial">🏢 B2B — бизнес / объект</option>
                     </select>
                   </div>
                   <div>
-                    <label class="text-xs">Тип клиента <span class="order-required">*</span></label>
-                    <select id="nc-relationship">
-                      <option value="one_time">Разовый клиент</option>
-                      <option value="regular">Постоянный клиент / аккаунт</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div>
-                    <label class="text-xs">Источник <span class="order-required">*</span></label>
+                    <label class="text-xs">Источник</label>
                     <select id="nc-source">
                       <option value="direct">${T('sourceDirect')}</option>
                       <option value="ad">${T('sourceAd')}</option>
@@ -20079,36 +20063,68 @@ function openOrderModal() {
                       <option value="other">${T('sourceOther')}</option>
                     </select>
                   </div>
-                  <div>
-                    <label class="text-xs">Название адреса</label>
-                    <input id="nc-address-label" placeholder="Дом, офис, объект, Malibu house...">
-                  </div>
                 </div>
+
                 <div>
-                  <label class="text-xs">Умный поиск адреса <span class="order-required">*</span></label>
+                  <label class="text-xs">Умный поиск адреса</label>
                   ${addressSearchHtml('nc-addr-search', { street: 'nc-street', unit: 'nc-unit', city: 'nc-city', state: 'nc-state', zip: 'nc-zip', label: 'nc-address-label' }, 'Начните вводить адрес объекта: улица, город, ZIP...')}
                   <div class="text-xs text-gray-400 mt-1">Unit / Apt / Suite отделяется в отдельное поле и сохраняется в заказе.</div>
                 </div>
-                <div>
-                  <label class="text-xs">Улица и номер дома <span class="order-required">*</span></label>
-                  <input id="nc-street" placeholder="633 W 5th St">
-                </div>
-                <div>
-                  <label class="text-xs">Unit / Apt / Suite</label>
-                  <input id="nc-unit" placeholder="Unit 120, Apt 4B, Suite 10A">
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-xs">Улица и номер дома <span class="order-required">*</span></label>
+                    <input id="nc-street" placeholder="633 W 5th St">
+                  </div>
                   <div>
                     <label class="text-xs">Город <span class="order-required">*</span></label>
                     <input id="nc-city" placeholder="Los Angeles">
                   </div>
-                  <div>
-                    <label class="text-xs">Штат <span class="order-required">*</span></label>
-                    <input id="nc-state" placeholder="CA" maxlength="32">
+                </div>
+
+                <!-- Остальное дозаполняется позже: на замере, когда замерщик
+                     на объекте, или в карточке клиента. Прячем, чтобы форма
+                     не отпугивала во время разговора с клиентом. -->
+                <button type="button" class="btn-ghost text-xs w-full"
+                        onclick="toggleNewClientDetails()">
+                  <span id="nc-details-caret">▸</span> Дополнительно: фамилия, почта, квартира, штат, ZIP
+                </button>
+                <div id="nc-details" class="hidden space-y-3">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div>
+                      <label class="text-xs">Фамилия</label>
+                      <input id="nc-last" placeholder="Фамилия">
+                    </div>
+                    <div>
+                      <label class="text-xs">Почта</label>
+                      <input id="nc-email" placeholder="client@email.com">
+                    </div>
                   </div>
-                  <div>
-                    <label class="text-xs">ZIP code <span class="order-required">*</span></label>
-                    <input id="nc-zip" placeholder="90017">
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div>
+                      <label class="text-xs">Unit / Apt / Suite</label>
+                      <input id="nc-unit" placeholder="Unit 120, Apt 4B">
+                    </div>
+                    <div>
+                      <label class="text-xs">Штат</label>
+                      <input id="nc-state" placeholder="CA" maxlength="32">
+                    </div>
+                    <div>
+                      <label class="text-xs">ZIP code</label>
+                      <input id="nc-zip" placeholder="90017">
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div>
+                      <label class="text-xs">Название адреса</label>
+                      <input id="nc-address-label" placeholder="Дом, офис, Malibu house...">
+                    </div>
+                    <div>
+                      <label class="text-xs">Тип клиента</label>
+                      <select id="nc-relationship">
+                        <option value="one_time">Разовый клиент</option>
+                        <option value="regular">Постоянный клиент / аккаунт</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -20147,7 +20163,7 @@ function openOrderModal() {
                   <select id="no-mgr">${managers.map(u=>`<option value="${u.id}" ${u.id===defaultManagerId?'selected':''}>${academyEsc(u.name)}</option>`).join('')}</select>
                 </div>
                 <div>
-                  <label class="text-xs">Сложность <span class="order-required">*</span></label>
+                  <label class="text-xs">Сложность</label>
                   <select id="no-complexity">
                     ${['standard','ladder','tower','alpinism'].map(k => `<option value="${k}">${T('complexity'+k.charAt(0).toUpperCase()+k.slice(1))} ×${db.settings.complexityCoefs[k].toFixed(2)}</option>`).join('')}
                   </select>
@@ -20514,6 +20530,21 @@ function saveClientAddressOverlay(clientId) {
   closeClientAddressOverlay();
   refreshOrderClientSelection();
 }
+/**
+ * Раскрывает редкие поля клиента в форме нового заказа.
+ *
+ * Фамилия, почта, квартира, штат, ZIP и название адреса нужны не в
+ * момент звонка, а позже — на замере или при выставлении КП. Держим
+ * их свёрнутыми, чтобы форма не выглядела как анкета.
+ */
+function toggleNewClientDetails() {
+  const box = document.getElementById('nc-details');
+  const caret = document.getElementById('nc-details-caret');
+  if (!box) return;
+  const hidden = box.classList.toggle('hidden');
+  if (caret) caret.textContent = hidden ? '▸' : '▾';
+}
+
 function showNewClientForm() {
   state._newOrderClient = null;
   state._newOrderAddressId = null;
@@ -20566,26 +20597,27 @@ function createOrder() {
     const addressCity = (document.getElementById('nc-city')?.value || '').trim();
     const addressState = (document.getElementById('nc-state')?.value || '').trim();
     const addressZip = (document.getElementById('nc-zip')?.value || '').trim();
+    /**
+     * Обязательно только то, без чего заказ не имеет смысла.
+     *
+     * Заказ заводится во время разговора, клиент на линии. В этот момент
+     * известны имя, телефон, адрес и что человек хочет. Фамилия, почта,
+     * индекс и сегмент выясняются позже — на замере, когда замерщик уже
+     * на объекте. Требовать их сейчас значит либо тянуть разговор, либо
+     * заполнять выдуманным.
+     */
     const required = [
       [firstName, 'имя'],
-      [lastName, 'фамилия'],
       [phone, 'номер телефона'],
-      [email, 'почта'],
-      [type, 'сегмент'],
-      [relationshipType, 'тип клиента'],
-      [source, 'источник'],
-      [managerId, 'менеджер'],
-      [complexity, 'сложность'],
       [addressStreet, 'улица'],
       [addressCity, 'город'],
-      [addressState, 'штат'],
-      [addressZip, 'zip code'],
     ].filter(([value]) => !String(value || '').trim()).map(([, label]) => label);
     if (required.length) {
       alert('Заполните обязательные поля: ' + required.join(', '));
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // Почта необязательна, но если введена — должна быть похожа на почту.
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       alert('Проверьте email клиента');
       return;
     }
