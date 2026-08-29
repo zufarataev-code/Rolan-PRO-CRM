@@ -27236,9 +27236,11 @@ function renderInventory() {
   <div class="flex gap-2 mb-4 flex-wrap">
     <button class="btn-${tab==='film'?'primary':'ghost'} text-sm" onclick="state.inventoryTab='film'; render();">🎞 Плёнка</button>
     <button class="btn-${tab==='supplies'?'primary':'ghost'} text-sm" onclick="state.inventoryTab='supplies'; render();">🧰 Расходники${lowSupplies().length ? ` · ${lowSupplies().length}⚠️` : ''}</button>
+    <button class="btn-${tab==='tools'?'primary':'ghost'} text-sm" onclick="state.inventoryTab='tools'; render();">🔧 Инструмент${ensureTools().filter(x => x.holderId).length ? ` · ${ensureTools().filter(x => x.holderId).length}` : ''}</button>
   </div>`;
 
   if (tab === 'supplies') return tabs + renderSupplies();
+  if (tab === 'tools') return tabs + renderTools();
 
   return tabs + `
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
@@ -27598,6 +27600,174 @@ function renderSupplies() {
                 <button class="btn-ghost text-xs" onclick="moveSupply('${s.id}',10)">+10</button>
                 <button class="btn-ghost text-xs text-red-600" onclick="deleteSupply('${s.id}')">✕</button>
               </td>` : ''}
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+/**
+ * ИНСТРУМЕНТ
+ *
+ * Третья сущность склада. Инструмент не расходуется — он выдаётся
+ * человеку и возвращается. Поэтому здесь нет «остатка» и «минимума»:
+ * важно, у кого фен на руках и в каком он состоянии.
+ *
+ * Приход и списание заменены на выдачу и возврат, а история движений
+ * хранится в самой записи: при пропаже видно, кто брал последним.
+ */
+const TOOL_CONDITIONS = [
+  { id: 'good', label: 'Рабочий', color: 'bg-emerald-100 text-emerald-800' },
+  { id: 'worn', label: 'Изношен', color: 'bg-amber-100 text-amber-800' },
+  { id: 'repair', label: 'В ремонте', color: 'bg-orange-100 text-orange-800' },
+  { id: 'lost', label: 'Утерян', color: 'bg-red-100 text-red-800' },
+];
+
+function toolConditionInfo(id) {
+  return TOOL_CONDITIONS.find(c => c.id === id) || TOOL_CONDITIONS[0];
+}
+
+function ensureTools() {
+  if (!Array.isArray(db.tools)) db.tools = [];
+  return db.tools;
+}
+
+function addTool() {
+  ensureTools().push({
+    id: 'tool_' + uid(),
+    name: 'Новый инструмент',
+    invNumber: '',
+    condition: 'good',
+    holderId: null,
+    issuedAt: null,
+    note: '',
+    history: [],
+  });
+  save();
+  render();
+}
+
+function updateTool(id, field, value) {
+  const item = ensureTools().find(x => x.id === id);
+  if (!item) return;
+  item[field] = value;
+  save();
+}
+
+function deleteTool(id) {
+  if (!confirm('Удалить инструмент из списка?')) return;
+  db.tools = ensureTools().filter(x => x.id !== id);
+  save();
+  render();
+}
+
+/**
+ * Выдача и возврат. Каждое движение попадает в историю — без неё
+ * учёт ответственности не работает: при пропаже нужно знать, кто
+ * брал последним, а не только у кого сейчас.
+ */
+function issueTool(id, userId) {
+  const item = ensureTools().find(x => x.id === id);
+  if (!item) return;
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (!userId) {
+    // Возврат на склад.
+    if (item.holderId) {
+      item.history = item.history || [];
+      item.history.push({ userId: item.holderId, from: item.issuedAt, to: today });
+      if (item.history.length > 20) item.history = item.history.slice(-20);
+    }
+    item.holderId = null;
+    item.issuedAt = null;
+  } else {
+    // Выдача другому человеку закрывает предыдущую запись.
+    if (item.holderId && item.holderId !== userId) {
+      item.history = item.history || [];
+      item.history.push({ userId: item.holderId, from: item.issuedAt, to: today });
+    }
+    item.holderId = userId;
+    item.issuedAt = today;
+  }
+  save();
+  render();
+}
+
+function toolHolderLabel(item) {
+  if (!item.holderId) return '<span class="text-emerald-700">на складе</span>';
+  const holder = getUser(item.holderId);
+  const name = holder ? academyEsc(holder.name) : 'неизвестно';
+  const since = item.issuedAt ? ` с ${fmtDate(item.issuedAt)}` : '';
+  return `<span class="text-blue-700 font-medium">${name}</span><span class="text-xs text-gray-500">${since}</span>`;
+}
+
+function renderTools() {
+  const tools = ensureTools();
+  const canManage = ['owner', 'manager'].includes(currentUser()?.role);
+  const staff = db.users.filter(u => u.active !== false);
+  const issued = tools.filter(x => x.holderId).length;
+  const problems = tools.filter(x => ['repair', 'lost'].includes(x.condition)).length;
+
+  if (!tools.length) {
+    return `
+    <div class="card">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <h3 class="font-semibold">🔧 Инструмент</h3>
+          <p class="text-sm text-gray-500">Фены, ножи, стремянки, тепловизор — то, что выдаётся и возвращается.</p>
+        </div>
+        ${canManage ? `<button class="btn-primary text-sm" onclick="addTool()">+ Добавить инструмент</button>` : ''}
+      </div>
+      <div class="empty-state"><div class="icon">🔧</div><div>Пока пусто. Заведите инструмент, чтобы видеть, у кого он на руках.</div></div>
+    </div>`;
+  }
+
+  return `
+  <div class="card">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <div>
+        <h3 class="font-semibold">🔧 Инструмент <span class="text-sm font-normal text-gray-500">· ${tools.length} · на руках ${issued}</span></h3>
+        <p class="text-sm text-gray-500">Выберите сотрудника, чтобы выдать. «На складе» — возврат.</p>
+      </div>
+      ${canManage ? `<button class="btn-primary text-sm" onclick="addTool()">+ Добавить инструмент</button>` : ''}
+    </div>
+    ${problems ? `<div class="tag bg-orange-100 text-orange-800 mb-3">🔧 В ремонте или утеряно: ${problems}</div>` : ''}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-xs text-gray-500 border-b">
+          <th class="text-left p-2">Инструмент</th>
+          <th class="text-left p-2">Инв. №</th>
+          <th class="text-left p-2">Состояние</th>
+          <th class="text-left p-2">У кого</th>
+          <th class="text-left p-2">Выдать / вернуть</th>
+          ${canManage ? '<th class="text-left p-2"></th>' : ''}
+        </tr></thead>
+        <tbody>
+          ${tools.map(item => {
+            const cond = toolConditionInfo(item.condition);
+            const last = (item.history || []).slice(-1)[0];
+            return `
+            <tr class="border-t ${item.condition === 'lost' ? 'bg-red-50' : ''}">
+              <td class="p-2">
+                <input value="${academyEsc(item.name)}" ${canManage?'':'readonly'} onchange="updateTool('${item.id}','name',this.value)">
+                ${last && !item.holderId ? `<div class="text-xs text-gray-400 mt-1">последним брал ${academyEsc(getUser(last.userId)?.name || '—')}</div>` : ''}
+              </td>
+              <td class="p-2"><input value="${academyEsc(item.invNumber || '')}" ${canManage?'':'readonly'} onchange="updateTool('${item.id}','invNumber',this.value)" style="width:100px" placeholder="—"></td>
+              <td class="p-2">
+                <select ${canManage?'':'disabled'} onchange="updateTool('${item.id}','condition',this.value); render();" style="max-width:130px">
+                  ${TOOL_CONDITIONS.map(c => `<option value="${c.id}" ${item.condition===c.id?'selected':''}>${c.label}</option>`).join('')}
+                </select>
+              </td>
+              <td class="p-2">${toolHolderLabel(item)}</td>
+              <td class="p-2">
+                <select onchange="issueTool('${item.id}', this.value || null)" style="max-width:170px">
+                  <option value="" ${!item.holderId?'selected':''}>— на складе —</option>
+                  ${staff.map(u => `<option value="${u.id}" ${item.holderId===u.id?'selected':''}>${academyEsc(u.name)}</option>`).join('')}
+                </select>
+              </td>
+              ${canManage ? `<td class="p-2"><button class="btn-ghost text-xs text-red-600" onclick="deleteTool('${item.id}')">✕</button></td>` : ''}
             </tr>`;
           }).join('')}
         </tbody>
