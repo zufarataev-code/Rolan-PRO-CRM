@@ -27230,7 +27230,17 @@ function renderInventory() {
   const totalRolls = db.inventory.length;
   const totalLength = Object.values(summary).reduce((s,v) => s + v.lengthM, 0);
 
-  return `
+  const tab = state.inventoryTab || 'film';
+
+  const tabs = `
+  <div class="flex gap-2 mb-4 flex-wrap">
+    <button class="btn-${tab==='film'?'primary':'ghost'} text-sm" onclick="state.inventoryTab='film'; render();">🎞 Плёнка</button>
+    <button class="btn-${tab==='supplies'?'primary':'ghost'} text-sm" onclick="state.inventoryTab='supplies'; render();">🧰 Расходники${lowSupplies().length ? ` · ${lowSupplies().length}⚠️` : ''}</button>
+  </div>`;
+
+  if (tab === 'supplies') return tabs + renderSupplies();
+
+  return tabs + `
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
     <div class="card"><div class="text-sm text-gray-500">Всего рулонов</div><div class="kpi-value">${totalRolls}</div></div>
     <div class="card"><div class="text-sm text-gray-500">Общая длина</div><div class="kpi-value">${totalLength.toFixed(1)} м</div></div>
@@ -27238,9 +27248,18 @@ function renderInventory() {
     <div class="card ${lowStock.length?'border-red-300':''}"><div class="text-sm ${lowStock.length?'text-red-700':'text-gray-500'}">⚠️ Заканчивается</div><div class="kpi-value ${lowStock.length?'text-red-600':''}">${lowStock.length}</div></div>
   </div>
 
-  ${lowStock.length ? `
+  ${(lowStock.length || lowSupplies().length) ? `
   <div class="card mb-4 border-l-4 border-red-500">
     <h3 class="font-semibold mb-3 text-red-700">⚠️ Закупить срочно</h3>
+    ${lowSupplies().length ? `
+    <div class="mb-3">
+      <div class="text-xs text-gray-500 mb-1">Расходники</div>
+      <div class="flex flex-wrap gap-2">
+        ${lowSupplies().map(s => `<span class="tag ${s.status==='critical'?'bg-red-100 text-red-800':'bg-amber-100 text-amber-800'}">${academyEsc(s.name)}: ${(s.qty||0)} ${supplyUnitLabel(s.unit)}</span>`).join('')}
+      </div>
+    </div>` : ''}
+    ${lowStock.length ? `
+    <div class="text-xs text-gray-500 mb-1">Плёнка</div>
     <table class="w-full text-sm">
       <thead><tr class="text-xs text-gray-500"><th class="text-left p-2">Плёнка</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Статус</th><th class="text-left p-2">Действие</th></tr></thead>
       <tbody>
@@ -27251,7 +27270,7 @@ function renderInventory() {
           <td class="p-2"><button class="btn-primary text-xs" onclick="openAddRollModal('${s.catalogId}')">+ Принять рулон</button></td>
         </tr>`).join('')}
       </tbody>
-    </table>
+    </table>` : ''}
   </div>` : ''}
 
   <div class="card mb-4">
@@ -27414,6 +27433,177 @@ function saveCatalogSpec(catalogId) {
   save();
   closeModal();
   render();
+}
+
+/**
+ * РАСХОДНИКИ
+ *
+ * Плёнка, расходники и инструмент ведут себя по-разному, поэтому
+ * хранятся раздельно:
+ *
+ *   db.inventory — плёнка: дробный остаток в метрах, партия (lot),
+ *                  списывается расчётом от площади монтажа;
+ *   db.supplies  — расходники: штуки и объём, партия не важна, важен
+ *                  минимальный остаток — кончился раствор, бригада стоит;
+ *   db.tools     — инструмент: не расходуется, важно у кого на руках.
+ *
+ * Одна таблица на три сущности дала бы поля, бессмысленные для двух
+ * третей записей.
+ */
+const SUPPLY_UNITS = [
+  { id: 'pcs', label: 'шт' },
+  { id: 'l', label: 'л' },
+  { id: 'ml', label: 'мл' },
+  { id: 'm', label: 'м' },
+  { id: 'pack', label: 'упак' },
+];
+
+function supplyUnitLabel(unit) {
+  return SUPPLY_UNITS.find(u => u.id === unit)?.label || unit || 'шт';
+}
+
+function ensureSupplies() {
+  if (!Array.isArray(db.supplies)) db.supplies = [];
+  return db.supplies;
+}
+
+/**
+ * Расходники ниже минимального остатка. Попадают в общий блок
+ * «Закупить срочно» вместе с плёнкой.
+ */
+function lowSupplies() {
+  return ensureSupplies()
+    .filter(s => s.minQty != null && (s.qty || 0) <= s.minQty)
+    .map(s => ({
+      ...s,
+      status: (s.qty || 0) <= 0 ? 'critical' : 'low',
+    }));
+}
+
+function addSupply() {
+  ensureSupplies().push({
+    id: 'sup_' + uid(),
+    name: 'Новый расходник',
+    unit: 'pcs',
+    qty: 0,
+    minQty: 1,
+    costPerUnit: 0,
+    vendorId: null,
+    note: '',
+  });
+  save();
+  render();
+}
+
+function updateSupply(id, field, value) {
+  const s = ensureSupplies().find(x => x.id === id);
+  if (!s) return;
+  if (['qty', 'minQty', 'costPerUnit'].includes(field)) {
+    const num = parseFloat(value);
+    s[field] = Number.isFinite(num) ? num : 0;
+  } else {
+    s[field] = value;
+  }
+  save();
+}
+
+function deleteSupply(id) {
+  if (!confirm('Удалить расходник со склада?')) return;
+  db.supplies = ensureSupplies().filter(x => x.id !== id);
+  save();
+  render();
+}
+
+/**
+ * Приход и списание одной кнопкой. Норм расхода владелец не задавал,
+ * а придуманные нормы хуже честного ручного счёта — поэтому вручную.
+ * Списание в минус не уходит: остаток на складе не бывает отрицательным.
+ */
+function moveSupply(id, delta) {
+  const s = ensureSupplies().find(x => x.id === id);
+  if (!s) return;
+  s.qty = Math.max(0, (s.qty || 0) + delta);
+  save();
+  render();
+}
+
+function renderSupplies() {
+  const supplies = ensureSupplies();
+  const canEdit = ['owner', 'manager', 'installer'].includes(currentUser()?.role);
+  const totalValue = supplies.reduce((sum, s) => sum + (s.qty || 0) * (s.costPerUnit || 0), 0);
+  const low = lowSupplies();
+
+  if (!supplies.length) {
+    return `
+    <div class="card">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <h3 class="font-semibold">🧰 Расходники</h3>
+          <p class="text-sm text-gray-500">Ракели, лезвия, раствор, силикон, салфетки — всё, что кончается.</p>
+        </div>
+        ${canEdit ? `<button class="btn-primary text-sm" onclick="addSupply()">+ Добавить расходник</button>` : ''}
+      </div>
+      <div class="empty-state"><div class="icon">🧰</div><div>Пока пусто. Добавьте то, что расходуется на объектах — система предупредит, когда закончится.</div></div>
+    </div>`;
+  }
+
+  return `
+  <div class="card">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <div>
+        <h3 class="font-semibold">🧰 Расходники <span class="text-sm font-normal text-gray-500">· ${supplies.length} позиций · ${fmtMoney(totalValue)}</span></h3>
+        <p class="text-sm text-gray-500">Кнопки −1 и +1 списывают и принимают. Красным — то, что пора закупить.</p>
+      </div>
+      ${canEdit ? `<button class="btn-primary text-sm" onclick="addSupply()">+ Добавить расходник</button>` : ''}
+    </div>
+    ${low.length ? `<div class="tag bg-red-100 text-red-800 mb-3">⚠️ Заканчивается: ${low.length}</div>` : ''}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-xs text-gray-500 border-b">
+          <th class="text-left p-2">Наименование</th>
+          <th class="text-left p-2">Ед.</th>
+          <th class="text-left p-2">Остаток</th>
+          <th class="text-left p-2">Минимум</th>
+          <th class="text-left p-2">Цена</th>
+          <th class="text-left p-2">Поставщик</th>
+          ${canEdit ? '<th class="text-left p-2">Движение</th>' : ''}
+        </tr></thead>
+        <tbody>
+          ${supplies.map(s => {
+            const isLow = s.minQty != null && (s.qty || 0) <= s.minQty;
+            const isOut = (s.qty || 0) <= 0;
+            return `
+            <tr class="border-t ${isOut ? 'bg-red-50' : isLow ? 'bg-amber-50' : ''}">
+              <td class="p-2"><input value="${academyEsc(s.name)}" ${canEdit?'':'readonly'} onchange="updateSupply('${s.id}','name',this.value)"></td>
+              <td class="p-2">
+                <select ${canEdit?'':'disabled'} onchange="updateSupply('${s.id}','unit',this.value)" style="max-width:90px">
+                  ${SUPPLY_UNITS.map(u => `<option value="${u.id}" ${s.unit===u.id?'selected':''}>${u.label}</option>`).join('')}
+                </select>
+              </td>
+              <td class="p-2 font-semibold ${isOut ? 'text-red-700' : isLow ? 'text-amber-700' : 'text-slate-800'}" style="white-space:nowrap">
+                ${(s.qty || 0)} ${supplyUnitLabel(s.unit)}
+                ${isOut ? ' 🚨' : isLow ? ' ⚠️' : ''}
+              </td>
+              <td class="p-2"><input type="number" step="1" value="${s.minQty ?? ''}" ${canEdit?'':'readonly'} onchange="updateSupply('${s.id}','minQty',this.value)" style="width:80px"></td>
+              <td class="p-2"><input type="number" step="0.01" value="${s.costPerUnit ?? ''}" ${canEdit?'':'readonly'} onchange="updateSupply('${s.id}','costPerUnit',this.value)" style="width:90px"></td>
+              <td class="p-2">
+                <select ${canEdit?'':'disabled'} onchange="updateSupply('${s.id}','vendorId',this.value||null)" style="max-width:150px">
+                  <option value="">—</option>
+                  ${db.vendors.map(v => `<option value="${v.id}" ${s.vendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}
+                </select>
+              </td>
+              ${canEdit ? `<td class="p-2" style="white-space:nowrap">
+                <button class="btn-ghost text-xs" onclick="moveSupply('${s.id}',-1)">−1</button>
+                <button class="btn-ghost text-xs" onclick="moveSupply('${s.id}',1)">+1</button>
+                <button class="btn-ghost text-xs" onclick="moveSupply('${s.id}',10)">+10</button>
+                <button class="btn-ghost text-xs text-red-600" onclick="deleteSupply('${s.id}')">✕</button>
+              </td>` : ''}
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
 }
 
 function renderCatalogBrowser() {
