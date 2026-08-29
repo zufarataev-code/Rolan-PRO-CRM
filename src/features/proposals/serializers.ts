@@ -65,6 +65,12 @@ function serializeProposalItemInternal(item: any) {
           model_name_ru: item.film.model_name_ru,
           model_name_en: item.film.model_name_en,
           thickness: item.film.thickness,
+          // Характеристики хранились в базе, но до клиента не доходили —
+          // предложение на десятки тысяч выглядело голым списком строк.
+          vlt_percent: toNumber(item.film.vlt_percent),
+          uv_rejection_percent: toNumber(item.film.uv_rejection_percent),
+          ir_rejection_percent: toNumber(item.film.ir_rejection_percent),
+          tser_percent: toNumber(item.film.tser_percent),
         }
       : null,
   };
@@ -260,6 +266,18 @@ export function serializePublicProposal(proposal: any) {
   return {
     proposal_id: proposal.proposal_id,
     proposal_code: proposal.proposal_code,
+    proposal_number: proposal.proposal_code,
+    // Способы оплаты берутся из переменных окружения, а не из базы:
+    // это реквизиты компании, одни на все предложения. Пустые не
+    // передаются — блок оплаты тогда не показывается вовсе.
+    payment_options: (() => {
+      const env = getEnv();
+      return {
+        ach_enabled: env.paymentsAchEnabled,
+        zelle_handle: env.paymentsZelle,
+        wire_details: env.paymentsWire,
+      };
+    })(),
     title: proposal.title,
     status: proposal.status,
     currency: proposal.currency,
