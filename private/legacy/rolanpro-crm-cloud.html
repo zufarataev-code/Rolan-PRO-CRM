@@ -28033,16 +28033,23 @@ function renderCatalogBrowser() {
   const vendorFilter = state.catalogVendor || 'all';
   const categoryFilter = state.catalogCategory || 'all';
 
+  // Каталог живёт в db.settings.catalog — так во всех остальных местах
+  // файла. В первой версии этой функции стояло db.catalog, которого не
+  // существует: обращение к нему обрывало отрисовку и раздел «Склад»
+  // не открывался вовсе.
+  const catalog = Array.isArray(db.settings?.catalog) ? db.settings.catalog : [];
+  const rolls = Array.isArray(db.inventory) ? db.inventory : [];
+
   const stockByCatalog = {};
-  db.inventory.forEach(roll => {
+  rolls.forEach(roll => {
     const id = roll.catalogId;
     if (!id) return;
     stockByCatalog[id] = (stockByCatalog[id] || 0) + (roll.lengthM || 0);
   });
 
-  const categories = [...new Set(db.catalog.map(c => c.category).filter(Boolean))];
+  const categories = [...new Set(catalog.map(c => c.category).filter(Boolean))];
 
-  const matches = db.catalog.filter(c => {
+  const matches = catalog.filter(c => {
     if (vendorFilter !== 'all') {
       const vid = c.vendorId || '_none';
       if (vid !== vendorFilter) return false;
@@ -28079,7 +28086,7 @@ function renderCatalogBrowser() {
     ${(query || vendorFilter!=='all' || categoryFilter!=='all')
       ? `<button class="btn-ghost text-sm" onclick="state.catalogQuery=''; state.catalogVendor='all'; state.catalogCategory='all'; render();">✕ Сбросить</button>`
       : ''}
-    <span class="tag self-center">${matches.length} из ${db.catalog.length}</span>
+    <span class="tag self-center">${matches.length} из ${catalog.length}</span>
   </div>`;
 
   if (!matches.length) {
