@@ -1,0 +1,50 @@
+name: Codex Builder
+
+# Архитектор правит файлы сам.
+#
+# В отличие от Codex Bridge, который отвечает на всё подряд и только
+# текстом, этот запускается ТОЛЬКО по прямой команде в задаче:
+#
+#     /codex собери
+#
+# Причина ограничения простая: ответ в задаче ничего не портит, а правка
+# файлов — портит. Автоматический запуск по расписанию или на каждый
+# комментарий здесь недопустим.
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Номер задачи"
+        required: true
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.comment.user.login != 'github-actions[bot]' &&
+       !startsWith(github.event.comment.body, '<!-- codex-') &&
+       startsWith(github.event.comment.body, '/codex собери'))
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Пулл-реквест, созданный встроенным GITHUB_TOKEN, не запускает
+          # другие рабочие процессы — CI по нему не пойдёт. Поэтому если
+          # задан личный токен, берём его, чтобы проверки отработали.
+          token: ${{ secrets.CODEX_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Build as architect
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GH_TOKEN: ${{ secrets.CODEX_TOKEN || secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue }}
+        run: bash .agents/bridge/build.sh
