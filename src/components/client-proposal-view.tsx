@@ -232,6 +232,45 @@ function localizeItemText(text: unknown): string {
   return result;
 }
 
+/**
+ * Сводка проекта для обложки: комнаты, окна, площадь.
+ *
+ * Премиальное КП в legacy показывало эти цифры сразу под именем клиента —
+ * клиент видел объём работ до цены. Здесь они собираются из позиций:
+ * площадь берётся из снимка замера, если он есть.
+ */
+function getProjectSummary(items: any[]) {
+  const rooms = new Set<string>();
+  let windows = 0;
+  let area = 0;
+
+  for (const item of items ?? []) {
+    if (item.room_name) rooms.add(String(item.room_name));
+    windows += Number(item.quantity) || 0;
+
+    const sqft = Number(item?.measurement_snapshot?.sqft);
+    if (Number.isFinite(sqft)) area += sqft;
+  }
+
+  return { rooms: rooms.size, windows, area };
+}
+
+/**
+ * Позиции, сгруппированные по комнате, в порядке первого появления.
+ * Клиент читает документ по комнатам своего дома, а не сплошным списком.
+ */
+function groupItemsByRoom(items: any[]) {
+  const groups = new Map<string, any[]>();
+
+  for (const item of items ?? []) {
+    const room = item.room_name ? String(item.room_name) : "Project";
+    if (!groups.has(room)) groups.set(room, []);
+    groups.get(room)!.push(item);
+  }
+
+  return Array.from(groups, ([room, roomItems]) => ({ room, items: roomItems }));
+}
+
 function getDynamicFieldSummary(item: any) {
   const fields = item?.dynamic_fields;
 
@@ -315,6 +354,8 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
     0,
   );
   const printableItems = proposal.items.filter((item: any) => item.client_selected);
+  const projectSummary = getProjectSummary(proposal.items);
+  const roomGroups = groupItemsByRoom(proposal.items);
 
   async function saveSelection() {
     setSaving(true);
@@ -492,8 +533,29 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
 
       <section className="client-proposal-hero">
         <div>
-          <div className="landing-kicker">ROLANPRO Proposal</div>
-          <h1 className="client-proposal-title">{proposal.title}</h1>
+          <div className="landing-kicker">Premium proposal prepared for</div>
+          <h1 className="client-proposal-title">{proposal.client?.name ?? proposal.title}</h1>
+          <p className="client-proposal-address">
+            {[proposal.client?.service_address, proposal.proposal_code].filter(Boolean).join(" · ")}
+          </p>
+
+          {/* Объём работ до цены: сколько комнат, окон и площади. */}
+          <div className="client-proposal-pills">
+            {projectSummary.rooms > 0 && (
+              <span className="chip chip-spec">
+                {projectSummary.rooms} {projectSummary.rooms === 1 ? "room" : "rooms"}
+              </span>
+            )}
+            {projectSummary.windows > 0 && (
+              <span className="chip chip-spec">
+                {projectSummary.windows} {projectSummary.windows === 1 ? "window" : "windows"}
+              </span>
+            )}
+            {projectSummary.area > 0 && (
+              <span className="chip chip-spec">{projectSummary.area.toFixed(1)} sqft</span>
+            )}
+          </div>
+
           <p className="landing-text">
             Review each service line, keep what you want, remove what you do not need, and sign the
             agreement when ready.
@@ -523,8 +585,17 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
               Only approved and selected items will move into the final project.
             </p>
 
+            {roomGroups.map((group) => (
+              <div key={group.room} className="client-room-group">
+                <div className="client-room-head">
+                  <h3 className="client-room-title">{localizeItemText(group.room)}</h3>
+                  <span className="client-room-count">
+                    {group.items.length} {group.items.length === 1 ? "line" : "lines"}
+                  </span>
+                </div>
+
             <div className="client-item-list">
-              {proposal.items.map((item: any) => {
+              {group.items.map((item: any) => {
                 const fieldSummary = getDynamicFieldSummary(item);
                 const addonSummary = getAddonSummary(item.addons_snapshot);
 
@@ -605,6 +676,8 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
                 );
               })}
             </div>
+              </div>
+            ))}
           </section>
 
           {/* Технический блок: характеристики плёнок, встречающихся в
