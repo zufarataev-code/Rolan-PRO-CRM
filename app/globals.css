@@ -4051,3 +4051,58 @@ select option {
     border-radius: 13px;
   }
 }
+
+
+/* ---------- Публичное КП: обложка и комнаты ----------
+   Премиальное КП в legacy открывалось обложкой: имя клиента, адрес
+   объекта и объём работ — комнаты, окна, площадь — до цены. Позиции
+   шли по комнатам дома, а не сплошным списком. Здесь то же самое
+   для публичной страницы. */
+
+.client-proposal-address {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.client-proposal-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.client-room-group {
+  margin-top: 22px;
+}
+
+.client-room-group:first-of-type {
+  margin-top: 14px;
+}
+
+.client-room-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.client-room-title {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.client-room-count {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
