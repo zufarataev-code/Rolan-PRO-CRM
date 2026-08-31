@@ -299,6 +299,7 @@ export function serializePublicProposal(proposal: any) {
       window_id: item.window_id,
       title: item.title_en,
       description: item.description_en,
+      measurement_snapshot: item.measurement_snapshot,
       dynamic_fields: item.dynamic_fields,
       addons_snapshot: item.addons_snapshot,
       quantity: toNumber(item.quantity),
@@ -333,6 +334,12 @@ export function serializePublicProposal(proposal: any) {
             brand_name: item.film.brand_name_en,
             model_name: item.film.model_name_en,
             thickness: item.film.thickness,
+            vlt_percent: item.film.vlt_percent == null ? null : toNumber(item.film.vlt_percent),
+            uv_rejection_percent:
+              item.film.uv_rejection_percent == null ? null : toNumber(item.film.uv_rejection_percent),
+            ir_rejection_percent:
+              item.film.ir_rejection_percent == null ? null : toNumber(item.film.ir_rejection_percent),
+            tser_percent: item.film.tser_percent == null ? null : toNumber(item.film.tser_percent),
           }
         : null,
     })),

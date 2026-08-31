@@ -18,7 +18,7 @@ export default async function PublicProposalPage({ params }: PageProps) {
   }
 
   return (
-    <main className="landing-shell">
+    <main className="landing-shell proposal-page-shell">
       <ClientProposalView initialProposal={{ ...proposal, access_token: accessToken }} />
     </main>
   );

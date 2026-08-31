@@ -291,6 +291,23 @@ function getDynamicFieldSummary(item: any) {
   return entries.filter((entry): entry is string => Boolean(entry));
 }
 
+function getMeasurementSummary(item: any) {
+  const snapshot = item?.measurement_snapshot;
+  if (!snapshot || typeof snapshot !== "object") return [];
+
+  const width = parseNumber(snapshot.width);
+  const height = parseNumber(snapshot.height);
+  const sqft = parseNumber(snapshot.sqft);
+  const facts = [
+    width > 0 && height > 0 ? localizeItemText(`${width} × ${height}`) : null,
+    sqft > 0 ? `${sqft.toFixed(1)} sqft` : null,
+    snapshot.glass_type ? `Glass: ${String(snapshot.glass_type)}` : null,
+    snapshot.installation_side ? `Install: ${String(snapshot.installation_side)}` : null,
+  ];
+
+  return facts.filter((fact): fact is string => Boolean(fact));
+}
+
 function getAddonSummary(addonsSnapshot: unknown) {
   if (!Array.isArray(addonsSnapshot)) {
     return [];
@@ -354,6 +371,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
     0,
   );
   const printableItems = proposal.items.filter((item: any) => item.client_selected);
+  const selectedCount = printableItems.length;
   const projectSummary = getProjectSummary(proposal.items);
   const roomGroups = groupItemsByRoom(proposal.items);
 
@@ -453,6 +471,24 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
           </div>
         </section>
 
+        <section className="proposal-print-overview">
+          <div><span>Project areas</span><strong>{projectSummary.rooms || "—"}</strong></div>
+          <div><span>Glass sections</span><strong>{projectSummary.windows || "—"}</strong></div>
+          <div><span>Measured area</span><strong>{projectSummary.area ? `${projectSummary.area.toFixed(1)} sqft` : "Project scope"}</strong></div>
+          <div><span>Selected investment</span><strong>{formatCurrency(localSelectedTotal)}</strong></div>
+        </section>
+
+        {serviceIntro ? (
+          <section className="proposal-print-solution">
+            <div>
+              <span>Recommended solution</span>
+              <h2>{serviceIntro.title}</h2>
+              <p>{serviceIntro.body}</p>
+            </div>
+            <ul>{serviceIntro.points.map((point) => <li key={point}>{point}</li>)}</ul>
+          </section>
+        ) : null}
+
         <section className="proposal-print-scope">
           <div className="proposal-print-section-heading">
             <div>
@@ -464,7 +500,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
 
           <div className="proposal-print-items">
             {printableItems.map((item: any, index: number) => {
-              const fieldSummary = getDynamicFieldSummary(item);
+              const fieldSummary = [...new Set([...getMeasurementSummary(item), ...getDynamicFieldSummary(item)])];
               const addonSummary = getAddonSummary(item.addons_snapshot);
 
               return (
@@ -531,58 +567,67 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
         </footer>
       </article>
 
-      <section className="client-proposal-hero">
-        <div>
-          <div className="landing-kicker">Premium proposal prepared for</div>
-          <h1 className="client-proposal-title">{proposal.client?.name ?? proposal.title}</h1>
-          <p className="client-proposal-address">
-            {[proposal.client?.service_address, proposal.proposal_code].filter(Boolean).join(" · ")}
-          </p>
-
-          {/* Объём работ до цены: сколько комнат, окон и площади. */}
-          <div className="client-proposal-pills">
-            {projectSummary.rooms > 0 && (
-              <span className="chip chip-spec">
-                {projectSummary.rooms} {projectSummary.rooms === 1 ? "room" : "rooms"}
-              </span>
-            )}
-            {projectSummary.windows > 0 && (
-              <span className="chip chip-spec">
-                {projectSummary.windows} {projectSummary.windows === 1 ? "window" : "windows"}
-              </span>
-            )}
-            {projectSummary.area > 0 && (
-              <span className="chip chip-spec">{projectSummary.area.toFixed(1)} sqft</span>
-            )}
+      <header className="client-proposal-hero">
+        <div className="proposal-hero-nav">
+          <img src="/landing/rolan-logo.webp" alt="Rolan PRO" className="proposal-hero-logo" />
+          <div className="proposal-hero-meta">
+            <strong>{proposal.proposal_code ?? "Project proposal"}</strong>
+            <span>Valid through {formatDate(proposal.expires_at)}</span>
           </div>
+        </div>
 
+        <div className="proposal-hero-copy">
+          <div className="landing-kicker">Window film proposal prepared for</div>
+          <h1 className="client-proposal-title">{proposal.client?.name ?? proposal.title}</h1>
+          <p className="client-proposal-address">{proposal.client?.service_address || "Southern California"}</p>
           <p className="landing-text">
-            Review each service line, keep what you want, remove what you do not need, and sign the
-            agreement when ready.
+            A measured, project-specific solution for your glass — materials, installation scope and
+            investment presented in one clear document.
           </p>
-          <button type="button" className="secondary-button proposal-print-trigger" onClick={() => window.print()}>
-            Download polished PDF
-          </button>
+          <div className="proposal-hero-actions">
+            <a href="#project-scope" className="proposal-primary-link">Review project scope</a>
+            <button type="button" className="proposal-print-trigger" onClick={() => window.print()}>
+              Download PDF
+            </button>
+          </div>
         </div>
 
         <div className="client-proposal-summary">
-          <div className="client-summary-row">
-            <span>Proposal Total</span>
-            <strong>{formatCurrency(proposal.subtotal_amount)}</strong>
-          </div>
-          <div className="client-summary-row client-summary-row-strong">
-            <span>Selected Total</span>
-            <strong>{formatCurrency(localSelectedTotal)}</strong>
-          </div>
+          <span>Your selected investment</span>
+          <strong>{formatCurrency(localSelectedTotal)}</strong>
+          <small>{selectedCount} selected service {selectedCount === 1 ? "line" : "lines"}</small>
         </div>
+      </header>
+
+      <section className="proposal-overview-strip" aria-label="Project summary">
+        <div><span>Proposal</span><strong>{proposal.proposal_code ?? "Prepared"}</strong></div>
+        <div><span>Project areas</span><strong>{projectSummary.rooms || "—"}</strong></div>
+        <div><span>Glass sections</span><strong>{projectSummary.windows || "—"}</strong></div>
+        <div><span>Measured area</span><strong>{projectSummary.area ? `${projectSummary.area.toFixed(1)} sqft` : "—"}</strong></div>
       </section>
+
+      {serviceIntro ? (
+        <section className="proposal-solution-section">
+          <div className="proposal-section-label">01 / Recommended solution</div>
+          <div className="proposal-solution-copy">
+            <h2>{serviceIntro.title}</h2>
+            <p>{serviceIntro.body}</p>
+          </div>
+          <div className="proposal-benefit-list">
+            {serviceIntro.points.map((point, index) => (
+              <div key={point}><span>{String(index + 1).padStart(2, "0")}</span><p>{point}</p></div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="client-proposal-grid">
         <div className="client-proposal-band">
-          <section className="surface">
-            <h2 className="surface-title">Service Lines</h2>
+          <section className="surface proposal-scope-section" id="project-scope">
+            <div className="proposal-section-label">02 / Measured scope</div>
+            <h2 className="surface-title">Your project, room by room</h2>
             <p className="surface-subtitle">
-              Only approved and selected items will move into the final project.
+              Every line is tied to the measured glass. Optional services can be included or removed before signing.
             </p>
 
             {roomGroups.map((group) => (
@@ -596,7 +641,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
 
             <div className="client-item-list">
               {group.items.map((item: any) => {
-                const fieldSummary = getDynamicFieldSummary(item);
+                const fieldSummary = [...new Set([...getMeasurementSummary(item), ...getDynamicFieldSummary(item)])];
                 const addonSummary = getAddonSummary(item.addons_snapshot);
 
                 return (
@@ -716,8 +761,20 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
             </section>
           )}
 
-          <section className="surface">
-            <h2 className="surface-title">Questions / Notes</h2>
+          <section className="proposal-assurance-section">
+            <div className="proposal-section-label">03 / Delivery standard</div>
+            <h2>What happens after approval</h2>
+            <div className="proposal-process-grid">
+              <div><span>01</span><strong>Final confirmation</strong><p>We confirm the selected scope, film and installation access.</p></div>
+              <div><span>02</span><strong>Scheduling</strong><p>Your manager coordinates the installation window and preparation.</p></div>
+              <div><span>03</span><strong>Professional install</strong><p>The crew protects the work area, installs the film and checks every section.</p></div>
+              <div><span>04</span><strong>Handover</strong><p>You receive care guidance and the applicable product and workmanship terms.</p></div>
+            </div>
+          </section>
+
+          <section className="surface proposal-notes-section">
+            <div className="proposal-section-label">04 / Questions</div>
+            <h2 className="surface-title">Notes for your project manager</h2>
             <label className="calculator-notes">
               <span>Your message</span>
               <textarea
@@ -739,8 +796,14 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
         </div>
 
         <aside className="client-proposal-side">
-          <section className="surface">
-            <h2 className="surface-title">Agreement</h2>
+          <section className="surface proposal-agreement-panel">
+            <div className="proposal-side-total">
+              <span>Selected project total</span>
+              <strong>{formatCurrency(localSelectedTotal)}</strong>
+              <small>{selectedCount} of {proposal.items.length} service lines included</small>
+            </div>
+            <div className="proposal-section-label">05 / Approval</div>
+            <h2 className="surface-title">Approve your proposal</h2>
             <p className="surface-subtitle">
               Signing confirms the selected services and authorizes the project to move forward.
             </p>
@@ -812,6 +875,13 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
               <button type="button" className="accent-button" onClick={signAgreement} disabled={isLocked || saving}>
                 {isLocked ? "Agreement Signed" : "Sign Agreement"}
               </button>
+            </div>
+
+            <div className="proposal-trust-note">
+              <strong>Rolan PRO</strong>
+              <span>Westlake Village, California</span>
+              <a href="tel:+14243250512">(424) 325-0512</a>
+              <a href="https://rolan-pro.com" target="_blank" rel="noreferrer">rolan-pro.com</a>
             </div>
           </section>
 
