@@ -36,6 +36,12 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function assertValidEmail(email: string) {
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("Укажите корректную почту сотрудника.");
+  }
+}
+
 function assertValidRoles(roles: RoleCode[]) {
   const known = new Set(Object.values(ROLE_CODES));
   const invalid = roles.filter((role) => !known.has(role));
@@ -84,6 +90,7 @@ export async function createTeamMember(input: TeamMemberInput) {
   const email = normalizeEmail(input.email);
   const password = input.password?.trim() ?? "";
 
+  assertValidEmail(email);
   assertValidRoles(input.roles);
   assertValidPassword(password);
 
@@ -114,13 +121,18 @@ export async function createTeamMember(input: TeamMemberInput) {
   return { userId: user.user_id, email: user.email, temporaryPassword: password };
 }
 
-/** Меняет имя, роли и активность. Пароль здесь не трогается. */
+/** Меняет почту, имя, роли и активность. Пароль здесь не трогается. */
 export async function updateTeamMember(
   userId: string,
-  input: { fullName?: string; roles?: RoleCode[]; isActive?: boolean },
+  input: { email?: string; fullName?: string; roles?: RoleCode[]; isActive?: boolean },
 ) {
   if (input.roles) {
     assertValidRoles(input.roles);
+  }
+
+  const email = input.email === undefined ? undefined : normalizeEmail(input.email);
+  if (email !== undefined) {
+    assertValidEmail(email);
   }
 
   const user = await prisma.user.findUnique({
@@ -130,6 +142,13 @@ export async function updateTeamMember(
 
   if (!user) {
     throw new Error("Сотрудник не найден.");
+  }
+
+  if (email !== undefined && email !== user.email) {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing && existing.user_id !== userId) {
+      throw new Error("Пользователь с такой почтой уже есть.");
+    }
   }
 
   // Последнего владельца нельзя ни отключить, ни лишить роли:
@@ -164,15 +183,16 @@ export async function updateTeamMember(
     });
   }
 
-  await prisma.user.update({
+  const updated = await prisma.user.update({
     where: { user_id: userId },
     data: {
+      email,
       full_name: input.fullName?.trim() ?? undefined,
       is_active: input.isActive ?? undefined,
     },
   });
 
-  return { userId };
+  return { userId, email: updated.email };
 }
 
 /** Задаёт новый пароль сотруднику. Сотрудник сменит его при входе. */
