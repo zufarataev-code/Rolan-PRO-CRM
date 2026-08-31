@@ -22,6 +22,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const { userId } = await context.params;
   const body = (await request.json().catch(() => null)) as {
+    email?: string;
     fullName?: string;
     roles?: RoleCode[];
     isActive?: boolean;
@@ -33,18 +34,37 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    if (body.password) {
-      const result = await setTeamMemberPassword(userId, body.password);
-      return apiSuccess(result);
+    // Profile fields and password can be changed in one request.
+    // The password is never returned by the server except as the one-time
+    // temporary value from setTeamMemberPassword.
+    let profileResult: { userId: string; email: string } | null = null;
+    if (
+      body.email !== undefined ||
+      body.fullName !== undefined ||
+      body.roles !== undefined ||
+      body.isActive !== undefined
+    ) {
+      profileResult = await updateTeamMember(userId, {
+        email: body.email,
+        fullName: body.fullName,
+        roles: body.roles,
+        isActive: body.isActive,
+      });
     }
 
-    const result = await updateTeamMember(userId, {
-      fullName: body.fullName,
-      roles: body.roles,
-      isActive: body.isActive,
-    });
+    if (body.password) {
+      const passwordResult = await setTeamMemberPassword(userId, body.password);
+      return apiSuccess({
+        ...(profileResult ?? { userId }),
+        temporaryPassword: passwordResult.temporaryPassword,
+      });
+    }
 
-    return apiSuccess(result);
+    if (profileResult) {
+      return apiSuccess(profileResult);
+    }
+
+    return apiError(400, "invalid_input", "Нет изменений для сохранения.");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось обновить сотрудника.";
     return apiError(400, "update_failed", message);
