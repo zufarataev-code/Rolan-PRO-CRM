@@ -16,3 +16,12 @@ test("legacy proposal email is sent by the authenticated Gmail API route", () =>
   assert.doesNotMatch(managerModal, /emailLink\(client\.email/);
   assert.match(legacyCrm, /\/api\/v1\/proposals\/\$\{encodeURIComponent\(published\.proposal_id\)\}\/send/);
 });
+
+test("owner and manager have a proposal registry with real client views and order navigation", () => {
+  assert.match(legacyCrm, /\['proposals', 'КП', '📄'\]/);
+  assert.match(legacyCrm, /case 'proposals': return renderProposalsRegistry\(\)/);
+  assert.match(legacyCrm, /fetch\('\/api\/v1\/proposals'/);
+  assert.match(legacyCrm, /server\?\.client_viewed_at/);
+  assert.match(legacyCrm, /В заказ →/);
+  assert.match(legacyCrm, /openOrder\('\$\{record\.order\.id\}'\)/);
+});
