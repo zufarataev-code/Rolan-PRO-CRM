@@ -26,13 +26,14 @@ test("marketing email cannot use the primary Google Workspace mailbox", () => {
   }
 });
 
-test("marketing email reports a separate configured sender", () => {
+test("marketing email is paused by default even when sender is configured", () => {
   const previous = {
     gmail: process.env.GMAIL_ALLOWED_ADDRESS,
     provider: process.env.MARKETING_EMAIL_PROVIDER,
     from: process.env.MARKETING_EMAIL_FROM,
     key: process.env.MARKETING_EMAIL_API_KEY,
     replyTo: process.env.MARKETING_EMAIL_REPLY_TO,
+    enabled: process.env.MARKETING_EMAIL_ENABLED,
   };
   try {
     process.env.GMAIL_ALLOWED_ADDRESS = "info@rolan-pro.com";
@@ -40,8 +41,10 @@ test("marketing email reports a separate configured sender", () => {
     process.env.MARKETING_EMAIL_FROM = "RolanPRO <hello@updates.rolan-pro.com>";
     process.env.MARKETING_EMAIL_API_KEY = "test-key";
     delete process.env.MARKETING_EMAIL_REPLY_TO;
+    delete process.env.MARKETING_EMAIL_ENABLED;
     assert.deepEqual(marketingEmailConfig(), {
       configured: true,
+      enabled: false,
       provider: "resend",
       from: "RolanPRO <hello@updates.rolan-pro.com>",
       replyTo: "info@rolan-pro.com",
@@ -52,5 +55,27 @@ test("marketing email reports a separate configured sender", () => {
     restore("MARKETING_EMAIL_FROM", previous.from);
     restore("MARKETING_EMAIL_API_KEY", previous.key);
     restore("MARKETING_EMAIL_REPLY_TO", previous.replyTo);
+    restore("MARKETING_EMAIL_ENABLED", previous.enabled);
+  }
+});
+
+test("marketing email can only be re-enabled explicitly", () => {
+  const previous = {
+    gmail: process.env.GMAIL_ALLOWED_ADDRESS,
+    from: process.env.MARKETING_EMAIL_FROM,
+    key: process.env.MARKETING_EMAIL_API_KEY,
+    enabled: process.env.MARKETING_EMAIL_ENABLED,
+  };
+  try {
+    process.env.GMAIL_ALLOWED_ADDRESS = "info@rolan-pro.com";
+    process.env.MARKETING_EMAIL_FROM = "RolanPRO <hello@updates.rolan-pro.com>";
+    process.env.MARKETING_EMAIL_API_KEY = "test-key";
+    process.env.MARKETING_EMAIL_ENABLED = "true";
+    assert.equal(marketingEmailConfig().enabled, true);
+  } finally {
+    restore("GMAIL_ALLOWED_ADDRESS", previous.gmail);
+    restore("MARKETING_EMAIL_FROM", previous.from);
+    restore("MARKETING_EMAIL_API_KEY", previous.key);
+    restore("MARKETING_EMAIL_ENABLED", previous.enabled);
   }
 });
