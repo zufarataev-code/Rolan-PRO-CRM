@@ -1,6 +1,6 @@
-/* ROLANPRO Premium Document System v1
- * Visual override for the public proposal and its printable PDF.
- * Keeps proposal/business logic untouched: this file changes presentation only.
+/* ROLANPRO Premium Document System v2
+ * Stronger client proposal styling and a true premium printable cover.
+ * Presentation only: no pricing or proposal business logic changes.
  */
 
 .client-proposal-shell {
@@ -12,22 +12,19 @@
   --rp-line: #d9e3ea;
   --rp-paper: #ffffff;
   --rp-canvas: #f4f6f8;
-}
-
-/* ---------- Client-facing proposal ---------- */
-.client-proposal-shell {
   background:
-    radial-gradient(circle at 12% 0%, rgba(41, 167, 225, 0.12), transparent 32rem),
+    radial-gradient(circle at 10% 0%, rgba(41, 167, 225, 0.14), transparent 30rem),
     linear-gradient(180deg, #eef3f7 0%, #f8fafb 28rem, #f4f6f8 100%);
 }
 
+/* ---------- Client-facing proposal ---------- */
 .client-proposal-shell .client-proposal-hero {
   position: relative;
   overflow: hidden;
   border: 0;
   border-radius: 26px;
   background:
-    linear-gradient(120deg, rgba(41, 167, 225, 0.18), transparent 38%),
+    linear-gradient(120deg, rgba(41, 167, 225, 0.22), transparent 42%),
     var(--rp-navy);
   color: #ffffff;
   box-shadow: 0 24px 70px rgba(16, 37, 63, 0.18);
@@ -45,7 +42,7 @@
 .client-proposal-shell .client-proposal-hero .client-proposal-address,
 .client-proposal-shell .client-proposal-hero .landing-text,
 .client-proposal-shell .client-proposal-hero .client-summary-row span {
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(255, 255, 255, 0.74);
 }
 
 .client-proposal-shell .client-proposal-title,
@@ -73,11 +70,6 @@
   font-weight: 800;
 }
 
-.client-proposal-shell .proposal-print-trigger:hover {
-  border-color: #ffffff;
-  background: var(--rp-blue-soft);
-}
-
 .client-proposal-shell .surface {
   border: 1px solid var(--rp-line);
   border-radius: 20px;
@@ -89,10 +81,6 @@
 .client-proposal-shell .row-title,
 .client-proposal-shell .client-room-title {
   color: var(--rp-navy);
-}
-
-.client-proposal-shell .surface-title {
-  letter-spacing: -0.025em;
 }
 
 .client-proposal-shell .client-room-head {
@@ -124,13 +112,40 @@
   box-shadow: none;
 }
 
-.client-proposal-shell .accent-button:hover {
-  background: #178fca;
-  box-shadow: none;
+/* ---------- Premium printable proposal / PDF ---------- */
+@page {
+  size: Letter portrait;
+  margin: 0.42in 0.48in 0.52in;
 }
 
-/* ---------- Premium printable proposal / PDF ---------- */
 @media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  body {
+    color: #17283b;
+    font-family: Arial, Helvetica, sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .client-proposal-shell > :not(.proposal-print-document) {
+    display: none !important;
+  }
+
+  .landing-shell {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
   .proposal-print-document {
     --rp-navy: #10253f;
     --rp-blue: #29a7e1;
@@ -138,59 +153,86 @@
     --rp-ink: #17283b;
     --rp-muted: #687889;
     --rp-line: #d8e3ea;
+    display: block;
+    width: 100%;
     position: relative;
     color: var(--rp-ink);
+    background: #ffffff;
     font-family: Arial, Helvetica, sans-serif;
     font-size: 9.6pt;
+    line-height: 1.45;
   }
 
   .proposal-print-document::before {
     content: "";
     position: fixed;
-    top: -0.48in;
-    left: -0.5in;
-    right: -0.5in;
-    height: 0.09in;
+    top: -0.42in;
+    left: -0.48in;
+    right: -0.48in;
+    height: 0.08in;
     background: var(--rp-blue);
+  }
+
+  .proposal-print-header,
+  .proposal-print-intro,
+  .proposal-print-section-heading,
+  .proposal-print-item-heading,
+  .proposal-print-closing,
+  .proposal-print-signatures,
+  .proposal-print-footer {
+    display: flex;
   }
 
   .proposal-print-header {
     position: relative;
-    min-height: 54px;
+    min-height: 58px;
     align-items: center;
-    gap: 20px;
-    padding: 3px 0 15px;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 4px 0 15px;
     border-bottom: 1px solid var(--rp-line);
+    break-inside: avoid;
   }
 
   .proposal-print-brand {
+    position: relative;
     flex: 1 1 auto;
-    min-width: 175px;
+    min-width: 210px;
+    height: 46px;
   }
 
   .proposal-print-brand > * {
     display: none !important;
   }
 
+  /* Use a background image instead of CSS content:url().
+     content:url() keeps the source image's intrinsic size in WebKit print
+     and caused the logo to appear cropped on iPhone/iPad PDF preview. */
   .proposal-print-brand::before {
-    content: url('/landing/rolan-logo.webp');
-    display: block;
-    width: 158px;
-    max-height: 44px;
-    overflow: hidden;
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 188px;
+    height: 46px;
+    background: url('/landing/rolan-logo.webp') left center / contain no-repeat;
   }
 
   .proposal-print-meta {
     flex: 0 0 auto;
     text-align: right;
     color: var(--rp-muted);
-    font-size: 7.8pt;
+    font-size: 7.7pt;
     line-height: 1.45;
+  }
+
+  .proposal-print-meta strong,
+  .proposal-print-meta span {
+    display: block;
   }
 
   .proposal-print-meta strong {
     color: var(--rp-navy);
-    font-size: 10pt;
+    font-size: 10.2pt;
     letter-spacing: 0.01em;
   }
 
@@ -198,25 +240,35 @@
     content: "🇺🇸";
     display: grid;
     place-items: center;
-    flex: 0 0 36px;
-    width: 36px;
-    height: 25px;
+    flex: 0 0 38px;
+    width: 38px;
+    height: 27px;
     border: 1px solid var(--rp-line);
-    border-radius: 5px;
+    border-radius: 6px;
     background: #ffffff;
     font-size: 21px;
     line-height: 1;
   }
 
+  /* True cover: first page is visually distinct instead of looking like
+     the old proposal with new colors. */
   .proposal-print-intro {
     position: relative;
-    align-items: stretch;
-    gap: 22px;
-    margin-top: 18px;
-    padding: 25px 26px;
-    border-radius: 18px;
-    background: var(--rp-navy);
+    min-height: 6.15in;
+    margin-top: 22px;
+    padding: 0.5in 0.48in;
+    border-radius: 22px;
+    overflow: hidden;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 28px;
     color: #ffffff;
+    background:
+      linear-gradient(90deg, rgba(16, 37, 63, 0.98) 0%, rgba(16, 37, 63, 0.91) 47%, rgba(16, 37, 63, 0.57) 100%),
+      url('/landing/hero-window-film.jpg') center / cover no-repeat;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .proposal-print-intro::before {
@@ -225,136 +277,237 @@
     top: 0;
     bottom: 0;
     left: 0;
-    width: 5px;
-    border-radius: 18px 0 0 18px;
+    width: 6px;
     background: var(--rp-blue);
+  }
+
+  .proposal-print-intro::after {
+    content: "ARCHITECTURAL WINDOW FILM • SMART FILM • SAFETY & PRIVACY";
+    position: absolute;
+    left: 0.48in;
+    right: 0.48in;
+    top: 0.42in;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,.18);
+    color: rgba(255,255,255,.72);
+    font-size: 7pt;
+    font-weight: 800;
+    letter-spacing: .12em;
+  }
+
+  .proposal-print-intro > div:first-child {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 auto;
+    max-width: 4.7in;
   }
 
   .proposal-print-kicker {
     color: #7ed4f5;
-    font-size: 7.2pt;
-    letter-spacing: 0.16em;
+    font-size: 8pt;
+    font-weight: 800;
+    letter-spacing: 0.17em;
+    text-transform: uppercase;
   }
 
   .proposal-print-intro h1 {
-    max-width: 470px;
-    margin: 7px 0 9px;
+    max-width: 4.7in;
+    margin: 10px 0 12px;
     color: #ffffff;
-    font-size: 25pt;
-    line-height: 1.02;
-    letter-spacing: -0.035em;
+    font-size: 31pt;
+    line-height: 0.98;
+    letter-spacing: -0.045em;
   }
 
   .proposal-print-intro > div:first-child > p {
-    max-width: 455px;
-    color: rgba(255, 255, 255, 0.72);
-    font-size: 8.6pt;
-    line-height: 1.5;
+    max-width: 4.45in;
+    margin: 0;
+    color: rgba(255,255,255,.76);
+    font-size: 9.5pt;
+    line-height: 1.55;
   }
 
   .proposal-print-client {
-    flex: 0 0 205px;
-    align-self: stretch;
-    padding: 14px 15px;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    border-radius: 13px;
-    background: rgba(255, 255, 255, 0.08);
+    position: relative;
+    z-index: 1;
+    flex: 0 0 2.12in;
+    align-self: flex-end;
+    padding: 16px 17px;
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 15px;
+    background: rgba(255,255,255,.10);
+    backdrop-filter: blur(4px);
+  }
+
+  .proposal-print-client > span,
+  .proposal-print-client strong,
+  .proposal-print-client p {
+    display: block;
   }
 
   .proposal-print-client > span {
     color: #7ed4f5;
-    font-size: 7pt;
+    font-size: 7.2pt;
     font-weight: 800;
-    letter-spacing: 0.11em;
+    letter-spacing: .12em;
     text-transform: uppercase;
   }
 
   .proposal-print-client strong {
-    margin-top: 5px;
+    margin: 6px 0 7px;
     color: #ffffff;
-    font-size: 11pt;
+    font-size: 12pt;
   }
 
   .proposal-print-client p {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 7.7pt;
-    line-height: 1.4;
+    margin: 3px 0 0;
+    color: rgba(255,255,255,.73);
+    font-size: 7.8pt;
+    line-height: 1.42;
+    overflow-wrap: anywhere;
   }
 
   .proposal-print-scope {
-    margin-top: 22px;
+    break-before: page;
+    page-break-before: always;
+    margin-top: 0;
   }
 
   .proposal-print-section-heading {
-    margin-bottom: 10px;
-    padding-bottom: 9px;
-    border-bottom-color: var(--rp-line);
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 12px;
+    padding: 6px 0 10px;
+    border-bottom: 1px solid var(--rp-line);
+    break-after: avoid;
+    page-break-after: avoid;
   }
 
   .proposal-print-section-heading span,
   .proposal-print-note span,
   .proposal-print-total span {
+    display: block;
     color: #178fca;
+    font-size: 7.4pt;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
 
   .proposal-print-section-heading h2 {
+    margin: 4px 0 0;
     color: var(--rp-navy);
-    font-size: 14pt;
+    font-size: 16pt;
+    line-height: 1.08;
+  }
+
+  .proposal-print-section-heading > strong {
+    color: var(--rp-muted);
+    font-size: 8.5pt;
+  }
+
+  .proposal-print-items {
+    display: grid;
+    gap: 9px;
   }
 
   .proposal-print-item {
-    grid-template-columns: 30px minmax(0, 1fr);
-    gap: 10px;
-    padding: 9px 11px;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 12px;
+    padding: 11px 12px;
     border: 1px solid var(--rp-line);
-    border-radius: 10px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #ffffff, #fbfdfe);
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .proposal-print-item-number {
-    width: 27px;
-    height: 27px;
-    border-radius: 7px;
+    display: grid;
+    place-items: center;
+    align-self: start;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
     background: var(--rp-blue-soft);
     color: #178fca;
+    font-size: 8pt;
+    font-weight: 900;
   }
 
-  .proposal-print-item-heading h3,
-  .proposal-print-item-heading > strong {
+  .proposal-print-item-heading {
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .proposal-print-item-heading h3 {
+    margin: 0;
     color: var(--rp-navy);
+    font-size: 11pt;
+    line-height: 1.18;
   }
 
   .proposal-print-item-heading > strong {
-    font-size: 10.7pt;
+    flex: 0 0 auto;
+    color: var(--rp-navy);
+    font-size: 11.2pt;
   }
 
   .proposal-print-item-heading p,
   .proposal-print-description {
+    margin: 3px 0 0;
     color: var(--rp-muted);
+    font-size: 8pt;
+  }
+
+  .proposal-print-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 7px;
   }
 
   .proposal-print-facts span {
+    padding: 2px 7px;
     border: 1px solid #dce9ef;
+    border-radius: 999px;
     background: #f5fafc;
     color: #526576;
+    font-size: 7pt;
   }
 
   .proposal-print-closing {
+    align-items: stretch;
+    justify-content: space-between;
     gap: 12px;
-    margin-top: 15px;
+    margin-top: 16px;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .proposal-print-note {
+    flex: 1 1 auto;
+    padding: 14px 15px;
     border: 1px solid var(--rp-line);
+    border-radius: 12px;
     background: #f7f9fa;
   }
 
   .proposal-print-note p {
+    margin: 6px 0 0;
     color: #526576;
+    font-size: 8.2pt;
   }
 
   .proposal-print-total {
-    flex-basis: 235px;
+    flex: 0 0 2.45in;
+    padding: 14px 17px;
+    border-radius: 12px;
     background: var(--rp-navy);
+    color: #ffffff;
     box-shadow: inset 5px 0 0 var(--rp-blue);
   }
 
@@ -363,27 +516,61 @@
   }
 
   .proposal-print-total strong {
-    font-size: 21pt;
+    display: block;
+    margin: 5px 0;
+    color: #ffffff;
+    font-size: 22pt;
+    line-height: 1;
+  }
+
+  .proposal-print-total small {
+    display: block;
+    color: #cbd5e1;
+    font-size: 7pt;
+  }
+
+  .proposal-print-signatures {
+    justify-content: space-between;
+    gap: 34px;
+    margin-top: 28px;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .proposal-print-signatures > div {
-    border-top-color: #8b9aa8;
+    flex: 1 1 0;
+    padding-top: 8px;
+    border-top: 1px solid #8b9aa8;
   }
 
   .proposal-print-signatures span {
+    display: block;
     color: var(--rp-navy);
+    font-size: 8.5pt;
+    font-weight: 700;
+  }
+
+  .proposal-print-signatures small {
+    display: block;
+    color: var(--rp-muted);
+    font-size: 7pt;
   }
 
   .proposal-print-footer {
-    position: relative;
-    margin-top: 20px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin-top: 22px;
     padding-top: 10px;
     border-top: 1px solid var(--rp-line);
     color: var(--rp-muted);
+    font-size: 7pt;
+    break-inside: avoid;
   }
 
   .proposal-print-footer strong {
     color: var(--rp-navy);
+    letter-spacing: .08em;
   }
 
   .proposal-print-footer span {
