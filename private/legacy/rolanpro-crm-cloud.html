@@ -15684,7 +15684,7 @@ function renderTeam() {
       <div class="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h3 class="font-semibold text-slate-800">Сотрудники и доступы</h3>
-          <div class="text-xs text-gray-500 mt-1">Логин, пароль и роль задаются здесь. Пароль временный — сотрудник меняет его при первом входе.</div>
+          <div class="text-xs text-gray-500 mt-1">Фото, личные данные, логин, пароль и роль сотрудника настраиваются в его карточке.</div>
         </div>
         <button class="btn-primary text-sm" onclick="openTeamMemberForm()">+ Добавить сотрудника</button>
       </div>
@@ -15705,7 +15705,7 @@ function renderTeam() {
             return `
             <div class="p-3 bg-gray-50 rounded-lg">
               <div class="flex items-center gap-3">
-                ${teamAvatarHtml(u, 48)}
+                ${teamAvatarHtml(u, 56)}
                 <div class="flex-1 min-w-0">
                   <div class="font-medium truncate">${u.name}</div>
                   <div class="text-xs text-gray-500">${u.phone||'—'}</div>
@@ -15716,6 +15716,9 @@ function renderTeam() {
               <div class="flex gap-1 mt-2 flex-wrap">
                 ${canManage || currentUser()?.id === u.id
                   ? `<button class="btn-ghost text-xs" onclick="openTeamMemberEdit('${u.id}')">✏️ Изменить</button>`
+                  : ''}
+                ${canManage || currentUser()?.id === u.id
+                  ? `<button class="btn-ghost text-xs" onclick="openTeamMemberPhoto('${u.id}')">📷 Фото</button>`
                   : ''}
                 <button class="btn-ghost text-xs" onclick="openUserPayConfig('${u.id}')">💰 Зарплата</button>
                 ${canManage ? `<button class="btn-ghost text-xs" onclick="openTeamMemberAccess('${u.id}')">🔑 Доступ</button>` : ''}
@@ -15829,7 +15832,7 @@ function teamAvatarHtml(user, px = 48) {
     style="width:${px}px;height:${px}px;flex:none;">${initial}</div>`;
 }
 
-function teamPhotoPickerClick(userId) {
+function teamPhotoPickerClick(userId, previewSize = 64) {
   const inp = document.createElement('input');
   inp.type = 'file';
   inp.accept = 'image/*';
@@ -15839,7 +15842,7 @@ function teamPhotoPickerClick(userId) {
     try {
       const dataUrl = await compressTeamPhoto(file);
       const preview = document.getElementById('tm-photo-preview');
-      if (preview) preview.innerHTML = `<img src="${dataUrl}" style="width:64px;height:64px;border-radius:9999px;object-fit:cover;">`;
+      if (preview) preview.innerHTML = `<img src="${dataUrl}" style="width:${previewSize}px;height:${previewSize}px;border-radius:9999px;object-fit:cover;">`;
       const hidden = document.getElementById('tm-photo-data');
       if (hidden) hidden.value = dataUrl;
     } catch (error) {
@@ -15849,11 +15852,69 @@ function teamPhotoPickerClick(userId) {
   inp.click();
 }
 
-function teamPhotoRemove() {
+function teamPhotoRemove(previewSize = 64) {
   const hidden = document.getElementById('tm-photo-data');
   if (hidden) hidden.value = '';
   const preview = document.getElementById('tm-photo-preview');
-  if (preview) preview.innerHTML = '<div class="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center text-slate-400">нет</div>';
+  if (preview) preview.innerHTML = `<div class="bg-slate-200 flex items-center justify-center text-slate-400" style="width:${previewSize}px;height:${previewSize}px;border-radius:9999px;">нет</div>`;
+}
+
+/**
+ * Отдельное окно фотографии находится прямо на карточке сотрудника.
+ * Так владельцу не нужно догадываться, что загрузка спрятана внутри
+ * общего редактирования имени и телефона.
+ */
+function openTeamMemberPhoto(userId) {
+  const u = getUser(userId);
+  if (!u) return;
+  const viewer = currentUser();
+  if (viewer?.role !== 'owner' && viewer?.id !== u.id) {
+    alert('Изменять фотографию можно только в своей карточке.');
+    return;
+  }
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6" style="max-width:30rem;">
+      <h3 class="font-semibold text-lg mb-1">Фотография сотрудника</h3>
+      <p class="text-xs text-gray-500 mb-5">${academyEsc(u.name)} · изображение будет видно в разделе «Команда» и в меню CRM.</p>
+
+      <div class="flex flex-col items-center text-center">
+        <div id="tm-photo-preview" class="mb-4">${u.photo
+          ? `<img src="${u.photo}" alt="${academyEsc(u.name || '')}" style="width:144px;height:144px;border-radius:9999px;object-fit:cover;">`
+          : `<div class="brand-gradient text-white flex items-center justify-center font-black text-4xl" style="width:144px;height:144px;border-radius:9999px;">${academyEsc((u.name || '?')[0])}</div>`}</div>
+        <input type="hidden" id="tm-photo-data" value="${u.photo || ''}">
+        <div class="flex gap-2 flex-wrap justify-center">
+          <button class="btn-primary text-sm" onclick="teamPhotoPickerClick('${u.id}',144)">📷 ${u.photo ? 'Заменить фото' : 'Загрузить фото'}</button>
+          ${u.photo ? `<button class="btn-ghost text-sm text-red-600" onclick="teamPhotoRemove(144)">Убрать фото</button>` : ''}
+        </div>
+        <div class="text-xs text-gray-400 mt-3">Подойдут JPG, PNG, WebP и фото с телефона. CRM сама обрежет изображение до квадрата и уменьшит размер.</div>
+      </div>
+
+      <div id="tm-photo-error" class="text-sm text-red-600 mt-3 hidden"></div>
+      <div class="flex gap-2 mt-6">
+        <button class="btn-primary flex-1" onclick="submitTeamMemberPhoto('${u.id}')">Сохранить фото</button>
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
+function submitTeamMemberPhoto(userId) {
+  const u = getUser(userId);
+  const viewer = currentUser();
+  if (!u || (viewer?.role !== 'owner' && viewer?.id !== u.id)) return;
+  const photo = document.getElementById('tm-photo-data')?.value || '';
+  if (photo && !photo.startsWith('data:image/')) {
+    const err = document.getElementById('tm-photo-error');
+    if (err) { err.textContent = 'Не удалось распознать изображение. Выберите другой файл.'; err.classList.remove('hidden'); }
+    return;
+  }
+  if (photo) u.photo = photo;
+  else delete u.photo;
+  save();
+  closeModal();
+  render();
 }
 
 /**

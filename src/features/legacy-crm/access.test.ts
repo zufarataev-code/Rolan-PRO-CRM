@@ -33,3 +33,16 @@ test("owner settings use a section directory with employee access entry", () => 
   assert.match(source, /function settingsPanelAttrs\(key\)/);
   assert.match(source, /if \(key === 'settings' && user\?\.role !== 'owner'\) return;/);
 });
+
+test("every employee card exposes photo upload and preview controls", () => {
+  const source = readFileSync(
+    "private/legacy/rolanpro-crm-cloud.html",
+    "utf8",
+  );
+
+  assert.match(source, /onclick="openTeamMemberPhoto\('\$\{u\.id\}'\)"/);
+  assert.match(source, /function openTeamMemberPhoto\(userId\)/);
+  assert.match(source, /function submitTeamMemberPhoto\(userId\)/);
+  assert.match(source, /compressTeamPhoto\(file/);
+  assert.match(source, /Сохранить фото/);
+});
