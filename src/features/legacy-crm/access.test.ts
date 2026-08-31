@@ -20,3 +20,16 @@ test("legacy workspace API applies the role restriction to reads and writes", ()
 
   assert.equal(guardedCalls?.length, 2);
 });
+
+test("owner settings use a section directory with employee access entry", () => {
+  const source = readFileSync(
+    "private/legacy/rolanpro-crm-cloud.html",
+    "utf8",
+  );
+
+  assert.match(source, /title: 'Доступ сотрудников'/);
+  assert.match(source, /destination: 'team'/);
+  assert.match(source, /function renderSettingsHub\(\)/);
+  assert.match(source, /function settingsPanelAttrs\(key\)/);
+  assert.match(source, /if \(key === 'settings' && user\?\.role !== 'owner'\) return;/);
+});

@@ -4991,6 +4991,49 @@
       right: 0;
     }
   }
+  /* === Owner settings directory === */
+  .settings-hub { max-width: 980px; }
+  .settings-hub-intro { margin-bottom: 22px; }
+  .settings-hub-intro h2 {
+    margin: 0 0 6px; font-size: 24px; font-weight: 800;
+    color: #0f172a; letter-spacing: -0.025em;
+  }
+  .settings-hub-intro p { margin: 0; color: #64748b; font-size: 14px; }
+  .settings-hub-grid {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+  }
+  .settings-hub-item {
+    width: 100%; min-height: 116px; display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) 24px; align-items: center;
+    gap: 14px; padding: 18px; text-align: left; background: #fff;
+    border: 1px solid #dbe3ee; border-radius: 0; color: #0f172a;
+    transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+  }
+  .settings-hub-item:hover, .settings-hub-item:focus-visible {
+    border-color: #2563eb; background: #f8fbff; transform: translateY(-2px); outline: none;
+  }
+  .settings-hub-icon {
+    width: 48px; height: 48px; display: grid; place-items: center;
+    background: #eff6ff; color: #1d4ed8; border-radius: 0; font-size: 23px;
+  }
+  .settings-hub-title { display: block; margin-bottom: 5px; font-size: 15px; font-weight: 750; line-height: 1.25; }
+  .settings-hub-description { display: block; color: #64748b; font-size: 12px; line-height: 1.45; }
+  .settings-hub-arrow { color: #2563eb; font-size: 22px; transition: transform 160ms ease; }
+  .settings-hub-item:hover .settings-hub-arrow { transform: translateX(3px); }
+  .settings-detail { max-width: 860px; }
+  .settings-detail-header { padding-bottom: 16px; border-bottom: 1px solid #dbe3ee; }
+  .settings-detail-back {
+    display: inline-flex; align-items: center; margin-bottom: 14px; padding: 0;
+    border: 0; background: transparent; color: #2563eb; font-size: 13px; font-weight: 700;
+  }
+  .settings-detail-title { display: flex; align-items: center; gap: 11px; }
+  .settings-detail-title h2 { margin: 0; font-size: 22px; font-weight: 800; color: #0f172a; }
+  .settings-detail-title p { margin: 3px 0 0; color: #64748b; font-size: 13px; }
+  @media (max-width: 760px) {
+    .settings-hub-grid { grid-template-columns: 1fr; }
+    .settings-hub-item { min-height: 96px; padding: 14px; }
+    .settings-hub-intro h2 { font-size: 21px; }
+  }
   /* === Print === */
   @page { size: Letter portrait; margin: 0.55in; }
   @media print {
@@ -5929,6 +5972,7 @@ let state = {
   globalSearch: '',
   sidebarCollapsed: false,
   mobileSidebarOpen: false,
+  settingsSection: null,
   ordersView: 'kanban',
   ordersPeriod: 'all',
   ordersKanbanFullscreen: false,
@@ -14333,7 +14377,10 @@ function closeMobileSidebar() {
 }
 
 function selectAppView(key) {
+  const user = currentUser();
+  if (key === 'settings' && user?.role !== 'owner') return;
   state.view = key;
+  if (key !== 'settings') state.settingsSection = null;
   state.ordersKanbanFullscreen = false;
   if (isCompactViewport()) state.mobileSidebarOpen = false;
   render();
@@ -16391,12 +16438,80 @@ function renderReviews() {
 }
 
 // ---------- MANAGER: SETTINGS ----------
-function renderEmailChannelSettings(s) {
+function settingsSections() {
+  return [
+    { key: 'team-access', icon: '🔐', title: 'Доступ сотрудников', description: 'Email, пароль, роли и отключение доступа', destination: 'team' },
+    { key: 'company', icon: '🏢', title: T('company'), description: 'Название компании, валюта и базовые суммы' },
+    { key: 'telegram', icon: '✈️', title: T('telegramConfigure'), description: 'Telegram-бот и Chat ID сотрудников' },
+    { key: 'communication', icon: '💬', title: 'Автосвязь с клиентами', description: 'Каналы, автоматические сообщения и AI-продавец' },
+    { key: 'integrations', icon: '🔌', title: 'Интеграции', description: 'Google Voice, Gmail, Maps, лиды и внешние сервисы' },
+    { key: 'catalog', icon: '🎞', title: T('catalog'), description: 'Плёнки, поставщики, цены и выплаты монтажникам' },
+    { key: 'complexity', icon: '🪜', title: `${T('complexity')} — ${T('coefficient')}`, description: 'Коэффициенты сложности и стоимость аренды' },
+    { key: 'client-payments', icon: '💵', title: 'Как клиент платит', description: 'Доступные способы и приоритет оплаты' },
+    { key: 'pricing', icon: '📊', title: T('pricingDefaults'), description: 'Проценты, топливо, расходники и помощники' },
+    { key: 'units', icon: '📏', title: T('units'), description: 'Единицы измерения размеров стекла' },
+    { key: 'office', icon: '📍', title: 'Офис и карта', description: 'Адрес компании, центр карты и Google Reviews' },
+    { key: 'stripe', icon: '💳', title: 'Stripe', description: 'Приём платежей картой и платёжные ссылки' },
+    { key: 'proposal-payments', icon: '🏦', title: 'Оплата из КП', description: 'Chase, Zelle, ACH и карта в предложении' },
+    { key: 'public-url', icon: '🌐', title: 'Публичный URL CRM', description: 'Внешняя ссылка для кабинета клиента' },
+    { key: 'followups', icon: '⏰', title: 'Автоматические follow-ups', description: 'Повторные касания после сделки и монтажа' },
+    { key: 'ai', icon: '✨', title: 'AI-ассистент', description: 'Модель, API-ключ и тон помощника' },
+    { key: 'sms', icon: '📱', title: 'SMS-уведомления', description: 'Способ отправки и шаблоны сообщений' },
+    { key: 'email', icon: '📧', title: 'Почта и переписка', description: 'Google Workspace, рассылки и шаблоны писем' },
+    { key: 'backup', icon: '🗄', title: T('backupRestore'), description: 'Экспорт, импорт и резервные копии данных' },
+    { key: 'reset', icon: '⚠️', title: T('resetDemo'), description: 'Сброс демонстрационных данных CRM' },
+  ];
+}
+
+function openSettingsSection(key) {
+  if (currentUser()?.role !== 'owner') return;
+  const section = settingsSections().find(item => item.key === key);
+  if (!section) return;
+  if (section.destination) {
+    state.settingsSection = null;
+    selectAppView(section.destination);
+    return;
+  }
+  state.settingsSection = key;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  render();
+}
+
+function closeSettingsSection() {
+  state.settingsSection = null;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  render();
+}
+
+function renderSettingsHub() {
+  return `
+    <div class="settings-hub">
+      <div class="settings-hub-intro">
+        <h2>Настройки владельца</h2>
+        <p>Выберите нужный раздел — откроются только его параметры.</p>
+      </div>
+      <div class="settings-hub-grid">
+        ${settingsSections().map(section => `
+          <button type="button" class="settings-hub-item" onclick="openSettingsSection('${section.key}')">
+            <span class="settings-hub-icon" aria-hidden="true">${section.icon}</span>
+            <span><span class="settings-hub-title">${section.title}</span><span class="settings-hub-description">${section.description}</span></span>
+            <span class="settings-hub-arrow" aria-hidden="true">›</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+function settingsPanelAttrs(key) {
+  return `class="card settings-section-panel" data-settings-section="${key}"${state.settingsSection === key ? '' : ' hidden'}`;
+}
+
+function renderEmailChannelSettings(s, cardAttrs = 'class="card"') {
   const gmailConnected = gmailServerStatus?.connected === true;
   const marketingConnected = marketingEmailStatus?.configured === true;
   const gmailAddress = gmailServerStatus?.email_address || 'info@rolan-pro.com';
   return `
-    <div class="card">
+    <div ${cardAttrs}>
       <h3 class="font-black text-lg mb-1">✉️ Почта и переписка</h3>
       <p class="text-sm text-gray-600 mb-4">Два отдельных канала: Google Workspace для личной работы с клиентом, Resend — только для массовых рассылок и акций.</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -16436,9 +16551,18 @@ function renderEmailChannelSettings(s) {
 function renderSettings() {
   const s = db.settings;
   const comm = communicationSettings();
+  const activeSection = settingsSections().find(section => section.key === state.settingsSection && !section.destination);
+  if (!activeSection) return renderSettingsHub();
   return `
-  <div class="max-w-2xl space-y-4">
-    <div class="card">
+  <div class="max-w-2xl space-y-4 settings-detail">
+    <div class="settings-detail-header">
+      <button type="button" class="settings-detail-back" onclick="closeSettingsSection()">← Все настройки</button>
+      <div class="settings-detail-title">
+        <span class="settings-hub-icon" aria-hidden="true">${activeSection.icon}</span>
+        <div><h2>${activeSection.title}</h2><p>${activeSection.description}</p></div>
+      </div>
+    </div>
+    <div ${settingsPanelAttrs('company')}>
       <h3 class="font-semibold mb-3">${T('company')}</h3>
       <label>${T('companyName')}</label>
       <input id="set-company" value="${s.companyName}">
@@ -16457,7 +16581,7 @@ function renderSettings() {
       <button class="btn-primary mt-4" onclick="saveCompanySettings()">${T('save')}</button>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('telegram')}>
       <h3 class="font-semibold mb-1">${T('telegramConfigure')}</h3>
       <p class="text-sm text-gray-600 mb-3">${T('telegramHint')}</p>
       <label>${T('telegramToken')}</label>
@@ -16479,7 +16603,7 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('communication')}>
       <h3 class="font-semibold mb-1">💬 Автосвязь с клиентами</h3>
       <p class="text-sm text-gray-600 mb-3">Единые правила для SMS, email, WhatsApp, Telegram и AI-продавца. При назначении консультации, замера или монтажа CRM сама готовит уведомление и пишет результат в историю заказа.</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -16532,7 +16656,7 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('integrations')}>
       <h3 class="font-semibold mb-1">🔌 Интеграции</h3>
       <p class="text-sm text-gray-600 mb-3">Настройки сервисов. Ссылки «позвонить / написать / открыть карту» начинают работать сразу; полноценные API-интеграции подключим следующим шагом.</p>
 
@@ -16637,7 +16761,7 @@ function renderSettings() {
       <button class="btn-primary mt-4" onclick="saveIntegrations()">${T('save')}</button>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('catalog')}>
       <h3 class="font-semibold mb-3">${T('catalog')}</h3>
       <p class="text-sm text-gray-600 mb-3">${T('catalogHint')}</p>
       <div class="overflow-x-auto">
@@ -16687,7 +16811,7 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('complexity')}>
       <h3 class="font-semibold mb-3">${T('complexity')} — ${T('coefficient')}</h3>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         ${['standard','ladder','tower','alpinism'].map(k => `
@@ -16710,7 +16834,7 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('client-payments')}>
       <h3 class="font-semibold mb-1">💵 Как клиент платит</h3>
       <p class="text-xs text-gray-500 mb-3">
         Показывается клиенту в предложении. Zelle и перевод идут прямо на счёт компании
@@ -16758,7 +16882,7 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('pricing')}>
       <h3 class="font-semibold mb-3">${T('pricingDefaults')}</h3>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div><label>${T('managerPctDefault')} %</label><input type="number" step="0.5" value="${s.pricingDefaults.managerPct}" onchange="db.settings.pricingDefaults.managerPct=parseFloat(this.value)||0; save();"></div>
@@ -16769,7 +16893,7 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('units')}>
       <h3 class="font-semibold mb-3">${T('units')}</h3>
       <label>${T('inputUnits')}</label>
       <select onchange="db.settings.inputUnits=this.value; save(); render();">
@@ -16779,7 +16903,7 @@ function renderSettings() {
       <p class="text-xs text-gray-500 mt-2">Площади всегда хранятся и считаются в sqft. Конвертация автоматическая.</p>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('office')}>
       <h3 class="font-semibold mb-3">🏢 Офис и карта</h3>
       <p class="text-sm text-gray-600 mb-3">Адрес офиса и центр карты в графике монтажей. Точка отмечается на карте.</p>
       <label>Адрес офиса</label>
@@ -16796,7 +16920,7 @@ function renderSettings() {
       <button class="btn-ghost mt-3 ml-2" onclick="(async()=>{const c=await geocodeAddress(db.settings.officeAddress); if(c){db.settings.defaultMapCenter={lat:c.lat,lon:c.lon,zoom:13}; save(); render();}})()">🔎 Найти по адресу</button>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('stripe')}>
       <h3 class="font-semibold mb-3">💳 Stripe — приём платежей картой</h3>
       <p class="text-sm text-gray-600 mb-3">Регистрация: <a href="https://dashboard.stripe.com/register" target="_blank" class="text-blue-600 underline">stripe.com</a>. Получите ключ: Dashboard → Developers → API Keys. Для безопасности рекомендую <b>Restricted Key</b> с правами <code>products: write</code>, <code>prices: write</code>, <code>payment_links: write</code>, <code>checkout.sessions: read</code>.</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -16824,7 +16948,7 @@ function renderSettings() {
       <p class="text-xs text-gray-500 mt-2">Кнопку «🔄 Проверить» жмите когда клиент оплатил — CRM спросит у Stripe и автоматически отметит «Аванс получен».</p>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('proposal-payments')}>
       <h3 class="font-semibold mb-3">🏦 Оплата из КП · Chase, Zelle и карта</h3>
       <p class="text-sm text-gray-600 mb-3">Клиент нажимает «Оплатить» в КП и выбирает способ. Логин и пароль Chase в CRM не вводятся. Перевод считается ожидающим проверки, пока сотрудник не подтвердит поступление в банке.</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -16872,7 +16996,7 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('public-url')}>
       <h3 class="font-semibold mb-3">🌐 Публичный URL CRM</h3>
       <p class="text-sm text-gray-600 mb-2">Адрес, по которому CRM доступна в интернете — нужен для ссылок «Портал клиента» в письмах. Если CRM открывается локально (file://), ссылки в письмах не будут работать.</p>
       <input value="${s.publicBaseUrl||''}" placeholder="https://rolanpro.netlify.app/index.html"
@@ -16880,7 +17004,7 @@ function renderSettings() {
       <p class="text-xs text-gray-500 mt-2">Бесплатные варианты хостинга: <b>GitHub Pages</b>, <b>Netlify Drop</b> (просто перетащить файл), <b>Vercel</b>, <b>Cloudflare Pages</b>. Загрузите туда rolanpro-crm.html и вставьте сюда полный URL.</p>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('followups')}>
       <h3 class="font-semibold mb-3">⏰ Автоматические follow-ups</h3>
       <p class="text-sm text-gray-600 mb-3">Правила автоматической отправки сообщений клиентам через N дней после события (например через 24 часа после монтажа → запрос отзыва). Срабатывают при загрузке CRM (раз в час максимум).</p>
       <label class="flex items-center gap-2 cursor-pointer mb-3">
@@ -16917,7 +17041,7 @@ function renderSettings() {
       <p class="text-xs text-gray-500 mt-2">Переменные: {client}, {orderNo}, {sum}, {portalUrl}, {company}</p>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('ai')}>
       <h3 class="font-semibold mb-3">✨ AI-ассистент (Claude)</h3>
       <p class="text-sm text-gray-600 mb-3">Получите ключ на <a href="https://console.anthropic.com/settings/keys" target="_blank" class="text-blue-600 underline">console.anthropic.com</a> → Settings → API Keys → Create Key. Минимум $5 пополнения хватит на ~10 000 запросов.</p>
       <label>API Key</label>
@@ -16941,7 +17065,7 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('sms')}>
       <h3 class="font-semibold mb-3">📱 SMS-уведомления</h3>
       <label>Способ отправки</label>
       <select onchange="db.settings.sms.method=this.value; db.settings.sms._userPickedMethod=true; save(); render();">
@@ -17007,9 +17131,9 @@ function renderSettings() {
       </div>
     </div>
 
-    ${renderEmailChannelSettings(s)}
+    ${renderEmailChannelSettings(s, settingsPanelAttrs('email'))}
 
-    <div class="card">
+    <div ${settingsPanelAttrs('backup')}>
       <h3 class="font-semibold mb-3">${T('backupRestore')}</h3>
       <p class="text-sm text-gray-600 mb-3">Регулярно сохраняйте резервную копию — данные хранятся только в этом браузере.</p>
       <div class="flex flex-wrap gap-2">
@@ -17029,7 +17153,7 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="card">
+    <div ${settingsPanelAttrs('reset')}>
       <h3 class="font-semibold mb-3">${T('resetDemo')}</h3>
       <button class="btn-danger" onclick="if(confirm(T('resetConfirm'))){localStorage.removeItem('rolanpro_crm'); load(); render();}">⚠️ ${T('resetDemo')}</button>
     </div>
