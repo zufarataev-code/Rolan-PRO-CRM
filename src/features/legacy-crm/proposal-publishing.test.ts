@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const legacyCrm = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+const proposalCodeMigration = readFileSync(
+  "prisma/migrations/20260831170000_sequential_proposal_codes/migration.sql",
+  "utf8",
+);
 
 test("legacy proposal publishing uses the canonical public route", () => {
   const urlFunction = legacyCrm.match(/function premiumProposalUrl[\s\S]*?\n}/)?.[0] || "";
@@ -24,4 +28,11 @@ test("owner and manager have a proposal registry with real client views and orde
   assert.match(legacyCrm, /server\?\.client_viewed_at/);
   assert.match(legacyCrm, /В заказ →/);
   assert.match(legacyCrm, /openOrder\('\$\{record\.order\.id\}'\)/);
+});
+
+test("proposal numbers are immutable sequential PRC codes", () => {
+  assert.match(proposalCodeMigration, /CREATE SEQUENCE IF NOT EXISTS "proposal_code_sequence"/);
+  assert.match(proposalCodeMigration, /'PRC-' \|\| numbered\.proposal_number/);
+  assert.match(proposalCodeMigration, /SET DEFAULT \('PRC-' \|\| nextval\('proposal_code_sequence'\)/);
+  assert.match(legacyCrm, /record\.server\?\.proposal_code \|\| record\.local\?\.proposalCode/);
 });

@@ -1495,7 +1495,7 @@ async function seedDevProposalData() {
 
   const proposal = await prisma.proposal.upsert({
     where: {
-      proposal_code: "PRP-2001",
+      proposal_code: "PRC-2001",
     },
     update: {
       deal_id: completedDeal.deal_id,
@@ -1511,7 +1511,7 @@ async function seedDevProposalData() {
       sent_at: new Date("2026-03-22T06:00:00.000Z"),
     },
     create: {
-      proposal_code: "PRP-2001",
+      proposal_code: "PRC-2001",
       deal_id: completedDeal.deal_id,
       client_id: completedDeal.client_id!,
       survey_id: survey.survey_id,

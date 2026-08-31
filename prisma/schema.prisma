@@ -735,7 +735,7 @@ model Measurement {
 
 model Proposal {
   proposal_id                  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  proposal_code                String?        @unique @db.VarChar(40)
+  proposal_code                String?        @unique @default(dbgenerated("('PRC-'::text || nextval('proposal_code_sequence'::regclass)::text)")) @db.VarChar(40)
   deal_id                      String         @db.Uuid
   client_id                    String         @db.Uuid
   survey_id                    String?        @db.Uuid

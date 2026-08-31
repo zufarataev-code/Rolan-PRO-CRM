@@ -192,7 +192,6 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
         })
       : await tx.proposal.create({
           data: {
-            proposal_code: `PRP-${crypto.randomUUID().slice(0, 8)}`,
             deal_id: dealId!,
             client_id: clientId!,
             created_by: session.user.user_id,
@@ -241,6 +240,7 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
 
   return {
     proposal_id: result.proposal_id,
+    proposal_code: result.proposal_code,
     public_url: `${getEnv().appUrl.replace(/\/$/, "")}/proposal/${result.access_token}`,
   };
 }

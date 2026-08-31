@@ -824,7 +824,6 @@ export async function createProposalFromSurvey(
   const proposal = await prisma.$transaction(async (tx) => {
     const created = await tx.proposal.create({
       data: {
-        proposal_code: `PRP-${Date.now().toString().slice(-6)}`,
         deal_id: deal.deal_id,
         client_id: dealClientId,
         survey_id: survey.survey_id,
@@ -1049,7 +1048,6 @@ export async function createProposalFromCalculator(
   const proposalId = await prisma.$transaction(async (tx) => {
     const created = await tx.proposal.create({
       data: {
-        proposal_code: `PRP-${Date.now().toString().slice(-6)}`,
         deal_id: deal.deal_id,
         client_id: dealClientId,
         survey_id: null,
