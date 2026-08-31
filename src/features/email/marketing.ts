@@ -3,6 +3,7 @@ const UNSUBSCRIBE_TOKEN = "{{{RESEND_UNSUBSCRIBE_URL}}}";
 
 export type MarketingEmailConfig = {
   configured: boolean;
+  enabled: boolean;
   provider: "resend";
   from: string | null;
   replyTo: string | null;
@@ -10,6 +11,10 @@ export type MarketingEmailConfig = {
 
 function emailAddress(value: string) {
   return (value.match(/<([^>]+)>/)?.[1] || value).trim().toLowerCase();
+}
+
+function marketingEmailEnabled() {
+  return (process.env.MARKETING_EMAIL_ENABLED || "false").trim().toLowerCase() === "true";
 }
 
 export function marketingEmailConfig(): MarketingEmailConfig {
@@ -22,7 +27,13 @@ export function marketingEmailConfig(): MarketingEmailConfig {
   if (from && emailAddress(from) === workMailbox) {
     throw new Error("Marketing sender must not be the main Google Workspace mailbox.");
   }
-  return { configured: Boolean(apiKey && from), provider: "resend", from: from || null, replyTo: replyTo || null };
+  return {
+    configured: Boolean(apiKey && from),
+    enabled: marketingEmailEnabled(),
+    provider: "resend",
+    from: from || null,
+    replyTo: replyTo || null,
+  };
 }
 
 function marketingCredentials() {
@@ -47,6 +58,16 @@ export async function createMarketingBroadcast(input: {
   scheduledAt?: string | null;
 }) {
   const credentials = marketingCredentials();
+  const scheduledAt = input.scheduledAt?.trim() || "";
+
+  // Emergency/operational kill switch. Drafts stay available so templates can
+  // be prepared and reviewed while all real or scheduled mass delivery is off.
+  // Fail closed: production must explicitly set MARKETING_EMAIL_ENABLED=true
+  // before any broadcast can be sent or scheduled again.
+  if ((input.send || scheduledAt) && !credentials.enabled) {
+    throw new Error("Marketing broadcasts are temporarily paused. Draft creation is still available.");
+  }
+
   if (!input.segmentId.trim() || !input.topicId.trim() || !input.subject.trim() || !input.html.trim()) {
     throw new Error("Segment, topic, subject, and HTML are required.");
   }
@@ -62,7 +83,7 @@ export async function createMarketingBroadcast(input: {
       html: withUnsubscribe(input.html.trim()),
       name: input.name?.trim() || undefined,
       send: Boolean(input.send),
-      scheduled_at: input.scheduledAt?.trim() || undefined,
+      scheduled_at: scheduledAt || undefined,
     }),
   });
   const payload = await response.json().catch(() => null) as null | { id?: string; message?: string; error?: { message?: string } };
