@@ -43,6 +43,19 @@ test("client replies open a full conversation modal with SMS and WhatsApp", () =
   assert.match(legacyCrm, /TWILIO_WHATSAPP_FROM/);
 });
 
+test("inbound message badge opens a readable inbox even when an old order was removed", () => {
+  assert.match(legacyCrm, /function openInboundMessagesInbox\(\)/);
+  assert.match(legacyCrm, /Входящие сообщения/);
+  assert.match(legacyCrm, /заказ из прежней базы или без привязки/);
+  assert.match(legacyCrm, /Сообщение можно прочитать здесь/);
+});
+
+test("managers only see inbound messages for orders they can access", () => {
+  assert.match(legacyCrm, /function inboundMessageVisibleToUser\(message, user = currentUser\(\)\)/);
+  assert.match(legacyCrm, /return !!order && orderUserCanAccess\(order, user\)/);
+  assert.match(legacyCrm, /inboundMessageReadIdsByUser/);
+});
+
 test("email settings clearly separate Gmail correspondence from Resend broadcasts", () => {
   assert.match(legacyCrm, /Google Workspace для личной работы с клиентом/);
   assert.match(legacyCrm, /Resend Broadcasts/);
