@@ -442,11 +442,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
       <article className="proposal-print-document" aria-label="Printable ROLANPRO proposal">
         <header className="proposal-print-header">
           <div className="proposal-print-brand">
-            <span className="proposal-print-brand-mark">R</span>
-            <span>
-              <strong>ROLANPRO</strong>
-              <small>WINDOW FILM SOLUTIONS</small>
-            </span>
+            <img src="/landing/rolan-logo.webp" alt="Rolan PRO" className="proposal-print-logo" />
           </div>
           <div className="proposal-print-meta">
             <strong>{proposal.proposal_code ?? "Proposal"}</strong>

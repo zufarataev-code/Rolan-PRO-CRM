@@ -654,16 +654,12 @@
     min-width: 175px;
   }
 
-  .proposal-print-brand > * {
-    display: none !important;
-  }
-
-  .proposal-print-brand::before {
-    content: url('/landing/rolan-logo.webp');
+  .proposal-print-logo {
     display: block;
     width: 158px;
-    max-height: 44px;
-    overflow: hidden;
+    height: auto;
+    max-height: 50px;
+    object-fit: contain;
   }
 
   .proposal-print-meta {
