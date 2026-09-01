@@ -78,13 +78,46 @@
   opacity: 0.65;
 }
 
-.error {
+.error,
+.success {
   margin: 0;
   padding: 10px 12px;
   border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.error {
   background: #fef2f2;
   color: #b91c1c;
+}
+
+.success {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.formLinkRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+
+.link {
+  color: #2563eb;
   font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
 }
 
 .hint {
