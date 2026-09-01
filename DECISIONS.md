@@ -29,6 +29,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Surveyors and installers must not see project totals, selling prices, costs, margins, commissions, or other financial data.
 - Authorization must be enforced by server responses, not only by hiding interface elements.
 
+## 2026-09-01 — Credential-bound sessions and one-time password recovery
+
+- Authenticated sessions are bound to the user's current canonical email and a one-way fingerprint of the current password hash.
+- Changing the user's password or login email invalidates every previously issued session automatically.
+- An authenticated password change issues exactly one fresh session for the new credentials so the employee can continue working without preserving older sessions.
+- Password-reset links are bound to the current user ID, email, and password hash and are consumed with an atomic compare-and-swap database update.
+- Concurrent reuse of one reset link must have at most one successful password change; all later or racing attempts fail as already used/invalid.
+- These rules were introduced by security hotfix PR #99 after the post-merge review of PR #98 identified session-revocation and concurrent-token-consumption P1 findings.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
