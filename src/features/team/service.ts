@@ -24,6 +24,7 @@ export type TeamMemberInput = {
 
 export type TeamMember = {
   userId: string;
+  legacyUserIds: string[];
   email: string;
   fullName: string;
   roles: RoleCode[];
@@ -73,6 +74,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
 
   return users.map((user) => ({
     userId: user.user_id,
+    legacyUserIds: user.legacy_user_ids,
     email: user.email,
     fullName: user.full_name,
     roles: user.user_accesses.map((access) => access.role.code as RoleCode),
