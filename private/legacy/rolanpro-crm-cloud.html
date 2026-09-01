@@ -5982,6 +5982,10 @@ let state = {
   proposalsRegistryLoadedAt: null,
   proposalRegistrySearch: '',
   proposalRegistryStatus: 'all',
+  coldSearch: '',
+  coldStatusFilter: 'all',
+  coldAssigneeFilter: 'all',
+  pendingColdProspectId: null,
   statusFilter: '',
   managerFilter: '',
   dateFrom: '',
@@ -6532,6 +6536,20 @@ function migrateSchema() {
   if (!db.tasks) {
     db.tasks = [];
   }
+  // ---- COLD OUTREACH (компании до подтверждённого интереса) ----
+  // Холодная база намеренно отделена от db.clients: клиент создаётся только
+  // после интереса, чтобы отчёты и список реальных клиентов оставались чистыми.
+  if (!Array.isArray(db.coldProspects)) db.coldProspects = [];
+  db.coldProspects.forEach(p => {
+    if (!p || typeof p !== 'object') return;
+    if (!Array.isArray(p.calls)) p.calls = [];
+    if (!p.status) p.status = 'new';
+    if (!p.source) p.source = 'manual';
+    if (!p.serviceInterest) p.serviceInterest = 'unknown';
+    if (!p.createdAt) p.createdAt = new Date().toISOString();
+    if (p.attempts == null) p.attempts = p.calls.length;
+    if (p.doNotCall == null) p.doNotCall = p.status === 'do_not_call';
+  });
   // ---- CALL LOG (журнал звонков: клик-звонок через Google Voice + фиксация результата) ----
   if (!db.calls) {
     db.calls = [];
@@ -14451,6 +14469,7 @@ function renderAppShell() {
   const navItems = (role === 'manager' || role === 'owner') ? [
     ['dashboard', T('dashboard'), '📊'],
     ['leads', 'Новые лиды', '📥'],
+    ['coldcalls', 'Холодные звонки', '📞'],
     ['orders', T('orders'), '📦'],
     ['proposals', 'КП', '📄'],
     ['calendar', T('calendar'), '📅'],
@@ -14577,6 +14596,7 @@ function headerTitle() {
     case 'tasks': return '✅ Задачи';
     case 'academy': return '🧭 Академия и процессы';
     case 'leads': return '📥 Новые лиды';
+    case 'coldcalls': return '📞 Холодные звонки';
     case 'payroll': return '💰 Зарплата';
     case 'accounting': return '🧾 Учёт';
     case 'reports': return T('reports');
@@ -14600,6 +14620,7 @@ function headerSubtitle() {
     case 'proposals': return 'Кому отправлено, кто посмотрел и к какому заказу относится КП';
     case 'orderDetails': return 'Карточка объекта, замер, наряд, клиент и история';
     case 'clients': return 'Клиенты, адреса объектов, B2B/B2C и постоянные аккаунты';
+    case 'coldcalls': return 'Поиск компаний, журнал обзвона, повторные звонки и перевод в B2B';
     case 'inventory': return 'Плёнка, расходники, остатки, приход и списание';
     case 'payroll': return 'Начисления, периоды, выплаты и задолженность по зарплате';
     case 'accounting': return 'Деньги компании из заказов, склада, зарплаты и фактических операций';
@@ -14633,6 +14654,7 @@ function renderView() {
       case 'settings': return u.role === 'owner' ? renderSettings() : `<div class="card">${T('empty')}</div>`;
       case 'tasks': return renderTasksView();
       case 'leads': return renderLeadsView();
+      case 'coldcalls': return renderColdCallsView();
     }
   } else if (u.role === 'measurer') {
     switch (state.view) {
@@ -16380,6 +16402,288 @@ async function submitTeamPassword(email) {
   } catch (error) {
     showTeamError('Сервер не ответил. Попробуйте ещё раз.');
   }
+}
+
+// ---------- COLD CALLS / B2B OUTREACH ----------
+const COLD_STATUS_META = {
+  new:            { label: 'Новая компания', cls: 'bg-slate-100 text-slate-700' },
+  no_answer:      { label: 'Не дозвонились', cls: 'bg-amber-50 text-amber-800' },
+  callback:       { label: 'Перезвонить', cls: 'bg-blue-50 text-blue-700' },
+  thinking:       { label: 'Думает', cls: 'bg-violet-50 text-violet-700' },
+  interested:     { label: 'Интерес', cls: 'bg-emerald-50 text-emerald-700' },
+  appointment:    { label: 'Назначен замер', cls: 'bg-cyan-50 text-cyan-800' },
+  converted:      { label: 'B2B-клиент', cls: 'bg-green-100 text-green-800' },
+  not_interested: { label: 'Не интересно', cls: 'bg-gray-100 text-gray-500' },
+  wrong_number:   { label: 'Неверный номер', cls: 'bg-rose-50 text-rose-700' },
+  do_not_call:    { label: 'Не звонить', cls: 'bg-red-100 text-red-800' },
+};
+const COLD_SERVICE_META = {
+  smart: 'Smart-плёнка', protective: 'Защитная плёнка',
+  solar: 'Солнцезащитная', decorative: 'Декоративная', unknown: 'Ещё не выяснено'
+};
+
+function coldStatusBadge(status) {
+  const meta = COLD_STATUS_META[status] || COLD_STATUS_META.new;
+  return `<span class="tag ${meta.cls}">${meta.label}</span>`;
+}
+function coldManagers() { return db.users.filter(u => u.role === 'manager' || u.role === 'owner'); }
+function coldProspect(id) { return db.coldProspects.find(p => p.id === id); }
+function coldVisibleProspects() {
+  const me = currentUser();
+  let rows = me.role === 'owner'
+    ? [...db.coldProspects]
+    : db.coldProspects.filter(p => !p.assignedTo || p.assignedTo === me.id);
+  const query = String(state.coldSearch || '').trim().toLowerCase();
+  if (query) rows = rows.filter(p => [p.companyName,p.contactName,p.phone,p.email,p.website,p.city,p.businessType,p.notes].some(v => String(v||'').toLowerCase().includes(query)));
+  if (state.coldStatusFilter && state.coldStatusFilter !== 'all') rows = rows.filter(p => p.status === state.coldStatusFilter);
+  if (state.coldAssigneeFilter && state.coldAssigneeFilter !== 'all') rows = rows.filter(p => (p.assignedTo || 'unassigned') === state.coldAssigneeFilter);
+  return rows.sort((a,b) => {
+    const aTime = a.nextCallAt || '9999';
+    const bTime = b.nextCallAt || '9999';
+    if (aTime !== bTime) return aTime.localeCompare(bTime);
+    return (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '');
+  });
+}
+function coldDateTimeLocal(hoursAhead = 24) {
+  const d = new Date(Date.now() + hoursAhead * 3600000);
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function renderColdCallsView() {
+  const allVisible = currentUser().role === 'owner' ? db.coldProspects : db.coldProspects.filter(p => !p.assignedTo || p.assignedTo === currentUser().id);
+  const rows = coldVisibleProspects();
+  const now = new Date().toISOString();
+  const openStatuses = ['new','no_answer','callback','thinking','interested','appointment'];
+  const due = allVisible.filter(p => p.nextCallAt && p.nextCallAt <= now && openStatuses.includes(p.status)).length;
+  const interested = allVisible.filter(p => ['interested','appointment'].includes(p.status)).length;
+  const converted = allVisible.filter(p => p.status === 'converted').length;
+  return `
+  <div class="card mb-4 border-l-4 border-blue-600">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <div class="font-black text-slate-900">Правильный путь холодной B2B-продажи</div>
+        <div class="text-sm text-gray-600 mt-1">Компания → звонок → интерес → B2B-клиент → объект и замер → КП → согласование → счёт</div>
+        <div class="text-xs text-gray-500 mt-2">Счёт создаём только после согласования объёма и цены. До интереса компания остаётся в холодной базе и не портит список клиентов.</div>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn-ghost" onclick="openColdCompanySearch()">🔎 Найти компании</button>
+        <button class="btn-primary" onclick="openColdProspectModal()">+ Добавить компанию</button>
+      </div>
+    </div>
+  </div>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    <div class="card"><div class="text-xs text-gray-500">В базе</div><div class="text-2xl font-black">${allVisible.length}</div></div>
+    <div class="card"><div class="text-xs text-gray-500">Нужно позвонить</div><div class="text-2xl font-black ${due?'text-red-600':''}">${due}</div></div>
+    <div class="card"><div class="text-xs text-gray-500">Проявили интерес</div><div class="text-2xl font-black text-emerald-600">${interested}</div></div>
+    <div class="card"><div class="text-xs text-gray-500">Переведены в B2B</div><div class="text-2xl font-black text-blue-600">${converted}</div></div>
+  </div>
+  <div class="card mb-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+      <input placeholder="Поиск: компания, телефон, город..." value="${academyEsc(state.coldSearch||'')}" oninput="state.coldSearch=this.value; render()">
+      <select onchange="state.coldStatusFilter=this.value; render()">
+        <option value="all">Все статусы</option>
+        ${Object.entries(COLD_STATUS_META).map(([key,m]) => `<option value="${key}" ${state.coldStatusFilter===key?'selected':''}>${m.label}</option>`).join('')}
+      </select>
+      ${currentUser().role === 'owner' ? `<select onchange="state.coldAssigneeFilter=this.value; render()"><option value="all">Все ответственные</option><option value="unassigned" ${state.coldAssigneeFilter==='unassigned'?'selected':''}>Не назначено</option>${coldManagers().map(u=>`<option value="${u.id}" ${state.coldAssigneeFilter===u.id?'selected':''}>${academyEsc(u.name)}</option>`).join('')}</select>` : `<div class="text-sm text-gray-500 flex items-center">Показаны ваши и неназначенные компании</div>`}
+    </div>
+  </div>
+  ${rows.length ? `<div class="space-y-3">${rows.map(renderColdProspectCard).join('')}</div>` : `<div class="card text-center py-10 text-gray-500">Компаний по выбранному фильтру нет. Добавьте первую компанию или найдите её через Google Maps.</div>`}
+  `;
+}
+
+function renderColdProspectCard(p) {
+  const assignee = getUser(p.assignedTo);
+  const client = p.clientId ? getClient(p.clientId) : null;
+  const order = p.orderId ? getOrder(p.orderId) : null;
+  const overdue = p.nextCallAt && p.nextCallAt <= new Date().toISOString() && !['converted','not_interested','wrong_number','do_not_call'].includes(p.status);
+  const lastCall = (p.calls || []).slice().sort((a,b)=>(b.at||'').localeCompare(a.at||''))[0];
+  return `<div class="card ${overdue?'border-l-4 border-red-500':''}">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="flex-1 min-w-[250px]">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-black text-lg text-slate-900">${academyEsc(p.companyName || 'Без названия')}</span>
+          ${coldStatusBadge(p.status)}
+          ${p.serviceInterest && p.serviceInterest !== 'unknown' ? `<span class="tag bg-blue-50 text-blue-700">${COLD_SERVICE_META[p.serviceInterest]}</span>` : ''}
+        </div>
+        <div class="text-sm text-gray-600 mt-1">${academyEsc(p.contactName || 'Контакт не указан')} ${p.businessType?' • '+academyEsc(p.businessType):''} ${p.city?' • '+academyEsc(p.city):''}</div>
+        <div class="flex flex-wrap gap-3 mt-2 text-sm">
+          <span>📞 ${academyEsc(p.phone || '—')}</span>
+          ${p.email?`<span>✉️ ${academyEsc(p.email)}</span>`:''}
+          ${p.website?`<a class="text-blue-600 underline" href="${academyEsc(/^https?:/i.test(p.website)?p.website:'https://'+p.website)}" target="_blank" rel="noopener">🌐 Сайт</a>`:''}
+        </div>
+        ${p.notes?`<div class="text-sm bg-gray-50 p-2 mt-2">${academyEsc(p.notes)}</div>`:''}
+        <div class="flex flex-wrap gap-3 mt-2 text-xs text-gray-500">
+          <span>Ответственный: <b>${academyEsc(assignee?.name || 'не назначен')}</b></span>
+          <span>Попыток: <b>${Number(p.attempts)||0}</b></span>
+          ${lastCall?`<span>Последний звонок: <b>${fmtDateTime(lastCall.at)}</b></span>`:''}
+          ${p.nextCallAt?`<span class="${overdue?'text-red-600 font-bold':''}">Следующий: <b>${fmtDateTime(p.nextCallAt)}</b></span>`:''}
+        </div>
+      </div>
+      <div class="flex gap-2 flex-wrap justify-end">
+        ${p.doNotCall || p.status==='do_not_call' ? `<span class="btn-ghost text-red-700 cursor-not-allowed">🚫 Звонки запрещены</span>` : `<button class="btn-primary" onclick="coldStartCall('${p.id}')">📞 Позвонить</button>`}
+        <button class="btn-ghost" onclick="openColdHistory('${p.id}')">История (${(p.calls||[]).length})</button>
+        <button class="btn-ghost" onclick="openColdProspectModal('${p.id}')">Изменить</button>
+        ${!p.clientId ? `<button class="btn-ghost text-emerald-700" onclick="coldConvertToB2B('${p.id}',false)">Создать B2B-клиента</button>` : ''}
+        ${p.clientId && !p.orderId ? `<button class="btn-primary" onclick="coldOpenOrderFlow('${p.id}')">Создать заказ и КП</button>` : ''}
+        ${order ? `<button class="btn-primary" onclick="openOrder('${order.id}')">Заказ ${academyEsc(order.number)}</button><button class="btn-ghost" onclick="openProfessionalKP('${order.id}')">Открыть КП</button>` : ''}
+        ${client ? `<button class="btn-ghost" onclick="location.hash='#/account/${client.id}'">B2B-карточка</button>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function openColdProspectModal(id = '') {
+  const p = id ? coldProspect(id) : null;
+  const managerDefault = p?.assignedTo || currentUser().id;
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:760px">
+    <h3 class="font-black text-xl mb-1">${p?'Карточка холодной компании':'Новая компания'}</h3>
+    <p class="text-sm text-gray-500 mb-4">Здесь хранится потенциальная компания. Реальным B2B-клиентом она станет после подтверждённого интереса.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div><label>Компания *</label><input id="cp-company" value="${academyEsc(p?.companyName||'')}" placeholder="Название компании"></div>
+      <div><label>Контактное лицо</label><input id="cp-contact" value="${academyEsc(p?.contactName||'')}" placeholder="Имя и должность"></div>
+      <div><label>Телефон *</label><input id="cp-phone" value="${academyEsc(p?.phone||'')}" placeholder="+1 ..."></div>
+      <div><label>Email</label><input id="cp-email" value="${academyEsc(p?.email||'')}" type="email"></div>
+      <div><label>Сайт</label><input id="cp-website" value="${academyEsc(p?.website||'')}" placeholder="company.com"></div>
+      <div><label>Город</label><input id="cp-city" value="${academyEsc(p?.city||'')}" placeholder="Los Angeles"></div>
+      <div><label>Тип бизнеса</label><input id="cp-type" value="${academyEsc(p?.businessType||'')}" placeholder="Офис, ресторан, школа, дилер..."></div>
+      <div><label>Интересующее направление</label><select id="cp-service">${Object.entries(COLD_SERVICE_META).map(([k,v])=>`<option value="${k}" ${(p?.serviceInterest||'unknown')===k?'selected':''}>${v}</option>`).join('')}</select></div>
+      <div><label>Источник</label><select id="cp-source"><option value="manual" ${(p?.source||'manual')==='manual'?'selected':''}>Вручную</option><option value="google_maps" ${p?.source==='google_maps'?'selected':''}>Google Maps</option><option value="referral" ${p?.source==='referral'?'selected':''}>Рекомендация</option><option value="csv" ${p?.source==='csv'?'selected':''}>Импорт</option></select></div>
+      <div><label>Ответственный</label><select id="cp-assignee">${coldManagers().map(u=>`<option value="${u.id}" ${managerDefault===u.id?'selected':''}>${academyEsc(u.name)}</option>`).join('')}</select></div>
+      <div class="md:col-span-2"><label>Адрес / район</label><input id="cp-address" value="${academyEsc(p?.address||'')}" placeholder="Адрес или район"></div>
+      <div class="md:col-span-2"><label>Заметка</label><textarea id="cp-notes" rows="3" placeholder="Что известно о компании, потребность, кто принимает решение...">${academyEsc(p?.notes||'')}</textarea></div>
+    </div>
+    <div class="flex justify-end gap-2 mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveColdProspect('${id}')">Сохранить</button></div>
+  </div></div>`;
+  render();
+}
+
+function saveColdProspect(id = '') {
+  const companyName = (document.getElementById('cp-company')?.value || '').trim();
+  const phone = (document.getElementById('cp-phone')?.value || '').trim();
+  if (!companyName || !phone) { alert('Укажите название компании и телефон'); return; }
+  const phoneKey = phone.replace(/\D/g,'').slice(-10);
+  const duplicate = db.coldProspects.find(x => x.id !== id && x.phone && x.phone.replace(/\D/g,'').slice(-10) === phoneKey);
+  if (duplicate) { alert(`Этот телефон уже есть у компании «${duplicate.companyName}»`); return; }
+  const now = new Date().toISOString();
+  const p = id ? coldProspect(id) : { id: 'cp_'+uid(), calls: [], status: 'new', attempts: 0, createdAt: now };
+  Object.assign(p, {
+    companyName, phone,
+    contactName: (document.getElementById('cp-contact')?.value || '').trim(),
+    email: (document.getElementById('cp-email')?.value || '').trim().toLowerCase(),
+    website: (document.getElementById('cp-website')?.value || '').trim(),
+    city: (document.getElementById('cp-city')?.value || '').trim(),
+    businessType: (document.getElementById('cp-type')?.value || '').trim(),
+    serviceInterest: document.getElementById('cp-service')?.value || 'unknown',
+    source: document.getElementById('cp-source')?.value || 'manual',
+    assignedTo: document.getElementById('cp-assignee')?.value || currentUser().id,
+    address: (document.getElementById('cp-address')?.value || '').trim(),
+    notes: (document.getElementById('cp-notes')?.value || '').trim(),
+    updatedAt: now,
+  });
+  if (!id) db.coldProspects.push(p);
+  save(); closeModal();
+}
+
+function openColdCompanySearch() {
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:620px">
+    <h3 class="font-black text-xl">Поиск новых B2B-компаний</h3>
+    <p class="text-sm text-gray-500 mt-1 mb-4">Выберите нишу и город. CRM откроет точный поиск в Google Maps; найденную компанию добавьте в журнал, чтобы не потерять историю звонков.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div><label>Кого ищем</label><input id="cold-map-type" value="offices restaurants glass storefronts" placeholder="offices, restaurants, schools..."></div>
+      <div><label>Город / район</label><input id="cold-map-city" value="Los Angeles, CA" placeholder="Westlake Village, CA"></div>
+    </div>
+    <div class="p-3 bg-blue-50 text-sm text-blue-900 mt-4"><b>Приоритет для Rolan PRO:</b> офисы и конференц-залы для smart-плёнки, витрины и ювелирные магазины для защитной, рестораны и здания с перегревом для солнцезащитной.</div>
+    <div class="flex justify-end gap-2 mt-5"><button class="btn-ghost" onclick="closeModal()">Закрыть</button><button class="btn-primary" onclick="runColdCompanySearch()">🔎 Открыть Google Maps</button></div>
+  </div></div>`;
+  render();
+}
+function runColdCompanySearch() {
+  const type = (document.getElementById('cold-map-type')?.value || '').trim();
+  const city = (document.getElementById('cold-map-city')?.value || '').trim();
+  if (!type || !city) { alert('Укажите тип компании и город'); return; }
+  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(type + ' ' + city)}`, '_blank', 'noopener');
+}
+
+function coldStartCall(id) {
+  const p = coldProspect(id);
+  if (!p) return;
+  if (p.doNotCall || p.status === 'do_not_call') { alert('Эта компания попросила не звонить. Запрет сохранён в CRM.'); return; }
+  window.open(callLink(p.phone), '_blank', 'noopener');
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:560px">
+    <h3 class="font-black text-xl">📞 ${academyEsc(p.companyName)}</h3>
+    <div class="text-sm text-gray-500 mb-4">${academyEsc(p.phone)}. После звонка обязательно сохраните результат.</div>
+    <label>Результат звонка</label>
+    <select id="cold-outcome" onchange="coldOutcomeChanged()">
+      <option value="no_answer">Не дозвонились</option><option value="callback">Попросили перезвонить</option><option value="thinking">Думает / отправили информацию</option><option value="interested">Есть интерес</option><option value="appointment">Назначен замер</option><option value="not_interested">Не интересно</option><option value="wrong_number">Неверный номер</option><option value="do_not_call">Просит больше не звонить</option>
+    </select>
+    <label class="mt-3">Что обсудили</label><textarea id="cold-call-note" rows="4" placeholder="С кем говорили, потребность, возражения, следующий шаг..."></textarea>
+    <div id="cold-next-wrap" class="mt-3"><label>Когда позвонить снова</label><input id="cold-next-at" type="datetime-local" value="${coldDateTimeLocal(24)}"><div class="text-xs text-gray-500 mt-1">Для «перезвонить» и «думает» дата обязательна — задача появится в разделе «Задачи».</div></div>
+    <div class="flex justify-end gap-2 mt-5"><button class="btn-ghost" onclick="closeModal()">Закрыть без записи</button><button class="btn-primary" onclick="saveColdCallOutcome('${id}')">Сохранить результат</button></div>
+  </div></div>`;
+  render();
+  coldOutcomeChanged();
+}
+function coldOutcomeChanged() {
+  const status = document.getElementById('cold-outcome')?.value;
+  const wrap = document.getElementById('cold-next-wrap');
+  if (wrap) wrap.style.display = ['no_answer','callback','thinking','interested'].includes(status) ? '' : 'none';
+}
+function saveColdCallOutcome(id) {
+  const p = coldProspect(id); if (!p) return;
+  const status = document.getElementById('cold-outcome')?.value || 'no_answer';
+  const note = (document.getElementById('cold-call-note')?.value || '').trim();
+  const nextRaw = ['no_answer','callback','thinking','interested'].includes(status) ? (document.getElementById('cold-next-at')?.value || '') : '';
+  if (['callback','thinking'].includes(status) && !nextRaw) { alert('Укажите дату повторного звонка'); return; }
+  const nextAt = nextRaw ? new Date(nextRaw).toISOString() : '';
+  const at = new Date().toISOString();
+  const record = { id:'cc_'+uid(), at, outcome:status, note, nextCallAt:nextAt || null, by:currentUser().id };
+  p.calls = p.calls || []; p.calls.push(record);
+  p.status = status; p.lastCallAt = at; p.nextCallAt = nextAt || null; p.attempts = (Number(p.attempts)||0) + 1;
+  p.doNotCall = status === 'do_not_call'; p.updatedAt = at;
+  db.calls.push({ id:record.id, phone:p.phone, clientId:p.clientId||null, orderId:p.orderId||null, prospectId:p.id, outcome:status, note, at, by:currentUser().id });
+  db.tasks.filter(t => t.prospectId === p.id && t.status !== 'done').forEach(t => { t.status='done'; t.doneAt=at; });
+  if (nextAt) db.tasks.push({ id:'t_'+uid(), title:`Перезвонить: ${p.companyName}`, dueAt:nextAt, teamIds:p.assignedTo?[p.assignedTo]:[], responsibleId:p.assignedTo||currentUser().id, clientId:p.clientId||null, prospectId:p.id, notes:`Холодный B2B-контакт${note?' • '+note:''}`, status:'open', createdAt:at, createdBy:currentUser().id, doneAt:null });
+  save(); closeModal();
+}
+
+function openColdHistory(id) {
+  const p = coldProspect(id); if (!p) return;
+  const calls = (p.calls||[]).slice().sort((a,b)=>(b.at||'').localeCompare(a.at||''));
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:680px"><h3 class="font-black text-xl">История: ${academyEsc(p.companyName)}</h3><div class="text-sm text-gray-500 mb-4">${academyEsc(p.phone)}</div>${calls.length?`<div class="space-y-2">${calls.map(c=>`<div class="border p-3"><div class="flex justify-between gap-2"><b>${COLD_STATUS_META[c.outcome]?.label||c.outcome}</b><span class="text-xs text-gray-500">${fmtDateTime(c.at)}</span></div>${c.note?`<div class="text-sm mt-1">${academyEsc(c.note)}</div>`:''}${c.nextCallAt?`<div class="text-xs text-blue-700 mt-1">Следующий звонок: ${fmtDateTime(c.nextCallAt)}</div>`:''}</div>`).join('')}</div>`:`<div class="text-gray-500 py-6 text-center">Звонков ещё не было</div>`}<button class="btn-ghost w-full mt-4" onclick="closeModal()">Закрыть</button></div></div>`;
+  render();
+}
+
+function coldConvertToB2B(id, openOrderAfter = false) {
+  const p = coldProspect(id); if (!p) return null;
+  if (!p.clientId) {
+    const phoneKey = String(p.phone||'').replace(/\D/g,'').slice(-10);
+    const existing = db.clients.find(c => phoneKey && String(c.phone||'').replace(/\D/g,'').slice(-10) === phoneKey);
+    if (existing) p.clientId = existing.id;
+    else {
+      const clientId = 'c'+uid();
+      db.clients.push({
+        id:clientId, name:p.companyName, firstName:p.contactName||'', lastName:'', phone:p.phone||'', email:p.email||'',
+        address:p.address||p.city||'', addressCity:p.city||'', type:'commercial', accountType:'b2b', relationshipType:'regular',
+        source:'cold_call', preferredChannel:'phone', primaryAddressId:null, addresses:[], referralCode:(p.companyName||'B2B').substring(0,3).toUpperCase()+'-'+Math.floor(Math.random()*9000+1000),
+        referredBy:null, createdAt:new Date().toISOString(), tags:['b2b','regular','cold-call'], coldProspectId:p.id,
+      });
+      p.clientId = clientId;
+    }
+    p.status = 'converted'; p.convertedAt = new Date().toISOString(); p.updatedAt = p.convertedAt;
+    db.tasks.filter(t => t.prospectId === p.id && t.status !== 'done').forEach(t => { t.status='done'; t.doneAt=p.convertedAt; });
+    save();
+  }
+  if (openOrderAfter) coldOpenOrderFlow(id); else { alert('B2B-клиент создан. Следующий шаг: добавить объект и создать заказ, затем подготовить КП.'); render(); }
+  return p.clientId;
+}
+function coldOpenOrderFlow(id) {
+  const p = coldProspect(id); if (!p) return;
+  const clientId = p.clientId || coldConvertToB2B(id, false);
+  if (!clientId) return;
+  state.pendingColdProspectId = p.id;
+  openOrderModal();
+  selectOrderClient(clientId);
 }
 
 // ---------- TASKS / PLANNER (so nothing gets forgotten: calls, purchases, follow-ups) ----------
@@ -21758,6 +22062,16 @@ function createOrder() {
   stampOrderAddress(o, selectedAddress);
 
   db.orders.push(o);
+  if (state.pendingColdProspectId) {
+    const prospect = coldProspect(state.pendingColdProspectId);
+    if (prospect && prospect.clientId === clientId) {
+      prospect.orderId = o.id;
+      prospect.updatedAt = new Date().toISOString();
+      o.coldProspectId = prospect.id;
+      o.timeline.push({ at: prospect.updatedAt, key: 'cold_lead_converted', by: state.currentUserId, note: `Создан из холодной B2B-базы: ${prospect.companyName}` });
+    }
+    state.pendingColdProspectId = null;
+  }
   save(); closeModal();
   openOrder(o.id);
 }
@@ -21874,7 +22188,7 @@ function createClient() {
   save(); closeModal();
 }
 
-function closeModal() { state.modal = null; render(); }
+function closeModal() { state.modal = null; state.pendingColdProspectId = null; render(); }
 
 // ---------- FILM TYPES (rate-aware) ----------
 function renameFilmType(oldName, newName) {
