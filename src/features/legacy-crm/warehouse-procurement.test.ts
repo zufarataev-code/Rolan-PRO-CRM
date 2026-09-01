@@ -52,8 +52,10 @@ test('Magnitronic Solar Prime series is seeded with verified meter readings', ()
   assert.match(html, /'SP05': \{ vlt: 5\.7,\s+tser: 93\.3, uv: 100\.0, ir: 95\.6 \}/);
   assert.match(html, /'SP70': \{ vlt: 68\.0, tser: 63\.6, uv: 99\.2,\s+ir: 99\.4 \}/);
   assert.match(html, /ensureMagnitronicSolarPrimeSeries\(s\.catalog\);/);
-  assert.match(html, /brand: 'Magnitronic Solar Prime'/);
-  assert.match(seed, /"Magnitronic Solar Prime", "Magnitronic Solar Prime"/);
+  assert.match(html, /brand: 'Rolan PRO'/);
+  assert.match(html, /series: 'Magnitronic Solar Prime'/);
+  assert.match(seed, /"ROLANPRO", "Rolan PRO", "Rolan PRO"/);
+  assert.match(seed, /"Magnitronic Solar Prime SP-5%", "Magnitronic Solar Prime SP-5%"/);
   assert.match(html, /retailPerSqft: null/);
   assert.match(html, /costPerSqft: null/);
 });

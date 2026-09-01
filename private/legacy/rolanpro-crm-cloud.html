@@ -6317,14 +6317,15 @@ function ensureMagnitronicSolarPrimeSeries(catalog) {
     const stableId = `film_magnitronic_prime_${entry.code.toLowerCase()}`;
     const normalizedModel = entry.model.toUpperCase().replace(/[^A-Z0-9]/g, '');
     let item = catalog.find(candidate => candidate?.id === stableId || (
-      String(candidate?.brand || '').toUpperCase().includes('MAGNITRONIC') &&
-      String(candidate?.model || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === normalizedModel
+      /MAGNITRONIC|ROLAN\s*PRO/i.test(String(candidate?.brand || '')) &&
+      String(candidate?.model || '').toUpperCase().replace(/[^A-Z0-9]/g, '').endsWith(normalizedModel)
     ));
     if (!item) {
       item = {
         id: stableId,
-        brand: 'Magnitronic Solar Prime',
-        model: entry.model,
+        brand: 'Rolan PRO',
+        series: 'Magnitronic Solar Prime',
+        model: `Magnitronic Solar Prime ${entry.model}`,
         category: 'solar',
         retailPerSqft: null,
         costPerSqft: null,
@@ -6336,7 +6337,9 @@ function ensureMagnitronicSolarPrimeSeries(catalog) {
       catalog.push(item);
       added++;
     }
-    item.brand = 'Magnitronic Solar Prime';
+    item.brand = 'Rolan PRO';
+    item.series = 'Magnitronic Solar Prime';
+    item.model = `Magnitronic Solar Prime ${entry.model}`;
     const spec = MAGNITRONIC_SOLAR_PRIME_SPECS[entry.code];
     item.category = 'solar';
     item.vlt = spec.vlt;
