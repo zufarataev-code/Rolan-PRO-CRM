@@ -44,14 +44,16 @@ test('film category navigation reuses existing catalog and inventory records', (
   assert.match(html, /state\.inventoryFilmCategory=film\?\.category\|\|null;state\.inventoryFilmModel=roll\.catalogId\|\|null/);
 });
 
-test('Magnitronic Prime SP series is seeded with verified meter readings', () => {
+test('Magnitronic Solar Prime series is seeded with verified meter readings', () => {
   for (const model of ['SP-5%', 'SP-15%', 'SP-20%', 'SP-35%', 'SP-50%', 'SP-70%']) {
     assert.match(html, new RegExp(model.replace('%', '%')));
     assert.match(seed, new RegExp(model.replace('%', '%')));
   }
   assert.match(html, /'SP05': \{ vlt: 5\.7,\s+tser: 93\.3, uv: 100\.0, ir: 95\.6 \}/);
   assert.match(html, /'SP70': \{ vlt: 68\.0, tser: 63\.6, uv: 99\.2,\s+ir: 99\.4 \}/);
-  assert.match(html, /ensureMagnitronicPrimeSpSeries\(s\.catalog\);/);
+  assert.match(html, /ensureMagnitronicSolarPrimeSeries\(s\.catalog\);/);
+  assert.match(html, /brand: 'Magnitronic Solar Prime'/);
+  assert.match(seed, /"Magnitronic Solar Prime", "Magnitronic Solar Prime"/);
   assert.match(html, /retailPerSqft: null/);
   assert.match(html, /costPerSqft: null/);
 });

@@ -6247,7 +6247,7 @@ function mm_to_inches(mm) { return mm / MM_PER_INCH; }
 // Comprehensive: Madico + Johnson + LLumar + Solar Gard + 3M + SunTek + smart/decorative
 // Sources: manufacturer MSRPs, US dealer wholesale, retail averages 2024
 /**
- * Реальные замеры линейки MAGNITRONIC PRIME (прибор LS160A).
+ * Реальные замеры линейки MAGNITRONIC SOLAR PRIME (прибор LS160A).
  *
  * Это единственные характеристики, измеренные владельцем лично. Для
  * чужих брендов таких данных нет — там поля остаются пустыми, и в КП
@@ -6259,7 +6259,7 @@ function mm_to_inches(mm) { return mm / MM_PER_INCH; }
  * uv   — блокировка ультрафиолета, %
  * ir   — блокировка инфракрасного излучения, %
  */
-const MAGNITRONIC_PRIME_SPECS = {
+const MAGNITRONIC_SOLAR_PRIME_SPECS = {
   'MP05': { vlt: 5.7,  tser: 93.3, uv: 100.0, ir: 95.6 },
   'MP15': { vlt: 14.0, tser: 88.5, uv: 99.9,  ir: 97.4 },
   'MP20': { vlt: 23.5, tser: 83.2, uv: 99.9,  ir: 98.3 },
@@ -6273,7 +6273,7 @@ const MAGNITRONIC_PRIME_SPECS = {
   'SP50': { vlt: 58.1, tser: 68.2, uv: 99.6,  ir: 99.2 },
   'SP70': { vlt: 68.0, tser: 63.6, uv: 99.2,  ir: 99.4 },
 };
-const MAGNITRONIC_PRIME_SP_SERIES = [
+const MAGNITRONIC_SOLAR_PRIME_SERIES = [
   { code:'SP05', model:'SP-5%' },
   { code:'SP15', model:'SP-15%' },
   { code:'SP20', model:'SP-20%' },
@@ -6282,9 +6282,9 @@ const MAGNITRONIC_PRIME_SP_SERIES = [
   { code:'SP70', model:'SP-70%' },
 ];
 
-function magnitronicPrimeSpecCode(item) {
+function magnitronicSolarPrimeSpecCode(item) {
   const compact = `${item?.brand || ''}${item?.model || ''}`.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return Object.keys(MAGNITRONIC_PRIME_SPECS).find(code => compact.includes(code) || compact.includes(code.replace('05', '5'))) || null;
+  return Object.keys(MAGNITRONIC_SOLAR_PRIME_SPECS).find(code => compact.includes(code) || compact.includes(code.replace('05', '5'))) || null;
 }
 
 /**
@@ -6299,9 +6299,9 @@ function applyMagnitronicSpecs(catalog) {
   let filled = 0;
   catalog.forEach(item => {
     if (!item) return;
-    const code = magnitronicPrimeSpecCode(item);
+    const code = magnitronicSolarPrimeSpecCode(item);
     if (!code) return;
-    const spec = MAGNITRONIC_PRIME_SPECS[code];
+    const spec = MAGNITRONIC_SOLAR_PRIME_SPECS[code];
     if (item.vlt == null) { item.vlt = spec.vlt; filled++; }
     if (item.tser == null) item.tser = spec.tser;
     if (item.uvBlock == null) item.uvBlock = spec.uv;
@@ -6310,10 +6310,10 @@ function applyMagnitronicSpecs(catalog) {
   return filled;
 }
 
-function ensureMagnitronicPrimeSpSeries(catalog) {
+function ensureMagnitronicSolarPrimeSeries(catalog) {
   if (!Array.isArray(catalog)) return 0;
   let added = 0;
-  MAGNITRONIC_PRIME_SP_SERIES.forEach(entry => {
+  MAGNITRONIC_SOLAR_PRIME_SERIES.forEach(entry => {
     const stableId = `film_magnitronic_prime_${entry.code.toLowerCase()}`;
     const normalizedModel = entry.model.toUpperCase().replace(/[^A-Z0-9]/g, '');
     let item = catalog.find(candidate => candidate?.id === stableId || (
@@ -6323,7 +6323,7 @@ function ensureMagnitronicPrimeSpSeries(catalog) {
     if (!item) {
       item = {
         id: stableId,
-        brand: 'Magnitronic Prime',
+        brand: 'Magnitronic Solar Prime',
         model: entry.model,
         category: 'solar',
         retailPerSqft: null,
@@ -6336,7 +6336,8 @@ function ensureMagnitronicPrimeSpSeries(catalog) {
       catalog.push(item);
       added++;
     }
-    const spec = MAGNITRONIC_PRIME_SPECS[entry.code];
+    item.brand = 'Magnitronic Solar Prime';
+    const spec = MAGNITRONIC_SOLAR_PRIME_SPECS[entry.code];
     item.category = 'solar';
     item.vlt = spec.vlt;
     item.tser = spec.tser;
@@ -6624,7 +6625,7 @@ function migrateSchema() {
   }
   // Добавляем только модели каталога. Рулоны, цены и остатки не создаём:
   // они появятся только после реального прихода на склад.
-  ensureMagnitronicPrimeSpSeries(s.catalog);
+  ensureMagnitronicSolarPrimeSeries(s.catalog);
   applyMagnitronicSpecs(s.catalog);
 
   // ---- UNITS ----
@@ -24553,7 +24554,7 @@ function premiumFinancingMonthly(total) {
  * менеджер ответит по паспорту производителя.
  *
  * Поля vlt/uv/heat появятся в каталоге отдельной задачей — для
- * линейки MAGNITRONIC PRIME у владельца есть реальные замеры.
+ * линейки MAGNITRONIC SOLAR PRIME у владельца есть реальные замеры.
  */
 /**
  * Собирает подпись из тех характеристик, которые действительно есть.
