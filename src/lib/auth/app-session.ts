@@ -4,7 +4,7 @@ import type { RoleCode } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { hasAnyRole } from "@/lib/auth/rbac";
-import { verifySessionToken } from "@/lib/auth/session";
+import { sessionMatchesCurrentCredentials, verifySessionToken } from "@/lib/auth/session";
 
 export async function getAppSession() {
   const cookieStore = await cookies();
@@ -39,7 +39,11 @@ export async function getAppSession() {
     },
   });
 
-  if (!user || !user.is_active) {
+  if (
+    !user ||
+    !user.is_active ||
+    !sessionMatchesCurrentCredentials(payload, user.email, user.password_hash)
+  ) {
     return null;
   }
 
