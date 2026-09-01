@@ -32,7 +32,8 @@ Before doing any work:
 | #17 | Remove embedded customer export | `security/remove-embedded-wiz-data` | Open; review and merge still required |
 | #12 | Bootstrap Claude Builder transport | `feature/claude-builder-transport` | Open; completion state must be reviewed before reuse |
 | #24 | Unified proposal delivery, public PDF, employee routing, and removal of duplicate PIN login | `codex/unify-crm-proposal-pdf` | Open; local checks passed, GitHub review/CI and merge still required |
-| #98 | Employee email editing, password recovery, and canonical server login | `fix/employee-account-recovery` | Open; CI/review in progress |
+| #98 | Employee email editing, password recovery, and canonical server login | `fix/employee-account-recovery` | Merged and deployed; post-merge security findings are handled by #99 |
+| #99 | Revoke old sessions and make password-reset links atomically one-time | `fix/password-reset-session-revocation` | Open; first full CI green, final docs commit CI/security review required before merge |
 
 Always re-check GitHub before acting; this table is a handoff snapshot, not a substitute for the live PR state.
 
@@ -78,7 +79,8 @@ Target modules:
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
 | Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / #24 | Codex | PR open | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
-| Fix employee email editing, forgot-password by email, and server-only employee login | `fix/employee-account-recovery` / #98 | ChatGPT | PR open | Get green CI/review, merge to `main`, deploy, then run controlled production smoke tests |
+| Fix employee email editing, forgot-password by email, and server-only employee login | `fix/employee-account-recovery` / #98 | ChatGPT | Merged/deployed | Verify through #99 security hotfix, then controlled production employee-access smoke test |
+| Revoke old sessions after credential changes and make reset links concurrency-safe | `fix/password-reset-session-revocation` / #99 | ChatGPT | First full CI green; final docs commit pending checks | Wait for final CI/security review on latest head, merge to `main`, deploy, verify production health |
 
 Contributors must add a row before starting substantial work and update or remove it at handoff.
 
@@ -101,7 +103,20 @@ Contributors must add a row before starting substantial work and update or remov
 - Security verification added: automated tests cover token signature tampering, expiry, password-change invalidation, and email-change invalidation.
 - First CI attempt: all 119 existing tests passed; TypeScript failed only because the two new pages initially imported root `components/` through the `@/` alias that points to `src/`. Those imports were corrected and a new CI run was triggered.
 - Branch / PR: `fix/employee-account-recovery` / #98 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/98`).
-- Required before completion: latest CI must pass tests + TypeScript + production build; review must be checked; merge/deploy must happen from `main`; production smoke must verify email change/login, one controlled reset email, reset completion, and browser access without HTML download.
+- Result after handoff: PR #98 later passed CI, merged to `main` as `59c4794ec464ce40a297c73e63032467cb5c96b3`, and production deploy succeeded. A post-merge security review then identified two P1 issues now owned by PR #99.
+
+## 2026-09-01 handoff — password recovery security hotfix / PR #99
+
+- Trigger: the post-merge security review of #98 found two P1 issues: existing stateless session cookies remained valid after a password reset, and concurrent submissions of the same reset link could both validate the old password hash before either write completed.
+- Session fix: every newly issued session now carries a one-way fingerprint of the current password hash plus canonical email. Both API and server-rendered app session loaders compare that fingerprint/email with the live PostgreSQL User. Password or email changes therefore invalidate all older sessions automatically.
+- Current-session UX: the authenticated change-password endpoint writes the new password and returns one freshly bound cookie for the new credentials; all other older cookies fail validation.
+- Reset race fix: reset completion now uses PostgreSQL `updateMany` as an atomic compare-and-swap against exact user ID, email, old password hash, and active status. Only one concurrent request can update one row; every racing/later request gets an invalid/already-used result.
+- Tests: regression coverage now checks credential fingerprint creation, password-change invalidation, email-change invalidation, and rejection of malformed/legacy-style session payloads. Existing reset-token signature/TTL/credential-change tests remain.
+- Verification on code head `96885575b64e52b0156929bbbaec1838e0d4cca0`: GitHub CI passed tests, TypeScript, and production build. Documentation commits recording this handoff and durable decision were added afterward, so final CI must be green again on the latest head before merge.
+- Durable decision: `DECISIONS.md` now records credential-bound sessions and atomic one-time password recovery as the canonical authentication policy.
+- Branch / PR: `fix/password-reset-session-revocation` / #99 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/99`).
+- Blocker: none in code; release is gated only by final GitHub CI/security review on the latest head.
+- Next action: wait for final checks, merge #99 to `main`, let the standard production workflow deploy it, and verify production is serving the merge SHA. Controlled real-email/reset smoke should be done only with an intentionally selected internal/test employee account so no real employee password is changed unexpectedly.
 
 ## Completion rule
 
