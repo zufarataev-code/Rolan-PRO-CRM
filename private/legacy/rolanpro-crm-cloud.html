@@ -6024,6 +6024,9 @@ let state = {
   reportsRange: '6m',
   inventoryTab: 'overview',
   inventoryCategory: 'all',
+  inventoryFilmCategory: null,
+  inventoryFilmModel: null,
+  inventoryFilmQuery: '',
   calendarMode: 'week',  // 'day' | 'week' | 'month'
   calendarAnchor: null,  // ISO date string anchor (Monday for week, 1st of month for month)
   calendarRoleFilter: 'all',
@@ -22446,9 +22449,9 @@ function updateCatalogItem(id, field, val) {
   c[field] = val;
   save(); render();
 }
-function addCatalogItem(presetVendorId) {
+function addCatalogItem(presetVendorId, presetCategory = 'solar') {
   db.settings.catalog.push({
-    id: uid(), brand: 'New', model: 'Model', category: 'solar', vendorId: presetVendorId || null,
+    id: uid(), brand: 'New', model: 'Model', category: presetCategory || 'solar', vendorId: presetVendorId || null,
     retailPerSqft: 10, costPerSqft: 2.5, installerRatePerSqft: 0.27, wastePct: 12,
   });
   save(); render();
@@ -28645,7 +28648,7 @@ function renderInventory() {
       <div><h2 class="font-semibold text-lg">📦 Склад и снабжение</h2><p class="text-sm text-gray-500">Реальный остаток, закупки под проекты и ответственный за каждую заявку.</p></div>
       <div class="flex gap-2"><button class="btn-ghost text-sm" onclick="openWarehouseQrSearch()">▦ Найти по QR</button><button class="btn-primary text-sm" onclick="openPurchaseRequestModal()">+ Заявка на закупку</button></div>
     </div>
-    <div class="flex gap-2 mt-4 flex-wrap">${tabs.map(([id,label]) => `<button class="btn-${tab===id?'primary':'ghost'} text-sm" onclick="state.inventoryTab='${id}';render();">${label}${id==='overview'&&needs.length?` · ${needs.length}⚠️`:''}</button>`).join('')}</div>
+    <div class="flex gap-2 mt-4 flex-wrap">${tabs.map(([id,label]) => `<button class="btn-${tab===id?'primary':'ghost'} text-sm" onclick="state.inventoryTab='${id}';${id==='film' ? "state.inventoryFilmCategory=null;state.inventoryFilmModel=null;state.inventoryFilmQuery='';" : ''}render();">${label}${id==='overview'&&needs.length?` · ${needs.length}⚠️`:''}</button>`).join('')}</div>
   </div>${body}`;
 }
 function renderWarehouseOverview() {
@@ -28715,9 +28718,120 @@ function openVendorModal(id='') { const v=db.vendors.find(x=>x.id===id)||{name:'
 function saveVendor(){const id=document.getElementById('v-id').value;let v=db.vendors.find(x=>x.id===id);if(!v){v={id:'v_'+uid(),active:true};db.vendors.push(v)}v.name=document.getElementById('v-name').value.trim();if(!v.name)return alert('Введите название.');v.contact=document.getElementById('v-contact').value.trim();v.country=document.getElementById('v-country').value.trim();v.leadTimeDays=parseInt(document.getElementById('v-lead').value)||7;v.paymentTerms=document.getElementById('v-terms').value.trim();v.categories=document.getElementById('v-categories').value.split(',').map(x=>x.trim()).filter(Boolean);save();closeModal();render();}
 function renderWarehouseMovements(){const rows=(db.inventoryMovements||[]).slice(0,200);return `<div class="card"><div><h3 class="font-semibold">Журнал прихода и списания</h3><p class="text-sm text-gray-500 mb-3">Кто, когда, какой материал и по какому проекту.</p></div>${rows.length?`<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Дата</th><th class="text-left p-2">Операция</th><th class="text-left p-2">Материал</th><th class="text-left p-2">Количество</th><th class="text-left p-2">Проект</th><th class="text-left p-2">Кто</th></tr></thead><tbody>${rows.map(m=>{const o=getOrder(m.orderId);return `<tr class="border-t"><td class="p-2">${fmtDate(m.at)}</td><td class="p-2"><span class="tag ${m.direction==='receipt'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}">${m.direction==='receipt'?'Приход':'Списание'}</span></td><td class="p-2">${academyEsc(m.itemName||'Материал')}</td><td class="p-2">${m.direction==='receipt'?'+':'−'}${m.qty} ${academyEsc(m.unit||'')}</td><td class="p-2">${o?academyEsc(warehouseOrderLabel(o)):'—'}</td><td class="p-2">${academyEsc(getUser(m.createdBy)?.name||getUser(m.responsibleId)?.name||'—')}</td></tr>`}).join('')}</tbody></table></div>`:`<div class="empty-state"><div class="icon">↕️</div><div>Движений пока нет.</div></div>`}</div>`;}
 function openWarehouseQr(kind,id){const item=kind==='film'?db.inventory.find(x=>x.id===id):ensureSupplies().find(x=>x.id===id);if(!item)return;const code=item.qrCode||item.sku||`RP-${id}`;const name=kind==='film'?(catalogLabel(getCatalogItem(item.catalogId))+' · Lot '+(item.lotNumber||'—')):item.name;const src=`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(code)}`;state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content p-6 text-center" style="max-width:24rem"><h3 class="font-semibold">QR-этикетка</h3><p class="text-sm text-gray-500 mb-3">${academyEsc(name)}</p><img src="${src}" alt="QR ${academyEsc(code)}" style="width:220px;height:220px;margin:auto"><div class="font-mono mt-2">${academyEsc(code)}</div><div class="flex gap-2 mt-4"><button class="btn-ghost flex-1" onclick="closeModal()">Закрыть</button><button class="btn-primary flex-1" onclick="window.print()">Печать</button></div></div></div>`;render();}
-function openWarehouseQrSearch(){const code=prompt('Введите или отсканируйте QR-код:');if(!code)return;const roll=db.inventory.find(x=>(x.qrCode||'').toLowerCase()===code.trim().toLowerCase());if(roll){state.inventoryTab='film';render();return alert('Рулон найден: '+catalogLabel(getCatalogItem(roll.catalogId))+' · остаток '+Number(roll.remainingLengthM||0).toFixed(2)+' м');}const s=ensureSupplies().find(x=>(x.sku||'').toLowerCase()===code.trim().toLowerCase());if(s){state.inventoryTab='supplies';render();return alert('Найдено: '+s.name+' · остаток '+s.qty+' '+supplyUnitLabel(s.unit));}alert('Материал с таким QR-кодом не найден.');}
+function openWarehouseQrSearch(){const code=prompt('Введите или отсканируйте QR-код:');if(!code)return;const roll=db.inventory.find(x=>(x.qrCode||'').toLowerCase()===code.trim().toLowerCase());if(roll){const film=getCatalogItem(roll.catalogId);state.inventoryTab='film';state.inventoryFilmCategory=film?.category||null;state.inventoryFilmModel=roll.catalogId||null;render();return alert('Рулон найден: '+catalogLabel(film)+' · остаток '+Number(roll.remainingLengthM||0).toFixed(2)+' м');}const s=ensureSupplies().find(x=>(x.sku||'').toLowerCase()===code.trim().toLowerCase());if(s){state.inventoryTab='supplies';render();return alert('Найдено: '+s.name+' · остаток '+s.qty+' '+supplyUnitLabel(s.unit));}alert('Материал с таким QR-кодом не найден.');}
 
+function filmWarehouseCategoryIcon(category) {
+  return ({ smart:'⚡', solar:'☀️', protective:'🛡️', privacy:'🪞', decorative:'🎨' })[category] || '🎞';
+}
+function filmWarehouseRolls(catalogId) {
+  return (db.inventory || []).filter(roll => roll.catalogId === catalogId);
+}
+function filmWarehouseStats(items) {
+  const ids = new Set(items.map(item => item.id));
+  const rolls = (db.inventory || []).filter(roll => ids.has(roll.catalogId));
+  const lengthM = rolls.reduce((sum, roll) => sum + Number(roll.remainingLengthM || 0), 0);
+  const value = rolls.reduce((sum, roll) => {
+    const original = Number(roll.originalLengthM || 0);
+    return sum + (original > 0 ? Number(roll.costTotal || 0) * Number(roll.remainingLengthM || 0) / original : 0);
+  }, 0);
+  const threshold = Number(db.settings.inventoryAlerts?.reorderBelowM || 5);
+  const low = items.filter(item => filmWarehouseRolls(item.id).reduce((sum, roll) => sum + Number(roll.remainingLengthM || 0), 0) <= threshold).length;
+  return { rolls, lengthM, value, low };
+}
+function openFilmWarehouseCategory(category) {
+  state.inventoryFilmCategory = category;
+  state.inventoryFilmModel = null;
+  state.inventoryFilmQuery = '';
+  render();
+}
+function openFilmWarehouseModel(catalogId) {
+  state.inventoryFilmModel = catalogId;
+  render();
+}
+function renderFilmWarehouseKpis() {
+  const catalog = Array.isArray(db.settings?.catalog) ? db.settings.catalog : [];
+  const stats = filmWarehouseStats(catalog);
+  return `<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+    <div class="card"><div class="text-sm text-gray-500">Категорий</div><div class="kpi-value">${Object.keys(catalogByCategory()).length}</div></div>
+    <div class="card"><div class="text-sm text-gray-500">Рулонов</div><div class="kpi-value">${stats.rolls.length}</div></div>
+    <div class="card"><div class="text-sm text-gray-500">Остаток плёнки</div><div class="kpi-value">${stats.lengthM.toFixed(1)} м</div></div>
+    <div class="card"><div class="text-sm text-gray-500">Стоимость остатков</div><div class="kpi-value text-emerald-600">${fmtMoney(stats.value)}</div></div>
+  </div>`;
+}
+function renderFilmCategoryDirectory() {
+  const groups = catalogByCategory();
+  const preferred = ['smart','solar','protective','privacy','decorative'];
+  const categories = Object.keys(groups).sort((a, b) => {
+    const ai = preferred.indexOf(a), bi = preferred.indexOf(b);
+    if (ai !== -1 || bi !== -1) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    return catLabel(a).localeCompare(catLabel(b), 'ru');
+  });
+  return `${renderFilmWarehouseKpis()}
+  <div class="card">
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+      <div><h3 class="font-semibold text-lg">🎞 Плёнка по категориям</h3><p class="text-sm text-gray-500">Сначала выберите направление. Внутри будут только его модели и рулоны.</p></div>
+      <button class="btn-primary text-sm" onclick="openAddRollModal()">+ Принять рулон</button>
+    </div>
+    ${categories.length ? `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">${categories.map(category => {
+      const items = groups[category] || [];
+      const stats = filmWarehouseStats(items);
+      const colors = catColor(category);
+      return `<button class="card text-left" style="border-left:5px solid ${colors.dot};box-shadow:none" onclick="openFilmWarehouseCategory('${category}')">
+        <div class="flex items-start justify-between gap-3"><div><div class="text-2xl">${filmWarehouseCategoryIcon(category)}</div><div class="font-black text-lg mt-1">${academyEsc(catLabel(category))}</div></div><span class="tag" style="background:${colors.bg};color:${colors.text}">${items.length} мод.</span></div>
+        <div class="grid grid-cols-3 gap-2 mt-4 text-sm"><div><div class="text-gray-400">Рулонов</div><b>${stats.rolls.length}</b></div><div><div class="text-gray-400">Остаток</div><b>${stats.lengthM.toFixed(1)} м</b></div><div><div class="text-gray-400">Мало</div><b class="${stats.low ? 'text-red-600' : 'text-emerald-700'}">${stats.low}</b></div></div>
+        <div class="text-blue-700 font-semibold text-sm mt-4">Открыть модели →</div>
+      </button>`;
+    }).join('')}</div>` : `<div class="empty-state"><div class="icon">🎞</div><div>Каталог плёнок пока пуст.</div></div>`}
+  </div>`;
+}
+function renderFilmCategoryModels(category) {
+  const all = (db.settings.catalog || []).filter(item => item.category === category);
+  const query = String(state.inventoryFilmQuery || '').trim().toLowerCase();
+  const items = all.filter(item => !query || `${item.brand} ${item.model}`.toLowerCase().includes(query));
+  const colors = catColor(category);
+  return `<div class="card mb-4">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <div><button class="btn-ghost text-sm mb-3" onclick="state.inventoryFilmCategory=null;state.inventoryFilmModel=null;state.inventoryFilmQuery='';render();">← Категории плёнки</button><h3 class="font-black text-xl">${filmWarehouseCategoryIcon(category)} ${academyEsc(catLabel(category))}</h3><p class="text-sm text-gray-500">Выберите модель, чтобы увидеть её рулоны, партии, приход и списание.</p></div>
+      <button class="btn-primary text-sm" onclick="addCatalogItem(null,'${category}')">+ Добавить модель</button>
+    </div>
+    <div class="mt-4"><input value="${academyEsc(state.inventoryFilmQuery || '')}" placeholder="🔎 Найти бренд или модель в этой категории" oninput="state.inventoryFilmQuery=this.value;render();"></div>
+  </div>
+  <div class="card">
+    ${items.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Модель</th><th class="text-left p-2">Рулонов</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Ширины</th><th class="text-left p-2">Статус</th><th></th></tr></thead><tbody>${items.map(item => {
+      const rolls = filmWarehouseRolls(item.id);
+      const length = rolls.reduce((sum, roll) => sum + Number(roll.remainingLengthM || 0), 0);
+      const widths = [...new Set(rolls.map(roll => Number(roll.widthMm || 0)).filter(Boolean))].sort((a,b)=>a-b).map(width => `${(width/1000).toFixed(2)} м`).join(', ') || (item.rollWidth ? `${item.rollWidth}\"` : '—');
+      const low = length <= Number(db.settings.inventoryAlerts?.reorderBelowM || 5);
+      return `<tr class="border-t ${length <= 0 ? 'bg-red-50' : low ? 'bg-amber-50' : ''}" onclick="openFilmWarehouseModel('${item.id}')" style="cursor:pointer"><td class="p-2"><span style="width:8px;height:8px;border-radius:50%;background:${colors.dot};display:inline-block;margin-right:6px"></span><b>${academyEsc(item.brand)} — ${academyEsc(item.model)}</b><div class="text-xs text-gray-400">${catalogSpecLabel(item)}</div></td><td class="p-2">${rolls.length}</td><td class="p-2 font-bold ${length > 0 ? 'text-emerald-700' : 'text-red-700'}">${length.toFixed(1)} м</td><td class="p-2">${widths}</td><td class="p-2"><span class="tag ${length <= 0 ? 'bg-red-100 text-red-800' : low ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">${length <= 0 ? 'нет' : low ? 'мало' : 'в наличии'}</span></td><td class="p-2 text-blue-700 font-semibold">Открыть →</td></tr>`;
+    }).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="icon">🔎</div><div>В этой категории модели не найдены.</div></div>`}
+  </div>`;
+}
+function renderFilmModelStock(catalogId) {
+  const item = getCatalogItem(catalogId);
+  if (!item) { state.inventoryFilmModel = null; return renderFilmCategoryModels(state.inventoryFilmCategory); }
+  const rolls = filmWarehouseRolls(catalogId).slice().sort((a,b) => String(b.dateReceived || '').localeCompare(String(a.dateReceived || '')));
+  const stats = filmWarehouseStats([item]);
+  const vendor = item.vendorId ? db.vendors.find(v => v.id === item.vendorId) : null;
+  return `<div class="card mb-4">
+    <button class="btn-ghost text-sm mb-3" onclick="state.inventoryFilmModel=null;render();">← ${academyEsc(catLabel(item.category))} · все модели</button>
+    <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs text-gray-500">${academyEsc(catLabel(item.category))}</div><h3 class="font-black text-2xl">${academyEsc(item.brand)} — ${academyEsc(item.model)}</h3><div class="text-sm mt-1">${catalogSpecLabel(item)}</div></div><div class="flex gap-2 flex-wrap"><button class="btn-ghost text-sm" onclick="openCatalogSpecModal('${item.id}')">Характеристики</button><button class="btn-ghost text-sm" onclick="openPurchaseRequestModal('film','${item.id}')">В закупку</button><button class="btn-primary text-sm" onclick="openAddRollModal('${item.id}')">+ Принять рулон</button></div></div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4"><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Рулонов</div><b class="text-lg">${rolls.length}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Остаток</div><b class="text-lg">${stats.lengthM.toFixed(2)} м</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Стоимость</div><b class="text-lg text-emerald-700">${fmtMoney(stats.value)}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Поставщик</div><b>${academyEsc(vendor?.name || 'не назначен')}</b></div></div>
+  </div>
+  <div class="card"><h3 class="font-semibold mb-3">Рулоны модели</h3>${rolls.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Lot #</th><th class="text-left p-2">Ширина</th><th class="text-left p-2">Принято</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Локация</th><th class="text-left p-2">Поставщик</th><th></th></tr></thead><tbody>${rolls.map(roll => {
+    const rollVendor = db.vendors.find(v => v.id === roll.vendorId);
+    const low = Number(roll.remainingLengthM || 0) < Number(db.settings.inventoryAlerts?.reorderBelowM || 5);
+    return `<tr class="border-t ${low ? 'bg-amber-50' : ''}"><td class="p-2 font-mono">${academyEsc(roll.lotNumber || '—')}</td><td class="p-2">${(Number(roll.widthMm || 0)/1000).toFixed(2)} м</td><td class="p-2">${Number(roll.originalLengthM || 0).toFixed(1)} м</td><td class="p-2 font-bold ${low ? 'text-red-700' : 'text-emerald-700'}">${Number(roll.remainingLengthM || 0).toFixed(2)} м</td><td class="p-2">${academyEsc(roll.location || 'Warehouse')}</td><td class="p-2">${academyEsc(rollVendor?.name || '—')}</td><td class="p-2 whitespace-nowrap"><button class="btn-ghost text-xs" onclick="openFilmIssueModal('${roll.id}')">Списать</button><button class="btn-ghost text-xs" onclick="openWarehouseQr('film','${roll.id}')">QR</button></td></tr>`;
+  }).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="icon">📦</div><div>Этой модели на складе нет. Создайте заявку или примите рулон.</div></div>`}</div>`;
+}
 function renderFilmInventory() {
+  const category = state.inventoryFilmCategory;
+  const model = state.inventoryFilmModel;
+  if (!category) return renderFilmCategoryDirectory();
+  if (model) return renderFilmModelStock(model);
+  return renderFilmCategoryModels(category);
+}
+
+function renderFilmInventoryLegacy() {
   const summary = inventorySummary();
   const lowStock = lowStockItems();
   const totalValue = Object.values(summary).reduce((s,v) => s + v.value, 0);
