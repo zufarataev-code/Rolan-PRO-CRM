@@ -113,6 +113,13 @@ function assertNewPassword(password: string) {
   }
 }
 
+function invalidResetToken(): never {
+  throw new PasswordRecoveryError(
+    "invalid_token",
+    "Ссылка восстановления недействительна, истекла или уже использована. Запросите новую ссылку.",
+  );
+}
+
 function buildResetLink(token: string) {
   const url = new URL("/reset-password", getEnv().appUrl);
   url.searchParams.set("token", token);
@@ -180,33 +187,45 @@ export async function requestPasswordReset(rawEmail: string) {
 export async function resetPasswordWithToken(token: string, password: string) {
   assertNewPassword(password);
   const payload = parsePasswordResetToken(token);
-  if (!payload) {
-    throw new PasswordRecoveryError(
-      "invalid_token",
-      "Ссылка восстановления недействительна или уже истекла. Запросите новую ссылку.",
-    );
+  if (!payload || payload.exp <= Date.now()) {
+    invalidResetToken();
   }
 
   const user = await prisma.user.findUnique({ where: { user_id: payload.uid } });
-  if (!user || !passwordResetTokenMatchesUser(payload, {
-    userId: user.user_id,
-    email: user.email,
-    passwordHash: user.password_hash,
-    isActive: user.is_active,
-  })) {
-    throw new PasswordRecoveryError(
-      "invalid_token",
-      "Ссылка восстановления недействительна, истекла или уже использована. Запросите новую ссылку.",
-    );
+  if (
+    !user ||
+    !passwordResetTokenMatchesUser(payload, {
+      userId: user.user_id,
+      email: user.email,
+      passwordHash: user.password_hash,
+      isActive: user.is_active,
+    })
+  ) {
+    invalidResetToken();
   }
 
-  await prisma.user.update({
-    where: { user_id: user.user_id },
+  const oldPasswordHash = user.password_hash;
+  const newPasswordHash = hashPassword(password.trim());
+
+  // Atomic compare-and-swap: only the request that still sees the exact
+  // credentials encoded in the reset token may change the password. If two
+  // requests use the same link concurrently, only one update can succeed.
+  const updated = await prisma.user.updateMany({
+    where: {
+      user_id: user.user_id,
+      email: user.email,
+      password_hash: oldPasswordHash,
+      is_active: true,
+    },
     data: {
-      password_hash: hashPassword(password.trim()),
+      password_hash: newPasswordHash,
       must_change_password: false,
     },
   });
+
+  if (updated.count !== 1) {
+    invalidResetToken();
+  }
 
   return { email: user.email };
 }
