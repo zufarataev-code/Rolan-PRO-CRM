@@ -27,6 +27,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     roles?: RoleCode[];
     isActive?: boolean;
     password?: string;
+    legacyUserId?: string;
   } | null;
 
   if (!body) {
@@ -35,20 +36,26 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   try {
     // Profile fields and password can be changed in one request.
-    // The password is never returned by the server except as the one-time
-    // temporary value from setTeamMemberPassword.
-    let profileResult: { userId: string; email: string } | null = null;
+    // legacyUserId is accepted only on this owner-only endpoint and is used
+    // to permanently link an old legacy employee card to its PostgreSQL user.
+    let profileResult: {
+      userId: string;
+      email: string;
+      legacyUserIds: string[];
+    } | null = null;
     if (
       body.email !== undefined ||
       body.fullName !== undefined ||
       body.roles !== undefined ||
-      body.isActive !== undefined
+      body.isActive !== undefined ||
+      body.legacyUserId !== undefined
     ) {
       profileResult = await updateTeamMember(userId, {
         email: body.email,
         fullName: body.fullName,
         roles: body.roles,
         isActive: body.isActive,
+        legacyUserId: body.legacyUserId,
       });
     }
 
