@@ -5991,6 +5991,8 @@ let state = {
   dateFrom: '',
   dateTo: '',
   reportsRange: '6m',
+  inventoryTab: 'overview',
+  inventoryCategory: 'all',
   calendarMode: 'week',  // 'day' | 'week' | 'month'
   calendarAnchor: null,  // ISO date string anchor (Monday for week, 1st of month for month)
   calendarRoleFilter: 'all',
@@ -6504,6 +6506,29 @@ function migrateSchema() {
   if (!s.inventoryAlerts) {
     s.inventoryAlerts = { reorderBelowM: 5, criticalBelowM: 2 };
   }
+  // ---- WAREHOUSE OPERATIONS / PROCUREMENT ----
+  if (!Array.isArray(db.supplies)) db.supplies = [];
+  if (!Array.isArray(db.tools)) db.tools = [];
+  if (!Array.isArray(db.inventoryMovements)) db.inventoryMovements = [];
+  if (!Array.isArray(db.purchaseRequests)) db.purchaseRequests = [];
+  db.inventory.forEach(r => {
+    if (!r.qrCode) r.qrCode = 'RP-ROLL-' + r.id;
+    if (!r.status) r.status = Number(r.remainingLengthM || 0) > 0 ? 'available' : 'empty';
+    if (!Array.isArray(r._consumed)) r._consumed = [];
+  });
+  db.supplies.forEach(item => {
+    if (!item.category) item.category = 'installation';
+    if (!item.sku) item.sku = 'RP-SUP-' + item.id;
+    if (item.maxQty == null) item.maxQty = Math.max(Number(item.minQty || 0) * 3, Number(item.qty || 0));
+    if (!item.location) item.location = 'Warehouse';
+    if (!Array.isArray(item.movements)) item.movements = [];
+  });
+  db.vendors.forEach(v => {
+    if (!Array.isArray(v.categories)) v.categories = [];
+    if (v.active == null) v.active = true;
+    if (!v.country) v.country = '';
+    if (!v.paymentTerms) v.paymentTerms = '';
+  });
   // ---- OPERATING EXPENSES (recurring) ----
   if (!db.opex) {
     db.opex = [
@@ -7262,7 +7287,7 @@ function openWindowTemplateModal(orderId) {
 
 // ---------- INVENTORY MANAGEMENT ----------
 function addInventoryRoll(data) {
-  db.inventory.push({
+  const roll = {
     id: 'inv_' + uid(),
     catalogId: data.catalogId,
     lotNumber: data.lotNumber || '',
@@ -7273,9 +7298,13 @@ function addInventoryRoll(data) {
     vendorId: data.vendorId || null,
     dateReceived: data.dateReceived || new Date().toISOString().slice(0,10),
     location: data.location || 'Warehouse',
+    qrCode: 'RP-ROLL-' + uid(),
+    status: 'available',
     _consumed: [],
-  });
+  };
+  db.inventory.push(roll);
   save();
+  return roll;
 }
 function inventoryByCatalogId(catalogId) {
   return db.inventory.filter(r => r.catalogId === catalogId).sort((a,b) => b.remainingLengthM - a.remainingLengthM);
@@ -7324,6 +7353,7 @@ function autoDeductInventoryForOrder(o) {
         roll.remainingLengthM = Math.round((roll.remainingLengthM - take) * 100) / 100;
         roll._consumed = roll._consumed || [];
         roll._consumed.push({ orderId: o.id, lengthM: take, widthMm: requiredWidth, at: new Date().toISOString() });
+        recordInventoryMovement({ kind:'film', itemId:roll.id, itemName:catalogLabel(getCatalogItem(catId)), direction:'issue', qty:take, unit:'м', orderId:o.id, reason:'Автосписание после монтажа' });
         log.push({ catId, rollId: roll.id, widthMm: requiredWidth, lengthM: take });
         remaining -= take;
       }
@@ -28385,26 +28415,142 @@ function markPayoutPaid(userId, startISO, endISO) {
 // ERP MODULES: Inventory, Cash Dashboard, Product P&L, Marketing ROI
 // ============================================================================
 
+const WAREHOUSE_CATEGORIES = [
+  { id:'installation', label:'Монтажные расходники' },
+  { id:'cleaning', label:'Очистка стекла' },
+  { id:'electrical', label:'Электрика Smart' },
+  { id:'safety', label:'Защита и безопасность' },
+  { id:'packing', label:'Упаковка и доставка' },
+  { id:'other', label:'Прочее' },
+];
+const PURCHASE_STATUS = {
+  requested: ['Заявка', 'bg-amber-100 text-amber-800'],
+  approved: ['Согласовано', 'bg-blue-100 text-blue-800'],
+  ordered: ['Заказано', 'bg-purple-100 text-purple-800'],
+  received: ['Получено', 'bg-emerald-100 text-emerald-800'],
+  cancelled: ['Отменено', 'bg-gray-100 text-gray-600'],
+};
+function warehouseCategoryLabel(id) { return WAREHOUSE_CATEGORIES.find(x => x.id === id)?.label || 'Прочее'; }
+function warehouseOrders() { return db.orders.filter(o => !['completed','cancelled','lost'].includes(o.status)); }
+function warehouseOrderLabel(o) {
+  const c = getClient(o.clientId);
+  return `${o.number || o.id} · ${c?.name || c?.company || 'Клиент'}`;
+}
+function warehouseNeedItems() {
+  const film = lowStockItems().map(x => ({ kind:'film', id:x.catalogId, name:catalogLabel(x.catalog), qty:x.lengthM, min:db.settings.inventoryAlerts?.reorderBelowM || 5, target:db.settings.inventoryAlerts?.targetStockM || 30, unit:'м', vendorId:x.catalog?.vendorId || null, critical:x.status === 'critical' }));
+  const supplies = lowSupplies().map(x => ({ kind:'supply', id:x.id, name:x.name, qty:Number(x.qty||0), min:Number(x.minQty||0), target:Number(x.maxQty||Math.max((x.minQty||0)*3,1)), unit:supplyUnitLabel(x.unit), vendorId:x.vendorId || null, critical:x.status === 'critical' }));
+  return [...film, ...supplies];
+}
+function recordInventoryMovement(data) {
+  db.inventoryMovements = db.inventoryMovements || [];
+  db.inventoryMovements.unshift({ id:'mov_'+uid(), at:new Date().toISOString(), createdBy:state.currentUserId, ...data });
+}
+function purchaseRequestNumber() {
+  const year = new Date().getFullYear();
+  const n = (db.purchaseRequests || []).filter(x => String(x.number||'').startsWith(`PUR-${year}-`)).length + 1;
+  return `PUR-${year}-${String(n).padStart(4,'0')}`;
+}
 function renderInventory() {
+  const tab = state.inventoryTab || 'overview';
+  const needs = warehouseNeedItems();
+  const activePurchases = (db.purchaseRequests||[]).filter(x => !['received','cancelled'].includes(x.status)).length;
+  const tabs = [
+    ['overview','Обзор'], ['film','Плёнка'], ['supplies','Расходники'], ['tools','Инструмент'],
+    ['purchases',`Закупки${activePurchases ? ` · ${activePurchases}` : ''}`], ['vendors','Поставщики'], ['movements','Движения']
+  ];
+  let body = '';
+  if (tab === 'film') body = renderFilmInventory();
+  else if (tab === 'supplies') body = renderSupplies();
+  else if (tab === 'tools') body = renderTools();
+  else if (tab === 'purchases') body = renderPurchaseRequests();
+  else if (tab === 'vendors') body = renderWarehouseVendors();
+  else if (tab === 'movements') body = renderWarehouseMovements();
+  else body = renderWarehouseOverview();
+  return `<div class="card mb-4">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <div><h2 class="font-semibold text-lg">📦 Склад и снабжение</h2><p class="text-sm text-gray-500">Реальный остаток, закупки под проекты и ответственный за каждую заявку.</p></div>
+      <div class="flex gap-2"><button class="btn-ghost text-sm" onclick="openWarehouseQrSearch()">▦ Найти по QR</button><button class="btn-primary text-sm" onclick="openPurchaseRequestModal()">+ Заявка на закупку</button></div>
+    </div>
+    <div class="flex gap-2 mt-4 flex-wrap">${tabs.map(([id,label]) => `<button class="btn-${tab===id?'primary':'ghost'} text-sm" onclick="state.inventoryTab='${id}';render();">${label}${id==='overview'&&needs.length?` · ${needs.length}⚠️`:''}</button>`).join('')}</div>
+  </div>${body}`;
+}
+function renderWarehouseOverview() {
+  const needs = warehouseNeedItems();
+  const out = needs.filter(x => x.qty <= 0).length;
+  const stockValue = Object.values(inventorySummary()).reduce((s,x)=>s+x.value,0) + ensureSupplies().reduce((s,x)=>s+Number(x.qty||0)*Number(x.costPerUnit||0),0);
+  const active = (db.purchaseRequests||[]).filter(x => !['received','cancelled'].includes(x.status));
+  return `<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+    <div class="card"><div class="text-sm text-gray-500">Стоимость остатков</div><div class="kpi-value text-emerald-600">${fmtMoney(stockValue)}</div></div>
+    <div class="card"><div class="text-sm text-gray-500">Позиций заканчивается</div><div class="kpi-value ${needs.length?'text-amber-600':''}">${needs.length}</div></div>
+    <div class="card"><div class="text-sm text-gray-500">Нет в наличии</div><div class="kpi-value ${out?'text-red-600':''}">${out}</div></div>
+    <div class="card"><div class="text-sm text-gray-500">Закупок в работе</div><div class="kpi-value text-blue-600">${active.length}</div></div>
+  </div>
+  <div class="card mb-4"><div class="flex items-center justify-between mb-3"><div><h3 class="font-semibold">Что нужно закупить</h3><p class="text-sm text-gray-500">Минимальный остаток формирует подсказку, но заказ создаёт сотрудник.</p></div></div>
+  ${needs.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Материал</th><th class="text-left p-2">Есть</th><th class="text-left p-2">Нужно иметь</th><th class="text-left p-2">Поставщик</th><th></th></tr></thead><tbody>${needs.map(x=>{const v=db.vendors.find(v=>v.id===x.vendorId);return `<tr class="border-t ${x.critical?'bg-red-50':''}"><td class="p-2"><div class="font-medium">${academyEsc(x.name)}</div><div class="text-xs text-gray-500">${x.kind==='film'?'Плёнка':'Расходник'}</div></td><td class="p-2 ${x.critical?'text-red-700 font-bold':'text-amber-700'}">${x.qty.toFixed(1)} ${x.unit}</td><td class="p-2">${x.target} ${x.unit}</td><td class="p-2">${academyEsc(v?.name||'не назначен')}</td><td class="p-2"><button class="btn-primary text-xs" onclick="openPurchaseRequestModal('${x.kind}','${x.id}')">Создать заявку</button></td></tr>`}).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="icon">✅</div><div>Все материалы выше минимального остатка.</div></div>`}
+  </div>
+  <div class="card"><div class="flex items-center justify-between mb-3"><div><h3 class="font-semibold">Закупки в работе</h3><p class="text-sm text-gray-500">Видно проект, срок и кто отвечает.</p></div><button class="btn-ghost text-sm" onclick="state.inventoryTab='purchases';render();">Все закупки →</button></div>${renderPurchaseTable(active.slice(0,6), true)}</div>`;
+}
+function renderPurchaseTable(rows, compact=false) {
+  if (!rows.length) return `<div class="empty-state"><div class="icon">🧾</div><div>Активных заявок пока нет.</div></div>`;
+  return `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Заявка</th><th class="text-left p-2">Материал</th><th class="text-left p-2">Проект</th><th class="text-left p-2">Ответственный</th><th class="text-left p-2">Статус</th>${compact?'':'<th></th>'}</tr></thead><tbody>${rows.map(p=>{const st=PURCHASE_STATUS[p.status]||PURCHASE_STATUS.requested;const o=getOrder(p.orderId);const u=getUser(p.responsibleId);return `<tr class="border-t"><td class="p-2"><div class="font-medium">${p.number}</div><div class="text-xs text-gray-500">${fmtDate(p.createdAt)}</div></td><td class="p-2"><div>${academyEsc(p.itemNameSnapshot||'Материал')}</div><div class="text-xs text-gray-500">${p.qty} ${academyEsc(p.unit||'')}</div></td><td class="p-2">${o?`<button class="link" onclick="openOrder('${o.id}')">${academyEsc(warehouseOrderLabel(o))}</button>`:'Общий запас'}</td><td class="p-2">${academyEsc(u?.name||'не назначен')}</td><td class="p-2"><span class="tag ${st[1]}">${st[0]}</span></td>${compact?'':`<td class="p-2">${purchaseActionButtons(p)}</td>`}</tr>`}).join('')}</tbody></table></div>`;
+}
+function purchaseActionButtons(p) {
+  if (p.status==='requested') return `<button class="btn-ghost text-xs" onclick="setPurchaseRequestStatus('${p.id}','approved')">Согласовать</button>`;
+  if (p.status==='approved') return `<button class="btn-primary text-xs" onclick="setPurchaseRequestStatus('${p.id}','ordered')">Заказано</button>`;
+  if (p.status==='ordered') return `<button class="btn-primary text-xs" onclick="receivePurchaseRequest('${p.id}')">Принять</button>`;
+  return '';
+}
+function renderPurchaseRequests() {
+  const rows=[...(db.purchaseRequests||[])].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+  return `<div class="card"><div class="flex items-center justify-between mb-3"><div><h3 class="font-semibold">Заявки и заказы на закупку</h3><p class="text-sm text-gray-500">Материал привязан к проекту, а выполнение — к ответственному сотруднику.</p></div><button class="btn-primary text-sm" onclick="openPurchaseRequestModal()">+ Новая заявка</button></div>${renderPurchaseTable(rows)}</div>`;
+}
+function openPurchaseRequestModal(kind='', itemId='', presetOrderId='') {
+  const needs=warehouseNeedItems(); const match=needs.find(x=>x.kind===kind&&x.id===itemId);
+  const filmOptions=(db.settings.catalog||[]).map(c=>`<option value="film:${c.id}" ${kind==='film'&&itemId===c.id?'selected':''}>Плёнка · ${academyEsc(c.brand)} ${academyEsc(c.model)}</option>`).join('');
+  const supplyOptions=ensureSupplies().map(s=>`<option value="supply:${s.id}" ${kind==='supply'&&itemId===s.id?'selected':''}>Расходник · ${academyEsc(s.name)}</option>`).join('');
+  state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:42rem"><h3 class="font-semibold text-lg">Новая заявка на закупку</h3><p class="text-sm text-gray-500 mb-4">Укажите для какого проекта нужен материал и кто отвечает за закупку.</p><div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+  <div class="md:col-span-2"><label>Материал</label><select id="pr-item">${filmOptions}${supplyOptions}</select></div>
+  <div><label>Количество</label><input id="pr-qty" type="number" min="0.01" step="0.01" value="${match?Math.max(match.target-match.qty,1):1}"></div>
+  <div><label>Нужно к дате</label><input id="pr-date" type="date"></div>
+  <div><label>Проект / заказ</label><select id="pr-order"><option value="">Общий запас склада</option>${warehouseOrders().map(o=>`<option value="${o.id}" ${presetOrderId===o.id?'selected':''}>${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div>
+  <div><label>Ответственный</label><select id="pr-owner"><option value="">Выберите</option>${db.users.filter(u=>u.active!==false).map(u=>`<option value="${u.id}">${academyEsc(u.name)} · ${academyEsc(u.role||'сотрудник')}</option>`).join('')}</select></div>
+  <div><label>Поставщик</label><select id="pr-vendor"><option value="">Не выбран</option>${db.vendors.filter(v=>v.active!==false).map(v=>`<option value="${v.id}" ${match?.vendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
+  <div><label>Комментарий</label><input id="pr-note" placeholder="Срочность, размер, цвет..."></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="savePurchaseRequest()">Создать заявку</button></div></div></div>`;render();
+}
+function savePurchaseRequest() {
+  const [kind,itemId]=(document.getElementById('pr-item')?.value||'').split(':');
+  const item=kind==='film'?getCatalogItem(itemId):ensureSupplies().find(x=>x.id===itemId);
+  const qty=parseFloat(document.getElementById('pr-qty')?.value||0); const responsibleId=document.getElementById('pr-owner')?.value||null;
+  if(!item||qty<=0) return alert('Выберите материал и количество.');
+  if(!responsibleId) return alert('Назначьте ответственного за закупку.');
+  db.purchaseRequests.push({id:'pr_'+uid(),number:purchaseRequestNumber(),kind,itemId,itemNameSnapshot:kind==='film'?`${item.brand} ${item.model}`:item.name,qty,unit:kind==='film'?'м':supplyUnitLabel(item.unit),orderId:document.getElementById('pr-order')?.value||null,vendorId:document.getElementById('pr-vendor')?.value||null,responsibleId,neededBy:document.getElementById('pr-date')?.value||null,note:document.getElementById('pr-note')?.value||'',status:'requested',requestedBy:state.currentUserId,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+  save();closeModal();state.inventoryTab='purchases';render();
+}
+function setPurchaseRequestStatus(id,status) { const p=db.purchaseRequests.find(x=>x.id===id);if(!p)return;p.status=status;p.updatedAt=new Date().toISOString();save();render(); }
+function receivePurchaseRequest(id) {
+  const p=db.purchaseRequests.find(x=>x.id===id);if(!p)return;
+  if(p.kind==='film') return openAddRollModal(p.itemId,p.id);
+  const s=ensureSupplies().find(x=>x.id===p.itemId);if(!s)return alert('Расходник не найден.');
+  const actual=parseFloat(prompt(`Сколько получено (${supplyUnitLabel(s.unit)})?`,String(p.qty))||'0');if(actual<=0)return;
+  s.qty=Number(s.qty||0)+actual;recordInventoryMovement({kind:'supply',itemId:s.id,itemName:s.name,direction:'receipt',qty:actual,unit:supplyUnitLabel(s.unit),orderId:p.orderId,vendorId:p.vendorId,responsibleId:p.responsibleId,purchaseRequestId:p.id,reason:`Приход по ${p.number}`});p.status='received';p.updatedAt=new Date().toISOString();save();render();
+}
+function renderWarehouseVendors() {
+  return `<div class="card"><div class="flex items-center justify-between mb-3"><div><h3 class="font-semibold">Поставщики</h3><p class="text-sm text-gray-500">Плёнка, расходники, сроки поставки и контакты в одном месте.</p></div><button class="btn-primary text-sm" onclick="openVendorModal()">+ Поставщик</button></div><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Поставщик</th><th class="text-left p-2">Категории</th><th class="text-left p-2">Контакт</th><th class="text-left p-2">Срок</th><th></th></tr></thead><tbody>${db.vendors.map(v=>`<tr class="border-t"><td class="p-2 font-medium">${academyEsc(v.name)}</td><td class="p-2">${(v.categories||[]).map(x=>`<span class="tag mr-1">${academyEsc(x)}</span>`).join('')||'—'}</td><td class="p-2">${academyEsc(v.contact||'—')}</td><td class="p-2">${v.leadTimeDays||7} дн.</td><td class="p-2"><button class="btn-ghost text-xs" onclick="openVendorModal('${v.id}')">Изменить</button></td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function openVendorModal(id='') { const v=db.vendors.find(x=>x.id===id)||{name:'',contact:'',leadTimeDays:7,country:'',paymentTerms:'',categories:[],active:true};state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:34rem"><h3 class="font-semibold text-lg mb-4">${id?'Поставщик':'Новый поставщик'}</h3><input id="v-id" type="hidden" value="${id}"><div class="grid grid-cols-2 gap-3"><div class="col-span-2"><label>Название</label><input id="v-name" value="${academyEsc(v.name)}"></div><div><label>Контакт</label><input id="v-contact" value="${academyEsc(v.contact||'')}"></div><div><label>Страна</label><input id="v-country" value="${academyEsc(v.country||'')}"></div><div><label>Срок поставки, дней</label><input id="v-lead" type="number" value="${v.leadTimeDays||7}"></div><div><label>Условия оплаты</label><input id="v-terms" value="${academyEsc(v.paymentTerms||'')}"></div><div class="col-span-2"><label>Что поставляет</label><input id="v-categories" value="${academyEsc((v.categories||[]).join(', '))}" placeholder="Плёнка, расходники, доставка"></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveVendor()">Сохранить</button></div></div></div>`;render(); }
+function saveVendor(){const id=document.getElementById('v-id').value;let v=db.vendors.find(x=>x.id===id);if(!v){v={id:'v_'+uid(),active:true};db.vendors.push(v)}v.name=document.getElementById('v-name').value.trim();if(!v.name)return alert('Введите название.');v.contact=document.getElementById('v-contact').value.trim();v.country=document.getElementById('v-country').value.trim();v.leadTimeDays=parseInt(document.getElementById('v-lead').value)||7;v.paymentTerms=document.getElementById('v-terms').value.trim();v.categories=document.getElementById('v-categories').value.split(',').map(x=>x.trim()).filter(Boolean);save();closeModal();render();}
+function renderWarehouseMovements(){const rows=(db.inventoryMovements||[]).slice(0,200);return `<div class="card"><div><h3 class="font-semibold">Журнал прихода и списания</h3><p class="text-sm text-gray-500 mb-3">Кто, когда, какой материал и по какому проекту.</p></div>${rows.length?`<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Дата</th><th class="text-left p-2">Операция</th><th class="text-left p-2">Материал</th><th class="text-left p-2">Количество</th><th class="text-left p-2">Проект</th><th class="text-left p-2">Кто</th></tr></thead><tbody>${rows.map(m=>{const o=getOrder(m.orderId);return `<tr class="border-t"><td class="p-2">${fmtDate(m.at)}</td><td class="p-2"><span class="tag ${m.direction==='receipt'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}">${m.direction==='receipt'?'Приход':'Списание'}</span></td><td class="p-2">${academyEsc(m.itemName||'Материал')}</td><td class="p-2">${m.direction==='receipt'?'+':'−'}${m.qty} ${academyEsc(m.unit||'')}</td><td class="p-2">${o?academyEsc(warehouseOrderLabel(o)):'—'}</td><td class="p-2">${academyEsc(getUser(m.createdBy)?.name||getUser(m.responsibleId)?.name||'—')}</td></tr>`}).join('')}</tbody></table></div>`:`<div class="empty-state"><div class="icon">↕️</div><div>Движений пока нет.</div></div>`}</div>`;}
+function openWarehouseQr(kind,id){const item=kind==='film'?db.inventory.find(x=>x.id===id):ensureSupplies().find(x=>x.id===id);if(!item)return;const code=item.qrCode||item.sku||`RP-${id}`;const name=kind==='film'?(catalogLabel(getCatalogItem(item.catalogId))+' · Lot '+(item.lotNumber||'—')):item.name;const src=`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(code)}`;state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content p-6 text-center" style="max-width:24rem"><h3 class="font-semibold">QR-этикетка</h3><p class="text-sm text-gray-500 mb-3">${academyEsc(name)}</p><img src="${src}" alt="QR ${academyEsc(code)}" style="width:220px;height:220px;margin:auto"><div class="font-mono mt-2">${academyEsc(code)}</div><div class="flex gap-2 mt-4"><button class="btn-ghost flex-1" onclick="closeModal()">Закрыть</button><button class="btn-primary flex-1" onclick="window.print()">Печать</button></div></div></div>`;render();}
+function openWarehouseQrSearch(){const code=prompt('Введите или отсканируйте QR-код:');if(!code)return;const roll=db.inventory.find(x=>(x.qrCode||'').toLowerCase()===code.trim().toLowerCase());if(roll){state.inventoryTab='film';render();return alert('Рулон найден: '+catalogLabel(getCatalogItem(roll.catalogId))+' · остаток '+Number(roll.remainingLengthM||0).toFixed(2)+' м');}const s=ensureSupplies().find(x=>(x.sku||'').toLowerCase()===code.trim().toLowerCase());if(s){state.inventoryTab='supplies';render();return alert('Найдено: '+s.name+' · остаток '+s.qty+' '+supplyUnitLabel(s.unit));}alert('Материал с таким QR-кодом не найден.');}
+
+function renderFilmInventory() {
   const summary = inventorySummary();
   const lowStock = lowStockItems();
   const totalValue = Object.values(summary).reduce((s,v) => s + v.value, 0);
   const totalRolls = db.inventory.length;
   const totalLength = Object.values(summary).reduce((s,v) => s + v.lengthM, 0);
 
-  const tab = state.inventoryTab || 'film';
-
-  const tabs = `
-  <div class="flex gap-2 mb-4 flex-wrap">
-    <button class="btn-${tab==='film'?'primary':'ghost'} text-sm" onclick="state.inventoryTab='film'; render();">🎞 Плёнка</button>
-    <button class="btn-${tab==='supplies'?'primary':'ghost'} text-sm" onclick="state.inventoryTab='supplies'; render();">🧰 Расходники${lowSupplies().length ? ` · ${lowSupplies().length}⚠️` : ''}</button>
-    <button class="btn-${tab==='tools'?'primary':'ghost'} text-sm" onclick="state.inventoryTab='tools'; render();">🔧 Инструмент${ensureTools().filter(x => x.holderId).length ? ` · ${ensureTools().filter(x => x.holderId).length}` : ''}</button>
-  </div>`;
-
-  if (tab === 'supplies') return tabs + renderSupplies();
-  if (tab === 'tools') return tabs + renderTools();
-
-  return tabs + `
+  return `
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
     <div class="card"><div class="text-sm text-gray-500">Всего рулонов</div><div class="kpi-value">${totalRolls}</div></div>
     <div class="card"><div class="text-sm text-gray-500">Общая длина</div><div class="kpi-value">${totalLength.toFixed(1)} м</div></div>
@@ -28473,7 +28619,7 @@ function renderInventory() {
               <td class="p-2"><div class="bg-gray-100 rounded-full h-2 overflow-hidden" style="width:80px"><div class="h-full ${used>80?'bg-red-500':used>50?'bg-amber-500':'bg-emerald-500'}" style="width:${used}%"></div></div><span class="text-xs">${used.toFixed(0)}%</span></td>
               <td class="p-2">${fmtMoney(r.costTotal)}</td>
               <td class="p-2 text-xs">${vendor?.name || '—'}</td>
-              <td class="p-2"><button class="btn-ghost text-xs text-red-600" onclick="if(confirm('Удалить рулон ${cat?.brand} ${cat?.model} (Lot ${r.lotNumber||'?'})?')){db.inventory=db.inventory.filter(x=>x.id!=='${r.id}'); save(); render();}">✕</button></td>
+              <td class="p-2 whitespace-nowrap"><button class="btn-ghost text-xs" onclick="openFilmIssueModal('${r.id}')">Списать</button><button class="btn-ghost text-xs" onclick="openWarehouseQr('film','${r.id}')">QR</button><button class="btn-ghost text-xs text-red-600" onclick="if(confirm('Удалить рулон ${cat?.brand} ${cat?.model} (Lot ${r.lotNumber||'?'})?')){db.inventory=db.inventory.filter(x=>x.id!=='${r.id}'); save(); render();}">✕</button></td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -28651,8 +28797,13 @@ function addSupply() {
     unit: 'pcs',
     qty: 0,
     minQty: 1,
+    maxQty: 10,
     costPerUnit: 0,
     vendorId: null,
+    category: 'installation',
+    location: 'Warehouse',
+    sku: 'RP-SUP-' + uid(),
+    movements: [],
     note: '',
   });
   save();
@@ -28662,7 +28813,7 @@ function addSupply() {
 function updateSupply(id, field, value) {
   const s = ensureSupplies().find(x => x.id === id);
   if (!s) return;
-  if (['qty', 'minQty', 'costPerUnit'].includes(field)) {
+  if (['qty', 'minQty', 'maxQty', 'costPerUnit'].includes(field)) {
     const num = parseFloat(value);
     s[field] = Number.isFinite(num) ? num : 0;
   } else {
@@ -28691,13 +28842,21 @@ function moveSupply(id, delta) {
   render();
 }
 
+function openSupplyMovementModal(id, direction) {
+  const s=ensureSupplies().find(x=>x.id===id); if(!s)return;
+  state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:36rem"><h3 class="font-semibold text-lg">${direction==='receipt'?'Приход':'Списание'} · ${academyEsc(s.name)}</h3><p class="text-sm text-gray-500 mb-4">Текущий остаток: ${s.qty||0} ${supplyUnitLabel(s.unit)}</p><div class="grid grid-cols-2 gap-3"><div><label>Количество</label><input id="sm-qty" type="number" min="0.01" step="0.01" value="1"></div><div><label>Проект / заказ</label><select id="sm-order"><option value="">Без проекта</option>${warehouseOrders().map(o=>`<option value="${o.id}">${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div>${direction==='receipt'?`<div><label>Поставщик</label><select id="sm-vendor"><option value="">—</option>${db.vendors.map(v=>`<option value="${v.id}" ${s.vendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select></div><div><label>Цена за единицу, $</label><input id="sm-cost" type="number" min="0" step="0.01" value="${s.costPerUnit||0}"></div>`:''}<div class="col-span-2"><label>Причина / комментарий</label><input id="sm-reason" placeholder="Для какого объекта или зачем"></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveSupplyMovement('${id}','${direction}')">${direction==='receipt'?'Принять':'Списать'}</button></div></div></div>`;render();
+}
+function saveSupplyMovement(id,direction){const s=ensureSupplies().find(x=>x.id===id);if(!s)return;const qty=parseFloat(document.getElementById('sm-qty')?.value||0);const orderId=document.getElementById('sm-order')?.value||null;const reason=document.getElementById('sm-reason')?.value.trim()||'';if(qty<=0)return alert('Введите количество.');if(direction==='issue'&&qty>Number(s.qty||0))return alert(`Недостаточно на складе. Есть ${s.qty||0} ${supplyUnitLabel(s.unit)}.`);if(direction==='issue'&&!orderId&&!reason)return alert('Для списания выберите проект или укажите причину.');if(direction==='receipt'){const oldQty=Number(s.qty||0),cost=parseFloat(document.getElementById('sm-cost')?.value||0),vendorId=document.getElementById('sm-vendor')?.value||null;s.costPerUnit=(oldQty+qty)>0?((oldQty*Number(s.costPerUnit||0)+qty*cost)/(oldQty+qty)):cost;s.vendorId=vendorId||s.vendorId;s.qty=oldQty+qty;}else{s.qty=Number(s.qty||0)-qty;}recordInventoryMovement({kind:'supply',itemId:s.id,itemName:s.name,direction,qty,unit:supplyUnitLabel(s.unit),orderId,vendorId:direction==='receipt'?(document.getElementById('sm-vendor')?.value||null):null,reason});save();closeModal();render();}
+
 function renderSupplies() {
-  const supplies = ensureSupplies();
+  const allSupplies = ensureSupplies();
+  const category = state.inventoryCategory || 'all';
+  const supplies = category === 'all' ? allSupplies : allSupplies.filter(x => x.category === category);
   const canEdit = ['owner', 'manager', 'installer'].includes(currentUser()?.role);
-  const totalValue = supplies.reduce((sum, s) => sum + (s.qty || 0) * (s.costPerUnit || 0), 0);
+  const totalValue = allSupplies.reduce((sum, s) => sum + (s.qty || 0) * (s.costPerUnit || 0), 0);
   const low = lowSupplies();
 
-  if (!supplies.length) {
+  if (!allSupplies.length) {
     return `
     <div class="card">
       <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -28716,18 +28875,22 @@ function renderSupplies() {
     <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
       <div>
         <h3 class="font-semibold">🧰 Расходники <span class="text-sm font-normal text-gray-500">· ${supplies.length} позиций · ${fmtMoney(totalValue)}</span></h3>
-        <p class="text-sm text-gray-500">Кнопки −1 и +1 списывают и принимают. Красным — то, что пора закупить.</p>
+        <p class="text-sm text-gray-500">По категориям, с минимальным и целевым остатком. Каждое движение записывается в журнал.</p>
       </div>
       ${canEdit ? `<button class="btn-primary text-sm" onclick="addSupply()">+ Добавить расходник</button>` : ''}
     </div>
+    <div class="flex gap-2 flex-wrap mb-3"><button class="btn-${category==='all'?'primary':'ghost'} text-xs" onclick="state.inventoryCategory='all';render();">Все · ${allSupplies.length}</button>${WAREHOUSE_CATEGORIES.map(c=>{const n=allSupplies.filter(x=>x.category===c.id).length;return n?`<button class="btn-${category===c.id?'primary':'ghost'} text-xs" onclick="state.inventoryCategory='${c.id}';render();">${c.label} · ${n}</button>`:''}).join('')}</div>
     ${low.length ? `<div class="tag bg-red-100 text-red-800 mb-3">⚠️ Заканчивается: ${low.length}</div>` : ''}
+    ${!supplies.length ? `<div class="empty-state"><div class="icon">🧰</div><div>В этой категории пока нет позиций.</div></div>` : `
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead><tr class="text-xs text-gray-500 border-b">
           <th class="text-left p-2">Наименование</th>
+          <th class="text-left p-2">Категория</th>
           <th class="text-left p-2">Ед.</th>
           <th class="text-left p-2">Остаток</th>
           <th class="text-left p-2">Минимум</th>
+          <th class="text-left p-2">Цель</th>
           <th class="text-left p-2">Цена</th>
           <th class="text-left p-2">Поставщик</th>
           ${canEdit ? '<th class="text-left p-2">Движение</th>' : ''}
@@ -28738,7 +28901,8 @@ function renderSupplies() {
             const isOut = (s.qty || 0) <= 0;
             return `
             <tr class="border-t ${isOut ? 'bg-red-50' : isLow ? 'bg-amber-50' : ''}">
-              <td class="p-2"><input value="${academyEsc(s.name)}" ${canEdit?'':'readonly'} onchange="updateSupply('${s.id}','name',this.value)"></td>
+              <td class="p-2"><input value="${academyEsc(s.name)}" ${canEdit?'':'readonly'} onchange="updateSupply('${s.id}','name',this.value)"><div class="text-xs text-gray-400">${academyEsc(s.sku||'')}</div></td>
+              <td class="p-2"><select ${canEdit?'':'disabled'} onchange="updateSupply('${s.id}','category',this.value)" style="max-width:150px">${WAREHOUSE_CATEGORIES.map(c=>`<option value="${c.id}" ${s.category===c.id?'selected':''}>${c.label}</option>`).join('')}</select></td>
               <td class="p-2">
                 <select ${canEdit?'':'disabled'} onchange="updateSupply('${s.id}','unit',this.value)" style="max-width:90px">
                   ${SUPPLY_UNITS.map(u => `<option value="${u.id}" ${s.unit===u.id?'selected':''}>${u.label}</option>`).join('')}
@@ -28749,6 +28913,7 @@ function renderSupplies() {
                 ${isOut ? ' 🚨' : isLow ? ' ⚠️' : ''}
               </td>
               <td class="p-2"><input type="number" step="1" value="${s.minQty ?? ''}" ${canEdit?'':'readonly'} onchange="updateSupply('${s.id}','minQty',this.value)" style="width:80px"></td>
+              <td class="p-2"><input type="number" step="1" value="${s.maxQty ?? ''}" ${canEdit?'':'readonly'} onchange="updateSupply('${s.id}','maxQty',this.value)" style="width:80px"></td>
               <td class="p-2"><input type="number" step="0.01" value="${s.costPerUnit ?? ''}" ${canEdit?'':'readonly'} onchange="updateSupply('${s.id}','costPerUnit',this.value)" style="width:90px"></td>
               <td class="p-2">
                 <select ${canEdit?'':'disabled'} onchange="updateSupply('${s.id}','vendorId',this.value||null)" style="max-width:150px">
@@ -28757,9 +28922,10 @@ function renderSupplies() {
                 </select>
               </td>
               ${canEdit ? `<td class="p-2" style="white-space:nowrap">
-                <button class="btn-ghost text-xs" onclick="moveSupply('${s.id}',-1)">−1</button>
-                <button class="btn-ghost text-xs" onclick="moveSupply('${s.id}',1)">+1</button>
-                <button class="btn-ghost text-xs" onclick="moveSupply('${s.id}',10)">+10</button>
+                <button class="btn-ghost text-xs" onclick="openSupplyMovementModal('${s.id}','receipt')">Приход</button>
+                <button class="btn-ghost text-xs" onclick="openSupplyMovementModal('${s.id}','issue')">Списать</button>
+                <button class="btn-ghost text-xs" onclick="openWarehouseQr('supply','${s.id}')">QR</button>
+                ${isLow?`<button class="btn-primary text-xs" onclick="openPurchaseRequestModal('supply','${s.id}')">В закупку</button>`:''}
                 <button class="btn-ghost text-xs text-red-600" onclick="deleteSupply('${s.id}')">✕</button>
               </td>` : ''}
             </tr>`;
@@ -28767,6 +28933,7 @@ function renderSupplies() {
         </tbody>
       </table>
     </div>
+    `}
   </div>`;
 }
 
@@ -28954,7 +29121,7 @@ function renderCatalogBrowser() {
   rolls.forEach(roll => {
     const id = roll.catalogId;
     if (!id) return;
-    stockByCatalog[id] = (stockByCatalog[id] || 0) + (roll.lengthM || 0);
+    stockByCatalog[id] = (stockByCatalog[id] || 0) + (roll.remainingLengthM || 0);
   });
 
   const categories = [...new Set(catalog.map(c => c.category).filter(Boolean))];
@@ -29053,7 +29220,8 @@ function renderCatalogBrowser() {
   return controls + rows;
 }
 
-function openAddRollModal(presetCatId) {
+function openAddRollModal(presetCatId, purchaseRequestId='') {
+  const request=(db.purchaseRequests||[]).find(x=>x.id===purchaseRequestId);
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6" style="max-width: 32rem;">
@@ -29070,7 +29238,7 @@ function openAddRollModal(presetCatId) {
         </div>
         <div>
           <label>Поставщик</label>
-          <select id="ar-vendor">${db.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}</select>
+          <select id="ar-vendor">${db.vendors.map(v => `<option value="${v.id}" ${request?.vendorId===v.id?'selected':''}>${v.name}</option>`).join('')}</select>
         </div>
         <div><label>Lot / партия</label><input id="ar-lot" placeholder="например 240315-A"></div>
         <div><label>Ширина (мм)</label><select id="ar-width">${(db.settings.filmRolls?.widths||[1520,1820,910]).map(w => `<option value="${w}">${(w/1000).toFixed(2)} м</option>`).join('')}</select></div>
@@ -29079,6 +29247,7 @@ function openAddRollModal(presetCatId) {
         <div><label>Дата получения</label><input id="ar-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
         <div><label>Локация</label><input id="ar-loc" value="Warehouse"></div>
       </div>
+      <input id="ar-request" type="hidden" value="${purchaseRequestId}">
       <div class="flex gap-2 mt-4 justify-end">
         <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
         <button class="btn-primary" onclick="confirmAddRoll()">Принять</button>
@@ -29088,7 +29257,7 @@ function openAddRollModal(presetCatId) {
   render();
 }
 function confirmAddRoll() {
-  addInventoryRoll({
+  const roll=addInventoryRoll({
     catalogId: document.getElementById('ar-cat').value,
     vendorId: document.getElementById('ar-vendor').value,
     lotNumber: document.getElementById('ar-lot').value,
@@ -29098,9 +29267,18 @@ function confirmAddRoll() {
     dateReceived: document.getElementById('ar-date').value,
     location: document.getElementById('ar-loc').value,
   });
+  const requestId=document.getElementById('ar-request')?.value||null;
+  const request=(db.purchaseRequests||[]).find(x=>x.id===requestId);
+  const cat=getCatalogItem(roll.catalogId);
+  recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(cat),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,responsibleId:request?.responsibleId||null,reason:request?`Приход по ${request.number}`:'Приход рулона'});
+  if(request){request.status='received';request.updatedAt=new Date().toISOString();}
+  save();
   closeModal();
   render();
 }
+
+function openFilmIssueModal(id){const r=db.inventory.find(x=>x.id===id);if(!r)return;const cat=getCatalogItem(r.catalogId);state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:34rem"><h3 class="font-semibold text-lg">Списание плёнки</h3><p class="text-sm text-gray-500 mb-4">${academyEsc(catalogLabel(cat))} · Lot ${academyEsc(r.lotNumber||'—')} · есть ${Number(r.remainingLengthM||0).toFixed(2)} м</p><div class="grid grid-cols-2 gap-3"><div><label>Длина, м</label><input id="fi-qty" type="number" min="0.01" step="0.01"></div><div><label>Проект / заказ</label><select id="fi-order"><option value="">Без проекта</option>${warehouseOrders().map(o=>`<option value="${o.id}">${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div><div class="col-span-2"><label>Причина</label><input id="fi-reason" placeholder="Образец, брак, ручное списание..."></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveFilmIssue('${id}')">Списать</button></div></div></div>`;render();}
+function saveFilmIssue(id){const r=db.inventory.find(x=>x.id===id);if(!r)return;const qty=parseFloat(document.getElementById('fi-qty')?.value||0),orderId=document.getElementById('fi-order')?.value||null,reason=document.getElementById('fi-reason')?.value.trim()||'';if(qty<=0)return alert('Введите длину.');if(qty>Number(r.remainingLengthM||0))return alert(`Недостаточно плёнки. Есть ${Number(r.remainingLengthM||0).toFixed(2)} м.`);if(!orderId&&!reason)return alert('Выберите проект или укажите причину.');r.remainingLengthM=Math.round((Number(r.remainingLengthM||0)-qty)*100)/100;r._consumed=r._consumed||[];r._consumed.push({orderId,lengthM:qty,at:new Date().toISOString(),manual:true});recordInventoryMovement({kind:'film',itemId:r.id,itemName:catalogLabel(getCatalogItem(r.catalogId)),direction:'issue',qty,unit:'м',orderId,reason});save();closeModal();render();}
 
 // ---------- CASH DASHBOARD (extended owner panel) ----------
 function buildCashDashboard() {
