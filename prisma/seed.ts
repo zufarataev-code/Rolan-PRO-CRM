@@ -561,9 +561,9 @@ async function seedServiceReferences() {
     });
   }
 
-  // Реальная линейка RolanPRO. MAGNITRONIC PRIME — основная плёнка,
-  // цифра в артикуле = заявленное светопропускание.
-  // Замеры прибором LS160A, август 2026.
+  // Реальная линейка RolanPRO. MAGNITRONIC PRIME SP — основная плёнка.
+  // Внутренние коды MP05…MP70 сохранены, чтобы не сломать старые заказы;
+  // клиентское название модели — SP-5%…SP-70%. Замеры прибором LS160A, 2026.
   //
   // Коды остекления: single_tempered, single_annealed, dual_pane,
   // low_e, skylight, panoramic. Стороны света: south, west, north, east.
@@ -572,27 +572,27 @@ async function seedServiceReferences() {
     // model_ru, model_en, thickness, unit, sort, vlt, uv, ir, tser,
     // allowed_glass, restricted_orientations, requires_review, note
     ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
-     "MP05", "MP05", "MP05", null, "sqft", 1, "5.70", "100.00", "95.60", "93.30",
+     "MP05", "SP-5%", "SP-5%", null, "sqft", 1, "5.70", "100.00", "95.60", "93.30",
      ["single_tempered"], ["south", "west"], false,
      "Максимальное затемнение. Только закалённое одинарное стекло."],
     ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
-     "MP15", "MP15", "MP15", null, "sqft", 2, "14.00", "99.90", "97.40", "88.50",
+     "MP15", "SP-15%", "SP-15%", null, "sqft", 2, "14.00", "99.90", "97.40", "88.50",
      ["single_tempered", "single_annealed"], ["south", "west"], false,
      "Тёмная. На стеклопакет не ставить."],
     ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
-     "MP20", "MP20", "MP20", null, "sqft", 3, "23.50", "99.90", "98.30", "83.20",
+     "MP20", "SP-20%", "SP-20%", null, "sqft", 3, "23.50", "99.90", "98.30", "83.20",
      ["single_tempered", "single_annealed", "dual_pane", "panoramic"], ["south", "west"], false,
      "На стеклопакет и панораму только север и восток."],
     ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
-     "MP35", "MP35", "MP35", null, "sqft", 4, "35.50", "99.80", "98.50", "77.10",
+     "MP35", "SP-35%", "SP-35%", null, "sqft", 4, "35.50", "99.80", "98.50", "77.10",
      ["single_tempered", "single_annealed", "dual_pane", "panoramic"], [], false,
      "Универсальный выбор для стеклопакета и панорамы."],
     ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
-     "MP50", "MP50", "MP50", null, "sqft", 5, "58.10", "99.60", "99.20", "68.20",
+     "MP50", "SP-50%", "SP-50%", null, "sqft", 5, "58.10", "99.60", "99.20", "68.20",
      ["single_tempered", "single_annealed", "dual_pane", "low_e", "skylight", "panoramic"], [], false,
      "Безопасен для Low-E и skylight. Для Low-E зафиксировать поверхность покрытия."],
     ["SOLAR", "Солнцезащитная", "Solar Film", "MAGNITRONIC", "Magnitronic Prime", "Magnitronic Prime",
-     "MP70", "MP70", "MP70", null, "sqft", 6, "68.00", "99.20", "99.40", "63.60",
+     "MP70", "SP-70%", "SP-70%", null, "sqft", 6, "68.00", "99.20", "99.40", "63.60",
      ["single_tempered", "single_annealed", "dual_pane", "low_e", "skylight", "panoramic"], [], false,
      "Максимально прозрачная. Подходит везде, включая skylight."],
 

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
+const seed = readFileSync('prisma/seed.ts', 'utf8');
 
 test('warehouse separates stock, procurement, suppliers and movement journal', () => {
   assert.match(html, /Склад и снабжение/);
@@ -41,4 +42,16 @@ test('film category navigation reuses existing catalog and inventory records', (
   assert.match(html, /function filmWarehouseRolls\(catalogId\)[\s\S]*?db\.inventory/);
   assert.match(html, /function renderFilmCategoryModels\(category\)[\s\S]*?db\.settings\.catalog/);
   assert.match(html, /state\.inventoryFilmCategory=film\?\.category\|\|null;state\.inventoryFilmModel=roll\.catalogId\|\|null/);
+});
+
+test('Magnitronic Prime SP series is seeded with verified meter readings', () => {
+  for (const model of ['SP-5%', 'SP-15%', 'SP-20%', 'SP-35%', 'SP-50%', 'SP-70%']) {
+    assert.match(html, new RegExp(model.replace('%', '%')));
+    assert.match(seed, new RegExp(model.replace('%', '%')));
+  }
+  assert.match(html, /'SP05': \{ vlt: 5\.7,\s+tser: 93\.3, uv: 100\.0, ir: 95\.6 \}/);
+  assert.match(html, /'SP70': \{ vlt: 68\.0, tser: 63\.6, uv: 99\.2,\s+ir: 99\.4 \}/);
+  assert.match(html, /ensureMagnitronicPrimeSpSeries\(s\.catalog\);/);
+  assert.match(html, /retailPerSqft: null/);
+  assert.match(html, /costPerSqft: null/);
 });
