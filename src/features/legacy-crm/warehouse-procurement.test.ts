@@ -14,9 +14,19 @@ test('warehouse separates stock, procurement, suppliers and movement journal', (
 
 test('purchase requests require an assignee and can link to a project', () => {
   assert.match(html, /Назначьте ответственного за закупку/);
-  assert.match(html, /orderId:document\.getElementById\('pr-order'\)/);
+  assert.match(html, /const orderId=document\.getElementById\('pr-order'\)/);
   assert.match(html, /responsibleId/);
   assert.match(html, /purchaseRequestId/);
+});
+
+test('manager can create a project purchase request from a film shortage', () => {
+  assert.match(html, /function openProjectFilmPurchaseRequest\(orderId, catalogId\)/);
+  assert.match(html, /Создать заявку на закупку/);
+  assert.match(html, /projectFilmShortageSnapshot\(orderId, catalogId\)/);
+  assert.match(html, /activeProjectFilmPurchaseRequest\(orderId,itemId\)/);
+  assert.match(html, /order\.purchaseRequestIds=Array\.from\(new Set/);
+  assert.match(html, /key:'purchase_requested'/);
+  assert.match(html, /Allocate the widest cuts first and consume each real roll only once/);
 });
 
 test('warehouse movements reject negative stock and support QR labels', () => {

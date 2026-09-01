@@ -7853,12 +7853,28 @@ function filmPlanInventoryStatus(catalogId, usage) {
     const width = filmCutCanonicalRollWidthMm(r.widthMm);
     byWidth[width] = (byWidth[width] || 0) + (Number(r.remainingLengthM) || 0);
   });
-  const shortages = Object.entries(usage?.widths || {}).map(([width, need]) => {
-    const w = Number(width);
-    const available = rolls
-      .filter(r => filmCutRollFits(r.widthMm, w))
-      .reduce((s, r) => s + (Number(r.remainingLengthM) || 0), 0);
-    return { width: w, need, available, shortage: Math.max(0, need - available) };
+  // Allocate the widest cuts first and consume each real roll only once.
+  // Otherwise one 72" roll could be counted as available for both 72" and 60" needs.
+  const remainingByRoll = rolls.map(r => ({
+    roll: r,
+    remainingM: Number(r.remainingLengthM) || 0,
+  }));
+  const requirements = Object.entries(usage?.widths || {})
+    .map(([width, need]) => ({ width: Number(width), need: Number(need) || 0 }))
+    .sort((a, b) => b.width - a.width);
+  const shortages = requirements.map(req => {
+    const fitting = remainingByRoll
+      .filter(x => x.remainingM > 0.001 && filmCutRollFits(x.roll.widthMm, req.width))
+      .sort((a, b) => filmCutCanonicalRollWidthMm(a.roll.widthMm) - filmCutCanonicalRollWidthMm(b.roll.widthMm));
+    const available = fitting.reduce((sum, x) => sum + x.remainingM, 0);
+    let outstanding = req.need;
+    fitting.forEach(x => {
+      if (outstanding <= 0) return;
+      const take = Math.min(outstanding, x.remainingM);
+      x.remainingM -= take;
+      outstanding -= take;
+    });
+    return { width: req.width, need: req.need, available, shortage: Math.max(0, outstanding) };
   }).filter(x => x.shortage > 0.05);
   return { rolls, totalAvailable, byWidth, shortages, enough: shortages.length === 0 && totalAvailable > 0 };
 }
@@ -20191,6 +20207,7 @@ function renderManagerMaterialPlan(o) {
       ${rows.map(([catalogId, u]) => {
         const cat = catalogId === '__no_catalog' ? null : getCatalogItem(catalogId);
         const status = cat ? filmPlanInventoryStatus(catalogId, u) : null;
+        const purchase = cat ? activeProjectFilmPurchaseRequest(o.id, catalogId) : null;
         const widths = Object.entries(u.widths || {}).map(([w, m]) => `${filmCutInLabel(Number(w), 0)} × ${m.toFixed(2)}м`).join(', ');
         const stock = status ? `${status.totalAvailable.toFixed(2)}м / ${status.rolls.length} рул.` : '—';
         const badge = !cat
@@ -20211,7 +20228,13 @@ function renderManagerMaterialPlan(o) {
             <div><div class="text-xs text-gray-500">Расход рулона</div><b>${u.consumedSqft.toFixed(2)} sqft</b></div>
             <div><div class="text-xs text-gray-500">Длина</div><b>${u.lengthM.toFixed(2)} м</b></div>
             <div><div class="text-xs text-gray-500">Склад</div><b>${stock}</b></div>
-            <div>${badge}</div>
+            <div>
+              ${badge}
+              ${cat && !status.enough ? (purchase
+                ? `<button class="btn-ghost text-xs mt-2" onclick="openProjectPurchaseRequests()">🧾 ${academyEsc(purchase.number)} создана</button>`
+                : `<button class="btn-primary text-xs mt-2" onclick="openProjectFilmPurchaseRequest('${o.id}','${catalogId}')">Создать заявку на закупку</button>`
+              ) : ''}
+            </div>
           </div>`;
       }).join('')}
       ${plan.unfit?.length ? `<div class="mt-2 p-2 rounded-lg bg-red-50 text-xs text-red-700 font-semibold">Есть ${plan.unfit.length} лист(а), которые не помещаются на стандартный рулон 60"/72". Проверьте размер панели, деление или наличие спец-рулона.</div>` : ''}
@@ -28687,6 +28710,44 @@ function purchaseRequestNumber() {
   const n = (db.purchaseRequests || []).filter(x => String(x.number||'').startsWith(`PUR-${year}-`)).length + 1;
   return `PUR-${year}-${String(n).padStart(4,'0')}`;
 }
+function activeProjectFilmPurchaseRequest(orderId, catalogId) {
+  return (db.purchaseRequests || []).find(p => p.kind === 'film'
+    && p.itemId === catalogId
+    && p.orderId === orderId
+    && !['received','cancelled'].includes(p.status));
+}
+function projectFilmShortageSnapshot(orderId, catalogId) {
+  const order = getOrder(orderId);
+  if (!order) return null;
+  const usage = filmPlanUsageByCatalog(order);
+  const material = usage[catalogId];
+  if (!material) return null;
+  const status = filmPlanInventoryStatus(catalogId, material);
+  const shortages = status.shortages || [];
+  return {
+    qty: shortages.reduce((sum, row) => sum + Number(row.shortage || 0), 0),
+    requirements: shortages.map(row => ({
+      widthMm: Number(row.width) || 0,
+      requiredM: Number(row.need) || 0,
+      availableM: Number(row.available) || 0,
+      shortageM: Number(row.shortage) || 0,
+    })),
+    note: shortages.map(row => `${filmCutInLabel(Number(row.width), 0)}: нужно ${Number(row.need).toFixed(2)}м, есть ${Number(row.available).toFixed(2)}м, заказать ${Number(row.shortage).toFixed(2)}м`).join('; '),
+  };
+}
+function openProjectFilmPurchaseRequest(orderId, catalogId) {
+  const existing = activeProjectFilmPurchaseRequest(orderId, catalogId);
+  if (existing) return alert(`Для этой плёнки уже создана заявка ${existing.number}.`);
+  const snapshot = projectFilmShortageSnapshot(orderId, catalogId);
+  if (!snapshot || snapshot.qty <= 0) return alert('Недостаток плёнки не найден. Обновите размеры проекта и проверьте склад.');
+  openPurchaseRequestModal('film', catalogId, orderId, snapshot.qty, snapshot.note, snapshot.requirements);
+}
+function openProjectPurchaseRequests() {
+  state.modal = '';
+  state.view = 'inventory';
+  state.inventoryTab = 'purchases';
+  render();
+}
 function renderInventory() {
   const tab = state.inventoryTab || 'overview';
   const needs = warehouseNeedItems();
@@ -28741,27 +28802,39 @@ function renderPurchaseRequests() {
   const rows=[...(db.purchaseRequests||[])].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
   return `<div class="card"><div class="flex items-center justify-between mb-3"><div><h3 class="font-semibold">Заявки и заказы на закупку</h3><p class="text-sm text-gray-500">Материал привязан к проекту, а выполнение — к ответственному сотруднику.</p></div><button class="btn-primary text-sm" onclick="openPurchaseRequestModal()">+ Новая заявка</button></div>${renderPurchaseTable(rows)}</div>`;
 }
-function openPurchaseRequestModal(kind='', itemId='', presetOrderId='') {
+function openPurchaseRequestModal(kind='', itemId='', presetOrderId='', presetQty='', presetNote='', requirements=[]) {
   const needs=warehouseNeedItems(); const match=needs.find(x=>x.kind===kind&&x.id===itemId);
   const filmOptions=(db.settings.catalog||[]).map(c=>`<option value="film:${c.id}" ${kind==='film'&&itemId===c.id?'selected':''}>Плёнка · ${academyEsc(c.brand)} ${academyEsc(c.model)}</option>`).join('');
   const supplyOptions=ensureSupplies().map(s=>`<option value="supply:${s.id}" ${kind==='supply'&&itemId===s.id?'selected':''}>Расходник · ${academyEsc(s.name)}</option>`).join('');
-  state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:42rem"><h3 class="font-semibold text-lg">Новая заявка на закупку</h3><p class="text-sm text-gray-500 mb-4">Укажите для какого проекта нужен материал и кто отвечает за закупку.</p><div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+  const qtyValue = Number(presetQty) > 0 ? Number(presetQty).toFixed(2) : (match ? Math.max(match.target-match.qty,1) : 1);
+  const cancelAction = presetOrderId ? `refreshManagerMeasureModal('${presetOrderId}')` : 'closeModal()';
+  state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)${cancelAction}"><div class="modal-content workspace-modal p-6" style="max-width:42rem"><h3 class="font-semibold text-lg">Новая заявка на закупку</h3><p class="text-sm text-gray-500 mb-4">Укажите для какого проекта нужен материал и кто отвечает за закупку.</p><input id="pr-return-order" type="hidden" value="${academyEsc(presetOrderId)}"><input id="pr-requirements" type="hidden" value="${academyEsc(JSON.stringify(requirements || []))}"><div class="grid grid-cols-1 md:grid-cols-2 gap-3">
   <div class="md:col-span-2"><label>Материал</label><select id="pr-item">${filmOptions}${supplyOptions}</select></div>
-  <div><label>Количество</label><input id="pr-qty" type="number" min="0.01" step="0.01" value="${match?Math.max(match.target-match.qty,1):1}"></div>
+  <div><label>Количество</label><input id="pr-qty" type="number" min="0.01" step="0.01" value="${qtyValue}"></div>
   <div><label>Нужно к дате</label><input id="pr-date" type="date"></div>
   <div><label>Проект / заказ</label><select id="pr-order"><option value="">Общий запас склада</option>${warehouseOrders().map(o=>`<option value="${o.id}" ${presetOrderId===o.id?'selected':''}>${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div>
   <div><label>Ответственный</label><select id="pr-owner"><option value="">Выберите</option>${db.users.filter(u=>u.active!==false).map(u=>`<option value="${u.id}">${academyEsc(u.name)} · ${academyEsc(u.role||'сотрудник')}</option>`).join('')}</select></div>
   <div><label>Поставщик</label><select id="pr-vendor"><option value="">Не выбран</option>${db.vendors.filter(v=>v.active!==false).map(v=>`<option value="${v.id}" ${match?.vendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
-  <div><label>Комментарий</label><input id="pr-note" placeholder="Срочность, размер, цвет..."></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="savePurchaseRequest()">Создать заявку</button></div></div></div>`;render();
+  <div class="md:col-span-2"><label>Комментарий</label><textarea id="pr-note" rows="3" placeholder="Срочность, размер, цвет...">${academyEsc(presetNote)}</textarea></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="${cancelAction}">Отмена</button><button class="btn-primary" onclick="savePurchaseRequest()">Создать заявку</button></div></div></div>`;render();
 }
 function savePurchaseRequest() {
   const [kind,itemId]=(document.getElementById('pr-item')?.value||'').split(':');
   const item=kind==='film'?getCatalogItem(itemId):ensureSupplies().find(x=>x.id===itemId);
   const qty=parseFloat(document.getElementById('pr-qty')?.value||0); const responsibleId=document.getElementById('pr-owner')?.value||null;
+  const orderId=document.getElementById('pr-order')?.value||null;
+  const returnOrderId=document.getElementById('pr-return-order')?.value||'';
   if(!item||qty<=0) return alert('Выберите материал и количество.');
   if(!responsibleId) return alert('Назначьте ответственного за закупку.');
-  db.purchaseRequests.push({id:'pr_'+uid(),number:purchaseRequestNumber(),kind,itemId,itemNameSnapshot:kind==='film'?`${item.brand} ${item.model}`:item.name,qty,unit:kind==='film'?'м':supplyUnitLabel(item.unit),orderId:document.getElementById('pr-order')?.value||null,vendorId:document.getElementById('pr-vendor')?.value||null,responsibleId,neededBy:document.getElementById('pr-date')?.value||null,note:document.getElementById('pr-note')?.value||'',status:'requested',requestedBy:state.currentUserId,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
-  save();closeModal();state.inventoryTab='purchases';render();
+  const duplicate=kind==='film'&&orderId?activeProjectFilmPurchaseRequest(orderId,itemId):null;
+  if(duplicate) return alert(`Для этой плёнки уже создана заявка ${duplicate.number}.`);
+  let requirements=[];try{requirements=JSON.parse(document.getElementById('pr-requirements')?.value||'[]')}catch(e){}
+  const request={id:'pr_'+uid(),number:purchaseRequestNumber(),kind,itemId,itemNameSnapshot:kind==='film'?`${item.brand} ${item.model}`:item.name,qty,unit:kind==='film'?'м':supplyUnitLabel(item.unit),orderId,vendorId:document.getElementById('pr-vendor')?.value||null,responsibleId,neededBy:document.getElementById('pr-date')?.value||null,note:document.getElementById('pr-note')?.value||'',requirements,status:'requested',requestedBy:state.currentUserId,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  db.purchaseRequests.push(request);
+  const order=orderId?getOrder(orderId):null;
+  if(order){order.purchaseRequestIds=Array.from(new Set([...(order.purchaseRequestIds||[]),request.id]));order.timeline=order.timeline||[];order.timeline.push({at:new Date().toISOString(),key:'purchase_requested',by:state.currentUserId,note:`Закупка ${request.number}: ${request.itemNameSnapshot}, ${request.qty} ${request.unit}`});}
+  save();
+  if(returnOrderId){alert(`Заявка ${request.number} создана и назначена ответственному.`);return refreshManagerMeasureModal(returnOrderId);}
+  closeModal();state.inventoryTab='purchases';render();
 }
 function setPurchaseRequestStatus(id,status) { const p=db.purchaseRequests.find(x=>x.id===id);if(!p)return;p.status=status;p.updatedAt=new Date().toISOString();save();render(); }
 function receivePurchaseRequest(id) {
