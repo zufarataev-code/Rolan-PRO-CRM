@@ -162,6 +162,22 @@ export async function updateTeamMember(
   const legacyUserId = input.legacyUserId?.trim() || null;
   const shouldLinkLegacyUser = Boolean(legacyUserId && !user.legacy_user_ids.includes(legacyUserId));
 
+  if (shouldLinkLegacyUser && legacyUserId) {
+    const alreadyLinked = await prisma.user.findFirst({
+      where: {
+        user_id: { not: userId },
+        legacy_user_ids: { has: legacyUserId },
+      },
+      select: { user_id: true, email: true },
+    });
+
+    if (alreadyLinked) {
+      throw new Error(
+        `Эта legacy-карточка уже привязана к другому серверному аккаунту (${alreadyLinked.email}). Сначала проверьте дубликат сотрудника.`,
+      );
+    }
+  }
+
   // Последнего владельца нельзя ни отключить, ни лишить роли:
   // иначе в системе не останется никого, кто может заводить людей.
   const isOwner = user.user_accesses.some((access) => access.role.code === ROLE_CODES.OWNER);
