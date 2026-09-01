@@ -13915,6 +13915,14 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'payment_received') return { icon: '⭐', title: 'Закрыть и запросить отзыв', sub: 'Финальный шаг: заказ закрыт, клиенту отправляем отзыв.', variant: 'success', onclick: `changeStatus('${o.id}','completed'); askForReview('${o.id}');` };
   return { icon: '📌', title: 'Заказ под контролем', sub: 'Проверьте календарь, документы и связь с клиентом.', variant: 'soft', onclick: `openOrder('${o.id}')` };
 }
+function installerOrderPrimaryAction(o) {
+  if (o.status === 'installation_scheduled') return { icon: '✅', title: 'Принять задачу', sub: 'Подтвердите, что увидели назначенный монтаж.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_accepted')` };
+  if (o.status === 'installation_accepted') return { icon: '🚗', title: 'Выехал на объект', sub: 'Зафиксировать начало поездки.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_en_route')` };
+  if (o.status === 'installation_en_route') return { icon: '▶', title: 'Начать монтаж', sub: 'Перед началом заполните приёмку и сделайте фото.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_in_progress')` };
+  if (o.status === 'installation_in_progress') return { icon: '✓', title: 'Завершить монтаж', sub: 'Добавьте фото после работы и подтвердите сдачу.', variant: 'success', onclick: `changeStatus('${o.id}','installation_done')` };
+  if (o.status === 'installation_done') return { icon: '📝', title: 'Акт подписан', sub: 'Отметить после подписи клиента.', variant: 'primary', onclick: `changeStatus('${o.id}','act_signed')` };
+  return { icon: '📋', title: 'Открыть заказ-наряд', sub: 'Рабочая задача, размеры, материалы и чек-лист.', variant: 'soft', onclick: `openWorkOrder('${o.id}')` };
+}
 function renderOrderActionCard(a) {
   if (!a) return '';
   const cls = `order-action-card ${a.variant || 'soft'} ${a.disabled ? 'disabled' : ''}`;
@@ -17792,6 +17800,8 @@ async function buildInstallerRoute() {
 }
 function renderInstallerPayHistory() {
   const u = currentUser();
+  const payConfig = u.payConfig || {};
+  const categoryRates = payConfig.ratesByCategory || {};
   const myOrders = db.orders.filter(o => (o.installerIds||[]).includes(u.id))
     .sort((a,b) => (b.installationDoneAt || b.installationAt || b.createdAt).localeCompare(a.installationDoneAt || a.installationAt || a.createdAt));
   const completed = myOrders.filter(o => o.installationDoneAt);
@@ -17826,6 +17836,25 @@ function renderInstallerPayHistory() {
       <div class="text-sm text-blue-700">🎯 Этот месяц</div>
       <div class="text-3xl font-bold text-blue-700">${months[0] ? fmtMoney(months[0][1].total) : '—'}</div>
       <div class="text-xs text-gray-500 mt-1">${months[0] ? months[0][1].count + ' заказ' + (months[0][1].count===1?'':'ов') : '0'}</div>
+    </div>
+  </div>
+
+  <div class="card mb-6">
+    <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+      <div>
+        <h3 class="font-semibold">💵 Мои расценки</h3>
+        <p class="text-xs text-gray-500 mt-1">Только ваши рабочие ставки. Стоимость заказа для клиента и маржа компании скрыты.</p>
+      </div>
+      <div class="text-right"><div class="text-xs text-gray-500">Базовая ставка</div><div class="text-2xl font-bold text-blue-700">${fmtMoney(payConfig.ratePerSqft || 0.30)} / sqft</div></div>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+      ${[
+        ['solar', 'Солнцезащитная'],
+        ['protective', 'Защитная'],
+        ['smart', 'Smart'],
+        ['decorative', 'Декоративная'],
+        ['privacy', 'Privacy'],
+      ].map(([key, label]) => `<div class="p-3 rounded-lg bg-slate-50 border"><div class="text-xs text-gray-500">${label}</div><div class="font-bold mt-1">${fmtMoney(categoryRates[key] || payConfig.ratePerSqft || 0.30)} / sqft</div></div>`).join('')}
     </div>
   </div>
 
@@ -18033,7 +18062,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
         <div class="order-passport-side">
           <div class="order-passport-side-title">Быстрые действия по заказу</div>
           <div class="order-passport-action-grid">
-            ${orderPassportActions(o, { measureSub, measureAction, hasMeasurements, proposalDisabled, address, routeHref })}
+            ${orderPassportActions(o, { measureSub, measureAction, hasMeasurements, proposalDisabled, address, routeHref, isInstaller: u?.role === 'installer' })}
           </div>
           ${canSeeMoney ? `
             <div class="order-passport-money">
@@ -18061,6 +18090,20 @@ function renderOrderPassport(o, c, u, opts = {}) {
  * а не всегда одно и то же: пока нет замера — замер, после КП — монтаж.
  */
 function orderPassportActions(o, ctx) {
+  if (ctx.isInstaller) {
+    return [
+      { icon: '📋', title: 'Заказ-наряд',
+        sub: ctx.hasMeasurements ? 'задача, размеры, адрес и фото' : 'ожидает замера',
+        onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements, primary: true },
+      { icon: '🧰', title: 'Технический лист',
+        sub: ctx.hasMeasurements ? 'схема и материалы без цен' : 'ожидает замера',
+        onclick: `openTechnicalSheet('${o.id}')`, disabled: !ctx.hasMeasurements },
+      { icon: '🧭', title: 'Маршрут',
+        sub: ctx.address ? 'Google Maps' : 'адрес не указан',
+        href: ctx.routeHref, disabled: !ctx.address },
+    ].map(a => renderOrderPassportAction(a)).join('');
+  }
+
   const done = {
     measure: ctx.hasMeasurements,
     proposal: ['proposal_sent','proposal_accepted','installation_scheduled','installation_accepted',
@@ -18250,6 +18293,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const canManage = !!opts.canManage;
   const canMeasure = !!opts.canMeasure;
   const canSeeMoney = !!opts.canSeeMoney;
+  const isInstaller = u?.role === 'installer';
   const visibleTimeline = opts.visibleTimeline || [];
   const projectAddress = orderAddress(o, c);
   const rooms = o.measurements?.rooms || [];
@@ -18257,7 +18301,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const events = orderScheduledEvents(o);
   const pendingRequests = pendingClientRequests(o);
   const hasMeasurements = windows.length > 0;
-  const primary = orderPrimaryNextAction(o);
+  const primary = isInstaller ? installerOrderPrimaryAction(o) : orderPrimaryNextAction(o);
   const service = ORDER_PRIMARY_SERVICES.find(s => s.id === o.serviceType);
   const plan = calcFilmPlan(o);
   const installers = (o.installerIds || []).map(id => getUser(id)?.name).filter(Boolean);
@@ -18306,15 +18350,28 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     </div>
     ${filmRows.length ? `<div class="mt-3">${renderOrderCleanRows(filmRows.slice(0, 6))}</div>` : `<div class="order-clean-note mt-3">Пленка еще не выбрана по окнам. Откройте замеры и назначьте материал из каталога.</div>`}
     <div class="order-clean-actions mt-3">
+      ${isInstaller ? `
+      ${renderOrderActionCard({ icon: '🧰', title: 'Открыть технический лист', sub: hasMeasurements ? 'схема, размеры и материалы' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasMeasurements, variant: 'primary' })}
+      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'задача, адрес, размеры и фото' : 'ожидает замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.pieces.length} деталей` : 'после размеров', onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
+      ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать наряд', sub: 'рабочий лист и подписи', onclick: `printWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ` : `
       ${renderOrderActionCard({ icon: '📐', title: measureActionTitle, sub: hasMeasurements ? `${rooms.length} комн. · ${windows.length} окон` : 'добавить комнаты и окна', onclick: measureAction, variant: 'primary' })}
       ${renderOrderActionCard({ icon: '🧭', title: 'Полевой модуль v2.5', sub: 'планшет: комнаты, окна, компас, фото, JSON', onclick: `openMeasurerV25ForOrder('${o.id}')`, variant: canMeasure ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '⬆️', title: 'Импорт JSON v2.5', sub: 'забрать выездной замер в CRM', onclick: `openMeasurerV25Import('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
       ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.consumedSqft.toFixed(1)} sqft расход` : 'после размеров', onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
       ${renderOrderActionCard({ icon: '🖨', title: 'Печать наряда', sub: 'рабочий лист', onclick: `printWorkOrder('${o.id}')` })}
+      `}
     </div>`;
 
-  const docsBody = `
+  const docsBody = isInstaller ? `
+    <div class="order-clean-note">Коммерческие суммы, КП и оплаты скрыты. Здесь находятся только рабочие документы бригады.</div>
+    <div class="order-clean-actions mt-3">
+      ${renderOrderActionCard({ icon: '🧰', title: 'Технический лист', sub: hasMeasurements ? 'готов к работе' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasMeasurements, variant: 'primary' })}
+      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд / акт', sub: 'чек-лист и подписи клиента и бригадира', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ${renderOrderActionCard({ icon: '✅', title: 'Акт подписан', sub: o.status === 'act_signed' ? 'уже отмечен' : 'отметить после сдачи объекта', onclick: `changeStatus('${o.id}','act_signed')`, disabled: o.status !== 'installation_done' })}
+    </div>` : `
     <div class="order-clean-mini-grid">
       ${renderOrderCleanMini('КП', proposal ? 'создано' : 'нет')}
       ${renderOrderCleanMini('Оплата', proposal?.paymentClaim?.status === 'pending_review' ? 'проверить Chase' : (proposalStripeUrl ? (proposal?.stripe?.paid || o.stripe?.paid ? 'оплачено' : 'карта готова') : 'Zelle / ACH / карта'))}
@@ -18335,10 +18392,15 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
         <b>${fmtDateTime(ev.at)}</b>
       </div>`).join('')}</div>` : `<div class="order-clean-note">Пока нет запланированных событий. Следующий шаг назначается из карточки ниже.</div>`}
     <div class="order-clean-actions mt-3">
+      ${isInstaller ? `
+      ${renderOrderActionCard(installerOrderPrimaryAction(o))}
+      ${projectAddress ? renderOrderActionCard({ icon: '🧭', title: 'Открыть маршрут', sub: projectAddress, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(projectAddress)}` }) : ''}
+      ` : `
       ${renderOrderActionCard({ icon: '📞', title: 'Консультация', sub: o.consultationAt ? fmtDateTime(o.consultationAt) : 'назначить', onclick: `scheduleConsultationPrompt('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '📐', title: 'Замер', sub: o.measurementAt ? fmtDateTime(o.measurementAt) : 'назначить', onclick: `scheduleMeasurementPrompt('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '🔧', title: 'Монтаж', sub: o.installationAt ? fmtDateTime(o.installationAt) : 'назначить', onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '👷', title: 'Команда', sub: installers.length ? installers.join(', ') : 'назначить', onclick: `openAssignTeam('${o.id}')`, disabled: !canManage })}
+      `}
     </div>`;
 
   const financeBody = canSeeMoney ? `
@@ -18383,8 +18445,8 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
 
   return `
     <div class="order-clean-topbar">
-      <button class="btn-ghost" onclick="state.view='orders'; location.hash=''; render();">← ${T('orders')}</button>
-      <button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();" title="Открыть старую полную форму, если нужны все поля сразу">Расширенный режим</button>
+      <button class="btn-ghost" onclick="state.view='${isInstaller ? 'installations' : 'orders'}'; location.hash=''; render();">← ${isInstaller ? 'Мои задачи' : T('orders')}</button>
+      ${isInstaller ? '' : `<button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();" title="Открыть старую полную форму, если нужны все поля сразу">Расширенный режим</button>`}
     </div>
     <div class="order-clean-shell">
       ${renderOrderPassport(o, c, u, { canManage, canMeasure, canSeeMoney })}
@@ -18402,10 +18464,10 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       <div class="order-clean-card-grid">
         ${pendingRequests.length ? renderOrderCleanCard({ icon: '⚠️', title: 'Запрос клиента', summary: 'перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), open: true }) : ''}
         ${renderOrderCleanCard({ icon: '📐', title: 'Замеры и материалы', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : 'размеры еще не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : 'нужно', body: measurementBody, open: !hasMeasurements })}
-        ${renderOrderCleanCard({ icon: '📄', title: 'КП, техлист, оплата', summary: proposal ? 'КП создано' : 'единый стандарт после замера', badge: proposal?.paymentClaim?.status === 'pending_review' ? 'Проверить оплату' : 'КП', body: docsBody })}
-        ${renderOrderCleanCard({ icon: '📅', title: 'Календарь и команда', summary: events.length ? `${events.length} события` : 'события не назначены', badge: installers.length ? `${installers.length}` : 'команда', body: scheduleBody })}
-        ${renderOrderCleanCard({ icon: '💵', title: 'Экономика', summary: canSeeMoney ? `долг ${fmtMoney(orderDebt(o))}` : 'скрыто по роли', badge: canSeeMoney ? `${(orderMarginPct(o)*100).toFixed(0)}%` : 'скрыто', body: financeBody })}
-        ${renderOrderCleanCard({ icon: '🧭', title: 'Маршрут реализации', summary: service?.title || orderServiceTypeLabel(o.serviceType), badge: service?.short || 'этапы', body: routeBody })}
+        ${renderOrderCleanCard({ icon: isInstaller ? '🧰' : '📄', title: isInstaller ? 'Рабочие документы и акт' : 'КП, техлист, оплата', summary: isInstaller ? 'без коммерческих сумм' : (proposal ? 'КП создано' : 'единый стандарт после замера'), badge: isInstaller ? 'документы' : (proposal?.paymentClaim?.status === 'pending_review' ? 'Проверить оплату' : 'КП'), body: docsBody })}
+        ${renderOrderCleanCard({ icon: '📅', title: isInstaller ? 'Задача и выезд' : 'Календарь и команда', summary: events.length ? `${events.length} события` : 'события не назначены', badge: isInstaller ? T(o.status) : (installers.length ? `${installers.length}` : 'команда'), body: scheduleBody })}
+        ${isInstaller ? '' : renderOrderCleanCard({ icon: '💵', title: 'Экономика', summary: canSeeMoney ? `долг ${fmtMoney(orderDebt(o))}` : 'скрыто по роли', badge: canSeeMoney ? `${(orderMarginPct(o)*100).toFixed(0)}%` : 'скрыто', body: financeBody })}
+        ${isInstaller ? '' : renderOrderCleanCard({ icon: '🧭', title: 'Маршрут реализации', summary: service?.title || orderServiceTypeLabel(o.serviceType), badge: service?.short || 'этапы', body: routeBody })}
         ${renderOrderCleanCard({ icon: '🗂', title: 'Фото и история', summary: `${(o.photos||[]).length} фото · ${(visibleTimeline||[]).length} событий`, badge: 'журнал', body: photosBody })}
       </div>
     </div>`;
@@ -18432,7 +18494,7 @@ function renderOrderDetails(id) {
   const canSeeMoney = orderUserCanSeeMoney(o, u);
   const visibleTimeline = orderTimelineForUser(o, u);
 
-  if (!state.orderClassicMode) {
+  if (u.role === 'installer' || !state.orderClassicMode) {
     return renderOrderCleanDetails(o, c, u, { canManage, canMeasure, canSeeMoney, visibleTimeline });
   }
 

@@ -103,6 +103,15 @@ test("field-role calendar and proposal actions keep project totals hidden", () =
   assert.match(html, /function printProposal\(oid\)[\s\S]*?if \(!orderUserOwns\(o\)\)/);
 });
 
+test("installer order workspace exposes only operational documents and personal pay", () => {
+  assert.match(html, /function installerOrderPrimaryAction\(o\)/);
+  assert.match(html, /isInstaller \? 'Рабочие документы и акт' : 'КП, техлист, оплата'/);
+  assert.match(html, /isInstaller \? '' : renderOrderCleanCard\(\{ icon: '💵', title: 'Экономика'/);
+  assert.match(html, /u\.role === 'installer' \|\| !state\.orderClassicMode/);
+  assert.match(html, /Мои расценки/);
+  assert.match(html, /Стоимость заказа для клиента и маржа компании скрыты/);
+});
+
 test("manager-facing surfaces use the shared visibility helpers", () => {
   assert.match(html, /function renderManagerDashboard\(\)[\s\S]*?const orders = visibleOrdersForUser\(u\);/);
   assert.match(html, /function renderOrders\(\)[\s\S]*?const filtered = visibleOrdersForUser\(u\)/);
