@@ -6576,6 +6576,8 @@ function migrateSchema() {
     };
   }
   if (s.integrations.googleMapsApiKey == null) s.integrations.googleMapsApiKey = '';
+  if (!s.integrations.zadarma) s.integrations.zadarma = { enabled: true, processedCallIds: [] };
+  if (!Array.isArray(s.integrations.zadarma.processedCallIds)) s.integrations.zadarma.processedCallIds = [];
   if (!s.integrations.facebook) {
     s.integrations.facebook = { pageId: '', pageName: '', connected: false };
   }
@@ -11055,7 +11057,7 @@ function phoneAnchor(phone) {
 // startCall: открывает звонилку и сразу показывает мини-форму результата.
 // Итог пишется в db.calls, привязывается к клиенту/заказу; «не дозвонился» → задача «перезвонить».
 function startCall(phone, clientId, orderId) {
-  window.open(callLink(phone), '_blank', 'noopener');
+  startManagedCall(phone);
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-5" style="max-width:420px;width:94vw;">
@@ -16609,7 +16611,7 @@ function coldStartCall(id) {
   const p = coldProspect(id);
   if (!p) return;
   if (p.doNotCall || p.status === 'do_not_call') { alert('Эта компания попросила не звонить. Запрет сохранён в CRM.'); return; }
-  window.open(callLink(p.phone), '_blank', 'noopener');
+  startManagedCall(p.phone);
   state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:560px">
     <h3 class="font-black text-xl">📞 ${academyEsc(p.companyName)}</h3>
     <div class="text-sm text-gray-500 mb-4">${academyEsc(p.phone)}. После звонка обязательно сохраните результат.</div>
@@ -17282,9 +17284,27 @@ function renderSettings() {
       <p class="text-sm text-gray-600 mb-3">Настройки сервисов. Ссылки «позвонить / написать / открыть карту» начинают работать сразу; полноценные API-интеграции подключим следующим шагом.</p>
 
       <div class="space-y-4">
+        <div class="p-4 border ${zadarmaServerStatus?.connected ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div class="font-semibold text-sm mb-1">📞 Zadarma — телефония CRM</div>
+              <p class="text-xs ${zadarmaServerStatus?.connected ? 'text-emerald-800' : 'text-amber-800'}">${zadarmaServerStatus?.connected ? `✅ Подключено. Внутренние номера АТС: ${(zadarmaServerStatus.extensions||[]).map(academyEsc).join(', ') || 'не найдены'}.` : '⏳ Сервер готов к подключению. Нужны ZADARMA_API_KEY и ZADARMA_API_SECRET.'}</p>
+              <p class="text-xs text-gray-500 mt-1">Webhook звонков: <code>${academyEsc(zadarmaServerStatus?.webhookUrl || 'появится после настройки адреса CRM')}</code></p>
+              ${zadarmaServerStatus?.error ? `<p class="text-xs text-red-700 mt-1">${academyEsc(zadarmaServerStatus.error)}</p>` : ''}
+            </div>
+            <button class="btn-ghost text-sm" onclick="refreshZadarmaStatus()">Проверить</button>
+          </div>
+          <div class="mt-3 pt-3 border-t border-current/10">
+            <div class="text-xs font-semibold mb-2">Закрепить внутренний номер за сотрудником</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              ${db.users.filter(u=>u.role==='owner'||u.role==='manager').map(u=>`<label class="flex items-center gap-2 text-sm"><span class="flex-1">${academyEsc(u.name)}</span><select style="width:130px" onchange="setZadarmaExtension('${u.id}',this.value)"><option value="">Не назначен</option>${(zadarmaServerStatus?.extensions||[]).map(ext=>`<option value="${academyEsc(ext)}" ${String(u.zadarmaExtension||'')===String(ext)?'selected':''}>АТС ${academyEsc(ext)}</option>`).join('')}</select></label>`).join('')}
+            </div>
+          </div>
+        </div>
+
         <div class="p-3 border rounded-lg">
-          <div class="font-medium text-sm mb-1">📞 Google Voice (звонилка)</div>
-          <p class="text-xs text-gray-500 mb-2">Укажи свой номер Google Voice — клики по телефонам клиентов будут открывать звонилку Google Voice. Если пусто — используется обычный набор номера телефона.</p>
+          <div class="font-medium text-sm mb-1">📞 Google Voice (запасной вариант)</div>
+          <p class="text-xs text-gray-500 mb-2">Используется, пока Zadarma не подключена или сотруднику не назначен внутренний номер.</p>
           <input id="int-gv" value="${(s.integrations||{}).googleVoiceNumber||''}" placeholder="+1 (818) 555-1234">
         </div>
 
@@ -26800,6 +26820,86 @@ let twilioServerStatus = null;
 let twilioRemoteMessages = [];
 let gmailServerStatus = null;
 let marketingEmailStatus = null;
+let zadarmaServerStatus = null;
+let zadarmaLastSyncAt = null;
+async function zadarmaApi(path, options = {}) {
+  if (ROLANPRO_LOCAL_FILE) throw new Error('Zadarma работает только в публичной CRM');
+  const r = await fetch(`/api/v1/integrations/zadarma${path}`, {
+    credentials:'same-origin', cache:'no-store', ...options,
+    headers:{'Content-Type':'application/json', ...(options.headers||{})},
+  });
+  const payload = await r.json().catch(()=>null);
+  if (!r.ok) throw new Error(payload?.errors?.[0]?.message || `Zadarma server ${r.status}`);
+  return payload?.data;
+}
+async function refreshZadarmaStatus() {
+  try { zadarmaServerStatus = await zadarmaApi('/status'); }
+  catch (e) { zadarmaServerStatus = {connected:false,error:e.message}; }
+  render();
+}
+function setZadarmaExtension(userId, extension) {
+  const user = getUser(userId); if (!user) return;
+  user.zadarmaExtension = String(extension||'').replace(/\D/g,'');
+  save();
+}
+async function startManagedCall(phone) {
+  const user = currentUser();
+  const extension = String(user?.zadarmaExtension || '').replace(/\D/g,'');
+  if (zadarmaServerStatus?.connected && extension) {
+    try {
+      await zadarmaApi('/callback', {method:'POST', body:JSON.stringify({to:phone,extension})});
+      return;
+    } catch (e) {
+      alert('Zadarma не начала звонок: ' + e.message + '. Открою запасной способ набора.');
+    }
+  }
+  window.open(callLink(phone), '_blank', 'noopener');
+}
+function zadarmaPhoneKey(phone) { return String(phone||'').replace(/\D/g,'').slice(-10); }
+async function syncZadarmaCalls() {
+  if (!ROLANPRO_CLOUD || !zadarmaServerStatus?.connected) return;
+  try {
+    const suffix = zadarmaLastSyncAt ? `?since=${encodeURIComponent(zadarmaLastSyncAt)}` : '';
+    const rows = await zadarmaApi('/calls' + suffix);
+    const calls = Array.isArray(rows) ? rows : [];
+    const cfg = db.settings.integrations.zadarma || (db.settings.integrations.zadarma={processedCallIds:[]});
+    const processed = new Set(cfg.processedCallIds || []);
+    let changed = false;
+    calls.slice().reverse().forEach(call => {
+      const externalId = String(call.pbx_call_id || '');
+      if (!externalId || processed.has(externalId) || !call.ended_at) return;
+      const key = zadarmaPhoneKey(call.phone_number);
+      const prospect = db.coldProspects.find(p=>zadarmaPhoneKey(p.phone)===key);
+      const client = db.clients.find(c=>zadarmaPhoneKey(c.phone)===key);
+      const order = client ? db.orders.filter(o=>o.clientId===client.id).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''))[0] : null;
+      const disposition = String(call.disposition||'').toLowerCase();
+      const outcome = disposition === 'answered' ? 'answered' : disposition.includes('busy') ? 'busy' : 'no_answer';
+      db.calls.push({
+        id:'zadarma_'+externalId, provider:'zadarma', providerCallId:externalId,
+        phone:call.phone_number, clientId:client?.id||prospect?.clientId||null, orderId:order?.id||prospect?.orderId||null,
+        prospectId:prospect?.id||null, direction:call.direction, internal:call.internal_number||null,
+        outcome, disposition, duration:Number(call.duration_seconds)||0, recorded:call.is_recorded===true,
+        recordingId:call.recording_id||null, at:call.started_at, endedAt:call.ended_at,
+      });
+      if (prospect) {
+        prospect.calls = prospect.calls || [];
+        if (!prospect.calls.some(x=>x.providerCallId===externalId)) prospect.calls.push({id:'cc_'+uid(),provider:'zadarma',providerCallId:externalId,at:call.started_at,outcome,note:'',nextCallAt:null,by:null,duration:Number(call.duration_seconds)||0});
+        prospect.lastCallAt = call.started_at;
+        prospect.attempts = Math.max(Number(prospect.attempts)||0, prospect.calls.length);
+        if (outcome==='no_answer' && !['converted','do_not_call','not_interested'].includes(prospect.status)) prospect.status='no_answer';
+      }
+      const missed = call.direction==='incoming' && outcome!=='answered';
+      if (missed) {
+        const assigned = db.users.find(u=>String(u.zadarmaExtension||'')===String(call.internal_number||''))?.id || prospect?.assignedTo || order?.managerId || currentUser()?.id;
+        if (!db.tasks.some(t=>t.zadarmaCallId===externalId)) db.tasks.push({id:'t_'+uid(),title:`Пропущенный звонок: ${prospect?.companyName||client?.name||call.phone_number}`,dueAt:new Date(Date.now()+30*60000).toISOString(),teamIds:assigned?[assigned]:[],responsibleId:assigned||null,clientId:client?.id||null,prospectId:prospect?.id||null,zadarmaCallId:externalId,notes:'Перезвонить по пропущенному входящему звонку Zadarma',status:'open',createdAt:new Date().toISOString(),createdBy:currentUser()?.id||null,doneAt:null});
+      }
+      processed.add(externalId); changed = true;
+    });
+    cfg.processedCallIds=[...processed].slice(-1000);
+    zadarmaLastSyncAt = new Date().toISOString();
+    if (changed) { save(); render(); }
+  } catch (e) { console.warn('[Zadarma] call sync failed', e); }
+}
 async function twilioApi(path, options = {}) {
   if (ROLANPRO_LOCAL_FILE) {
     throw new Error('Открыта локальная копия CRM. SMS работает только в рабочей CRM: ' + ROLANPRO_PRODUCTION_URL);
@@ -29242,6 +29342,8 @@ async function cloudBoot() {
     syncTwilioMessages();
     refreshTwilioStatus();
     refreshEmailChannelStatus(true);
+    await refreshZadarmaStatus();
+    syncZadarmaCalls();
   } catch (error) {
     console.error('[Cloud CRM] boot failed', error);
     cloudStatus('CRM временно недоступна', 'red');
@@ -29267,6 +29369,7 @@ if (ROLANPRO_LOCAL_FILE) renderLocalCloudFileGuard();
 else if (ROLANPRO_CLOUD) cloudBoot();
 else { load(); parseHash(); render(); }
 setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) syncTwilioMessages(); }, 15000);
+setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) syncZadarmaCalls(); }, 15000);
 setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) refreshEmailChannelStatus(true); }, 300000);
 </script>
 
