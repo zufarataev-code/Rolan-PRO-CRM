@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { verifyPassword } from "@/lib/auth/password";
-import { createSessionToken } from "@/lib/auth/session";
+import { createSessionToken, sessionCredentialFingerprint } from "@/lib/auth/session";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
@@ -65,6 +65,7 @@ export async function POST(request: Request) {
     sub: user.user_id,
     email: user.email,
     roles,
+    pwd: sessionCredentialFingerprint(user.password_hash),
   });
 
   const response = apiSuccess({
