@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { createSessionToken } from "@/lib/auth/session";
+import { createSessionToken, sessionCredentialFingerprint } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  if (!user?.is_active || user.user_accesses.length === 0) {
+  if (!user?.is_active || !user.password_hash || user.user_accesses.length === 0) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
     sub: user.user_id,
     email: user.email,
     roles: user.user_accesses.map((access) => access.role.code),
+    pwd: sessionCredentialFingerprint(user.password_hash),
   });
 
   const response = NextResponse.redirect(new URL(demoUser.redirectTo, request.url));
