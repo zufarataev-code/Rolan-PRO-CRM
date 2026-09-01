@@ -21,6 +21,8 @@ Before doing any work:
 - Production status: deploy run #16 succeeded for `3086998`; login page and owner access were verified
 - Current phase: security stabilization, data consolidation, and removal of duplicate CRM workflows
 
+> Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
+
 ## Active pull requests
 
 | PR | Purpose | Branch | State at last verification |
@@ -30,6 +32,7 @@ Before doing any work:
 | #17 | Remove embedded customer export | `security/remove-embedded-wiz-data` | Open; review and merge still required |
 | #12 | Bootstrap Claude Builder transport | `feature/claude-builder-transport` | Open; completion state must be reviewed before reuse |
 | #24 | Unified proposal delivery, public PDF, employee routing, and removal of duplicate PIN login | `codex/unify-crm-proposal-pdf` | Open; local checks passed, GitHub review/CI and merge still required |
+| #98 | Employee email editing, password recovery, and canonical server login | `fix/employee-account-recovery` | Open; CI/review in progress |
 
 Always re-check GitHub before acting; this table is a handoff snapshot, not a substitute for the live PR state.
 
@@ -75,6 +78,7 @@ Target modules:
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
 | Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / #24 | Codex | PR open | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
+| Fix employee email editing, forgot-password by email, and server-only employee login | `fix/employee-account-recovery` / #98 | ChatGPT | PR open | Get green CI/review, merge to `main`, deploy, then run controlled production smoke tests |
 
 Contributors must add a row before starting substantial work and update or remove it at handoff.
 
@@ -86,6 +90,18 @@ Contributors must add a row before starting substantial work and update or remov
 - Branch / PR: `codex/unify-crm-proposal-pdf` / #24 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/24`).
 - Blocker: the old `/legacy-crm` route must remain available until its business records are fully migrated; this change publishes legacy KP snapshots into the canonical proposal tables but does not yet migrate every legacy order or disable legacy writes.
 - Next action: open the PR, let GitHub CI pass, merge and deploy from `main`; in production, send one controlled KP to an internal address, open the public link in a signed-out browser, and verify PDF download before using it with clients.
+
+## 2026-09-01 handoff — employee account recovery / PR #98
+
+- Root cause: the legacy Team access modal matched a server user only by the legacy card's current email. When legacy and PostgreSQL emails had diverged, the owner could see the edit field but the save flow could not reliably identify the canonical account.
+- Fix: Team API now exposes `legacyUserIds`; owner-only account updates may link a legacy employee ID to the canonical PostgreSQL User, and the legacy access UI resolves by stable ID first with old email only as a fallback. The mapping is persisted after a successful update.
+- Owner account control: the existing Access modal can change the employee login email and can set a new temporary password while preserving the required password-change behavior.
+- Forgot-password: `/login` now exposes `Забыли пароль?`; `/forgot-password` sends a reset link through the connected corporate Gmail; `/reset-password` accepts a signed HMAC token with 30-minute TTL. The token is bound to user ID, email, and current password hash, so changing email/password invalidates it.
+- Server-only access: employee Access UI now displays/copies the canonical server `/login` URL, and `/legacy-crm` explicitly returns HTML inline. Employees should never receive or store a CRM HTML file; see `docs/EMPLOYEE_ACCESS.md`.
+- Security verification added: automated tests cover token signature tampering, expiry, password-change invalidation, and email-change invalidation.
+- First CI attempt: all 119 existing tests passed; TypeScript failed only because the two new pages initially imported root `components/` through the `@/` alias that points to `src/`. Those imports were corrected and a new CI run was triggered.
+- Branch / PR: `fix/employee-account-recovery` / #98 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/98`).
+- Required before completion: latest CI must pass tests + TypeScript + production build; review must be checked; merge/deploy must happen from `main`; production smoke must verify email change/login, one controlled reset email, reset completion, and browser access without HTML download.
 
 ## Completion rule
 
