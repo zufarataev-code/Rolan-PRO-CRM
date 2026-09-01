@@ -126,7 +126,13 @@ export async function createTeamMember(input: TeamMemberInput) {
 /** Меняет почту, имя, роли и активность. Пароль здесь не трогается. */
 export async function updateTeamMember(
   userId: string,
-  input: { email?: string; fullName?: string; roles?: RoleCode[]; isActive?: boolean },
+  input: {
+    email?: string;
+    fullName?: string;
+    roles?: RoleCode[];
+    isActive?: boolean;
+    legacyUserId?: string;
+  },
 ) {
   if (input.roles) {
     assertValidRoles(input.roles);
@@ -152,6 +158,9 @@ export async function updateTeamMember(
       throw new Error("Пользователь с такой почтой уже есть.");
     }
   }
+
+  const legacyUserId = input.legacyUserId?.trim() || null;
+  const shouldLinkLegacyUser = Boolean(legacyUserId && !user.legacy_user_ids.includes(legacyUserId));
 
   // Последнего владельца нельзя ни отключить, ни лишить роли:
   // иначе в системе не останется никого, кто может заводить людей.
@@ -191,10 +200,11 @@ export async function updateTeamMember(
       email,
       full_name: input.fullName?.trim() ?? undefined,
       is_active: input.isActive ?? undefined,
+      legacy_user_ids: shouldLinkLegacyUser && legacyUserId ? { push: legacyUserId } : undefined,
     },
   });
 
-  return { userId, email: updated.email };
+  return { userId, email: updated.email, legacyUserIds: updated.legacy_user_ids };
 }
 
 /** Задаёт новый пароль сотруднику. Сотрудник сменит его при входе. */
