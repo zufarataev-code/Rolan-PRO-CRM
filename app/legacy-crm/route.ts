@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
   );
 
   const cloudHtml = replaceLegacyBootstrapLogin(html);
+  const employeeLoginUrl = new URL("/login", publicAppUrl).toString();
   const mailShortcut = `
     <style>
       #rolanpro-mail-shortcut{position:fixed;right:22px;top:78px;z-index:2147483000;display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:#fff;color:#1d4ed8;border:1px solid #bfdbfe;box-shadow:0 10px 30px rgba(15,23,42,.16);font:800 13px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-decoration:none}
@@ -48,6 +49,22 @@ export async function GET(request: NextRequest) {
   const teamAccessPatch = `
     <script>
       (() => {
+        const employeeLoginUrl = ${JSON.stringify(employeeLoginUrl)};
+        const apiMessage = (payload, fallback) => payload?.errors?.[0]?.message || payload?.error?.message || fallback;
+
+        window.copyTeamLoginUrl = async function copyTeamLoginUrl(button) {
+          try {
+            await navigator.clipboard.writeText(employeeLoginUrl);
+            if (button) {
+              const original = button.textContent;
+              button.textContent = 'Скопировано';
+              setTimeout(() => { button.textContent = original; }, 1400);
+            }
+          } catch (error) {
+            window.prompt('Скопируйте ссылку для входа', employeeLoginUrl);
+          }
+        };
+
         window.openTeamMemberAccess = function openTeamMemberAccess(legacyUserId) {
           const user = getUser(legacyUserId);
           if (!user) return;
@@ -71,6 +88,13 @@ export async function GET(request: NextRequest) {
                 '</div>' +
                 '<div class="text-xs text-gray-500 mt-1">Если задать новый пароль, сотрудник сменит его при следующем входе.</div>' +
 
+                '<div class="mt-4 p-3 rounded-lg bg-blue-50 border border-blue-100">' +
+                  '<div class="text-xs font-semibold text-blue-900 mb-1">Ссылка сотруднику</div>' +
+                  '<div class="text-xs text-blue-800 break-all">' + academyEsc(employeeLoginUrl) + '</div>' +
+                  '<button class="btn-ghost text-sm mt-2" onclick="copyTeamLoginUrl(this)">Копировать ссылку</button>' +
+                  '<div class="text-xs text-gray-500 mt-2">Это обычный вход на сервер. Сотруднику не нужно скачивать HTML-файл или хранить CRM на телефоне.</div>' +
+                '</div>' +
+
                 '<div id="tm-error" class="text-sm text-red-600 mt-3 hidden"></div>' +
 
                 '<div class="flex gap-2 mt-5">' +
@@ -83,55 +107,50 @@ export async function GET(request: NextRequest) {
         };
 
         window.submitTeamMemberAccess = async function submitTeamMemberAccess() {
-          const legacyUserId = window.__teamAccessLegacyUserId;
+          const legacyUserId = String(window.__teamAccessLegacyUserId || '').trim();
           const currentEmail = String(window.__teamAccessCurrentEmail || '').trim().toLowerCase();
           const email = String(document.getElementById('tm-email')?.value || '').trim().toLowerCase();
           const password = String(document.getElementById('tm-password')?.value || '').trim();
 
+          if (!legacyUserId) {
+            return showTeamError('Не удалось определить сотрудника. Закройте окно и откройте доступ ещё раз.');
+          }
           if (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
             return showTeamError('Укажите корректную почту сотрудника.');
           }
           if (password && password.length < 10) {
             return showTeamError('Пароль должен быть не короче 10 символов.');
           }
-          if (!currentEmail) {
-            return showTeamError('У сотрудника не указана текущая почта.');
-          }
 
           try {
             const listResponse = await fetch('/api/v1/team', { cache: 'no-store' });
             const list = await listResponse.json();
             if (!listResponse.ok) {
-              return showTeamError(list?.error?.message || 'Не удалось загрузить сотрудников.');
+              return showTeamError(apiMessage(list, 'Не удалось загрузить сотрудников.'));
             }
 
-            const member = (list?.data || []).find(
-              (item) => item.email?.toLowerCase() === currentEmail,
-            );
-            if (!member) return showTeamError('Сотрудник не найден в системе доступов.');
+            const members = Array.isArray(list?.data) ? list.data : [];
+            const member = members.find(
+              (item) => Array.isArray(item.legacyUserIds) && item.legacyUserIds.includes(legacyUserId),
+            ) || (currentEmail ? members.find(
+              (item) => String(item.email || '').trim().toLowerCase() === currentEmail,
+            ) : null);
 
-            if (email !== member.email.toLowerCase()) {
-              const emailResponse = await fetch('/api/v1/team/' + member.userId, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email }),
-              });
-              const emailResult = await emailResponse.json();
-              if (!emailResponse.ok) {
-                return showTeamError(emailResult?.error?.message || 'Не удалось изменить почту.');
-              }
+            if (!member) {
+              return showTeamError('Сотрудник не найден в серверной системе доступов. Создайте ему серверный аккаунт или проверьте почту.');
             }
 
-            if (password) {
-              const passwordResponse = await fetch('/api/v1/team/' + member.userId, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password }),
-              });
-              const passwordResult = await passwordResponse.json();
-              if (!passwordResponse.ok) {
-                return showTeamError(passwordResult?.error?.message || 'Не удалось изменить пароль.');
-              }
+            const updatePayload = { email, legacyUserId };
+            if (password) updatePayload.password = password;
+
+            const updateResponse = await fetch('/api/v1/team/' + member.userId, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updatePayload),
+            });
+            const updateResult = await updateResponse.json();
+            if (!updateResponse.ok) {
+              return showTeamError(apiMessage(updateResult, 'Не удалось обновить доступ сотрудника.'));
             }
 
             const legacyUser = getUser(legacyUserId);
@@ -172,6 +191,7 @@ export async function GET(request: NextRequest) {
     headers: {
       "Cache-Control": "no-store",
       "Content-Type": "text/html; charset=utf-8",
+      "Content-Disposition": "inline",
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "SAMEORIGIN",
       "Referrer-Policy": "same-origin",
