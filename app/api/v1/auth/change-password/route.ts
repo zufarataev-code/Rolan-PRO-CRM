@@ -23,21 +23,41 @@ export async function POST(request: NextRequest) {
     return apiError(400, "weak_password", "Password must contain at least 12 characters.");
   }
 
+  const currentUser = auth.session.user;
+  const observedPasswordHash = currentUser.password_hash;
   const newPasswordHash = hashPassword(password);
-  const user = await prisma.user.update({
-    where: { user_id: auth.session.user.user_id },
+
+  // Compare-and-swap against the exact credentials that were validated for
+  // this request. If another password reset/change or email edit wins the race,
+  // this request must not overwrite those newer credentials or mint a fresh
+  // session for stale authentication state.
+  const updated = await prisma.user.updateMany({
+    where: {
+      user_id: currentUser.user_id,
+      email: currentUser.email,
+      password_hash: observedPasswordHash,
+      is_active: true,
+    },
     data: {
       password_hash: newPasswordHash,
       must_change_password: false,
     },
   });
 
+  if (updated.count !== 1) {
+    return apiError(
+      409,
+      "credentials_changed",
+      "Your account credentials changed during this request. Sign in again and retry.",
+    );
+  }
+
   const response = apiSuccess({ password_changed: true, roles: auth.session.roles });
   response.cookies.set({
     name: getEnv().sessionCookieName,
     value: createSessionToken({
-      sub: user.user_id,
-      email: user.email,
+      sub: currentUser.user_id,
+      email: currentUser.email,
       roles: auth.session.roles,
       pwd: sessionCredentialFingerprint(newPasswordHash),
     }),
