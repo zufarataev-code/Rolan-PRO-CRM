@@ -79,11 +79,15 @@ export function AuthLoginForm() {
               required
             />
           </label>
+          <div className={styles.formLinkRow}>
+            <a className={styles.link} href="/forgot-password">Забыли пароль?</a>
+          </div>
           {error ? <p className={styles.error}>{error}</p> : null}
           <button className={styles.button} disabled={pending} type="submit">
             {pending ? "Входим…" : "Войти"}
           </button>
         </form>
+        <p className={styles.hint}>CRM работает с сервера. Скачивать HTML-файл на телефон для входа не нужно.</p>
       </section>
     </main>
   );
