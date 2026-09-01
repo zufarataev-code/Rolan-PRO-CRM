@@ -24,6 +24,7 @@ export type TeamMemberInput = {
 
 export type TeamMember = {
   userId: string;
+  legacyUserIds: string[];
   email: string;
   fullName: string;
   roles: RoleCode[];
@@ -73,6 +74,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
 
   return users.map((user) => ({
     userId: user.user_id,
+    legacyUserIds: user.legacy_user_ids,
     email: user.email,
     fullName: user.full_name,
     roles: user.user_accesses.map((access) => access.role.code as RoleCode),
@@ -124,7 +126,13 @@ export async function createTeamMember(input: TeamMemberInput) {
 /** Меняет почту, имя, роли и активность. Пароль здесь не трогается. */
 export async function updateTeamMember(
   userId: string,
-  input: { email?: string; fullName?: string; roles?: RoleCode[]; isActive?: boolean },
+  input: {
+    email?: string;
+    fullName?: string;
+    roles?: RoleCode[];
+    isActive?: boolean;
+    legacyUserId?: string;
+  },
 ) {
   if (input.roles) {
     assertValidRoles(input.roles);
@@ -148,6 +156,25 @@ export async function updateTeamMember(
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing && existing.user_id !== userId) {
       throw new Error("Пользователь с такой почтой уже есть.");
+    }
+  }
+
+  const legacyUserId = input.legacyUserId?.trim() || null;
+  const shouldLinkLegacyUser = Boolean(legacyUserId && !user.legacy_user_ids.includes(legacyUserId));
+
+  if (shouldLinkLegacyUser && legacyUserId) {
+    const alreadyLinked = await prisma.user.findFirst({
+      where: {
+        user_id: { not: userId },
+        legacy_user_ids: { has: legacyUserId },
+      },
+      select: { user_id: true, email: true },
+    });
+
+    if (alreadyLinked) {
+      throw new Error(
+        `Эта legacy-карточка уже привязана к другому серверному аккаунту (${alreadyLinked.email}). Сначала проверьте дубликат сотрудника.`,
+      );
     }
   }
 
@@ -189,10 +216,11 @@ export async function updateTeamMember(
       email,
       full_name: input.fullName?.trim() ?? undefined,
       is_active: input.isActive ?? undefined,
+      legacy_user_ids: shouldLinkLegacyUser && legacyUserId ? { push: legacyUserId } : undefined,
     },
   });
 
-  return { userId, email: updated.email };
+  return { userId, email: updated.email, legacyUserIds: updated.legacy_user_ids };
 }
 
 /** Задаёт новый пароль сотруднику. Сотрудник сменит его при входе. */
