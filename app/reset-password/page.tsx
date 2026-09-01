@@ -1,4 +1,4 @@
-import { AuthResetPasswordForm } from "@/components/auth-reset-password-form";
+import { AuthResetPasswordForm } from "../../components/auth-reset-password-form";
 
 type ResetPasswordPageProps = {
   searchParams: Promise<{ token?: string | string[] }>;
