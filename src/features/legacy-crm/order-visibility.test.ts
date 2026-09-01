@@ -40,10 +40,11 @@ function visibilityContext() {
     currentUser: () => null,
   });
 
-  vm.runInContext(`${html.slice(start, end)}\nthis.visibility = { orderUserCanAccess, orderUserCanSeeMoney, visibleOrdersForUser, visibleClientsForUser };`, context);
+  vm.runInContext(`${html.slice(start, end)}\nthis.visibility = { orderUserCanAccess, orderUserCanSeeMoney, orderUserCanViewProposal, visibleOrdersForUser, visibleClientsForUser };`, context);
   return context.visibility as {
     orderUserCanAccess: (order: unknown, user: unknown) => boolean;
     orderUserCanSeeMoney: (order: unknown, user: unknown) => boolean;
+    orderUserCanViewProposal: (order: unknown, user: unknown) => boolean;
     visibleOrdersForUser: (user: unknown) => Array<{ id: string }>;
     visibleClientsForUser: (user: unknown) => Array<{ id: string }>;
   };
@@ -94,20 +95,28 @@ test("surveyors and installers never see project financial totals", () => {
   assert.equal(visibility.orderUserCanSeeMoney(fieldOrder, { id: "manager-b", role: "manager" }), false);
   assert.equal(visibility.orderUserCanSeeMoney(fieldOrder, { id: "measurer-a", role: "measurer" }), false);
   assert.equal(visibility.orderUserCanSeeMoney(fieldOrder, { id: "installer-a", role: "installer" }), false);
+  assert.equal(visibility.orderUserCanViewProposal(fieldOrder, { id: "owner", role: "owner" }), true);
+  assert.equal(visibility.orderUserCanViewProposal(fieldOrder, { id: "manager-a", role: "manager" }), true);
+  assert.equal(visibility.orderUserCanViewProposal(fieldOrder, { id: "installer-a", role: "installer" }), false);
 });
 
 test("field-role calendar and proposal actions keep project totals hidden", () => {
   assert.match(html, /function renderCalendarSummary[\s\S]*?const canSeeMoney = orderUserCanManage\(\);/);
   assert.match(html, /\$\{canSeeMoney \? `<div class="calendar-kpi"[\s\S]*?Сумма заказов[\s\S]*?` : ''\}/);
-  assert.match(html, /function openProfessionalKP\(oid\)[\s\S]*?if \(!orderUserOwns\(o\)\)/);
-  assert.match(html, /function printProposal\(oid\)[\s\S]*?if \(!orderUserOwns\(o\)\)/);
+  assert.match(html, /function openProfessionalKP\(oid\)[\s\S]*?if \(!orderUserCanViewProposal\(o\)\)/);
+  assert.match(html, /function printProposal\(oid\)[\s\S]*?if \(!orderUserCanViewProposal\(o\)\)/);
+  assert.match(html, /async function generatePremiumProposal\(orderId\)[\s\S]*?if \(!orderUserCanViewProposal\(order\)\)/);
+  assert.match(html, /function openPremiumProposalManagerModal\(token\)[\s\S]*?if \(!orderUserCanViewProposal\(order\)\)/);
 });
 
-test("installer order workspace exposes only operational documents and personal pay", () => {
+test("installer order workspace exposes only the technical sheet", () => {
   assert.match(html, /function installerOrderPrimaryAction\(o\)/);
-  assert.match(html, /isInstaller \? 'Рабочие документы и акт' : 'КП, техлист, оплата'/);
-  assert.match(html, /isInstaller \? '' : renderOrderCleanCard\(\{ icon: '💵', title: 'Экономика'/);
-  assert.match(html, /u\.role === 'installer' \|\| !state\.orderClassicMode/);
+  assert.match(html, /function renderInstallerTechnicalWorkspace\(o, c, u\)/);
+  assert.match(html, /Монтажнику доступен только ТЗ-лист/);
+  assert.match(html, /function renderOrderDetails\(id\)[\s\S]*?if \(u\.role === 'installer'\) \{[\s\S]*?return renderInstallerTechnicalWorkspace\(o, c, u\);/);
+  assert.match(html, /onclick="openOrder\('\$\{o\.id\}'\)\">Открыть ТЗ-лист/);
+  assert.match(html, /onclick="printTechnicalSheet\('\$\{o\.id\}'\)\">🖨 ТЗ-лист/);
+  assert.match(html, /viewer && !orderUserCanViewProposal\(proposalOrder, viewer\)/);
   assert.match(html, /Мои расценки/);
   assert.match(html, /Стоимость заказа для клиента и маржа компании скрыты/);
 });

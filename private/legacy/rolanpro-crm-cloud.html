@@ -10897,7 +10897,7 @@ function openTechnicalSheet(orderId) {
         <div class="measure-head">
           <div>
             <div class="text-xs font-bold text-blue-700">Technical sheet</div>
-            <h3 class="text-xl font-black">Технический лист для КП и монтажа</h3>
+            <h3 class="text-xl font-black">ТЗ-лист монтажа</h3>
           </div>
           <div class="flex gap-2 flex-wrap justify-end">
             <button class="btn-ghost" onclick="printTechnicalSheet('${order.id}')">📄 PDF / Печать</button>
@@ -10945,6 +10945,7 @@ function rolanDocumentPrintCss() {
 function printTechnicalSheet(orderId) {
   const order = getOrder(orderId);
   if (!order) return;
+  if (!orderUserCanAccess(order)) { alert('Нет доступа к ТЗ-листу этого заказа'); return; }
   const w = window.open('', '_blank');
   if (!w) { alert('Браузер заблокировал печать. Разрешите pop-up для CRM.'); return; }
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${academyEsc(order.number)} Technical Sheet</title><script src="https://cdn.tailwindcss.com"><\\/script><style>${rolanDocumentPrintCss()}</style><style>${cutSheetVerticalPrintCss()}</style><style>${cutSheetContinuousPrintCss()}</style></head><body>${renderTechnicalSheetHtml(order, true)}<script>setTimeout(()=>window.print(),700)<\\/script></body></html>`);
@@ -11161,7 +11162,7 @@ function sketchSave() {
 // ---------- PROFESSIONAL PROPOSAL (КП) with window drawings per room ----------
 function openProfessionalKP(oid) {
   const o = getOrder(oid);
-  if (!orderUserOwns(o)) { alert('Финансовые документы доступны только владельцу и назначенному менеджеру'); return; }
+  if (!orderUserCanViewProposal(o)) { alert('КП доступно только владельцу и назначенному менеджеру'); return; }
   generatePremiumProposal(oid);
 }
 
@@ -13705,6 +13706,9 @@ function orderUserCanAccess(order, user = currentUser()) {
 function orderUserCanSeeMoney(order, user = currentUser()) {
   return orderUserOwns(order, user);
 }
+function orderUserCanViewProposal(order, user = currentUser()) {
+  return orderUserOwns(order, user);
+}
 function visibleOrdersForUser(user = currentUser()) {
   return (db?.orders || []).filter(order => orderUserCanAccess(order, user));
 }
@@ -14091,7 +14095,7 @@ function installerOrderPrimaryAction(o) {
   if (o.status === 'installation_en_route') return { icon: '▶', title: 'Начать монтаж', sub: 'Перед началом заполните приёмку и сделайте фото.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_in_progress')` };
   if (o.status === 'installation_in_progress') return { icon: '✓', title: 'Завершить монтаж', sub: 'Добавьте фото после работы и подтвердите сдачу.', variant: 'success', onclick: `changeStatus('${o.id}','installation_done')` };
   if (o.status === 'installation_done') return { icon: '📝', title: 'Акт подписан', sub: 'Отметить после подписи клиента.', variant: 'primary', onclick: `changeStatus('${o.id}','act_signed')` };
-  return { icon: '📋', title: 'Открыть заказ-наряд', sub: 'Рабочая задача, размеры, материалы и чек-лист.', variant: 'soft', onclick: `openWorkOrder('${o.id}')` };
+  return { icon: '🧰', title: 'Открыть ТЗ-лист', sub: 'Схема, размеры, материалы и лист раскроя.', variant: 'soft', onclick: `openTechnicalSheet('${o.id}')` };
 }
 function renderOrderActionCard(a) {
   if (!a) return '';
@@ -14443,7 +14447,17 @@ function renderNow() {
   const root = document.getElementById('app');
   const snapshot = captureRenderPosition();
 
-  if (state.premiumProposalToken) { root.innerHTML = renderPremiumProposalPortal(state.premiumProposalToken); return; }
+  if (state.premiumProposalToken) {
+    const viewer = currentUser();
+    const proposal = getPremiumProposalByToken(state.premiumProposalToken);
+    const proposalOrder = getOrder(proposal?.orderId);
+    if (viewer && !orderUserCanViewProposal(proposalOrder, viewer)) {
+      root.innerHTML = `<div class="min-h-screen grid place-items-center bg-slate-100 p-5"><div class="card max-w-lg text-center"><div class="text-4xl mb-3">🧰</div><h1 class="text-2xl font-black">Для вашей роли КП недоступно</h1><p class="text-gray-500 mt-2">В рабочем кабинете открывайте ТЗ-лист назначенного монтажа.</p><button class="btn-primary mt-4" onclick="location.hash=''; state.premiumProposalToken=null; state.view='installations'; render();">К моим задачам</button></div></div>`;
+      return;
+    }
+    root.innerHTML = renderPremiumProposalPortal(state.premiumProposalToken);
+    return;
+  }
   if (state.clientAccountPortalClientId) { root.innerHTML = renderClientAccountPortal(); return; }
   if (state.clientPortalOrderId) { root.innerHTML = renderClientPortal(); return; }
   if (!state.currentUserId) { root.innerHTML = renderLogin(); return; }
@@ -14931,6 +14945,7 @@ function proposalRegistrySetStatus(status) {
 }
 
 function openProposalRegistryRecord(localToken, canonicalId) {
+  if (!orderUserCanManage()) { alert('Раздел КП доступен только owner и менеджерам'); return; }
   if (localToken) {
     openPremiumProposalManagerModal(localToken);
     return;
@@ -18456,8 +18471,8 @@ function renderInstallerList(tasks) {
           <div class="mt-2 p-2 bg-emerald-50 rounded text-emerald-800"><b>💰 Ваша выплата:</b> ${fmtMoney(myPayout)}</div>
         </div>
         <div class="mt-3 flex gap-2 flex-wrap">
-          <button class="btn-primary" onclick="openOrder('${o.id}')">Открыть наряд</button>
-          <button class="btn-ghost" onclick="printWorkOrder('${o.id}')">🖨 Распечатать</button>
+          <button class="btn-primary" onclick="openOrder('${o.id}')">Открыть ТЗ-лист</button>
+          <button class="btn-ghost" onclick="printTechnicalSheet('${o.id}')">🖨 ТЗ-лист</button>
           ${canAccept ? `<button class="btn-primary bg-green-600 hover:bg-green-700" onclick="changeStatus('${o.id}','installation_accepted')">✓ ${T('acceptJob')}</button>` : ''}
           ${canGo ? `<button class="btn-primary bg-purple-600 hover:bg-purple-700" onclick="changeStatus('${o.id}','installation_en_route')">🚗 ${T('enRouteJob')}</button>` : ''}
           ${canStart  ? `<button class="btn-primary bg-blue-600 hover:bg-blue-700" onclick="changeStatus('${o.id}','installation_in_progress')">▶ ${T('startJob')}</button>` : ''}
@@ -18949,6 +18964,38 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     </div>`;
 }
 
+function renderInstallerTechnicalWorkspace(o, c, u) {
+  const projectAddress = orderAddress(o, c);
+  const hasMeasurements = measureAllWindows(o).length > 0;
+  const primary = installerOrderPrimaryAction(o);
+  return `
+    <div class="order-clean-topbar">
+      <button class="btn-ghost" onclick="state.view='installations'; location.hash=''; render();">← Мои задачи</button>
+      <span class="tag">Монтажнику доступен только ТЗ-лист</span>
+    </div>
+    <div class="order-clean-shell">
+      <section class="order-clean-stage">
+        <div class="order-clean-stage-head">
+          <div>
+            <div class="text-xs font-bold text-blue-700">ROLANPRO TECHNICAL SHEET</div>
+            <div class="order-clean-stage-title">ТЗ-лист · ${academyEsc(o.number)}</div>
+            <div class="order-clean-stage-sub">${academyEsc(projectAddress || 'Адрес ещё не указан')} · ${fmtDateTime(o.installationAt)}</div>
+          </div>
+          <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
+        </div>
+        <div class="order-clean-actions mt-3">
+          ${renderOrderActionCard(primary)}
+          ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать ТЗ', sub: 'размеры, схема и раскрой', onclick: `printTechnicalSheet('${o.id}')`, disabled: !hasMeasurements })}
+          ${projectAddress ? renderOrderActionCard({ icon: '🧭', title: 'Маршрут', sub: projectAddress, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(projectAddress)}` }) : ''}
+          ${renderOrderActionCard({ icon: '📷', title: 'Добавить фото', sub: 'до или после монтажа', onclick: `addOrderPhoto('${o.id}')` })}
+        </div>
+      </section>
+      <div class="card p-0 overflow-hidden">
+        ${renderTechnicalSheetHtml(o)}
+      </div>
+    </div>`;
+}
+
 function renderOrderDetails(id) {
   const o = getOrder(id);
   if (!o) return `<div class="card">${T('empty')}</div>`;
@@ -18970,7 +19017,10 @@ function renderOrderDetails(id) {
   const canSeeMoney = orderUserCanSeeMoney(o, u);
   const visibleTimeline = orderTimelineForUser(o, u);
 
-  if (u.role === 'installer' || !state.orderClassicMode) {
+  if (u.role === 'installer') {
+    return renderInstallerTechnicalWorkspace(o, c, u);
+  }
+  if (!state.orderClassicMode) {
     return renderOrderCleanDetails(o, c, u, { canManage, canMeasure, canSeeMoney, visibleTimeline });
   }
 
@@ -20943,7 +20993,7 @@ function printWorkOrder(oid) {
 
 function printProposal(oid) {
   const o = getOrder(oid);
-  if (!orderUserOwns(o)) { alert('Финансовые документы доступны только владельцу и назначенному менеджеру'); return; }
+  if (!orderUserCanViewProposal(o)) { alert('КП доступно только владельцу и назначенному менеджеру'); return; }
   const c = getClient(o.clientId);
   const projectAddress = orderAddress(o, c);
   const win = window.open('', '_blank');
@@ -25359,9 +25409,10 @@ async function premiumPublishCanonicalProposal(prop) {
   return payload.data.proposal;
 }
 async function generatePremiumProposal(orderId) {
+  const order = getOrder(orderId);
+  if (!orderUserCanViewProposal(order)) { alert('КП доступно только владельцу и назначенному менеджеру'); return; }
   const prop = ensurePremiumProposal(orderId);
   if (!prop) return;
-  const order = getOrder(orderId);
   try {
     await premiumPublishCanonicalProposal(prop);
     if (!premiumProposalLocked(prop) && prop.status === 'Draft') {
@@ -25401,6 +25452,7 @@ function openPremiumProposalManagerModal(token) {
   const prop = getPremiumProposalByToken(token);
   const order = getOrder(prop?.orderId);
   if (!prop || !order) return;
+  if (!orderUserCanViewProposal(order)) { alert('КП доступно только владельцу и назначенному менеджеру'); return; }
   const client = getClient(order.clientId) || {};
   const calc = premiumProposalCalc(prop);
   const url = premiumProposalUrl(prop);
