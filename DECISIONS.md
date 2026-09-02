@@ -67,6 +67,7 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - One interface does not mean one unrestricted payload. Owner/manager may load the legacy operating workspace; field-role pages continue to read only their assigned PostgreSQL records through server-enforced role filters.
 - Surveyors and installers keep their focused mobile workspaces and must not receive customer prices, company costs, margins, or the complete legacy workspace payload.
 - All role workspaces use the same Rolan PRO identity and primary CRM visual language so an employee never appears to enter a different product.
+- Implemented and released by PR #110 (`codex/one-crm-all-roles`).
 
 ## Changing a decision
 

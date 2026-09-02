@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Put surveyor and installer inside the single canonical CRM interface | `codex/one-crm-all-roles` | Codex | Code complete; release pending | Push branch, open PR, pass CI, merge and deploy |
+| Put surveyor and installer inside the single canonical CRM interface | `codex/one-crm-all-roles` / #110 | Codex | Merged and deployed | Surveyor and installer should refresh/sign in through the public CRM and use only the `/legacy-crm` role workspace |
 | Remove duplicate owner/manager pricing shell and keep canonical pricing inside the main CRM | `codex/unify-service-pricing-ui` / #108 | Codex | Merged and deployed | Refresh the public CRM and use `Услуги и цены` / `Монтажники сейчас` only inside `/legacy-crm` |
 | Daily installer workspace: shifts, hours, mileage, payroll history, and opt-in work tracking | `codex/installer-daily-operations` / #106 | Codex | Merged and deployed | Have each installer sign in, install/open the Rolan PRO app, and begin using `Рабочий день`; review configured installer rates before first payroll |
 | Fix installed employee app opening installer 404 | `fix/installer-pwa-entry` / #103 | Codex | Merged and deployed | No remaining code action; employee should close and reopen the installed app |
@@ -201,8 +201,10 @@ Contributors must add a row before starting substantial work and update or remov
 - Visual continuity: field workspaces now use the real Rolan PRO logo, dark primary navigation, one `Rolan PRO CRM` identity, and compact rectangular work cards instead of presenting a separate white product shell.
 - Data safety: field roles still use their existing PostgreSQL services and server-side assignment filters. They do not receive the owner/manager `LegacyWorkspace.payload`, selling prices, company costs, margins, or unrelated customer records.
 - Verification: 146 automated tests passed; TypeScript passed; the production build passed and includes all seven canonical role routes. Local route smoke confirmed old URLs return 308 to the matching `/legacy-crm` URL, while canonical role URLs remain authentication-protected. `git diff --check` passed.
-- Branch: `codex/one-crm-all-roles`.
-- Next action: push the branch, open and merge a PR after CI/security review, deploy from `main`, then sign in once as the real surveyor and installer to visually verify their assigned data without changing any live records.
+- Branch / PR: `codex/one-crm-all-roles` / #110 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/110`).
+- Release: PR #110 passed CI and security review, merged to `main` as `554bb2636332c86825bc38a640805bfc7988bd17`, and production deploy run #33637568763 succeeded.
+- Production smoke: old survey and installer URLs returned 308 to the exact canonical `/legacy-crm` route, including consultation/job IDs; canonical field and owner routes remained authentication-protected. No live customer, measurement, shift, mileage, payroll, price, or employee record was changed.
+- Next action: sign in once as the real surveyor and installer, refresh or fully close/reopen the installed app, and visually verify their assigned data without changing any live records.
 
 ## Completion rule
 
