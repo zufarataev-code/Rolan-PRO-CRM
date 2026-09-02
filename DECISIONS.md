@@ -60,6 +60,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - `Услуги и цены` and `Монтажники сейчас` render inside `/legacy-crm`. Old direct modern-shell URLs redirect to the matching section of the main CRM so bookmarks do not break.
 - Removing a duplicate interface must not delete canonical PostgreSQL pricing, payroll, installer, or planning data.
 
+## 2026-09-02 — One CRM interface for every employee role
+
+- This decision extends and supersedes the role scope of `One owner/manager interface`: `/legacy-crm` is the single visible Rolan PRO CRM namespace for owner, manager, surveyor, and installer.
+- Surveyors work at `/legacy-crm/survey`; installers work at `/legacy-crm/installer`. Old `/survey` and `/installer` links are compatibility redirects and must not present another CRM shell.
+- One interface does not mean one unrestricted payload. Owner/manager may load the legacy operating workspace; field-role pages continue to read only their assigned PostgreSQL records through server-enforced role filters.
+- Surveyors and installers keep their focused mobile workspaces and must not receive customer prices, company costs, margins, or the complete legacy workspace payload.
+- All role workspaces use the same Rolan PRO identity and primary CRM visual language so an employee never appears to enter a different product.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

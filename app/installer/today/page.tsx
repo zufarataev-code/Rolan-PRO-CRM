@@ -15,7 +15,7 @@ export default async function InstallerTodayPage() {
   const dashboard = await getInstallerOperationsDashboard(session);
 
   return (
-    <InstallerShell title="Мой рабочий день" subtitle="Смена, объекты, часы, пробег и личные начисления в одной истории." kicker="Монтажник / Сегодня" activeHref="/installer/today">
+    <InstallerShell title="Мой рабочий день" subtitle="Смена, объекты, часы, пробег и личные начисления в одной истории." kicker="Rolan PRO CRM / Сегодня" activeHref="/legacy-crm/installer">
       <section className="metric-grid">
         <div className="metric-cell"><span className="metric-label">Часы</span><strong className="metric-value">{hours(dashboard.totals.work_minutes)}</strong><span className="metric-footnote">последние 30 смен</span></div>
         <div className="metric-cell"><span className="metric-label">Пробег</span><strong className="metric-value">{dashboard.totals.miles}</strong><span className="metric-footnote">miles</span></div>

@@ -15,9 +15,9 @@ const navGroups: ProductNavGroup[] = [
   {
     label: "Сегодня",
     items: [
-      { href: "/installer/today", label: "Рабочий день" },
-      { href: "/installer/jobs", label: "Мои монтажи" },
-      { href: "/notifications", label: "Уведомления" },
+      { href: "/legacy-crm/installer", label: "Рабочий день" },
+      { href: "/legacy-crm/installer/jobs", label: "Мои монтажи" },
+      { href: "/legacy-crm/installer/notifications", label: "Уведомления" },
     ],
   },
 ];
@@ -33,13 +33,14 @@ export function InstallerShell({
   return (
     <ProductShell
       roleLabel="Монтажник"
-      homeHref="/installer/today"
+      homeHref="/legacy-crm/installer"
       navGroups={navGroups}
       title={title}
       subtitle={subtitle}
       kicker={kicker}
       actions={actions}
       activeHref={activeHref}
+      canonicalCrm
     >
       {children}
     </ProductShell>

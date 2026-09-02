@@ -27,9 +27,9 @@ export default async function NotificationsPage() {
 
   const notifications = await listNotificationsForSession(session);
   const backHref = session.roles.includes(ROLE_CODES.INSTALLER)
-    ? "/installer/jobs"
+    ? "/legacy-crm/installer"
     : session.roles.includes(ROLE_CODES.CONSULTANT)
-    ? "/survey"
+    ? "/legacy-crm/survey"
     : "/manager";
 
   const content = (

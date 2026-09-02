@@ -49,10 +49,10 @@ export default async function ConsultationSurveyPage({ params }: PageProps) {
       title="Карточка замера"
       subtitle="Размеры, рекомендации по пленке, фотографии и данные клиента в одном экране."
       kicker="Выезды / Замер"
-      activeHref="/survey"
+      activeHref="/legacy-crm/survey"
       actions={
         <>
-          <Link href="/survey" className="soft-button">
+          <Link href="/legacy-crm/survey" className="soft-button">
             Назад к списку
           </Link>
           <div className="chip chip-accent">{consultation.status}</div>

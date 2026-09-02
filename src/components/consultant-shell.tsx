@@ -15,8 +15,8 @@ const navGroups: ProductNavGroup[] = [
   {
     label: "Сегодня",
     items: [
-      { href: "/survey", label: "Мои выезды" },
-      { href: "/notifications", label: "Уведомления" },
+      { href: "/legacy-crm/survey", label: "Мои выезды" },
+      { href: "/legacy-crm/survey/notifications", label: "Уведомления" },
     ],
   },
 ];
@@ -32,13 +32,14 @@ export function ConsultantShell({
   return (
     <ProductShell
       roleLabel="Замерщик"
-      homeHref="/survey"
+      homeHref="/legacy-crm/survey"
       navGroups={navGroups}
       title={title}
       subtitle={subtitle}
       kicker={kicker}
       actions={actions}
       activeHref={activeHref}
+      canonicalCrm
     >
       {children}
     </ProductShell>

@@ -3581,6 +3581,72 @@ select option {
   letter-spacing: -0.04em;
 }
 
+.product-brand-logo-panel {
+  width: 148px;
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 3px 8px;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+}
+
+.product-brand-logo-panel img {
+  width: 132px;
+  height: auto;
+  display: block;
+}
+
+.product-shell-canonical .product-sidebar {
+  background: #111b31;
+  border-right-color: #27334c;
+}
+
+.product-shell-canonical .product-brand {
+  display: grid;
+  gap: 8px;
+}
+
+.product-shell-canonical .product-brand-copy strong,
+.product-shell-canonical .product-role-card strong {
+  color: #ffffff;
+}
+
+.product-shell-canonical .product-brand-copy span,
+.product-shell-canonical .product-role-card small {
+  color: #9aa7bc;
+}
+
+.product-shell-canonical .product-nav-label {
+  color: #76849b;
+}
+
+.product-shell-canonical .product-nav-link {
+  border-radius: 4px;
+  color: #c6cedb;
+}
+
+.product-shell-canonical .product-nav-link:hover {
+  background: #1b2943;
+  color: #ffffff;
+}
+
+.product-shell-canonical .product-nav-link-active {
+  background: #1769d3;
+  color: #ffffff;
+}
+
+.product-shell-canonical .product-role-card {
+  border-top-color: #2a3750;
+}
+
+.product-shell.product-shell-canonical .surface,
+.product-shell.product-shell-canonical .workspace-hero,
+.product-shell.product-shell-canonical .metric-cell {
+  border-radius: 4px;
+}
+
 .product-brand-copy {
   min-width: 0;
   display: grid;
@@ -4015,6 +4081,25 @@ select option {
 
   .product-brand {
     padding: 0;
+  }
+
+  .product-shell-canonical .product-brand {
+    display: flex;
+  }
+
+  .product-shell-canonical .product-brand-logo-panel {
+    width: 126px;
+    min-height: 38px;
+    padding: 2px 6px;
+  }
+
+  .product-shell-canonical .product-brand-logo-panel img {
+    width: 112px;
+  }
+
+  .product-shell-canonical .product-navigation {
+    padding-top: 8px;
+    border-top: 1px solid #2a3750;
   }
 
   .product-brand-copy span,

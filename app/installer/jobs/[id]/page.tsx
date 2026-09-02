@@ -52,9 +52,9 @@ export default async function InstallerJobDetailPage({ params }: PageProps) {
       title="Карточка монтажа"
       subtitle="Адрес, клиент, состав работ и действия по текущей монтажной задаче."
       kicker="Работы / Монтаж"
-      activeHref="/installer/jobs"
+      activeHref="/legacy-crm/installer/jobs"
       actions={
-        <Link href="/installer/jobs" className="soft-button">
+        <Link href="/legacy-crm/installer/jobs" className="soft-button">
           Назад к задачам
         </Link>
       }

@@ -20,7 +20,7 @@ export default async function SurveyHomePage() {
       title="Мои консультации"
       subtitle="Назначенные выезды, данные клиента и готовая форма замера."
       kicker="Выезды / Сегодня"
-      activeHref="/survey"
+      activeHref="/legacy-crm/survey"
       actions={<div className="chip chip-accent">{consultations.length} консультаций</div>}
     >
       <section className="surface">
@@ -47,7 +47,7 @@ export default async function SurveyHomePage() {
                 <tr key={consultation.consultation_id}>
                   <td>
                     <div className="row-title">
-                      <Link href={`/survey/consultations/${consultation.consultation_id}`}>
+                      <Link href={`/legacy-crm/survey/consultations/${consultation.consultation_id}`}>
                         {consultation.title}
                       </Link>
                     </div>
