@@ -28,7 +28,7 @@ export default async function InstallerJobsPage() {
       title="Мои монтажи"
       subtitle="Монтажник видит только свои назначенные позиции и текущий статус выполнения."
       kicker="Работы / Сегодня"
-      activeHref="/installer/jobs"
+      activeHref="/legacy-crm/installer/jobs"
     >
       <section className="surface">
         <h2 className="surface-title">Назначенные работы</h2>
@@ -41,7 +41,7 @@ export default async function InstallerJobsPage() {
                 <div className="chip chip-accent">{job.status}</div>
                 <div>
                   <div className="row-title">
-                    <Link href={`/installer/jobs/${job.installer_job_id}`}>
+                    <Link href={`/legacy-crm/installer/jobs/${job.installer_job_id}`}>
                       {job.position?.title ?? job.project.title}
                     </Link>
                   </div>

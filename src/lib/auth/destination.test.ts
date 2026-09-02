@@ -9,12 +9,12 @@ test("владелец и менеджер попадают в рабочую CR
 });
 
 test("полевые роли попадают в свои экраны", () => {
-  assert.equal(destinationForRoles(["CONSULTANT"]), "/survey");
-  assert.equal(destinationForRoles(["INSTALLER"]), "/installer/today");
+  assert.equal(destinationForRoles(["CONSULTANT"]), "/legacy-crm/survey");
+  assert.equal(destinationForRoles(["INSTALLER"]), "/legacy-crm/installer");
 });
 
 test("при нескольких ролях выигрывает более широкая", () => {
-  assert.equal(destinationForRoles(["INSTALLER", "CONSULTANT"]), "/survey");
+  assert.equal(destinationForRoles(["INSTALLER", "CONSULTANT"]), "/legacy-crm/survey");
   assert.equal(destinationForRoles(["MANAGER", "CONSULTANT"]), "/legacy-crm");
 });
 

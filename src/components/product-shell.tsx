@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { ReactNode } from "react";
 
 import { NotificationsBell } from "@/components/notifications-bell";
@@ -25,6 +26,7 @@ type ProductShellProps = {
   activeHref?: string;
   createHref?: string;
   createLabel?: string;
+  canonicalCrm?: boolean;
 };
 
 export function ProductShell({
@@ -39,14 +41,21 @@ export function ProductShell({
   activeHref,
   createHref,
   createLabel = "Создать",
+  canonicalCrm = false,
 }: ProductShellProps) {
   return (
-    <div className="product-shell">
+    <div className={`product-shell${canonicalCrm ? " product-shell-canonical" : ""}`}>
       <aside className="product-sidebar">
         <Link href={homeHref} className="product-brand" aria-label="ROLANPRO — главная">
-          <span className="product-brand-mark" aria-hidden="true">R</span>
+          {canonicalCrm ? (
+            <span className="product-brand-logo-panel">
+              <Image src="/landing/rolan-logo.webp" alt="Rolan PRO" width={132} height={42} priority />
+            </span>
+          ) : (
+            <span className="product-brand-mark" aria-hidden="true">R</span>
+          )}
           <span className="product-brand-copy">
-            <strong>ROLANPRO</strong>
+            <strong>{canonicalCrm ? "Rolan PRO CRM" : "ROLANPRO"}</strong>
             <span>{roleLabel}</span>
           </span>
         </Link>
@@ -87,7 +96,7 @@ export function ProductShell({
           <span className="product-role-status" aria-hidden="true" />
           <span>
             <strong>{roleLabel}</strong>
-            <small>Рабочий кабинет</small>
+            <small>Единая CRM</small>
           </span>
         </div>
       </aside>

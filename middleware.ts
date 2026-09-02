@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getEnv } from "@/lib/env";
+import { canonicalRolePath } from "@/lib/auth/canonical-route";
 import { getRolesForPath, hasAnyRole } from "@/lib/auth/rbac";
 
 type EdgeSessionPayload = {
@@ -99,6 +100,13 @@ function deny(request: NextRequest, status: number, code: string, message: strin
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  const canonicalPathname = canonicalRolePath(pathname);
+  if (canonicalPathname !== pathname) {
+    const canonicalUrl = request.nextUrl.clone();
+    canonicalUrl.pathname = canonicalPathname;
+    return NextResponse.redirect(canonicalUrl, 308);
+  }
 
   if (isPublicPath(pathname)) {
     return NextResponse.next();
