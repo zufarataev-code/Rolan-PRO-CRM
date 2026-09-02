@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Remove standalone voice-input button from every CRM interface | `codex/remove-voice-button` | Codex | Code complete; release pending | Push branch, open PR, pass CI, merge and deploy |
+| Remove standalone voice-input button from every CRM interface | `codex/remove-voice-button` / #112 | Codex | Merged and deployed | Refresh any already-open CRM tab once; voice will return only inside the future agent |
 | Put surveyor and installer inside the single canonical CRM interface | `codex/one-crm-all-roles` / #110 | Codex | Merged and deployed | Surveyor and installer should refresh/sign in through the public CRM and use only the `/legacy-crm` role workspace |
 | Remove duplicate owner/manager pricing shell and keep canonical pricing inside the main CRM | `codex/unify-service-pricing-ui` / #108 | Codex | Merged and deployed | Refresh the public CRM and use `Услуги и цены` / `Монтажники сейчас` only inside `/legacy-crm` |
 | Daily installer workspace: shifts, hours, mileage, payroll history, and opt-in work tracking | `codex/installer-daily-operations` / #106 | Codex | Merged and deployed | Have each installer sign in, install/open the Rolan PRO app, and begin using `Рабочий день`; review configured installer rates before first payroll |
@@ -214,8 +214,10 @@ Contributors must add a row before starting substantial work and update or remov
 - Kept Google Voice calling/SMS configuration and the Smart-film `Voice Control` catalog capability unchanged; they are unrelated to the removed dictation button.
 - Added a regression check that the standalone control and its handler are absent from both CRM shells.
 - Verification: 146 automated tests passed, TypeScript passed, production build passed, and `git diff --check` passed.
-- Branch: `codex/remove-voice-button`.
-- Next action: push the branch, open and merge a PR after CI/security review, deploy from `main`, then verify the button is absent on the public owner and employee workspaces.
+- Branch / PR: `codex/remove-voice-button` / #112 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/112`).
+- Release: PR #112 passed CI and security review, merged to `main` as `3dced4563ff24ad1b45b72ba5d0f2077aa5648c0`, and production deploy run #33641166229 succeeded.
+- Production safety: the release changed interface code only. It did not modify customer data, orders, calls, Google Voice configuration, employees, shifts, payroll, prices, or Smart-film services.
+- Next action: refresh any already-open CRM tab once. Voice interaction remains deferred until it is designed as part of the unified CRM agent.
 
 ## Completion rule
 
