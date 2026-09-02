@@ -10,7 +10,7 @@ test("владелец и менеджер попадают в рабочую CR
 
 test("полевые роли попадают в свои экраны", () => {
   assert.equal(destinationForRoles(["CONSULTANT"]), "/survey");
-  assert.equal(destinationForRoles(["INSTALLER"]), "/installer");
+  assert.equal(destinationForRoles(["INSTALLER"]), "/installer/jobs");
 });
 
 test("при нескольких ролях выигрывает более широкая", () => {
