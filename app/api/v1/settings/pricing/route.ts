@@ -9,6 +9,7 @@ import {
   withoutInternalPlanningCosts,
 } from "@/lib/finance/business-planning";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
+import { addonPricingForRole, servicePricingForRole } from "@/lib/reference/pricing-visibility";
 
 const PRICING_ROLES = [ROLE_CODES.OWNER, ROLE_CODES.MANAGER] as const;
 
@@ -67,13 +68,8 @@ export async function GET(request: NextRequest) {
 
   const owner = isOwner(auth.session.roles);
   return apiSuccess({
-    services: services.map((service) => owner ? service : {
-      ...service,
-      material_cost_per_sqft: 0,
-      installation_cost_per_sqft: 0,
-      block_cost_price: 0,
-    }),
-    addons: addons.map((addon) => owner ? addon : { ...addon, cost_price: 0 }),
+    services: services.map((service) => servicePricingForRole(service, owner)),
+    addons: addons.map((addon) => addonPricingForRole(addon, owner)),
     planning: owner ? planning : withoutInternalPlanningCosts(planning),
     can_view_costs: owner,
   });
@@ -187,7 +183,7 @@ export async function PATCH(request: NextRequest) {
         sort_order: integerValue(patch.sort_order),
       },
     });
-    return apiSuccess(updated);
+    return apiSuccess(servicePricingForRole(updated, owner));
   }
 
   if (entity === "service_addon") {
@@ -204,7 +200,7 @@ export async function PATCH(request: NextRequest) {
         sort_order: integerValue(patch.sort_order),
       },
     });
-    return apiSuccess(updated);
+    return apiSuccess(addonPricingForRole(updated, isOwner(auth.session.roles)));
   }
 
   return apiError(400, "unsupported_entity", "Этот тип записи не поддерживается.");

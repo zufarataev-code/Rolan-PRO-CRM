@@ -146,7 +146,8 @@ Contributors must add a row before starting substantial work and update or remov
 - Owner-only fields include material cost, installer pay rate, block/add-on cost, company overhead, target profit, and margin assumptions. Manager server responses zero internal-cost fields and expose only actionable sales targets.
 - Added persistent business-planning assumptions and a monthly signal that converts overhead, contribution margin, average check, and conversion into required revenue, deals, and leads. The owner dashboard now raises an action when the break-even plan is behind.
 - Added direct `Услуги и цены` entry points to owner navigation, manager navigation, and the active legacy CRM menu/settings hub.
-- Local verification: 135 tests passed, TypeScript passed, production build passed, and `git diff --check` passed. Migration status could not be queried locally because this worktree intentionally has no `DATABASE_URL`; the standard production deploy runs `prisma migrate deploy`.
+- Security review: a P1 finding showed that manager PATCH responses could return internal cost fields even though the screen hid them. All GET and PATCH responses now use the same server-side redaction, with dedicated regression tests.
+- Local verification: 137 tests passed, TypeScript passed, production build passed, and `git diff --check` passed. Migration status could not be queried locally because this worktree intentionally has no `DATABASE_URL`; the standard production deploy runs `prisma migrate deploy`.
 - Branch / PR: `codex/service-pricing-control` / #101 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/101`).
 - Next action: push the branch, let CI pass, merge into `main`, verify migration/deploy success, then smoke-test owner and manager pages without changing live prices.
 
