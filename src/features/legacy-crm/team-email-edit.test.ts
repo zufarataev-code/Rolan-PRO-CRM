@@ -19,3 +19,11 @@ test("self email changes refresh the authenticated owner session", () => {
   assert.match(route, /sessionCredentialFingerprint\(user\.password_hash\)/);
   assert.match(route, /response\.cookies\.set/);
 });
+
+test("cloud employee access patch remains valid without nested inline quotes", () => {
+  const route = readFileSync("app/legacy-crm/route.ts", "utf8");
+
+  assert.match(route, /onclick="generateTeamAccessPassword\(\)"/);
+  assert.match(route, /window\.generateTeamAccessPassword/);
+  assert.doesNotMatch(route, /onclick="const el=document\.getElementById/);
+});

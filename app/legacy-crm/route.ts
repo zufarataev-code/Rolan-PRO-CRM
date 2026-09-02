@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
                 '<label class="mt-3">Новый временный пароль</label>' +
                 '<div class="flex gap-2">' +
                   '<input id="tm-password" type="password" autocomplete="new-password" placeholder="Оставьте пустым, чтобы не менять">' +
-                  '<button class="btn-ghost text-sm whitespace-nowrap" onclick="const el=document.getElementById(\'tm-password\'); el.value=suggestTeamPassword(); el.type=\'text\';">Сгенерировать</button>' +
+                  '<button class="btn-ghost text-sm whitespace-nowrap" onclick="generateTeamAccessPassword()">Сгенерировать</button>' +
                 '</div>' +
                 '<div class="text-xs text-gray-500 mt-1">Если задать новый пароль, сотрудник сменит его при следующем входе.</div>' +
 
@@ -104,6 +104,13 @@ export async function GET(request: NextRequest) {
               '</div>' +
             '</div>';
           render();
+        };
+
+        window.generateTeamAccessPassword = function generateTeamAccessPassword() {
+          const input = document.getElementById('tm-password');
+          if (!input) return;
+          input.value = suggestTeamPassword();
+          input.type = 'text';
         };
 
         window.submitTeamMemberAccess = async function submitTeamMemberAccess() {
