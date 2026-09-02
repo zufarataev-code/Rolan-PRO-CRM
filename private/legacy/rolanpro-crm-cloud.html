@@ -16242,11 +16242,22 @@ function renderTeam() {
 // чужие постоянные пароли.
 
 const TEAM_ROLE_OPTIONS = [
-  { code: 'MANAGER', label: 'Менеджер — продажи, заказы, клиенты' },
-  { code: 'CONSULTANT', label: 'Замерщик — выезды и замеры, без финансов' },
-  { code: 'INSTALLER', label: 'Монтажник — свои работы и фотоотчёт' },
-  { code: 'OWNER', label: 'Владелец — полный доступ, включая деньги' },
+  { code: 'MANAGER', legacyRole: 'manager', name: 'Менеджер', label: 'Менеджер — продажи, заказы, клиенты' },
+  { code: 'CONSULTANT', legacyRole: 'measurer', name: 'Замерщик', label: 'Замерщик — выезды и замеры, без финансов' },
+  { code: 'INSTALLER', legacyRole: 'installer', name: 'Монтажник', label: 'Монтажник — свои работы и фотоотчёт' },
+  { code: 'OWNER', legacyRole: 'owner', name: 'Владелец', label: 'Владелец — полный доступ, включая деньги' },
 ];
+
+function teamRoleOptionByLegacy(legacyRole) {
+  return TEAM_ROLE_OPTIONS.find(option => option.legacyRole === legacyRole) || null;
+}
+
+function teamLegacyRoleFromServer(roles) {
+  const codes = Array.isArray(roles) ? roles : [];
+  const priority = ['OWNER', 'MANAGER', 'CONSULTANT', 'INSTALLER'];
+  const primaryCode = priority.find(code => codes.includes(code));
+  return TEAM_ROLE_OPTIONS.find(option => option.code === primaryCode)?.legacyRole || '';
+}
 
 function suggestTeamPassword() {
   // Пароль читается вслух и передаётся лично, поэтому без похожих
@@ -16399,10 +16410,9 @@ function submitTeamMemberPhoto(userId) {
 }
 
 /**
- * Карточка сотрудника: имя, телефон, фотография.
- *
- * Логин, пароль и роли остаются в openTeamMemberAccess — это разные
- * по смыслу вещи: здесь личные данные, там доступ в систему.
+ * Карточка сотрудника: имя, телефон, фотография, почта и роль.
+ * Пароль остаётся отдельным действием, потому что его меняют реже и
+ * после смены сотрудник должен задать собственный постоянный пароль.
  *
  * Владелец правит любого сотрудника, сотрудник — только себя.
  */
@@ -16419,7 +16429,7 @@ function openTeamMemberEdit(userId) {
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6">
       <h3 class="font-semibold text-lg mb-1">${academyEsc(u.name)}</h3>
-      <p class="text-xs text-gray-500 mb-4">Личные данные сотрудника. Владелец может изменить почту для входа прямо здесь.</p>
+      <p class="text-xs text-gray-500 mb-4">Личные данные сотрудника. Владелец может изменить почту и роль прямо здесь.</p>
 
       <div class="flex items-center gap-3 mb-4">
         <div id="tm-photo-preview">${u.photo
@@ -16445,8 +16455,16 @@ function openTeamMemberEdit(userId) {
       <div class="text-xs text-gray-400 mt-1">После сохранения новая почта сразу станет логином сотрудника.</div>
 
       <label class="mt-3">Роль</label>
-      <input value="${academyEsc(T(u.role) || u.role || '—')}" disabled
+      ${isOwner && u.id !== viewer?.id
+        ? `<select id="tm-edit-role">
+            ${TEAM_ROLE_OPTIONS.map(option => `<option value="${option.legacyRole}" ${u.role === option.legacyRole ? 'selected' : ''}>${academyEsc(option.name)}</option>`).join('')}
+          </select>
+          <div class="text-xs text-gray-400 mt-1">Роль определяет разделы и данные, которые сотрудник увидит после сохранения.</div>`
+        : `<input id="tm-edit-role" value="${academyEsc(T(u.role) || u.role || '—')}" disabled
              style="opacity:.6;cursor:not-allowed;">
+           <div class="text-xs text-gray-400 mt-1">${isOwner
+             ? 'Свою роль владельца менять нельзя, чтобы не потерять доступ к CRM.'
+             : 'Роль сотрудника может изменить только владелец.'}</div>`}
 
       ${isOwner ? `<button class="btn-ghost text-sm w-full mt-2" onclick="openTeamMemberAccess('${u.id}')">🔑 Изменить пароль и доступ</button>` : ''}
 
@@ -16459,18 +16477,49 @@ function openTeamMemberEdit(userId) {
     </div>
   </div>`;
   render();
+  if (isOwner && location.protocol !== 'file:') hydrateTeamMemberAccount(userId);
+}
+
+async function hydrateTeamMemberAccount(userId) {
+  const u = getUser(userId);
+  if (!u) return;
+  try {
+    const response = await fetch('/api/v1/team', { cache: 'no-store' });
+    const list = await response.json();
+    if (!response.ok) return;
+    const members = Array.isArray(list?.data) ? list.data : [];
+    const currentEmail = String(u.email || '').trim().toLowerCase();
+    const member = members.find(item => Array.isArray(item.legacyUserIds) && item.legacyUserIds.includes(userId))
+      || (currentEmail ? members.find(item => String(item.email || '').trim().toLowerCase() === currentEmail) : null);
+    if (!member) return;
+
+    const emailInput = document.getElementById('tm-edit-email');
+    if (emailInput && (!emailInput.value || emailInput.value.trim().toLowerCase() === currentEmail)) {
+      emailInput.value = member.email || '';
+    }
+
+    const roleSelect = document.getElementById('tm-edit-role');
+    const serverRole = teamLegacyRoleFromServer(member.roles);
+    if (roleSelect?.tagName === 'SELECT' && serverRole) roleSelect.value = serverRole;
+  } catch (error) {
+    console.error('[Team card] account hydration failed', error);
+  }
 }
 
 async function submitTeamMemberEdit(userId) {
   const u = getUser(userId);
   if (!u) return;
   const viewer = currentUser();
+  const isOwner = viewer?.role === 'owner';
   if (viewer?.role !== 'owner' && viewer?.id !== u.id) return;
 
   const name = (document.getElementById('tm-edit-name')?.value || '').trim();
   const phone = (document.getElementById('tm-edit-phone')?.value || '').trim();
   const currentEmail = String(u.email || '').trim().toLowerCase();
-  const email = (document.getElementById('tm-edit-email')?.value || '').trim().toLowerCase();
+  const enteredEmail = (document.getElementById('tm-edit-email')?.value || '').trim().toLowerCase();
+  const requestedRole = isOwner
+    ? (document.getElementById('tm-edit-role')?.value || u.role)
+    : u.role;
   const photo = document.getElementById('tm-photo-data')?.value || '';
   const err = document.getElementById('tm-edit-error');
 
@@ -16481,13 +16530,20 @@ async function submitTeamMemberEdit(userId) {
 
   if (!name) return fail('Укажите имя сотрудника.');
 
-  if (viewer?.role === 'owner') {
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (isOwner) {
+    const roleOption = teamRoleOptionByLegacy(requestedRole);
+    if (!roleOption) return fail('Выберите корректную роль сотрудника.');
+    if (enteredEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enteredEmail)) {
       return fail('Укажите корректную почту для входа.');
     }
 
+    if (requestedRole === 'owner' && u.role !== 'owner') {
+      const confirmed = confirm('Назначить сотруднику роль владельца? Он получит полный доступ, включая финансы и настройки.');
+      if (!confirmed) return;
+    }
+
     if (location.protocol === 'file:') {
-      return fail('Почту можно менять только в публичной CRM на сервере.');
+      return fail('Почту и роль можно менять только в публичной CRM на сервере.');
     }
 
     try {
@@ -16501,14 +16557,22 @@ async function submitTeamMemberEdit(userId) {
         || (currentEmail ? members.find(item => String(item.email || '').trim().toLowerCase() === currentEmail) : null);
       if (!member) return fail('Серверная учётная запись сотрудника не найдена. Откройте «Изменить пароль и доступ» и проверьте привязку.');
 
+      const canonicalEmail = String(member.email || '').trim().toLowerCase();
+      const emailWasEdited = Boolean(enteredEmail && enteredEmail !== currentEmail);
+      const email = emailWasEdited ? enteredEmail : (canonicalEmail || enteredEmail);
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return fail('Укажите корректную почту для входа.');
+      }
+
       const updateResponse = await fetch(`/api/v1/team/${member.userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, fullName: name, legacyUserId: userId }),
+        body: JSON.stringify({ email, fullName: name, roles: [roleOption.code], legacyUserId: userId }),
       });
       const update = await updateResponse.json();
-      if (!updateResponse.ok) return fail(apiMessage(update, 'Не удалось изменить почту сотрудника.'));
+      if (!updateResponse.ok) return fail(apiMessage(update, 'Не удалось изменить данные и роль сотрудника.'));
       u.email = email;
+      u.role = requestedRole;
     } catch (error) {
       console.error('[Team card] employee update failed', error);
       return fail('Сервер не ответил. Изменения не сохранены — попробуйте ещё раз.');

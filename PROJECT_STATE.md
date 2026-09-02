@@ -82,6 +82,7 @@ Target modules:
 | Fix employee email editing, forgot-password by email, and server-only employee login | `fix/employee-account-recovery` / #98 | ChatGPT | Merged/deployed | Verify through #99 security hotfix, then controlled production employee-access smoke test |
 | Revoke old sessions after credential changes and make reset links concurrency-safe | `fix/password-reset-session-revocation` / #99 | ChatGPT | First full CI green; final docs commit pending checks | Wait for final CI/security review on latest head, merge to `main`, deploy, verify production health |
 | Make employee login email editable directly in the employee card | `codex/direct-email-edit` | Codex | Merged and deployed | No remaining code action; use the Team card's `Изменить` action for future email changes |
+| Allow owner to change an employee role from the normal employee card | `codex/edit-employee-role` | Codex | Local verification passed; release pending | Push to `main`, deploy, then verify the role selector in the public Team card without changing a real employee |
 
 Contributors must add a row before starting substantial work and update or remove it at handoff.
 
@@ -126,6 +127,15 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification: 131 automated tests passed, TypeScript passed, and the production build passed. GitHub CI and the production deploy both succeeded for `e734ea3743ded8afbc2b85cce305514f2c6eb2c9`. A fresh production browser load had no script errors; the Team editor displayed `Почта для входа` as an enabled, non-read-only `email` field for both owner and manager cards. No real employee email was changed during smoke testing.
 - Branch / release: `codex/direct-email-edit`; merged by reviewed fast-forward to `main`; production served release `e734ea3743ded8afbc2b85cce305514f2c6eb2c9` before this documentation-only handoff commit.
 - Next action: none. When changing an address, open `Команда` → the employee's `Изменить` button, enter the new email, and press `Сохранить`; the new address immediately becomes that employee's login.
+
+## 2026-09-01 handoff — employee role editing from the Team card
+
+- Root cause: the normal employee editor rendered `Роль` as a permanently disabled reference field. The separate access dialog only changed email and password, so the owner had no working UI for changing the canonical server role.
+- Fix: an owner editing another employee now gets one role selector in the normal card: Manager, Surveyor, Installer, or Owner. Saving maps that selection to the canonical server role, updates PostgreSQL through the owner-only Team API, and then updates the legacy card. The owner cannot change their own role in this card, preventing accidental self-lockout; promotion to Owner requires an explicit warning confirmation.
+- Data safety: the editor hydrates the canonical server email and role before saving. A role-only change therefore does not overwrite a newer server email with stale legacy data. If a server account has multiple roles, the primary legacy view follows the existing access priority: Owner, Manager, Surveyor, Installer.
+- Local verification: the legacy inline script compiled; all 133 automated tests passed; TypeScript passed; the production build passed. No real employee account was modified.
+- Branch: `codex/edit-employee-role`.
+- Next action: publish from `main`, verify the deployed Team card shows an enabled selector for another employee and a disabled role for the current owner, then record the production release SHA.
 
 ## Completion rule
 
