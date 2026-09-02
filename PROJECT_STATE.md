@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Daily installer workspace: shifts, hours, mileage, payroll history, and opt-in work tracking | `codex/installer-daily-operations` | Codex | Implemented and locally verified | Push branch, release from `main`, run migration, then production smoke without starting a real employee shift |
+| Daily installer workspace: shifts, hours, mileage, payroll history, and opt-in work tracking | `codex/installer-daily-operations` / #106 | Codex | Merged and deployed | Have each installer sign in, install/open the Rolan PRO app, and begin using `Рабочий день`; review configured installer rates before first payroll |
 | Fix installed employee app opening installer 404 | `fix/installer-pwa-entry` / #103 | Codex | Merged and deployed | No remaining code action; employee should close and reopen the installed app |
 | Canonical services/pricing and break-even control for owner + manager | `codex/service-pricing-control` / #101 | Codex | Merged and deployed | No remaining release action; owner should confirm planning assumptions before using targets operationally |
 | Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / #24 | Codex | PR open | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
@@ -174,8 +174,10 @@ Contributors must add a row before starting substantial work and update or remov
 - Work location is opt-in at shift start and is accepted only for the authenticated installer's active, tracking-enabled shift. The manager/owner view at `/manager/installers` shows current shift, object, elapsed time, and last location with a Google Maps link. The legacy CRM navigation includes `Монтажники сейчас` so this is reachable from the current operating workspace.
 - Data protection: a partial unique database index prevents two simultaneous active shifts for one installer; location writes validate coordinates and are rejected when tracking is inactive; all employee writes are scoped server-side to the authenticated Installer role.
 - Local verification: 140 tests passed, TypeScript passed, production build passed with `/installer/today`, `/manager/installers`, and both work-session APIs, and `git diff --check` passed.
-- Branch: `codex/installer-daily-operations`.
-- Remaining release action: push, merge to `main`, let the standard production deployment run the migration, and smoke-test route availability without starting a real employee shift or requesting location permission.
+- Branch / PR: `codex/installer-daily-operations` / #106 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/106`).
+- Release: PR #106 passed GitHub CI and merged to `main` as `d9696a08fd84e2238328dc129a8de49ad02b80ad`. Production deploy run #33602991272 succeeded, including the database migration.
+- Production smoke: `/installer`, `/installer/today`, and `/manager/installers` all returned the expected authenticated redirect rather than 404; the work-session API returned 401 without a session. No real employee shift, mileage, payroll, or location record was created.
+- Next action: verify the real installer rates in `Услуги и цены`, then have each installer sign in at the public CRM, open `Рабочий день`, allow location only if desired, and start the first real shift.
 
 ## Completion rule
 
