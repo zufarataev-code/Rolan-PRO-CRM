@@ -82,7 +82,7 @@ Target modules:
 | Fix employee email editing, forgot-password by email, and server-only employee login | `fix/employee-account-recovery` / #98 | ChatGPT | Merged/deployed | Verify through #99 security hotfix, then controlled production employee-access smoke test |
 | Revoke old sessions after credential changes and make reset links concurrency-safe | `fix/password-reset-session-revocation` / #99 | ChatGPT | First full CI green; final docs commit pending checks | Wait for final CI/security review on latest head, merge to `main`, deploy, verify production health |
 | Make employee login email editable directly in the employee card | `codex/direct-email-edit` | Codex | Merged and deployed | No remaining code action; use the Team card's `Изменить` action for future email changes |
-| Allow owner to change an employee role from the normal employee card | `codex/edit-employee-role` | Codex | Local verification passed; release pending | Push to `main`, deploy, then verify the role selector in the public Team card without changing a real employee |
+| Allow owner to change an employee role from the normal employee card | `codex/edit-employee-role` | Codex | Merged and deployed | No remaining code action; change roles through `Команда` → employee → `Изменить` |
 
 Contributors must add a row before starting substantial work and update or remove it at handoff.
 
@@ -135,7 +135,9 @@ Contributors must add a row before starting substantial work and update or remov
 - Data safety: the editor hydrates the canonical server email and role before saving. A role-only change therefore does not overwrite a newer server email with stale legacy data. If a server account has multiple roles, the primary legacy view follows the existing access priority: Owner, Manager, Surveyor, Installer.
 - Local verification: the legacy inline script compiled; all 133 automated tests passed; TypeScript passed; the production build passed. No real employee account was modified.
 - Branch: `codex/edit-employee-role`.
-- Next action: publish from `main`, verify the deployed Team card shows an enabled selector for another employee and a disabled role for the current owner, then record the production release SHA.
+- Production verification: GitHub CI and the production deploy succeeded for `0b6e0883bb0f1713f7dac3858c007a8b4e942474`. On a fresh public CRM load, Danilla's normal employee card showed an enabled `SELECT` with Manager, Surveyor, Installer, and Owner; the current owner's role remained a disabled field. The public page reported no script errors, and the dialog was closed with `Отмена`, so no real account was changed.
+- Release: `0b6e0883bb0f1713f7dac3858c007a8b4e942474` from `main`.
+- Next action: none. Change a role through `Команда` → employee → `Изменить` → `Роль` → `Сохранить`.
 
 ## Completion rule
 
