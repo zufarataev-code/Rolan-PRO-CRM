@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { calculatePositionFinance, listProjectsForSession } from "@/features/projects/service";
 import { calculateProratedCompanyOverhead, readCompanyOverheadConfig } from "@/lib/finance/company-overhead";
+import { getBusinessPlanningSnapshot } from "@/lib/finance/business-planning";
 
 type OwnerSession = {
   user: {
@@ -318,7 +319,7 @@ async function getServicePnlRows(input?: {
 
 export async function getOwnerDashboardData(session: OwnerSession) {
   const now = new Date();
-  const [projects, leadsCount, dealsCount, proposals, deposits, overdueFollowUpsCount, overdueTasksCount] =
+  const [projects, leadsCount, dealsCount, proposals, deposits, overdueFollowUpsCount, overdueTasksCount, planning] =
     await Promise.all([
       listProjectsForSession(session),
       prisma.lead.count(),
@@ -398,6 +399,7 @@ export async function getOwnerDashboardData(session: OwnerSession) {
           },
         },
       }),
+      getBusinessPlanningSnapshot(),
     ]);
 
   const totalSales = proposals.reduce((sum, proposal) => sum + toNumber(proposal.selected_total_amount), 0);
@@ -439,6 +441,7 @@ export async function getOwnerDashboardData(session: OwnerSession) {
       .filter((project) => project.problem_flag || project.status_flags.is_overdue || project.finance_snapshot.margin_percent < 25)
       .slice(0, 8),
     recent_deposits: deposits,
+    planning,
     recent_proposals: proposals.slice(0, 8).map((proposal) => ({
       proposal_id: proposal.proposal_id,
       proposal_code: proposal.proposal_code,

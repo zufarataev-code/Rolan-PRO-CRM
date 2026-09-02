@@ -27,6 +27,7 @@ const navGroups: ProductNavGroup[] = [
   {
     label: "Система",
     items: [
+      { href: "/owner/settings/pricing", label: "Услуги и цены" },
       { href: "/owner/settings", label: "Настройки" },
       { href: "/manager", label: "Кабинет менеджера" },
     ],

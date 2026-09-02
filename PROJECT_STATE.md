@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Canonical services/pricing and break-even control for owner + manager | `codex/service-pricing-control` / #101 | Codex | PR open; local checks green | Merge after CI, deploy migration, and smoke-test production |
 | Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / #24 | Codex | PR open | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
 | Fix employee email editing, forgot-password by email, and server-only employee login | `fix/employee-account-recovery` / #98 | ChatGPT | Merged/deployed | Verify through #99 security hotfix, then controlled production employee-access smoke test |
 | Revoke old sessions after credential changes and make reset links concurrency-safe | `fix/password-reset-session-revocation` / #99 | ChatGPT | First full CI green; final docs commit pending checks | Wait for final CI/security review on latest head, merge to `main`, deploy, verify production health |
@@ -138,6 +139,17 @@ Contributors must add a row before starting substantial work and update or remov
 - Production verification: GitHub CI and the production deploy succeeded for `0b6e0883bb0f1713f7dac3858c007a8b4e942474`. On a fresh public CRM load, Danilla's normal employee card showed an enabled `SELECT` with Manager, Surveyor, Installer, and Owner; the current owner's role remained a disabled field. The public page reported no script errors, and the dialog was closed with `Отмена`, so no real account was changed.
 - Release: `0b6e0883bb0f1713f7dac3858c007a8b4e942474` from `main`.
 - Next action: none. Change a role through `Команда` → employee → `Изменить` → `Роль` → `Сохранить`.
+
+## 2026-09-01 handoff — canonical service pricing and break-even control
+
+- Added focused owner and manager pages for one PostgreSQL-backed service price list. Both roles can add services and add-ons and maintain customer-facing prices used by calculator/proposal flows.
+- Owner-only fields include material cost, installer pay rate, block/add-on cost, company overhead, target profit, and margin assumptions. Manager server responses zero internal-cost fields and expose only actionable sales targets.
+- Added persistent business-planning assumptions and a monthly signal that converts overhead, contribution margin, average check, and conversion into required revenue, deals, and leads. The owner dashboard now raises an action when the break-even plan is behind.
+- Added direct `Услуги и цены` entry points to owner navigation, manager navigation, and the active legacy CRM menu/settings hub.
+- Security review: a P1 finding showed that manager PATCH responses could return internal cost fields even though the screen hid them. All GET and PATCH responses now use the same server-side redaction, with dedicated regression tests.
+- Local verification: 137 tests passed, TypeScript passed, production build passed, and `git diff --check` passed. Migration status could not be queried locally because this worktree intentionally has no `DATABASE_URL`; the standard production deploy runs `prisma migrate deploy`.
+- Branch / PR: `codex/service-pricing-control` / #101 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/101`).
+- Next action: push the branch, let CI pass, merge into `main`, verify migration/deploy success, then smoke-test owner and manager pages without changing live prices.
 
 ## Completion rule
 

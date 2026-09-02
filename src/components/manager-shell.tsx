@@ -32,7 +32,10 @@ const navGroups: ProductNavGroup[] = [
   },
   {
     label: "Инструменты",
-    items: [{ href: "/manager/crm/calculator", label: "Калькулятор" }],
+    items: [
+      { href: "/manager/crm/calculator", label: "Калькулятор" },
+      { href: "/manager/crm/pricing", label: "Услуги и цены" },
+    ],
   },
 ];
 

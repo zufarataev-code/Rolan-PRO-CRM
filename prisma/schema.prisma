@@ -105,6 +105,16 @@ model ServiceType {
   @@map("service_types")
 }
 
+model BusinessPlanningSetting {
+  planning_key                 String    @id @default("company") @db.VarChar(40)
+  average_deal_value           Decimal   @default(5000) @db.Decimal(12, 2)
+  lead_to_deal_percent         Decimal   @default(30) @db.Decimal(5, 2)
+  target_profit_monthly        Decimal   @default(50000) @db.Decimal(12, 2)
+  updated_at                   DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@map("business_planning_settings")
+}
+
 model ServiceFieldConfig {
   service_field_config_id      String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   service_type_id              String      @db.Uuid
