@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Canonical services/pricing and break-even control for owner + manager | `codex/service-pricing-control` | Codex | Local implementation verified | Commit, push, merge after CI, deploy migration, and smoke-test production |
+| Canonical services/pricing and break-even control for owner + manager | `codex/service-pricing-control` / #101 | Codex | PR open; local checks green | Merge after CI, deploy migration, and smoke-test production |
 | Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / #24 | Codex | PR open | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
 | Fix employee email editing, forgot-password by email, and server-only employee login | `fix/employee-account-recovery` / #98 | ChatGPT | Merged/deployed | Verify through #99 security hotfix, then controlled production employee-access smoke test |
 | Revoke old sessions after credential changes and make reset links concurrency-safe | `fix/password-reset-session-revocation` / #99 | ChatGPT | First full CI green; final docs commit pending checks | Wait for final CI/security review on latest head, merge to `main`, deploy, verify production health |
@@ -147,7 +147,7 @@ Contributors must add a row before starting substantial work and update or remov
 - Added persistent business-planning assumptions and a monthly signal that converts overhead, contribution margin, average check, and conversion into required revenue, deals, and leads. The owner dashboard now raises an action when the break-even plan is behind.
 - Added direct `Услуги и цены` entry points to owner navigation, manager navigation, and the active legacy CRM menu/settings hub.
 - Local verification: 135 tests passed, TypeScript passed, production build passed, and `git diff --check` passed. Migration status could not be queried locally because this worktree intentionally has no `DATABASE_URL`; the standard production deploy runs `prisma migrate deploy`.
-- Branch: `codex/service-pricing-control`.
+- Branch / PR: `codex/service-pricing-control` / #101 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/101`).
 - Next action: push the branch, let CI pass, merge into `main`, verify migration/deploy success, then smoke-test owner and manager pages without changing live prices.
 
 ## Completion rule
