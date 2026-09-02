@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { OwnerShell } from "@/components/owner-shell";
@@ -22,6 +23,7 @@ export default async function OwnerSettingsPage() {
       subtitle="Цены, активные услуги, каталог пленок, зоны обслуживания и системные параметры."
       kicker="Система / Настройки"
       activeHref="/owner/settings"
+      actions={<Link href="/owner/settings/pricing" className="accent-button">Услуги, цены и план продаж</Link>}
     >
       <OwnerSettingsEditor
         serviceTypes={settings.service_types.map((item) => ({

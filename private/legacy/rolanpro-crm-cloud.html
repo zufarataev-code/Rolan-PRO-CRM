@@ -14700,6 +14700,10 @@ function closeMobileSidebar() {
 
 function selectAppView(key) {
   const user = currentUser();
+  if (key === 'servicePricing' && (user?.role === 'owner' || user?.role === 'manager')) {
+    location.href = user.role === 'owner' ? '/owner/settings/pricing' : '/manager/crm/pricing';
+    return;
+  }
   if (key === 'settings' && user?.role !== 'owner') return;
   state.view = key;
   if (key !== 'settings') state.settingsSection = null;
@@ -14717,6 +14721,7 @@ function renderAppShell() {
     ['coldcalls', 'Холодные звонки', '📞'],
     ['orders', T('orders'), '📦'],
     ['proposals', 'КП', '📄'],
+    ['servicePricing', 'Услуги и цены', '💲'],
     ['calendar', T('calendar'), '📅'],
     ['tasks', 'Задачи', '✅'],
     ['academy', 'Академия', '🧭'],
@@ -17417,6 +17422,7 @@ function settingsSections() {
     { key: 'complexity', icon: '🪜', title: `${T('complexity')} — ${T('coefficient')}`, description: 'Коэффициенты сложности и стоимость аренды' },
     { key: 'client-payments', icon: '💵', title: 'Как клиент платит', description: 'Доступные способы и приоритет оплаты' },
     { key: 'pricing', icon: '📊', title: T('pricingDefaults'), description: 'Проценты, топливо, расходники и помощники' },
+    { key: 'service-pricing', icon: '💲', title: 'Услуги, цены и план продаж', description: 'Единый прайс, ставки работ и точка безубыточности', destinationUrl: '/owner/settings/pricing' },
     { key: 'units', icon: '📏', title: T('units'), description: 'Единицы измерения размеров стекла' },
     { key: 'office', icon: '📍', title: 'Офис и карта', description: 'Адрес компании, центр карты и Google Reviews' },
     { key: 'stripe', icon: '💳', title: 'Stripe', description: 'Приём платежей картой и платёжные ссылки' },
@@ -17435,6 +17441,10 @@ function openSettingsSection(key) {
   if (currentUser()?.role !== 'owner') return;
   const section = settingsSections().find(item => item.key === key);
   if (!section) return;
+  if (section.destinationUrl) {
+    location.href = section.destinationUrl;
+    return;
+  }
   if (section.destination) {
     state.settingsSection = null;
     selectAppView(section.destination);

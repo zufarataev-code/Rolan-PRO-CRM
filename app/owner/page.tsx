@@ -61,9 +61,20 @@ export default async function OwnerDashboardPage() {
     { label: "Low margin", value: data.metrics.low_margin_projects, note: "Margin ниже 25%" },
     { label: "Problems", value: data.metrics.problem_projects, note: "Problem / overdue / attention" },
     { label: "Overdue actions", value: data.metrics.overdue_follow_ups + data.metrics.overdue_tasks, note: "Просроченные follow-ups и tasks" },
+    { label: "Break-even plan", value: `${data.planning.actual.progress_percent.toFixed(0)}%`, note: `${data.planning.break_even.deals} сделок / ${data.planning.break_even.leads} лидов в месяц` },
   ];
 
   const ownerNextActions: SmartAction[] = [];
+
+  if (data.planning.actual.signal !== "on_track") {
+    ownerNextActions.push({
+      label: "Добрать продажи до безубыточности",
+      description: `Сейчас ${data.planning.actual.progress_percent.toFixed(0)}% плана по сумме КП. До точки безубыточности нужно ${data.planning.break_even.deals} сделок из ${data.planning.break_even.leads} лидов в месяц.`,
+      value: formatCurrency(data.planning.break_even.revenue),
+      href: "/owner/settings/pricing",
+      chipClassName: data.planning.actual.signal === "risk" ? "chip chip-danger" : "chip chip-accent",
+    });
+  }
 
   if (overdueActions > 0) {
     ownerNextActions.push({
@@ -136,7 +147,7 @@ export default async function OwnerDashboardPage() {
           <Link href="/owner/finance" className="soft-button">
             Открыть финансы
           </Link>
-          <Link href="/owner/settings" className="accent-button">
+          <Link href="/owner/settings/pricing" className="accent-button">
             Справочники и прайсы
           </Link>
         </>
@@ -168,8 +179,8 @@ export default async function OwnerDashboardPage() {
                 <Link href="/owner/projects" className="soft-button">
                   Проекты
                 </Link>
-                <Link href="/owner/settings" className="soft-button">
-                  Справочники
+                <Link href="/owner/settings/pricing" className="soft-button">
+                  Услуги и цены
                 </Link>
               </div>
               <div className="inline-stat-grid">
