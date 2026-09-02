@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Remove duplicate owner/manager pricing shell and keep canonical pricing inside the main CRM | `codex/unify-service-pricing-ui` | Codex | Implemented and locally verified | Push, merge, deploy, then verify the old URLs return to `/legacy-crm` |
 | Daily installer workspace: shifts, hours, mileage, payroll history, and opt-in work tracking | `codex/installer-daily-operations` / #106 | Codex | Merged and deployed | Have each installer sign in, install/open the Rolan PRO app, and begin using `Рабочий день`; review configured installer rates before first payroll |
 | Fix installed employee app opening installer 404 | `fix/installer-pwa-entry` / #103 | Codex | Merged and deployed | No remaining code action; employee should close and reopen the installed app |
 | Canonical services/pricing and break-even control for owner + manager | `codex/service-pricing-control` / #101 | Codex | Merged and deployed | No remaining release action; owner should confirm planning assumptions before using targets operationally |
@@ -178,6 +179,16 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #106 passed GitHub CI and merged to `main` as `d9696a08fd84e2238328dc129a8de49ad02b80ad`. Production deploy run #33602991272 succeeded, including the database migration.
 - Production smoke: `/installer`, `/installer/today`, and `/manager/installers` all returned the expected authenticated redirect rather than 404; the work-session API returned 401 without a session. No real employee shift, mileage, payroll, or location record was created.
 - Next action: verify the real installer rates in `Услуги и цены`, then have each installer sign in at the public CRM, open `Рабочий день`, allow location only if desired, and start the first real shift.
+
+## 2026-09-02 handoff — one owner/manager CRM interface
+
+- Root cause: the canonical PostgreSQL pricing editor and installer tracking screen were opened in the separate modern owner/manager shell. The data source was correct, but the second sidebar and visual language made it look like a different CRM.
+- Fix: `Услуги и цены` now renders directly inside the active `/legacy-crm` shell with compact expandable service/add-on cards, owner-only costs and installer rates, manager-safe selling prices, add-service/add-on actions, and the existing break-even plan. `Монтажники сейчас` also renders inside the same shell through a protected Owner/Manager API.
+- Compatibility: `/owner/settings/pricing` and `/manager/crm/pricing` redirect to `/legacy-crm#/service-pricing`; `/manager/installers` redirects to `/legacy-crm#/installer-operations`. Existing bookmarks therefore stop showing the duplicate shell without breaking.
+- Data safety: no service, rate, planning, payroll, shift, or location data was deleted. All writes continue through the same authenticated PostgreSQL APIs, including server-side manager cost redaction.
+- Local verification: 142 tests passed, TypeScript passed, the legacy inline script compiled, production build passed with the new team API and compatibility redirects, and `git diff --check` passed.
+- Branch: `codex/unify-service-pricing-ui`.
+- Next action: push and merge, deploy from `main`, then verify public route behavior without changing live prices or employee data.
 
 ## Completion rule
 

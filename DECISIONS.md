@@ -53,6 +53,13 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Precise location tracking is explicit and work-bound: the installer enables it when starting a shift, it stops when the shift ends, and the interface states that the app must remain open. Hidden continuous off-shift tracking is not permitted.
 - Installers may see only their own work history and own payroll accruals. Owners and managers may see current team work status and the last consented work location; customer prices and company margin remain hidden from installers.
 
+## 2026-09-02 — One owner/manager interface
+
+- This decision supersedes the UI-routing part of `One canonical service price list and role-safe planning`: the canonical PostgreSQL price list remains unchanged, but owner and manager pricing no longer opens a separate modern shell.
+- `/legacy-crm` is the single owner/manager operating interface while legacy business records are being migrated. Canonical PostgreSQL modules must open as sections inside that interface, not appear as a second CRM.
+- `Услуги и цены` and `Монтажники сейчас` render inside `/legacy-crm`. Old direct modern-shell URLs redirect to the matching section of the main CRM so bookmarks do not break.
+- Removing a duplicate interface must not delete canonical PostgreSQL pricing, payroll, installer, or planning data.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
