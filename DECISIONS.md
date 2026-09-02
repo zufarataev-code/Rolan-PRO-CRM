@@ -69,6 +69,12 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - All role workspaces use the same Rolan PRO identity and primary CRM visual language so an employee never appears to enter a different product.
 - Implemented and released by PR #110 (`codex/one-crm-all-roles`).
 
+## 2026-09-02 — Voice input belongs to the future agent
+
+- The standalone floating `Голосовой ввод` control is removed from the legacy CRM and every modern employee page.
+- Voice interaction may return only as part of the unified CRM agent, with a clear workflow and permissions, not as an unrelated global microphone button.
+- This does not remove Google Voice telephony, call history, or the customer-facing Smart-film `Voice Control` service; those are separate business capabilities.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

@@ -189,34 +189,6 @@
     height: auto;
     object-fit: contain;
   }
-  .voice-input-fab {
-    position: fixed;
-    right: 18px;
-    bottom: calc(82px + env(safe-area-inset-bottom));
-    z-index: 80;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 44px;
-    padding: 0 15px;
-    border: 1px solid rgba(37,99,235,.25);
-    border-radius: 6px;
-    background: #fff;
-    color: #1d4ed8;
-    box-shadow: 0 12px 30px rgba(15,23,42,.18);
-    font-weight: 700;
-  }
-  .voice-input-fab.listening {
-    background: #dc2626;
-    border-color: #dc2626;
-    color: #fff;
-    animation: voicePulse 1.1s ease-in-out infinite;
-  }
-  @keyframes voicePulse { 50% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(220,38,38,.14); } }
-  @media (max-width: 640px) {
-    .voice-input-fab { width: 48px; padding: 0; justify-content: center; }
-    .voice-input-label { display: none; }
-  }
   .brand-logo-symbol {
     width: 100%;
     height: 100%;
@@ -6071,9 +6043,6 @@ const CORE_LOGIN_ACCESS = {
 };
 
 let deferredPwaInstallPrompt = null;
-let voiceInputTarget = null;
-let voiceRecognition = null;
-let voiceListening = false;
 
 function isRolanProInstalled() {
   return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -6103,58 +6072,6 @@ async function installRolanProApp() {
 function pwaInstallButtonHtml() {
   if (!ROLANPRO_CLOUD || isRolanProInstalled()) return '';
   return `<button class="btn-ghost text-sm" onclick="installRolanProApp()" title="Установить CRM как приложение">⬇ Установить</button>`;
-}
-function isVoiceInputElement(el) {
-  if (!el) return false;
-  if (el.tagName === 'TEXTAREA' || el.isContentEditable) return true;
-  return el.tagName === 'INPUT' && ['text','search','tel','email','url'].includes((el.type || 'text').toLowerCase());
-}
-document.addEventListener('focusin', event => {
-  if (isVoiceInputElement(event.target)) voiceInputTarget = event.target;
-});
-function updateVoiceButton() {
-  const button = document.getElementById('voice-input-fab');
-  if (!button) return;
-  button.classList.toggle('listening', voiceListening);
-  button.setAttribute('aria-pressed', voiceListening ? 'true' : 'false');
-  button.innerHTML = voiceListening ? '<span>⏹</span><span class="voice-input-label">Остановить</span>' : '<span>🎙</span><span class="voice-input-label">Голосовой ввод</span>';
-}
-function insertVoiceText(target, text) {
-  const clean = String(text || '').trim();
-  if (!clean || !target) return;
-  if (target.isContentEditable) {
-    target.focus();
-    document.execCommand('insertText', false, clean + ' ');
-  } else {
-    const start = Number.isInteger(target.selectionStart) ? target.selectionStart : target.value.length;
-    const end = Number.isInteger(target.selectionEnd) ? target.selectionEnd : start;
-    const prefix = start > 0 && !/\s$/.test(target.value.slice(0, start)) ? ' ' : '';
-    target.setRangeText(prefix + clean, start, end, 'end');
-  }
-  target.dispatchEvent(new Event('input', { bubbles: true }));
-  target.dispatchEvent(new Event('change', { bubbles: true }));
-}
-function startVoiceInput() {
-  if (voiceListening && voiceRecognition) { voiceRecognition.stop(); return; }
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Recognition) return alert('Голосовой ввод поддерживается в Chrome, Edge и Safari на телефоне.');
-  const target = isVoiceInputElement(document.activeElement) ? document.activeElement : voiceInputTarget;
-  if (!isVoiceInputElement(target)) return alert('Сначала нажмите на поле, куда нужно записать текст, затем на микрофон.');
-  voiceInputTarget = target;
-  voiceRecognition = new Recognition();
-  voiceRecognition.lang = state.lang === 'en' ? 'en-US' : 'ru-RU';
-  voiceRecognition.continuous = false;
-  voiceRecognition.interimResults = false;
-  voiceRecognition.onstart = () => { voiceListening = true; updateVoiceButton(); };
-  voiceRecognition.onresult = event => {
-    const text = Array.from(event.results).map(result => result[0]?.transcript || '').join(' ');
-    insertVoiceText(voiceInputTarget, text);
-  };
-  voiceRecognition.onerror = event => {
-    if (!['aborted','no-speech'].includes(event.error)) alert('Не удалось распознать речь. Проверьте доступ к микрофону.');
-  };
-  voiceRecognition.onend = () => { voiceListening = false; voiceRecognition = null; updateVoiceButton(); };
-  voiceRecognition.start();
 }
 function load() {
   const raw = localStorage.getItem('rolanpro_crm');
@@ -14838,7 +14755,6 @@ function renderAppShell() {
   </div>
   ${state.modal || ''}
   ${renderAiSidebar()}
-  <button id="voice-input-fab" type="button" class="voice-input-fab ${voiceListening?'listening':''}" onclick="startVoiceInput()" aria-pressed="${voiceListening?'true':'false'}" title="Надиктовать в выбранное поле"><span>${voiceListening?'⏹':'🎙'}</span><span class="voice-input-label">${voiceListening?'Остановить':'Голосовой ввод'}</span></button>
   `;
 }
 

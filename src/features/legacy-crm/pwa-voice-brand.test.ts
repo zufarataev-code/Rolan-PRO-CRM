@@ -6,6 +6,7 @@ const legacy = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 const proposal = readFileSync("src/components/client-proposal-view.tsx", "utf8");
 const manifest = readFileSync("app/manifest.ts", "utf8");
 const serviceWorker = readFileSync("public/sw.js", "utf8");
+const rootLayout = readFileSync("app/layout.tsx", "utf8");
 
 test("every proposal surface uses the real Rolan PRO logo asset", () => {
   assert.match(legacy, /\/landing\/rolan-logo\.webp/);
@@ -22,9 +23,8 @@ test("CRM is installable without caching private CRM records", () => {
   assert.match(legacy, /installRolanProApp/);
 });
 
-test("voice input writes into the selected CRM field", () => {
-  assert.match(legacy, /SpeechRecognition/);
-  assert.match(legacy, /voiceInputTarget/);
-  assert.match(legacy, /insertVoiceText/);
-  assert.match(legacy, /Голосовой ввод/);
+test("standalone voice input is absent until it is integrated with the agent", () => {
+  assert.doesNotMatch(legacy, /voice-input-fab/);
+  assert.doesNotMatch(legacy, /startVoiceInput/);
+  assert.doesNotMatch(rootLayout, /GlobalVoiceInput/);
 });
