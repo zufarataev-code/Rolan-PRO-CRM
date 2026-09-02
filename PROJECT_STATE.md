@@ -81,6 +81,7 @@ Target modules:
 | Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / #24 | Codex | PR open | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
 | Fix employee email editing, forgot-password by email, and server-only employee login | `fix/employee-account-recovery` / #98 | ChatGPT | Merged/deployed | Verify through #99 security hotfix, then controlled production employee-access smoke test |
 | Revoke old sessions after credential changes and make reset links concurrency-safe | `fix/password-reset-session-revocation` / #99 | ChatGPT | First full CI green; final docs commit pending checks | Wait for final CI/security review on latest head, merge to `main`, deploy, verify production health |
+| Make employee login email editable directly in the employee card | `codex/direct-email-edit` | Codex | Merged and deployed | No remaining code action; use the Team card's `Изменить` action for future email changes |
 
 Contributors must add a row before starting substantial work and update or remove it at handoff.
 
@@ -117,6 +118,14 @@ Contributors must add a row before starting substantial work and update or remov
 - Branch / PR: `fix/password-reset-session-revocation` / #99 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/99`).
 - Blocker: none in code; release is gated only by final GitHub CI/security review on the latest head.
 - Next action: wait for final checks, merge #99 to `main`, let the standard production workflow deploy it, and verify production is serving the merge SHA. Controlled real-email/reset smoke should be done only with an intentionally selected internal/test employee account so no real employee password is changed unexpectedly.
+
+## 2026-09-01 handoff — direct employee email editing
+
+- Root cause: the employee card still rendered the login email as a disabled reference field and delegated changes to a separate Access dialog. The cloud access patch that was intended to support the dialog also contained an invalid nested quote in generated JavaScript, so that patch stopped executing in production.
+- Fix: for an owner, the normal Team card editor now contains an enabled email field. Saving resolves the canonical PostgreSQL user by stable `legacyUserIds` first, updates the server login email, and keeps the owner signed in when the owner changes their own email. The malformed inline access-button handler was replaced with a separate valid function.
+- Verification: 131 automated tests passed, TypeScript passed, and the production build passed. GitHub CI and the production deploy both succeeded for `e734ea3743ded8afbc2b85cce305514f2c6eb2c9`. A fresh production browser load had no script errors; the Team editor displayed `Почта для входа` as an enabled, non-read-only `email` field for both owner and manager cards. No real employee email was changed during smoke testing.
+- Branch / release: `codex/direct-email-edit`; merged by reviewed fast-forward to `main`; production served release `e734ea3743ded8afbc2b85cce305514f2c6eb2c9` before this documentation-only handoff commit.
+- Next action: none. When changing an address, open `Команда` → the employee's `Изменить` button, enter the new email, and press `Сохранить`; the new address immediately becomes that employee's login.
 
 ## Completion rule
 
