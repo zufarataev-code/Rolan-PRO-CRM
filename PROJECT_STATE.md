@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Fix installed employee app opening installer 404 | `fix/installer-pwa-entry` | Codex | Local implementation verified | Push, pass CI, deploy, and verify public `/installer` redirect |
 | Canonical services/pricing and break-even control for owner + manager | `codex/service-pricing-control` / #101 | Codex | Merged and deployed | No remaining release action; owner should confirm planning assumptions before using targets operationally |
 | Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / #24 | Codex | PR open | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
 | Fix employee email editing, forgot-password by email, and server-only employee login | `fix/employee-account-recovery` / #98 | ChatGPT | Merged/deployed | Verify through #99 security hotfix, then controlled production employee-access smoke test |
@@ -152,6 +153,15 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #101 passed CI and security review, then merged to `main` as `fb1c3d69815a53b47ce4cf5262b5ecd0cb993dcc`. Production deploy run #33589241883 completed successfully, including `prisma migrate deploy`.
 - Production verification: `/owner/settings/pricing` loaded the live canonical service list, owner-only cost fields, margin figures, and break-even/target cards with no browser errors. `/manager/crm/pricing` also loaded successfully with 24 service/add-on cards and no browser errors. No live price, service, or planning value was changed during smoke testing.
 - Next action: owner should review and save the real average deal, lead-to-deal conversion, monthly target profit, and company overhead. After that the dashboard signal becomes the operating monthly target for leads and closed deals.
+
+## 2026-09-01 handoff — installed employee app installer 404
+
+- Root cause: the shared post-login destination mapped the Installer role to `/installer`, while the real employee workspace lives at `/installer/jobs`. The installed PWA therefore opened a valid authenticated session on a nonexistent page and showed the reported 404.
+- Fix: Installer login and first-password-change now route to `/installer/jobs`; `/installer` remains as a compatibility redirect so already installed apps, bookmarks, and cached entry links recover automatically after deployment.
+- Related access fix: `/api/v1/settings/pricing` now has the same Owner + Manager middleware permission as its route handler, while all other settings APIs remain Owner-only.
+- Verification: 138 tests passed, TypeScript passed, production build passed, the build now contains both `/installer` and `/installer/jobs`, and `git diff --check` passed.
+- Branch: `fix/installer-pwa-entry`.
+- Next action: open a PR, merge after CI, deploy, then verify public `/installer` redirects without using or changing an employee account.
 
 ## Completion rule
 

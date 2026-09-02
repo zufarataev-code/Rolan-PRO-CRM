@@ -16,6 +16,6 @@ export function destinationForRoles(roles: string[]) {
   if (roles.includes(ROLE_CODES.OWNER)) return "/legacy-crm";
   if (roles.includes(ROLE_CODES.MANAGER)) return "/legacy-crm";
   if (roles.includes(ROLE_CODES.CONSULTANT)) return "/survey";
-  if (roles.includes(ROLE_CODES.INSTALLER)) return "/installer";
+  if (roles.includes(ROLE_CODES.INSTALLER)) return "/installer/jobs";
   return "/login";
 }
