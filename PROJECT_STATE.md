@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Canonical services/pricing and break-even control for owner + manager | `codex/service-pricing-control` / #101 | Codex | PR open; local checks green | Merge after CI, deploy migration, and smoke-test production |
+| Canonical services/pricing and break-even control for owner + manager | `codex/service-pricing-control` / #101 | Codex | Merged and deployed | No remaining release action; owner should confirm planning assumptions before using targets operationally |
 | Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / #24 | Codex | PR open | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
 | Fix employee email editing, forgot-password by email, and server-only employee login | `fix/employee-account-recovery` / #98 | ChatGPT | Merged/deployed | Verify through #99 security hotfix, then controlled production employee-access smoke test |
 | Revoke old sessions after credential changes and make reset links concurrency-safe | `fix/password-reset-session-revocation` / #99 | ChatGPT | First full CI green; final docs commit pending checks | Wait for final CI/security review on latest head, merge to `main`, deploy, verify production health |
@@ -149,7 +149,9 @@ Contributors must add a row before starting substantial work and update or remov
 - Security review: a P1 finding showed that manager PATCH responses could return internal cost fields even though the screen hid them. All GET and PATCH responses now use the same server-side redaction, with dedicated regression tests.
 - Local verification: 137 tests passed, TypeScript passed, production build passed, and `git diff --check` passed. Migration status could not be queried locally because this worktree intentionally has no `DATABASE_URL`; the standard production deploy runs `prisma migrate deploy`.
 - Branch / PR: `codex/service-pricing-control` / #101 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/101`).
-- Next action: push the branch, let CI pass, merge into `main`, verify migration/deploy success, then smoke-test owner and manager pages without changing live prices.
+- Release: PR #101 passed CI and security review, then merged to `main` as `fb1c3d69815a53b47ce4cf5262b5ecd0cb993dcc`. Production deploy run #33589241883 completed successfully, including `prisma migrate deploy`.
+- Production verification: `/owner/settings/pricing` loaded the live canonical service list, owner-only cost fields, margin figures, and break-even/target cards with no browser errors. `/manager/crm/pricing` also loaded successfully with 24 service/add-on cards and no browser errors. No live price, service, or planning value was changed during smoke testing.
+- Next action: owner should review and save the real average deal, lead-to-deal conversion, monthly target profit, and company overhead. After that the dashboard signal becomes the operating monthly target for leads and closed deals.
 
 ## Completion rule
 
