@@ -18,7 +18,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", publicAppUrl));
   }
 
-  if (!session.roles.includes(ROLE_CODES.OWNER) && !session.roles.includes(ROLE_CODES.MANAGER)) {
+  const canUseWorkspace = [
+    ROLE_CODES.OWNER,
+    ROLE_CODES.MANAGER,
+    ROLE_CODES.CONSULTANT,
+    ROLE_CODES.INSTALLER,
+  ].some((role) => session.roles.includes(role));
+
+  if (!canUseWorkspace) {
     return NextResponse.redirect(new URL("/", publicAppUrl));
   }
 
@@ -188,7 +195,8 @@ export async function GET(request: NextRequest) {
     </script>
   `;
 
-  const injectedUi = `${mailShortcut}${teamAccessPatch}`;
+  const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
+  const injectedUi = privilegedWorkspace ? `${mailShortcut}${teamAccessPatch}` : "";
   const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0
     ? `${cloudHtml.slice(0, closingBodyIndex)}${injectedUi}${cloudHtml.slice(closingBodyIndex)}`

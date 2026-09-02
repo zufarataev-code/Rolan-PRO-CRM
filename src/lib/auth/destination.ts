@@ -1,5 +1,4 @@
 import { ROLE_CODES } from "@/lib/auth/constants";
-import { CRM_ROLE_ROUTES } from "@/lib/auth/canonical-route";
 
 /**
  * Куда попадает пользователь сразу после входа.
@@ -16,7 +15,7 @@ import { CRM_ROLE_ROUTES } from "@/lib/auth/canonical-route";
 export function destinationForRoles(roles: string[]) {
   if (roles.includes(ROLE_CODES.OWNER)) return "/legacy-crm";
   if (roles.includes(ROLE_CODES.MANAGER)) return "/legacy-crm";
-  if (roles.includes(ROLE_CODES.CONSULTANT)) return CRM_ROLE_ROUTES.consultant;
-  if (roles.includes(ROLE_CODES.INSTALLER)) return CRM_ROLE_ROUTES.installer;
+  if (roles.includes(ROLE_CODES.CONSULTANT)) return "/legacy-crm";
+  if (roles.includes(ROLE_CODES.INSTALLER)) return "/legacy-crm";
   return "/login";
 }

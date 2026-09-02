@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { ConsultantShell } from "@/components/consultant-shell";
-import { InstallerShell } from "@/components/installer-shell";
 import { ManagerShell } from "@/components/manager-shell";
 import { listNotificationsForSession } from "@/features/core/notifications";
 import { ROLE_CODES } from "@/lib/auth/constants";
@@ -25,12 +23,15 @@ export default async function NotificationsPage() {
     redirect("/");
   }
 
+  if (
+    session.roles.includes(ROLE_CODES.INSTALLER) ||
+    session.roles.includes(ROLE_CODES.CONSULTANT)
+  ) {
+    redirect("/legacy-crm");
+  }
+
   const notifications = await listNotificationsForSession(session);
-  const backHref = session.roles.includes(ROLE_CODES.INSTALLER)
-    ? "/legacy-crm/installer"
-    : session.roles.includes(ROLE_CODES.CONSULTANT)
-    ? "/legacy-crm/survey"
-    : "/manager";
+  const backHref = "/manager";
 
   const content = (
     <section className="surface">
@@ -75,40 +76,6 @@ export default async function NotificationsPage() {
       </div>
     </section>
   );
-
-  if (session.roles.includes(ROLE_CODES.INSTALLER)) {
-    return (
-      <InstallerShell
-        title="Notifications"
-        subtitle="Изменения по вашим jobs и schedule."
-        kicker="Installer"
-        actions={
-          <Link href={backHref} className="soft-button">
-            Назад
-          </Link>
-        }
-      >
-        {content}
-      </InstallerShell>
-    );
-  }
-
-  if (session.roles.includes(ROLE_CODES.CONSULTANT)) {
-    return (
-      <ConsultantShell
-        title="Notifications"
-        subtitle="Назначения и live-события по consultation flow."
-        kicker="Survey"
-        actions={
-          <Link href={backHref} className="soft-button">
-            Назад
-          </Link>
-        }
-      >
-        {content}
-      </ConsultantShell>
-    );
-  }
 
   return (
     <ManagerShell

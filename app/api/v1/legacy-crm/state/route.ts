@@ -9,12 +9,18 @@ import {
   sanitizeLegacyPayload,
   validateLegacyPayload,
 } from "@/features/legacy-crm/sanitize";
-import { LEGACY_WORKSPACE_ROLES } from "@/features/legacy-crm/api";
+import { LEGACY_WORKSPACE_VIEW_ROLES } from "@/features/legacy-crm/api";
+import {
+  createFieldWorkspace,
+  hasFieldWorkspaceRole,
+  isPrivilegedLegacyWorkspaceRole,
+  mergeFieldWorkspace,
+} from "@/features/legacy-crm/field-workspace";
 
 const WORKSPACE_ID = "primary";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireRequestSession(request, LEGACY_WORKSPACE_ROLES);
+  const auth = await requireRequestSession(request, LEGACY_WORKSPACE_VIEW_ROLES);
 
   if (!auth.ok) {
     return apiError(
@@ -32,15 +38,24 @@ export async function GET(request: NextRequest) {
     return apiError(404, "workspace_not_initialized", "CRM workspace is not initialized.");
   }
 
+  const payload = workspace.payload as Record<string, unknown>;
+  const responsePayload = isPrivilegedLegacyWorkspaceRole(auth.session.roles)
+    ? payload
+    : createFieldWorkspace(
+        payload,
+        auth.session.roles,
+        auth.session.user.legacy_user_ids,
+      );
+
   return apiSuccess({
-    payload: workspace.payload,
+    payload: responsePayload,
     revision: workspace.revision,
     updated_at: workspace.updated_at,
   });
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireRequestSession(request, LEGACY_WORKSPACE_ROLES);
+  const auth = await requireRequestSession(request, LEGACY_WORKSPACE_VIEW_ROLES);
 
   if (!auth.ok) {
     return apiError(
@@ -56,6 +71,12 @@ export async function PUT(request: NextRequest) {
 
   if (!body || !Number.isInteger(body.revision) || !validateLegacyPayload(body.payload)) {
     return apiError(400, "invalid_payload", "A valid CRM payload and revision are required.");
+  }
+
+  const isPrivileged = isPrivilegedLegacyWorkspaceRole(auth.session.roles);
+
+  if (!isPrivileged && !hasFieldWorkspaceRole(auth.session.roles)) {
+    return apiError(403, "forbidden", "Legacy CRM workspace update denied.");
   }
 
   const payload = sanitizeLegacyPayload(body.payload);
@@ -84,13 +105,35 @@ export async function PUT(request: NextRequest) {
     }
   }
 
+  const currentWorkspace = await prisma.legacyWorkspace.findUnique({
+    where: { workspace_id: WORKSPACE_ID },
+  });
+
+  if (!currentWorkspace || currentWorkspace.revision !== body.revision) {
+    return apiError(409, "revision_conflict", "CRM data changed in another browser.", {
+      current_revision: currentWorkspace?.revision ?? null,
+      updated_at: currentWorkspace?.updated_at ?? null,
+    });
+  }
+
+  const nextPayload = isPrivileged
+    ? payload
+    : sanitizeLegacyPayload(
+        mergeFieldWorkspace(
+          currentWorkspace.payload as Record<string, unknown>,
+          body.payload,
+          auth.session.roles,
+          auth.session.user.legacy_user_ids,
+        ),
+      );
+
   const updated = await prisma.legacyWorkspace.updateMany({
     where: {
       workspace_id: WORKSPACE_ID,
       revision: body.revision,
     },
     data: {
-      payload,
+      payload: nextPayload,
       revision: { increment: 1 },
       updated_by: auth.session.user.user_id,
     },

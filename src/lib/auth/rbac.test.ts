@@ -9,12 +9,23 @@ test("manager can use the dedicated pricing API without gaining other settings a
   assert.deepEqual(getRolesForPath("/api/v1/settings/company-overhead"), [ROLE_CODES.OWNER]);
 });
 
-test("field workspaces live inside legacy-crm without opening the owner workspace", () => {
+test("every employee opens the same legacy-crm route", () => {
   assert.deepEqual(getRolesForPath("/legacy-crm/survey"), [
     ROLE_CODES.OWNER,
     ROLE_CODES.MANAGER,
     ROLE_CODES.CONSULTANT,
+    ROLE_CODES.INSTALLER,
   ]);
-  assert.deepEqual(getRolesForPath("/legacy-crm/installer/jobs/job_123"), [ROLE_CODES.INSTALLER]);
-  assert.deepEqual(getRolesForPath("/legacy-crm"), [ROLE_CODES.OWNER, ROLE_CODES.MANAGER]);
+  assert.deepEqual(getRolesForPath("/legacy-crm/installer/jobs/job_123"), [
+    ROLE_CODES.OWNER,
+    ROLE_CODES.MANAGER,
+    ROLE_CODES.CONSULTANT,
+    ROLE_CODES.INSTALLER,
+  ]);
+  assert.deepEqual(getRolesForPath("/legacy-crm"), [
+    ROLE_CODES.OWNER,
+    ROLE_CODES.MANAGER,
+    ROLE_CODES.CONSULTANT,
+    ROLE_CODES.INSTALLER,
+  ]);
 });

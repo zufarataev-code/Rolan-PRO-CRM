@@ -14666,10 +14666,10 @@ function renderAppShell() {
     ['tasks', 'Задачи', '✅'],
   ] : (role === 'installer') ? [
     ['dashboard', T('dashboard'), '🏠'],
+    ['workday', 'Рабочий день', '⏱'],
     ['installations', T('myTasks'), '🔧'],
     ['calendar', T('calendar'), '📅'],
     ['tasks', 'Задачи', '✅'],
-    ['mypay', 'Моя зарплата', '💰'],
   ] : [];
 
   const compactViewport = isCompactViewport();
@@ -14766,6 +14766,7 @@ function headerTitle() {
     case 'proposals': return '📄 Коммерческие предложения';
     case 'servicePricing': return '💲 Услуги и цены';
     case 'installerOps': return '📍 Монтажники сейчас';
+    case 'workday': return '⏱ Рабочий день';
     case 'calendar': return T('calendar');
     case 'clients': return T('clients');
     case 'paymentsdue': return '💵 Ожидают оплаты';
@@ -14777,7 +14778,6 @@ function headerTitle() {
     case 'payroll': return '💰 Зарплата';
     case 'accounting': return '🧾 Учёт';
     case 'reports': return T('reports');
-    case 'mypay': return '💰 Моя зарплата';
     case 'team': return T('team');
     case 'referrals': return T('referralProgram');
     case 'reviews': return T('reviews');
@@ -14797,6 +14797,7 @@ function headerSubtitle() {
     case 'proposals': return 'Кому отправлено, кто посмотрел и к какому заказу относится КП';
     case 'servicePricing': return 'Единый прайс, ставки монтажников и план продаж — внутри основной CRM';
     case 'installerOps': return 'Активные смены, объекты и последнее добровольно переданное местоположение';
+    case 'workday': return 'Смена, часы, пробег и личные начисления в одной истории';
     case 'orderDetails': return 'Карточка объекта, замер, наряд, клиент и история';
     case 'clients': return 'Клиенты, адреса объектов, B2B/B2C и постоянные аккаунты';
     case 'coldcalls': return 'Поиск компаний, журнал обзвона, повторные звонки и перевод в B2B';
@@ -14848,13 +14849,170 @@ function renderView() {
   } else if (u.role === 'installer') {
     switch (state.view) {
       case 'dashboard': return renderInstallerDashboard();
+      case 'workday': return renderCanonicalInstallerWorkday();
       case 'installations': return renderInstallerTasks();
       case 'calendar': return renderCalendar();
-      case 'mypay': return renderInstallerPayHistory();
       case 'tasks': return renderTasksView();
     }
   }
   return `<div class="card">${T('empty')}</div>`;
+}
+
+// ---------- INSTALLER WORKDAY INSIDE THE ONE CRM ----------
+function installerWorkdayMoney(value) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+}
+
+function installerWorkdayHours(minutes) {
+  return `${(Number(minutes || 0) / 60).toFixed(1)} ч`;
+}
+
+async function installerWorkdayRequest(path, body) {
+  const response = await fetch(path, {
+    method: body ? 'POST' : 'GET',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) { location.assign('/login'); throw new Error('Требуется вход'); }
+  if (!response.ok) throw new Error(payload?.errors?.[0]?.message || `HTTP ${response.status}`);
+  return payload.data;
+}
+
+async function loadCanonicalInstallerWorkday(force = false) {
+  if (state.installerWorkdayLoading) return;
+  if (!force && state.installerWorkdayData) return;
+  state.installerWorkdayLoading = true;
+  state.installerWorkdayError = '';
+  render();
+  try {
+    state.installerWorkdayData = await installerWorkdayRequest('/api/v1/installer-work-sessions');
+    startInstallerWorkdayTracking();
+  } catch (error) {
+    state.installerWorkdayError = error?.message || 'Не удалось загрузить рабочий день';
+  } finally {
+    state.installerWorkdayLoading = false;
+    render();
+  }
+}
+
+function startInstallerWorkdayTracking() {
+  const active = state.installerWorkdayData?.active_session;
+  if (window.__rolanproInstallerGeoWatch != null) {
+    navigator.geolocation?.clearWatch(window.__rolanproInstallerGeoWatch);
+    window.__rolanproInstallerGeoWatch = null;
+  }
+  if (!active?.tracking_enabled || !navigator.geolocation) return;
+  let lastSentAt = 0;
+  window.__rolanproInstallerGeoWatch = navigator.geolocation.watchPosition(async position => {
+    if (Date.now() - lastSentAt < 45000) return;
+    lastSentAt = Date.now();
+    try {
+      await installerWorkdayRequest('/api/v1/installer-work-sessions/location', {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy_meters: position.coords.accuracy,
+        captured_at: new Date(position.timestamp).toISOString(),
+      });
+      const status = document.getElementById('installer-workday-message');
+      if (status) status.textContent = 'Геолокация передаётся только во время активной смены.';
+    } catch (error) {
+      const status = document.getElementById('installer-workday-message');
+      if (status) status.textContent = error?.message || 'Не удалось передать геолокацию.';
+    }
+  }, () => {
+    const status = document.getElementById('installer-workday-message');
+    if (status) status.textContent = 'Геолокация не разрешена. Смена продолжает учитываться без неё.';
+  }, { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 });
+}
+
+async function startCanonicalInstallerShift() {
+  const button = document.getElementById('installer-shift-start');
+  if (button) button.disabled = true;
+  try {
+    await installerWorkdayRequest('/api/v1/installer-work-sessions', {
+      action: 'start',
+      installer_job_id: document.getElementById('installer-job-id')?.value || null,
+      start_odometer_miles: Number(document.getElementById('installer-start-odometer')?.value) || null,
+      tracking_enabled: !!document.getElementById('installer-tracking-enabled')?.checked,
+    });
+    state.installerWorkdayData = null;
+    await loadCanonicalInstallerWorkday(true);
+  } catch (error) {
+    alert(error?.message || 'Не удалось начать смену');
+    if (button) button.disabled = false;
+  }
+}
+
+async function stopCanonicalInstallerShift() {
+  const button = document.getElementById('installer-shift-stop');
+  if (button) button.disabled = true;
+  try {
+    await installerWorkdayRequest('/api/v1/installer-work-sessions', {
+      action: 'stop',
+      end_odometer_miles: Number(document.getElementById('installer-end-odometer')?.value) || null,
+      miles_driven: Number(document.getElementById('installer-manual-miles')?.value) || null,
+      notes: document.getElementById('installer-shift-notes')?.value || null,
+    });
+    if (window.__rolanproInstallerGeoWatch != null) {
+      navigator.geolocation?.clearWatch(window.__rolanproInstallerGeoWatch);
+      window.__rolanproInstallerGeoWatch = null;
+    }
+    state.installerWorkdayData = null;
+    await loadCanonicalInstallerWorkday(true);
+  } catch (error) {
+    alert(error?.message || 'Не удалось завершить смену');
+    if (button) button.disabled = false;
+  }
+}
+
+function renderCanonicalInstallerWorkday() {
+  if (!state.installerWorkdayData && !state.installerWorkdayLoading && !state.installerWorkdayError) {
+    setTimeout(() => loadCanonicalInstallerWorkday(), 0);
+  }
+  if (state.installerWorkdayLoading && !state.installerWorkdayData) return '<div class="card">Загружаем рабочий день…</div>';
+  if (state.installerWorkdayError) return `<div class="card"><div class="text-red-700 font-semibold">${academyEsc(state.installerWorkdayError)}</div><button class="btn-primary mt-3" onclick="state.installerWorkdayError=''; loadCanonicalInstallerWorkday(true)">Повторить</button></div>`;
+  const data = state.installerWorkdayData;
+  if (!data) return '<div class="card">Рабочий день пока недоступен.</div>';
+  const active = data.active_session;
+  const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+  const history = Array.isArray(data.history) ? data.history : [];
+  const payroll = Array.isArray(data.payroll) ? data.payroll : [];
+  const totals = data.totals || {};
+  return `
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div class="card"><div class="text-xs text-gray-500">Часы · 30 смен</div><div class="text-2xl font-bold">${installerWorkdayHours(totals.work_minutes)}</div></div>
+      <div class="card"><div class="text-xs text-gray-500">Пробег</div><div class="text-2xl font-bold">${Number(totals.miles || 0).toFixed(1)} mi</div></div>
+      <div class="card"><div class="text-xs text-gray-500">К выплате</div><div class="text-2xl font-bold text-amber-700">${installerWorkdayMoney(totals.owed)}</div></div>
+      <div class="card"><div class="text-xs text-gray-500">Выплачено</div><div class="text-2xl font-bold text-emerald-700">${installerWorkdayMoney(totals.paid)}</div></div>
+    </div>
+    <div class="card mb-4">
+      <h3 class="font-semibold text-lg">${active ? 'Смена идёт' : 'Начать рабочий день'}</h3>
+      ${active ? `
+        <div class="mt-3 p-3 bg-blue-50 border border-blue-100">
+          <div class="font-semibold">${academyEsc(active.installer_job?.position?.title || active.installer_job?.project?.title || 'Общая смена')}</div>
+          <div class="text-sm text-gray-600">${academyEsc(active.installer_job?.project?.address || 'Без привязки к объекту')}</div>
+          <div class="text-xs text-gray-500 mt-1">Начало: ${fmtDateTime(active.started_at)}</div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+          <label>Одометр в конце, miles<input id="installer-end-odometer" type="number" step="0.1"></label>
+          <label>Пробег вручную<input id="installer-manual-miles" type="number" step="0.1"></label>
+        </div>
+        <label class="mt-3">Что сделано / проблема<textarea id="installer-shift-notes" rows="3"></textarea></label>
+        <button id="installer-shift-stop" class="btn-primary mt-3" onclick="stopCanonicalInstallerShift()">Завершить смену</button>
+      ` : `
+        <label class="mt-3">Монтаж<select id="installer-job-id"><option value="">Общая смена</option>${jobs.map(job => `<option value="${academyEsc(job.installer_job_id)}">${academyEsc(job.project?.project_code || 'Проект')} — ${academyEsc(job.position?.title || job.project?.title || 'Монтаж')}</option>`).join('')}</select></label>
+        <label class="mt-3">Одометр в начале, miles<input id="installer-start-odometer" type="number" step="0.1"></label>
+        <label class="mt-3 flex items-start gap-2"><input id="installer-tracking-enabled" type="checkbox" checked style="width:auto;margin-top:3px"><span><b>Рабочая геолокация</b><br><span class="text-xs text-gray-500">Передавать местоположение только пока смена активна и CRM открыта.</span></span></label>
+        <button id="installer-shift-start" class="btn-primary mt-3" onclick="startCanonicalInstallerShift()">Начать смену</button>
+      `}
+      <div id="installer-workday-message" class="text-xs text-gray-500 mt-3">${active?.tracking_enabled ? 'Рабочая геолокация включена.' : 'Геолокация выключена.'}</div>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="card"><h3 class="font-semibold mb-3">История смен</h3>${history.length ? history.map(item => `<div class="border-t py-3 first:border-t-0"><div class="font-semibold">${academyEsc(item.installer_job?.position?.title || item.installer_job?.project?.title || 'Общая смена')}</div><div class="text-sm text-gray-600">${fmtDateTime(item.started_at)} · ${installerWorkdayHours(item.work_minutes)} · ${Number(item.miles_driven || 0).toFixed(1)} miles</div>${item.notes ? `<div class="text-xs text-gray-500 mt-1">${academyEsc(item.notes)}</div>` : ''}</div>`).join('') : '<div class="text-sm text-gray-500">Завершённые смены появятся здесь.</div>'}</div>
+      <div class="card"><h3 class="font-semibold mb-1">Моя зарплата</h3><p class="text-xs text-gray-500 mb-3">Только ваши начисления. Цена клиента и маржа компании скрыты.</p>${payroll.length ? payroll.map(item => `<div class="border-t py-3 first:border-t-0 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.service_name)}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${Number(item.quantity_sqft || 0).toFixed(1)} sqft × ${installerWorkdayMoney(item.rate_per_sqft)} × ${Number(item.complexity_multiplier || 1)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('') : '<div class="text-sm text-gray-500">Начислений пока нет.</div>'}</div>
+    </div>`;
 }
 
 // ---------- CANONICAL SERVICE PRICING (ONE CRM UI) ----------
@@ -30177,6 +30335,9 @@ async function cloudBoot() {
     cloudAllowedLegacyIds = Array.isArray(cloudCurrentUser.legacy_user_ids) ? cloudCurrentUser.legacy_user_ids : [];
     cloudRevision = stateResult.data.revision;
     db = stateResult.data.payload;
+    if (Array.isArray(db._allowedLegacyUserIds)) {
+      cloudAllowedLegacyIds = cloudAllowedLegacyIds.filter(id => db._allowedLegacyUserIds.includes(id));
+    }
     const persistClientNotificationMigration = !db._clientStageNotificationsV1;
     migrateSchema();
     normalizeClientAccountData();

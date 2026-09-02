@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Remove the duplicate field-role CRM shell and open every employee inside the real `/legacy-crm` workspace | `codex/remove-duplicate-field-shell` | Codex | Ready for PR | Push the verified branch, run CI/security review, merge and deploy, then sign in with controlled surveyor/installer accounts to confirm their assigned records and `Рабочий день` inside the actual CRM |
 | Remove standalone voice-input button from every CRM interface | `codex/remove-voice-button` / #112 | Codex | Merged and deployed | Refresh any already-open CRM tab once; voice will return only inside the future agent |
 | Put surveyor and installer inside the single canonical CRM interface | `codex/one-crm-all-roles` / #110 | Codex | Merged and deployed | Surveyor and installer should refresh/sign in through the public CRM and use only the `/legacy-crm` role workspace |
 | Remove duplicate owner/manager pricing shell and keep canonical pricing inside the main CRM | `codex/unify-service-pricing-ui` / #108 | Codex | Merged and deployed | Refresh the public CRM and use `Услуги и цены` / `Монтажники сейчас` only inside `/legacy-crm` |
@@ -218,6 +219,17 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #112 passed CI and security review, merged to `main` as `3dced4563ff24ad1b45b72ba5d0f2077aa5648c0`, and production deploy run #33641166229 succeeded.
 - Production safety: the release changed interface code only. It did not modify customer data, orders, calls, Google Voice configuration, employees, shifts, payroll, prices, or Smart-film services.
 - Next action: refresh any already-open CRM tab once. Voice interaction remains deferred until it is designed as part of the unified CRM agent.
+
+## 2026-09-02 handoff — remove the duplicate field-role CRM shell
+
+- Root cause: PR #110 changed the employee URL and colors but kept separate React page trees and a separate `ProductShell`. A route named `/legacy-crm/survey/...` therefore still displayed a different CRM, exactly as reported.
+- Fix: the duplicate surveyor and installer page trees and their role shells are removed. Login, notifications, installed-app entry, and every old surveyor/installer URL now resolve to the one real `/legacy-crm` document used by the company.
+- Field access: the real legacy workspace now accepts Surveyor and Installer sessions, but its API builds a server-side field view containing only explicitly assigned orders, linked clients, assigned tasks, safe coworkers, and operational reference data. It removes selling prices, payments, costs, margins, company finance, unrelated customers, and other employees' compensation before sending the response.
+- Safe writes: field updates merge only operational order facts and assigned-task status into the current full workspace. Existing financial values embedded in measurements and financial timeline events are preserved on the server even though the employee never receives them. Assignment IDs, customer price, payment data, and unauthorized stage transitions cannot be overwritten by a field request.
+- Installer continuity: PostgreSQL shift, hours, mileage, opt-in work location, and personal payroll history were not deleted. They now render as `Рабочий день` in the installer menu inside the actual legacy CRM.
+- Verification: 150 automated tests passed; TypeScript passed; production build passed and no longer contains `/survey`, `/installer`, `/legacy-crm/survey`, or `/legacy-crm/installer` page bundles. Local route smoke confirmed the reported `/legacy-crm/survey/notifications` and old `/installer/today` addresses return 308 to `/legacy-crm`. No production record, employee account, password, shift, location, payroll, client, or order was changed.
+- Branch: `codex/remove-duplicate-field-shell`.
+- Next action: open the PR, pass CI and security review, merge/deploy from `main`, then perform a controlled production sign-in as a mapped surveyor and installer without changing live customer data.
 
 ## Completion rule
 

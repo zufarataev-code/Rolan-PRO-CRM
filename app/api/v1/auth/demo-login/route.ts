@@ -15,11 +15,11 @@ const DEMO_ROLE_MAP = {
   },
   consultant: {
     email: "consultant@rolanpro.local",
-    redirectTo: "/legacy-crm/survey",
+    redirectTo: "/legacy-crm",
   },
   installer: {
     email: "installer@rolanpro.local",
-    redirectTo: "/legacy-crm/installer",
+    redirectTo: "/legacy-crm",
   },
 } as const;
 

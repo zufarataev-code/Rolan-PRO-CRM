@@ -76,6 +76,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - This does not remove Google Voice telephony, call history, or the customer-facing Smart-film `Voice Control` service; those are separate business capabilities.
 - Implemented and released by PR #112 (`codex/remove-voice-button`).
 
+## 2026-09-02 — Field roles use the actual CRM shell, not a look-alike
+
+- This decision supersedes the route/UI part of `One CRM interface for every employee role`: putting a second React shell under an address beginning with `/legacy-crm` does not make it the same CRM.
+- Owner, manager, surveyor, and installer all enter the actual `/legacy-crm` document. The separate surveyor and installer page trees and their role shells are removed; every old nested employee URL is only a compatibility redirect to `/legacy-crm`.
+- Field roles receive a server-generated subset of the legacy workspace containing only explicitly assigned orders, their linked clients, and operational reference data. Customer prices, payments, costs, margin, company finance, unrelated customers, and other employees' compensation are removed before the response leaves the server.
+- Field saves may merge only operational order fields such as measurements, status, technical notes, photos, checklists, and installation timestamps. They cannot overwrite assignments, customer price, payment data, or the full workspace.
+- Canonical PostgreSQL work-session, mileage, opt-in location, and installer payroll history stay available as the `Рабочий день` section inside the real CRM; removing the duplicate interface does not remove those records or capabilities.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

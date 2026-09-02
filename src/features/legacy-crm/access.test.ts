@@ -2,20 +2,26 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { LEGACY_WORKSPACE_ROLES } from "./api";
+import { LEGACY_WORKSPACE_ROLES, LEGACY_WORKSPACE_VIEW_ROLES } from "./api";
 import { ROLE_CODES } from "../../lib/auth/constants";
 import { getRolesForPath } from "../../lib/auth/rbac";
 
-test("full legacy workspace is limited to owner and manager roles", () => {
+test("the full payload is privileged while every employee may enter the workspace", () => {
   assert.deepEqual(LEGACY_WORKSPACE_ROLES, [ROLE_CODES.OWNER, ROLE_CODES.MANAGER]);
-  assert.deepEqual(getRolesForPath("/legacy-crm"), [ROLE_CODES.OWNER, ROLE_CODES.MANAGER]);
-  assert.deepEqual(getRolesForPath("/api/v1/legacy-crm/state"), [ROLE_CODES.OWNER, ROLE_CODES.MANAGER]);
+  assert.deepEqual(LEGACY_WORKSPACE_VIEW_ROLES, [
+    ROLE_CODES.OWNER,
+    ROLE_CODES.MANAGER,
+    ROLE_CODES.CONSULTANT,
+    ROLE_CODES.INSTALLER,
+  ]);
+  assert.deepEqual(getRolesForPath("/legacy-crm"), LEGACY_WORKSPACE_VIEW_ROLES);
+  assert.deepEqual(getRolesForPath("/api/v1/legacy-crm/state"), LEGACY_WORKSPACE_VIEW_ROLES);
 });
 
-test("legacy workspace API applies the role restriction to reads and writes", () => {
+test("legacy workspace API applies role-aware filtering to reads and writes", () => {
   const route = readFileSync("app/api/v1/legacy-crm/state/route.ts", "utf8");
   const guardedCalls = route.match(
-    /requireRequestSession\(request, LEGACY_WORKSPACE_ROLES\)/g,
+    /requireRequestSession\(request, LEGACY_WORKSPACE_VIEW_ROLES\)/g,
   );
 
   assert.equal(guardedCalls?.length, 2);

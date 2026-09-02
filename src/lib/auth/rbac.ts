@@ -13,21 +13,16 @@ export const ROUTE_ROLE_RULES: Array<{
   { prefix: "/installer", roles: [ROLE_CODES.INSTALLER] },
   { prefix: "/installer-app", roles: [ROLE_CODES.INSTALLER] },
   {
-    prefix: "/legacy-crm/survey",
-    roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER, ROLE_CODES.CONSULTANT],
-  },
-  { prefix: "/legacy-crm/installer", roles: [ROLE_CODES.INSTALLER] },
-  {
     prefix: "/crm",
     roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
   },
   {
     prefix: "/legacy-crm",
-    roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
+    roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER, ROLE_CODES.CONSULTANT, ROLE_CODES.INSTALLER],
   },
   {
     prefix: "/api/v1/legacy-crm",
-    roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
+    roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER, ROLE_CODES.CONSULTANT, ROLE_CODES.INSTALLER],
   },
   {
     prefix: "/projects",
