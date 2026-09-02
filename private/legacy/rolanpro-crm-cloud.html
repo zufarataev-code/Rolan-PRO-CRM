@@ -16419,7 +16419,7 @@ function openTeamMemberEdit(userId) {
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6">
       <h3 class="font-semibold text-lg mb-1">${academyEsc(u.name)}</h3>
-      <p class="text-xs text-gray-500 mb-4">Личные данные сотрудника. Почта и роль показаны для справки — они задаются на сервере.</p>
+      <p class="text-xs text-gray-500 mb-4">Личные данные сотрудника. Владелец может изменить почту для входа прямо здесь.</p>
 
       <div class="flex items-center gap-3 mb-4">
         <div id="tm-photo-preview">${u.photo
@@ -16439,9 +16439,10 @@ function openTeamMemberEdit(userId) {
       <input id="tm-edit-phone" value="${academyEsc(u.phone || '')}" placeholder="+1 818...">
 
       <label class="mt-3">Почта для входа</label>
-      <input value="${academyEsc(u.email || 'не указана')}" disabled
-             style="opacity:.6;cursor:not-allowed;">
-      <div class="text-xs text-gray-400 mt-1">Почта — это логин на сервере. Менять её здесь нельзя: смена пароля перестанет находить сотрудника.</div>
+      <input id="tm-edit-email" type="email" value="${academyEsc(u.email || '')}"
+             placeholder="name@rolan-pro.com"
+             ${isOwner ? '' : 'disabled style="opacity:.6;cursor:not-allowed;"'}>
+      <div class="text-xs text-gray-400 mt-1">После сохранения новая почта сразу станет логином сотрудника.</div>
 
       <label class="mt-3">Роль</label>
       <input value="${academyEsc(T(u.role) || u.role || '—')}" disabled
@@ -16460,7 +16461,7 @@ function openTeamMemberEdit(userId) {
   render();
 }
 
-function submitTeamMemberEdit(userId) {
+async function submitTeamMemberEdit(userId) {
   const u = getUser(userId);
   if (!u) return;
   const viewer = currentUser();
@@ -16468,6 +16469,8 @@ function submitTeamMemberEdit(userId) {
 
   const name = (document.getElementById('tm-edit-name')?.value || '').trim();
   const phone = (document.getElementById('tm-edit-phone')?.value || '').trim();
+  const currentEmail = String(u.email || '').trim().toLowerCase();
+  const email = (document.getElementById('tm-edit-email')?.value || '').trim().toLowerCase();
   const photo = document.getElementById('tm-photo-data')?.value || '';
   const err = document.getElementById('tm-edit-error');
 
@@ -16478,8 +16481,40 @@ function submitTeamMemberEdit(userId) {
 
   if (!name) return fail('Укажите имя сотрудника.');
 
-  // Почта намеренно не меняется: она же логин на сервере, и связь
-  // между записью в CRM и учётной записью идёт именно по ней.
+  if (viewer?.role === 'owner') {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return fail('Укажите корректную почту для входа.');
+    }
+
+    if (location.protocol === 'file:') {
+      return fail('Почту можно менять только в публичной CRM на сервере.');
+    }
+
+    try {
+      const listResponse = await fetch('/api/v1/team', { cache: 'no-store' });
+      const list = await listResponse.json();
+      const apiMessage = (payload, fallback) => payload?.errors?.[0]?.message || payload?.error?.message || fallback;
+      if (!listResponse.ok) return fail(apiMessage(list, 'Не удалось загрузить учётные записи сотрудников.'));
+
+      const members = Array.isArray(list?.data) ? list.data : [];
+      const member = members.find(item => Array.isArray(item.legacyUserIds) && item.legacyUserIds.includes(userId))
+        || (currentEmail ? members.find(item => String(item.email || '').trim().toLowerCase() === currentEmail) : null);
+      if (!member) return fail('Серверная учётная запись сотрудника не найдена. Откройте «Изменить пароль и доступ» и проверьте привязку.');
+
+      const updateResponse = await fetch(`/api/v1/team/${member.userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, fullName: name, legacyUserId: userId }),
+      });
+      const update = await updateResponse.json();
+      if (!updateResponse.ok) return fail(apiMessage(update, 'Не удалось изменить почту сотрудника.'));
+      u.email = email;
+    } catch (error) {
+      console.error('[Team card] employee update failed', error);
+      return fail('Сервер не ответил. Изменения не сохранены — попробуйте ещё раз.');
+    }
+  }
+
   u.name = name;
   u.phone = phone;
   if (photo) u.photo = photo;
