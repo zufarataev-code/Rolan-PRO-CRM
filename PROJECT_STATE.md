@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Remove duplicate owner/manager pricing shell and keep canonical pricing inside the main CRM | `codex/unify-service-pricing-ui` | Codex | Implemented and locally verified | Push, merge, deploy, then verify the old URLs return to `/legacy-crm` |
+| Remove duplicate owner/manager pricing shell and keep canonical pricing inside the main CRM | `codex/unify-service-pricing-ui` / #108 | Codex | Merged and deployed | Refresh the public CRM and use `Услуги и цены` / `Монтажники сейчас` only inside `/legacy-crm` |
 | Daily installer workspace: shifts, hours, mileage, payroll history, and opt-in work tracking | `codex/installer-daily-operations` / #106 | Codex | Merged and deployed | Have each installer sign in, install/open the Rolan PRO app, and begin using `Рабочий день`; review configured installer rates before first payroll |
 | Fix installed employee app opening installer 404 | `fix/installer-pwa-entry` / #103 | Codex | Merged and deployed | No remaining code action; employee should close and reopen the installed app |
 | Canonical services/pricing and break-even control for owner + manager | `codex/service-pricing-control` / #101 | Codex | Merged and deployed | No remaining release action; owner should confirm planning assumptions before using targets operationally |
@@ -187,8 +187,10 @@ Contributors must add a row before starting substantial work and update or remov
 - Compatibility: `/owner/settings/pricing` and `/manager/crm/pricing` redirect to `/legacy-crm#/service-pricing`; `/manager/installers` redirects to `/legacy-crm#/installer-operations`. Existing bookmarks therefore stop showing the duplicate shell without breaking.
 - Data safety: no service, rate, planning, payroll, shift, or location data was deleted. All writes continue through the same authenticated PostgreSQL APIs, including server-side manager cost redaction.
 - Local verification: 142 tests passed, TypeScript passed, the legacy inline script compiled, production build passed with the new team API and compatibility redirects, and `git diff --check` passed.
-- Branch: `codex/unify-service-pricing-ui`.
-- Next action: push and merge, deploy from `main`, then verify public route behavior without changing live prices or employee data.
+- Branch / PR: `codex/unify-service-pricing-ui` / #108 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/108`).
+- Release: PR #108 passed GitHub CI, merged to `main` as `133a1c13fcc0231c3cd87ebd5f05bd3546de0fe8`, and production deploy run #33604923832 succeeded.
+- Production safety: the release was deployed without modifying any live price, installer rate, shift, payroll, or location record. An authenticated visual smoke still requires the owner to refresh their existing session; unauthenticated route protection remains in place.
+- Next action: close the local `file:///tmp/...` tab, open the public `/legacy-crm`, refresh once, and verify that `Услуги и цены` stays under the same main sidebar.
 
 ## Completion rule
 
