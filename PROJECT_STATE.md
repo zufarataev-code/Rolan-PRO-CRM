@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Remove standalone voice-input button from every CRM interface | `codex/remove-voice-button` | Codex | Code complete; release pending | Push branch, open PR, pass CI, merge and deploy |
 | Put surveyor and installer inside the single canonical CRM interface | `codex/one-crm-all-roles` / #110 | Codex | Merged and deployed | Surveyor and installer should refresh/sign in through the public CRM and use only the `/legacy-crm` role workspace |
 | Remove duplicate owner/manager pricing shell and keep canonical pricing inside the main CRM | `codex/unify-service-pricing-ui` / #108 | Codex | Merged and deployed | Refresh the public CRM and use `Услуги и цены` / `Монтажники сейчас` only inside `/legacy-crm` |
 | Daily installer workspace: shifts, hours, mileage, payroll history, and opt-in work tracking | `codex/installer-daily-operations` / #106 | Codex | Merged and deployed | Have each installer sign in, install/open the Rolan PRO app, and begin using `Рабочий день`; review configured installer rates before first payroll |
@@ -205,6 +206,16 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #110 passed CI and security review, merged to `main` as `554bb2636332c86825bc38a640805bfc7988bd17`, and production deploy run #33637568763 succeeded.
 - Production smoke: old survey and installer URLs returned 308 to the exact canonical `/legacy-crm` route, including consultation/job IDs; canonical field and owner routes remained authentication-protected. No live customer, measurement, shift, mileage, payroll, price, or employee record was changed.
 - Next action: sign in once as the real surveyor and installer, refresh or fully close/reopen the installed app, and visually verify their assigned data without changing any live records.
+
+## 2026-09-02 handoff — remove standalone voice input
+
+- Removed the floating `Голосовой ввод` button from the active legacy CRM and from the shared Next.js layout used by employee role pages.
+- Removed the unused browser speech-recognition handlers, focus listeners, state, and button styles so the feature cannot reappear on another screen through shared code.
+- Kept Google Voice calling/SMS configuration and the Smart-film `Voice Control` catalog capability unchanged; they are unrelated to the removed dictation button.
+- Added a regression check that the standalone control and its handler are absent from both CRM shells.
+- Verification: 146 automated tests passed, TypeScript passed, production build passed, and `git diff --check` passed.
+- Branch: `codex/remove-voice-button`.
+- Next action: push the branch, open and merge a PR after CI/security review, deploy from `main`, then verify the button is absent on the public owner and employee workspaces.
 
 ## Completion rule
 

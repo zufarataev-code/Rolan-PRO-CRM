@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import "./proposal-premium.css";
 import { PwaRegistration } from "@/components/pwa-registration";
-import { GlobalVoiceInput } from "@/components/global-voice-input";
 
 export const metadata: Metadata = {
   title: "Rolan PRO CRM",
@@ -21,7 +20,7 @@ type RootLayoutProps = {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="ru">
-      <body><PwaRegistration /><GlobalVoiceInput />{children}</body>
+      <body><PwaRegistration />{children}</body>
     </html>
   );
 }
