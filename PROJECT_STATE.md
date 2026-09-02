@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Fix installed employee app opening installer 404 | `fix/installer-pwa-entry` / #103 | Codex | PR open; local checks green | Merge after CI, deploy, and verify public `/installer` redirect |
+| Fix installed employee app opening installer 404 | `fix/installer-pwa-entry` / #103 | Codex | Merged and deployed | No remaining code action; employee should close and reopen the installed app |
 | Canonical services/pricing and break-even control for owner + manager | `codex/service-pricing-control` / #101 | Codex | Merged and deployed | No remaining release action; owner should confirm planning assumptions before using targets operationally |
 | Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / #24 | Codex | PR open | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
 | Fix employee email editing, forgot-password by email, and server-only employee login | `fix/employee-account-recovery` / #98 | ChatGPT | Merged/deployed | Verify through #99 security hotfix, then controlled production employee-access smoke test |
@@ -161,7 +161,9 @@ Contributors must add a row before starting substantial work and update or remov
 - Related access fix: `/api/v1/settings/pricing` now has the same Owner + Manager middleware permission as its route handler, while all other settings APIs remain Owner-only.
 - Verification: 138 tests passed, TypeScript passed, production build passed, the build now contains both `/installer` and `/installer/jobs`, and `git diff --check` passed.
 - Branch / PR: `fix/installer-pwa-entry` / #103 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/103`).
-- Next action: open a PR, merge after CI, deploy, then verify public `/installer` redirects without using or changing an employee account.
+- Release: PR #103 passed CI and merged to `main` as `03e5c7b345f31d999ff9214d640f042e7856cda3`; production deploy run #33590299756 completed successfully.
+- Production verification: unauthenticated requests to both `/installer` and `/installer/jobs` return the same authorization redirect and neither returns 404. The authenticated role destination and compatibility redirect are covered by the passing tests/build. No employee password or live account was used or changed.
+- Next action: the affected employee should fully close the installed Rolan PRO app and open it again. If Chrome still shows the old page, refresh once; reinstalling should not be necessary.
 
 ## Completion rule
 
