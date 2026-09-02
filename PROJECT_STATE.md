@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Daily installer workspace: shifts, hours, mileage, payroll history, and opt-in work tracking | `codex/installer-daily-operations` | Codex | Implemented and locally verified | Push branch, release from `main`, run migration, then production smoke without starting a real employee shift |
 | Fix installed employee app opening installer 404 | `fix/installer-pwa-entry` / #103 | Codex | Merged and deployed | No remaining code action; employee should close and reopen the installed app |
 | Canonical services/pricing and break-even control for owner + manager | `codex/service-pricing-control` / #101 | Codex | Merged and deployed | No remaining release action; owner should confirm planning assumptions before using targets operationally |
 | Unify CRM navigation, employee entry points, and one public proposal/PDF output | `codex/unify-crm-proposal-pdf` / #24 | Codex | PR open | Review, merge after CI passes, deploy from `main`, then smoke-test Gmail delivery and the no-login client link |
@@ -164,6 +165,17 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #103 passed CI and merged to `main` as `03e5c7b345f31d999ff9214d640f042e7856cda3`; production deploy run #33590299756 completed successfully.
 - Production verification: unauthenticated requests to both `/installer` and `/installer/jobs` return the same authorization redirect and neither returns 404. The authenticated role destination and compatibility redirect are covered by the passing tests/build. No employee password or live account was used or changed.
 - Next action: the affected employee should fully close the installed Rolan PRO app and open it again. If Chrome still shows the old page, refresh once; reinstalling should not be necessary.
+
+## 2026-09-02 handoff — installer daily operations
+
+- Added one mobile-first installer workday inside the canonical CRM at `/installer/today`. Installer login and the installed PWA now open this workspace first; existing job cards remain at `/installer/jobs`.
+- A worker can start a shift, bind it to an assigned installation, record starting/ending odometer or manual mileage, add an end-of-shift note, and review the last 30 shifts with hours and miles.
+- When an installer completes a job, PostgreSQL creates one immutable payroll accrual snapshot from actual sqft, the saved installer rate, and the saved complexity multiplier. The installer sees only their own owed/paid history; client selling price and company margin are not returned.
+- Work location is opt-in at shift start and is accepted only for the authenticated installer's active, tracking-enabled shift. The manager/owner view at `/manager/installers` shows current shift, object, elapsed time, and last location with a Google Maps link. The legacy CRM navigation includes `Монтажники сейчас` so this is reachable from the current operating workspace.
+- Data protection: a partial unique database index prevents two simultaneous active shifts for one installer; location writes validate coordinates and are rejected when tracking is inactive; all employee writes are scoped server-side to the authenticated Installer role.
+- Local verification: 140 tests passed, TypeScript passed, production build passed with `/installer/today`, `/manager/installers`, and both work-session APIs, and `git diff --check` passed.
+- Branch: `codex/installer-daily-operations`.
+- Remaining release action: push, merge to `main`, let the standard production deployment run the migration, and smoke-test route availability without starting a real employee shift or requesting location permission.
 
 ## Completion rule
 

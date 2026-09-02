@@ -739,6 +739,79 @@ select option {
   font-size: 13px;
 }
 
+.installer-workday-control {
+  display: grid;
+  gap: 16px;
+}
+
+.installer-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.installer-form-grid label,
+.installer-current-job,
+.installer-tracking-consent,
+.installer-location-status {
+  display: grid;
+  gap: 7px;
+}
+
+.installer-form-grid label > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.installer-form-grid input,
+.installer-form-grid select,
+.installer-form-grid textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.installer-notes-field {
+  grid-column: 1 / -1;
+}
+
+.installer-tracking-consent {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid rgba(42, 209, 255, 0.22);
+  border-radius: 14px;
+  background: rgba(42, 209, 255, 0.06);
+}
+
+.installer-current-job span,
+.installer-control-message {
+  color: var(--muted);
+}
+
+.installer-location-status {
+  justify-items: end;
+  margin-left: auto;
+}
+
+@media (max-width: 720px) {
+  .installer-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .installer-notes-field {
+    grid-column: auto;
+  }
+
+  .installer-location-status {
+    justify-items: start;
+    margin-left: 0;
+  }
+}
+
 .list-stack {
   display: flex;
   flex-direction: column;

@@ -15,6 +15,7 @@ const navGroups: ProductNavGroup[] = [
   {
     label: "Сегодня",
     items: [
+      { href: "/installer/today", label: "Рабочий день" },
       { href: "/installer/jobs", label: "Мои монтажи" },
       { href: "/notifications", label: "Уведомления" },
     ],
@@ -32,7 +33,7 @@ export function InstallerShell({
   return (
     <ProductShell
       roleLabel="Монтажник"
-      homeHref="/installer/jobs"
+      homeHref="/installer/today"
       navGroups={navGroups}
       title={title}
       subtitle={subtitle}

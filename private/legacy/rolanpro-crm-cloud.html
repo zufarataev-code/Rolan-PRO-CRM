@@ -14700,6 +14700,10 @@ function closeMobileSidebar() {
 
 function selectAppView(key) {
   const user = currentUser();
+  if (key === 'installerOps' && (user?.role === 'owner' || user?.role === 'manager')) {
+    location.href = '/manager/installers';
+    return;
+  }
   if (key === 'servicePricing' && (user?.role === 'owner' || user?.role === 'manager')) {
     location.href = user.role === 'owner' ? '/owner/settings/pricing' : '/manager/crm/pricing';
     return;
@@ -14723,6 +14727,7 @@ function renderAppShell() {
     ['proposals', 'КП', '📄'],
     ['servicePricing', 'Услуги и цены', '💲'],
     ['calendar', T('calendar'), '📅'],
+    ['installerOps', 'Монтажники сейчас', '📍'],
     ['tasks', 'Задачи', '✅'],
     ['academy', 'Академия', '🧭'],
     ['clients', T('clients'), '👥'],
