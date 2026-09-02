@@ -15,7 +15,7 @@ export default function PrivacyPolicyPage() {
         </Link>
         <p className="legal-kicker">Privacy Policy</p>
         <h1>RolanPRO Privacy Policy</h1>
-        <p className="legal-muted">Last updated: August 9, 2026</p>
+        <p className="legal-muted">Last updated: September 2, 2026</p>
 
         <h2>Information we collect</h2>
         <p>
@@ -53,6 +53,15 @@ export default function PrivacyPolicyPage() {
         <p>
           You can opt out of SMS messages at any time by replying STOP. For assistance, reply HELP, call
           +1 (424) 325-0512, or email info@rolan-pro.com.
+        </p>
+
+        <h2>Employee work application</h2>
+        <p>
+          Authorized employees may use the RolanPRO work application to record assigned jobs, work-session
+          start and end times, mileage, job notes, and payroll accruals. When an employee explicitly enables
+          work-location sharing at the start of a shift, the application records location only during that
+          active shift while the application is open. Work-location sharing stops when the shift is ended.
+          RolanPRO does not use this feature for hidden off-shift tracking.
         </p>
 
         <h2>Contact</h2>

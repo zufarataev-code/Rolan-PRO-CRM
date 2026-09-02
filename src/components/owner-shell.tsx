@@ -18,6 +18,7 @@ const navGroups: ProductNavGroup[] = [
       { href: "/owner", label: "Обзор" },
       { href: "/owner/finance", label: "Финансы" },
       { href: "/owner/projects", label: "Проекты" },
+      { href: "/manager/installers", label: "Монтажники" },
     ],
   },
   {

@@ -6,6 +6,7 @@ import { PROPOSAL_STATUSES } from "@/features/proposals/api";
 import { prisma } from "@/lib/db";
 import { omitSensitiveFinancialFields } from "@/lib/finance/visibility";
 import { onInstallationAssigned, onJobStarted, onProjectCompleted, onProjectCreated } from "@/features/core/events";
+import { recordInstallerPayrollAccrual } from "@/features/installer-operations/service";
 
 const FILM_SERVICE_CODES = new Set(["SMART_FILM", "SOLAR_FILM", "SAFETY_FILM"]);
 const ACTIVE_INSTALLER_JOB_STATUSES = new Set<string>([
@@ -1871,6 +1872,10 @@ export async function updateInstallerJobStatus(
           project_status_id: projectInProgressStatusId,
         },
       });
+    }
+
+    if (status === INSTALLER_JOB_STATUSES.COMPLETED) {
+      await recordInstallerPayrollAccrual(tx, installerJobId, timestamp);
     }
 
     if (status === INSTALLER_JOB_STATUSES.COMPLETED && projectCompletedStatusId) {

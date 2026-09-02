@@ -25,6 +25,8 @@ model User {
   led_projects            Project[]        @relation("project_lead_installer")
   assigned_calendar_events CalendarEvent[] @relation("calendar_event_assignee")
   installer_jobs          InstallerJob[]   @relation("installer_job_user")
+  installer_work_sessions InstallerWorkSession[] @relation("installer_work_session_user")
+  installer_payroll_accruals InstallerPayrollAccrual[] @relation("installer_payroll_user")
   uploaded_files          AttachmentFile[] @relation("attachment_uploaded_by")
   created_documents       Document[]       @relation("document_created_by")
   activity_logs           ActivityLog[]    @relation("activity_actor")
@@ -468,6 +470,7 @@ model Project {
   schedule_assignment          ScheduleAssignment?
   calendar_events              CalendarEvent[]
   installer_jobs               InstallerJob[]
+  installer_payroll_accruals   InstallerPayrollAccrual[]
   attachments_files            AttachmentFile[]
   documents                    Document[]
   activity_logs                ActivityLog[]
@@ -636,6 +639,8 @@ model InstallerJob {
   calendar_event               CalendarEvent?    @relation(fields: [calendar_event_id], references: [calendar_event_id], onDelete: SetNull)
   installer                    User              @relation("installer_job_user", fields: [installer_id], references: [user_id], onDelete: Restrict)
   attachments_files            AttachmentFile[]
+  work_sessions                InstallerWorkSession[]
+  payroll_accrual              InstallerPayrollAccrual?
 
   @@index([project_id])
   @@unique([project_position_id])
@@ -644,6 +649,73 @@ model InstallerJob {
   @@index([calendar_event_id])
   @@index([installer_id])
   @@map("installer_jobs")
+}
+
+model InstallerWorkSession {
+  work_session_id              String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  installer_id                 String                   @db.Uuid
+  installer_job_id             String?                  @db.Uuid
+  started_at                   DateTime                 @default(now()) @db.Timestamptz(6)
+  ended_at                     DateTime?                @db.Timestamptz(6)
+  work_minutes                 Int                      @default(0)
+  start_odometer_miles         Decimal?                 @db.Decimal(10, 1)
+  end_odometer_miles           Decimal?                 @db.Decimal(10, 1)
+  miles_driven                 Decimal                  @default(0) @db.Decimal(10, 1)
+  tracking_enabled             Boolean                  @default(false)
+  tracking_consent_at          DateTime?                @db.Timestamptz(6)
+  last_latitude                Decimal?                 @db.Decimal(10, 7)
+  last_longitude               Decimal?                 @db.Decimal(10, 7)
+  last_accuracy_meters         Decimal?                 @db.Decimal(10, 2)
+  last_location_at             DateTime?                @db.Timestamptz(6)
+  notes                        String?                  @db.Text
+  created_at                   DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime                 @updatedAt @db.Timestamptz(6)
+  installer                    User                     @relation("installer_work_session_user", fields: [installer_id], references: [user_id], onDelete: Restrict)
+  installer_job                InstallerJob?            @relation(fields: [installer_job_id], references: [installer_job_id], onDelete: SetNull)
+  location_points              InstallerLocationPoint[]
+
+  @@index([installer_id, started_at])
+  @@index([installer_job_id])
+  @@index([ended_at])
+  @@map("installer_work_sessions")
+}
+
+model InstallerLocationPoint {
+  location_point_id            String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  work_session_id              String                 @db.Uuid
+  latitude                     Decimal                @db.Decimal(10, 7)
+  longitude                    Decimal                @db.Decimal(10, 7)
+  accuracy_meters              Decimal?               @db.Decimal(10, 2)
+  captured_at                  DateTime               @default(now()) @db.Timestamptz(6)
+  work_session                 InstallerWorkSession   @relation(fields: [work_session_id], references: [work_session_id], onDelete: Cascade)
+
+  @@index([work_session_id, captured_at])
+  @@map("installer_location_points")
+}
+
+model InstallerPayrollAccrual {
+  payroll_accrual_id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  installer_id                 String         @db.Uuid
+  installer_job_id             String         @unique @db.Uuid
+  project_id                   String         @db.Uuid
+  service_name                 String         @db.VarChar(160)
+  quantity_sqft                Decimal        @default(0) @db.Decimal(10, 2)
+  rate_per_sqft                Decimal        @default(0) @db.Decimal(10, 2)
+  complexity_multiplier        Decimal        @default(1) @db.Decimal(6, 2)
+  amount                       Decimal        @default(0) @db.Decimal(12, 2)
+  status                       String         @default("owed") @db.VarChar(30)
+  accrued_at                   DateTime       @default(now()) @db.Timestamptz(6)
+  paid_at                      DateTime?      @db.Timestamptz(6)
+  created_at                   DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime       @updatedAt @db.Timestamptz(6)
+  installer                    User           @relation("installer_payroll_user", fields: [installer_id], references: [user_id], onDelete: Restrict)
+  installer_job                InstallerJob   @relation(fields: [installer_job_id], references: [installer_job_id], onDelete: Cascade)
+  project                      Project        @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
+
+  @@index([installer_id, accrued_at])
+  @@index([project_id])
+  @@index([status])
+  @@map("installer_payroll_accruals")
 }
 
 model Consultation {
