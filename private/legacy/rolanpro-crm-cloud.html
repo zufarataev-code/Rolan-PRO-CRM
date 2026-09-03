@@ -5365,6 +5365,7 @@ const I18N = {
     copied: 'Скопировано!',
     linkShared: 'Отправьте эту ссылку клиенту — он сможет отслеживать статус и оставить отзыв.',
     noAccess: 'Нет доступа',
+    welcomeOwner: 'Кабинет владельца',
     welcomeMeasurer: 'Портал замерщика',
     welcomeInstaller: 'Портал монтажника',
     welcomeClient: 'Портал клиента',
@@ -5784,6 +5785,7 @@ const I18N = {
     copied: 'Copied!',
     linkShared: 'Share this link with the client — they can track status and leave a review.',
     noAccess: 'No access',
+    welcomeOwner: 'Owner workspace',
     welcomeMeasurer: 'Measurer portal',
     welcomeInstaller: 'Installer portal',
     welcomeClient: 'Client portal',
@@ -14761,7 +14763,11 @@ function renderAppShell() {
 function headerTitle() {
   const u = currentUser();
   switch (state.view) {
-    case 'dashboard': return u.role === 'manager' ? T('welcomeManager') : u.role === 'measurer' ? T('welcomeMeasurer') : T('welcomeInstaller');
+    case 'dashboard':
+      if (u.role === 'owner') return T('welcomeOwner');
+      if (u.role === 'manager') return T('welcomeManager');
+      if (u.role === 'measurer') return T('welcomeMeasurer');
+      return T('welcomeInstaller');
     case 'orders': return T('orders');
     case 'proposals': return '📄 Коммерческие предложения';
     case 'servicePricing': return '💲 Услуги и цены';

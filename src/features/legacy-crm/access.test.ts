@@ -52,3 +52,11 @@ test("every employee card exposes photo upload and preview controls", () => {
   assert.match(source, /compressTeamPhoto\(file/);
   assert.match(source, /Сохранить фото/);
 });
+
+test("dashboard heading follows the current employee role", () => {
+  const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+
+  assert.match(source, /u\.role === 'owner'\) return T\('welcomeOwner'\)/);
+  assert.match(source, /u\.role === 'manager'\) return T\('welcomeManager'\)/);
+  assert.match(source, /u\.role === 'measurer'\) return T\('welcomeMeasurer'\)/);
+});
