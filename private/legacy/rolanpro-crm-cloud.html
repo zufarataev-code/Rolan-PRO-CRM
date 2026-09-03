@@ -30348,11 +30348,16 @@ async function cloudBoot() {
     migrateSchema();
     normalizeClientAccountData();
     const firstAllowed = cloudAllowedLegacyIds.map(getUser).find(Boolean);
+    const authenticatedLegacyRole = teamLegacyRoleFromServer(cloudCurrentUser.roles);
+    const roleWasSynchronized = Boolean(
+      firstAllowed && authenticatedLegacyRole && firstAllowed.role !== authenticatedLegacyRole,
+    );
+    if (roleWasSynchronized) firstAllowed.role = authenticatedLegacyRole;
     state.currentUserId = firstAllowed?.id || null;
     state.lang = firstAllowed?.lang || state.lang;
     cloudReady = true;
     localStorage.setItem('rolanpro_crm', JSON.stringify(db));
-    if (persistClientNotificationMigration) cloudScheduleSave();
+    if (persistClientNotificationMigration || roleWasSynchronized) cloudScheduleSave();
     parseHash();
     render();
     cloudStatus('Сохранено', 'green');

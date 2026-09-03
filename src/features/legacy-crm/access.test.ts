@@ -60,3 +60,11 @@ test("dashboard heading follows the current employee role", () => {
   assert.match(source, /u\.role === 'manager'\) return T\('welcomeManager'\)/);
   assert.match(source, /u\.role === 'measurer'\) return T\('welcomeMeasurer'\)/);
 });
+
+test("authenticated server role overrides a stale editable employee-card role", () => {
+  const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+
+  assert.match(source, /authenticatedLegacyRole = teamLegacyRoleFromServer\(cloudCurrentUser\.roles\)/);
+  assert.match(source, /firstAllowed\.role = authenticatedLegacyRole/);
+  assert.match(source, /persistClientNotificationMigration \|\| roleWasSynchronized/);
+});
