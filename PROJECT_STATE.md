@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Remove the duplicate field-role CRM shell and open every employee inside the real `/legacy-crm` workspace | `codex/remove-duplicate-field-shell` | Codex | Ready for PR | Push the verified branch, run CI/security review, merge and deploy, then sign in with controlled surveyor/installer accounts to confirm their assigned records and `Рабочий день` inside the actual CRM |
+| Remove the duplicate field-role CRM shell and open every employee inside the real `/legacy-crm` workspace | `codex/remove-duplicate-field-shell` / `f70355f` | Codex | Merged and deployed | Refresh/sign in through the public `/legacy-crm`; perform a controlled surveyor/installer account check of assigned records and `Рабочий день` without changing live customer data |
 | Remove standalone voice-input button from every CRM interface | `codex/remove-voice-button` / #112 | Codex | Merged and deployed | Refresh any already-open CRM tab once; voice will return only inside the future agent |
 | Put surveyor and installer inside the single canonical CRM interface | `codex/one-crm-all-roles` / #110 | Codex | Merged and deployed | Surveyor and installer should refresh/sign in through the public CRM and use only the `/legacy-crm` role workspace |
 | Remove duplicate owner/manager pricing shell and keep canonical pricing inside the main CRM | `codex/unify-service-pricing-ui` / #108 | Codex | Merged and deployed | Refresh the public CRM and use `Услуги и цены` / `Монтажники сейчас` only inside `/legacy-crm` |
@@ -228,8 +228,9 @@ Contributors must add a row before starting substantial work and update or remov
 - Safe writes: field updates merge only operational order facts and assigned-task status into the current full workspace. Existing financial values embedded in measurements and financial timeline events are preserved on the server even though the employee never receives them. Assignment IDs, customer price, payment data, and unauthorized stage transitions cannot be overwritten by a field request.
 - Installer continuity: PostgreSQL shift, hours, mileage, opt-in work location, and personal payroll history were not deleted. They now render as `Рабочий день` in the installer menu inside the actual legacy CRM.
 - Verification: 150 automated tests passed; TypeScript passed; production build passed and no longer contains `/survey`, `/installer`, `/legacy-crm/survey`, or `/legacy-crm/installer` page bundles. Local route smoke confirmed the reported `/legacy-crm/survey/notifications` and old `/installer/today` addresses return 308 to `/legacy-crm`. No production record, employee account, password, shift, location, payroll, client, or order was changed.
-- Branch: `codex/remove-duplicate-field-shell`.
-- Next action: open the PR, pass CI and security review, merge/deploy from `main`, then perform a controlled production sign-in as a mapped surveyor and installer without changing live customer data.
+- Release: branch `codex/remove-duplicate-field-shell` was reviewed and fast-forwarded to `main` as `f70355f99c76d32d4ee563a1ecb57b721f62cfe3`. GitHub CI run #33697488074 passed and production deploy run #33697612449 succeeded.
+- Production smoke: the exact reported address `/legacy-crm/survey/notifications` and old `/installer/today` both return 308 to `/legacy-crm`; the public build exposes only the actual `/legacy-crm` page and no longer builds the deleted field shells. An unauthenticated request remains protected. No live employee session was used to change records.
+- Next action: refresh/sign in through the public `/legacy-crm`, then perform one controlled visual check with mapped surveyor and installer accounts to confirm assigned records and `Рабочий день` without changing live customer data.
 
 ## Completion rule
 
