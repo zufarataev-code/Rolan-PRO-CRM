@@ -90,6 +90,33 @@ test("installer receives only their own compensation configuration", () => {
   assert.equal("hourlyRate" in (owner || {}), false);
 });
 
+test("server role change immediately switches a linked legacy card from surveyor to installer", () => {
+  const transitionedWorkspace = {
+    ...workspace,
+    orders: [
+      ...workspace.orders,
+      {
+        id: "order-install-after-role-change",
+        clientId: "client-b",
+        measurerId: "someone-else",
+        installerIds: ["measure"],
+        status: "installation_scheduled",
+      },
+    ],
+  };
+
+  const field = createFieldWorkspace(
+    transitionedWorkspace,
+    [ROLE_CODES.INSTALLER],
+    ["measure"],
+  );
+  const users = field.users as Array<Record<string, unknown>>;
+  const orders = field.orders as Array<Record<string, unknown>>;
+
+  assert.equal(users.find((user) => user.id === "measure")?.role, "installer");
+  assert.deepEqual(orders.map((order) => order.id), ["order-install-after-role-change"]);
+});
+
 test("field save updates operational facts but cannot change money or assignments", () => {
   const submitted = createFieldWorkspace(workspace, [ROLE_CODES.CONSULTANT], ["measure"]);
   const submittedOrders = submitted.orders as Array<Record<string, unknown>>;

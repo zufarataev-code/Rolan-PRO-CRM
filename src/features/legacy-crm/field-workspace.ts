@@ -117,31 +117,42 @@ function legacyRoleNames(roles: readonly string[]) {
 }
 
 function fieldIdentityIds(payload: JsonObject, roles: readonly string[], legacyUserIds: readonly string[]) {
-  const roleNames = legacyRoleNames(roles);
+  if (legacyRoleNames(roles).size === 0) return new Set<string>();
   const users = Array.isArray(payload.users) ? payload.users : [];
   return new Set(
     users
       .filter(
         (user) =>
           isObject(user) &&
-          legacyUserIds.includes(String(user.id || "")) &&
-          roleNames.has(String(user.role || "")),
+          legacyUserIds.includes(String(user.id || "")),
       )
       .map((user) => String((user as JsonObject).id)),
   );
 }
 
-function orderAssignedTo(order: JsonObject, identityIds: Set<string>) {
-  if (identityIds.has(String(order.measurerId || ""))) return true;
-  return Array.isArray(order.installerIds)
+function orderAssignedTo(order: JsonObject, identityIds: Set<string>, roles: readonly string[]) {
+  if (
+    roles.includes(ROLE_CODES.CONSULTANT) &&
+    identityIds.has(String(order.measurerId || ""))
+  ) {
+    return true;
+  }
+  return roles.includes(ROLE_CODES.INSTALLER) && Array.isArray(order.installerIds)
     ? order.installerIds.some((id) => identityIds.has(String(id)))
     : false;
 }
 
-function safeUser(user: JsonObject, own: boolean) {
+function effectiveLegacyRole(roles: readonly string[]) {
+  if (roles.includes(ROLE_CODES.CONSULTANT)) return "measurer";
+  if (roles.includes(ROLE_CODES.INSTALLER)) return "installer";
+  return null;
+}
+
+function safeUser(user: JsonObject, own: boolean, roles: readonly string[]) {
+  const effectiveRole = own ? effectiveLegacyRole(roles) : null;
   const result: JsonObject = {
     id: user.id,
-    role: user.role,
+    role: effectiveRole || user.role,
     name: user.name,
     title: user.title,
     phone: user.phone,
@@ -153,7 +164,7 @@ function safeUser(user: JsonObject, own: boolean) {
 
   // An installer may see their own configured work rates, never another
   // employee's compensation settings.
-  if (own && user.role === "installer") result.payConfig = clone(user.payConfig || {});
+  if (own && effectiveRole === "installer") result.payConfig = clone(user.payConfig || {});
   return result;
 }
 
@@ -188,7 +199,7 @@ export function createFieldWorkspace(
 ) {
   const identityIds = fieldIdentityIds(payload, roles, legacyUserIds);
   const allOrders = (Array.isArray(payload.orders) ? payload.orders : []).filter(isObject);
-  const assignedOrders = allOrders.filter((order) => orderAssignedTo(order, identityIds));
+  const assignedOrders = allOrders.filter((order) => orderAssignedTo(order, identityIds, roles));
   const orderIds = new Set(assignedOrders.map((order) => String(order.id || "")));
   const clientIds = new Set(assignedOrders.map((order) => String(order.clientId || "")).filter(Boolean));
   const referencedUserIds = new Set(identityIds);
@@ -218,7 +229,7 @@ export function createFieldWorkspace(
   const users = (Array.isArray(payload.users) ? payload.users : [])
     .filter(isObject)
     .filter((user) => referencedUserIds.has(String(user.id || "")))
-    .map((user) => safeUser(user, identityIds.has(String(user.id || ""))));
+    .map((user) => safeUser(user, identityIds.has(String(user.id || "")), roles));
   const clients = (Array.isArray(payload.clients) ? payload.clients : [])
     .filter(isObject)
     .filter((client) => clientIds.has(String(client.id || "")))
@@ -259,12 +270,12 @@ export function mergeFieldWorkspace(
       .map((order) => [String(order.id || ""), order]),
   );
   const allowedStatuses = allowedFieldStatuses(roles);
-  const assignedOrders = currentOrders.filter((order) => orderAssignedTo(order, identityIds));
+  const assignedOrders = currentOrders.filter((order) => orderAssignedTo(order, identityIds, roles));
   const orderIds = new Set(assignedOrders.map((order) => String(order.id || "")));
   const clientIds = new Set(assignedOrders.map((order) => String(order.clientId || "")).filter(Boolean));
 
   const mergedOrders = currentOrders.map((currentOrder) => {
-    if (!orderAssignedTo(currentOrder, identityIds)) return currentOrder;
+    if (!orderAssignedTo(currentOrder, identityIds, roles)) return currentOrder;
     const submitted = submittedOrders.get(String(currentOrder.id || ""));
     if (!submitted) return currentOrder;
 
