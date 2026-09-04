@@ -10,17 +10,21 @@ export function buildProposalEmail(input: ProposalEmailInput) {
   const reference = input.proposalCode?.trim() || input.proposalTitle.trim();
 
   return {
-    subject: `Your ROLANPRO proposal${reference ? ` - ${reference}` : ""}`,
+    subject: `Your ROLANPRO proposal package${reference ? ` - ${reference}` : ""}`,
     body: [
       greeting,
       "",
-      "Your ROLANPRO proposal is ready.",
+      "Your ROLANPRO client package is ready.",
       "",
-      `Open proposal: ${input.publicUrl}`,
+      `Open secure package: ${input.publicUrl}`,
       "",
-      "This secure client page does not require access to the ROLANPRO CRM. You can review the scope, approve the proposal, and use Download proposal to save a PDF copy.",
+      "The same page contains your proposal, selected scope of work, agreement/signature, warranty information, and payment instructions when the deposit is ready.",
       "",
-      "If the button or link does not open, copy the full address above into your browser.",
+      "Preferred payment methods are Zelle or bank transfer. If you choose online payment processing, the applicable processing fee is shown before payment.",
+      "",
+      "This secure client page does not require access to the ROLANPRO CRM. You can also use Download proposal to save a PDF copy.",
+      "",
+      "If the link does not open, copy the full address above into your browser.",
       "",
       "ROLANPRO",
     ].join("\n"),
