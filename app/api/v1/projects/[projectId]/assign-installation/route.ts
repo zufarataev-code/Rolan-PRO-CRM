@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server";
 
 import { PROJECT_RUNTIME_MANAGER_ROLES } from "@/features/projects/api";
+import {
+  saveProjectInstallationEndDate,
+  validateInstallationWindow,
+} from "@/features/projects/lifecycle";
 import { assignInstallationToProject } from "@/features/projects/service";
 import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
@@ -21,6 +25,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const body = (await request.json().catch(() => null)) as
     | {
         date?: string;
+        end_date?: string | null;
         start_time?: string | null;
         end_time?: string | null;
         crew_id?: string;
@@ -42,17 +47,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
   }
 
+  if (validateInstallationWindow(body.date, body.end_date)) {
+    return apiError(400, "invalid_install_window", "Installation end date cannot be earlier than start date.");
+  }
+
   const result = await assignInstallationToProject(auth.session, {
-      project_id: projectId,
-      date: body.date,
-      start_time: body.start_time ?? null,
-      end_time: body.end_time ?? null,
-      crew_id: body.crew_id,
-      manager_notes: typeof body.manager_notes === "string" ? body.manager_notes : null,
-      assignments: body.assignments.flatMap((assignment) =>
-        assignment.project_position_id && assignment.installer_id
-          ? [
-              {
+    project_id: projectId,
+    date: body.date,
+    start_time: body.start_time ?? null,
+    end_time: body.end_time ?? null,
+    crew_id: body.crew_id,
+    manager_notes: typeof body.manager_notes === "string" ? body.manager_notes : null,
+    assignments: body.assignments.flatMap((assignment) =>
+      assignment.project_position_id && assignment.installer_id
+        ? [
+            {
               project_position_id: assignment.project_position_id,
               installer_id: assignment.installer_id,
             },
@@ -97,5 +106,27 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError(400, "invalid_installer", "One or more installers are invalid.");
   }
 
-  return apiSuccess(result);
+  const installationWindow = await saveProjectInstallationEndDate(auth.session, {
+    project_id: projectId,
+    start_date: body.date,
+    end_date: body.end_date ?? body.date,
+  });
+
+  if (!installationWindow) {
+    return apiError(404, "not_found", "Project was not found while saving the installation window.");
+  }
+
+  if (installationWindow === "invalid_install_window") {
+    return apiError(400, "invalid_install_window", "Installation date window is invalid.");
+  }
+
+  if (installationWindow === "missing_schedule") {
+    return apiError(409, "missing_schedule", "Installation schedule was not created.");
+  }
+
+  return apiSuccess({
+    assignment: result.assignment,
+    items: result.items,
+    installation_window: installationWindow,
+  });
 }
