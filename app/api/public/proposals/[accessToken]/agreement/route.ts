@@ -1,5 +1,6 @@
-import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { signPublicAgreement } from "@/features/proposals/service";
+import { closeSaleIfReady } from "@/features/sales/close-sale";
+import { apiError, apiSuccess } from "@/lib/http/api-response";
 
 type RouteContext = {
   params: Promise<{
@@ -45,7 +46,10 @@ export async function POST(request: Request, context: RouteContext) {
     return apiError(409, "proposal_locked", "Proposal is already approved and can no longer be re-signed.");
   }
 
+  const sale = await closeSaleIfReady({ accessToken });
+
   return apiSuccess({
     proposal,
+    sale,
   });
 }
