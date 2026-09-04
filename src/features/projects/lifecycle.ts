@@ -249,9 +249,16 @@ export async function completeProjectInstallation(session: ProjectSession, proje
     },
     include: {
       project_status: true,
+      schedule_assignment: {
+        select: { schedule_assignment_id: true },
+      },
+      project_positions: {
+        select: { position_id: true },
+      },
       installer_jobs: {
         select: {
           installer_job_id: true,
+          project_position_id: true,
           status: true,
           started_at: true,
           completed_at: true,
@@ -268,6 +275,16 @@ export async function completeProjectInstallation(session: ProjectSession, proje
       already_completed: true,
       completed_jobs: project.installer_jobs.filter((job) => job.status === INSTALLER_JOB_STATUSES.COMPLETED).length,
     };
+  }
+
+  const assignedPositionIds = new Set(project.installer_jobs.map((job) => job.project_position_id));
+  const hasCompleteSetup =
+    Boolean(project.schedule_assignment) &&
+    project.project_positions.length > 0 &&
+    project.project_positions.every((position) => assignedPositionIds.has(position.position_id));
+
+  if (!hasCompleteSetup) {
+    return "incomplete_installation_setup" as const;
   }
 
   const [completedProjectStatus, completedPositionStatus] = await Promise.all([
