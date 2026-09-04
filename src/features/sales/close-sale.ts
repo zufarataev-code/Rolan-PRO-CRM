@@ -12,19 +12,9 @@ type CloseSaleInput = SaleGateLookup & {
 };
 
 function proposalWhere(input: SaleGateLookup): Prisma.ProposalWhereInput {
-  if ("proposalId" in input) {
-    return { proposal_id: input.proposalId };
-  }
-
-  if ("accessToken" in input) {
-    return { access_token: input.accessToken };
-  }
-
-  return {
-    deposit: {
-      deposit_id: input.depositId,
-    },
-  };
+  if ("proposalId" in input) return { proposal_id: input.proposalId };
+  if ("accessToken" in input) return { access_token: input.accessToken };
+  return { deposit: { deposit_id: input.depositId } };
 }
 
 export function isSaleCloseReady(input: {
@@ -41,6 +31,72 @@ export function isSaleCloseReady(input: {
   );
 }
 
+async function reconcileIncompleteSale(input: {
+  proposalId: string;
+  dealId: string;
+  managerUserId?: string | null;
+  actorUserId?: string | null;
+  agreementSigned: boolean;
+  depositPaid: boolean;
+}) {
+  const actorUserId = input.actorUserId ?? input.managerUserId ?? null;
+
+  await prisma.$transaction(async (tx) => {
+    // Old flow created this task immediately after a deposit. It must never be
+    // actionable until both sales gates are complete.
+    await tx.task.updateMany({
+      where: {
+        deal_id: input.dealId,
+        title: "Создать project",
+        status: { in: ["open", "in_progress"] },
+      },
+      data: {
+        status: "done",
+        completed_at: new Date(),
+      },
+    });
+
+    if (!input.managerUserId || !actorUserId) return;
+
+    const title = !input.agreementSigned
+      ? "Получить подпись договора"
+      : !input.depositPaid
+        ? "Получить аванс"
+        : null;
+
+    if (!title) return;
+
+    const existing = await tx.task.findFirst({
+      where: {
+        deal_id: input.dealId,
+        entity_type: "proposal",
+        entity_id: input.proposalId,
+        title,
+        status: { in: ["open", "in_progress"] },
+      },
+      select: { task_id: true },
+    });
+
+    if (!existing) {
+      await tx.task.create({
+        data: {
+          deal_id: input.dealId,
+          entity_type: "proposal",
+          entity_id: input.proposalId,
+          title,
+          description: !input.agreementSigned
+            ? "Аванс уже получен, но договор ещё не подписан. Продолжайте сопровождение клиента — проект запускать нельзя."
+            : "Договор подписан, но аванс ещё не получен. Продолжайте сопровождение клиента — проект запускать нельзя.",
+          priority: "high",
+          assigned_to: input.managerUserId,
+          created_by: actorUserId,
+          due_at: new Date(),
+        },
+      });
+    }
+  });
+}
+
 /**
  * Closes the sales deal only when BOTH commercial gates are complete:
  * signed agreement + paid deposit. Operational Project creation is deliberately
@@ -50,40 +106,21 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
   const proposal = await prisma.proposal.findFirst({
     where: proposalWhere(input),
     include: {
-      agreement: {
-        select: {
-          status: true,
-          signed_at: true,
-        },
-      },
-      deposit: {
-        select: {
-          deposit_id: true,
-          status: true,
-          paid_at: true,
-        },
-      },
-      project: {
-        select: {
-          project_id: true,
-        },
-      },
+      agreement: { select: { status: true, signed_at: true } },
+      deposit: { select: { deposit_id: true, status: true, paid_at: true } },
+      project: { select: { project_id: true } },
       deal: {
         include: {
-          pipeline_status: {
-            select: {
-              status_code: true,
-            },
-          },
+          pipeline_status: { select: { status_code: true } },
         },
       },
     },
   });
 
-  if (!proposal) {
-    return null;
-  }
+  if (!proposal) return null;
 
+  const agreementSigned = proposal.agreement?.status === "signed" && Boolean(proposal.agreement?.signed_at);
+  const depositPaid = proposal.deposit?.status === "paid" && Boolean(proposal.deposit?.paid_at);
   const ready = isSaleCloseReady({
     agreementStatus: proposal.agreement?.status,
     agreementSignedAt: proposal.agreement?.signed_at,
@@ -92,14 +129,23 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
   });
 
   if (!ready) {
+    await reconcileIncompleteSale({
+      proposalId: proposal.proposal_id,
+      dealId: proposal.deal_id,
+      managerUserId: proposal.deal.assigned_manager_id,
+      actorUserId: input.actorUserId,
+      agreementSigned,
+      depositPaid,
+    });
+
     return {
       proposal_id: proposal.proposal_id,
       deal_id: proposal.deal_id,
       ready: false,
       closed: proposal.deal.pipeline_status.status_code === "CLOSED_WON",
       project_id: proposal.project?.project_id ?? null,
-      agreement_signed: proposal.agreement?.status === "signed" && Boolean(proposal.agreement?.signed_at),
-      deposit_paid: proposal.deposit?.status === "paid" && Boolean(proposal.deposit?.paid_at),
+      agreement_signed: agreementSigned,
+      deposit_paid: depositPaid,
     };
   }
 
@@ -150,9 +196,7 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
       where: {
         deal_id: proposal.deal_id,
         status: "scheduled",
-        type_key: {
-          in: ["proposal_review_call", "deposit_reminder"],
-        },
+        type_key: { in: ["proposal_review_call", "deposit_reminder"] },
       },
       data: {
         status: "completed",
@@ -161,12 +205,11 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
       },
     });
 
-    // Remove the obsolete pre-launch wording produced by older flows.
     await tx.task.updateMany({
       where: {
         deal_id: proposal.deal_id,
         status: { in: ["open", "in_progress"] },
-        title: "Создать project",
+        title: { in: ["Создать project", "Получить подпись договора", "Получить аванс"] },
       },
       data: {
         status: "done",
