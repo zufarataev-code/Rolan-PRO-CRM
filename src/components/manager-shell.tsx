@@ -19,6 +19,7 @@ const navGroups: ProductNavGroup[] = [
       { href: "/manager/crm/pipeline", label: "Продажи" },
       { href: "/manager/calendar", label: "Расписание" },
       { href: "/manager/projects", label: "Проекты" },
+      { href: "/manager/projects/completed", label: "Завершённые" },
       { href: "/manager/installers", label: "Монтажники" },
     ],
   },
