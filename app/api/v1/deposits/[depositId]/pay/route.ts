@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 
 import { PROPOSAL_MANAGER_ROLES } from "@/features/proposals/api";
 import { markDepositPaid } from "@/features/proposals/service";
+import { closeSaleIfReady } from "@/features/sales/close-sale";
 import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 
@@ -29,5 +30,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError(409, "proposal_not_approved", "Proposal must remain approved before deposit payment is recorded.");
   }
 
-  return apiSuccess(result);
+  const sale = await closeSaleIfReady({
+    depositId,
+    actorUserId: auth.session.user.user_id,
+  });
+
+  return apiSuccess({
+    ...result,
+    sale,
+  });
 }
