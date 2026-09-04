@@ -282,6 +282,23 @@ export async function completeProjectInstallation(session: ProjectSession, proje
   const completedAt = new Date();
 
   const result = await prisma.$transaction(async (tx) => {
+    const claim = await tx.project.updateMany({
+      where: {
+        project_id: project.project_id,
+        project_status_id: project.project_status_id,
+      },
+      data: {
+        project_status_id: completedProjectStatus.project_status_id,
+      },
+    });
+
+    if (claim.count === 0) {
+      return {
+        claimed: false,
+        completedJobs: 0,
+      };
+    }
+
     let completedJobs = 0;
 
     for (const job of project.installer_jobs) {
@@ -302,11 +319,6 @@ export async function completeProjectInstallation(session: ProjectSession, proje
     await tx.projectPosition.updateMany({
       where: { project_id: project.project_id },
       data: { position_status_id: completedPositionStatus.position_status_id },
-    });
-
-    await tx.project.update({
-      where: { project_id: project.project_id },
-      data: { project_status_id: completedProjectStatus.project_status_id },
     });
 
     await tx.activityLog.create({
@@ -332,13 +344,24 @@ export async function completeProjectInstallation(session: ProjectSession, proje
       managerUserId: project.manager_id,
     });
 
-    return completedJobs;
+    return {
+      claimed: true,
+      completedJobs,
+    };
   });
+
+  if (!result.claimed) {
+    return {
+      project_id: project.project_id,
+      already_completed: true,
+      completed_jobs: project.installer_jobs.filter((job) => job.status === INSTALLER_JOB_STATUSES.COMPLETED).length,
+    };
+  }
 
   return {
     project_id: project.project_id,
     already_completed: false,
-    completed_jobs: result,
+    completed_jobs: result.completedJobs,
     completed_at: completedAt,
   };
 }
