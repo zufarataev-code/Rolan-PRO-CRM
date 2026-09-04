@@ -1,7 +1,9 @@
-import { INSTALLER_JOB_STATUSES } from "@/features/projects/api";
-import { calculatePositionFinance } from "@/features/projects/service";
+import { Prisma } from "@prisma/client";
+
 import { onProjectCompleted } from "@/features/core/events";
 import { recordInstallerPayrollAccrual } from "@/features/installer-operations/service";
+import { INSTALLER_JOB_STATUSES } from "@/features/projects/api";
+import { calculatePositionFinance } from "@/features/projects/service";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
 
@@ -26,9 +28,98 @@ function asRecord(value: unknown) {
   return value as Record<string, unknown>;
 }
 
+function parseDateOnly(value: string | null | undefined) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function dateOnlyString(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
 function projectAccessWhere(session: ProjectSession) {
   if (session.roles.includes(ROLE_CODES.OWNER)) return {};
   return { manager_id: session.user.user_id };
+}
+
+export function validateInstallationWindow(startDate: string, endDate?: string | null) {
+  const start = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate || startDate);
+
+  if (!start || !end) return "invalid_install_window" as const;
+  if (end.getTime() < start.getTime()) return "invalid_install_window" as const;
+
+  return null;
+}
+
+export async function saveProjectInstallationEndDate(
+  session: ProjectSession,
+  input: {
+    project_id: string;
+    start_date: string;
+    end_date?: string | null;
+  },
+) {
+  const validation = validateInstallationWindow(input.start_date, input.end_date);
+  if (validation) return validation;
+
+  const project = await prisma.project.findFirst({
+    where: {
+      project_id: input.project_id,
+      ...projectAccessWhere(session),
+    },
+    include: {
+      schedule_assignment: {
+        select: {
+          schedule_assignment_id: true,
+          planning_tags: true,
+        },
+      },
+    },
+  });
+
+  if (!project) return null;
+  if (!project.schedule_assignment) return "missing_schedule" as const;
+
+  const endDate = input.end_date || input.start_date;
+  const currentTags = asRecord(project.schedule_assignment.planning_tags);
+  const planningTags = {
+    ...currentTags,
+    install_end_date: endDate,
+  } as Prisma.InputJsonValue;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.scheduleAssignment.update({
+      where: {
+        schedule_assignment_id: project.schedule_assignment!.schedule_assignment_id,
+      },
+      data: {
+        planning_tags: planningTags,
+      },
+    });
+
+    await tx.activityLog.create({
+      data: {
+        actor_user_id: session.user.user_id,
+        entity_type: "project",
+        entity_id: project.project_id,
+        project_id: project.project_id,
+        action_key: "installation.window_updated",
+        message: `Окно монтажа: ${input.start_date} — ${endDate}.`,
+        metadata: {
+          start_date: input.start_date,
+          end_date: endDate,
+        },
+      },
+    });
+  });
+
+  return {
+    project_id: project.project_id,
+    start_date: input.start_date,
+    end_date: endDate,
+  };
 }
 
 export async function getProjectLifecycleSummary(session: ProjectSession, projectId: string) {
@@ -88,6 +179,11 @@ export async function getProjectLifecycleSummary(session: ProjectSession, projec
   const installerMap = new Map(
     project.installer_jobs.map((job) => [job.installer.user_id, job.installer]),
   );
+  const planningTags = asRecord(project.schedule_assignment?.planning_tags);
+  const storedEndDate =
+    typeof planningTags.install_end_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(planningTags.install_end_date)
+      ? planningTags.install_end_date
+      : null;
 
   return {
     project_id: project.project_id,
@@ -99,6 +195,7 @@ export async function getProjectLifecycleSummary(session: ProjectSession, projec
     schedule: project.schedule_assignment
       ? {
           date: project.schedule_assignment.date,
+          end_date: storedEndDate ?? dateOnlyString(project.schedule_assignment.date),
           start_time: project.schedule_assignment.start_time,
           end_time: project.schedule_assignment.end_time,
           crew: project.schedule_assignment.crew,
