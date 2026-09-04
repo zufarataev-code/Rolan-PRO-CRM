@@ -25,6 +25,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError(404, "not_found", "Project was not found.");
   }
 
+  if (result === "incomplete_installation_setup") {
+    return apiError(
+      409,
+      "incomplete_installation_setup",
+      "Сначала заполните позиции проекта, назначьте даты монтажа и installer для каждой позиции.",
+    );
+  }
+
   if (result === "missing_status_config") {
     return apiError(409, "missing_status_config", "Completed project statuses are not configured.");
   }
