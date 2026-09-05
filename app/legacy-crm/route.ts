@@ -40,27 +40,10 @@ export async function GET(request: NextRequest) {
 
   const cloudHtml = replaceLegacyBootstrapLogin(html);
   const employeeLoginUrl = new URL("/login", publicAppUrl).toString();
-  const workspaceShortcuts = `
-    <style>
-      #rolanpro-workspace-shortcuts{position:fixed;right:18px;top:74px;z-index:2147483000;display:flex;align-items:center;gap:8px;padding:7px;border-radius:18px;background:rgba(255,255,255,.96);border:1px solid #dbeafe;box-shadow:0 12px 34px rgba(15,23,42,.18);backdrop-filter:blur(14px);font:800 13px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-      #rolanpro-workspace-shortcuts a{display:flex;align-items:center;gap:7px;padding:9px 12px;border-radius:12px;color:#0f172a;text-decoration:none;white-space:nowrap;transition:.15s ease}
-      #rolanpro-workspace-shortcuts a:hover{background:#eff6ff;transform:translateY(-1px)}
-      #rolanpro-workspace-shortcuts a.sales{background:#0f172a;color:#fff}
-      #rolanpro-workspace-shortcuts a.sales:hover{background:#1e293b}
-      #rolanpro-workspace-shortcuts i{font-size:15px;line-height:1}
-      #rolanpro-workspace-shortcuts .mail-icon{color:#ea4335}
-      @media(max-width:760px){#rolanpro-workspace-shortcuts{left:10px;right:10px;top:auto;bottom:10px;justify-content:space-between;padding:6px}#rolanpro-workspace-shortcuts a{flex:1;justify-content:center;padding:10px 7px;font-size:12px}}
-    </style>
-    <nav id="rolanpro-workspace-shortcuts" aria-label="Быстрые разделы CRM">
-      <a class="sales" href="/manager/crm/pipeline" aria-label="Открыть воронку продаж"><i class="bi bi-funnel-fill" aria-hidden="true"></i>Продажи</a>
-      <a href="/manager/crm/calculator" aria-label="Открыть быстрый калькулятор"><i class="bi bi-calculator-fill" aria-hidden="true"></i>Калькулятор</a>
-      <a href="/mail" aria-label="Открыть рабочую почту"><span class="mail-icon"><i class="bi bi-envelope-fill" aria-hidden="true"></i></span>Почта</a>
-    </nav>
-  `;
 
-  // The legacy CRM is a large generated HTML shell. Keep the employee-access
-  // override here so the cloud app can evolve without re-embedding credentials
-  // or hand-editing the generated legacy file.
+  // The legacy CRM is the single visible CRM shell. Keep only the employee
+  // access patch here; do not inject shortcuts that jump into a second owner/
+  // manager application shell.
   const teamAccessPatch = `
     <script>
       (() => {
@@ -204,7 +187,7 @@ export async function GET(request: NextRequest) {
   `;
 
   const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
-  const injectedUi = privilegedWorkspace ? `${workspaceShortcuts}${teamAccessPatch}` : "";
+  const injectedUi = privilegedWorkspace ? teamAccessPatch : "";
   const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0
     ? `${cloudHtml.slice(0, closingBodyIndex)}${injectedUi}${cloudHtml.slice(closingBodyIndex)}`
