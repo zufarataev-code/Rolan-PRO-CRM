@@ -80,7 +80,7 @@ function WorkflowCard(props: {
 export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("Все ключевые manager actions теперь собираются вокруг сделки.");
+  const [message, setMessage] = useState("Менеджер ведёт клиента до закрытия продажи, затем отдельно запускает проект.");
   const [consultantId, setConsultantId] = useState(consultants[0]?.user_id ?? "");
   const [scheduledStart, setScheduledStart] = useState(() => {
     const date = new Date();
@@ -105,6 +105,11 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
   const latestDeposit = latestProposal?.deposit ?? null;
   const latestProject = deal.workflow?.latest_project ?? latestProposal?.project ?? null;
   const latestProjectStatusCode = latestProject?.project_status?.status_code ?? null;
+  const agreementSigned = Boolean(
+    latestProposal?.agreement?.status === "signed" && latestProposal?.agreement?.signed_at,
+  );
+  const depositPaid = Boolean(latestDeposit?.status === "paid" && latestDeposit?.paid_at);
+  const saleClosed = deal.pipeline_status?.status_code === "CLOSED_WON";
 
   const canCreateClientFromLead = Boolean(!deal.client && deal.lead?.lead_id && deal.lead?.name);
   const canScheduleConsultation = Boolean(consultantId);
@@ -113,11 +118,11 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
   const canApproveProposal = Boolean(latestProposal && latestProposal.status !== "approved" && latestProposal.status !== "finalized");
   const canCreateDeposit = Boolean(latestProposal && latestProposal.status === "approved" && !latestDeposit);
   const canMarkDepositPaid = Boolean(latestDeposit && latestDeposit.status === "pending");
-  const canCreateProject = Boolean(latestProposal && latestDeposit?.status === "paid" && !latestProject?.project_id);
+  const canLaunchProject = Boolean(
+    latestProposal && agreementSigned && depositPaid && saleClosed && !latestProject?.project_id,
+  );
   const canAssignInstallation = Boolean(
-    latestProject?.project_id &&
-      (["PROJECT_CREATED", "SCHEDULED"].includes(deal.pipeline_status?.status_code ?? "") ||
-        ["PROJECT_CREATED", "SCHEDULED"].includes(latestProjectStatusCode ?? "")),
+    latestProject?.project_id && ["PROJECT_CREATED", "SCHEDULED", "IN_PROGRESS"].includes(latestProjectStatusCode ?? ""),
   );
 
   const consultationTitle = useMemo(() => {
@@ -235,7 +240,7 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       }),
     );
 
-    setMessage("Proposal создан из survey и привязан к сделке.");
+    setMessage("КП создано из замера и привязано к сделке.");
     router.push(`/manager/crm/proposals/${data.proposal.proposal_id}`);
   }
 
@@ -246,7 +251,7 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       }),
     );
 
-    setMessage("Proposal отправлен клиенту.");
+    setMessage("КП, договор и клиентский пакет отправлены.");
   }
 
   async function approveProposal() {
@@ -256,7 +261,7 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       }),
     );
 
-    setMessage("Proposal approved.");
+    setMessage("КП согласовано.");
   }
 
   async function createDeposit() {
@@ -272,7 +277,7 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       }),
     );
 
-    setMessage("Deposit создан.");
+    setMessage("Счёт на аванс подготовлен.");
   }
 
   async function markDepositPaid() {
@@ -282,10 +287,10 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       }),
     );
 
-    setMessage("Deposit отмечен как paid.");
+    setMessage("Аванс отмечен как оплаченный.");
   }
 
-  async function createProject() {
+  async function launchProject() {
     const data = await parseEnvelope(
       await fetch("/api/v1/projects", {
         method: "POST",
@@ -298,15 +303,15 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       }),
     );
 
-    setMessage("Project создан из сделки.");
+    setMessage("Проект запущен. PRJ-номер присвоен.");
     router.push(`/manager/projects/${data.project.project_id}`);
   }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <WorkflowCard
-        title="Client"
-        status={deal.client ? "LINKED" : "PENDING"}
+        title="Клиент"
+        status={deal.client ? "ПРИВЯЗАН" : "ОЖИДАЕТ"}
         detail={
           deal.client
             ? `${deal.client.name} · ${deal.client.phone ?? "без телефона"}`
@@ -337,47 +342,39 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       >
         <div className="inspector-list">
           <div className="inspector-item">
-            <div className="row-title">Lead</div>
+            <div className="row-title">Лид</div>
             <div className="row-meta">{deal.lead?.name ?? "Нет связанного лида"}</div>
           </div>
           <div className="inspector-item">
-            <div className="row-title">Адрес сервиса</div>
+            <div className="row-title">Адрес объекта</div>
             <div className="row-meta">{deal.client?.service_address ?? consultationAddress ?? "Не указан"}</div>
           </div>
         </div>
       </WorkflowCard>
 
       <WorkflowCard
-        title="Consultation"
-        status={latestConsultation ? latestConsultation.status : "NOT_SCHEDULED"}
+        title="Замер"
+        status={latestConsultation ? latestConsultation.status : "НЕ НАЗНАЧЕН"}
         detail={
           latestConsultation
-            ? `${latestConsultation.assigned_consultant?.full_name ?? "без консультанта"} · ${formatDateTime(
+            ? `${latestConsultation.assigned_consultant?.full_name ?? "без замерщика"} · ${formatDateTime(
                 latestConsultation.scheduled_start_at,
               )}`
-            : "Назначьте консультацию прямо из сделки. Если клиент прислал размеры сам, менеджер потом заполнит survey и соберет КП."
+            : "Назначьте замер или внесите размеры, которые клиент прислал менеджеру."
         }
         actions={
           <>
             <button
               type="button"
               className="accent-button"
-              onClick={() => runAction("Назначаю консультацию...", scheduleConsultation)}
+              onClick={() => runAction("Назначаю замер...", scheduleConsultation)}
               disabled={saving || !canScheduleConsultation}
             >
-              {latestConsultation ? "Переназначить консультацию" : "Назначить консультацию"}
+              {latestConsultation ? "Переназначить замер" : "Назначить замер"}
             </button>
             {latestConsultation ? (
-              <Link href={`/manager/crm/consultations/${latestConsultation.consultation_id}`} className="soft-button">
-                Открыть consultation
-              </Link>
-            ) : null}
-            {latestConsultation ? (
-              <Link
-                href={`/manager/crm/consultations/${latestConsultation.consultation_id}#workspace`}
-                className="soft-button"
-              >
-                Добавить размеры
+              <Link href={`/manager/crm/consultations/${latestConsultation.consultation_id}#workspace`} className="soft-button">
+                Добавить / изменить размеры
               </Link>
             ) : null}
           </>
@@ -385,9 +382,9 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       >
         <div className="proposal-item-grid">
           <label className="calculator-field">
-            <span>Консультант</span>
+            <span>Исполнитель замера</span>
             <select value={consultantId} onChange={(event) => setConsultantId(event.target.value)} disabled={saving}>
-              <option value="">Выберите консультанта</option>
+              <option value="">Выберите сотрудника</option>
               {consultants.map((consultant) => (
                 <option key={consultant.user_id} value={consultant.user_id}>
                   {consultant.full_name}
@@ -397,7 +394,7 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
           </label>
 
           <label className="calculator-field">
-            <span>Start</span>
+            <span>Начало</span>
             <input
               type="datetime-local"
               value={scheduledStart}
@@ -407,7 +404,7 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
           </label>
 
           <label className="calculator-field">
-            <span>End</span>
+            <span>Конец</span>
             <input
               type="datetime-local"
               value={scheduledEnd}
@@ -423,91 +420,49 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
         </label>
 
         <label className="calculator-notes">
-          <span>Manager notes</span>
+          <span>Комментарий менеджера</span>
           <textarea rows={2} value={consultationNotes} onChange={(event) => setConsultationNotes(event.target.value)} />
         </label>
-      </WorkflowCard>
 
-      <WorkflowCard
-        title="Survey"
-        status={latestSurvey ? latestSurvey.status : "WAITING"}
-        detail={
-          latestSurvey
-            ? `${latestSurvey.counts.measurements} замеров · ${latestSurvey.counts.recommendations} рекомендаций`
-            : "Survey появится после назначения консультации. Менеджер тоже может заполнить размеры вручную, если клиент прислал их заранее."
-        }
-        actions={
-          <>
-            {latestConsultation ? (
-              <Link
-                href={`/manager/crm/consultations/${latestConsultation.consultation_id}#workspace`}
-                className="accent-button"
-              >
-                {latestSurvey ? "Добавить / изменить размеры" : "Заполнить survey"}
-              </Link>
-            ) : null}
-            {latestConsultation ? (
-              <Link href={`/manager/crm/consultations/${latestConsultation.consultation_id}`} className="soft-button">
-                {latestSurvey ? "Открыть survey card" : "Открыть consultation"}
-              </Link>
-            ) : null}
-          </>
-        }
-      >
         {latestSurvey ? (
-          <div className="detail-meta">
-            <span>Completed: {formatDateTime(latestSurvey.completed_at)}</span>
-            <span>Файлы: {latestSurvey.counts.files}</span>
-            <span>Источник: survey внутри сделки</span>
-          </div>
-        ) : latestConsultation ? (
-          <div className="detail-meta">
-            <span>Если клиент прислал размеры в чат или по почте, менеджер может занести их сам.</span>
+          <div className="detail-meta" style={{ marginTop: 12 }}>
+            <span>Замеров: {latestSurvey.counts.measurements}</span>
+            <span>Рекомендаций: {latestSurvey.counts.recommendations}</span>
+            <span>Завершено: {formatDateTime(latestSurvey.completed_at)}</span>
           </div>
         ) : null}
       </WorkflowCard>
 
       <WorkflowCard
-        title="Calculator"
-        status="DEAL_CONTEXT"
-        detail="Калькулятор должен открываться в контексте сделки и survey, а не как отдельный мир."
-        actions={
-          <Link href={`/manager/crm/calculator?deal_id=${deal.deal_id}`} className="accent-button">
-            Открыть калькулятор
-          </Link>
-        }
-      />
-
-      <WorkflowCard
-        title="Proposal"
-        status={latestProposal ? latestProposal.status : "NOT_CREATED"}
+        title="КП и договор"
+        status={latestProposal ? latestProposal.status : "НЕ СОЗДАНО"}
         detail={
           latestProposal
-            ? `${formatCurrency(latestProposal.selected_total_amount, latestProposal.currency)} · ${
-                latestProposal.agreement?.status ?? "agreement pending"
+            ? `${formatCurrency(latestProposal.selected_total_amount, latestProposal.currency)} · договор ${
+                agreementSigned ? "подписан" : "ожидает подписи"
               }`
-            : "После completed survey менеджер собирает proposal внутри сделки."
+            : "После замера менеджер формирует КП. Клиент получает КП, договор, гарантийные условия и варианты оплаты одним пакетом."
         }
         actions={
           <>
             {!latestProposal && canCreateProposal ? (
-              <button type="button" className="accent-button" onClick={() => runAction("Создаю proposal...", createProposal)} disabled={saving}>
-                Создать предложение
+              <button type="button" className="accent-button" onClick={() => runAction("Создаю КП...", createProposal)} disabled={saving}>
+                Создать КП
               </button>
             ) : null}
             {latestProposal ? (
               <Link href={`/manager/crm/proposals/${latestProposal.proposal_id}`} className="soft-button">
-                Открыть proposal
+                Открыть КП
               </Link>
             ) : null}
             {canSendProposal ? (
-              <button type="button" className="soft-button" onClick={() => runAction("Отправляю proposal...", sendProposal)} disabled={saving}>
-                Отправить предложение
+              <button type="button" className="soft-button" onClick={() => runAction("Отправляю пакет клиенту...", sendProposal)} disabled={saving}>
+                Отправить КП + договор
               </button>
             ) : null}
             {canApproveProposal ? (
-              <button type="button" className="soft-button" onClick={() => runAction("Approve proposal...", approveProposal)} disabled={saving}>
-                Approve proposal
+              <button type="button" className="soft-button" onClick={() => runAction("Согласовываю КП...", approveProposal)} disabled={saving}>
+                Отметить КП согласованным
               </button>
             ) : null}
           </>
@@ -515,32 +470,32 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       >
         {latestProposal ? (
           <div className="detail-meta">
-            <span>Sent: {formatDateTime(latestProposal.sent_at)}</span>
-            <span>Survey: {latestProposal.survey_id ?? "manual"}</span>
+            <span>Отправлено: {formatDateTime(latestProposal.sent_at)}</span>
+            <span>Договор: {agreementSigned ? formatDateTime(latestProposal.agreement?.signed_at) : "не подписан"}</span>
           </div>
         ) : null}
       </WorkflowCard>
 
       <WorkflowCard
-        title="Deposit"
-        status={latestDeposit ? latestDeposit.status : "NOT_CREATED"}
+        title="Аванс"
+        status={latestDeposit ? latestDeposit.status : "НЕ СОЗДАН"}
         detail={
           latestDeposit
-            ? `${formatCurrency(latestDeposit.amount, latestProposal?.currency ?? "USD")} · paid ${formatDateTime(
-                latestDeposit.paid_at,
-              )}`
-            : "Deposit создается после approved proposal."
+            ? `${formatCurrency(latestDeposit.amount, latestProposal?.currency ?? "USD")} · ${
+                depositPaid ? `оплачен ${formatDateTime(latestDeposit.paid_at)}` : "ожидает оплаты"
+              }`
+            : "После согласования КП создаётся аванс. Zelle / bank transfer — без processing fee; online payment — +3.5%."
         }
         actions={
           <>
             {canCreateDeposit ? (
-              <button type="button" className="accent-button" onClick={() => runAction("Создаю deposit...", createDeposit)} disabled={saving}>
-                Создать deposit
+              <button type="button" className="accent-button" onClick={() => runAction("Создаю аванс...", createDeposit)} disabled={saving}>
+                Создать аванс
               </button>
             ) : null}
             {canMarkDepositPaid ? (
-              <button type="button" className="soft-button" onClick={() => runAction("Фиксирую deposit paid...", markDepositPaid)} disabled={saving}>
-                Отметить paid
+              <button type="button" className="soft-button" onClick={() => runAction("Фиксирую оплату аванса...", markDepositPaid)} disabled={saving}>
+                Отметить аванс оплаченным
               </button>
             ) : null}
           </>
@@ -548,28 +503,30 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       />
 
       <WorkflowCard
-        title="Project"
-        status={latestProject?.project_status?.status_code ?? (latestProject?.project_id ? "CREATED" : "NOT_CREATED")}
+        title="Закрытие продажи → запуск проекта"
+        status={latestProject?.project_status?.status_code ?? (saleClosed ? "CLOSED_WON" : "ПРОДАЖА")}
         detail={
           latestProject
             ? `${latestProject.project_code ?? latestProject.project_id} · ${latestProject.title}`
-            : "Project создается только после approved proposal и paid deposit."
+            : canLaunchProject
+              ? "Договор подписан и аванс оплачен. Продажа закрыта — проект готов к запуску."
+              : "До запуска это лид/сделка. PRJ-номер появится только после подписанного договора, оплаченного аванса и закрытия продажи."
         }
         actions={
           <>
-            {canCreateProject ? (
-              <button type="button" className="accent-button" onClick={() => runAction("Создаю project...", createProject)} disabled={saving}>
-                Создать проект
+            {canLaunchProject ? (
+              <button type="button" className="accent-button" onClick={() => runAction("Запускаю проект...", launchProject)} disabled={saving}>
+                Запустить проект
               </button>
             ) : null}
             {latestProject?.project_id ? (
               <Link href={`/manager/projects/${latestProject.project_id}`} className="soft-button">
-                Открыть project
+                Открыть проект
               </Link>
             ) : null}
             {canAssignInstallation ? (
               <Link href={`/manager/projects/${latestProject.project_id}#assignment`} className="accent-button">
-                {latestProjectStatusCode === "SCHEDULED" ? "+ Изменить монтаж" : "+ Назначить монтаж"}
+                + Этап монтажа / исполнители
               </Link>
             ) : null}
           </>
@@ -577,24 +534,30 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       >
         <div className="inspector-list">
           <div className="inspector-item">
-            <div className="row-title">Статус воронки</div>
-            <div className="row-meta">{deal.pipeline_status.name_ru}</div>
+            <div className="row-title">Договор</div>
+            <div className="row-meta">{agreementSigned ? "✓ Подписан" : "Ожидает подписи"}</div>
           </div>
           <div className="inspector-item">
-            <div className="row-title">Монтаж</div>
+            <div className="row-title">Аванс</div>
+            <div className="row-meta">{depositPaid ? "✓ Оплачен" : "Ожидает оплаты"}</div>
+          </div>
+          <div className="inspector-item">
+            <div className="row-title">Продажа</div>
+            <div className="row-meta">{saleClosed ? "✓ CLOSED_WON" : "Ещё в работе с клиентом"}</div>
+          </div>
+          <div className="inspector-item">
+            <div className="row-title">Проект</div>
             <div className="row-meta">
               {latestProject?.project_id
-                ? canAssignInstallation
-                  ? "Менеджер может открыть назначение монтажа, добавить монтажников и сохранить schedule."
-                  : "Назначение монтажа станет доступно, когда project выйдет в этап Project Created / Scheduled."
-                : "Сначала нужно создать project из approved proposal и paid deposit."}
+                ? `✓ Запущен ${latestProject.project_code ?? latestProject.project_id}`
+                : "Не создан — PRJ-номер отсутствует"}
             </div>
           </div>
         </div>
       </WorkflowCard>
 
       <section className="surface">
-        <h3 className="surface-title">Workflow status</h3>
+        <h3 className="surface-title">Статус действий</h3>
         <div className="row-meta">{message}</div>
       </section>
     </div>

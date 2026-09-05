@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { DealMilestoneTimeline } from "@/components/deal-milestone-timeline";
 import { DealWorkflowPanel } from "@/components/deal-workflow-panel";
 import { ManagerShell } from "@/components/manager-shell";
+import { ServiceCalculator } from "@/components/service-calculator";
+import {
+  getServiceCalculatorBootstrap,
+  withoutInternalCalculatorCosts,
+} from "@/features/calculator/bootstrap";
 import { getDealCardData } from "@/features/sales/server-api";
 import { listConsultantOptions } from "@/features/sales/service";
 import { ROLE_CODES } from "@/lib/auth/constants";
@@ -48,19 +54,25 @@ export default async function DealCardPage({ params }: PageProps) {
   }
 
   const { dealId } = await params;
-  const [deal, consultants] = await Promise.all([
+  const [deal, consultants, internalBootstrap] = await Promise.all([
     getDealCardData(dealId).catch(() => null),
     listConsultantOptions(),
+    getServiceCalculatorBootstrap(),
   ]);
 
   if (!deal) {
     notFound();
   }
 
+  const showInternalEconomics = session.roles.includes(ROLE_CODES.OWNER);
+  const calculatorBootstrap = showInternalEconomics
+    ? internalBootstrap
+    : withoutInternalCalculatorCosts(internalBootstrap);
+
   return (
     <ManagerShell
       title="Карточка сделки"
-      subtitle="Единый manager command center: client, consultation, survey, calculator, proposal, deposit и project."
+      subtitle="Лид → замер → КП → договор → аванс → закрытая продажа. Проект начинается только после запуска."
       kicker="Сделка"
       activeHref={`/manager/crm/deals/${deal.deal_id}`}
       actions={
@@ -68,6 +80,9 @@ export default async function DealCardPage({ params }: PageProps) {
           <Link href="/manager/crm/pipeline" className="soft-button">
             Назад в воронку
           </Link>
+          <a href="#quick-calculator" className="accent-button">
+            Быстрый калькулятор
+          </a>
           <div className="chip chip-accent">{deal.pipeline_status.name_ru}</div>
         </>
       }
@@ -88,6 +103,27 @@ export default async function DealCardPage({ params }: PageProps) {
                 </div>
               </div>
               <div className="chip chip-accent">{formatCurrency(deal.estimated_value)}</div>
+            </div>
+          </section>
+
+          <DealMilestoneTimeline dealId={deal.deal_id} />
+
+          <section id="quick-calculator" className="surface">
+            <div className="detail-hero">
+              <div>
+                <h3 className="surface-title">Быстрый калькулятор клиента</h3>
+                <p className="surface-subtitle">
+                  Считайте услуги прямо во время разговора. Расчёт остаётся в контексте сделки и не создаёт PRJ-номер.
+                </p>
+              </div>
+              <div className="chip chip-accent">До КП</div>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <ServiceCalculator
+                bootstrap={calculatorBootstrap}
+                deal={deal}
+                showInternalEconomics={showInternalEconomics}
+              />
             </div>
           </section>
 

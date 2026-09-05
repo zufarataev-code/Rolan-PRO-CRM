@@ -84,6 +84,18 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Field saves may merge only operational order fields such as measurements, status, technical notes, photos, checklists, and installation timestamps. They cannot overwrite assignments, customer price, payment data, or the full workspace.
 - Canonical PostgreSQL work-session, mileage, opt-in location, and installer payroll history stay available as the `Рабочий день` section inside the real CRM; removing the duplicate interface does not remove those records or capabilities.
 
+## 2026-09-04 — Sales closes before the operational project is launched
+
+- This decision refines and supersedes the old mixed sales/operations lifecycle. A lead/deal remains a sales object while the customer is being estimated, surveyed, quoted, followed up, or nurtured. Operational project statuses do not continue the sales pipeline.
+- The fast service calculator is a sales tool. Saving a quick estimate does not create a `Project` and does not assign a project number. A manager explicitly converts an estimate/survey into a Proposal when it is time to send a formal quote.
+- The canonical sales close condition is BOTH: the client has signed the Agreement AND the required Deposit has been recorded as paid. At that point the Deal becomes `CLOSED_WON` and the manager receives the explicit next action `Запустить проект`.
+- Creating a `Project` is an explicit operational launch after the sale is closed. Only this action creates the `PRJ-...` project number. Customers who are still thinking remain in sales/nurture statuses and retain follow-up tasks instead of appearing in Projects.
+- One Project may contain multiple operational phases. Each phase has its own planned date range, client-confirmation state, services/positions, crew, and one or more installers. A single Project is not limited to one installation date or one service date.
+- The public customer package is one canonical Proposal output, not separate document engines. The client receives one link/package containing the commercial proposal, agreement/signature flow, approved warranty terms, and payment instructions.
+- Preferred payment methods are Zelle and bank transfer with no processor fee. If the client deliberately chooses the online payment-system option, the server applies the configured processing fee (initial business setting: 3.5%) and shows the fee and resulting total before payment. The browser may not calculate or override this fee.
+- Bank account and Zelle details are operational secrets/configuration and must never be committed to Git. They are supplied from protected server configuration/settings.
+- Existing/historical projects may be imported through an owner-only migration/history path, but the normal manager workflow cannot bypass the signed-agreement + paid-deposit launch gate.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
