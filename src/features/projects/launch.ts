@@ -54,14 +54,10 @@ export async function launchProjectFromClosedSale(
   session: ProjectLaunchSession,
   input: { proposal_id: string },
 ) {
-  // Reconcile the sales gate first. This is idempotent and also supports old
-  // records where signing/payment happened before this lifecycle was released.
-  const sale = await closeSaleIfReady({
-    proposalId: input.proposal_id,
-    actorUserId: session.user.user_id,
-  });
-
-  const proposal = await prisma.proposal.findFirst({
+  // Authorization must happen before closeSaleIfReady because that helper can
+  // update the deal, tasks, lead and notifications. Never allow a guessed
+  // proposal_id to cause side effects in another manager's records.
+  const accessibleProposal = await prisma.proposal.findFirst({
     where: {
       proposal_id: input.proposal_id,
       ...(isOwner(session)
@@ -70,6 +66,20 @@ export async function launchProjectFromClosedSale(
             OR: [{ created_by: session.user.user_id }, { deal: { assigned_manager_id: session.user.user_id } }],
           }),
     },
+    select: { proposal_id: true },
+  });
+
+  if (!accessibleProposal) return null;
+
+  // Reconcile the sales gate only after access is proven. This is idempotent
+  // and also supports records where signing/payment happened before release.
+  const sale = await closeSaleIfReady({
+    proposalId: accessibleProposal.proposal_id,
+    actorUserId: session.user.user_id,
+  });
+
+  const proposal = await prisma.proposal.findUnique({
+    where: { proposal_id: accessibleProposal.proposal_id },
     include: {
       client: true,
       agreement: true,
@@ -123,8 +133,6 @@ export async function launchProjectFromClosedSale(
   }
 
   if (!sale?.ready || proposal.deal.pipeline_status.status_code !== "CLOSED_WON") {
-    // The query above may have been read before closeSaleIfReady committed its
-    // update. Re-check the canonical status rather than allowing a bypass.
     const refreshedDeal = await prisma.deal.findUnique({
       where: { deal_id: proposal.deal_id },
       include: { pipeline_status: { select: { status_code: true } } },
