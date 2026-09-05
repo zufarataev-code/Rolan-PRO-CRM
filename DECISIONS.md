@@ -96,6 +96,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Bank account and Zelle details are operational secrets/configuration and must never be committed to Git. They are supplied from protected server configuration/settings.
 - Existing/historical projects may be imported through an owner-only migration/history path, but the normal manager workflow cannot bypass the signed-agreement + paid-deposit launch gate.
 
+## 2026-09-05 — No secondary CRM shell and onboarding-only app install
+
+- This decision reinforces `One owner/manager interface` and `Field roles use the actual CRM shell, not a look-alike`: `/legacy-crm` is the only visible CRM shell for owner, manager, consultant, and installer.
+- `/owner/*` and `/manager/*` are compatibility URLs only. They must redirect to `/legacy-crm` and may not render a separate navigation/header that looks like another CRM.
+- Historical modern pages and their server/API logic may remain temporarily during migration, but `OwnerShell` and `ManagerShell` are non-visual compatibility wrappers and must not create a second product surface.
+- The canonical `/legacy-crm` response must not inject floating shortcuts that send users to a secondary owner/manager shell.
+- PWA registration remains global so the service worker can function, but there is no persistent `Установить Rolan PRO` button inside CRM.
+- App installation is offered only as a one-time onboarding step after a successful first login on a browser where the offer has not already been handled. Accepting or dismissing the offer marks it seen so it does not keep covering the CRM.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
