@@ -55,6 +55,27 @@ function phaseMetadata(input: CreateProjectPhaseInput, phaseNumber: number) {
   } as Prisma.InputJsonValue;
 }
 
+export function validatePhaseAssignments(positionIds: string[], assignments: PhaseAssignment[]) {
+  const uniquePositionIds = [...new Set(positionIds.filter(Boolean))];
+  if (uniquePositionIds.length === 0) return "missing_positions" as const;
+  if (assignments.length === 0) return "missing_installers" as const;
+
+  const assignmentPositionIds = new Set<string>();
+  for (const assignment of assignments) {
+    if (!assignment.project_position_id || !assignment.installer_id) return "invalid_assignment" as const;
+    if (!uniquePositionIds.includes(assignment.project_position_id)) return "invalid_assignment" as const;
+    if (assignmentPositionIds.has(assignment.project_position_id)) return "duplicate_assignment" as const;
+    assignmentPositionIds.add(assignment.project_position_id);
+  }
+
+  // Every service/position in an installation phase must have a responsible
+  // installer before the phase can be scheduled. A phase is execution, not a
+  // placeholder calendar note.
+  if (assignmentPositionIds.size !== uniquePositionIds.length) return "unassigned_positions" as const;
+
+  return null;
+}
+
 export async function listProjectPhases(session: SessionLike, projectId: string) {
   const project = await prisma.project.findFirst({
     where: projectWhere(session, projectId),
@@ -99,7 +120,9 @@ export async function createProjectPhase(
   if (!input.title.trim() || !startsAt || !endsAt || endsAt.getTime() <= startsAt.getTime()) {
     return "invalid_phase" as const;
   }
-  if (uniquePositionIds.length === 0) return "missing_positions" as const;
+
+  const assignmentError = validatePhaseAssignments(uniquePositionIds, assignments);
+  if (assignmentError) return assignmentError;
 
   const project = await prisma.project.findFirst({
     where: projectWhere(session, projectId),
@@ -116,30 +139,30 @@ export async function createProjectPhase(
   if (project.project_status.status_code === "COMPLETED") return "project_completed" as const;
   if (project.project_positions.length !== uniquePositionIds.length) return "invalid_position" as const;
 
-  const assignmentPositionIds = new Set<string>();
-  for (const assignment of assignments) {
-    if (!uniquePositionIds.includes(assignment.project_position_id)) return "invalid_assignment" as const;
-    if (assignmentPositionIds.has(assignment.project_position_id)) return "duplicate_assignment" as const;
-    assignmentPositionIds.add(assignment.project_position_id);
-  }
+  const alreadyAssigned = await prisma.installerJob.findFirst({
+    where: {
+      project_id: projectId,
+      project_position_id: { in: uniquePositionIds },
+    },
+    select: { installer_job_id: true, project_position_id: true, calendar_event_id: true },
+  });
+  if (alreadyAssigned) return "position_already_assigned" as const;
 
   const installerIds = [...new Set(assignments.map((item) => item.installer_id))];
-  if (installerIds.length) {
-    const installers = await prisma.user.findMany({
-      where: {
-        user_id: { in: installerIds },
-        is_active: true,
-        user_accesses: {
-          some: {
-            is_active: true,
-            role: { code: ROLE_CODES.INSTALLER, is_active: true },
-          },
+  const installers = await prisma.user.findMany({
+    where: {
+      user_id: { in: installerIds },
+      is_active: true,
+      user_accesses: {
+        some: {
+          is_active: true,
+          role: { code: ROLE_CODES.INSTALLER, is_active: true },
         },
       },
-      select: { user_id: true },
-    });
-    if (installers.length !== installerIds.length) return "invalid_installer" as const;
-  }
+    },
+    select: { user_id: true },
+  });
+  if (installers.length !== installerIds.length) return "invalid_installer" as const;
 
   if (input.crew_id) {
     const crew = await prisma.crew.findFirst({
@@ -163,113 +186,111 @@ export async function createProjectPhase(
     return "missing_status_config" as const;
   }
 
-  const result = await prisma.$transaction(async (tx) => {
-    const event = await tx.calendarEvent.create({
-      data: {
-        event_type_id: eventType.event_type_id,
-        event_track_id: eventTrack?.event_track_id ?? null,
-        project_id: projectId,
-        assigned_user_id: assignments[0]?.installer_id ?? null,
-        title: input.title.trim(),
-        starts_at: startsAt,
-        ends_at: endsAt,
-        status: "scheduled",
-        metadata: phaseMetadata({ ...input, position_ids: uniquePositionIds }, phaseCount + 1),
-      },
-    });
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // Serialize phase creation per project so two concurrent requests cannot
+      // both schedule the same position after passing the preflight check.
+      await tx.$queryRaw(
+        Prisma.sql`SELECT project_id FROM projects WHERE project_id = ${projectId}::uuid FOR UPDATE`,
+      );
 
-    await tx.project.update({
-      where: { project_id: projectId },
-      data: {
-        project_status_id: scheduledProjectStatus.project_status_id,
-        install_date: project.install_date ?? startsAt,
-      },
-    });
-
-    await tx.projectPosition.updateMany({
-      where: { project_id: projectId, position_id: { in: uniquePositionIds } },
-      data: { position_status_id: scheduledPositionStatus.position_status_id },
-    });
-
-    for (const assignment of assignments) {
-      await tx.installerJob.upsert({
-        where: { project_position_id: assignment.project_position_id },
-        update: {
+      const conflictingJob = await tx.installerJob.findFirst({
+        where: {
           project_id: projectId,
-          calendar_event_id: event.calendar_event_id,
-          crew_id: input.crew_id ?? null,
-          installer_id: assignment.installer_id,
-          status: INSTALLER_JOB_STATUSES.ASSIGNED,
-          on_the_way_at: null,
-          started_at: null,
-          paused_at: null,
-          completed_at: null,
+          project_position_id: { in: uniquePositionIds },
         },
-        create: {
+        select: { installer_job_id: true },
+      });
+      if (conflictingJob) return "position_already_assigned" as const;
+
+      const event = await tx.calendarEvent.create({
+        data: {
+          event_type_id: eventType.event_type_id,
+          event_track_id: eventTrack?.event_track_id ?? null,
           project_id: projectId,
-          project_position_id: assignment.project_position_id,
-          calendar_event_id: event.calendar_event_id,
-          crew_id: input.crew_id ?? null,
-          installer_id: assignment.installer_id,
-          status: INSTALLER_JOB_STATUSES.ASSIGNED,
+          assigned_user_id: assignments[0].installer_id,
+          title: input.title.trim(),
+          starts_at: startsAt,
+          ends_at: endsAt,
+          status: "scheduled",
+          metadata: phaseMetadata({ ...input, position_ids: uniquePositionIds }, phaseCount + 1),
         },
       });
 
-      await tx.notification.create({
+      await tx.project.update({
+        where: { project_id: projectId },
         data: {
-          recipient_user_id: assignment.installer_id,
+          project_status_id: scheduledProjectStatus.project_status_id,
+          install_date: project.install_date ?? startsAt,
+        },
+      });
+
+      await tx.projectPosition.updateMany({
+        where: { project_id: projectId, position_id: { in: uniquePositionIds } },
+        data: { position_status_id: scheduledPositionStatus.position_status_id },
+      });
+
+      for (const assignment of assignments) {
+        await tx.installerJob.create({
+          data: {
+            project_id: projectId,
+            project_position_id: assignment.project_position_id,
+            calendar_event_id: event.calendar_event_id,
+            crew_id: input.crew_id ?? null,
+            installer_id: assignment.installer_id,
+            status: INSTALLER_JOB_STATUSES.ASSIGNED,
+          },
+        });
+
+        await tx.notification.create({
+          data: {
+            recipient_user_id: assignment.installer_id,
+            actor_user_id: session.user.user_id,
+            entity_type: "project",
+            entity_id: projectId,
+            type_key: "installation.phase_assigned",
+            title: "Назначен этап монтажа",
+            message: `${input.title.trim()} · ${startsAt.toLocaleString("en-US")}`,
+          },
+        });
+      }
+
+      await tx.activityLog.create({
+        data: {
           actor_user_id: session.user.user_id,
           entity_type: "project",
           entity_id: projectId,
-          type_key: "installation.phase_assigned",
-          title: "Назначен этап монтажа",
-          message: `${input.title.trim()} · ${startsAt.toLocaleString("en-US")}`,
+          project_id: projectId,
+          action_key: "installation.phase_created",
+          message: `Создан этап монтажа: ${input.title.trim()}.`,
+          metadata: {
+            calendar_event_id: event.calendar_event_id,
+            phase_number: phaseCount + 1,
+            starts_at: startsAt.toISOString(),
+            ends_at: endsAt.toISOString(),
+            client_confirmed: Boolean(input.client_confirmed),
+            position_ids: uniquePositionIds,
+            installer_ids: installerIds,
+          },
         },
       });
-    }
 
-    await tx.activityLog.create({
-      data: {
-        actor_user_id: session.user.user_id,
-        entity_type: "project",
-        entity_id: projectId,
-        project_id: projectId,
-        action_key: "installation.phase_created",
-        message: `Создан этап монтажа: ${input.title.trim()}.`,
-        metadata: {
-          calendar_event_id: event.calendar_event_id,
-          phase_number: phaseCount + 1,
-          starts_at: startsAt.toISOString(),
-          ends_at: endsAt.toISOString(),
-          client_confirmed: Boolean(input.client_confirmed),
-          position_ids: uniquePositionIds,
-          installer_ids: installerIds,
-        },
-      },
+      return event;
     });
-
-    return event;
-  });
-
-  return result;
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return "position_already_assigned" as const;
+    }
+    throw error;
+  }
 }
 
 export async function completeProjectPhase(session: SessionLike, projectId: string, eventId: string) {
-  const phase = await prisma.calendarEvent.findFirst({
-    where: {
-      calendar_event_id: eventId,
-      project_id: projectId,
-      event_type: { event_code: "INSTALL" },
-      project: projectWhere(session, projectId),
-    },
-    include: {
-      installer_jobs: true,
-    },
+  const accessibleProject = await prisma.project.findFirst({
+    where: projectWhere(session, projectId),
+    select: { project_id: true },
   });
-
-  if (!phase) return null;
-  if (phase.status === "completed") return { already_completed: true, calendar_event_id: eventId };
-  if (phase.installer_jobs.length === 0) return "missing_installers" as const;
+  if (!accessibleProject) return null;
 
   const completedPositionStatus = await prisma.positionStatus.findUnique({ where: { status_code: "COMPLETED" } });
   if (!completedPositionStatus) return "missing_status_config" as const;
@@ -277,11 +298,33 @@ export async function completeProjectPhase(session: SessionLike, projectId: stri
   const completedAt = new Date();
 
   const result = await prisma.$transaction(async (tx) => {
-    const claim = await tx.calendarEvent.updateMany({
-      where: { calendar_event_id: eventId, status: { not: "completed" } },
+    // All phase completions for one project serialize on the project row. If
+    // two last phases are completed simultaneously, the second request waits
+    // and then sees the first one's committed state before deciding whether
+    // the whole project is finished.
+    await tx.$queryRaw(
+      Prisma.sql`SELECT project_id FROM projects WHERE project_id = ${projectId}::uuid FOR UPDATE`,
+    );
+
+    const phase = await tx.calendarEvent.findFirst({
+      where: {
+        calendar_event_id: eventId,
+        project_id: projectId,
+        event_type: { event_code: "INSTALL" },
+      },
+      include: { installer_jobs: true },
+    });
+
+    if (!phase) return "phase_not_found" as const;
+    if (phase.status === "completed") {
+      return { claimed: false, projectCompleted: false, phaseTitle: phase.title };
+    }
+    if (phase.installer_jobs.length === 0) return "missing_installers" as const;
+
+    await tx.calendarEvent.update({
+      where: { calendar_event_id: eventId },
       data: { status: "completed" },
     });
-    if (claim.count === 0) return { claimed: false, projectCompleted: false };
 
     const positionIds: string[] = [];
     for (const job of phase.installer_jobs) {
@@ -344,8 +387,11 @@ export async function completeProjectPhase(session: SessionLike, projectId: stri
       },
     });
 
-    return { claimed: true, projectCompleted };
+    return { claimed: true, projectCompleted, phaseTitle: phase.title };
   });
+
+  if (result === "phase_not_found") return null;
+  if (result === "missing_installers") return result;
 
   return {
     already_completed: !result.claimed,
