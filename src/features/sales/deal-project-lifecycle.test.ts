@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { calculatePaymentAmount, PAYMENT_METHODS } from "@/features/payments/policy";
-import { isSaleCloseReady } from "@/features/sales/close-sale";
-import { getAllowedStageTransitions, isValidStageTransition } from "@/features/sales/pipeline";
+import { calculatePaymentAmount, PAYMENT_METHODS } from "../payments/policy";
+import { isSaleCloseReady } from "./close-sale";
+import { getAllowedStageTransitions, isValidStageTransition } from "./pipeline";
 
 test("sale closes only after both signed agreement and paid deposit", () => {
   const signedAt = new Date("2026-09-04T18:00:00.000Z");
