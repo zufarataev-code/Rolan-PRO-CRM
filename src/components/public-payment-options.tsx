@@ -54,26 +54,28 @@ export function PublicPaymentOptions({
         <p>
           Your proposal, agreement and warranty are already in this client package. Payment instructions will become active as soon as the deposit amount is confirmed.
         </p>
-        <p><strong>Preferred methods:</strong> Zelle or bank transfer — no processing fee. Online payment is available with a 3.5% processing fee.</p>
+        <p><strong>Preferred methods:</strong> Zelle or bank transfer — no processing fee. Online payment is available with a 3.5% processing fee when secure checkout is configured.</p>
       </section>
     );
   }
 
   const paid = data.deposit.status === "paid";
 
-  async function selectMethod(method: string) {
-    if (paid) return;
-    setSaving(method);
+  async function selectMethod(option: PaymentOption) {
+    if (paid || !option.available) return;
+    setSaving(option.method);
     setError(null);
     try {
       const response = await fetch(`/api/public/proposals/${accessToken}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ method }),
+        body: JSON.stringify({ method: option.method }),
       });
-      const payload = await response.json();
+      const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.error?.message || "Unable to select payment method.");
+        throw new Error(
+          payload?.errors?.[0]?.message || payload?.error?.message || "Unable to select payment method.",
+        );
       }
       setData(payload.data);
     } catch (caught) {
@@ -88,7 +90,7 @@ export function PublicPaymentOptions({
       <div className="proposal-section-kicker">Payment</div>
       <h2>{paid ? "Deposit received" : "Choose payment method"}</h2>
       <p>
-        Deposit amount: <strong>{formatMoney(data.deposit.base_amount, data.currency)}</strong>. Zelle and bank transfer have no processing fee. Online payment includes a 3.5% processing fee.
+        Deposit amount: <strong>{formatMoney(data.deposit.base_amount, data.currency)}</strong>. Zelle and bank transfer have no processing fee. Online payment includes a 3.5% processing fee in the amount charged by secure checkout.
       </p>
 
       <div style={{ display: "grid", gap: 12, marginTop: 18 }}>
@@ -101,6 +103,7 @@ export function PublicPaymentOptions({
                 border: selected ? "2px solid currentColor" : "1px solid rgba(15,23,42,.14)",
                 borderRadius: 16,
                 padding: 16,
+                opacity: option.available || paid ? 1 : 0.62,
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
@@ -127,20 +130,30 @@ export function PublicPaymentOptions({
                 </a>
               ) : null}
 
-              {selected && option.method === "payment_system" && !option.payment_link ? (
+              {selected && option.method === "payment_system" && option.available && !option.payment_link ? (
                 <div style={{ marginTop: 12, opacity: 0.72 }}>
-                  ROLANPRO will provide the secure processor link. The 3.5% fee shown above is the amount that will be added to this payment.
+                  Secure checkout is being prepared. Choose Online payment again if you need a new payment session.
                 </div>
+              ) : null}
+
+              {!option.available && !paid ? (
+                <div style={{ marginTop: 12, opacity: 0.72 }}>This payment method is not configured yet.</div>
               ) : null}
 
               {!paid ? (
                 <button
                   type="button"
-                  onClick={() => selectMethod(option.method)}
-                  disabled={saving !== null}
+                  onClick={() => selectMethod(option)}
+                  disabled={saving !== null || !option.available}
                   style={{ marginTop: 14 }}
                 >
-                  {saving === option.method ? "Saving…" : selected ? "Selected" : `Choose ${option.label}`}
+                  {saving === option.method
+                    ? "Preparing…"
+                    : !option.available
+                      ? "Unavailable"
+                      : selected
+                        ? "Selected"
+                        : `Choose ${option.label}`}
                 </button>
               ) : null}
             </div>
