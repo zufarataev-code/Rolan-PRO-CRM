@@ -51,9 +51,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const conflicts: Record<string, string> = {
     invalid_phase: "Phase date range or title is invalid.",
     missing_positions: "Select at least one service/position for this phase.",
+    missing_installers: "Assign an installer before scheduling this installation phase.",
+    unassigned_positions: "Every service/position in this phase must have a responsible installer.",
     invalid_position: "One or more selected positions do not belong to this project.",
     invalid_assignment: "Installer assignment does not match the selected phase positions.",
     duplicate_assignment: "A project position can be assigned only once inside a phase.",
+    position_already_assigned: "One or more selected services are already scheduled in another installation phase.",
     invalid_installer: "One or more installers are invalid or inactive.",
     invalid_crew: "Crew is invalid or inactive.",
     project_completed: "Completed projects cannot receive new installation phases.",
