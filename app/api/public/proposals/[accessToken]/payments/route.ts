@@ -39,5 +39,17 @@ export async function POST(request: Request, context: RouteContext) {
     return apiError(409, "deposit_already_paid", "Deposit is already paid.");
   }
 
+  if (result === "payment_processor_not_configured") {
+    return apiError(503, "payment_processor_not_configured", "Secure online payment is temporarily unavailable. Please use Zelle or bank transfer.");
+  }
+
+  if (result === "invalid_payment_amount") {
+    return apiError(409, "invalid_payment_amount", "The online payment amount is invalid. Please contact ROLANPRO.");
+  }
+
+  if (result === "payment_processor_error") {
+    return apiError(502, "payment_processor_error", "The secure payment processor could not create checkout. Please try again or use Zelle/bank transfer.");
+  }
+
   return apiSuccess(result);
 }
