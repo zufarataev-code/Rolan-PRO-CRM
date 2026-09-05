@@ -5,6 +5,9 @@ import { FormEvent, useState } from "react";
 import styles from "./auth-card.module.css";
 import { destinationForRoles } from "@/lib/auth/destination";
 
+const INSTALL_ONBOARDING_PENDING = "rolanpro:pwa-install-onboarding-pending";
+const INSTALL_ONBOARDING_SEEN = "rolanpro:pwa-install-onboarding-seen";
+
 type LoginResponse = {
   data?: {
     user?: {
@@ -14,6 +17,16 @@ type LoginResponse = {
   };
   errors?: Array<{ message?: string }>;
 };
+
+function queueInstallOnboarding() {
+  try {
+    if (window.localStorage.getItem(INSTALL_ONBOARDING_SEEN) !== "1") {
+      window.localStorage.setItem(INSTALL_ONBOARDING_PENDING, "1");
+    }
+  } catch {
+    // Login must never fail because browser storage is unavailable.
+  }
+}
 
 export function AuthLoginForm() {
   const [email, setEmail] = useState("");
@@ -39,6 +52,7 @@ export function AuthLoginForm() {
         return;
       }
 
+      queueInstallOnboarding();
       window.location.assign(
         payload.data?.user?.must_change_password
           ? "/change-password"
