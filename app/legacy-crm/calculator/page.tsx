@@ -27,23 +27,27 @@ export default async function LegacyCrmCalculatorPage({ searchParams }: PageProp
 
   const { deal_id: initialDealId, embed } = await searchParams;
   const managerScope = getRecordManagerScope(session);
+  const showInternalEconomics = session.roles.includes(ROLE_CODES.OWNER);
   const [internalBootstrap, deals, planning] = await Promise.all([
     getServiceCalculatorBootstrap(),
     listDeals(managerScope),
-    getBusinessPlanningSnapshot(),
+    showInternalEconomics ? getBusinessPlanningSnapshot() : Promise.resolve(null),
   ]);
 
-  const showInternalEconomics = session.roles.includes(ROLE_CODES.OWNER);
   const bootstrap = showInternalEconomics
     ? internalBootstrap
     : withoutInternalCalculatorCosts(internalBootstrap);
   const openDeals = deals.filter(
     (deal) => !["CLOSED_WON", "CLOSED_LOST"].includes(deal.pipeline_status.status_code),
   );
-  const monthlyOverhead = planning.assumptions.monthly_overhead;
-  const targetDeals = Math.max(1, planning.target.deals || 1);
-  const recommendedOverheadPerDeal = monthlyOverhead / targetDeals;
-  const targetProfitPerDeal = planning.assumptions.target_profit_monthly / targetDeals;
+  const monthlyOverhead = planning?.assumptions.monthly_overhead ?? 0;
+  const targetDeals = planning
+    ? Math.max(1, planning.target.deals || planning.break_even.deals || 1)
+    : 1;
+  const recommendedOverheadPerDeal = showInternalEconomics ? monthlyOverhead / targetDeals : 0;
+  const targetProfitPerDeal = showInternalEconomics
+    ? (planning?.assumptions.target_profit_monthly ?? 0) / targetDeals
+    : 0;
   const isEmbedded = embed === "1";
 
   return (
