@@ -41,9 +41,6 @@ export async function GET(request: NextRequest) {
   const cloudHtml = replaceLegacyBootstrapLogin(html);
   const employeeLoginUrl = new URL("/login", publicAppUrl).toString();
 
-  // The legacy CRM is the single visible CRM shell. Keep only the employee
-  // access patch here; do not inject shortcuts that jump into a second owner/
-  // manager application shell.
   const teamAccessPatch = `
     <script>
       (() => {
@@ -186,8 +183,115 @@ export async function GET(request: NextRequest) {
     </script>
   `;
 
+  const calculatorPatch = `
+    <style>
+      #rolanpro-calculator-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483000;
+        background: rgba(15, 23, 42, .48);
+        display: grid;
+        place-items: center;
+        padding: 14px;
+      }
+      #rolanpro-calculator-panel {
+        width: min(1080px, 100%);
+        height: min(92dvh, 920px);
+        background: #f8fafc;
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 24px 80px rgba(15, 23, 42, .28);
+        display: grid;
+        grid-template-rows: 54px 1fr;
+      }
+      #rolanpro-calculator-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 14px;
+        background: #fff;
+        border-bottom: 1px solid #e2e8f0;
+        font: 700 15px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: #0f172a;
+      }
+      #rolanpro-calculator-close {
+        width: 40px;
+        height: 40px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #fff;
+        font-size: 24px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      #rolanpro-calculator-frame { width: 100%; height: 100%; border: 0; background: #f8fafc; }
+      .rolanpro-calculator-nav { cursor: pointer; }
+      @media (max-width: 640px) {
+        #rolanpro-calculator-overlay { padding: 0; }
+        #rolanpro-calculator-panel { width: 100%; height: 100dvh; border-radius: 0; }
+      }
+    </style>
+    <script>
+      (() => {
+        window.closeRolanProCalculator = function closeRolanProCalculator() {
+          document.getElementById('rolanpro-calculator-overlay')?.remove();
+        };
+
+        window.openRolanProCalculator = function openRolanProCalculator(dealId) {
+          window.closeRolanProCalculator();
+          const overlay = document.createElement('div');
+          overlay.id = 'rolanpro-calculator-overlay';
+          overlay.innerHTML =
+            '<div id="rolanpro-calculator-panel">' +
+              '<div id="rolanpro-calculator-bar">' +
+                '<span>Быстрый калькулятор</span>' +
+                '<button id="rolanpro-calculator-close" type="button" aria-label="Закрыть калькулятор">×</button>' +
+              '</div>' +
+              '<iframe id="rolanpro-calculator-frame" title="Быстрый калькулятор" src="/legacy-crm/calculator?embed=1' + (dealId ? '&deal_id=' + encodeURIComponent(dealId) : '') + '"></iframe>' +
+            '</div>';
+          overlay.addEventListener('click', (event) => {
+            if (event.target === overlay) window.closeRolanProCalculator();
+          });
+          document.body.appendChild(overlay);
+          document.getElementById('rolanpro-calculator-close')?.addEventListener('click', window.closeRolanProCalculator);
+        };
+
+        function ensureCalculatorNav() {
+          const navs = Array.from(document.querySelectorAll('nav'));
+          const nav = navs.find((candidate) =>
+            Array.from(candidate.querySelectorAll('.nav-item')).some((item) => String(item.textContent || '').trim().includes('КП')),
+          );
+          if (!nav || nav.querySelector('[data-rolanpro-calculator-nav="1"]')) return;
+
+          const item = document.createElement('div');
+          item.className = 'nav-item rolanpro-calculator-nav';
+          item.setAttribute('data-rolanpro-calculator-nav', '1');
+          item.title = 'Быстрый калькулятор';
+          item.innerHTML = '<span class="nav-icon">🧮</span><span class="nav-label">Калькулятор</span>';
+          item.addEventListener('click', () => window.openRolanProCalculator());
+
+          const proposalItem = Array.from(nav.querySelectorAll('.nav-item')).find((candidate) =>
+            String(candidate.textContent || '').trim().includes('КП'),
+          );
+          if (proposalItem?.nextSibling) nav.insertBefore(item, proposalItem.nextSibling);
+          else nav.appendChild(item);
+        }
+
+        const observer = new MutationObserver(() => window.requestAnimationFrame(ensureCalculatorNav));
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        window.requestAnimationFrame(ensureCalculatorNav);
+
+        window.addEventListener('message', (event) => {
+          if (event.origin !== window.location.origin || event.data?.type !== 'rolanpro-calculator-saved') return;
+          if (typeof cloudStatus === 'function') cloudStatus('Расчёт сохранён в сделку', 'green');
+        });
+      })();
+    </script>
+  `;
+
   const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
-  const injectedUi = privilegedWorkspace ? teamAccessPatch : "";
+  const injectedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
   const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0
     ? `${cloudHtml.slice(0, closingBodyIndex)}${injectedUi}${cloudHtml.slice(closingBodyIndex)}`
