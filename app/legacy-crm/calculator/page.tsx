@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { QuickEstimateCalculator } from "@/components/quick-estimate-calculator";
+import { SimpleQuickCalculator } from "@/components/simple-quick-calculator";
 import {
   getServiceCalculatorBootstrap,
   withoutInternalCalculatorCosts,
@@ -14,6 +14,7 @@ import { getBusinessPlanningSnapshot } from "@/lib/finance/business-planning";
 type PageProps = {
   searchParams: Promise<{
     deal_id?: string;
+    embed?: string;
   }>;
 };
 
@@ -24,7 +25,7 @@ export default async function LegacyCrmCalculatorPage({ searchParams }: PageProp
     redirect("/");
   }
 
-  const { deal_id: initialDealId } = await searchParams;
+  const { deal_id: initialDealId, embed } = await searchParams;
   const managerScope = getRecordManagerScope(session);
   const [internalBootstrap, deals, planning] = await Promise.all([
     getServiceCalculatorBootstrap(),
@@ -36,54 +37,45 @@ export default async function LegacyCrmCalculatorPage({ searchParams }: PageProp
   const bootstrap = showInternalEconomics
     ? internalBootstrap
     : withoutInternalCalculatorCosts(internalBootstrap);
-
   const openDeals = deals.filter(
     (deal) => !["CLOSED_WON", "CLOSED_LOST"].includes(deal.pipeline_status.status_code),
   );
   const monthlyOverhead = planning.assumptions.monthly_overhead;
-  const recommendedFixedCost =
-    planning.target.deals > 0 ? monthlyOverhead / planning.target.deals : 0;
-  const targetNetMarginPercent =
-    planning.target.revenue > 0
-      ? (planning.assumptions.target_profit_monthly / planning.target.revenue) * 100
-      : 0;
+  const targetDeals = Math.max(1, planning.target.deals || 1);
+  const recommendedOverheadPerDeal = monthlyOverhead / targetDeals;
+  const targetProfitPerDeal = planning.assumptions.target_profit_monthly / targetDeals;
+  const isEmbedded = embed === "1";
 
   return (
-    <main style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 32 }}>
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "18px" }}>
-        <header
-          className="surface"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            marginBottom: 16,
-            padding: "14px 16px",
-          }}
-        >
-          <div>
-            <div className="page-kicker">ROLANPRO CRM</div>
-            <h1 className="detail-heading" style={{ margin: "4px 0" }}>
-              Быстрый калькулятор
-            </h1>
-            <div className="detail-meta">
-              <span>Ориентир цены за минуту. Без комнат, окон и точной пленки.</span>
+    <main style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 24 }}>
+      <div style={{ maxWidth: 1040, margin: "0 auto", padding: isEmbedded ? "12px" : "18px" }}>
+        {!isEmbedded ? (
+          <header
+            className="surface"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 14,
+              padding: "12px 14px",
+            }}
+          >
+            <div>
+              <div className="page-kicker">ROLANPRO CRM</div>
+              <h1 className="detail-heading" style={{ margin: "4px 0" }}>Быстрый калькулятор</h1>
             </div>
-          </div>
-          <a href="/legacy-crm" target="_top" className="soft-button">
-            Назад в CRM
-          </a>
-        </header>
+            <a href="/legacy-crm" className="soft-button">Назад в CRM</a>
+          </header>
+        ) : null}
 
-        <QuickEstimateCalculator
+        <SimpleQuickCalculator
           bootstrap={bootstrap}
           deals={openDeals.map((deal) => ({
             deal_id: deal.deal_id,
             deal_code: deal.deal_code ?? "DEAL",
             title: deal.title,
-            client_name: deal.client?.name ?? null,
-            lead_name: deal.lead?.name ?? null,
+            contact_name: deal.client?.name ?? deal.lead?.name ?? deal.title,
             status_name: deal.pipeline_status.name_ru,
           }))}
           initialDealId={
@@ -93,8 +85,8 @@ export default async function LegacyCrmCalculatorPage({ searchParams }: PageProp
           }
           showInternalEconomics={showInternalEconomics}
           monthlyOverhead={monthlyOverhead}
-          recommendedFixedCost={recommendedFixedCost}
-          targetNetMarginPercent={targetNetMarginPercent}
+          recommendedOverheadPerDeal={recommendedOverheadPerDeal}
+          targetProfitPerDeal={targetProfitPerDeal}
         />
       </div>
     </main>
