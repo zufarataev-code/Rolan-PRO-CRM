@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { createCardForServiceType, getServiceTypeById } from "@/features/calculator/logic";
 import type { CalculatorBootstrap, CalculatorCard } from "@/features/calculator/types";
@@ -23,6 +23,12 @@ type Line = {
   coefficient: number;
 };
 
+type PlannedExpense = {
+  id: string;
+  label: string;
+  amount: number;
+};
+
 type Props = {
   bootstrap: CalculatorBootstrap;
   deals: DealOption[];
@@ -34,9 +40,9 @@ type Props = {
 };
 
 let sequence = 0;
-function id() {
+function id(prefix = "line") {
   sequence += 1;
-  return `line-${sequence}`;
+  return `${prefix}-${sequence}`;
 }
 
 function round(value: number) {
@@ -64,7 +70,12 @@ function makeLine(bootstrap: CalculatorBootstrap): Line {
   };
 }
 
-async function api(response: Response) {
+function makeExpense(label = "", amount = 0): PlannedExpense {
+  return { id: id("expense"), label, amount };
+}
+
+async function api(responseInput: Response | Promise<Response>) {
+  const response = await responseInput;
   const payload = await response.json().catch(() => null) as any;
   if (!response.ok || !payload?.data) {
     throw new Error(payload?.errors?.[0]?.message ?? "Операция не выполнена.");
@@ -82,7 +93,8 @@ export function SimpleQuickCalculator({
   targetProfitPerDeal,
 }: Props) {
   const [lines, setLines] = useState<Line[]>([makeLine(bootstrap)]);
-  const [extraExpenses, setExtraExpenses] = useState(0);
+  const [plannedExpenses, setPlannedExpenses] = useState<PlannedExpense[]>([]);
+  const [loadingExpenses, setLoadingExpenses] = useState(false);
   const [overheadShare, setOverheadShare] = useState(round(recommendedOverheadPerDeal));
   const [selectedDealId, setSelectedDealId] = useState(initialDealId ?? "");
   const [contactName, setContactName] = useState("");
@@ -90,6 +102,34 @@ export function SimpleQuickCalculator({
   const [email, setEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!selectedDealId) return;
+
+    let cancelled = false;
+    setLoadingExpenses(true);
+    api(fetch(`/api/v1/deals/${selectedDealId}/planned-expenses`))
+      .then((data) => {
+        if (cancelled) return;
+        const items = Array.isArray(data.items) ? data.items : [];
+        setPlannedExpenses(items.map((item: any) => makeExpense(String(item.label ?? ""), Math.max(0, Number(item.amount) || 0))));
+      })
+      .catch((error) => {
+        if (!cancelled) setMessage(error instanceof Error ? error.message : "Не удалось загрузить плановые расходы.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingExpenses(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDealId]);
+
+  const plannedExtraTotal = useMemo(
+    () => round(plannedExpenses.reduce((sum, item) => sum + Math.max(0, Number(item.amount) || 0), 0)),
+    [plannedExpenses],
+  );
 
   const result = useMemo(() => {
     const rows = lines.map((line) => {
@@ -113,7 +153,7 @@ export function SimpleQuickCalculator({
     const listTotal = rows.reduce((sum, row) => sum + row.listTotal, 0);
     const materialCost = rows.reduce((sum, row) => sum + row.materialCost, 0);
     const installCost = rows.reduce((sum, row) => sum + row.installCost, 0);
-    const extras = showInternalEconomics ? Math.max(0, Number(extraExpenses) || 0) : 0;
+    const extras = plannedExtraTotal;
     const overhead = showInternalEconomics ? Math.max(0, Number(overheadShare) || 0) : 0;
     const directCost = materialCost + installCost + extras;
     const fullCost = directCost + overhead;
@@ -127,13 +167,15 @@ export function SimpleQuickCalculator({
       listTotal: round(listTotal),
       materialCost: round(materialCost),
       installCost: round(installCost),
+      plannedExtraTotal: round(extras),
+      afterPlannedExtras: round(clientTotal - extras),
       directCost: round(directCost),
       fullCost: round(fullCost),
       recommendedPrice: round(recommendedPrice),
       profit: round(profit),
       margin: round(margin),
     };
-  }, [bootstrap.service_types, extraExpenses, lines, overheadShare, showInternalEconomics, targetProfitPerDeal]);
+  }, [bootstrap.service_types, lines, overheadShare, plannedExtraTotal, showInternalEconomics, targetProfitPerDeal]);
 
   const signal = !showInternalEconomics
     ? null
@@ -145,6 +187,10 @@ export function SimpleQuickCalculator({
 
   function updateLine(lineId: string, patch: Partial<Line>) {
     setLines((current) => current.map((line) => line.id === lineId ? { ...line, ...patch } : line));
+  }
+
+  function updateExpense(expenseId: string, patch: Partial<PlannedExpense>) {
+    setPlannedExpenses((current) => current.map((item) => item.id === expenseId ? { ...item, ...patch } : item));
   }
 
   function changeService(lineId: string, serviceTypeId: string) {
@@ -211,6 +257,18 @@ export function SimpleQuickCalculator({
       });
   }
 
+  async function savePlannedExpenses(dealId: string) {
+    const items = plannedExpenses
+      .filter((item) => item.label.trim() && Number(item.amount) > 0)
+      .map((item) => ({ label: item.label.trim(), amount: round(Number(item.amount) || 0) }));
+
+    await api(await fetch(`/api/v1/deals/${dealId}/planned-expenses`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    }));
+  }
+
   async function save() {
     if (result.clientTotal <= 0) {
       setMessage("Введите услугу и примерный объем.");
@@ -226,12 +284,13 @@ export function SimpleQuickCalculator({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ estimated_value: result.clientTotal }),
       }));
+      await savePlannedExpenses(dealId);
       const saved = await api(await fetch("/api/v1/proposals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deal_id: dealId, calculator_cards: proposalCards() }),
       }));
-      setMessage(`Сохранено в сделку. Черновик КП: ${saved.proposal.proposal_code ?? "создан"}.`);
+      setMessage(`Сохранено в сделку. Доп. расходы: ${money(plannedExtraTotal)}. Черновик КП: ${saved.proposal.proposal_code ?? "создан"}.`);
       if (window.parent !== window) {
         window.parent.postMessage({ type: "rolanpro-calculator-saved", dealId }, window.location.origin);
       }
@@ -275,11 +334,29 @@ export function SimpleQuickCalculator({
 
       <button type="button" className="soft-button" style={{ justifySelf: "start" }} onClick={() => setLines((current) => [...current, makeLine(bootstrap)])}>+ Добавить услугу</button>
 
+      <section className="surface" style={{ padding: 16 }}>
+        <div className="page-kicker">ПЛАНОВЫЕ ДОП. РАСХОДЫ</div>
+        <div className="detail-meta" style={{ marginTop: 4 }}><span>Менеджер может заложить lift, доставку, парковку, электрика, аренду и другие расходы объекта. Клиенту эти внутренние строки не отправляются.</span></div>
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          {plannedExpenses.map((expense) => (
+            <div key={expense.id} className="calculator-grid" style={{ alignItems: "end" }}>
+              <label className="calculator-field"><span>Что за расход</span><input value={expense.label} placeholder="Например: Lift" onChange={(event) => updateExpense(expense.id, { label: event.target.value })} /></label>
+              <label className="calculator-field"><span>Сумма</span><input type="number" min="0" step="1" value={expense.amount || ""} placeholder="0" onChange={(event) => updateExpense(expense.id, { amount: Math.max(0, Number(event.target.value) || 0) })} /></label>
+              <button type="button" className="soft-button" onClick={() => setPlannedExpenses((current) => current.filter((item) => item.id !== expense.id))}>Удалить</button>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
+          <button type="button" className="soft-button" onClick={() => setPlannedExpenses((current) => [...current, makeExpense()])}>+ Доп. расход</button>
+          <strong>План доп. расходов: {money(plannedExtraTotal)}</strong>
+          {loadingExpenses ? <span className="row-meta">Загружаю расходы сделки…</span> : null}
+        </div>
+      </section>
+
       {showInternalEconomics ? (
         <section className="surface" style={{ padding: 16 }}>
           <div className="page-kicker">ЭКОНОМИКА · ТОЛЬКО ВЛАДЕЛЕЦ</div>
           <div className="calculator-grid" style={{ marginTop: 10 }}>
-            <label className="calculator-field"><span>Доп. расходы</span><input type="number" min="0" step="1" value={extraExpenses || ""} placeholder="lift, доставка, парковка…" onChange={(event) => setExtraExpenses(Math.max(0, Number(event.target.value) || 0))} /></label>
             <label className="calculator-field"><span>Постоянные расходы на заказ</span><input type="number" min="0" step="1" value={overheadShare} onChange={(event) => setOverheadShare(Math.max(0, Number(event.target.value) || 0))} /><small>Подсказка: {money(recommendedOverheadPerDeal)}. Месячный overhead: {money(monthlyOverhead)}.</small></label>
           </div>
           {signal ? <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: signal.bg, color: signal.color, fontWeight: 800 }}>{signal.text}</div> : null}
@@ -291,6 +368,8 @@ export function SimpleQuickCalculator({
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginTop: 10 }}>
           <div className="card"><div className="row-meta">По прайсу</div><strong>{money(result.listTotal)}</strong></div>
           <div className="card"><div className="row-meta">Цена клиенту</div><strong>{money(result.clientTotal)}</strong></div>
+          <div className="card"><div className="row-meta">План доп. расходов</div><strong>{money(result.plannedExtraTotal)}</strong></div>
+          {!showInternalEconomics ? <div className="card"><div className="row-meta">Цена минус доп. расходы</div><strong>{money(result.afterPlannedExtras)}</strong><div className="row-meta">Это не прибыль: внутренние себестоимости скрыты.</div></div> : null}
           {showInternalEconomics ? <>
             <div className="card"><div className="row-meta">Материал</div><strong>{money(result.materialCost)}</strong></div>
             <div className="card"><div className="row-meta">Монтаж</div><strong>{money(result.installCost)}</strong></div>
@@ -304,7 +383,7 @@ export function SimpleQuickCalculator({
       <section className="surface" style={{ padding: 16 }}>
         <div className="page-kicker">ЕСЛИ КЛИЕНТ ЗАИНТЕРЕСОВАН</div>
         <div className="calculator-grid" style={{ marginTop: 10 }}>
-          <label className="calculator-field"><span>Существующая сделка</span><select value={selectedDealId} onChange={(event) => setSelectedDealId(event.target.value)}><option value="">Создать нового клиента/лид</option>{deals.map((deal) => <option key={deal.deal_id} value={deal.deal_id}>{deal.deal_code} · {deal.contact_name} · {deal.status_name}</option>)}</select></label>
+          <label className="calculator-field"><span>Существующая сделка</span><select value={selectedDealId} onChange={(event) => { const value = event.target.value; setSelectedDealId(value); if (!value) setPlannedExpenses([]); }}><option value="">Создать нового клиента/лид</option>{deals.map((deal) => <option key={deal.deal_id} value={deal.deal_id}>{deal.deal_code} · {deal.contact_name} · {deal.status_name}</option>)}</select></label>
           <label className="calculator-field"><span>Имя / компания</span><input value={contactName} disabled={Boolean(selectedDealId)} onChange={(event) => setContactName(event.target.value)} /></label>
           <label className="calculator-field"><span>Телефон</span><input value={phone} disabled={Boolean(selectedDealId)} onChange={(event) => setPhone(event.target.value)} /></label>
           <label className="calculator-field"><span>Email</span><input type="email" value={email} disabled={Boolean(selectedDealId)} onChange={(event) => setEmail(event.target.value)} /></label>
