@@ -256,6 +256,245 @@ const MOBILE_ORDERS_PATCH = `
   })();
 </script>`;
 
+const MOBILE_PROPOSALS_PATCH = `
+<style id="rolanpro-mobile-proposals-cards-style">
+  @media (max-width: 768px) {
+    table[data-rolanpro-mobile-proposals="1"] {
+      display: block !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      table-layout: auto !important;
+      border: 0 !important;
+      background: transparent !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] thead {
+      display: none !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody {
+      display: grid !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      gap: 12px !important;
+      padding: 2px 0 18px !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) auto !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      gap: 8px 12px !important;
+      padding: 14px !important;
+      margin: 0 !important;
+      border: 1px solid #e2e8f0 !important;
+      border-radius: 16px !important;
+      background: #ffffff !important;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+      overflow: hidden !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td {
+      display: block !important;
+      width: auto !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      padding: 0 !important;
+      border: 0 !important;
+      white-space: normal !important;
+      word-break: normal !important;
+      overflow-wrap: break-word !important;
+      writing-mode: horizontal-tb !important;
+      text-orientation: mixed !important;
+      line-height: 1.35 !important;
+      color: #334155 !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-hidden="1"] {
+      display: none !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="primary"] {
+      grid-column: 1 / -1;
+      font-size: 15px !important;
+      font-weight: 800 !important;
+      color: #0f172a !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="recipient"] {
+      grid-column: 1 / -1;
+      font-size: 14px !important;
+      font-weight: 650 !important;
+      color: #1e293b !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="status"] {
+      grid-column: 1 / -1;
+      justify-self: start;
+      max-width: 100% !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="status"] *,
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="status"] .status-badge {
+      max-width: 100% !important;
+      white-space: normal !important;
+      word-break: normal !important;
+      overflow-wrap: break-word !important;
+      writing-mode: horizontal-tb !important;
+      text-orientation: mixed !important;
+      line-height: 1.25 !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="manager"],
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="sent"],
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="viewed"],
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="accepted"],
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="meta"] {
+      grid-column: 1 / -1;
+      display: grid !important;
+      grid-template-columns: minmax(82px, 108px) minmax(0, 1fr) !important;
+      gap: 8px !important;
+      align-items: baseline !important;
+      font-size: 13px !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-mobile-label]::before {
+      content: attr(data-proposal-mobile-label);
+      color: #94a3b8;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: normal;
+      word-break: normal;
+      writing-mode: horizontal-tb;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="primary"]::before,
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="recipient"]::before,
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="status"]::before {
+      content: none !important;
+    }
+
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr button,
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr a {
+      min-height: 44px;
+      max-width: 100% !important;
+      white-space: normal !important;
+      word-break: normal !important;
+      writing-mode: horizontal-tb !important;
+    }
+  }
+</style>
+<script id="rolanpro-mobile-proposals-cards-script">
+  (() => {
+    const MOBILE_MAX = 768;
+
+    const normalizeProposal = (value) => String(value || '')
+      .replace(/\\s+/g, ' ')
+      .trim()
+      .toLocaleLowerCase('ru-RU');
+
+    const isProposalVisible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const style = window.getComputedStyle(element);
+      return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+    };
+
+    const proposalHeaderRole = (header) => {
+      const value = normalizeProposal(header);
+      if (!value) return 'meta';
+      if (/^кп|proposal|предлож|заказ|order/.test(value)) return 'primary';
+      if (/кому|клиент|customer|получател|recipient/.test(value)) return 'recipient';
+      if (/менедж|manager/.test(value)) return 'manager';
+      if (/статус|status/.test(value)) return 'status';
+      if (/отправ|sent/.test(value)) return 'sent';
+      if (/просмотр|viewed|open/.test(value)) return 'viewed';
+      if (/принят|accepted|approved/.test(value)) return 'accepted';
+      return 'meta';
+    };
+
+    const proposalHeaders = (table) => Array.from(table.querySelectorAll('thead th')).map((cell) =>
+      String(cell.textContent || '').replace(/\\s+/g, ' ').trim(),
+    );
+
+    const hasProposalsHeading = () => Array.from(document.querySelectorAll('h1, h2, h3, [data-page-title], .page-title'))
+      .some((element) => {
+        if (!isProposalVisible(element)) return false;
+        return /коммерческие предложения|реестр кп/i.test(String(element.textContent || '').trim());
+      });
+
+    const looksLikeProposalsTable = (table) => {
+      const roles = proposalHeaders(table).map(proposalHeaderRole);
+      return roles.includes('primary') && roles.includes('status') && (roles.includes('recipient') || roles.includes('manager'));
+    };
+
+    const proposalRowCount = (table) => table.querySelectorAll('tbody > tr').length;
+
+    const findProposalsTable = () => {
+      const tables = Array.from(document.querySelectorAll('table'))
+        .filter((table) => isProposalVisible(table) && !table.closest('.modal-backdrop, [role="dialog"]') && proposalRowCount(table) > 0);
+
+      if (!tables.length) return null;
+
+      const semantic = tables.find(looksLikeProposalsTable);
+      if (semantic) return semantic;
+
+      if (!hasProposalsHeading()) return null;
+
+      return tables
+        .filter((table) => table.querySelectorAll('tbody > tr > td').length >= 3)
+        .sort((left, right) => proposalRowCount(right) - proposalRowCount(left))[0] || null;
+    };
+
+    const enhanceProposalsTable = () => {
+      if (window.innerWidth > MOBILE_MAX) return;
+
+      const table = findProposalsTable();
+      if (!table) return;
+
+      table.setAttribute('data-rolanpro-mobile-proposals', '1');
+      const headers = proposalHeaders(table);
+
+      Array.from(table.querySelectorAll('tbody > tr')).forEach((row) => {
+        Array.from(row.children).forEach((cell, index) => {
+          if (!(cell instanceof HTMLTableCellElement)) return;
+
+          const header = headers[index] || '';
+          const role = proposalHeaderRole(header);
+          const text = String(cell.textContent || '').replace(/\\s+/g, ' ').trim();
+
+          cell.setAttribute('data-proposal-role', role);
+          if (header) cell.setAttribute('data-proposal-mobile-label', header);
+          else cell.removeAttribute('data-proposal-mobile-label');
+
+          if (!text || /^[-—–]+$/.test(text)) cell.setAttribute('data-proposal-hidden', '1');
+          else cell.removeAttribute('data-proposal-hidden');
+        });
+      });
+    };
+
+    let proposalsQueued = false;
+    const queueProposalsEnhancement = () => {
+      if (proposalsQueued) return;
+      proposalsQueued = true;
+      window.requestAnimationFrame(() => {
+        proposalsQueued = false;
+        enhanceProposalsTable();
+      });
+    };
+
+    const proposalsObserver = new MutationObserver(queueProposalsEnhancement);
+    proposalsObserver.observe(document.documentElement, { childList: true, subtree: true });
+    window.addEventListener('resize', queueProposalsEnhancement, { passive: true });
+    window.addEventListener('hashchange', queueProposalsEnhancement);
+    queueProposalsEnhancement();
+  })();
+</script>`;
+
 function injectMobileOrdersCards(html: string) {
   if (html.includes('id="rolanpro-mobile-orders-cards-style"')) return html;
 
@@ -263,6 +502,15 @@ function injectMobileOrdersCards(html: string) {
   if (closingBodyIndex < 0) return `${html}${MOBILE_ORDERS_PATCH}`;
 
   return `${html.slice(0, closingBodyIndex)}${MOBILE_ORDERS_PATCH}${html.slice(closingBodyIndex)}`;
+}
+
+function injectMobileProposalsCards(html: string) {
+  if (html.includes('id="rolanpro-mobile-proposals-cards-style"')) return html;
+
+  const closingBodyIndex = html.toLowerCase().lastIndexOf("</body>");
+  if (closingBodyIndex < 0) return `${html}${MOBILE_PROPOSALS_PATCH}`;
+
+  return `${html.slice(0, closingBodyIndex)}${MOBILE_PROPOSALS_PATCH}${html.slice(closingBodyIndex)}`;
 }
 
 export function replaceLegacyBootstrapLogin(html: string) {
@@ -280,5 +528,5 @@ export function replaceLegacyBootstrapLogin(html: string) {
 </div>`;
 
   const withoutBootstrapLogin = `${html.slice(0, appStart)}${loadingShell}${html.slice(scriptStart)}`;
-  return injectMobileOrdersCards(withoutBootstrapLogin);
+  return injectMobileProposalsCards(injectMobileOrdersCards(withoutBootstrapLogin));
 }
