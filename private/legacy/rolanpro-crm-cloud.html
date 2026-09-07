@@ -15344,6 +15344,9 @@ function openProposalRegistryRecord(localToken, canonicalId) {
 }
 
 function renderProposalsRegistry() {
+  if (window.innerWidth <= 768) {
+    return renderMobileProposals();
+  }
   if (!Array.isArray(state.proposalsRegistry) && !state.proposalsRegistryLoading && !state.proposalsRegistryError) {
     setTimeout(() => loadProposalsRegistry(), 0);
   }
@@ -15427,6 +15430,39 @@ function renderProposalsRegistry() {
     </div>
   </div>`;
 }
+
+// render proposals as cards for mobile
+function renderMobileProposals() {
+  const all = proposalRegistryRecords();
+  const query = String(state.proposalRegistrySearch || '').trim().toLowerCase();
+  const activeStatus = state.proposalRegistryStatus || 'all';
+  const rows = all.filter(record => {
+    if (activeStatus !== 'all' && record.kind !== activeStatus) return false;
+    if (!query) return true;
+    return [record.title, record.clientName, record.clientEmail]
+      .filter(Boolean).join(' ').toLowerCase().includes(query);
+  });
+  return `
+    <div class="space-y-4">
+      ${rows.length ? rows.map(record => {
+        const status = proposalRegistryStatusMeta(record.kind);
+        return `<div class="card p-4">
+          <div class="mb-2">
+            <strong>${academyEsc(record.clientName)}</strong>
+            <span class="status-badge ${status.cls} ml-2">${status.label}</span>
+          </div>
+          <div class="text-sm">
+            <div>${academyEsc(record.server?.proposal_code || record.local?.proposalCode || record.title)}</div>
+            <div>Amount: ${fmtMoney(record.total)}</div>
+            <div>Sent: ${fmtDateTime(record.sentAt)}</div>
+            ${record.viewedAt ? `<div>Viewed: ${fmtDateTime(record.viewedAt)}</div>` : ''}
+            <button class="btn-primary mt-3" onclick="openProposalRegistryRecord('${record.local?.token || ''}','${record.server?.proposal_id || ''}')">Open Proposal</button>
+          </div>
+        </div>`;
+      }).join('') : `<div class="empty-state p-8 text-center">No proposals found.</div>`}
+    </div>`;
+}
+
 
 // ---------- MANAGER: DASHBOARD ----------
 function renderOwnerPanel() {
