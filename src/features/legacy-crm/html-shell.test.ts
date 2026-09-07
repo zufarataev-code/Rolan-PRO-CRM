@@ -60,3 +60,28 @@ test("mobile Orders card adapter is injected only once", () => {
 
   assert.equal((first.match(/id="rolanpro-mobile-orders-cards-style"/g) || []).length, 1);
 });
+
+test("server injects a mobile-only Commercial Proposals card adapter", () => {
+  const result = replaceLegacyBootstrapLogin(`<!doctype html><body>
+<div id="app"><div>legacy bootstrap</div></div>
+<script>cloudBoot()</script></body>`);
+
+  assert.match(result, /rolanpro-mobile-proposals-cards-style/);
+  assert.match(result, /data-rolanpro-mobile-proposals/);
+  assert.match(result, /hasProposalsHeading/);
+  assert.match(result, /looksLikeProposalsTable/);
+  assert.match(result, /data-proposal-role/);
+  assert.match(result, /data-proposal-hidden/);
+  assert.match(result, /коммерческие предложения\|реестр кп/);
+  assert.match(result, /writing-mode: horizontal-tb/);
+  assert.match(result, /MutationObserver/);
+});
+
+test("mobile Commercial Proposals card adapter is injected only once", () => {
+  const source = `<!doctype html><body>
+<div id="app"><div>legacy bootstrap</div></div>
+<script>cloudBoot()</script></body>`;
+  const first = replaceLegacyBootstrapLogin(source);
+
+  assert.equal((first.match(/id="rolanpro-mobile-proposals-cards-style"/g) || []).length, 1);
+});
