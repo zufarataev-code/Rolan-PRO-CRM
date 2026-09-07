@@ -290,8 +290,115 @@ export async function GET(request: NextRequest) {
     </script>
   `;
 
+  const moneyTrackerPatch = `
+    <style>
+      #rolanpro-money-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483001;
+        background: rgba(15, 23, 42, .52);
+        display: grid;
+        place-items: center;
+        padding: 14px;
+      }
+      #rolanpro-money-panel {
+        width: min(1160px, 100%);
+        height: min(94dvh, 960px);
+        background: #f8fafc;
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 24px 80px rgba(15, 23, 42, .30);
+        display: grid;
+        grid-template-rows: 54px 1fr;
+      }
+      #rolanpro-money-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 14px;
+        background: #fff;
+        border-bottom: 1px solid #e2e8f0;
+        font: 700 15px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: #0f172a;
+      }
+      #rolanpro-money-close {
+        width: 40px;
+        height: 40px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #fff;
+        font-size: 24px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      #rolanpro-money-frame { width: 100%; height: 100%; border: 0; background: #f8fafc; }
+      .rolanpro-money-nav { cursor: pointer; }
+      @media (max-width: 640px) {
+        #rolanpro-money-overlay { padding: 0; }
+        #rolanpro-money-panel { width: 100%; height: 100dvh; border-radius: 0; }
+      }
+    </style>
+    <script>
+      (() => {
+        window.closeRolanProMoneyTracker = function closeRolanProMoneyTracker() {
+          document.getElementById('rolanpro-money-overlay')?.remove();
+        };
+
+        window.openRolanProMoneyTracker = function openRolanProMoneyTracker() {
+          window.closeRolanProMoneyTracker();
+          const overlay = document.createElement('div');
+          overlay.id = 'rolanpro-money-overlay';
+          overlay.innerHTML =
+            '<div id="rolanpro-money-panel">' +
+              '<div id="rolanpro-money-bar">' +
+                '<span>Money Tracker · фактические расходы</span>' +
+                '<button id="rolanpro-money-close" type="button" aria-label="Закрыть Money Tracker">×</button>' +
+              '</div>' +
+              '<iframe id="rolanpro-money-frame" title="Money Tracker" src="/legacy-crm/money?embed=1"></iframe>' +
+            '</div>';
+          overlay.addEventListener('click', (event) => {
+            if (event.target === overlay) window.closeRolanProMoneyTracker();
+          });
+          document.body.appendChild(overlay);
+          document.getElementById('rolanpro-money-close')?.addEventListener('click', window.closeRolanProMoneyTracker);
+        };
+
+        function ensureMoneyNav() {
+          const navs = Array.from(document.querySelectorAll('nav'));
+          const nav = navs.find((candidate) =>
+            Array.from(candidate.querySelectorAll('.nav-item')).some((item) => String(item.textContent || '').trim().includes('КП')),
+          );
+          if (!nav || nav.querySelector('[data-rolanpro-money-nav="1"]')) return;
+
+          const item = document.createElement('div');
+          item.className = 'nav-item rolanpro-money-nav';
+          item.setAttribute('data-rolanpro-money-nav', '1');
+          item.title = 'Фактические расходы';
+          item.innerHTML = '<span class="nav-icon">💵</span><span class="nav-label">Деньги</span>';
+          item.addEventListener('click', () => window.openRolanProMoneyTracker());
+
+          const calculatorItem = nav.querySelector('[data-rolanpro-calculator-nav="1"]');
+          if (calculatorItem?.nextSibling) nav.insertBefore(item, calculatorItem.nextSibling);
+          else if (calculatorItem) nav.appendChild(item);
+          else {
+            const proposalItem = Array.from(nav.querySelectorAll('.nav-item')).find((candidate) =>
+              String(candidate.textContent || '').trim().includes('КП'),
+            );
+            if (proposalItem?.nextSibling) nav.insertBefore(item, proposalItem.nextSibling);
+            else nav.appendChild(item);
+          }
+        }
+
+        const observer = new MutationObserver(() => window.requestAnimationFrame(ensureMoneyNav));
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        window.requestAnimationFrame(ensureMoneyNav);
+      })();
+    </script>
+  `;
+
   const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
-  const injectedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
+  const injectedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}${moneyTrackerPatch}` : "";
   const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0
     ? `${cloudHtml.slice(0, closingBodyIndex)}${injectedUi}${cloudHtml.slice(closingBodyIndex)}`
