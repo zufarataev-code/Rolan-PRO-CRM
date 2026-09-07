@@ -1220,6 +1220,116 @@
     padding: .95rem;
     background: #fbfdff;
   }
+  .order-workspace-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .72rem;
+  }
+  .order-workspace-tile {
+    --workspace-color: #2563eb;
+    --workspace-soft: #eff6ff;
+    width: 100%;
+    min-height: 86px;
+    display: grid;
+    grid-template-columns: 2.7rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .82rem;
+    padding: .92rem;
+    border: 1px solid #dbe4ef;
+    border-radius: 13px;
+    background: #fff;
+    text-align: left;
+    box-shadow: 0 2px 8px rgba(15,23,42,.035);
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease;
+  }
+  .order-workspace-tile:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--workspace-color) 42%, white);
+    background: linear-gradient(105deg, var(--workspace-soft), #fff 58%);
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--workspace-color) 10%, transparent);
+  }
+  .order-workspace-tile:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--workspace-color) 20%, transparent);
+    outline-offset: 2px;
+  }
+  .order-workspace-tile .order-clean-icon {
+    width: 2.7rem;
+    height: 2.7rem;
+    border-radius: 11px;
+    background: var(--workspace-soft);
+    color: var(--workspace-color);
+  }
+  .order-workspace-tile-copy { min-width: 0; }
+  .order-workspace-tile .order-clean-summary { max-width: 100%; }
+  .order-workspace-backdrop { padding: 1rem; }
+  .order-workspace-modal {
+    --workspace-color: #2563eb;
+    width: min(980px, 96vw);
+    max-width: 980px;
+    max-height: min(88vh, 920px);
+    padding: 0;
+    overflow: hidden;
+    border-radius: 18px;
+    box-shadow: 0 30px 80px rgba(15,23,42,.25);
+    animation: orderWorkspaceEnter .22s cubic-bezier(.2,.8,.2,1) both;
+  }
+  .order-workspace-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.1rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: rgba(255,255,255,.97);
+    backdrop-filter: blur(14px);
+  }
+  .order-workspace-modal-heading { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+  .order-workspace-modal-icon {
+    width: 2.7rem;
+    height: 2.7rem;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--workspace-color) 11%, white);
+    font-size: 1.18rem;
+  }
+  .order-workspace-modal-kicker {
+    color: var(--workspace-color);
+    font-size: .62rem;
+    font-weight: 950;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  .order-workspace-modal h3 {
+    margin-top: .12rem;
+    color: #0f172a;
+    font-size: 1.12rem;
+    font-weight: 950;
+    letter-spacing: -.02em;
+  }
+  .order-workspace-close {
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 auto;
+    border: 1px solid #dbe4ef;
+    border-radius: 10px;
+    background: #fff;
+    color: #475569;
+    font-size: 1.1rem;
+  }
+  .order-workspace-close:hover { color: #0f172a; background: #f1f5f9; }
+  .order-workspace-modal-body {
+    max-height: calc(min(88vh, 920px) - 76px);
+    overflow: auto;
+    padding: 1.15rem;
+    background: #fbfdff;
+  }
+  @keyframes orderWorkspaceEnter {
+    from { opacity: 0; transform: translateY(14px) scale(.985); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
   .client-passport { display: grid; gap: .85rem; }
   .client-passport-head {
     display: grid;
@@ -4858,6 +4968,9 @@
     .order-clean-card-grid {
       grid-template-columns: 1fr;
     }
+    .order-workspace-grid {
+      grid-template-columns: 1fr;
+    }
   }
   @media (max-width: 560px) {
     input:not([type="checkbox"]):not([type="radio"]),
@@ -4977,6 +5090,29 @@
     .order-clean-summary {
       white-space: normal;
     }
+    .order-workspace-tile {
+      min-height: 78px;
+      grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+      padding: .78rem;
+    }
+    .order-workspace-tile .order-clean-icon {
+      width: 2.4rem;
+      height: 2.4rem;
+    }
+    .order-workspace-backdrop {
+      padding: 0;
+      align-items: flex-end;
+    }
+    .order-workspace-modal {
+      width: 100%;
+      max-width: none;
+      max-height: 94dvh;
+      border-radius: 18px 18px 0 0;
+    }
+    .order-workspace-modal-body {
+      max-height: calc(94dvh - 74px);
+      padding: .88rem;
+    }
     .calendar-mode-switch {
       width: 100%;
     }
@@ -4993,6 +5129,10 @@
     .ai-sidebar.open {
       right: 0;
     }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .order-workspace-tile { transition: none; }
+    .order-workspace-modal { animation: none; }
   }
   /* === Owner settings directory === */
   .settings-hub { max-width: 980px; }
@@ -19159,6 +19299,46 @@ function renderOrderCleanCard({ icon = '•', title = '', summary = '', badge = 
     </details>`;
 }
 
+function renderOrderWorkspaceTile({ orderId = '', key = '', icon = '•', title = '', summary = '', badge = '', body = '', color = '#2563eb', soft = '#eff6ff' }) {
+  const safeKey = String(key || title || 'workspace').toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  const templateId = `order-workspace-${String(orderId).replace(/[^a-zA-Z0-9_-]/g, '')}-${safeKey}`;
+  return `
+    <div>
+      <button type="button" class="order-workspace-tile" style="--workspace-color:${color};--workspace-soft:${soft}" onclick="openOrderWorkspaceFromTemplate('${templateId}','${jsQuote(title)}','${jsQuote(icon)}','${jsQuote(color)}')" aria-label="Открыть: ${academyEsc(title)}">
+        <span class="order-clean-icon">${icon}</span>
+        <span class="order-workspace-tile-copy">
+          <span class="order-clean-title">${academyEsc(title)}</span>
+          ${summary ? `<span class="order-clean-summary">${academyEsc(summary)}</span>` : ''}
+        </span>
+        <span class="order-clean-open">${badge ? `<span class="tag">${academyEsc(badge)}</span>` : ''}<span class="order-clean-open-label">Открыть</span><span aria-hidden="true">↗</span></span>
+      </button>
+      <template id="${templateId}">${body}</template>
+    </div>`;
+}
+
+function openOrderWorkspaceFromTemplate(templateId, title, icon = '•', color = '#2563eb') {
+  const template = document.getElementById(templateId);
+  if (!template) return;
+  const order = getOrder(state.openOrderId);
+  state.modal = `
+    <div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
+      <div class="modal-content workspace-modal order-workspace-modal" style="--workspace-color:${academyEsc(color)}" onclick="event.stopPropagation()">
+        <header class="order-workspace-modal-head">
+          <div class="order-workspace-modal-heading">
+            <span class="order-workspace-modal-icon">${academyEsc(icon)}</span>
+            <div>
+              <div class="order-workspace-modal-kicker">${academyEsc(order?.number || 'Заказ')}</div>
+              <h3>${academyEsc(title)}</h3>
+            </div>
+          </div>
+          <button type="button" class="order-workspace-close" onclick="closeModal()" aria-label="Закрыть рабочее окно">×</button>
+        </header>
+        <div class="order-workspace-modal-body">${template.innerHTML}</div>
+      </div>
+    </div>`;
+  render();
+}
+
 function renderOrderCleanProgress(o) {
   const curStep = getOrderStatus(o).step;
   return `
@@ -19435,7 +19615,6 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     </div>
     <div class="order-clean-shell">
       ${renderOrderPassport(o, c, u, { canManage, canMeasure, canSeeMoney })}
-      ${renderOrderCleanCard({ icon: '👤', title: 'Паспорт клиента', summary: 'данные и все каналы связи', badge: c?.phone || c?.email ? 'контакты' : 'заполнить', body: clientBody, open: true })}
       <section class="order-clean-stage">
         <div class="order-clean-stage-head">
           <div>
@@ -19446,14 +19625,15 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
         </div>
         ${renderOrderCleanProgress(o)}
       </section>
-      <div class="order-clean-card-grid">
-        ${pendingRequests.length ? renderOrderCleanCard({ icon: '⚠️', title: 'Запрос клиента', summary: 'перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), open: true }) : ''}
-        ${renderOrderCleanCard({ icon: '📐', title: 'Замеры и материалы', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : 'размеры еще не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : 'нужно', body: measurementBody, open: !hasMeasurements })}
-        ${renderOrderCleanCard({ icon: isInstaller ? '🧰' : '📄', title: isInstaller ? 'Рабочие документы и акт' : 'КП, техлист, оплата', summary: isInstaller ? 'без коммерческих сумм' : (proposal ? 'КП создано' : 'единый стандарт после замера'), badge: isInstaller ? 'документы' : (proposal?.paymentClaim?.status === 'pending_review' ? 'Проверить оплату' : 'КП'), body: docsBody })}
-        ${renderOrderCleanCard({ icon: '📅', title: isInstaller ? 'Задача и выезд' : 'Календарь и команда', summary: events.length ? `${events.length} события` : 'события не назначены', badge: isInstaller ? T(o.status) : (installers.length ? `${installers.length}` : 'команда'), body: scheduleBody })}
-        ${isInstaller ? '' : renderOrderCleanCard({ icon: '💵', title: 'Экономика', summary: canSeeMoney ? `долг ${fmtMoney(orderDebt(o))}` : 'скрыто по роли', badge: canSeeMoney ? `${(orderMarginPct(o)*100).toFixed(0)}%` : 'скрыто', body: financeBody })}
-        ${isInstaller ? '' : renderOrderCleanCard({ icon: '🧭', title: 'Маршрут реализации', summary: service?.title || orderServiceTypeLabel(o.serviceType), badge: service?.short || 'этапы', body: routeBody })}
-        ${renderOrderCleanCard({ icon: '🗂', title: 'Фото и история', summary: `${(o.photos||[]).length} фото · ${(visibleTimeline||[]).length} событий`, badge: 'журнал', body: photosBody })}
+      <div class="order-workspace-grid">
+        ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
+        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'client', icon: '👤', title: 'Клиент и связь', summary: c?.name || 'Данные и все каналы связи', badge: c?.phone || c?.email ? 'контакт' : 'заполнить', body: clientBody, color: '#2563eb', soft: '#eff6ff' })}
+        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'measurement', icon: '📐', title: 'Замер', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : 'Размеры ещё не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : 'нужно', body: measurementBody, color: '#7c3aed', soft: '#f5f3ff' })}
+        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'documents', icon: isInstaller ? '🧰' : '📄', title: isInstaller ? 'Рабочие документы и акт' : 'КП и документы', summary: isInstaller ? 'Без коммерческих сумм' : (proposal ? 'КП создано' : 'Единый стандарт после замера'), badge: isInstaller ? 'документы' : 'КП', body: docsBody, color: '#d97706', soft: '#fff7ed' })}
+        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'schedule', icon: '📅', title: isInstaller ? 'Задача и выезд' : 'Календарь и команда', summary: events.length ? `${events.length} события` : 'События не назначены', badge: isInstaller ? T(o.status) : (installers.length ? `${installers.length}` : 'команда'), body: scheduleBody, color: '#0891b2', soft: '#ecfeff' })}
+        ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'payment', icon: '💵', title: 'Оплата', summary: canSeeMoney ? (orderDebt(o) > 0 ? `Долг ${fmtMoney(orderDebt(o))}` : 'Оплачено полностью') : 'Скрыто по роли', badge: canSeeMoney ? `${(orderMarginPct(o)*100).toFixed(0)}%` : 'скрыто', body: financeBody, color: '#059669', soft: '#ecfdf5' })}
+        ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'route', icon: '🧭', title: 'Маршрут заказа', summary: service?.title || orderServiceTypeLabel(o.serviceType), badge: service?.short || 'этапы', body: routeBody, color: '#4f46e5', soft: '#eef2ff' })}
+        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'history', icon: '🗂', title: 'Файлы и история', summary: `${(o.photos||[]).length} фото · ${(visibleTimeline||[]).length} событий`, badge: 'журнал', body: photosBody, color: '#475569', soft: '#f8fafc' })}
       </div>
     </div>`;
 }
