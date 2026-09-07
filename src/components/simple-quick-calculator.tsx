@@ -74,7 +74,8 @@ function makeExpense(label = "", amount = 0): PlannedExpense {
   return { id: id("expense"), label, amount };
 }
 
-async function api(response: Response) {
+async function api(responseInput: Response | Promise<Response>) {
+  const response = await responseInput;
   const payload = await response.json().catch(() => null) as any;
   if (!response.ok || !payload?.data) {
     throw new Error(payload?.errors?.[0]?.message ?? "Операция не выполнена.");
