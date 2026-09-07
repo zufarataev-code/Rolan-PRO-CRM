@@ -36,7 +36,7 @@ function readItems(metadata: unknown) {
   });
 }
 
-async function canAccessDeal(dealId: string, managerId: string | null) {
+async function canAccessDeal(dealId: string, managerId?: string) {
   return prisma.deal.findFirst({
     where: buildDealAccessWhere(dealId, managerId),
     select: { deal_id: true },
