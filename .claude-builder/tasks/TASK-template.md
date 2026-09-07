@@ -1,0 +1,33 @@
+# ROLANPRO CRM Task
+
+- task_id: TASK-000
+- title:
+- owner_intent:
+- business_outcome:
+- status: DRAFT
+- priority: MEDIUM
+- risk_level: R0
+- requested_by: Owner
+- planner: ChatGPT Orchestrator
+- builder: Claude Builder
+- reviewer: Codex Reviewer
+- required_skills: []
+- required_tools: [GitHub Actions, Claude Builder, Codex GitHub review]
+- tool_permissions: [Claude model job repository read-only; deterministic publisher generated task branch and PR only]
+- source_of_truth: [AGENTS.md, CLAUDE.md, .claude-builder/README.md, linked GitHub issue]
+- scope_in: []
+- scope_out: [production systems, credentials, customer data, deployment, merge, destructive database actions]
+- dependencies: []
+- assumptions: []
+- definition_of_done: []
+- implementation_plan: []
+- branch_or_pr:
+- changed_files: []
+- tests_run: []
+- review_findings: []
+- approval_requirements: [independent Codex review; Owner merge approval]
+- approval_evidence: []
+- acceptance_result:
+- next_action:
+- created_at:
+- updated_at:
