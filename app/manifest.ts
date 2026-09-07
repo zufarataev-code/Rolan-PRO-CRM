@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Rolan PRO CRM",
     short_name: "Rolan PRO",
     description: "Рабочая CRM сотрудников Rolan PRO",
-    start_url: "/legacy-crm",
+    start_url: "/",
     scope: "/",
     display: "standalone",
     background_color: "#0f172a",
