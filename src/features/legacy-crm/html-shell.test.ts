@@ -86,3 +86,25 @@ test("mobile Commercial Proposals registry adapter is injected only once", () =>
 
   assert.equal((first.match(/id="rolanpro-mobile-proposals-cards-style"/g) || []).length, 1);
 });
+
+test("server injects cleanup for redundant New Order guidance sidebar", () => {
+  const result = replaceLegacyBootstrapLogin(`<!doctype html><body>
+<div id="app"><div>legacy bootstrap</div></div>
+<script>cloudBoot()</script></body>`);
+
+  assert.match(result, /rolanpro-order-intake-cleanup-style/);
+  assert.match(result, /Что будет после создания/);
+  assert.match(result, /Что происходит дальше/);
+  assert.match(result, /data-rolanpro-order-intake-sidebar/);
+  assert.match(result, /data-rolanpro-order-intake-layout/);
+  assert.match(result, /grid-template-columns: minmax\(0, 1fr\)/);
+});
+
+test("New Order guidance cleanup is injected only once", () => {
+  const source = `<!doctype html><body>
+<div id="app"><div>legacy bootstrap</div></div>
+<script>cloudBoot()</script></body>`;
+  const first = replaceLegacyBootstrapLogin(source);
+
+  assert.equal((first.match(/id="rolanpro-order-intake-cleanup-style"/g) || []).length, 1);
+});
