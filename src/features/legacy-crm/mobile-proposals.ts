@@ -1,7 +1,8 @@
 const MOBILE_PROPOSALS_PATCH = `
 <style id="rolanpro-mobile-proposals-cards-style">
   @media (max-width: 768px) {
-    [data-rolanpro-mobile-proposals-wrap="1"] {
+    [data-rolanpro-mobile-proposals-wrap="1"],
+    [data-rolanpro-mobile-proposals-card="1"] {
       width: 100% !important;
       min-width: 0 !important;
       max-width: 100% !important;
@@ -18,6 +19,7 @@ const MOBILE_PROPOSALS_PATCH = `
       background: transparent !important;
     }
 
+    table[data-rolanpro-mobile-proposals="1"] colgroup,
     table[data-rolanpro-mobile-proposals="1"] thead {
       display: none !important;
     }
@@ -28,7 +30,8 @@ const MOBILE_PROPOSALS_PATCH = `
       min-width: 0 !important;
       max-width: 100% !important;
       gap: 12px !important;
-      padding: 2px 0 18px !important;
+      padding: 12px !important;
+      background: #f8fafc !important;
     }
 
     table[data-rolanpro-mobile-proposals="1"] tbody > tr {
@@ -37,25 +40,29 @@ const MOBILE_PROPOSALS_PATCH = `
       width: 100% !important;
       min-width: 0 !important;
       max-width: 100% !important;
-      gap: 8px !important;
-      padding: 14px !important;
+      gap: 9px !important;
+      padding: 15px !important;
       margin: 0 !important;
       border: 1px solid #e2e8f0 !important;
       border-radius: 16px !important;
       background: #ffffff !important;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
       overflow: hidden !important;
+      writing-mode: horizontal-tb !important;
     }
 
     table[data-rolanpro-mobile-proposals="1"] tbody > tr > td {
       display: grid !important;
-      grid-template-columns: minmax(88px, 104px) minmax(0, 1fr) !important;
+      grid-template-columns: 112px minmax(0, 1fr) !important;
       align-items: start !important;
       gap: 8px !important;
       width: 100% !important;
       min-width: 0 !important;
       max-width: 100% !important;
+      height: auto !important;
+      min-height: 0 !important;
       padding: 0 !important;
+      margin: 0 !important;
       border: 0 !important;
       white-space: normal !important;
       word-break: normal !important;
@@ -64,6 +71,7 @@ const MOBILE_PROPOSALS_PATCH = `
       text-orientation: mixed !important;
       line-height: 1.35 !important;
       color: #334155 !important;
+      text-align: left !important;
     }
 
     table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-hidden="1"] {
@@ -72,33 +80,53 @@ const MOBILE_PROPOSALS_PATCH = `
 
     table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="proposal"] {
       display: block !important;
-      padding-bottom: 4px !important;
+      order: 1 !important;
+      padding-bottom: 5px !important;
       font-size: 15px !important;
       font-weight: 800 !important;
       color: #0f172a !important;
+      overflow-wrap: anywhere !important;
     }
 
     table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="proposal"]::before {
       content: none !important;
     }
 
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="contact"] { order: 2 !important; }
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="owner"] { order: 3 !important; }
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="status"] { order: 4 !important; }
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="sent"] { order: 5 !important; }
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="viewed"] { order: 6 !important; }
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="amount"] { order: 7 !important; }
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="detail"] { order: 8 !important; }
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="actions"] { order: 9 !important; }
+
     table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="amount"] {
       font-weight: 800 !important;
       color: #0f172a !important;
     }
 
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="status"] > *,
+    table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-proposal-role="actions"] > * {
+      justify-self: start !important;
+    }
+
     table[data-rolanpro-mobile-proposals="1"] tbody > tr > td[data-mobile-label]::before {
-      content: attr(data-mobile-label);
+      content: attr(data-mobile-label) !important;
+      display: block !important;
+      width: auto !important;
       min-width: 0 !important;
+      max-width: 112px !important;
       color: #94a3b8 !important;
       font-size: 11px !important;
       font-weight: 700 !important;
       line-height: 1.25 !important;
       white-space: normal !important;
-      word-break: normal !important;
+      word-break: keep-all !important;
       overflow-wrap: normal !important;
       writing-mode: horizontal-tb !important;
       text-orientation: mixed !important;
+      text-align: left !important;
     }
 
     table[data-rolanpro-mobile-proposals="1"] tbody > tr > td > *,
@@ -112,6 +140,7 @@ const MOBILE_PROPOSALS_PATCH = `
       overflow-wrap: anywhere !important;
       writing-mode: horizontal-tb !important;
       text-orientation: mixed !important;
+      text-align: left !important;
     }
 
     table[data-rolanpro-mobile-proposals="1"] tbody > tr button,
@@ -119,13 +148,19 @@ const MOBILE_PROPOSALS_PATCH = `
       min-height: 44px !important;
       max-width: 100% !important;
     }
+
+    #proposal-registry-search {
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
   }
 </style>
 <script id="rolanpro-mobile-proposals-cards-script">
   (() => {
     const MOBILE_MAX = 768;
-    const FALLBACK_LABELS = ['КП', 'Получатель', 'Ответственный', 'Статус', 'Дата', 'Просмотрено', 'Действия'];
-    const FALLBACK_ROLES = ['proposal', 'contact', 'owner', 'status', 'date', 'viewed', 'actions'];
+    const FALLBACK_LABELS = ['КП / заказ', 'Кому отправлено', 'Менеджер', 'Статус', 'Отправлено', 'Просмотрено', 'Сумма', 'Действия'];
+    const FALLBACK_ROLES = ['proposal', 'contact', 'owner', 'status', 'sent', 'viewed', 'amount', 'actions'];
 
     const normalize = (value) => String(value || '')
       .replace(/\\s+/g, ' ')
@@ -141,13 +176,12 @@ const MOBILE_PROPOSALS_PATCH = `
     const headerRole = (header) => {
       const value = normalize(header);
       if (!value) return null;
-      if (/^кп$|коммерческ|предложен|proposal|quote|номер|^№$|^#$/.test(value)) return 'proposal';
-      if (/клиент|customer|заказчик/.test(value)) return 'client';
-      if (/получател|recipient|телефон|phone|email|e-mail|почт|контакт/.test(value)) return 'contact';
-      if (/менедж|manager|ответств|owner|владел/.test(value)) return 'owner';
+      if (/кп\\s*\\/\\s*заказ|^кп$|proposal|quote|номер|^№$|^#$/.test(value)) return 'proposal';
+      if (/кому\\s+отправлено|получател|recipient|email|e-mail|телефон|phone|контакт/.test(value)) return 'contact';
+      if (/ответственн|менедж|manager|owner|владел/.test(value)) return 'owner';
       if (/статус|status|этап|stage/.test(value)) return 'status';
-      if (/просмотр|view|открыт|opened/.test(value)) return 'viewed';
-      if (/дата|date|создан|created|отправлен.*дата|sent.*date/.test(value)) return 'date';
+      if (/^отправлено$|дата\\s+отправ|sent/.test(value)) return 'sent';
+      if (/просмотрено|просмотр|viewed|opened|открыт/.test(value)) return 'viewed';
       if (/сумм|итого|total|amount|стоим|price/.test(value)) return 'amount';
       if (/действ|action|открыть|open|скач|download/.test(value)) return 'actions';
       return 'detail';
@@ -164,7 +198,9 @@ const MOBILE_PROPOSALS_PATCH = `
       const headers = getHeaders(table);
       if (!headers.length) return false;
       const roles = headers.map(headerRole);
-      return roles.includes('proposal') && (roles.includes('status') || roles.includes('contact') || roles.includes('date'));
+      const signature = ['proposal', 'contact', 'owner', 'status', 'sent', 'viewed'];
+      const score = signature.filter((role) => roles.includes(role)).length;
+      return roles.includes('proposal') && roles.includes('contact') && score >= 4;
     };
 
     const rowCount = (table) => table.querySelectorAll('tbody > tr').length;
@@ -186,8 +222,16 @@ const MOBILE_PROPOSALS_PATCH = `
       const candidates = scoped.length ? scoped : tables;
 
       return candidates
-        .filter((table) => table.querySelectorAll('tbody > tr > td').length >= 3)
+        .filter((table) => table.querySelectorAll('tbody > tr > td').length >= 6)
         .sort((left, right) => rowCount(right) - rowCount(left))[0] || null;
+    };
+
+    const markWrappers = (table) => {
+      const direct = table.parentElement;
+      if (direct) direct.setAttribute('data-rolanpro-mobile-proposals-wrap', '1');
+
+      const card = table.closest('.card');
+      if (card) card.setAttribute('data-rolanpro-mobile-proposals-card', '1');
     };
 
     const enhanceProposalsTable = () => {
@@ -197,7 +241,7 @@ const MOBILE_PROPOSALS_PATCH = `
       if (!table) return;
 
       table.setAttribute('data-rolanpro-mobile-proposals', '1');
-      if (table.parentElement) table.parentElement.setAttribute('data-rolanpro-mobile-proposals-wrap', '1');
+      markWrappers(table);
 
       const headers = getHeaders(table);
       Array.from(table.querySelectorAll('tbody > tr')).forEach((row) => {
