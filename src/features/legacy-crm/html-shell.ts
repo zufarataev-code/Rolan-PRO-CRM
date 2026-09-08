@@ -1,3 +1,5 @@
+import { injectMobileProposalsCards } from "./mobile-proposals";
+
 const APP_START = '<div id="app">';
 const SCRIPT_START = "\n<script>";
 
@@ -280,5 +282,5 @@ export function replaceLegacyBootstrapLogin(html: string) {
 </div>`;
 
   const withoutBootstrapLogin = `${html.slice(0, appStart)}${loadingShell}${html.slice(scriptStart)}`;
-  return injectMobileOrdersCards(withoutBootstrapLogin);
+  return injectMobileProposalsCards(injectMobileOrdersCards(withoutBootstrapLogin));
 }
