@@ -17,9 +17,27 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
 <script id="rolanpro-order-intake-cleanup-script">
   (() => {
     const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+    const textOf = (element) => normalize(element?.textContent);
 
-    const findByExactText = (root, text) => Array.from(root.querySelectorAll('h1,h2,h3,h4,h5,div,span,p,strong'))
-      .find((element) => normalize(element.textContent) === text);
+    const containsAll = (element, needles) => {
+      const text = textOf(element);
+      return needles.every((needle) => text.includes(needle));
+    };
+
+    const findSmallestContaining = (root, needles) => {
+      if (!root) return null;
+
+      const candidates = [root, ...Array.from(root.querySelectorAll('*'))]
+        .filter((element) => element instanceof HTMLElement && containsAll(element, needles));
+
+      if (!candidates.length) return null;
+
+      return candidates.sort((left, right) => {
+        const textDelta = textOf(left).length - textOf(right).length;
+        if (textDelta !== 0) return textDelta;
+        return left.querySelectorAll('*').length - right.querySelectorAll('*').length;
+      })[0];
+    };
 
     const lowestCommonAncestor = (left, right) => {
       if (!left || !right) return null;
@@ -37,59 +55,72 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       return null;
     };
 
+    const containsProtectedOrderUi = (element) => {
+      const text = textOf(element);
+      return [
+        'Клиент и объект',
+        'Направление услуги',
+        'Создать заказ',
+        'Отмена',
+      ].some((marker) => text.includes(marker));
+    };
+
     const findGridParent = (element, stopAt) => {
       let node = element?.parentElement || null;
-      for (let depth = 0; node && depth < 7 && node !== stopAt; depth += 1, node = node.parentElement) {
+      for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
+        if (node === stopAt) break;
         const style = window.getComputedStyle(node);
-        if (style.display === 'grid' || node.classList.contains('grid')) return node;
+        if (style.display === 'grid') return node;
       }
       return null;
     };
 
-    const findHintCard = (heading, modal) => {
-      let node = heading;
-      for (let depth = 0; node && depth < 5 && node !== modal; depth += 1, node = node.parentElement) {
-        const text = normalize(node.textContent);
-        const hasOneKnownHeading = text.includes('Что будет после создания') || text.includes('Что происходит дальше');
-        const hasMainFormText = text.includes('Клиент и объект') || text.includes('Направление услуги');
-        if (hasOneKnownHeading && !hasMainFormText && node.children.length > 1) return node;
-      }
-      return heading.parentElement;
+    const hideCard = (card) => {
+      if (!card || containsProtectedOrderUi(card)) return false;
+      card.setAttribute('data-rolanpro-order-intake-hint-card', '1');
+      card.style.setProperty('display', 'none', 'important');
+      return true;
     };
 
     const cleanupOrderIntake = () => {
-      const orderTitle = Array.from(document.querySelectorAll('h1,h2,h3,[data-page-title],.page-title'))
-        .find((element) => normalize(element.textContent) === 'Новый заказ');
-      if (!orderTitle) return;
-
-      const modal = orderTitle.closest('[role="dialog"], .modal, .modal-content, .fixed, [class*="modal"]') || orderTitle.parentElement;
+      const modal = findSmallestContaining(document.body, [
+        'Новый заказ',
+        'Клиент и объект',
+        'Направление услуги',
+      ]);
       if (!modal) return;
 
-      const firstHeading = findByExactText(modal, 'Что будет после создания');
-      const secondHeading = findByExactText(modal, 'Что происходит дальше');
-      if (!firstHeading && !secondHeading) return;
+      const firstCard =
+        findSmallestContaining(modal, ['Что будет после создания', 'Менеджер назначит']) ||
+        findSmallestContaining(modal, ['Что будет после создания', 'Замерщик увидит']);
 
-      const common = firstHeading && secondHeading ? lowestCommonAncestor(firstHeading, secondHeading) : null;
-      const commonText = common ? normalize(common.textContent) : '';
-      const safeCommon = common && common !== modal && !commonText.includes('Клиент и объект') && !commonText.includes('Направление услуги');
+      const secondCard =
+        findSmallestContaining(modal, ['Что происходит дальше', 'СОБИРАЕМ ЗАКАЗ КАРТОЧКАМИ']) ||
+        findSmallestContaining(modal, ['Что происходит дальше', 'Стандартный проект']);
 
-      let anchor = null;
-      if (safeCommon) {
-        common.setAttribute('data-rolanpro-order-intake-sidebar', '1');
-        anchor = common;
+      if (!firstCard && !secondCard) return;
+
+      const sidebar = firstCard && secondCard ? lowestCommonAncestor(firstCard, secondCard) : null;
+      let layoutAnchor = null;
+
+      if (
+        sidebar &&
+        sidebar !== modal &&
+        containsAll(sidebar, ['Что будет после создания', 'Что происходит дальше']) &&
+        !containsProtectedOrderUi(sidebar)
+      ) {
+        sidebar.setAttribute('data-rolanpro-order-intake-sidebar', '1');
+        sidebar.style.setProperty('display', 'none', 'important');
+        layoutAnchor = sidebar;
       } else {
-        [firstHeading, secondHeading].filter(Boolean).forEach((heading) => {
-          const card = findHintCard(heading, modal);
-          if (card && card !== modal) {
-            card.setAttribute('data-rolanpro-order-intake-hint-card', '1');
-            anchor = anchor || card;
-          }
-        });
+        if (hideCard(firstCard)) layoutAnchor = layoutAnchor || firstCard;
+        if (hideCard(secondCard)) layoutAnchor = layoutAnchor || secondCard;
       }
 
-      const layout = anchor ? findGridParent(anchor, modal) : null;
-      if (layout && modal.contains(layout)) {
+      const layout = layoutAnchor ? findGridParent(layoutAnchor, modal) : null;
+      if (layout) {
         layout.setAttribute('data-rolanpro-order-intake-layout', '1');
+        layout.style.setProperty('grid-template-columns', 'minmax(0, 1fr)', 'important');
       }
     };
 
@@ -106,6 +137,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
     const observer = new MutationObserver(queueCleanup);
     observer.observe(document.documentElement, { childList: true, subtree: true });
     window.addEventListener('hashchange', queueCleanup);
+    window.addEventListener('resize', queueCleanup, { passive: true });
     queueCleanup();
   })();
 </script>`;
