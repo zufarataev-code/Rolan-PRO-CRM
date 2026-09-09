@@ -100,11 +100,31 @@ test("server injects cleanup for redundant New Order guidance sidebar", () => {
   assert.match(result, /grid-template-columns: minmax\(0, 1fr\)/);
 });
 
-test("New Order guidance cleanup is injected only once", () => {
+test("server injects service, catalog material and complexity controls into order flow", () => {
+  const result = replaceLegacyBootstrapLogin(`<!doctype html><body>
+<div id="app"><div>legacy bootstrap</div></div>
+<script>cloudBoot()</script></body>`);
+
+  assert.match(result, /rolanpro-order-material-section/);
+  assert.match(result, /no-material/);
+  assert.match(result, /db\.settings\.catalog/);
+  assert.match(result, /catalogCategory/);
+  assert.match(result, /materialCatalogId/);
+  assert.match(result, /complexityCoef/);
+  assert.match(result, /openRolanProOrderParameters/);
+  assert.match(result, /saveRolanProOrderParameters/);
+  assert.match(result, /rp-op-service/);
+  assert.match(result, /rp-op-material/);
+  assert.match(result, /rp-op-complexity/);
+  assert.match(result, /addExtraService/);
+});
+
+test("New Order guidance and parameter patch is injected only once", () => {
   const source = `<!doctype html><body>
 <div id="app"><div>legacy bootstrap</div></div>
 <script>cloudBoot()</script></body>`;
   const first = replaceLegacyBootstrapLogin(source);
 
   assert.equal((first.match(/id="rolanpro-order-intake-cleanup-style"/g) || []).length, 1);
+  assert.equal((first.match(/id="rolanpro-order-intake-cleanup-script"/g) || []).length, 1);
 });
