@@ -198,6 +198,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       return [
         'Клиент и объект',
         'Направление услуги',
+        'Услуги проекта',
         'Создать заказ',
         'Отмена',
       ].some((marker) => text.includes(marker));
@@ -224,7 +225,6 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       const modal = findSmallestContaining(document.body, [
         'Новый заказ',
         'Клиент и объект',
-        'Направление услуги',
       ]);
       if (!modal) return;
 
@@ -523,7 +523,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
             '<div class="rolanpro-params-note">Если в замерах уже вручную выбрана другая плёнка для конкретного окна, CRM её не перезапишет. Новый материал станет значением по умолчанию и заполнит только пустые окна.</div>' +
           '</div>' +
           '<div class="rolanpro-order-parameters-footer">' +
-            '<button type="button" class="btn-ghost" id="rp-op-extra-service">+ Доп. услуга</button>' +
+            '<button type="button" class="btn-ghost" id="rp-op-extra-service">Услуги проекта</button>' +
             '<div class="rolanpro-order-parameters-footer-actions">' +
               '<button type="button" class="btn-ghost" id="rp-op-cancel">Отмена</button>' +
               '<button type="button" class="btn-primary" id="rp-op-save">Сохранить</button>' +
@@ -544,7 +544,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       document.getElementById('rp-op-save')?.addEventListener('click', () => window.saveRolanProOrderParameters(id));
       document.getElementById('rp-op-extra-service')?.addEventListener('click', () => {
         window.closeRolanProOrderParameters();
-        if (typeof addExtraService === 'function') addExtraService(id);
+        if (typeof openManagerProjectServicesModal === 'function') openManagerProjectServicesModal(id);
       });
       refreshParameterMaterialSelect(currentMaterialId);
       refreshParametersSummary();
@@ -571,6 +571,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       }
 
       order.serviceType = service.id;
+      order.serviceTypes = Array.from(new Set([service.id, ...(order.serviceTypes || [])]));
       order.serviceCategory = service.catalogCategory;
       order.serviceWorkflow = Array.isArray(service.workflow) ? [...service.workflow] : [];
       order.complexity = complexityKey;
@@ -580,7 +581,10 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
 
       const serviceTags = serviceList().map((item) => item.tag).filter(Boolean);
       order.tags = Array.isArray(order.tags) ? order.tags.filter((tag) => !serviceTags.includes(tag)) : [];
-      if (service.tag && !order.tags.includes(service.tag)) order.tags.push(service.tag);
+      order.serviceTypes.forEach((id) => {
+        const selectedService = serviceInfoSafe(id);
+        if (selectedService?.tag && !order.tags.includes(selectedService.tag)) order.tags.push(selectedService.tag);
+      });
 
       order.orderBuilder = order.orderBuilder || {};
       order.orderBuilder.serviceId = service.id;
@@ -592,9 +596,11 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
 
       if (material) {
         (order.measurements?.rooms || []).forEach((room) => {
-          if (!room.defaultCatalogId) room.defaultCatalogId = material.id;
+          room.defaultCatalogByScope = room.defaultCatalogByScope || {};
+          if (!room.defaultCatalogByScope[service.id]) room.defaultCatalogByScope[service.id] = material.id;
           (room.windows || []).forEach((windowItem) => {
-            if (!windowItem.catalogId) windowItem.catalogId = material.id;
+            const windowScope = windowItem.measureScope || (typeof orderMeasureScope === 'function' ? orderMeasureScope(order) : order.serviceType);
+            if (windowScope === service.id && !windowItem.catalogId) windowItem.catalogId = material.id;
           });
         });
       }

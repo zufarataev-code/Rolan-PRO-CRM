@@ -28,3 +28,13 @@ test("measurement material picker is scoped to the selected service category", (
   assert.match(legacyCrm, /function managerScopedCatalogOptionsHtml/);
   assert.match(legacyCrm, /c\.category === category \|\| c\.id === selectedId/);
 });
+
+test("one project supports separate measurements for multiple film services", () => {
+  assert.match(legacyCrm, /function orderMeasureScopes\(order\)/);
+  assert.match(legacyCrm, /serviceTypes: selectedServices\.map\(item => item\.id\)/);
+  assert.match(legacyCrm, /function managerSelectMeasureScope\(oid, scopeKey\)/);
+  assert.match(legacyCrm, /У каждого будет собственный замер и материал/);
+  assert.match(legacyCrm, /filter\(w => \(w\.measureScope \|\| orderMeasureScope\(o\)\) === activeScopeKey\)/);
+  assert.match(legacyCrm, /Добавьте размеры для каждой услуги/);
+  assert.match(legacyCrm, /defaultCatalogByScope/);
+});

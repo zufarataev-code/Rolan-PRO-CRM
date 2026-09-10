@@ -116,7 +116,9 @@ test("server injects service, catalog material and complexity controls into orde
   assert.match(result, /rp-op-service/);
   assert.match(result, /rp-op-material/);
   assert.match(result, /rp-op-complexity/);
-  assert.match(result, /addExtraService/);
+  assert.match(result, /openManagerProjectServicesModal/);
+  assert.match(result, /order\.serviceTypes/);
+  assert.match(result, /defaultCatalogByScope/);
 });
 
 test("New Order guidance and parameter patch is injected only once", () => {

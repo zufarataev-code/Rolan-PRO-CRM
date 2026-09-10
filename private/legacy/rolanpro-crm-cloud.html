@@ -8471,6 +8471,59 @@ function orderMeasureScope(order) {
   if (type === 'decorative_film' || tags.includes('decorative') || tags.includes('privacy')) return 'decorative_film';
   return 'solar_film';
 }
+function orderMeasureScopes(order) {
+  const valid = new Set(MEASURE_SCOPES.map(scope => scope.key));
+  const fromOrder = Array.isArray(order?.serviceTypes) ? order.serviceTypes : [];
+  const fromWindows = (order?.measurements?.rooms || []).flatMap(room => room.windows || []).map(win => win.measureScope).filter(Boolean);
+  const scopes = [orderMeasureScope(order), ...fromOrder, ...fromWindows]
+    .map(value => measureScopeInfo(value).key)
+    .filter(value => valid.has(value));
+  return Array.from(new Set(scopes));
+}
+function managerActiveMeasureScope(order) {
+  state._managerActiveScopeByOrder = state._managerActiveScopeByOrder || {};
+  const scopes = orderMeasureScopes(order);
+  const selected = state._managerActiveScopeByOrder[order?.id];
+  const active = scopes.includes(selected) ? selected : (scopes[0] || orderMeasureScope(order));
+  if (order?.id) state._managerActiveScopeByOrder[order.id] = active;
+  return active;
+}
+function managerSelectMeasureScope(oid, scopeKey) {
+  const order = getOrder(oid);
+  if (!order || !orderMeasureScopes(order).includes(scopeKey)) return;
+  state._managerActiveScopeByOrder = state._managerActiveScopeByOrder || {};
+  state._managerActiveScopeByOrder[oid] = scopeKey;
+  refreshManagerMeasureModal(oid);
+}
+function openManagerProjectServicesModal(oid) {
+  const order = getOrder(oid);
+  if (!order) return;
+  const selected = new Set(orderMeasureScopes(order));
+  const used = new Set(measureAllWindows(order).map(item => item.win.measureScope || orderMeasureScope(order)));
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)refreshManagerMeasureModal('${oid}')"><div class="modal-content workspace-modal p-6" style="max-width:44rem" onclick="event.stopPropagation()"><div class="flex items-start justify-between gap-3"><div><div class="text-xs font-black text-blue-700">УСЛУГИ ПРОЕКТА</div><h3 class="text-xl font-black">Что делаем на этом объекте?</h3><p class="text-sm text-gray-500 mt-1">Можно выбрать несколько направлений. У каждого будет собственный замер и материал.</p></div><button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Назад</button></div><div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">${MEASURE_SCOPES.map(scope => `<label class="card flex items-start gap-3 cursor-pointer"><input class="manager-project-service" type="checkbox" value="${scope.key}" ${selected.has(scope.key)?'checked':''} ${used.has(scope.key)?'disabled':''} style="width:20px;height:20px;margin-top:2px"><span><span class="font-bold">${scope.icon} ${academyEsc(scope.short)}</span><span class="block text-xs text-gray-500 mt-1">${academyEsc(measureScopeCardDesc(scope.key))}</span>${used.has(scope.key)?'<span class="block text-xs text-blue-600 mt-1">Есть размеры — услуга сохранится</span>':''}</span></label>`).join('')}</div><div class="flex justify-end gap-2 mt-5"><button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Отмена</button><button class="btn-primary" onclick="saveManagerProjectServices('${oid}')">Сохранить услуги</button></div></div></div>`;
+  render();
+}
+function saveManagerProjectServices(oid) {
+  const order = getOrder(oid);
+  if (!order) return;
+  const chosen = Array.from(document.querySelectorAll('.manager-project-service:checked')).map(input => input.value);
+  const used = measureAllWindows(order).map(item => item.win.measureScope || orderMeasureScope(order));
+  const services = Array.from(new Set([...chosen, ...used]));
+  if (!services.length) return alert('Выберите хотя бы одну услугу');
+  order.serviceTypes = services;
+  order.serviceType = services[0];
+  const serviceTags = ORDER_PRIMARY_SERVICES.map(service => service.tag).filter(Boolean);
+  order.tags = (order.tags || []).filter(tag => !serviceTags.includes(tag));
+  services.forEach(scopeKey => {
+    const service = primaryServiceInfo(scopeKey);
+    if (service.tag && !order.tags.includes(service.tag)) order.tags.push(service.tag);
+  });
+  state._managerActiveScopeByOrder = state._managerActiveScopeByOrder || {};
+  state._managerActiveScopeByOrder[oid] = services[0];
+  invalidateProjectEstimate(order, 'Изменён состав услуг проекта');
+  save();
+  refreshManagerMeasureModal(oid);
+}
 function measureScopeByCatalog(catalog) {
   const cat = catalog?.category;
   if (cat === 'smart') return 'smart_film';
@@ -10222,6 +10275,7 @@ function measureStudioSaveWindow(orderId) {
   order.measurements = order.measurements || { rooms: [] };
   const data = measureStudioFormWindow();
   if (!data.width || !data.height) { alert('Введите ширину и высоту окна'); return; }
+  order.serviceTypes = Array.from(new Set([...(order.serviceTypes || [orderMeasureScope(order)]), data.measureScope]));
   let targetRoomId = document.getElementById('ms-room')?.value || '__new';
   let targetRoom = targetRoomId !== '__new' ? order.measurements.rooms.find(r => r.id === targetRoomId) : null;
   if (!targetRoom) {
@@ -10577,7 +10631,7 @@ function renderWorkOrderHtml(order, printMode = false) {
         <div>
           <div class="wo-label">ЗАКАЗ-НАРЯД</div>
           <h1 class="wo-number">${academyEsc(order.number)}</h1>
-          <div class="wo-service">${academyEsc(orderServiceTypeLabel(order.serviceType))}</div>
+          <div class="wo-service">${academyEsc(orderServiceSummaryLabel(order))}</div>
         </div>
         <div class="wo-when">
           <div class="wo-when-label">Выезд</div>
@@ -10765,7 +10819,7 @@ function renderTechnicalSheetHtml(order, printMode = false) {
           <div class="text-sm text-gray-600 mt-1">${academyEsc(orderAddress(order, client) || '')}</div>
         </div>
         <div class="text-right text-sm">
-          <div><b>Услуга:</b> ${academyEsc(orderServiceTypeLabel(order.serviceType))}</div>
+          <div><b>Услуги:</b> ${academyEsc(orderServiceSummaryLabel(order))}</div>
           <div><b>Обновлено:</b> ${fmtDateTime(order.technicalSheetUpdatedAt || new Date().toISOString())}</div>
         </div>
       </div>
@@ -12847,15 +12901,16 @@ function renderOrderBuilderRoute(items) {
 }
 function renderOrderBuilderPreview(serviceId = 'smart_film', variantId = 'standard_project') {
   const service = primaryServiceInfo(serviceId);
+  const selectedServices = (typeof state !== 'undefined' && Array.isArray(state._newOrderServices) && state._newOrderServices.length ? state._newOrderServices : [service.id]).map(id => primaryServiceInfo(id));
   const variant = orderExecutionVariantInfo(variantId);
   const pal = orderServicePalette(service.id);
-  const tags = Array.from(new Set([service.tag, ...(variant.tags || [])].filter(Boolean)));
+  const tags = Array.from(new Set([...selectedServices.map(item => item.tag), ...(variant.tags || [])].filter(Boolean)));
   return `
     <div class="order-builder-preview" style="border-color:${pal.color}33">
       <div class="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div class="text-xs font-black uppercase" style="color:${pal.color}">Собираем заказ карточками</div>
-          <div class="font-black text-slate-900 mt-1">${service.icon} ${academyEsc(service.title)} · ${variant.icon} ${academyEsc(variant.title)}</div>
+          <div class="font-black text-slate-900 mt-1">${selectedServices.map(item => `${item.icon} ${academyEsc(item.title)}`).join(' + ')} · ${variant.icon} ${academyEsc(variant.title)}</div>
           <div class="text-xs text-gray-500 mt-1">CRM автоматически добавит цвет направления, маршрут, теги и правила замера.</div>
         </div>
         <div class="flex flex-wrap gap-1">
@@ -12890,6 +12945,10 @@ function orderServiceTypeLabel(type) {
   };
   return legacy[type] || type || '🎞 Установка плёнки';
 }
+function orderServiceSummaryLabel(order) {
+  const ids = Array.isArray(order?.serviceTypes) && order.serviceTypes.length ? order.serviceTypes : [order?.serviceType];
+  return Array.from(new Set(ids.filter(Boolean))).map(id => orderServiceTypeLabel(id)).join(' + ') || orderServiceTypeLabel(order?.serviceType);
+}
 function orderServiceWorkflow(type) {
   const svc = ORDER_PRIMARY_SERVICES.find(s => s.id === type);
   if (svc) return svc.workflow;
@@ -12912,7 +12971,7 @@ function renderOrderServiceWorkflow(o) {
       <div class="flex items-start justify-between gap-3 mb-3">
         <div>
           <h3 class="font-semibold">Маршрут реализации</h3>
-          <div class="text-xs text-gray-500 mt-1">${academyEsc(orderServiceTypeLabel(o.serviceType))}</div>
+          <div class="text-xs text-gray-500 mt-1">${academyEsc(orderServiceSummaryLabel(o))}</div>
         </div>
         <span class="tag bg-blue-50 text-blue-700">${workflow.length} этапов</span>
       </div>
@@ -19263,7 +19322,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
           </div>
           <div class="order-passport-title">
             <h2>Заказ ${academyEsc(o.number)}</h2>
-            <span class="tag" style="background:${service.bg};color:${service.color};border-color:${service.color}33">${service.icon} ${academyEsc(orderServiceTypeLabel(o.serviceType))}</span>
+            <span class="tag" style="background:${service.bg};color:${service.color};border-color:${service.color}33">${academyEsc(orderServiceSummaryLabel(o))}</span>
           </div>
           <div class="order-passport-address">${address ? academyEsc(address) : 'Адрес объекта не указан'}</div>
           <div class="order-passport-facts">
@@ -19968,7 +20027,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'documents', icon: workDocsOnly ? '🧰' : '📄', title: workDocsOnly ? 'Рабочие документы' : 'КП и документы', summary: workDocsOnly ? 'Без коммерческих сумм' : (proposal ? 'КП создано' : estimateApproved ? 'Расчёт готов — можно формировать КП' : 'Сначала подтвердите расчёт проекта'), badge: workDocsOnly ? 'документы' : estimateApproved ? 'КП' : 'заблокировано', body: docsBody, color: '#d97706', soft: '#fff7ed' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'schedule', icon: '📅', title: isInstaller ? 'Задача и выезд' : 'Календарь и команда', summary: events.length ? `${events.length} события` : 'События не назначены', badge: isInstaller ? T(o.status) : (installers.length ? `${installers.length}` : 'команда'), body: scheduleBody, color: '#0891b2', soft: '#ecfeff' })}
         ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'payment', icon: '💵', title: 'Оплата', summary: canSeeMoney ? (orderDebt(o) > 0 ? `Долг ${fmtMoney(orderDebt(o))}` : 'Оплачено полностью') : 'Скрыто по роли', badge: canSeeMoney ? `${(orderMarginPct(o)*100).toFixed(0)}%` : 'скрыто', body: financeBody, color: '#059669', soft: '#ecfdf5' })}
-        ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'route', icon: '🧭', title: 'Маршрут заказа', summary: service?.title || orderServiceTypeLabel(o.serviceType), badge: service?.short || 'этапы', body: routeBody, color: '#4f46e5', soft: '#eef2ff' })}
+        ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'route', icon: '🧭', title: 'Маршрут заказа', summary: orderServiceSummaryLabel(o), badge: `${orderMeasureScopes(o).length} услуг`, body: routeBody, color: '#4f46e5', soft: '#eef2ff' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'history', icon: '🗂', title: 'Файлы и история', summary: `${(o.photos||[]).length} фото · ${(visibleTimeline||[]).length} событий`, badge: 'журнал', body: photosBody, color: '#475569', soft: '#f8fafc' })}
       </div>
     </div>`;
@@ -20049,7 +20108,7 @@ function renderOrderDetails(id) {
           <div>
             <div class="text-xs text-gray-500">${T('orderNo')}</div>
             <div class="text-2xl font-bold">${o.number}</div>
-            ${o.serviceType ? `<div class="mt-1"><span class="tag bg-blue-100 text-blue-800">${academyEsc(orderServiceTypeLabel(o.serviceType))}</span></div>` : ''}
+            ${o.serviceType ? `<div class="mt-1"><span class="tag bg-blue-100 text-blue-800">${academyEsc(orderServiceSummaryLabel(o))}</span></div>` : ''}
             ${(o.tags||[]).length ? `<div class="mt-1 flex flex-wrap gap-1">${(o.tags||[]).map(t => { const ti = tagInfo(t); return `<span class="tag bg-amber-100 text-amber-800">${ti.icon} ${ti.label}</span>`; }).join('')}</div>` : ''}
           </div>
           <span class="status-badge ${getOrderStatus(o).color} text-sm">${T(o.status)}</span>
@@ -20734,9 +20793,10 @@ function managerRoomAddTypeValue(rid, kind, scopeKey) {
 }
 function managerRoomScopeKey(order, rid) {
   const room = order?.measurements?.rooms?.find(r => r.id === rid);
-  const catalogId = managerRoomCatalogId(room);
+  const activeScope = managerActiveMeasureScope(order);
+  const catalogId = managerRoomCatalogId(room, activeScope);
   const catalog = catalogId ? getCatalogItem(catalogId) : null;
-  return catalog ? measureScopeByCatalog(catalog) : orderMeasureScope(order);
+  return catalog ? measureScopeByCatalog(catalog) : activeScope;
 }
 function managerSetRoomAddKind(oid, rid, kind) {
   state._managerAddKindByRoom = state._managerAddKindByRoom || {};
@@ -20806,14 +20866,15 @@ function managerRoomAddChooserHtml(oid, room, scopeKey) {
     </div>`;
 }
 function defaultCatalogIdForOrder(o) {
-  const scope = measureScopeInfo(orderMeasureScope(o));
+  const scope = measureScopeInfo(managerActiveMeasureScope(o));
   const preferred = db.settings.catalog.find(c => c.category === scope.catalogCategory);
   return preferred?.id || db.settings.catalog[0]?.id || '';
 }
-function managerRoomCatalogId(room) {
-  const ids = Array.from(new Set((room?.windows || []).map(w => w.catalogId).filter(Boolean)));
+function managerRoomCatalogId(room, scopeKey = '') {
+  const relevant = scopeKey ? (room?.windows || []).filter(w => (w.measureScope || measureScopeByCatalog(windowCatalog(w))) === scopeKey) : (room?.windows || []);
+  const ids = Array.from(new Set(relevant.map(w => w.catalogId).filter(Boolean)));
   if (ids.length > 1) return '';
-  return ids.length === 1 ? ids[0] : (room?.defaultCatalogId || '');
+  return ids.length === 1 ? ids[0] : (room?.defaultCatalogByScope?.[scopeKey] || (!scopeKey ? room?.defaultCatalogId : '') || '');
 }
 function managerCatalogOptionsHtml(selectedId = '', preferredCategory = '') {
   const groups = catalogByCategory();
@@ -20838,12 +20899,10 @@ function managerWindowScopeKey(order, win) {
 }
 function managerWindowNeedsSolarFields(order, win, roomScopeKey = '') {
   return roomScopeKey === 'solar_film'
-    || managerWindowScopeKey(order, win) === 'solar_film'
-    || orderMeasureScope(order) === 'solar_film';
+    || managerWindowScopeKey(order, win) === 'solar_film';
 }
 function managerRoomNeedsSolarFields(order, room, roomScopeKey) {
   return roomScopeKey === 'solar_film'
-    || orderMeasureScope(order) === 'solar_film'
     || (room?.windows || []).some(w => managerWindowNeedsSolarFields(order, w, roomScopeKey));
 }
 function managerOrientationOptionsHtml(selected = '') {
@@ -20939,9 +20998,10 @@ function managerSolarFieldsHtml(oid, rid, w) {
     </td>`;
 }
 function managerWindowDefaults(o, room, opts = {}) {
-  const catalogId = room?.defaultCatalogId || managerRoomCatalogId(room) || defaultCatalogIdForOrder(o);
+  const requestedScope = opts.scopeKey || managerActiveMeasureScope(o);
+  const catalogId = opts.catalogId || room?.defaultCatalogByScope?.[requestedScope] || managerRoomCatalogId(room, requestedScope) || db.settings.catalog.find(c => c.category === measureScopeInfo(requestedScope).catalogCategory)?.id || '';
   const cat = getCatalogItem(catalogId);
-  const scopeKey = cat ? measureScopeByCatalog(cat) : orderMeasureScope(o);
+  const scopeKey = cat ? measureScopeByCatalog(cat) : requestedScope;
   const objectKind = opts.objectKind || managerRoomAddKindValue(room?.id || '') || 'window';
   const winType = opts.winType || managerRoomAddTypeValue(room?.id || '', objectKind, scopeKey);
   const kindInfo = managerObjectKindInfo(objectKind);
@@ -21187,9 +21247,9 @@ function managerSelectRoom(oid, rid) {
   state._managerActiveRoomByOrder[oid] = rid;
   refreshManagerMeasureModal(oid);
 }
-function managerMeasureProgressHtml(order) {
+function managerMeasureProgressHtml(order, scopeKey = '') {
   const rooms = order?.measurements?.rooms || [];
-  const windows = rooms.flatMap(r => r.windows || []);
+  const windows = rooms.flatMap(r => r.windows || []).filter(w => !scopeKey || (w.measureScope || orderMeasureScope(order)) === scopeKey);
   const hasRooms = rooms.length > 0;
   const hasWindows = windows.length > 0;
   const hasSizes = hasWindows && windows.every(w => Number(w.width) > 0 && Number(w.height) > 0 && Number(w.qty || 1) > 0);
@@ -21231,11 +21291,14 @@ function renderManagerMeasureModal(oid) {
   if (!o) return '';
   o.measurements = o.measurements || { rooms: [] };
   const c = getClient(o.clientId);
-  const scope = measureScopeInfo(orderMeasureScope(o));
+  const projectScopes = orderMeasureScopes(o);
+  const activeScopeKey = managerActiveMeasureScope(o);
+  const scope = measureScopeInfo(activeScopeKey);
   const plan = calcFilmPlan(o);
   const preferredCategory = scope.catalogCategory;
   const rooms = o.measurements.rooms || [];
-  const windows = rooms.flatMap(r => r.windows || []);
+  const allWindows = rooms.flatMap(r => r.windows || []);
+  const windows = allWindows.filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey);
   const activeRoom = managerActiveRoom(o);
   return `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
@@ -21244,17 +21307,19 @@ function renderManagerMeasureModal(oid) {
         <div class="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <div class="text-xs font-black text-blue-700">ЗАМЕР ОБЪЕКТА</div>
-            <div class="text-2xl font-black text-slate-900">${academyEsc(o.number)} · ${academyEsc(scope.short)}</div>
-            <div class="text-sm text-gray-500 mt-1">${academyEsc(c?.name || 'Без клиента')} · ${academyEsc(orderAddress(o, c) || 'адрес не указан')} · ${scope.icon} ${academyEsc(scope.short)}</div>
+            <div class="text-2xl font-black text-slate-900">${academyEsc(o.number)} · замер проекта</div>
+            <div class="text-sm text-gray-500 mt-1">${academyEsc(c?.name || 'Без клиента')} · ${academyEsc(orderAddress(o, c) || 'адрес не указан')}</div>
           </div>
           <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
         </div>
         <div class="manager-measure-kpis mt-3">
           <div class="manager-measure-kpi"><div>Комнаты</div><div>${rooms.length}</div></div>
-          <div class="manager-measure-kpi"><div>Окна / двери</div><div>${windows.length}</div></div>
+          <div class="manager-measure-kpi"><div>Услуги</div><div>${projectScopes.length}</div></div>
+          <div class="manager-measure-kpi"><div>Окна / двери</div><div>${allWindows.length}</div></div>
           <div class="manager-measure-kpi"><div>Площадь стекла</div><div>${orderActualAreaSqft(o).toFixed(2)} sqft</div></div>
         </div>
-        ${managerMeasureProgressHtml(o)}
+        <div class="flex items-center gap-2 flex-wrap mt-3"><span class="text-xs font-bold text-slate-600">Услуга:</span>${projectScopes.map(key => { const item = measureScopeInfo(key); return `<button class="btn-ghost text-sm ${key===activeScopeKey?'bg-blue-50 text-blue-700':''}" onclick="managerSelectMeasureScope('${oid}','${key}')">${item.icon} ${academyEsc(item.short)} · ${measureAllWindows(o).filter(x => (x.win.measureScope || orderMeasureScope(o))===key).length}</button>`; }).join('')}<button class="btn-ghost text-sm" onclick="openManagerProjectServicesModal('${oid}')">+ Изменить услуги</button></div>
+        ${managerMeasureProgressHtml(o, activeScopeKey)}
       </div>
       <div class="manager-measure-body" data-scroll-key="measure-body">
         <div class="manager-measure-workspace">
@@ -21263,10 +21328,10 @@ function renderManagerMeasureModal(oid) {
               <div class="font-black text-sm text-slate-900">1. Выберите комнату</div>
               <div class="text-xs text-gray-500 mt-1">Работаем только с одной комнатой за раз.</div>
               <div class="manager-room-list mt-3">
-                ${rooms.map((room, index) => `<button type="button" class="manager-room-tab ${activeRoom?.id === room.id ? 'active' : ''}" onclick="managerSelectRoom('${oid}','${room.id}')">
-                  <span><span class="manager-room-tab-name">${index + 1}. ${academyEsc(room.name || ('Комната ' + (index + 1)))}</span><span class="manager-room-tab-meta">${(room.windows || []).length} элементов · ${roomActualAreaSqft(room).toFixed(1)} sqft</span></span>
-                  <span class="manager-room-tab-count">${(room.windows || []).length}</span>
-                </button>`).join('') || '<div class="text-xs text-gray-500">Комнат пока нет.</div>'}
+                ${rooms.map((room, index) => { const serviceWindows = (room.windows || []).filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey); return `<button type="button" class="manager-room-tab ${activeRoom?.id === room.id ? 'active' : ''}" onclick="managerSelectRoom('${oid}','${room.id}')">
+                  <span><span class="manager-room-tab-name">${index + 1}. ${academyEsc(room.name || ('Комната ' + (index + 1)))}</span><span class="manager-room-tab-meta">${serviceWindows.length} элементов · ${serviceWindows.reduce((sum,w)=>sum+windowActualAreaSqft(w),0).toFixed(1)} sqft</span></span>
+                  <span class="manager-room-tab-count">${serviceWindows.length}</span>
+                </button>`; }).join('') || '<div class="text-xs text-gray-500">Комнат пока нет.</div>'}
               </div>
             </div>
             <div class="manager-add-room-card">
@@ -21282,11 +21347,12 @@ function renderManagerMeasureModal(oid) {
           <section class="manager-measure-main">
             ${activeRoom ? (() => {
               const r = activeRoom;
-              const selectedRoomCatalog = managerRoomCatalogId(r);
+              const selectedRoomCatalog = managerRoomCatalogId(r, activeScopeKey);
               const roomCatalog = selectedRoomCatalog ? getCatalogItem(selectedRoomCatalog) : null;
-              const roomScopeKey = roomCatalog ? measureScopeByCatalog(roomCatalog) : orderMeasureScope(o);
-              const showSolarFields = managerRoomNeedsSolarFields(o, r, roomScopeKey);
+              const roomScopeKey = roomCatalog ? measureScopeByCatalog(roomCatalog) : activeScopeKey;
+              const showSolarFields = roomScopeKey === 'solar_film';
               const inUnits = db.settings.inputUnits === 'inches';
+              const serviceWindows = (r.windows || []).filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey);
               return `<div class="manager-room-focus">
                 <div class="manager-room-focus-head">
                   <div>
@@ -21294,7 +21360,7 @@ function renderManagerMeasureModal(oid) {
                     <input value="${academyEsc(r.name || '')}" onchange="managerUpdateRoomName('${oid}','${r.id}',this.value)">
                   </div>
                   <div>
-                    <label class="text-xs">Материал для всей комнаты</label>
+                    <label class="text-xs">Материал для ${academyEsc(scope.short)} в этой комнате</label>
                     <select id="mm-room-film-${r.id}" onchange="managerApplyFilmToRoom('${oid}','${r.id}',this.value)">
                       ${managerScopedCatalogOptionsHtml(selectedRoomCatalog, preferredCategory)}
                     </select>
@@ -21305,7 +21371,7 @@ function renderManagerMeasureModal(oid) {
                 ${managerRoomAddChooserHtml(oid, r, roomScopeKey)}
 
                 <div class="manager-window-cards">
-                  ${(r.windows || []).length ? (r.windows || []).map((w, wi) => {
+                  ${serviceWindows.length ? serviceWindows.map((w, wi) => {
                     const cat = windowCatalog(w);
                     const scopeKey = w.measureScope || (cat ? measureScopeByCatalog(cat) : orderMeasureScope(o));
                     const needsSolar = showSolarFields && managerWindowNeedsSolarFields(o, w, roomScopeKey);
@@ -21328,10 +21394,10 @@ function renderManagerMeasureModal(oid) {
                         </div>
                       </div>
                     </article>`;
-                  }).join('') : `<div class="rounded-lg border border-dashed p-6 text-center text-sm text-gray-500">В этой комнате пока нет элементов. Выберите выше окно, дверь или skylight, затем нажмите «Добавить».</div>`}
+                  }).join('') : `<div class="rounded-lg border border-dashed p-6 text-center text-sm text-gray-500">Для услуги ${scope.icon} ${academyEsc(scope.short)} в этой комнате размеров пока нет. Выберите окно, дверь или skylight и нажмите «Добавить».</div>`}
                 </div>
                 <div class="manager-room-summary">
-                  <span>Комната: <b>${(r.windows || []).length} элементов · ${roomActualAreaSqft(r).toFixed(2)} sqft</b></span>
+                  <span>${scope.icon} ${academyEsc(scope.short)}: <b>${serviceWindows.length} элементов · ${serviceWindows.reduce((sum,w)=>sum+windowActualAreaSqft(w),0).toFixed(2)} sqft</b></span>
                   <span>Все изменения сохраняются автоматически.</span>
                 </div>
               </div>`;
@@ -21359,6 +21425,8 @@ function completeManagerMeasurement(oid) {
   const o = getOrder(oid);
   if (!o) return;
   if (!measureAllWindows(o).length) { alert('Добавьте хотя бы одно окно или панель с размерами.'); return; }
+  const missingScopes = orderMeasureScopes(o).filter(scopeKey => !measureAllWindows(o).some(({ win }) => (win.measureScope || orderMeasureScope(o)) === scopeKey && Number(win.width) > 0 && Number(win.height) > 0 && Number(win.qty || 1) > 0));
+  if (missingScopes.length) { alert('Добавьте размеры для каждой услуги: ' + missingScopes.map(key => measureScopeInfo(key).short).join(', ')); return; }
   if (o.status === 'measurement_done') {
     invalidateProjectEstimate(o, 'Замер изменён — требуется повторный расчёт проекта');
     save();
@@ -21378,7 +21446,9 @@ function managerAddRoomFromForm(oid) {
   const preset = document.getElementById('mm-room-preset')?.value || T('room');
   const custom = (document.getElementById('mm-room-custom')?.value || '').trim();
   const name = custom || (preset === 'Custom room' ? T('room') + ' ' + (o.measurements.rooms.length + 1) : preset);
-  const room = { id: uid(), name, windows: [], defaultCatalogId: defaultCatalogIdForOrder(o) || null };
+  const activeScope = managerActiveMeasureScope(o);
+  const defaultCatalogId = defaultCatalogIdForOrder(o) || null;
+  const room = { id: uid(), name, windows: [], defaultCatalogId, defaultCatalogByScope: defaultCatalogId ? { [activeScope]: defaultCatalogId } : {} };
   o.measurements.rooms.push(room);
   invalidateProjectEstimate(o, 'Добавлена комната в замер');
   state._managerActiveRoomByOrder = state._managerActiveRoomByOrder || {};
@@ -21406,14 +21476,16 @@ function managerAddWindow(oid, rid) {
   const o = getOrder(oid);
   const r = o?.measurements?.rooms?.find(x => x.id === rid);
   if (!o || !r) return;
+  const activeScope = managerActiveMeasureScope(o);
   const selected = document.getElementById('mm-room-film-' + rid)?.value || '';
-  if (selected) r.defaultCatalogId = selected;
-  const catalog = selected ? getCatalogItem(selected) : getCatalogItem(r.defaultCatalogId || defaultCatalogIdForOrder(o));
-  const scopeKey = catalog ? measureScopeByCatalog(catalog) : orderMeasureScope(o);
+  r.defaultCatalogByScope = r.defaultCatalogByScope || {};
+  if (selected) r.defaultCatalogByScope[activeScope] = selected;
+  const catalog = selected ? getCatalogItem(selected) : getCatalogItem(r.defaultCatalogByScope[activeScope] || '');
+  const scopeKey = catalog ? measureScopeByCatalog(catalog) : activeScope;
   const objectKind = managerRoomAddKindValue(rid);
   const winType = managerRoomAddTypeValue(rid, objectKind, scopeKey);
   r.windows = r.windows || [];
-  r.windows.push(managerWindowDefaults(o, r, { objectKind, winType }));
+  r.windows.push(managerWindowDefaults(o, r, { objectKind, winType, scopeKey, catalogId: catalog?.id || '' }));
   invalidateProjectEstimate(o, 'Добавлен элемент в замер');
   save();
   refreshManagerMeasureModal(oid);
@@ -21491,7 +21563,8 @@ function managerSetWinCatalog(oid, rid, wid, catalogId) {
       w.measureScope = measureScopeByCatalog(c);
       w.winType = normalizeMeasureWindowTypeForScope(w.measureScope, w.winType);
       syncWindowPanelsForType(w, w.measureScope);
-      r.defaultCatalogId = catalogId;
+      r.defaultCatalogByScope = r.defaultCatalogByScope || {};
+      r.defaultCatalogByScope[w.measureScope] = catalogId;
     }
   } else {
     w.filmType = '';
@@ -21504,9 +21577,11 @@ function managerApplyFilmToRoom(oid, rid, catalogId) {
   const o = getOrder(oid);
   const r = o?.measurements?.rooms?.find(x => x.id === rid);
   if (!r) return;
-  r.defaultCatalogId = catalogId || null;
+  const activeScope = managerActiveMeasureScope(o);
+  r.defaultCatalogByScope = r.defaultCatalogByScope || {};
+  r.defaultCatalogByScope[activeScope] = catalogId || null;
   const c = catalogId ? getCatalogItem(catalogId) : null;
-  (r.windows || []).forEach(w => {
+  (r.windows || []).filter(w => (w.measureScope || orderMeasureScope(o)) === activeScope).forEach(w => {
     w.catalogId = c?.id || null;
     w.filmType = c ? `${c.brand} — ${c.model}` : '';
     if (c) {
@@ -22200,7 +22275,7 @@ function renderClientAccountPortal() {
               <div class="flex items-start justify-between gap-2">
                 <div>
                   <div class="text-xs text-gray-500">${academyEsc(o.number)}</div>
-                  <div class="font-black text-slate-900">${academyEsc(orderServiceTypeLabel(o.serviceType))}</div>
+                  <div class="font-black text-slate-900">${academyEsc(orderServiceSummaryLabel(o))}</div>
                 </div>
                 <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
               </div>
@@ -22289,6 +22364,7 @@ function submitClientPortalRequest(clientId) {
     timeline: [{ at: new Date().toISOString(), key: 'orderCreated', by: c.id, note: 'Заявка из кабинета клиента' }],
     notes,
     serviceType: service.id,
+    serviceTypes: [service.id],
     serviceCategory: service.catalogCategory,
     serviceWorkflow: [...service.workflow],
     recommendedAddons: [],
@@ -22593,6 +22669,7 @@ function openOrderModal() {
   state._newOrderAddressId = null;
   state._newOrderTags = [];
   state._newOrderService = 'smart_film';
+  state._newOrderServices = ['smart_film'];
   state._newOrderExecution = 'standard_project';
   const viewer = currentUser();
   const allManagers = orderManagerCandidates();
@@ -22632,8 +22709,8 @@ function openOrderModal() {
             <section class="erp-intake-card">
               <div class="erp-intake-card-head">
                 <div>
-                  <div class="erp-intake-card-title"><span class="erp-intake-step">2</span> Направление услуги <span class="order-required">*</span></div>
-                  <div class="erp-intake-helper">Выбираем главное направление. Допуслуги не мешают созданию заказа — они добавляются в КП как допродажи.</div>
+                  <div class="erp-intake-card-title"><span class="erp-intake-step">2</span> Услуги проекта <span class="order-required">*</span></div>
+                  <div class="erp-intake-helper">Выберите одно или несколько направлений. Для каждого направления в замере будут отдельные размеры и материал.</div>
                 </div>
               </div>
               <div class="order-intake-grid" id="no-svc-buttons">
@@ -22716,14 +22793,19 @@ function openOrderModal() {
     </div>
   </div>`;
   render();
-  setTimeout(() => { selectOrderService('smart_film'); selectOrderExecution('standard_project'); }, 50);
+  setTimeout(() => { selectOrderService('smart_film', true); selectOrderExecution('standard_project'); }, 50);
 }
 
-function selectOrderService(v) {
-  state._newOrderService = v;
-  document.getElementById('no-svc').value = v;
+function selectOrderService(v, force = false) {
+  const selected = new Set(state._newOrderServices || ['smart_film']);
+  if (force) selected.add(v);
+  else if (selected.has(v) && selected.size > 1) selected.delete(v);
+  else selected.add(v);
+  state._newOrderServices = Array.from(selected);
+  state._newOrderService = state._newOrderServices[0] || v;
+  document.getElementById('no-svc').value = state._newOrderService;
   document.querySelectorAll('#no-svc-buttons [data-svc]').forEach(b => {
-    b.classList.toggle('active', b.dataset.svc === v);
+    b.classList.toggle('active', selected.has(b.dataset.svc));
   });
   refreshOrderBuilderPreview();
 }
@@ -23158,8 +23240,10 @@ function createOrderClientFromOverlay() {
 
 function createOrder() {
   let clientId = state._newOrderClient;
-  const serviceId = document.getElementById('no-svc')?.value || state._newOrderService || 'smart_film';
+  const serviceIds = Array.from(new Set((state._newOrderServices || []).filter(id => ORDER_PRIMARY_SERVICES.some(service => service.id === id))));
+  const serviceId = serviceIds[0] || document.getElementById('no-svc')?.value || state._newOrderService || 'smart_film';
   const service = primaryServiceInfo(serviceId);
+  const selectedServices = serviceIds.length ? serviceIds.map(id => primaryServiceInfo(id)) : [service];
   const executionVariantId = document.getElementById('no-execution')?.value || state._newOrderExecution || 'standard_project';
   const executionVariant = orderExecutionVariantInfo(executionVariantId);
   const viewer = currentUser();
@@ -23204,7 +23288,7 @@ function createOrder() {
     return;
   }
   const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(db.orders.length + 1).padStart(3, '0');
-  const tags = Array.from(new Set([service.tag, accountTypeForOrder, relationshipForOrder === 'regular' ? 'regular' : 'one_time', ...(executionVariant.tags || []), ...pickedTags].filter(Boolean)));
+  const tags = Array.from(new Set([...selectedServices.map(item => item.tag), accountTypeForOrder, relationshipForOrder === 'regular' ? 'regular' : 'one_time', ...(executionVariant.tags || []), ...pickedTags].filter(Boolean)));
 
   const o = {
     id: 'o' + uid(), number: num, clientId,
@@ -23220,10 +23304,11 @@ function createOrder() {
       at: new Date().toISOString(),
       key: 'orderCreated',
       by: state.currentUserId,
-      note: `Карточки: ${service.title} · ${executionVariant.title}`,
+      note: `Карточки: ${selectedServices.map(item => item.title).join(' + ')} · ${executionVariant.title}`,
     }],
     notes: document.getElementById('no-notes').value,
     serviceType: service.id,
+    serviceTypes: selectedServices.map(item => item.id),
     serviceCategory: service.catalogCategory,
     serviceWorkflow: [...service.workflow],
     executionVariant: executionVariant.id,
@@ -23232,6 +23317,7 @@ function createOrder() {
     orderBuilder: {
       serviceId: service.id,
       serviceTitle: service.title,
+      serviceIds: selectedServices.map(item => item.id),
       variantId: executionVariant.id,
       variantTitle: executionVariant.title,
       color: orderServicePalette(service.id).color,
