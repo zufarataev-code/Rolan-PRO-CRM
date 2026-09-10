@@ -77,3 +77,12 @@ test("system money is allocated to an account instead of duplicated", () => {
   assert.match(html, /inventoryId: row\.inventoryId \|\| null/);
   assert.match(html, /Источник останется один/);
 });
+
+test("finance overview stays lightweight and opens focused workspaces", () => {
+  assert.equal((html.match(/class="card finance-primary-kpi"/g) || []).length, 4);
+  assert.match(html, /function renderFinanceHubCard\(section, icon, title/);
+  assert.match(html, /function renderFinanceWorkspaceHeader\(icon, title/);
+  assert.match(html, /<details class="card"><summary class="cursor-pointer font-semibold text-slate-800">Фильтры/);
+  assert.match(html, /function financeOpenPlanModal\(index = -1\)/);
+  assert.match(html, /function financeSavePlan\(index\)/);
+});

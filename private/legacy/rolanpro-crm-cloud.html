@@ -26967,20 +26967,51 @@ function financeResetFilters() {
 
 function renderFinancePlans() {
   const plans = db.opex || [];
-  const categoryOptions = selected => FINANCE_CATEGORY_OPTIONS
-    .filter(([key]) => !['client_payment','inventory_purchase','project_expense','payroll','refund','owner_draw'].includes(key))
-    .map(([key,label]) => `<option value="${key}" ${selected===key?'selected':''}>${academyEsc(label)}</option>`).join('');
-  const frequencyOptions = selected => ['daily','weekly','monthly','quarterly','yearly'].map(freq =>
-    `<option value="${freq}" ${selected===freq?'selected':''}>${({ daily:'день', weekly:'неделя', monthly:'месяц', quarterly:'квартал', yearly:'год' })[freq]}</option>`
-  ).join('');
-  return `<div class="card"><div class="flex items-center justify-between gap-3 flex-wrap mb-3"><div><h3 class="font-semibold">Постоянные и плановые расходы</h3><p class="text-xs text-gray-500">Это календарь будущих обязательств. Остаток счёта изменится только после записи реальной оплаты.</p></div><button class="btn-primary text-sm" onclick="addOpexItem()">+ Плановый расход</button></div>
-    <div class="overflow-x-auto"><table class="w-full text-sm" style="min-width:980px"><thead><tr class="text-xs text-gray-500"><th class="text-left p-2">Активен</th><th class="text-left p-2">Название</th><th class="text-left p-2">Категория</th><th class="text-left p-2">Сумма</th><th class="text-left p-2">Период</th><th class="text-left p-2">День оплаты</th><th class="text-left p-2">Контур</th><th class="text-left p-2">Теги</th><th class="text-right p-2">В месяц</th><th></th></tr></thead><tbody>
-      ${plans.map((plan,index) => `<tr class="border-t ${plan.active?'':'opacity-50'}"><td class="p-2"><input type="checkbox" ${plan.active?'checked':''} onchange="db.opex[${index}].active=this.checked;save();render();"></td><td class="p-2"><input value="${academyEsc(plan.name || '')}" onchange="db.opex[${index}].name=this.value;save();"></td><td class="p-2"><select onchange="db.opex[${index}].category=this.value;save();">${categoryOptions(plan.category)}</select></td><td class="p-2"><input type="number" min="0" step="0.01" value="${Number(plan.amount)||0}" onchange="db.opex[${index}].amount=Math.abs(Number(this.value)||0);save();render();"></td><td class="p-2"><select onchange="db.opex[${index}].frequency=this.value;save();render();">${frequencyOptions(plan.frequency)}</select></td><td class="p-2"><input type="number" min="1" max="31" value="${plan.day || ''}" placeholder="1–31" onchange="db.opex[${index}].day=Math.max(1,Math.min(31,Number(this.value)||1));save();"></td><td class="p-2"><select onchange="db.opex[${index}].scope=this.value;save();"><option value="business" ${plan.scope!=='personal'?'selected':''}>Бизнес</option><option value="personal" ${plan.scope==='personal'?'selected':''}>Личное</option></select></td><td class="p-2"><input value="${academyEsc(financeTags(plan.tags).join(', '))}" placeholder="аренда, склад" onchange="db.opex[${index}].tags=financeTags(this.value);save();"></td><td class="p-2 text-right font-semibold">${fmtMoney(opexMonthly(plan))}</td><td class="p-2"><button class="btn-ghost text-red-600" onclick="if(confirm('Удалить плановый расход?')){db.opex.splice(${index},1);save();render();}">✕</button></td></tr>`).join('')}
-      <tr class="border-t-2 font-bold"><td colspan="8" class="p-2">Плановая нагрузка в месяц</td><td class="p-2 text-right">${fmtMoney(totalMonthlyBurn())}</td><td></td></tr>
-    </tbody></table></div></div>`;
+  const frequencyLabel = { daily:'каждый день', weekly:'каждую неделю', monthly:'каждый месяц', quarterly:'каждый квартал', yearly:'каждый год' };
+  if (!plans.length) return `<div class="card empty-state"><div class="icon">📅</div><div class="font-semibold">Регулярных платежей пока нет</div><div class="text-sm text-gray-500 mt-1">Добавьте аренду, страховку, сервисы и другие обязательства.</div><button class="btn-primary mt-4" onclick="financeOpenPlanModal()">+ Добавить платёж</button></div>`;
+  return `<div class="space-y-3">
+    <div class="card flex items-center justify-between gap-3 flex-wrap"><div><div class="text-sm text-gray-500">Плановая нагрузка в месяц</div><div class="text-2xl font-black text-slate-900">${fmtMoney(totalMonthlyBurn())}</div><div class="text-xs text-gray-500 mt-1">Это план. Остаток счёта изменится только после записи реальной оплаты.</div></div><button class="btn-primary" onclick="financeOpenPlanModal()">+ Добавить платёж</button></div>
+    ${plans.map((plan,index) => `<div class="card ${plan.active?'':'opacity-50'}"><div class="flex items-center justify-between gap-4 flex-wrap"><div class="flex items-center gap-3 min-w-0"><input type="checkbox" ${plan.active?'checked':''} onchange="db.opex[${index}].active=this.checked;save();render();" style="width:20px;height:20px"><div class="min-w-0"><div class="font-semibold text-slate-900">${academyEsc(plan.name || 'Без названия')}</div><div class="text-xs text-gray-500 mt-1">${academyEsc(financeCategoryLabel(plan.category))} · ${frequencyLabel[plan.frequency] || 'каждый месяц'}${plan.day ? ` · ${plan.day}-го числа` : ''} · ${plan.scope === 'personal' ? 'личное' : 'бизнес'}</div></div></div><div class="flex items-center gap-3"><div class="text-right"><div class="font-black text-lg">${fmtMoney(opexMonthly(plan))}</div><div class="text-xs text-gray-500">в месяц</div></div><button class="btn-ghost" onclick="financeOpenPlanModal(${index})">Изменить</button></div></div></div>`).join('')}
+  </div>`;
 }
 
-function renderAccounting() {
+function financeOpenPlanModal(index = -1) {
+  const existing = index >= 0 ? db.opex[index] : null;
+  const plan = existing || { name:'', amount:0, frequency:'monthly', category:'other', scope:'business', costBehavior:'fixed', day:1, tags:[], active:true };
+  const categoryOptions = FINANCE_CATEGORY_OPTIONS
+    .filter(([key]) => !['client_payment','inventory_purchase','project_expense','payroll','refund','owner_draw'].includes(key))
+    .map(([key,label]) => `<option value="${key}" ${plan.category===key?'selected':''}>${academyEsc(label)}</option>`).join('');
+  const frequencyOptions = [['daily','Каждый день'],['weekly','Каждую неделю'],['monthly','Каждый месяц'],['quarterly','Каждый квартал'],['yearly','Каждый год']]
+    .map(([key,label]) => `<option value="${key}" ${plan.frequency===key?'selected':''}>${label}</option>`).join('');
+  state.modal = `<div class="modal-backdrop"><div class="modal max-w-xl"><div class="flex items-center justify-between mb-4"><div><h3 class="font-semibold text-lg">${existing ? 'Регулярный платёж' : 'Новый регулярный платёж'}</h3><p class="text-xs text-gray-500">Заполните только основное. Детали всегда можно изменить позже.</p></div><button class="btn-ghost" onclick="closeModal()">✕</button></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3"><div class="md:col-span-2"><label>Название</label><input id="fin-plan-name" value="${academyEsc(plan.name || '')}" placeholder="Например: аренда склада"></div><div><label>Сумма, $</label><input id="fin-plan-amount" type="number" min="0" step="0.01" value="${Number(plan.amount)||0}"></div><div><label>Как часто</label><select id="fin-plan-frequency">${frequencyOptions}</select></div><div><label>Категория</label><select id="fin-plan-category">${categoryOptions}</select></div><div><label>День оплаты</label><input id="fin-plan-day" type="number" min="1" max="31" value="${plan.day || 1}"></div><div><label>Назначение</label><select id="fin-plan-scope"><option value="business" ${plan.scope!=='personal'?'selected':''}>Бизнес</option><option value="personal" ${plan.scope==='personal'?'selected':''}>Личное</option></select></div><div><label>Тип расхода</label><select id="fin-plan-behavior"><option value="fixed" ${plan.costBehavior!=='variable'?'selected':''}>Постоянный</option><option value="variable" ${plan.costBehavior==='variable'?'selected':''}>Переменный</option></select></div><div class="md:col-span-2"><label>Теги — необязательно</label><input id="fin-plan-tags" value="${academyEsc(financeTags(plan.tags).join(', '))}" placeholder="склад, аренда"></div></div>
+    <div class="flex items-center justify-between gap-2 mt-5"><div>${existing ? `<button class="btn-ghost text-red-600" onclick="if(confirm('Удалить этот платёж?')){db.opex.splice(${index},1);save();closeModal();render();}">Удалить</button>` : ''}</div><div class="flex gap-2"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="financeSavePlan(${index})">Сохранить</button></div></div>
+  </div></div>`;
+  render();
+}
+
+function financeSavePlan(index) {
+  const name = document.getElementById('fin-plan-name')?.value?.trim();
+  if (!name) return alert('Введите название платежа');
+  const plan = {
+    id: index >= 0 ? db.opex[index].id : 'opx_' + uid(),
+    name,
+    amount: Math.abs(Number(document.getElementById('fin-plan-amount')?.value) || 0),
+    frequency: document.getElementById('fin-plan-frequency')?.value || 'monthly',
+    category: document.getElementById('fin-plan-category')?.value || 'other',
+    scope: document.getElementById('fin-plan-scope')?.value || 'business',
+    costBehavior: document.getElementById('fin-plan-behavior')?.value || 'fixed',
+    day: Math.max(1, Math.min(31, Number(document.getElementById('fin-plan-day')?.value) || 1)),
+    tags: financeTags(document.getElementById('fin-plan-tags')?.value || ''),
+    active: index >= 0 ? db.opex[index].active !== false : true,
+    addedAt: index >= 0 ? db.opex[index].addedAt : new Date().toISOString(),
+  };
+  if (index >= 0) db.opex[index] = { ...db.opex[index], ...plan };
+  else db.opex.push(plan);
+  save(); closeModal(); render();
+}
+
+function renderAccountingOverloadedBackup() {
   if (currentUser()?.role !== 'owner') return `<div class="card">Доступ только владельцу</div>`;
   const tab = state.accountingTab || 'overview';
   const range = financePeriodRange();
@@ -27034,6 +27065,76 @@ function renderAccounting() {
     ${tab === 'accounts' ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-4">${accounts.map(a => `<div class="card" style="border-top:4px solid ${a.color || '#2563eb'}"><div class="flex items-center justify-between"><div><div class="font-semibold">${academyEsc(a.name)}</div><div class="text-xs text-gray-500">${academyEsc(a.institution || '')}${a.last4 ? ` · •${academyEsc(a.last4)}` : ''}</div></div><span class="tag">${academyEsc(financeAccountTypeLabel(a.type))}</span></div><div class="kpi-value mt-3 ${financeAccountBalance(a.id)>=0?'text-emerald-700':'text-red-600'}">${fmtMoney(financeAccountBalance(a.id))}</div><div class="text-xs text-gray-500 mt-1">Начальный остаток: ${fmtMoney(a.openingBalance || 0)} · ручной учёт</div></div>`).join('')}<button class="card text-left" onclick="financeOpenAccountModal()" style="border:2px dashed #bfdbfe"><div class="text-3xl text-blue-600">＋</div><div class="font-semibold mt-2">Добавить счёт или карту</div><div class="text-xs text-gray-500 mt-1">Chase, Stripe, наличные и другие</div></button></div><div class="card mt-4"><div class="flex items-center justify-between gap-3 flex-wrap"><div><h3 class="font-semibold">Перенос из старого трекера</h3><p class="text-xs text-gray-500">Импортирует счета, операции и плановые платежи. Клиенты и проекты не дублируются.</p></div><button class="btn-ghost" onclick="financeImportTrackerClick()">Импортировать JSON</button><input id="finance-import-file" type="file" accept="application/json,.json" style="display:none" onchange="financeImportTracker(event)"></div></div>` : ''}
     ${tab === 'plans' ? renderFinancePlans() : ''}
     ${tab === 'projects' ? renderFinanceProjects(range) : ''}
+  </div>`;
+}
+
+function financeOpenSection(section) {
+  state.accountingTab = section;
+  render();
+}
+
+function renderFinanceWorkspaceHeader(icon, title, subtitle, action = '') {
+  return `<div class="card"><div class="flex items-center justify-between gap-4 flex-wrap"><div class="flex items-center gap-3"><button class="btn-ghost" onclick="financeOpenSection('overview')">← Деньги</button><div><h2 class="text-xl font-black text-slate-900">${icon} ${academyEsc(title)}</h2><p class="text-sm text-gray-500 mt-1">${academyEsc(subtitle)}</p></div></div>${action}</div></div>`;
+}
+
+function renderFinanceHubCard(section, icon, title, value, caption, tone = 'blue') {
+  const tones = { blue:'bg-blue-50 text-blue-700', emerald:'bg-emerald-50 text-emerald-700', amber:'bg-amber-50 text-amber-700', purple:'bg-purple-50 text-purple-700' };
+  return `<button class="card text-left w-full hover:shadow-md transition-shadow" onclick="financeOpenSection('${section}')"><div class="flex items-start justify-between gap-4"><div class="flex gap-3"><div class="w-11 h-11 rounded-xl flex items-center justify-center text-xl ${tones[tone] || tones.blue}">${icon}</div><div><div class="font-bold text-slate-900">${academyEsc(title)}</div><div class="text-xs text-gray-500 mt-1">${academyEsc(caption)}</div></div></div><div class="text-right"><div class="font-black text-lg text-slate-900">${value}</div><div class="text-blue-600 text-sm mt-1">Открыть →</div></div></div></button>`;
+}
+
+function renderAccounting() {
+  if (currentUser()?.role !== 'owner') return `<div class="card">Доступ только владельцу</div>`;
+  const tab = state.accountingTab || 'overview';
+  const range = financePeriodRange();
+  const rows = financeAllRows();
+  const periodRows = rows.filter(row => financeRowInPeriod(row, range));
+  const filteredRows = financeFilteredRows(periodRows);
+  const income = periodRows.filter(r => r.type === 'income').reduce((sum,row) => sum + row.amount, 0);
+  const expense = periodRows.filter(r => r.type === 'expense').reduce((sum,row) => sum + row.amount, 0);
+  const completedProjectProfit = (db.orders || []).filter(order => {
+    const completedAt = order.installationDoneAt || order.actSignedAt || order.paidAt;
+    return completedAt && (range.mode === 'all' || financeRowInPeriod({ date: completedAt }, range));
+  }).reduce((sum, order) => sum + orderMargin(order), 0);
+  const operatingExpense = periodRows.filter(row => row.type === 'expense' && (row.scope || 'business') === 'business' && !['inventory_purchase','project_expense','payroll','owner_draw'].includes(row.category)).reduce((sum,row) => sum + row.amount, 0);
+  const operatingProfit = completedProjectProfit - operatingExpense;
+  const debt = (db.orders || []).reduce((sum,order) => sum + orderDebt(order), 0);
+  const payrollOwed = financePayrollOwed();
+  const accounts = financeData().accounts.filter(account => account.active !== false && account.id !== 'fin_unallocated');
+  const accountTotal = accounts.reduce((sum,account) => sum + financeAccountBalance(account.id), 0);
+  const unallocatedRows = periodRows.filter(row => row.accountId === 'fin_unallocated');
+  const unallocatedTotal = unallocatedRows.reduce((sum,row) => sum + row.amount, 0);
+  const periodSelect = `<select onchange="state.accountingPeriod=this.value; render();" class="w-auto"><option value="this_month" ${range.mode==='this_month'?'selected':''}>Этот месяц</option><option value="last_month" ${range.mode==='last_month'?'selected':''}>Прошлый месяц</option><option value="this_year" ${range.mode==='this_year'?'selected':''}>Этот год</option><option value="all" ${range.mode==='all'?'selected':''}>Всё время</option></select>`;
+  const categoryFilterOptions = FINANCE_CATEGORY_OPTIONS.map(([key,label]) => `<option value="${key}" ${state.financeFilterCategory===key?'selected':''}>${academyEsc(label)}</option>`).join('');
+  const accountFilterOptions = accounts.map(account => `<option value="${account.id}" ${state.financeFilterAccount===account.id?'selected':''}>${academyEsc(account.name)}</option>`).join('');
+
+  if (tab === 'operations') return `<div class="space-y-4">${renderFinanceWorkspaceHeader('↕', 'Операции', 'Все реальные поступления, расходы и переводы.', `<button class="btn-primary" onclick="financeOpenTransactionModal()">+ Операция</button>`)}
+    <details class="card"><summary class="cursor-pointer font-semibold text-slate-800">Фильтры <span class="text-xs font-normal text-gray-500">· показано ${filteredRows.length} из ${periodRows.length}</span></summary><div class="grid grid-cols-1 md:grid-cols-4 gap-2 mt-4"><select onchange="state.financeFilterType=this.value;render()"><option value="all">Все движения</option><option value="income" ${state.financeFilterType==='income'?'selected':''}>Приход</option><option value="expense" ${state.financeFilterType==='expense'?'selected':''}>Расход</option><option value="transfer" ${state.financeFilterType==='transfer'?'selected':''}>Переводы</option></select><select onchange="state.financeFilterCategory=this.value;render()"><option value="all">Все категории</option>${categoryFilterOptions}</select><select onchange="state.financeFilterAccount=this.value;render()"><option value="all">Все счета</option><option value="fin_unallocated" ${state.financeFilterAccount==='fin_unallocated'?'selected':''}>Не распределено</option>${accountFilterOptions}</select><select onchange="state.financeFilterScope=this.value;render()"><option value="all">Бизнес и личное</option><option value="business" ${state.financeFilterScope==='business'?'selected':''}>Только бизнес</option><option value="personal" ${state.financeFilterScope==='personal'?'selected':''}>Только личное</option></select><div class="md:col-span-4 flex gap-2"><input value="${academyEsc(state.financeFilterQuery || '')}" oninput="state.financeFilterQuery=this.value" onkeydown="if(event.key==='Enter')render()" placeholder="Поиск по заказу, тегу или поставщику"><button class="btn-ghost" onclick="financeResetFilters()">Сбросить</button></div></div></details>
+    <div class="card">${renderFinanceRows(filteredRows)}</div></div>`;
+
+  if (tab === 'accounts') return `<div class="space-y-4">${renderFinanceWorkspaceHeader('💳', 'Счета и карты', 'Где сейчас находятся деньги компании.', `<button class="btn-primary" onclick="financeOpenAccountModal()">+ Добавить счёт</button>`)}
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">${accounts.map(account => `<div class="card" style="border-top:4px solid ${account.color || '#2563eb'}"><div class="flex items-center justify-between"><div><div class="font-semibold">${academyEsc(account.name)}</div><div class="text-xs text-gray-500">${academyEsc(account.institution || '')}${account.last4 ? ` · •${academyEsc(account.last4)}` : ''}</div></div><span class="tag">${academyEsc(financeAccountTypeLabel(account.type))}</span></div><div class="kpi-value mt-3 ${financeAccountBalance(account.id)>=0?'text-emerald-700':'text-red-600'}">${fmtMoney(financeAccountBalance(account.id))}</div><div class="text-xs text-gray-500 mt-1">Ручной учёт</div></div>`).join('')}</div>
+    <details class="card"><summary class="cursor-pointer font-semibold">Перенос из старого трекера</summary><div class="flex items-center justify-between gap-3 flex-wrap mt-4"><p class="text-xs text-gray-500">Импортирует только счета, операции и регулярные платежи.</p><button class="btn-ghost" onclick="financeImportTrackerClick()">Импортировать JSON</button><input id="finance-import-file" type="file" accept="application/json,.json" style="display:none" onchange="financeImportTracker(event)"></div></details></div>`;
+
+  if (tab === 'plans') return `<div class="space-y-4">${renderFinanceWorkspaceHeader('📅', 'Регулярные платежи', 'Аренда, страховка, сервисы и другие будущие обязательства.')}${renderFinancePlans()}</div>`;
+
+  if (tab === 'projects') return `<div class="space-y-4">${renderFinanceWorkspaceHeader('📦', 'Прибыль по объектам', 'Выручка, долг и себестоимость каждого заказа.')}${renderFinanceProjects(range)}</div>`;
+
+  const attentionCount = unallocatedRows.length + (payrollOwed > 0 ? 1 : 0);
+  return `<div class="space-y-4">
+    <div class="card"><div class="flex items-center justify-between gap-4 flex-wrap"><div><div class="text-xs text-blue-700 font-semibold">ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА</div><h2 class="text-2xl font-black text-slate-900 mt-1">Деньги</h2><p class="text-sm text-gray-500 mt-1">Главное о финансах Rolan PRO на одном спокойном экране.</p></div><div class="flex gap-2 flex-wrap">${periodSelect}<button class="btn-primary" onclick="financeOpenTransactionModal()">+ Операция</button></div></div></div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="card finance-primary-kpi"><div class="text-sm text-gray-500">На счетах</div><div class="kpi-value text-blue-700">${fmtMoney(accountTotal)}</div></div>
+      <div class="card finance-primary-kpi"><div class="text-sm text-gray-500">Денежный поток</div><div class="kpi-value ${income-expense>=0?'text-emerald-700':'text-red-600'}">${fmtMoney(income-expense)}</div></div>
+      <div class="card finance-primary-kpi"><div class="text-sm text-gray-500">Должны клиенты</div><div class="kpi-value text-amber-600">${fmtMoney(debt)}</div></div>
+      <div class="card finance-primary-kpi"><div class="text-sm text-gray-500">Прибыль бизнеса</div><div class="kpi-value ${operatingProfit>=0?'text-emerald-700':'text-red-600'}">${fmtMoney(operatingProfit)}</div></div>
+    </div>
+    ${attentionCount ? `<button class="card w-full text-left border-amber-200 bg-amber-50" onclick="financeOpenSection('operations')"><div class="flex items-center justify-between gap-3"><div><div class="font-bold text-amber-900">Нужно проверить: ${attentionCount}</div><div class="text-sm text-amber-800 mt-1">${unallocatedRows.length ? `${unallocatedRows.length} операций без счёта на ${fmtMoney(unallocatedTotal)}` : ''}${unallocatedRows.length && payrollOwed > 0 ? ' · ' : ''}${payrollOwed > 0 ? `зарплата к выплате ${fmtMoney(payrollOwed)}` : ''}</div></div><span class="text-amber-800 font-semibold">Проверить →</span></div></button>` : ''}
+    <div><h3 class="font-bold text-slate-900 mb-3">Что вы хотите сделать?</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      ${renderFinanceHubCard('operations','↕','Операции',`${periodRows.length}`,`Пришло ${fmtMoney(income)} · ушло ${fmtMoney(expense)}`,'blue')}
+      ${renderFinanceHubCard('accounts','💳','Счета и карты',fmtMoney(accountTotal),`${accounts.length} подключено вручную`,'emerald')}
+      ${renderFinanceHubCard('plans','📅','Регулярные платежи',fmtMoney(totalMonthlyBurn()),'Плановая нагрузка в месяц','amber')}
+      ${renderFinanceHubCard('projects','📦','Прибыль по объектам',fmtMoney(completedProjectProfit),'Выполненные объекты за период','purple')}
+    </div></div>
   </div>`;
 }
 
@@ -27462,20 +27563,7 @@ function renderReports() {
 }
 
 function addOpexItem() {
-  db.opex.push({
-    id: 'opx_' + uid(),
-    name: 'Новая статья',
-    amount: 0,
-    frequency: 'monthly',
-    category: 'other',
-    scope: 'business',
-    costBehavior: 'fixed',
-    day: 1,
-    tags: [],
-    active: true,
-    addedAt: new Date().toISOString(),
-  });
-  save(); render();
+  financeOpenPlanModal();
 }
 
 // ---------- GEOCODING (Nominatim) ----------
