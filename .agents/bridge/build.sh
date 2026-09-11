@@ -114,8 +114,19 @@ done < "$WORK/paths.txt"
   exit 0
 }
 
-# Не даём одному огромному legacy-файлу вытеснить весь полезный контекст.
-head -c 420000 "$WORK/code.md" > "$WORK/code.trim" && mv "$WORK/code.trim" "$WORK/code.md"
+# Не даём одному огромному файлу вытеснить весь полезный контекст и при этом
+# никогда не режем UTF-8 посередине многобайтного символа.
+python3 - "$WORK/code.md" "$WORK/code.trim" <<'PY'
+import sys
+source, target = sys.argv[1:3]
+raw = open(source, "rb").read()
+if len(raw) > 420000:
+    raw = raw[:420000]
+text = raw.decode("utf-8", errors="ignore")
+with open(target, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PY
+mv "$WORK/code.trim" "$WORK/code.md"
 
 # 3. Запрос архитектору.
 SYSTEM='Ты архитектор и разработчик проекта RolanPRO CRM - системы для компании по установке оконных плёнок в Лос-Анджелесе.
@@ -145,22 +156,32 @@ SYSTEM='Ты архитектор и разработчик проекта Rolan
 - Ничего не выдумывай: опирайся на предоставленные файлы и правила задачи.
 - Если для части работы действительно не хватает конкретного кода, сделай всё безопасно возможное из имеющегося контекста и укажи блокер в summary вместо пустого ответа на всю задачу.'
 
-jq -n --arg s "$SYSTEM" \
-      --arg task "$(cat "$WORK/issue.md")" \
-      --arg code "$(cat "$WORK/code.md")" '{
+# --rawfile передаёт содержимое файлов в jq без shell command substitution.
+# Это сохраняет UTF-8 и гарантирует корректное JSON-экранирование больших фрагментов.
+if ! jq -n --arg s "$SYSTEM" \
+      --rawfile task "$WORK/issue.md" \
+      --rawfile code "$WORK/code.md" '{
   model: "gpt-4o",
   response_format: {type: "json_object"},
   messages: [
     {role: "system", content: $s},
     {role: "user", content: ("ЗАДАЧА:\n" + $task + "\n\nКОД:\n" + $code)}
   ]
-}' > "$WORK/request.json"
+}' > "$WORK/request.json"; then
+  say "Не удалось собрать JSON-запрос для OpenAI. Правок не делал."
+  exit 0
+fi
+
+if ! jq -e . "$WORK/request.json" >/dev/null 2>&1; then
+  say "Собранный запрос OpenAI не прошёл локальную JSON-проверку. Правок не делал."
+  exit 0
+fi
 
 HTTP=$(curl -sS -o "$WORK/response.json" -w '%{http_code}' \
   https://api.openai.com/v1/chat/completions \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
   -H "Content-Type: application/json" \
-  -d @"$WORK/request.json")
+  --data-binary @"$WORK/request.json")
 
 if [ "$HTTP" != "200" ]; then
   ERR=$(jq -r '.error.message // "неизвестная ошибка"' "$WORK/response.json" 2>/dev/null)
