@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { serializeClient, serializeDealCard, serializeFollowUp, serializeLead, serializeTask } from "@/features/sales/serializers";
 import { getAllowedStageTransitions, isValidStageTransition } from "@/features/sales/pipeline";
+import { ensureClosedWonConversion } from "@/features/google-ads/conversion-events";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { buildClientAccessWhere, buildDealAccessWhere } from "@/features/sales/access";
 
