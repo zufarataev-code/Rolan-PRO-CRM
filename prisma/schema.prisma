@@ -370,6 +370,9 @@ model Lead {
   follow_ups                   FollowUp[]
   tasks                        Task[]
   consultations                Consultation[]
+  acquisition_touchpoints      AcquisitionTouchpoint[]
+  consent_snapshots            ConsentSnapshot[]
+  conversion_events            ConversionEvent[]
 
   @@index([assigned_manager_id])
   @@index([city_id])
@@ -396,6 +399,9 @@ model Client {
   documents                    Document[]
   consultations                Consultation[]
   proposals                    Proposal[]
+  acquisition_touchpoints      AcquisitionTouchpoint[]
+  consent_snapshots            ConsentSnapshot[]
+  conversion_events            ConversionEvent[]
 
   @@index([city_id])
   @@map("clients")
@@ -408,6 +414,7 @@ model Deal {
   client_id                    String?           @db.Uuid
   assigned_manager_id          String?           @db.Uuid
   pipeline_status_id           String            @db.Uuid
+  attribution_touchpoint_id    String?           @db.Uuid
   title                        String            @db.VarChar(160)
   estimated_value              Decimal           @default(0) @db.Decimal(12, 2)
   currency                     String            @default("USD") @db.VarChar(3)
@@ -418,6 +425,7 @@ model Deal {
   client                       Client?           @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
   assigned_manager             User?             @relation("deal_manager", fields: [assigned_manager_id], references: [user_id], onDelete: SetNull)
   pipeline_status              PipelineStatus    @relation(fields: [pipeline_status_id], references: [pipeline_status_id], onDelete: Restrict)
+  attribution_touchpoint       AcquisitionTouchpoint? @relation("deal_attribution_touchpoint", fields: [attribution_touchpoint_id], references: [acquisition_touchpoint_id], onDelete: SetNull)
   projects                     Project[]
   calendar_events              CalendarEvent[]
   attachments_files            AttachmentFile[]
@@ -426,12 +434,143 @@ model Deal {
   tasks                        Task[]
   consultations                Consultation[]
   proposals                    Proposal[]
+  conversion_events            ConversionEvent[]
 
   @@index([lead_id])
+  @@index([attribution_touchpoint_id])
   @@index([client_id])
   @@index([assigned_manager_id])
   @@index([pipeline_status_id])
   @@map("deals")
+}
+
+model AcquisitionTouchpoint {
+  acquisition_touchpoint_id  String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id                    String?                    @db.Uuid
+  client_id                  String?                    @db.Uuid
+  gclid                      String?                    @db.Text
+  gbraid                     String?                    @db.Text
+  wbraid                     String?                    @db.Text
+  landing_page               String?                    @db.Text
+  utm_source                 String?                    @db.VarChar(255)
+  utm_medium                 String?                    @db.VarChar(255)
+  utm_campaign               String?                    @db.VarChar(255)
+  utm_term                   String?                    @db.VarChar(255)
+  utm_content                String?                    @db.VarChar(255)
+  session_attributes         Json?
+  captured_at                DateTime                   @default(now()) @db.Timestamptz(6)
+  created_at                 DateTime                   @default(now()) @db.Timestamptz(6)
+  lead                       Lead?                      @relation(fields: [lead_id], references: [lead_id], onDelete: SetNull)
+  client                     Client?                    @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
+  attributed_deals           Deal[]                     @relation("deal_attribution_touchpoint")
+  conversion_events          ConversionEvent[]
+  
+  @@index([lead_id])
+  @@index([client_id])
+  @@index([captured_at])
+  @@map("acquisition_touchpoints")
+}
+
+model ConsentSnapshot {
+  consent_snapshot_id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id                   String?   @db.Uuid
+  client_id                 String?   @db.Uuid
+  ad_user_data              String    @default("UNKNOWN") @db.VarChar(30)
+  ad_personalization        String    @default("UNKNOWN") @db.VarChar(30)
+  audience_marketing_eligible Boolean @default(false)
+  source                    String?   @db.VarChar(100)
+  policy_version            String?   @db.VarChar(100)
+  effective_at              DateTime  @default(now()) @db.Timestamptz(6)
+  created_at                DateTime  @default(now())
+  lead                      Lead?     @relation(fields: [lead_id], references: [lead_id], onDelete: SetNull)
+  client                    Client?   @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
+  
+  @@index([lead_id])
+  @@index([client_id])
+  @@index([effective_at])
+  @@map("consent_snapshots")
+}
+
+model GoogleAdsIntegrationSetting {
+  setting_key                 String    @id @default("default") @db.VarChar(40)
+  upload_enabled              Boolean   @default(false)
+  validate_only               Boolean   @default(true)
+  cloud_project_id            String?   @db.VarChar(64)
+  conversion_owner_customer_id String?   @db.VarChar(64)
+  login_customer_id            String?   @db.VarChar(64)
+  qualified_lead_action_id    String?   @db.VarChar(64)
+  converted_lead_action_id    String?   @db.VarChar(64)
+  qualification_rules         Json?
+  sale_milestone              String    @default("CLOSED_WON") @db.VarChar(60)
+  value_basis                 String    @default("ACTUAL_SALE_REVENUE") @db.VarChar(60)
+  conversion_unit             String    @default("DEAL") @db.VarChar(40)
+  currency_policy             String    @default("DEAL_CURRENCY") @db.VarChar(40)
+  attribution_policy          String    @default("DEAL_SELECTED_TOUCHPOINT") @db.VarChar(60)
+  reopened_deal_policy        String    @default("SAME_TRANSACTION") @db.VarChar(60)
+  bidding_goal                String?   @db.VarChar(60)
+  audience_rules              Json?
+  rule_version                String    @default("v1") @db.VarChar(40)
+  created_at                  DateTime  @default(now())
+  updated_at                  DateTime  @updatedAt
+
+  @@map("google_ads_integration_settings")
+}
+
+model ConversionEvent {
+  conversion_event_id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id                     String?  @db.Uuid
+  client_id                   String?  @db.Uuid
+  deal_id                     String?  @db.Uuid
+  business_object_type        String   @db.VarChar(50)
+  business_object_id          String   @db.VarChar(191)
+  event_type                  String   @db.VarChar(50)
+  occurred_at                 DateTime @db.Timestamptz(6)
+  event_source                String   @db.VarChar(30)
+  conversion_value            Decimal? @db.Decimal(14, 2)
+  currency                    String   @db.VarChar(3)
+  attribution_touchpoint_id   String?  @db.Uuid
+  transaction_id              String   @unique @db.VarChar(191)
+  rule_version                String   @db.VarChar(40)
+  payload_snapshot            Json?
+  created_at                  DateTime @default(now())
+  lead                        Lead?    @relation(fields: [lead_id], references: [lead_id], onDelete: SetNull)
+  client                      Client?  @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
+  deal                        Deal?    @relation(fields: [deal_id], references: [deal_id], onDelete: SetNull)
+  attribution_touchpoint      AcquisitionTouchpoint? @relation(fields: [attribution_touchpoint_id], references: [acquisition_touchpoint_id], onDelete: SetNull)
+  upload_outboxes             ConversionUploadOutbox[]
+
+  @@unique([business_object_type, business_object_id, event_type])
+  @@index([lead_id])
+  @@index([client_id])
+  @@index([deal_id])
+  @@index([attribution_touchpoint_id])
+  @@index([event_type, occurred_at])
+  @@map("conversion_events")
+}
+
+model ConversionUploadOutbox {
+  conversion_upload_outbox_id String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversion_event_id         String     @db.Uuid
+  destination_account_id      String     @db.VarChar(64)
+  action_id                   String     @db.VarChar(64)
+  transaction_id              String     @db.VarChar(191)
+  payload_version             Int        @default(1)
+  payload_snapshot            Json?
+  attempts                    Int        @default(0)
+  next_retry_at               DateTime   @default(now()) @db.Timestamptz(6)
+  submitted_at                DateTime?
+  request_id                  String?    @db.VarChar(191)
+  processing_status           String     @default("queued") @db.VarChar(40)
+  field_warnings              Json?
+  last_error                  Json?
+  created_at                  DateTime   @default(now())
+  updated_at                  DateTime   @updatedAt
+  conversion_event            ConversionEvent @relation(fields: [conversion_event_id], references: [conversion_event_id], onDelete: Restrict)
+
+  @@unique([destination_account_id, action_id, transaction_id])
+  @@index([conversion_event_id])
+  @@index([processing_status, next_retry_at])
+  @@map("conversion_upload_outbox")
 }
 
 model Project {
