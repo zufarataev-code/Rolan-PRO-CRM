@@ -1,4 +1,4 @@
--- Extended google_ads_integration_settings with Customer Match fields.
+-- Customer Match persistence is safe-by-default: disabled and Terms of Service unaccepted until owner configuration.
 ALTER TABLE "google_ads_integration_settings"
 ADD COLUMN "customer_match_enabled" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN "customer_match_user_list_id" VARCHAR(64),
