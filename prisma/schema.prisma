@@ -377,6 +377,7 @@ model Lead {
   @@index([assigned_manager_id])
   @@index([city_id])
   @@index([pipeline_status_id])
+  @@unique([external_source, external_submission_id])
   @@map("leads")
 }
 
