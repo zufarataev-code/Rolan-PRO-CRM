@@ -5,6 +5,8 @@ import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { CONSULTATION_ACCESS_ROLES } from "@/features/consultations/api";
 import { addMeasurement, getConsultationByIdForSession } from "@/features/consultations/service";
+import { withMeasurementConstructorData } from "@/features/projects/constructor";
+import { parseMeasurementConstructorInput } from "@/features/projects/constructor-request";
 
 type RouteContext = {
   params: Promise<{
@@ -56,6 +58,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         complexity_level_id?: string | null;
         notes?: string | null;
         drawing_data?: Prisma.InputJsonValue | null;
+        constructor?: unknown;
         sort_order?: number;
       }
     | null;
@@ -63,6 +66,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!body?.room_name?.trim()) {
     return apiError(400, "invalid_payload", "room_name is required.");
   }
+
+  const constructorInput = body.constructor === undefined ? null : parseMeasurementConstructorInput(body.constructor);
+  if (body.constructor !== undefined && !constructorInput) {
+    return apiError(
+      400,
+      "invalid_constructor_payload",
+      "constructor requires valid site_type and source values.",
+    );
+  }
+
+  const drawingData = constructorInput
+    ? (withMeasurementConstructorData(body.drawing_data, constructorInput) as Prisma.InputJsonValue)
+    : body.drawing_data;
 
   const measurement = await addMeasurement(auth.session, consultationId, {
     room_name: body.room_name,
@@ -79,7 +95,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     access_type: body.access_type,
     complexity_level_id: body.complexity_level_id,
     notes: body.notes,
-    drawing_data: body.drawing_data,
+    drawing_data: drawingData,
     sort_order: body.sort_order,
   });
 
