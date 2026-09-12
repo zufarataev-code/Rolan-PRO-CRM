@@ -40,6 +40,7 @@ model User {
   assigned_consultations  Consultation[]   @relation("consultation_assigned_consultant")
   managed_consultations   Consultation[]   @relation("consultation_assigned_manager")
   created_consultations   Consultation[]   @relation("consultation_created_by")
+  recorded_measurements    Measurement[]    @relation("measurement_recorded_by")
   created_proposals       Proposal[]       @relation("proposal_created_by")
   proposal_events         ProposalEvent[]  @relation("proposal_event_actor")
   updated_legacy_workspaces LegacyWorkspace[] @relation("legacy_workspace_updated_by")
@@ -172,6 +173,10 @@ model FilmCatalog {
   model_name_en                String            @db.VarChar(120)
   thickness                    String?           @db.VarChar(50)
   unit                         String            @db.VarChar(30)
+  technology_code              String?           @db.VarChar(50)
+  appearance_code              String?           @db.VarChar(50)
+  application_side             String?           @db.VarChar(30)
+  capability_tags              Json?
 
   // Оптические параметры для подбора плёнки на замере.
   // Заполняются из спецификации производителя. Пустое значение
@@ -387,6 +392,7 @@ model Client {
   service_address              String?           @db.Text
   city_id                      String?           @db.Uuid
   zip_code                     String?           @db.VarChar(20)
+  customer_type                 String?           @db.VarChar(20)
   notes                        String?           @db.Text
   created_at                   DateTime          @default(now()) @db.Timestamptz(6)
   updated_at                   DateTime          @updatedAt @db.Timestamptz(6)
@@ -515,6 +521,7 @@ model ProjectPosition {
   installer_job                InstallerJob?
   attachments_files            AttachmentFile[]
   position_addons              ProjectPositionAddon[]
+  measurements                  Measurement[]
 
   @@index([project_id])
   @@index([proposal_item_id])
@@ -787,6 +794,9 @@ model Survey {
 model Measurement {
   measurement_id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   survey_id                    String      @db.Uuid
+  project_position_id           String?     @db.Uuid
+  supersedes_measurement_id     String?     @unique @db.Uuid
+  recorded_by_user_id           String?     @db.Uuid
   room_name                    String      @db.VarChar(160)
   office_name                  String?     @db.VarChar(160)
   zone_name                    String?     @db.VarChar(160)
@@ -808,12 +818,18 @@ model Measurement {
   created_at                   DateTime    @default(now()) @db.Timestamptz(6)
   updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
   survey                       Survey      @relation(fields: [survey_id], references: [survey_id], onDelete: Cascade)
+  project_position              ProjectPosition? @relation(fields: [project_position_id], references: [position_id], onDelete: SetNull)
+  supersedes_measurement        Measurement? @relation("measurement_revisions", fields: [supersedes_measurement_id], references: [measurement_id], onDelete: SetNull)
+  measurement_revisions         Measurement[] @relation("measurement_revisions")
+  recorded_by_user              User? @relation("measurement_recorded_by", fields: [recorded_by_user_id], references: [user_id], onDelete: SetNull)
   complexity_level             ComplexityLevel? @relation(fields: [complexity_level_id], references: [complexity_level_id], onDelete: SetNull)
   recommendations              SurveyRecommendation[]
   attachments_files            AttachmentFile[]
   proposal_items               ProposalItem[]
 
   @@index([survey_id])
+  @@index([project_position_id])
+  @@index([recorded_by_user_id])
   @@index([complexity_level_id])
   @@map("measurements")
 }

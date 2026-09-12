@@ -6,16 +6,16 @@ export function normalizeSiteType(value: unknown): SiteType | null {
   const normalized = value.trim().toLowerCase().replace(/[\s_-]+/g, "_");
 
   if (["residential", "residence", "home", "house", "residential_property"].includes(normalized)) {
-    return "residential";
+    return "RESIDENTIAL";
   }
 
   if (["commercial", "business", "commercial_property"].includes(normalized)) {
-    return "commercial";
+    return "COMMERCIAL";
   }
 
   return null;
 }
 
 export function isSiteType(value: unknown): value is SiteType {
-  return value === "residential" || value === "commercial";
+  return value === "RESIDENTIAL" || value === "COMMERCIAL";
 }

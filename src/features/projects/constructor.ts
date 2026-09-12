@@ -1,6 +1,7 @@
-export type SiteType = "residential" | "commercial";
-export type MeasurementSource = "customer" | "surveyor";
-export type MeasurementVerificationStatus = "unverified" | "verified";
+export type SiteType = "RESIDENTIAL" | "COMMERCIAL";
+export type CustomerType = "B2C" | "B2B";
+export type MeasurementSource = "CUSTOMER" | "SURVEYOR_VERIFIED";
+export type MeasurementVerificationStatus = "UNVERIFIED" | "VERIFIED";
 export type OpeningType =
   | "standard_window"
   | "standard_door"
@@ -11,7 +12,7 @@ export type OpeningType =
   | "custom";
 export type GlassConstruction = "single_pane" | "double_pane_igu" | "triple_pane_igu" | "unknown";
 export type GlassTreatment = "annealed" | "heat_strengthened" | "tempered" | "unknown";
-export type SolarCompatibilityStatus = "ok" | "review" | "not_recommended";
+export type SolarCompatibilityStatus = "OK" | "REVIEW" | "NOT_RECOMMENDED";
 
 export type SelectOption<T extends string> = {
   value: T;
@@ -20,12 +21,17 @@ export type SelectOption<T extends string> = {
 };
 
 export const SITE_TYPE_OPTIONS: SelectOption<SiteType>[] = [
-  { value: "residential", label_ru: "Жилой объект", label_en: "Residential" },
-  { value: "commercial", label_ru: "Коммерческий объект", label_en: "Commercial" },
+  { value: "RESIDENTIAL", label_ru: "Жилой объект", label_en: "Residential" },
+  { value: "COMMERCIAL", label_ru: "Коммерческий объект", label_en: "Commercial" },
+];
+
+export const CUSTOMER_TYPE_OPTIONS: SelectOption<CustomerType>[] = [
+  { value: "B2C", label_ru: "B2C — частный клиент", label_en: "B2C — Consumer" },
+  { value: "B2B", label_ru: "B2B — компания / подрядчик", label_en: "B2B — Business" },
 ];
 
 export const ROOM_TEMPLATES: Record<SiteType, Array<{ key: string; label_ru: string; label_en: string }>> = {
-  residential: [
+  RESIDENTIAL: [
     { key: "living_room", label_ru: "Гостиная", label_en: "Living Room" },
     { key: "bedroom", label_ru: "Спальня", label_en: "Bedroom" },
     { key: "kitchen", label_ru: "Кухня", label_en: "Kitchen" },
@@ -34,18 +40,22 @@ export const ROOM_TEMPLATES: Record<SiteType, Array<{ key: string; label_ru: str
     { key: "office", label_ru: "Кабинет", label_en: "Office" },
     { key: "garage", label_ru: "Гараж", label_en: "Garage" },
     { key: "hallway", label_ru: "Коридор", label_en: "Hallway" },
-    { key: "entry", label_ru: "Входная зона", label_en: "Entry" },
+    { key: "entry_foyer", label_ru: "Вход / фойе", label_en: "Entry / Foyer" },
+    { key: "patio_sunroom", label_ru: "Патио / зимний сад", label_en: "Patio / Sunroom" },
     { key: "custom", label_ru: "Другое", label_en: "Custom" },
   ],
-  commercial: [
+  COMMERCIAL: [
     { key: "office", label_ru: "Офис", label_en: "Office" },
     { key: "conference_room", label_ru: "Переговорная", label_en: "Conference Room" },
     { key: "lobby", label_ru: "Лобби / ресепшен", label_en: "Lobby / Reception" },
     { key: "storefront", label_ru: "Витрина", label_en: "Storefront" },
     { key: "corridor", label_ru: "Коридор", label_en: "Corridor" },
     { key: "break_room", label_ru: "Комната отдыха", label_en: "Break Room" },
+    { key: "restroom", label_ru: "Санузел", label_en: "Restroom" },
     { key: "technical_room", label_ru: "Техническое помещение", label_en: "Technical / Utility Room" },
     { key: "warehouse_area", label_ru: "Складская зона", label_en: "Warehouse Area" },
+    { key: "server_it_room", label_ru: "Серверная / IT", label_en: "Server / IT Room" },
+    { key: "stairwell", label_ru: "Лестничная клетка", label_en: "Stairwell" },
     { key: "custom", label_ru: "Другое", label_en: "Custom" },
   ],
 };
@@ -84,8 +94,11 @@ export const SAFETY_FILM_CLASSES = [
 export type MeasurementConstructorInput = {
   site_type: SiteType;
   source: MeasurementSource;
+  opening_id?: string | null;
+  cell_id?: string | null;
   opening_type?: OpeningType;
   room_key?: string | null;
+  room_number?: string | null;
   overall_width?: number | null;
   overall_height?: number | null;
   pane_index?: number | null;
@@ -98,6 +111,8 @@ export type MeasurementConstructorInput = {
     laminated?: boolean;
     tinted?: boolean;
   };
+  room_film_id?: string | null;
+  opening_film_id?: string | null;
   film_override_id?: string | null;
 };
 
@@ -106,8 +121,11 @@ export type MeasurementConstructorDataV1 = {
   site_type: SiteType;
   source: MeasurementSource;
   verification_status: MeasurementVerificationStatus;
+  opening_id: string | null;
+  cell_id: string | null;
   opening_type: OpeningType;
   room_key: string | null;
+  room_number: string | null;
   overall_width: number | null;
   overall_height: number | null;
   pane_index: number | null;
@@ -120,6 +138,8 @@ export type MeasurementConstructorDataV1 = {
     laminated: boolean;
     tinted: boolean;
   };
+  room_film_id: string | null;
+  opening_film_id: string | null;
   film_override_id: string | null;
 };
 
@@ -128,7 +148,7 @@ export function roomTemplatesForSite(siteType: SiteType) {
 }
 
 export function verificationStatusForSource(source: MeasurementSource): MeasurementVerificationStatus {
-  return source === "surveyor" ? "verified" : "unverified";
+  return source === "SURVEYOR_VERIFIED" ? "VERIFIED" : "UNVERIFIED";
 }
 
 export function buildMeasurementConstructorData(input: MeasurementConstructorInput): MeasurementConstructorDataV1 {
@@ -137,8 +157,11 @@ export function buildMeasurementConstructorData(input: MeasurementConstructorInp
     site_type: input.site_type,
     source: input.source,
     verification_status: verificationStatusForSource(input.source),
+    opening_id: input.opening_id?.trim() || null,
+    cell_id: input.cell_id?.trim() || null,
     opening_type: input.opening_type ?? "standard_window",
     room_key: input.room_key?.trim() || null,
+    room_number: input.room_number?.trim() || null,
     overall_width: finitePositiveOrNull(input.overall_width),
     overall_height: finitePositiveOrNull(input.overall_height),
     pane_index: finitePositiveIntegerOrNull(input.pane_index),
@@ -151,6 +174,8 @@ export function buildMeasurementConstructorData(input: MeasurementConstructorInp
       laminated: Boolean(input.glass?.laminated),
       tinted: Boolean(input.glass?.tinted),
     },
+    room_film_id: input.room_film_id?.trim() || null,
+    opening_film_id: input.opening_film_id?.trim() || null,
     film_override_id: input.film_override_id?.trim() || null,
   };
 }
@@ -177,18 +202,20 @@ export function parseMeasurementConstructorData(drawingData: unknown): Measureme
   }
 
   const raw = drawingData.constructor_v1;
-  if (raw.version !== 1 || (raw.site_type !== "residential" && raw.site_type !== "commercial")) {
-    return null;
-  }
-  if (raw.source !== "customer" && raw.source !== "surveyor") {
+  const siteType = normalizeConstructorSiteType(raw.site_type);
+  const source = normalizeConstructorSource(raw.source);
+  if (raw.version !== 1 || !siteType || !source) {
     return null;
   }
 
   return buildMeasurementConstructorData({
-    site_type: raw.site_type,
-    source: raw.source,
+    site_type: siteType,
+    source,
+    opening_id: stringOrNull(raw.opening_id),
+    cell_id: stringOrNull(raw.cell_id),
     opening_type: isOpeningType(raw.opening_type) ? raw.opening_type : "standard_window",
     room_key: stringOrNull(raw.room_key),
+    room_number: stringOrNull(raw.room_number),
     overall_width: numberOrNull(raw.overall_width),
     overall_height: numberOrNull(raw.overall_height),
     pane_index: numberOrNull(raw.pane_index),
@@ -203,6 +230,8 @@ export function parseMeasurementConstructorData(drawingData: unknown): Measureme
           tinted: Boolean(raw.glass.tinted),
         }
       : undefined,
+    room_film_id: stringOrNull(raw.room_film_id),
+    opening_film_id: stringOrNull(raw.opening_film_id),
     film_override_id: stringOrNull(raw.film_override_id),
   });
 }
@@ -219,7 +248,7 @@ export function resolveEffectiveFilm(input: FilmInheritanceInput) {
     ["pane", input.pane_film_id],
     ["opening", input.opening_film_id],
     ["room", input.room_film_id],
-    ["project", input.project_film_id],
+    ["service", input.project_film_id],
   ] as const;
 
   for (const [source, filmId] of levels) {
@@ -291,7 +320,7 @@ export function evaluateSolarCompatibility(input: SolarCompatibilityInput): Sola
 
   if (reasons.includes("restricted_orientation") || reasons.includes("glass_not_allowed")) {
     return {
-      status: "not_recommended",
+      status: "NOT_RECOMMENDED",
       reason_codes: reasons,
       note_ru: input.selection_note_ru?.trim() || null,
     };
@@ -301,7 +330,7 @@ export function evaluateSolarCompatibility(input: SolarCompatibilityInput): Sola
   if (input.requires_review) reasons.push("film_requires_review");
 
   return {
-    status: reasons.length > 0 ? "review" : "ok",
+    status: reasons.length > 0 ? "REVIEW" : "OK",
     reason_codes: reasons,
     note_ru: input.selection_note_ru?.trim() || null,
   };
@@ -351,6 +380,18 @@ function stringOrNull(value: unknown) {
 
 function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function normalizeConstructorSiteType(value: unknown): SiteType | null {
+  if (value === "RESIDENTIAL" || value === "residential") return "RESIDENTIAL";
+  if (value === "COMMERCIAL" || value === "commercial") return "COMMERCIAL";
+  return null;
+}
+
+function normalizeConstructorSource(value: unknown): MeasurementSource | null {
+  if (value === "CUSTOMER" || value === "customer") return "CUSTOMER";
+  if (value === "SURVEYOR_VERIFIED" || value === "surveyor") return "SURVEYOR_VERIFIED";
+  return null;
 }
 
 function isOpeningType(value: unknown): value is OpeningType {

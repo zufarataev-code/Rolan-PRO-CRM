@@ -15,8 +15,8 @@ import {
 } from "./constructor";
 
 test("site type controls room templates independently of client type", () => {
-  const residential = roomTemplatesForSite("residential").map((room) => room.key);
-  const commercial = roomTemplatesForSite("commercial").map((room) => room.key);
+  const residential = roomTemplatesForSite("RESIDENTIAL").map((room) => room.key);
+  const commercial = roomTemplatesForSite("COMMERCIAL").map((room) => room.key);
 
   assert.ok(residential.includes("living_room"));
   assert.ok(residential.includes("bedroom"));
@@ -26,22 +26,22 @@ test("site type controls room templates independently of client type", () => {
 });
 
 test("measurement source deterministically controls verification status", () => {
-  assert.equal(verificationStatusForSource("customer"), "unverified");
-  assert.equal(verificationStatusForSource("surveyor"), "verified");
+  assert.equal(verificationStatusForSource("CUSTOMER"), "UNVERIFIED");
+  assert.equal(verificationStatusForSource("SURVEYOR_VERIFIED"), "VERIFIED");
 
-  const customer = buildMeasurementConstructorData({ site_type: "residential", source: "customer" });
-  const surveyor = buildMeasurementConstructorData({ site_type: "commercial", source: "surveyor" });
+  const customer = buildMeasurementConstructorData({ site_type: "RESIDENTIAL", source: "CUSTOMER" });
+  const surveyor = buildMeasurementConstructorData({ site_type: "COMMERCIAL", source: "SURVEYOR_VERIFIED" });
 
-  assert.equal(customer.verification_status, "unverified");
-  assert.equal(surveyor.verification_status, "verified");
+  assert.equal(customer.verification_status, "UNVERIFIED");
+  assert.equal(surveyor.verification_status, "VERIFIED");
 });
 
 test("constructor metadata preserves legacy drawing data instead of replacing it", () => {
   const result = withMeasurementConstructorData(
     { shape: "trapezoid", points: [1, 2, 3] },
     {
-      site_type: "residential",
-      source: "customer",
+      site_type: "RESIDENTIAL",
+      source: "CUSTOMER",
       opening_type: "french_door",
       removal_required: true,
       glass: { construction: "double_pane_igu", treatment: "tempered", low_e: true },
@@ -78,7 +78,7 @@ test("film inheritance resolves the most specific override", () => {
 
   assert.deepEqual(resolveEffectiveFilm({ project_film_id: "film-project" }), {
     film_id: "film-project",
-    source: "project",
+    source: "service",
   });
 });
 
@@ -142,7 +142,7 @@ test("solar compatibility is catalog-driven and conservative for unknown glass",
       tinted: false,
     },
   });
-  assert.equal(blockedOrientation.status, "not_recommended");
+  assert.equal(blockedOrientation.status, "NOT_RECOMMENDED");
   assert.ok(blockedOrientation.reason_codes.includes("restricted_orientation"));
 
   const unknownGlass = evaluateSolarCompatibility({
@@ -156,7 +156,7 @@ test("solar compatibility is catalog-driven and conservative for unknown glass",
       tinted: false,
     },
   });
-  assert.equal(unknownGlass.status, "review");
+  assert.equal(unknownGlass.status, "REVIEW");
   assert.ok(unknownGlass.reason_codes.includes("glass_unknown"));
 
   const allowed = evaluateSolarCompatibility({
@@ -171,5 +171,5 @@ test("solar compatibility is catalog-driven and conservative for unknown glass",
       tinted: false,
     },
   });
-  assert.equal(allowed.status, "ok");
+  assert.equal(allowed.status, "OK");
 });

@@ -7,7 +7,6 @@ import { CONSULTATION_ACCESS_ROLES } from "@/features/consultations/api";
 import { addMeasurement, getConsultationByIdForSession } from "@/features/consultations/service";
 import { withMeasurementConstructorData } from "@/features/projects/constructor";
 import { parseMeasurementConstructorInput } from "@/features/projects/constructor-request";
-import { syncMeasurementConstructorMetadata } from "@/features/projects/measurement-metadata";
 
 type RouteContext = {
   params: Promise<{
@@ -97,15 +96,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     complexity_level_id: body.complexity_level_id,
     notes: body.notes,
     drawing_data: drawingData,
+    measurement_source: constructorInput?.source ?? null,
     sort_order: body.sort_order,
   });
 
   if (!measurement) {
     return apiError(404, "not_found", "Consultation or survey was not found.");
-  }
-
-  if (constructorInput) {
-    await syncMeasurementConstructorMetadata(measurement.measurement_id, constructorInput.source);
   }
 
   return apiSuccess({
