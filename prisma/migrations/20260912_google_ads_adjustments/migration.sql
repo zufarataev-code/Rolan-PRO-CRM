@@ -28,7 +28,7 @@ CREATE TABLE "conversion_adjustment_outbox" (
     "processing_status" VARCHAR(40) NOT NULL DEFAULT 'queued',
     "attempts" INTEGER NOT NULL DEFAULT 0,
     "next_retry_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "submitted_at" TIMESTAMPTZ(6),
+    "submitted_at" TIMESTAMP(3),
     "request_id" VARCHAR(191),
     "last_error" JSONB,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
