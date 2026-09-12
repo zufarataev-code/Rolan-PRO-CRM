@@ -20,6 +20,8 @@ export function serializeMeasurement(
     orientation: string | null;
     access_type: string | null;
     notes: string | null;
+    measurement_source: string | null;
+    verification_status: string | null;
     drawing_data: unknown;
     sort_order: number;
     complexity_level:
@@ -55,6 +57,8 @@ export function serializeMeasurement(
     orientation: measurement.orientation,
     access_type: measurement.access_type,
     notes: measurement.notes,
+    measurement_source: measurement.measurement_source,
+    verification_status: measurement.verification_status,
     drawing_data: measurement.drawing_data,
     constructor: parseMeasurementConstructorData(measurement.drawing_data),
     sort_order: measurement.sort_order,
