@@ -15631,6 +15631,7 @@ function openProposalRegistryRecord(localToken, canonicalId) {
 }
 
 function renderProposalsRegistry() {
+  if (window.innerWidth <= 768) return renderMobileProposals();
   if (!Array.isArray(state.proposalsRegistry) && !state.proposalsRegistryLoading && !state.proposalsRegistryError) {
     setTimeout(() => loadProposalsRegistry(), 0);
   }
@@ -15697,7 +15698,7 @@ function renderProposalsRegistry() {
                 <div class="text-xs text-gray-500 mt-0.5">${academyEsc(record.title)}${record.local?.version ? ` · v${record.local.version}` : ''}</div>
               </button>
             </td>
-            <td class="p-3"><div class="font-semibold text-slate-800">${academyEsc(record.clientName)}</div><div class="text-xs text-gray-500 mt-0.5">${academyEsc(contact || 'контакт не указан')}</div></td>
+            <td class="p-3"><div class="font-semibold text-slate-800"><!-- Начало отображения клинта -->${academyEsc(record.clientName)}</div><div class="text-xs text-gray-500 mt-0.5">${academyEsc(contact || 'контакт не указан')}</div></td>
             <td class="p-3">${academyEsc(record.manager?.name || '—')}</td>
             <td class="p-3"><span class="status-badge ${status.cls}">${status.label}</span></td>
             <td class="p-3 whitespace-nowrap">${fmtDateTime(record.sentAt)}</td>
@@ -15710,7 +15711,7 @@ function renderProposalsRegistry() {
             </div></td>
           </tr>`;
         }).join('')}</tbody>
-      </table></div>` : `<div class="empty-state p-8"><div class="icon">📄</div><div>${all.length ? 'По этому фильтру КП нет.' : 'КП пока нет. Создайте его из карточки заказа после замера.'}</div></div>`}
+      </table></div>` : `<div class="empty-state p-8"><div class="icon">📄</div><div>${all.length ? 'По этому фильтру КП нет.' : 'КП пока нет. Создайте его из карточки заказа после замера.'}</div></div>`} <!-- Конец списка КП -->
     </div>
   </div>`;
 }
