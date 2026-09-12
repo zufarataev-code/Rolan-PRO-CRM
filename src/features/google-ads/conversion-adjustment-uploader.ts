@@ -197,21 +197,6 @@ export async function processNextConversionAdjustmentUpload() {
   const job = await claimNextAdjustmentOutbox();
   if (!job) return { status: "idle" as const };
 
-  const developerToken = trimOrNull(process.env.GOOGLE_ADS_DEVELOPER_TOKEN);
-  if (!developerToken) {
-    await prisma.conversionAdjustmentOutbox.update({
-      where: { conversion_adjustment_outbox_id: job.conversion_adjustment_outbox_id },
-      data: {
-        processing_status: "needs_operator_action",
-        last_error: {
-          code: "google_ads_developer_token_missing",
-          message: "Google Ads developer token is not configured.",
-        },
-      },
-    });
-    return { status: "needs_operator_action" as const, outboxId: job.conversion_adjustment_outbox_id };
-  }
-
   const adjustment = job.conversion_adjustment;
   let requestBody: ReturnType<typeof buildGoogleAdsAdjustmentRequest>;
   try {
@@ -245,8 +230,12 @@ export async function processNextConversionAdjustmentUpload() {
     const headers: Record<string, string> = {
       authorization: `Bearer ${accessToken}`,
       "content-type": "application/json",
-      "developer-token": developerToken,
     };
+    // Developer tokens were sunset on 2026-09-09. Older deployments may still
+    // provide one; Google currently accepts and ignores the header, so sending it
+    // remains harmless during migration but it is no longer a runtime requirement.
+    const legacyDeveloperToken = trimOrNull(process.env.GOOGLE_ADS_DEVELOPER_TOKEN);
+    if (legacyDeveloperToken) headers["developer-token"] = legacyDeveloperToken;
     const loginCustomerId = trimOrNull(settings?.login_customer_id ?? process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID);
     if (loginCustomerId) headers["login-customer-id"] = normalizeNumericGoogleId(loginCustomerId);
 
