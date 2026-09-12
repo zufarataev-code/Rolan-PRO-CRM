@@ -42,9 +42,14 @@ export async function GET(request: NextRequest) {
     customer_match_terms_accepted: settings?.customer_match_terms_accepted ?? false,
     credentials: {
       developer_token_configured: Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim()),
-      oauth_refresh_token_configured: Boolean(process.env.GOOGLE_ADS_REFRESH_TOKEN?.trim()),
+      oauth_refresh_token_configured: Boolean(
+        process.env.GOOGLE_ADS_OAUTH_CLIENT_ID?.trim() &&
+          process.env.GOOGLE_ADS_OAUTH_CLIENT_SECRET?.trim() &&
+          process.env.GOOGLE_ADS_OAUTH_REFRESH_TOKEN?.trim(),
+      ),
       service_account_configured: Boolean(
-        process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim() && process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.trim(),
+        process.env.GOOGLE_ADS_SERVICE_ACCOUNT_EMAIL?.trim() &&
+          process.env.GOOGLE_ADS_SERVICE_ACCOUNT_PRIVATE_KEY?.trim(),
       ),
     },
   });
