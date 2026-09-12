@@ -49,6 +49,8 @@ test("server injects a mobile-only Orders card adapter into the canonical legacy
   assert.match(result, /word-break: normal/);
   assert.match(result, /writing-mode: horizontal-tb/);
   assert.match(result, /MutationObserver/);
+  assert.match(result, /rolanpro-mobile-workspace-style/);
+  assert.match(result, /@media \(max-width: 768px\)/);
   assert.match(result, /cloudBoot\(\)/);
 });
 
