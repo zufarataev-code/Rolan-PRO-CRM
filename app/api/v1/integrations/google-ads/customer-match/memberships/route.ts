@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 
+import { queueStoredCustomerMatchRemoval } from "@/features/google-ads/customer-match-cleanup";
 import {
   CustomerMatchValidationError,
+  normalizeCustomerMatchDesiredState,
   setCustomerMatchMembershipDesiredState,
 } from "@/features/google-ads/customer-match";
 import { ROLE_CODES } from "@/lib/auth/constants";
@@ -39,12 +41,39 @@ export async function POST(request: NextRequest) {
     return apiError(400, "desired_state_required", "desired_state is required.");
   }
 
+  const subjectType = body.subject_type.trim().toLowerCase();
+  if (subjectType !== "lead" && subjectType !== "client") {
+    return apiError(400, "invalid_subject_type", "subject_type must be lead or client.");
+  }
+  const subjectId = body.subject_id.trim();
+  if (!subjectId) {
+    return apiError(400, "subject_id_required", "subject_id is required.");
+  }
+
   try {
+    const desiredState = normalizeCustomerMatchDesiredState(body.desired_state);
+
+    if (desiredState === "REMOVED") {
+      const cleanup = await prisma.$transaction((tx) =>
+        queueStoredCustomerMatchRemoval(tx, subjectType, subjectId),
+      );
+      const membership = cleanup.memberships[0] ?? null;
+      return apiSuccess({
+        customer_match_membership_id: membership?.customer_match_membership_id ?? null,
+        subject_type: subjectType,
+        subject_id: subjectId,
+        desired_state: "REMOVED",
+        applied_state: membership?.applied_state ?? null,
+        queued_outbox_ids: cleanup.queuedOutboxIds,
+        no_op: cleanup.memberships.length === 0,
+      });
+    }
+
     const result = await prisma.$transaction((tx) =>
       setCustomerMatchMembershipDesiredState(tx, {
-        subjectType: body.subject_type as string,
-        subjectId: body.subject_id as string,
-        desiredState: body.desired_state as string,
+        subjectType,
+        subjectId,
+        desiredState,
       }),
     );
 
@@ -55,6 +84,7 @@ export async function POST(request: NextRequest) {
       desired_state: result.membership.desired_state,
       applied_state: result.membership.applied_state,
       queued_outbox_ids: result.queuedOutboxIds,
+      no_op: false,
     });
   } catch (cause) {
     if (cause instanceof CustomerMatchValidationError) {
