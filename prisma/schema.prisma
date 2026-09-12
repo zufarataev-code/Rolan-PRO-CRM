@@ -355,6 +355,8 @@ model Lead {
   phone                        String?           @db.VarChar(40)
   email                        String?           @db.VarChar(191)
   source                       String?           @db.VarChar(120)
+  external_source              String?           @db.VarChar(60)
+  external_submission_id       String?           @db.VarChar(191)
   pipeline_status_id           String            @db.Uuid
   city_id                      String?           @db.Uuid
   assigned_manager_id          String?           @db.Uuid
