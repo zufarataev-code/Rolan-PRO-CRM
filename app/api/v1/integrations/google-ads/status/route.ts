@@ -3,7 +3,9 @@ import { NextRequest } from "next/server";
 import {
   GOOGLE_ADS_CONVERTED_LEAD_EVENT,
   GOOGLE_ADS_DEFAULT_SETTING_KEY,
+  GOOGLE_ADS_QUALIFIED_LEAD_EVENT,
 } from "@/features/google-ads/conversion-events";
+import { readQualificationStageFromRules } from "@/features/google-ads/settings";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { requireRequestSession } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
@@ -19,7 +21,19 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const [settings, statusGroups, awaitingConfiguration, oldestPending, recentProblems] = await Promise.all([
+  const [
+    settings,
+    conversionStatusGroups,
+    awaitingConvertedConfiguration,
+    awaitingQualifiedConfiguration,
+    oldestPending,
+    recentProblems,
+    adjustmentStatusGroups,
+    customerMatchStatusGroups,
+    customerMatchMembershipGroups,
+    latestCost,
+    costRowCount,
+  ] = await Promise.all([
     prisma.googleAdsIntegrationSetting.findUnique({
       where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
       select: {
@@ -30,6 +44,10 @@ export async function GET(request: NextRequest) {
         login_customer_id: true,
         qualified_lead_action_id: true,
         converted_lead_action_id: true,
+        qualification_rules: true,
+        customer_match_enabled: true,
+        customer_match_user_list_id: true,
+        customer_match_terms_accepted: true,
         sale_milestone: true,
         value_basis: true,
         rule_version: true,
@@ -43,6 +61,12 @@ export async function GET(request: NextRequest) {
     prisma.conversionEvent.count({
       where: {
         event_type: GOOGLE_ADS_CONVERTED_LEAD_EVENT,
+        upload_outboxes: { none: {} },
+      },
+    }),
+    prisma.conversionEvent.count({
+      where: {
+        event_type: GOOGLE_ADS_QUALIFIED_LEAD_EVENT,
         upload_outboxes: { none: {} },
       },
     }),
@@ -74,11 +98,44 @@ export async function GET(request: NextRequest) {
         updated_at: true,
       },
     }),
+    prisma.conversionAdjustmentOutbox.groupBy({
+      by: ["processing_status"],
+      _count: { _all: true },
+    }),
+    prisma.customerMatchOutbox.groupBy({
+      by: ["processing_status"],
+      _count: { _all: true },
+    }),
+    prisma.customerMatchMembership.groupBy({
+      by: ["desired_state", "applied_state"],
+      _count: { _all: true },
+    }),
+    prisma.googleAdsDailyCost.findFirst({
+      orderBy: [{ segments_date: "desc" }, { imported_at: "desc" }],
+      select: {
+        customer_id: true,
+        segments_date: true,
+        currency: true,
+        imported_at: true,
+      },
+    }),
+    prisma.googleAdsDailyCost.count(),
   ]);
 
-  const outbox = Object.fromEntries(
-    statusGroups.map((group) => [group.processing_status, group._count._all]),
+  const conversionOutbox = Object.fromEntries(
+    conversionStatusGroups.map((group) => [group.processing_status, group._count._all]),
   );
+  const adjustmentOutbox = Object.fromEntries(
+    adjustmentStatusGroups.map((group) => [group.processing_status, group._count._all]),
+  );
+  const customerMatchOutbox = Object.fromEntries(
+    customerMatchStatusGroups.map((group) => [group.processing_status, group._count._all]),
+  );
+  const customerMatchMemberships = customerMatchMembershipGroups.map((group) => ({
+    desired_state: group.desired_state,
+    applied_state: group.applied_state,
+    count: group._count._all,
+  }));
   const destinationConfigured = Boolean(
     settings?.conversion_owner_customer_id && settings.converted_lead_action_id,
   );
@@ -99,18 +156,50 @@ export async function GET(request: NextRequest) {
       : null,
     business_rules: settings
       ? {
+          qualification_pipeline_status_code: readQualificationStageFromRules(settings.qualification_rules),
           sale_milestone: settings.sale_milestone,
           value_basis: settings.value_basis,
           rule_version: settings.rule_version,
         }
       : null,
-    outbox,
-    awaiting_configuration: awaitingConfiguration,
-    oldest_pending: oldestPending,
-    recent_problems: recentProblems,
+    customer_match: {
+      enabled: settings?.customer_match_enabled ?? false,
+      user_list_id: settings?.customer_match_user_list_id ?? null,
+      terms_accepted: settings?.customer_match_terms_accepted ?? false,
+      outbox: customerMatchOutbox,
+      memberships: customerMatchMemberships,
+    },
+    conversions: {
+      outbox: conversionOutbox,
+      awaiting_configuration: {
+        converted_lead: awaitingConvertedConfiguration,
+        qualified_lead: awaitingQualifiedConfiguration,
+      },
+      oldest_pending: oldestPending,
+      recent_problems: recentProblems,
+    },
+    adjustments: {
+      outbox: adjustmentOutbox,
+    },
+    cost_feed: {
+      row_count: costRowCount,
+      latest: latestCost,
+    },
+    credential_presence: {
+      developer_token: Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim()),
+      oauth_refresh_token: Boolean(
+        process.env.GOOGLE_ADS_OAUTH_CLIENT_ID?.trim() &&
+          process.env.GOOGLE_ADS_OAUTH_CLIENT_SECRET?.trim() &&
+          process.env.GOOGLE_ADS_OAUTH_REFRESH_TOKEN?.trim(),
+      ),
+      service_account: Boolean(
+        process.env.GOOGLE_ADS_SERVICE_ACCOUNT_EMAIL?.trim() &&
+          process.env.GOOGLE_ADS_SERVICE_ACCOUNT_PRIVATE_KEY?.trim(),
+      ),
+    },
     diagnostics_note:
       (settings?.validate_only ?? true)
-        ? "Validate-only requests are validated but not processed; Google ingestion diagnostics are intentionally not queried."
-        : "Submitted requests may remain processing in Google before final diagnostics are available.",
+        ? "Validate-only requests are validated but not processed; live activation requires a separate explicit owner workflow."
+        : "Live uploads are enabled; submitted requests may remain processing in Google before final diagnostics are available.",
   });
 }
