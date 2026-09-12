@@ -593,7 +593,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         '<div id="rolanpro-order-parameters-panel">' +
           '<div class="rolanpro-order-parameters-head">' +
             '<div><div class="rolanpro-order-parameters-title">Параметры заказа</div>' +
-            '<div class="rolanpro-order-parameters-sub">Услуга, плёнка и сложность заказа.</div></div>' +
+            '</div>' +
             '<button type="button" class="btn-ghost" id="rp-op-close">Закрыть</button>' +
           '</div>' +
           '<div class="rolanpro-order-parameters-body">' +
@@ -611,7 +611,6 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
               '<div><label>Модель</label><select id="rp-op-material"></select></div>' +
             '</div>' +
             '<div id="rp-op-summary" class="rolanpro-order-parameters-summary"></div>' +
-            '<div class="rolanpro-params-note">Если в замерах уже вручную выбрана другая плёнка для конкретного окна, CRM её не перезапишет. Новый материал станет значением по умолчанию и заполнит только пустые окна.</div>' +
           '</div>' +
           '<div class="rolanpro-order-parameters-footer">' +
             '<button type="button" class="btn-ghost" id="rp-op-extra-service">Услуги проекта</button>' +

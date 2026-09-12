@@ -250,7 +250,8 @@ Contributors must add a row before starting substantial work and update or remov
 - Example identity is preserved exactly as `Зеркальная → Prime → NE2`; the service direction remains separate. The selected final model still resolves to one existing catalog ID.
 - Existing catalog entries are migrated in place without changing IDs. Orders save category/name/model snapshots in addition to the catalog ID so later catalog edits do not erase what was sold.
 - The same structure is available in order parameters and catalog management. Missing legacy model codes are displayed as `Модель не указана` instead of inventing a value.
-- Verification: 212 automated tests passed, including injected-script compilation and hierarchy guards; Prisma validation, TypeScript, production build, and `git diff --check` passed. Refreshed GitHub CI is required on the amended PR head.
+- Final UI correction: the same cascading fields now apply to the Solar service default and every room, opening, and cell override. The New Order form no longer contains the explanatory sidebar, workflow pills, long introductory copy, or redundant field guidance; only actionable validation messages remain.
+- Verification: 213 automated tests passed, including legacy/injected script compilation, compact-form guards, and hierarchy guards. Refreshed Prisma, TypeScript, production build, and GitHub CI checks are required on the amended PR head.
 
 ## Completion rule
 

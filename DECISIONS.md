@@ -119,8 +119,9 @@ This file records durable decisions. Current activity, blockers, and next steps 
 
 - A film is not presented or stored as one concatenated `brand — model` choice. Its business identity is three separate catalog dimensions: film category/appearance (for example `Зеркальная`), product name/line (for example `Prime`), and exact model code (for example `NE2`).
 - The service direction (`Solar`, `Smart`, `Safety`, or `Decorative`) remains a separate filter and must not be mislabeled as the film category.
-- Order creation and order parameters use cascading Category → Name → Model selectors but persist one exact catalog ID plus all three display snapshots on the order. Existing orders and catalog IDs remain valid.
+- Order creation, order parameters, the Solar service default, and room/opening/cell overrides use cascading Category → Name → Model selectors but persist one exact catalog ID plus the applicable display snapshots. Existing orders and catalog IDs remain valid.
 - Legacy catalog records are extended in place with `filmCategory`, `productName`, and `modelCode`; no second material list is created. Canonical PostgreSQL uses the corresponding FilmCatalog appearance/category, model name, and model code fields.
+- Obvious selectors must not be surrounded by instructional paragraphs. The New Order screen uses compact service cards and short field labels; explanatory copy is shown only for an actionable warning or validation failure.
 - Added to PR #169 after review of the New Order screen. Production deployment remains a separate action.
 
 ## Changing a decision

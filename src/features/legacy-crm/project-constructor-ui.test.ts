@@ -23,15 +23,20 @@ test("legacy CRM inline script remains valid JavaScript", () => {
 });
 
 test("Solar V1 UI exposes source, inheritance, French cells, glass and removal", () => {
-  assert.match(legacyCrm, /Customer · UNVERIFIED/);
-  assert.match(legacyCrm, /Surveyor · VERIFIED/);
-  assert.match(legacyCrm, /Room film override/);
-  assert.match(legacyCrm, /Opening film override/);
-  assert.match(legacyCrm, /Film override/);
-  assert.match(legacyCrm, /French Window/);
-  assert.match(legacyCrm, /French Door/);
-  assert.match(legacyCrm, /Glass construction/);
-  assert.match(legacyCrm, /Heat-strengthened/);
+  assert.match(legacyCrm, /Клиент · не проверено/);
+  assert.match(legacyCrm, /Замерщик · подтверждено/);
+  assert.match(legacyCrm, /Плёнка для помещения/);
+  assert.match(legacyCrm, /Плёнка для проёма/);
+  assert.match(legacyCrm, /Переопределить плёнку/);
+  assert.match(legacyCrm, /canonicalFilmPickerHtml/);
+  assert.match(legacyCrm, /canonicalFilmPickerChanged/);
+  assert.match(legacyCrm, /Категория<select/);
+  assert.match(legacyCrm, /Название<select/);
+  assert.match(legacyCrm, /Модель<select/);
+  assert.match(legacyCrm, /Французское окно/);
+  assert.match(legacyCrm, /Французская дверь/);
+  assert.match(legacyCrm, /Конструкция стекла/);
+  assert.match(legacyCrm, /Термоупрочнённое/);
   assert.match(legacyCrm, /Low-E/);
   assert.match(legacyCrm, /Removal/);
   assert.match(legacyCrm, /NOT RECOMMENDED/);
@@ -47,6 +52,16 @@ test("legacy catalog stores film category, product name and model separately", (
   assert.match(legacyCrm, /Категория плёнки/);
   assert.match(legacyCrm, /placeholder="Prime"/);
   assert.match(legacyCrm, /placeholder="NE2"/);
+});
+
+test("new order form stays compact without redundant guidance", () => {
+  assert.doesNotMatch(legacyCrm, /Фиксируем только ядро/);
+  assert.doesNotMatch(legacyCrm, /Сначала ищем существующего клиента/);
+  assert.doesNotMatch(legacyCrm, /Выберите одно или несколько направлений/);
+  assert.doesNotMatch(legacyCrm, /Минимум для старта/);
+  assert.doesNotMatch(legacyCrm, /Что будет после создания/);
+  assert.doesNotMatch(legacyCrm, /Что происходит дальше/);
+  assert.doesNotMatch(legacyCrm, /Допуслуги, рекомендации пленки/);
 });
 
 test("surveyor uses assigned canonical projects without finance controls", () => {
