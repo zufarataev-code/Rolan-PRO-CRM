@@ -29,6 +29,20 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
     line-height: 1.45;
   }
 
+  .rolanpro-film-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .rolanpro-film-picker-grid label {
+    display: block;
+    margin-bottom: 6px;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
   #rolanpro-order-parameters-overlay {
     position: fixed;
     inset: 0;
@@ -128,6 +142,10 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
     }
 
     .rolanpro-order-parameters-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .rolanpro-film-picker-grid {
       grid-template-columns: minmax(0, 1fr);
     }
 
@@ -277,10 +295,28 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       return db.settings.catalog;
     };
 
+    const legacyProductParts = (value) => {
+      const source = normalize(value);
+      const match = source.match(/^(.*?)\\s+([A-Z]{0,5}-?\\d+[A-Z0-9%.-]*)$/i);
+      return match ? { name: normalize(match[1]), model: normalize(match[2]) } : { name: source, model: '' };
+    };
+
+    const materialCategory = (item) => normalize(
+      item?.filmCategory || item?.appearance || item?.appearanceCode ||
+      (typeof catLabel === 'function' && item?.category ? catLabel(item.category) : item?.category) || '',
+    );
+
+    const materialName = (item) => normalize(
+      item?.productName || item?.series || legacyProductParts(item?.model).name || '',
+    );
+
+    const materialModel = (item) => normalize(
+      item?.modelCode || item?.sku || item?.code || legacyProductParts(item?.model).model || '',
+    );
+
     const materialLabel = (item) => {
       if (!item) return 'Не выбрана';
-      if (typeof catalogLabel === 'function') return catalogLabel(item);
-      return normalize((item.brand || '') + ' — ' + (item.model || '')) || 'Материал';
+      return Array.from(new Set([materialCategory(item), materialName(item), materialModel(item)].filter(Boolean))).join(' · ') || 'Материал';
     };
 
     const materialsForService = (serviceId) => {
@@ -314,16 +350,42 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       return Number.isFinite(value) && value > 0 ? value : 1;
     };
 
-    const materialOptionsHtml = (serviceId, selectedId) => {
-      const items = materialsForService(serviceId);
-      if (!items.length) {
-        return '<option value="">Нет материалов этой категории в каталоге</option>';
-      }
-      return items
-        .slice()
-        .sort((left, right) => materialLabel(left).localeCompare(materialLabel(right)))
-        .map((item) => '<option value="' + esc(item.id) + '"' + (item.id === selectedId ? ' selected' : '') + '>' + esc(materialLabel(item)) + '</option>')
-        .join('');
+    const uniqueSorted = (values) => Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+
+    const optionListHtml = (values, selected, emptyLabel) => {
+      if (!values.length) return '<option value="">' + esc(emptyLabel) + '</option>';
+      return values.map((value) => '<option value="' + esc(value) + '"' + (value === selected ? ' selected' : '') + '>' + esc(value) + '</option>').join('');
+    };
+
+    const syncMaterialPicker = ({ serviceId, categoryId, nameId, materialId, preferredId = '' }) => {
+      const categorySelect = document.getElementById(categoryId);
+      const nameSelect = document.getElementById(nameId);
+      const materialSelect = document.getElementById(materialId);
+      if (!categorySelect || !nameSelect || !materialSelect) return '';
+
+      const items = materialsForService(serviceId).slice().sort((left, right) => materialLabel(left).localeCompare(materialLabel(right)));
+      const preferred = items.find((item) => item.id === preferredId) || null;
+      const categories = uniqueSorted(items.map(materialCategory));
+      let category = preferred ? materialCategory(preferred) : categorySelect.value;
+      if (!categories.includes(category)) category = categories[0] || '';
+      categorySelect.innerHTML = optionListHtml(categories, category, 'Нет категорий');
+      categorySelect.value = category;
+
+      const categoryItems = items.filter((item) => materialCategory(item) === category);
+      const names = uniqueSorted(categoryItems.map(materialName));
+      let name = preferred && materialCategory(preferred) === category ? materialName(preferred) : nameSelect.value;
+      if (!names.includes(name)) name = names[0] || '';
+      nameSelect.innerHTML = optionListHtml(names, name, 'Нет названий');
+      nameSelect.value = name;
+
+      const modelItems = categoryItems.filter((item) => materialName(item) === name);
+      let selectedId = preferred && modelItems.some((item) => item.id === preferred.id) ? preferred.id : materialSelect.value;
+      if (!modelItems.some((item) => item.id === selectedId)) selectedId = modelItems[0]?.id || '';
+      materialSelect.innerHTML = modelItems.length
+        ? modelItems.map((item) => '<option value="' + esc(item.id) + '"' + (item.id === selectedId ? ' selected' : '') + '>' + esc(materialModel(item) || 'Модель не указана') + '</option>').join('')
+        : '<option value="">Нет моделей</option>';
+      materialSelect.value = selectedId;
+      return selectedId;
     };
 
     const complexityOptionsHtml = (selectedKey) => complexityKeys
@@ -344,19 +406,21 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
     };
 
     const refreshNewOrderMaterials = (preferredId) => {
-      const select = document.getElementById('no-material');
-      if (!select) return;
       const serviceId = document.getElementById('no-svc')?.value || (typeof state !== 'undefined' ? state._newOrderService : '') || 'smart_film';
       const items = materialsForService(serviceId);
-      const current = preferredId || select.value || (typeof state !== 'undefined' ? state._newOrderMaterial : '') || '';
-      const selected = items.some((item) => item.id === current) ? current : (items[0]?.id || '');
-      select.innerHTML = materialOptionsHtml(serviceId, selected);
-      if (selected) select.value = selected;
+      const current = preferredId || (typeof state !== 'undefined' ? state._newOrderMaterial : '') || '';
+      const selected = syncMaterialPicker({
+        serviceId,
+        categoryId: 'no-film-category',
+        nameId: 'no-film-name',
+        materialId: 'no-material',
+        preferredId: current,
+      });
       if (typeof state !== 'undefined') state._newOrderMaterial = selected;
       const note = document.getElementById('rolanpro-new-order-material-note');
       if (note) {
         note.textContent = items.length
-          ? 'Источник: единый каталог CRM. Выбранная плёнка станет материалом заказа и значением по умолчанию для новых замеров.'
+          ? 'Выбранная модель станет материалом заказа и значением по умолчанию для новых замеров.'
           : 'Для этого направления в каталоге пока нет материала. Добавьте позицию в Каталог, затем вернитесь в заказ.';
       }
     };
@@ -375,15 +439,34 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         section.className = 'erp-intake-card';
         section.innerHTML =
           '<div class="erp-intake-card-head"><div>' +
-            '<div class="erp-intake-card-title">Плёнка / материал <span class="order-required">*</span></div>' +
-            '<div class="erp-intake-helper">Выберите конкретную позицию из каталога ROLANPRO. Никакого второго списка материалов.</div>' +
+            '<div class="erp-intake-card-title">Плёнка <span class="order-required">*</span></div>' +
+            '<div class="erp-intake-helper">Категория, название и модель выбираются отдельно.</div>' +
           '</div></div>' +
-          '<div><label class="text-xs">Материал</label><select id="no-material"></select>' +
+          '<div class="rolanpro-film-picker-grid">' +
+            '<div><label>Категория</label><select id="no-film-category"></select></div>' +
+            '<div><label>Название</label><select id="no-film-name"></select></div>' +
+            '<div><label>Модель</label><select id="no-material"></select></div>' +
+          '</div>' +
+          '<div>' +
           '<div id="rolanpro-new-order-material-note" class="rolanpro-material-note"></div></div>';
 
         if (serviceSection?.parentElement) serviceSection.insertAdjacentElement('afterend', section);
         else modal.appendChild(section);
 
+        section.querySelector('#no-film-category')?.addEventListener('change', () => {
+          const nameSelect = document.getElementById('no-film-name');
+          const materialSelect = document.getElementById('no-material');
+          if (nameSelect) nameSelect.value = '';
+          if (materialSelect) materialSelect.value = '';
+          if (typeof state !== 'undefined') state._newOrderMaterial = '';
+          refreshNewOrderMaterials();
+        });
+        section.querySelector('#no-film-name')?.addEventListener('change', () => {
+          const materialSelect = document.getElementById('no-material');
+          if (materialSelect) materialSelect.value = '';
+          if (typeof state !== 'undefined') state._newOrderMaterial = '';
+          refreshNewOrderMaterials();
+        });
         section.querySelector('#no-material')?.addEventListener('change', (event) => {
           if (typeof state !== 'undefined') state._newOrderMaterial = event.target.value || '';
         });
@@ -428,10 +511,16 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
           const material = catalogList().find((item) => item.id === materialId) || null;
           createdOrder.materialCatalogId = material?.id || '';
           createdOrder.materialLabel = material ? materialLabel(material) : '';
+          createdOrder.materialCategory = material ? materialCategory(material) : '';
+          createdOrder.materialName = material ? materialName(material) : '';
+          createdOrder.materialModel = material ? materialModel(material) : '';
           createdOrder.complexityCoef = complexityCoef(complexityKey);
           createdOrder.orderBuilder = createdOrder.orderBuilder || {};
           createdOrder.orderBuilder.materialId = material?.id || '';
           createdOrder.orderBuilder.materialLabel = material ? materialLabel(material) : '';
+          createdOrder.orderBuilder.materialCategory = material ? materialCategory(material) : '';
+          createdOrder.orderBuilder.materialName = material ? materialName(material) : '';
+          createdOrder.orderBuilder.materialModel = material ? materialModel(material) : '';
           createdOrder.orderBuilder.complexity = complexityKey;
           createdOrder.orderBuilder.complexityCoef = complexityCoef(complexityKey);
           createdOrder.timeline = Array.isArray(createdOrder.timeline) ? createdOrder.timeline : [];
@@ -457,14 +546,15 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
 
     const refreshParameterMaterialSelect = (preferredId) => {
       const serviceSelect = document.getElementById('rp-op-service');
-      const materialSelect = document.getElementById('rp-op-material');
-      if (!serviceSelect || !materialSelect) return;
+      if (!serviceSelect) return;
       const serviceId = serviceSelect.value || 'smart_film';
-      const items = materialsForService(serviceId);
-      const current = preferredId || materialSelect.value || '';
-      const selected = items.some((item) => item.id === current) ? current : (items[0]?.id || '');
-      materialSelect.innerHTML = materialOptionsHtml(serviceId, selected);
-      if (selected) materialSelect.value = selected;
+      syncMaterialPicker({
+        serviceId,
+        categoryId: 'rp-op-film-category',
+        nameId: 'rp-op-film-name',
+        materialId: 'rp-op-material',
+        preferredId,
+      });
       refreshParametersSummary();
     };
 
@@ -504,7 +594,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         '<div id="rolanpro-order-parameters-panel">' +
           '<div class="rolanpro-order-parameters-head">' +
             '<div><div class="rolanpro-order-parameters-title">Параметры заказа</div>' +
-            '<div class="rolanpro-order-parameters-sub">Услуга, конкретная плёнка и сложность — в одном месте. Материал берётся из единого каталога CRM.</div></div>' +
+            '<div class="rolanpro-order-parameters-sub">Услуга, плёнка и сложность заказа.</div></div>' +
             '<button type="button" class="btn-ghost" id="rp-op-close">Закрыть</button>' +
           '</div>' +
           '<div class="rolanpro-order-parameters-body">' +
@@ -512,12 +602,14 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
               '<div class="rolanpro-order-parameters-field"><label>Основная услуга</label>' +
                 '<select id="rp-op-service">' + services.map((service) => '<option value="' + esc(service.id) + '"' + (service.id === currentServiceId ? ' selected' : '') + '>' + esc(service.title) + '</option>').join('') + '</select>' +
               '</div>' +
-              '<div class="rolanpro-order-parameters-field"><label>Плёнка / материал</label>' +
-                '<select id="rp-op-material">' + materialOptionsHtml(currentServiceId, currentMaterialId) + '</select>' +
-              '</div>' +
               '<div class="rolanpro-order-parameters-field"><label>Сложность / коэффициент</label>' +
                 '<select id="rp-op-complexity">' + complexityOptionsHtml(currentComplexity) + '</select>' +
               '</div>' +
+            '</div>' +
+            '<div class="rolanpro-film-picker-grid">' +
+              '<div><label>Категория плёнки</label><select id="rp-op-film-category"></select></div>' +
+              '<div><label>Название</label><select id="rp-op-film-name"></select></div>' +
+              '<div><label>Модель</label><select id="rp-op-material"></select></div>' +
             '</div>' +
             '<div id="rp-op-summary" class="rolanpro-order-parameters-summary"></div>' +
             '<div class="rolanpro-params-note">Если в замерах уже вручную выбрана другая плёнка для конкретного окна, CRM её не перезапишет. Новый материал станет значением по умолчанию и заполнит только пустые окна.</div>' +
@@ -538,7 +630,27 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
 
       document.getElementById('rp-op-close')?.addEventListener('click', window.closeRolanProOrderParameters);
       document.getElementById('rp-op-cancel')?.addEventListener('click', window.closeRolanProOrderParameters);
-      document.getElementById('rp-op-service')?.addEventListener('change', () => refreshParameterMaterialSelect());
+      document.getElementById('rp-op-service')?.addEventListener('change', () => {
+        const categorySelect = document.getElementById('rp-op-film-category');
+        const nameSelect = document.getElementById('rp-op-film-name');
+        const materialSelect = document.getElementById('rp-op-material');
+        if (categorySelect) categorySelect.value = '';
+        if (nameSelect) nameSelect.value = '';
+        if (materialSelect) materialSelect.value = '';
+        refreshParameterMaterialSelect();
+      });
+      document.getElementById('rp-op-film-category')?.addEventListener('change', () => {
+        const nameSelect = document.getElementById('rp-op-film-name');
+        const materialSelect = document.getElementById('rp-op-material');
+        if (nameSelect) nameSelect.value = '';
+        if (materialSelect) materialSelect.value = '';
+        refreshParameterMaterialSelect();
+      });
+      document.getElementById('rp-op-film-name')?.addEventListener('change', () => {
+        const materialSelect = document.getElementById('rp-op-material');
+        if (materialSelect) materialSelect.value = '';
+        refreshParameterMaterialSelect();
+      });
       document.getElementById('rp-op-material')?.addEventListener('change', refreshParametersSummary);
       document.getElementById('rp-op-complexity')?.addEventListener('change', refreshParametersSummary);
       document.getElementById('rp-op-save')?.addEventListener('click', () => window.saveRolanProOrderParameters(id));
@@ -578,6 +690,9 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       order.complexityCoef = complexityCoef(complexityKey);
       order.materialCatalogId = material?.id || '';
       order.materialLabel = material ? materialLabel(material) : '';
+      order.materialCategory = material ? materialCategory(material) : '';
+      order.materialName = material ? materialName(material) : '';
+      order.materialModel = material ? materialModel(material) : '';
 
       const serviceTags = serviceList().map((item) => item.tag).filter(Boolean);
       order.tags = Array.isArray(order.tags) ? order.tags.filter((tag) => !serviceTags.includes(tag)) : [];
@@ -591,6 +706,9 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       order.orderBuilder.serviceTitle = service.title;
       order.orderBuilder.materialId = material?.id || '';
       order.orderBuilder.materialLabel = material ? materialLabel(material) : '';
+      order.orderBuilder.materialCategory = material ? materialCategory(material) : '';
+      order.orderBuilder.materialName = material ? materialName(material) : '';
+      order.orderBuilder.materialModel = material ? materialModel(material) : '';
       order.orderBuilder.complexity = complexityKey;
       order.orderBuilder.complexityCoef = complexityCoef(complexityKey);
 

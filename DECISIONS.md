@@ -115,6 +115,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Owners and assigned managers may configure the Project and services. Assigned surveyors may read only their scoped projects and create verified measurements; server responses must not expose project finance to them.
 - Implemented for review by PR #169 (`codex/issue-164-project-constructor`), which supersedes the foundation PR #161. Production deployment remains a separate, reviewed release action.
 
+## 2026-09-12 — Film identity is Category → Name → Model
+
+- A film is not presented or stored as one concatenated `brand — model` choice. Its business identity is three separate catalog dimensions: film category/appearance (for example `Зеркальная`), product name/line (for example `Prime`), and exact model code (for example `NE2`).
+- The service direction (`Solar`, `Smart`, `Safety`, or `Decorative`) remains a separate filter and must not be mislabeled as the film category.
+- Order creation and order parameters use cascading Category → Name → Model selectors but persist one exact catalog ID plus all three display snapshots on the order. Existing orders and catalog IDs remain valid.
+- Legacy catalog records are extended in place with `filmCategory`, `productName`, and `modelCode`; no second material list is created. Canonical PostgreSQL uses the corresponding FilmCatalog appearance/category, model name, and model code fields.
+- Added to PR #169 after review of the New Order screen. Production deployment remains a separate action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

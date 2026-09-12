@@ -6450,6 +6450,9 @@ function ensureMagnitronicSolarPrimeSeries(catalog) {
     item.brand = 'Rolan PRO';
     item.series = 'Magnitronic Solar Prime';
     item.model = `Magnitronic Solar Prime ${entry.model}`;
+    item.filmCategory = item.filmCategory || 'Солнцезащитная';
+    item.productName = 'Magnitronic Solar Prime';
+    item.modelCode = entry.model;
     const spec = MAGNITRONIC_SOLAR_PRIME_SPECS[entry.code];
     item.category = 'solar';
     item.vlt = spec.vlt;
@@ -6740,6 +6743,12 @@ function migrateSchema() {
   // они появятся только после реального прихода на склад.
   ensureMagnitronicSolarPrimeSeries(s.catalog);
   applyMagnitronicSpecs(s.catalog);
+  (s.catalog || []).forEach(item => {
+    if (!item || typeof item !== 'object') return;
+    if (!item.filmCategory) item.filmCategory = item.appearance || item.appearanceCode || '';
+    if (!item.productName) item.productName = item.series || catalogLegacyProductParts(item.model).name;
+    if (!item.modelCode) item.modelCode = item.sku || item.code || catalogLegacyProductParts(item.model).model;
+  });
 
   // ---- UNITS ----
   if (s.inputUnits == null) s.inputUnits = 'inches'; // 'mm' or 'inches' (default inches for US)
@@ -13377,7 +13386,28 @@ function normalizeClientAccountData() {
 
 // ---------- CATALOG HELPERS ----------
 function getCatalogItem(id) { return db.settings.catalog.find(c => c.id === id); }
-function catalogLabel(c) { return c ? `${c.brand} — ${c.model}` : '—'; }
+function catalogLegacyProductParts(value) {
+  const source = String(value || '').trim();
+  const match = source.match(/^(.*?)\s+([A-Z]{0,5}-?\d+[A-Z0-9%.-]*)$/i);
+  return match ? { name: match[1].trim(), model: match[2].trim() } : { name: source, model: '' };
+}
+function catalogFilmCategory(c) {
+  if (!c) return '';
+  const explicit = c.filmCategory || c.appearance || c.appearanceCode || '';
+  return String(explicit || (c.category ? catLabel(c.category) : '')).trim();
+}
+function catalogFilmName(c) {
+  if (!c) return '';
+  return String(c.productName || c.series || catalogLegacyProductParts(c.model).name || '').trim();
+}
+function catalogFilmModel(c) {
+  if (!c) return '';
+  return String(c.modelCode || c.sku || c.code || catalogLegacyProductParts(c.model).model || '').trim();
+}
+function catalogLabel(c) {
+  if (!c) return '—';
+  return [...new Set([catalogFilmCategory(c), catalogFilmName(c), catalogFilmModel(c)].filter(Boolean))].join(' · ') || '—';
+}
 function catalogByCategory() {
   const groups = {};
   db.settings.catalog.forEach(c => {
@@ -15238,8 +15268,11 @@ function reloadCanonicalProjectConstructor() {
 }
 
 function canonicalFilmLabel(film) {
-  const taxonomy = [film.technology_code, film.appearance_code, film.application_side].filter(Boolean).join(' · ');
-  return `${film.brand_name_ru} ${film.model_name_ru}${taxonomy ? ` · ${taxonomy}` : ''}`;
+  return [...new Set([
+    film.appearance_code || film.category_name_ru,
+    film.model_name_ru,
+    film.model_code,
+  ].filter(Boolean))].join(' · ');
 }
 
 function canonicalFilmOptions(selectedId = '', category = '') {
@@ -18646,8 +18679,10 @@ function renderSettings() {
           <thead>
             <tr class="text-left text-xs uppercase text-gray-500">
               <th class="px-2 py-2">${T('brand')}</th>
-              <th class="px-2 py-2">${T('model')}</th>
-              <th class="px-2 py-2">${T('category')}</th>
+              <th class="px-2 py-2">Категория плёнки</th>
+              <th class="px-2 py-2">Название</th>
+              <th class="px-2 py-2">Модель</th>
+              <th class="px-2 py-2">Направление</th>
               <th class="px-2 py-2">Поставщик</th>
               <th class="px-2 py-2 w-24">${T('retailPrice')} ($/sqft)</th>
               <th class="px-2 py-2 w-20">${T('cost')} ($/sqft)</th>
@@ -18660,7 +18695,9 @@ function renderSettings() {
             ${(s.catalog||[]).map(c => `
               <tr class="border-t">
                 <td class="px-2 py-1"><input value="${c.brand}" onchange="updateCatalogItem('${c.id}','brand',this.value)"></td>
-                <td class="px-2 py-1"><input value="${c.model}" onchange="updateCatalogItem('${c.id}','model',this.value)"></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmCategory(c))}" placeholder="Зеркальная" onchange="updateCatalogItem('${c.id}','filmCategory',this.value)"></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmName(c))}" placeholder="Prime" onchange="updateCatalogItem('${c.id}','productName',this.value)"></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmModel(c))}" placeholder="NE2" onchange="updateCatalogItem('${c.id}','modelCode',this.value)"></td>
                 <td class="px-2 py-1">
                   <select onchange="updateCatalogItem('${c.id}','category',this.value)" style="background:${catColor(c.category).bg};color:${catColor(c.category).text};border:none;font-weight:600;">
                     ${['solar','protective','smart','privacy','decorative','removal','washing'].map(k => `<option value="${k}" ${c.category===k?'selected':''}>${T('cat'+k.charAt(0).toUpperCase()+k.slice(1))}</option>`).join('')}
@@ -23781,11 +23818,15 @@ function addNewFilmType() {
 function updateCatalogItem(id, field, val) {
   const c = getCatalogItem(id); if (!c) return;
   c[field] = val;
+  if (field === 'productName' || field === 'modelCode') {
+    c.model = [c.productName, c.modelCode].filter(Boolean).join(' ').trim();
+  }
   save(); render();
 }
 function addCatalogItem(presetVendorId, presetCategory = 'solar') {
   db.settings.catalog.push({
-    id: uid(), brand: 'New', model: 'Model', category: presetCategory || 'solar', vendorId: presetVendorId || null,
+    id: uid(), brand: 'Rolan PRO', model: '', category: presetCategory || 'solar', vendorId: presetVendorId || null,
+    filmCategory: '', productName: '', modelCode: '',
     retailPerSqft: 10, costPerSqft: 2.5, installerRatePerSqft: 0.27, wastePct: 12,
   });
   save(); render();
@@ -31093,7 +31134,7 @@ function renderCatalogBrowser() {
     }
     if (categoryFilter !== 'all' && c.category !== categoryFilter) return false;
     if (!query) return true;
-    return `${c.brand} ${c.model} ${catLabel(c.category)}`.toLowerCase().includes(query);
+    return `${c.brand} ${catalogFilmCategory(c)} ${catalogFilmName(c)} ${catalogFilmModel(c)} ${catLabel(c.category)}`.toLowerCase().includes(query);
   });
 
   // Внутри отфильтрованного — по-прежнему группируем по поставщику,
@@ -31108,7 +31149,7 @@ function renderCatalogBrowser() {
   const controls = `
   <div class="flex gap-2 flex-wrap mb-3">
     <input id="catalog-search" value="${academyEsc(state.catalogQuery || '')}"
-           placeholder="🔎 Бренд или модель: ATR, Titan, Safety..."
+           placeholder="🔎 Категория, название или модель: Зеркальная, Prime, NE2..."
            oninput="state.catalogQuery=this.value; render();"
            style="flex:1;min-width:200px;">
     <select class="w-auto text-sm" onchange="state.catalogVendor=this.value; render();">
@@ -31145,8 +31186,10 @@ function renderCatalogBrowser() {
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead><tr class="text-xs text-gray-500 border-b">
-            <th class="text-left p-2">Плёнка</th>
-            <th class="text-left p-2">Категория</th>
+            <th class="text-left p-2">Категория плёнки</th>
+            <th class="text-left p-2">Название</th>
+            <th class="text-left p-2">Модель</th>
+            <th class="text-left p-2">Направление</th>
             <th class="text-left p-2">Ширина рулона</th>
             <th class="text-left p-2">Характеристики</th>
             <th class="text-left p-2">Цена</th>
@@ -31161,8 +31204,10 @@ function renderCatalogBrowser() {
               <tr class="border-t">
                 <td class="p-2">
                   <span style="width:8px;height:8px;border-radius:50%;background:${pal.dot};display:inline-block;margin-right:6px;"></span>
-                  <span class="font-medium">${academyEsc(c.brand)} — ${academyEsc(c.model)}</span>
+                  <span class="font-medium">${academyEsc(catalogFilmCategory(c) || '—')}</span>
                 </td>
+                <td class="p-2">${academyEsc(catalogFilmName(c) || '—')}</td>
+                <td class="p-2 font-mono">${academyEsc(catalogFilmModel(c) || 'не указана')}</td>
                 <td class="p-2"><span class="tag" style="background:${pal.bg};color:${pal.text}">${catLabel(c.category)}</span></td>
                 <td class="p-2 whitespace-nowrap">${c.rollWidth ? c.rollWidth + '"' : '<span class="text-gray-400">—</span>'}</td>
                 <td class="p-2 text-xs">${catalogSpecLabel(c)}</td>

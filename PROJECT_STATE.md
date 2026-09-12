@@ -244,6 +244,14 @@ Contributors must add a row before starting substantial work and update or remov
 - Branch / PR: `codex/issue-164-project-constructor` / #169 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/169`).
 - Release: not deployed. Review #169 and GitHub CI first; merge and deploy only through the normal release workflow, then verify the migration and role-scoped Project screens in a controlled production smoke test.
 
+### 2026-09-12 correction — structured film selection
+
+- User review found that New Order still showed one combined value such as `RolanPRO — Smart Vision Prime`. PR #169 now replaces that control with three cascading fields: film category, product name, and model.
+- Example identity is preserved exactly as `Зеркальная → Prime → NE2`; the service direction remains separate. The selected final model still resolves to one existing catalog ID.
+- Existing catalog entries are migrated in place without changing IDs. Orders save category/name/model snapshots in addition to the catalog ID so later catalog edits do not erase what was sold.
+- The same structure is available in order parameters and catalog management. Missing legacy model codes are displayed as `Модель не указана` instead of inventing a value.
+- Verification: 212 automated tests passed, including injected-script compilation and hierarchy guards; Prisma validation, TypeScript, production build, and `git diff --check` passed. Refreshed GitHub CI is required on the amended PR head.
+
 ## Completion rule
 
 A task is shared and complete only when all applicable statements are true:

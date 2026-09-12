@@ -35,6 +35,18 @@ test("Solar V1 UI exposes source, inheritance, French cells, glass and removal",
   assert.match(legacyCrm, /Low-E/);
   assert.match(legacyCrm, /Removal/);
   assert.match(legacyCrm, /NOT RECOMMENDED/);
+  assert.match(legacyCrm, /film\.appearance_code \|\| film\.category_name_ru/);
+  assert.match(legacyCrm, /film\.model_name_ru/);
+  assert.match(legacyCrm, /film\.model_code/);
+});
+
+test("legacy catalog stores film category, product name and model separately", () => {
+  assert.match(legacyCrm, /item\.filmCategory = item\.appearance/);
+  assert.match(legacyCrm, /item\.productName = item\.series/);
+  assert.match(legacyCrm, /item\.modelCode = item\.sku/);
+  assert.match(legacyCrm, /Категория плёнки/);
+  assert.match(legacyCrm, /placeholder="Prime"/);
+  assert.match(legacyCrm, /placeholder="NE2"/);
 });
 
 test("surveyor uses assigned canonical projects without finance controls", () => {
