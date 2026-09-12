@@ -3,34 +3,38 @@ import { prisma } from "@/lib/db";
 import {
   GOOGLE_ADS_CONVERTED_LEAD_EVENT,
   GOOGLE_ADS_DEFAULT_SETTING_KEY,
+  GOOGLE_ADS_QUALIFIED_LEAD_EVENT,
 } from "./conversion-events";
 
 const MAX_RECONCILE_BATCH = 100;
 
-export async function reconcileConvertedLeadOutbox(limit = MAX_RECONCILE_BATCH) {
+export async function reconcileConversionOutbox(limit = MAX_RECONCILE_BATCH) {
   const settings = await prisma.googleAdsIntegrationSetting.findUnique({
     where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
     select: {
       conversion_owner_customer_id: true,
       converted_lead_action_id: true,
+      qualified_lead_action_id: true,
     },
   });
 
-  if (!settings?.conversion_owner_customer_id || !settings.converted_lead_action_id) {
+  if (
+    !settings?.conversion_owner_customer_id ||
+    (!settings.converted_lead_action_id && !settings.qualified_lead_action_id)
+  ) {
     return {
       status: "awaiting_configuration" as const,
       scanned: 0,
       created: 0,
+      skipped_missing_action: 0,
     };
   }
 
   const boundedLimit = Math.max(1, Math.min(MAX_RECONCILE_BATCH, Math.trunc(limit)));
   const events = await prisma.conversionEvent.findMany({
     where: {
-      event_type: GOOGLE_ADS_CONVERTED_LEAD_EVENT,
-      upload_outboxes: {
-        none: {},
-      },
+      event_type: { in: [GOOGLE_ADS_QUALIFIED_LEAD_EVENT, GOOGLE_ADS_CONVERTED_LEAD_EVENT] },
+      upload_outboxes: { none: {} },
     },
     orderBy: [{ occurred_at: "asc" }, { created_at: "asc" }],
     take: boundedLimit,
@@ -46,12 +50,22 @@ export async function reconcileConvertedLeadOutbox(limit = MAX_RECONCILE_BATCH) 
   });
 
   let created = 0;
+  let skippedMissingAction = 0;
   for (const event of events) {
+    const actionId =
+      event.event_type === GOOGLE_ADS_QUALIFIED_LEAD_EVENT
+        ? settings.qualified_lead_action_id
+        : settings.converted_lead_action_id;
+    if (!actionId) {
+      skippedMissingAction += 1;
+      continue;
+    }
+
     const outbox = await prisma.conversionUploadOutbox.upsert({
       where: {
         destination_account_id_action_id_transaction_id: {
           destination_account_id: settings.conversion_owner_customer_id,
-          action_id: settings.converted_lead_action_id,
+          action_id: actionId,
           transaction_id: event.transaction_id,
         },
       },
@@ -59,7 +73,7 @@ export async function reconcileConvertedLeadOutbox(limit = MAX_RECONCILE_BATCH) 
       create: {
         conversion_event_id: event.conversion_event_id,
         destination_account_id: settings.conversion_owner_customer_id,
-        action_id: settings.converted_lead_action_id,
+        action_id: actionId,
         transaction_id: event.transaction_id,
         processing_status: "queued",
         payload_snapshot: {
@@ -81,5 +95,11 @@ export async function reconcileConvertedLeadOutbox(limit = MAX_RECONCILE_BATCH) 
     status: events.length === boundedLimit ? ("more_available" as const) : ("complete" as const),
     scanned: events.length,
     created,
+    skipped_missing_action: skippedMissingAction,
   };
+}
+
+/** Backward-compatible name used by the existing owner reconciliation route. */
+export async function reconcileConvertedLeadOutbox(limit = MAX_RECONCILE_BATCH) {
+  return reconcileConversionOutbox(limit);
 }
