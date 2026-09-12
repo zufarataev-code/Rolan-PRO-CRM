@@ -35,7 +35,7 @@ const MOBILE_WORKSPACE_PATCH = `
       max-width: 100% !important;
     }
 
-    input,
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
     select,
     textarea {
       width: 100%;
@@ -43,6 +43,16 @@ const MOBILE_WORKSPACE_PATCH = `
       min-width: 0 !important;
       box-sizing: border-box !important;
       font-size: 16px !important;
+    }
+
+    input[type="checkbox"],
+    input[type="radio"],
+    input[type="range"],
+    input[type="color"] {
+      width: auto !important;
+      min-width: auto !important;
+      max-width: none !important;
+      flex: 0 0 auto !important;
     }
 
     textarea {
@@ -80,7 +90,7 @@ const MOBILE_WORKSPACE_PATCH = `
       gap: 8px !important;
     }
 
-    [data-rolanpro-mobile-toolbar="1"] > input,
+    [data-rolanpro-mobile-toolbar="1"] > input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
     [data-rolanpro-mobile-toolbar="1"] > select,
     [data-rolanpro-mobile-toolbar="1"] > textarea {
       flex: 1 1 100% !important;
