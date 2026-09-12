@@ -109,6 +109,8 @@ test("server injects service, catalog material and complexity controls into orde
 
   assert.match(result, /rolanpro-order-material-section/);
   assert.match(result, /no-material/);
+  assert.match(result, /no-film-category/);
+  assert.match(result, /no-film-name/);
   assert.match(result, /db\.settings\.catalog/);
   assert.match(result, /catalogCategory/);
   assert.match(result, /materialCatalogId/);
@@ -117,10 +119,29 @@ test("server injects service, catalog material and complexity controls into orde
   assert.match(result, /saveRolanProOrderParameters/);
   assert.match(result, /rp-op-service/);
   assert.match(result, /rp-op-material/);
+  assert.match(result, /rp-op-film-category/);
+  assert.match(result, /rp-op-film-name/);
   assert.match(result, /rp-op-complexity/);
   assert.match(result, /openManagerProjectServicesModal/);
   assert.match(result, /order\.serviceTypes/);
   assert.match(result, /defaultCatalogByScope/);
+  assert.match(result, /materialCategory/);
+  assert.match(result, /materialName/);
+  assert.match(result, /materialModel/);
+  assert.match(result, /createdOrder\.materialCategory/);
+  assert.match(result, /orderBuilder\.materialModel/);
+  assert.doesNotMatch(result, /Категория, название и модель выбираются отдельно/);
+  assert.doesNotMatch(result, /Выбранная модель станет материалом заказа/);
+});
+
+test("injected order film hierarchy remains valid JavaScript", () => {
+  const result = replaceLegacyBootstrapLogin(`<!doctype html><body>
+<div id="app"><div>legacy bootstrap</div></div>
+<script>cloudBoot()</script></body>`);
+  const script = result.match(/<script id="rolanpro-order-intake-cleanup-script">\s*([\s\S]*?)\s*<\/script>/)?.[1];
+
+  assert.ok(script);
+  assert.doesNotThrow(() => new Function(script));
 });
 
 test("New Order guidance and parameter patch is injected only once", () => {

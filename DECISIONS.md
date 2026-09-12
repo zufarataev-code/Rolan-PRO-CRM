@@ -105,6 +105,25 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - PWA registration remains global so the service worker can function, but there is no persistent `Установить Rolan PRO` button inside CRM.
 - App installation is offered only as a one-time onboarding step after a successful first login on a browser where the offer has not already been handled. Accepting or dismissing the offer marks it seen so it does not keep covering the CRM.
 
+## 2026-09-12 — Canonical Project constructor and auditable Solar measurements
+
+- This decision extends `One CRM data source`, `One operational workflow`, and `Field roles use the actual CRM shell`: the Project constructor is a section of the existing `/legacy-crm` document backed only by relational PostgreSQL APIs, not a second shell or browser-storage editor.
+- Customer classification (`B2B`/`B2C`) and physical site type (`RESIDENTIAL`/`COMMERCIAL`) are independent facts. One Project may contain multiple service positions; each position may define its default film.
+- Solar rooms, openings, and cells are the structured view of canonical Measurement records. Opening/cell identity and technical details live in versioned constructor metadata, while project-position ownership, author, source/status, and revision links are relational and constrained.
+- Measurement provenance is explicit: customer data is `CUSTOMER` + `UNVERIFIED`; a surveyor record is `SURVEYOR_VERIFIED` + `VERIFIED`. Revisions append records instead of overwriting measurements, and unverified customer data may never supersede a verified measurement.
+- Effective film resolves in this order: cell override, opening override, room override, service default. Solar compatibility is advisory (`OK`, `REVIEW`, `NOT_RECOMMENDED`) and must be derived from canonical FilmCatalog compatibility fields; the browser cannot declare compatibility itself.
+- Owners and assigned managers may configure the Project and services. Assigned surveyors may read only their scoped projects and create verified measurements; server responses must not expose project finance to them.
+- Implemented for review by PR #169 (`codex/issue-164-project-constructor`), which supersedes the foundation PR #161. Production deployment remains a separate, reviewed release action.
+
+## 2026-09-12 — Film identity is Category → Name → Model
+
+- A film is not presented or stored as one concatenated `brand — model` choice. Its business identity is three separate catalog dimensions: film category/appearance (for example `Зеркальная`), product name/line (for example `Prime`), and exact model code (for example `NE2`).
+- The service direction (`Solar`, `Smart`, `Safety`, or `Decorative`) remains a separate filter and must not be mislabeled as the film category.
+- Order creation, order parameters, the Solar service default, and room/opening/cell overrides use cascading Category → Name → Model selectors but persist one exact catalog ID plus the applicable display snapshots. Existing orders and catalog IDs remain valid.
+- Legacy catalog records are extended in place with `filmCategory`, `productName`, and `modelCode`; no second material list is created. Canonical PostgreSQL uses the corresponding FilmCatalog appearance/category, model name, and model code fields.
+- Obvious selectors must not be surrounded by instructional paragraphs. The New Order screen uses compact service cards and short field labels; explanatory copy is shown only for an actionable warning or validation failure.
+- Added to PR #169 after review of the New Order screen. Production deployment remains a separate action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

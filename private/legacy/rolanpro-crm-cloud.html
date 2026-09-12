@@ -6450,6 +6450,9 @@ function ensureMagnitronicSolarPrimeSeries(catalog) {
     item.brand = 'Rolan PRO';
     item.series = 'Magnitronic Solar Prime';
     item.model = `Magnitronic Solar Prime ${entry.model}`;
+    item.filmCategory = item.filmCategory || 'Солнцезащитная';
+    item.productName = 'Magnitronic Solar Prime';
+    item.modelCode = entry.model;
     const spec = MAGNITRONIC_SOLAR_PRIME_SPECS[entry.code];
     item.category = 'solar';
     item.vlt = spec.vlt;
@@ -6740,6 +6743,12 @@ function migrateSchema() {
   // они появятся только после реального прихода на склад.
   ensureMagnitronicSolarPrimeSeries(s.catalog);
   applyMagnitronicSpecs(s.catalog);
+  (s.catalog || []).forEach(item => {
+    if (!item || typeof item !== 'object') return;
+    if (!item.filmCategory) item.filmCategory = item.appearance || item.appearanceCode || '';
+    if (!item.productName) item.productName = item.series || catalogLegacyProductParts(item.model).name;
+    if (!item.modelCode) item.modelCode = item.sku || item.code || catalogLegacyProductParts(item.model).model;
+  });
 
   // ---- UNITS ----
   if (s.inputUnits == null) s.inputUnits = 'inches'; // 'mm' or 'inches' (default inches for US)
@@ -13377,7 +13386,28 @@ function normalizeClientAccountData() {
 
 // ---------- CATALOG HELPERS ----------
 function getCatalogItem(id) { return db.settings.catalog.find(c => c.id === id); }
-function catalogLabel(c) { return c ? `${c.brand} — ${c.model}` : '—'; }
+function catalogLegacyProductParts(value) {
+  const source = String(value || '').trim();
+  const match = source.match(/^(.*?)\s+([A-Z]{0,5}-?\d+[A-Z0-9%.-]*)$/i);
+  return match ? { name: match[1].trim(), model: match[2].trim() } : { name: source, model: '' };
+}
+function catalogFilmCategory(c) {
+  if (!c) return '';
+  const explicit = c.filmCategory || c.appearance || c.appearanceCode || '';
+  return String(explicit || (c.category ? catLabel(c.category) : '')).trim();
+}
+function catalogFilmName(c) {
+  if (!c) return '';
+  return String(c.productName || c.series || catalogLegacyProductParts(c.model).name || '').trim();
+}
+function catalogFilmModel(c) {
+  if (!c) return '';
+  return String(c.modelCode || c.sku || c.code || catalogLegacyProductParts(c.model).model || '').trim();
+}
+function catalogLabel(c) {
+  if (!c) return '—';
+  return [...new Set([catalogFilmCategory(c), catalogFilmName(c), catalogFilmModel(c)].filter(Boolean))].join(' · ') || '—';
+}
 function catalogByCategory() {
   const groups = {};
   db.settings.catalog.forEach(c => {
@@ -14636,6 +14666,9 @@ function parseHash() {
   else { state.premiumProposalToken = null; }
   const o = h.match(/^#\/order\/([^/]+)/);
   if (o) { state.view = 'orderDetails'; state.openOrderId = o[1]; }
+  const canonicalProject = h.match(/^#\/projects\/([^/]+)$/);
+  if (canonicalProject) { state.view = 'canonicalProjects'; state.canonicalProjectId = canonicalProject[1]; }
+  else if (/^#\/projects\/?$/.test(h)) { state.view = 'canonicalProjects'; state.canonicalProjectId = null; }
   if (/^#\/service-pricing\/?$/.test(h)) { state.view = 'servicePricing'; }
   if (/^#\/installer-operations\/?$/.test(h)) { state.view = 'installerOps'; }
 }
@@ -14916,6 +14949,10 @@ function selectAppView(key) {
     location.hash = '#/service-pricing';
     return;
   }
+  if (key === 'canonicalProjects' && (user?.role === 'owner' || user?.role === 'manager' || user?.role === 'measurer')) {
+    location.hash = '#/projects';
+    return;
+  }
   if (key === 'settings' && user?.role !== 'owner') return;
   state.view = key;
   if (key !== 'settings') state.settingsSection = null;
@@ -14932,6 +14969,7 @@ function renderAppShell() {
     ['leads', 'Новые лиды', '📥'],
     ['coldcalls', 'Холодные звонки', '📞'],
     ['orders', T('orders'), '📦'],
+    ['canonicalProjects', 'Проекты', '🏗'],
     ['proposals', 'КП', '📄'],
     ['servicePricing', 'Услуги и цены', '💲'],
     ['calendar', T('calendar'), '📅'],
@@ -14950,6 +14988,7 @@ function renderAppShell() {
     ...(role === 'owner' ? [['settings', T('settings'), '⚙️']] : []),
   ] : (role === 'measurer') ? [
     ['dashboard', T('dashboard'), '📊'],
+    ['canonicalProjects', 'Замеры проектов', '🏗'],
     ['measurements', T('myTasks'), '📐'],
     ['calendar', T('calendar'), '📅'],
     ['tasks', 'Задачи', '✅'],
@@ -15056,6 +15095,7 @@ function headerTitle() {
       if (u.role === 'measurer') return T('welcomeMeasurer');
       return T('welcomeInstaller');
     case 'orders': return T('orders');
+    case 'canonicalProjects': return state.canonicalProjectId ? '🏗 Конструктор проекта' : '🏗 Проекты';
     case 'proposals': return '📄 Коммерческие предложения';
     case 'servicePricing': return '💲 Услуги и цены';
     case 'installerOps': return '📍 Монтажники сейчас';
@@ -15087,6 +15127,7 @@ function headerSubtitle() {
   if (!u) return 'Рабочее пространство RolanPRO';
   switch (state.view) {
     case 'orders': return 'Воронка, фильтры, долги и быстрые действия по объектам';
+    case 'canonicalProjects': return 'Объект, услуги и проверенные замеры из PostgreSQL';
     case 'proposals': return 'Кому отправлено, кто посмотрел и к какому заказу относится КП';
     case 'servicePricing': return 'Единый прайс, ставки монтажников и план продаж — внутри основной CRM';
     case 'installerOps': return 'Активные смены, объекты и последнее добровольно переданное местоположение';
@@ -15113,6 +15154,7 @@ function renderView() {
     switch (state.view) {
       case 'dashboard': return renderManagerDashboard();
       case 'orders': return renderOrders();
+      case 'canonicalProjects': return renderCanonicalProjects();
       case 'proposals': return renderProposalsRegistry();
       case 'servicePricing': return renderCanonicalServicePricing();
       case 'installerOps': return renderCanonicalInstallerOperations();
@@ -15134,6 +15176,7 @@ function renderView() {
   } else if (u.role === 'measurer') {
     switch (state.view) {
       case 'dashboard': return renderMeasurerDashboard();
+      case 'canonicalProjects': return renderCanonicalProjects();
       case 'paymentsdue': return renderPaymentsDue();
       case 'measurements': return renderMeasurerTasks();
       case 'calendar': return renderCalendar();
@@ -15149,6 +15192,349 @@ function renderView() {
     }
   }
   return `<div class="card">${T('empty')}</div>`;
+}
+
+// ---------- CANONICAL PROJECT / SOLAR CONSTRUCTOR ----------
+async function canonicalProjectRequest(path, method = 'GET', body = null) {
+  const response = await fetch(path, {
+    method,
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) { location.assign('/login'); throw new Error('Требуется вход'); }
+  if (!response.ok) {
+    const code = payload?.errors?.[0]?.code || '';
+    const labels = {
+      survey_required: 'Для проекта сначала нужен связанный замер/Survey.',
+      site_type_mismatch: 'Тип объекта изменился. Обновите карточку и повторите.',
+      verified_revision_required: 'Проверенный замер может заменить только новая проверенная ревизия.',
+      unsupported_service: 'Solar-форма доступна только для услуги Solar.',
+    };
+    throw new Error(labels[code] || payload?.errors?.[0]?.message || `HTTP ${response.status}`);
+  }
+  return payload.data;
+}
+
+async function loadCanonicalProjects(force = false) {
+  if (state.canonicalProjectsLoading) return;
+  if (!force && Array.isArray(state.canonicalProjects)) return;
+  state.canonicalProjectsLoading = true;
+  state.canonicalProjectsError = '';
+  render();
+  try {
+    const data = await canonicalProjectRequest('/api/v1/projects/constructor');
+    state.canonicalProjects = Array.isArray(data?.items) ? data.items : [];
+  } catch (error) {
+    state.canonicalProjectsError = error?.message || 'Не удалось загрузить проекты';
+  } finally {
+    state.canonicalProjectsLoading = false;
+    render();
+  }
+}
+
+async function loadCanonicalProjectConstructor(projectId, force = false) {
+  if (!projectId || state.canonicalConstructorLoading) return;
+  if (!force && state.canonicalConstructor?.project_id === projectId) return;
+  state.canonicalConstructorLoading = true;
+  state.canonicalConstructorError = '';
+  render();
+  try {
+    const data = await canonicalProjectRequest(`/api/v1/projects/${encodeURIComponent(projectId)}/constructor`);
+    state.canonicalConstructor = data?.constructor || null;
+  } catch (error) {
+    state.canonicalConstructorError = error?.message || 'Не удалось загрузить конструктор';
+  } finally {
+    state.canonicalConstructorLoading = false;
+    render();
+  }
+}
+
+function openCanonicalProject(projectId) {
+  state.canonicalConstructor = null;
+  state.canonicalProjectId = projectId;
+  location.hash = `#/projects/${encodeURIComponent(projectId)}`;
+}
+
+function closeCanonicalProject() {
+  state.canonicalProjectId = null;
+  state.canonicalConstructor = null;
+  location.hash = '#/projects';
+}
+
+function reloadCanonicalProjectConstructor() {
+  return loadCanonicalProjectConstructor(state.canonicalProjectId, true);
+}
+
+function canonicalFilmLabel(film) {
+  return [...new Set([
+    film.appearance_code || film.category_name_ru,
+    film.model_name_ru,
+    film.model_code,
+  ].filter(Boolean))].join(' · ');
+}
+
+function canonicalFilms(category = '') {
+  const data = state.canonicalConstructor;
+  return (data?.films || []).filter(film => !category || film.category_code === category);
+}
+
+function canonicalFilmCategory(film) {
+  return film?.appearance_code || film?.category_name_ru || '';
+}
+
+function canonicalFilmCategoryLabel(value) {
+  return ({ MIRROR: 'Зеркальная', REFLECTIVE: 'Зеркальная', NEUTRAL: 'Нейтральная', CLEAR: 'Прозрачная', SMOKE: 'Дымчатая', BLACKOUT: 'Blackout', WHITEOUT: 'Whiteout' })[value] || value;
+}
+
+function canonicalFilmName(film) {
+  const name = film?.product_name_ru || film?.model_name_ru || '';
+  return name.replace(/\s+[A-Z]{1,6}-?\d+%?$/i, '').trim() || name;
+}
+
+function canonicalFilmModel(film) {
+  return film?.model_code || '';
+}
+
+function canonicalUnique(values) {
+  return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function canonicalFilmPickerHtml(prefix, selectedId = '', category = '', options = {}) {
+  const films = canonicalFilms(category);
+  const selected = films.find(film => film.film_id === selectedId);
+  const selectedCategory = canonicalFilmCategory(selected);
+  const selectedName = canonicalFilmName(selected);
+  const categories = canonicalUnique(films.map(canonicalFilmCategory));
+  const names = selectedCategory ? canonicalUnique(films.filter(film => canonicalFilmCategory(film) === selectedCategory).map(canonicalFilmName)) : [];
+  const models = selectedName ? films.filter(film => canonicalFilmCategory(film) === selectedCategory && canonicalFilmName(film) === selectedName) : [];
+  const disabled = options.disabled ? 'disabled' : '';
+  const modelField = options.modelField ? `data-field="${options.modelField}"` : '';
+  const modelChange = options.modelChange || '';
+  return `<div class="grid grid-cols-1 md:grid-cols-3 gap-2 ${options.className || ''}" data-film-picker="${academyEsc(prefix)}" data-film-category="${academyEsc(category)}">
+    <label>Категория<select id="${academyEsc(prefix)}-category" onchange="canonicalFilmPickerChanged('${academyEsc(prefix)}','category','${academyEsc(category)}')" ${disabled}><option value="">Наследовать</option>${categories.map(value => `<option value="${academyEsc(value)}" ${value === selectedCategory ? 'selected' : ''}>${academyEsc(canonicalFilmCategoryLabel(value))}</option>`).join('')}</select></label>
+    <label>Название<select id="${academyEsc(prefix)}-name" onchange="canonicalFilmPickerChanged('${academyEsc(prefix)}','name','${academyEsc(category)}')" ${disabled}><option value="">${selectedCategory ? 'Выберите' : '—'}</option>${names.map(value => `<option value="${academyEsc(value)}" ${value === selectedName ? 'selected' : ''}>${academyEsc(value)}</option>`).join('')}</select></label>
+    <label>Модель<select id="${academyEsc(prefix)}-model" ${modelField} onchange="${modelChange}" ${disabled}><option value="">${selectedName ? 'Выберите' : '—'}</option>${models.map(film => `<option value="${academyEsc(film.film_id)}" ${film.film_id === selectedId ? 'selected' : ''}>${academyEsc(canonicalFilmModel(film) || 'Без кода')}</option>`).join('')}</select></label>
+  </div>`;
+}
+
+function canonicalFilmPickerChanged(prefix, level, category = '') {
+  const films = canonicalFilms(category);
+  const categorySelect = document.getElementById(`${prefix}-category`);
+  const nameSelect = document.getElementById(`${prefix}-name`);
+  const modelSelect = document.getElementById(`${prefix}-model`);
+  if (!categorySelect || !nameSelect || !modelSelect) return;
+  const requestedName = level === 'name' ? nameSelect.value : '';
+  modelSelect.value = '';
+  const selectedCategory = categorySelect.value;
+  const names = selectedCategory ? canonicalUnique(films.filter(film => canonicalFilmCategory(film) === selectedCategory).map(canonicalFilmName)) : [];
+  nameSelect.innerHTML = `<option value="">${selectedCategory ? 'Выберите' : '—'}</option>${names.map(value => `<option value="${academyEsc(value)}" ${value === requestedName ? 'selected' : ''}>${academyEsc(value)}</option>`).join('')}`;
+  nameSelect.value = names.includes(requestedName) ? requestedName : '';
+  const selectedName = nameSelect.value;
+  const models = selectedName ? films.filter(film => canonicalFilmCategory(film) === selectedCategory && canonicalFilmName(film) === selectedName) : [];
+  modelSelect.innerHTML = `<option value="">${selectedName ? 'Выберите' : '—'}</option>${models.map(film => `<option value="${academyEsc(film.film_id)}">${academyEsc(canonicalFilmModel(film) || 'Без кода')}</option>`).join('')}`;
+}
+
+function canonicalCompatibilityBadge(result) {
+  const meta = {
+    OK: ['OK', 'bg-emerald-100 text-emerald-800'],
+    REVIEW: ['REVIEW', 'bg-amber-100 text-amber-900'],
+    NOT_RECOMMENDED: ['NOT RECOMMENDED', 'bg-rose-100 text-rose-800'],
+  }[result?.status] || ['REVIEW', 'bg-amber-100 text-amber-900'];
+  return `<span class="tag ${meta[1]}" title="${academyEsc((result?.reason_codes || []).join(', '))}">${meta[0]}</span>`;
+}
+
+function canonicalOpeningTypeLabel(value) {
+  return ({ standard_window: 'Окно', standard_door: 'Дверь', french_window: 'Французское окно', french_door: 'Французская дверь', storefront: 'Витрина', skylight: 'Мансардное окно', custom: 'Другое' })[value] || value?.replaceAll('_', ' ') || 'Проём';
+}
+
+function canonicalFilmSourceLabel(value) {
+  return ({ SERVICE: 'Плёнка услуги', PROJECT: 'Плёнка проекта', ROOM: 'Плёнка помещения', OPENING: 'Плёнка проёма', CELL: 'Плёнка ячейки', NONE: 'Плёнка не выбрана' })[value] || value || 'Плёнка не выбрана';
+}
+
+async function saveCanonicalProjectProfile() {
+  const id = state.canonicalProjectId;
+  if (!id) return;
+  try {
+    const data = await canonicalProjectRequest(`/api/v1/projects/${encodeURIComponent(id)}/constructor`, 'PATCH', {
+      customer_type: document.getElementById('cp-customer-type')?.value,
+      site_type: document.getElementById('cp-site-type')?.value,
+      position_updates: [],
+    });
+    state.canonicalConstructor = data.constructor;
+    state.canonicalProjectNotice = 'Карточка сохранена';
+    state.canonicalProjects = null;
+    render();
+  } catch (error) { alert(error?.message || 'Не удалось сохранить карточку'); }
+}
+
+async function addCanonicalProjectService() {
+  const id = state.canonicalProjectId;
+  const serviceTypeId = document.getElementById('cp-add-service')?.value;
+  if (!id || !serviceTypeId) return;
+  try {
+    const data = await canonicalProjectRequest(`/api/v1/projects/${encodeURIComponent(id)}/constructor`, 'PATCH', {
+      add_service_type_id: serviceTypeId,
+      position_updates: [],
+    });
+    state.canonicalConstructor = data.constructor;
+    render();
+  } catch (error) { alert(error?.message || 'Не удалось добавить услугу'); }
+}
+
+async function setCanonicalPositionFilm(positionId, filmId) {
+  const id = state.canonicalProjectId;
+  if (!id) return;
+  try {
+    const data = await canonicalProjectRequest(`/api/v1/projects/${encodeURIComponent(id)}/constructor`, 'PATCH', {
+      position_updates: [{ position_id: positionId, film_id: filmId || null }],
+    });
+    state.canonicalConstructor = data.constructor;
+    render();
+  } catch (error) { alert(error?.message || 'Не удалось изменить материал'); }
+}
+
+function canonicalProjectListHtml() {
+  if (!Array.isArray(state.canonicalProjects) && !state.canonicalProjectsLoading && !state.canonicalProjectsError) {
+    setTimeout(() => loadCanonicalProjects(), 0);
+  }
+  if (state.canonicalProjectsLoading && !state.canonicalProjects) return '<div class="card">Загружаем проекты…</div>';
+  if (state.canonicalProjectsError) return `<div class="card"><b class="text-red-700">${academyEsc(state.canonicalProjectsError)}</b><button class="btn-primary mt-3" onclick="loadCanonicalProjects(true)">Повторить</button></div>`;
+  const projects = state.canonicalProjects || [];
+  return `<div class="space-y-4">
+    <div class="card flex items-center justify-between gap-3"><h2 class="text-xl font-black">Проекты в работе</h2><button class="btn-ghost" onclick="loadCanonicalProjects(true)">Обновить</button></div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">${projects.map(project => `<button class="card text-left border border-slate-200 hover:border-blue-400" onclick="openCanonicalProject('${academyEsc(project.project_id)}')">
+      <div class="flex items-start justify-between gap-3"><div><div class="text-xs font-black text-blue-700">${academyEsc(project.project_code || 'PROJECT')}</div><div class="text-lg font-black">${academyEsc(project.title)}</div><div class="text-sm text-gray-500">${academyEsc(project.client?.name || 'Без клиента')}</div></div><span class="tag bg-slate-100 text-slate-700">${academyEsc(project.project_status?.name_ru || '')}</span></div>
+      <div class="flex flex-wrap gap-2 mt-3"><span class="tag bg-blue-50 text-blue-800">${academyEsc(project.client?.customer_type || 'Тип клиента —')}</span><span class="tag bg-violet-50 text-violet-800">${project.site_type === 'RESIDENTIAL' ? 'Жилой' : project.site_type === 'COMMERCIAL' ? 'Коммерческий' : 'Тип объекта —'}</span><span class="tag bg-slate-100 text-slate-700">${Number(project.positions_count || 0)} услуг</span></div>
+      <div class="text-sm text-gray-600 mt-3">${academyEsc(project.service_summary || 'Услуги не добавлены')}</div>
+    </button>`).join('') || '<div class="card text-gray-500">Проекты появятся после подписанного договора, оплаченного депозита и запуска из сделки.</div>'}</div>
+  </div>`;
+}
+
+function canonicalOpeningCard(room, opening, position) {
+  const unverified = opening.cells.some(cell => cell.verification_status === 'UNVERIFIED');
+  return `<article class="border border-slate-200 bg-slate-50 p-3" style="border-radius:6px">
+    <div class="flex items-start justify-between gap-2"><div><b>${academyEsc(opening.opening_id)}</b> · ${academyEsc(canonicalOpeningTypeLabel(opening.opening_type))}<div class="text-xs text-gray-500">${opening.overall_width || '—'} × ${opening.overall_height || '—'} in · ${opening.total_sqft} sqft</div></div><button class="btn-ghost text-xs" onclick="openCanonicalOpening('${position.position_id}','${academyEsc(room.room_key)}','${academyEsc(opening.opening_id)}',${unverified})">${unverified ? 'Проверить' : 'Новая ревизия'}</button></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">${opening.cells.map(cell => `<div class="bg-white border border-slate-200 p-2" style="border-radius:4px"><div class="flex justify-between gap-2"><b>${academyEsc(cell.cell_id)}</b>${canonicalCompatibilityBadge(cell.compatibility)}</div><div class="text-xs text-gray-600 mt-1">${cell.width} × ${cell.height} in · ${cell.sqft} sqft · ${academyEsc(canonicalFilmSourceLabel(cell.effective_film_source))}</div><div class="mt-1"><span class="tag ${cell.verification_status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}">${cell.verification_status === 'VERIFIED' ? 'Подтверждено' : 'Не проверено'}</span>${cell.removal_required ? '<span class="tag bg-rose-100 text-rose-800 ml-1">Удаление</span>' : ''}</div></div>`).join('')}</div>
+  </article>`;
+}
+
+function canonicalPositionCard(position, data) {
+  const rooms = (data.rooms || []).filter(room => room.project_position_id === position.position_id);
+  const isSolar = position.service_type.service_code === 'SOLAR_FILM';
+  const canManage = ['owner','manager'].includes(currentUser()?.role);
+  return `<section class="card border border-slate-200" style="border-radius:6px">
+    <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs font-black text-blue-700">УСЛУГА</div><h3 class="text-lg font-black">${academyEsc(position.title || position.service_type.name_ru)}</h3></div>${isSolar ? `<button class="btn-primary" onclick="openCanonicalOpening('${position.position_id}')" ${data.site_type ? '' : 'disabled'}>+ Проём</button>` : ''}</div>
+    <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка по умолчанию</div>${canonicalFilmPickerHtml(`cp-position-${position.position_id}`, position.film_id || '', isSolar ? 'SOLAR' : '', { disabled: !canManage, modelChange: `setCanonicalPositionFilm('${position.position_id}',this.value)` })}</div>
+    ${isSolar ? `<div class="space-y-3 mt-4">${rooms.map(room => `<div><div class="font-black mb-2">${academyEsc(room.room_name)}${room.room_number ? ` · ${academyEsc(room.room_number)}` : ''}</div><div class="space-y-2">${room.openings.map(opening => canonicalOpeningCard(room, opening, position)).join('')}</div></div>`).join('') || '<div class="border border-dashed border-slate-300 p-4 text-center text-sm text-gray-500">Добавьте помещение и проём.</div>'}</div>` : ''}
+  </section>`;
+}
+
+function canonicalProjectDetailHtml() {
+  const id = state.canonicalProjectId;
+  if (!state.canonicalConstructor && !state.canonicalConstructorLoading && !state.canonicalConstructorError) setTimeout(() => loadCanonicalProjectConstructor(id), 0);
+  if (state.canonicalConstructorLoading || !state.canonicalConstructor && !state.canonicalConstructorError) return '<div class="card">Загружаем конструктор…</div>';
+  if (state.canonicalConstructorError) return `<div class="card"><b class="text-red-700">${academyEsc(state.canonicalConstructorError)}</b><button class="btn-primary mt-3" onclick="reloadCanonicalProjectConstructor()">Повторить</button></div>`;
+  const data = state.canonicalConstructor;
+  const canManage = ['owner','manager'].includes(currentUser()?.role);
+  return `<div class="space-y-4">
+    <div class="flex items-center justify-between gap-3"><button class="btn-ghost" onclick="closeCanonicalProject()">← Проекты</button><button class="btn-ghost" onclick="reloadCanonicalProjectConstructor()">Обновить</button></div>
+    <section class="card"><div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs font-black text-blue-700">${academyEsc(data.project_code || 'PROJECT')}</div><h2 class="text-2xl font-black">${academyEsc(data.title)}</h2><div class="text-sm text-gray-500">${academyEsc(data.customer?.name || '')}</div></div><div class="grid grid-cols-2 gap-2"><div><div class="text-xs text-gray-500">Площадь</div><b>${data.totals.sqft} sqft</b></div><div><div class="text-xs text-gray-500">Удаление</div><b>${data.totals.removal_sqft} sqft</b></div></div></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Тип клиента</span><select id="cp-customer-type" ${canManage ? '' : 'disabled'}><option value="B2C" ${data.customer?.customer_type === 'B2C' ? 'selected' : ''}>B2C</option><option value="B2B" ${data.customer?.customer_type === 'B2B' ? 'selected' : ''}>B2B</option></select></label><label><span class="text-xs font-semibold text-slate-500">Тип объекта</span><select id="cp-site-type" ${canManage ? '' : 'disabled'}><option value="RESIDENTIAL" ${data.site_type === 'RESIDENTIAL' ? 'selected' : ''}>Жилой</option><option value="COMMERCIAL" ${data.site_type === 'COMMERCIAL' ? 'selected' : ''}>Коммерческий</option></select></label></div>
+      ${canManage ? `<button class="btn-primary mt-3" onclick="saveCanonicalProjectProfile()">Сохранить</button>${state.canonicalProjectNotice ? `<span class="text-sm text-emerald-700 ml-2">${academyEsc(state.canonicalProjectNotice)}</span>` : ''}` : ''}
+    </section>
+    ${canManage ? `<section class="card"><div class="flex items-end gap-2 flex-wrap"><label class="flex-1"><span class="text-xs font-semibold text-slate-500">Добавить услугу</span><select id="cp-add-service"><option value="">Выберите услугу</option>${(data.service_types || []).filter(service => !(data.positions || []).some(position => position.service_type.service_type_id === service.service_type_id)).map(service => `<option value="${service.service_type_id}">${academyEsc(service.name_ru)}</option>`).join('')}</select></label><button class="btn-primary" onclick="addCanonicalProjectService()">Добавить</button></div></section>` : ''}
+    <div class="space-y-3">${(data.positions || []).map(position => canonicalPositionCard(position, data)).join('') || '<div class="card">Добавьте первую услугу.</div>'}</div>
+    <section class="card"><div class="flex justify-between gap-2"><b>История замеров</b><span class="tag bg-slate-100 text-slate-700">${data.measurement_history?.length || 0}</span></div><div class="space-y-2 mt-3">${(data.measurement_history || []).slice().reverse().slice(0,12).map(item => `<div class="border-t border-slate-100 pt-2 flex items-start justify-between gap-2"><div><b>${academyEsc(item.constructor?.opening_id || 'Проём')} · ${academyEsc(item.constructor?.cell_id || 'Ячейка')}</b><div class="text-xs text-gray-500">${item.width || '—'} × ${item.height || '—'} in · ${academyEsc(item.recorded_by?.full_name || 'система')}</div></div><div class="text-right"><span class="tag ${item.verification_status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}">${item.verification_status === 'VERIFIED' ? 'Подтверждено' : item.verification_status === 'UNVERIFIED' ? 'Не проверено' : academyEsc(item.source || 'Старый замер')}</span>${item.superseded ? '<div class="text-xs text-gray-400 mt-1">заменён</div>' : ''}</div></div>`).join('') || '<div class="text-sm text-gray-500">Замеров пока нет.</div>'}</div></section>
+  </div>`;
+}
+
+function renderCanonicalProjects() {
+  return state.canonicalProjectId ? canonicalProjectDetailHtml() : canonicalProjectListHtml();
+}
+
+function canonicalOpeningTypeOptions(selected = 'standard_window') {
+  return ['standard_window','standard_door','french_window','french_door','storefront','skylight','custom'].map(value => `<option value="${value}" ${value === selected ? 'selected' : ''}>${canonicalOpeningTypeLabel(value)}</option>`).join('');
+}
+
+function canonicalCellRow(index, cell = {}) {
+  return `<div class="cp-cell-row border border-slate-200 bg-slate-50 p-3" style="border-radius:4px" data-index="${index}"><input type="hidden" data-field="supersedes" value="${academyEsc(cell.measurement_id || cell.supersedes_measurement_id || '')}"><div class="grid grid-cols-2 md:grid-cols-4 gap-2"><label>Ячейка<input data-field="cell_id" value="${academyEsc(cell.cell_id || `cell-${index + 1}`)}"></label><label>Ширина, in<input data-field="width" type="number" min="0.01" step="0.01" value="${academyEsc(cell.width || '')}"></label><label>Высота, in<input data-field="height" type="number" min="0.01" step="0.01" value="${academyEsc(cell.height || '')}"></label><label>Количество<input data-field="quantity" type="number" min="0.01" step="0.01" value="${academyEsc(cell.quantity || 1)}"></label></div><div class="mt-2"><div class="text-xs font-semibold text-slate-500 mb-1">Переопределить плёнку</div>${canonicalFilmPickerHtml(`cp-cell-${index}-film`, cell.film_override_id || '', 'SOLAR', { modelField: 'film' })}</div><label class="flex items-center gap-2 mt-2"><input data-field="removal" type="checkbox" ${cell.removal_required ? 'checked' : ''} style="width:auto"><span>Удаление старой плёнки</span></label></div>`;
+}
+
+function canonicalAddCellRow() {
+  const host = document.getElementById('cp-cells');
+  if (!host) return;
+  host.insertAdjacentHTML('beforeend', canonicalCellRow(host.querySelectorAll('.cp-cell-row').length));
+}
+
+function openCanonicalOpening(positionId, roomKey = '', openingId = '', verify = false) {
+  const data = state.canonicalConstructor;
+  const room = (data?.rooms || []).find(item => item.project_position_id === positionId && item.room_key === roomKey);
+  const opening = room?.openings?.find(item => item.opening_id === openingId);
+  state.canonicalOpeningDraft = { positionId, room, opening, verify };
+  const templates = data?.room_templates || [];
+  const source = currentUser()?.role === 'measurer' || verify ? 'SURVEYOR_VERIFIED' : opening?.cells?.[0]?.source || 'CUSTOMER';
+  const cells = opening?.cells?.length ? opening.cells : [{}];
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-5" style="max-width:62rem" onclick="event.stopPropagation()"><div class="flex items-start justify-between gap-3"><div><div class="text-xs font-black text-blue-700">SOLAR V1</div><h3 class="text-xl font-black">${opening ? (verify ? 'Проверить проём' : 'Новая ревизия') : 'Добавить проём'}</h3></div><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4"><label>Источник замеров<select id="cp-source"><option value="CUSTOMER" ${source === 'CUSTOMER' ? 'selected' : ''}>Клиент · не проверено</option><option value="SURVEYOR_VERIFIED" ${source === 'SURVEYOR_VERIFIED' ? 'selected' : ''}>Замерщик · подтверждено</option></select></label><label>Помещение<select id="cp-room-key"><option value="">Выберите</option>${templates.map(item => `<option value="${academyEsc(item.key)}" ${item.key === room?.room_key ? 'selected' : ''}>${academyEsc(item.label_ru)}</option>`).join('')}</select></label><label>Название помещения<input id="cp-room-name" value="${academyEsc(room?.room_name || '')}"></label><label>Помещение / №<input id="cp-room-number" value="${academyEsc(room?.room_number || '')}"></label><label>ID проёма<input id="cp-opening-id" value="${academyEsc(opening?.opening_id || '')}"></label><label>Тип проёма<select id="cp-opening-type">${canonicalOpeningTypeOptions(opening?.opening_type)}</select></label><label>Общая ширина, in<input id="cp-overall-width" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_width || '')}"></label><label>Общая высота, in<input id="cp-overall-height" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_height || '')}"></label><label>Сторона света<select id="cp-orientation"><option value="">Неизвестно</option>${[['north','Север'],['east','Восток'],['south','Юг'],['west','Запад']].map(([value,label]) => `<option value="${value}" ${value === opening?.orientation ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div>
+    <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка для помещения</div>${canonicalFilmPickerHtml('cp-room-film', room?.film_id || '', 'SOLAR')}</div>
+    <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка для проёма</div>${canonicalFilmPickerHtml('cp-opening-film', opening?.film_id || '', 'SOLAR')}</div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3"><label>Конструкция стекла<select id="cp-glass-construction">${[['unknown','Неизвестно'],['single_pane','Одинарное'],['double_pane_igu','Двойной стеклопакет / IGU'],['triple_pane_igu','Тройной стеклопакет / IGU']].map(([value,label]) => `<option value="${value}" ${value === opening?.glass?.construction ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Прочность<select id="cp-glass-treatment">${[['unknown','Неизвестно'],['annealed','Сырое'],['heat_strengthened','Термоупрочнённое'],['tempered','Закалённое']].map(([value,label]) => `<option value="${value}" ${value === opening?.glass?.treatment ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Позиция Low-E<input id="cp-low-e-position" value="${academyEsc(opening?.glass?.low_e_position || '')}"></label></div>
+    <div class="flex flex-wrap gap-4 mt-3"><label class="flex items-center gap-2"><input id="cp-low-e" type="checkbox" ${opening?.glass?.low_e ? 'checked' : ''} style="width:auto">Low-E</label><label class="flex items-center gap-2"><input id="cp-laminated" type="checkbox" ${opening?.glass?.laminated ? 'checked' : ''} style="width:auto">Ламинированное</label><label class="flex items-center gap-2"><input id="cp-tinted" type="checkbox" ${opening?.glass?.tinted ? 'checked' : ''} style="width:auto">Тонированное</label></div>
+    <div class="flex items-center justify-between mt-4"><b>Ячейки</b><button class="btn-ghost" onclick="canonicalAddCellRow()">+ Ячейка</button></div><div id="cp-cells" class="space-y-2 mt-2">${cells.map((cell,index) => canonicalCellRow(index, cell)).join('')}</div>
+    <div class="flex justify-end gap-2 mt-4"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveCanonicalOpening()">Сохранить замер</button></div></div></div>`;
+  render();
+  setTimeout(() => {
+    const sourceSelect = document.getElementById('cp-source');
+    if (sourceSelect && currentUser()?.role === 'measurer') sourceSelect.disabled = true;
+  }, 0);
+}
+
+async function saveCanonicalOpening() {
+  const draft = state.canonicalOpeningDraft;
+  const projectId = state.canonicalProjectId;
+  if (!draft?.positionId || !projectId) return;
+  const cells = Array.from(document.querySelectorAll('#cp-cells .cp-cell-row')).map(row => ({
+    cell_id: row.querySelector('[data-field="cell_id"]')?.value?.trim(),
+    width: Number(row.querySelector('[data-field="width"]')?.value),
+    height: Number(row.querySelector('[data-field="height"]')?.value),
+    quantity: Number(row.querySelector('[data-field="quantity"]')?.value || 1),
+    removal_required: !!row.querySelector('[data-field="removal"]')?.checked,
+    film_override_id: row.querySelector('[data-field="film"]')?.value || null,
+    supersedes_measurement_id: row.querySelector('[data-field="supersedes"]')?.value || null,
+  }));
+  const roomKey = document.getElementById('cp-room-key')?.value || document.getElementById('cp-room-name')?.value?.trim()?.toLowerCase().replace(/[^a-z0-9]+/g,'_');
+  const body = {
+    project_position_id: draft.positionId,
+    site_type: state.canonicalConstructor?.site_type,
+    source: document.getElementById('cp-source')?.value,
+    room_key: roomKey,
+    room_name: document.getElementById('cp-room-name')?.value?.trim(),
+    room_number: document.getElementById('cp-room-number')?.value?.trim() || null,
+    room_film_id: document.getElementById('cp-room-film-model')?.value || null,
+    opening_id: document.getElementById('cp-opening-id')?.value?.trim(),
+    opening_type: document.getElementById('cp-opening-type')?.value,
+    opening_film_id: document.getElementById('cp-opening-film-model')?.value || null,
+    overall_width: Number(document.getElementById('cp-overall-width')?.value),
+    overall_height: Number(document.getElementById('cp-overall-height')?.value),
+    orientation: document.getElementById('cp-orientation')?.value || null,
+    glass: {
+      construction: document.getElementById('cp-glass-construction')?.value,
+      treatment: document.getElementById('cp-glass-treatment')?.value,
+      low_e: !!document.getElementById('cp-low-e')?.checked,
+      low_e_position: document.getElementById('cp-low-e-position')?.value?.trim() || null,
+      laminated: !!document.getElementById('cp-laminated')?.checked,
+      tinted: !!document.getElementById('cp-tinted')?.checked,
+    },
+    cells,
+  };
+  try {
+    await canonicalProjectRequest(`/api/v1/projects/${encodeURIComponent(projectId)}/constructor/measurements`, 'POST', body);
+    closeModal();
+    state.canonicalConstructor = null;
+    await loadCanonicalProjectConstructor(projectId, true);
+  } catch (error) { alert(error?.message || 'Не удалось сохранить замер'); }
 }
 
 // ---------- INSTALLER WORKDAY INSIDE THE ONE CRM ----------
@@ -18358,8 +18744,10 @@ function renderSettings() {
           <thead>
             <tr class="text-left text-xs uppercase text-gray-500">
               <th class="px-2 py-2">${T('brand')}</th>
-              <th class="px-2 py-2">${T('model')}</th>
-              <th class="px-2 py-2">${T('category')}</th>
+              <th class="px-2 py-2">Категория плёнки</th>
+              <th class="px-2 py-2">Название</th>
+              <th class="px-2 py-2">Модель</th>
+              <th class="px-2 py-2">Направление</th>
               <th class="px-2 py-2">Поставщик</th>
               <th class="px-2 py-2 w-24">${T('retailPrice')} ($/sqft)</th>
               <th class="px-2 py-2 w-20">${T('cost')} ($/sqft)</th>
@@ -18372,7 +18760,9 @@ function renderSettings() {
             ${(s.catalog||[]).map(c => `
               <tr class="border-t">
                 <td class="px-2 py-1"><input value="${c.brand}" onchange="updateCatalogItem('${c.id}','brand',this.value)"></td>
-                <td class="px-2 py-1"><input value="${c.model}" onchange="updateCatalogItem('${c.id}','model',this.value)"></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmCategory(c))}" placeholder="Зеркальная" onchange="updateCatalogItem('${c.id}','filmCategory',this.value)"></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmName(c))}" placeholder="Prime" onchange="updateCatalogItem('${c.id}','productName',this.value)"></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmModel(c))}" placeholder="NE2" onchange="updateCatalogItem('${c.id}','modelCode',this.value)"></td>
                 <td class="px-2 py-1">
                   <select onchange="updateCatalogItem('${c.id}','category',this.value)" style="background:${catColor(c.category).bg};color:${catColor(c.category).text};border:none;font-weight:600;">
                     ${['solar','protective','smart','privacy','decorative','removal','washing'].map(k => `<option value="${k}" ${c.category===k?'selected':''}>${T('cat'+k.charAt(0).toUpperCase()+k.slice(1))}</option>`).join('')}
@@ -22682,35 +23072,31 @@ function openOrderModal() {
         <div>
           <div class="erp-intake-kicker">ROLANPRO ERP · Order Intake</div>
           <div class="erp-intake-title">Новый заказ</div>
-          <div class="erp-intake-sub">Фиксируем только ядро: клиент, объект, направление, менеджер и заметка. Замер, КП, допродажи, оплата и монтаж открываются после создания из карточек заказа.</div>
         </div>
         <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
       </div>
 
       <div class="erp-intake-body">
-        <div class="erp-intake-main-grid">
+        <div class="erp-intake-main-grid" style="grid-template-columns:minmax(0,1fr)">
           <div>
             <section class="erp-intake-card">
               <div class="erp-intake-card-head">
                 <div>
                   <div class="erp-intake-card-title"><span class="erp-intake-step">1</span> Клиент и объект <span class="order-required">*</span></div>
-                  <div class="erp-intake-helper">Сначала ищем существующего клиента. Если клиент уже есть, CRM подтянет телефон, email, сегмент и адреса.</div>
                 </div>
                 <button id="no-client-new-btn" class="btn-primary text-sm" onclick="openOrderClientOverlay()">+ Новый клиент</button>
               </div>
               <div class="relative">
-                <input id="no-client-search" placeholder="🔎 Имя, телефон, email, адрес клиента..." oninput="renderClientSearch(this.value)" autocomplete="off">
+                <input id="no-client-search" placeholder="Имя, телефон или адрес" oninput="renderClientSearch(this.value)" autocomplete="off">
                 <div id="no-client-results" class="absolute left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto z-30" style="display:none;"></div>
               </div>
               <div id="no-client-selected" class="mt-2"></div>
-              <div class="erp-intake-note mt-3">Выберите клиента из поиска или создайте нового в отдельном окне. После сохранения CRM автоматически вернёт вас к заказу и подставит клиента.</div>
             </section>
 
             <section class="erp-intake-card">
               <div class="erp-intake-card-head">
                 <div>
                   <div class="erp-intake-card-title"><span class="erp-intake-step">2</span> Услуги проекта <span class="order-required">*</span></div>
-                  <div class="erp-intake-helper">Выберите одно или несколько направлений. Для каждого направления в замере будут отдельные размеры и материал.</div>
                 </div>
               </div>
               <div class="order-intake-grid" id="no-svc-buttons">
@@ -22718,8 +23104,6 @@ function openOrderModal() {
                   <button type="button" class="order-service-card" style="${orderServiceCardStyle(s.id)}" data-svc="${s.id}" onclick="selectOrderService('${s.id}')">
                     <div class="order-service-icon">${s.icon}</div>
                     <div class="font-semibold text-sm">${academyEsc(s.title)}</div>
-                    <div class="text-xs text-gray-500 mt-1">${academyEsc(s.desc)}</div>
-                    <div class="order-flow">${renderWorkflowPills(s.workflow, 3)}</div>
                   </button>
                 `).join('')}
               </div>
@@ -22730,7 +23114,6 @@ function openOrderModal() {
               <div class="erp-intake-card-head">
                 <div>
                   <div class="erp-intake-card-title"><span class="erp-intake-step">3</span> Управление заказом <span class="order-required">*</span></div>
-                  <div class="erp-intake-helper">Минимум для старта: менеджер, сложность и рабочая заметка. Все остальное откроется карточками в заказе.</div>
                 </div>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -22747,7 +23130,7 @@ function openOrderModal() {
               </div>
               <div class="mt-3">
                 <label class="text-xs">Заметка менеджера</label>
-                <textarea id="no-notes" rows="2" placeholder="Что хочет клиент, доступ, сроки, важные детали..."></textarea>
+                <textarea id="no-notes" rows="2"></textarea>
               </div>
               <details class="erp-intake-disclosure mt-3">
                 <summary>Редкие признаки и теги</summary>
@@ -22756,36 +23139,16 @@ function openOrderModal() {
                   <select id="no-tags" multiple size="5">
                     ${ORDER_TAG_DEFS.map(t => `<option value="${t.value}">${t.icon} ${t.label}</option>`).join('')}
                   </select>
-                  <div class="text-xs text-gray-400 mt-0.5">Направление, B2B/B2C и тип клиента добавляются автоматически. Здесь только редкие признаки: VIP, срочно, лестница, демонтаж.</div>
                 </div>
               </details>
             </section>
           </div>
-
-          <aside class="erp-intake-side">
-            <section class="erp-intake-card">
-              <div class="erp-intake-card-title">Что будет после создания</div>
-              <div class="erp-intake-helper">Заказ откроется как карточка: следующий шаг, клиент, замеры, КП, календарь, финансы и история.</div>
-              <div class="erp-intake-checklist mt-3">
-                <div><span>✓</span><span>Менеджер назначит консультацию/замер.</span></div>
-                <div><span>✓</span><span>Замерщик увидит задачу без финансов.</span></div>
-                <div><span>✓</span><span>КП, оплата, монтаж и склад живут в отдельных рабочих карточках.</span></div>
-              </div>
-            </section>
-            <details class="erp-intake-disclosure" open>
-              <summary>Что происходит дальше</summary>
-              <div class="order-builder-strip mt-3">
-                <input type="hidden" id="no-execution" value="standard_project">
-                <div id="no-order-builder-preview">${renderOrderBuilderPreview('smart_film', 'standard_project')}</div>
-              </div>
-            </details>
-          </aside>
+          <input type="hidden" id="no-execution" value="standard_project">
         </div>
       </div>
 
       <div class="erp-intake-footer">
-        <div class="erp-intake-footer-note">Допуслуги, рекомендации пленки, раскрой и оплата не убраны из CRM — они перенесены в правильные этапы после замера и КП.</div>
-        <div class="flex gap-2 justify-end">
+        <div class="flex gap-2 justify-end" style="margin-left:auto">
           <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
           <button class="btn-primary" onclick="createOrder()">Создать заказ</button>
         </div>
@@ -23493,11 +23856,15 @@ function addNewFilmType() {
 function updateCatalogItem(id, field, val) {
   const c = getCatalogItem(id); if (!c) return;
   c[field] = val;
+  if (field === 'productName' || field === 'modelCode') {
+    c.model = [c.productName, c.modelCode].filter(Boolean).join(' ').trim();
+  }
   save(); render();
 }
 function addCatalogItem(presetVendorId, presetCategory = 'solar') {
   db.settings.catalog.push({
-    id: uid(), brand: 'New', model: 'Model', category: presetCategory || 'solar', vendorId: presetVendorId || null,
+    id: uid(), brand: 'Rolan PRO', model: '', category: presetCategory || 'solar', vendorId: presetVendorId || null,
+    filmCategory: '', productName: '', modelCode: '',
     retailPerSqft: 10, costPerSqft: 2.5, installerRatePerSqft: 0.27, wastePct: 12,
   });
   save(); render();
@@ -30805,7 +31172,7 @@ function renderCatalogBrowser() {
     }
     if (categoryFilter !== 'all' && c.category !== categoryFilter) return false;
     if (!query) return true;
-    return `${c.brand} ${c.model} ${catLabel(c.category)}`.toLowerCase().includes(query);
+    return `${c.brand} ${catalogFilmCategory(c)} ${catalogFilmName(c)} ${catalogFilmModel(c)} ${catLabel(c.category)}`.toLowerCase().includes(query);
   });
 
   // Внутри отфильтрованного — по-прежнему группируем по поставщику,
@@ -30820,7 +31187,7 @@ function renderCatalogBrowser() {
   const controls = `
   <div class="flex gap-2 flex-wrap mb-3">
     <input id="catalog-search" value="${academyEsc(state.catalogQuery || '')}"
-           placeholder="🔎 Бренд или модель: ATR, Titan, Safety..."
+           placeholder="🔎 Категория, название или модель: Зеркальная, Prime, NE2..."
            oninput="state.catalogQuery=this.value; render();"
            style="flex:1;min-width:200px;">
     <select class="w-auto text-sm" onchange="state.catalogVendor=this.value; render();">
@@ -30857,8 +31224,10 @@ function renderCatalogBrowser() {
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead><tr class="text-xs text-gray-500 border-b">
-            <th class="text-left p-2">Плёнка</th>
-            <th class="text-left p-2">Категория</th>
+            <th class="text-left p-2">Категория плёнки</th>
+            <th class="text-left p-2">Название</th>
+            <th class="text-left p-2">Модель</th>
+            <th class="text-left p-2">Направление</th>
             <th class="text-left p-2">Ширина рулона</th>
             <th class="text-left p-2">Характеристики</th>
             <th class="text-left p-2">Цена</th>
@@ -30873,8 +31242,10 @@ function renderCatalogBrowser() {
               <tr class="border-t">
                 <td class="p-2">
                   <span style="width:8px;height:8px;border-radius:50%;background:${pal.dot};display:inline-block;margin-right:6px;"></span>
-                  <span class="font-medium">${academyEsc(c.brand)} — ${academyEsc(c.model)}</span>
+                  <span class="font-medium">${academyEsc(catalogFilmCategory(c) || '—')}</span>
                 </td>
+                <td class="p-2">${academyEsc(catalogFilmName(c) || '—')}</td>
+                <td class="p-2 font-mono">${academyEsc(catalogFilmModel(c) || 'не указана')}</td>
                 <td class="p-2"><span class="tag" style="background:${pal.bg};color:${pal.text}">${catLabel(c.category)}</span></td>
                 <td class="p-2 whitespace-nowrap">${c.rollWidth ? c.rollWidth + '"' : '<span class="text-gray-400">—</span>'}</td>
                 <td class="p-2 text-xs">${catalogSpecLabel(c)}</td>

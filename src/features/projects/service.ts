@@ -2018,6 +2018,7 @@ async function fetchProjectsForSession(session: ProjectSession) {
           client_id: true,
           client_code: true,
           name: true,
+          customer_type: true,
         },
       },
       city: {
@@ -2109,6 +2110,7 @@ export async function listProjectsForSession(session: ProjectSession) {
     return {
       project_id: project.project_id,
       project_code: project.project_code,
+      site_type: project.site_type,
       title: project.title,
       priority: project.priority,
       problem_flag: project.problem_flag,
@@ -2121,6 +2123,7 @@ export async function listProjectsForSession(session: ProjectSession) {
             client_id: project.client.client_id,
             client_code: project.client.client_code,
             name: project.client.name,
+            customer_type: project.client.customer_type,
           }
         : null,
       city: project.city
@@ -2510,6 +2513,7 @@ export async function getProjectCardByIdForSession(session: ProjectSession, proj
   return {
     project_id: project.project_id,
     project_code: project.project_code,
+    site_type: project.site_type,
     title: project.title,
     address: project.address,
     zip_code: project.zip_code,
@@ -2529,6 +2533,7 @@ export async function getProjectCardByIdForSession(session: ProjectSession, proj
           phone: project.client.phone,
           email: project.client.email,
           service_address: project.client.service_address,
+          customer_type: project.client.customer_type,
         }
       : null,
     city: project.city
