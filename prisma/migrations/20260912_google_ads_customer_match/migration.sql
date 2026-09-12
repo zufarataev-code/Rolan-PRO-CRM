@@ -21,11 +21,15 @@ CREATE TABLE "customer_match_memberships" (
     "last_synced_at" TIMESTAMPTZ(6),
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY ("customer_match_membership_id")
+    CONSTRAINT "customer_match_memberships_pkey" PRIMARY KEY ("customer_match_membership_id")
 );
-CREATE UNIQUE INDEX ON "customer_match_memberships" ("destination_account_id", "user_list_id", "subject_type", "subject_id");
-CREATE INDEX ON "customer_match_memberships" ("desired_state", "applied_state");
-CREATE INDEX ON "customer_match_memberships" ("subject_type", "subject_id");
+
+CREATE UNIQUE INDEX "customer_match_memberships_destination_account_id_user_list_id_subject_type_subject_id_key"
+    ON "customer_match_memberships" ("destination_account_id", "user_list_id", "subject_type", "subject_id");
+CREATE INDEX "customer_match_memberships_desired_state_applied_state_idx"
+    ON "customer_match_memberships" ("desired_state", "applied_state");
+CREATE INDEX "customer_match_memberships_subject_type_subject_id_idx"
+    ON "customer_match_memberships" ("subject_type", "subject_id");
 
 -- Created customer_match_outbox table to track operations on Customer Match memberships.
 CREATE TABLE "customer_match_outbox" (
@@ -42,15 +46,19 @@ CREATE TABLE "customer_match_outbox" (
     "last_error" JSONB,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY ("customer_match_outbox_id")
+    CONSTRAINT "customer_match_outbox_pkey" PRIMARY KEY ("customer_match_outbox_id")
 );
-CREATE UNIQUE INDEX ON "customer_match_outbox" ("customer_match_membership_id", "operation", "identifier_version");
-CREATE INDEX ON "customer_match_outbox" ("processing_status", "next_retry_at");
-CREATE INDEX ON "customer_match_outbox" ("customer_match_membership_id");
+
+CREATE UNIQUE INDEX "customer_match_outbox_customer_match_membership_id_operation_identifier_version_key"
+    ON "customer_match_outbox" ("customer_match_membership_id", "operation", "identifier_version");
+CREATE INDEX "customer_match_outbox_processing_status_next_retry_at_idx"
+    ON "customer_match_outbox" ("processing_status", "next_retry_at");
+CREATE INDEX "customer_match_outbox_customer_match_membership_id_idx"
+    ON "customer_match_outbox" ("customer_match_membership_id");
 
 -- Adding required foreign key constraint for customer_match_outbox referring to customer_match_memberships.
 ALTER TABLE "customer_match_outbox"
-ADD CONSTRAINT "customer_match_outbox_membership_id_fkey"
+ADD CONSTRAINT "customer_match_outbox_customer_match_membership_id_fkey"
 FOREIGN KEY ("customer_match_membership_id")
 REFERENCES "customer_match_memberships" ("customer_match_membership_id")
 ON DELETE CASCADE ON UPDATE CASCADE;
