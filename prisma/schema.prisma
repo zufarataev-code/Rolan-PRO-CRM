@@ -485,9 +485,12 @@ model Project {
   @@index([payment_status_id])
   @@index([city_id])
   @@map("projects")
+  site_type String? @db.VarChar(30)
 }
 
-model ProjectPosition {
+model Measurement {
+  measurement_source String? @db.VarChar(30)
+  verification_status String? @db.VarChar(30)
   position_id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   project_id                   String            @db.Uuid
   proposal_item_id             String?           @unique @db.Uuid
