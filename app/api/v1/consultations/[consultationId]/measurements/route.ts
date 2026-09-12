@@ -5,7 +5,10 @@ import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { CONSULTATION_ACCESS_ROLES } from "@/features/consultations/api";
 import { addMeasurement, getConsultationByIdForSession } from "@/features/consultations/service";
-import { withMeasurementConstructorData } from "@/features/projects/constructor";
+import {
+  verificationStatusForSource,
+  withMeasurementConstructorData,
+} from "@/features/projects/constructor";
 import { parseMeasurementConstructorInput } from "@/features/projects/constructor-request";
 
 type RouteContext = {
@@ -96,6 +99,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     complexity_level_id: body.complexity_level_id,
     notes: body.notes,
     drawing_data: drawingData,
+    measurement_source: constructorInput?.source ?? null,
+    verification_status: constructorInput ? verificationStatusForSource(constructorInput.source) : null,
     sort_order: body.sort_order,
   });
 
