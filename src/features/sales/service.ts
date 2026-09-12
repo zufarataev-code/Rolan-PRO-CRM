@@ -845,6 +845,48 @@ export async function moveDealStage(input: MoveDealStageInput) {
       });
     }
 
+    if (nextStatus.status_code === "CLOSED_WON") {
+      const proposal = await tx.proposal.findFirst({
+        where: {
+          deal_id: deal.deal_id,
+        },
+        orderBy: {
+          updated_at: "desc",
+        },
+        select: {
+          selected_total_amount: true,
+          currency: true,
+          agreement: {
+            select: {
+              status: true,
+              signed_at: true,
+            },
+          },
+          deposit: {
+            select: {
+              status: true,
+              paid_at: true,
+            },
+          },
+        },
+      });
+
+      const hasSignedAgreement = proposal?.agreement?.status === "signed" && Boolean(proposal.agreement.signed_at);
+      const hasPaidDeposit = proposal?.deposit?.status === "paid" && Boolean(proposal.deposit.paid_at);
+      const conversionValue = hasSignedAgreement && hasPaidDeposit ? proposal?.selected_total_amount ?? null : null;
+
+      await ensureClosedWonConversion(tx, {
+        dealId: deal.deal_id,
+        leadId: deal.lead_id,
+        clientId: deal.client_id,
+        attributionTouchpointId: deal.attribution_touchpoint_id,
+        occurredAt: new Date(),
+        conversionValue,
+        currency: proposal?.currency ?? "USD",
+        eventSource: "OTHER",
+      });
+    }
+
     if (!isTerminalStage && input.nextAction) {
       const followUp = await tx.followUp.create({
         data: {
