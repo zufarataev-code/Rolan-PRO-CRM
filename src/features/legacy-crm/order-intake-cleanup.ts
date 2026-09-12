@@ -420,7 +420,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       const note = document.getElementById('rolanpro-new-order-material-note');
       if (note) {
         note.textContent = items.length
-          ? 'Выбранная модель станет материалом заказа и значением по умолчанию для новых замеров.'
+          ? ''
           : 'Для этого направления в каталоге пока нет материала. Добавьте позицию в Каталог, затем вернитесь в заказ.';
       }
     };
@@ -440,7 +440,6 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         section.innerHTML =
           '<div class="erp-intake-card-head"><div>' +
             '<div class="erp-intake-card-title">Плёнка <span class="order-required">*</span></div>' +
-            '<div class="erp-intake-helper">Категория, название и модель выбираются отдельно.</div>' +
           '</div></div>' +
           '<div class="rolanpro-film-picker-grid">' +
             '<div><label>Категория</label><select id="no-film-category"></select></div>' +

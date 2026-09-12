@@ -130,7 +130,8 @@ test("server injects service, catalog material and complexity controls into orde
   assert.match(result, /materialModel/);
   assert.match(result, /createdOrder\.materialCategory/);
   assert.match(result, /orderBuilder\.materialModel/);
-  assert.match(result, /Категория, название и модель выбираются отдельно/);
+  assert.doesNotMatch(result, /Категория, название и модель выбираются отдельно/);
+  assert.doesNotMatch(result, /Выбранная модель станет материалом заказа/);
 });
 
 test("injected order film hierarchy remains valid JavaScript", () => {
