@@ -435,8 +435,8 @@ model Deal {
 }
 
 model Project {
-  project_id
-  site_type String? @db.VarChar(30)                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  site_type String?           @db.VarChar(30)
   project_code                 String?           @unique @db.VarChar(40)
   client_id                    String            @db.Uuid
   deal_id                      String?           @db.Uuid
