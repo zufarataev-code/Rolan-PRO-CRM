@@ -435,7 +435,8 @@ model Deal {
 }
 
 model Project {
-  project_id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id
+  site_type String? @db.VarChar(30)                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   project_code                 String?           @unique @db.VarChar(40)
   client_id                    String            @db.Uuid
   deal_id                      String?           @db.Uuid
@@ -485,10 +486,9 @@ model Project {
   @@index([payment_status_id])
   @@index([city_id])
   @@map("projects")
-  site_type String? @db.VarChar(30)
-}
+  }
 
-model Measurement {
+model ProjectPosition {
   measurement_source String? @db.VarChar(30)
   verification_status String? @db.VarChar(30)
   position_id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -803,6 +803,8 @@ model Measurement {
   access_type                  String?     @db.VarChar(80)
   complexity_level_id          String?     @db.Uuid
   notes                        String?     @db.Text
+  measurement_source String? @db.VarChar(30)
+  verification_status String? @db.VarChar(30)
   drawing_data                 Json?
   sort_order                   Int         @default(0)
   created_at                   DateTime    @default(now()) @db.Timestamptz(6)
