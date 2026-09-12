@@ -549,6 +549,53 @@ model ConversionEvent {
   @@index([attribution_touchpoint_id])
   @@index([event_type, occurred_at])
   @@map("conversion_events")
+
+  adjustments                   ConversionAdjustment[]
+}
+
+model ConversionAdjustment {
+  conversion_adjustment_id     String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversion_event_id          String       @db.Uuid
+  adjustment_type              String       @db.VarChar(20)
+  financial_reference_id       String       @db.VarChar(191)
+  original_transaction_id      String       @db.VarChar(191)
+  adjusted_value               Decimal?     @db.Decimal(14, 2)
+  currency                     String?      @db.VarChar(3)
+  reason                       String?      @db.VarChar(255)
+  occurred_at                  DateTime     @db.Timestamptz(6)
+  created_by_user_id           String?      @db.Uuid
+  created_at                   DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime     @updatedAt @db.Timestamptz(6)
+
+  conversion_event             ConversionEvent   @relation(fields: [conversion_event_id], references: [conversion_event_id], onDelete: Restrict)
+  upload_outboxes              ConversionAdjustmentOutbox[]
+
+  @@unique([conversion_event_id, financial_reference_id, adjustment_type])
+  @@index([original_transaction_id])
+  @@map("conversion_adjustments")
+}
+
+model ConversionAdjustmentOutbox {
+  conversion_adjustment_outbox_id String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversion_adjustment_id        String    @db.Uuid
+  destination_account_id          String    @db.VarChar(64)
+  action_id                       String    @db.VarChar(64)
+  original_transaction_id         String    @db.VarChar(191)
+  processing_status               String    @default("queued") @db.VarChar(40)
+  attempts                        Int       @default(0)
+  next_retry_at                   DateTime  @default(now()) @db.Timestamptz(6)
+  submitted_at                    DateTime?
+  request_id                      String?   @db.VarChar(191)
+  last_error                      Json?
+  created_at                      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                      DateTime  @updatedAt @db.Timestamptz(6)
+
+  conversion_adjustment           ConversionAdjustment   @relation(fields: [conversion_adjustment_id], references: [conversion_adjustment_id], onDelete: Cascade)
+
+  @@unique([destination_account_id, action_id, original_transaction_id, conversion_adjustment_id])
+  @@index([processing_status, next_retry_at])
+  @@index([conversion_adjustment_id])
+  @@map("conversion_adjustment_outbox")
 }
 
 model ConversionUploadOutbox {
