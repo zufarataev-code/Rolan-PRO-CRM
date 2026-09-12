@@ -489,8 +489,6 @@ model Project {
   }
 
 model ProjectPosition {
-  measurement_source String? @db.VarChar(30)
-  verification_status String? @db.VarChar(30)
   position_id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   project_id                   String            @db.Uuid
   proposal_item_id             String?           @unique @db.Uuid
