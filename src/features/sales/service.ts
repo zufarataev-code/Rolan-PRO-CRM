@@ -1,7 +1,10 @@
 import { prisma } from "@/lib/db";
 import { serializeClient, serializeDealCard, serializeFollowUp, serializeLead, serializeTask } from "@/features/sales/serializers";
 import { getAllowedStageTransitions, isValidStageTransition } from "@/features/sales/pipeline";
-import { ensureClosedWonConversion } from "@/features/google-ads/conversion-events";
+import {
+  ensureClosedWonConversion,
+  ensureQualifiedLeadConversion,
+} from "@/features/google-ads/conversion-events";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { buildClientAccessWhere, buildDealAccessWhere } from "@/features/sales/access";
 
@@ -844,6 +847,16 @@ export async function moveDealStage(input: MoveDealStageInput) {
         },
       });
     }
+
+    await ensureQualifiedLeadConversion(tx, {
+      dealId: deal.deal_id,
+      leadId: deal.lead_id,
+      clientId: deal.client_id,
+      attributionTouchpointId: deal.attribution_touchpoint_id,
+      pipelineStatusCode: nextStatus.status_code,
+      occurredAt: new Date(),
+      eventSource: "OTHER",
+    });
 
     if (nextStatus.status_code === "CLOSED_WON") {
       const proposal = await tx.proposal.findFirst({
