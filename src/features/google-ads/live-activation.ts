@@ -44,6 +44,8 @@ export type ActivateGoogleAdsLiveInput = {
 /**
  * The only application path that can set validate_only=false.
  * It intentionally requires an environment-level opt-in in addition to owner confirmation.
+ * Google Ads API access is determined by the Google Cloud project that owns the OAuth
+ * client/service account. Legacy developer tokens are optional and are not required here.
  */
 export async function activateGoogleAdsLiveUploads(input: ActivateGoogleAdsLiveInput) {
   if (input.confirmation !== GOOGLE_ADS_LIVE_CONFIRMATION) {
@@ -55,8 +57,8 @@ export async function activateGoogleAdsLiveUploads(input: ActivateGoogleAdsLiveI
       "GOOGLE_ADS_VALIDATE_ONLY must be explicitly set to false before live activation is permitted.",
     );
   }
-  if (!process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim() || !hasGoogleCredentials()) {
-    fail("google_credentials_incomplete", "Google Ads developer token and OAuth credentials must be configured first.");
+  if (!hasGoogleCredentials()) {
+    fail("google_credentials_incomplete", "Google Ads OAuth credentials must be configured first.");
   }
 
   return prisma.$transaction(async (tx) => {
