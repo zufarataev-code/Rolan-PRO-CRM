@@ -1,3 +1,5 @@
+import { parseMeasurementConstructorData } from "@/features/projects/constructor";
+
 function toNumber(value: { toString(): string } | null | undefined) {
   return value ? Number(value.toString()) : null;
 }
@@ -54,6 +56,7 @@ export function serializeMeasurement(
     access_type: measurement.access_type,
     notes: measurement.notes,
     drawing_data: measurement.drawing_data,
+    constructor: parseMeasurementConstructorData(measurement.drawing_data),
     sort_order: measurement.sort_order,
     complexity_level: measurement.complexity_level,
     photos:
