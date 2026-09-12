@@ -119,15 +119,15 @@ export async function importGoogleAdsDailyCosts(startDate: string, endDate: stri
   const customerId = normalizeGoogleId(configuredCustomerId);
   if (!/^\d+$/.test(customerId)) fail("invalid_google_ads_customer_id", "Google Ads customer ID must be numeric.");
 
-  const developerToken = trimOrNull(process.env.GOOGLE_ADS_DEVELOPER_TOKEN);
-  if (!developerToken) fail("google_ads_developer_token_missing", "Google Ads developer token is not configured.");
-
   const accessToken = await getGoogleAccessToken(["https://www.googleapis.com/auth/adwords"]);
   const headers: Record<string, string> = {
     authorization: `Bearer ${accessToken}`,
     "content-type": "application/json",
-    "developer-token": developerToken,
   };
+  // Developer tokens were sunset on 2026-09-09. Keep the legacy header only
+  // when an older deployment already has one; Cloud project access is authoritative.
+  const legacyDeveloperToken = trimOrNull(process.env.GOOGLE_ADS_DEVELOPER_TOKEN);
+  if (legacyDeveloperToken) headers["developer-token"] = legacyDeveloperToken;
   const loginCustomerId = trimOrNull(settings?.login_customer_id ?? process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID);
   if (loginCustomerId) headers["login-customer-id"] = normalizeGoogleId(loginCustomerId);
 
