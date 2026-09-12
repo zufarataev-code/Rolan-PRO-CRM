@@ -27,6 +27,16 @@ export async function GET(request: NextRequest) {
     where: { setting_key: SETTINGS_KEY },
   });
 
+  const oauthConfigured = Boolean(
+    process.env.GOOGLE_ADS_OAUTH_CLIENT_ID?.trim() &&
+      process.env.GOOGLE_ADS_OAUTH_CLIENT_SECRET?.trim() &&
+      process.env.GOOGLE_ADS_OAUTH_REFRESH_TOKEN?.trim(),
+  );
+  const serviceAccountConfigured = Boolean(
+    process.env.GOOGLE_ADS_SERVICE_ACCOUNT_EMAIL?.trim() &&
+      process.env.GOOGLE_ADS_SERVICE_ACCOUNT_PRIVATE_KEY?.trim(),
+  );
+
   return apiSuccess({
     configured: Boolean(settings),
     upload_enabled: settings?.upload_enabled ?? false,
@@ -41,16 +51,10 @@ export async function GET(request: NextRequest) {
     customer_match_user_list_id: settings?.customer_match_user_list_id ?? null,
     customer_match_terms_accepted: settings?.customer_match_terms_accepted ?? false,
     credentials: {
-      developer_token_configured: Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim()),
-      oauth_refresh_token_configured: Boolean(
-        process.env.GOOGLE_ADS_OAUTH_CLIENT_ID?.trim() &&
-          process.env.GOOGLE_ADS_OAUTH_CLIENT_SECRET?.trim() &&
-          process.env.GOOGLE_ADS_OAUTH_REFRESH_TOKEN?.trim(),
-      ),
-      service_account_configured: Boolean(
-        process.env.GOOGLE_ADS_SERVICE_ACCOUNT_EMAIL?.trim() &&
-          process.env.GOOGLE_ADS_SERVICE_ACCOUNT_PRIVATE_KEY?.trim(),
-      ),
+      cloud_managed_api_access: oauthConfigured || serviceAccountConfigured,
+      oauth_refresh_token_configured: oauthConfigured,
+      service_account_configured: serviceAccountConfigured,
+      legacy_developer_token_configured: Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim()),
     },
   });
 }
