@@ -495,6 +495,9 @@ model ConsentSnapshot {
 }
 
 model GoogleAdsIntegrationSetting {
+  customer_match_enabled  Boolean  @default(false)
+  customer_match_user_list_id  String?  @db.VarChar(64)
+  customer_match_terms_accepted  Boolean  @default(false)
   setting_key                 String    @id @default("default") @db.VarChar(40)
   upload_enabled              Boolean   @default(false)
   validate_only               Boolean   @default(true)
