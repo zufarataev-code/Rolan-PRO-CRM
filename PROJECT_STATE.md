@@ -251,7 +251,8 @@ Contributors must add a row before starting substantial work and update or remov
 - Existing catalog entries are migrated in place without changing IDs. Orders save category/name/model snapshots in addition to the catalog ID so later catalog edits do not erase what was sold.
 - The same structure is available in order parameters and catalog management. Missing legacy model codes are displayed as `Модель не указана` instead of inventing a value.
 - Final UI correction: the same cascading fields now apply to the Solar service default and every room, opening, and cell override. The New Order form no longer contains the explanatory sidebar, workflow pills, long introductory copy, or redundant field guidance; only actionable validation messages remain.
-- Verification: 213 automated tests passed, including legacy/injected script compilation, compact-form guards, and hierarchy guards. Refreshed Prisma, TypeScript, production build, and GitHub CI checks are required on the amended PR head.
+- New Order correction: site type is now a required independent choice (`RESIDENTIAL` or `COMMERCIAL`). The legacy measurement workspaces use it to show the matching residential-room or commercial-area presets, and the selected value is carried through the canonical proposal into the launched PostgreSQL Project.
+- Verification: 215 automated tests passed, including legacy/injected script compilation, compact-form guards, site-type propagation, room-preset routing, and hierarchy guards. Refreshed Prisma, TypeScript, production build, and GitHub CI checks are required on the amended PR head.
 
 ## Completion rule
 

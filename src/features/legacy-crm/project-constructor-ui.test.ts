@@ -64,6 +64,21 @@ test("new order form stays compact without redundant guidance", () => {
   assert.doesNotMatch(legacyCrm, /Допуслуги, рекомендации пленки/);
 });
 
+test("new order requires site type and site type drives room presets", () => {
+  assert.match(legacyCrm, /id="no-site-type-buttons"/);
+  assert.match(legacyCrm, /data-site-type="RESIDENTIAL"/);
+  assert.match(legacyCrm, /data-site-type="COMMERCIAL"/);
+  assert.match(legacyCrm, /Выберите тип объекта: жилой или коммерческий/);
+  assert.match(legacyCrm, /siteType,/);
+  assert.match(legacyCrm, /const RESIDENTIAL_ROOM_PRESETS/);
+  assert.match(legacyCrm, /const COMMERCIAL_ROOM_PRESETS/);
+  assert.match(legacyCrm, /roomPresetsForOrder\(o\)/);
+  assert.match(legacyCrm, /Техническое помещение/);
+  assert.match(legacyCrm, /Патио \/ зимний сад/);
+  const siteTypeResolver = legacyCrm.match(/function orderSiteType\(order\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.doesNotMatch(siteTypeResolver, /accountType|client|B2B|B2C/);
+});
+
 test("surveyor uses assigned canonical projects without finance controls", () => {
   assert.match(legacyCrm, /\['canonicalProjects', 'Замеры проектов', '🏗'\]/);
   assert.match(legacyCrm, /currentUser\(\)\?\.role === 'measurer'/);

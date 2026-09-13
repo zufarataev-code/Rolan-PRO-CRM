@@ -9299,9 +9299,28 @@ const US_ROOM_PRESETS = [
   'Private office', 'Showroom', 'Waiting room', 'Break room', 'Retail floor',
   'Restaurant dining area', 'Classroom', 'Gym / Studio', 'Warehouse office',
 ];
-function roomPresetOptionsHtml(selected = 'Living room', includeCustom = true) {
-  const opts = US_ROOM_PRESETS.map(name => `<option value="${academyEsc(name)}" ${selected === name ? 'selected' : ''}>${academyEsc(name)}</option>`).join('');
-  return opts + (includeCustom ? `<option value="__custom" ${selected === '__custom' ? 'selected' : ''}>Custom room / zone</option>` : '');
+const RESIDENTIAL_ROOM_PRESETS = ['Гостиная','Спальня','Кухня','Столовая','Ванная','Кабинет','Коридор','Вход / фойе','Гараж','Патио / зимний сад','Другое'];
+const COMMERCIAL_ROOM_PRESETS = ['Офис','Переговорная','Лобби / ресепшен','Витрина / торговый зал','Коридор','Комната отдыха','Санузел','Склад','Техническое помещение','Серверная / IT','Лестничная клетка','Другое'];
+function normalizeOrderSiteType(value) {
+  const normalized = String(value || '').trim().toUpperCase();
+  return ['RESIDENTIAL','COMMERCIAL'].includes(normalized) ? normalized : '';
+}
+function orderSiteType(order) {
+  return normalizeOrderSiteType(order?.siteType || order?.site_type || order?.orderBuilder?.siteType);
+}
+function roomPresetsForOrder(order) {
+  const siteType = orderSiteType(order);
+  if (siteType === 'RESIDENTIAL') return RESIDENTIAL_ROOM_PRESETS;
+  if (siteType === 'COMMERCIAL') return COMMERCIAL_ROOM_PRESETS;
+  return [...US_ROOM_PRESETS, 'Custom room'];
+}
+function isCustomRoomPreset(value) {
+  return ['Другое','Custom room','__custom'].includes(value);
+}
+function roomPresetOptionsHtml(selected = '', includeCustom = true, order = null) {
+  const presets = roomPresetsForOrder(order).filter(name => includeCustom || !isCustomRoomPreset(name));
+  const opts = presets.map(name => `<option value="${academyEsc(name)}" ${selected === name ? 'selected' : ''}>${academyEsc(name)}</option>`).join('');
+  return opts + (includeCustom && !presets.some(isCustomRoomPreset) ? `<option value="__custom" ${selected === '__custom' ? 'selected' : ''}>Другое</option>` : '');
 }
 function measureStudioRoomSelectChanged() {
   const select = document.getElementById('ms-room');
@@ -9712,7 +9731,7 @@ function openEngineeringMeasureStudio(orderId) {
                   <div id="ms-room-new-wrap" style="display:${room ? 'none' : 'block'}">
                     <label>Название комнаты в США</label>
                     <select id="ms-room-preset" onchange="measureStudioRoomPresetChanged()">
-                      ${roomPresetOptionsHtml('Living room')}
+                      ${roomPresetOptionsHtml('', true, order)}
                     </select>
                     <input id="ms-room-new" class="mt-2" value="${room ? '' : 'Living room'}" placeholder="Можно уточнить: Kitchen - 2nd floor">
                     <div class="text-xs text-gray-500 mt-1">Выберите стандартное название комнаты или Custom room / zone для своего варианта.</div>
@@ -21116,7 +21135,6 @@ function updateWin(oid, rid, wid, field, val) {
   requestAnimationFrame(render);
 }
 
-const MANAGER_ROOM_PRESETS = [...US_ROOM_PRESETS, 'Custom room'];
 const MANAGER_OBJECT_GROUPS = [
   {
     key: 'window',
@@ -21727,7 +21745,7 @@ function renderManagerMeasureModal(oid) {
             <div class="manager-add-room-card">
               <label class="text-xs">Добавить комнату</label>
               <select id="mm-room-preset" class="mt-1">
-                ${MANAGER_ROOM_PRESETS.map(x => `<option value="${academyEsc(x)}">${academyEsc(x)}</option>`).join('')}
+                ${roomPresetsForOrder(o).map(x => `<option value="${academyEsc(x)}">${academyEsc(x)}</option>`).join('')}
               </select>
               <input id="mm-room-custom" class="mt-2" placeholder="Или свое название">
               <button class="btn-primary w-full mt-2" onclick="managerAddRoomFromForm('${oid}')">Добавить комнату</button>
@@ -21835,7 +21853,7 @@ function managerAddRoomFromForm(oid) {
   o.measurements = o.measurements || { rooms: [] };
   const preset = document.getElementById('mm-room-preset')?.value || T('room');
   const custom = (document.getElementById('mm-room-custom')?.value || '').trim();
-  const name = custom || (preset === 'Custom room' ? T('room') + ' ' + (o.measurements.rooms.length + 1) : preset);
+  const name = custom || (isCustomRoomPreset(preset) ? T('room') + ' ' + (o.measurements.rooms.length + 1) : preset);
   const activeScope = managerActiveMeasureScope(o);
   const defaultCatalogId = defaultCatalogIdForOrder(o) || null;
   const room = { id: uid(), name, windows: [], defaultCatalogId, defaultCatalogByScope: defaultCatalogId ? { [activeScope]: defaultCatalogId } : {} };
@@ -23058,6 +23076,7 @@ function openOrderModal() {
   state._newOrderClient = null;
   state._newOrderAddressId = null;
   state._newOrderTags = [];
+  state._newOrderSiteType = '';
   state._newOrderService = 'smart_film';
   state._newOrderServices = ['smart_film'];
   state._newOrderExecution = 'standard_project';
@@ -23091,6 +23110,14 @@ function openOrderModal() {
                 <div id="no-client-results" class="absolute left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto z-30" style="display:none;"></div>
               </div>
               <div id="no-client-selected" class="mt-2"></div>
+              <div class="mt-3">
+                <label class="text-xs">Тип объекта <span class="order-required">*</span></label>
+                <div class="grid grid-cols-2 gap-2 mt-1" id="no-site-type-buttons">
+                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="RESIDENTIAL" onclick="selectOrderSiteType('RESIDENTIAL')"><div class="font-semibold text-sm">🏠 Жилой</div></button>
+                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="COMMERCIAL" onclick="selectOrderSiteType('COMMERCIAL')"><div class="font-semibold text-sm">🏢 Коммерческий</div></button>
+                </div>
+                <input type="hidden" id="no-site-type" value="">
+              </div>
             </section>
 
             <section class="erp-intake-card">
@@ -23171,6 +23198,15 @@ function selectOrderService(v, force = false) {
     b.classList.toggle('active', selected.has(b.dataset.svc));
   });
   refreshOrderBuilderPreview();
+}
+function selectOrderSiteType(value) {
+  const siteType = normalizeOrderSiteType(value);
+  state._newOrderSiteType = siteType;
+  const hidden = document.getElementById('no-site-type');
+  if (hidden) hidden.value = siteType;
+  document.querySelectorAll('#no-site-type-buttons [data-site-type]').forEach(button => {
+    button.classList.toggle('active', button.dataset.siteType === siteType);
+  });
 }
 function selectOrderExecution(v) {
   const variant = orderExecutionVariantInfo(v);
@@ -23613,6 +23649,7 @@ function createOrder() {
   const requestedManagerId = (document.getElementById('no-mgr')?.value || '').trim();
   const managerId = viewer?.role === 'manager' ? viewer.id : requestedManagerId;
   const complexity = document.getElementById('no-complexity')?.value || 'standard';
+  const siteType = normalizeOrderSiteType(document.getElementById('no-site-type')?.value || state._newOrderSiteType);
   const pickedTags = Array.from(document.getElementById('no-tags')?.selectedOptions || []).map(o => o.value);
 
   if (!service || !ORDER_PRIMARY_SERVICES.some(s => s.id === service.id)) {
@@ -23621,6 +23658,10 @@ function createOrder() {
   }
   if (!managerId) {
     alert('Выберите менеджера');
+    return;
+  }
+  if (!siteType) {
+    alert('Выберите тип объекта: жилой или коммерческий');
     return;
   }
 
@@ -23661,6 +23702,7 @@ function createOrder() {
     pricePerM2: db.settings.pricePerM2,
     complexity, distanceKm: 0, marketing: 0, paid: 0,
     measurements: { rooms: [] },
+    siteType,
     extraServices: [],
     extraExpenses: [],
     timeline: [{
@@ -23684,6 +23726,7 @@ function createOrder() {
       variantId: executionVariant.id,
       variantTitle: executionVariant.title,
       color: orderServicePalette(service.id).color,
+      siteType,
       createdByCards: true,
     },
     recommendedAddons: [],
@@ -26769,6 +26812,7 @@ function premiumCanonicalSnapshot(prop) {
           width: premiumNum(windowItem.width),
           height: premiumNum(windowItem.height),
           sqft: premiumNum(priced.area),
+          site_type: orderSiteType(order) || null,
           glass_type: windowItem.glassType || null,
           installation_side: windowItem.side || null,
         },
@@ -26804,6 +26848,7 @@ function premiumCanonicalSnapshot(prop) {
     token: prop.token,
     legacy_order_id: order.id,
     order_number: order.number,
+    site_type: orderSiteType(order) || null,
     title: `ROLANPRO Proposal ${order.number || ''}`.trim(),
     client: {
       legacy_client_id: client.id,

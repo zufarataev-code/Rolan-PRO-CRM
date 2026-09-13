@@ -50,6 +50,16 @@ function makeProjectCode() {
   return `PRJ-${timePart}-${randomPart}`;
 }
 
+function projectSiteTypeFromItems(items: Array<{ dynamic_fields: Prisma.JsonValue | null; measurement_snapshot: Prisma.JsonValue | null }>) {
+  for (const item of items) {
+    const dynamicSiteType = asObject(item.dynamic_fields).site_type;
+    const measurementSiteType = asObject(item.measurement_snapshot).site_type;
+    const value = String(dynamicSiteType || measurementSiteType || "").toUpperCase();
+    if (value === "RESIDENTIAL" || value === "COMMERCIAL") return value;
+  }
+  return null;
+}
+
 export async function launchProjectFromClosedSale(
   session: ProjectLaunchSession,
   input: { proposal_id: string },
@@ -149,6 +159,7 @@ export async function launchProjectFromClosedSale(
   if (proposal.proposal_items.length === 0) {
     return "missing_selection" as const;
   }
+  const siteType = projectSiteTypeFromItems(proposal.proposal_items);
 
   const [projectStatus, paymentStatus, positionStatus] = await Promise.all([
     prisma.projectStatus.findUnique({ where: { status_code: "NEW" } }),
@@ -182,6 +193,7 @@ export async function launchProjectFromClosedSale(
           address: proposal.client.service_address ?? proposal.client.billing_address ?? null,
           zip_code: proposal.client.zip_code ?? null,
           priority: "normal",
+          site_type: siteType,
         },
         select: {
           project_id: true,

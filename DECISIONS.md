@@ -122,6 +122,7 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Order creation, order parameters, the Solar service default, and room/opening/cell overrides use cascading Category → Name → Model selectors but persist one exact catalog ID plus the applicable display snapshots. Existing orders and catalog IDs remain valid.
 - Legacy catalog records are extended in place with `filmCategory`, `productName`, and `modelCode`; no second material list is created. Canonical PostgreSQL uses the corresponding FilmCatalog appearance/category, model name, and model code fields.
 - Obvious selectors must not be surrounded by instructional paragraphs. The New Order screen uses compact service cards and short field labels; explanatory copy is shown only for an actionable warning or validation failure.
+- New Order requires an explicit physical site type. This value is never inferred from B2B/B2C, controls the room/location presets in legacy measurement entry, and is propagated through the canonical Proposal into the launched Project.
 - Added to PR #169 after review of the New Order screen. Production deployment remains a separate action.
 
 ## Changing a decision

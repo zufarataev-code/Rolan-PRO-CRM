@@ -586,6 +586,9 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         : (services[0]?.id || 'smart_film');
       const currentMaterialId = selectedMaterialFromOrder(order);
       const currentComplexity = complexityKeys.includes(order.complexity) ? order.complexity : 'standard';
+      const currentSiteType = typeof orderSiteType === 'function'
+        ? orderSiteType(order)
+        : (['RESIDENTIAL', 'COMMERCIAL'].includes(order.siteType) ? order.siteType : '');
 
       const overlay = document.createElement('div');
       overlay.id = 'rolanpro-order-parameters-overlay';
@@ -603,6 +606,9 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
               '</div>' +
               '<div class="rolanpro-order-parameters-field"><label>Сложность / коэффициент</label>' +
                 '<select id="rp-op-complexity">' + complexityOptionsHtml(currentComplexity) + '</select>' +
+              '</div>' +
+              '<div class="rolanpro-order-parameters-field"><label>Тип объекта</label>' +
+                '<select id="rp-op-site-type"><option value="">Выберите</option><option value="RESIDENTIAL"' + (currentSiteType === 'RESIDENTIAL' ? ' selected' : '') + '>Жилой</option><option value="COMMERCIAL"' + (currentSiteType === 'COMMERCIAL' ? ' selected' : '') + '>Коммерческий</option></select>' +
               '</div>' +
             '</div>' +
             '<div class="rolanpro-film-picker-grid">' +
@@ -667,6 +673,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       const serviceId = document.getElementById('rp-op-service')?.value || '';
       const materialId = document.getElementById('rp-op-material')?.value || '';
       const complexityKey = document.getElementById('rp-op-complexity')?.value || 'standard';
+      const siteType = document.getElementById('rp-op-site-type')?.value || '';
       const service = serviceInfoSafe(serviceId);
       const availableMaterials = materialsForService(serviceId);
       const material = catalogList().find((item) => item.id === materialId) || null;
@@ -679,6 +686,10 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         alert('Выберите плёнку / материал');
         return;
       }
+      if (!['RESIDENTIAL', 'COMMERCIAL'].includes(siteType)) {
+        alert('Выберите тип объекта: жилой или коммерческий');
+        return;
+      }
 
       order.serviceType = service.id;
       order.serviceTypes = Array.from(new Set([service.id, ...(order.serviceTypes || [])]));
@@ -686,6 +697,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       order.serviceWorkflow = Array.isArray(service.workflow) ? [...service.workflow] : [];
       order.complexity = complexityKey;
       order.complexityCoef = complexityCoef(complexityKey);
+      order.siteType = siteType;
       order.materialCatalogId = material?.id || '';
       order.materialLabel = material ? materialLabel(material) : '';
       order.materialCategory = material ? materialCategory(material) : '';
@@ -709,6 +721,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       order.orderBuilder.materialModel = material ? materialModel(material) : '';
       order.orderBuilder.complexity = complexityKey;
       order.orderBuilder.complexityCoef = complexityCoef(complexityKey);
+      order.orderBuilder.siteType = siteType;
 
       if (material) {
         (order.measurements?.rooms || []).forEach((room) => {

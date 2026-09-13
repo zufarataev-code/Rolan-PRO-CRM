@@ -25,6 +25,7 @@ export type LegacyProposalSnapshot = {
   token?: string;
   legacy_order_id?: string;
   order_number?: string;
+  site_type?: string | null;
   title?: string;
   client?: {
     legacy_client_id?: string;
@@ -46,12 +47,18 @@ function cleanMoney(value: unknown) {
   return Math.round(number * 100) / 100;
 }
 
+function cleanSiteType(value: unknown) {
+  const siteType = cleanText(value, 30).toUpperCase();
+  return siteType === "RESIDENTIAL" || siteType === "COMMERCIAL" ? siteType : null;
+}
+
 function normalizeSnapshot(input: LegacyProposalSnapshot) {
   const token = cleanText(input.token, 120);
   const legacyOrderId = cleanText(input.legacy_order_id, 120);
   const clientName = cleanText(input.client?.name, 160);
   const email = cleanText(input.client?.email, 191).toLowerCase();
   const phone = cleanText(input.client?.phone, 40);
+  const siteType = cleanSiteType(input.site_type);
   if (!/^pp_[a-z0-9]+$/i.test(token) || !legacyOrderId || !clientName) {
     throw new Error("Legacy proposal token, order and client are required.");
   }
@@ -71,9 +78,12 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
     measurementSnapshot: item.measurement_snapshot && typeof item.measurement_snapshot === "object"
       ? item.measurement_snapshot as Prisma.InputJsonValue
       : undefined,
-    dynamicFields: item.dynamic_fields && typeof item.dynamic_fields === "object"
-      ? item.dynamic_fields as Prisma.InputJsonValue
-      : undefined,
+    dynamicFields: {
+      ...(item.dynamic_fields && typeof item.dynamic_fields === "object" && !Array.isArray(item.dynamic_fields)
+        ? item.dynamic_fields
+        : {}),
+      ...(siteType ? { site_type: siteType } : {}),
+    } as Prisma.InputJsonValue,
     itemKind: cleanText(item.item_kind, 40) || "service",
   }));
   if (!items.length) throw new Error("The proposal has no billable lines.");
@@ -88,6 +98,7 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
     email,
     phone,
     address: cleanText(input.client?.address, 2_000),
+    siteType,
     items,
   };
 }

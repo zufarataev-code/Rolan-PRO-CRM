@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const legacyCrm = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+const legacyProposalPublisher = readFileSync("src/features/legacy-crm/publish-proposal.ts", "utf8");
+const projectLaunch = readFileSync("src/features/projects/launch.ts", "utf8");
 const proposalCodeMigration = readFileSync(
   "prisma/migrations/20260831170000_sequential_proposal_codes/migration.sql",
   "utf8",
@@ -35,4 +37,12 @@ test("proposal numbers are immutable sequential PRC codes", () => {
   assert.match(proposalCodeMigration, /'PRC-' \|\| numbered\.proposal_number/);
   assert.match(proposalCodeMigration, /SET DEFAULT \('PRC-' \|\| nextval\('proposal_code_sequence'\)/);
   assert.match(legacyCrm, /record\.server\?\.proposal_code \|\| record\.local\?\.proposalCode/);
+});
+
+test("selected site type follows the order into the canonical project", () => {
+  assert.match(legacyCrm, /site_type: orderSiteType\(order\) \|\| null/);
+  assert.match(legacyProposalPublisher, /cleanSiteType\(input\.site_type\)/);
+  assert.match(legacyProposalPublisher, /site_type: siteType/);
+  assert.match(projectLaunch, /projectSiteTypeFromItems/);
+  assert.match(projectLaunch, /site_type: siteType/);
 });
