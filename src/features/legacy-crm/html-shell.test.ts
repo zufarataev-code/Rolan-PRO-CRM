@@ -108,12 +108,18 @@ test("server injects service, catalog material and complexity controls into orde
 <script>cloudBoot()</script></body>`);
 
   assert.match(result, /rolanpro-order-material-section/);
-  assert.match(result, /no-material/);
-  assert.match(result, /no-film-category/);
-  assert.match(result, /no-film-name/);
+  assert.match(result, /rolanpro-new-order-material-list/);
+  assert.match(result, /servicePickerId/);
+  assert.match(result, /Плёнка по каждой услуге/);
+  assert.match(result, /Серия \/ категория/);
   assert.match(result, /db\.settings\.catalog/);
   assert.match(result, /catalogCategory/);
   assert.match(result, /materialCatalogId/);
+  assert.match(result, /materialsByService/);
+  assert.match(result, /selectedNewOrderServiceIds/);
+  assert.match(result, /return items\.filter\(\(item\) => item\.category === category\)/);
+  assert.match(result, /if \(!category\) return \[\]/);
+  assert.match(result, /chosenMaterials\[serviceId\]/);
   assert.match(result, /complexityCoef/);
   assert.match(result, /openRolanProOrderParameters/);
   assert.match(result, /saveRolanProOrderParameters/);

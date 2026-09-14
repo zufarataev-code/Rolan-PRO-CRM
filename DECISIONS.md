@@ -125,6 +125,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - New Order requires an explicit physical site type. This value is never inferred from B2B/B2C, controls the room/location presets in legacy measurement entry, and is propagated through the canonical Proposal into the launched Project.
 - Added to PR #169 after review of the New Order screen. Production deployment remains a separate action.
 
+## 2026-09-13 — Film selection is scoped per service
+
+- This decision refines `Film identity is Category → Name → Model`: a multi-service order never uses one shared film choice and never exposes the complete film catalog in a service picker.
+- New Order renders one independent film card for every selected service: Solar sees only Solar catalog records, Smart only Smart, Safety only Safety, and Decorative only Decorative.
+- Within each service card, film identity remains `Серия / категория → Название → Модель`. The order stores one exact existing catalog ID and display snapshot per service in `materialsByService`; no duplicate film catalog is created.
+- The first selected service remains the legacy primary service only for backward compatibility. Measurement defaults resolve from the active service's saved film, so a multi-service Project cannot accidentally inherit another service's material.
+- Added to PR #169 after New Order review. Production deployment remains a separate reviewed release action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

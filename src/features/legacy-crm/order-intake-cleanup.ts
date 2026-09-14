@@ -43,6 +43,25 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
     font-weight: 700;
   }
 
+  .rolanpro-service-film-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .rolanpro-service-film-card {
+    padding: 12px;
+    border: 1px solid #dbe4f0;
+    border-radius: 12px;
+    background: #f8fafc;
+  }
+
+  .rolanpro-service-film-title {
+    margin-bottom: 10px;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
   #rolanpro-order-parameters-overlay {
     position: fixed;
     inset: 0;
@@ -323,7 +342,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       const service = serviceInfoSafe(serviceId);
       const category = service?.catalogCategory || '';
       const items = catalogList();
-      if (!category) return items;
+      if (!category) return [];
       return items.filter((item) => item.category === category);
     };
 
@@ -392,8 +411,18 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       .map((key) => '<option value="' + key + '"' + (key === selectedKey ? ' selected' : '') + '>' + esc(complexityLabel(key)) + ' ×' + complexityCoef(key).toFixed(2) + '</option>')
       .join('');
 
-    const selectedMaterialFromOrder = (order) => {
+    const materialSnapshot = (item) => item ? {
+      catalogId: item.id,
+      label: materialLabel(item),
+      category: materialCategory(item),
+      name: materialName(item),
+      model: materialModel(item),
+    } : null;
+
+    const selectedMaterialFromOrder = (order, serviceId = '') => {
       if (!order) return '';
+      const scoped = order.materialsByService?.[serviceId] || order.orderBuilder?.materialsByService?.[serviceId];
+      if (scoped?.catalogId && materialsForService(serviceId).some((item) => item.id === scoped.catalogId)) return scoped.catalogId;
       if (order.materialCatalogId && catalogList().some((item) => item.id === order.materialCatalogId)) return order.materialCatalogId;
       const ids = [];
       (order.measurements?.rooms || []).forEach((room) => {
@@ -405,24 +434,58 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       return unique.length === 1 ? unique[0] : '';
     };
 
-    const refreshNewOrderMaterials = (preferredId) => {
-      const serviceId = document.getElementById('no-svc')?.value || (typeof state !== 'undefined' ? state._newOrderService : '') || 'smart_film';
-      const items = materialsForService(serviceId);
-      const current = preferredId || (typeof state !== 'undefined' ? state._newOrderMaterial : '') || '';
+    const selectedNewOrderServiceIds = () => {
+      const selected = typeof state !== 'undefined' && Array.isArray(state._newOrderServices)
+        ? state._newOrderServices.filter((id) => serviceInfoSafe(id))
+        : [];
+      const fallback = document.getElementById('no-svc')?.value || 'smart_film';
+      return selected.length ? selected : [fallback];
+    };
+
+    const newOrderMaterialState = () => {
+      if (typeof state === 'undefined') return {};
+      state._newOrderMaterialsByService = state._newOrderMaterialsByService || {};
+      return state._newOrderMaterialsByService;
+    };
+
+    const servicePickerId = (serviceId, field) => 'no-film-' + serviceId.replace(/[^a-z0-9_-]/gi, '-') + '-' + field;
+
+    const syncNewOrderMaterialPicker = (serviceId, preferredId = '') => {
       const selected = syncMaterialPicker({
         serviceId,
-        categoryId: 'no-film-category',
-        nameId: 'no-film-name',
-        materialId: 'no-material',
-        preferredId: current,
+        categoryId: servicePickerId(serviceId, 'category'),
+        nameId: servicePickerId(serviceId, 'name'),
+        materialId: servicePickerId(serviceId, 'model'),
+        preferredId: preferredId || newOrderMaterialState()[serviceId] || '',
       });
-      if (typeof state !== 'undefined') state._newOrderMaterial = selected;
-      const note = document.getElementById('rolanpro-new-order-material-note');
-      if (note) {
-        note.textContent = items.length
-          ? ''
-          : 'Для этого направления в каталоге пока нет материала. Добавьте позицию в Каталог, затем вернитесь в заказ.';
-      }
+      newOrderMaterialState()[serviceId] = selected;
+      return selected;
+    };
+
+    const refreshNewOrderMaterials = () => {
+      const container = document.getElementById('rolanpro-new-order-material-list');
+      if (!container) return;
+      container.querySelectorAll('[data-new-order-material-service]').forEach((card) => {
+        const serviceId = card.dataset.newOrderMaterialService || '';
+        const value = card.querySelector('[data-film-field="model"]')?.value || '';
+        if (serviceId && value) newOrderMaterialState()[serviceId] = value;
+      });
+
+      const serviceIds = selectedNewOrderServiceIds();
+      container.innerHTML = serviceIds.map((serviceId) => {
+        const service = serviceInfoSafe(serviceId);
+        const hasMaterials = materialsForService(serviceId).length > 0;
+        return '<div class="rolanpro-service-film-card" data-new-order-material-service="' + esc(serviceId) + '">' +
+          '<div class="rolanpro-service-film-title">' + esc(service?.icon || '') + ' ' + esc(service?.title || serviceId) + '</div>' +
+          '<div class="rolanpro-film-picker-grid">' +
+            '<div><label>Серия / категория</label><select data-film-field="category" id="' + esc(servicePickerId(serviceId, 'category')) + '"></select></div>' +
+            '<div><label>Название</label><select data-film-field="name" id="' + esc(servicePickerId(serviceId, 'name')) + '"></select></div>' +
+            '<div><label>Модель</label><select data-film-field="model" id="' + esc(servicePickerId(serviceId, 'model')) + '"></select></div>' +
+          '</div>' +
+          (hasMaterials ? '' : '<div class="rolanpro-material-note">Для этой услуги нет плёнок в каталоге.</div>') +
+        '</div>';
+      }).join('');
+      serviceIds.forEach((serviceId) => syncNewOrderMaterialPicker(serviceId));
     };
 
     const ensureNewOrderMaterialField = () => {
@@ -439,35 +502,33 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         section.className = 'erp-intake-card';
         section.innerHTML =
           '<div class="erp-intake-card-head"><div>' +
-            '<div class="erp-intake-card-title">Плёнка <span class="order-required">*</span></div>' +
+            '<div class="erp-intake-card-title">Плёнка по каждой услуге <span class="order-required">*</span></div>' +
           '</div></div>' +
-          '<div class="rolanpro-film-picker-grid">' +
-            '<div><label>Категория</label><select id="no-film-category"></select></div>' +
-            '<div><label>Название</label><select id="no-film-name"></select></div>' +
-            '<div><label>Модель</label><select id="no-material"></select></div>' +
-          '</div>' +
-          '<div>' +
-          '<div id="rolanpro-new-order-material-note" class="rolanpro-material-note"></div></div>';
+          '<div id="rolanpro-new-order-material-list" class="rolanpro-service-film-list"></div>';
 
         if (serviceSection?.parentElement) serviceSection.insertAdjacentElement('afterend', section);
         else modal.appendChild(section);
 
-        section.querySelector('#no-film-category')?.addEventListener('change', () => {
-          const nameSelect = document.getElementById('no-film-name');
-          const materialSelect = document.getElementById('no-material');
-          if (nameSelect) nameSelect.value = '';
-          if (materialSelect) materialSelect.value = '';
-          if (typeof state !== 'undefined') state._newOrderMaterial = '';
-          refreshNewOrderMaterials();
-        });
-        section.querySelector('#no-film-name')?.addEventListener('change', () => {
-          const materialSelect = document.getElementById('no-material');
-          if (materialSelect) materialSelect.value = '';
-          if (typeof state !== 'undefined') state._newOrderMaterial = '';
-          refreshNewOrderMaterials();
-        });
-        section.querySelector('#no-material')?.addEventListener('change', (event) => {
-          if (typeof state !== 'undefined') state._newOrderMaterial = event.target.value || '';
+        section.addEventListener('change', (event) => {
+          const field = event.target?.dataset?.filmField || '';
+          const card = event.target?.closest?.('[data-new-order-material-service]');
+          const serviceId = card?.dataset?.newOrderMaterialService || '';
+          if (!serviceId || !field) return;
+          if (field === 'category') {
+            const nameSelect = document.getElementById(servicePickerId(serviceId, 'name'));
+            const materialSelect = document.getElementById(servicePickerId(serviceId, 'model'));
+            if (nameSelect) nameSelect.value = '';
+            if (materialSelect) materialSelect.value = '';
+            newOrderMaterialState()[serviceId] = '';
+            syncNewOrderMaterialPicker(serviceId);
+          } else if (field === 'name') {
+            const materialSelect = document.getElementById(servicePickerId(serviceId, 'model'));
+            if (materialSelect) materialSelect.value = '';
+            newOrderMaterialState()[serviceId] = '';
+            syncNewOrderMaterialPicker(serviceId);
+          } else {
+            newOrderMaterialState()[serviceId] = event.target.value || '';
+          }
         });
       }
 
@@ -489,15 +550,18 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       if (typeof window.createOrder === 'function' && !window.createOrder.__rolanproMaterialWrapped) {
         const originalCreateOrder = window.createOrder;
         const wrappedCreateOrder = function wrappedCreateOrder() {
-          const materialSelect = document.getElementById('no-material');
-          const serviceId = document.getElementById('no-svc')?.value || (typeof state !== 'undefined' ? state._newOrderService : '') || 'smart_film';
+          const serviceIds = selectedNewOrderServiceIds();
           const complexityKey = document.getElementById('no-complexity')?.value || 'standard';
-          const availableMaterials = materialsForService(serviceId);
-          const materialId = materialSelect?.value || '';
-
-          if (availableMaterials.length && !materialId) {
-            alert('Выберите плёнку / материал');
-            return;
+          const chosenMaterials = {};
+          for (const serviceId of serviceIds) {
+            const availableMaterials = materialsForService(serviceId);
+            const materialId = document.getElementById(servicePickerId(serviceId, 'model'))?.value || newOrderMaterialState()[serviceId] || '';
+            const material = availableMaterials.find((item) => item.id === materialId) || null;
+            if (availableMaterials.length && !material) {
+              alert('Выберите плёнку для услуги «' + (serviceInfoSafe(serviceId)?.title || serviceId) + '»');
+              return;
+            }
+            if (material) chosenMaterials[serviceId] = material;
           }
 
           const beforeIds = new Set((typeof db !== 'undefined' && Array.isArray(db.orders) ? db.orders : []).map((order) => order.id));
@@ -507,7 +571,13 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
           const createdOrder = db.orders.find((order) => !beforeIds.has(order.id));
           if (!createdOrder) return result;
 
-          const material = catalogList().find((item) => item.id === materialId) || null;
+          const primaryServiceId = createdOrder.serviceType || serviceIds[0] || '';
+          const material = chosenMaterials[primaryServiceId] || null;
+          const materialsByService = {};
+          Object.entries(chosenMaterials).forEach(([serviceId, item]) => {
+            materialsByService[serviceId] = materialSnapshot(item);
+          });
+          createdOrder.materialsByService = materialsByService;
           createdOrder.materialCatalogId = material?.id || '';
           createdOrder.materialLabel = material ? materialLabel(material) : '';
           createdOrder.materialCategory = material ? materialCategory(material) : '';
@@ -515,6 +585,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
           createdOrder.materialModel = material ? materialModel(material) : '';
           createdOrder.complexityCoef = complexityCoef(complexityKey);
           createdOrder.orderBuilder = createdOrder.orderBuilder || {};
+          createdOrder.orderBuilder.materialsByService = materialsByService;
           createdOrder.orderBuilder.materialId = material?.id || '';
           createdOrder.orderBuilder.materialLabel = material ? materialLabel(material) : '';
           createdOrder.orderBuilder.materialCategory = material ? materialCategory(material) : '';
@@ -527,7 +598,11 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
             at: new Date().toISOString(),
             key: 'orderParametersSet',
             by: typeof state !== 'undefined' ? state.currentUserId : null,
-            note: (material ? materialLabel(material) : 'Материал TBD') + ' · ' + complexityLabel(complexityKey) + ' ×' + complexityCoef(complexityKey).toFixed(2),
+            note: serviceIds.map((serviceId) => {
+              const service = serviceInfoSafe(serviceId);
+              const scopedMaterial = chosenMaterials[serviceId];
+              return (service?.title || serviceId) + ': ' + (scopedMaterial ? materialLabel(scopedMaterial) : 'Материал TBD');
+            }).join(' · ') + ' · ' + complexityLabel(complexityKey) + ' ×' + complexityCoef(complexityKey).toFixed(2),
           });
 
           if (typeof save === 'function') save();
@@ -584,7 +659,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       const currentServiceId = services.some((service) => service.id === order.serviceType)
         ? order.serviceType
         : (services[0]?.id || 'smart_film');
-      const currentMaterialId = selectedMaterialFromOrder(order);
+      const currentMaterialId = selectedMaterialFromOrder(order, currentServiceId);
       const currentComplexity = complexityKeys.includes(order.complexity) ? order.complexity : 'standard';
       const currentSiteType = typeof orderSiteType === 'function'
         ? orderSiteType(order)
@@ -703,6 +778,8 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       order.materialCategory = material ? materialCategory(material) : '';
       order.materialName = material ? materialName(material) : '';
       order.materialModel = material ? materialModel(material) : '';
+      order.materialsByService = order.materialsByService || {};
+      if (material) order.materialsByService[service.id] = materialSnapshot(material);
 
       const serviceTags = serviceList().map((item) => item.tag).filter(Boolean);
       order.tags = Array.isArray(order.tags) ? order.tags.filter((tag) => !serviceTags.includes(tag)) : [];
@@ -712,6 +789,8 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       });
 
       order.orderBuilder = order.orderBuilder || {};
+      order.orderBuilder.materialsByService = order.orderBuilder.materialsByService || {};
+      if (material) order.orderBuilder.materialsByService[service.id] = materialSnapshot(material);
       order.orderBuilder.serviceId = service.id;
       order.orderBuilder.serviceTitle = service.title;
       order.orderBuilder.materialId = material?.id || '';

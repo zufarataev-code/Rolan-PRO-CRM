@@ -21274,9 +21274,13 @@ function managerRoomAddChooserHtml(oid, room, scopeKey) {
     </div>`;
 }
 function defaultCatalogIdForOrder(o) {
-  const scope = measureScopeInfo(managerActiveMeasureScope(o));
+  const activeScope = managerActiveMeasureScope(o);
+  const scope = measureScopeInfo(activeScope);
+  const scoped = o?.materialsByService?.[activeScope] || o?.orderBuilder?.materialsByService?.[activeScope];
+  if (scoped?.catalogId && db.settings.catalog.some(c => c.id === scoped.catalogId && c.category === scope.catalogCategory)) return scoped.catalogId;
+  if (o?.materialCatalogId && db.settings.catalog.some(c => c.id === o.materialCatalogId && c.category === scope.catalogCategory)) return o.materialCatalogId;
   const preferred = db.settings.catalog.find(c => c.category === scope.catalogCategory);
-  return preferred?.id || db.settings.catalog[0]?.id || '';
+  return preferred?.id || '';
 }
 function managerRoomCatalogId(room, scopeKey = '') {
   const relevant = scopeKey ? (room?.windows || []).filter(w => (w.measureScope || measureScopeByCatalog(windowCatalog(w))) === scopeKey) : (room?.windows || []);
@@ -23079,6 +23083,7 @@ function openOrderModal() {
   state._newOrderSiteType = '';
   state._newOrderService = 'smart_film';
   state._newOrderServices = ['smart_film'];
+  state._newOrderMaterialsByService = {};
   state._newOrderExecution = 'standard_project';
   const viewer = currentUser();
   const allManagers = orderManagerCandidates();
