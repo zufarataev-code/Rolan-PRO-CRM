@@ -65,6 +65,8 @@ export async function listProjectConstructorSummariesForSession(session: Project
       project_code: true,
       title: true,
       site_type: true,
+      lead_source: true,
+      lead_intent_service_type: { select: { service_code: true, name_ru: true } },
       address: true,
       project_status: { select: { status_code: true, name_ru: true, color_token: true } },
       client: { select: { client_id: true, name: true, customer_type: true } },
@@ -92,6 +94,8 @@ export async function getProjectConstructorForSession(
       project_code: true,
       title: true,
       site_type: true,
+      lead_source: true,
+      lead_intent_service_type: { select: { service_code: true, name_ru: true } },
       client: {
         select: {
           client_id: true,
@@ -262,6 +266,8 @@ export async function getProjectConstructorForSession(
     project_code: project.project_code,
     title: project.title,
     site_type: project.site_type,
+    lead_source: project.lead_source,
+    lead_intent_service_type: project.lead_intent_service_type,
     customer: project.client,
     positions: project.project_positions,
     service_types: serviceTypes,

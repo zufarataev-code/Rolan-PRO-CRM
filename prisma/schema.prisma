@@ -104,6 +104,7 @@ model ServiceType {
   project_positions            ProjectPosition[]
   survey_recommendations       SurveyRecommendation[]
   proposal_items               ProposalItem[]
+  lead_intent_projects         Project[]            @relation("project_lead_intent_service")
 
   @@map("service_types")
 }
@@ -443,6 +444,8 @@ model Deal {
 model Project {
   project_id String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   site_type String?           @db.VarChar(30)
+  lead_source                  String?           @db.VarChar(120)
+  lead_intent_service_type_id  String?           @db.Uuid
   project_code                 String?           @unique @db.VarChar(40)
   client_id                    String            @db.Uuid
   deal_id                      String?           @db.Uuid
@@ -473,6 +476,7 @@ model Project {
   project_status               ProjectStatus     @relation(fields: [project_status_id], references: [project_status_id], onDelete: Restrict)
   payment_status               PaymentStatus?    @relation(fields: [payment_status_id], references: [payment_status_id], onDelete: SetNull)
   city                         City?             @relation(fields: [city_id], references: [city_id], onDelete: SetNull)
+  lead_intent_service_type     ServiceType?      @relation("project_lead_intent_service", fields: [lead_intent_service_type_id], references: [service_type_id], onDelete: SetNull)
   project_positions            ProjectPosition[]
   schedule_assignment          ScheduleAssignment?
   calendar_events              CalendarEvent[]
@@ -491,6 +495,7 @@ model Project {
   @@index([project_status_id])
   @@index([payment_status_id])
   @@index([city_id])
+  @@index([lead_intent_service_type_id])
   @@map("projects")
   }
 

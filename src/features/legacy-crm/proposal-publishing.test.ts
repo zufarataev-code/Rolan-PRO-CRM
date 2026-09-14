@@ -46,3 +46,11 @@ test("selected site type follows the order into the canonical project", () => {
   assert.match(projectLaunch, /projectSiteTypeFromItems/);
   assert.match(projectLaunch, /site_type: siteType/);
 });
+
+test("incoming lead service remains separate from additional project services", () => {
+  assert.match(legacyCrm, /lead_intent_service_code: canonicalServiceCodeForOrderService/);
+  assert.match(legacyCrm, /lead_source: orderLeadSource\(order\)/);
+  assert.match(legacyProposalPublisher, /leadIntentServiceCode/);
+  assert.match(legacyProposalPublisher, /leadSource/);
+  assert.match(projectLaunch, /projectLeadAttributionFromItems/);
+});

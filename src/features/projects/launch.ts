@@ -60,6 +60,16 @@ function projectSiteTypeFromItems(items: Array<{ dynamic_fields: Prisma.JsonValu
   return null;
 }
 
+function projectLeadAttributionFromItems(items: Array<{ dynamic_fields: Prisma.JsonValue | null }>) {
+  for (const item of items) {
+    const fields = asObject(item.dynamic_fields);
+    const serviceCode = String(fields.lead_intent_service_code || "").trim().toUpperCase();
+    const leadSource = String(fields.lead_source || "").trim().slice(0, 120);
+    if (serviceCode || leadSource) return { serviceCode, leadSource: leadSource || null };
+  }
+  return { serviceCode: "", leadSource: null };
+}
+
 export async function launchProjectFromClosedSale(
   session: ProjectLaunchSession,
   input: { proposal_id: string },
@@ -160,11 +170,15 @@ export async function launchProjectFromClosedSale(
     return "missing_selection" as const;
   }
   const siteType = projectSiteTypeFromItems(proposal.proposal_items);
+  const leadAttribution = projectLeadAttributionFromItems(proposal.proposal_items);
 
-  const [projectStatus, paymentStatus, positionStatus] = await Promise.all([
+  const [projectStatus, paymentStatus, positionStatus, leadIntentServiceType] = await Promise.all([
     prisma.projectStatus.findUnique({ where: { status_code: "NEW" } }),
     prisma.paymentStatus.findUnique({ where: { status_code: "DEPOSIT_PAID" } }),
     prisma.positionStatus.findUnique({ where: { status_code: "READY" } }),
+    leadAttribution.serviceCode
+      ? prisma.serviceType.findUnique({ where: { service_code: leadAttribution.serviceCode }, select: { service_type_id: true } })
+      : Promise.resolve(null),
   ]);
 
   if (!projectStatus || !paymentStatus || !positionStatus) {
@@ -194,6 +208,8 @@ export async function launchProjectFromClosedSale(
           zip_code: proposal.client.zip_code ?? null,
           priority: "normal",
           site_type: siteType,
+          lead_source: leadAttribution.leadSource,
+          lead_intent_service_type_id: leadIntentServiceType?.service_type_id ?? null,
         },
         select: {
           project_id: true,

@@ -133,6 +133,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - The first selected service remains the legacy primary service only for backward compatibility. Measurement defaults resolve from the active service's saved film, so a multi-service Project cannot accidentally inherit another service's material.
 - Added to PR #169 after New Order review. Production deployment remains a separate reviewed release action.
 
+## 2026-09-14 — Incoming lead intent is not the project service list
+
+- This decision refines `Film selection is scoped per service`: New Order records exactly one immutable incoming service — the offer or problem that caused the customer to contact Rolan PRO.
+- A project's operational service list is separate and mutable. A manager may add Smart, Solar, Safety, or Decorative work without rewriting the incoming service or creating another order/project.
+- Marketing statistics count the lead once under its captured source and incoming service. Cross-sold services and their revenue remain part of the same project and are measured separately; they do not reclassify the original Google Ads intent.
+- The legacy order keeps an intake snapshot for the current operating workflow. When the sale launches a canonical Project, PostgreSQL stores `lead_source` and the relational `lead_intent_service_type_id`; Project positions continue to represent the services actually sold.
+- Google Ads conversion delivery must use the original click/campaign attribution and stable conversion events. This change preserves the required service identity but does not claim to upload offline conversions to Google Ads.
+- Added to PR #169. Production deployment remains a separate reviewed release action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

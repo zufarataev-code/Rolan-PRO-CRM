@@ -26,6 +26,8 @@ export type LegacyProposalSnapshot = {
   legacy_order_id?: string;
   order_number?: string;
   site_type?: string | null;
+  lead_source?: string | null;
+  lead_intent_service_code?: string | null;
   title?: string;
   client?: {
     legacy_client_id?: string;
@@ -59,6 +61,8 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
   const email = cleanText(input.client?.email, 191).toLowerCase();
   const phone = cleanText(input.client?.phone, 40);
   const siteType = cleanSiteType(input.site_type);
+  const leadSource = cleanText(input.lead_source, 120) || null;
+  const leadIntentServiceCode = cleanText(input.lead_intent_service_code, 50).toUpperCase() || null;
   if (!/^pp_[a-z0-9]+$/i.test(token) || !legacyOrderId || !clientName) {
     throw new Error("Legacy proposal token, order and client are required.");
   }
@@ -83,6 +87,8 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
         ? item.dynamic_fields
         : {}),
       ...(siteType ? { site_type: siteType } : {}),
+      ...(leadSource ? { lead_source: leadSource } : {}),
+      ...(leadIntentServiceCode ? { lead_intent_service_code: leadIntentServiceCode } : {}),
     } as Prisma.InputJsonValue,
     itemKind: cleanText(item.item_kind, 40) || "service",
   }));
@@ -99,6 +105,8 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
     phone,
     address: cleanText(input.client?.address, 2_000),
     siteType,
+    leadSource,
+    leadIntentServiceCode,
     items,
   };
 }
