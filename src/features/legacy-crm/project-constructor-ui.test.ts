@@ -75,6 +75,10 @@ test("new order requires site type and site type drives room presets", () => {
   assert.match(legacyCrm, /roomPresetsForOrder\(o\)/);
   assert.match(legacyCrm, /Техническое помещение/);
   assert.match(legacyCrm, /Патио \/ зимний сад/);
+  assert.match(legacyCrm, /Residential · жилой · комнаты дома/);
+  assert.match(legacyCrm, /Commercial · офисы и зоны/);
+  assert.match(legacyCrm, /room_template_mismatch/);
+  assert.match(legacyCrm, /site_type_locked/);
   const siteTypeResolver = legacyCrm.match(/function orderSiteType\(order\) \{([\s\S]*?)\n\}/)?.[1] || "";
   assert.doesNotMatch(siteTypeResolver, /accountType|client|B2B|B2C/);
 });

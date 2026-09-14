@@ -33,7 +33,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const result = await updateProjectConstructorForSession(auth.session, projectId, input);
   if (!result) return apiError(404, "not_found", "Project was not found.");
   if (typeof result === "string") {
-    const status = result === "missing_status_config" ? 500 : result === "forbidden_change" ? 403 : 400;
+    const status = result === "missing_status_config" ? 500
+      : result === "forbidden_change" ? 403
+        : result === "site_type_locked" ? 409
+          : 400;
     return apiError(status, result, "Project constructor change was rejected.");
   }
   return apiSuccess({ constructor: result });

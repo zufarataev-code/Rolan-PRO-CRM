@@ -147,6 +147,18 @@ export function roomTemplatesForSite(siteType: SiteType) {
   return ROOM_TEMPLATES[siteType];
 }
 
+export function isRoomTemplateAllowedForSite(siteType: SiteType, roomKey: string) {
+  return ROOM_TEMPLATES[siteType].some((room) => room.key === roomKey.trim());
+}
+
+export function canChangeProjectSiteType(
+  currentSiteType: SiteType | null,
+  requestedSiteType: SiteType,
+  hasMeasurements: boolean,
+) {
+  return !currentSiteType || currentSiteType === requestedSiteType || !hasMeasurements;
+}
+
 export function verificationStatusForSource(source: MeasurementSource): MeasurementVerificationStatus {
   return source === "SURVEYOR_VERIFIED" ? "VERIFIED" : "UNVERIFIED";
 }

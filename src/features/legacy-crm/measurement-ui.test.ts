@@ -4,9 +4,11 @@ import test from "node:test";
 
 const legacyCrm = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 
-test("measurement workspace focuses on one room and a four-step flow", () => {
+test("measurement workspace focuses on one site-specific space and a four-step flow", () => {
   assert.match(legacyCrm, /manager-measure-progress/);
-  assert.match(legacyCrm, /Работаем только с одной комнатой за раз/);
+  assert.match(legacyCrm, /function roomTermsForOrder/);
+  assert.match(legacyCrm, /Офисы \/ зоны/);
+  assert.match(legacyCrm, /Комнаты дома/);
   assert.match(legacyCrm, /managerActiveRoom\(o\)/);
   assert.match(legacyCrm, /managerSelectRoom/);
   assert.match(legacyCrm, /Материал и проверка/);

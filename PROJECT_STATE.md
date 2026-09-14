@@ -256,6 +256,13 @@ Contributors must add a row before starting substantial work and update or remov
 - Lead attribution correction: New Order now captures one incoming service rather than treating every project service as a marketing origin. Managers add or remove cross-sold services inside the same project without changing `leadIntentServiceType`. The current-month report groups leads by frozen source + incoming service and reports cross-sell separately. Canonical launched Projects preserve the source and incoming ServiceType through a new relational migration.
 - Verification: 219 automated tests pass, including the real legacy script compilation, immutable lead-intent guards, monthly service attribution, cross-sell separation, proposal propagation, and canonical Project persistence. GitHub CI generated the Prisma client, passed TypeScript, and completed the production build on commit `ab31ca7`. The local Prisma CLI did not complete on this host, but the same required Prisma generation passed in the clean CI environment.
 
+### 2026-09-14 correction — strict Residential / Commercial measurement structure
+
+- Project creation now presents the property choice explicitly as `Residential · жилой · комнаты дома` or `Commercial · коммерческий · офисы и зоны`; it remains independent from B2B/B2C.
+- Both legacy and canonical measurement workspaces use site-specific terminology and presets. Residential receives home rooms only; Commercial receives offices and commercial zones only.
+- Backend validation rejects a room template that belongs to the other site type. After a typed Project has measurements, its site type is locked so existing rooms cannot be reclassified into offices, or offices into home rooms.
+- This correction remains in PR #169 and does not deploy production automatically.
+
 ## Completion rule
 
 A task is shared and complete only when all applicable statements are true:

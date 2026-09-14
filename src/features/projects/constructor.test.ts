@@ -3,10 +3,12 @@ import test from "node:test";
 
 import {
   buildMeasurementConstructorData,
+  canChangeProjectSiteType,
   calculatePaneSqft,
   calculateRemovalSqft,
   evaluateSolarCompatibility,
   glassCompatibilityKeys,
+  isRoomTemplateAllowedForSite,
   parseMeasurementConstructorData,
   resolveEffectiveFilm,
   roomTemplatesForSite,
@@ -23,6 +25,19 @@ test("site type controls room templates independently of client type", () => {
   assert.ok(!residential.includes("conference_room"));
   assert.ok(commercial.includes("conference_room"));
   assert.ok(commercial.includes("technical_room"));
+  assert.equal(isRoomTemplateAllowedForSite("RESIDENTIAL", "living_room"), true);
+  assert.equal(isRoomTemplateAllowedForSite("RESIDENTIAL", "conference_room"), false);
+  assert.equal(isRoomTemplateAllowedForSite("COMMERCIAL", "conference_room"), true);
+  assert.equal(isRoomTemplateAllowedForSite("COMMERCIAL", "bedroom"), false);
+  assert.equal(isRoomTemplateAllowedForSite("COMMERCIAL", "custom"), true);
+});
+
+test("site type cannot cross residential and commercial after measurement starts", () => {
+  assert.equal(canChangeProjectSiteType(null, "COMMERCIAL", true), true);
+  assert.equal(canChangeProjectSiteType("RESIDENTIAL", "COMMERCIAL", false), true);
+  assert.equal(canChangeProjectSiteType("RESIDENTIAL", "RESIDENTIAL", true), true);
+  assert.equal(canChangeProjectSiteType("RESIDENTIAL", "COMMERCIAL", true), false);
+  assert.equal(canChangeProjectSiteType("COMMERCIAL", "RESIDENTIAL", true), false);
 });
 
 test("measurement source deterministically controls verification status", () => {

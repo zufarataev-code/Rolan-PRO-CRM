@@ -3,7 +3,9 @@ import { Prisma } from "@prisma/client";
 import {
   calculatePaneSqft,
   calculateRemovalSqft,
+  canChangeProjectSiteType,
   evaluateSolarCompatibility,
+  isRoomTemplateAllowedForSite,
   parseMeasurementConstructorData,
   resolveEffectiveFilm,
   roomTemplatesForSite,
@@ -315,12 +317,14 @@ export async function updateProjectConstructorForSession(
     select: {
       project_id: true,
       client_id: true,
+      site_type: true,
       project_positions: {
         select: {
           position_id: true,
           service_type_id: true,
           sort_order: true,
           service_type: { select: { service_code: true } },
+          _count: { select: { measurements: true } },
         },
       },
     },
@@ -374,6 +378,14 @@ export async function updateProjectConstructorForSession(
   if (input.add_service_type_id
     && project.project_positions.some((position) => position.service_type_id === input.add_service_type_id)) {
     return "duplicate_service" as const;
+  }
+  const hasMeasurements = project.project_positions.some((position) => position._count.measurements > 0);
+  if (input.site_type && !canChangeProjectSiteType(
+    project.site_type === "RESIDENTIAL" || project.site_type === "COMMERCIAL" ? project.site_type : null,
+    input.site_type,
+    hasMeasurements,
+  )) {
+    return "site_type_locked" as const;
   }
 
   await prisma.$transaction(async (tx) => {
@@ -456,6 +468,7 @@ export async function addProjectOpeningMeasurement(
   if (!position) return "invalid_position" as const;
   if (position.service_type.service_code !== "SOLAR_FILM") return "unsupported_service" as const;
   if (project.site_type && project.site_type !== input.site_type) return "site_type_mismatch" as const;
+  if (!isRoomTemplateAllowedForSite(input.site_type, input.room_key)) return "room_template_mismatch" as const;
   const surveyId = project.consultations[0]?.survey?.survey_id;
   if (!surveyId) return "survey_required" as const;
 

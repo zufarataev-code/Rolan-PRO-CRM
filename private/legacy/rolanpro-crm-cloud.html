@@ -9330,6 +9330,16 @@ function roomPresetsForOrder(order) {
   if (siteType === 'COMMERCIAL') return COMMERCIAL_ROOM_PRESETS;
   return [...US_ROOM_PRESETS, 'Custom room'];
 }
+function roomTermsForOrder(order) {
+  if (orderSiteType(order) === 'COMMERCIAL') return {
+    plural: 'Офисы / зоны', choose: 'Выберите офис / зону', empty: 'Офисов и зон пока нет.',
+    add: 'Добавить офис / зону', name: 'Название офиса / зоны', defaultName: 'Зона', deleteLabel: 'Удалить офис / зону',
+  };
+  return {
+    plural: 'Комнаты', choose: 'Выберите комнату', empty: 'Комнат пока нет.',
+    add: 'Добавить комнату', name: 'Название комнаты', defaultName: 'Комната', deleteLabel: 'Удалить комнату',
+  };
+}
 function isCustomRoomPreset(value) {
   return ['Другое','Custom room','__custom'].includes(value);
 }
@@ -15261,6 +15271,8 @@ async function canonicalProjectRequest(path, method = 'GET', body = null) {
     const labels = {
       survey_required: 'Для проекта сначала нужен связанный замер/Survey.',
       site_type_mismatch: 'Тип объекта изменился. Обновите карточку и повторите.',
+      site_type_locked: 'Тип объекта нельзя изменить после начала замера.',
+      room_template_mismatch: 'Выбранное помещение не относится к этому типу объекта.',
       verified_revision_required: 'Проверенный замер может заменить только новая проверенная ревизия.',
       unsupported_service: 'Solar-форма доступна только для услуги Solar.',
     };
@@ -15405,6 +15417,12 @@ function canonicalFilmSourceLabel(value) {
   return ({ SERVICE: 'Плёнка услуги', PROJECT: 'Плёнка проекта', ROOM: 'Плёнка помещения', OPENING: 'Плёнка проёма', CELL: 'Плёнка ячейки', NONE: 'Плёнка не выбрана' })[value] || value || 'Плёнка не выбрана';
 }
 
+function canonicalSpaceTerms(siteType) {
+  return siteType === 'COMMERCIAL'
+    ? { plural: 'Офисы и зоны', select: 'Тип офиса / зоны', name: 'Название офиса / зоны', number: 'Офис / зона №', add: 'Добавьте офис / зону и проём.' }
+    : { plural: 'Комнаты дома', select: 'Комната дома', name: 'Название комнаты', number: 'Комната / №', add: 'Добавьте комнату и проём.' };
+}
+
 async function saveCanonicalProjectProfile() {
   const id = state.canonicalProjectId;
   if (!id) return;
@@ -15474,12 +15492,13 @@ function canonicalOpeningCard(room, opening, position) {
 
 function canonicalPositionCard(position, data) {
   const rooms = (data.rooms || []).filter(room => room.project_position_id === position.position_id);
+  const spaceTerms = canonicalSpaceTerms(data.site_type);
   const isSolar = position.service_type.service_code === 'SOLAR_FILM';
   const canManage = ['owner','manager'].includes(currentUser()?.role);
   return `<section class="card border border-slate-200" style="border-radius:6px">
     <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs font-black text-blue-700">УСЛУГА</div><h3 class="text-lg font-black">${academyEsc(position.title || position.service_type.name_ru)}</h3></div>${isSolar ? `<button class="btn-primary" onclick="openCanonicalOpening('${position.position_id}')" ${data.site_type ? '' : 'disabled'}>+ Проём</button>` : ''}</div>
     <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка по умолчанию</div>${canonicalFilmPickerHtml(`cp-position-${position.position_id}`, position.film_id || '', isSolar ? 'SOLAR' : '', { disabled: !canManage, modelChange: `setCanonicalPositionFilm('${position.position_id}',this.value)` })}</div>
-    ${isSolar ? `<div class="space-y-3 mt-4">${rooms.map(room => `<div><div class="font-black mb-2">${academyEsc(room.room_name)}${room.room_number ? ` · ${academyEsc(room.room_number)}` : ''}</div><div class="space-y-2">${room.openings.map(opening => canonicalOpeningCard(room, opening, position)).join('')}</div></div>`).join('') || '<div class="border border-dashed border-slate-300 p-4 text-center text-sm text-gray-500">Добавьте помещение и проём.</div>'}</div>` : ''}
+    ${isSolar ? `<div class="space-y-3 mt-4"><div class="text-xs font-black text-slate-500 uppercase">${academyEsc(spaceTerms.plural)}</div>${rooms.map(room => `<div><div class="font-black mb-2">${academyEsc(room.room_name)}${room.room_number ? ` · ${academyEsc(room.room_number)}` : ''}</div><div class="space-y-2">${room.openings.map(opening => canonicalOpeningCard(room, opening, position)).join('')}</div></div>`).join('') || `<div class="border border-dashed border-slate-300 p-4 text-center text-sm text-gray-500">${academyEsc(spaceTerms.add)}</div>`}</div>` : ''}
   </section>`;
 }
 
@@ -15490,10 +15509,11 @@ function canonicalProjectDetailHtml() {
   if (state.canonicalConstructorError) return `<div class="card"><b class="text-red-700">${academyEsc(state.canonicalConstructorError)}</b><button class="btn-primary mt-3" onclick="reloadCanonicalProjectConstructor()">Повторить</button></div>`;
   const data = state.canonicalConstructor;
   const canManage = ['owner','manager'].includes(currentUser()?.role);
+  const spaceTerms = canonicalSpaceTerms(data.site_type);
   return `<div class="space-y-4">
     <div class="flex items-center justify-between gap-3"><button class="btn-ghost" onclick="closeCanonicalProject()">← Проекты</button><button class="btn-ghost" onclick="reloadCanonicalProjectConstructor()">Обновить</button></div>
     <section class="card"><div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs font-black text-blue-700">${academyEsc(data.project_code || 'PROJECT')}</div><h2 class="text-2xl font-black">${academyEsc(data.title)}</h2><div class="text-sm text-gray-500">${academyEsc(data.customer?.name || '')}</div>${data.lead_intent_service_type ? `<div class="mt-2"><span class="tag bg-amber-50 text-amber-900">Лид пришёл: ${academyEsc(data.lead_intent_service_type.name_ru)}</span>${data.lead_source ? `<span class="tag bg-slate-100 text-slate-700 ml-1">${academyEsc(data.lead_source)}</span>` : ''}</div>` : ''}</div><div class="grid grid-cols-2 gap-2"><div><div class="text-xs text-gray-500">Площадь</div><b>${data.totals.sqft} sqft</b></div><div><div class="text-xs text-gray-500">Удаление</div><b>${data.totals.removal_sqft} sqft</b></div></div></div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Тип клиента</span><select id="cp-customer-type" ${canManage ? '' : 'disabled'}><option value="B2C" ${data.customer?.customer_type === 'B2C' ? 'selected' : ''}>B2C</option><option value="B2B" ${data.customer?.customer_type === 'B2B' ? 'selected' : ''}>B2B</option></select></label><label><span class="text-xs font-semibold text-slate-500">Тип объекта</span><select id="cp-site-type" ${canManage ? '' : 'disabled'}><option value="RESIDENTIAL" ${data.site_type === 'RESIDENTIAL' ? 'selected' : ''}>Жилой</option><option value="COMMERCIAL" ${data.site_type === 'COMMERCIAL' ? 'selected' : ''}>Коммерческий</option></select></label></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Тип клиента</span><select id="cp-customer-type" ${canManage ? '' : 'disabled'}><option value="B2C" ${data.customer?.customer_type === 'B2C' ? 'selected' : ''}>B2C</option><option value="B2B" ${data.customer?.customer_type === 'B2B' ? 'selected' : ''}>B2B</option></select></label><label><span class="text-xs font-semibold text-slate-500">Тип недвижимости</span><select id="cp-site-type" ${canManage ? '' : 'disabled'}><option value="RESIDENTIAL" ${data.site_type === 'RESIDENTIAL' ? 'selected' : ''}>Residential · жилой · комнаты дома</option><option value="COMMERCIAL" ${data.site_type === 'COMMERCIAL' ? 'selected' : ''}>Commercial · офисы и зоны</option></select><span class="text-xs text-blue-700">Структура замера: ${academyEsc(spaceTerms.plural)}</span></label></div>
       ${canManage ? `<button class="btn-primary mt-3" onclick="saveCanonicalProjectProfile()">Сохранить</button>${state.canonicalProjectNotice ? `<span class="text-sm text-emerald-700 ml-2">${academyEsc(state.canonicalProjectNotice)}</span>` : ''}` : ''}
     </section>
     ${canManage ? `<section class="card"><div class="flex items-end gap-2 flex-wrap"><label class="flex-1"><span class="text-xs font-semibold text-slate-500">Добавить услугу</span><select id="cp-add-service"><option value="">Выберите услугу</option>${(data.service_types || []).filter(service => !(data.positions || []).some(position => position.service_type.service_type_id === service.service_type_id)).map(service => `<option value="${service.service_type_id}">${academyEsc(service.name_ru)}</option>`).join('')}</select></label><button class="btn-primary" onclick="addCanonicalProjectService()">Добавить</button></div></section>` : ''}
@@ -15522,6 +15542,7 @@ function canonicalAddCellRow() {
 
 function openCanonicalOpening(positionId, roomKey = '', openingId = '', verify = false) {
   const data = state.canonicalConstructor;
+  const spaceTerms = canonicalSpaceTerms(data?.site_type);
   const room = (data?.rooms || []).find(item => item.project_position_id === positionId && item.room_key === roomKey);
   const opening = room?.openings?.find(item => item.opening_id === openingId);
   state.canonicalOpeningDraft = { positionId, room, opening, verify };
@@ -15529,7 +15550,7 @@ function openCanonicalOpening(positionId, roomKey = '', openingId = '', verify =
   const source = currentUser()?.role === 'measurer' || verify ? 'SURVEYOR_VERIFIED' : opening?.cells?.[0]?.source || 'CUSTOMER';
   const cells = opening?.cells?.length ? opening.cells : [{}];
   state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-5" style="max-width:62rem" onclick="event.stopPropagation()"><div class="flex items-start justify-between gap-3"><div><div class="text-xs font-black text-blue-700">SOLAR V1</div><h3 class="text-xl font-black">${opening ? (verify ? 'Проверить проём' : 'Новая ревизия') : 'Добавить проём'}</h3></div><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4"><label>Источник замеров<select id="cp-source"><option value="CUSTOMER" ${source === 'CUSTOMER' ? 'selected' : ''}>Клиент · не проверено</option><option value="SURVEYOR_VERIFIED" ${source === 'SURVEYOR_VERIFIED' ? 'selected' : ''}>Замерщик · подтверждено</option></select></label><label>Помещение<select id="cp-room-key"><option value="">Выберите</option>${templates.map(item => `<option value="${academyEsc(item.key)}" ${item.key === room?.room_key ? 'selected' : ''}>${academyEsc(item.label_ru)}</option>`).join('')}</select></label><label>Название помещения<input id="cp-room-name" value="${academyEsc(room?.room_name || '')}"></label><label>Помещение / №<input id="cp-room-number" value="${academyEsc(room?.room_number || '')}"></label><label>ID проёма<input id="cp-opening-id" value="${academyEsc(opening?.opening_id || '')}"></label><label>Тип проёма<select id="cp-opening-type">${canonicalOpeningTypeOptions(opening?.opening_type)}</select></label><label>Общая ширина, in<input id="cp-overall-width" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_width || '')}"></label><label>Общая высота, in<input id="cp-overall-height" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_height || '')}"></label><label>Сторона света<select id="cp-orientation"><option value="">Неизвестно</option>${[['north','Север'],['east','Восток'],['south','Юг'],['west','Запад']].map(([value,label]) => `<option value="${value}" ${value === opening?.orientation ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4"><label>Источник замеров<select id="cp-source"><option value="CUSTOMER" ${source === 'CUSTOMER' ? 'selected' : ''}>Клиент · не проверено</option><option value="SURVEYOR_VERIFIED" ${source === 'SURVEYOR_VERIFIED' ? 'selected' : ''}>Замерщик · подтверждено</option></select></label><label>${academyEsc(spaceTerms.select)}<select id="cp-room-key"><option value="">Выберите</option>${templates.map(item => `<option value="${academyEsc(item.key)}" ${item.key === room?.room_key ? 'selected' : ''}>${academyEsc(item.label_ru)}</option>`).join('')}</select></label><label>${academyEsc(spaceTerms.name)}<input id="cp-room-name" value="${academyEsc(room?.room_name || '')}"></label><label>${academyEsc(spaceTerms.number)}<input id="cp-room-number" value="${academyEsc(room?.room_number || '')}"></label><label>ID проёма<input id="cp-opening-id" value="${academyEsc(opening?.opening_id || '')}"></label><label>Тип проёма<select id="cp-opening-type">${canonicalOpeningTypeOptions(opening?.opening_type)}</select></label><label>Общая ширина, in<input id="cp-overall-width" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_width || '')}"></label><label>Общая высота, in<input id="cp-overall-height" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_height || '')}"></label><label>Сторона света<select id="cp-orientation"><option value="">Неизвестно</option>${[['north','Север'],['east','Восток'],['south','Юг'],['west','Запад']].map(([value,label]) => `<option value="${value}" ${value === opening?.orientation ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div>
     <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка для помещения</div>${canonicalFilmPickerHtml('cp-room-film', room?.film_id || '', 'SOLAR')}</div>
     <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка для проёма</div>${canonicalFilmPickerHtml('cp-opening-film', opening?.film_id || '', 'SOLAR')}</div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3"><label>Конструкция стекла<select id="cp-glass-construction">${[['unknown','Неизвестно'],['single_pane','Одинарное'],['double_pane_igu','Двойной стеклопакет / IGU'],['triple_pane_igu','Тройной стеклопакет / IGU']].map(([value,label]) => `<option value="${value}" ${value === opening?.glass?.construction ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Прочность<select id="cp-glass-treatment">${[['unknown','Неизвестно'],['annealed','Сырое'],['heat_strengthened','Термоупрочнённое'],['tempered','Закалённое']].map(([value,label]) => `<option value="${value}" ${value === opening?.glass?.treatment ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Позиция Low-E<input id="cp-low-e-position" value="${academyEsc(opening?.glass?.low_e_position || '')}"></label></div>
@@ -21694,13 +21715,14 @@ function managerSelectRoom(oid, rid) {
 }
 function managerMeasureProgressHtml(order, scopeKey = '') {
   const rooms = order?.measurements?.rooms || [];
+  const roomTerms = roomTermsForOrder(order);
   const windows = rooms.flatMap(r => r.windows || []).filter(w => !scopeKey || (w.measureScope || orderMeasureScope(order)) === scopeKey);
   const hasRooms = rooms.length > 0;
   const hasWindows = windows.length > 0;
   const hasSizes = hasWindows && windows.every(w => Number(w.width) > 0 && Number(w.height) > 0 && Number(w.qty || 1) > 0);
   const hasMaterials = hasWindows && windows.every(w => Boolean(w.catalogId));
   const steps = [
-    { label: 'Комнаты', done: hasRooms },
+    { label: roomTerms.plural, done: hasRooms },
     { label: 'Окна и двери', done: hasWindows },
     { label: 'Размеры', done: hasSizes },
     { label: 'Материал и проверка', done: hasMaterials },
@@ -21745,6 +21767,7 @@ function renderManagerMeasureModal(oid) {
   const allWindows = rooms.flatMap(r => r.windows || []);
   const windows = allWindows.filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey);
   const activeRoom = managerActiveRoom(o);
+  const roomTerms = roomTermsForOrder(o);
   return `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal manager-measure-modal" onclick="event.stopPropagation()">
@@ -21758,7 +21781,7 @@ function renderManagerMeasureModal(oid) {
           <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
         </div>
         <div class="manager-measure-kpis mt-3">
-          <div class="manager-measure-kpi"><div>Комнаты</div><div>${rooms.length}</div></div>
+          <div class="manager-measure-kpi"><div>${academyEsc(roomTerms.plural)}</div><div>${rooms.length}</div></div>
           <div class="manager-measure-kpi"><div>Услуги</div><div>${projectScopes.length}</div></div>
           <div class="manager-measure-kpi"><div>Окна / двери</div><div>${allWindows.length}</div></div>
           <div class="manager-measure-kpi"><div>Площадь стекла</div><div>${orderActualAreaSqft(o).toFixed(2)} sqft</div></div>
@@ -21770,22 +21793,21 @@ function renderManagerMeasureModal(oid) {
         <div class="manager-measure-workspace">
           <aside class="manager-measure-sidebar">
             <div class="rounded-lg border bg-white p-3">
-              <div class="font-black text-sm text-slate-900">1. Выберите комнату</div>
-              <div class="text-xs text-gray-500 mt-1">Работаем только с одной комнатой за раз.</div>
+              <div class="font-black text-sm text-slate-900">1. ${academyEsc(roomTerms.choose)}</div>
               <div class="manager-room-list mt-3">
                 ${rooms.map((room, index) => { const serviceWindows = (room.windows || []).filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey); return `<button type="button" class="manager-room-tab ${activeRoom?.id === room.id ? 'active' : ''}" onclick="managerSelectRoom('${oid}','${room.id}')">
-                  <span><span class="manager-room-tab-name">${index + 1}. ${academyEsc(room.name || ('Комната ' + (index + 1)))}</span><span class="manager-room-tab-meta">${serviceWindows.length} элементов · ${serviceWindows.reduce((sum,w)=>sum+windowActualAreaSqft(w),0).toFixed(1)} sqft</span></span>
+                  <span><span class="manager-room-tab-name">${index + 1}. ${academyEsc(room.name || (roomTerms.defaultName + ' ' + (index + 1)))}</span><span class="manager-room-tab-meta">${serviceWindows.length} элементов · ${serviceWindows.reduce((sum,w)=>sum+windowActualAreaSqft(w),0).toFixed(1)} sqft</span></span>
                   <span class="manager-room-tab-count">${serviceWindows.length}</span>
-                </button>`; }).join('') || '<div class="text-xs text-gray-500">Комнат пока нет.</div>'}
+                </button>`; }).join('') || `<div class="text-xs text-gray-500">${academyEsc(roomTerms.empty)}</div>`}
               </div>
             </div>
             <div class="manager-add-room-card">
-              <label class="text-xs">Добавить комнату</label>
+              <label class="text-xs">${academyEsc(roomTerms.add)}</label>
               <select id="mm-room-preset" class="mt-1">
                 ${roomPresetsForOrder(o).map(x => `<option value="${academyEsc(x)}">${academyEsc(x)}</option>`).join('')}
               </select>
               <input id="mm-room-custom" class="mt-2" placeholder="Или свое название">
-              <button class="btn-primary w-full mt-2" onclick="managerAddRoomFromForm('${oid}')">Добавить комнату</button>
+              <button class="btn-primary w-full mt-2" onclick="managerAddRoomFromForm('${oid}')">${academyEsc(roomTerms.add)}</button>
             </div>
           </aside>
 
@@ -21801,7 +21823,7 @@ function renderManagerMeasureModal(oid) {
               return `<div class="manager-room-focus">
                 <div class="manager-room-focus-head">
                   <div>
-                    <label class="text-xs">Название комнаты / зоны</label>
+                    <label class="text-xs">${academyEsc(roomTerms.name)}</label>
                     <input value="${academyEsc(r.name || '')}" onchange="managerUpdateRoomName('${oid}','${r.id}',this.value)">
                   </div>
                   <div>
@@ -21810,7 +21832,7 @@ function renderManagerMeasureModal(oid) {
                       ${managerScopedCatalogOptionsHtml(selectedRoomCatalog, preferredCategory)}
                     </select>
                   </div>
-                  <button class="btn-ghost text-sm text-red-600" onclick="managerDeleteRoom('${oid}','${r.id}')">Удалить комнату</button>
+                  <button class="btn-ghost text-sm text-red-600" onclick="managerDeleteRoom('${oid}','${r.id}')">${academyEsc(roomTerms.deleteLabel)}</button>
                 </div>
 
                 ${managerRoomAddChooserHtml(oid, r, roomScopeKey)}
@@ -21846,7 +21868,7 @@ function renderManagerMeasureModal(oid) {
                   <span>Все изменения сохраняются автоматически.</span>
                 </div>
               </div>`;
-            })() : `<div class="rounded-lg border bg-white p-8 text-center"><div class="font-black text-slate-900">Начните с первой комнаты</div><div class="text-sm text-gray-500 mt-1">Добавьте комнату слева, затем окно или дверь и внесите размеры.</div></div>`}
+            })() : `<div class="rounded-lg border bg-white p-8 text-center"><div class="font-black text-slate-900">${academyEsc(roomTerms.add)}</div><div class="text-sm text-gray-500 mt-1">Затем добавьте окно или дверь и внесите размеры.</div></div>`}
 
             ${windows.length ? `<details class="manager-results-panel"><summary><span>4. Проверка материала и результат</span><span class="text-xs text-gray-500">Расход ${plan.consumedSqft.toFixed(1)} sqft</span></summary><div class="manager-results-body">${renderManagerMaterialPlan(o)}</div></details>` : ''}
           </section>
@@ -21890,7 +21912,8 @@ function managerAddRoomFromForm(oid) {
   o.measurements = o.measurements || { rooms: [] };
   const preset = document.getElementById('mm-room-preset')?.value || T('room');
   const custom = (document.getElementById('mm-room-custom')?.value || '').trim();
-  const name = custom || (isCustomRoomPreset(preset) ? T('room') + ' ' + (o.measurements.rooms.length + 1) : preset);
+  const roomTerms = roomTermsForOrder(o);
+  const name = custom || (isCustomRoomPreset(preset) ? roomTerms.defaultName + ' ' + (o.measurements.rooms.length + 1) : preset);
   const activeScope = managerActiveMeasureScope(o);
   const defaultCatalogId = defaultCatalogIdForOrder(o) || null;
   const room = { id: uid(), name, windows: [], defaultCatalogId, defaultCatalogByScope: defaultCatalogId ? { [activeScope]: defaultCatalogId } : {} };
@@ -21909,7 +21932,9 @@ function managerUpdateRoomName(oid, rid, value) {
 }
 function managerDeleteRoom(oid, rid) {
   const o = getOrder(oid);
-  if (!o || !confirm('Удалить комнату и все окна в ней?')) return;
+  if (!o) return;
+  const roomTerms = roomTermsForOrder(o);
+  if (!confirm(`${roomTerms.deleteLabel} и все окна в ней?`)) return;
   o.measurements.rooms = (o.measurements.rooms || []).filter(r => r.id !== rid);
   invalidateProjectEstimate(o, 'Удалена комната из замера');
   state._managerActiveRoomByOrder = state._managerActiveRoomByOrder || {};
@@ -23151,8 +23176,8 @@ function openOrderModal() {
               <div class="mt-3">
                 <label class="text-xs">Тип объекта <span class="order-required">*</span></label>
                 <div class="grid grid-cols-2 gap-2 mt-1" id="no-site-type-buttons">
-                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="RESIDENTIAL" onclick="selectOrderSiteType('RESIDENTIAL')"><div class="font-semibold text-sm">🏠 Жилой</div></button>
-                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="COMMERCIAL" onclick="selectOrderSiteType('COMMERCIAL')"><div class="font-semibold text-sm">🏢 Коммерческий</div></button>
+                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="RESIDENTIAL" onclick="selectOrderSiteType('RESIDENTIAL')"><div class="font-semibold text-sm">🏠 Residential · жилой</div><div class="text-xs text-gray-500">Комнаты дома</div></button>
+                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="COMMERCIAL" onclick="selectOrderSiteType('COMMERCIAL')"><div class="font-semibold text-sm">🏢 Commercial · коммерческий</div><div class="text-xs text-gray-500">Офисы и зоны</div></button>
                 </div>
                 <input type="hidden" id="no-site-type" value="">
               </div>

@@ -142,6 +142,13 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Google Ads conversion delivery must use the original click/campaign attribution and stable conversion events. This change preserves the required service identity but does not claim to upload offline conversions to Google Ads.
 - Added to PR #169. Production deployment remains a separate reviewed release action.
 
+## 2026-09-14 — Site type owns the measurement-space vocabulary
+
+- This decision refines `Canonical Project constructor and auditable Solar measurements`: `RESIDENTIAL` and `COMMERCIAL` are not display tags; they select two separate measurement structures.
+- Residential projects use home-room templates and room terminology. Commercial projects use office/commercial-zone templates and matching terminology. Neither list is inferred from B2B/B2C, and a template from one structure is rejected for the other by the backend.
+- The first site type may be assigned to an imported Project whose type is missing. Once a typed Project contains measurements, switching its site type is rejected to prevent mixed room/office history.
+- Added to PR #169. Production deployment remains a separate reviewed release action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
