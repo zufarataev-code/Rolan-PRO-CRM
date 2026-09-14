@@ -134,6 +134,20 @@ const MOBILE_WORKSPACE_PATCH = `
       border-radius: 16px !important;
     }
 
+    /* This editor owns its mobile layout; generic modal sizing must not constrain it. */
+    .modal-backdrop.manager-measure-backdrop {
+      padding: 0 !important;
+      overflow: hidden !important;
+      align-items: stretch !important;
+    }
+    .modal-content.manager-measure-modal {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: 100dvh !important;
+      max-height: 100dvh !important;
+      border-radius: 0 !important;
+    }
+
     [data-rolanpro-mobile-nav="1"] {
       max-width: 100% !important;
       min-width: 0 !important;
@@ -341,7 +355,7 @@ const MOBILE_WORKSPACE_PATCH = `
 
     const enhanceGrid = (element) => {
       if (!(element instanceof HTMLElement) || !isVisible(element)) return;
-      if (element.closest('table')) return;
+      if (element.closest('table, .manager-measure-modal')) return;
       const style = window.getComputedStyle(element);
       if (style.display !== 'grid') return;
       const columns = style.gridTemplateColumns.split(' ').filter(Boolean);
@@ -352,7 +366,7 @@ const MOBILE_WORKSPACE_PATCH = `
 
     const enhanceToolbar = (element) => {
       if (!(element instanceof HTMLElement) || !isVisible(element)) return;
-      if (element.closest('table')) return;
+      if (element.closest('table, .manager-measure-modal')) return;
       const style = window.getComputedStyle(element);
       if (style.display !== 'flex' && style.display !== 'inline-flex') return;
       if (element.children.length < 2) return;
@@ -388,7 +402,7 @@ const MOBILE_WORKSPACE_PATCH = `
       document.querySelectorAll('form, .modal-content, .workspace-modal, main, section').forEach((container) => {
         if (!(container instanceof HTMLElement) || !isVisible(container)) return;
         Array.from(container.children).forEach((row) => {
-          if (!(row instanceof HTMLElement) || !isVisible(row) || row.closest('table')) return;
+          if (!(row instanceof HTMLElement) || !isVisible(row) || row.closest('table, .manager-measure-modal')) return;
           const directActions = Array.from(row.children).filter((child) =>
             child.matches?.('button, a[href], [role="button"]'),
           );
@@ -429,7 +443,7 @@ const MOBILE_WORKSPACE_PATCH = `
 
     const auditOverflow = () => {
       document.querySelectorAll('main *, section *, .modal-content *, .workspace-modal *').forEach((element) => {
-        if (!(element instanceof HTMLElement) || !isVisible(element) || element.closest('table')) return;
+        if (!(element instanceof HTMLElement) || !isVisible(element) || element.closest('table, .manager-measure-modal')) return;
         if (element.scrollWidth > window.innerWidth + 4) {
           element.setAttribute('data-rolanpro-mobile-scroll', '1');
         }

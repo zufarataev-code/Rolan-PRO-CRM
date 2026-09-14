@@ -15,7 +15,7 @@ test("measurement workspace focuses on one site-specific space and a four-step f
 });
 
 test("measurement workspace keeps costing and cutting out of the primary input view", () => {
-  assert.match(legacyCrm, /<details class="manager-results-panel">/);
+  assert.match(legacyCrm, /<details class="manager-results-panel"/);
   assert.match(legacyCrm, /Проверка материала и результат/);
   assert.doesNotMatch(
     legacyCrm.slice(
