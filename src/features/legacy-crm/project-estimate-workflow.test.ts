@@ -5,7 +5,7 @@ import test from "node:test";
 const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 
 test("measurement completion routes the manager into project calculation", () => {
-  assert.match(source, /Завершить замер и рассчитать проект/);
+  assert.match(source, /Завершить замер[\s\S]*?и рассчитать проект/);
   assert.match(
     source,
     /function completeManagerMeasurement\(oid\)[\s\S]*changeStatus\(oid, 'measurement_done'\)/,

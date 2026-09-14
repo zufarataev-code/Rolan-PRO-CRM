@@ -5245,6 +5245,45 @@
   }
   /* === Inter font === */
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+  /* Measurement chrome must never reserve the mobile input viewport. */
+  .manager-measure-titlebar { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .manager-measure-titlebar > div { min-width:0; }
+  .manager-measure-titlebar > button { flex-shrink:0; }
+  .manager-measure-overview { margin-top:8px; }
+  .manager-measure-overview > summary { cursor:pointer; font-size:12px; color:#64748b; padding:8px 0; }
+  .manager-measure-services { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  @media (max-width:840px) {
+    .modal-backdrop.manager-measure-backdrop { padding:0; align-items:stretch; }
+    .modal-content.manager-measure-modal {
+      width:100%; max-width:none; height:100dvh; max-height:100dvh; border-radius:0;
+      display:block; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain;
+      -webkit-overflow-scrolling:touch; scroll-padding-block:16px;
+    }
+    .manager-measure-modal .manager-measure-header { padding:calc(8px + env(safe-area-inset-top)) 12px 8px; }
+    .manager-measure-modal .manager-measure-title { font-size:18px; line-height:24px; overflow-wrap:anywhere; }
+    .manager-measure-title-suffix { display:none; }
+    .manager-measure-modal .manager-measure-address { font-size:12px; line-height:16px; overflow-wrap:anywhere; }
+    .manager-measure-modal .manager-measure-titlebar button { min-height:44px; padding:8px; font-size:14px; }
+    .manager-measure-modal .manager-measure-services { flex-wrap:nowrap; overflow-x:auto; margin-top:4px; }
+    .manager-measure-services > * { flex-shrink:0; white-space:nowrap; }
+    .manager-measure-modal .manager-measure-services button { min-height:44px; padding:8px 10px; }
+    .manager-measure-modal .manager-measure-progress { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; margin-top:4px; overflow:visible; }
+    .manager-measure-modal .manager-measure-progress-step { display:flex; flex-direction:column; justify-content:center; padding:6px 2px; gap:4px; }
+    .manager-measure-modal .manager-measure-progress-no { width:22px; height:22px; flex-shrink:0; }
+    .manager-measure-modal .manager-measure-progress-label { display:block; font-size:10px; text-align:center; line-height:12px; }
+    .manager-measure-modal .manager-measure-body { overflow:visible; max-height:none; padding:12px; }
+    .manager-measure-modal .manager-measure-workspace { display:grid; grid-template-columns:minmax(0,1fr); }
+    .manager-measure-modal .manager-measure-sidebar { position:static; min-width:0; }
+    .manager-measure-modal .manager-room-list { max-width:100%; }
+    .manager-measure-modal .manager-measure-main { min-width:0; }
+    .manager-measure-modal input, .manager-measure-modal select { font-size:16px; min-height:44px; max-width:100%; scroll-margin-block:16px; }
+    .manager-measure-modal .manager-measure-footer { position:static; display:block; padding:12px 12px calc(16px + env(safe-area-inset-bottom)); }
+    .manager-measure-footer > div:first-child { margin-bottom:8px; }
+    .manager-measure-footer > div:last-child { display:flex; flex-wrap:wrap; }
+    .manager-measure-modal .manager-measure-footer button { min-height:44px; flex:1 1 auto; font-size:14px; padding:10px; }
+  }
+
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
 <style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.mb-1{margin-bottom:0.25rem}.mb-2{margin-bottom:0.5rem}.mb-3{margin-bottom:0.75rem}.mt-1{margin-top:0.25rem}.mt-2{margin-top:0.5rem}.mt-3{margin-top:0.75rem}.mt-4{margin-top:1rem}.flex{display:flex}.grid{display:grid}.min-h-screen{min-height:100vh}.w-auto{width:auto}.w-full{width:100%}.max-w-md{max-width:28rem}.cursor-pointer{cursor:pointer}.grid-cols-2{grid-template-columns:repeat(2, minmax(0, 1fr))}.items-center{align-items:center}.justify-end{justify-content:flex-end}.justify-center{justify-content:center}.gap-2{gap:0.5rem}.overflow-hidden{overflow:hidden}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded-2xl{border-radius:1rem}.rounded-lg{border-radius:0.5rem}.border-t{border-top-width:1px}.bg-gray-50{--tw-bg-opacity:1;background-color:rgb(249 250 251 / var(--tw-bg-opacity, 1))}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}.bg-gradient-to-br{background-image:linear-gradient(to bottom right, var(--tw-gradient-stops))}.from-amber-400{--tw-gradient-from:#fbbf24 var(--tw-gradient-from-position);--tw-gradient-to:rgb(251 191 36 / 0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from), var(--tw-gradient-to)}.from-blue-500{--tw-gradient-from:#3b82f6 var(--tw-gradient-from-position);--tw-gradient-to:rgb(59 130 246 / 0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from), var(--tw-gradient-to)}.from-indigo-500{--tw-gradient-from:#6366f1 var(--tw-gradient-from-position);--tw-gradient-to:rgb(99 102 241 / 0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from), var(--tw-gradient-to)}.from-purple-500{--tw-gradient-from:#a855f7 var(--tw-gradient-from-position);--tw-gradient-to:rgb(168 85 247 / 0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from), var(--tw-gradient-to)}.to-amber-600{--tw-gradient-to:#d97706 var(--tw-gradient-to-position)}.to-blue-700{--tw-gradient-to:#1d4ed8 var(--tw-gradient-to-position)}.to-indigo-700{--tw-gradient-to:#4338ca var(--tw-gradient-to-position)}.to-purple-700{--tw-gradient-to:#7e22ce var(--tw-gradient-to-position)}.p-3{padding:0.75rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.pt-4{padding-top:1rem}.text-left{text-align:left}.text-center{text-align:center}.text-2xl{font-size:1.5rem;line-height:2rem}.text-3xl{font-size:1.875rem;line-height:2.25rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.text-xs{font-size:0.75rem;line-height:1rem}.font-black{font-weight:900}.font-semibold{font-weight:600}.tracking-tight{letter-spacing:-0.025em}.text-gray-500{--tw-text-opacity:1;color:rgb(107 114 128 / var(--tw-text-opacity, 1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}.opacity-80{opacity:0.8}.opacity-90{opacity:0.9}.shadow-2xl{--tw-shadow:0 25px 50px -12px rgb(0 0 0 / 0.25);--tw-shadow-colored:0 25px 50px -12px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.transition{transition-property:color, background-color, border-color, fill, stroke, opacity, box-shadow, transform, filter, -webkit-text-decoration-color, -webkit-backdrop-filter;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter, -webkit-text-decoration-color, -webkit-backdrop-filter;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.hover\:scale-105:hover{--tw-scale-x:1.05;--tw-scale-y:1.05;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}</style></head>
@@ -21301,24 +21340,25 @@ function renderManagerMeasureModal(oid) {
   const windows = allWindows.filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey);
   const activeRoom = managerActiveRoom(o);
   return `
-  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
-    <div class="modal-content workspace-modal manager-measure-modal" onclick="event.stopPropagation()">
+  <div class="modal-backdrop manager-measure-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal manager-measure-modal" data-scroll-key="measure-modal" role="dialog" aria-modal="true" aria-label="Замер объекта" onclick="event.stopPropagation()">
       <div class="manager-measure-header">
-        <div class="flex items-start justify-between gap-3 flex-wrap">
+        <div class="manager-measure-titlebar">
           <div>
             <div class="text-xs font-black text-blue-700">ЗАМЕР ОБЪЕКТА</div>
-            <div class="text-2xl font-black text-slate-900">${academyEsc(o.number)} · замер проекта</div>
-            <div class="text-sm text-gray-500 mt-1">${academyEsc(c?.name || 'Без клиента')} · ${academyEsc(orderAddress(o, c) || 'адрес не указан')}</div>
+            <div class="manager-measure-title text-2xl font-black text-slate-900">${academyEsc(o.number)}<span class="manager-measure-title-suffix"> · замер проекта</span></div>
+            <div class="manager-measure-address text-sm text-gray-500 mt-1">${academyEsc(c?.name || 'Без клиента')} · ${academyEsc(orderAddress(o, c) || 'адрес не указан')}</div>
           </div>
           <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
         </div>
-        <div class="manager-measure-kpis mt-3">
+        <details class="manager-measure-overview" ${state._managerMeasureDetails?.[oid]?.overview ? 'open' : ''} ontoggle="managerMeasureDetailsToggle('${oid}','overview',this.open)"><summary>Сводка · ${rooms.length} комнат · ${allWindows.length} окон / дверей · ${orderActualAreaSqft(o).toFixed(1)} sqft</summary><div class="manager-measure-kpis mt-3">
           <div class="manager-measure-kpi"><div>Комнаты</div><div>${rooms.length}</div></div>
           <div class="manager-measure-kpi"><div>Услуги</div><div>${projectScopes.length}</div></div>
           <div class="manager-measure-kpi"><div>Окна / двери</div><div>${allWindows.length}</div></div>
           <div class="manager-measure-kpi"><div>Площадь стекла</div><div>${orderActualAreaSqft(o).toFixed(2)} sqft</div></div>
         </div>
-        <div class="flex items-center gap-2 flex-wrap mt-3"><span class="text-xs font-bold text-slate-600">Услуга:</span>${projectScopes.map(key => { const item = measureScopeInfo(key); return `<button class="btn-ghost text-sm ${key===activeScopeKey?'bg-blue-50 text-blue-700':''}" onclick="managerSelectMeasureScope('${oid}','${key}')">${item.icon} ${academyEsc(item.short)} · ${measureAllWindows(o).filter(x => (x.win.measureScope || orderMeasureScope(o))===key).length}</button>`; }).join('')}<button class="btn-ghost text-sm" onclick="openManagerProjectServicesModal('${oid}')">+ Изменить услуги</button></div>
+        </details>
+        <div class="manager-measure-services" data-scroll-key="measure-services"><span class="text-xs font-bold text-slate-600">Услуга:</span>${projectScopes.map(key => { const item = measureScopeInfo(key); return `<button class="btn-ghost text-sm ${key===activeScopeKey?'bg-blue-50 text-blue-700':''}" onclick="managerSelectMeasureScope('${oid}','${key}')">${item.icon} ${academyEsc(item.short)} · ${measureAllWindows(o).filter(x => (x.win.measureScope || orderMeasureScope(o))===key).length}</button>`; }).join('')}<button class="btn-ghost text-sm" onclick="openManagerProjectServicesModal('${oid}')">+ Изменить услуги</button></div>
         ${managerMeasureProgressHtml(o, activeScopeKey)}
       </div>
       <div class="manager-measure-body" data-scroll-key="measure-body">
@@ -21327,7 +21367,7 @@ function renderManagerMeasureModal(oid) {
             <div class="rounded-lg border bg-white p-3">
               <div class="font-black text-sm text-slate-900">1. Выберите комнату</div>
               <div class="text-xs text-gray-500 mt-1">Работаем только с одной комнатой за раз.</div>
-              <div class="manager-room-list mt-3">
+              <div class="manager-room-list mt-3" data-scroll-key="measure-rooms">
                 ${rooms.map((room, index) => { const serviceWindows = (room.windows || []).filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey); return `<button type="button" class="manager-room-tab ${activeRoom?.id === room.id ? 'active' : ''}" onclick="managerSelectRoom('${oid}','${room.id}')">
                   <span><span class="manager-room-tab-name">${index + 1}. ${academyEsc(room.name || ('Комната ' + (index + 1)))}</span><span class="manager-room-tab-meta">${serviceWindows.length} элементов · ${serviceWindows.reduce((sum,w)=>sum+windowActualAreaSqft(w),0).toFixed(1)} sqft</span></span>
                   <span class="manager-room-tab-count">${serviceWindows.length}</span>
@@ -21335,11 +21375,11 @@ function renderManagerMeasureModal(oid) {
               </div>
             </div>
             <div class="manager-add-room-card">
-              <label class="text-xs">Добавить комнату</label>
+              <label for="mm-room-preset" class="text-xs">Добавить комнату</label>
               <select id="mm-room-preset" class="mt-1">
                 ${MANAGER_ROOM_PRESETS.map(x => `<option value="${academyEsc(x)}">${academyEsc(x)}</option>`).join('')}
               </select>
-              <input id="mm-room-custom" class="mt-2" placeholder="Или свое название">
+              <input id="mm-room-custom" aria-label="Своё название комнаты" class="mt-2" placeholder="Или свое название">
               <button class="btn-primary w-full mt-2" onclick="managerAddRoomFromForm('${oid}')">Добавить комнату</button>
             </div>
           </aside>
@@ -21357,7 +21397,7 @@ function renderManagerMeasureModal(oid) {
                 <div class="manager-room-focus-head">
                   <div>
                     <label class="text-xs">Название комнаты / зоны</label>
-                    <input value="${academyEsc(r.name || '')}" onchange="managerUpdateRoomName('${oid}','${r.id}',this.value)">
+                    <input id="mm-room-name-${r.id}" value="${academyEsc(r.name || '')}" onchange="managerUpdateRoomName('${oid}','${r.id}',this.value)">
                   </div>
                   <div>
                     <label class="text-xs">Материал для ${academyEsc(scope.short)} в этой комнате</label>
@@ -21379,7 +21419,7 @@ function renderManagerMeasureModal(oid) {
                       <div class="manager-window-card-head">
                         <div class="manager-window-card-title">
                           <span class="manager-room-tab-count">${wi + 1}</span>
-                          <input aria-label="Название элемента" value="${academyEsc(w.name || ('Окно ' + (wi + 1)))}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','name',this.value)">
+                          <input id="mm-window-name-${w.id}" aria-label="Название элемента" value="${academyEsc(w.name || ('Окно ' + (wi + 1)))}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','name',this.value)">
                         </div>
                         <div class="manager-window-card-area">${windowActualAreaSqft(w).toFixed(2)} sqft</div>
                         <button class="btn-ghost text-red-600 text-xs" aria-label="Удалить элемент" onclick="managerDeleteWin('${oid}','${r.id}','${w.id}')">Удалить</button>
@@ -21387,9 +21427,9 @@ function renderManagerMeasureModal(oid) {
                       <div class="manager-window-card-body">
                         <div>${managerWindowTypeCompactHtml(oid, r.id, w, scopeKey)}</div>
                         <div class="manager-window-fields">
-                          <div class="manager-window-field"><label>Ширина (${inUnits ? 'in' : 'мм'})</label><input type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.width || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></div>
-                          <div class="manager-window-field"><label>Высота (${inUnits ? 'in' : 'мм'})</label><input type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.height || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></div>
-                          <div class="manager-window-field"><label>Количество</label><input type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></div>
+                          <div class="manager-window-field"><label>Ширина (${inUnits ? 'in' : 'мм'})</label><input id="mm-width-${w.id}" aria-label="Ширина" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.width || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></div>
+                          <div class="manager-window-field"><label>Высота (${inUnits ? 'in' : 'мм'})</label><input id="mm-height-${w.id}" aria-label="Высота" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.height || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></div>
+                          <div class="manager-window-field"><label>Количество</label><input id="mm-qty-${w.id}" aria-label="Количество" type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></div>
                           ${needsSolar ? `<div class="manager-window-field"><label>Сторона фасада</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','orientation',this.value)">${managerOrientationOptionsHtml(w.orientation || '')}</select></div><div class="manager-window-field wide"><label>Тип стекла</label>${managerGlassChipHtml(oid, r.id, w)}${managerSolarRiskHtml(w)}</div>` : ''}
                         </div>
                       </div>
@@ -21401,9 +21441,9 @@ function renderManagerMeasureModal(oid) {
                   <span>Все изменения сохраняются автоматически.</span>
                 </div>
               </div>`;
-            })() : `<div class="rounded-lg border bg-white p-8 text-center"><div class="font-black text-slate-900">Начните с первой комнаты</div><div class="text-sm text-gray-500 mt-1">Добавьте комнату слева, затем окно или дверь и внесите размеры.</div></div>`}
+            })() : `<div class="rounded-lg border bg-white p-8 text-center"><div class="font-black text-slate-900">Начните с первой комнаты</div><div class="text-sm text-gray-500 mt-1">Добавьте комнату, затем окно или дверь и внесите размеры.</div></div>`}
 
-            ${windows.length ? `<details class="manager-results-panel"><summary><span>4. Проверка материала и результат</span><span class="text-xs text-gray-500">Расход ${plan.consumedSqft.toFixed(1)} sqft</span></summary><div class="manager-results-body">${renderManagerMaterialPlan(o)}</div></details>` : ''}
+            ${windows.length ? `<details class="manager-results-panel" ${state._managerMeasureDetails?.[oid]?.results ? 'open' : ''} ontoggle="managerMeasureDetailsToggle('${oid}','results',this.open)"><summary><span>4. Проверка материала и результат</span><span class="text-xs text-gray-500">Расход ${plan.consumedSqft.toFixed(1)} sqft</span></summary><div class="manager-results-body">${renderManagerMaterialPlan(o)}</div></details>` : ''}
           </section>
         </div>
       </div>
@@ -21411,11 +21451,16 @@ function renderManagerMeasureModal(oid) {
         <div class="text-xs text-gray-500">Замер сохраняется автоматически и попадёт в КП, заказ-наряд и склад.</div>
         <div class="flex gap-2">
           <button class="btn-ghost" onclick="openWorkOrder('${oid}')">Заказ-наряд</button>
-          <button class="btn-primary" onclick="completeManagerMeasurement('${oid}')">Завершить замер и рассчитать проект →</button>
+          <button class="btn-primary" onclick="completeManagerMeasurement('${oid}')">Завершить замер<span class="manager-measure-title-suffix"> и рассчитать проект</span> →</button>
         </div>
       </div>
     </div>
   </div>`;
+}
+function managerMeasureDetailsToggle(oid, key, open) {
+  state._managerMeasureDetails = state._managerMeasureDetails || {};
+  state._managerMeasureDetails[oid] = state._managerMeasureDetails[oid] || {};
+  state._managerMeasureDetails[oid][key] = open;
 }
 function openManagerMeasureModal(oid) {
   state.modal = renderManagerMeasureModal(oid);

@@ -243,3 +243,11 @@ A task is shared and complete only when all applicable statements are true:
 - Production is verified separately when deployment is part of the task.
 
 Local edits, screenshots, chat messages, and unpushed commits do not count as shared completion.
+
+## 2026-09-14 — Mobile measurement viewport repair
+
+- Owner: Codex; branch `codex/mobile-measurement-workspace`, based on current `main`.
+- Scope: the existing legacy measurement editor; one mobile scroll surface, compact title/services/progress, collapsible summary, footer in document flow, accessible room inputs.
+- Verification: 189 automated tests passed; TypeScript passed; production build passed; inline scripts compile. Independent agent review identified adapter overrides, field focus IDs, details state, and horizontal scroll restoration; all addressed.
+- Blocker: browser rejected both local preview URLs with ERR_BLOCKED_BY_CLIENT. Actual mobile rendering, keyboard interaction, and server persistence are NOT verified. Do not claim mobile acceptance or production completion.
+- Next action: review dedicated branch/PR, test the injected legacy route at 375/390/430px and desktop with keyboard and save/reopen, then release through main after CI. Not merged or deployed.
