@@ -105,6 +105,50 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - PWA registration remains global so the service worker can function, but there is no persistent `Установить Rolan PRO` button inside CRM.
 - App installation is offered only as a one-time onboarding step after a successful first login on a browser where the offer has not already been handled. Accepting or dismissing the offer marks it seen so it does not keep covering the CRM.
 
+## 2026-09-12 — Canonical Project constructor and auditable Solar measurements
+
+- This decision extends `One CRM data source`, `One operational workflow`, and `Field roles use the actual CRM shell`: the Project constructor is a section of the existing `/legacy-crm` document backed only by relational PostgreSQL APIs, not a second shell or browser-storage editor.
+- Customer classification (`B2B`/`B2C`) and physical site type (`RESIDENTIAL`/`COMMERCIAL`) are independent facts. One Project may contain multiple service positions; each position may define its default film.
+- Solar rooms, openings, and cells are the structured view of canonical Measurement records. Opening/cell identity and technical details live in versioned constructor metadata, while project-position ownership, author, source/status, and revision links are relational and constrained.
+- Measurement provenance is explicit: customer data is `CUSTOMER` + `UNVERIFIED`; a surveyor record is `SURVEYOR_VERIFIED` + `VERIFIED`. Revisions append records instead of overwriting measurements, and unverified customer data may never supersede a verified measurement.
+- Effective film resolves in this order: cell override, opening override, room override, service default. Solar compatibility is advisory (`OK`, `REVIEW`, `NOT_RECOMMENDED`) and must be derived from canonical FilmCatalog compatibility fields; the browser cannot declare compatibility itself.
+- Owners and assigned managers may configure the Project and services. Assigned surveyors may read only their scoped projects and create verified measurements; server responses must not expose project finance to them.
+- Implemented for review by PR #169 (`codex/issue-164-project-constructor`), which supersedes the foundation PR #161. Production deployment remains a separate, reviewed release action.
+
+## 2026-09-12 — Film identity is Category → Name → Model
+
+- A film is not presented or stored as one concatenated `brand — model` choice. Its business identity is three separate catalog dimensions: film category/appearance (for example `Зеркальная`), product name/line (for example `Prime`), and exact model code (for example `NE2`).
+- The service direction (`Solar`, `Smart`, `Safety`, or `Decorative`) remains a separate filter and must not be mislabeled as the film category.
+- Order creation, order parameters, the Solar service default, and room/opening/cell overrides use cascading Category → Name → Model selectors but persist one exact catalog ID plus the applicable display snapshots. Existing orders and catalog IDs remain valid.
+- Legacy catalog records are extended in place with `filmCategory`, `productName`, and `modelCode`; no second material list is created. Canonical PostgreSQL uses the corresponding FilmCatalog appearance/category, model name, and model code fields.
+- Obvious selectors must not be surrounded by instructional paragraphs. The New Order screen uses compact service cards and short field labels; explanatory copy is shown only for an actionable warning or validation failure.
+- New Order requires an explicit physical site type. This value is never inferred from B2B/B2C, controls the room/location presets in legacy measurement entry, and is propagated through the canonical Proposal into the launched Project.
+- Added to PR #169 after review of the New Order screen. Production deployment remains a separate action.
+
+## 2026-09-13 — Film selection is scoped per service
+
+- This decision refines `Film identity is Category → Name → Model`: a multi-service order never uses one shared film choice and never exposes the complete film catalog in a service picker.
+- New Order renders one independent film card for every selected service: Solar sees only Solar catalog records, Smart only Smart, Safety only Safety, and Decorative only Decorative.
+- Within each service card, film identity remains `Серия / категория → Название → Модель`. The order stores one exact existing catalog ID and display snapshot per service in `materialsByService`; no duplicate film catalog is created.
+- The first selected service remains the legacy primary service only for backward compatibility. Measurement defaults resolve from the active service's saved film, so a multi-service Project cannot accidentally inherit another service's material.
+- Added to PR #169 after New Order review. Production deployment remains a separate reviewed release action.
+
+## 2026-09-14 — Incoming lead intent is not the project service list
+
+- This decision refines `Film selection is scoped per service`: New Order records exactly one immutable incoming service — the offer or problem that caused the customer to contact Rolan PRO.
+- A project's operational service list is separate and mutable. A manager may add Smart, Solar, Safety, or Decorative work without rewriting the incoming service or creating another order/project.
+- Marketing statistics count the lead once under its captured source and incoming service. Cross-sold services and their revenue remain part of the same project and are measured separately; they do not reclassify the original Google Ads intent.
+- The legacy order keeps an intake snapshot for the current operating workflow. When the sale launches a canonical Project, PostgreSQL stores `lead_source` and the relational `lead_intent_service_type_id`; Project positions continue to represent the services actually sold.
+- Google Ads conversion delivery must use the original click/campaign attribution and stable conversion events. This change preserves the required service identity but does not claim to upload offline conversions to Google Ads.
+- Added to PR #169. Production deployment remains a separate reviewed release action.
+
+## 2026-09-14 — Site type owns the measurement-space vocabulary
+
+- This decision refines `Canonical Project constructor and auditable Solar measurements`: `RESIDENTIAL` and `COMMERCIAL` are not display tags; they select two separate measurement structures.
+- Residential projects use home-room templates and room terminology. Commercial projects use office/commercial-zone templates and matching terminology. Neither list is inferred from B2B/B2C, and a template from one structure is rejected for the other by the backend.
+- The first site type may be assigned to an imported Project whose type is missing. Once a typed Project contains measurements, switching its site type is rejected to prevent mixed room/office history.
+- Added to PR #169. Production deployment remains a separate reviewed release action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

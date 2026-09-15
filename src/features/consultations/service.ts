@@ -5,6 +5,7 @@ import { ROLE_CODES } from "@/lib/auth/constants";
 import { serializeConsultationDetail, serializeConsultationListItem } from "@/features/consultations/serializers";
 import { logConsultationActivity } from "@/features/consultations/activity";
 import { onConsultationScheduled, onSurveyCompleted } from "@/features/core/events";
+import { verificationStatusForSource, type MeasurementSource } from "@/features/projects/constructor";
 
 type SessionLike = {
   user: {
@@ -621,6 +622,9 @@ export async function addMeasurement(
     complexity_level_id?: string | null;
     notes?: string | null;
     drawing_data?: Prisma.InputJsonValue | null;
+    project_position_id?: string | null;
+    supersedes_measurement_id?: string | null;
+    measurement_source?: MeasurementSource | null;
     sort_order?: number;
   },
 ) {
@@ -653,6 +657,13 @@ export async function addMeasurement(
       complexity_level_id: input.complexity_level_id ?? null,
       notes: input.notes ?? null,
       drawing_data: nullableJson(input.drawing_data),
+      project_position_id: input.project_position_id ?? null,
+      supersedes_measurement_id: input.supersedes_measurement_id ?? null,
+      recorded_by_user_id: session.user.user_id,
+      measurement_source: input.measurement_source ?? null,
+      verification_status: input.measurement_source
+        ? verificationStatusForSource(input.measurement_source)
+        : null,
       sort_order: input.sort_order ?? 0,
     },
   });

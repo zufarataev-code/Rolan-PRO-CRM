@@ -601,7 +601,7 @@ async function seedServiceReferences() {
      "A1", "A1 — 8 mil", "A1 — 8 mil", "8 mil", "sqft", 11, null, null, null, null,
      null, null, false, "Базовый класс. Силикон по периметру обязателен."],
     ["SAFETY", "Защитная", "Safety Film", "ROLANPRO", "RolanPRO", "RolanPRO",
-     "A2", "A2 — 12 mil", "A2 — 12 mil", "12 mil", "sqft", 12, null, null, null, null,
+     "A2", "A2 — 14 mil", "A2 — 14 mil", "14 mil", "sqft", 12, null, null, null, null,
      null, null, false, "Средний класс. Силикон по периметру обязателен."],
     ["SAFETY", "Защитная", "Safety Film", "ROLANPRO", "RolanPRO", "RolanPRO",
      "A3", "A3 — 24 mil", "A3 — 24 mil", "24 mil", "sqft", 13, null, null, null, null,
@@ -650,6 +650,12 @@ async function seedServiceReferences() {
       restricted_orientations: restricted_orientations ? [...restricted_orientations] : undefined,
       requires_review,
       selection_note_ru,
+      technology_code: category_code === "SOLAR" ? "MAGNETRON_SPUTTERED" : "SAFETY_POLYESTER",
+      appearance_code: category_code === "SOLAR" ? "NEUTRAL" : "CLEAR",
+      application_side: "INTERIOR",
+      capability_tags: category_code === "SOLAR"
+        ? ["HEAT_CONTROL", "UV_REJECTION"]
+        : ["SECURITY", "SHATTER_RETENTION"],
     };
 
     await prisma.filmCatalog.upsert({

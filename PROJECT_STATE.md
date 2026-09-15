@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Implement issue #164: canonical multi-service Project / Solar measurement constructor | `codex/issue-164-project-constructor` / #169 | Codex | PR open; local verification green; no production deployment performed | Review #169 and its CI, merge only after approval, then run the normal migration/release workflow separately |
 | Remove the duplicate field-role CRM shell and open every employee inside the real `/legacy-crm` workspace | `codex/remove-duplicate-field-shell` / `f70355f` | Codex | Merged and deployed | Refresh/sign in through the public `/legacy-crm`; perform a controlled surveyor/installer account check of assigned records and `Рабочий день` without changing live customer data |
 | Remove standalone voice-input button from every CRM interface | `codex/remove-voice-button` / #112 | Codex | Merged and deployed | Refresh any already-open CRM tab once; voice will return only inside the future agent |
 | Put surveyor and installer inside the single canonical CRM interface | `codex/one-crm-all-roles` / #110 | Codex | Merged and deployed | Surveyor and installer should refresh/sign in through the public CRM and use only the `/legacy-crm` role workspace |
@@ -231,6 +232,36 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: branch `codex/remove-duplicate-field-shell` was reviewed and fast-forwarded to `main` as `f70355f99c76d32d4ee563a1ecb57b721f62cfe3`. GitHub CI run #33697488074 passed and production deploy run #33697612449 succeeded.
 - Production smoke: the exact reported address `/legacy-crm/survey/notifications` and old `/installer/today` both return 308 to `/legacy-crm`; the public build exposes only the actual `/legacy-crm` page and no longer builds the deleted field shells. An unauthenticated request remains protected. No live employee session was used to change records.
 - Next action: refresh/sign in through the public `/legacy-crm`, then perform one controlled visual check with mapped surveyor and installer accounts to confirm assigned records and `Рабочий день` without changing live customer data.
+
+## 2026-09-12 handoff — canonical Project / Solar measurement constructor
+
+- Scope: PR #169 completes issue #164 and supersedes the smaller foundation PR #161. One canonical Project now carries independent B2B/B2C customer classification, Residential/Commercial site type, multiple service positions, and service-level default films.
+- Solar V1: the existing `/legacy-crm` shell now contains one compact Projects section for owner, manager, and assigned surveyor. It supports room templates, openings, French Window/French Door overall dimensions and cells, glass construction/strength/Low-E details, removal per cell, and film inheritance from service through room/opening/cell.
+- Data integrity: PostgreSQL records source/status as `CUSTOMER`/`UNVERIFIED` or `SURVEYOR_VERIFIED`/`VERIFIED`; revisions preserve the prior measurement and a verified measurement cannot be replaced by customer data. Project, position, film category, source, revision, duplicate-cell, and role access checks are enforced on the server.
+- Film selection: compatibility is evaluated from the existing `FilmCatalog.allowed_glass_types`, `restricted_orientations`, `requires_review`, and selection note fields. The catalog also receives explicit technology, appearance, application-side, and capability taxonomy. Safety A2 is corrected to 14 mil.
+- Storage and permissions: the new section reads and writes canonical PostgreSQL APIs only; it does not create a second shell, second editor, or browser-storage source of truth. Assigned surveyors receive the operational constructor without project finance and can submit only verified measurements.
+- Verification: Prisma schema validation and client generation passed; 210 automated tests passed; TypeScript passed; the real legacy inline script compiled in regression coverage; production build passed; `git diff --check` passed. The worktree has no live `DATABASE_URL`, so no migration was applied to any database.
+- Branch / PR: `codex/issue-164-project-constructor` / #169 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/169`).
+- Release: not deployed. Review #169 and GitHub CI first; merge and deploy only through the normal release workflow, then verify the migration and role-scoped Project screens in a controlled production smoke test.
+
+### 2026-09-12 correction — structured film selection
+
+- User review found that New Order still showed one combined value such as `RolanPRO — Smart Vision Prime`. PR #169 now replaces that control with three cascading fields: film category, product name, and model.
+- Example identity is preserved exactly as `Зеркальная → Prime → NE2`; the service direction remains separate. The selected final model still resolves to one existing catalog ID.
+- Existing catalog entries are migrated in place without changing IDs. Orders save category/name/model snapshots in addition to the catalog ID so later catalog edits do not erase what was sold.
+- The same structure is available in order parameters and catalog management. Missing legacy model codes are displayed as `Модель не указана` instead of inventing a value.
+- Final UI correction: the same cascading fields now apply to the Solar service default and every room, opening, and cell override. The New Order form no longer contains the explanatory sidebar, workflow pills, long introductory copy, or redundant field guidance; only actionable validation messages remain.
+- New Order correction: site type is now a required independent choice (`RESIDENTIAL` or `COMMERCIAL`). The legacy measurement workspaces use it to show the matching residential-room or commercial-area presets, and the selected value is carried through the canonical proposal into the launched PostgreSQL Project.
+- Multi-service film correction: New Order renders one film card for every selected service. Smart, Solar, Safety, and Decorative cards are filtered to their own existing catalog category and each independently selects `Серия / категория → Название → Модель`; the order persists the exact catalog ID and snapshots in `materialsByService`, while the primary-service fields remain for backward compatibility. The selected service film becomes the default for that service's measurement rooms.
+- Lead attribution correction: New Order now captures one incoming service rather than treating every project service as a marketing origin. Managers add or remove cross-sold services inside the same project without changing `leadIntentServiceType`. The current-month report groups leads by frozen source + incoming service and reports cross-sell separately. Canonical launched Projects preserve the source and incoming ServiceType through a new relational migration.
+- Verification: 219 automated tests pass, including the real legacy script compilation, immutable lead-intent guards, monthly service attribution, cross-sell separation, proposal propagation, and canonical Project persistence. GitHub CI generated the Prisma client, passed TypeScript, and completed the production build on commit `ab31ca7`. The local Prisma CLI did not complete on this host, but the same required Prisma generation passed in the clean CI environment.
+
+### 2026-09-14 correction — strict Residential / Commercial measurement structure
+
+- Project creation now presents the property choice explicitly as `Residential · жилой · комнаты дома` or `Commercial · коммерческий · офисы и зоны`; it remains independent from B2B/B2C.
+- Both legacy and canonical measurement workspaces use site-specific terminology and presets. Residential receives home rooms only; Commercial receives offices and commercial zones only.
+- Backend validation rejects a room template that belongs to the other site type. After a typed Project has measurements, its site type is locked so existing rooms cannot be reclassified into offices, or offices into home rooms.
+- This correction remains in PR #169 and does not deploy production automatically.
 
 ## Completion rule
 
