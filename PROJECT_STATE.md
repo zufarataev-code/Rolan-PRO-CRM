@@ -261,7 +261,8 @@ Contributors must add a row before starting substantial work and update or remov
 - Project creation now presents the property choice explicitly as `Residential · жилой · комнаты дома` or `Commercial · коммерческий · офисы и зоны`; it remains independent from B2B/B2C.
 - Both legacy and canonical measurement workspaces use site-specific terminology and presets. Residential receives home rooms only; Commercial receives offices and commercial zones only.
 - Backend validation rejects a room template that belongs to the other site type. After a typed Project has measurements, its site type is locked so existing rooms cannot be reclassified into offices, or offices into home rooms.
-- This correction remains in PR #169 and does not deploy production automatically.
+- Release: PR #169 merged to `main` as `21d304a4af149172f9d5faea4325ceb248c0bd79`. Main CI run #34933721970 passed Prisma generation, 220 tests, TypeScript, and the production build. Production deploy run #34933844649 succeeded and confirmed that the server is serving the same commit.
+- Production smoke: the public login responds successfully and `/legacy-crm` remains session-protected. No customer, order, measurement, film, or employee record was edited during smoke verification.
 
 ## Completion rule
 
