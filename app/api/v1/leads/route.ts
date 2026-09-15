@@ -8,6 +8,64 @@ import { MANAGER_ROLES, getManagerScope, getPipelineStatusId } from "@/features/
 import { getRecordManagerScope, isCrossManagerAssignment } from "@/features/sales/access";
 import { listLeads } from "@/features/sales/service";
 import { onLeadCreated } from "@/features/core/events";
+import { persistLeadAttribution } from "@/features/google-ads/attribution";
+import type { AttributionCaptureInput, ConsentState } from "@/features/google-ads/types";
+
+type ApiAttributionInput = {
+  gclid?: string | null;
+  gbraid?: string | null;
+  wbraid?: string | null;
+  landing_page?: string | null;
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  utm_term?: string | null;
+  utm_content?: string | null;
+  session_attributes?: Record<string, unknown> | null;
+  captured_at?: string | null;
+  consent?: {
+    ad_user_data?: ConsentState | string | null;
+    ad_personalization?: ConsentState | string | null;
+    audience_marketing_eligible?: boolean | null;
+    source?: string | null;
+    policy_version?: string | null;
+    effective_at?: string | null;
+  } | null;
+};
+
+function parseOptionalDate(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function toAttributionCaptureInput(input: ApiAttributionInput | null | undefined): AttributionCaptureInput | null {
+  if (!input) return null;
+
+  return {
+    gclid: input.gclid,
+    gbraid: input.gbraid,
+    wbraid: input.wbraid,
+    landingPage: input.landing_page,
+    utmSource: input.utm_source,
+    utmMedium: input.utm_medium,
+    utmCampaign: input.utm_campaign,
+    utmTerm: input.utm_term,
+    utmContent: input.utm_content,
+    sessionAttributes: input.session_attributes,
+    capturedAt: parseOptionalDate(input.captured_at),
+    consent: input.consent
+      ? {
+          adUserData: (input.consent.ad_user_data ?? "UNKNOWN") as ConsentState,
+          adPersonalization: (input.consent.ad_personalization ?? "UNKNOWN") as ConsentState,
+          audienceMarketingEligible: input.consent.audience_marketing_eligible === true,
+          source: input.consent.source?.trim() || "unspecified",
+          policyVersion: input.consent.policy_version,
+          effectiveAt: parseOptionalDate(input.consent.effective_at),
+        }
+      : null,
+  };
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireRequestSession(request, MANAGER_ROLES);
@@ -41,6 +99,7 @@ export async function POST(request: NextRequest) {
         city_id?: string;
         assigned_manager_id?: string;
         pipeline_status_code?: string;
+        attribution?: ApiAttributionInput | null;
       }
     | null;
 
@@ -65,6 +124,7 @@ export async function POST(request: NextRequest) {
   }
 
   const assignedManagerId = recordManagerId ?? body.assigned_manager_id ?? null;
+  const attribution = toAttributionCaptureInput(body.attribution);
 
   const lead = await prisma.$transaction(async (tx) => {
     const createdLead = await tx.lead.create({
@@ -79,6 +139,10 @@ export async function POST(request: NextRequest) {
         pipeline_status_id: pipelineStatus.pipeline_status_id,
       },
     });
+
+    // Attribution and consent become part of the accepted CRM lead atomically.
+    // A rejected/rolled-back lead cannot leave orphaned Google matching data behind.
+    await persistLeadAttribution(tx, createdLead.lead_id, attribution);
 
     if (pipelineStatus.status_code === "NEW_LEAD" || pipelineStatus.status_code === "LEAD") {
       await onLeadCreated(tx, {
