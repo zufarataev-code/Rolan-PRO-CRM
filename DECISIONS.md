@@ -200,6 +200,13 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - This UI consolidation does not claim that legacy `db.orders` has already been migrated into relational `Project`. Stable ID mapping and the single PostgreSQL write path remain required before the compatibility store can be removed.
 - Implemented for review in PR #172. Production deployment remains a separate action.
 
+## 2026-09-15 — Dispatch Calendar uses the configured Google map
+
+- This decision refines the calendar/map portion of `Manager calculates the customer offer; owner controls internal economics`: the visible dispatch map in `/legacy-crm` uses Google Maps as its primary map provider.
+- The browser key is supplied by protected server environment configuration and must be restricted in Google Cloud by the production domains and required Maps APIs. It is not Project data and must not be persisted in the legacy CRM payload or committed to Git.
+- Calendar cards, Google map markers, filters, addresses, and route geometry remain views of the existing Project events and geocache. Changing the map provider does not create another calendar, route store, shell, or customer-job entity.
+- Leaflet remains a resilience fallback only when Google Maps is unavailable. This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const session = await getRequestSession(request);
-  const publicAppUrl = getEnv().appUrl;
+  const env = getEnv();
+  const publicAppUrl = env.appUrl;
 
   if (!session) {
     return NextResponse.redirect(new URL("/login", publicAppUrl));
@@ -40,6 +41,11 @@ export async function GET(request: NextRequest) {
 
   const cloudHtml = replaceLegacyBootstrapLogin(html);
   const employeeLoginUrl = new URL("/login", publicAppUrl).toString();
+  const googleMapsBootstrapPatch = `
+    <script>
+      window.__ROLANPRO_GOOGLE_MAPS_API_KEY__ = ${JSON.stringify(env.googleMapsApiKey)};
+    </script>
+  `;
 
   const teamAccessPatch = `
     <script>
@@ -291,7 +297,8 @@ export async function GET(request: NextRequest) {
   `;
 
   const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
-  const injectedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
+  const privilegedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
+  const injectedUi = `${googleMapsBootstrapPatch}${privilegedUi}`;
   const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0
     ? `${cloudHtml.slice(0, closingBodyIndex)}${injectedUi}${cloudHtml.slice(closingBodyIndex)}`
@@ -304,7 +311,8 @@ export async function GET(request: NextRequest) {
       "Content-Disposition": "inline",
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "SAMEORIGIN",
-      "Referrer-Policy": "same-origin",
+      // Google Maps browser-key restrictions validate the requesting origin.
+      "Referrer-Policy": "strict-origin-when-cross-origin",
     },
   });
 }

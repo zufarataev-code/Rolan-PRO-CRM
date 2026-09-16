@@ -12852,12 +12852,12 @@ window.__rolanGooglePlacesReady = function() {
   _googlePlacesResolved = true;
 };
 function googleMapsApiKey() {
-  return String((intCfg().googleMapsApiKey || db.settings.googleMapsApiKey || '')).trim();
+  return String((window.__ROLANPRO_GOOGLE_MAPS_API_KEY__ || intCfg().googleMapsApiKey || db.settings.googleMapsApiKey || '')).trim();
 }
-function loadGooglePlacesLibrary() {
+function loadGoogleMapsLibrary() {
   const key = googleMapsApiKey();
   if (!key) return Promise.resolve(false);
-  if (window.google?.maps?.places?.AutocompleteService) return Promise.resolve(true);
+  if (window.google?.maps?.Map) return Promise.resolve(true);
   if (_googlePlacesLoadPromise) return _googlePlacesLoadPromise;
   _googlePlacesLoadPromise = new Promise(resolve => {
     let done = false;
@@ -12868,11 +12868,11 @@ function loadGooglePlacesLibrary() {
     };
     window.__rolanGooglePlacesReady = function() {
       _googlePlacesResolved = true;
-      finish(!!window.google?.maps?.places?.AutocompleteService);
+      finish(!!window.google?.maps?.Map);
     };
     const existing = document.getElementById('rolan-google-places-js');
     if (existing) {
-      setTimeout(() => finish(!!window.google?.maps?.places?.AutocompleteService), 1200);
+      setTimeout(() => finish(!!window.google?.maps?.Map), 1200);
       return;
     }
     const script = document.createElement('script');
@@ -12882,9 +12882,13 @@ function loadGooglePlacesLibrary() {
     script.onerror = () => finish(false);
     script.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&libraries=places&callback=__rolanGooglePlacesReady';
     document.head.appendChild(script);
-    setTimeout(() => finish(_googlePlacesResolved && !!window.google?.maps?.places?.AutocompleteService), 6500);
+    setTimeout(() => finish(_googlePlacesResolved && !!window.google?.maps?.Map), 6500);
   });
   return _googlePlacesLoadPromise;
+}
+async function loadGooglePlacesLibrary() {
+  const loaded = await loadGoogleMapsLibrary();
+  return loaded && !!window.google?.maps?.places?.AutocompleteService;
 }
 function normalizeGooglePlaceAddress(place = {}) {
   const byType = {};
@@ -19915,11 +19919,16 @@ async function renderInstallerMap(containerId, tasks) {
   const el = document.getElementById(containerId);
   if (!el) { setTimeout(() => renderInstallerMap(containerId, tasks), 200); return; }
   if (!window.L) { el.innerHTML = '<div class="p-6 text-center text-red-600 text-sm">Leaflet не загружен</div>'; return; }
-  if (_map) { try { _map.remove(); } catch(e){} _map = null; }
+  if (_mapProvider === 'google') {
+    _mapMarkers.forEach(marker => { try { marker.setMap(null); } catch(e){} });
+    if (_mapRoute) { try { _mapRoute.setMap(null); } catch(e){} }
+  } else if (_map) { try { _map.remove(); } catch(e){} }
+  _map = null;
   if (el._leaflet_id) { el._leaflet_id = null; el.innerHTML = ''; }
   _mapMarkers = []; _mapRoute = null;
 
   const center = (db.settings.defaultMapCenter || DEFAULT_MAP_CENTER);
+  _mapProvider = 'leaflet';
   _map = L.map(el, { scrollWheelZoom: false }).setView([center.lat, center.lon], center.zoom || 11);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}@2x.png', { maxZoom: 19, subdomains: 'abcd' }).addTo(_map);
   // Office pin
@@ -28745,7 +28754,7 @@ async function buildRoute(coords) {
 // ---------- MAP ----------
 // Default center: Los Angeles (user's office)
 const DEFAULT_MAP_CENTER = { lat: 34.0522, lon: -118.2437, zoom: 11 };
-let _map = null, _mapMarkers = [], _mapRoute = null, _tileFallbackTried = false;
+let _map = null, _mapMarkers = [], _mapRoute = null, _mapProvider = null, _tileFallbackTried = false;
 
 function setMapStatus(msg, kind) {
   const el = document.getElementById('map-status');
@@ -28892,6 +28901,105 @@ function renderCalendarAreaStats(periodStart, periodEnd, dayObj = null) {
   </div>`;
 }
 
+async function renderGoogleCalendarMap(el, items, center, showAll) {
+  _mapProvider = 'google';
+  _map = new google.maps.Map(el, {
+    center: { lat: Number(center.lat), lng: Number(center.lon) },
+    zoom: center.zoom || 11,
+    mapTypeControl: true,
+    streetViewControl: false,
+    fullscreenControl: true,
+    gestureHandling: 'cooperative',
+  });
+
+  const infoWindow = new google.maps.InfoWindow();
+  const officeMarker = new google.maps.Marker({
+    map: _map,
+    position: { lat: Number(center.lat), lng: Number(center.lon) },
+    title: 'Офис Rolan PRO',
+    label: { text: 'R', color: '#ffffff', fontWeight: '800' },
+    icon: {
+      path: google.maps.SymbolPath.CIRCLE,
+      scale: 15,
+      fillColor: '#1a2b4a',
+      fillOpacity: 1,
+      strokeColor: '#ffffff',
+      strokeWeight: 3,
+    },
+    zIndex: 1000,
+  });
+  officeMarker.addListener('click', () => {
+    infoWindow.setContent('<b>🏢 Офис Rolan PRO</b><br>' + (db.settings.officeAddress || 'Westlake Village, CA'));
+    infoWindow.open({ map: _map, anchor: officeMarker });
+  });
+  _mapMarkers.push(officeMarker);
+
+  setMapStatus('Google Maps · загружаем адреса…');
+  const today = new Date(); today.setHours(0,0,0,0);
+  const coords = [];
+  const eventKeys = new Set();
+  let sequence = 0;
+  for (const it of items) {
+    const eventKey = `${it.o.id}:${it.kind}:${it.dt ? it.dt.toISOString() : 'pending'}`;
+    if (eventKeys.has(eventKey)) continue;
+    eventKeys.add(eventKey);
+    const o = it.o;
+    const c = getClient(o.clientId);
+    const projectAddress = orderAddress(o, c);
+    if (!c || !projectAddress) continue;
+    const coord = await geocodeOrder(o);
+    if (!coord) continue;
+    sequence += 1;
+    const info = it.info || orderEventInfo(it.kind);
+    const pal = it.kind === 'pending' ? calendarEventPalette('pending') : calendarEventPalette(it.kind);
+    const service = calendarServicePalette(o);
+    const color = it.kind === 'pending' ? '#f59e0b' : pal.color;
+    const label = `${info.icon} ${info.short}`;
+    const dtStr = it.dt ? fmtDateTime(it.dt.toISOString()) : T(o.status);
+    const installers = (o.installerIds||[]).map(id => getUser(id)?.name).filter(Boolean).join(', ');
+    const marker = new google.maps.Marker({
+      map: _map,
+      position: { lat: Number(coord.lat), lng: Number(coord.lon) },
+      title: [it.dt ? calendarTimeLabel(it.dt) : '', o.number, c?.name || '', projectAddress].filter(Boolean).join(' · '),
+      label: { text: String(sequence), color: '#ffffff', fontWeight: '800', fontSize: '11px' },
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: it.dt && it.dt.toDateString() === today.toDateString() ? 13 : 11,
+        fillColor: color,
+        fillOpacity: .95,
+        strokeColor: service.color,
+        strokeWeight: 3,
+      },
+    });
+    marker.addListener('click', () => {
+      infoWindow.setContent(`<b>${it.dt ? calendarTimeLabel(it.dt) + ' · ' : ''}${o.number}</b><br>${c?.name || ''}<br>📍 ${projectAddress}<br>` +
+        `<span style="color:${color}">${label}</span> — ${dtStr}<br>` +
+        `<span style="color:${service.color}">${service.icon} ${service.short}</span><br>` +
+        (installers ? `👷 ${installers}<br>` : '') +
+        `<a href="#/order/${o.id}">Открыть проект →</a>`);
+      infoWindow.open({ map: _map, anchor: marker });
+    });
+    _mapMarkers.push(marker);
+    coords.push(coord);
+  }
+
+  if (coords.length > 0) {
+    const stayLocal = state.calendarMapStayLocal !== false;
+    if (!stayLocal) {
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend({ lat: Number(center.lat), lng: Number(center.lon) });
+      coords.forEach(coord => bounds.extend({ lat: Number(coord.lat), lng: Number(coord.lon) }));
+      _map.fitBounds(bounds, 40);
+    }
+    const inLA = coords.filter(c => c.lat > 33.5 && c.lat < 34.7 && c.lon > -118.9 && c.lon < -117.5).length;
+    const farAway = coords.length - inLA;
+    setMapStatus(`Google Maps · адресов: ${coords.length}` + (farAway ? ` (${farAway} вне LA)` : ''), 'ok');
+  } else {
+    setMapStatus(showAll ? 'Google Maps · в этом периоде нет проектов с адресами' : 'Google Maps · на эту дату ничего не запланировано');
+  }
+  state._mapCoordsCache = coords;
+}
+
 async function renderMapForDay(containerId, dateObj, opts) {
   opts = opts || {};
   const showAll = opts.showAll || state.calendarMapShowAll;
@@ -28900,46 +29008,6 @@ async function renderMapForDay(containerId, dateObj, opts) {
 
   const el = document.getElementById(containerId);
   if (!el) { setTimeout(() => renderMapForDay(containerId, dateObj, opts), 200); return; }
-  if (!window.L) {
-    el.innerHTML = '<div class="p-6 text-center text-red-600 text-sm">Карта (Leaflet) не загружена. Проверьте интернет.</div>';
-    return;
-  }
-  if (_map) { try { _map.remove(); } catch(e){} _map = null; }
-  if (el._leaflet_id) { el._leaflet_id = null; el.innerHTML = ''; }
-  _mapMarkers = []; _mapRoute = null;
-
-  const center = (db.settings.defaultMapCenter || DEFAULT_MAP_CENTER);
-  _map = L.map(el, { scrollWheelZoom: false }).setView([center.lat, center.lon], center.zoom || 11);
-  // CARTO Voyager — free, no API key, works from file:// (OSM tile server returns 403 without Referer)
-  const tileUrl = (db.settings.mapTileUrl || 'https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}@2x.png');
-  const tileLayer = L.tileLayer(tileUrl, {
-    maxZoom: 19,
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: 'abcd',
-  });
-  tileLayer.on('tileerror', (e) => {
-    console.warn('Tile error', e);
-    // Fallback: switch to OSM.de which often allows file://
-    if (!_tileFallbackTried) {
-      _tileFallbackTried = true;
-      tileLayer.setUrl('https://tile.openstreetmap.de/{z}/{x}/{y}.png');
-      setMapStatus('Переключился на запасной сервер тайлов', 'ok');
-    }
-  });
-  tileLayer.addTo(_map);
-
-  // Office marker (always show, distinct icon)
-  const officeIcon = L.divIcon({
-    className: 'office-pin',
-    html: '<div style="background:#1a2b4a;color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:14px;">🏢</div>',
-    iconSize: [32,32], iconAnchor: [16,16],
-  });
-  L.marker([center.lat, center.lon], { icon: officeIcon, zIndexOffset: 1000 })
-    .addTo(_map)
-    .bindPopup('<b>🏢 Офис</b><br>' + (db.settings.companyName || 'RolanPRO') + '<br>' + (db.settings.officeAddress || ''));
-
-  setMapStatus('Геокодирование адресов…');
-
   // Determine items to show
   let items;
   if (showAll && periodStart && periodEnd) {
@@ -28958,6 +29026,57 @@ async function renderMapForDay(containerId, dateObj, opts) {
   } else {
     items = [];
   }
+
+  if (_mapProvider === 'google') {
+    _mapMarkers.forEach(marker => { try { marker.setMap(null); } catch(e){} });
+    if (_mapRoute) { try { _mapRoute.setMap(null); } catch(e){} }
+  } else if (_map) {
+    try { _map.remove(); } catch(e){}
+  }
+  _map = null; _mapMarkers = []; _mapRoute = null; _mapProvider = null;
+  if (el._leaflet_id) { el._leaflet_id = null; }
+  el.innerHTML = '';
+
+  const center = (db.settings.defaultMapCenter || DEFAULT_MAP_CENTER);
+  setMapStatus('Загружаем Google Maps…');
+  if (await loadGoogleMapsLibrary()) {
+    await renderGoogleCalendarMap(el, items, center, showAll);
+    return;
+  }
+  if (!window.L) {
+    el.innerHTML = '<div class="p-6 text-center text-red-600 text-sm">Google Maps не настроен, резервная карта не загрузилась. Проверьте API-ключ и интернет.</div>';
+    setMapStatus('Google Maps не настроен', 'error');
+    return;
+  }
+
+  _mapProvider = 'leaflet';
+  _map = L.map(el, { scrollWheelZoom: false }).setView([center.lat, center.lon], center.zoom || 11);
+  const tileUrl = (db.settings.mapTileUrl || 'https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}@2x.png');
+  const tileLayer = L.tileLayer(tileUrl, {
+    maxZoom: 19,
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd',
+  });
+  tileLayer.on('tileerror', (e) => {
+    console.warn('Tile error', e);
+    if (!_tileFallbackTried) {
+      _tileFallbackTried = true;
+      tileLayer.setUrl('https://tile.openstreetmap.de/{z}/{x}/{y}.png');
+      setMapStatus('Google Maps недоступен — включена резервная карта', 'ok');
+    }
+  });
+  tileLayer.addTo(_map);
+
+  const officeIcon = L.divIcon({
+    className: 'office-pin',
+    html: '<div style="background:#1a2b4a;color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:14px;">🏢</div>',
+    iconSize: [32,32], iconAnchor: [16,16],
+  });
+  L.marker([center.lat, center.lon], { icon: officeIcon, zIndexOffset: 1000 })
+    .addTo(_map)
+    .bindPopup('<b>🏢 Офис</b><br>' + (db.settings.companyName || 'Rolan PRO') + '<br>' + (db.settings.officeAddress || ''));
+
+  setMapStatus('Google Maps недоступен — используем резервную карту');
 
   const today = new Date(); today.setHours(0,0,0,0);
   const coords = [];
@@ -29031,10 +29150,22 @@ async function buildRouteOnMap() {
   if (coords.length < 2) { alert(state.lang === 'ru' ? 'Нужно минимум 2 адреса с координатами' : 'Need at least 2 addresses'); return; }
   const r = await buildRoute(coords);
   if (!r) { alert(state.lang === 'ru' ? 'Маршрут не построился' : 'Route failed'); return; }
-  if (_mapRoute) { _mapRoute.remove(); _mapRoute = null; }
-  const latLngs = r.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
-  _mapRoute = L.polyline(latLngs, { color: '#dc2626', weight: 5, opacity: 0.75 }).addTo(_map);
-  _map.fitBounds(_mapRoute.getBounds(), { padding: [40, 40] });
+  if (_mapRoute) {
+    if (_mapProvider === 'google') _mapRoute.setMap(null);
+    else _mapRoute.remove();
+    _mapRoute = null;
+  }
+  if (_mapProvider === 'google') {
+    const path = r.geometry.coordinates.map(([lon, lat]) => ({ lat, lng: lon }));
+    _mapRoute = new google.maps.Polyline({ path, map: _map, strokeColor: '#dc2626', strokeWeight: 5, strokeOpacity: .78 });
+    const bounds = new google.maps.LatLngBounds();
+    path.forEach(point => bounds.extend(point));
+    _map.fitBounds(bounds, 40);
+  } else {
+    const latLngs = r.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+    _mapRoute = L.polyline(latLngs, { color: '#dc2626', weight: 5, opacity: 0.75 }).addTo(_map);
+    _map.fitBounds(_mapRoute.getBounds(), { padding: [40, 40] });
+  }
   // Show distance + duration
   const km = (r.distance / 1000).toFixed(1);
   const min = Math.round(r.duration / 60);
@@ -29042,7 +29173,11 @@ async function buildRouteOnMap() {
   if (lbl) lbl.textContent = `${km} км • ~${min} мин`;
 }
 function clearRouteOnMap() {
-  if (_mapRoute) { _mapRoute.remove(); _mapRoute = null; }
+  if (_mapRoute) {
+    if (_mapProvider === 'google') _mapRoute.setMap(null);
+    else _mapRoute.remove();
+    _mapRoute = null;
+  }
   const lbl = document.getElementById('route-info');
   if (lbl) lbl.textContent = '';
 }

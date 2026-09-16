@@ -322,6 +322,13 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification: all 240 automated tests pass locally. GitHub CI run #35055402899 generated the current Prisma client, passed the complete test suite and TypeScript, and completed the production build on commit `3d3b146`.
 - Branch / PR: `codex/project-add-service-button` / #172. No production deployment was started.
 
+### 2026-09-15 correction — Google Maps in the dispatch calendar
+
+- The calendar/map workspace now uses Google Maps as its primary map. Project visit markers, customer/address details, calendar filters, and the existing route line remain attached to the same Project events.
+- `/legacy-crm` receives the restricted browser key from protected server environment configuration (`GOOGLE_MAPS_BROWSER_API_KEY`, with the existing `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` as compatibility fallback). The key is not committed to Git or written into CRM storage.
+- If the key is absent, rejected, or Google Maps cannot load, the existing Leaflet map remains an operational fallback instead of breaking Calendar.
+- This correction extends PR #172. Production deployment remains a separate release action.
+
 A task is shared and complete only when all applicable statements are true:
 
 - The work is committed and pushed.

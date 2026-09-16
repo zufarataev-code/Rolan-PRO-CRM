@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+const routeSource = readFileSync("app/legacy-crm/route.ts", "utf8");
 
 test("weekly calendar is one side-by-side schedule and map workspace", () => {
   assert.match(source, /class="dispatch-workspace"/);
@@ -28,4 +29,15 @@ test("dispatch events expose operational identity and timed map labels", () => {
   assert.match(source, /orderAddress\(o, c\) \|\| 'Адрес не указан'/);
   assert.match(source, /bindTooltip\(calendarTimeLabel\(it\.dt\).*permanent:true/);
   assert.match(source, /onclick="openOrder\('\$\{o\.id\}'\)"/);
+});
+
+test("dispatch calendar uses the server-configured Google map with a safe fallback", () => {
+  assert.match(source, /window\.__ROLANPRO_GOOGLE_MAPS_API_KEY__/);
+  assert.match(source, /function loadGoogleMapsLibrary\(\)/);
+  assert.match(source, /new google\.maps\.Map\(el/);
+  assert.match(source, /new google\.maps\.Marker\(/);
+  assert.match(source, /Google Maps · адресов:/);
+  assert.match(source, /_mapProvider = 'leaflet'/);
+  assert.match(routeSource, /window\.__ROLANPRO_GOOGLE_MAPS_API_KEY__/);
+  assert.match(routeSource, /strict-origin-when-cross-origin/);
 });
