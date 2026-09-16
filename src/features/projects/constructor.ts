@@ -9,6 +9,7 @@ export type OpeningType =
   | "french_door"
   | "storefront"
   | "skylight"
+  | "glass_partition"
   | "custom";
 export type GlassConstruction = "single_pane" | "double_pane_igu" | "triple_pane_igu" | "unknown";
 export type GlassTreatment = "annealed" | "heat_strengthened" | "tempered" | "unknown";
@@ -67,6 +68,7 @@ export const OPENING_TYPE_OPTIONS: SelectOption<OpeningType>[] = [
   { value: "french_door", label_ru: "Французская дверь", label_en: "French Door" },
   { value: "storefront", label_ru: "Витрина", label_en: "Storefront" },
   { value: "skylight", label_ru: "Мансардное окно", label_en: "Skylight" },
+  { value: "glass_partition", label_ru: "Офисная стеклянная перегородка", label_en: "Office Glass Partition" },
   { value: "custom", label_ru: "Другое", label_en: "Custom" },
 ];
 
@@ -364,7 +366,7 @@ export function glassCompatibilityKeys(
   if (glass.laminated) keys.add("laminated");
   if (glass.tinted) keys.add("tinted_glass");
   if (openingType === "skylight") keys.add("skylight");
-  if (openingType === "storefront" || openingType === "french_window" || openingType === "french_door") {
+  if (openingType === "storefront" || openingType === "glass_partition" || openingType === "french_window" || openingType === "french_door") {
     keys.add("panoramic");
   }
   return [...keys];
@@ -414,6 +416,7 @@ function isOpeningType(value: unknown): value is OpeningType {
     "french_door",
     "storefront",
     "skylight",
+    "glass_partition",
     "custom",
   ].includes(String(value));
 }

@@ -149,6 +149,49 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - The first site type may be assigned to an imported Project whose type is missing. Once a typed Project contains measurements, switching its site type is rejected to prevent mixed room/office history.
 - Added to PR #169. Production deployment remains a separate reviewed release action.
 
+## 2026-09-15 — Smart film, power supply, and controls are separate catalog dimensions
+
+- This decision refines `Film identity is Category → Name → Model`: the selected Smart film remains a FilmCatalog record, while its Rolan Control power supply is a Smart service add-on and Wi-Fi/multi-zone/voice/ecosystem/wall-switch choices are control options. None of those components may be concatenated into one material name.
+- The confirmed Smart film lines are Rolan PRO MS (Mitsubishi), Rolan PRO AR (Arshi · China), and the decorative variable-pattern DEC-SMART line. Exact models are stored independently and the picker remains scoped to Smart only.
+- Unknown commercial prices, specifications, the two unnamed members of the stated eight-model power-supply range, and any unnamed third manufacturer must remain unset. Catalog maintenance may add them only after their exact identity is confirmed; the implementation must not infer plausible wattages or names.
+- Existing generic Smart placeholder records are retained for historical references but archived from new-order selection. This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Office glass partitions are commercial openings
+
+- This decision refines `Site type owns the measurement-space vocabulary`: an office glass partition is a first-class `glass_partition` opening in a Commercial space, not an ordinary window and not a room type.
+- It uses the same canonical measurement facts as other glass openings—overall dimensions, cells/panes, glass construction and treatment, removal, provenance, and film inheritance—but is not offered for Residential Projects.
+- Existing records remain valid. This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Film removal is selected at the measured opening
+
+- This decision refines `Canonical Project constructor and auditable Solar measurements`: removal is an attribute of each measured window/opening or its individual cells, not a second measurement list and not an ambiguous global checkbox.
+- Selecting removal contributes that opening's measured sqft to the project's removal service calculation. The window-removal action and the destructive delete-window action must remain visually and semantically distinct.
+- Proposal readiness must validate the effective positive dimensions of the actual window record. A zero or stale legacy `actualWidth`/`actualHeight` cannot override newly entered positive planned dimensions and falsely block the proposal.
+- This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Customer dimensions may price a proposal but may not release production
+
+- This decision refines `Canonical Project constructor and auditable Solar measurements`: `CUSTOMER / UNVERIFIED` dimensions are valid commercial inputs for calculating and issuing a proposal. They must remain visibly preliminary and retain their provenance.
+- Closing the sale does not silently convert customer dimensions into exact dimensions. Before installation can be scheduled or any production status can begin, every active opening must have positive `SURVEYOR_VERIFIED / VERIFIED` dimensions.
+- Changing width, height, or quantity invalidates the prior verification and the saved estimate until it is reviewed again. Existing completed or in-production legacy records are preserved through an idempotent compatibility migration.
+- This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Manager calculates the customer offer; owner controls internal economics
+
+- The Project calculation is the required source for the Proposal. A manager may edit measured quantity, selected material, sale price, customer-facing add-ons, and the final customer amount.
+- Material purchase cost, payroll, marketing, direct expenses, production cost, profit, and margin are internal company economics visible and editable only by the owner. They must not appear as manager Project fields or block the manager from preparing a complete Proposal.
+- Project material cost is calculated from the cut plan and the actual purchase cost of suitable warehouse lots. The catalog `costPerSqft` is only a fallback when a lot has no recorded cost or stock is short. Installer and operating rates come from owner-managed reference settings; managers never re-enter them in a Project. Marketing attribution belongs to lead-source reporting and is not a manual Project estimate input.
+- Scheduling follows one dispatch model: a work event belongs to the existing Project, carries its visit type, exact time, responsible employee(s), customer and object address, and is rendered simultaneously in the weekly time grid and on the map. Calendar cards and map pins are two views of the same event, never copied jobs or a second scheduling store. The interaction model is based on the proven calendar-plus-map workflow studied in TintWiz, while Rolan PRO keeps its own UI, data and implementation.
+- This is a permission boundary inside the same Project, not a separate estimate, order, accounting Project, or duplicated storage record.
+- This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Order and Project are one lifecycle record
+
+- This decision supersedes the record-creation boundary in `Sales closes before the operational project is launched`. A customer job is not converted into a second Project after the sale; accepting the Proposal and receiving the deposit change the stage of the same record.
+- `Project` is the canonical database entity and `Заказ` is its user-facing name in the CRM. Measurements, service positions, Proposal, agreement, payments, scheduling, installation, payroll links, and history belong to that one record.
+- A Lead/Deal may exist before a real customer job is opened, but the normal workflow may not create parallel Order and Project records or separate browser-storage and PostgreSQL versions of the same job.
+- The existing legacy `orders` and modern `Project` split is migration debt, not the target architecture. It must be consolidated with stable ID mapping and data preservation before the duplicate navigation and launch path are removed.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
