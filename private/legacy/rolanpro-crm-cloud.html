@@ -7427,6 +7427,18 @@ function migrateSchema() {
         if (w.actualWidth == null) w.actualWidth = w.width;
         if (w.actualHeight == null) w.actualHeight = w.height;
         if (w.actualQty == null) w.actualQty = w.qty;
+        if (!w.measurementSource && w.measurement_source) w.measurementSource = w.measurement_source;
+        if (!w.measurement_source && w.measurementSource) w.measurement_source = w.measurementSource;
+        if (!w.measurementSource && !w.measurement_source) {
+          const alreadyInProduction = [
+            'installation_scheduled','installation_accepted','installation_en_route','installation_in_progress',
+            'installation_done','act_signed','payment_received','completed','review_received',
+          ].includes(o.status);
+          w.measurementSource = alreadyInProduction ? 'SURVEYOR_VERIFIED' : 'CUSTOMER';
+          w.measurement_source = w.measurementSource;
+          w.verificationStatus = alreadyInProduction ? 'VERIFIED' : 'UNVERIFIED';
+          if (alreadyInProduction) w.measurementVerifiedAt = o.installationAt || o.measurementDoneAt || o.createdAt || new Date().toISOString();
+        }
         if (w.smart) {
           if (!w.smart.connectionPointSide) w.smart.connectionPointSide = w.smart.busbarSide || 'top';
           if (!w.smart.busbarSide) w.smart.busbarSide = w.smart.connectionPointSide;
@@ -9323,6 +9335,11 @@ function applyMeasurerV25DataToOrder(oid, data) {
         glassType: measurerV25GlassToCrm(win.glass || ''),
         orientation: win.direction || '',
         side: 'in',
+        measurementSource: 'SURVEYOR_VERIFIED',
+        measurement_source: 'SURVEYOR_VERIFIED',
+        verificationStatus: 'VERIFIED',
+        measurementVerifiedAt: new Date().toISOString(),
+        measurementVerifiedBy: state.currentUserId || null,
         filmType: catalog ? `${catalog.brand} — ${catalog.model}` : (fieldFilm || ''),
         catalogId: catalog?.id || null,
         note: win.note || '',
@@ -10476,6 +10493,8 @@ function measureStudioSaveWindow(orderId) {
   if (targetWin.actualWidth == null) targetWin.actualWidth = targetWin.width;
   if (targetWin.actualHeight == null) targetWin.actualHeight = targetWin.height;
   if (targetWin.actualQty == null) targetWin.actualQty = targetWin.qty;
+  if (currentUser()?.role === 'measurer') markWindowMeasurementVerified(targetWin);
+  else if (!targetWin.measurementSource) markWindowMeasurementUnverified(targetWin);
   if (!existing) {
     targetRoom.windows = targetRoom.windows || [];
     targetRoom.windows.push(targetWin);
@@ -13666,6 +13685,58 @@ function windowActualAreaSqft(w) {
 function windowRemovalRequired(w) {
   return w?.removalRequired === true || w?.removal_required === true;
 }
+function windowMeasurementSource(w) {
+  return w?.measurementSource === 'SURVEYOR_VERIFIED' || w?.measurement_source === 'SURVEYOR_VERIFIED'
+    ? 'SURVEYOR_VERIFIED'
+    : 'CUSTOMER';
+}
+function windowMeasurementIsVerified(w) {
+  return windowMeasurementSource(w) === 'SURVEYOR_VERIFIED'
+    && Number(w?.actualWidth || w?.width) > 0
+    && Number(w?.actualHeight || w?.height) > 0
+    && Number(w?.actualQty || w?.qty || 1) > 0;
+}
+function markWindowMeasurementUnverified(w) {
+  if (!w) return;
+  w.measurementSource = 'CUSTOMER';
+  w.measurement_source = 'CUSTOMER';
+  w.verificationStatus = 'UNVERIFIED';
+  delete w.measurementVerifiedAt;
+  delete w.measurementVerifiedBy;
+}
+function markWindowMeasurementVerified(w, by = state.currentUserId) {
+  if (!w) return;
+  w.actualWidth = Number(w.width) || Number(w.actualWidth) || 0;
+  w.actualHeight = Number(w.height) || Number(w.actualHeight) || 0;
+  w.actualQty = Number(w.qty) || Number(w.actualQty) || 1;
+  w.measurementSource = 'SURVEYOR_VERIFIED';
+  w.measurement_source = 'SURVEYOR_VERIFIED';
+  w.verificationStatus = 'VERIFIED';
+  w.measurementVerifiedAt = new Date().toISOString();
+  w.measurementVerifiedBy = by || null;
+}
+function orderMeasurementVerificationIssues(o) {
+  const windows = measureAllWindows(o);
+  if (!windows.length) return ['нет окон с размерами'];
+  return windows
+    .filter(({ win }) => !windowMeasurementIsVerified(win))
+    .map(({ room, win }) => `${room.name || 'Помещение'} · ${win.name || 'Окно'}`);
+}
+function orderStatusRequiresVerifiedMeasurements(status) {
+  return [
+    'installation_scheduled','installation_accepted','installation_en_route','installation_in_progress',
+    'installation_done','act_signed','payment_received','completed','review_received',
+  ].includes(status);
+}
+function ensureVerifiedMeasurementsForStatus(o, status, openMeasurement = true) {
+  if (!o || !orderStatusRequiresVerifiedMeasurements(status)) return true;
+  const issues = orderMeasurementVerificationIssues(o);
+  if (!issues.length) return true;
+  const preview = issues.slice(0, 4).join(', ');
+  alert(`Перед назначением и выполнением монтажа нужны точные проверенные размеры всех окон. Не подтверждены: ${preview}${issues.length > 4 ? ` и ещё ${issues.length - 4}` : ''}.`);
+  if (openMeasurement && orderUserCanManage(currentUser())) openManagerMeasureModal(o.id);
+  return false;
+}
 function orderRemovalAreaSqft(o) {
   return measureAllWindows(o).reduce((sum, { win }) => sum + (windowRemovalRequired(win) ? windowActualAreaSqft(win) : 0), 0);
 }
@@ -14253,10 +14324,11 @@ function orderPrice(o) { return orderArea(o) * (o.pricePerM2 || db.settings.pric
 
 function changeStatus(orderId, newStatus, by, opts = {}) {
   const o = getOrder(orderId);
-  if (!o) return;
+  if (!o) return false;
+  if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return false;
   if (o.status === newStatus && !opts.force) {
     render();
-    return;
+    return true;
   }
   o.status = newStatus;
   o.timeline = o.timeline || [];
@@ -14284,9 +14356,10 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   if (!opts.skipClientAuto) autoNotifyClient(o, newStatus);
   if (newStatus === 'measurement_done' && orderUserCanSeeMoney(o, currentUser()) && opts.openEstimate !== false) {
     openProjectEstimateWorkspace(orderId);
-    return;
+    return true;
   }
   render();
+  return true;
 }
 
 function acceptMeasurementTask(orderId, openStudio = false) {
@@ -14606,7 +14679,8 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'measurement_done') return { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
   if (o.status === 'proposal_sent') return { icon: '✅', title: 'Отметить КП принятым', sub: 'Используйте, если клиент подтвердил предложение вне портала.', variant: 'primary', onclick: `changeStatus('${o.id}','proposal_accepted')` };
   if (o.status === 'proposal_accepted' && !o.depositReceived) return { icon: '💰', title: 'Отметить аванс', sub: 'После аванса можно уверенно закреплять дату монтажа.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
-  if (o.status === 'proposal_accepted') return { icon: '🔧', title: 'Назначить монтаж', sub: 'Монтажники увидят только свои наряды и маршрут.', variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
+  if (o.status === 'proposal_accepted' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
+  if (o.status === 'proposal_accepted') return { icon: '🔧', title: 'Назначить монтаж', sub: 'Точные размеры подтверждены. Монтажники увидят свои наряды и маршрут.', variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
   if (o.status === 'installation_done') return { icon: '📝', title: 'Подписать акт', sub: 'Закрываем выполненную работу документально.', variant: 'primary', onclick: `changeStatus('${o.id}','act_signed')` };
   if (o.status === 'act_signed') return { icon: '💳', title: 'Отметить оплату', sub: 'Фиксируем финальную оплату по заказу.', variant: 'primary', onclick: `changeStatus('${o.id}','payment_received')` };
   if (o.status === 'payment_received') return { icon: '⭐', title: 'Закрыть и запросить отзыв', sub: 'Финальный шаг: заказ закрыт, клиенту отправляем отзыв.', variant: 'success', onclick: `changeStatus('${o.id}','completed'); askForReview('${o.id}');` };
@@ -20373,6 +20447,7 @@ function approveProjectEstimateAndOpenProposal(oid) {
     areaSqft: orderActualAreaSqft(o),
     serviceCount: (o.extraServices || []).length,
     expenseCount: (o.extraExpenses || []).length,
+    measurementBasis: orderMeasurementVerificationIssues(o).length ? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED',
   };
   o.timeline = o.timeline || [];
   o.timeline.push({ at: approvedAt, key: 'project_estimate_approved', by: state.currentUserId, note: `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}, маржа ${marginPct.toFixed(1)}%` });
@@ -20386,6 +20461,7 @@ function renderProjectEstimateWorkspace(o) {
   const margin = orderMargin(o);
   const marginPct = orderMarginPct(o) * 100;
   const issues = projectEstimateReadiness(o);
+  const unverifiedMeasurements = orderMeasurementVerificationIssues(o);
   const serviceTypes = ['washing','removal','silicone','electric','connect','warranty','custom'];
   const expenseTypes = ['gas','consumables','delivery','helper','electric','rental','permit','other'];
   const materialRows = (o.measurements?.rooms || []).flatMap(room => (room.windows || []).map(win => {
@@ -20393,7 +20469,7 @@ function renderProjectEstimateWorkspace(o) {
     const area = windowActualAreaSqft(win);
     const defaultPrice = win.pricePerSqft ?? o.priceOverridePerSqft ?? cat?.retailPerSqft ?? 0;
     return `<tr>
-      <td><b>${academyEsc(room.name || 'Комната')}</b><br><span class="text-gray-500">${academyEsc(win.name || 'Окно')}</span></td>
+      <td><b>${academyEsc(room.name || 'Комната')}</b><br><span class="text-gray-500">${academyEsc(win.name || 'Окно')}</span><br><span class="text-xs ${windowMeasurementIsVerified(win) ? 'text-emerald-700' : 'text-amber-700'}">${windowMeasurementIsVerified(win) ? '✓ точный замер' : 'размер клиента · предварительно'}</span></td>
       <td>${academyEsc(cat ? `${cat.brand} ${cat.model}` : 'Плёнка не выбрана')}</td>
       <td class="money">${area.toFixed(2)}</td>
       <td><input aria-label="Цена за sqft" type="number" min="0" step="0.5" value="${Number(defaultPrice || 0)}" onchange="projectEstimateUpdateWindowPrice('${o.id}','${room.id}','${win.id}',this.value)"></td>
@@ -20429,6 +20505,7 @@ function renderProjectEstimateWorkspace(o) {
       <div class="project-estimate-kpi"><span>Маржа</span><strong class="${marginPct >= 30 ? 'text-emerald-700' : marginPct >= 20 ? 'text-amber-600' : 'text-red-600'}">${marginPct.toFixed(1)}%</strong></div>
     </div>
     ${issues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>До КП нужно проверить:</b> ${issues.map(academyEsc).join(', ')}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Расчёт заполнен.</b> Проверьте маржу и подтвердите переход к КП.</div>`}
+    ${unverifiedMeasurements.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Предварительные размеры клиента.</b> По ним разрешено рассчитать проект и выпустить КП. Перед назначением монтажа потребуется внести и подтвердить точные размеры ${unverifiedMeasurements.length} окон.</div>` : ''}
 
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>1. Замер и материалы</h4><div class="text-xs text-gray-500">Площадь и материал берутся из замера. Здесь назначается цена продажи.</div></div></div>
@@ -20494,6 +20571,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const events = orderScheduledEvents(o);
   const pendingRequests = pendingClientRequests(o);
   const hasMeasurements = windows.length > 0;
+  const unverifiedMeasurements = orderMeasurementVerificationIssues(o);
   const estimateApproved = projectEstimateIsApproved(o);
   const primary = isInstaller
     ? installerOrderPrimaryAction(o)
@@ -20545,7 +20623,9 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ${renderOrderCleanMini('Комнаты', String(rooms.length))}
       ${renderOrderCleanMini('Окна / панели', String(windows.length))}
       ${renderOrderCleanMini('Площадь', `${orderActualAreaSqft(o).toFixed(2)} sqft`)}
+      ${renderOrderCleanMini('Размеры', !hasMeasurements ? 'не внесены' : unverifiedMeasurements.length ? `предварительные · ${unverifiedMeasurements.length}` : '✓ точные')}
     </div>
+    ${hasMeasurements && unverifiedMeasurements.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Предварительный расчёт.</b> КП можно подготовить по размерам клиента, но назначить монтаж можно только после подтверждения точных размеров каждого окна.</div>` : ''}
     ${filmRows.length ? `<div class="mt-3">${renderOrderCleanRows(filmRows.slice(0, 6))}</div>` : `<div class="order-clean-note mt-3">Пленка еще не выбрана по окнам. Откройте замеры и назначьте материал из каталога.</div>`}
     <div class="order-clean-actions mt-3">
       ${isInstaller ? `
@@ -20597,7 +20677,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ` : `
       ${renderOrderActionCard({ icon: '📞', title: 'Консультация', sub: o.consultationAt ? fmtDateTime(o.consultationAt) : 'назначить', onclick: `scheduleConsultationPrompt('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '📐', title: 'Замер', sub: o.measurementAt ? fmtDateTime(o.measurementAt) : 'назначить', onclick: `scheduleMeasurementPrompt('${o.id}')`, disabled: !canManage })}
-      ${renderOrderActionCard({ icon: '🔧', title: 'Монтаж', sub: o.installationAt ? fmtDateTime(o.installationAt) : 'назначить', onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage })}
+      ${renderOrderActionCard({ icon: unverifiedMeasurements.length ? '📐' : '🔧', title: unverifiedMeasurements.length ? 'Сначала точные размеры' : 'Монтаж', sub: unverifiedMeasurements.length ? `${unverifiedMeasurements.length} окон не подтверждено` : (o.installationAt ? fmtDateTime(o.installationAt) : 'назначить'), onclick: unverifiedMeasurements.length ? `openManagerMeasureModal('${o.id}')` : `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage, variant: unverifiedMeasurements.length ? 'warning' : 'soft' })}
       ${renderOrderActionCard({ icon: '👷', title: 'Команда', sub: installers.length ? installers.join(', ') : 'назначить', onclick: `openAssignTeam('${o.id}')`, disabled: !canManage })}
       `}
     </div>`;
@@ -21342,7 +21422,7 @@ function addWindow(oid, rid) {
   const r = o.measurements.rooms.find(x=>x.id===rid);
   const scopeKey = orderMeasureScope(o);
   r.windows = r.windows || [];
-  r.windows.push(syncWindowPanelsForType({ id: uid(), name: T('window') + ' ' + (r.windows.length + 1), width: 1000, height: 1000, qty: 1, winType: measureDefaultWinTypeForScope(scopeKey), measureScope: scopeKey, glassType:'', orientation:'', filmType:'', side:'in' }, scopeKey));
+  r.windows.push(syncWindowPanelsForType({ id: uid(), name: T('window') + ' ' + (r.windows.length + 1), width: 1000, height: 1000, qty: 1, winType: measureDefaultWinTypeForScope(scopeKey), measureScope: scopeKey, glassType:'', orientation:'', filmType:'', side:'in', measurementSource:'CUSTOMER', measurement_source:'CUSTOMER', verificationStatus:'UNVERIFIED' }, scopeKey));
   save(); render();
 }
 function deleteWin(oid, rid, wid) {
@@ -21359,6 +21439,7 @@ function updateWin(oid, rid, wid, field, val) {
   } else {
     w[field] = val;
   }
+  if (['width','height','qty','actualWidth','actualHeight','actualQty'].includes(field)) markWindowMeasurementUnverified(w);
   save();
   // re-render totals but keep focus:
   requestAnimationFrame(render);
@@ -21678,6 +21759,9 @@ function managerWindowDefaults(o, room, opts = {}) {
     filmType: cat ? `${cat.brand} — ${cat.model}` : '',
     catalogId: cat?.id || null,
     side: 'in',
+    measurementSource: 'CUSTOMER',
+    measurement_source: 'CUSTOMER',
+    verificationStatus: 'UNVERIFIED',
   };
   return syncWindowPanelsForType(win, scopeKey);
 }
@@ -22041,6 +22125,7 @@ function renderManagerMeasureModal(oid) {
                           <input id="mm-window-name-${w.id}" aria-label="Название элемента" value="${academyEsc(w.name || ('Окно ' + (wi + 1)))}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','name',this.value)">
                         </div>
                         <div class="manager-window-card-area">${windowActualAreaSqft(w).toFixed(2)} sqft</div>
+                        <button class="btn-ghost text-xs ${windowMeasurementIsVerified(w) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}" aria-pressed="${windowMeasurementIsVerified(w) ? 'true' : 'false'}" onclick="managerConfirmWindowMeasurement('${oid}','${r.id}','${w.id}')">${windowMeasurementIsVerified(w) ? '✓ Точные размеры' : 'От клиента · подтвердить точные'}</button>
                         <button class="btn-ghost text-xs ${windowRemovalRequired(w) ? 'bg-rose-100 text-rose-800' : ''}" aria-pressed="${windowRemovalRequired(w) ? 'true' : 'false'}" onclick="managerToggleWindowRemoval('${oid}','${r.id}','${w.id}')">${windowRemovalRequired(w) ? '✓ ' : ''}Удаление плёнки${windowRemovalRequired(w) ? ` · ${windowActualAreaSqft(w).toFixed(2)} sqft` : ''}</button>
                         <button class="btn-ghost text-red-600 text-xs" aria-label="Удалить элемент" onclick="managerDeleteWin('${oid}','${r.id}','${w.id}')">Удалить окно</button>
                       </div>
@@ -22068,7 +22153,7 @@ function renderManagerMeasureModal(oid) {
         </div>
       </div>
       <div class="manager-measure-footer flex items-center justify-between gap-2 flex-wrap">
-        <div class="text-xs text-gray-500">Замер сохраняется автоматически и попадёт в КП, заказ-наряд и склад.</div>
+        <div class="text-xs text-gray-500">Размеры клиента можно использовать для расчёта и КП. До назначения монтажа каждое окно должно быть подтверждено как точный замер.</div>
         <div class="flex gap-2">
           <button class="btn-ghost" onclick="openWorkOrder('${oid}')">Заказ-наряд</button>
           <button class="btn-primary" onclick="completeManagerMeasurement('${oid}')">Завершить замер<span class="manager-measure-title-suffix"> и рассчитать проект</span> →</button>
@@ -22180,6 +22265,29 @@ function managerToggleWindowRemoval(oid, rid, wid) {
   save();
   refreshManagerMeasureModal(oid);
 }
+function managerConfirmWindowMeasurement(oid, rid, wid) {
+  const o = getOrder(oid);
+  const room = o?.measurements?.rooms?.find(item => item.id === rid);
+  const w = room?.windows?.find(item => item.id === wid);
+  if (!o || !room || !w) return;
+  if (windowMeasurementIsVerified(w)) {
+    alert('Точные размеры этого окна уже подтверждены. Если изменить ширину, высоту или количество, потребуется подтвердить их повторно.');
+    return;
+  }
+  if (Number(w.width) <= 0 || Number(w.height) <= 0 || Number(w.qty || 1) <= 0) {
+    alert('Сначала внесите точную ширину, высоту и количество.');
+    return;
+  }
+  const dimensions = `${measureMmToInput(w.width)} × ${measureMmToInput(w.height)} ${db.settings.inputUnits === 'inches' ? 'in' : 'мм'} · ${Number(w.qty || 1)} шт.`;
+  if (!confirm(`Подтвердить как точный проверенный замер?\n\n${room.name || 'Помещение'} · ${w.name || 'Окно'}\n${dimensions}`)) return;
+  markWindowMeasurementVerified(w);
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: w.measurementVerifiedAt, key: 'measurement_verified', by: state.currentUserId, note: `${room.name || 'Помещение'} · ${w.name || 'Окно'}: ${dimensions}` });
+  syncOrderWindowRemovalService(o);
+  invalidateProjectEstimate(o, 'Точные размеры подтверждены — требуется проверить расчёт проекта');
+  save();
+  refreshManagerMeasureModal(oid);
+}
 function managerUpdateWin(oid, rid, wid, field, val) {
   const o = getOrder(oid);
   const r = o?.measurements?.rooms?.find(x => x.id === rid);
@@ -22189,7 +22297,10 @@ function managerUpdateWin(oid, rid, wid, field, val) {
     w[field] = normalizeMeasureWindowTypeForScope(w.measureScope || orderMeasureScope(o), val);
     syncWindowPanelsForType(w, w.measureScope || orderMeasureScope(o));
   }
-  else if (field === 'qty') w[field] = Math.max(1, parseFloat(val) || 1);
+  else if (field === 'qty') {
+    w[field] = Math.max(1, parseFloat(val) || 1);
+    markWindowMeasurementUnverified(w);
+  }
   else w[field] = val;
   if (windowRemovalRequired(w)) syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменены данные замера');
@@ -22235,6 +22346,7 @@ function managerUpdateWinDim(oid, rid, wid, field, val) {
   if (actualField && (Number(w[actualField]) <= 0 || Math.abs(Number(w[actualField]) - previous) < 1)) {
     w[actualField] = next;
   }
+  markWindowMeasurementUnverified(w);
   syncWindowPanelsForType(w, w.measureScope || orderMeasureScope(o));
   syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменены размеры окна');
@@ -22535,6 +22647,7 @@ function addWorkType(oid) {
 
 function scheduleInstallationPrompt(oid) {
   const o = getOrder(oid);
+  if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
   const installers = usersByRole('installer');
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
@@ -22565,12 +22678,14 @@ function scheduleInstallationPrompt(oid) {
 }
 function confirmScheduleInstallation(oid) {
   const o = getOrder(oid);
+  if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
   o.installerIds = Array.from(document.querySelectorAll('.isch-installer:checked')).map(x => x.value);
   const dt = document.getElementById('isch-dt').value;
   if (dt) o.installationAt = new Date(dt).toISOString();
   closeModal();
-  changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true });
-  notifyClientEventScheduled(oid, 'install');
+  if (changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true })) {
+    notifyClientEventScheduled(oid, 'install');
+  }
 }
 
 function openAssignTeam(oid) {
@@ -24227,6 +24342,7 @@ function updateActualWin(oid, rid, wid, field, val) {
   const r = getOrder(oid).measurements.rooms.find(x=>x.id===rid);
   const w = r.windows.find(x=>x.id===wid);
   w[field] = val;
+  markWindowMeasurementUnverified(w);
   save();
   requestAnimationFrame(render);
 }
@@ -24235,6 +24351,7 @@ function updateWinDim(oid, rid, wid, field, val) {
   const r = o.measurements.rooms.find(x=>x.id===rid);
   const w = r.windows.find(x=>x.id===wid);
   w[field] = measureInputToMm(val);
+  markWindowMeasurementUnverified(w);
   syncWindowPanelsForType(w, w.measureScope || orderMeasureScope(o));
   save(); requestAnimationFrame(render);
 }
@@ -24242,6 +24359,7 @@ function updateActualWinDim(oid, rid, wid, field, val) {
   const r = getOrder(oid).measurements.rooms.find(x=>x.id===rid);
   const w = r.windows.find(x=>x.id===wid);
   w[field] = measureInputToMm(val);
+  markWindowMeasurementUnverified(w);
   save(); requestAnimationFrame(render);
 }
 function setWinCatalog(oid, rid, wid, catalogId) {
@@ -24403,6 +24521,7 @@ function copyPlannedToActual(oid) {
       w.actualWidth = w.width;
       w.actualHeight = w.height;
       w.actualQty = w.qty;
+      markWindowMeasurementUnverified(w);
     });
   });
   save(); render();

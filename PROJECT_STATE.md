@@ -290,6 +290,13 @@ Contributors must add a row before starting substantial work and update or remov
 - Fixed the false `есть окна без размера` proposal blocker: `measureAllWindows()` returns `{ room, win }`, and readiness now validates `win` rather than the wrapper. Positive planned dimensions are also used when stale legacy actual dimensions are zero.
 - This correction extends PR #172. Existing measurements migrate without deletion, and production deployment remains separate.
 
+### 2026-09-15 correction — preliminary customer dimensions versus verified field dimensions
+
+- A manager may create and price a Project from dimensions supplied by the customer. Those windows are stored as `CUSTOMER / UNVERIFIED`, remain clearly marked as preliminary, and do not block calculation or proposal generation.
+- Every measured window has an explicit action to confirm exact dimensions. Editing width, height, or quantity after confirmation returns that window to preliminary status; a field-measurement v2.5 import is recorded as `SURVEYOR_VERIFIED / VERIFIED` with provenance.
+- Installation scheduling and every later production status are blocked until all active windows have positive, verified exact dimensions. Existing Projects already in installation or completed stages are migrated as verified so historical workflows are not broken.
+- This correction extends PR #172. It stays inside the existing Project measurement history and does not authorize an automatic production deployment.
+
 ## Completion rule
 
 A task is shared and complete only when all applicable statements are true:

@@ -78,3 +78,22 @@ test("window removal button creates an area-based calculated service", () => {
   assert.match(source, /Удаление плёнки\$\{windowRemovalRequired\(w\)/);
   assert.match(source, /Удалить окно/);
 });
+
+test("manager can quote from customer dimensions but installation requires verified dimensions", () => {
+  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(readiness, /orderMeasurementVerificationIssues|windowMeasurementIsVerified/);
+  assert.match(source, /measurementBasis: orderMeasurementVerificationIssues\(o\)\.length \? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED'/);
+  assert.match(source, /По ним разрешено рассчитать проект и выпустить КП/);
+  assert.match(source, /function orderStatusRequiresVerifiedMeasurements\(status\)/);
+  assert.match(source, /'installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'/);
+  assert.match(source, /if \(!ensureVerifiedMeasurementsForStatus\(o, newStatus/);
+});
+
+test("each manager-entered window starts preliminary and can be explicitly verified", () => {
+  assert.match(source, /measurementSource: 'CUSTOMER'/);
+  assert.match(source, /function managerConfirmWindowMeasurement\(oid, rid, wid\)/);
+  assert.match(source, /От клиента · подтвердить точные/);
+  assert.match(source, /markWindowMeasurementVerified\(w\)/);
+  assert.match(source, /markWindowMeasurementUnverified\(w\)[\s\S]*invalidateProjectEstimate/);
+  assert.match(source, /measurementSource: 'SURVEYOR_VERIFIED'/);
+});
