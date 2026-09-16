@@ -283,6 +283,13 @@ Contributors must add a row before starting substantial work and update or remov
 - The manager measurement workspace shows the new add-element category only when the order site type is `COMMERCIAL`. Canonical backend validation rejects `glass_partition` for a `RESIDENTIAL` Project.
 - This correction extends PR #172. Existing measurements and Residential choices remain unchanged; production deployment remains separate.
 
+### 2026-09-15 correction — per-window film removal and proposal readiness
+
+- Every measured window/door/partition card now has a distinct `Удаление плёнки` toggle separate from the destructive `Удалить окно` action. Selected windows contribute their measured sqft to one automatically maintained removal service line using the existing configured removal rate; changing dimensions or quantity recalculates that line.
+- The canonical opening editor also has one action to select removal for every cell in the opening while retaining per-cell control.
+- Fixed the false `есть окна без размера` proposal blocker: `measureAllWindows()` returns `{ room, win }`, and readiness now validates `win` rather than the wrapper. Positive planned dimensions are also used when stale legacy actual dimensions are zero.
+- This correction extends PR #172. Existing measurements migrate without deletion, and production deployment remains separate.
+
 ## Completion rule
 
 A task is shared and complete only when all applicable statements are true:

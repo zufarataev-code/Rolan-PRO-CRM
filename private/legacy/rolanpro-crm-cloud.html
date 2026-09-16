@@ -13658,10 +13658,34 @@ function windowAreaSqft(w) {
 }
 function windowActualAreaSqft(w) {
   if (Array.isArray(w.panels) && w.panels.length && w.actualPanels == null) return measurePanelAreaSqft(w);
-  const aw = w.actualWidth  != null ? w.actualWidth  : w.width;
-  const ah = w.actualHeight != null ? w.actualHeight : w.height;
-  const aq = w.actualQty    != null ? w.actualQty    : w.qty;
+  const aw = Number(w.actualWidth) > 0 ? Number(w.actualWidth) : Number(w.width);
+  const ah = Number(w.actualHeight) > 0 ? Number(w.actualHeight) : Number(w.height);
+  const aq = Number(w.actualQty) > 0 ? Number(w.actualQty) : Number(w.qty);
   return mm2_to_sqft((aw || 0) * (ah || 0)) * (aq || 1);
+}
+function windowRemovalRequired(w) {
+  return w?.removalRequired === true || w?.removal_required === true;
+}
+function orderRemovalAreaSqft(o) {
+  return measureAllWindows(o).reduce((sum, { win }) => sum + (windowRemovalRequired(win) ? windowActualAreaSqft(win) : 0), 0);
+}
+function syncOrderWindowRemovalService(o) {
+  if (!o) return;
+  o.extraServices = o.extraServices || [];
+  const area = orderRemovalAreaSqft(o);
+  const existing = o.extraServices.find(service => service.autoWindowRemoval === true);
+  if (area <= 0) {
+    o.extraServices = o.extraServices.filter(service => service.autoWindowRemoval !== true);
+    return;
+  }
+  const configured = PREMIUM_EXTRA_SERVICES.find(service => service.id === 'film_removal');
+  const unitPrice = Number(existing?.unitPrice) > 0 ? Number(existing.unitPrice) : Number(configured?.price || 2.5);
+  const line = existing || { id: 'auto_window_removal', type: 'removal', label: 'Снятие старой плёнки', cost: 0, autoWindowRemoval: true };
+  line.qty = Number(area.toFixed(2));
+  line.unit = 'sqft';
+  line.unitPrice = unitPrice;
+  line.price = Number((area * unitPrice).toFixed(2));
+  if (!existing) o.extraServices.push(line);
 }
 // Legacy m² helpers (kept for compatibility)
 function windowActualArea(w) { return windowActualAreaSqft(w) * M2_PER_SQFT; }
@@ -15677,6 +15701,19 @@ function canonicalAddCellRow() {
   host.insertAdjacentHTML('beforeend', canonicalCellRow(host.querySelectorAll('.cp-cell-row').length));
 }
 
+function canonicalToggleOpeningRemoval(button) {
+  const inputs = Array.from(document.querySelectorAll('#cp-cells [data-field="removal"]'));
+  if (!inputs.length) return;
+  const enabled = !inputs.every(input => input.checked);
+  inputs.forEach(input => { input.checked = enabled; });
+  if (button) {
+    button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    button.classList.toggle('bg-rose-100', enabled);
+    button.classList.toggle('text-rose-800', enabled);
+    button.textContent = enabled ? '✓ Удаление плёнки со всего проёма' : 'Удаление плёнки со всего проёма';
+  }
+}
+
 function openCanonicalOpening(positionId, roomKey = '', openingId = '', verify = false) {
   const data = state.canonicalConstructor;
   const spaceTerms = canonicalSpaceTerms(data?.site_type);
@@ -15686,13 +15723,14 @@ function openCanonicalOpening(positionId, roomKey = '', openingId = '', verify =
   const templates = data?.room_templates || [];
   const source = currentUser()?.role === 'measurer' || verify ? 'SURVEYOR_VERIFIED' : opening?.cells?.[0]?.source || 'CUSTOMER';
   const cells = opening?.cells?.length ? opening.cells : [{}];
+  const allCellsRemoval = cells.length > 0 && cells.every(cell => cell.removal_required === true);
   state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-5" style="max-width:62rem" onclick="event.stopPropagation()"><div class="flex items-start justify-between gap-3"><div><div class="text-xs font-black text-blue-700">SOLAR V1</div><h3 class="text-xl font-black">${opening ? (verify ? 'Проверить проём' : 'Новая ревизия') : 'Добавить проём'}</h3></div><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4"><label>Источник замеров<select id="cp-source"><option value="CUSTOMER" ${source === 'CUSTOMER' ? 'selected' : ''}>Клиент · не проверено</option><option value="SURVEYOR_VERIFIED" ${source === 'SURVEYOR_VERIFIED' ? 'selected' : ''}>Замерщик · подтверждено</option></select></label><label>${academyEsc(spaceTerms.select)}<select id="cp-room-key"><option value="">Выберите</option>${templates.map(item => `<option value="${academyEsc(item.key)}" ${item.key === room?.room_key ? 'selected' : ''}>${academyEsc(item.label_ru)}</option>`).join('')}</select></label><label>${academyEsc(spaceTerms.name)}<input id="cp-room-name" value="${academyEsc(room?.room_name || '')}"></label><label>${academyEsc(spaceTerms.number)}<input id="cp-room-number" value="${academyEsc(room?.room_number || '')}"></label><label>ID проёма<input id="cp-opening-id" value="${academyEsc(opening?.opening_id || '')}"></label><label>Тип проёма<select id="cp-opening-type">${canonicalOpeningTypeOptions(opening?.opening_type, data?.site_type)}</select></label><label>Общая ширина, in<input id="cp-overall-width" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_width || '')}"></label><label>Общая высота, in<input id="cp-overall-height" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_height || '')}"></label><label>Сторона света<select id="cp-orientation"><option value="">Неизвестно</option>${[['north','Север'],['east','Восток'],['south','Юг'],['west','Запад']].map(([value,label]) => `<option value="${value}" ${value === opening?.orientation ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div>
     <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка для помещения</div>${canonicalFilmPickerHtml('cp-room-film', room?.film_id || '', 'SOLAR')}</div>
     <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка для проёма</div>${canonicalFilmPickerHtml('cp-opening-film', opening?.film_id || '', 'SOLAR')}</div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3"><label>Конструкция стекла<select id="cp-glass-construction">${[['unknown','Неизвестно'],['single_pane','Одинарное'],['double_pane_igu','Двойной стеклопакет / IGU'],['triple_pane_igu','Тройной стеклопакет / IGU']].map(([value,label]) => `<option value="${value}" ${value === opening?.glass?.construction ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Прочность<select id="cp-glass-treatment">${[['unknown','Неизвестно'],['annealed','Сырое'],['heat_strengthened','Термоупрочнённое'],['tempered','Закалённое']].map(([value,label]) => `<option value="${value}" ${value === opening?.glass?.treatment ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Позиция Low-E<input id="cp-low-e-position" value="${academyEsc(opening?.glass?.low_e_position || '')}"></label></div>
     <div class="flex flex-wrap gap-4 mt-3"><label class="flex items-center gap-2"><input id="cp-low-e" type="checkbox" ${opening?.glass?.low_e ? 'checked' : ''} style="width:auto">Low-E</label><label class="flex items-center gap-2"><input id="cp-laminated" type="checkbox" ${opening?.glass?.laminated ? 'checked' : ''} style="width:auto">Ламинированное</label><label class="flex items-center gap-2"><input id="cp-tinted" type="checkbox" ${opening?.glass?.tinted ? 'checked' : ''} style="width:auto">Тонированное</label></div>
-    <div class="flex items-center justify-between mt-4"><b>Ячейки</b><button class="btn-ghost" onclick="canonicalAddCellRow()">+ Ячейка</button></div><div id="cp-cells" class="space-y-2 mt-2">${cells.map((cell,index) => canonicalCellRow(index, cell)).join('')}</div>
+    <div class="flex items-center justify-between mt-4 gap-2 flex-wrap"><b>Ячейки</b><div class="flex gap-2"><button class="btn-ghost ${allCellsRemoval ? 'bg-rose-100 text-rose-800' : ''}" aria-pressed="${allCellsRemoval ? 'true' : 'false'}" onclick="canonicalToggleOpeningRemoval(this)">${allCellsRemoval ? '✓ ' : ''}Удаление плёнки со всего проёма</button><button class="btn-ghost" onclick="canonicalAddCellRow()">+ Ячейка</button></div></div><div id="cp-cells" class="space-y-2 mt-2">${cells.map((cell,index) => canonicalCellRow(index, cell)).join('')}</div>
     <div class="flex justify-end gap-2 mt-4"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveCanonicalOpening()">Сохранить замер</button></div></div></div>`;
   render();
   setTimeout(() => {
@@ -20227,8 +20265,8 @@ function projectEstimateReadiness(o) {
   const issues = [];
   const windows = measureAllWindows(o);
   if (!windows.length) issues.push('нет замеров');
-  if (windows.some(w => windowActualAreaSqft(w) <= 0)) issues.push('есть окна без размера');
-  if (windows.some(w => !windowCatalog(w))) issues.push('не выбрана плёнка для всех окон');
+  if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
+  if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
   if ((o.extraServices || []).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
   if ((o.extraExpenses || []).some(e => !String(e.label || '').trim() || Number(e.amount) <= 0)) issues.push('есть незаполненные дополнительные расходы');
   if (orderRevenue(o) <= 0) issues.push('сумма проекта равна нулю');
@@ -22003,7 +22041,8 @@ function renderManagerMeasureModal(oid) {
                           <input id="mm-window-name-${w.id}" aria-label="Название элемента" value="${academyEsc(w.name || ('Окно ' + (wi + 1)))}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','name',this.value)">
                         </div>
                         <div class="manager-window-card-area">${windowActualAreaSqft(w).toFixed(2)} sqft</div>
-                        <button class="btn-ghost text-red-600 text-xs" aria-label="Удалить элемент" onclick="managerDeleteWin('${oid}','${r.id}','${w.id}')">Удалить</button>
+                        <button class="btn-ghost text-xs ${windowRemovalRequired(w) ? 'bg-rose-100 text-rose-800' : ''}" aria-pressed="${windowRemovalRequired(w) ? 'true' : 'false'}" onclick="managerToggleWindowRemoval('${oid}','${r.id}','${w.id}')">${windowRemovalRequired(w) ? '✓ ' : ''}Удаление плёнки${windowRemovalRequired(w) ? ` · ${windowActualAreaSqft(w).toFixed(2)} sqft` : ''}</button>
+                        <button class="btn-ghost text-red-600 text-xs" aria-label="Удалить элемент" onclick="managerDeleteWin('${oid}','${r.id}','${w.id}')">Удалить окно</button>
                       </div>
                       <div class="manager-window-card-body">
                         <div>${managerWindowTypeCompactHtml(oid, r.id, w, scopeKey)}</div>
@@ -22124,7 +22163,20 @@ function managerDeleteWin(oid, rid, wid) {
   const r = o?.measurements?.rooms?.find(x => x.id === rid);
   if (!o || !r) return;
   r.windows = (r.windows || []).filter(w => w.id !== wid);
+  syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Удалён элемент из замера');
+  save();
+  refreshManagerMeasureModal(oid);
+}
+function managerToggleWindowRemoval(oid, rid, wid) {
+  const o = getOrder(oid);
+  const w = o?.measurements?.rooms?.find(room => room.id === rid)?.windows?.find(item => item.id === wid);
+  if (!o || !w) return;
+  const enabled = !windowRemovalRequired(w);
+  w.removalRequired = enabled;
+  w.removal_required = enabled;
+  syncOrderWindowRemovalService(o);
+  invalidateProjectEstimate(o, enabled ? 'Добавлено удаление плёнки с окна' : 'Удалено снятие плёнки с окна');
   save();
   refreshManagerMeasureModal(oid);
 }
@@ -22139,6 +22191,7 @@ function managerUpdateWin(oid, rid, wid, field, val) {
   }
   else if (field === 'qty') w[field] = Math.max(1, parseFloat(val) || 1);
   else w[field] = val;
+  if (windowRemovalRequired(w)) syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменены данные замера');
   save();
   refreshManagerMeasureModal(oid);
@@ -22150,6 +22203,7 @@ function managerSetWindowType(oid, rid, wid, typeKey) {
   if (!w) return;
   w.winType = normalizeMeasureWindowTypeForScope(w.measureScope || orderMeasureScope(o), typeKey);
   syncWindowPanelsForType(w, w.measureScope || orderMeasureScope(o));
+  if (windowRemovalRequired(w)) syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменён тип окна в замере');
   save();
   refreshManagerMeasureModal(oid);
@@ -22164,6 +22218,7 @@ function managerSetExistingWindowType(oid, rid, wid, objectKind, typeKey) {
   w.isSkylight = kind === 'skylight';
   w.winType = normalizeMeasureWindowTypeForScope(w.measureScope || orderMeasureScope(o), typeKey);
   syncWindowPanelsForType(w, w.measureScope || orderMeasureScope(o));
+  if (windowRemovalRequired(w)) syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменён тип элемента в замере');
   save();
   refreshManagerMeasureModal(oid);
@@ -22173,8 +22228,15 @@ function managerUpdateWinDim(oid, rid, wid, field, val) {
   const r = o?.measurements?.rooms?.find(x => x.id === rid);
   const w = r?.windows?.find(x => x.id === wid);
   if (!w) return;
-  w[field] = measureInputToMm(val);
+  const previous = Number(w[field]) || 0;
+  const next = measureInputToMm(val);
+  w[field] = next;
+  const actualField = field === 'width' ? 'actualWidth' : field === 'height' ? 'actualHeight' : '';
+  if (actualField && (Number(w[actualField]) <= 0 || Math.abs(Number(w[actualField]) - previous) < 1)) {
+    w[actualField] = next;
+  }
   syncWindowPanelsForType(w, w.measureScope || orderMeasureScope(o));
+  syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменены размеры окна');
   save();
   refreshManagerMeasureModal(oid);

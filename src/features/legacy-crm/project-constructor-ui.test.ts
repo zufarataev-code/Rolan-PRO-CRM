@@ -105,3 +105,9 @@ test("commercial measurements expose office glass partitions as their own openin
   assert.match(legacyCrm, /glass_partition: 'Офисная стеклянная перегородка'/);
   assert.match(legacyCrm, /if \(siteType === 'COMMERCIAL'\) values\.splice/);
 });
+
+test("canonical openings expose one action to mark the whole opening for film removal", () => {
+  assert.match(legacyCrm, /function canonicalToggleOpeningRemoval\(button\)/);
+  assert.match(legacyCrm, /Удаление плёнки со всего проёма/);
+  assert.match(legacyCrm, /inputs\.forEach\(input => \{ input\.checked = enabled; \}\)/);
+});

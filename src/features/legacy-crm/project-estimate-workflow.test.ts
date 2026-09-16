@@ -58,3 +58,23 @@ test("manual transport expense is not counted twice", () => {
     /function orderManualExpensesTotal\(o\)[\s\S]*\.filter\(e => e\.type !== 'gas'\)/,
   );
 });
+
+test("proposal readiness validates the actual window instead of its room wrapper", () => {
+  assert.match(
+    source,
+    /windows\.some\(\(\{ win \}\) => windowActualAreaSqft\(win\) <= 0\)/,
+  );
+  assert.match(
+    source,
+    /windows\.some\(\(\{ win \}\) => !windowCatalog\(win\)\)/,
+  );
+  assert.doesNotMatch(source, /windows\.some\(w => windowActualAreaSqft\(w\) <= 0\)/);
+});
+
+test("window removal button creates an area-based calculated service", () => {
+  assert.match(source, /function managerToggleWindowRemoval\(oid, rid, wid\)/);
+  assert.match(source, /function orderRemovalAreaSqft\(o\)/);
+  assert.match(source, /line\.price = Number\(\(area \* unitPrice\)\.toFixed\(2\)\)/);
+  assert.match(source, /Удаление плёнки\$\{windowRemovalRequired\(w\)/);
+  assert.match(source, /Удалить окно/);
+});
