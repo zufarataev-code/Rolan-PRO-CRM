@@ -89,12 +89,23 @@ test("proposal readiness validates the actual window instead of its room wrapper
   assert.doesNotMatch(source, /windows\.some\(w => windowActualAreaSqft\(w\) <= 0\)/);
 });
 
-test("window removal button creates an area-based calculated service", () => {
+test("window and room removal checkboxes create an area-based calculated service", () => {
   assert.match(source, /function managerToggleWindowRemoval\(oid, rid, wid\)/);
+  assert.match(source, /function managerSetWindowRemoval\(oid, rid, wid, enabled\)/);
+  assert.match(source, /function managerSetRoomRemoval\(oid, rid, scopeKey, enabled\)/);
+  assert.match(source, /Удаление плёнки со всех окон/);
+  assert.match(source, /type="checkbox"[\s\S]*?managerSetWindowRemoval/);
   assert.match(source, /function orderRemovalAreaSqft\(o\)/);
   assert.match(source, /line\.price = Number\(\(area \* unitPrice\)\.toFixed\(2\)\)/);
   assert.match(source, /Удаление плёнки\$\{windowRemovalRequired\(w\)/);
   assert.match(source, /Удалить окно/);
+});
+
+test("each room exposes a service-scoped film selector and shows its selected film", () => {
+  assert.match(source, /Плёнка для помещения · \$\{academyEsc\(scope\.short\)\}/);
+  assert.match(source, /managerApplyFilmToRoom\('\$\{oid\}','\$\{r\.id\}',this\.value\)/);
+  assert.match(source, /const roomFilm = roomCatalog \? `\$\{roomCatalog\.brand\} · \$\{roomCatalog\.model\}` : 'плёнка не выбрана'/);
+  assert.match(source, /managerScopedCatalogOptionsHtml\(selectedRoomCatalog, preferredCategory\)/);
 });
 
 test("manager can quote from customer dimensions but installation requires verified dimensions", () => {

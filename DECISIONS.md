@@ -165,6 +165,7 @@ This file records durable decisions. Current activity, blockers, and next steps 
 ## 2026-09-15 — Film removal is selected at the measured opening
 
 - This decision refines `Canonical Project constructor and auditable Solar measurements`: removal is an attribute of each measured window/opening or its individual cells, not a second measurement list and not an ambiguous global checkbox.
+- The room/office checkbox is a bulk editing control over those same opening attributes for the currently selected service. It does not store a separate room-level removal charge, and individual openings may still be changed afterward.
 - Selecting removal contributes that opening's measured sqft to the project's removal service calculation. The window-removal action and the destructive delete-window action must remain visually and semantically distinct.
 - Proposal readiness must validate the effective positive dimensions of the actual window record. A zero or stale legacy `actualWidth`/`actualHeight` cannot override newly entered positive planned dimensions and falsely block the proposal.
 - This correction is implemented in PR #172 and does not authorize an automatic production deployment.

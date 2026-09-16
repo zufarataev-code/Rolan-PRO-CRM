@@ -2177,12 +2177,74 @@
   }
   .manager-room-focus-head {
     display: grid;
-    grid-template-columns: minmax(180px, .8fr) minmax(260px, 1.2fr) auto;
+    grid-template-columns: minmax(180px, .7fr) minmax(280px, 1.25fr) minmax(230px, .85fr) auto;
     gap: .7rem;
     align-items: end;
     padding: .85rem;
     border-bottom: 1px solid #eef2f7;
     background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  }
+  .manager-room-film-control,
+  .manager-removal-check {
+    border: 1px solid #dbe4ef;
+    border-radius: 10px;
+    background: #fff;
+    padding: .55rem .65rem;
+  }
+  .manager-room-film-control select {
+    margin-top: .25rem;
+  }
+  .manager-removal-check {
+    min-height: 62px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: .5rem;
+    align-items: center;
+    cursor: pointer;
+  }
+  .manager-removal-check.active {
+    border-color: #fda4af;
+    background: #fff1f2;
+    color: #9f1239;
+  }
+  .manager-removal-check input {
+    width: 17px;
+    height: 17px;
+    accent-color: #e11d48;
+  }
+  .manager-removal-check span {
+    font-size: .76rem;
+    font-weight: 900;
+  }
+  .manager-removal-check small {
+    grid-column: 2;
+    color: #64748b;
+    font-size: .67rem;
+    font-weight: 700;
+  }
+  .manager-window-removal-check {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    border: 1px solid #dbe4ef;
+    border-radius: 8px;
+    background: #fff;
+    padding: .4rem .55rem;
+    color: #475569;
+    font-size: .72rem;
+    font-weight: 850;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .manager-window-removal-check.active {
+    border-color: #fda4af;
+    background: #fff1f2;
+    color: #9f1239;
+  }
+  .manager-window-removal-check input {
+    width: 15px;
+    height: 15px;
+    accent-color: #e11d48;
   }
   .manager-window-cards {
     display: grid;
@@ -22273,8 +22335,8 @@ function renderManagerMeasureModal(oid) {
             <div class="rounded-lg border bg-white p-3">
               <div class="font-black text-sm text-slate-900">1. ${academyEsc(roomTerms.choose)}</div>
               <div class="manager-room-list mt-3" data-scroll-key="measure-rooms">
-                ${rooms.map((room, index) => { const serviceWindows = (room.windows || []).filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey); return `<button type="button" class="manager-room-tab ${activeRoom?.id === room.id ? 'active' : ''}" onclick="managerSelectRoom('${oid}','${room.id}')">
-                  <span><span class="manager-room-tab-name">${index + 1}. ${academyEsc(room.name || (roomTerms.defaultName + ' ' + (index + 1)))}</span><span class="manager-room-tab-meta">${serviceWindows.length} элементов · ${serviceWindows.reduce((sum,w)=>sum+windowActualAreaSqft(w),0).toFixed(1)} sqft</span></span>
+                ${rooms.map((room, index) => { const serviceWindows = (room.windows || []).filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey); const roomCatalog = getCatalogItem(managerRoomCatalogId(room, activeScopeKey)); const roomFilm = roomCatalog ? `${roomCatalog.brand} · ${roomCatalog.model}` : 'плёнка не выбрана'; return `<button type="button" class="manager-room-tab ${activeRoom?.id === room.id ? 'active' : ''}" onclick="managerSelectRoom('${oid}','${room.id}')">
+                  <span><span class="manager-room-tab-name">${index + 1}. ${academyEsc(room.name || (roomTerms.defaultName + ' ' + (index + 1)))}</span><span class="manager-room-tab-meta">${serviceWindows.length} элементов · ${serviceWindows.reduce((sum,w)=>sum+windowActualAreaSqft(w),0).toFixed(1)} sqft · ${academyEsc(roomFilm)}</span></span>
                   <span class="manager-room-tab-count">${serviceWindows.length}</span>
                 </button>`; }).join('') || `<div class="text-xs text-gray-500">${academyEsc(roomTerms.empty)}</div>`}
               </div>
@@ -22298,18 +22360,27 @@ function renderManagerMeasureModal(oid) {
               const showSolarFields = roomScopeKey === 'solar_film';
               const inUnits = db.settings.inputUnits === 'inches';
               const serviceWindows = (r.windows || []).filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey);
+              const removalWindows = serviceWindows.filter(w => windowRemovalRequired(w));
+              const allRoomRemoval = serviceWindows.length > 0 && removalWindows.length === serviceWindows.length;
+              const someRoomRemoval = removalWindows.length > 0 && !allRoomRemoval;
+              const roomRemovalArea = removalWindows.reduce((sum, w) => sum + windowActualAreaSqft(w), 0);
               return `<div class="manager-room-focus">
                 <div class="manager-room-focus-head">
                   <div>
                     <label class="text-xs">${academyEsc(roomTerms.name)}</label>
                     <input id="mm-room-name-${r.id}" value="${academyEsc(r.name || '')}" onchange="managerUpdateRoomName('${oid}','${r.id}',this.value)">
                   </div>
-                  <div>
-                    <label class="text-xs">Материал для ${academyEsc(scope.short)} в этой комнате</label>
+                  <div class="manager-room-film-control">
+                    <label class="text-xs font-black">Плёнка для помещения · ${academyEsc(scope.short)}</label>
                     <select id="mm-room-film-${r.id}" onchange="managerApplyFilmToRoom('${oid}','${r.id}',this.value)">
                       ${managerScopedCatalogOptionsHtml(selectedRoomCatalog, preferredCategory)}
                     </select>
                   </div>
+                  <label class="manager-removal-check ${allRoomRemoval || someRoomRemoval ? 'active' : ''}">
+                    <input type="checkbox" ${allRoomRemoval ? 'checked' : ''} ${serviceWindows.length ? '' : 'disabled'} onchange="managerSetRoomRemoval('${oid}','${r.id}','${activeScopeKey}',this.checked)">
+                    <span>Удаление плёнки со всех окон</span>
+                    <small>${serviceWindows.length ? (someRoomRemoval ? `Выбрано частично · ${roomRemovalArea.toFixed(2)} sqft` : allRoomRemoval ? `${roomRemovalArea.toFixed(2)} sqft` : 'Не требуется') : 'Сначала добавьте окно'}</small>
+                  </label>
                   <button class="btn-ghost text-sm text-red-600" onclick="managerDeleteRoom('${oid}','${r.id}')">${academyEsc(roomTerms.deleteLabel)}</button>
                 </div>
 
@@ -22328,7 +22399,7 @@ function renderManagerMeasureModal(oid) {
                         </div>
                         <div class="manager-window-card-area">${windowActualAreaSqft(w).toFixed(2)} sqft</div>
                         <button class="btn-ghost text-xs ${windowMeasurementIsVerified(w) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}" aria-pressed="${windowMeasurementIsVerified(w) ? 'true' : 'false'}" onclick="managerConfirmWindowMeasurement('${oid}','${r.id}','${w.id}')">${windowMeasurementIsVerified(w) ? '✓ Точные размеры' : 'От клиента · подтвердить точные'}</button>
-                        <button class="btn-ghost text-xs ${windowRemovalRequired(w) ? 'bg-rose-100 text-rose-800' : ''}" aria-pressed="${windowRemovalRequired(w) ? 'true' : 'false'}" onclick="managerToggleWindowRemoval('${oid}','${r.id}','${w.id}')">${windowRemovalRequired(w) ? '✓ ' : ''}Удаление плёнки${windowRemovalRequired(w) ? ` · ${windowActualAreaSqft(w).toFixed(2)} sqft` : ''}</button>
+                        <label class="manager-window-removal-check ${windowRemovalRequired(w) ? 'active' : ''}"><input type="checkbox" ${windowRemovalRequired(w) ? 'checked' : ''} onchange="managerSetWindowRemoval('${oid}','${r.id}','${w.id}',this.checked)"><span>Удаление плёнки${windowRemovalRequired(w) ? ` · ${windowActualAreaSqft(w).toFixed(2)} sqft` : ''}</span></label>
                         <button class="btn-ghost text-red-600 text-xs" aria-label="Удалить элемент" onclick="managerDeleteWin('${oid}','${r.id}','${w.id}')">Удалить окно</button>
                       </div>
                       <div class="manager-window-card-body">
@@ -22456,14 +22527,33 @@ function managerDeleteWin(oid, rid, wid) {
   refreshManagerMeasureModal(oid);
 }
 function managerToggleWindowRemoval(oid, rid, wid) {
+  const w = getOrder(oid)?.measurements?.rooms?.find(room => room.id === rid)?.windows?.find(item => item.id === wid);
+  if (!w) return;
+  managerSetWindowRemoval(oid, rid, wid, !windowRemovalRequired(w));
+}
+function managerSetWindowRemoval(oid, rid, wid, enabled) {
   const o = getOrder(oid);
   const w = o?.measurements?.rooms?.find(room => room.id === rid)?.windows?.find(item => item.id === wid);
   if (!o || !w) return;
-  const enabled = !windowRemovalRequired(w);
-  w.removalRequired = enabled;
-  w.removal_required = enabled;
+  w.removalRequired = Boolean(enabled);
+  w.removal_required = Boolean(enabled);
   syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, enabled ? 'Добавлено удаление плёнки с окна' : 'Удалено снятие плёнки с окна');
+  save();
+  refreshManagerMeasureModal(oid);
+}
+function managerSetRoomRemoval(oid, rid, scopeKey, enabled) {
+  const o = getOrder(oid);
+  const room = o?.measurements?.rooms?.find(item => item.id === rid);
+  if (!o || !room) return;
+  const activeScope = scopeKey || managerActiveMeasureScope(o);
+  const windows = (room.windows || []).filter(w => (w.measureScope || orderMeasureScope(o)) === activeScope);
+  windows.forEach(w => {
+    w.removalRequired = Boolean(enabled);
+    w.removal_required = Boolean(enabled);
+  });
+  syncOrderWindowRemovalService(o);
+  invalidateProjectEstimate(o, enabled ? 'Добавлено удаление плёнки со всех окон помещения' : 'Удалено снятие плёнки со всех окон помещения');
   save();
   refreshManagerMeasureModal(oid);
 }

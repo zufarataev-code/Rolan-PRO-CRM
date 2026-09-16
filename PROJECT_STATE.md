@@ -286,8 +286,10 @@ Contributors must add a row before starting substantial work and update or remov
 ### 2026-09-15 correction — per-window film removal and proposal readiness
 
 - Every measured window/door/partition card now has a distinct `Удаление плёнки` toggle separate from the destructive `Удалить окно` action. Selected windows contribute their measured sqft to one automatically maintained removal service line using the existing configured removal rate; changing dimensions or quantity recalculates that line.
+- The selected room/office card now exposes its service-scoped film selector directly and shows the chosen brand/model in the room list. A room-level `Удаление плёнки со всех окон` checkbox applies the same existing opening flag to every opening of the active service; per-window checkboxes remain available for exceptions.
 - The canonical opening editor also has one action to select removal for every cell in the opening while retaining per-cell control.
 - Fixed the false `есть окна без размера` proposal blocker: `measureAllWindows()` returns `{ room, win }`, and readiness now validates `win` rather than the wrapper. Positive planned dimensions are also used when stale legacy actual dimensions are zero.
+- Verification after the room-control correction: all 244 automated tests passed, TypeScript passed, and the production build completed locally.
 - This correction extends PR #172. Existing measurements migrate without deletion, and production deployment remains separate.
 
 ### 2026-09-15 correction — preliminary customer dimensions versus verified field dimensions
