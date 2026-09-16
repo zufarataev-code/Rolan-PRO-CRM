@@ -228,6 +228,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Every mobile field retains its business label, destructive actions use complete phrases, and the proposal confirmation action remains reachable without horizontal overflow.
 - This correction is implemented in PR #172 and does not authorize an automatic production deployment.
 
+## 2026-09-16 — Project gross profit and management net profit are distinct
+
+- This decision refines `Manager calculates the customer offer; owner controls internal economics`: the same Project calculation owns the fast operational input and the owner profitability view. It must not create a parallel financial Project, manual material list, or duplicate payroll record.
+- Project gross profit is customer revenue minus direct material from warehouse lots, employee labor from the team reference, billable-service cost, and explicit direct Project expenses. Recurring monthly OpEx is not a direct Project cost and is shown only as a separate management allocation.
+- Active fixed business OpEx is divided equally across the revenue-bearing Projects in the Project's operating month. This answers the owner's planning question without presenting a planned expense as an actual paid cash transaction.
+- California income/franchise tax is a configurable planning reserve, not tax filing output. The default C corporation profile uses 8.84%, the S corporation option uses 1.5%, and the annual minimum reserve is $800. Actual entity treatment, federal tax, deductions, and paid amounts remain the accountant's and accounting module's responsibility.
+- Installer cost and payroll share one source: the employee pay configuration by service category. Before assignment, the category reference rate is retained as a labor reserve so an incomplete staffing decision cannot falsely inflate Project profit.
+- Implemented for review in PR #172. Production deployment remains a separate action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

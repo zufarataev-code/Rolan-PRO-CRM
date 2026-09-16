@@ -1339,6 +1339,55 @@
   }
   .project-estimate-kpi span { display: block; color: #64748b; font-size: .68rem; font-weight: 800; }
   .project-estimate-kpi strong { display: block; margin-top: .2rem; color: #0f172a; font-size: 1.08rem; font-weight: 950; }
+  .project-estimate-quick {
+    margin-top: .9rem;
+    padding: .85rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #f8fafc, #fff);
+  }
+  .project-estimate-quick-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .55rem;
+  }
+  .project-estimate-quick-card {
+    min-width: 0;
+    padding: .68rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 11px;
+    background: #fff;
+  }
+  .project-estimate-quick-card span { display: block; color: #64748b; font-size: .65rem; font-weight: 800; }
+  .project-estimate-quick-card strong { display: block; margin-top: .18rem; color: #0f172a; font-size: .88rem; overflow-wrap: anywhere; }
+  .project-estimate-assignees { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .project-estimate-assignee {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    min-height: 42px;
+    padding: .55rem .7rem;
+    border: 1px solid #dbe4ef;
+    border-radius: 10px;
+    background: #fff;
+    font-size: .78rem;
+    font-weight: 800;
+  }
+  .project-estimate-assignee input { width: 18px; height: 18px; }
+  .project-profit-flow {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .55rem;
+  }
+  .project-profit-card {
+    min-width: 0;
+    padding: .72rem;
+    border: 1px solid #dbe4ef;
+    border-radius: 11px;
+    background: #fff;
+  }
+  .project-profit-card span { display: block; color: #64748b; font-size: .66rem; font-weight: 800; }
+  .project-profit-card strong { display: block; margin-top: .18rem; font-size: 1rem; font-weight: 950; }
   .project-estimate-section {
     margin-top: .9rem;
     border-top: 1px solid #dbe4ef;
@@ -5364,6 +5413,8 @@
       padding: .88rem;
     }
     .project-estimate-summary { grid-template-columns: 1fr 1fr; gap: .5rem; }
+    .project-estimate-quick-grid,
+    .project-profit-flow { grid-template-columns: 1fr 1fr; }
     .project-estimate-footer { bottom: -.88rem; margin: .9rem -.88rem -.88rem; padding: .75rem .88rem; }
     .project-estimate-table-wrap {
       overflow: visible !important;
@@ -5441,6 +5492,7 @@
       width: 100%;
       min-height: 44px;
     }
+    .project-estimate-assignees { display: grid; grid-template-columns: 1fr; }
     .project-estimate-footer {
       align-items: stretch;
     }
@@ -7603,6 +7655,14 @@ function migrateSchema() {
       types: {},
     };
   }
+  if (!s.projectProfitTax) {
+    s.projectProfitTax = {
+      entityType: 'C_CORP',
+      ratePct: 8.84,
+      annualMinimum: 800,
+      jurisdiction: 'California',
+    };
+  }
 
   // ---- MAP / OFFICE defaults ----
   if (!s.defaultMapCenter) {
@@ -7636,6 +7696,23 @@ function migrateSchema() {
       };
     }
   });
+  // Replace only the obsolete built-in installer defaults. Custom employee
+  // rates remain untouched; the employee card is the source of truth.
+  if (!db._installerPayRates2026) {
+    const legacyRates = { protective: 0.32, smart: 0.55, solar: 0.27, decorative: 0.27, privacy: 0.27, other: 0.27 };
+    const currentRates = { protective: 3, smart: 5, solar: 2.5, decorative: 2.5, privacy: 2.5, other: 2.5 };
+    (db.users || []).filter(u => u.role === 'installer').forEach(u => {
+      const pc = u.payConfig = u.payConfig || {};
+      pc.ratesByCategory = pc.ratesByCategory || {};
+      Object.entries(currentRates).forEach(([category, rate]) => {
+        const existing = Number(pc.ratesByCategory[category]);
+        if (!existing || Math.abs(existing - legacyRates[category]) < 0.001) pc.ratesByCategory[category] = rate;
+      });
+      const baseRate = Number(pc.ratePerSqft);
+      if (!baseRate || Math.abs(baseRate - 0.30) < 0.001) pc.ratePerSqft = 2.5;
+    });
+    db._installerPayRates2026 = true;
+  }
   // ---- ENSURE OWNER USER EXISTS ----
   if (!db.users) db.users = [];
   const hasOwner = db.users.some(u => u.role === 'owner');
@@ -14140,9 +14217,43 @@ function windowFilmCost(w) {
 }
 function windowInstallerPayout(w) {
   const c = windowCatalog(w);
-  const sqft = windowActualAreaSqft(w);
-  if (!c) return sqft * 0.27;
-  return sqft * (c.installerRatePerSqft || 0.27);
+  const filmName = c ? `${c.brand} ${c.model}` : (w.filmType || '');
+  return windowActualAreaSqft(w) * filmRate(filmName);
+}
+function installerRateForWindow(user, w) {
+  const pc = user?.payConfig || {};
+  const catalog = windowCatalog(w);
+  const category = catalog?.category || filmCategory(w?.filmType || '');
+  const categoryRate = Number(pc.ratesByCategory?.[category]);
+  if (categoryRate > 0) return categoryRate;
+  const baseRate = Number(pc.ratePerSqft);
+  if (baseRate > 0) return baseRate;
+  const filmName = catalog ? `${catalog.brand} ${catalog.model}` : (w?.filmType || '');
+  return filmRate(filmName);
+}
+function orderInstallerPayoutForUser(o, userId) {
+  const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
+  if (!installerIds.includes(userId)) return 0;
+  const user = getUser(userId);
+  const pc = user?.payConfig || {};
+  if (pc.type === 'fixed_per_job') return Math.max(0, Number(pc.fixedPerJob) || 0);
+  if (pc.type === 'commission') return orderRevenue(o) * Math.max(0, Number(pc.commissionPct) || 0) / 100 / installerIds.length;
+  if (pc.type !== 'per_sqft') return 0;
+  return measureAllWindows(o).reduce((sum, { win }) => {
+    return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / installerIds.length;
+  }, 0);
+}
+function orderInstallerPayoutBreakdown(o) {
+  const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
+  if (!installerIds.length) {
+    const total = measureAllWindows(o).reduce((sum, { win }) => sum + windowInstallerPayout(win), 0);
+    return { total, byInstaller: [], source: 'REFERENCE_DEFAULT' };
+  }
+  const byInstaller = installerIds.map(userId => {
+    const user = getUser(userId);
+    return { userId, name: user?.name || 'Исполнитель', amount: orderInstallerPayoutForUser(o, userId) };
+  });
+  return { total: byInstaller.reduce((sum, row) => sum + row.amount, 0), byInstaller, source: 'EMPLOYEE_REFERENCE' };
 }
 
 // Per-order aggregates
@@ -14163,11 +14274,10 @@ function orderRevenue(o) {
   return orderFilmRevenue(o) + orderExtraServicesRevenue(o);
 }
 function orderInstallerPayout(o) {
-  let total = 0;
-  (o.measurements?.rooms || []).forEach(r => (r.windows || []).forEach(w => { total += windowInstallerPayout(w); }));
-  return total;
+  return orderInstallerPayoutBreakdown(o).total;
 }
-function orderInstallerPayoutPerPerson(o) {
+function orderInstallerPayoutPerPerson(o, userId = '') {
+  if (userId) return orderInstallerPayoutForUser(o, userId);
   const n = (o.installerIds || []).length || 1;
   return orderInstallerPayout(o) / n;
 }
@@ -14228,6 +14338,63 @@ function orderMargin(o) {
 function orderMarginPct(o) {
   const r = orderRevenue(o);
   return r > 0 ? orderMargin(o) / r : 0;
+}
+function projectProfitTaxProfile() {
+  const profile = db.settings.projectProfitTax = db.settings.projectProfitTax || {};
+  if (!profile.entityType) profile.entityType = 'C_CORP';
+  if (!(Number(profile.ratePct) >= 0)) profile.ratePct = profile.entityType === 'S_CORP' ? 1.5 : 8.84;
+  if (!(Number(profile.annualMinimum) >= 0)) profile.annualMinimum = 800;
+  if (!profile.jurisdiction) profile.jurisdiction = 'California';
+  return profile;
+}
+function projectProfitDate(o) {
+  const value = o?.installationDoneAt || o?.installationAt || o?.proposalAcceptedAt || o?.proposalSentAt || o?.createdAt;
+  const date = value ? new Date(value) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+function projectProfitMonthOrders(o) {
+  const date = projectProfitDate(o);
+  return (db.orders || []).filter(order => {
+    if (orderRevenue(order) <= 0) return false;
+    const candidate = projectProfitDate(order);
+    return candidate.getFullYear() === date.getFullYear() && candidate.getMonth() === date.getMonth();
+  });
+}
+function projectMonthlyFixedExpensePool() {
+  financeData();
+  return (db.opex || [])
+    .filter(item => item.active !== false && item.scope !== 'personal' && item.costBehavior !== 'variable' && item.category !== 'tax')
+    .reduce((sum, item) => sum + opexMonthly(item), 0);
+}
+function projectProfitability(o) {
+  const monthOrders = projectProfitMonthOrders(o);
+  const projectCount = Math.max(1, monthOrders.length);
+  const fixedPool = projectMonthlyFixedExpensePool();
+  const fixedAllocation = fixedPool / projectCount;
+  const grossProfit = orderMargin(o);
+  const profitBeforeTax = grossProfit - fixedAllocation;
+  const monthGrossProfit = monthOrders.reduce((sum, order) => sum + orderMargin(order), 0);
+  const monthProfitBeforeTax = monthGrossProfit - fixedPool;
+  const profile = projectProfitTaxProfile();
+  const rate = Math.max(0, Number(profile.ratePct) || 0) / 100;
+  const minimumMonthlyReserve = Math.max(0, Number(profile.annualMinimum) || 0) / 12;
+  const monthTaxReserve = monthOrders.length ? Math.max(Math.max(0, monthProfitBeforeTax) * rate, minimumMonthlyReserve) : 0;
+  const monthRevenue = monthOrders.reduce((sum, order) => sum + orderRevenue(order), 0);
+  const revenueShare = monthRevenue > 0 ? orderRevenue(o) / monthRevenue : 1 / projectCount;
+  const taxAllocation = monthTaxReserve * revenueShare;
+  return {
+    grossProfit,
+    fixedPool,
+    fixedAllocation,
+    profitBeforeTax,
+    taxAllocation,
+    netProfit: profitBeforeTax - taxAllocation,
+    monthTaxReserve,
+    monthProfitBeforeTax,
+    projectCount,
+    monthLabel: projectProfitDate(o).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }),
+    profile,
+  };
 }
 function projectEstimateIsApproved(o) {
   return !!o?.projectEstimateApprovedAt;
@@ -20040,7 +20207,7 @@ function renderInstallerDashboard() {
   // Today's payout total (only what user earned)
   const today = new Date(); today.setHours(0,0,0,0);
   const todayTasks = myTasks.filter(o => o.installationAt && new Date(o.installationAt).toDateString() === today.toDateString());
-  const todayPayout = todayTasks.reduce((s, o) => s + orderInstallerPayoutPerPerson(o), 0);
+  const todayPayout = todayTasks.reduce((s, o) => s + orderInstallerPayoutPerPerson(o, u.id), 0);
   // Trigger map after render
   setTimeout(() => renderInstallerMap('installer-map', myTasks), 100);
   return `
@@ -20154,15 +20321,15 @@ function renderInstallerPayHistory() {
     .sort((a,b) => (b.installationDoneAt || b.installationAt || b.createdAt).localeCompare(a.installationDoneAt || a.installationAt || a.createdAt));
   const completed = myOrders.filter(o => o.installationDoneAt);
   const pending = myOrders.filter(o => !o.installationDoneAt && !['completed','review_received'].includes(o.status));
-  const totalEarned = completed.reduce((s,o) => s + orderInstallerPayoutPerPerson(o), 0);
-  const totalPending = pending.reduce((s,o) => s + orderInstallerPayoutPerPerson(o), 0);
+  const totalEarned = completed.reduce((s,o) => s + orderInstallerPayoutPerPerson(o, u.id), 0);
+  const totalPending = pending.reduce((s,o) => s + orderInstallerPayoutPerPerson(o, u.id), 0);
   // Group completed by month
   const byMonth = {};
   completed.forEach(o => {
     const d = new Date(o.installationDoneAt);
     const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     if (!byMonth[key]) byMonth[key] = { label: d.toLocaleDateString(state.lang==='ru'?'ru-RU':'en-US',{month:'long', year:'numeric'}), total: 0, count: 0, orders: [] };
-    byMonth[key].total += orderInstallerPayoutPerPerson(o);
+    byMonth[key].total += orderInstallerPayoutPerPerson(o, u.id);
     byMonth[key].count++;
     byMonth[key].orders.push(o);
   });
@@ -20219,7 +20386,7 @@ function renderInstallerPayHistory() {
             <td class="p-2 text-xs">${orderAddress(o, c).slice(0,40) || '—'}</td>
             <td class="p-2">${fmtDateTime(o.installationAt)}</td>
             <td class="p-2"><span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span></td>
-            <td class="p-2 font-semibold text-amber-700">${fmtMoney(orderInstallerPayoutPerPerson(o))}</td>
+            <td class="p-2 font-semibold text-amber-700">${fmtMoney(orderInstallerPayoutPerPerson(o, u.id))}</td>
           </tr>`;
         }).join('')}
       </tbody>
@@ -20248,7 +20415,7 @@ function renderInstallerPayHistory() {
               <td class="p-1.5 font-medium">${o.number}</td>
               <td class="p-1.5">${c?.name?.slice(0,25) || '—'}</td>
               <td class="p-1.5">${orderActualAreaSqft(o).toFixed(1)}</td>
-              <td class="p-1.5 font-semibold text-emerald-700">${fmtMoney(orderInstallerPayoutPerPerson(o))}</td>
+              <td class="p-1.5 font-semibold text-emerald-700">${fmtMoney(orderInstallerPayoutPerPerson(o, u.id))}</td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -20298,7 +20465,7 @@ function renderInstallerList(tasks) {
       const canStart  = o.status === 'installation_en_route';
       const canFinish = o.status === 'installation_in_progress';
       // Show only personal payout (not order revenue)
-      const myPayout = orderInstallerPayoutPerPerson(o);
+      const myPayout = orderInstallerPayoutPerPerson(o, u.id);
       // Films summary (no prices)
       const films = {};
       (o.measurements?.rooms||[]).forEach(r => (r.windows||[]).forEach(w => {
@@ -20695,8 +20862,33 @@ function projectEstimateServiceLabel(type) {
 function projectEstimateExpenseLabel(type) {
   return ({
     gas: 'Транспорт / топливо', consumables: 'Расходные материалы', delivery: 'Доставка', helper: 'Помощник / субподряд',
+    material_purchase: 'Разовая закупка материала', subcontractor: 'Наёмный специалист', tools: 'Инструмент / оборудование',
     electric: 'Электрик', connect: 'Подключение', rental: 'Аренда оборудования', permit: 'Разрешения', other: 'Другой расход',
   })[type] || 'Другой расход';
+}
+
+function projectEstimateToggleInstaller(oid, userId, enabled) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeInternalEconomics(o, currentUser())) return;
+  const selected = new Set(o.installerIds || []);
+  if (enabled) selected.add(userId); else selected.delete(userId);
+  o.installerIds = [...selected];
+  projectEstimateMarkChanged(o, 'Изменены исполнители проекта');
+  save(); openProjectEstimateWorkspace(oid);
+}
+
+function projectEstimateUpdateTaxProfile(oid, field, value) {
+  const o = getOrder(oid);
+  if (!o || currentUser()?.role !== 'owner') return;
+  const profile = projectProfitTaxProfile();
+  if (field === 'entityType') {
+    profile.entityType = value;
+    if (value === 'C_CORP') profile.ratePct = 8.84;
+    if (value === 'S_CORP') profile.ratePct = 1.5;
+  } else if (['ratePct','annualMinimum'].includes(field)) {
+    profile[field] = Math.max(0, Number(value) || 0);
+  }
+  save(); openProjectEstimateWorkspace(oid);
 }
 
 function projectEstimateReadiness(o) {
@@ -20814,6 +21006,9 @@ function approveProjectEstimateAndOpenProposal(oid) {
     serviceCount: (o.extraServices || []).length,
     expenseCount: (o.extraExpenses || []).length,
     measurementBasis: orderMeasurementVerificationIssues(o).length ? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED',
+    fixedExpenseAllocation: canSeeInternalEconomics ? projectProfitability(o).fixedAllocation : null,
+    californiaTaxAllocation: canSeeInternalEconomics ? projectProfitability(o).taxAllocation : null,
+    managementNetProfit: canSeeInternalEconomics ? projectProfitability(o).netProfit : null,
   };
   o.timeline = o.timeline || [];
   o.timeline.push({ at: approvedAt, key: 'project_estimate_approved', by: state.currentUserId, note: canSeeInternalEconomics ? `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}, маржа ${marginPct.toFixed(1)}%` : `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}` });
@@ -20829,8 +21024,16 @@ function renderProjectEstimateWorkspace(o) {
   const marginPct = orderMarginPct(o) * 100;
   const issues = projectEstimateReadiness(o);
   const unverifiedMeasurements = orderMeasurementVerificationIssues(o);
+  const filmPlan = calcFilmPlan(o);
+  const installerPay = orderInstallerPayoutBreakdown(o);
+  const profitability = canSeeInternalEconomics ? projectProfitability(o) : null;
+  const availableInstallers = usersByRole('installer');
+  const selectedFilms = [...new Set(measureAllWindows(o).map(({ win }) => {
+    const catalog = windowCatalog(win);
+    return catalog ? `${catalog.brand} · ${catalog.model}` : '';
+  }).filter(Boolean))];
   const serviceTypes = ['washing','removal','silicone','electric','connect','warranty','custom'];
-  const expenseTypes = ['gas','consumables','delivery','helper','electric','rental','permit','other'];
+  const expenseTypes = ['gas','consumables','delivery','material_purchase','helper','subcontractor','electric','tools','rental','permit','other'];
   const materialRows = (o.measurements?.rooms || []).flatMap(room => (room.windows || []).map(win => {
     const cat = windowCatalog(win);
     const area = windowActualAreaSqft(win);
@@ -20858,6 +21061,7 @@ function renderProjectEstimateWorkspace(o) {
     <td data-label="Сумма"><input type="number" min="0" step="1" value="${Number(line.amount || 0)}" onchange="projectEstimateUpdateExpense('${o.id}','${line.id}','amount',this.value)"></td>
     <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteExpense('${o.id}','${line.id}')">Удалить расход</button></td>
   </tr>`).join('');
+  const installerRows = installerPay.byInstaller.map(row => `<div class="order-clean-list-row"><span>${academyEsc(row.name)}</span><b>${fmtMoney(row.amount)}</b></div>`).join('');
   const costLines = [
     ['Плёнка и отход', pss.film], ['Монтажники', pss.installers], ['Транспорт', pss.gas],
     ['Менеджер', pss.manager], ['Замерщик', pss.measurer], ['Расходники', pss.consumables],
@@ -20870,6 +21074,19 @@ function renderProjectEstimateWorkspace(o) {
       <div class="project-estimate-kpi"><span>Площадь</span><strong>${orderActualAreaSqft(o).toFixed(2)} sqft</strong></div>
       <div class="project-estimate-kpi"><span>Услуги</span><strong>${(o.extraServices || []).length}</strong></div>
       ${canSeeInternalEconomics ? `<div class="project-estimate-kpi"><span>Себестоимость</span><strong class="text-red-600">${fmtMoney(pss.total)}</strong></div><div class="project-estimate-kpi"><span>Прибыль / маржа</span><strong class="${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(margin)} · ${marginPct.toFixed(1)}%</strong></div>` : ''}
+    </div>
+    <div class="project-estimate-quick">
+      <div class="project-estimate-section-head"><div><h4>Быстрый итог проекта</h4><div class="text-xs text-gray-500">Все значения берутся из этого проекта, склада и справочника сотрудников.</div></div></div>
+      <div class="project-estimate-quick-grid">
+        <div class="project-estimate-quick-card"><span>Услуги проекта</span><strong>${academyEsc(orderServiceSummaryLabel(o))}</strong></div>
+        <div class="project-estimate-quick-card"><span>Плёнка</span><strong>${selectedFilms.length ? selectedFilms.map(academyEsc).join(', ') : 'не выбрана'}</strong></div>
+        <div class="project-estimate-quick-card"><span>Метраж стекла</span><strong>${orderActualAreaSqft(o).toFixed(2)} sqft</strong></div>
+        <div class="project-estimate-quick-card"><span>Расход плёнки</span><strong>${Number(filmPlan.consumedSqft || 0).toFixed(2)} sqft</strong></div>
+        <div class="project-estimate-quick-card"><span>Доп. услуги</span><strong>${(o.extraServices || []).length} · ${fmtMoney(orderExtraServicesRevenue(o))}</strong></div>
+        <div class="project-estimate-quick-card"><span>Исполнители</span><strong>${installerPay.byInstaller.length ? installerPay.byInstaller.map(row => academyEsc(row.name)).join(', ') : 'ставка категории · команда не назначена'}</strong></div>
+        <div class="project-estimate-quick-card"><span>Материал со склада</span><strong>${fmtMoney(pss.film)}</strong></div>
+        <div class="project-estimate-quick-card"><span>Оплата бригады</span><strong>${fmtMoney(pss.installers)}</strong></div>
+      </div>
     </div>
     ${issues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>До КП нужно проверить:</b> ${issues.map(academyEsc).join(', ')}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Расчёт заполнен.</b> Проверьте цену клиенту и подтвердите переход к КП.</div>`}
     ${unverifiedMeasurements.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Предварительные размеры клиента.</b> По ним разрешено рассчитать проект и выпустить КП. Перед назначением монтажа потребуется внести и подтвердить точные размеры ${unverifiedMeasurements.length} окон.</div>` : ''}
@@ -20889,8 +21106,16 @@ function renderProjectEstimateWorkspace(o) {
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead><tbody>${expenseRows || '<tr><td colspan="4" class="text-gray-500">Дополнительных расходов нет.</td></tr>'}</tbody></table></div>
     </section>` : ''}
 
+    ${canSeeInternalEconomics ? `<section class="project-estimate-section">
+      <div class="project-estimate-section-head"><div><h4>4. Исполнители и зарплата</h4><div class="text-xs text-gray-500">Ставки берутся из карточек сотрудников. Общий фонд делится между назначенной бригадой.</div></div></div>
+      <div class="project-estimate-assignees">
+        ${availableInstallers.length ? availableInstallers.map(user => `<label class="project-estimate-assignee"><input type="checkbox" ${o.installerIds?.includes(user.id) ? 'checked' : ''} onchange="projectEstimateToggleInstaller('${o.id}','${user.id}',this.checked)"><span>${academyEsc(user.name)}</span></label>`).join('') : '<span class="text-sm text-gray-500">Добавьте монтажников в разделе «Команда».</span>'}
+      </div>
+      <div class="mt-3">${installerRows || `<div class="order-clean-note">Команда ещё не назначена. В себестоимость уже включён резерв оплаты по базовым ставкам категорий: <b>${fmtMoney(installerPay.total)}</b>.</div>`}</div>
+    </section>` : ''}
+
     <section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>${canSeeInternalEconomics ? '4. Параметры и себестоимость' : '3. Параметры цены'}</h4><div class="text-xs text-gray-500">${canSeeInternalEconomics ? 'Владелец видит внутренние расходы и прибыль.' : 'Менеджер назначает только цену продажи, которая попадёт в КП.'}</div></div></div>
+      <div class="project-estimate-section-head"><div><h4>${canSeeInternalEconomics ? '5. Параметры и себестоимость' : '3. Параметры цены'}</h4><div class="text-xs text-gray-500">${canSeeInternalEconomics ? 'Владелец видит внутренние расходы и прибыль.' : 'Менеджер назначает только цену продажи, которая попадёт в КП.'}</div></div></div>
       <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
         <div><label>Сложность</label><select onchange="projectEstimateUpdateSetting('${o.id}','complexity',this.value)">${['standard','ladder','tower','alpinism'].map(key => `<option value="${key}" ${(o.complexity||'standard')===key?'selected':''}>${T('complexity'+key.charAt(0).toUpperCase()+key.slice(1))} ×${db.settings.complexityCoefs[key].toFixed(2)}</option>`).join('')}</select></div>
         <div><label>Цена продажи / sqft</label><input type="number" min="0" step="0.5" value="${o.priceOverridePerSqft == null ? '' : Number(o.priceOverridePerSqft)}" placeholder="Из каталога" onchange="projectEstimateUpdateSetting('${o.id}','priceOverridePerSqft',this.value)"></div>
@@ -20898,6 +21123,27 @@ function renderProjectEstimateWorkspace(o) {
       </div>
       ${canSeeInternalEconomics ? `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">${costLines.map(([label, amount]) => `<div class="order-clean-list-row"><span>${label}</span><b>${fmtMoney(amount)}</b></div>`).join('')}</div><div class="order-clean-list-row mt-2" style="border-top:2px solid #cbd5e1"><span><b>Общая себестоимость проекта</b></span><b class="text-red-600">${fmtMoney(pss.total)}</b></div>` : ''}
     </section>
+
+    ${canSeeInternalEconomics ? `<section class="project-estimate-section">
+      <div class="project-estimate-section-head"><div><h4>6. Чистая прибыль проекта</h4><div class="text-xs text-gray-500">Управленческий расчёт за ${academyEsc(profitability.monthLabel)}. Постоянные расходы делятся поровну между ${profitability.projectCount} проектами месяца.</div></div></div>
+      <div class="project-profit-flow">
+        <div class="project-profit-card"><span>Сумма заказа</span><strong class="text-emerald-700">${fmtMoney(orderRevenue(o))}</strong></div>
+        <div class="project-profit-card"><span>Прямые затраты</span><strong class="text-red-600">− ${fmtMoney(pss.total)}</strong></div>
+        <div class="project-profit-card"><span>Валовая прибыль</span><strong class="${profitability.grossProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(profitability.grossProfit)}</strong></div>
+        <div class="project-profit-card"><span>Доля постоянных расходов</span><strong class="text-red-600">− ${fmtMoney(profitability.fixedAllocation)}</strong></div>
+        <div class="project-profit-card"><span>Прибыль до налога</span><strong class="${profitability.profitBeforeTax >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(profitability.profitBeforeTax)}</strong></div>
+        <div class="project-profit-card"><span>Резерв налога California</span><strong class="text-red-600">− ${fmtMoney(profitability.taxAllocation)}</strong></div>
+        <div class="project-profit-card" style="border-color:${profitability.netProfit >= 0 ? '#86efac' : '#fca5a5'};background:${profitability.netProfit >= 0 ? '#f0fdf4' : '#fef2f2'}"><span>Расчётная чистая прибыль</span><strong class="${profitability.netProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(profitability.netProfit)}</strong></div>
+        <div class="project-profit-card"><span>Постоянные расходы месяца</span><strong>${fmtMoney(profitability.fixedPool)}</strong></div>
+        <div class="project-profit-card"><span>Резерв налога месяца</span><strong>${fmtMoney(profitability.monthTaxReserve)}</strong></div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3">
+        <div><label>Налоговый профиль</label><select onchange="projectEstimateUpdateTaxProfile('${o.id}','entityType',this.value)"><option value="C_CORP" ${profitability.profile.entityType==='C_CORP'?'selected':''}>California C corporation</option><option value="S_CORP" ${profitability.profile.entityType==='S_CORP'?'selected':''}>California S corporation</option><option value="CUSTOM" ${profitability.profile.entityType==='CUSTOM'?'selected':''}>Другая ставка</option></select></div>
+        <div><label>Расчётная ставка, %</label><input type="number" min="0" step="0.01" value="${Number(profitability.profile.ratePct || 0)}" onchange="projectEstimateUpdateTaxProfile('${o.id}','ratePct',this.value)"></div>
+        <div><label>Годовой минимум, $</label><input type="number" min="0" step="1" value="${Number(profitability.profile.annualMinimum || 0)}" onchange="projectEstimateUpdateTaxProfile('${o.id}','annualMinimum',this.value)"></div>
+      </div>
+      <div class="order-clean-note mt-3">Это управленческий резерв, а не налоговая декларация. Фактические федеральные и California налоги подтверждает бухгалтер; оплаченные суммы учитываются отдельно в финансах.</div>
+    </section>` : ''}
 
     <div class="project-estimate-footer">
       <div class="text-xs text-gray-500">${projectEstimateIsApproved(o) ? `Подтверждено ${fmtDateTime(o.projectEstimateApprovedAt)}` : 'КП заблокировано до подтверждения расчёта.'}</div>
@@ -21215,7 +21461,7 @@ function renderOrderDetails(id) {
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 text-sm">
           <div><div class="text-gray-500">${T('plannedArea')}</div><div class="font-semibold text-base">${orderPlannedAreaSqft(o).toFixed(2)} ${T('sqft')}</div></div>
           <div><div class="text-gray-500">${T('actualArea')}</div><div class="font-semibold text-base ${Math.abs(orderActualAreaSqft(o) - orderPlannedAreaSqft(o))>0.01?'text-amber-600':''}">${orderActualAreaSqft(o).toFixed(2)} ${T('sqft')}</div></div>
-          <div class="bg-emerald-50 rounded-lg p-2"><div class="text-emerald-700 text-xs">💰 Ваша выплата</div><div class="font-bold text-base text-emerald-700">${fmtMoney(orderInstallerPayoutPerPerson(o))}</div></div>
+          <div class="bg-emerald-50 rounded-lg p-2"><div class="text-emerald-700 text-xs">💰 Ваша выплата</div><div class="font-bold text-base text-emerald-700">${fmtMoney(orderInstallerPayoutPerPerson(o, u.id))}</div></div>
           <div><div class="text-gray-500">${T('complexity')}</div><div class="font-semibold text-base">${T('complexity'+ (o.complexity||'standard').charAt(0).toUpperCase()+ (o.complexity||'standard').slice(1))}</div></div>
         </div>
         ` : canManage ? `
@@ -21588,7 +21834,7 @@ function renderOrderDetails(id) {
           <tbody>
             ${(o.installerIds||[]).map(id => {
               const u2 = getUser(id);
-              return `<tr class="border-t"><td class="p-2">${u2?.name || '—'}</td><td class="p-2 font-semibold text-purple-700">${fmtMoney(orderInstallerPayoutPerPerson(o))}</td></tr>`;
+              return `<tr class="border-t"><td class="p-2">${u2?.name || '—'}</td><td class="p-2 font-semibold text-purple-700">${fmtMoney(orderInstallerPayoutPerPerson(o, id))}</td></tr>`;
             }).join('')}
           </tbody>
           <tfoot><tr class="border-t-2 font-semibold"><td class="p-2">${T('installerPayoutTotal')}</td><td class="p-2 text-purple-700">${fmtMoney(orderInstallerPayout(o))}</td></tr></tfoot>
@@ -31150,17 +31396,8 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
       amount = orderRevenue(o) * (pc.commissionPct || 0) / 100;
       label = `${pc.commissionPct}% от ${fmtMoney(orderRevenue(o))}`;
     } else if (pc.type === 'per_sqft') {
-      // Calculate per-window with rate by category override
-      let win = 0;
-      (o.measurements?.rooms || []).forEach(r => (r.windows || []).forEach(w => {
-        const cat = windowCatalog(w);
-        const sqft = windowActualAreaSqft(w);
-        const catKey = cat?.category || 'other';
-        const rate = (pc.ratesByCategory?.[catKey] && pc.ratesByCategory[catKey] > 0) ? pc.ratesByCategory[catKey] : (pc.ratePerSqft || 0.30);
-        win += sqft * rate;
-      }));
       const installersCount = (o.installerIds||[]).length || 1;
-      amount = win / installersCount;
+      amount = orderInstallerPayoutForUser(o, u.id);
       label = `${orderActualAreaSqft(o).toFixed(1)} sqft × ставки${installersCount>1?' ÷'+installersCount:''}`;
     } else if (pc.type === 'fixed_per_job') {
       amount = pc.fixedPerJob || 0;
