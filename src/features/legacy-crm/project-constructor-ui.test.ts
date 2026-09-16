@@ -96,3 +96,12 @@ test("project adds another service from one button and a filtered service list",
   assert.match(legacyCrm, /addCanonicalProjectService\('\$\{service\.service_type_id\}'\)/);
   assert.doesNotMatch(legacyCrm, /id="cp-add-service"/);
 });
+
+test("commercial measurements expose office glass partitions as their own opening category", () => {
+  assert.match(legacyCrm, /key: 'glass_partition'/);
+  assert.match(legacyCrm, /label: 'Стеклянная перегородка'/);
+  assert.match(legacyCrm, /commercialOnly: true/);
+  assert.match(legacyCrm, /orderSiteType\(order\) === 'COMMERCIAL'/);
+  assert.match(legacyCrm, /glass_partition: 'Офисная стеклянная перегородка'/);
+  assert.match(legacyCrm, /if \(siteType === 'COMMERCIAL'\) values\.splice/);
+});

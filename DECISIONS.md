@@ -156,6 +156,12 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Unknown commercial prices, specifications, the two unnamed members of the stated eight-model power-supply range, and any unnamed third manufacturer must remain unset. Catalog maintenance may add them only after their exact identity is confirmed; the implementation must not infer plausible wattages or names.
 - Existing generic Smart placeholder records are retained for historical references but archived from new-order selection. This correction is implemented in PR #172 and does not authorize an automatic production deployment.
 
+## 2026-09-15 — Office glass partitions are commercial openings
+
+- This decision refines `Site type owns the measurement-space vocabulary`: an office glass partition is a first-class `glass_partition` opening in a Commercial space, not an ordinary window and not a room type.
+- It uses the same canonical measurement facts as other glass openings—overall dimensions, cells/panes, glass construction and treatment, removal, provenance, and film inheritance—but is not offered for Residential Projects.
+- Existing records remain valid. This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

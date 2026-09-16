@@ -277,6 +277,12 @@ Contributors must add a row before starting substantial work and update or remov
 - This correction extends PR #172. Prices and unprovided technical specifications remain empty/zero rather than being invented. Production deployment remains a separate release action.
 - Verification on commit `1b8c07a`: all 226 tests passed locally; GitHub CI run #35043142443 generated Prisma, passed tests and TypeScript, and completed the production build. No production deployment was started.
 
+### 2026-09-15 correction — commercial office glass partitions
+
+- Commercial measurement spaces now offer `Офисная стеклянная перегородка` as a separate opening category alongside windows, doors, storefronts, and skylights. It persists as `glass_partition` with its own dimensions, panes/cells, glass characteristics, removal flags, and film inheritance.
+- The manager measurement workspace shows the new add-element category only when the order site type is `COMMERCIAL`. Canonical backend validation rejects `glass_partition` for a `RESIDENTIAL` Project.
+- This correction extends PR #172. Existing measurements and Residential choices remain unchanged; production deployment remains separate.
+
 ## Completion rule
 
 A task is shared and complete only when all applicable statements are true:

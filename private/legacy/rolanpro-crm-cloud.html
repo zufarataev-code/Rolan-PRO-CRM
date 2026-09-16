@@ -8239,6 +8239,7 @@ const WIN_TYPES = [
   { key: 'french_door_double', label: 'French door - двойная', icon: '🚪🚪', family: 'door', panelMode: 'french_grid', defaultPanels: 2 },
   { key: 'panoramic_door', label: 'Панорамная стеклянная дверь', icon: '▯', family: 'door', panelMode: 'panoramic', defaultPanels: 1 },
   { key: 'transom', label: 'С фрамугой', icon: '⊟', family: 'window', panelMode: 'transom', defaultPanels: 2 },
+  { key: 'glass_partition', label: 'Офисная стеклянная перегородка', icon: '▥', family: 'partition', panelMode: 'panoramic', defaultPanels: 1 },
 ];
 function normalizeWinTypeKey(key) {
   return WIN_TYPE_ALIASES[key] || key || 'single_hung';
@@ -15531,7 +15532,7 @@ function canonicalCompatibilityBadge(result) {
 }
 
 function canonicalOpeningTypeLabel(value) {
-  return ({ standard_window: 'Окно', standard_door: 'Дверь', french_window: 'Французское окно', french_door: 'Французская дверь', storefront: 'Витрина', skylight: 'Мансардное окно', custom: 'Другое' })[value] || value?.replaceAll('_', ' ') || 'Проём';
+  return ({ standard_window: 'Окно', standard_door: 'Дверь', french_window: 'Французское окно', french_door: 'Французская дверь', storefront: 'Витрина', skylight: 'Мансардное окно', glass_partition: 'Офисная стеклянная перегородка', custom: 'Другое' })[value] || value?.replaceAll('_', ' ') || 'Проём';
 }
 
 function canonicalFilmSourceLabel(value) {
@@ -15659,8 +15660,11 @@ function renderCanonicalProjects() {
   return state.canonicalProjectId ? canonicalProjectDetailHtml() : canonicalProjectListHtml();
 }
 
-function canonicalOpeningTypeOptions(selected = 'standard_window') {
-  return ['standard_window','standard_door','french_window','french_door','storefront','skylight','custom'].map(value => `<option value="${value}" ${value === selected ? 'selected' : ''}>${canonicalOpeningTypeLabel(value)}</option>`).join('');
+function canonicalOpeningTypeOptions(selected = 'standard_window', siteType = 'RESIDENTIAL') {
+  const values = ['standard_window','standard_door','french_window','french_door','storefront','skylight','custom'];
+  if (siteType === 'COMMERCIAL') values.splice(6, 0, 'glass_partition');
+  if (selected === 'glass_partition' && !values.includes(selected)) values.splice(6, 0, selected);
+  return values.map(value => `<option value="${value}" ${value === selected ? 'selected' : ''}>${canonicalOpeningTypeLabel(value)}</option>`).join('');
 }
 
 function canonicalCellRow(index, cell = {}) {
@@ -15683,7 +15687,7 @@ function openCanonicalOpening(positionId, roomKey = '', openingId = '', verify =
   const source = currentUser()?.role === 'measurer' || verify ? 'SURVEYOR_VERIFIED' : opening?.cells?.[0]?.source || 'CUSTOMER';
   const cells = opening?.cells?.length ? opening.cells : [{}];
   state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-5" style="max-width:62rem" onclick="event.stopPropagation()"><div class="flex items-start justify-between gap-3"><div><div class="text-xs font-black text-blue-700">SOLAR V1</div><h3 class="text-xl font-black">${opening ? (verify ? 'Проверить проём' : 'Новая ревизия') : 'Добавить проём'}</h3></div><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4"><label>Источник замеров<select id="cp-source"><option value="CUSTOMER" ${source === 'CUSTOMER' ? 'selected' : ''}>Клиент · не проверено</option><option value="SURVEYOR_VERIFIED" ${source === 'SURVEYOR_VERIFIED' ? 'selected' : ''}>Замерщик · подтверждено</option></select></label><label>${academyEsc(spaceTerms.select)}<select id="cp-room-key"><option value="">Выберите</option>${templates.map(item => `<option value="${academyEsc(item.key)}" ${item.key === room?.room_key ? 'selected' : ''}>${academyEsc(item.label_ru)}</option>`).join('')}</select></label><label>${academyEsc(spaceTerms.name)}<input id="cp-room-name" value="${academyEsc(room?.room_name || '')}"></label><label>${academyEsc(spaceTerms.number)}<input id="cp-room-number" value="${academyEsc(room?.room_number || '')}"></label><label>ID проёма<input id="cp-opening-id" value="${academyEsc(opening?.opening_id || '')}"></label><label>Тип проёма<select id="cp-opening-type">${canonicalOpeningTypeOptions(opening?.opening_type)}</select></label><label>Общая ширина, in<input id="cp-overall-width" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_width || '')}"></label><label>Общая высота, in<input id="cp-overall-height" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_height || '')}"></label><label>Сторона света<select id="cp-orientation"><option value="">Неизвестно</option>${[['north','Север'],['east','Восток'],['south','Юг'],['west','Запад']].map(([value,label]) => `<option value="${value}" ${value === opening?.orientation ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4"><label>Источник замеров<select id="cp-source"><option value="CUSTOMER" ${source === 'CUSTOMER' ? 'selected' : ''}>Клиент · не проверено</option><option value="SURVEYOR_VERIFIED" ${source === 'SURVEYOR_VERIFIED' ? 'selected' : ''}>Замерщик · подтверждено</option></select></label><label>${academyEsc(spaceTerms.select)}<select id="cp-room-key"><option value="">Выберите</option>${templates.map(item => `<option value="${academyEsc(item.key)}" ${item.key === room?.room_key ? 'selected' : ''}>${academyEsc(item.label_ru)}</option>`).join('')}</select></label><label>${academyEsc(spaceTerms.name)}<input id="cp-room-name" value="${academyEsc(room?.room_name || '')}"></label><label>${academyEsc(spaceTerms.number)}<input id="cp-room-number" value="${academyEsc(room?.room_number || '')}"></label><label>ID проёма<input id="cp-opening-id" value="${academyEsc(opening?.opening_id || '')}"></label><label>Тип проёма<select id="cp-opening-type">${canonicalOpeningTypeOptions(opening?.opening_type, data?.site_type)}</select></label><label>Общая ширина, in<input id="cp-overall-width" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_width || '')}"></label><label>Общая высота, in<input id="cp-overall-height" type="number" min="0.01" step="0.01" value="${academyEsc(opening?.overall_height || '')}"></label><label>Сторона света<select id="cp-orientation"><option value="">Неизвестно</option>${[['north','Север'],['east','Восток'],['south','Юг'],['west','Запад']].map(([value,label]) => `<option value="${value}" ${value === opening?.orientation ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div>
     <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка для помещения</div>${canonicalFilmPickerHtml('cp-room-film', room?.film_id || '', 'SOLAR')}</div>
     <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка для проёма</div>${canonicalFilmPickerHtml('cp-opening-film', opening?.film_id || '', 'SOLAR')}</div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3"><label>Конструкция стекла<select id="cp-glass-construction">${[['unknown','Неизвестно'],['single_pane','Одинарное'],['double_pane_igu','Двойной стеклопакет / IGU'],['triple_pane_igu','Тройной стеклопакет / IGU']].map(([value,label]) => `<option value="${value}" ${value === opening?.glass?.construction ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Прочность<select id="cp-glass-treatment">${[['unknown','Неизвестно'],['annealed','Сырое'],['heat_strengthened','Термоупрочнённое'],['tempered','Закалённое']].map(([value,label]) => `<option value="${value}" ${value === opening?.glass?.treatment ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Позиция Low-E<input id="cp-low-e-position" value="${academyEsc(opening?.glass?.low_e_position || '')}"></label></div>
@@ -21347,7 +21351,19 @@ const MANAGER_OBJECT_GROUPS = [
     baseName: 'Skylight',
     typeKeys: ['picture','panoramic'],
   },
+  {
+    key: 'glass_partition',
+    icon: '▥',
+    label: 'Стеклянная перегородка',
+    addLabel: 'Добавить перегородку',
+    baseName: 'Стеклянная перегородка',
+    commercialOnly: true,
+    typeKeys: ['glass_partition'],
+  },
 ];
+function managerObjectGroupsForOrder(order) {
+  return MANAGER_OBJECT_GROUPS.filter(group => !group.commercialOnly || orderSiteType(order) === 'COMMERCIAL');
+}
 function managerObjectKindInfo(kind) {
   return MANAGER_OBJECT_GROUPS.find(g => g.key === kind) || MANAGER_OBJECT_GROUPS[0];
 }
@@ -21398,7 +21414,8 @@ function managerSetRoomAddKind(oid, rid, kind) {
   state._managerAddTypeByRoom = state._managerAddTypeByRoom || {};
   const order = getOrder(oid);
   const scopeKey = managerRoomScopeKey(order, rid);
-  state._managerAddKindByRoom[rid] = managerObjectKindInfo(kind).key;
+  const allowedGroup = managerObjectGroupsForOrder(order).find(group => group.key === kind) || MANAGER_OBJECT_GROUPS[0];
+  state._managerAddKindByRoom[rid] = allowedGroup.key;
   state._managerAddTypeByRoom[rid] = managerDefaultTypeForKind(kind, scopeKey);
   refreshManagerMeasureModal(oid);
 }
@@ -21413,7 +21430,10 @@ function managerSetRoomAddType(oid, rid, typeKey) {
   refreshManagerMeasureModal(oid);
 }
 function managerRoomAddChooserHtml(oid, room, scopeKey) {
-  const kind = managerRoomAddKindValue(room.id);
+  const order = getOrder(oid);
+  const groups = managerObjectGroupsForOrder(order);
+  const requestedKind = managerRoomAddKindValue(room.id);
+  const kind = groups.some(group => group.key === requestedKind) ? requestedKind : groups[0].key;
   const kindInfo = managerObjectKindInfo(kind);
   const selectedType = managerRoomAddTypeValue(room.id, kind, scopeKey);
   const types = managerAllowedTypesForKind(kind, scopeKey);
@@ -21424,10 +21444,10 @@ function managerRoomAddChooserHtml(oid, room, scopeKey) {
       <div class="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <div class="text-xs font-black text-blue-800 uppercase">Добавить элемент в комнату</div>
-          <div class="text-xs text-gray-500 mt-1">Сначала выберите: окно, дверь или skylight. Типовые иконки показываются один раз для комнаты, а не под каждым окном.</div>
+          <div class="text-xs text-gray-500 mt-1">Сначала выберите: окно, дверь, skylight${orderSiteType(order) === 'COMMERCIAL' ? ' или стеклянную перегородку' : ''}. Типовые иконки показываются один раз для помещения.</div>
         </div>
         <div class="manager-add-kind-row">
-          ${MANAGER_OBJECT_GROUPS.map(g => `
+          ${groups.map(g => `
             <button type="button" class="manager-add-kind-btn ${kind === g.key ? 'active' : ''}" onclick="managerSetRoomAddKind('${oid}','${room.id}','${g.key}')">
               <span class="manager-add-kind-icon">${g.icon}</span>
               <span>${academyEsc(g.label)}</span>
@@ -21608,8 +21628,8 @@ function managerWindowDefaults(o, room, opts = {}) {
   const win = {
     id: uid(),
     name: kindInfo.baseName + ' ' + (sameKindCount + 1),
-    width: Math.round(inches_to_mm(objectKind === 'skylight' ? 36 : 40)),
-    height: Math.round(inches_to_mm(objectKind === 'skylight' ? 36 : 70)),
+    width: Math.round(inches_to_mm(objectKind === 'skylight' ? 36 : objectKind === 'glass_partition' ? 48 : 40)),
+    height: Math.round(inches_to_mm(objectKind === 'skylight' ? 36 : objectKind === 'glass_partition' ? 96 : 70)),
     qty: 1,
     winType,
     measureScope: scopeKey,

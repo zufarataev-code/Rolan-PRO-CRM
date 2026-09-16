@@ -28,6 +28,7 @@ export function parseMeasurementConstructorInput(value: unknown): MeasurementCon
   const openingType = typeof value.opening_type === "string" && OPENING_TYPES.has(value.opening_type as OpeningType)
     ? (value.opening_type as OpeningType)
     : undefined;
+  if (openingType === "glass_partition" && siteType !== "COMMERCIAL") return null;
 
   const glassValue = isRecord(value.glass) ? value.glass : null;
   const construction =
@@ -162,6 +163,7 @@ export function parseOpeningMeasurementInput(value: unknown): OpeningMeasurement
     : "unknown";
 
   if (!projectPositionId || !siteType || !source || !roomKey || !roomName || !openingId || !openingType) return null;
+  if (openingType === "glass_partition" && siteType !== "COMMERCIAL") return null;
   if (overallWidth === null || overallHeight === null) return null;
 
   const rawCells = Array.isArray(value.cells) ? value.cells : [];
