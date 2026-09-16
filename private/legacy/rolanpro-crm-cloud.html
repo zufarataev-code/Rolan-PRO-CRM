@@ -5551,7 +5551,7 @@ const I18N = {
     logout: 'Выйти',
     dashboard: 'Главная',
     leads: 'Лиды',
-    orders: 'Заказы',
+    orders: 'Проекты',
     clients: 'Клиенты',
     measurements: 'Замеры',
     installations: 'Монтажи',
@@ -5562,7 +5562,7 @@ const I18N = {
     notifications: 'Уведомления',
     myTasks: 'Мои задачи',
     myProjects: 'Мои проекты',
-    newOrder: 'Новый заказ',
+    newOrder: 'Новый проект',
     newLead: 'Новый лид',
     newClient: 'Новый клиент',
     client: 'Клиент',
@@ -5681,7 +5681,7 @@ const I18N = {
     enRouteJob: 'Выехали к клиенту',
     reviewReceived: 'Отзыв получен',
     orderCreated: 'Заказ создан',
-    orderNo: 'Заказ №',
+    orderNo: 'Проект №',
     search: 'Поиск…',
     empty: 'Нет данных',
     allStatuses: 'Все статусы',
@@ -5757,7 +5757,7 @@ const I18N = {
     stepPayment: 'Оплата',
     stepDone: 'Готово',
     stepReview: 'Отзыв',
-    orderDetails: 'Детали заказа',
+    orderDetails: 'Карточка проекта',
     pickFile: 'Выбрать файл',
     photo: 'Фото',
     addPhoto: 'Добавить фото',
@@ -5972,7 +5972,7 @@ const I18N = {
     logout: 'Logout',
     dashboard: 'Dashboard',
     leads: 'Leads',
-    orders: 'Orders',
+    orders: 'Projects',
     clients: 'Clients',
     measurements: 'Measurements',
     installations: 'Installations',
@@ -5983,7 +5983,7 @@ const I18N = {
     notifications: 'Notifications',
     myTasks: 'My tasks',
     myProjects: 'My projects',
-    newOrder: 'New order',
+    newOrder: 'New project',
     newLead: 'New lead',
     newClient: 'New client',
     client: 'Client',
@@ -6101,7 +6101,7 @@ const I18N = {
     enRouteJob: 'On my way',
     reviewReceived: 'Review received',
     orderCreated: 'Order created',
-    orderNo: 'Order #',
+    orderNo: 'Project #',
     search: 'Search…',
     empty: 'No data',
     allStatuses: 'All statuses',
@@ -6177,7 +6177,7 @@ const I18N = {
     stepPayment: 'Payment',
     stepDone: 'Done',
     stepReview: 'Review',
-    orderDetails: 'Order details',
+    orderDetails: 'Project details',
     pickFile: 'Pick file',
     photo: 'Photo',
     addPhoto: 'Add photo',
@@ -15449,8 +15449,7 @@ function renderAppShell() {
     ['dashboard', T('dashboard'), '📊'],
     ['leads', 'Новые лиды', '📥'],
     ['coldcalls', 'Холодные звонки', '📞'],
-    ['orders', T('orders'), '📦'],
-    ['canonicalProjects', 'Проекты', '🏗'],
+    ['orders', T('orders'), '🏗'],
     ['proposals', 'КП', '📄'],
     ['servicePricing', 'Услуги и цены', '💲'],
     ['calendar', T('calendar'), '📅'],
@@ -15576,7 +15575,7 @@ function headerTitle() {
       if (u.role === 'measurer') return T('welcomeMeasurer');
       return T('welcomeInstaller');
     case 'orders': return T('orders');
-    case 'canonicalProjects': return state.canonicalProjectId ? '🏗 Конструктор проекта' : '🏗 Проекты';
+    case 'canonicalProjects': return state.canonicalProjectId ? '📐 Конструктор замеров' : '📐 Проверенные замеры';
     case 'proposals': return '📄 Коммерческие предложения';
     case 'servicePricing': return '💲 Услуги и цены';
     case 'installerOps': return '📍 Монтажники сейчас';
@@ -15607,13 +15606,13 @@ function headerSubtitle() {
   const u = currentUser();
   if (!u) return 'Рабочее пространство RolanPRO';
   switch (state.view) {
-    case 'orders': return 'Воронка, фильтры, долги и быстрые действия по объектам';
-    case 'canonicalProjects': return 'Объект, услуги и проверенные замеры из PostgreSQL';
+    case 'orders': return 'Один проект от первого обращения до замера, КП, монтажа и оплаты';
+    case 'canonicalProjects': return 'Точные замеры и услуги внутри существующего проекта';
     case 'proposals': return 'Кому отправлено, кто посмотрел и к какому заказу относится КП';
     case 'servicePricing': return 'Единый прайс, ставки монтажников и план продаж — внутри основной CRM';
     case 'installerOps': return 'Активные смены, объекты и последнее добровольно переданное местоположение';
     case 'workday': return 'Смена, часы, пробег и личные начисления в одной истории';
-    case 'orderDetails': return 'Карточка объекта, замер, наряд, клиент и история';
+    case 'orderDetails': return 'Единая карточка проекта: объект, услуги, замер, КП, монтаж, оплата и история';
     case 'clients': return 'Клиенты, адреса объектов, B2B/B2C и постоянные аккаунты';
     case 'coldcalls': return 'Поиск компаний, журнал обзвона, повторные звонки и перевод в B2B';
     case 'inventory': return 'Плёнка, расходники, остатки, приход и списание';
@@ -15904,7 +15903,10 @@ function canonicalProjectListHtml() {
   if (state.canonicalProjectsError) return `<div class="card"><b class="text-red-700">${academyEsc(state.canonicalProjectsError)}</b><button class="btn-primary mt-3" onclick="loadCanonicalProjects(true)">Повторить</button></div>`;
   const projects = state.canonicalProjects || [];
   return `<div class="space-y-4">
-    <div class="card flex items-center justify-between gap-3"><h2 class="text-xl font-black">Проекты в работе</h2><button class="btn-ghost" onclick="loadCanonicalProjects(true)">Обновить</button></div>
+    <div class="card flex items-center justify-between gap-3">
+      <h2 class="text-xl font-black">Проверенные замеры проектов</h2>
+      <div class="flex gap-2"><button class="btn-ghost" onclick="state.view='orders'; location.hash=''; render();">← Проекты</button><button class="btn-ghost" onclick="loadCanonicalProjects(true)">Обновить</button></div>
+    </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">${projects.map(project => `<button class="card text-left border border-slate-200 hover:border-blue-400" onclick="openCanonicalProject('${academyEsc(project.project_id)}')">
       <div class="flex items-start justify-between gap-3"><div><div class="text-xs font-black text-blue-700">${academyEsc(project.project_code || 'PROJECT')}</div><div class="text-lg font-black">${academyEsc(project.title)}</div><div class="text-sm text-gray-500">${academyEsc(project.client?.name || 'Без клиента')}</div></div><span class="tag bg-slate-100 text-slate-700">${academyEsc(project.project_status?.name_ru || '')}</span></div>
       <div class="flex flex-wrap gap-2 mt-3"><span class="tag bg-blue-50 text-blue-800">${academyEsc(project.client?.customer_type || 'Тип клиента —')}</span><span class="tag bg-violet-50 text-violet-800">${project.site_type === 'RESIDENTIAL' ? 'Жилой' : project.site_type === 'COMMERCIAL' ? 'Коммерческий' : 'Тип объекта —'}</span>${project.lead_intent_service_type ? `<span class="tag bg-amber-50 text-amber-900">Лид: ${academyEsc(project.lead_intent_service_type.name_ru)}</span>` : ''}<span class="tag bg-slate-100 text-slate-700">${Number(project.positions_count || 0)} услуг</span></div>
@@ -17256,7 +17258,7 @@ function openKanbanStagePicker(orderId) {
       <div class="modal-content workspace-modal p-6" style="max-width:620px">
         <div class="flex items-start justify-between gap-3 mb-4">
           <div>
-            <div class="text-xs font-bold text-blue-700">ЗАКАЗ ${premiumEsc(o.number)}</div>
+            <div class="text-xs font-bold text-blue-700">ПРОЕКТ ${premiumEsc(o.number)}</div>
             <h3 class="font-black text-xl text-slate-900">Переместить на этап</h3>
             <div class="text-sm text-gray-500 mt-1">Сейчас: ${premiumEsc(currentColumn?.title || T(o.status))}</div>
           </div>
@@ -17303,7 +17305,7 @@ function renderOrdersKanban(filtered, opts = {}) {
                   <span class="kanban-col-marker"></span>
                   <div class="min-w-0">
                     <div class="font-black text-slate-900 truncate">${col.icon} ${col.title}</div>
-                    <div class="text-xs text-gray-500">${orders.length} заказов · ${fmtMoney(colRevenue)}</div>
+                    <div class="text-xs text-gray-500">${orders.length} проектов · ${fmtMoney(colRevenue)}</div>
                   </div>
                 </div>
                 <span class="kanban-chip dark">${orders.length}</span>
@@ -17311,7 +17313,7 @@ function renderOrdersKanban(filtered, opts = {}) {
               ${colDebt > 0 ? `<div class="text-xs text-red-600 mt-2">Долг: ${fmtMoney(colDebt)}</div>` : `<div class="text-xs text-gray-400 mt-2">Без просроченного долга</div>`}
             </div>
             <div class="py-1">
-              ${orders.length ? orders.map(o => renderOrderKanbanCard(o)).join('') : `<div class="kanban-empty">Перетащите заказ сюда</div>`}
+              ${orders.length ? orders.map(o => renderOrderKanbanCard(o)).join('') : `<div class="kanban-empty">Перетащите проект сюда</div>`}
             </div>
           </section>
         `;
@@ -17326,12 +17328,12 @@ function renderOrdersKanbanFullscreen(filtered, meta = {}) {
       <div class="kanban-fullscreen-bar">
         <div class="flex items-center gap-3 flex-wrap">
           <div class="mr-auto">
-            <div class="text-xs text-gray-500 font-semibold">ROLANPRO CRM · Канбан заказов</div>
+            <div class="text-xs text-gray-500 font-semibold">ROLANPRO CRM · Канбан проектов</div>
             <div class="text-2xl font-black text-slate-900">${meta.periodLabel || ordersPeriodLabel()}</div>
           </div>
           ${renderOrdersPeriodToggle(true)}
           <div class="hidden md:flex items-center gap-2 text-sm">
-            <span class="kanban-chip dark">${filtered.length} заказов</span>
+            <span class="kanban-chip dark">${filtered.length} проектов</span>
             <span class="kanban-chip">Потенциал ${fmtMoney(meta.totalSum || 0)}</span>
             <span class="kanban-chip ${totalDebt>0?'bg-rose-50 text-rose-700 border-rose-100':''}">Долг ${fmtMoney(totalDebt)}</span>
             <span class="kanban-chip">${(meta.totalArea || 0).toFixed(0)} sqft</span>
@@ -17402,9 +17404,9 @@ function renderOrderKanbanCard(o) {
         </div>
         </a>
         <div class="kanban-card-actions">
-          <button class="kanban-drag-handle" title="Перетащить или выбрать этап" aria-label="Переместить заказ"
+          <button class="kanban-drag-handle" title="Перетащить или выбрать этап" aria-label="Переместить проект"
             onclick="event.stopPropagation(); openKanbanStagePicker('${o.id}')">↕ Этап</button>
-          <button class="kanban-icon-btn" title="Открыть заказ" onclick="event.stopPropagation(); openOrder('${o.id}')">↗</button>
+          <button class="kanban-icon-btn" title="Открыть проект" onclick="event.stopPropagation(); openOrder('${o.id}')">↗</button>
           <a class="kanban-icon-btn" title="Позвонить" href="${callLink(c.phone)}" onclick="event.stopPropagation()">☎</a>
           <a class="kanban-icon-btn" title="WhatsApp" href="${whatsappLink(c.phone, text)}" target="_blank" onclick="event.stopPropagation()">WA</a>
           <button class="kanban-icon-btn" title="Единое КП ROLANPRO" onclick="event.stopPropagation(); openProfessionalKP('${o.id}')">КП</button>
@@ -17445,12 +17447,13 @@ function renderOrders() {
   <div class="orders-command-panel mb-4">
     <div class="orders-command-head">
       <div class="min-w-0">
-        <div class="orders-command-title">Воронка заказов</div>
-        <div class="orders-command-subtitle">Фильтры, период, режим просмотра и быстрые действия собраны в одном месте.</div>
+        <div class="orders-command-title">Проекты</div>
+        <div class="orders-command-subtitle">Одна карточка ведёт клиента от обращения до замера, КП, монтажа и оплаты.</div>
       </div>
       <div class="orders-primary-actions">
         ${hasFilters ? `<button class="btn-ghost" onclick="clearOrderFilters()">✕ ${T('clearFilters')}</button>` : ''}
         ${ordersView === 'kanban' ? `<button class="btn-ghost" onclick="openOrdersKanbanFullscreen()">⛶ Весь экран</button>` : ''}
+        <button class="btn-ghost" onclick="location.hash='#/projects'">📐 Проверенные замеры</button>
         <button class="btn-primary" onclick="openOrderModal()">+ ${T('newOrder')}</button>
       </div>
     </div>
@@ -18377,7 +18380,7 @@ function renderColdProspectCard(p) {
         <button class="btn-ghost" onclick="openColdHistory('${p.id}')">История (${(p.calls||[]).length})</button>
         <button class="btn-ghost" onclick="openColdProspectModal('${p.id}')">Изменить</button>
         ${!p.clientId ? `<button class="btn-ghost text-emerald-700" onclick="coldConvertToB2B('${p.id}',false)">Создать B2B-клиента</button>` : ''}
-        ${p.clientId && !p.orderId ? `<button class="btn-primary" onclick="coldOpenOrderFlow('${p.id}')">Создать заказ и КП</button>` : ''}
+        ${p.clientId && !p.orderId ? `<button class="btn-primary" onclick="coldOpenOrderFlow('${p.id}')">Создать проект и КП</button>` : ''}
         ${order ? `<button class="btn-primary" onclick="openOrder('${order.id}')">Заказ ${academyEsc(order.number)}</button><button class="btn-ghost" onclick="openProfessionalKP('${order.id}')">Открыть КП</button>` : ''}
         ${client ? `<button class="btn-ghost" onclick="location.hash='#/account/${client.id}'">B2B-карточка</button>` : ''}
       </div>
@@ -18750,7 +18753,7 @@ function renderLeadsView() {
               ${l.message ? `<div class="text-sm text-gray-600 mt-1 bg-gray-50 rounded p-2">${l.message}</div>` : ''}
             </div>
             <div class="flex flex-col gap-2">
-              <button class="btn-primary text-sm" onclick="convertLead('${l.id}')">➕ Создать заказ</button>
+              <button class="btn-primary text-sm" onclick="convertLead('${l.id}')">➕ Создать проект</button>
               <button class="btn-ghost text-xs text-gray-400" onclick="dismissLead('${l.id}')">Спам / отклонить</button>
             </div>
           </div>
@@ -20219,7 +20222,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
     ? 'режим замерщика: без денег'
     : u?.role === 'installer'
       ? 'режим монтажника: только рабочие данные'
-      : 'паспорт заказа';
+      : 'паспорт проекта';
 
   return `
     <section class="order-passport card">
@@ -20232,7 +20235,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
             <span class="status-badge ${status.color}">${T(o.status)}</span>
           </div>
           <div class="order-passport-title">
-            <h2>Заказ ${academyEsc(o.number)}</h2>
+            <h2>Проект ${academyEsc(o.number)}</h2>
             <span class="tag" style="background:${service.bg};color:${service.color};border-color:${service.color}33">${academyEsc(orderServiceSummaryLabel(o))}</span>
           </div>
           <div class="order-passport-address">${address ? academyEsc(address) : 'Адрес объекта не указан'}</div>
@@ -20244,7 +20247,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
           </div>
         </div>
         <div class="order-passport-side">
-          <div class="order-passport-side-title">Быстрые действия по заказу</div>
+          <div class="order-passport-side-title">Быстрые действия по проекту</div>
           <div class="order-passport-action-grid">
             ${orderPassportActions(o, { canManage, measureSub, measureAction, hasMeasurements, estimateApproved, proposalDisabled, address, routeHref, isInstaller: u?.role === 'installer' })}
           </div>
@@ -23689,8 +23692,8 @@ function openOrderModal() {
     <div class="modal-content workspace-modal erp-intake-modal">
       <div class="erp-intake-head">
         <div>
-          <div class="erp-intake-kicker">ROLANPRO ERP · Order Intake</div>
-          <div class="erp-intake-title">Новый заказ</div>
+          <div class="erp-intake-kicker">ROLANPRO ERP · Project Intake</div>
+          <div class="erp-intake-title">Новый проект</div>
         </div>
         <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
       </div>
@@ -23777,7 +23780,7 @@ function openOrderModal() {
       <div class="erp-intake-footer">
         <div class="flex gap-2 justify-end" style="margin-left:auto">
           <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
-          <button class="btn-primary" onclick="createOrder()">Создать заказ</button>
+          <button class="btn-primary" onclick="createOrder()">Создать проект</button>
         </div>
       </div>
     </div>
@@ -24116,9 +24119,9 @@ function openOrderClientOverlay() {
       <div class="address-overlay-card">
         <div class="address-overlay-head">
           <div>
-            <div class="text-xs text-blue-600 font-black uppercase tracking-wide">Новый заказ · карточка клиента</div>
+            <div class="text-xs text-blue-600 font-black uppercase tracking-wide">Новый проект · карточка клиента</div>
             <div class="text-xl font-black text-slate-900">Новый клиент</div>
-            <div class="text-sm text-gray-500 mt-1">Создайте клиента отдельно. После сохранения он автоматически подставится в заказ.</div>
+            <div class="text-sm text-gray-500 mt-1">Создайте клиента отдельно. После сохранения он автоматически подставится в проект.</div>
           </div>
           <button class="btn-ghost" onclick="closeOrderClientOverlay()">Закрыть</button>
         </div>

@@ -308,11 +308,18 @@ Contributors must add a row before starting substantial work and update or remov
 
 ### 2026-09-15 architecture correction — Order and Project are the same customer job
 
-- Product rule: one canonical PostgreSQL `Project` is shown to employees as one `Заказ` and survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.
-- Current blocker: legacy `db.orders` and relational `Project` are still separate and unsynchronized, as documented above. Removing a label or hiding one menu would mask the duplication and risk losing records, so consolidation requires a tested ID/data migration and one write path.
+- Product rule: one canonical PostgreSQL `Project` survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.
+- The visible navigation is now consolidated as one `Проекты` workspace, but legacy `db.orders` and relational `Project` are still separate and unsynchronized behind that interface. Finishing the consolidation still requires a tested stable-ID/data migration and one PostgreSQL write path.
 - PR #172 must not be treated as the final entity-consolidation release. It may supply the Project fields and permissions, but the duplicate launch/list workflow remains migration work. No production deployment is authorized.
 
 ## Completion rule
+
+### 2026-09-15 correction — one Projects workspace
+
+- Owner and manager navigation now contains one `Проекты` entry instead of separate `Заказы` and `Проекты` entries. New work is labeled `Новый проект`, and the funnel, cards, primary actions, and project intake use the same lifecycle language.
+- The canonical PostgreSQL constructor remains available from the Projects workspace as `Проверенные замеры`; it is a measurement tool inside the project, not a second customer-job list.
+- Compatibility is preserved: legacy `orders` keys, `#/order/...` links, `R-...` numbers, and `Заказ-наряд` documents are not deleted or rewritten. The relational ID/data migration is still required before legacy storage can be retired.
+- Branch / PR: `codex/project-add-service-button` / #172. No production deployment was started.
 
 A task is shared and complete only when all applicable statements are true:
 

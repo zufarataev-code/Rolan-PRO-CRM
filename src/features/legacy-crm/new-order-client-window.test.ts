@@ -12,7 +12,7 @@ test("new client from order opens in its own workspace", () => {
   assert.match(orderModal, /onclick="openOrderClientOverlay\(\)"/);
   assert.match(html, /function openOrderClientOverlay\(\)/);
   assert.match(html, /id="order-client-overlay" class="address-overlay"/);
-  assert.match(html, /Новый заказ · карточка клиента/);
+  assert.match(html, /Новый проект · карточка клиента/);
   assert.doesNotMatch(orderModal, /id="no-newclient"/);
 });
 

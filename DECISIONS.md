@@ -192,6 +192,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - A Lead/Deal may exist before a real customer job is opened, but the normal workflow may not create parallel Order and Project records or separate browser-storage and PostgreSQL versions of the same job.
 - The existing legacy `orders` and modern `Project` split is migration debt, not the target architecture. It must be consolidated with stable ID mapping and data preservation before the duplicate navigation and launch path are removed.
 
+## 2026-09-15 — One visible Projects workspace
+
+- This decision refines the navigation portion of `Order and Project are one lifecycle record`: owner and manager see one `Проекты` entry, one project funnel, one creation action, and one project card from intake through completion. A separate `Заказы` menu is not allowed.
+- `Проект` is the visible lifecycle term in the main CRM. `Заказ-наряд` remains the correct name for the installation work document; technical `orders` keys and historical `R-...` identifiers remain compatibility details until the data migration is complete.
+- The PostgreSQL measurement constructor is exposed as `Проверенные замеры` inside the Projects workspace, not as another competing Projects/Orders navigation item.
+- This UI consolidation does not claim that legacy `db.orders` has already been migrated into relational `Project`. Stable ID mapping and the single PostgreSQL write path remain required before the compatibility store can be removed.
+- Implemented for review in PR #172. Production deployment remains a separate action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

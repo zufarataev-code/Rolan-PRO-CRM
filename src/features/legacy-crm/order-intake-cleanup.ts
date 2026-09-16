@@ -236,7 +236,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         'Клиент и объект',
         'Направление услуги',
         'Услуги проекта',
-        'Создать заказ',
+        'Создать проект',
         'Отмена',
       ].some((marker) => text.includes(marker));
     };
@@ -260,7 +260,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
 
     const cleanupOrderIntake = () => {
       const modal = findSmallestContaining(document.body, [
-        'Новый заказ',
+        'Новый проект',
         'Клиент и объект',
       ]);
       if (!modal) return;
