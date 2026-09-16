@@ -126,3 +126,17 @@ test("each manager-entered window starts preliminary and can be explicitly verif
   assert.match(source, /markWindowMeasurementUnverified\(w\)[\s\S]*invalidateProjectEstimate/);
   assert.match(source, /measurementSource: 'SURVEYOR_VERIFIED'/);
 });
+
+test("project estimate becomes stacked labeled rows on a phone", () => {
+  assert.match(source, /@media \(max-width: 840px\) \{[\s\S]*?\.project-estimate-table-wrap/);
+  assert.match(source, /\.project-estimate-table-wrap \{[\s\S]*?overflow: visible !important/);
+  assert.match(source, /\.project-estimate-table thead \{ display: none; \}/);
+  assert.match(source, /\.project-estimate-table td::before \{[\s\S]*?content: attr\(data-label\)/);
+  assert.match(source, /data-label="Помещение \/ окно"/);
+  assert.match(source, /data-label="Цена клиенту"/);
+  assert.match(source, /data-label="Комментарий"/);
+  assert.match(source, /class="project-estimate-action"/);
+  assert.match(source, /Удалить услугу/);
+  assert.match(source, /Удалить расход/);
+  assert.match(source, /\.project-estimate-footer > div:last-child \{[\s\S]*?grid-template-columns: 1fr/);
+});

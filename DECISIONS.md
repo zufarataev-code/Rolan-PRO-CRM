@@ -222,6 +222,12 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - The measurement modal uses explicit keyed scroll restoration, so browser scroll anchoring is disabled within that modal to prevent a second competing adjustment after render.
 - This correction is implemented in PR #172 and does not authorize an automatic production deployment.
 
+## 2026-09-15 — Project calculation uses labeled mobile rows
+
+- Wide estimate tables remain tables on desktop, but on phone widths each data row becomes a compact labeled record. Horizontal table scrolling is not an acceptable primary interaction for setting prices or internal expenses.
+- Every mobile field retains its business label, destructive actions use complete phrases, and the proposal confirmation action remains reachable without horizontal overflow.
+- This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

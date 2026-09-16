@@ -5222,7 +5222,7 @@
     }
     .project-estimate-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
-  @media (max-width: 560px) {
+  @media (max-width: 840px) {
     input:not([type="checkbox"]):not([type="radio"]),
     select,
     textarea {
@@ -5365,6 +5365,95 @@
     }
     .project-estimate-summary { grid-template-columns: 1fr 1fr; gap: .5rem; }
     .project-estimate-footer { bottom: -.88rem; margin: .9rem -.88rem -.88rem; padding: .75rem .88rem; }
+    .project-estimate-table-wrap {
+      overflow: visible !important;
+      width: 100%;
+      max-width: 100%;
+    }
+    .project-estimate-table {
+      display: block;
+      width: 100%;
+      min-width: 0;
+    }
+    .project-estimate-table thead { display: none; }
+    .project-estimate-table tbody {
+      display: grid;
+      width: 100%;
+      gap: .65rem;
+    }
+    .project-estimate-table tr {
+      display: grid;
+      width: 100%;
+      min-width: 0;
+      gap: .55rem;
+      padding: .72rem;
+      border: 1px solid #dbe4ef;
+      border-radius: 12px;
+      background: #fff;
+    }
+    .project-estimate-table td {
+      display: grid;
+      grid-template-columns: minmax(92px, .75fr) minmax(0, 1.25fr);
+      align-items: center;
+      gap: .55rem;
+      width: 100%;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      text-align: left !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere;
+    }
+    .project-estimate-table td::before {
+      content: attr(data-label);
+      color: #64748b;
+      font-size: .68rem;
+      font-weight: 850;
+      line-height: 1.2;
+    }
+    .project-estimate-table td[colspan] {
+      display: block;
+      padding: .15rem;
+    }
+    .project-estimate-table td[colspan]::before { content: none; }
+    .project-estimate-table input,
+    .project-estimate-table select {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      min-height: 44px;
+      font-size: 16px;
+    }
+    .project-estimate-table td.project-estimate-action {
+      display: block;
+      padding-top: .15rem;
+    }
+    .project-estimate-table td.project-estimate-action::before { content: none; }
+    .project-estimate-table td.project-estimate-action button {
+      width: 100%;
+      min-height: 42px;
+      white-space: nowrap;
+    }
+    .project-estimate-section-head {
+      align-items: stretch;
+    }
+    .project-estimate-section-head > button {
+      width: 100%;
+      min-height: 44px;
+    }
+    .project-estimate-footer {
+      align-items: stretch;
+    }
+    .project-estimate-footer > div:last-child {
+      display: grid;
+      width: 100%;
+      grid-template-columns: 1fr;
+    }
+    .project-estimate-footer button {
+      width: 100%;
+      min-height: 48px;
+      white-space: normal;
+    }
     .calendar-mode-switch {
       width: 100%;
     }
@@ -20747,27 +20836,27 @@ function renderProjectEstimateWorkspace(o) {
     const area = windowActualAreaSqft(win);
     const defaultPrice = win.pricePerSqft ?? o.priceOverridePerSqft ?? cat?.retailPerSqft ?? 0;
     return `<tr>
-      <td><b>${academyEsc(room.name || 'Комната')}</b><br><span class="text-gray-500">${academyEsc(win.name || 'Окно')}</span><br><span class="text-xs ${windowMeasurementIsVerified(win) ? 'text-emerald-700' : 'text-amber-700'}">${windowMeasurementIsVerified(win) ? '✓ точный замер' : 'размер клиента · предварительно'}</span></td>
-      <td>${academyEsc(cat ? `${cat.brand} ${cat.model}` : 'Плёнка не выбрана')}</td>
-      <td class="money">${area.toFixed(2)}</td>
-      <td><input aria-label="Цена за sqft" type="number" min="0" step="0.5" value="${Number(defaultPrice || 0)}" onchange="projectEstimateUpdateWindowPrice('${o.id}','${room.id}','${win.id}',this.value)"></td>
-      <td class="money"><b>${fmtMoney(windowRetailPrice(win, o.complexity || 'standard', o.priceOverridePerSqft))}</b></td>
-      ${canSeeInternalEconomics ? `<td class="money">${fmtMoney(windowFilmCost(win))}</td>` : ''}
+      <td data-label="Помещение / окно"><div><b>${academyEsc(room.name || 'Комната')}</b><br><span class="text-gray-500">${academyEsc(win.name || 'Окно')}</span><br><span class="text-xs ${windowMeasurementIsVerified(win) ? 'text-emerald-700' : 'text-amber-700'}">${windowMeasurementIsVerified(win) ? '✓ точный замер' : 'размер клиента · предварительно'}</span></div></td>
+      <td data-label="Материал">${academyEsc(cat ? `${cat.brand} ${cat.model}` : 'Плёнка не выбрана')}</td>
+      <td data-label="Площадь, sqft" class="money">${area.toFixed(2)}</td>
+      <td data-label="Цена / sqft"><input aria-label="Цена за sqft" type="number" min="0" step="0.5" value="${Number(defaultPrice || 0)}" onchange="projectEstimateUpdateWindowPrice('${o.id}','${room.id}','${win.id}',this.value)"></td>
+      <td data-label="Клиенту" class="money"><b>${fmtMoney(windowRetailPrice(win, o.complexity || 'standard', o.priceOverridePerSqft))}</b></td>
+      ${canSeeInternalEconomics ? `<td data-label="Себестоимость" class="money">${fmtMoney(windowFilmCost(win))}</td>` : ''}
     </tr>`;
   })).join('');
   const serviceRows = (o.extraServices || []).map(line => `<tr>
-    <td><select onchange="projectEstimateUpdateService('${o.id}','${line.id}','type',this.value)">${serviceTypes.map(type => `<option value="${type}" ${line.type===type?'selected':''}>${projectEstimateServiceLabel(type)}</option>`).join('')}</select></td>
-    <td><input value="${academyEsc(line.label || '')}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','label',this.value)"></td>
-    <td><input type="number" min="0" step="1" value="${Number(line.qty || 1)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','qty',this.value)"></td>
-    <td><input type="number" min="0" step="1" value="${Number(line.price || 0)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','price',this.value)"></td>
-    ${canSeeInternalEconomics ? `<td><input type="number" min="0" step="1" value="${Number(line.cost || 0)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','cost',this.value)"></td>` : ''}
-    <td><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteService('${o.id}','${line.id}')">Удалить</button></td>
+    <td data-label="Тип"><select onchange="projectEstimateUpdateService('${o.id}','${line.id}','type',this.value)">${serviceTypes.map(type => `<option value="${type}" ${line.type===type?'selected':''}>${projectEstimateServiceLabel(type)}</option>`).join('')}</select></td>
+    <td data-label="Описание"><input value="${academyEsc(line.label || '')}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','label',this.value)"></td>
+    <td data-label="Количество"><input type="number" min="0" step="1" value="${Number(line.qty || 1)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','qty',this.value)"></td>
+    <td data-label="Цена клиенту"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','price',this.value)"></td>
+    ${canSeeInternalEconomics ? `<td data-label="Себестоимость"><input type="number" min="0" step="1" value="${Number(line.cost || 0)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','cost',this.value)"></td>` : ''}
+    <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteService('${o.id}','${line.id}')">Удалить услугу</button></td>
   </tr>`).join('');
   const expenseRows = (o.extraExpenses || []).map(line => `<tr>
-    <td><select onchange="projectEstimateUpdateExpense('${o.id}','${line.id}','type',this.value)">${expenseTypes.map(type => `<option value="${type}" ${line.type===type?'selected':''}>${projectEstimateExpenseLabel(type)}</option>`).join('')}</select></td>
-    <td><input value="${academyEsc(line.label || '')}" onchange="projectEstimateUpdateExpense('${o.id}','${line.id}','label',this.value)"></td>
-    <td><input type="number" min="0" step="1" value="${Number(line.amount || 0)}" onchange="projectEstimateUpdateExpense('${o.id}','${line.id}','amount',this.value)"></td>
-    <td><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteExpense('${o.id}','${line.id}')">Удалить</button></td>
+    <td data-label="Категория"><select onchange="projectEstimateUpdateExpense('${o.id}','${line.id}','type',this.value)">${expenseTypes.map(type => `<option value="${type}" ${line.type===type?'selected':''}>${projectEstimateExpenseLabel(type)}</option>`).join('')}</select></td>
+    <td data-label="Комментарий"><input value="${academyEsc(line.label || '')}" onchange="projectEstimateUpdateExpense('${o.id}','${line.id}','label',this.value)"></td>
+    <td data-label="Сумма"><input type="number" min="0" step="1" value="${Number(line.amount || 0)}" onchange="projectEstimateUpdateExpense('${o.id}','${line.id}','amount',this.value)"></td>
+    <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteExpense('${o.id}','${line.id}')">Удалить расход</button></td>
   </tr>`).join('');
   const costLines = [
     ['Плёнка и отход', pss.film], ['Монтажники', pss.installers], ['Транспорт', pss.gas],
@@ -20787,17 +20876,17 @@ function renderProjectEstimateWorkspace(o) {
 
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>1. Замер и материалы</h4><div class="text-xs text-gray-500">Площадь и материал берутся из замера. Здесь назначается цена продажи.</div></div></div>
-      <div class="overflow-x-auto"><table class="project-estimate-table"><thead><tr><th>Помещение / окно</th><th>Материал</th><th class="money">sqft</th><th>Цена продажи / sqft</th><th class="money">Клиенту</th>${canSeeInternalEconomics ? '<th class="money">Себестоимость материала</th>' : ''}</tr></thead><tbody>${materialRows || `<tr><td colspan="${canSeeInternalEconomics ? 6 : 5}" class="text-gray-500">Сначала завершите замер.</td></tr>`}</tbody></table></div>
+      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Помещение / окно</th><th>Материал</th><th class="money">sqft</th><th>Цена продажи / sqft</th><th class="money">Клиенту</th>${canSeeInternalEconomics ? '<th class="money">Себестоимость материала</th>' : ''}</tr></thead><tbody>${materialRows || `<tr><td colspan="${canSeeInternalEconomics ? 6 : 5}" class="text-gray-500">Сначала завершите замер.</td></tr>`}</tbody></table></div>
     </section>
 
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>2. Дополнительные услуги</h4><div class="text-xs text-gray-500">Попадут в КП и увеличат цену для клиента.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddService('${o.id}','washing')">+ Добавить услугу</button></div>
-      <div class="overflow-x-auto"><table class="project-estimate-table"><thead><tr><th>Тип</th><th>Описание</th><th>Кол-во</th><th>Цена клиенту, всего</th>${canSeeInternalEconomics ? '<th>Себестоимость</th>' : ''}<th></th></tr></thead><tbody>${serviceRows || `<tr><td colspan="${canSeeInternalEconomics ? 6 : 5}" class="text-gray-500">Дополнительных услуг нет.</td></tr>`}</tbody></table></div>
+      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Тип</th><th>Описание</th><th>Кол-во</th><th>Цена клиенту, всего</th>${canSeeInternalEconomics ? '<th>Себестоимость</th>' : ''}<th></th></tr></thead><tbody>${serviceRows || `<tr><td colspan="${canSeeInternalEconomics ? 6 : 5}" class="text-gray-500">Дополнительных услуг нет.</td></tr>`}</tbody></table></div>
     </section>
 
     ${canSeeInternalEconomics ? `<section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>3. Прямые расходы проекта</h4><div class="text-xs text-gray-500">Не показываются клиенту, но уменьшают прибыль и маржу.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddExpense('${o.id}','other')">+ Добавить расход</button></div>
-      <div class="overflow-x-auto"><table class="project-estimate-table"><thead><tr><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead><tbody>${expenseRows || '<tr><td colspan="4" class="text-gray-500">Дополнительных расходов нет.</td></tr>'}</tbody></table></div>
+      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead><tbody>${expenseRows || '<tr><td colspan="4" class="text-gray-500">Дополнительных расходов нет.</td></tr>'}</tbody></table></div>
     </section>` : ''}
 
     <section class="project-estimate-section">

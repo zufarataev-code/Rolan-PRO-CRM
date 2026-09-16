@@ -299,6 +299,13 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification: the local preview remained on the second window after its removal checkbox rebuilt the modal; all 245 automated tests, TypeScript, and the production build passed locally.
 - This correction extends PR #172 and does not authorize an automatic production deployment.
 
+### 2026-09-15 correction — project calculation is usable on phones
+
+- The Project calculation modal now converts material, additional-service, and direct-expense tables into labeled stacked rows below 840px instead of retaining a 720px minimum width.
+- Inputs and selects use the full available row width, destructive actions have explicit full labels, section actions become full-width touch targets, and the sticky approval footer stacks its actions without horizontal clipping.
+- The responsive breakpoint is aligned with the modal shell at 840px, preventing a mobile modal from containing the desktop table. Visual verification at a 390×844 phone viewport showed labeled material rows and both footer actions fully inside the screen.
+- This correction extends PR #172 and does not authorize an automatic production deployment.
+
 ### 2026-09-15 correction — preliminary customer dimensions versus verified field dimensions
 
 - A manager may create and price a Project from dimensions supplied by the customer. Those windows are stored as `CUSTOMER / UNVERIFIED`, remain clearly marked as preliminary, and do not block calculation or proposal generation.
