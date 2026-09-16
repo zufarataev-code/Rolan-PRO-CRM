@@ -3272,6 +3272,148 @@
     border-radius: 999px;
     display: inline-block;
   }
+  .dispatch-workspace {
+    display: grid;
+    grid-template-columns: minmax(620px, 1.04fr) minmax(420px, .96fr);
+    min-height: 660px;
+    border: 1px solid #dbe4ef;
+    border-radius: 14px;
+    background: #fff;
+    overflow: hidden;
+    box-shadow: 0 12px 30px rgba(15,23,42,.07);
+  }
+  .dispatch-calendar-pane,
+  .dispatch-map-pane {
+    min-width: 0;
+    background: #fff;
+  }
+  .dispatch-calendar-pane {
+    border-right: 1px solid #dbe4ef;
+  }
+  .dispatch-week-head {
+    display: grid;
+    grid-template-columns: 62px repeat(7, minmax(76px, 1fr));
+    min-width: 720px;
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    border-bottom: 1px solid #dbe4ef;
+    background: #f8fafc;
+  }
+  .dispatch-week-head > div {
+    min-height: 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-left: 1px solid #e2e8f0;
+    color: #475569;
+    font-size: .7rem;
+    font-weight: 850;
+  }
+  .dispatch-week-head > div:first-child { border-left: 0; }
+  .dispatch-week-head .today {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+  .dispatch-week-scroll {
+    max-height: 610px;
+    overflow: auto;
+  }
+  .dispatch-time-grid {
+    display: grid;
+    grid-template-columns: 62px repeat(7, minmax(76px, 1fr));
+    min-width: 720px;
+    position: relative;
+    background: #fff;
+  }
+  .dispatch-time-gutter,
+  .dispatch-day-column {
+    position: relative;
+    min-height: var(--dispatch-grid-height);
+  }
+  .dispatch-day-column {
+    border-left: 1px solid #e2e8f0;
+    background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--dispatch-hour-height) - 1px), #e2e8f0 calc(var(--dispatch-hour-height) - 1px), #e2e8f0 var(--dispatch-hour-height));
+  }
+  .dispatch-day-column.today { background-color: #f8fbff; }
+  .dispatch-hour-label {
+    position: absolute;
+    left: 0;
+    right: .45rem;
+    transform: translateY(-.52em);
+    color: #64748b;
+    font-size: .66rem;
+    font-weight: 750;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .dispatch-event {
+    position: absolute;
+    z-index: 2;
+    display: block;
+    min-height: 28px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--event-color) 50%, #fff);
+    border-left: 4px solid var(--event-color);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--event-color) 14%, #fff);
+    color: #0f172a;
+    padding: .25rem .3rem;
+    text-align: left;
+    box-shadow: 0 2px 5px rgba(15,23,42,.10);
+  }
+  .dispatch-event:hover,
+  .dispatch-event:focus-visible {
+    z-index: 5;
+    outline: 2px solid color-mix(in srgb, var(--event-color) 52%, #fff);
+    box-shadow: 0 8px 18px rgba(15,23,42,.18);
+  }
+  .dispatch-event-time {
+    color: color-mix(in srgb, var(--event-color) 78%, #0f172a);
+    font-size: .65rem;
+    line-height: 1;
+    font-weight: 950;
+  }
+  .dispatch-event-title {
+    margin-top: .14rem;
+    font-size: .69rem;
+    line-height: 1.08;
+    font-weight: 950;
+    overflow-wrap: anywhere;
+  }
+  .dispatch-event-meta {
+    margin-top: .14rem;
+    color: #475569;
+    font-size: .61rem;
+    line-height: 1.08;
+    overflow-wrap: anywhere;
+  }
+  .dispatch-map-toolbar {
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    flex-wrap: wrap;
+    padding: .45rem .6rem;
+    border-bottom: 1px solid #dbe4ef;
+    background: #f8fafc;
+  }
+  .dispatch-map-canvas {
+    width: 100%;
+    height: 610px;
+    background: #f1f5f9;
+  }
+  .dispatch-map-time-label {
+    border: 1px solid rgba(15,23,42,.18);
+    border-radius: 5px;
+    background: #fef9c3;
+    color: #0f172a;
+    padding: 1px 4px;
+    box-shadow: 0 1px 3px rgba(15,23,42,.18);
+    font-size: 10px;
+    font-weight: 900;
+  }
   @media (max-width: 1100px) {
     .calendar-day-layout,
     .calendar-kpi-grid {
@@ -3280,6 +3422,9 @@
     .calendar-lanes {
       grid-template-columns: repeat(4, minmax(240px, 82vw));
     }
+    .dispatch-workspace { grid-template-columns: 1fr; }
+    .dispatch-calendar-pane { border-right: 0; border-bottom: 1px solid #dbe4ef; }
+    .dispatch-map-canvas { height: 460px; }
   }
   @media (max-width: 760px) {
     .calendar-month-grid {
@@ -3295,6 +3440,9 @@
     .calendar-mode-switch button {
       flex: 1;
     }
+    .dispatch-workspace { min-height: 0; border-radius: 10px; }
+    .dispatch-week-scroll { max-height: 62vh; }
+    .dispatch-map-canvas { height: 52vh; min-height: 360px; }
   }
   .map-area-stat {
     border: 1px solid #e2e8f0;
@@ -28609,12 +28757,25 @@ function calendarRoleFilterValue() {
   if (u.role === 'measurer' || u.role === 'installer') return 'my';
   return state.calendarRoleFilter || 'all';
 }
+function calendarAssigneeFilterValue() {
+  const u = currentUser();
+  if (!u) return 'all';
+  if (u.role === 'measurer' || u.role === 'installer') return u.id;
+  return state.calendarAssigneeFilter || 'all';
+}
+function calendarEventAssigneeIds(o, eventType) {
+  if (eventType === 'measure') return [o.measurerId].filter(Boolean);
+  if (eventType === 'install') return (o.installerIds || []).filter(Boolean);
+  return [o.managerId].filter(Boolean);
+}
 function orderMatchesCalendarRole(o, eventType) {
   const u = currentUser();
   if (!u) return true;
   if (!orderUserCanAccess(o, u)) return false;
   if (u.role === 'measurer') return eventType === 'measure' && o.measurerId === u.id;
   if (u.role === 'installer') return eventType === 'install' && (o.installerIds || []).includes(u.id);
+  const assignee = calendarAssigneeFilterValue();
+  if (assignee !== 'all' && !calendarEventAssigneeIds(o, eventType).includes(assignee)) return false;
   const filter = calendarRoleFilterValue();
   if (filter === 'mine') return o.managerId === u.id;
   if (filter === 'consultations') return eventType === 'consultation';
@@ -28783,7 +28944,7 @@ async function renderMapForDay(containerId, dateObj, opts) {
     items = calItemsInRange(periodStart, periodEnd);
     // Plus active orders WITHOUT a scheduled date (so we still see addresses)
     const scheduledIds = new Set(items.map(x => x.o.id));
-    calActiveOrdersWithAddress().forEach(o => {
+    if (!opts.scheduledOnly) calActiveOrdersWithAddress().forEach(o => {
       if (!scheduledIds.has(o.id)) items.push({ o, kind: 'pending', dt: null });
     });
   } else if (dateObj) {
@@ -28797,10 +28958,11 @@ async function renderMapForDay(containerId, dateObj, opts) {
 
   const today = new Date(); today.setHours(0,0,0,0);
   const coords = [];
-  const orderById = new Map(); // dedupe by orderId so a single order appears once even with both measure+install
+  const eventKeys = new Set();
   for (const it of items) {
-    if (orderById.has(it.o.id)) continue;
-    orderById.set(it.o.id, it);
+    const eventKey = `${it.o.id}:${it.kind}:${it.dt ? it.dt.toISOString() : 'pending'}`;
+    if (eventKeys.has(eventKey)) continue;
+    eventKeys.add(eventKey);
     const o = it.o;
     const c = getClient(o.clientId);
     const projectAddress = orderAddress(o, c);
@@ -28821,6 +28983,7 @@ async function renderMapForDay(containerId, dateObj, opts) {
         `<span style="color:${service.color}">${service.icon} ${service.short}</span><br>` +
         (installers ? `👷 ${installers}<br>` : '') +
         `<a href="#/order/${o.id}">Открыть заказ →</a>`);
+    if (it.dt) m.bindTooltip(calendarTimeLabel(it.dt), { permanent:true, direction:'bottom', offset:[0,8], className:'dispatch-map-time-label' });
     _mapMarkers.push(m);
     coords.push(coord);
   }
@@ -30255,6 +30418,95 @@ function calMeasurementsOnDay(dateObj) {
   });
 }
 
+const DISPATCH_START_HOUR = 6;
+const DISPATCH_END_HOUR = 21;
+const DISPATCH_HOUR_HEIGHT = 64;
+
+function calendarEventDurationMinutes(ev) {
+  const field = ({ consultation:'consultationDurationMinutes', measure:'measurementDurationMinutes', install:'installationDurationMinutes', complaint:'complaintDurationMinutes' })[ev.kind];
+  const configured = Number(field && ev.o?.[field]);
+  if (configured > 0) return Math.min(configured, 8 * 60);
+  return ({ consultation:60, measure:90, install:180, complaint:90 })[ev.kind] || 60;
+}
+function calendarWeekDayLayouts(events) {
+  const dayStartMinutes = DISPATCH_START_HOUR * 60;
+  const dayEndMinutes = DISPATCH_END_HOUR * 60;
+  const items = events.map(ev => {
+    const start = ev.dt.getHours() * 60 + ev.dt.getMinutes();
+    const end = Math.min(dayEndMinutes, start + calendarEventDurationMinutes(ev));
+    return { ev, start: Math.max(dayStartMinutes, start), end: Math.max(dayStartMinutes + 30, end), lane: 0, laneCount: 1 };
+  }).filter(item => item.start < dayEndMinutes).sort((a,b) => a.start - b.start || a.end - b.end);
+  let group = [];
+  let groupEnd = -1;
+  const closeGroup = () => {
+    if (!group.length) return;
+    const laneCount = Math.max(1, ...group.map(item => item.lane + 1));
+    group.forEach(item => { item.laneCount = laneCount; });
+    group = [];
+    groupEnd = -1;
+  };
+  items.forEach(item => {
+    if (group.length && item.start >= groupEnd) closeGroup();
+    const active = group.filter(other => other.end > item.start);
+    const used = new Set(active.map(other => other.lane));
+    let lane = 0;
+    while (used.has(lane)) lane++;
+    item.lane = lane;
+    group.push(item);
+    groupEnd = Math.max(groupEnd, item.end);
+  });
+  closeGroup();
+  return items;
+}
+function renderDispatchEvent(layout) {
+  const { ev } = layout;
+  const o = ev.o;
+  const c = getClient(o.clientId);
+  const pal = calendarEventPalette(ev.kind);
+  const top = (layout.start - DISPATCH_START_HOUR * 60) / 60 * DISPATCH_HOUR_HEIGHT;
+  const height = Math.max(34, (layout.end - layout.start) / 60 * DISPATCH_HOUR_HEIGHT - 3);
+  const width = 100 / layout.laneCount;
+  const left = width * layout.lane;
+  const address = orderAddress(o, c) || 'Адрес не указан';
+  return `<button class="dispatch-event" style="--event-color:${pal.color};top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px)" onclick="openOrder('${o.id}')" title="${academyEsc(ev.info.title)} · ${academyEsc(c?.name || '')} · ${academyEsc(address)}"><div class="dispatch-event-time">${calendarTimeLabel(ev.dt)} · ${academyEsc(ev.info.short)}</div><div class="dispatch-event-title">${academyEsc(calendarEventPeople(ev))} · ${academyEsc(c?.name || 'Без клиента')}</div><div class="dispatch-event-meta">${academyEsc(address)}</div></button>`;
+}
+function renderDispatchWeek(anchor) {
+  const range = calendarRangeForMode(anchor, 'week');
+  const today = new Date(); today.setHours(0,0,0,0);
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(range.start);
+    day.setDate(day.getDate() + index);
+    return day;
+  });
+  const height = (DISPATCH_END_HOUR - DISPATCH_START_HOUR) * DISPATCH_HOUR_HEIGHT;
+  const locale = state.lang === 'ru' ? 'ru-RU' : 'en-US';
+  return `<section class="dispatch-calendar-pane"><div class="dispatch-week-head"><div></div>${days.map(day => `<div class="${day.getTime() === today.getTime() ? 'today' : ''}"><span>${academyEsc(day.toLocaleDateString(locale,{weekday:'short'}))}</span><b>${day.getDate()}</b></div>`).join('')}</div><div class="dispatch-week-scroll"><div class="dispatch-time-grid" style="--dispatch-hour-height:${DISPATCH_HOUR_HEIGHT}px;--dispatch-grid-height:${height}px"><div class="dispatch-time-gutter">${Array.from({length:DISPATCH_END_HOUR-DISPATCH_START_HOUR+1},(_,index) => `<span class="dispatch-hour-label" style="top:${index * DISPATCH_HOUR_HEIGHT}px">${String(DISPATCH_START_HOUR + index).padStart(2,'0')}:00</span>`).join('')}</div>${days.map(day => {
+    const events = calendarEventsOnDayFull(day);
+    return `<div class="dispatch-day-column ${day.getTime() === today.getTime() ? 'today' : ''}">${calendarWeekDayLayouts(events).map(renderDispatchEvent).join('')}</div>`;
+  }).join('')}</div></div></section>`;
+}
+function renderDispatchMap(anchor) {
+  const range = calendarRangeForMode(anchor, 'week');
+  setTimeout(() => renderMapForDay('cal-map', range.start, { showAll:true, periodStart:range.start, periodEnd:range.end, scheduledOnly:true }), 80);
+  return `<aside class="dispatch-map-pane"><div class="dispatch-map-toolbar"><button class="btn-primary text-sm" onclick="buildRouteOnMap()">🧭 Маршрут</button><button class="btn-ghost text-sm" onclick="clearRouteOnMap()">Очистить</button><button class="btn-ghost text-sm" onclick="state.calendarMapStayLocal=!state.calendarMapStayLocal; render();">${state.calendarMapStayLocal!==false?'Все адреса':'Только LA'}</button><span id="route-info" class="text-sm font-semibold text-slate-800"></span><span id="map-status" class="text-xs text-gray-500"></span></div><div id="cal-map" class="dispatch-map-canvas"><div class="flex items-center justify-center h-full text-sm text-gray-400">Загрузка карты…</div></div></aside>`;
+}
+
+function openCalendarSchedulePicker() {
+  const orders = visibleOrdersForUser(currentUser()).filter(order => !['completed','review_received'].includes(order.status));
+  if (!orders.length) return alert('Нет активных проектов для назначения.');
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-5" style="max-width:34rem" onclick="event.stopPropagation()"><div class="flex items-center justify-between gap-3"><h3 class="text-xl font-black">Назначить работу</h3><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div><div class="grid grid-cols-1 gap-3 mt-4"><label>Проект<select id="calendar-schedule-order">${orders.map(order => { const client = getClient(order.clientId); return `<option value="${order.id}">${academyEsc(order.number)} · ${academyEsc(client?.name || 'Без клиента')} · ${academyEsc(orderAddress(order, client) || 'без адреса')}</option>`; }).join('')}</select></label><label>Работа<select id="calendar-schedule-kind"><option value="consultation">Консультация</option><option value="measure">Замер</option><option value="install">Монтаж</option></select></label></div><div class="flex justify-end mt-4"><button class="btn-primary" onclick="confirmCalendarSchedulePicker()">Выбрать время →</button></div></div></div>`;
+  render();
+}
+function confirmCalendarSchedulePicker() {
+  const orderId = document.getElementById('calendar-schedule-order')?.value;
+  const kind = document.getElementById('calendar-schedule-kind')?.value;
+  if (!orderId) return;
+  closeModal();
+  if (kind === 'measure') return scheduleMeasurementPrompt(orderId);
+  if (kind === 'install') return scheduleInstallationPrompt(orderId);
+  return scheduleConsultationPrompt(orderId);
+}
+
 function renderCalendarMap(anchor, mode) {
   // Default mode: show all in period
   if (state.calendarMapShowAll == null) state.calendarMapShowAll = true;
@@ -30336,6 +30588,7 @@ function renderCalendar() {
   const mode = state.calendarMode || 'week';
   const u = currentUser();
   const canRoleFilter = u && (u.role === 'owner' || u.role === 'manager');
+  const dispatchStaff = canRoleFilter ? db.users.filter(user => user.isActive !== false && ['owner','manager','measurer','installer'].includes(user.role)) : [];
   const today = new Date(); today.setHours(0,0,0,0);
   const anchor = calStartDate();
   const range = calendarRangeForMode(anchor, mode);
@@ -30360,6 +30613,7 @@ function renderCalendar() {
       <button class="btn-ghost" onclick="calToday()">${T('today')}</button>
       <button class="btn-ghost" onclick="${nextAction}">${T('next')}</button>
       <div class="font-black text-slate-900 ml-1">${academyEsc(headerLabel)}</div>
+      ${canRoleFilter ? '<button class="btn-primary" onclick="openCalendarSchedulePicker()">+ Назначить работу</button>' : ''}
       ${canRoleFilter ? `
         <select class="w-auto text-sm" onchange="state.calendarRoleFilter=this.value; render();">
           <option value="all" ${calendarRoleFilterValue()==='all'?'selected':''}>${u?.role === 'owner' ? 'Все события' : 'Все мои события'}</option>
@@ -30369,9 +30623,13 @@ function renderCalendar() {
           <option value="installations" ${calendarRoleFilterValue()==='installations'?'selected':''}>Монтажи</option>
           <option value="complaints" ${calendarRoleFilterValue()==='complaints'?'selected':''}>Рекламации</option>
         </select>
+        <select class="w-auto text-sm" onchange="state.calendarAssigneeFilter=this.value; render();">
+          <option value="all" ${calendarAssigneeFilterValue()==='all'?'selected':''}>Все сотрудники</option>
+          ${dispatchStaff.map(user => `<option value="${user.id}" ${calendarAssigneeFilterValue()===user.id?'selected':''}>${academyEsc(user.name)} · ${academyEsc(T(user.role))}</option>`).join('')}
+        </select>
       ` : `<span class="tag">${u?.role === 'measurer' ? 'Мои замеры' : u?.role === 'installer' ? 'Мои монтажи' : 'Мой график'}</span>`}
       <div class="flex-1"></div>
-      <button class="btn-ghost" onclick="state.calendarShowMap=!state.calendarShowMap; render();">${state.calendarShowMap ? '🗺 Скрыть карту' : '🗺 Показать карту'}</button>
+      ${mode === 'week' ? '<span class="tag">Календарь + карта</span>' : `<button class="btn-ghost" onclick="state.calendarShowMap=!state.calendarShowMap; render();">${state.calendarShowMap ? '🗺 Скрыть карту' : '🗺 Показать карту'}</button>`}
     </div>
     <div class="mt-3">
       ${renderCalendarLegend()}
@@ -30379,14 +30637,8 @@ function renderCalendar() {
   </div>
   `;
 
-  /**
-   * Карта показывается ПОД графиком, а не над ним.
-   *
-   * Раньше она стояла сразу после панели и занимала весь первый экран:
-   * карточки событий — то, ради чего календарь открывают — оказывались
-   * ниже сгиба, и до них нужно было прокручивать мимо карты.
-   * Для планирования маршрута карта нужна, но не первой.
-   */
+  // Day and month keep the optional detail map below their primary view.
+  // Week mode uses the permanent side-by-side dispatch workspace instead.
   const mapBlock = state.calendarShowMap ? renderCalendarMap(anchor, mode) : '';
 
   if (mode === 'day') {
@@ -30394,6 +30646,7 @@ function renderCalendar() {
   }
 
   if (mode === 'week') {
+    return toolbar + `<div class="dispatch-workspace">${renderDispatchWeek(anchor)}${renderDispatchMap(anchor)}</div>`;
     const monday = range.start;
     const days = [];
     for (let i = 0; i < 7; i++) {
