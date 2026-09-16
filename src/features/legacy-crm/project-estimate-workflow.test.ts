@@ -31,7 +31,8 @@ test("manager prices the proposal without seeing owner-only project economics", 
   assert.match(source, /user\.role === 'owner' && orderUserOwns\(order, user\)/);
   assert.match(source, /canSeeInternalEconomics \? '<th class="money">Себестоимость материала<\/th>' : ''/);
   assert.match(source, /canSeeInternalEconomics \? `<section class="project-estimate-section">[\s\S]*?3\. Прямые расходы проекта/);
-  assert.match(source, /canSeeInternalEconomics \? `<div><label>Расстояние, км[\s\S]*?<label>Маркетинг, \$<\/label>/);
+  assert.match(source, /canSeeInternalEconomics \? `<div><label>Расстояние, км/);
+  assert.doesNotMatch(source, /projectEstimateUpdateSetting\([^\n]+['"]marketing['"]/);
   assert.match(source, /Менеджер назначает только цену продажи, которая попадёт в КП/);
   assert.match(source, /if \(!state\.orderClassicMode \|\| u\.role !== 'owner'\)/);
 });

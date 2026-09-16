@@ -8219,8 +8219,53 @@ function orderFilmCutMaterialCost(o) {
   return ids.reduce((sum, id) => {
     const cat = getCatalogItem(id);
     if (!cat) return sum;
-    return sum + usage[id].consumedSqft * (Number(cat.costPerSqft) || 0);
+    return sum + filmInventoryMaterialCost(id, usage[id], Number(cat.costPerSqft) || 0);
   }, 0);
+}
+
+// Cost the cut plan against the real warehouse lots. A roll receipt stores the
+// total purchase cost and original length, so consuming one metre consumes the
+// same share of that lot's cost. Narrower suitable rolls are used first; the
+// catalog cost remains a safe fallback for an unpriced lot or stock shortage.
+function filmInventoryMaterialCost(catalogId, usage, catalogCostPerSqft = 0) {
+  const rolls = inventoryByCatalogId(catalogId).map(roll => ({
+    roll,
+    remainingM: Math.max(0, Number(roll.remainingLengthM) || 0),
+  }));
+  const requirements = Object.entries(usage?.widths || {})
+    .map(([width, lengthM]) => ({ width: Number(width) || 0, lengthM: Number(lengthM) || 0 }))
+    .filter(item => item.width > 0 && item.lengthM > 0)
+    .sort((a, b) => b.width - a.width);
+  if (!requirements.length) return (Number(usage?.consumedSqft) || 0) * catalogCostPerSqft;
+
+  let total = 0;
+  requirements.forEach(requirement => {
+    let outstandingM = requirement.lengthM;
+    const fitting = rolls
+      .filter(item => item.remainingM > 0.001 && filmCutRollFits(item.roll.widthMm, requirement.width))
+      .sort((a, b) => {
+        const widthDiff = filmCutCanonicalRollWidthMm(a.roll.widthMm) - filmCutCanonicalRollWidthMm(b.roll.widthMm);
+        if (widthDiff) return widthDiff;
+        return String(a.roll.dateReceived || '').localeCompare(String(b.roll.dateReceived || ''));
+      });
+    fitting.forEach(item => {
+      if (outstandingM <= 0.001) return;
+      const takeM = Math.min(outstandingM, item.remainingM);
+      const originalM = Number(item.roll.originalLengthM) || 0;
+      const lotCost = Number(item.roll.costTotal) || 0;
+      if (originalM > 0 && lotCost > 0) {
+        total += takeM * lotCost / originalM;
+      } else {
+        total += mm2_to_sqft(requirement.width * takeM * 1000) * catalogCostPerSqft;
+      }
+      item.remainingM -= takeM;
+      outstandingM -= takeM;
+    });
+    if (outstandingM > 0.001) {
+      total += mm2_to_sqft(requirement.width * outstandingM * 1000) * catalogCostPerSqft;
+    }
+  });
+  return total;
 }
 
 // ---------- WINDOW DRAWING ENGINE (professional technical sketches) ----------
@@ -13872,7 +13917,10 @@ function orderPSS(o) {
   const rent = orderRentExpense(o);
   const extraSvcCost = orderExtraServicesCost(o);
   const manualExp = orderManualExpensesTotal(o);
-  const marketing = Number(o.marketing) || 0;
+  // Advertising belongs to channel/CAC reporting, not to a manager's Project
+  // estimate. Keeping the key at zero preserves old callers without charging
+  // the same Google Ads spend once per Project (and again in company OpEx).
+  const marketing = 0;
   return {
     film, installers, gas, manager: mgr, measurer: meas,
     consumables: consum, rent, extraServicesCost: extraSvcCost, manual: manualExp,
@@ -20501,7 +20549,7 @@ function renderProjectEstimateWorkspace(o) {
     ['Плёнка и отход', pss.film], ['Монтажники', pss.installers], ['Транспорт', pss.gas],
     ['Менеджер', pss.manager], ['Замерщик', pss.measurer], ['Расходники', pss.consumables],
     ['Аренда', pss.rent], ['Себестоимость доп. услуг', pss.extraServicesCost],
-    ['Прямые расходы', pss.manual], ['Маркетинг', pss.marketing],
+    ['Прямые расходы', pss.manual],
   ];
   return `
     <div class="project-estimate-summary">
@@ -20533,7 +20581,7 @@ function renderProjectEstimateWorkspace(o) {
       <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
         <div><label>Сложность</label><select onchange="projectEstimateUpdateSetting('${o.id}','complexity',this.value)">${['standard','ladder','tower','alpinism'].map(key => `<option value="${key}" ${(o.complexity||'standard')===key?'selected':''}>${T('complexity'+key.charAt(0).toUpperCase()+key.slice(1))} ×${db.settings.complexityCoefs[key].toFixed(2)}</option>`).join('')}</select></div>
         <div><label>Цена продажи / sqft</label><input type="number" min="0" step="0.5" value="${o.priceOverridePerSqft == null ? '' : Number(o.priceOverridePerSqft)}" placeholder="Из каталога" onchange="projectEstimateUpdateSetting('${o.id}','priceOverridePerSqft',this.value)"></div>
-        ${canSeeInternalEconomics ? `<div><label>Расстояние, км</label><input type="number" min="0" step="1" value="${Number(o.distanceKm || 0)}" onchange="projectEstimateUpdateSetting('${o.id}','distanceKm',this.value)"></div><div><label>Маркетинг, $</label><input type="number" min="0" step="1" value="${Number(o.marketing || 0)}" onchange="projectEstimateUpdateSetting('${o.id}','marketing',this.value)"></div>` : ''}
+        ${canSeeInternalEconomics ? `<div><label>Расстояние, км</label><input type="number" min="0" step="1" value="${Number(o.distanceKm || 0)}" onchange="projectEstimateUpdateSetting('${o.id}','distanceKm',this.value)"></div>` : ''}
       </div>
       ${canSeeInternalEconomics ? `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">${costLines.map(([label, amount]) => `<div class="order-clean-list-row"><span>${label}</span><b>${fmtMoney(amount)}</b></div>`).join('')}</div><div class="order-clean-list-row mt-2" style="border-top:2px solid #cbd5e1"><span><b>Общая себестоимость проекта</b></span><b class="text-red-600">${fmtMoney(pss.total)}</b></div>` : ''}
     </section>

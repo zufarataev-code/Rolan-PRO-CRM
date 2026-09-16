@@ -180,6 +180,7 @@ This file records durable decisions. Current activity, blockers, and next steps 
 
 - The Project calculation is the required source for the Proposal. A manager may edit measured quantity, selected material, sale price, customer-facing add-ons, and the final customer amount.
 - Material purchase cost, payroll, marketing, direct expenses, production cost, profit, and margin are internal company economics visible and editable only by the owner. They must not appear as manager Project fields or block the manager from preparing a complete Proposal.
+- Project material cost is calculated from the cut plan and the actual purchase cost of suitable warehouse lots. The catalog `costPerSqft` is only a fallback when a lot has no recorded cost or stock is short. Installer and operating rates come from owner-managed reference settings; managers never re-enter them in a Project. Marketing attribution belongs to lead-source reporting and is not a manual Project estimate input.
 - This is a permission boundary inside the same Project, not a separate estimate, order, accounting Project, or duplicated storage record.
 - This correction is implemented in PR #172 and does not authorize an automatic production deployment.
 
