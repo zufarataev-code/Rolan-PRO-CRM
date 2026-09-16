@@ -264,6 +264,11 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #169 merged to `main` as `21d304a4af149172f9d5faea4325ceb248c0bd79`. Main CI run #34933721970 passed Prisma generation, 220 tests, TypeScript, and the production build. Production deploy run #34933844649 succeeded and confirmed that the server is serving the same commit.
 - Production smoke: the public login responds successfully and `/legacy-crm` remains session-protected. No customer, order, measurement, film, or employee record was edited during smoke verification.
 
+### 2026-09-15 correction — add service from the Project
+
+- The canonical Project no longer keeps a permanent service dropdown on the page. Owner and manager use one `+ Добавить услугу` button, then choose from a compact list containing only services not already present in that Project.
+- The selected service is still added as an existing `ProjectPosition` through the canonical PostgreSQL API. The incoming lead service remains unchanged, and no second order or Project is created.
+
 ## Completion rule
 
 A task is shared and complete only when all applicable statements are true:

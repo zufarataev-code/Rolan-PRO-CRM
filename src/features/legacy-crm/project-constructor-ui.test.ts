@@ -88,3 +88,11 @@ test("surveyor uses assigned canonical projects without finance controls", () =>
   assert.match(legacyCrm, /currentUser\(\)\?\.role === 'measurer'/);
   assert.match(legacyCrm, /sourceSelect\.disabled = true/);
 });
+
+test("project adds another service from one button and a filtered service list", () => {
+  assert.match(legacyCrm, /onclick="openCanonicalProjectServicePicker\(\)"/);
+  assert.match(legacyCrm, /function canonicalAvailableProjectServices/);
+  assert.match(legacyCrm, /existing\.has\(service\.service_type_id\)/);
+  assert.match(legacyCrm, /addCanonicalProjectService\('\$\{service\.service_type_id\}'\)/);
+  assert.doesNotMatch(legacyCrm, /id="cp-add-service"/);
+});
