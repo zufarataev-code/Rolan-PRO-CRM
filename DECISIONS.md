@@ -216,6 +216,12 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - The interaction model intentionally follows the proven TintWiz scheduler principles documented by TintWiz: side-by-side calendar/map, appointment and team-member filters, and scheduling an assignee against an existing Project. Rolan PRO retains its own UI, terminology, permissions, Project model, and implementation.
 - Implemented for review in PR #172. Production deployment remains a separate action.
 
+## 2026-09-15 — Measurement editing preserves operator position
+
+- The legacy manager measurement workspace may rebuild its HTML to keep totals, film, and removal calculations current, but those rebuilds must preserve the active room, focused field, vertical position, and horizontal service/room strip positions.
+- The measurement modal uses explicit keyed scroll restoration, so browser scroll anchoring is disabled within that modal to prevent a second competing adjustment after render.
+- This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

@@ -292,6 +292,13 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification after the room-control correction: all 244 automated tests passed, TypeScript passed, and the production build completed locally.
 - This correction extends PR #172. Existing measurements migrate without deletion, and production deployment remains separate.
 
+### 2026-09-15 correction — measurement screen position is stable during editing
+
+- Measurement actions that rebuild the modal now capture the active scroll containers before changing modal state and restore them synchronously and again on the next animation frame after layout settles.
+- Browser scroll anchoring is disabled only inside the manager measurement modal because that workspace uses explicit keyed scroll restoration. Selecting film, toggling removal, changing dimensions, adding an opening, or switching an opening type must no longer jump the screen to the top.
+- Verification: the local preview remained on the second window after its removal checkbox rebuilt the modal; all 245 automated tests, TypeScript, and the production build passed locally.
+- This correction extends PR #172 and does not authorize an automatic production deployment.
+
 ### 2026-09-15 correction — preliminary customer dimensions versus verified field dimensions
 
 - A manager may create and price a Project from dimensions supplied by the customer. Those windows are stored as `CUSTOMER / UNVERIFIED`, remain clearly marked as preliminary, and do not block calculation or proposal generation.

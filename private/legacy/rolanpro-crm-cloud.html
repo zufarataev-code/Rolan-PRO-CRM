@@ -1611,12 +1611,14 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    overflow-anchor: none;
   }
   .manager-measure-body {
     min-height: 0;
     overflow: auto;
     padding: 1rem;
     background: #f8fafc;
+    overflow-anchor: none;
   }
   .manager-measure-header,
   .manager-measure-footer {
@@ -15270,6 +15272,16 @@ function restoreRenderPosition(snapshot) {
 }
 
 let __lastRenderedHtml = '';
+let __pendingRenderPosition = null;
+
+function preservePositionForNextRender(snapshot = captureRenderPosition()) {
+  if (!__pendingRenderPosition) __pendingRenderPosition = snapshot;
+}
+
+function restoreRenderPositionStable(snapshot) {
+  restoreRenderPosition(snapshot);
+  requestAnimationFrame(() => restoreRenderPosition(snapshot));
+}
 
 /**
  * Перерисовка не чаще одного раза за кадр.
@@ -15301,7 +15313,8 @@ function render() {
  */
 function renderNow() {
   const root = document.getElementById('app');
-  const snapshot = captureRenderPosition();
+  const snapshot = __pendingRenderPosition || captureRenderPosition();
+  __pendingRenderPosition = null;
 
   if (state.premiumProposalToken) {
     const viewer = currentUser();
@@ -15328,14 +15341,14 @@ function renderNow() {
   // Сравнение строк дешевле, чем перестроение дерева документа:
   // если разметка та же, DOM не трогаем вообще.
   if (html === __lastRenderedHtml) {
-    restoreRenderPosition(snapshot);
+    restoreRenderPositionStable(snapshot);
     return;
   }
 
   __lastRenderedHtml = html;
   root.innerHTML = html;
   attachGlobalListeners();
-  restoreRenderPosition(snapshot);
+  restoreRenderPositionStable(snapshot);
 }
 
 // ---------- LOGIN VIEW ----------
@@ -22459,6 +22472,7 @@ function completeManagerMeasurement(oid) {
   changeStatus(oid, 'measurement_done');
 }
 function refreshManagerMeasureModal(oid) {
+  preservePositionForNextRender();
   state.modal = renderManagerMeasureModal(oid);
   render();
 }
