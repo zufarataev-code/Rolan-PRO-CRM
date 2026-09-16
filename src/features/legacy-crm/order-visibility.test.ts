@@ -101,8 +101,8 @@ test("surveyors and installers never see project financial totals", () => {
 });
 
 test("field-role calendar and proposal actions keep project totals hidden", () => {
-  assert.match(html, /function renderCalendarSummary[\s\S]*?const canSeeMoney = orderUserCanManage\(\);/);
-  assert.match(html, /\$\{canSeeMoney \? `<div class="calendar-kpi"[\s\S]*?Сумма заказов[\s\S]*?` : ''\}/);
+  assert.doesNotMatch(html, /function renderCalendarSummary/);
+  assert.match(html, /class="calendar-period-count">\$\{periodEvents\.length\}/);
   assert.match(html, /function openProfessionalKP\(oid\)[\s\S]*?if \(!orderUserCanViewProposal\(o\)\)/);
   assert.match(html, /function printProposal\(oid\)[\s\S]*?if \(!orderUserCanViewProposal\(o\)\)/);
   assert.match(html, /async function generatePremiumProposal\(orderId\)[\s\S]*?if \(!orderUserCanViewProposal\(order\)\)/);

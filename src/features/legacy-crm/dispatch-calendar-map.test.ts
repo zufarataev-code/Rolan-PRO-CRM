@@ -7,13 +7,21 @@ const routeSource = readFileSync("app/legacy-crm/route.ts", "utf8");
 
 test("weekly calendar is one side-by-side schedule and map workspace", () => {
   assert.match(source, /class="dispatch-workspace"/);
-  assert.match(source, /renderDispatchWeek\(anchor\).*renderDispatchMap\(anchor\)/);
+  assert.match(source, /renderDispatchWeek\(anchor\).*renderDispatchMap\(anchor, 'week'\)/);
   assert.match(source, /class="dispatch-week-head"/);
   assert.match(source, /class="dispatch-map-canvas"/);
   assert.match(source, /DISPATCH_START_HOUR = 6/);
   assert.match(source, /DISPATCH_END_HOUR = 21/);
   assert.match(source, /openCalendarSchedulePicker\(\)/);
   assert.match(source, /confirmCalendarSchedulePicker\(\)/);
+});
+
+test("day calendar uses one timeline and map instead of duplicate KPI and event lanes", () => {
+  assert.match(source, /function renderDispatchDay\(anchor\)/);
+  assert.match(source, /calendar-toolbar-primary/);
+  assert.match(source, /calendar-toolbar-secondary/);
+  assert.match(source, /renderDispatchDay\(anchor\).*renderDispatchMap\(anchor, 'day'\)/s);
+  assert.match(source, /mode === 'month' && state\.calendarShowMap/);
 });
 
 test("calendar and map share project events and filters", () => {

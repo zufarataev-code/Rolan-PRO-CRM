@@ -3016,10 +3016,50 @@
     gap: .9rem;
   }
   .calendar-toolbar {
+    display: grid;
+    gap: .65rem;
+    padding: .8rem .9rem;
+    border: 1px solid #dbe4ef;
+    border-radius: 14px;
+    background: #fff;
+  }
+  .calendar-toolbar-primary,
+  .calendar-toolbar-secondary {
     display: flex;
     align-items: center;
-    gap: .7rem;
-    flex-wrap: wrap;
+    gap: .55rem;
+    min-width: 0;
+  }
+  .calendar-toolbar-secondary {
+    padding-top: .65rem;
+    border-top: 1px solid #eef2f7;
+  }
+  .calendar-period-title {
+    min-width: 0;
+    margin-left: .3rem;
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 900;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .calendar-period-count {
+    color: #64748b;
+    font-size: .75rem;
+    font-weight: 750;
+    white-space: nowrap;
+  }
+  .calendar-nav-button {
+    width: 38px;
+    height: 38px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid #dbe4ef;
+    border-radius: 10px;
+    background: #fff;
+    color: #334155;
+    font-size: 1.05rem;
   }
   .calendar-mode-switch {
     display: inline-flex;
@@ -3040,30 +3080,6 @@
   .calendar-mode-switch button.active {
     background: #0f172a;
     color: #fff;
-  }
-  .calendar-kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: .65rem;
-  }
-  .calendar-kpi {
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    background: #fff;
-    padding: .72rem;
-    min-width: 0;
-    border-top: 3px solid var(--event-color, #2563eb);
-  }
-  .calendar-kpi-label {
-    color: #64748b;
-    font-size: .72rem;
-    font-weight: 850;
-  }
-  .calendar-kpi-value {
-    margin-top: .16rem;
-    color: #0f172a;
-    font-size: 1.18rem;
-    font-weight: 950;
   }
   .calendar-event-card {
     position: relative;
@@ -3154,60 +3170,6 @@
     font-weight: 900;
     line-height: 1.1;
   }
-  .calendar-day-layout {
-    display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
-    gap: .85rem;
-  }
-  .calendar-day-column {
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    background: #fff;
-    overflow: hidden;
-  }
-  .calendar-day-column-head {
-    padding: .85rem;
-    border-bottom: 1px solid #eef2f7;
-    background: #f8fafc;
-  }
-  .calendar-day-list {
-    display: grid;
-    gap: .55rem;
-    padding: .85rem;
-  }
-  .calendar-lanes {
-    /* Было repeat(4, minmax(210px, 1fr)) = 840px минимум.
-       Единица fr заставляет браузер ужимать колонки под окно,
-       и последняя обрезается. Фиксированная ширина честнее:
-       колонка либо видна целиком, либо до неё скроллят. */
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(210px, 260px);
-    gap: .7rem;
-    overflow-x: auto;
-  }
-  .calendar-lane {
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    background: #fff;
-    min-height: 320px;
-    overflow: hidden;
-  }
-  .calendar-lane-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .4rem;
-    padding: .72rem .8rem;
-    border-top: 3px solid var(--event-color, #2563eb);
-    border-bottom: 1px solid #eef2f7;
-    background: #f8fafc;
-  }
-  .calendar-lane-body {
-    display: grid;
-    gap: .5rem;
-    padding: .7rem;
-  }
   /* Дни недели остаются видны при прокрутке вниз: без этого,
      дойдя до строки монтажей, невозможно понять, какой столбец
      какой день. z-index выше ячеек, но ниже закреплённой левой
@@ -3274,8 +3236,8 @@
   }
   .dispatch-workspace {
     display: grid;
-    grid-template-columns: minmax(620px, 1.04fr) minmax(420px, .96fr);
-    min-height: 660px;
+    grid-template-columns: minmax(760px, 1.65fr) minmax(360px, .85fr);
+    min-height: 690px;
     border: 1px solid #dbe4ef;
     border-radius: 14px;
     background: #fff;
@@ -3299,6 +3261,35 @@
     z-index: 6;
     border-bottom: 1px solid #dbe4ef;
     background: #f8fafc;
+  }
+  .dispatch-day-head {
+    display: grid;
+    grid-template-columns: 62px minmax(420px, 1fr);
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    min-width: 520px;
+    border-bottom: 1px solid #dbe4ef;
+    background: #f8fafc;
+  }
+  .dispatch-day-head > div {
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    border-left: 1px solid #e2e8f0;
+    color: #334155;
+    font-size: .78rem;
+    font-weight: 900;
+  }
+  .dispatch-day-head > div:first-child { border-left: 0; }
+  .dispatch-day-grid {
+    display: grid;
+    grid-template-columns: 62px minmax(420px, 1fr);
+    min-width: 520px;
+    position: relative;
+    background: #fff;
   }
   .dispatch-week-head > div {
     min-height: 50px;
@@ -3415,13 +3406,6 @@
     font-weight: 900;
   }
   @media (max-width: 1100px) {
-    .calendar-day-layout,
-    .calendar-kpi-grid {
-      grid-template-columns: 1fr;
-    }
-    .calendar-lanes {
-      grid-template-columns: repeat(4, minmax(240px, 82vw));
-    }
     .dispatch-workspace { grid-template-columns: 1fr; }
     .dispatch-calendar-pane { border-right: 0; border-bottom: 1px solid #dbe4ef; }
     .dispatch-map-canvas { height: 460px; }
@@ -3440,6 +3424,11 @@
     .calendar-mode-switch button {
       flex: 1;
     }
+    .calendar-toolbar-primary,
+    .calendar-toolbar-secondary { flex-wrap: wrap; }
+    .calendar-toolbar-secondary select { flex: 1 1 145px; min-width: 0; }
+    .calendar-period-title { order: -1; width: 100%; margin: 0; }
+    .calendar-period-count { margin-right: auto; }
     .dispatch-workspace { min-height: 0; border-radius: 10px; }
     .dispatch-week-scroll { max-height: 62vh; }
     .dispatch-map-canvas { height: 52vh; min-height: 360px; }
@@ -30454,86 +30443,6 @@ function renderCalendarEventCard(ev, opts = {}) {
       </div>
     </button>`;
 }
-function renderCalendarSummary(events, periodLabel = '') {
-  const visible = calendarVisibleKinds();
-  const cells = visible.map(kind => {
-    const info = orderEventInfo(kind);
-    const pal = calendarEventPalette(kind);
-    const count = events.filter(ev => ev.kind === kind).length;
-    return `
-      <div class="calendar-kpi" style="--event-color:${pal.color}">
-        <div class="calendar-kpi-label">${info.icon} ${academyEsc(info.short)}</div>
-        <div class="calendar-kpi-value">${count}</div>
-      </div>`;
-  }).join('');
-  const canSeeMoney = orderUserCanManage();
-  const revenue = canSeeMoney
-    ? Array.from(new Set(events.map(ev => ev.o.id))).map(id => getOrder(id)).filter(Boolean).reduce((s,o) => s + orderRevenue(o), 0)
-    : 0;
-  return `
-    <div class="calendar-kpi-grid">
-      ${cells}
-      <div class="calendar-kpi" style="--event-color:#0f172a">
-        <div class="calendar-kpi-label">Период</div>
-        <div class="calendar-kpi-value">${academyEsc(periodLabel || String(events.length))}</div>
-      </div>
-      ${canSeeMoney ? `<div class="calendar-kpi" style="--event-color:#059669">
-        <div class="calendar-kpi-label">Сумма заказов</div>
-        <div class="calendar-kpi-value">${fmtMoney(revenue)}</div>
-      </div>` : ''}
-    </div>`;
-}
-function renderCalendarLegend() {
-  const eventLegend = CALENDAR_EVENT_KINDS.map(kind => {
-    const info = orderEventInfo(kind);
-    const p = calendarEventPalette(kind);
-    return `<span class="flex items-center gap-1"><span class="calendar-legend-dot" style="background:${p.color}"></span>${info.short}</span>`;
-  }).join('');
-  const serviceLegend = ORDER_PRIMARY_SERVICES.map(s => {
-    const p = calendarServicePalette({ serviceType: s.id });
-    return `<span class="flex items-center gap-1"><span class="calendar-legend-dot" style="background:${p.color}"></span>${academyEsc(s.short)}</span>`;
-  }).join('');
-  return `<div class="calendar-legend"><b>События:</b>${eventLegend}<span class="text-slate-300">|</span><b>Услуги:</b>${serviceLegend}</div>`;
-}
-function renderCalendarDayView(anchor) {
-  const { start, end } = calendarRangeForMode(anchor, 'day');
-  const events = calItemsInRange(start, end);
-  const grouped = {};
-  calendarVisibleKinds().forEach(kind => grouped[kind] = events.filter(ev => ev.kind === kind));
-  const title = anchor.toLocaleDateString(state.lang === 'ru' ? 'ru-RU' : 'en-US', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
-  return `
-    <div class="calendar-board">
-      ${renderCalendarSummary(events, `${events.length} событ.`)}
-      <div class="calendar-day-layout">
-        <div class="calendar-day-column">
-          <div class="calendar-day-column-head">
-            <div class="text-xs font-black text-slate-500 uppercase">Порядок дня</div>
-            <div class="font-black text-lg text-slate-900">${academyEsc(title)}</div>
-          </div>
-          <div class="calendar-day-list">
-            ${events.length ? events.map(ev => renderCalendarEventCard(ev, { compact: false })).join('') : `<div class="calendar-empty">На этот день ничего не запланировано.</div>`}
-          </div>
-        </div>
-        <div class="calendar-lanes">
-          ${calendarVisibleKinds().map(kind => {
-            const info = orderEventInfo(kind);
-            const pal = calendarEventPalette(kind);
-            const list = grouped[kind] || [];
-            return `
-              <section class="calendar-lane" style="--event-color:${pal.color}">
-                <div class="calendar-lane-head">
-                  <div class="font-black text-slate-900">${info.icon} ${academyEsc(info.short)}</div>
-                  <span class="tag">${list.length}</span>
-                </div>
-                <div class="calendar-lane-body">
-                  ${list.length ? list.map(ev => renderCalendarEventCard(ev, { compact: false })).join('') : `<div class="calendar-empty">Пусто</div>`}
-                </div>
-              </section>`;
-          }).join('')}
-        </div>
-      </div>
-    </div>`;
-}
 function calOrdersOnDay(dateObj, installerId) {
   const dayStart = new Date(dateObj); dayStart.setHours(0,0,0,0);
   const dayEnd   = new Date(dateObj); dayEnd.setHours(23,59,59,999);
@@ -30623,10 +30532,17 @@ function renderDispatchWeek(anchor) {
     return `<div class="dispatch-day-column ${day.getTime() === today.getTime() ? 'today' : ''}">${calendarWeekDayLayouts(events).map(renderDispatchEvent).join('')}</div>`;
   }).join('')}</div></div></section>`;
 }
-function renderDispatchMap(anchor) {
-  const range = calendarRangeForMode(anchor, 'week');
+function renderDispatchDay(anchor) {
+  const range = calendarRangeForMode(anchor, 'day');
+  const height = (DISPATCH_END_HOUR - DISPATCH_START_HOUR) * DISPATCH_HOUR_HEIGHT;
+  const locale = state.lang === 'ru' ? 'ru-RU' : 'en-US';
+  const events = calItemsInRange(range.start, range.end);
+  return `<section class="dispatch-calendar-pane"><div class="dispatch-day-head"><div></div><div><span>${academyEsc(anchor.toLocaleDateString(locale,{weekday:'long'}))}</span><b>${academyEsc(anchor.toLocaleDateString(locale,{day:'2-digit',month:'long'}))}</b></div></div><div class="dispatch-week-scroll"><div class="dispatch-day-grid" style="--dispatch-hour-height:${DISPATCH_HOUR_HEIGHT}px;--dispatch-grid-height:${height}px"><div class="dispatch-time-gutter">${Array.from({length:DISPATCH_END_HOUR-DISPATCH_START_HOUR+1},(_,index) => `<span class="dispatch-hour-label" style="top:${index * DISPATCH_HOUR_HEIGHT}px">${String(DISPATCH_START_HOUR + index).padStart(2,'0')}:00</span>`).join('')}</div><div class="dispatch-day-column">${calendarWeekDayLayouts(events).map(renderDispatchEvent).join('')}</div></div></div></section>`;
+}
+function renderDispatchMap(anchor, mode = 'week') {
+  const range = calendarRangeForMode(anchor, mode);
   setTimeout(() => renderMapForDay('cal-map', range.start, { showAll:true, periodStart:range.start, periodEnd:range.end, scheduledOnly:true }), 80);
-  return `<aside class="dispatch-map-pane"><div class="dispatch-map-toolbar"><button class="btn-primary text-sm" onclick="buildRouteOnMap()">🧭 Маршрут</button><button class="btn-ghost text-sm" onclick="clearRouteOnMap()">Очистить</button><button class="btn-ghost text-sm" onclick="state.calendarMapStayLocal=!state.calendarMapStayLocal; render();">${state.calendarMapStayLocal!==false?'Все адреса':'Только LA'}</button><span id="route-info" class="text-sm font-semibold text-slate-800"></span><span id="map-status" class="text-xs text-gray-500"></span></div><div id="cal-map" class="dispatch-map-canvas"><div class="flex items-center justify-center h-full text-sm text-gray-400">Загрузка карты…</div></div></aside>`;
+  return `<aside class="dispatch-map-pane"><div class="dispatch-map-toolbar"><button class="btn-primary text-sm" onclick="buildRouteOnMap()">Построить маршрут</button><button class="btn-ghost text-sm" onclick="clearRouteOnMap()">Сбросить</button><button class="btn-ghost text-sm" onclick="state.calendarMapStayLocal=!state.calendarMapStayLocal; render();">${state.calendarMapStayLocal!==false?'Показать все адреса':'Вернуться к LA'}</button><span id="route-info" class="text-sm font-semibold text-slate-800"></span><span id="map-status" class="text-xs text-gray-500"></span></div><div id="cal-map" class="dispatch-map-canvas"><div class="flex items-center justify-center h-full text-sm text-gray-400">Загрузка карты…</div></div></aside>`;
 }
 
 function openCalendarSchedulePicker() {
@@ -30740,18 +30656,22 @@ function renderCalendar() {
   const nextAction = mode === 'day' ? 'calMoveDay(1)' : mode === 'week' ? 'calMoveWeek(1)' : 'calMoveMonth(1)';
 
   const toolbar = `
-  <div class="card mb-4">
-    <div class="calendar-toolbar">
+  <div class="calendar-toolbar mb-3">
+    <div class="calendar-toolbar-primary">
+      <button class="calendar-nav-button" onclick="${prevAction}" aria-label="Предыдущий период">←</button>
+      <button class="btn-ghost" onclick="calToday()">Сегодня</button>
+      <button class="calendar-nav-button" onclick="${nextAction}" aria-label="Следующий период">→</button>
+      <div class="calendar-period-title">${academyEsc(headerLabel)}</div>
+      <div class="calendar-period-count">${periodEvents.length} ${periodEvents.length === 1 ? 'событие' : 'событий'}</div>
+      <div class="flex-1"></div>
+      ${canRoleFilter ? '<button class="btn-primary" onclick="openCalendarSchedulePicker()">+ Назначить</button>' : ''}
+    </div>
+    <div class="calendar-toolbar-secondary">
       <div class="calendar-mode-switch">
         <button class="${mode==='day'?'active':''}" onclick="state.calendarMode='day'; render();">День</button>
         <button class="${mode==='week'?'active':''}" onclick="state.calendarMode='week'; render();">${T('calendarWeek')}</button>
         <button class="${mode==='month'?'active':''}" onclick="state.calendarMode='month'; render();">${T('calendarMonth')}</button>
       </div>
-      <button class="btn-ghost" onclick="${prevAction}">${T('prev')}</button>
-      <button class="btn-ghost" onclick="calToday()">${T('today')}</button>
-      <button class="btn-ghost" onclick="${nextAction}">${T('next')}</button>
-      <div class="font-black text-slate-900 ml-1">${academyEsc(headerLabel)}</div>
-      ${canRoleFilter ? '<button class="btn-primary" onclick="openCalendarSchedulePicker()">+ Назначить работу</button>' : ''}
       ${canRoleFilter ? `
         <select class="w-auto text-sm" onchange="state.calendarRoleFilter=this.value; render();">
           <option value="all" ${calendarRoleFilterValue()==='all'?'selected':''}>${u?.role === 'owner' ? 'Все события' : 'Все мои события'}</option>
@@ -30767,24 +30687,20 @@ function renderCalendar() {
         </select>
       ` : `<span class="tag">${u?.role === 'measurer' ? 'Мои замеры' : u?.role === 'installer' ? 'Мои монтажи' : 'Мой график'}</span>`}
       <div class="flex-1"></div>
-      ${mode === 'week' ? '<span class="tag">Календарь + карта</span>' : `<button class="btn-ghost" onclick="state.calendarShowMap=!state.calendarShowMap; render();">${state.calendarShowMap ? '🗺 Скрыть карту' : '🗺 Показать карту'}</button>`}
-    </div>
-    <div class="mt-3">
-      ${renderCalendarLegend()}
+      ${mode === 'month' ? `<button class="btn-ghost" onclick="state.calendarShowMap=!state.calendarShowMap; render();">${state.calendarShowMap ? 'Скрыть карту' : 'Показать карту'}</button>` : ''}
     </div>
   </div>
   `;
 
-  // Day and month keep the optional detail map below their primary view.
-  // Week mode uses the permanent side-by-side dispatch workspace instead.
-  const mapBlock = state.calendarShowMap ? renderCalendarMap(anchor, mode) : '';
+  // Day and week use one permanent calendar + map workspace. Month keeps an optional map.
+  const mapBlock = mode === 'month' && state.calendarShowMap ? renderCalendarMap(anchor, mode) : '';
 
   if (mode === 'day') {
-    return toolbar + renderCalendarDayView(anchor) + mapBlock;
+    return toolbar + `<div class="dispatch-workspace">${renderDispatchDay(anchor)}${renderDispatchMap(anchor, 'day')}</div>`;
   }
 
   if (mode === 'week') {
-    return toolbar + `<div class="dispatch-workspace">${renderDispatchWeek(anchor)}${renderDispatchMap(anchor)}</div>`;
+    return toolbar + `<div class="dispatch-workspace">${renderDispatchWeek(anchor)}${renderDispatchMap(anchor, 'week')}</div>`;
     const monday = range.start;
     const days = [];
     for (let i = 0; i < 7; i++) {
@@ -30892,7 +30808,6 @@ function renderCalendar() {
   const monNames = ['monthMon','monthTue','monthWed','monthThu','monthFri','monthSat','monthSun'];
 
   return toolbar + `
-  <div class="mb-4">${renderCalendarSummary(periodEvents, `${periodEvents.length} событ.`)}</div>
   <div class="card p-0" style="max-height:75vh;overflow-y:auto;">
     <!-- Шапка месяца — не таблица, а сетка, поэтому закрепляется сама,
          а не через calendar-sticky-head. -->

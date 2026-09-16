@@ -207,6 +207,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Calendar cards, Google map markers, filters, addresses, and route geometry remain views of the existing Project events and geocache. Changing the map provider does not create another calendar, route store, shell, or customer-job entity.
 - Leaflet remains a resilience fallback only when Google Maps is unavailable. This correction is implemented in PR #172 and does not authorize an automatic production deployment.
 
+## 2026-09-15 — Calendar is a scheduling surface, not a dashboard
+
+- This decision refines `Manager calculates the customer offer; owner controls internal economics`: the Calendar must prioritize time, availability, assignee, customer, address, and route. Revenue summaries and repeated appointment-type KPI cards do not belong above the schedule.
+- Day and Week share one model: a chronological time grid beside the map. Day has one daily timeline; Week has seven day columns. Month is for date scanning and may reveal the map only on request.
+- Appointment type and employee are filters over the same Project events. They must not create separate consultation, survey, installation, or complaint boards and must not duplicate those events into another store.
+- The interaction model intentionally follows the proven TintWiz scheduler principles documented by TintWiz: side-by-side calendar/map, appointment and team-member filters, and scheduling an assignee against an existing Project. Rolan PRO retains its own UI, terminology, permissions, Project model, and implementation.
+- Implemented for review in PR #172. Production deployment remains a separate action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
