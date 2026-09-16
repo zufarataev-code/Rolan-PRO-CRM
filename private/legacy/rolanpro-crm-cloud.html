@@ -14294,6 +14294,9 @@ function orderUserCanAccess(order, user = currentUser()) {
 function orderUserCanSeeMoney(order, user = currentUser()) {
   return orderUserOwns(order, user);
 }
+function orderUserCanSeeInternalEconomics(order, user = currentUser()) {
+  return !!order && !!user && user.role === 'owner' && orderUserOwns(order, user);
+}
 function orderUserCanViewProposal(order, user = currentUser()) {
   return orderUserOwns(order, user);
 }
@@ -14675,7 +14678,7 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'measurement_scheduled') return o.measurerId
     ? { icon: '🧭', title: 'Контроль замера', sub: 'Замерщик видит заказ без денег. Основной модуль замера v2.5.', variant: 'soft', onclick: `openMeasurerV25ForOrder('${o.id}')` }
     : { icon: '👷', title: 'Назначить замерщика', sub: 'Без ответственного замерщик не увидит задачу в своём кабинете.', variant: 'warning', onclick: `openAssignTeam('${o.id}')` };
-  if (o.status === 'measurement_done' && !projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: 'Проверьте услуги, материалы, расходы, прибыль и маржу до формирования КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
+  if (o.status === 'measurement_done' && !projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: orderUserCanSeeInternalEconomics(o, currentUser()) ? 'Проверьте цену, расходы и маржу до формирования КП.' : 'Проверьте размеры, услуги и цену клиенту до формирования КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
   if (o.status === 'measurement_done') return { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
   if (o.status === 'proposal_sent') return { icon: '✅', title: 'Отметить КП принятым', sub: 'Используйте, если клиент подтвердил предложение вне портала.', variant: 'primary', onclick: `changeStatus('${o.id}','proposal_accepted')` };
   if (o.status === 'proposal_accepted' && !o.depositReceived) return { icon: '💰', title: 'Отметить аванс', sub: 'После аванса можно уверенно закреплять дату монтажа.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
@@ -20110,7 +20113,7 @@ function orderPassportActions(o, ctx) {
       sub: ctx.measureSub, onclick: ctx.measureAction },
 
     { key: 'estimate', icon: '🧮', title: 'Расчёт проекта',
-      sub: !ctx.hasMeasurements ? 'сначала замер' : ctx.estimateApproved ? 'проверен и подтверждён' : 'услуги, расходы и маржа',
+      sub: !ctx.hasMeasurements ? 'сначала замер' : ctx.estimateApproved ? 'проверен и подтверждён' : (orderUserCanSeeInternalEconomics(o, currentUser()) ? 'цена, расходы и маржа' : 'услуги и цена клиенту'),
       onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !ctx.canManage || !ctx.hasMeasurements },
 
     { key: 'proposal', icon: '📄', title: 'КП',
@@ -20342,7 +20345,6 @@ function projectEstimateReadiness(o) {
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
   if ((o.extraServices || []).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
-  if ((o.extraExpenses || []).some(e => !String(e.label || '').trim() || Number(e.amount) <= 0)) issues.push('есть незаполненные дополнительные расходы');
   if (orderRevenue(o) <= 0) issues.push('сумма проекта равна нулю');
   return issues;
 }
@@ -20364,6 +20366,7 @@ function projectEstimateUpdateWindowPrice(oid, rid, wid, value) {
 function projectEstimateUpdateSetting(oid, field, value) {
   const o = getOrder(oid);
   if (!o) return;
+  if (['marketing','distanceKm'].includes(field) && !orderUserCanSeeInternalEconomics(o, currentUser())) return;
   if (field === 'complexity') o.complexity = value || 'standard';
   else if (field === 'priceOverridePerSqft') o.priceOverridePerSqft = value === '' ? null : Math.max(0, parseFloat(value) || 0);
   else o[field] = Math.max(0, parseFloat(value) || 0);
@@ -20384,6 +20387,7 @@ function projectEstimateUpdateService(oid, sid, field, value) {
   const o = getOrder(oid);
   const line = (o?.extraServices || []).find(s => s.id === sid);
   if (!o || !line) return;
+  if (field === 'cost' && !orderUserCanSeeInternalEconomics(o, currentUser())) return;
   if (['qty','price','cost'].includes(field)) line[field] = Math.max(0, parseFloat(value) || 0);
   else line[field] = value;
   if (field === 'type') line.label = projectEstimateServiceLabel(value);
@@ -20401,7 +20405,7 @@ function projectEstimateDeleteService(oid, sid) {
 
 function projectEstimateAddExpense(oid, type = 'other') {
   const o = getOrder(oid);
-  if (!o) return;
+  if (!o || !orderUserCanSeeInternalEconomics(o, currentUser())) return;
   o.extraExpenses = o.extraExpenses || [];
   o.extraExpenses.push({ id: uid(), type, label: projectEstimateExpenseLabel(type), amount: 0, projectDirect: true, createdAt: new Date().toISOString() });
   projectEstimateMarkChanged(o, 'Добавлен прямой расход проекта');
@@ -20411,7 +20415,7 @@ function projectEstimateAddExpense(oid, type = 'other') {
 function projectEstimateUpdateExpense(oid, eid, field, value) {
   const o = getOrder(oid);
   const line = (o?.extraExpenses || []).find(e => e.id === eid);
-  if (!o || !line) return;
+  if (!o || !line || !orderUserCanSeeInternalEconomics(o, currentUser())) return;
   if (field === 'amount') line[field] = Math.max(0, parseFloat(value) || 0);
   else line[field] = value;
   if (field === 'type') line.label = projectEstimateExpenseLabel(value);
@@ -20421,7 +20425,7 @@ function projectEstimateUpdateExpense(oid, eid, field, value) {
 
 function projectEstimateDeleteExpense(oid, eid) {
   const o = getOrder(oid);
-  if (!o) return;
+  if (!o || !orderUserCanSeeInternalEconomics(o, currentUser())) return;
   o.extraExpenses = (o.extraExpenses || []).filter(e => e.id !== eid);
   projectEstimateMarkChanged(o, 'Удалён прямой расход проекта');
   save(); openProjectEstimateWorkspace(oid);
@@ -20433,7 +20437,8 @@ function approveProjectEstimateAndOpenProposal(oid) {
   const issues = projectEstimateReadiness(o);
   if (issues.length) { alert('Расчёт пока не готов: ' + issues.join(', ') + '.'); return; }
   const marginPct = orderMarginPct(o) * 100;
-  if (marginPct < 20 && !confirm(`Маржа проекта ${marginPct.toFixed(1)}%. Всё равно подтвердить расчёт и перейти к КП?`)) return;
+  const canSeeInternalEconomics = orderUserCanSeeInternalEconomics(o, currentUser());
+  if (canSeeInternalEconomics && marginPct < 20 && !confirm(`Маржа проекта ${marginPct.toFixed(1)}%. Всё равно подтвердить расчёт и перейти к КП?`)) return;
   const approvedAt = new Date().toISOString();
   o.projectEstimateApprovedAt = approvedAt;
   o.projectEstimateApprovedBy = state.currentUserId;
@@ -20450,13 +20455,14 @@ function approveProjectEstimateAndOpenProposal(oid) {
     measurementBasis: orderMeasurementVerificationIssues(o).length ? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED',
   };
   o.timeline = o.timeline || [];
-  o.timeline.push({ at: approvedAt, key: 'project_estimate_approved', by: state.currentUserId, note: `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}, маржа ${marginPct.toFixed(1)}%` });
+  o.timeline.push({ at: approvedAt, key: 'project_estimate_approved', by: state.currentUserId, note: canSeeInternalEconomics ? `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}, маржа ${marginPct.toFixed(1)}%` : `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}` });
   save();
   closeModal();
   openProfessionalKP(oid);
 }
 
 function renderProjectEstimateWorkspace(o) {
+  const canSeeInternalEconomics = orderUserCanSeeInternalEconomics(o, currentUser());
   const pss = orderPSS(o);
   const margin = orderMargin(o);
   const marginPct = orderMarginPct(o) * 100;
@@ -20474,7 +20480,7 @@ function renderProjectEstimateWorkspace(o) {
       <td class="money">${area.toFixed(2)}</td>
       <td><input aria-label="Цена за sqft" type="number" min="0" step="0.5" value="${Number(defaultPrice || 0)}" onchange="projectEstimateUpdateWindowPrice('${o.id}','${room.id}','${win.id}',this.value)"></td>
       <td class="money"><b>${fmtMoney(windowRetailPrice(win, o.complexity || 'standard', o.priceOverridePerSqft))}</b></td>
-      <td class="money">${fmtMoney(windowFilmCost(win))}</td>
+      ${canSeeInternalEconomics ? `<td class="money">${fmtMoney(windowFilmCost(win))}</td>` : ''}
     </tr>`;
   })).join('');
   const serviceRows = (o.extraServices || []).map(line => `<tr>
@@ -20482,7 +20488,7 @@ function renderProjectEstimateWorkspace(o) {
     <td><input value="${academyEsc(line.label || '')}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','label',this.value)"></td>
     <td><input type="number" min="0" step="1" value="${Number(line.qty || 1)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','qty',this.value)"></td>
     <td><input type="number" min="0" step="1" value="${Number(line.price || 0)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','price',this.value)"></td>
-    <td><input type="number" min="0" step="1" value="${Number(line.cost || 0)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','cost',this.value)"></td>
+    ${canSeeInternalEconomics ? `<td><input type="number" min="0" step="1" value="${Number(line.cost || 0)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','cost',this.value)"></td>` : ''}
     <td><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteService('${o.id}','${line.id}')">Удалить</button></td>
   </tr>`).join('');
   const expenseRows = (o.extraExpenses || []).map(line => `<tr>
@@ -20500,38 +20506,36 @@ function renderProjectEstimateWorkspace(o) {
   return `
     <div class="project-estimate-summary">
       <div class="project-estimate-kpi"><span>Цена клиенту</span><strong class="text-emerald-700">${fmtMoney(orderRevenue(o))}</strong></div>
-      <div class="project-estimate-kpi"><span>Себестоимость</span><strong class="text-red-600">${fmtMoney(pss.total)}</strong></div>
-      <div class="project-estimate-kpi"><span>Прибыль проекта</span><strong class="${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(margin)}</strong></div>
-      <div class="project-estimate-kpi"><span>Маржа</span><strong class="${marginPct >= 30 ? 'text-emerald-700' : marginPct >= 20 ? 'text-amber-600' : 'text-red-600'}">${marginPct.toFixed(1)}%</strong></div>
+      <div class="project-estimate-kpi"><span>Площадь</span><strong>${orderActualAreaSqft(o).toFixed(2)} sqft</strong></div>
+      <div class="project-estimate-kpi"><span>Услуги</span><strong>${(o.extraServices || []).length}</strong></div>
+      ${canSeeInternalEconomics ? `<div class="project-estimate-kpi"><span>Себестоимость</span><strong class="text-red-600">${fmtMoney(pss.total)}</strong></div><div class="project-estimate-kpi"><span>Прибыль / маржа</span><strong class="${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(margin)} · ${marginPct.toFixed(1)}%</strong></div>` : ''}
     </div>
-    ${issues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>До КП нужно проверить:</b> ${issues.map(academyEsc).join(', ')}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Расчёт заполнен.</b> Проверьте маржу и подтвердите переход к КП.</div>`}
+    ${issues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>До КП нужно проверить:</b> ${issues.map(academyEsc).join(', ')}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Расчёт заполнен.</b> Проверьте цену клиенту и подтвердите переход к КП.</div>`}
     ${unverifiedMeasurements.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Предварительные размеры клиента.</b> По ним разрешено рассчитать проект и выпустить КП. Перед назначением монтажа потребуется внести и подтвердить точные размеры ${unverifiedMeasurements.length} окон.</div>` : ''}
 
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>1. Замер и материалы</h4><div class="text-xs text-gray-500">Площадь и материал берутся из замера. Здесь назначается цена продажи.</div></div></div>
-      <div class="overflow-x-auto"><table class="project-estimate-table"><thead><tr><th>Помещение / окно</th><th>Материал</th><th class="money">sqft</th><th>Цена / sqft</th><th class="money">Клиенту</th><th class="money">Материал</th></tr></thead><tbody>${materialRows || '<tr><td colspan="6" class="text-gray-500">Сначала завершите замер.</td></tr>'}</tbody></table></div>
+      <div class="overflow-x-auto"><table class="project-estimate-table"><thead><tr><th>Помещение / окно</th><th>Материал</th><th class="money">sqft</th><th>Цена продажи / sqft</th><th class="money">Клиенту</th>${canSeeInternalEconomics ? '<th class="money">Себестоимость материала</th>' : ''}</tr></thead><tbody>${materialRows || `<tr><td colspan="${canSeeInternalEconomics ? 6 : 5}" class="text-gray-500">Сначала завершите замер.</td></tr>`}</tbody></table></div>
     </section>
 
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>2. Дополнительные услуги</h4><div class="text-xs text-gray-500">Попадут в КП и увеличат цену для клиента.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddService('${o.id}','washing')">+ Добавить услугу</button></div>
-      <div class="overflow-x-auto"><table class="project-estimate-table"><thead><tr><th>Тип</th><th>Описание</th><th>Кол-во</th><th>Цена клиенту, всего</th><th>Себестоимость</th><th></th></tr></thead><tbody>${serviceRows || '<tr><td colspan="6" class="text-gray-500">Дополнительных услуг нет.</td></tr>'}</tbody></table></div>
+      <div class="overflow-x-auto"><table class="project-estimate-table"><thead><tr><th>Тип</th><th>Описание</th><th>Кол-во</th><th>Цена клиенту, всего</th>${canSeeInternalEconomics ? '<th>Себестоимость</th>' : ''}<th></th></tr></thead><tbody>${serviceRows || `<tr><td colspan="${canSeeInternalEconomics ? 6 : 5}" class="text-gray-500">Дополнительных услуг нет.</td></tr>`}</tbody></table></div>
     </section>
 
-    <section class="project-estimate-section">
+    ${canSeeInternalEconomics ? `<section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>3. Прямые расходы проекта</h4><div class="text-xs text-gray-500">Не показываются клиенту, но уменьшают прибыль и маржу.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddExpense('${o.id}','other')">+ Добавить расход</button></div>
       <div class="overflow-x-auto"><table class="project-estimate-table"><thead><tr><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead><tbody>${expenseRows || '<tr><td colspan="4" class="text-gray-500">Дополнительных расходов нет.</td></tr>'}</tbody></table></div>
-    </section>
+    </section>` : ''}
 
     <section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>4. Параметры и себестоимость</h4><div class="text-xs text-gray-500">Автоматический расчёт использует ставки материалов, монтажников и проценты команды.</div></div></div>
+      <div class="project-estimate-section-head"><div><h4>${canSeeInternalEconomics ? '4. Параметры и себестоимость' : '3. Параметры цены'}</h4><div class="text-xs text-gray-500">${canSeeInternalEconomics ? 'Владелец видит внутренние расходы и прибыль.' : 'Менеджер назначает только цену продажи, которая попадёт в КП.'}</div></div></div>
       <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
         <div><label>Сложность</label><select onchange="projectEstimateUpdateSetting('${o.id}','complexity',this.value)">${['standard','ladder','tower','alpinism'].map(key => `<option value="${key}" ${(o.complexity||'standard')===key?'selected':''}>${T('complexity'+key.charAt(0).toUpperCase()+key.slice(1))} ×${db.settings.complexityCoefs[key].toFixed(2)}</option>`).join('')}</select></div>
-        <div><label>Единая цена / sqft</label><input type="number" min="0" step="0.5" value="${o.priceOverridePerSqft == null ? '' : Number(o.priceOverridePerSqft)}" placeholder="Из материала" onchange="projectEstimateUpdateSetting('${o.id}','priceOverridePerSqft',this.value)"></div>
-        <div><label>Расстояние, км</label><input type="number" min="0" step="1" value="${Number(o.distanceKm || 0)}" onchange="projectEstimateUpdateSetting('${o.id}','distanceKm',this.value)"></div>
-        <div><label>Маркетинг, $</label><input type="number" min="0" step="1" value="${Number(o.marketing || 0)}" onchange="projectEstimateUpdateSetting('${o.id}','marketing',this.value)"></div>
+        <div><label>Цена продажи / sqft</label><input type="number" min="0" step="0.5" value="${o.priceOverridePerSqft == null ? '' : Number(o.priceOverridePerSqft)}" placeholder="Из каталога" onchange="projectEstimateUpdateSetting('${o.id}','priceOverridePerSqft',this.value)"></div>
+        ${canSeeInternalEconomics ? `<div><label>Расстояние, км</label><input type="number" min="0" step="1" value="${Number(o.distanceKm || 0)}" onchange="projectEstimateUpdateSetting('${o.id}','distanceKm',this.value)"></div><div><label>Маркетинг, $</label><input type="number" min="0" step="1" value="${Number(o.marketing || 0)}" onchange="projectEstimateUpdateSetting('${o.id}','marketing',this.value)"></div>` : ''}
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">${costLines.map(([label, amount]) => `<div class="order-clean-list-row"><span>${label}</span><b>${fmtMoney(amount)}</b></div>`).join('')}</div>
-      <div class="order-clean-list-row mt-2" style="border-top:2px solid #cbd5e1"><span><b>Общая себестоимость проекта</b></span><b class="text-red-600">${fmtMoney(pss.total)}</b></div>
+      ${canSeeInternalEconomics ? `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">${costLines.map(([label, amount]) => `<div class="order-clean-list-row"><span>${label}</span><b>${fmtMoney(amount)}</b></div>`).join('')}</div><div class="order-clean-list-row mt-2" style="border-top:2px solid #cbd5e1"><span><b>Общая себестоимость проекта</b></span><b class="text-red-600">${fmtMoney(pss.total)}</b></div>` : ''}
     </section>
 
     <div class="project-estimate-footer">
@@ -20562,6 +20566,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const canManage = !!opts.canManage;
   const canMeasure = !!opts.canMeasure;
   const canSeeMoney = !!opts.canSeeMoney;
+  const canSeeInternalEconomics = orderUserCanSeeInternalEconomics(o, u);
   const isInstaller = u?.role === 'installer';
   const workDocsOnly = isInstaller || !canSeeMoney;
   const visibleTimeline = opts.visibleTimeline || [];
@@ -20657,7 +20662,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     </div>
     ${proposalStripeUrl ? `<div class="order-clean-note mt-3">Stripe checkout: <a class="text-blue-700 underline break-all" href="${proposalStripeUrl}" target="_blank">${proposalStripeUrl}</a></div>` : ''}
     <div class="order-clean-actions mt-3">
-      ${renderOrderActionCard({ icon: '🧮', title: estimateApproved ? 'Расчёт проекта подтверждён' : 'Рассчитать проект', sub: hasMeasurements ? `цена, расходы и маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : 'сначала внесите замеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !canManage || !hasMeasurements, variant: hasMeasurements && !estimateApproved ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🧮', title: estimateApproved ? 'Расчёт проекта подтверждён' : 'Рассчитать проект', sub: hasMeasurements ? (canSeeInternalEconomics ? `цена, расходы и маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `цена клиенту ${fmtMoney(orderRevenue(o))}`) : 'сначала внесите замеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !canManage || !hasMeasurements, variant: hasMeasurements && !estimateApproved ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '📄', title: 'Единое КП', sub: !hasMeasurements ? 'сначала внесите замеры' : estimateApproved ? 'чертежи, комнаты, оплата' : 'сначала подтвердите расчёт проекта', onclick: `openProfessionalKP('${o.id}')`, disabled: !canManage || !hasMeasurements || !estimateApproved, variant: estimateApproved ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '🔗', title: 'Ссылка клиенту', sub: clientPortalUrl(o.id) ? 'скопировать портал' : 'public URL не настроен', onclick: `copyPortalLink('${o.id}')`, disabled: !clientPortalUrl(o.id) })}
       ${renderOrderActionCard({ icon: '✅', title: 'КП принято', sub: 'перевести этап', onclick: `changeStatus('${o.id}','proposal_accepted')`, disabled: !canManage || o.status === 'proposal_accepted' })}
@@ -20685,15 +20690,15 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const financeBody = canSeeMoney ? `
     <div class="order-clean-mini-grid">
       ${renderOrderCleanMini('Счёт', fmtMoney(orderRevenue(o)))}
-      ${renderOrderCleanMini('ПСС', `<span class="text-red-600">${fmtMoney(orderPSS(o).total)}</span>`)}
-      ${renderOrderCleanMini('Маржа', `<span class="${orderMargin(o)>0?'text-emerald-700':'text-red-600'}">${fmtMoney(orderMargin(o))}</span>`)}
+      ${canSeeInternalEconomics ? renderOrderCleanMini('ПСС', `<span class="text-red-600">${fmtMoney(orderPSS(o).total)}</span>`) : ''}
+      ${canSeeInternalEconomics ? renderOrderCleanMini('Маржа', `<span class="${orderMargin(o)>0?'text-emerald-700':'text-red-600'}">${fmtMoney(orderMargin(o))}</span>`) : ''}
       ${renderOrderCleanMini('Оплачено', fmtMoney(Number(o.paid) || 0))}
       ${renderOrderCleanMini('Долг', `<span class="${orderDebt(o)>0?'text-red-600':'text-emerald-700'}">${fmtMoney(orderDebt(o))}</span>`)}
-      ${renderOrderCleanMini('Рентабельность', `${(orderMarginPct(o)*100).toFixed(1)}%`)}
+      ${canSeeInternalEconomics ? renderOrderCleanMini('Рентабельность', `${(orderMarginPct(o)*100).toFixed(1)}%`) : ''}
     </div>
     <div class="order-clean-actions mt-3">
       ${renderOrderActionCard({ icon: '💰', title: o.depositReceived ? 'Аванс получен' : 'Отметить аванс', sub: o.depositReceived ? fmtDateTime(o.depositReceivedAt) : `ожидаемый ${fmtMoney(orderRevenue(o) * (db.settings.advancePct || 30) / 100)}`, onclick: o.depositReceived ? `openOrder('${o.id}')` : `markDepositReceived('${o.id}')`, variant: o.depositReceived ? 'success' : 'warning' })}
-      ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: 'услуги, материалы, расходы и маржа', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !hasMeasurements, variant: !estimateApproved && hasMeasurements ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: canSeeInternalEconomics ? 'цена, расходы и маржа' : 'размеры, услуги и цена клиенту', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !hasMeasurements, variant: !estimateApproved && hasMeasurements ? 'primary' : 'soft' })}
     </div>` : `<div class="order-clean-note">Финансы скрыты для роли ${academyEsc(u?.role || '')}. В рабочем режиме видны только клиент, адрес, замер, техлист и задача.</div>`;
 
   const routeBody = `
@@ -20723,7 +20728,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   return `
     <div class="order-clean-topbar">
       <button class="btn-ghost" onclick="state.view='${isInstaller ? 'installations' : 'orders'}'; location.hash=''; render();">← ${isInstaller ? 'Мои задачи' : T('orders')}</button>
-      ${isInstaller ? '' : `<button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();" title="Открыть старую полную форму, если нужны все поля сразу">Расширенный режим</button>`}
+      ${u?.role === 'owner' ? `<button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();" title="Открыть старую полную форму, если нужны все поля сразу">Расширенный режим</button>` : ''}
     </div>
     <div class="order-clean-shell">
       ${renderOrderPassport(o, c, u, { canManage, canMeasure, canSeeMoney })}
@@ -20741,10 +20746,10 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
         ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'client', icon: '👤', title: 'Клиент и связь', summary: c?.name || 'Данные и все каналы связи', badge: c?.phone || c?.email ? 'контакт' : 'заполнить', body: clientBody, color: '#2563eb', soft: '#eff6ff' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'measurement', icon: '📐', title: 'Замер', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : 'Размеры ещё не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : 'нужно', body: measurementBody, color: '#7c3aed', soft: '#f5f3ff' })}
-        ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '🧮', title: 'Расчёт проекта', summary: !hasMeasurements ? 'Сначала завершите замер' : estimateApproved ? `Подтверждён · маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : 'Услуги, материалы, расходы и маржа', badge: !hasMeasurements ? 'после замера' : estimateApproved ? 'готово' : 'нужно', onclick: `openProjectEstimateWorkspace('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
+        ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '🧮', title: 'Расчёт проекта', summary: !hasMeasurements ? 'Сначала завершите замер' : estimateApproved ? (canSeeInternalEconomics ? `Подтверждён · маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `Подтверждён · ${fmtMoney(orderRevenue(o))}`) : (canSeeInternalEconomics ? 'Услуги, материалы, расходы и маржа' : 'Размеры, услуги и цена клиенту'), badge: !hasMeasurements ? 'после замера' : estimateApproved ? 'готово' : 'нужно', onclick: `openProjectEstimateWorkspace('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'documents', icon: workDocsOnly ? '🧰' : '📄', title: workDocsOnly ? 'Рабочие документы' : 'КП и документы', summary: workDocsOnly ? 'Без коммерческих сумм' : (proposal ? 'КП создано' : estimateApproved ? 'Расчёт готов — можно формировать КП' : 'Сначала подтвердите расчёт проекта'), badge: workDocsOnly ? 'документы' : estimateApproved ? 'КП' : 'заблокировано', body: docsBody, color: '#d97706', soft: '#fff7ed' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'schedule', icon: '📅', title: isInstaller ? 'Задача и выезд' : 'Календарь и команда', summary: events.length ? `${events.length} события` : 'События не назначены', badge: isInstaller ? T(o.status) : (installers.length ? `${installers.length}` : 'команда'), body: scheduleBody, color: '#0891b2', soft: '#ecfeff' })}
-        ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'payment', icon: '💵', title: 'Оплата', summary: canSeeMoney ? (orderDebt(o) > 0 ? `Долг ${fmtMoney(orderDebt(o))}` : 'Оплачено полностью') : 'Скрыто по роли', badge: canSeeMoney ? `${(orderMarginPct(o)*100).toFixed(0)}%` : 'скрыто', body: financeBody, color: '#059669', soft: '#ecfdf5' })}
+        ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'payment', icon: '💵', title: 'Оплата', summary: canSeeMoney ? (orderDebt(o) > 0 ? `Долг ${fmtMoney(orderDebt(o))}` : 'Оплачено полностью') : 'Скрыто по роли', badge: canSeeMoney ? (canSeeInternalEconomics ? `${(orderMarginPct(o)*100).toFixed(0)}%` : (orderDebt(o) > 0 ? 'долг' : 'оплачено')) : 'скрыто', body: financeBody, color: '#059669', soft: '#ecfdf5' })}
         ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'route', icon: '🧭', title: 'Маршрут заказа', summary: `Лид: ${orderLeadIntentLabel(o)} · проект: ${orderServiceSummaryLabel(o)}`, badge: `${orderMeasureScopes(o).length} услуг`, body: routeBody, color: '#4f46e5', soft: '#eef2ff' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'history', icon: '🗂', title: 'Файлы и история', summary: `${(o.photos||[]).length} фото · ${(visibleTimeline||[]).length} событий`, badge: 'журнал', body: photosBody, color: '#475569', soft: '#f8fafc' })}
       </div>
@@ -20807,7 +20812,7 @@ function renderOrderDetails(id) {
   if (u.role === 'installer') {
     return renderInstallerTechnicalWorkspace(o, c, u);
   }
-  if (!state.orderClassicMode) {
+  if (!state.orderClassicMode || u.role !== 'owner') {
     return renderOrderCleanDetails(o, c, u, { canManage, canMeasure, canSeeMoney, visibleTimeline });
   }
 

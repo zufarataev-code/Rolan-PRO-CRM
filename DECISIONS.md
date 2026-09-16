@@ -176,6 +176,20 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Changing width, height, or quantity invalidates the prior verification and the saved estimate until it is reviewed again. Existing completed or in-production legacy records are preserved through an idempotent compatibility migration.
 - This correction is implemented in PR #172 and does not authorize an automatic production deployment.
 
+## 2026-09-15 — Manager calculates the customer offer; owner controls internal economics
+
+- The Project calculation is the required source for the Proposal. A manager may edit measured quantity, selected material, sale price, customer-facing add-ons, and the final customer amount.
+- Material purchase cost, payroll, marketing, direct expenses, production cost, profit, and margin are internal company economics visible and editable only by the owner. They must not appear as manager Project fields or block the manager from preparing a complete Proposal.
+- This is a permission boundary inside the same Project, not a separate estimate, order, accounting Project, or duplicated storage record.
+- This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Order and Project are one lifecycle record
+
+- This decision supersedes the record-creation boundary in `Sales closes before the operational project is launched`. A customer job is not converted into a second Project after the sale; accepting the Proposal and receiving the deposit change the stage of the same record.
+- `Project` is the canonical database entity and `Заказ` is its user-facing name in the CRM. Measurements, service positions, Proposal, agreement, payments, scheduling, installation, payroll links, and history belong to that one record.
+- A Lead/Deal may exist before a real customer job is opened, but the normal workflow may not create parallel Order and Project records or separate browser-storage and PostgreSQL versions of the same job.
+- The existing legacy `orders` and modern `Project` split is migration debt, not the target architecture. It must be consolidated with stable ID mapping and data preservation before the duplicate navigation and launch path are removed.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

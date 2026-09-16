@@ -26,6 +26,23 @@ test("project calculation combines measured materials, services, expenses and ma
   assert.match(source, /projectEstimateSnapshot/);
 });
 
+test("manager prices the proposal without seeing owner-only project economics", () => {
+  assert.match(source, /function orderUserCanSeeInternalEconomics\(order, user = currentUser\(\)\)/);
+  assert.match(source, /user\.role === 'owner' && orderUserOwns\(order, user\)/);
+  assert.match(source, /canSeeInternalEconomics \? '<th class="money">Себестоимость материала<\/th>' : ''/);
+  assert.match(source, /canSeeInternalEconomics \? `<section class="project-estimate-section">[\s\S]*?3\. Прямые расходы проекта/);
+  assert.match(source, /canSeeInternalEconomics \? `<div><label>Расстояние, км[\s\S]*?<label>Маркетинг, \$<\/label>/);
+  assert.match(source, /Менеджер назначает только цену продажи, которая попадёт в КП/);
+  assert.match(source, /if \(!state\.orderClassicMode \|\| u\.role !== 'owner'\)/);
+});
+
+test("hidden internal expenses do not block manager proposal readiness", () => {
+  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(readiness, /extraExpenses/);
+  assert.match(readiness, /extraServices/);
+  assert.match(readiness, /orderRevenue\(o\) <= 0/);
+});
+
 test("proposal generation is blocked until the calculation is approved", () => {
   assert.match(
     source,

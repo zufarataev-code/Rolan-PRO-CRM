@@ -297,6 +297,19 @@ Contributors must add a row before starting substantial work and update or remov
 - Installation scheduling and every later production status are blocked until all active windows have positive, verified exact dimensions. Existing Projects already in installation or completed stages are migrated as verified so historical workflows are not broken.
 - This correction extends PR #172. It stays inside the existing Project measurement history and does not authorize an automatic production deployment.
 
+### 2026-09-15 correction — manager calculation is customer pricing, not company accounting
+
+- The manager calculates the Project before creating the proposal: measured sqft, selected material, sale price per sqft, billable add-ons, and the customer total remain available.
+- Purchase/material cost, installer and team cost, marketing, direct company expenses, production cost, profit, and margin are owner-only. The manager Project workspace and payment card do not render those fields, and the old expanded form is owner-only.
+- Hidden internal expenses do not block proposal readiness. They remain attached to the same Project for owner accounting instead of becoming manager inputs or another entity.
+- This correction extends PR #172 and does not authorize an automatic production deployment.
+
+### 2026-09-15 architecture correction — Order and Project are the same customer job
+
+- Product rule: one canonical PostgreSQL `Project` is shown to employees as one `Заказ` and survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.
+- Current blocker: legacy `db.orders` and relational `Project` are still separate and unsynchronized, as documented above. Removing a label or hiding one menu would mask the duplication and risk losing records, so consolidation requires a tested ID/data migration and one write path.
+- PR #172 must not be treated as the final entity-consolidation release. It may supply the Project fields and permissions, but the duplicate launch/list workflow remains migration work. No production deployment is authorized.
+
 ## Completion rule
 
 A task is shared and complete only when all applicable statements are true:
