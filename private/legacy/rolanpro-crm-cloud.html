@@ -6504,6 +6504,58 @@ function ensureMagnitronicSolarPrimeSeries(catalog) {
   return added;
 }
 
+const ROLAN_SMART_FILMS = [
+  { id:'film_smart_ms_vision_85', brand:'Rolan PRO MS', filmCategory:'Rolan PRO MS (Mitsubishi)', productName:'Vision', modelCode:'Vision 85' },
+  { id:'film_smart_ms_vision_89', brand:'Rolan PRO MS', filmCategory:'Rolan PRO MS (Mitsubishi)', productName:'Vision', modelCode:'Vision 89' },
+  { id:'film_smart_ms_vision_95', brand:'Rolan PRO MS', filmCategory:'Rolan PRO MS (Mitsubishi)', productName:'Vision', modelCode:'Vision 95' },
+  { id:'film_smart_ar_vision_a85', brand:'Rolan PRO AR', filmCategory:'Rolan PRO AR (Arshi · Китай)', productName:'Vision', modelCode:'Vision A-85' },
+  { id:'film_smart_ar_vision_b88', brand:'Rolan PRO AR', filmCategory:'Rolan PRO AR (Arshi · Китай)', productName:'Vision', modelCode:'Vision B-88' },
+  { id:'film_smart_ar_vision_c92', brand:'Rolan PRO AR', filmCategory:'Rolan PRO AR (Arshi · Китай)', productName:'Vision', modelCode:'Vision C-92' },
+  { id:'film_smart_dec_1', brand:'Rolan PRO', filmCategory:'Декоративная Smart', productName:'Переменный рисунок / текстура', modelCode:'DEC-SMART 1' },
+  { id:'film_smart_dec_2', brand:'Rolan PRO', filmCategory:'Декоративная Smart', productName:'Переменный рисунок / текстура', modelCode:'DEC-SMART 2' },
+  { id:'film_smart_dec_3', brand:'Rolan PRO', filmCategory:'Декоративная Smart', productName:'Переменный рисунок / текстура', modelCode:'DEC-SMART 3' },
+];
+
+function ensureRolanSmartCatalog(catalog) {
+  if (!Array.isArray(catalog)) return 0;
+  let added = 0;
+  ROLAN_SMART_FILMS.forEach(entry => {
+    let item = catalog.find(candidate => candidate?.id === entry.id || (
+      candidate?.category === 'smart' && String(candidate?.modelCode || candidate?.model || '').trim() === entry.modelCode
+    ));
+    if (!item) {
+      item = {
+        id: entry.id,
+        category: 'smart',
+        retailPerSqft: null,
+        costPerSqft: null,
+        installerRatePerSqft: 5,
+        wastePct: 8,
+      };
+      catalog.push(item);
+      added++;
+    }
+    Object.assign(item, entry, {
+      category: 'smart',
+      series: entry.productName,
+      model: `${entry.productName} ${entry.modelCode}`,
+      archived: false,
+    });
+    if (item.installerRatePerSqft == null) item.installerRatePerSqft = 5;
+  });
+  catalog.forEach(item => {
+    const obsoleteDefault = item?.category === 'smart' && (
+      (item.brand === 'PDLC' && /^Smart Film (60in|72in|90in)/.test(String(item.model || ''))) ||
+      (item.brand === 'Switchable' && item.model === 'eGlass Premium 60in')
+    );
+    if (obsoleteDefault) {
+      item.archived = true;
+      item.archiveReason = 'Replaced by confirmed Rolan PRO Smart catalog';
+    }
+  });
+  return added;
+}
+
 function buildArchitecturalCatalog() {
   const c = (brand, model, category, retail, cost, rate = null, waste = 12) => ({
     id: uid(), brand, model, category,
@@ -6781,6 +6833,7 @@ function migrateSchema() {
   // Добавляем только модели каталога. Рулоны, цены и остатки не создаём:
   // они появятся только после реального прихода на склад.
   ensureMagnitronicSolarPrimeSeries(s.catalog);
+  ensureRolanSmartCatalog(s.catalog);
   applyMagnitronicSpecs(s.catalog);
   (s.catalog || []).forEach(item => {
     if (!item || typeof item !== 'object') return;
@@ -8792,6 +8845,23 @@ const SMART_CONTROL_TYPES = [
   'Smart home relay',
   'Multi-zone controller',
 ];
+const ROLAN_SMART_POWER_SUPPLIES = [
+  'Rolan Control 50W',
+  'Rolan Control 100W',
+  'Rolan Control 200W',
+  'Rolan Control 300W',
+  'Rolan Control 500W',
+  'Rolan Control 1000W',
+];
+const ROLAN_SMART_CONTROL_OPTIONS = [
+  { id:'wifi', label:'Wi-Fi' },
+  { id:'multizone', label:'Мультизона' },
+  { id:'voice', label:'Голосовое управление' },
+  { id:'google_home', label:'Google Home' },
+  { id:'amazon_alexa', label:'Amazon Alexa' },
+  { id:'apple_home', label:'Apple Home' },
+  { id:'wall_switch', label:'Настенный выключатель' },
+];
 const SMART_CONNECTION_POINTS = [
   { id: 'top', label: 'Сверху', short: 'ВЕРХ' },
   { id: 'bottom', label: 'Снизу', short: 'НИЗ' },
@@ -9334,6 +9404,7 @@ function measureWindowEngineeringSummary(win) {
   if (win.decor?.pattern) bits.push(`Decor: ${win.decor.pattern}`);
   if (win.smart?.voltageVac) bits.push(`Smart: ${win.smart.voltageVac}V AC`);
   if (win.smart?.calculatedW) bits.push(`Нагрузка: ${Math.round(win.smart.calculatedW)}W`);
+  if (win.smart?.powerSupplyModel) bits.push(`Питание: ${win.smart.powerSupplyModel}`);
   if (win.smart?.powerSupplyLocation) bits.push(`Блок: ${win.smart.powerSupplyLocation}`);
   return bits.join(' · ');
 }
@@ -9971,8 +10042,13 @@ function openEngineeringMeasureStudio(orderId) {
                 <div><label>W/m²</label><input id="ms-power" type="number" step="0.5" value="${smart.powerWm2 || 6}" oninput="measureStudioPreview()"></div>
                 <div><label>Блоков питания</label><input id="ms-blocks" type="number" min="1" value="${smart.blocks || 1}"></div>
               </div>
+              <label class="mt-2">Модель блока питания</label>
+              <select id="ms-power-supply-model"><option value="">— выбрать —</option>${ROLAN_SMART_POWER_SUPPLIES.map(v => `<option value="${v}" ${smart.powerSupplyModel === v ? 'selected' : ''}>${v}</option>`).join('')}</select>
               <label class="mt-2">Контроллер</label>
               <select id="ms-controller">${SMART_CONTROL_TYPES.map(v => `<option value="${v}" ${(smart.controllerType || 'Wall switch') === v ? 'selected' : ''}>${v}</option>`).join('')}</select>
+              <div class="grid grid-cols-2 gap-2 mt-2">
+                ${ROLAN_SMART_CONTROL_OPTIONS.map(option => `<label class="flex items-center gap-2 text-sm"><input type="checkbox" data-smart-control-option value="${option.id}" ${(smart.controlOptions || []).includes(option.id) ? 'checked' : ''} style="width:auto;"> ${option.label}</label>`).join('')}
+              </div>
               <div class="grid grid-cols-2 gap-2 mt-2">
                 <div><label>Размещение блока</label><select id="ms-block-placement">
                   ${SMART_BLOCK_PLACEMENTS.map(v => `<option value="${v.id}" ${(smart.blockPlacement || 'ceiling') === v.id ? 'selected' : ''}>${academyEsc(v.label)}</option>`).join('')}
@@ -10213,7 +10289,9 @@ function measureStudioFormWindow() {
     powerWm2: parseFloat(document.getElementById('ms-power')?.value) || 6,
     transformerOutput: `${parseFloat(document.getElementById('ms-voltage')?.value) || 48}V AC`,
     blocks: parseInt(document.getElementById('ms-blocks')?.value) || 1,
+    powerSupplyModel: document.getElementById('ms-power-supply-model')?.value || '',
     controllerType: (document.getElementById('ms-controller')?.value || '').trim(),
+    controlOptions: Array.from(document.querySelectorAll('[data-smart-control-option]:checked')).map(x => x.value),
     blockPlacement: document.getElementById('ms-block-placement')?.value || 'ceiling',
     powerSupplyLocation: (document.getElementById('ms-power-location')?.value || '').trim(),
     wirePath: (document.getElementById('ms-wire-path')?.value || '').trim(),
@@ -10349,7 +10427,9 @@ function measureStudioNewWindow(orderId) {
   if (document.getElementById('ms-voltage')) document.getElementById('ms-voltage').value = 48;
   if (document.getElementById('ms-power')) document.getElementById('ms-power').value = 6;
   if (document.getElementById('ms-blocks')) document.getElementById('ms-blocks').value = 1;
+  if (document.getElementById('ms-power-supply-model')) document.getElementById('ms-power-supply-model').value = '';
   if (document.getElementById('ms-controller')) document.getElementById('ms-controller').value = 'Wall switch';
+  document.querySelectorAll('[data-smart-control-option]').forEach(x => { x.checked = false; });
   if (document.getElementById('ms-conduit')) document.getElementById('ms-conduit').value = '1/2 in';
   if (document.getElementById('ms-block-placement')) document.getElementById('ms-block-placement').value = 'ceiling';
   if (document.getElementById('ms-connection-point')) document.getElementById('ms-connection-point').value = 'top';
@@ -10637,7 +10717,7 @@ function renderSmartRoomInstallationPlans(order) {
           <div class="smart-room-diagrams">
             ${windows.map(win => `<div class="smart-room-diagram">
               ${smartInstallationDiagramSvg(win, room.name)}
-              <div class="smart-room-route"><b>Точка:</b> ${academyEsc(smartConnectionPointInfo(win.smart?.connectionPointSide || win.smart?.busbarSide).label)}${win.smart?.connectionPointDetail ? ` · ${academyEsc(win.smart.connectionPointDetail)}` : ''}<br><b>Блок:</b> ${academyEsc(smartBlockPlacementInfo(win.smart?.blockPlacement).label)} · ${academyEsc(win.smart?.powerSupplyLocation || 'точное место не указано')}<br><b>Трасса:</b> ${academyEsc(win.smart?.wirePath || 'не указана')}</div>
+              <div class="smart-room-route"><b>Точка:</b> ${academyEsc(smartConnectionPointInfo(win.smart?.connectionPointSide || win.smart?.busbarSide).label)}${win.smart?.connectionPointDetail ? ` · ${academyEsc(win.smart.connectionPointDetail)}` : ''}<br><b>Блок:</b> ${academyEsc(win.smart?.powerSupplyModel || 'модель не выбрана')} · ${academyEsc(smartBlockPlacementInfo(win.smart?.blockPlacement).label)} · ${academyEsc(win.smart?.powerSupplyLocation || 'точное место не указано')}<br><b>Опции:</b> ${academyEsc((win.smart?.controlOptions || []).map(id => ROLAN_SMART_CONTROL_OPTIONS.find(option => option.id === id)?.label || id).join(', ') || 'нет')}<br><b>Трасса:</b> ${academyEsc(win.smart?.wirePath || 'не указана')}</div>
             </div>`).join('')}
           </div>
         </div>`).join('')}
@@ -10650,8 +10730,9 @@ function renderSmartTechnicalAssignment(win) {
   const route = [
     `Подключение: ${smartConnectionPointInfo(connectionSide).label}${smart.connectionPointDetail ? ` (${smart.connectionPointDetail})` : ''}`,
     smart.wirePath ? `Трасса: ${smart.wirePath}` : tpl.wirePath,
-    `Блок: ${smartBlockPlacementInfo(smart.blockPlacement).label}${smart.powerSupplyLocation ? ` — ${smart.powerSupplyLocation}` : ''}`,
+    `Блок: ${smart.powerSupplyModel || 'модель не выбрана'} · ${smartBlockPlacementInfo(smart.blockPlacement).label}${smart.powerSupplyLocation ? ` — ${smart.powerSupplyLocation}` : ''}`,
     smart.controllerType ? `Управление: ${smart.controllerType}` : tpl.controllerType,
+    (smart.controlOptions || []).length ? `Опции: ${(smart.controlOptions || []).map(id => ROLAN_SMART_CONTROL_OPTIONS.find(option => option.id === id)?.label || id).join(', ')}` : '',
   ].filter(Boolean).join(' → ');
   const repeater = smartNeedsRepeater(smart);
   return `
@@ -13512,6 +13593,7 @@ function catalogLabel(c) {
 function catalogByCategory() {
   const groups = {};
   db.settings.catalog.forEach(c => {
+    if (c.archived) return;
     if (!groups[c.category]) groups[c.category] = [];
     groups[c.category].push(c);
   });
@@ -21791,7 +21873,7 @@ function managerMeasureProgressHtml(order, scopeKey = '') {
 }
 function managerScopedCatalogOptionsHtml(selectedId = '', category = '') {
   const items = db.settings.catalog
-    .filter(c => !category || c.category === category || c.id === selectedId)
+    .filter(c => (!c.archived || c.id === selectedId) && (!category || c.category === category || c.id === selectedId))
     .sort((a, b) => {
       if (a.id === selectedId) return -1;
       if (b.id === selectedId) return 1;

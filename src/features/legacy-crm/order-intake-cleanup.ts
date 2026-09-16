@@ -343,7 +343,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       const category = service?.catalogCategory || '';
       const items = catalogList();
       if (!category) return [];
-      return items.filter((item) => item.category === category);
+      return items.filter((item) => item.category === category).filter((item) => !item.archived);
     };
 
     const complexityKeys = ['standard', 'ladder', 'tower', 'alpinism'];
