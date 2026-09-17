@@ -18,8 +18,37 @@ LOCK TABLE
   measurements,
   project_positions,
   installer_jobs,
-  legacy_workspaces
+  legacy_workspaces,
+  installer_location_points,
+  installer_work_sessions,
+  installer_payroll_accruals,
+  documents,
+  attachments_files,
+  proposal_events,
+  agreements,
+  deposits,
+  proposal_items,
+  survey_recommendations,
+  schedule_assignments,
+  project_position_addons,
+  calendar_events,
+  follow_ups,
+  tasks,
+  activity_log,
+  notifications,
+  email_actions,
+  gmail_messages,
+  twilio_messages
 IN ACCESS EXCLUSIVE MODE;
+
+LOCK TABLE
+  users,
+  user_access,
+  service_types,
+  service_addons,
+  film_catalog,
+  crews
+IN SHARE MODE;
 
 CREATE TEMP TABLE _purge_leads ON COMMIT DROP AS
 SELECT lead_id FROM leads;
