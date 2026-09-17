@@ -388,9 +388,10 @@ Contributors must add a row before starting substantial work and update or remov
 
 - `Быстрый ввод проекта` now matches the minimum data available from the former CRM: service direction, in-stock film, total sqft, customer-facing Project total, and Project installers.
 - For every service row, sale price per sqft is derived automatically from total divided by sqft. Existing rows that were originally entered by price per sqft remain readable and retain their previous calculation until the total is edited.
+- Every service row now has required start and end dates. Invalid reversed ranges are rejected; the service period is preserved in Proposal data, and the latest quick-service end date supplies the profitability month when no actual installation date exists.
 - Installer assignment is available inside the same compact window. The Project calculator continues to derive film COGS from Warehouse lots and installer accrual from the service/employee reference; neither cost is entered manually during import.
 - Multi-service rows continue through the existing Project revenue, Proposal, payroll, PSS, fixed-expense allocation, and management-profit formulas. No new database entity, storage root, or alternate calculation pipeline was added.
-- Verification: all 263 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- Verification: all 264 automated tests passed, standalone TypeScript passed, and the production build completed locally.
 - Branch: `codex/quick-project-total-and-installers`. Production deployment remains separate until explicitly authorized.
 
 ### 2026-09-15 architecture correction — Order and Project are the same customer job

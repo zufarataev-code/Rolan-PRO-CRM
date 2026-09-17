@@ -14553,7 +14553,8 @@ function projectProfitTaxProfile() {
   return profile;
 }
 function projectProfitDate(o) {
-  const value = o?.installationDoneAt || o?.installationAt || o?.proposalAcceptedAt || o?.proposalSentAt || o?.createdAt;
+  const quickRange = projectQuickDateRange(o);
+  const value = o?.installationDoneAt || o?.installationAt || quickRange.endDate || quickRange.startDate || o?.proposalAcceptedAt || o?.proposalSentAt || o?.createdAt;
   const date = value ? new Date(value) : new Date();
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
@@ -21171,6 +21172,8 @@ function projectEstimateReadiness(o) {
   const quickStockDemand = projectQuickRequiredSqftByCatalog(o);
   if (!windows.length && !quickLines.length) issues.push('нет позиций проекта');
   if (quickLines.some(line => !line.serviceType || !line.catalogId || !String(line.label || '').trim() || Number(line.qty) <= 0 || Number(line.unitPrice) <= 0)) issues.push('есть позиция без плёнки со склада, количества или цены продажи');
+  if (quickLines.some(line => !projectQuickDateValue(line.startDate) || !projectQuickDateValue(line.endDate))) issues.push('у каждой услуги нужны даты начала и окончания');
+  if (quickLines.some(line => projectQuickDateValue(line.startDate) > projectQuickDateValue(line.endDate))) issues.push('окончание услуги не может быть раньше начала');
   if (quickLines.some(line => line.catalogId && warehouseCatalogStockStats(line.catalogId).availableSqft <= 0)) issues.push('выбранной плёнки нет на складе');
   if (Object.entries(quickStockDemand).some(([catalogId, requiredSqft]) => warehouseCatalogStockStats(catalogId).pricedSqft < requiredSqft)) issues.push('на складе недостаточно плёнки с указанной закупочной ценой');
   if ((o.extraServices || []).filter(s => !s.quickProjectLine).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
@@ -21180,6 +21183,19 @@ function projectEstimateReadiness(o) {
 
 function projectQuickLines(o) {
   return (o?.extraServices || []).filter(line => line.quickProjectLine === true);
+}
+
+function projectQuickDateValue(value) {
+  const text = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return '';
+  const date = new Date(`${text}T12:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text ? '' : text;
+}
+
+function projectQuickDateRange(o) {
+  const starts = projectQuickLines(o).map(line => projectQuickDateValue(line.startDate)).filter(Boolean).sort();
+  const ends = projectQuickLines(o).map(line => projectQuickDateValue(line.endDate)).filter(Boolean).sort();
+  return { startDate: starts[0] || '', endDate: ends[ends.length - 1] || '' };
 }
 
 function projectQuickSqft(o) {
@@ -21217,6 +21233,8 @@ function projectEstimateSyncQuickLine(line, changedField = '') {
   line.unit = 'sqft';
   line.unitPrice = Math.max(0, Number(line.unitPrice) || 0);
   line.price = Math.max(0, Number(line.price) || 0);
+  line.startDate = projectQuickDateValue(line.startDate);
+  line.endDate = projectQuickDateValue(line.endDate);
   if (changedField === 'price') line.pricingMode = 'total';
   if (changedField === 'unitPrice') line.pricingMode = 'unit';
   if (line.pricingMode === 'total') {
@@ -21244,7 +21262,7 @@ function projectEstimateAddQuickLine(oid, requestedServiceType = '') {
   const line = {
     id: uid(), quickProjectLine: true, serviceType,
     catalogId: catalog?.id || '', label: catalog ? catalogLabel(catalog) : primaryServiceInfo(serviceType)?.title || 'Позиция',
-    qty: 0, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0), price: 0, pricingMode: 'total',
+    qty: 0, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0), price: 0, pricingMode: 'total', startDate: '', endDate: '',
   };
   projectEstimateSyncQuickLine(line);
   o.extraServices = o.extraServices || [];
@@ -21277,6 +21295,12 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     }
   } else if (['qty','unitPrice','price'].includes(field)) {
     line[field] = Math.max(0, Number(value) || 0);
+  } else if (['startDate','endDate'].includes(field)) {
+    const normalized = projectQuickDateValue(value);
+    const nextStart = field === 'startDate' ? normalized : projectQuickDateValue(line.startDate);
+    const nextEnd = field === 'endDate' ? normalized : projectQuickDateValue(line.endDate);
+    if (nextStart && nextEnd && nextEnd < nextStart) { alert('Дата окончания услуги не может быть раньше даты начала.'); return; }
+    line[field] = normalized;
   } else if (field === 'label') {
     line.label = String(value || '').trim();
   }
@@ -21421,6 +21445,8 @@ function renderQuickProjectEntry(o) {
       <td data-label="Количество, sqft"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
       <td data-label="Цена проекта"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','price',this.value)"></td>
       <td data-label="Цена / sqft" class="money"><b>${Number(line.qty) > 0 ? fmtMoney(line.unitPrice) : '—'}</b></td>
+      <td data-label="Начало"><input type="date" value="${projectQuickDateValue(line.startDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','startDate',this.value)"></td>
+      <td data-label="Окончание"><input type="date" min="${projectQuickDateValue(line.startDate)}" value="${projectQuickDateValue(line.endDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','endDate',this.value)"></td>
       <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить услугу</button></td>
     </tr>`;
   }).join('');
@@ -21434,7 +21460,7 @@ function renderQuickProjectEntry(o) {
     </div>
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>Услуги проекта</h4><div class="text-xs text-gray-500">Без комнат и размеров окон: укажите общий метраж и цену проекта. Цена за sqft рассчитается автоматически. Можно добавить несколько услуг.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
-      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена проекта</th><th class="money">Цена / sqft</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
+      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена проекта</th><th class="money">Цена / sqft</th><th>Начало</th><th>Окончание</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="8" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
     </section>
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>Исполнители</h4><div class="text-xs text-gray-500">Выберите монтажников этого проекта. Начисление рассчитается автоматически по услуге и общему метражу.</div></div></div>
@@ -25240,7 +25266,7 @@ function createOrder(nextStep = 'estimate') {
     const line = {
       id: uid(), quickProjectLine: true, serviceType: selectedService.id,
       catalogId: catalog?.id || '', label: catalog ? catalogLabel(catalog) : selectedService.title,
-      qty: 1, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0),
+      qty: 0, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0), price: 0, pricingMode: 'total', startDate: '', endDate: '',
     };
     projectEstimateSyncQuickLine(line);
     o.extraServices.push(line);
@@ -28336,12 +28362,14 @@ function premiumCanonicalSnapshot(prop) {
     });
   });
   projectQuickLines(order).forEach(line => {
+    const servicePeriod = [projectQuickDateValue(line.startDate), projectQuickDateValue(line.endDate)].filter(Boolean).join(' — ');
     items.push({
       service_code: canonicalServiceCodeForOrderService(line.serviceType) || 'SOLAR_FILM',
       title_en: line.label || primaryServiceInfo(line.serviceType)?.title || 'Project service',
       quantity: premiumNum(line.qty) || 1,
       unit_label: line.unit || 'unit',
       line_price: premiumNum(line.price),
+      description_en: servicePeriod ? `Service period: ${servicePeriod}` : null,
       item_kind: line.catalogId ? 'film' : 'service',
     });
   });

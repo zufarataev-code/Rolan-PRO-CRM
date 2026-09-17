@@ -153,8 +153,9 @@ test("quick project entry derives sqft price from the imported project total and
 });
 
 test("quick project total remains the source while sqft changes", () => {
+  const dateSource = source.match(/function projectQuickDateValue\(value\) \{[\s\S]*?\n\}/)?.[0] || "";
   const syncSource = source.match(/function projectEstimateSyncQuickLine\(line, changedField = ''\) \{[\s\S]*?\n\}/)?.[0] || "";
-  const sync = new Function(`${syncSource}; return projectEstimateSyncQuickLine;`)() as (
+  const sync = new Function(`${dateSource}; ${syncSource}; return projectEstimateSyncQuickLine;`)() as (
     line: Record<string, unknown>,
     changedField?: string,
   ) => void;
@@ -169,6 +170,24 @@ test("quick project total remains the source while sqft changes", () => {
   const existingUnitPriceLine: Record<string, unknown> = { qty: 100, price: 0, unitPrice: 12 };
   sync(existingUnitPriceLine);
   assert.equal(existingUnitPriceLine.price, 1200);
+});
+
+test("every quick service has its own validated start and end dates", () => {
+  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  assert.match(source, /function projectQuickDateValue\(value\)/);
+  assert.match(source, /function projectQuickDateRange\(o\)/);
+  assert.match(readiness, /у каждой услуги нужны даты начала и окончания/);
+  assert.match(readiness, /окончание услуги не может быть раньше начала/);
+  assert.match(updater, /\['startDate','endDate'\]\.includes\(field\)/);
+  assert.match(updater, /Дата окончания услуги не может быть раньше даты начала/);
+  assert.match(renderer, /data-label="Начало"><input type="date"/);
+  assert.match(renderer, /data-label="Окончание"><input type="date"/);
+  assert.match(source, /quickRange\.endDate \|\| quickRange\.startDate/);
+  assert.match(source, /Service period: \$\{servicePeriod\}/);
 });
 
 test("quick project lines use warehouse film and never accept manual material or labor cost", () => {

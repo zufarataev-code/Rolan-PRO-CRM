@@ -295,6 +295,7 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - The old CRM export may contain only service, total sqft, and the customer-facing total for a Project service. Quick Project Entry therefore accepts the service total and derives sale price per sqft as `total / sqft`.
 - Existing quick lines that were entered by price per sqft remain compatible. Once an operator enters the total, that total remains the commercial source while sqft changes recalculate the derived unit price.
 - Installers are assigned in the same compact window at Project level. Their accrual is still calculated from service/employee reference rates and sqft; managers do not type labor cost into the Project.
+- Every quick service row owns its own required start and end dates. The end cannot precede the start; the latest service end supplies the management reporting month when no actual Project installation date exists.
 - Multiple service rows still belong to one Project and feed the existing revenue, Warehouse material cost, payroll, margin, Proposal, and management-profit calculations. No import-only Project or parallel calculator is created.
 - Implemented on `codex/quick-project-total-and-installers`; production deployment remains a separate release action.
 
