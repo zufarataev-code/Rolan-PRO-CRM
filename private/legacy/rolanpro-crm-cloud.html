@@ -21136,6 +21136,18 @@ function projectEstimateToggleInstaller(oid, userId, enabled) {
   save(); openProjectEstimateWorkspace(oid);
 }
 
+function projectQuickToggleInstaller(oid, userId, enabled) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const installer = getUser(userId);
+  if (!installer || installer.role !== 'installer') return;
+  const selected = new Set(o.installerIds || []);
+  if (enabled) selected.add(userId); else selected.delete(userId);
+  o.installerIds = [...selected];
+  projectEstimateMarkChanged(o, 'Изменены исполнители проекта');
+  save(); openQuickProjectEntry(oid);
+}
+
 function projectEstimateUpdateTaxProfile(oid, field, value) {
   const o = getOrder(oid);
   if (!o || currentUser()?.role !== 'owner') return;
@@ -21200,11 +21212,18 @@ function orderQuickLineMaterialCost(o) {
   }, 0);
 }
 
-function projectEstimateSyncQuickLine(line) {
+function projectEstimateSyncQuickLine(line, changedField = '') {
   line.qty = Math.max(0, Number(line.qty) || 0);
   line.unit = 'sqft';
   line.unitPrice = Math.max(0, Number(line.unitPrice) || 0);
-  line.price = line.qty * line.unitPrice;
+  line.price = Math.max(0, Number(line.price) || 0);
+  if (changedField === 'price') line.pricingMode = 'total';
+  if (changedField === 'unitPrice') line.pricingMode = 'unit';
+  if (line.pricingMode === 'total') {
+    line.unitPrice = line.qty > 0 ? line.price / line.qty : 0;
+  } else {
+    line.price = line.qty * line.unitPrice;
+  }
   delete line.unitCost;
   delete line.cost;
 }
@@ -21225,7 +21244,7 @@ function projectEstimateAddQuickLine(oid, requestedServiceType = '') {
   const line = {
     id: uid(), quickProjectLine: true, serviceType,
     catalogId: catalog?.id || '', label: catalog ? catalogLabel(catalog) : primaryServiceInfo(serviceType)?.title || 'Позиция',
-    qty: 1, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0),
+    qty: 0, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0), price: 0, pricingMode: 'total',
   };
   projectEstimateSyncQuickLine(line);
   o.extraServices = o.extraServices || [];
@@ -21246,7 +21265,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     const catalog = projectQuickLineCatalog(service.id)[0] || null;
     line.catalogId = catalog?.id || '';
     line.label = catalog ? catalogLabel(catalog) : service.title;
-    line.unitPrice = Number(catalog?.retailPerSqft || 0);
+    if (Number(line.price) <= 0) line.unitPrice = Number(catalog?.retailPerSqft || 0);
   } else if (field === 'catalogId') {
     const catalog = getCatalogItem(value);
     const requiredCategory = primaryServiceInfo(line.serviceType)?.catalogCategory;
@@ -21254,14 +21273,14 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     line.catalogId = catalog?.id || '';
     if (catalog) {
       line.label = catalogLabel(catalog);
-      line.unitPrice = Number(catalog.retailPerSqft || 0);
+      if (Number(line.price) <= 0) line.unitPrice = Number(catalog.retailPerSqft || 0);
     }
-  } else if (['qty','unitPrice'].includes(field)) {
+  } else if (['qty','unitPrice','price'].includes(field)) {
     line[field] = Math.max(0, Number(value) || 0);
   } else if (field === 'label') {
     line.label = String(value || '').trim();
   }
-  projectEstimateSyncQuickLine(line);
+  projectEstimateSyncQuickLine(line, field);
   projectEstimateSyncQuickServices(o);
   projectEstimateMarkChanged(o, 'Изменена быстрая позиция проекта');
   save(); openQuickProjectEntry(oid);
@@ -21392,6 +21411,7 @@ function approveProjectEstimateAndOpenProposal(oid) {
 
 function renderQuickProjectEntry(o) {
   const quickLines = projectQuickLines(o);
+  const availableInstallers = usersByRole('installer');
   const rows = quickLines.map(line => {
     const catalog = projectQuickLineCatalog(line.serviceType, line.catalogId);
     const selectedStock = line.catalogId ? warehouseCatalogStockStats(line.catalogId) : null;
@@ -21399,8 +21419,8 @@ function renderQuickProjectEntry(o) {
       <td data-label="Услуга"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select></td>
       <td data-label="Плёнка со склада"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500 mt-1">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}</td>
       <td data-label="Количество, sqft"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
-      <td data-label="Цена продажи / sqft"><input type="number" min="0" step="0.5" value="${Number(line.unitPrice || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','unitPrice',this.value)"></td>
-      <td data-label="Сумма клиенту" class="money"><b>${fmtMoney(line.price)}</b></td>
+      <td data-label="Цена проекта"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','price',this.value)"></td>
+      <td data-label="Цена / sqft" class="money"><b>${Number(line.qty) > 0 ? fmtMoney(line.unitPrice) : '—'}</b></td>
       <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить услугу</button></td>
     </tr>`;
   }).join('');
@@ -21413,8 +21433,14 @@ function renderQuickProjectEntry(o) {
       <div class="project-estimate-kpi"><span>Сумма клиенту</span><strong class="text-emerald-700">${fmtMoney(total)}</strong></div>
     </div>
     <section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>Услуги проекта</h4><div class="text-xs text-gray-500">Без комнат и размеров окон: выберите услугу и плёнку со склада, укажите общий sqft и цену продажи. Можно добавить несколько услуг.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
-      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Количество, sqft</th><th>Цена продажи / sqft</th><th class="money">Сумма клиенту</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
+      <div class="project-estimate-section-head"><div><h4>Услуги проекта</h4><div class="text-xs text-gray-500">Без комнат и размеров окон: укажите общий метраж и цену проекта. Цена за sqft рассчитается автоматически. Можно добавить несколько услуг.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
+      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена проекта</th><th class="money">Цена / sqft</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
+    </section>
+    <section class="project-estimate-section">
+      <div class="project-estimate-section-head"><div><h4>Исполнители</h4><div class="text-xs text-gray-500">Выберите монтажников этого проекта. Начисление рассчитается автоматически по услуге и общему метражу.</div></div></div>
+      <div class="project-estimate-assignees">
+        ${availableInstallers.length ? availableInstallers.map(user => `<label class="project-estimate-assignee"><input type="checkbox" ${o.installerIds?.includes(user.id) ? 'checked' : ''} onchange="projectQuickToggleInstaller('${o.id}','${user.id}',this.checked)"><span>${academyEsc(user.name)}</span></label>`).join('') : '<span class="text-sm text-gray-500">Добавьте монтажников в разделе «Команда».</span>'}
+      </div>
     </section>
     <div class="project-estimate-footer">
       <div class="text-xs text-gray-500">Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников.</div>

@@ -127,15 +127,52 @@ test("quick project entry works without dimensions and supports multiple service
   assert.match(source, /function projectEstimateAddQuickLine\(oid, requestedServiceType = ''\)/);
   assert.match(source, /quickProjectLine: true, serviceType/);
   assert.match(source, /line\.price = line\.qty \* line\.unitPrice/);
+  assert.match(source, /line\.unitPrice = line\.qty > 0 \? line\.price \/ line\.qty : 0/);
   assert.match(source, /projectQuickLineCatalog\(line\.serviceType, line\.catalogId\)/);
   assert.match(source, /ORDER_PRIMARY_SERVICES\.map\(service =>/);
-  assert.match(source, /Количество, sqft/);
-  assert.match(source, /Цена продажи \/ sqft/);
+  assert.match(source, /Метраж, sqft/);
+  assert.match(source, /Цена проекта/);
+  assert.match(source, /Цена \/ sqft/);
   assert.match(source, /\+ Добавить услугу/);
 });
 
+test("quick project entry derives sqft price from the imported project total and assigns installers", () => {
+  const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  const installerToggle = source.match(/function projectQuickToggleInstaller\(oid, userId, enabled\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(updater, /\['qty','unitPrice','price'\]\.includes\(field\)/);
+  assert.match(source, /if \(changedField === 'price'\) line\.pricingMode = 'total'/);
+  assert.match(renderer, /Цена за sqft рассчитается автоматически/);
+  assert.match(renderer, /projectEstimateUpdateQuickLine\('[^']+','[^']+','price',this\.value\)/);
+  assert.match(renderer, /function projectQuickToggleInstaller|projectQuickToggleInstaller/);
+  assert.match(renderer, /Выберите монтажников этого проекта/);
+  assert.match(installerToggle, /o\.installerIds = \[\.\.\.selected\]/);
+  assert.match(installerToggle, /save\(\); openQuickProjectEntry\(oid\)/);
+});
+
+test("quick project total remains the source while sqft changes", () => {
+  const syncSource = source.match(/function projectEstimateSyncQuickLine\(line, changedField = ''\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const sync = new Function(`${syncSource}; return projectEstimateSyncQuickLine;`)() as (
+    line: Record<string, unknown>,
+    changedField?: string,
+  ) => void;
+  const importedLine: Record<string, unknown> = { qty: 200, price: 5000, unitPrice: 0 };
+  sync(importedLine, "price");
+  assert.equal(importedLine.unitPrice, 25);
+  importedLine.qty = 250;
+  sync(importedLine, "qty");
+  assert.equal(importedLine.price, 5000);
+  assert.equal(importedLine.unitPrice, 20);
+
+  const existingUnitPriceLine: Record<string, unknown> = { qty: 100, price: 0, unitPrice: 12 };
+  sync(existingUnitPriceLine);
+  assert.equal(existingUnitPriceLine.price, 1200);
+});
+
 test("quick project lines use warehouse film and never accept manual material or labor cost", () => {
-  const sync = source.match(/function projectEstimateSyncQuickLine\(line\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const sync = source.match(/function projectEstimateSyncQuickLine\(line, changedField = ''\) \{[\s\S]*?\n\}/)?.[0] || "";
   const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);

@@ -288,6 +288,16 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Film purchase cost remains owned by Warehouse lots. Additional-work rates remain in employee Payroll, and one-off purchases/helpers/subcontractors remain Project expenses.
 - Implemented in PR #173. Production deployment remains a separate authorized action.
 
+## 2026-09-16 — Imported quick Projects use total sale price as the input
+
+**Supersedes:** the quick-entry presentation in `Quick Project intake is line-item pricing before measurement`, where sale price per unit was the primary input.
+
+- The old CRM export may contain only service, total sqft, and the customer-facing total for a Project service. Quick Project Entry therefore accepts the service total and derives sale price per sqft as `total / sqft`.
+- Existing quick lines that were entered by price per sqft remain compatible. Once an operator enters the total, that total remains the commercial source while sqft changes recalculate the derived unit price.
+- Installers are assigned in the same compact window at Project level. Their accrual is still calculated from service/employee reference rates and sqft; managers do not type labor cost into the Project.
+- Multiple service rows still belong to one Project and feed the existing revenue, Warehouse material cost, payroll, margin, Proposal, and management-profit calculations. No import-only Project or parallel calculator is created.
+- Implemented on `codex/quick-project-total-and-installers`; production deployment remains a separate release action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
