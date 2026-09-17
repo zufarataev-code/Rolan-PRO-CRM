@@ -14,6 +14,26 @@ test("test-data purge is transactional and rolls back on failed postconditions",
   assert.match(sql, /ROLANPRO authorized test-data cleanup completed/);
 });
 
+test("purge locks every mutated table and freezes protected counts", () => {
+  const sql = migration();
+  for (const table of [
+    "installer_work_sessions",
+    "installer_payroll_accruals",
+    "attachments_files",
+    "proposal_items",
+    "survey_recommendations",
+    "calendar_events",
+    "tasks",
+    "notifications",
+    "email_actions",
+    "gmail_messages",
+    "twilio_messages",
+  ]) {
+    assert.match(sql, new RegExp(`LOCK TABLE[\\s\\S]*\\b${table}\\b[\\s\\S]*IN ACCESS EXCLUSIVE MODE;`));
+  }
+  assert.match(sql, /LOCK TABLE[\s\S]*users,[\s\S]*user_access,[\s\S]*service_types,[\s\S]*service_addons,[\s\S]*film_catalog,[\s\S]*crews[\s\S]*IN SHARE MODE;/);
+});
+
 test("employee work sessions linked to test jobs are removed before installer jobs", () => {
   const sql = migration();
   const sessionDelete = sql.indexOf("DELETE FROM installer_work_sessions");
