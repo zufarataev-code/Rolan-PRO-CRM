@@ -20,6 +20,7 @@ export type TeamMemberInput = {
   roles: RoleCode[];
   password?: string;
   isActive?: boolean;
+  legacyUserId?: string;
 };
 
 export type TeamMember = {
@@ -91,6 +92,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
 export async function createTeamMember(input: TeamMemberInput) {
   const email = normalizeEmail(input.email);
   const password = input.password?.trim() ?? "";
+  const legacyUserId = input.legacyUserId?.trim() || null;
 
   assertValidEmail(email);
   assertValidRoles(input.roles);
@@ -100,6 +102,19 @@ export async function createTeamMember(input: TeamMemberInput) {
 
   if (existing) {
     throw new Error("Пользователь с такой почтой уже есть.");
+  }
+
+  if (legacyUserId) {
+    const linkedUser = await prisma.user.findFirst({
+      where: { legacy_user_ids: { has: legacyUserId } },
+      select: { email: true },
+    });
+
+    if (linkedUser) {
+      throw new Error(
+        `Эта legacy-карточка уже привязана к другому серверному аккаунту (${linkedUser.email}). Сначала проверьте дубликат сотрудника.`,
+      );
+    }
   }
 
   const roles = await prisma.role.findMany({
@@ -114,13 +129,19 @@ export async function createTeamMember(input: TeamMemberInput) {
       password_hash: hashPassword(password),
       must_change_password: true,
       is_active: input.isActive ?? true,
+      legacy_user_ids: legacyUserId ? [legacyUserId] : [],
       user_accesses: {
         create: roles.map((role) => ({ role_id: role.role_id })),
       },
     },
   });
 
-  return { userId: user.user_id, email: user.email, temporaryPassword: password };
+  return {
+    userId: user.user_id,
+    legacyUserIds: user.legacy_user_ids,
+    email: user.email,
+    temporaryPassword: password,
+  };
 }
 
 /** Меняет почту, имя, роли и активность. Пароль здесь не трогается. */
