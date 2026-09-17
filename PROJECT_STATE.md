@@ -410,7 +410,7 @@ Contributors must add a row before starting substantial work and update or remov
 - The action uses service start/end dates and a selected payment date/method, records full payment and completion milestones, approves the Project estimate, and preserves the existing payroll, PSS, monthly fixed-cost, California-tax, and net-profit calculations.
 - The close action requires valid service data, assigned installers, film purchase cost, and valid dates. Because the material was consumed before import, it neither checks today's stock quantity nor deducts today's Warehouse; normal active-Project approval remains strict about available priced stock.
 - No automatic customer notification is sent for the historical event. The Project carries explicit import flags and audit-timeline notes.
-- Verification: all 270 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- Verification: all 275 automated tests passed after merging the latest `main`, standalone TypeScript passed, and the production build completed locally.
 - Branch: `codex/quick-project-total-and-installers`, PR #174. Production deployment remains separate until explicitly authorized.
 
 ### 2026-09-15 architecture correction — Order and Project are the same customer job

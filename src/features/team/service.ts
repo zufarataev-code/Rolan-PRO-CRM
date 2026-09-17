@@ -92,6 +92,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
 export async function createTeamMember(input: TeamMemberInput) {
   const email = normalizeEmail(input.email);
   const password = input.password?.trim() ?? "";
+  const legacyUserId = input.legacyUserId?.trim() || null;
 
   assertValidEmail(email);
   assertValidRoles(input.roles);
@@ -103,14 +104,16 @@ export async function createTeamMember(input: TeamMemberInput) {
     throw new Error("Пользователь с такой почтой уже есть.");
   }
 
-  const legacyUserId = input.legacyUserId?.trim() || null;
   if (legacyUserId) {
-    const existingLegacyLink = await prisma.user.findFirst({
+    const linkedUser = await prisma.user.findFirst({
       where: { legacy_user_ids: { has: legacyUserId } },
       select: { email: true },
     });
-    if (existingLegacyLink) {
-      throw new Error(`Эта карточка сотрудника уже связана с аккаунтом ${existingLegacyLink.email}.`);
+
+    if (linkedUser) {
+      throw new Error(
+        `Эта legacy-карточка уже привязана к другому серверному аккаунту (${linkedUser.email}). Сначала проверьте дубликат сотрудника.`,
+      );
     }
   }
 
@@ -133,7 +136,12 @@ export async function createTeamMember(input: TeamMemberInput) {
     },
   });
 
-  return { userId: user.user_id, email: user.email, temporaryPassword: password };
+  return {
+    userId: user.user_id,
+    legacyUserIds: user.legacy_user_ids,
+    email: user.email,
+    temporaryPassword: password,
+  };
 }
 
 /** Меняет почту, имя, роли и активность. Пароль здесь не трогается. */
