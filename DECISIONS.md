@@ -288,6 +288,36 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Film purchase cost remains owned by Warehouse lots. Additional-work rates remain in employee Payroll, and one-off purchases/helpers/subcontractors remain Project expenses.
 - Implemented in PR #173. Production deployment remains a separate authorized action.
 
+## 2026-09-16 — Imported quick Projects use total sale price as the input
+
+**Supersedes:** the quick-entry presentation in `Quick Project intake is line-item pricing before measurement`, where sale price per unit was the primary input.
+
+- The old CRM export may contain only service, total sqft, and the customer-facing total for a Project service. Quick Project Entry therefore accepts the service total and derives sale price per sqft as `total / sqft`.
+- Existing quick lines that were entered by price per sqft remain compatible. Once an operator enters the total, that total remains the commercial source while sqft changes recalculate the derived unit price.
+- Installers are assigned in the same compact window at Project level. Their accrual is still calculated from service/employee reference rates and sqft; managers do not type labor cost into the Project.
+- Every quick service row owns its own required start and end dates. The end cannot precede the start; the latest service end supplies the management reporting month when no actual Project installation date exists.
+- Multiple service rows still belong to one Project and feed the existing revenue, Warehouse material cost, payroll, margin, Proposal, and management-profit calculations. No import-only Project or parallel calculator is created.
+- Implemented on `codex/quick-project-total-and-installers`; production deployment remains a separate release action.
+
+## 2026-09-17 — Quick Project operations belong to each service row
+
+**Supersedes:** the same-window rule above that assigned installers only at Project level.
+
+- Each quick service row owns its required installers, start/end dates, Warehouse film, sqft, customer total, and optional Warehouse supplies. The Project-level installer list is only a compatibility union of those row assignments.
+- Installer accrual is calculated only from the sqft of services assigned to that employee. If several installers share one service, that service's accrual is divided among them; unrelated service rows do not affect their pay.
+- The owner can create an installer from a service row. Creation writes the canonical server account and its linked legacy card together, assigns that card to the current service, and returns to Quick Project Entry after the one-time password is recorded.
+- A missing film can be created inline only with its service direction, brand, film category, product name, model, actual roll dimensions, and purchase cost. The same action creates a FilmCatalog item and a Warehouse receipt; it does not create a second film list.
+- Supplies can be selected from Warehouse or created inline with unit, stock quantity, and purchase cost. Their used quantity contributes to Project profitability, while actual stock issue remains a later Warehouse operation, consistent with film stock behavior.
+- Implemented in PR #174. Production deployment remains a separate authorized action.
+
+## 2026-09-17 — Completed legacy jobs close inside Quick Project Entry
+
+- A completed job from the former CRM does not need fabricated room/window dimensions or a replay of every live funnel transition. The owner can close it directly from Quick Project Entry after entering its actual services, film, sqft, sale totals, dates, installers, supplies, and direct expenses.
+- Closing records full payment, installation start/end, act/payment/completion milestones, the approved estimate snapshot, payroll, PSS, fixed-expense/tax allocation, and management profit on the same Project.
+- Historical closure requires purchase-cost references but does not require today's Warehouse balance to cover material already consumed in the past and does not issue today's stock. This exception applies only to the explicit completed-import action; active Project approval keeps its normal stock sufficiency checks.
+- Historical closure never sends automatic client messages. It is an owner-only accounting import action and is marked in the Project audit trail.
+- Implemented in PR #174. Production deployment remains separate until explicitly authorized.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

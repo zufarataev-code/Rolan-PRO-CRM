@@ -384,6 +384,35 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification: all 261 automated tests passed, standalone TypeScript passed, and the production build completed locally.
 - This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains separate.
 
+### 2026-09-16 correction — quick import by Project total
+
+- `Быстрый ввод проекта` now matches the minimum data available from the former CRM: service direction, in-stock film, total sqft, customer-facing Project total, and Project installers.
+- For every service row, sale price per sqft is derived automatically from total divided by sqft. Existing rows that were originally entered by price per sqft remain readable and retain their previous calculation until the total is edited.
+- Every service row now has required start and end dates. Invalid reversed ranges are rejected; the service period is preserved in Proposal data, and the latest quick-service end date supplies the profitability month when no actual installation date exists.
+- Installer assignment is available inside the same compact window. The Project calculator continues to derive film COGS from Warehouse lots and installer accrual from the service/employee reference; neither cost is entered manually during import.
+- Multi-service rows continue through the existing Project revenue, Proposal, payroll, PSS, fixed-expense allocation, and management-profit formulas. No new database entity, storage root, or alternate calculation pipeline was added.
+- Verification: all 264 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- Branch: `codex/quick-project-total-and-installers`. Production deployment remains separate until explicitly authorized.
+
+### 2026-09-17 correction — per-service executors, film and supplies in Quick Project Entry
+
+- Quick Project Entry now assigns installers on each service row instead of once for the whole Project. The Project card keeps the union only for compatibility and permissions; payroll uses the actual row assignments and splits one row only among its selected installers.
+- The owner can add a new installer without leaving the row. The server account is created with its linked compatibility-card ID, the local employee card appears immediately, and it is selected for that service after the one-time password step.
+- Each service row can select Warehouse supplies, set used quantities, or create a new supply with current stock and purchase cost. Supply purchase cost is included in PSS and profit without prematurely issuing inventory.
+- A new film can be created in the same row using `brand → film category → product name → model`, plus the roll's width, length, lot, retail price, and actual purchase cost. The action writes the existing FilmCatalog and Warehouse receipt structures and immediately selects the new film.
+- New Project quick rows and migrated old rows receive independent `installerIds` and `supplyItems`; no second Project, catalog, Warehouse, employee directory, shell, or storage path was introduced.
+- Verification: all 268 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- Branch: `codex/quick-project-total-and-installers`, PR #174. Production deployment remains separate until explicitly authorized.
+
+### 2026-09-17 correction — one-step closure for completed former-CRM projects
+
+- The owner can now finish a historical import inside `Быстрый ввод проекта` with `Закрыть как выполненный и оплаченный`; no window dimensions or parallel import entity are required. Direct delivery, purchase, helper, subcontractor, tools, rental, permit, and other expenses can be recorded in the same window before closing.
+- The action uses service start/end dates and a selected payment date/method, records full payment and completion milestones, approves the Project estimate, and preserves the existing payroll, PSS, monthly fixed-cost, California-tax, and net-profit calculations.
+- The close action requires valid service data, assigned installers, film purchase cost, and valid dates. Because the material was consumed before import, it neither checks today's stock quantity nor deducts today's Warehouse; normal active-Project approval remains strict about available priced stock.
+- No automatic customer notification is sent for the historical event. The Project carries explicit import flags and audit-timeline notes.
+- Verification: all 275 automated tests passed after merging the latest `main`, standalone TypeScript passed, and the production build completed locally.
+- Branch: `codex/quick-project-total-and-installers`, PR #174. Production deployment remains separate until explicitly authorized.
+
 ### 2026-09-15 architecture correction — Order and Project are the same customer job
 
 - Product rule: one canonical PostgreSQL `Project` survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.

@@ -127,15 +127,155 @@ test("quick project entry works without dimensions and supports multiple service
   assert.match(source, /function projectEstimateAddQuickLine\(oid, requestedServiceType = ''\)/);
   assert.match(source, /quickProjectLine: true, serviceType/);
   assert.match(source, /line\.price = line\.qty \* line\.unitPrice/);
+  assert.match(source, /line\.unitPrice = line\.qty > 0 \? line\.price \/ line\.qty : 0/);
   assert.match(source, /projectQuickLineCatalog\(line\.serviceType, line\.catalogId\)/);
   assert.match(source, /ORDER_PRIMARY_SERVICES\.map\(service =>/);
-  assert.match(source, /Количество, sqft/);
-  assert.match(source, /Цена продажи \/ sqft/);
+  assert.match(source, /Метраж, sqft/);
+  assert.match(source, /Цена проекта/);
+  assert.match(source, /Цена \/ sqft/);
   assert.match(source, /\+ Добавить услугу/);
 });
 
+test("quick project entry derives sqft price and assigns installers per service", () => {
+  const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  const installerToggle = source.match(/function projectQuickToggleInstaller\(oid, lineId, userId, enabled\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(updater, /\['qty','unitPrice','price'\]\.includes\(field\)/);
+  assert.match(source, /if \(changedField === 'price'\) line\.pricingMode = 'total'/);
+  assert.match(renderer, /Цена за sqft рассчитается автоматически/);
+  assert.match(renderer, /projectEstimateUpdateQuickLine\('[^']+','[^']+','price',this\.value\)/);
+  assert.match(renderer, /projectQuickToggleInstaller\('[^']+','[^']+','[^']+',this\.checked\)/);
+  assert.match(renderer, /data-label="Исполнители"/);
+  assert.match(renderer, /\+ Новый сотрудник/);
+  assert.match(installerToggle, /line\.installerIds = \[\.\.\.selected\]/);
+  assert.match(installerToggle, /projectQuickSyncProjectInstallers\(o\)/);
+  assert.match(installerToggle, /save\(\); openQuickProjectEntry\(oid\)/);
+  assert.match(source, /filter\(line => line\.unit === 'sqft' && \(line\.installerIds \|\| \[\]\)\.includes\(user\?\.id\)\)/);
+  assert.match(source, /new Set\(line\.installerIds \|\| \[\]\)\.size/);
+});
+
+test("quick project can create an installer and return it as a selected service card", () => {
+  const submitter = source.match(/async function submitTeamMember\(quickOrderId = '', quickLineId = ''\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(source, /function openTeamMemberForm\(quickOrderId = '', quickLineId = ''\)/);
+  assert.match(submitter, /legacyUserId = 'u_' \+ uid\(\)/);
+  assert.match(submitter, /JSON\.stringify\(\{ fullName, email, password, roles, legacyUserId \}\)/);
+  assert.match(submitter, /db\.users\.push\(/);
+  assert.match(submitter, /line\.installerIds = \[\.\.\.new Set/);
+  assert.match(submitter, /state\.quickTeamReturn = \{ orderId: quickOrderId/);
+  assert.match(source, /function finishTeamPasswordResult\(\)/);
+  assert.match(source, /return openQuickProjectEntry\(target\.orderId\)/);
+});
+
+test("quick service can create warehouse film with category, name and model", () => {
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  const saver = source.match(/function saveQuickProjectFilm\(oid, lineId, category\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(renderer, /\+ Новая плёнка/);
+  assert.match(source, /id="qf-category"[^>]*placeholder="Зеркальная"/);
+  assert.match(source, /id="qf-name"[^>]*placeholder="Prime"/);
+  assert.match(source, /id="qf-model"[^>]*placeholder="NE2"/);
+  assert.match(saver, /filmCategory, productName, modelCode/);
+  assert.match(saver, /db\.settings\.catalog\.push\(catalog\)/);
+  assert.match(saver, /addInventoryRoll\(/);
+  assert.match(saver, /recordInventoryMovement\(/);
+  assert.match(saver, /line\.catalogId = catalog\.id/);
+});
+
+test("quick service adds stock supplies and includes their purchase cost", () => {
+  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const consumables = source.match(/function orderConsumablesExpense\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(source, /function projectQuickAddSupply\(oid, lineId\)/);
+  assert.match(source, /function openQuickProjectSupplyForm\(oid, lineId\)/);
+  assert.match(source, /function saveQuickProjectSupply\(oid, lineId\)/);
+  assert.match(source, /function projectQuickRequiredSupplies\(o\)/);
+  assert.match(source, /demand\[item\.supplyId\] = \(demand\[item\.supplyId\] \|\| 0\) \+ \(Number\(item\.qty\) \|\| 0\)/);
+  assert.match(source, /line\.supplyItems\.push\(/);
+  assert.match(source, /costPerUnit/);
+  assert.match(readiness, /есть незаполненный расходник услуги/);
+  assert.match(readiness, /на складе недостаточно расходников/);
+  assert.match(consumables, /projectQuickSupplyCost\(o\)/);
+});
+
+test("owner can close a completed legacy project directly from quick entry", () => {
+  const closer = source.match(/function closeQuickProjectAsCompleted\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  assert.match(renderer, /Закрытие проекта из старой CRM/);
+  assert.match(renderer, /Дата полной оплаты/);
+  assert.match(renderer, /Способ оплаты/);
+  assert.match(renderer, /Закрыть как выполненный и оплаченный/);
+  assert.match(completionIssues, /ignoredHistoricalStockIssues/);
+  assert.match(completionIssues, /warehouseCatalogCostPerSqft\(line\.catalogId\) <= 0/);
+  assert.match(closer, /currentUser\(\)\?\.role !== 'owner'/);
+  assert.match(closer, /o\.status = 'completed'/);
+  assert.match(closer, /o\.installationDoneAt = o\.installationDoneAt \|\| endAt/);
+  assert.match(closer, /o\.paidAt = paidAt/);
+  assert.match(closer, /payments\.push\(/);
+  assert.match(closer, /o\.projectEstimateSnapshot =/);
+  assert.match(closer, /quickProjectImportedCompleted = true/);
+  assert.doesNotMatch(closer, /autoNotifyClient|notifyStatusChange|autoDeductInventoryForOrder/);
+});
+
+test("quick entry records direct project expenses before historical closure", () => {
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  assert.match(source, /function projectQuickAddExpense\(oid, type = 'delivery'\)/);
+  assert.match(source, /function projectQuickUpdateExpense\(oid, expenseId, field, value\)/);
+  assert.match(source, /function projectQuickDeleteExpense\(oid, expenseId\)/);
+  assert.match(source, /projectDirect: true/);
+  assert.match(renderer, /Прямые расходы проекта/);
+  assert.match(renderer, /\+ Добавить расход/);
+  assert.match(renderer, /material_purchase/);
+  assert.match(renderer, /subcontractor/);
+  assert.match(renderer, /projectQuickUpdateExpense/);
+});
+
+test("quick project total remains the source while sqft changes", () => {
+  const dateSource = source.match(/function projectQuickDateValue\(value\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const syncSource = source.match(/function projectEstimateSyncQuickLine\(line, changedField = ''\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const sync = new Function(`${dateSource}; ${syncSource}; return projectEstimateSyncQuickLine;`)() as (
+    line: Record<string, unknown>,
+    changedField?: string,
+  ) => void;
+  const importedLine: Record<string, unknown> = { qty: 200, price: 5000, unitPrice: 0 };
+  sync(importedLine, "price");
+  assert.equal(importedLine.unitPrice, 25);
+  importedLine.qty = 250;
+  sync(importedLine, "qty");
+  assert.equal(importedLine.price, 5000);
+  assert.equal(importedLine.unitPrice, 20);
+
+  const existingUnitPriceLine: Record<string, unknown> = { qty: 100, price: 0, unitPrice: 12 };
+  sync(existingUnitPriceLine);
+  assert.equal(existingUnitPriceLine.price, 1200);
+});
+
+test("every quick service has its own validated start and end dates", () => {
+  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  assert.match(source, /function projectQuickDateValue\(value\)/);
+  assert.match(source, /function projectQuickDateRange\(o\)/);
+  assert.match(readiness, /у каждой услуги нужны даты начала и окончания/);
+  assert.match(readiness, /окончание услуги не может быть раньше начала/);
+  assert.match(updater, /\['startDate','endDate'\]\.includes\(field\)/);
+  assert.match(updater, /Дата окончания услуги не может быть раньше даты начала/);
+  assert.match(renderer, /data-label="Начало"><input type="date"/);
+  assert.match(renderer, /data-label="Окончание"><input type="date"/);
+  assert.match(source, /quickRange\.endDate \|\| quickRange\.startDate/);
+  assert.match(source, /Service period: \$\{servicePeriod\}/);
+});
+
 test("quick project lines use warehouse film and never accept manual material or labor cost", () => {
-  const sync = source.match(/function projectEstimateSyncQuickLine\(line\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const sync = source.match(/function projectEstimateSyncQuickLine\(line, changedField = ''\) \{[\s\S]*?\n\}/)?.[0] || "";
   const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);

@@ -51,3 +51,14 @@ test("cloud employee access patch remains valid without nested inline quotes", (
   assert.match(route, /window\.generateTeamAccessPassword/);
   assert.doesNotMatch(route, /onclick="const el=document\.getElementById/);
 });
+
+test("new employee is linked to the legacy card during creation", () => {
+  const route = readFileSync("app/api/v1/team/route.ts", "utf8");
+  const service = readFileSync("src/features/team/service.ts", "utf8");
+
+  assert.match(route, /legacyUserId\?: string/);
+  assert.match(route, /legacyUserId: body\.legacyUserId/);
+  assert.match(service, /legacyUserId\?: string/);
+  assert.match(service, /legacy_user_ids: legacyUserId \? \[legacyUserId\] : \[\]/);
+  assert.match(service, /legacy_user_ids: \{ has: legacyUserId \}/);
+});
