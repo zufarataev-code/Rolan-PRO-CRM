@@ -299,6 +299,17 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Multiple service rows still belong to one Project and feed the existing revenue, Warehouse material cost, payroll, margin, Proposal, and management-profit calculations. No import-only Project or parallel calculator is created.
 - Implemented on `codex/quick-project-total-and-installers`; production deployment remains a separate release action.
 
+## 2026-09-17 — Quick Project operations belong to each service row
+
+**Supersedes:** the same-window rule above that assigned installers only at Project level.
+
+- Each quick service row owns its required installers, start/end dates, Warehouse film, sqft, customer total, and optional Warehouse supplies. The Project-level installer list is only a compatibility union of those row assignments.
+- Installer accrual is calculated only from the sqft of services assigned to that employee. If several installers share one service, that service's accrual is divided among them; unrelated service rows do not affect their pay.
+- The owner can create an installer from a service row. Creation writes the canonical server account and its linked legacy card together, assigns that card to the current service, and returns to Quick Project Entry after the one-time password is recorded.
+- A missing film can be created inline only with its service direction, brand, film category, product name, model, actual roll dimensions, and purchase cost. The same action creates a FilmCatalog item and a Warehouse receipt; it does not create a second film list.
+- Supplies can be selected from Warehouse or created inline with unit, stock quantity, and purchase cost. Their used quantity contributes to Project profitability, while actual stock issue remains a later Warehouse operation, consistent with film stock behavior.
+- Implemented in PR #174. Production deployment remains a separate authorized action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

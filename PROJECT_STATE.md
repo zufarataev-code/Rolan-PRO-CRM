@@ -394,6 +394,16 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification: all 264 automated tests passed, standalone TypeScript passed, and the production build completed locally.
 - Branch: `codex/quick-project-total-and-installers`. Production deployment remains separate until explicitly authorized.
 
+### 2026-09-17 correction — per-service executors, film and supplies in Quick Project Entry
+
+- Quick Project Entry now assigns installers on each service row instead of once for the whole Project. The Project card keeps the union only for compatibility and permissions; payroll uses the actual row assignments and splits one row only among its selected installers.
+- The owner can add a new installer without leaving the row. The server account is created with its linked compatibility-card ID, the local employee card appears immediately, and it is selected for that service after the one-time password step.
+- Each service row can select Warehouse supplies, set used quantities, or create a new supply with current stock and purchase cost. Supply purchase cost is included in PSS and profit without prematurely issuing inventory.
+- A new film can be created in the same row using `brand → film category → product name → model`, plus the roll's width, length, lot, retail price, and actual purchase cost. The action writes the existing FilmCatalog and Warehouse receipt structures and immediately selects the new film.
+- New Project quick rows and migrated old rows receive independent `installerIds` and `supplyItems`; no second Project, catalog, Warehouse, employee directory, shell, or storage path was introduced.
+- Verification: all 268 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- Branch: `codex/quick-project-total-and-installers`, PR #174. Production deployment remains separate until explicitly authorized.
+
 ### 2026-09-15 architecture correction — Order and Project are the same customer job
 
 - Product rule: one canonical PostgreSQL `Project` survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.

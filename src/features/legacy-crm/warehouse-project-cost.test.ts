@@ -22,7 +22,9 @@ test('quick project cost is derived from priced warehouse stock and employee rat
   assert.match(html, /if \(!measureAllWindows\(o\)\.length\) return orderQuickLineMaterialCost\(o\)/);
   assert.match(html, /function installerRateForQuickLine\(user, line\)/);
   assert.match(html, /pc\.ratesByCategory\?\.\[category\]/);
-  assert.match(html, /const filmPayout = !measureAllWindows\(o\)\.length \? orderQuickInstallerPayoutForUser\(o, user, installerIds\.length\)/);
+  assert.match(html, /const filmPayout = !measureAllWindows\(o\)\.length \? orderQuickInstallerPayoutForUser\(o, user\)/);
+  assert.match(html, /filter\(line => line\.unit === 'sqft' && \(line\.installerIds \|\| \[\]\)\.includes\(user\?\.id\)\)/);
+  assert.match(html, /new Set\(line\.installerIds \|\| \[\]\)\.size/);
   assert.match(html, /return filmPayout \+ orderAdditionalWorkPayoutForUser\(o, user, installerIds\.length\)/);
   assert.match(html, /filter\(line => !line\.quickProjectLine\)/);
 });
