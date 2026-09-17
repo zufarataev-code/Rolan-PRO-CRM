@@ -56,6 +56,8 @@ test("legacy cleanup clears only authorized customer/project arrays", () => {
   const sql = migration();
   assert.match(sql, /jsonb_set\([\s\S]*'\{clients\}'[\s\S]*'\{orders\}'[\s\S]*'\{notifications\}'[\s\S]*'\{reviews\}'/);
   assert.match(sql, /payload - 'clients' - 'orders' - 'notifications' - 'reviews'/);
+  assert.match(sql, /revision = revision \+ 1/);
+  assert.match(sql, /updated_at = CURRENT_TIMESTAMP/);
   assert.match(sql, /non-customer legacy workspace data changed/);
   assert.doesNotMatch(sql, /'\{users\}'/);
   assert.doesNotMatch(sql, /'\{settings\}'/);
