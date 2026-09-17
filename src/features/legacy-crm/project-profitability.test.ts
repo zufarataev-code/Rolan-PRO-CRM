@@ -7,9 +7,9 @@ const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 test("project calculator exposes one fast operational summary", () => {
   assert.match(source, /Быстрый итог проекта/);
   assert.match(source, /Услуги проекта/);
-  assert.match(source, /Метраж стекла/);
+  assert.match(source, /Предварительный объём/);
   assert.match(source, /Расход плёнки/);
-  assert.match(source, /Доп\. услуги/);
+  assert.match(source, /Позиции проекта/);
   assert.match(source, /Исполнители и зарплата/);
 });
 
@@ -58,10 +58,11 @@ test("owner settings keep company fixed costs and break-even in one source of tr
   assert.match(source, /Это управленческий план, а не списание денег со счёта/);
 });
 
-test("new project can continue directly into the canonical measurement workspace", () => {
+test("new project opens a quick multi-service estimate without requiring measurements", () => {
   assert.match(source, /createOrder\('draft'\)/);
-  assert.match(source, /createOrder\('measure'\)/);
-  assert.match(source, /Создать и внести размеры →/);
-  assert.match(source, /function createOrder\(nextStep = 'measure'\)/);
-  assert.match(source, /openManagerMeasureModal\(o\.id\)/);
+  assert.match(source, /createOrder\('estimate'\)/);
+  assert.match(source, /Создать и быстро рассчитать →/);
+  assert.match(source, /function createOrder\(nextStep = 'estimate'\)/);
+  assert.match(source, /openProjectEstimateWorkspace\(o\.id\)/);
+  assert.match(source, /selectedServices\.forEach\(selectedService =>/);
 });

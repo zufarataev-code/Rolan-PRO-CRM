@@ -245,6 +245,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Fast intake remains a continuation of the same Project: after client, site type, incoming service, and manager are selected, the primary action opens the existing site-specific measurement workspace. A draft is a state of that Project, not another entity.
 - Implemented in PR #172 for the production release requested by the owner.
 
+## 2026-09-16 — Quick Project intake is line-item pricing before measurement
+
+- This decision supersedes the final `Fast intake` paragraph in `Break-even uses fixed company obligations and the same Project margin`. The primary New Project action must not force the manager into rooms, windows, or dimensions.
+- A manager first enters simple commercial lines inside the same Project: service, catalog position, quantity, unit, and sale price per unit. Each Project may contain multiple service directions, and every film picker is filtered to that line's service category while reusing the existing FilmCatalog Category → Name → Model identity.
+- Line totals are derived as quantity × unit price. Catalog cost is an owner-only preliminary internal value. Detailed room/opening measurements later provide production truth; they remain required before technical sheets, cutting, and installation, but not before preliminary calculation or Proposal.
+- Quick lines are a compatibility projection of Project service positions, not another Order, estimate, material catalog, or browser-storage root. The public Proposal preserves each line rather than collapsing the Project into one anonymous service total.
+- Implemented on `codex/quick-project-line-items`; PR number is recorded after opening. Production deployment is a separate release step.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

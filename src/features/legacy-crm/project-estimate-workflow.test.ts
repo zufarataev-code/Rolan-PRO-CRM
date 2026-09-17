@@ -18,9 +18,10 @@ test("measurement completion routes the manager into project calculation", () =>
 
 test("project calculation combines measured materials, services, expenses and margin", () => {
   assert.match(source, /function renderProjectEstimateWorkspace\(o\)/);
-  assert.match(source, /1\. Замер и материалы/);
-  assert.match(source, /2\. Дополнительные услуги/);
-  assert.match(source, /3\. Прямые расходы проекта/);
+  assert.match(source, /1\. Быстрый ввод проекта/);
+  assert.match(source, /2\. Замер и материалы/);
+  assert.match(source, /3\. Дополнительные работы/);
+  assert.match(source, /4\. Прямые расходы проекта/);
   assert.match(source, /Прибыль/);
   assert.match(source, /Маржа/);
   assert.match(source, /projectEstimateSnapshot/);
@@ -30,7 +31,7 @@ test("manager prices the proposal without seeing owner-only project economics", 
   assert.match(source, /function orderUserCanSeeInternalEconomics\(order, user = currentUser\(\)\)/);
   assert.match(source, /user\.role === 'owner' && orderUserOwns\(order, user\)/);
   assert.match(source, /canSeeInternalEconomics \? '<th class="money">Себестоимость материала<\/th>' : ''/);
-  assert.match(source, /canSeeInternalEconomics \? `<section class="project-estimate-section">[\s\S]*?3\. Прямые расходы проекта/);
+  assert.match(source, /canSeeInternalEconomics \? `<section class="project-estimate-section">[\s\S]*?4\. Прямые расходы проекта/);
   assert.match(source, /canSeeInternalEconomics \? `<div><label>Расстояние, км/);
   assert.doesNotMatch(source, /projectEstimateUpdateSetting\([^\n]+['"]marketing['"]/);
   assert.match(source, /Менеджер назначает только цену продажи, которая попадёт в КП/);
@@ -111,11 +112,24 @@ test("each room exposes a service-scoped film selector and shows its selected fi
 test("manager can quote from customer dimensions but installation requires verified dimensions", () => {
   const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.doesNotMatch(readiness, /orderMeasurementVerificationIssues|windowMeasurementIsVerified/);
-  assert.match(source, /measurementBasis: orderMeasurementVerificationIssues\(o\)\.length \? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED'/);
+  assert.match(source, /measurementBasis: !measureAllWindows\(o\)\.length \? 'QUICK_LINE_ITEMS'/);
   assert.match(source, /По ним разрешено рассчитать проект и выпустить КП/);
   assert.match(source, /function orderStatusRequiresVerifiedMeasurements\(status\)/);
   assert.match(source, /'installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'/);
   assert.match(source, /if \(!ensureVerifiedMeasurementsForStatus\(o, newStatus/);
+});
+
+test("quick project entry works without dimensions and supports multiple service lines", () => {
+  const opener = source.match(/function openProjectEstimateWorkspace\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(opener, /Сначала внесите размеры/);
+  assert.match(source, /function projectEstimateAddQuickLine\(oid, requestedServiceType = ''\)/);
+  assert.match(source, /quickProjectLine: true, serviceType/);
+  assert.match(source, /line\.price = line\.qty \* line\.unitPrice/);
+  assert.match(source, /projectQuickLineCatalog\(line\.serviceType\)/);
+  assert.match(source, /ORDER_PRIMARY_SERVICES\.map\(service =>/);
+  assert.match(source, /Количество/);
+  assert.match(source, /Цена \/ ед\./);
+  assert.match(source, /\+ Добавить услугу/);
 });
 
 test("each manager-entered window starts preliminary and can be explicitly verified", () => {
