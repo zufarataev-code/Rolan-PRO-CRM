@@ -73,6 +73,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
   });
 
   return users.map((user) => ({
+legacyUserIds: user.legacy_user_ids,
     userId: user.user_id,
     legacyUserIds: user.legacy_user_ids,
     email: user.email,
