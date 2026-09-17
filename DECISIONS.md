@@ -310,6 +310,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Supplies can be selected from Warehouse or created inline with unit, stock quantity, and purchase cost. Their used quantity contributes to Project profitability, while actual stock issue remains a later Warehouse operation, consistent with film stock behavior.
 - Implemented in PR #174. Production deployment remains a separate authorized action.
 
+## 2026-09-17 — Completed legacy jobs close inside Quick Project Entry
+
+- A completed job from the former CRM does not need fabricated room/window dimensions or a replay of every live funnel transition. The owner can close it directly from Quick Project Entry after entering its actual services, film, sqft, sale totals, dates, installers, supplies, and direct expenses.
+- Closing records full payment, installation start/end, act/payment/completion milestones, the approved estimate snapshot, payroll, PSS, fixed-expense/tax allocation, and management profit on the same Project.
+- Historical closure requires purchase-cost references but does not require today's Warehouse balance to cover material already consumed in the past and does not issue today's stock. This exception applies only to the explicit completed-import action; active Project approval keeps its normal stock sufficiency checks.
+- Historical closure never sends automatic client messages. It is an owner-only accounting import action and is marked in the Project audit trail.
+- Implemented in PR #174. Production deployment remains separate until explicitly authorized.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

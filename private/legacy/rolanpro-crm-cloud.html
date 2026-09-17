@@ -21411,6 +21411,37 @@ function projectQuickSupplyCost(o) {
   }, 0), 0);
 }
 
+function projectQuickAddExpense(oid, type = 'delivery') {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeInternalEconomics(o, currentUser())) return;
+  o.extraExpenses = o.extraExpenses || [];
+  o.extraExpenses.push({ id: uid(), type, label: projectEstimateExpenseLabel(type), amount: 0, projectDirect: true, createdAt: new Date().toISOString() });
+  projectEstimateMarkChanged(o, 'Добавлен прямой расход в быстром вводе');
+  save(); openQuickProjectEntry(oid);
+}
+
+function projectQuickUpdateExpense(oid, expenseId, field, value) {
+  const o = getOrder(oid);
+  const expense = (o?.extraExpenses || []).find(item => item.id === expenseId);
+  if (!o || !expense || !orderUserCanSeeInternalEconomics(o, currentUser())) return;
+  if (field === 'amount') expense.amount = Math.max(0, Number(value) || 0);
+  if (field === 'type') {
+    expense.type = value;
+    expense.label = projectEstimateExpenseLabel(value);
+  }
+  if (field === 'label') expense.label = String(value || '').trim();
+  projectEstimateMarkChanged(o, 'Изменён прямой расход в быстром вводе');
+  save(); openQuickProjectEntry(oid);
+}
+
+function projectQuickDeleteExpense(oid, expenseId) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeInternalEconomics(o, currentUser())) return;
+  o.extraExpenses = (o.extraExpenses || []).filter(item => item.id !== expenseId);
+  projectEstimateMarkChanged(o, 'Удалён прямой расход в быстром вводе');
+  save(); openQuickProjectEntry(oid);
+}
+
 function openQuickProjectSupplyForm(oid, lineId) {
   const o = getOrder(oid);
   const line = projectQuickLines(o).find(item => item.id === lineId);
@@ -21612,6 +21643,80 @@ function approveProjectEstimateAndOpenProposal(oid) {
   openProfessionalKP(oid);
 }
 
+function projectQuickCompletionIssues(o) {
+  const ignoredHistoricalStockIssues = new Set([
+    'выбранной плёнки нет на складе',
+    'на складе недостаточно плёнки с указанной закупочной ценой',
+    'на складе недостаточно расходников',
+  ]);
+  const issues = projectEstimateReadiness(o).filter(issue => !ignoredHistoricalStockIssues.has(issue));
+  if (projectQuickLines(o).some(line => line.catalogId && warehouseCatalogCostPerSqft(line.catalogId) <= 0)) {
+    issues.push('у выбранной плёнки нет закупочной стоимости');
+  }
+  return [...new Set(issues)];
+}
+
+function closeQuickProjectAsCompleted(oid) {
+  const o = getOrder(oid);
+  if (!o || currentUser()?.role !== 'owner') return;
+  const issues = projectQuickCompletionIssues(o);
+  if (issues.length) { alert('Нельзя закрыть проект: ' + issues.join(', ') + '.'); return; }
+  const range = projectQuickDateRange(o);
+  const paidDate = projectQuickDateValue(document.getElementById('quick-close-paid-date')?.value || range.endDate);
+  const method = document.getElementById('quick-close-payment-method')?.value || 'zelle';
+  if (!paidDate) { alert('Укажите дату полной оплаты.'); return; }
+  const revenue = orderRevenue(o);
+  if (!confirm(`Закрыть ${o.number} как выполненный и полностью оплаченный на ${fmtMoney(revenue)}?`)) return;
+
+  const recordedAt = new Date().toISOString();
+  const startAt = `${range.startDate}T12:00:00.000Z`;
+  const endAt = `${range.endDate}T12:00:00.000Z`;
+  const paidAt = `${paidDate}T12:00:00.000Z`;
+  const existingLegacyPaid = Math.max(0, Number(o.paid) || 0);
+  const payments = orderPayments(o);
+  if (!payments.length && existingLegacyPaid > 0) {
+    payments.push({ id: 'pay_' + uid(), amount: Math.min(existingLegacyPaid, revenue), date: paidDate, method, note: 'Оплата из старой CRM', recordedBy: state.currentUserId || null, recordedAt });
+  }
+  const remaining = Math.max(0, revenue - orderPaidTotal(o));
+  if (remaining > 0) {
+    payments.push({ id: 'pay_' + uid(), amount: remaining, date: paidDate, method, note: 'Полная оплата при переносе проекта', recordedBy: state.currentUserId || null, recordedAt });
+  }
+  syncOrderPaid(o);
+  o.paid = orderPaidTotal(o);
+  o.depositReceived = true;
+  o.depositReceivedAt = o.depositReceivedAt || paidAt;
+  o.installationAt = o.installationAt || startAt;
+  o.installationDoneAt = o.installationDoneAt || endAt;
+  o.actSignedAt = o.actSignedAt || endAt;
+  o.paidAt = paidAt;
+  o.status = 'completed';
+  o.quickProjectImportedCompleted = true;
+  o.quickProjectImportedCompletedAt = recordedAt;
+  o.quickProjectImportedCompletedBy = state.currentUserId;
+  o.projectEstimateApprovedAt = recordedAt;
+  o.projectEstimateApprovedBy = state.currentUserId;
+  o.projectEstimateUpdatedAt = recordedAt;
+  o.projectEstimateSnapshot = {
+    approvedAt: recordedAt,
+    revenue,
+    productionCost: orderPSS(o).total,
+    margin: orderMargin(o),
+    marginPct: orderMarginPct(o),
+    areaSqft: orderActualAreaSqft(o),
+    serviceCount: (o.extraServices || []).length,
+    expenseCount: (o.extraExpenses || []).length,
+    measurementBasis: 'QUICK_LINE_ITEMS',
+    fixedExpenseAllocation: projectProfitability(o).fixedAllocation,
+    californiaTaxAllocation: projectProfitability(o).taxAllocation,
+    managementNetProfit: projectProfitability(o).netProfit,
+  };
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: recordedAt, key: 'project_estimate_approved', by: state.currentUserId, note: `Импортированный расчёт подтверждён: ${fmtMoney(revenue)}` });
+  o.timeline.push({ at: paidAt, key: 'payment_received', by: state.currentUserId, note: `Полная оплата ${fmtMoney(revenue)} · перенос из старой CRM` });
+  o.timeline.push({ at: endAt, key: 'completed', by: state.currentUserId, note: 'Выполненный проект перенесён из старой CRM' });
+  save(); closeModal(); openOrder(oid);
+}
+
 function renderQuickProjectEntry(o) {
   const quickLines = projectQuickLines(o);
   const availableInstallers = usersByRole('installer');
@@ -21634,6 +21739,15 @@ function renderQuickProjectEntry(o) {
   }).join('');
   const totalSqft = projectQuickSqft(o);
   const total = quickLines.reduce((sum, line) => sum + Number(line.price || 0), 0);
+  const quickRange = projectQuickDateRange(o);
+  const completionIssues = projectQuickCompletionIssues(o);
+  const quickExpenseTypes = ['gas','delivery','material_purchase','helper','subcontractor','electric','tools','rental','permit','other'];
+  const quickExpenseRows = (o.extraExpenses || []).map(expense => `<tr>
+    <td data-label="Категория"><select onchange="projectQuickUpdateExpense('${o.id}','${expense.id}','type',this.value)">${quickExpenseTypes.map(type => `<option value="${type}" ${expense.type===type?'selected':''}>${projectEstimateExpenseLabel(type)}</option>`).join('')}</select></td>
+    <td data-label="Комментарий"><input value="${academyEsc(expense.label || '')}" onchange="projectQuickUpdateExpense('${o.id}','${expense.id}','label',this.value)"></td>
+    <td data-label="Сумма"><input type="number" min="0" step="0.01" value="${Number(expense.amount || 0)}" onchange="projectQuickUpdateExpense('${o.id}','${expense.id}','amount',this.value)"></td>
+    <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectQuickDeleteExpense('${o.id}','${expense.id}')">Удалить</button></td>
+  </tr>`).join('');
   return `
     <div class="project-estimate-summary">
       <div class="project-estimate-kpi"><span>Услуг</span><strong>${quickLines.length}</strong></div>
@@ -21644,6 +21758,19 @@ function renderQuickProjectEntry(o) {
       <div class="project-estimate-section-head"><div><h4>Услуги проекта</h4><div class="text-xs text-gray-500">Без комнат и размеров окон: укажите общий метраж и цену проекта. Цена за sqft рассчитается автоматически. Можно добавить несколько услуг.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена проекта</th><th class="money">Цена / sqft</th><th>Начало</th><th>Окончание</th><th>Исполнители</th><th>Расходники</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="10" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
     </section>
+    ${currentUser()?.role === 'owner' ? `<section class="project-estimate-section">
+      <div class="project-estimate-section-head"><div><h4>Прямые расходы проекта</h4><div class="text-xs text-gray-500">Доставка, разовая закупка, помощник, субподрядчик и другие фактические расходы.</div></div><button class="btn-ghost text-sm" onclick="projectQuickAddExpense('${o.id}')">+ Добавить расход</button></div>
+      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead><tbody>${quickExpenseRows || '<tr><td colspan="4" class="text-gray-500">Прямых расходов нет.</td></tr>'}</tbody></table></div>
+    </section>` : ''}
+    ${currentUser()?.role === 'owner' ? `<section class="project-estimate-section">
+      <div class="project-estimate-section-head"><div><h4>Закрытие проекта из старой CRM</h4><div class="text-xs text-gray-500">Фиксирует выполнение, полную оплату, зарплату, себестоимость и прибыль без ввода размеров окон.</div></div>${o.status === 'completed' ? '<span class="status-badge bg-emerald-100 text-emerald-800">Завершён</span>' : ''}</div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+        <div><label>Дата полной оплаты</label><input id="quick-close-paid-date" type="date" value="${projectQuickDateValue(o.paidAt?.slice?.(0,10)) || quickRange.endDate || new Date().toISOString().slice(0,10)}"></div>
+        <div><label>Способ оплаты</label><select id="quick-close-payment-method">${PAYMENT_METHODS.map(item => `<option value="${item.id}">${item.label}</option>`).join('')}</select></div>
+        <div class="flex items-end"><button class="btn-primary w-full" onclick="closeQuickProjectAsCompleted('${o.id}')" ${completionIssues.length || o.status === 'completed' ? 'disabled' : ''}>✓ Закрыть как выполненный и оплаченный</button></div>
+      </div>
+      ${completionIssues.length && o.status !== 'completed' ? `<div class="text-xs text-amber-700 mt-2">Нужно заполнить: ${academyEsc(completionIssues.join(', '))}.</div>` : ''}
+    </section>` : ''}
     <div class="project-estimate-footer">
       <div class="text-xs text-gray-500">Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников.</div>
       <div class="flex gap-2 flex-wrap"><button class="btn-ghost" onclick="closeModal()">Сохранить и закрыть</button><button class="btn-primary" onclick="openProjectEstimateWorkspace('${o.id}')">Перейти к расчёту проекта →</button></div>

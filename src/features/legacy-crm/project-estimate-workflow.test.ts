@@ -199,6 +199,43 @@ test("quick service adds stock supplies and includes their purchase cost", () =>
   assert.match(consumables, /projectQuickSupplyCost\(o\)/);
 });
 
+test("owner can close a completed legacy project directly from quick entry", () => {
+  const closer = source.match(/function closeQuickProjectAsCompleted\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  assert.match(renderer, /Закрытие проекта из старой CRM/);
+  assert.match(renderer, /Дата полной оплаты/);
+  assert.match(renderer, /Способ оплаты/);
+  assert.match(renderer, /Закрыть как выполненный и оплаченный/);
+  assert.match(completionIssues, /ignoredHistoricalStockIssues/);
+  assert.match(completionIssues, /warehouseCatalogCostPerSqft\(line\.catalogId\) <= 0/);
+  assert.match(closer, /currentUser\(\)\?\.role !== 'owner'/);
+  assert.match(closer, /o\.status = 'completed'/);
+  assert.match(closer, /o\.installationDoneAt = o\.installationDoneAt \|\| endAt/);
+  assert.match(closer, /o\.paidAt = paidAt/);
+  assert.match(closer, /payments\.push\(/);
+  assert.match(closer, /o\.projectEstimateSnapshot =/);
+  assert.match(closer, /quickProjectImportedCompleted = true/);
+  assert.doesNotMatch(closer, /autoNotifyClient|notifyStatusChange|autoDeductInventoryForOrder/);
+});
+
+test("quick entry records direct project expenses before historical closure", () => {
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  assert.match(source, /function projectQuickAddExpense\(oid, type = 'delivery'\)/);
+  assert.match(source, /function projectQuickUpdateExpense\(oid, expenseId, field, value\)/);
+  assert.match(source, /function projectQuickDeleteExpense\(oid, expenseId\)/);
+  assert.match(source, /projectDirect: true/);
+  assert.match(renderer, /Прямые расходы проекта/);
+  assert.match(renderer, /\+ Добавить расход/);
+  assert.match(renderer, /material_purchase/);
+  assert.match(renderer, /subcontractor/);
+  assert.match(renderer, /projectQuickUpdateExpense/);
+});
+
 test("quick project total remains the source while sqft changes", () => {
   const dateSource = source.match(/function projectQuickDateValue\(value\) \{[\s\S]*?\n\}/)?.[0] || "";
   const syncSource = source.match(/function projectEstimateSyncQuickLine\(line, changedField = ''\) \{[\s\S]*?\n\}/)?.[0] || "";

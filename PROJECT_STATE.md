@@ -404,6 +404,15 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification: all 268 automated tests passed, standalone TypeScript passed, and the production build completed locally.
 - Branch: `codex/quick-project-total-and-installers`, PR #174. Production deployment remains separate until explicitly authorized.
 
+### 2026-09-17 correction — one-step closure for completed former-CRM projects
+
+- The owner can now finish a historical import inside `Быстрый ввод проекта` with `Закрыть как выполненный и оплаченный`; no window dimensions or parallel import entity are required. Direct delivery, purchase, helper, subcontractor, tools, rental, permit, and other expenses can be recorded in the same window before closing.
+- The action uses service start/end dates and a selected payment date/method, records full payment and completion milestones, approves the Project estimate, and preserves the existing payroll, PSS, monthly fixed-cost, California-tax, and net-profit calculations.
+- The close action requires valid service data, assigned installers, film purchase cost, and valid dates. Because the material was consumed before import, it neither checks today's stock quantity nor deducts today's Warehouse; normal active-Project approval remains strict about available priced stock.
+- No automatic customer notification is sent for the historical event. The Project carries explicit import flags and audit-timeline notes.
+- Verification: all 270 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- Branch: `codex/quick-project-total-and-installers`, PR #174. Production deployment remains separate until explicitly authorized.
+
 ### 2026-09-15 architecture correction — Order and Project are the same customer job
 
 - Product rule: one canonical PostgreSQL `Project` survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.
