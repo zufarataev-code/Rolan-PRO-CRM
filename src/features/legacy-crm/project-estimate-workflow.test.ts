@@ -26,6 +26,24 @@ test("project calculation combines measured materials, services, expenses and ma
   assert.match(source, /projectEstimateSnapshot/);
 });
 
+test("manager prices the proposal without seeing owner-only project economics", () => {
+  assert.match(source, /function orderUserCanSeeInternalEconomics\(order, user = currentUser\(\)\)/);
+  assert.match(source, /user\.role === 'owner' && orderUserOwns\(order, user\)/);
+  assert.match(source, /canSeeInternalEconomics \? '<th class="money">Себестоимость материала<\/th>' : ''/);
+  assert.match(source, /canSeeInternalEconomics \? `<section class="project-estimate-section">[\s\S]*?3\. Прямые расходы проекта/);
+  assert.match(source, /canSeeInternalEconomics \? `<div><label>Расстояние, км/);
+  assert.doesNotMatch(source, /projectEstimateUpdateSetting\([^\n]+['"]marketing['"]/);
+  assert.match(source, /Менеджер назначает только цену продажи, которая попадёт в КП/);
+  assert.match(source, /if \(!state\.orderClassicMode \|\| u\.role !== 'owner'\)/);
+});
+
+test("hidden internal expenses do not block manager proposal readiness", () => {
+  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(readiness, /extraExpenses/);
+  assert.match(readiness, /extraServices/);
+  assert.match(readiness, /orderRevenue\(o\) <= 0/);
+});
+
 test("proposal generation is blocked until the calculation is approved", () => {
   assert.match(
     source,
@@ -57,4 +75,68 @@ test("manual transport expense is not counted twice", () => {
     source,
     /function orderManualExpensesTotal\(o\)[\s\S]*\.filter\(e => e\.type !== 'gas'\)/,
   );
+});
+
+test("proposal readiness validates the actual window instead of its room wrapper", () => {
+  assert.match(
+    source,
+    /windows\.some\(\(\{ win \}\) => windowActualAreaSqft\(win\) <= 0\)/,
+  );
+  assert.match(
+    source,
+    /windows\.some\(\(\{ win \}\) => !windowCatalog\(win\)\)/,
+  );
+  assert.doesNotMatch(source, /windows\.some\(w => windowActualAreaSqft\(w\) <= 0\)/);
+});
+
+test("window and room removal checkboxes create an area-based calculated service", () => {
+  assert.match(source, /function managerToggleWindowRemoval\(oid, rid, wid\)/);
+  assert.match(source, /function managerSetWindowRemoval\(oid, rid, wid, enabled\)/);
+  assert.match(source, /function managerSetRoomRemoval\(oid, rid, scopeKey, enabled\)/);
+  assert.match(source, /Удаление плёнки со всех окон/);
+  assert.match(source, /type="checkbox"[\s\S]*?managerSetWindowRemoval/);
+  assert.match(source, /function orderRemovalAreaSqft\(o\)/);
+  assert.match(source, /line\.price = Number\(\(area \* unitPrice\)\.toFixed\(2\)\)/);
+  assert.match(source, /Удаление плёнки\$\{windowRemovalRequired\(w\)/);
+  assert.match(source, /Удалить окно/);
+});
+
+test("each room exposes a service-scoped film selector and shows its selected film", () => {
+  assert.match(source, /Плёнка для помещения · \$\{academyEsc\(scope\.short\)\}/);
+  assert.match(source, /managerApplyFilmToRoom\('\$\{oid\}','\$\{r\.id\}',this\.value\)/);
+  assert.match(source, /const roomFilm = roomCatalog \? `\$\{roomCatalog\.brand\} · \$\{roomCatalog\.model\}` : 'плёнка не выбрана'/);
+  assert.match(source, /managerScopedCatalogOptionsHtml\(selectedRoomCatalog, preferredCategory\)/);
+});
+
+test("manager can quote from customer dimensions but installation requires verified dimensions", () => {
+  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(readiness, /orderMeasurementVerificationIssues|windowMeasurementIsVerified/);
+  assert.match(source, /measurementBasis: orderMeasurementVerificationIssues\(o\)\.length \? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED'/);
+  assert.match(source, /По ним разрешено рассчитать проект и выпустить КП/);
+  assert.match(source, /function orderStatusRequiresVerifiedMeasurements\(status\)/);
+  assert.match(source, /'installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'/);
+  assert.match(source, /if \(!ensureVerifiedMeasurementsForStatus\(o, newStatus/);
+});
+
+test("each manager-entered window starts preliminary and can be explicitly verified", () => {
+  assert.match(source, /measurementSource: 'CUSTOMER'/);
+  assert.match(source, /function managerConfirmWindowMeasurement\(oid, rid, wid\)/);
+  assert.match(source, /От клиента · подтвердить точные/);
+  assert.match(source, /markWindowMeasurementVerified\(w\)/);
+  assert.match(source, /markWindowMeasurementUnverified\(w\)[\s\S]*invalidateProjectEstimate/);
+  assert.match(source, /measurementSource: 'SURVEYOR_VERIFIED'/);
+});
+
+test("project estimate becomes stacked labeled rows on a phone", () => {
+  assert.match(source, /@media \(max-width: 840px\) \{[\s\S]*?\.project-estimate-table-wrap/);
+  assert.match(source, /\.project-estimate-table-wrap \{[\s\S]*?overflow: visible !important/);
+  assert.match(source, /\.project-estimate-table thead \{ display: none; \}/);
+  assert.match(source, /\.project-estimate-table td::before \{[\s\S]*?content: attr\(data-label\)/);
+  assert.match(source, /data-label="Помещение \/ окно"/);
+  assert.match(source, /data-label="Цена клиенту"/);
+  assert.match(source, /data-label="Комментарий"/);
+  assert.match(source, /class="project-estimate-action"/);
+  assert.match(source, /Удалить услугу/);
+  assert.match(source, /Удалить расход/);
+  assert.match(source, /\.project-estimate-footer > div:last-child \{[\s\S]*?grid-template-columns: 1fr/);
 });

@@ -137,6 +137,36 @@ test("standard opening derives one cell from overall dimensions", () => {
   assert.equal(parsed?.cells[0].height, 48);
 });
 
+test("office glass partition is available only for commercial projects", () => {
+  const base = {
+    project_position_id: POSITION_ID,
+    source: "SURVEYOR_VERIFIED",
+    room_key: "conference_room",
+    room_name: "Conference Room",
+    opening_id: "partition-1",
+    opening_type: "glass_partition",
+    overall_width: 120,
+    overall_height: 96,
+    cells: [],
+  };
+
+  const commercial = parseOpeningMeasurementInput({ ...base, site_type: "COMMERCIAL" });
+  assert.equal(commercial?.opening_type, "glass_partition");
+  assert.equal(commercial?.cells.length, 1);
+  assert.equal(parseOpeningMeasurementInput({ ...base, site_type: "RESIDENTIAL" }), null);
+
+  assert.equal(parseMeasurementConstructorInput({
+    site_type: "COMMERCIAL",
+    source: "CUSTOMER",
+    opening_type: "glass_partition",
+  })?.opening_type, "glass_partition");
+  assert.equal(parseMeasurementConstructorInput({
+    site_type: "RESIDENTIAL",
+    source: "CUSTOMER",
+    opening_type: "glass_partition",
+  }), null);
+});
+
 test("French opening rejects duplicate cell identifiers", () => {
   assert.equal(parseOpeningMeasurementInput({
     project_position_id: POSITION_ID,

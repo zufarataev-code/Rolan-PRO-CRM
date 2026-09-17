@@ -48,7 +48,7 @@ test("dropping within the same grouped stage does not move an order backwards", 
 
 test("kanban has an accessible stage picker fallback", () => {
   assert.match(html, /function openKanbanStagePicker\(orderId\)/);
-  assert.match(html, /aria-label="Переместить заказ"/);
+  assert.match(html, /aria-label="Переместить проект"/);
   assert.match(html, /function moveKanbanOrderFromPicker\(orderId, targetStatus\)/);
   assert.match(html, />↕ Этап<\/button>/);
   assert.match(html, /Перетащите карточку или нажмите «Этап»/);

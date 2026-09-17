@@ -264,7 +264,112 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #169 merged to `main` as `21d304a4af149172f9d5faea4325ceb248c0bd79`. Main CI run #34933721970 passed Prisma generation, 220 tests, TypeScript, and the production build. Production deploy run #34933844649 succeeded and confirmed that the server is serving the same commit.
 - Production smoke: the public login responds successfully and `/legacy-crm` remains session-protected. No customer, order, measurement, film, or employee record was edited during smoke verification.
 
+### 2026-09-15 correction — add service from the Project
+
+- The canonical Project no longer keeps a permanent service dropdown on the page. Owner and manager use one `+ Добавить услугу` button, then choose from a compact list containing only services not already present in that Project.
+- The selected service is still added as an existing `ProjectPosition` through the canonical PostgreSQL API. The incoming lead service remains unchanged, and no second order or Project is created.
+
+### 2026-09-15 correction — confirmed Smart catalog and controls
+
+- Smart-film selection now uses confirmed Rolan PRO lines: MS (Mitsubishi) with Vision 85/89/95, AR (Arshi · China) with Vision A-85/B-88/C-92, and decorative variable-pattern models DEC-SMART 1/2/3. Generic placeholder PDLC models are archived from new selection while historical references remain readable.
+- Films, power supplies, and control options are separate records. The six confirmed power supplies are Rolan Control 50W, 100W, 200W, 300W, 500W, and 1000W. Wi-Fi, multi-zone, voice, Google Home, Amazon Alexa, Apple Home, and wall switches are selectable control options.
+- The owner stated that eight power-supply variants and three manufacturers exist, but only six supply models and two named manufacturer lines plus the decorative line were identified. The two missing supply models and any separate third manufacturer remain intentionally unseeded until their exact names are confirmed.
+- This correction extends PR #172. Prices and unprovided technical specifications remain empty/zero rather than being invented. Production deployment remains a separate release action.
+- Verification on commit `1b8c07a`: all 226 tests passed locally; GitHub CI run #35043142443 generated Prisma, passed tests and TypeScript, and completed the production build. No production deployment was started.
+
+### 2026-09-15 correction — commercial office glass partitions
+
+- Commercial measurement spaces now offer `Офисная стеклянная перегородка` as a separate opening category alongside windows, doors, storefronts, and skylights. It persists as `glass_partition` with its own dimensions, panes/cells, glass characteristics, removal flags, and film inheritance.
+- The manager measurement workspace shows the new add-element category only when the order site type is `COMMERCIAL`. Canonical backend validation rejects `glass_partition` for a `RESIDENTIAL` Project.
+- This correction extends PR #172. Existing measurements and Residential choices remain unchanged; production deployment remains separate.
+
+### 2026-09-15 correction — per-window film removal and proposal readiness
+
+- Every measured window/door/partition card now has a distinct `Удаление плёнки` toggle separate from the destructive `Удалить окно` action. Selected windows contribute their measured sqft to one automatically maintained removal service line using the existing configured removal rate; changing dimensions or quantity recalculates that line.
+- The selected room/office card now exposes its service-scoped film selector directly and shows the chosen brand/model in the room list. A room-level `Удаление плёнки со всех окон` checkbox applies the same existing opening flag to every opening of the active service; per-window checkboxes remain available for exceptions.
+- The canonical opening editor also has one action to select removal for every cell in the opening while retaining per-cell control.
+- Fixed the false `есть окна без размера` proposal blocker: `measureAllWindows()` returns `{ room, win }`, and readiness now validates `win` rather than the wrapper. Positive planned dimensions are also used when stale legacy actual dimensions are zero.
+- Verification after the room-control correction: all 244 automated tests passed, TypeScript passed, and the production build completed locally.
+- This correction extends PR #172. Existing measurements migrate without deletion, and production deployment remains separate.
+
+### 2026-09-15 correction — measurement screen position is stable during editing
+
+- Measurement actions that rebuild the modal now capture the active scroll containers before changing modal state and restore them synchronously and again on the next animation frame after layout settles.
+- Browser scroll anchoring is disabled only inside the manager measurement modal because that workspace uses explicit keyed scroll restoration. Selecting film, toggling removal, changing dimensions, adding an opening, or switching an opening type must no longer jump the screen to the top.
+- Verification: the local preview remained on the second window after its removal checkbox rebuilt the modal; all 245 automated tests, TypeScript, and the production build passed locally.
+- This correction extends PR #172 and does not authorize an automatic production deployment.
+
+### 2026-09-15 correction — project calculation is usable on phones
+
+- The Project calculation modal now converts material, additional-service, and direct-expense tables into labeled stacked rows below 840px instead of retaining a 720px minimum width.
+- Inputs and selects use the full available row width, destructive actions have explicit full labels, section actions become full-width touch targets, and the sticky approval footer stacks its actions without horizontal clipping.
+- The responsive breakpoint is aligned with the modal shell at 840px, preventing a mobile modal from containing the desktop table. Visual verification at a 390×844 phone viewport showed labeled material rows and both footer actions fully inside the screen.
+- This correction extends PR #172 and does not authorize an automatic production deployment.
+
+### 2026-09-15 correction — preliminary customer dimensions versus verified field dimensions
+
+- A manager may create and price a Project from dimensions supplied by the customer. Those windows are stored as `CUSTOMER / UNVERIFIED`, remain clearly marked as preliminary, and do not block calculation or proposal generation.
+- Every measured window has an explicit action to confirm exact dimensions. Editing width, height, or quantity after confirmation returns that window to preliminary status; a field-measurement v2.5 import is recorded as `SURVEYOR_VERIFIED / VERIFIED` with provenance.
+- Installation scheduling and every later production status are blocked until all active windows have positive, verified exact dimensions. Existing Projects already in installation or completed stages are migrated as verified so historical workflows are not broken.
+- This correction extends PR #172. It stays inside the existing Project measurement history and does not authorize an automatic production deployment.
+
+### 2026-09-15 correction — manager calculation is customer pricing, not company accounting
+
+- The manager calculates the Project before creating the proposal: measured sqft, selected material, sale price per sqft, billable add-ons, and the customer total remain available.
+- Purchase/material cost, installer and team cost, marketing, direct company expenses, production cost, profit, and margin are owner-only. The manager Project workspace and payment card do not render those fields, and the old expanded form is owner-only.
+- Project material cost now follows the cut plan and consumes the proportional purchase cost of fitting warehouse lots (narrowest fitting width, oldest receipt first). Catalog cost is used only for an unpriced lot or shortage. Rates continue to come from the reference settings, and the Project calculator no longer asks for manual marketing spend.
+- The default weekly Calendar is now a dispatcher workspace modeled on TintWiz's operational pattern: hourly week grid on the left and the same filtered visits on the map on the right. Events show time, work type, responsible employee, customer and address; overlapping visits receive separate lanes; map pins retain event identity and time; employee and work-type filters update both views together. It continues to use the existing Project/order events and geocache rather than introducing a second calendar store.
+- Hidden internal expenses do not block proposal readiness. They remain attached to the same Project for owner accounting instead of becoming manager inputs or another entity.
+- This correction extends PR #172 and does not authorize an automatic production deployment.
+
+### 2026-09-16 correction — owner Project profitability from one operational record
+
+- The existing Project calculation now provides one compact operational summary: selected services and films, measured glass sqft, calculated film consumption, billable add-ons, assigned installers, warehouse material cost, and crew pay. It does not introduce another calculator, Project, or storage record.
+- Installer labor now comes from each assigned employee's pay configuration and service-category rates. Until a crew is assigned, the estimate keeps a labor reserve from the owner-managed category defaults instead of treating labor as zero. Payroll reuses the same per-employee calculation.
+- Owner-only direct Project expenses include delivery, one-off material purchases, helpers/subcontractors, hired specialists, tools/equipment, and the existing categories. These remain separate from recurring company OpEx.
+- The management profit view calculates customer revenue minus direct Project cost, then allocates the active fixed monthly OpEx equally across all revenue-bearing Projects in that Project's operating month. A configurable California corporation tax reserve is allocated by revenue share and shown separately from actual tax payments.
+- The default planning profile is California C corporation at 8.84% with the $800 annual minimum reserve. Owner may switch to the California S corporation planning rate of 1.5% or a custom rate. This is explicitly a management estimate; tax filings and paid cash remain in accounting.
+- Verification: all 251 automated tests passed, TypeScript passed, and the production build completed locally. At a 390×844 viewport the Project calculation had no horizontal overflow; the fast summary, financial cards, tax settings, and approval footer remained within the phone screen.
+- This correction extends PR #172. Production deployment remains a separate action.
+
+### 2026-09-16 release correction — fast Project intake and company break-even settings
+
+- The primary new-Project action now creates the same lifecycle record and immediately opens the existing room/office measurement workspace. `Сохранить черновик` remains available when dimensions are not ready; no second order, estimate, or storage record is created.
+- Owner Settings now has one focused `Постоянные расходы и безубыточность` section backed by the existing `db.opex` plan data. It accepts recurring company obligations, shows monthly/daily fixed burn, and calculates required Projects and sqft per month.
+- Break-even now excludes personal plans, variable expenses, and tax plans. It uses completed Projects when available and otherwise labels the result as preliminary from calculated Projects, so the owner can begin planning before the first completed month.
+- Existing role boundaries were rechecked: owner retains company P&L and settings; manager can create, measure, price, and prepare the customer proposal without internal cost/profit; surveyor and installer remain limited to assigned work and never receive company financial totals.
+- Verification: all 253 automated tests passed, TypeScript passed, and the production build completed locally. Branch / PR: `codex/project-add-service-button` / #172. The owner explicitly requested the production CRM update; next action is CI, merge to `main`, automatic production deploy, and a read-only smoke check.
+
+### 2026-09-15 architecture correction — Order and Project are the same customer job
+
+- Product rule: one canonical PostgreSQL `Project` survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.
+- The visible navigation is now consolidated as one `Проекты` workspace, but legacy `db.orders` and relational `Project` are still separate and unsynchronized behind that interface. Finishing the consolidation still requires a tested stable-ID/data migration and one PostgreSQL write path.
+- PR #172 must not be treated as the final entity-consolidation release. It may supply the Project fields and permissions, but the duplicate launch/list workflow remains migration work. No production deployment is authorized.
+
 ## Completion rule
+
+### 2026-09-15 correction — one Projects workspace
+
+- Owner and manager navigation now contains one `Проекты` entry instead of separate `Заказы` and `Проекты` entries. New work is labeled `Новый проект`, and the funnel, cards, primary actions, and project intake use the same lifecycle language.
+- The canonical PostgreSQL constructor remains available from the Projects workspace as `Проверенные замеры`; it is a measurement tool inside the project, not a second customer-job list.
+- Compatibility is preserved: legacy `orders` keys, `#/order/...` links, `R-...` numbers, and `Заказ-наряд` documents are not deleted or rewritten. The relational ID/data migration is still required before legacy storage can be retired.
+- Verification: all 240 automated tests pass locally. GitHub CI run #35055402899 generated the current Prisma client, passed the complete test suite and TypeScript, and completed the production build on commit `3d3b146`.
+- Branch / PR: `codex/project-add-service-button` / #172. No production deployment was started.
+
+### 2026-09-15 correction — Google Maps in the dispatch calendar
+
+- The calendar/map workspace now uses Google Maps as its primary map. Project visit markers, customer/address details, calendar filters, and the existing route line remain attached to the same Project events.
+- `/legacy-crm` receives the restricted browser key from protected server environment configuration (`GOOGLE_MAPS_BROWSER_API_KEY`, with the existing `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` as compatibility fallback). The key is not committed to Git or written into CRM storage.
+- If the key is absent, rejected, or Google Maps cannot load, the existing Leaflet map remains an operational fallback instead of breaking Calendar.
+- This correction extends PR #172. Production deployment remains a separate release action.
+
+### 2026-09-15 correction — one readable dispatch workspace
+
+- The Day view no longer repeats the same events across KPI cards, an agenda card, and four appointment-type lanes. It now uses one 06:00–21:00 timeline beside the map.
+- The Week view uses the same operating model with seven time columns. The calendar receives the primary width; the map is a narrower route-planning context. Month remains a compact calendar with an optional map.
+- Date navigation, Day/Week/Month mode, event filter, employee filter, event count, and `+ Назначить` are consolidated into one two-row command bar. Decorative legends and empty dashboard cards were removed from the main scheduling surface.
+- The implementation follows the official TintWiz scheduler pattern relevant to Rolan PRO: calendar and map side by side, filtering by appointment/team member, and scheduling against the existing Project. It does not copy TintWiz data or create another scheduling entity.
+- Desktop visual verification passed at 1920×1080 for Day and Week in the local preview. This correction extends PR #172; production deployment remains a separate action.
 
 A task is shared and complete only when all applicable statements are true:
 

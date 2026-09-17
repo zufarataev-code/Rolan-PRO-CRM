@@ -319,9 +319,12 @@ async function seedServiceReferences() {
       { value: "wall_opening", label_ru: "Требуется вскрытие стены", label_en: "Wall opening required" },
     ],
     block_type: [
-      { value: "standard_remote", label_ru: "Стандартный блок с пультом", label_en: "Standard unit with remote" },
-      { value: "timer", label_ru: "Блок с таймером", label_en: "Timer unit" },
-      { value: "smart_home", label_ru: "Блок с интеграцией умного дома", label_en: "Smart home unit" },
+      { value: "rolan_control_50w", label_ru: "Rolan Control 50W", label_en: "Rolan Control 50W" },
+      { value: "rolan_control_100w", label_ru: "Rolan Control 100W", label_en: "Rolan Control 100W" },
+      { value: "rolan_control_200w", label_ru: "Rolan Control 200W", label_en: "Rolan Control 200W" },
+      { value: "rolan_control_300w", label_ru: "Rolan Control 300W", label_en: "Rolan Control 300W" },
+      { value: "rolan_control_500w", label_ru: "Rolan Control 500W", label_en: "Rolan Control 500W" },
+      { value: "rolan_control_1000w", label_ru: "Rolan Control 1000W", label_en: "Rolan Control 1000W" },
     ],
     frame_type: [
       { value: "aluminum", label_ru: "Алюминий", label_en: "Aluminum" },
@@ -353,8 +356,13 @@ async function seedServiceReferences() {
     ["wiring_route", "Как идёт проводка", "Wiring Route", "text", "string", null, true, 15],
     ["existing_conduit", "Есть готовая трасса", "Existing Conduit", "checkbox", "boolean", null, false, 16],
     ["voice_control", "Голосовое управление", "Voice Control", "checkbox", "boolean", null, false, 17],
+    ["wifi_control", "Wi-Fi управление", "Wi-Fi Control", "checkbox", "boolean", null, false, 18],
+    ["multizone_control", "Мультизонное управление", "Multi-zone Control", "checkbox", "boolean", null, false, 19],
+    ["google_home", "Google Home", "Google Home", "checkbox", "boolean", null, false, 20],
+    ["amazon_alexa", "Amazon Alexa", "Amazon Alexa", "checkbox", "boolean", null, false, 21],
+    ["apple_home", "Apple Home", "Apple Home", "checkbox", "boolean", null, false, 22],
 
-    ["extra_costs", "Доп. расходы", "Extra Costs", "number", "decimal", null, false, 20],
+    ["extra_costs", "Доп. расходы", "Extra Costs", "number", "decimal", null, false, 30],
   ] as const;
 
   for (const [field_key, field_label_ru, field_label_en, input_type, data_type, dropdown_source, is_required, sort_order] of smartFilmFields) {
@@ -505,7 +513,7 @@ async function seedServiceReferences() {
           : undefined,
       },
       create: {
-        service_type_id: serviceTypeMap.SAFETY_FILM,
+        service_type_id: serviceTypeMap.SMART_FILM,
         field_key,
         field_label_ru,
         field_label_en,
@@ -527,6 +535,19 @@ async function seedServiceReferences() {
     ["SMART_FILM", "SILICONE", "Силикон", "Silicone", "sqft", "1.75", "1.50", "0.45", 3],
     ["SMART_FILM", "EXTRA_ELECTRICAL", "Электромонтаж до зон", "Zone Wiring Installation", "fixed", "350.00", "300.00", "180.00", 4],
     ["SMART_FILM", "OTHER", "Другое", "Other", "fixed", "0.00", "0.00", "0.00", 5],
+    ["SMART_FILM", "ROLAN_CONTROL_50W", "Rolan Control 50W", "Rolan Control 50W", "qty", "0.00", "0.00", "0.00", 10],
+    ["SMART_FILM", "ROLAN_CONTROL_100W", "Rolan Control 100W", "Rolan Control 100W", "qty", "0.00", "0.00", "0.00", 11],
+    ["SMART_FILM", "ROLAN_CONTROL_200W", "Rolan Control 200W", "Rolan Control 200W", "qty", "0.00", "0.00", "0.00", 12],
+    ["SMART_FILM", "ROLAN_CONTROL_300W", "Rolan Control 300W", "Rolan Control 300W", "qty", "0.00", "0.00", "0.00", 13],
+    ["SMART_FILM", "ROLAN_CONTROL_500W", "Rolan Control 500W", "Rolan Control 500W", "qty", "0.00", "0.00", "0.00", 14],
+    ["SMART_FILM", "ROLAN_CONTROL_1000W", "Rolan Control 1000W", "Rolan Control 1000W", "qty", "0.00", "0.00", "0.00", 15],
+    ["SMART_FILM", "WIFI_CONTROL", "Wi-Fi управление", "Wi-Fi Control", "fixed", "0.00", "0.00", "0.00", 20],
+    ["SMART_FILM", "MULTIZONE_CONTROL", "Мультизонное управление", "Multi-zone Control", "fixed", "0.00", "0.00", "0.00", 21],
+    ["SMART_FILM", "VOICE_CONTROL", "Голосовое управление", "Voice Control", "fixed", "0.00", "0.00", "0.00", 22],
+    ["SMART_FILM", "GOOGLE_HOME", "Google Home", "Google Home", "fixed", "0.00", "0.00", "0.00", 23],
+    ["SMART_FILM", "AMAZON_ALEXA", "Amazon Alexa", "Amazon Alexa", "fixed", "0.00", "0.00", "0.00", 24],
+    ["SMART_FILM", "APPLE_HOME", "Apple Home", "Apple Home", "fixed", "0.00", "0.00", "0.00", 25],
+    ["SMART_FILM", "WALL_SWITCH", "Настенный выключатель", "Wall Switch", "qty", "0.00", "0.00", "0.00", 26],
     ["SOLAR_FILM", "WASHING", "Мойка", "Washing", "sqft", "1.50", "1.20", "0.35", 1],
     ["SOLAR_FILM", "REMOVAL", "Удаление", "Removal", "sqft", "2.50", "2.00", "0.80", 2],
     ["SOLAR_FILM", "SILICONE", "Силикон", "Silicone", "sqft", "1.75", "1.50", "0.45", 3],
@@ -606,6 +627,26 @@ async function seedServiceReferences() {
     ["SAFETY", "Защитная", "Safety Film", "ROLANPRO", "RolanPRO", "RolanPRO",
      "A3", "A3 — 24 mil", "A3 — 24 mil", "24 mil", "sqft", 13, null, null, null, null,
      null, null, false, "Максимальный класс. Силикон по периметру обязателен."],
+
+    // Smart: производитель/линейка, название и модель хранятся раздельно.
+    ["SMART", "Смарт-плёнка", "Smart Film", "ROLANPRO_MS", "Rolan PRO MS (Mitsubishi)", "Rolan PRO MS (Mitsubishi)",
+     "Vision 85", "Vision", "Vision", null, "sqft", 21, null, null, null, null, null, null, false, "Линейка Rolan PRO MS."],
+    ["SMART", "Смарт-плёнка", "Smart Film", "ROLANPRO_MS", "Rolan PRO MS (Mitsubishi)", "Rolan PRO MS (Mitsubishi)",
+     "Vision 89", "Vision", "Vision", null, "sqft", 22, null, null, null, null, null, null, false, "Линейка Rolan PRO MS."],
+    ["SMART", "Смарт-плёнка", "Smart Film", "ROLANPRO_MS", "Rolan PRO MS (Mitsubishi)", "Rolan PRO MS (Mitsubishi)",
+     "Vision 95", "Vision", "Vision", null, "sqft", 23, null, null, null, null, null, null, false, "Линейка Rolan PRO MS."],
+    ["SMART", "Смарт-плёнка", "Smart Film", "ROLANPRO_AR", "Rolan PRO AR (Arshi · Китай)", "Rolan PRO AR (Arshi · China)",
+     "Vision A-85", "Vision", "Vision", null, "sqft", 24, null, null, null, null, null, null, false, "Линейка Rolan PRO AR."],
+    ["SMART", "Смарт-плёнка", "Smart Film", "ROLANPRO_AR", "Rolan PRO AR (Arshi · Китай)", "Rolan PRO AR (Arshi · China)",
+     "Vision B-88", "Vision", "Vision", null, "sqft", 25, null, null, null, null, null, null, false, "Линейка Rolan PRO AR."],
+    ["SMART", "Смарт-плёнка", "Smart Film", "ROLANPRO_AR", "Rolan PRO AR (Arshi · Китай)", "Rolan PRO AR (Arshi · China)",
+     "Vision C-92", "Vision", "Vision", null, "sqft", 26, null, null, null, null, null, null, false, "Линейка Rolan PRO AR."],
+    ["SMART", "Смарт-плёнка", "Smart Film", "ROLANPRO_DEC", "Rolan PRO", "Rolan PRO",
+     "DEC-SMART 1", "Переменный рисунок / текстура", "Variable Pattern / Texture", null, "sqft", 27, null, null, null, null, null, null, false, "Декоративная Smart-плёнка."],
+    ["SMART", "Смарт-плёнка", "Smart Film", "ROLANPRO_DEC", "Rolan PRO", "Rolan PRO",
+     "DEC-SMART 2", "Переменный рисунок / текстура", "Variable Pattern / Texture", null, "sqft", 28, null, null, null, null, null, null, false, "Декоративная Smart-плёнка."],
+    ["SMART", "Смарт-плёнка", "Smart Film", "ROLANPRO_DEC", "Rolan PRO", "Rolan PRO",
+     "DEC-SMART 3", "Переменный рисунок / текстура", "Variable Pattern / Texture", null, "sqft", 29, null, null, null, null, null, null, false, "Декоративная Smart-плёнка."],
   ] as const;
 
   for (const [
@@ -650,12 +691,26 @@ async function seedServiceReferences() {
       restricted_orientations: restricted_orientations ? [...restricted_orientations] : undefined,
       requires_review,
       selection_note_ru,
-      technology_code: category_code === "SOLAR" ? "MAGNETRON_SPUTTERED" : "SAFETY_POLYESTER",
-      appearance_code: category_code === "SOLAR" ? "NEUTRAL" : "CLEAR",
+      technology_code: category_code === "SOLAR"
+        ? "MAGNETRON_SPUTTERED"
+        : category_code === "SMART"
+          ? (model_code.startsWith("DEC-SMART") ? "PDLC_DECORATIVE" : "PDLC")
+          : "SAFETY_POLYESTER",
+      appearance_code: category_code === "SOLAR"
+        ? "NEUTRAL"
+        : category_code === "SMART"
+          ? (brand_code === "ROLANPRO_MS"
+              ? "Rolan PRO MS (Mitsubishi)"
+              : brand_code === "ROLANPRO_AR"
+                ? "Rolan PRO AR (Arshi · Китай)"
+                : "Декоративная Smart")
+          : "CLEAR",
       application_side: "INTERIOR",
       capability_tags: category_code === "SOLAR"
         ? ["HEAT_CONTROL", "UV_REJECTION"]
-        : ["SECURITY", "SHATTER_RETENTION"],
+        : category_code === "SMART"
+          ? ["SWITCHABLE_PRIVACY", model_code.startsWith("DEC-SMART") ? "DYNAMIC_PATTERN" : "CLEAR_OPAQUE"]
+          : ["SECURITY", "SHATTER_RETENTION"],
     };
 
     await prisma.filmCatalog.upsert({

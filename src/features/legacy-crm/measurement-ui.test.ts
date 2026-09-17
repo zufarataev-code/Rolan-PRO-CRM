@@ -40,3 +40,16 @@ test("one project supports separate measurements for multiple film services", ()
   assert.match(legacyCrm, /Добавьте размеры для каждой услуги/);
   assert.match(legacyCrm, /defaultCatalogByScope/);
 });
+
+test("measurement actions preserve the active scroll position across a full modal render", () => {
+  assert.match(legacyCrm, /let __pendingRenderPosition = null/);
+  assert.match(legacyCrm, /function preservePositionForNextRender\(snapshot = captureRenderPosition\(\)\)/);
+  assert.match(
+    legacyCrm,
+    /function refreshManagerMeasureModal\(oid\) \{[\s\S]*?preservePositionForNextRender\(\);[\s\S]*?render\(\);/,
+  );
+  assert.match(legacyCrm, /const snapshot = __pendingRenderPosition \|\| captureRenderPosition\(\)/);
+  assert.match(legacyCrm, /function restoreRenderPositionStable\(snapshot\)[\s\S]*?requestAnimationFrame\(\(\) => restoreRenderPosition\(snapshot\)\)/);
+  assert.match(legacyCrm, /\.manager-measure-modal \{[\s\S]*?overflow-anchor: none/);
+  assert.match(legacyCrm, /\.manager-measure-body \{[\s\S]*?overflow-anchor: none/);
+});

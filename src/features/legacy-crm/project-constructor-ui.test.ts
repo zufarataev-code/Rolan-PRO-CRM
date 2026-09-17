@@ -9,7 +9,9 @@ const legacyCrm = fs.readFileSync(
 );
 
 test("canonical project constructor stays inside the one legacy CRM shell", () => {
-  assert.match(legacyCrm, /\['canonicalProjects', 'Проекты', '🏗'\]/);
+  assert.match(legacyCrm, /\['orders', T\('orders'\), '🏗'\]/);
+  assert.doesNotMatch(legacyCrm, /\['canonicalProjects', 'Проекты', '🏗'\]/);
+  assert.match(legacyCrm, /📐 Проверенные замеры/);
   assert.ok(legacyCrm.includes("const canonicalProject = h.match(/^#\\/projects\\/([^/]+)$/)"));
   assert.match(legacyCrm, /renderCanonicalProjects\(\)/);
   assert.match(legacyCrm, /\/api\/v1\/projects\/constructor/);
@@ -87,4 +89,27 @@ test("surveyor uses assigned canonical projects without finance controls", () =>
   assert.match(legacyCrm, /\['canonicalProjects', 'Замеры проектов', '🏗'\]/);
   assert.match(legacyCrm, /currentUser\(\)\?\.role === 'measurer'/);
   assert.match(legacyCrm, /sourceSelect\.disabled = true/);
+});
+
+test("project adds another service from one button and a filtered service list", () => {
+  assert.match(legacyCrm, /onclick="openCanonicalProjectServicePicker\(\)"/);
+  assert.match(legacyCrm, /function canonicalAvailableProjectServices/);
+  assert.match(legacyCrm, /existing\.has\(service\.service_type_id\)/);
+  assert.match(legacyCrm, /addCanonicalProjectService\('\$\{service\.service_type_id\}'\)/);
+  assert.doesNotMatch(legacyCrm, /id="cp-add-service"/);
+});
+
+test("commercial measurements expose office glass partitions as their own opening category", () => {
+  assert.match(legacyCrm, /key: 'glass_partition'/);
+  assert.match(legacyCrm, /label: 'Стеклянная перегородка'/);
+  assert.match(legacyCrm, /commercialOnly: true/);
+  assert.match(legacyCrm, /orderSiteType\(order\) === 'COMMERCIAL'/);
+  assert.match(legacyCrm, /glass_partition: 'Офисная стеклянная перегородка'/);
+  assert.match(legacyCrm, /if \(siteType === 'COMMERCIAL'\) values\.splice/);
+});
+
+test("canonical openings expose one action to mark the whole opening for film removal", () => {
+  assert.match(legacyCrm, /function canonicalToggleOpeningRemoval\(button\)/);
+  assert.match(legacyCrm, /Удаление плёнки со всего проёма/);
+  assert.match(legacyCrm, /inputs\.forEach\(input => \{ input\.checked = enabled; \}\)/);
 });

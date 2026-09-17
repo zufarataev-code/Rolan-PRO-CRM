@@ -149,6 +149,102 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - The first site type may be assigned to an imported Project whose type is missing. Once a typed Project contains measurements, switching its site type is rejected to prevent mixed room/office history.
 - Added to PR #169. Production deployment remains a separate reviewed release action.
 
+## 2026-09-15 — Smart film, power supply, and controls are separate catalog dimensions
+
+- This decision refines `Film identity is Category → Name → Model`: the selected Smart film remains a FilmCatalog record, while its Rolan Control power supply is a Smart service add-on and Wi-Fi/multi-zone/voice/ecosystem/wall-switch choices are control options. None of those components may be concatenated into one material name.
+- The confirmed Smart film lines are Rolan PRO MS (Mitsubishi), Rolan PRO AR (Arshi · China), and the decorative variable-pattern DEC-SMART line. Exact models are stored independently and the picker remains scoped to Smart only.
+- Unknown commercial prices, specifications, the two unnamed members of the stated eight-model power-supply range, and any unnamed third manufacturer must remain unset. Catalog maintenance may add them only after their exact identity is confirmed; the implementation must not infer plausible wattages or names.
+- Existing generic Smart placeholder records are retained for historical references but archived from new-order selection. This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Office glass partitions are commercial openings
+
+- This decision refines `Site type owns the measurement-space vocabulary`: an office glass partition is a first-class `glass_partition` opening in a Commercial space, not an ordinary window and not a room type.
+- It uses the same canonical measurement facts as other glass openings—overall dimensions, cells/panes, glass construction and treatment, removal, provenance, and film inheritance—but is not offered for Residential Projects.
+- Existing records remain valid. This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Film removal is selected at the measured opening
+
+- This decision refines `Canonical Project constructor and auditable Solar measurements`: removal is an attribute of each measured window/opening or its individual cells, not a second measurement list and not an ambiguous global checkbox.
+- The room/office checkbox is a bulk editing control over those same opening attributes for the currently selected service. It does not store a separate room-level removal charge, and individual openings may still be changed afterward.
+- Selecting removal contributes that opening's measured sqft to the project's removal service calculation. The window-removal action and the destructive delete-window action must remain visually and semantically distinct.
+- Proposal readiness must validate the effective positive dimensions of the actual window record. A zero or stale legacy `actualWidth`/`actualHeight` cannot override newly entered positive planned dimensions and falsely block the proposal.
+- This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Customer dimensions may price a proposal but may not release production
+
+- This decision refines `Canonical Project constructor and auditable Solar measurements`: `CUSTOMER / UNVERIFIED` dimensions are valid commercial inputs for calculating and issuing a proposal. They must remain visibly preliminary and retain their provenance.
+- Closing the sale does not silently convert customer dimensions into exact dimensions. Before installation can be scheduled or any production status can begin, every active opening must have positive `SURVEYOR_VERIFIED / VERIFIED` dimensions.
+- Changing width, height, or quantity invalidates the prior verification and the saved estimate until it is reviewed again. Existing completed or in-production legacy records are preserved through an idempotent compatibility migration.
+- This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Manager calculates the customer offer; owner controls internal economics
+
+- The Project calculation is the required source for the Proposal. A manager may edit measured quantity, selected material, sale price, customer-facing add-ons, and the final customer amount.
+- Material purchase cost, payroll, marketing, direct expenses, production cost, profit, and margin are internal company economics visible and editable only by the owner. They must not appear as manager Project fields or block the manager from preparing a complete Proposal.
+- Project material cost is calculated from the cut plan and the actual purchase cost of suitable warehouse lots. The catalog `costPerSqft` is only a fallback when a lot has no recorded cost or stock is short. Installer and operating rates come from owner-managed reference settings; managers never re-enter them in a Project. Marketing attribution belongs to lead-source reporting and is not a manual Project estimate input.
+- Scheduling follows one dispatch model: a work event belongs to the existing Project, carries its visit type, exact time, responsible employee(s), customer and object address, and is rendered simultaneously in the weekly time grid and on the map. Calendar cards and map pins are two views of the same event, never copied jobs or a second scheduling store. The interaction model is based on the proven calendar-plus-map workflow studied in TintWiz, while Rolan PRO keeps its own UI, data and implementation.
+- This is a permission boundary inside the same Project, not a separate estimate, order, accounting Project, or duplicated storage record.
+- This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Order and Project are one lifecycle record
+
+- This decision supersedes the record-creation boundary in `Sales closes before the operational project is launched`. A customer job is not converted into a second Project after the sale; accepting the Proposal and receiving the deposit change the stage of the same record.
+- `Project` is the canonical database entity and `Заказ` is its user-facing name in the CRM. Measurements, service positions, Proposal, agreement, payments, scheduling, installation, payroll links, and history belong to that one record.
+- A Lead/Deal may exist before a real customer job is opened, but the normal workflow may not create parallel Order and Project records or separate browser-storage and PostgreSQL versions of the same job.
+- The existing legacy `orders` and modern `Project` split is migration debt, not the target architecture. It must be consolidated with stable ID mapping and data preservation before the duplicate navigation and launch path are removed.
+
+## 2026-09-15 — One visible Projects workspace
+
+- This decision refines the navigation portion of `Order and Project are one lifecycle record`: owner and manager see one `Проекты` entry, one project funnel, one creation action, and one project card from intake through completion. A separate `Заказы` menu is not allowed.
+- `Проект` is the visible lifecycle term in the main CRM. `Заказ-наряд` remains the correct name for the installation work document; technical `orders` keys and historical `R-...` identifiers remain compatibility details until the data migration is complete.
+- The PostgreSQL measurement constructor is exposed as `Проверенные замеры` inside the Projects workspace, not as another competing Projects/Orders navigation item.
+- This UI consolidation does not claim that legacy `db.orders` has already been migrated into relational `Project`. Stable ID mapping and the single PostgreSQL write path remain required before the compatibility store can be removed.
+- Implemented for review in PR #172. Production deployment remains a separate action.
+
+## 2026-09-15 — Dispatch Calendar uses the configured Google map
+
+- This decision refines the calendar/map portion of `Manager calculates the customer offer; owner controls internal economics`: the visible dispatch map in `/legacy-crm` uses Google Maps as its primary map provider.
+- The browser key is supplied by protected server environment configuration and must be restricted in Google Cloud by the production domains and required Maps APIs. It is not Project data and must not be persisted in the legacy CRM payload or committed to Git.
+- Calendar cards, Google map markers, filters, addresses, and route geometry remain views of the existing Project events and geocache. Changing the map provider does not create another calendar, route store, shell, or customer-job entity.
+- Leaflet remains a resilience fallback only when Google Maps is unavailable. This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Calendar is a scheduling surface, not a dashboard
+
+- This decision refines `Manager calculates the customer offer; owner controls internal economics`: the Calendar must prioritize time, availability, assignee, customer, address, and route. Revenue summaries and repeated appointment-type KPI cards do not belong above the schedule.
+- Day and Week share one model: a chronological time grid beside the map. Day has one daily timeline; Week has seven day columns. Month is for date scanning and may reveal the map only on request.
+- Appointment type and employee are filters over the same Project events. They must not create separate consultation, survey, installation, or complaint boards and must not duplicate those events into another store.
+- The interaction model intentionally follows the proven TintWiz scheduler principles documented by TintWiz: side-by-side calendar/map, appointment and team-member filters, and scheduling an assignee against an existing Project. Rolan PRO retains its own UI, terminology, permissions, Project model, and implementation.
+- Implemented for review in PR #172. Production deployment remains a separate action.
+
+## 2026-09-15 — Measurement editing preserves operator position
+
+- The legacy manager measurement workspace may rebuild its HTML to keep totals, film, and removal calculations current, but those rebuilds must preserve the active room, focused field, vertical position, and horizontal service/room strip positions.
+- The measurement modal uses explicit keyed scroll restoration, so browser scroll anchoring is disabled within that modal to prevent a second competing adjustment after render.
+- This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-15 — Project calculation uses labeled mobile rows
+
+- Wide estimate tables remain tables on desktop, but on phone widths each data row becomes a compact labeled record. Horizontal table scrolling is not an acceptable primary interaction for setting prices or internal expenses.
+- Every mobile field retains its business label, destructive actions use complete phrases, and the proposal confirmation action remains reachable without horizontal overflow.
+- This correction is implemented in PR #172 and does not authorize an automatic production deployment.
+
+## 2026-09-16 — Project gross profit and management net profit are distinct
+
+- This decision refines `Manager calculates the customer offer; owner controls internal economics`: the same Project calculation owns the fast operational input and the owner profitability view. It must not create a parallel financial Project, manual material list, or duplicate payroll record.
+- Project gross profit is customer revenue minus direct material from warehouse lots, employee labor from the team reference, billable-service cost, and explicit direct Project expenses. Recurring monthly OpEx is not a direct Project cost and is shown only as a separate management allocation.
+- Active fixed business OpEx is divided equally across the revenue-bearing Projects in the Project's operating month. This answers the owner's planning question without presenting a planned expense as an actual paid cash transaction.
+- California income/franchise tax is a configurable planning reserve, not tax filing output. The default C corporation profile uses 8.84%, the S corporation option uses 1.5%, and the annual minimum reserve is $800. Actual entity treatment, federal tax, deductions, and paid amounts remain the accountant's and accounting module's responsibility.
+- Installer cost and payroll share one source: the employee pay configuration by service category. Before assignment, the category reference rate is retained as a labor reserve so an incomplete staffing decision cannot falsely inflate Project profit.
+- Implemented for review in PR #172. Production deployment remains a separate action.
+
+## 2026-09-16 — Break-even uses fixed company obligations and the same Project margin
+
+- This decision refines `Project gross profit and management net profit are distinct`: the break-even numerator is active fixed business OpEx only. Personal plans, variable Project expenses, and tax planning reserves must not be mixed into fixed company burn.
+- Recurring expense settings and the Money workspace edit the same `db.opex` plan records. Adding a planned obligation does not create an actual cash transaction; real payment is recorded separately in Money.
+- Break-even uses the margin of completed Projects when that history exists. Before then, the CRM may show a clearly preliminary result from calculated revenue-bearing Projects so the owner can start operating without a fake zero or invented benchmark.
+- Fast intake remains a continuation of the same Project: after client, site type, incoming service, and manager are selected, the primary action opens the existing site-specific measurement workspace. A draft is a state of that Project, not another entity.
+- Implemented in PR #172 for the production release requested by the owner.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
