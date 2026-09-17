@@ -332,6 +332,14 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification: all 251 automated tests passed, TypeScript passed, and the production build completed locally. At a 390×844 viewport the Project calculation had no horizontal overflow; the fast summary, financial cards, tax settings, and approval footer remained within the phone screen.
 - This correction extends PR #172. Production deployment remains a separate action.
 
+### 2026-09-16 release correction — fast Project intake and company break-even settings
+
+- The primary new-Project action now creates the same lifecycle record and immediately opens the existing room/office measurement workspace. `Сохранить черновик` remains available when dimensions are not ready; no second order, estimate, or storage record is created.
+- Owner Settings now has one focused `Постоянные расходы и безубыточность` section backed by the existing `db.opex` plan data. It accepts recurring company obligations, shows monthly/daily fixed burn, and calculates required Projects and sqft per month.
+- Break-even now excludes personal plans, variable expenses, and tax plans. It uses completed Projects when available and otherwise labels the result as preliminary from calculated Projects, so the owner can begin planning before the first completed month.
+- Existing role boundaries were rechecked: owner retains company P&L and settings; manager can create, measure, price, and prepare the customer proposal without internal cost/profit; surveyor and installer remain limited to assigned work and never receive company financial totals.
+- Verification: all 253 automated tests passed, TypeScript passed, and the production build completed locally. Branch / PR: `codex/project-add-service-button` / #172. The owner explicitly requested the production CRM update; next action is CI, merge to `main`, automatic production deploy, and a read-only smoke check.
+
 ### 2026-09-15 architecture correction — Order and Project are the same customer job
 
 - Product rule: one canonical PostgreSQL `Project` survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.

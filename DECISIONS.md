@@ -237,6 +237,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Installer cost and payroll share one source: the employee pay configuration by service category. Before assignment, the category reference rate is retained as a labor reserve so an incomplete staffing decision cannot falsely inflate Project profit.
 - Implemented for review in PR #172. Production deployment remains a separate action.
 
+## 2026-09-16 — Break-even uses fixed company obligations and the same Project margin
+
+- This decision refines `Project gross profit and management net profit are distinct`: the break-even numerator is active fixed business OpEx only. Personal plans, variable Project expenses, and tax planning reserves must not be mixed into fixed company burn.
+- Recurring expense settings and the Money workspace edit the same `db.opex` plan records. Adding a planned obligation does not create an actual cash transaction; real payment is recorded separately in Money.
+- Break-even uses the margin of completed Projects when that history exists. Before then, the CRM may show a clearly preliminary result from calculated revenue-bearing Projects so the owner can start operating without a fake zero or invented benchmark.
+- Fast intake remains a continuation of the same Project: after client, site type, incoming service, and manager are selected, the primary action opens the existing site-specific measurement workspace. A draft is a state of that Project, not another entity.
+- Implemented in PR #172 for the production release requested by the owner.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

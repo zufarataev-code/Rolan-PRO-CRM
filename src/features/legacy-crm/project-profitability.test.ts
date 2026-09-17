@@ -47,3 +47,21 @@ test("tax profile supports California corporation types without hiding configura
   assert.match(source, /annualMinimum: 800/);
   assert.match(source, /value="CUSTOM"/);
 });
+
+test("owner settings keep company fixed costs and break-even in one source of truth", () => {
+  assert.match(source, /key: 'company-costs'/);
+  assert.match(source, /function renderCompanyFixedExpenseSettings\(\)/);
+  assert.match(source, /function companyFixedMonthlyBurn\(\)/);
+  assert.match(source, /financeOpenPlanModal\(-1,'company-fixed'\)/);
+  assert.match(source, /scope !== 'personal'/);
+  assert.match(source, /costBehavior !== 'variable'/);
+  assert.match(source, /Это управленческий план, а не списание денег со счёта/);
+});
+
+test("new project can continue directly into the canonical measurement workspace", () => {
+  assert.match(source, /createOrder\('draft'\)/);
+  assert.match(source, /createOrder\('measure'\)/);
+  assert.match(source, /Создать и внести размеры →/);
+  assert.match(source, /function createOrder\(nextStep = 'measure'\)/);
+  assert.match(source, /openManagerMeasureModal\(o\.id\)/);
+});

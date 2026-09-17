@@ -7838,6 +7838,11 @@ function opexMonthly(item) {
 function totalMonthlyBurn() {
   return (db.opex || []).reduce((s, e) => s + opexMonthly(e), 0);
 }
+function companyFixedMonthlyBurn() {
+  return (db.opex || [])
+    .filter(item => item.active !== false && item.scope !== 'personal' && item.costBehavior !== 'variable' && item.category !== 'tax')
+    .reduce((sum, item) => sum + opexMonthly(item), 0);
+}
 function totalDailyBurn() { return totalMonthlyBurn() / 30; }
 function totalAnnualBurn() { return totalMonthlyBurn() * 12; }
 
@@ -7857,20 +7862,25 @@ function netProfitForPeriod(startDate, endDate) {
 
 // Break-even: how many sqft / how many average orders per month to cover opex
 function breakEvenAnalysis() {
-  const burn = totalMonthlyBurn();
-  // Average margin per sqft from completed orders (at least 5 to get reliable avg)
-  const completed = db.orders.filter(o => o.installationDoneAt);
-  if (!completed.length) return { burn, avgMarginPerSqft: 0, sqftToBreakEven: 0, ordersToBreakEven: 0 };
-  const totalSqft = completed.reduce((s, o) => s + orderActualAreaSqft(o), 0);
-  const totalMargin = completed.reduce((s, o) => s + orderMargin(o), 0);
+  const burn = companyFixedMonthlyBurn();
+  const usable = order => orderActualAreaSqft(order) > 0 && orderRevenue(order) > 0;
+  const completed = db.orders.filter(order => order.installationDoneAt && usable(order));
+  const planned = db.orders.filter(usable);
+  const sample = completed.length ? completed : planned;
+  const basis = completed.length ? 'completed' : (planned.length ? 'planned' : 'none');
+  if (!sample.length) return { burn, avgMarginPerSqft: 0, avgOrderMargin: 0, sqftToBreakEven: 0, ordersToBreakEven: 0, sampleCount: 0, basis };
+  const totalSqft = sample.reduce((s, o) => s + orderActualAreaSqft(o), 0);
+  const totalMargin = sample.reduce((s, o) => s + orderMargin(o), 0);
   const avgMarginPerSqft = totalSqft > 0 ? totalMargin / totalSqft : 0;
-  const avgOrderMargin = totalMargin / completed.length;
+  const avgOrderMargin = totalMargin / sample.length;
   return {
     burn,
     avgMarginPerSqft,
     avgOrderMargin,
     sqftToBreakEven: avgMarginPerSqft > 0 ? burn / avgMarginPerSqft : 0,
     ordersToBreakEven: avgOrderMargin > 0 ? burn / avgOrderMargin : 0,
+    sampleCount: sample.length,
+    basis,
   };
 }
 
@@ -14362,9 +14372,7 @@ function projectProfitMonthOrders(o) {
 }
 function projectMonthlyFixedExpensePool() {
   financeData();
-  return (db.opex || [])
-    .filter(item => item.active !== false && item.scope !== 'personal' && item.costBehavior !== 'variable' && item.category !== 'tax')
-    .reduce((sum, item) => sum + opexMonthly(item), 0);
+  return companyFixedMonthlyBurn();
 }
 function projectProfitability(o) {
   const monthOrders = projectProfitMonthOrders(o);
@@ -19242,6 +19250,7 @@ function settingsSections() {
   return [
     { key: 'team-access', icon: '🔐', title: 'Доступ сотрудников', description: 'Email, пароль, роли и отключение доступа', destination: 'team' },
     { key: 'company', icon: '🏢', title: T('company'), description: 'Название компании, валюта и базовые суммы' },
+    { key: 'company-costs', icon: '🎯', title: 'Постоянные расходы и безубыточность', description: 'Аренда, страховка, сервисы и минимальный объём продаж' },
     { key: 'telegram', icon: '✈️', title: T('telegramConfigure'), description: 'Telegram-бот и Chat ID сотрудников' },
     { key: 'communication', icon: '💬', title: 'Автосвязь с клиентами', description: 'Каналы, автоматические сообщения и AI-продавец' },
     { key: 'integrations', icon: '🔌', title: 'Интеграции', description: 'Google Voice, Gmail, Maps, лиды и внешние сервисы' },
@@ -19353,6 +19362,34 @@ function renderEmailChannelSettings(s, cardAttrs = 'class="card"') {
     </div>`;
 }
 
+function renderCompanyFixedExpenseSettings() {
+  const analysis = breakEvenAnalysis();
+  const plans = (db.opex || []).map((plan, index) => ({ plan, index }))
+    .filter(({ plan }) => plan.scope !== 'personal' && plan.costBehavior !== 'variable' && plan.category !== 'tax');
+  const frequencyLabel = { daily:'каждый день', weekly:'каждую неделю', monthly:'каждый месяц', quarterly:'каждый квартал', yearly:'каждый год' };
+  const basisText = analysis.basis === 'completed'
+    ? `По ${analysis.sampleCount} выполненным проектам`
+    : analysis.basis === 'planned'
+      ? `Предварительно по ${analysis.sampleCount} рассчитанным проектам`
+      : 'Появится после расчёта первого проекта';
+  return `<div ${settingsPanelAttrs('company-costs')}>
+    <div class="flex items-start justify-between gap-3 flex-wrap">
+      <div><h3 class="font-black text-lg">🎯 Точка безубыточности</h3><p class="text-sm text-gray-600 mt-1">Сколько Rolan PRO должна заработать в месяц, чтобы покрыть постоянные расходы.</p></div>
+      <button class="btn-primary" onclick="financeOpenPlanModal(-1,'company-fixed')">+ Добавить расход</button>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+      <div class="p-3 rounded-xl bg-slate-50 border"><div class="text-xs text-gray-500">В месяц</div><div class="text-xl font-black">${fmtMoney(analysis.burn)}</div></div>
+      <div class="p-3 rounded-xl bg-slate-50 border"><div class="text-xs text-gray-500">В день</div><div class="text-xl font-black">${fmtMoney(analysis.burn / 30)}</div></div>
+      <div class="p-3 rounded-xl bg-blue-50 border border-blue-100"><div class="text-xs text-blue-700">Заказов / мес.</div><div class="text-xl font-black text-blue-900">${analysis.ordersToBreakEven > 0 ? analysis.ordersToBreakEven.toFixed(1) : '—'}</div></div>
+      <div class="p-3 rounded-xl bg-blue-50 border border-blue-100"><div class="text-xs text-blue-700">sqft / мес.</div><div class="text-xl font-black text-blue-900">${analysis.sqftToBreakEven > 0 ? Math.ceil(analysis.sqftToBreakEven).toLocaleString() : '—'}</div></div>
+    </div>
+    <div class="text-xs text-gray-500 mt-2">${basisText}. Это управленческий план, а не списание денег со счёта.</div>
+    <div class="border-t mt-5 pt-4"><div class="font-bold mb-3">Постоянные расходы компании</div>
+      ${plans.length ? `<div class="space-y-2">${plans.map(({ plan, index }) => `<div class="p-3 rounded-xl border ${plan.active === false ? 'opacity-50' : ''}"><div class="flex items-center justify-between gap-3 flex-wrap"><div class="flex items-center gap-3"><input type="checkbox" ${plan.active === false ? '' : 'checked'} onchange="db.opex[${index}].active=this.checked;save();render();" style="width:20px;height:20px"><div><div class="font-semibold">${academyEsc(plan.name || 'Без названия')}</div><div class="text-xs text-gray-500">${academyEsc(financeCategoryLabel(plan.category))} · ${frequencyLabel[plan.frequency] || 'каждый месяц'}</div></div></div><div class="flex items-center gap-3"><div class="text-right"><div class="font-black">${fmtMoney(opexMonthly(plan))}</div><div class="text-xs text-gray-500">в месяц</div></div><button class="btn-ghost text-sm" onclick="financeOpenPlanModal(${index},'company-fixed')">Изменить</button></div></div></div>`).join('')}</div>` : `<div class="p-5 rounded-xl border border-dashed text-center text-gray-500">Добавьте аренду, страховку, сервисы и другие обязательные расходы.</div>`}
+    </div>
+  </div>`;
+}
+
 function renderSettings() {
   const s = db.settings;
   const comm = communicationSettings();
@@ -19385,6 +19422,8 @@ function renderSettings() {
       <input type="number" id="set-ref" value="${s.referralReward}"></div>
       <button class="btn-primary mt-4" onclick="saveCompanySettings()">${T('save')}</button>
     </div>
+
+    ${renderCompanyFixedExpenseSettings()}
 
     <div ${settingsPanelAttrs('telegram')}>
       <h3 class="font-semibold mb-1">${T('telegramConfigure')}</h3>
@@ -24217,7 +24256,8 @@ function openOrderModal() {
       <div class="erp-intake-footer">
         <div class="flex gap-2 justify-end" style="margin-left:auto">
           <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
-          <button class="btn-primary" onclick="createOrder()">Создать проект</button>
+          <button class="btn-ghost" onclick="createOrder('draft')">Сохранить черновик</button>
+          <button class="btn-primary" onclick="createOrder('measure')">Создать и внести размеры →</button>
         </div>
       </div>
     </div>
@@ -24674,7 +24714,7 @@ function createOrderClientFromOverlay() {
   selectOrderClient(id);
 }
 
-function createOrder() {
+function createOrder(nextStep = 'measure') {
   let clientId = state._newOrderClient;
   const serviceIds = Array.from(new Set((state._newOrderServices || []).filter(id => ORDER_PRIMARY_SERVICES.some(service => service.id === id))));
   const serviceId = serviceIds[0] || document.getElementById('no-svc')?.value || state._newOrderService || 'smart_film';
@@ -24796,6 +24836,7 @@ function createOrder() {
   }
   save(); closeModal();
   openOrder(o.id);
+  if (nextStep === 'measure') setTimeout(() => openManagerMeasureModal(o.id), 0);
 }
 
 function openClientModal() {
@@ -28525,15 +28566,17 @@ function renderFinancePlans() {
 }
 
 function financeOpenPlanModal(index = -1) {
+  const preset = arguments[1] || '';
   const existing = index >= 0 ? db.opex[index] : null;
   const plan = existing || { name:'', amount:0, frequency:'monthly', category:'other', scope:'business', costBehavior:'fixed', day:1, tags:[], active:true };
+  const companyFixed = preset === 'company-fixed';
   const categoryOptions = FINANCE_CATEGORY_OPTIONS
     .filter(([key]) => !['client_payment','inventory_purchase','project_expense','payroll','refund','owner_draw'].includes(key))
     .map(([key,label]) => `<option value="${key}" ${plan.category===key?'selected':''}>${academyEsc(label)}</option>`).join('');
   const frequencyOptions = [['daily','Каждый день'],['weekly','Каждую неделю'],['monthly','Каждый месяц'],['quarterly','Каждый квартал'],['yearly','Каждый год']]
     .map(([key,label]) => `<option value="${key}" ${plan.frequency===key?'selected':''}>${label}</option>`).join('');
-  state.modal = `<div class="modal-backdrop"><div class="modal max-w-xl"><div class="flex items-center justify-between mb-4"><div><h3 class="font-semibold text-lg">${existing ? 'Регулярный платёж' : 'Новый регулярный платёж'}</h3><p class="text-xs text-gray-500">Заполните только основное. Детали всегда можно изменить позже.</p></div><button class="btn-ghost" onclick="closeModal()">✕</button></div>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3"><div class="md:col-span-2"><label>Название</label><input id="fin-plan-name" value="${academyEsc(plan.name || '')}" placeholder="Например: аренда склада"></div><div><label>Сумма, $</label><input id="fin-plan-amount" type="number" min="0" step="0.01" value="${Number(plan.amount)||0}"></div><div><label>Как часто</label><select id="fin-plan-frequency">${frequencyOptions}</select></div><div><label>Категория</label><select id="fin-plan-category">${categoryOptions}</select></div><div><label>День оплаты</label><input id="fin-plan-day" type="number" min="1" max="31" value="${plan.day || 1}"></div><div><label>Назначение</label><select id="fin-plan-scope"><option value="business" ${plan.scope!=='personal'?'selected':''}>Бизнес</option><option value="personal" ${plan.scope==='personal'?'selected':''}>Личное</option></select></div><div><label>Тип расхода</label><select id="fin-plan-behavior"><option value="fixed" ${plan.costBehavior!=='variable'?'selected':''}>Постоянный</option><option value="variable" ${plan.costBehavior==='variable'?'selected':''}>Переменный</option></select></div><div class="md:col-span-2"><label>Теги — необязательно</label><input id="fin-plan-tags" value="${academyEsc(financeTags(plan.tags).join(', '))}" placeholder="склад, аренда"></div></div>
+  state.modal = `<div class="modal-backdrop"><div class="modal max-w-xl"><div class="flex items-center justify-between mb-4"><div><h3 class="font-semibold text-lg">${companyFixed ? (existing ? 'Постоянный расход' : 'Новый постоянный расход') : (existing ? 'Регулярный платёж' : 'Новый регулярный платёж')}</h3><p class="text-xs text-gray-500">${companyFixed ? 'Учитывается в точке безубыточности. Оплату отмечайте отдельно в разделе «Деньги».' : 'Заполните только основное. Детали всегда можно изменить позже.'}</p></div><button class="btn-ghost" onclick="closeModal()">✕</button></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3"><div class="md:col-span-2"><label>Название</label><input id="fin-plan-name" value="${academyEsc(plan.name || '')}" placeholder="Например: аренда склада"></div><div><label>Сумма, $</label><input id="fin-plan-amount" type="number" min="0" step="0.01" value="${Number(plan.amount)||0}"></div><div><label>Как часто</label><select id="fin-plan-frequency">${frequencyOptions}</select></div><div><label>Категория</label><select id="fin-plan-category">${categoryOptions}</select></div><div><label>День оплаты</label><input id="fin-plan-day" type="number" min="1" max="31" value="${plan.day || 1}"></div><div><label>Назначение</label><select id="fin-plan-scope" ${companyFixed?'disabled':''}><option value="business" ${plan.scope!=='personal'?'selected':''}>Бизнес</option><option value="personal" ${plan.scope==='personal'?'selected':''}>Личное</option></select></div><div><label>Тип расхода</label><select id="fin-plan-behavior" ${companyFixed?'disabled':''}><option value="fixed" ${plan.costBehavior!=='variable'?'selected':''}>Постоянный</option><option value="variable" ${plan.costBehavior==='variable'?'selected':''}>Переменный</option></select></div><div class="md:col-span-2"><label>Теги — необязательно</label><input id="fin-plan-tags" value="${academyEsc(financeTags(plan.tags).join(', '))}" placeholder="склад, аренда"></div></div>
     <div class="flex items-center justify-between gap-2 mt-5"><div>${existing ? `<button class="btn-ghost text-red-600" onclick="if(confirm('Удалить этот платёж?')){db.opex.splice(${index},1);save();closeModal();render();}">Удалить</button>` : ''}</div><div class="flex gap-2"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="financeSavePlan(${index})">Сохранить</button></div></div>
   </div></div>`;
   render();
