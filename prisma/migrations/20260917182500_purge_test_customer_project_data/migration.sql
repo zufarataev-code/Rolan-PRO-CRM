@@ -268,7 +268,9 @@ SET payload = jsonb_set(
     '{notifications}', '[]'::jsonb, true
   ),
   '{reviews}', '[]'::jsonb, true
-);
+),
+revision = revision + 1,
+updated_at = CURRENT_TIMESTAMP;
 
 -- Hard postconditions. Any failure raises an exception and the entire cleanup
 -- transaction rolls back, leaving production data unchanged.
