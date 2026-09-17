@@ -20974,7 +20974,8 @@ function projectEstimateSyncQuickServices(o) {
 function projectEstimateAddQuickLine(oid, requestedServiceType = '') {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
-  const serviceType = primaryServiceInfo(requestedServiceType)?.id || o.serviceTypes?.[0] || o.serviceType || 'smart_film';
+  const requestedService = ORDER_PRIMARY_SERVICES.find(service => service.id === requestedServiceType);
+  const serviceType = requestedService?.id || o.serviceTypes?.[0] || o.serviceType || 'smart_film';
   const catalog = projectQuickLineCatalog(serviceType)[0] || null;
   const line = {
     id: uid(), quickProjectLine: true, serviceType,
@@ -20995,7 +20996,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   if (!o || !line || !orderUserCanSeeMoney(o, currentUser())) return;
   if (field === 'unitCost' && !orderUserCanSeeInternalEconomics(o, currentUser())) return;
   if (field === 'serviceType') {
-    const service = primaryServiceInfo(value);
+    const service = ORDER_PRIMARY_SERVICES.find(item => item.id === value);
     if (!service) return;
     line.serviceType = service.id;
     const catalog = projectQuickLineCatalog(service.id)[0] || null;
