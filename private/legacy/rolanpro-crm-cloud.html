@@ -7679,6 +7679,12 @@ function migrateSchema() {
       types: {},
     };
   }
+  s.installerRates.serviceTypes = s.installerRates.serviceTypes || {
+    SOLAR_FILM: Number(s.installerRates._defaults?.solar) || 2.5,
+    SMART_FILM: Number(s.installerRates._defaults?.smart) || 5,
+    SAFETY_FILM: Number(s.installerRates._defaults?.protective) || 3,
+    DECORATIVE_FILM: Number(s.installerRates._defaults?.decorative) || 2.5,
+  };
   s.installerRates.workTypes = s.installerRates.workTypes || {
     washing: 0, removal: 0, silicone: 0, electric: 0, connect: 0, warranty: 0, custom: 0,
   };
@@ -7741,6 +7747,20 @@ function migrateSchema() {
       if (!baseRate || Math.abs(baseRate - 0.30) < 0.001) pc.ratePerSqft = 2.5;
     });
     db._installerPayRates2026 = true;
+  }
+  // Service cards now own the default film-installation rate. Keep only real
+  // employee-specific overrides; remove values that came from built-in seeds.
+  if (!db._serviceOwnedInstallerRates2026) {
+    const builtInRates = { protective: 3, smart: 5, solar: 2.5, decorative: 2.5, privacy: 2.5, other: 2.5 };
+    (db.users || []).filter(u => u.role === 'installer').forEach(u => {
+      const pc = u.payConfig = u.payConfig || {};
+      pc.ratesByCategory = pc.ratesByCategory || {};
+      Object.entries(builtInRates).forEach(([category, rate]) => {
+        if (Math.abs(Number(pc.ratesByCategory[category]) - rate) < 0.001) pc.ratesByCategory[category] = 0;
+      });
+      if (Math.abs(Number(pc.ratePerSqft) - 2.5) < 0.001) pc.ratePerSqft = 0;
+    });
+    db._serviceOwnedInstallerRates2026 = true;
   }
   // ---- ENSURE OWNER USER EXISTS ----
   if (!db.users) db.users = [];
@@ -14207,7 +14227,26 @@ function filmCategory(filmTypeName) {
 }
 function filmDefaultRate(filmTypeName) {
   const cat = filmCategory(filmTypeName);
-  return (db.settings.installerRates?._defaults || {})[cat] ?? 2.5;
+  return installerServiceRateByCategory(cat);
+}
+function installerServiceCodeByCategory(category) {
+  return ({ solar: 'SOLAR_FILM', smart: 'SMART_FILM', protective: 'SAFETY_FILM', decorative: 'DECORATIVE_FILM' })[category] || '';
+}
+function installerServiceRateByCategory(category) {
+  const serviceCode = installerServiceCodeByCategory(category);
+  const serviceRate = Number(db.settings.installerRates?.serviceTypes?.[serviceCode]);
+  if (serviceRate > 0) return serviceRate;
+  return Number(db.settings.installerRates?._defaults?.[category]) || Number(db.settings.installerRates?._defaults?.other) || 2.5;
+}
+function syncLegacyInstallerServiceRate(serviceCode, rate) {
+  const normalizedRate = Math.max(0, Number(rate) || 0);
+  if (!serviceCode) return false;
+  db.settings.installerRates.serviceTypes = db.settings.installerRates.serviceTypes || {};
+  const previousRate = Number(db.settings.installerRates.serviceTypes[serviceCode]) || 0;
+  db.settings.installerRates.serviceTypes[serviceCode] = normalizedRate;
+  const category = ({ SOLAR_FILM: 'solar', SMART_FILM: 'smart', SAFETY_FILM: 'protective', DECORATIVE_FILM: 'decorative' })[serviceCode];
+  if (category) db.settings.installerRates._defaults[category] = normalizedRate;
+  return Math.abs(previousRate - normalizedRate) > 0.001;
 }
 function filmRate(filmTypeName) {
   if (!filmTypeName) return db.settings.installerRates?._defaults?.other ?? 2.5;
@@ -14355,8 +14394,7 @@ function installerRateForWindow(user, w) {
   if (categoryRate > 0) return categoryRate;
   const baseRate = Number(pc.ratePerSqft);
   if (baseRate > 0) return baseRate;
-  const filmName = catalog ? `${catalog.brand} ${catalog.model}` : (w?.filmType || '');
-  return filmRate(filmName);
+  return installerServiceRateByCategory(category);
 }
 function installerRateForQuickLine(user, line) {
   const pc = user?.payConfig || {};
@@ -14366,7 +14404,9 @@ function installerRateForQuickLine(user, line) {
   if (categoryRate > 0) return categoryRate;
   const baseRate = Number(pc.ratePerSqft);
   if (baseRate > 0) return baseRate;
-  return filmRate(catalog ? `${catalog.brand} ${catalog.model}` : category);
+  const serviceCode = canonicalServiceCodeForOrderService(line?.serviceType);
+  const serviceRate = Number(db.settings.installerRates?.serviceTypes?.[serviceCode]);
+  return serviceRate > 0 ? serviceRate : installerServiceRateByCategory(category);
 }
 function orderQuickInstallerPayoutForUser(o, user, installerCount = 1) {
   return projectQuickLines(o)
@@ -16727,7 +16767,14 @@ async function loadCanonicalServicePricing(force = false) {
   state.canonicalPricingLoading = true;
   state.canonicalPricingError = '';
   try {
-    state.canonicalPricingData = await canonicalPricingRequest('GET');
+    const pricingData = await canonicalPricingRequest('GET');
+    state.canonicalPricingData = pricingData;
+    if (pricingData?.can_view_costs) {
+      const ratesChanged = (pricingData.services || []).reduce((changed, service) => {
+        return syncLegacyInstallerServiceRate(service.service_code, service.installation_cost_per_sqft) || changed;
+      }, false);
+      if (ratesChanged) save();
+    }
   } catch (error) {
     state.canonicalPricingError = error?.message || 'Не удалось загрузить прайс';
   } finally {
@@ -16753,13 +16800,17 @@ async function canonicalPricingSave(body, successText) {
     state.canonicalPricingNotice = successText || 'Сохранено';
     state.canonicalPricingData = null;
     await loadCanonicalServicePricing(true);
+    return true;
   } catch (error) {
     state.canonicalPricingNotice = error?.message || 'Ошибка сохранения';
     render();
+    return false;
   }
 }
 
-function saveCanonicalService(id) {
+async function saveCanonicalService(id) {
+  const owner = !!state.canonicalPricingData?.can_view_costs;
+  const service = (state.canonicalPricingData?.services || []).find(row => row.service_type_id === id);
   const patch = {
     name_ru: canonicalPricingValue(`cps-${id}-name`),
     unit_type: canonicalPricingValue(`cps-${id}-unit`),
@@ -16768,7 +16819,12 @@ function saveCanonicalService(id) {
     block_revenue_price: canonicalPricingValue(`cps-${id}-block`, true),
     is_active: !!document.getElementById(`cps-${id}-active`)?.checked,
   };
-  canonicalPricingSave({ entity: 'service_type', id, patch }, 'Услуга сохранена');
+  if (owner) patch.installation_cost_per_sqft = canonicalPricingValue(`cps-${id}-installer`, true);
+  const saved = await canonicalPricingSave({ entity: 'service_type', id, patch }, 'Услуга сохранена');
+  if (saved && owner && service?.service_code) {
+    syncLegacyInstallerServiceRate(service.service_code, patch.installation_cost_per_sqft);
+    save();
+  }
 }
 
 function saveCanonicalAddon(id) {
@@ -16783,6 +16839,7 @@ function saveCanonicalAddon(id) {
 }
 
 async function createCanonicalService() {
+  const owner = !!state.canonicalPricingData?.can_view_costs;
   const values = {
     name_ru: canonicalPricingValue('cp-new-service-name'),
     service_code: canonicalPricingValue('cp-new-service-code'),
@@ -16790,9 +16847,14 @@ async function createCanonicalService() {
     base_price: canonicalPricingValue('cp-new-service-base', true),
     min_price: canonicalPricingValue('cp-new-service-min', true),
   };
+  if (owner) values.installation_cost_per_sqft = canonicalPricingValue('cp-new-service-installer', true);
   if (!values.name_ru) return alert('Укажите название услуги');
   try {
-    await canonicalPricingRequest('POST', { entity: 'service_type', values });
+    const created = await canonicalPricingRequest('POST', { entity: 'service_type', values });
+    if (owner && created?.service_code) {
+      syncLegacyInstallerServiceRate(created.service_code, created.installation_cost_per_sqft);
+      save();
+    }
     state.canonicalPricingData = null;
     state.canonicalPricingNotice = 'Новая услуга добавлена';
     await loadCanonicalServicePricing(true);
@@ -16841,14 +16903,15 @@ function renderCanonicalServicePricing() {
 
   const serviceCards = services.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:4px">
     <summary class="cursor-pointer list-none flex items-center justify-between gap-3"><div><div class="font-black text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.service_code)} · ${academyEsc(row.unit_type)}</div></div><div class="flex items-center gap-3"><span class="font-black text-blue-700">${canonicalPricingMoney(row.base_price)}</span><span class="text-slate-400">Открыть ↓</span></div></summary>
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 mt-5 pt-4 border-t border-slate-200">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-5 pt-4 border-t border-slate-200">
       ${canonicalPricingField(`cps-${row.service_type_id}-name`, 'Название', row.name_ru, 'text')}
       ${canonicalPricingField(`cps-${row.service_type_id}-unit`, 'Единица: sqft, zone, item', row.unit_type, 'text')}
       ${canonicalPricingField(`cps-${row.service_type_id}-base`, 'Цена клиенту, $', row.base_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-min`, 'Минимальная цена, $', row.min_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-block`, 'Блок клиенту, $', row.block_revenue_price)}
+      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-installer`, 'Монтажнику / sqft, $', row.installation_cost_per_sqft) : ''}
     </div>
-    <p class="text-xs text-slate-500 mt-3">Здесь хранится только цена клиенту. Стоимость плёнки берётся со склада, оплата работ — из раздела «Зарплата».</p>
+    <p class="text-xs text-slate-500 mt-3">Стоимость плёнки берётся со склада. Ставка монтажа из этой услуги автоматически начисляется назначенным монтажникам; индивидуальная ставка сотрудника может её переопределить.</p>
     <div class="mt-4 flex flex-wrap items-center gap-3"><label class="tag"><input id="cps-${row.service_type_id}-active" type="checkbox" ${row.is_active ? 'checked' : ''}> Активна</label><button class="btn-primary" onclick="saveCanonicalService('${row.service_type_id}')">Сохранить услугу</button></div>
   </details>`).join('');
 
@@ -16865,7 +16928,7 @@ function renderCanonicalServicePricing() {
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Безубыточность</div><b class="text-xl">${canonicalPricingMoney(planning.break_even?.revenue)}</b><div class="text-xs">${planning.break_even?.deals || 0} сделок / ${planning.break_even?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Цель с прибылью</div><b class="text-xl">${canonicalPricingMoney(planning.target?.revenue)}</b><div class="text-xs">${planning.target?.deals || 0} сделок / ${planning.target?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">КП за месяц</div><b class="text-xl">${canonicalPricingMoney(actual.proposal_revenue)}</b></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Прогресс</div><b class="text-xl">${Number(actual.progress_percent || 0).toFixed(0)}%</b></div></div>
       ${owner ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${canonicalPricingField('cp-plan-check', 'Средний чек, $', assumptions.average_deal_value)}${canonicalPricingField('cp-plan-conversion', 'Конверсия лид → сделка, %', assumptions.lead_to_deal_percent)}${canonicalPricingField('cp-plan-profit', 'Целевая прибыль / месяц, $', assumptions.target_profit_monthly)}</div><button class="btn-primary mt-4" onclick="saveCanonicalPlanning()">Сохранить план</button>` : '<p class="text-sm text-slate-500 mt-4">Менеджер видит цели по лидам и сделкам. Расходы и прибыль меняет владелец.</p>'}
     </section>
-    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Услуги</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту услугу, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
+    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Услуги</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту услугу, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Монтажнику / sqft, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between"><div><h2 class="text-xl font-black">Дополнительные работы</h2><p class="text-sm text-slate-500">Подключение зон, демонтаж, силикон и другие допродажи.</p></div><span class="tag">${addons.length}</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить допработу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Основная услуга</span><select id="cp-new-addon-service" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2">${services.map(s => `<option value="${s.service_type_id}">${academyEsc(s.name_ru)}</option>`).join('')}</select></label>${canonicalPricingField('cp-new-addon-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-addon-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-addon-unit', 'Единица', 'item', 'text')}${canonicalPricingField('cp-new-addon-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-addon-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalAddon()">Создать допработу</button></details><div class="space-y-3 mt-4">${addonCards || '<div class="text-slate-500">Дополнительных работ пока нет</div>'}</div></section>
   </div>`;
 }
@@ -31692,9 +31755,9 @@ function openUserPayConfig(userId) {
       </div>
 
       <div id="pc-per_sqft" class="pc-section mt-3" style="display:${pc.type==='per_sqft'?'block':'none'}">
-        <label>Базовая ставка $/sqft</label>
-        <input id="pc-ratePerSqft" type="number" step="0.05" value="${pc.ratePerSqft||0.30}">
-        <p class="text-xs text-gray-500 mt-1">Применяется если у плёнки нет своей ставки. Если несколько монтажников — делится поровну.</p>
+        <label>Индивидуальная ставка $/sqft (необязательно)</label>
+        <input id="pc-ratePerSqft" type="number" step="0.05" value="${pc.ratePerSqft ?? 0}">
+        <p class="text-xs text-gray-500 mt-1">0 = ставка монтажа из раздела «Услуги». Если несколько монтажников — начисление делится поровну.</p>
         <details class="mt-3">
           <summary class="text-sm font-medium cursor-pointer">⚙️ Ставки по категориям плёнок (override)</summary>
           <div class="grid grid-cols-2 gap-2 mt-2">
@@ -31705,7 +31768,7 @@ function openUserPayConfig(userId) {
               </div>
             `).join('')}
           </div>
-          <p class="text-xs text-gray-500 mt-1">0 = используется базовая ставка выше.</p>
+          <p class="text-xs text-gray-500 mt-1">0 = используется ставка монтажа выбранной услуги. Заполняйте только для индивидуального исключения сотрудника.</p>
         </details>
         <details class="mt-3">
           <summary class="text-sm font-medium cursor-pointer">⚙️ Оплата дополнительных услуг ($/ед.)</summary>

@@ -279,6 +279,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - This separation is presentation and responsibility ownership, not a new business entity. One Project remains the customer job from intake through Proposal, installation, payment, and completion.
 - Implemented in PR #173. Production deployment is not authorized by this decision.
 
+## 2026-09-16 — Services own the default installer rate
+
+**Supersedes:** the same-day statement that `Услуги` owns customer prices only and all labor rates belong exclusively to employee Payroll cards.
+
+- Each film service has one owner-editable `Монтажнику / sqft` value using the existing canonical `installation_cost_per_sqft` field.
+- That service rate is the default installer accrual for quick and measured Project quantities. Employee Payroll category/base rates are optional individual overrides, not duplicated mandatory setup.
+- Film purchase cost remains owned by Warehouse lots. Additional-work rates remain in employee Payroll, and one-off purchases/helpers/subcontractors remain Project expenses.
+- Implemented in PR #173. Production deployment remains a separate authorized action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

@@ -163,7 +163,7 @@ test("quick project entry is a separate window instead of an embedded estimate t
   assert.match(estimateRenderer, /Изменить быстрый ввод/);
 });
 
-test("services contain customer price only and labor comes from payroll work rates", () => {
+test("project add-on rows contain customer price only and labor comes from configured work rates", () => {
   const serviceUpdater = source.match(/function projectEstimateUpdateService\(oid, sid, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
   const estimateStart = source.indexOf("function renderProjectEstimateWorkspace");
   const estimateEnd = source.indexOf("function openProjectEstimateWorkspace", estimateStart);
@@ -176,14 +176,18 @@ test("services contain customer price only and labor comes from payroll work rat
   assert.match(source, /filmPayout \+ orderAdditionalWorkPayoutForUser/);
 });
 
-test("the Services reference does not ask for material or installer cost", () => {
+test("the Services reference owns installer pay while material stays in Warehouse", () => {
   const rendererStart = source.indexOf("function renderCanonicalServicePricing");
   const rendererEnd = source.indexOf("async function loadCanonicalInstallerOperations", rendererStart);
   const renderer = source.slice(rendererStart, rendererEnd);
   assert.doesNotMatch(renderer, /cps-\$\{row\.service_type_id\}-material/);
-  assert.doesNotMatch(renderer, /cps-\$\{row\.service_type_id\}-installer/);
+  assert.match(renderer, /cps-\$\{row\.service_type_id\}-installer/);
+  assert.match(renderer, /Монтажнику \/ sqft, \$/);
   assert.doesNotMatch(renderer, /cpa-\$\{row\.service_addon_id\}-cost/);
-  assert.match(renderer, /Стоимость плёнки берётся со склада, оплата работ — из раздела «Зарплата»/);
+  assert.match(renderer, /Стоимость плёнки берётся со склада\. Ставка монтажа из этой услуги автоматически начисляется/);
+  assert.match(source, /patch\.installation_cost_per_sqft = canonicalPricingValue/);
+  assert.match(source, /syncLegacyInstallerServiceRate\(service\.service_code, patch\.installation_cost_per_sqft\)/);
+  assert.match(source, /syncLegacyInstallerServiceRate\(service\.service_code, service\.installation_cost_per_sqft\)/);
 });
 
 test("each manager-entered window starts preliminary and can be explicitly verified", () => {

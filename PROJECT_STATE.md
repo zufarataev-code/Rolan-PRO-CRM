@@ -375,6 +375,15 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification: all 261 automated tests passed, standalone TypeScript passed, and the production build completed locally.
 - This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains a separate action.
 
+### 2026-09-16 correction — service-owned installer rate
+
+- The owner clarified that each film service must include `Монтажнику / sqft` directly in the `Услуги` reference. This supersedes the immediately preceding rule that Services contain customer prices only.
+- Film material cost still comes only from priced Warehouse lots. The service installation rate is the default payroll accrual for both measured openings and quick Project sqft; employee Payroll rates remain optional individual overrides.
+- Built-in employee category rates are cleared by an idempotent migration so they do not silently mask the service rate. Genuine non-default employee overrides remain unchanged.
+- The same canonical `installation_cost_per_sqft` field already used by relational Projects is restored in the `/legacy-crm` Services UI and synchronized into the compatibility Project calculator. No new entity or storage root is added.
+- Verification: all 261 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains separate.
+
 ### 2026-09-15 architecture correction — Order and Project are the same customer job
 
 - Product rule: one canonical PostgreSQL `Project` survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.

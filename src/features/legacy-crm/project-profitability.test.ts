@@ -16,6 +16,9 @@ test("project calculator exposes one fast operational summary", () => {
 test("installer labor uses employee reference rates and keeps a fallback reserve", () => {
   assert.match(source, /function installerRateForWindow\(user, w\)/);
   assert.match(source, /pc\.ratesByCategory\?\.\[category\]/);
+  assert.match(source, /function installerServiceRateByCategory\(category\)/);
+  assert.match(source, /installerRates\?\.serviceTypes\?\.\[serviceCode\]/);
+  assert.match(source, /return installerServiceRateByCategory\(category\)/);
   assert.match(source, /function orderInstallerPayoutForUser\(o, userId\)/);
   assert.match(source, /source: 'REFERENCE_DEFAULT'/);
   assert.match(source, /source: 'EMPLOYEE_REFERENCE'/);
