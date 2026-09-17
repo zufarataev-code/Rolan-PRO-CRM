@@ -125,11 +125,29 @@ test("quick project entry works without dimensions and supports multiple service
   assert.match(source, /function projectEstimateAddQuickLine\(oid, requestedServiceType = ''\)/);
   assert.match(source, /quickProjectLine: true, serviceType/);
   assert.match(source, /line\.price = line\.qty \* line\.unitPrice/);
-  assert.match(source, /projectQuickLineCatalog\(line\.serviceType\)/);
+  assert.match(source, /projectQuickLineCatalog\(line\.serviceType, line\.catalogId\)/);
   assert.match(source, /ORDER_PRIMARY_SERVICES\.map\(service =>/);
   assert.match(source, /Количество/);
   assert.match(source, /Цена \/ ед\./);
   assert.match(source, /\+ Добавить услугу/);
+});
+
+test("quick project lines use warehouse film and never accept manual material or labor cost", () => {
+  const sync = source.match(/function projectEstimateSyncQuickLine\(line\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const rendererStart = source.indexOf("function renderProjectEstimateWorkspace");
+  const rendererEnd = source.indexOf("function openProjectEstimateWorkspace", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  assert.match(source, /function projectQuickLineCatalog\(serviceType, selectedCatalogId = ''\)/);
+  assert.match(source, /warehouseCatalogStockStats\(item\.id\)\.availableSqft > 0/);
+  assert.match(renderer, /Плёнка со склада/);
+  assert.match(renderer, /Закупка материала и оплата исполнителей подставляются автоматически/);
+  assert.match(sync, /delete line\.unitCost/);
+  assert.match(sync, /delete line\.cost/);
+  assert.match(sync, /line\.unit = 'sqft'/);
+  assert.doesNotMatch(updater, /unitCost/);
+  assert.doesNotMatch(updater, /field === 'unit'/);
+  assert.doesNotMatch(renderer, /Себестоимость \/ ед\./);
 });
 
 test("each manager-entered window starts preliminary and can be explicitly verified", () => {

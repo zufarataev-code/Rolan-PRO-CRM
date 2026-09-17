@@ -356,6 +356,16 @@ Contributors must add a row before starting substantial work and update or remov
 - Employee pay cards now show and calculate salary per month rather than per week. The Settings model keeps the manager and active surveyor/owner pay configurations synchronized with the same percentages and salaries.
 - Implemented as an extension of PR #173. Production deployment remains separate.
 
+### 2026-09-16 correction — quick Project cost comes from Warehouse and Payroll references
+
+- The fast Project service row now contains only manager-owned commercial inputs: service, an in-stock film, quantity/unit, and customer sale price. Manual material cost and manual installation price were removed from that row for every role.
+- Film choices are restricted to the selected service category and to catalog items with a positive Warehouse roll balance. The selector shows current metres and approximate sqft; an old selected item remains readable after its stock reaches zero but cannot pass Proposal readiness.
+- Preliminary material cost without dimensions is calculated from the remaining value and area of priced Warehouse purchase lots, including the catalog waste percentage. A Project cannot be approved when the selected quantity is not covered by stock with a recorded purchase price.
+- Preliminary installer cost without dimensions is calculated from the assigned employee's Payroll category rate. Until installers are assigned, the existing owner-managed category defaults remain the reserve. Quick lines no longer contribute a second embedded service cost.
+- Existing quick-line `unitCost` and `cost` compatibility fields are removed during the idempotent legacy-state migration. No second catalog, warehouse, payroll table, Project, or storage root was introduced.
+- Verification: all 258 automated tests passed, standalone TypeScript passed, and a clean production build completed after regenerating the Prisma client.
+- This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains separate.
+
 ### 2026-09-15 architecture correction — Order and Project are the same customer job
 
 - Product rule: one canonical PostgreSQL `Project` survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.

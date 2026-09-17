@@ -7810,6 +7810,13 @@ function migrateSchema() {
     }
     if (o.depositReceived == null) o.depositReceived = false;
     if (!o.extraServices) o.extraServices = [];
+    o.extraServices.filter(line => line?.quickProjectLine).forEach(line => {
+      // A manager enters only sale data. Material COGS comes from warehouse
+      // receipts and installer labor comes from the employee pay reference.
+      line.unit = 'sqft';
+      delete line.unitCost;
+      delete line.cost;
+    });
     if (!o.extraExpenses) o.extraExpenses = [];
     if (!o.leadIntentServiceType) {
       o.leadIntentServiceType = o.orderBuilder?.leadIntentServiceType || o.serviceType || (o.serviceTypes || [])[0] || '';
@@ -8198,6 +8205,30 @@ function inventorySummary() {
     byCat[r.catalogId].originalValue += r.costTotal;
   });
   return byCat;
+}
+function warehouseCatalogStockStats(catalogId) {
+  return inventoryByCatalogId(catalogId).reduce((stats, roll) => {
+    const remainingM = Math.max(0, Number(roll.remainingLengthM) || 0);
+    const widthMm = Math.max(0, Number(roll.widthMm) || 0);
+    if (!remainingM || !widthMm) return stats;
+    const areaSqft = mm2_to_sqft(widthMm * remainingM * 1000);
+    const originalM = Math.max(0, Number(roll.originalLengthM) || 0);
+    const lotCost = Math.max(0, Number(roll.costTotal) || 0);
+    stats.lengthM += remainingM;
+    stats.availableSqft += areaSqft;
+    stats.rolls += 1;
+    if (originalM > 0 && lotCost > 0) {
+      stats.pricedSqft += areaSqft;
+      stats.remainingValue += lotCost * remainingM / originalM;
+    } else {
+      stats.unpricedRolls += 1;
+    }
+    return stats;
+  }, { rolls: 0, lengthM: 0, availableSqft: 0, pricedSqft: 0, remainingValue: 0, unpricedRolls: 0 });
+}
+function warehouseCatalogCostPerSqft(catalogId) {
+  const stats = warehouseCatalogStockStats(catalogId);
+  return stats.pricedSqft > 0 ? stats.remainingValue / stats.pricedSqft : 0;
 }
 function lowStockItems() {
   const summary = inventorySummary();
@@ -14317,6 +14348,21 @@ function installerRateForWindow(user, w) {
   const filmName = catalog ? `${catalog.brand} ${catalog.model}` : (w?.filmType || '');
   return filmRate(filmName);
 }
+function installerRateForQuickLine(user, line) {
+  const pc = user?.payConfig || {};
+  const catalog = getCatalogItem(line?.catalogId);
+  const category = catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other';
+  const categoryRate = Number(pc.ratesByCategory?.[category]);
+  if (categoryRate > 0) return categoryRate;
+  const baseRate = Number(pc.ratePerSqft);
+  if (baseRate > 0) return baseRate;
+  return filmRate(catalog ? `${catalog.brand} ${catalog.model}` : category);
+}
+function orderQuickInstallerPayoutForUser(o, user, installerCount = 1) {
+  return projectQuickLines(o)
+    .filter(line => line.unit === 'sqft')
+    .reduce((sum, line) => sum + (Number(line.qty) || 0) * installerRateForQuickLine(user, line) / installerCount, 0);
+}
 function orderInstallerPayoutForUser(o, userId) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.includes(userId)) return 0;
@@ -14325,6 +14371,7 @@ function orderInstallerPayoutForUser(o, userId) {
   if (pc.type === 'fixed_per_job') return Math.max(0, Number(pc.fixedPerJob) || 0);
   if (pc.type === 'commission') return orderRevenue(o) * Math.max(0, Number(pc.commissionPct) || 0) / 100 / installerIds.length;
   if (pc.type !== 'per_sqft') return 0;
+  if (!measureAllWindows(o).length) return orderQuickInstallerPayoutForUser(o, user, installerIds.length);
   return measureAllWindows(o).reduce((sum, { win }) => {
     return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / installerIds.length;
   }, 0);
@@ -14332,7 +14379,14 @@ function orderInstallerPayoutForUser(o, userId) {
 function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.length) {
-    const total = measureAllWindows(o).reduce((sum, { win }) => sum + windowInstallerPayout(win), 0);
+    const windows = measureAllWindows(o);
+    const total = windows.length
+      ? windows.reduce((sum, { win }) => sum + windowInstallerPayout(win), 0)
+      : projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => {
+          const catalog = getCatalogItem(line.catalogId);
+          const filmName = catalog ? `${catalog.brand} ${catalog.model}` : line.serviceType;
+          return sum + (Number(line.qty) || 0) * filmRate(filmName);
+        }, 0);
     return { total, byInstaller: [], source: 'REFERENCE_DEFAULT' };
   }
   const byInstaller = installerIds.map(userId => {
@@ -14354,7 +14408,7 @@ function orderExtraServicesRevenue(o) {
   return (o.extraServices || []).reduce((s, x) => s + (Number(x.price) || 0), 0);
 }
 function orderExtraServicesCost(o) {
-  return (o.extraServices || []).reduce((s, x) => s + (Number(x.cost) || 0), 0);
+  return (o.extraServices || []).filter(x => !x.quickProjectLine).reduce((s, x) => s + (Number(x.cost) || 0), 0);
 }
 function orderRevenue(o) {
   return orderFilmRevenue(o) + orderExtraServicesRevenue(o);
@@ -14370,6 +14424,7 @@ function orderInstallerPayoutPerPerson(o, userId = '') {
 function orderFilmCost(o) {
   const cutCost = orderFilmCutMaterialCost(o);
   if (cutCost != null) return cutCost;
+  if (!measureAllWindows(o).length) return orderQuickLineMaterialCost(o);
   let s = 0;
   (o.measurements?.rooms || []).forEach(r => (r.windows || []).forEach(w => { s += windowFilmCost(w); }));
   return s;
@@ -21025,8 +21080,11 @@ function projectEstimateReadiness(o) {
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
   const quickLines = projectQuickLines(o);
+  const quickStockDemand = projectQuickRequiredSqftByCatalog(o);
   if (!windows.length && !quickLines.length) issues.push('нет позиций проекта');
-  if (quickLines.some(line => !line.serviceType || !String(line.label || '').trim() || Number(line.qty) <= 0 || Number(line.unitPrice) <= 0)) issues.push('есть незаполненные позиции проекта');
+  if (quickLines.some(line => !line.serviceType || !line.catalogId || !String(line.label || '').trim() || Number(line.qty) <= 0 || Number(line.unitPrice) <= 0)) issues.push('есть позиция без плёнки со склада, количества или цены продажи');
+  if (quickLines.some(line => line.catalogId && warehouseCatalogStockStats(line.catalogId).availableSqft <= 0)) issues.push('выбранной плёнки нет на складе');
+  if (Object.entries(quickStockDemand).some(([catalogId, requiredSqft]) => warehouseCatalogStockStats(catalogId).pricedSqft < requiredSqft)) issues.push('на складе недостаточно плёнки с указанной закупочной ценой');
   if ((o.extraServices || []).filter(s => !s.quickProjectLine).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
   if (orderRevenue(o) <= 0) issues.push('сумма проекта равна нулю');
   return issues;
@@ -21040,17 +21098,39 @@ function projectQuickSqft(o) {
   return projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => sum + (Number(line.qty) || 0), 0);
 }
 
-function projectQuickLineCatalog(serviceType) {
+function projectQuickRequiredSqftByCatalog(o) {
+  return projectQuickLines(o).reduce((demand, line) => {
+    if (!line.catalogId) return demand;
+    const catalog = getCatalogItem(line.catalogId);
+    const requiredSqft = (Number(line.qty) || 0) * (1 + (Number(catalog?.wastePct) || 0) / 100);
+    demand[line.catalogId] = (demand[line.catalogId] || 0) + requiredSqft;
+    return demand;
+  }, {});
+}
+
+function projectQuickLineCatalog(serviceType, selectedCatalogId = '') {
   const category = primaryServiceInfo(serviceType)?.catalogCategory;
-  return (db.settings.catalog || []).filter(item => !item.archived && item.category === category);
+  return (db.settings.catalog || []).filter(item => !item.archived && item.category === category && (
+    item.id === selectedCatalogId || warehouseCatalogStockStats(item.id).availableSqft > 0
+  ));
+}
+
+function orderQuickLineMaterialCost(o) {
+  if (measureAllWindows(o).length) return 0;
+  return projectQuickLines(o).filter(line => line.unit === 'sqft' && line.catalogId).reduce((sum, line) => {
+    const catalog = getCatalogItem(line.catalogId);
+    const sqftWithWaste = (Number(line.qty) || 0) * (1 + (Number(catalog?.wastePct) || 0) / 100);
+    return sum + sqftWithWaste * warehouseCatalogCostPerSqft(line.catalogId);
+  }, 0);
 }
 
 function projectEstimateSyncQuickLine(line) {
   line.qty = Math.max(0, Number(line.qty) || 0);
+  line.unit = 'sqft';
   line.unitPrice = Math.max(0, Number(line.unitPrice) || 0);
-  line.unitCost = Math.max(0, Number(line.unitCost) || 0);
   line.price = line.qty * line.unitPrice;
-  line.cost = line.qty * line.unitCost;
+  delete line.unitCost;
+  delete line.cost;
 }
 
 function projectEstimateSyncQuickServices(o) {
@@ -21069,7 +21149,7 @@ function projectEstimateAddQuickLine(oid, requestedServiceType = '') {
   const line = {
     id: uid(), quickProjectLine: true, serviceType,
     catalogId: catalog?.id || '', label: catalog ? catalogLabel(catalog) : primaryServiceInfo(serviceType)?.title || 'Позиция',
-    qty: 1, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0), unitCost: Number(catalog?.costPerSqft || 0),
+    qty: 1, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0),
   };
   projectEstimateSyncQuickLine(line);
   o.extraServices = o.extraServices || [];
@@ -21083,7 +21163,6 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   const o = getOrder(oid);
   const line = projectQuickLines(o).find(item => item.id === lineId);
   if (!o || !line || !orderUserCanSeeMoney(o, currentUser())) return;
-  if (field === 'unitCost' && !orderUserCanSeeInternalEconomics(o, currentUser())) return;
   if (field === 'serviceType') {
     const service = ORDER_PRIMARY_SERVICES.find(item => item.id === value);
     if (!service) return;
@@ -21092,19 +21171,17 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     line.catalogId = catalog?.id || '';
     line.label = catalog ? catalogLabel(catalog) : service.title;
     line.unitPrice = Number(catalog?.retailPerSqft || 0);
-    line.unitCost = Number(catalog?.costPerSqft || 0);
   } else if (field === 'catalogId') {
     const catalog = getCatalogItem(value);
+    const requiredCategory = primaryServiceInfo(line.serviceType)?.catalogCategory;
+    if (catalog && (catalog.archived || catalog.category !== requiredCategory || warehouseCatalogStockStats(catalog.id).availableSqft <= 0)) return;
     line.catalogId = catalog?.id || '';
     if (catalog) {
       line.label = catalogLabel(catalog);
       line.unitPrice = Number(catalog.retailPerSqft || 0);
-      line.unitCost = Number(catalog.costPerSqft || 0);
     }
-  } else if (['qty','unitPrice','unitCost'].includes(field)) {
+  } else if (['qty','unitPrice'].includes(field)) {
     line[field] = Math.max(0, Number(value) || 0);
-  } else if (field === 'unit') {
-    line.unit = ['sqft','unit','zone','job'].includes(value) ? value : 'unit';
   } else if (field === 'label') {
     line.label = String(value || '').trim();
   }
@@ -21272,16 +21349,15 @@ function renderProjectEstimateWorkspace(o) {
     </tr>`;
   })).join('');
   const quickLineRows = quickLines.map(line => {
-    const catalog = projectQuickLineCatalog(line.serviceType);
-    const isCustom = !line.catalogId;
+    const catalog = projectQuickLineCatalog(line.serviceType, line.catalogId);
+    const selectedStock = line.catalogId ? warehouseCatalogStockStats(line.catalogId) : null;
     return `<tr>
       <td data-label="Услуга"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select></td>
-      <td data-label="Позиция"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">Другая позиция</option>${catalog.map(item => `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))}</option>`).join('')}</select>${isCustom ? `<input class="mt-2" value="${academyEsc(line.label || '')}" placeholder="Название позиции" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','label',this.value)">` : ''}</td>
+      <td data-label="Плёнка со склада"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500 mt-1">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}</td>
       <td data-label="Количество"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
-      <td data-label="Единица"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','unit',this.value)"><option value="sqft" ${line.unit==='sqft'?'selected':''}>sqft</option><option value="unit" ${line.unit==='unit'?'selected':''}>шт.</option><option value="zone" ${line.unit==='zone'?'selected':''}>зона</option><option value="job" ${line.unit==='job'?'selected':''}>проект</option></select></td>
+      <td data-label="Единица"><span class="font-semibold">sqft</span></td>
       <td data-label="Цена за единицу"><input type="number" min="0" step="0.5" value="${Number(line.unitPrice || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','unitPrice',this.value)"></td>
       <td data-label="Сумма" class="money"><b>${fmtMoney(line.price)}</b></td>
-      ${canSeeInternalEconomics ? `<td data-label="Себестоимость / ед."><input type="number" min="0" step="0.01" value="${Number(line.unitCost || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','unitCost',this.value)"></td>` : ''}
       <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить</button></td>
     </tr>`;
   }).join('');
@@ -21305,7 +21381,7 @@ function renderProjectEstimateWorkspace(o) {
     [`Менеджер (${Number(db.settings.pricingDefaults?.managerPct || 0)}% выручки)`, pss.manager],
     [`Рекламный резерв (${Number(db.settings.pricingDefaults?.marketingPct || 0)}% выручки)`, pss.marketing],
     ['Замерщик — оклад в постоянных расходах', pss.measurer], ['Расходники', pss.consumables],
-    ['Аренда', pss.rent], ['Быстрые позиции и доп. услуги', pss.extraServicesCost],
+    ['Аренда', pss.rent], ['Дополнительные работы', pss.extraServicesCost],
     ['Прямые расходы', pss.manual],
   ];
   return `
@@ -21332,8 +21408,8 @@ function renderProjectEstimateWorkspace(o) {
     ${unverifiedMeasurements.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Предварительные размеры клиента.</b> По ним разрешено рассчитать проект и выпустить КП. Перед назначением монтажа потребуется внести и подтвердить точные размеры ${unverifiedMeasurements.length} окон.</div>` : ''}
 
     <section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>1. Быстрый ввод проекта</h4><div class="text-xs text-gray-500">Без размеров: выберите услугу и позицию, укажите количество и цену за единицу. В одном проекте можно добавить несколько услуг.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
-      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Услуга</th><th>Позиция</th><th>Количество</th><th>Единица</th><th>Цена / ед.</th><th class="money">Сумма</th>${canSeeInternalEconomics ? '<th>Себестоимость / ед.</th>' : ''}<th></th></tr></thead><tbody>${quickLineRows || `<tr><td colspan="${canSeeInternalEconomics ? 8 : 7}" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>`}</tbody></table></div>
+      <div class="project-estimate-section-head"><div><h4>1. Быстрый ввод проекта</h4><div class="text-xs text-gray-500">Менеджер выбирает услугу и плёнку из остатков склада, затем указывает количество и цену продажи. Закупка материала и оплата исполнителей подставляются автоматически.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
+      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Количество</th><th>Единица</th><th>Цена / ед.</th><th class="money">Сумма</th><th></th></tr></thead><tbody>${quickLineRows || `<tr><td colspan="7" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>`}</tbody></table></div>
     </section>
 
     <section class="project-estimate-section">
@@ -25031,7 +25107,7 @@ function createOrder(nextStep = 'estimate') {
     const line = {
       id: uid(), quickProjectLine: true, serviceType: selectedService.id,
       catalogId: catalog?.id || '', label: catalog ? catalogLabel(catalog) : selectedService.title,
-      qty: 1, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0), unitCost: Number(catalog?.costPerSqft || 0),
+      qty: 1, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0),
     };
     projectEstimateSyncQuickLine(line);
     o.extraServices.push(line);

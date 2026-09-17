@@ -261,6 +261,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Managers do not enter payroll or advertising manually in Project calculation. Owner controls this model in `Настройки → Постоянные расходы и безубыточность`; individual employee cards reuse the same compensation values.
 - Implemented in PR #173. Production deployment remains a separate action.
 
+## 2026-09-16 — Warehouse and Payroll are the only quick-Project cost sources
+
+- This decision supersedes the sentence `Catalog cost is an owner-only preliminary internal value` in `Quick Project intake is line-item pricing before measurement`. A Project service row must never ask a manager or owner to re-enter material cost or installation price.
+- The row owns only customer-facing commercial input: service direction, an existing in-stock FilmCatalog item, quantity/unit, and sale price. The selectable film list is the intersection of the service category and current Warehouse roll balances.
+- Preliminary material COGS is derived from actual Warehouse lot receipts: remaining roll value divided by remaining priced area, multiplied by the Project sqft and the catalog waste factor. Missing purchase price or insufficient priced stock blocks calculation approval instead of silently substituting a manually entered line cost.
+- Installer labor is derived from the assigned employee's Payroll configuration by film category. Before assignment, the owner-managed category defaults are the reserve. These references are edited in Warehouse purchasing and employee Salary settings, not inside each Project.
+- Quick entry is an estimate and does not reserve or issue stock. Actual roll deduction remains tied to production/installation flow and measured cutting data. No parallel inventory, payroll, catalog, or Project entity is permitted.
+- Implemented in PR #173. Production deployment remains a separate action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
