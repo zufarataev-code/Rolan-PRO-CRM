@@ -58,6 +58,26 @@ test("owner settings keep company fixed costs and break-even in one source of tr
   assert.match(source, /Это управленческий план, а не списание денег со счёта/);
 });
 
+test("company compensation model separates fixed salaries from revenue percentages", () => {
+  assert.match(source, /opx_owner_salary', 'Оклад владельца — Зуфар', 3000/);
+  assert.match(source, /opx_measurer_salary', 'Оклад замерщика', 4000/);
+  assert.match(source, /s\.pricingDefaults\.managerPct = 5/);
+  assert.match(source, /s\.pricingDefaults\.marketingPct = 10/);
+  assert.match(source, /s\.pricingDefaults\.measurerPct = 0/);
+  assert.match(source, /Оклады входят в постоянные расходы месяца/);
+  assert.match(source, /Комиссия менеджера от валовой выручки/);
+  assert.match(source, /Рекламный резерв от валовой выручки/);
+});
+
+test("project PSS charges manager commission and advertising once from gross revenue", () => {
+  const pss = source.match(/function orderPSS\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(pss, /const mgr = rev \* managerPct \/ 100/);
+  assert.match(pss, /const marketing = rev \* Math\.max\(0, Number\(pd\.marketingPct\) \|\| 0\) \/ 100/);
+  assert.match(source, /legacyAds\.active = false/);
+  assert.match(source, /legacyAds\.costBehavior = 'variable'/);
+  assert.match(source, /Рекламный резерв \(\$\{Number\(db\.settings\.pricingDefaults\?\.marketingPct/);
+});
+
 test("new project opens a quick multi-service estimate without requiring measurements", () => {
   assert.match(source, /createOrder\('draft'\)/);
   assert.match(source, /createOrder\('estimate'\)/);

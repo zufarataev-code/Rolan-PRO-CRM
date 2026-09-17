@@ -17,5 +17,6 @@ test('project estimate does not ask for manual marketing spend', () => {
   const workspace = html.slice(start, end);
   assert.ok(start > 0 && end > start);
   assert.doesNotMatch(workspace, /projectEstimateUpdateSetting\([^\n]+['"]marketing['"]/);
-  assert.match(html, /const marketing = 0;/);
+  assert.match(html, /const marketing = rev \* Math\.max\(0, Number\(pd\.marketingPct\) \|\| 0\) \/ 100/);
+  assert.match(html, /Рекламный резерв/);
 });

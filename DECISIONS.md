@@ -253,6 +253,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Quick lines are a compatibility projection of Project service positions, not another Order, estimate, material catalog, or browser-storage root. The public Proposal preserves each line rather than collapsing the Project into one anonymous service total.
 - Implemented on `codex/quick-project-line-items` in PR #173. Production deployment is a separate release step.
 
+## 2026-09-16 — Fixed salaries and revenue-based costs use different bases
+
+- Owner compensation of $3,000/month and surveyor compensation of $4,000/month are fixed company payroll obligations. They belong to the monthly break-even pool and are allocated across the month's revenue-bearing Projects; they are not charged in full to every Project.
+- The assigned manager earns 5% of the Project's gross customer revenue. Advertising planning reserves 10% of that same gross revenue. Both are variable direct Project costs and reduce gross margin before fixed-cost allocation.
+- The advertising percentage replaces the old seeded daily advertising plan. Keeping both active would double count marketing, so compatibility migration deactivates the old plan while preserving it for history.
+- Managers do not enter payroll or advertising manually in Project calculation. Owner controls this model in `Настройки → Постоянные расходы и безубыточность`; individual employee cards reuse the same compensation values.
+- Implemented in PR #173. Production deployment remains a separate action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

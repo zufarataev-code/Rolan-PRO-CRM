@@ -6609,9 +6609,9 @@ function brandDocumentLogoHtml(className = '') {
   return `<img src="${src}" alt="Rolan PRO" class="${className}" style="display:block;height:46px;width:auto;max-width:230px;object-fit:contain;">`;
 }
 const CORE_LOGIN_ACCESS = {
-  'u_o1': { name: 'Rolan (Owner)', role: 'owner' },
+  'u_o1': { name: 'Зуфар', role: 'owner' },
   'u_m1': { name: 'Данилла', role: 'manager' },
-  'u_z1': { name: 'Зуфар', role: 'measurer' },
+  'u_z1': { name: 'Алан', role: 'measurer' },
   'u_i1': { name: 'Ринат', role: 'installer' },
   'u_i2': { name: 'Нурик', role: 'installer' },
 };
@@ -7275,6 +7275,30 @@ function migrateSchema() {
       { id: 'opx_ads',       name: 'Реклама (Google/Meta)', amount: 250, frequency: 'daily', category: 'marketing', active: true, addedAt: new Date().toISOString() },
     ];
   }
+  // ---- COMPANY COMPENSATION / REVENUE COST MODEL ----
+  // Fixed salaries belong to monthly company obligations. Manager commission
+  // and advertising reserve scale with Project revenue and are charged once in
+  // Project PSS, never duplicated in fixed OpEx.
+  if (!db._companyCostModel20260916) {
+    s.pricingDefaults.managerPct = 5;
+    s.pricingDefaults.measurerPct = 0;
+    s.pricingDefaults.marketingPct = 10;
+    const ensureFixedPlan = (id, name, amount) => {
+      const existing = db.opex.find(item => item.id === id);
+      if (existing) return;
+      db.opex.push({ id, name, amount, frequency: 'monthly', category: 'payroll', scope: 'business', costBehavior: 'fixed', active: true, addedAt: new Date().toISOString() });
+    };
+    ensureFixedPlan('opx_owner_salary', 'Оклад владельца — Зуфар', 3000);
+    ensureFixedPlan('opx_measurer_salary', 'Оклад замерщика', 4000);
+    const legacyAds = db.opex.find(item => item.id === 'opx_ads');
+    if (legacyAds) {
+      legacyAds.active = false;
+      legacyAds.costBehavior = 'variable';
+      legacyAds.note = 'Заменено автоматическим резервом 10% от валовой выручки';
+    }
+    db._companyCostModel20260916 = true;
+  }
+  if (s.pricingDefaults.marketingPct == null) s.pricingDefaults.marketingPct = 10;
   // ---- OWNER ACCOUNTING ----
   // Orders, inventory and payroll remain the source of truth. This object stores
   // only bank/cash accounts and actual movements that do not already live in an
@@ -7757,6 +7781,24 @@ function migrateSchema() {
   });
   // Legacy employee PINs are no longer authentication credentials.
   (db.users || []).forEach(user => { if (user && 'pin' in user) delete user.pin; });
+  if (!db._teamCompensationModel20260916) {
+    (db.users || []).forEach(user => {
+      user.payConfig = user.payConfig || {};
+      if (user.role === 'manager') {
+        user.payConfig.type = 'commission';
+        user.payConfig.commissionPct = 5;
+      } else if (user.role === 'measurer' && user.active !== false) {
+        user.payConfig.type = 'salary';
+        user.payConfig.monthlySalary = 4000;
+      } else if (user.role === 'owner') {
+        user.payConfig.type = 'salary';
+        user.payConfig.monthlySalary = 3000;
+      }
+      if (user.id === 'u_o1' && user.name === 'Rolan (Owner)') user.name = 'Зуфар';
+      if (user.id === 'u_z1' && user.name === 'Зуфар') user.name = 'Алан';
+    });
+    db._teamCompensationModel20260916 = true;
+  }
 
   // ---- ORDER fields migration ----
   (db.orders || []).forEach(o => {
@@ -7842,6 +7884,40 @@ function companyFixedMonthlyBurn() {
   return (db.opex || [])
     .filter(item => item.active !== false && item.scope !== 'personal' && item.costBehavior !== 'variable' && item.category !== 'tax')
     .reduce((sum, item) => sum + opexMonthly(item), 0);
+}
+function companyCostPlan(id, fallback = {}) {
+  return (db.opex || []).find(item => item.id === id) || fallback;
+}
+function saveCompanyCostModel() {
+  if (currentUser()?.role !== 'owner') return;
+  const readAmount = id => Math.max(0, Number(document.getElementById(id)?.value) || 0);
+  const upsertFixedSalary = (id, name, amount) => {
+    let plan = (db.opex || []).find(item => item.id === id);
+    if (!plan) {
+      plan = { id, addedAt: new Date().toISOString() };
+      db.opex.push(plan);
+    }
+    Object.assign(plan, { name, amount, frequency: 'monthly', category: 'payroll', scope: 'business', costBehavior: 'fixed', active: true });
+  };
+  upsertFixedSalary('opx_owner_salary', 'Оклад владельца — Зуфар', readAmount('company-owner-salary'));
+  upsertFixedSalary('opx_measurer_salary', 'Оклад замерщика', readAmount('company-measurer-salary'));
+  db.settings.pricingDefaults.managerPct = readAmount('company-manager-pct');
+  db.settings.pricingDefaults.measurerPct = 0;
+  db.settings.pricingDefaults.marketingPct = readAmount('company-marketing-pct');
+  (db.users || []).forEach(user => {
+    user.payConfig = user.payConfig || {};
+    if (user.role === 'manager') {
+      user.payConfig.type = 'commission';
+      user.payConfig.commissionPct = db.settings.pricingDefaults.managerPct;
+    } else if (user.role === 'measurer' && user.active !== false) {
+      user.payConfig.type = 'salary';
+      user.payConfig.monthlySalary = readAmount('company-measurer-salary');
+    } else if (user.role === 'owner') {
+      user.payConfig.type = 'salary';
+      user.payConfig.monthlySalary = readAmount('company-owner-salary');
+    }
+  });
+  save(); render();
 }
 function totalDailyBurn() { return totalMonthlyBurn() / 30; }
 function totalAnnualBurn() { return totalMonthlyBurn() * 12; }
@@ -14325,16 +14401,17 @@ function orderPSS(o) {
   const film = orderFilmCost(o);
   const installers = orderInstallerPayout(o);
   const gas = orderGasExpense(o);
-  const mgr = rev * (pd.managerPct || 0) / 100;
+  const assignedManager = getUser(o.managerId);
+  const managerPct = assignedManager?.payConfig?.type === 'commission'
+    ? Math.max(0, Number(assignedManager.payConfig.commissionPct) || 0)
+    : Math.max(0, Number(pd.managerPct) || 0);
+  const mgr = rev * managerPct / 100;
   const meas = rev * (pd.measurerPct || 0) / 100;
   const consum = orderConsumablesExpense(o);
   const rent = orderRentExpense(o);
   const extraSvcCost = orderExtraServicesCost(o);
   const manualExp = orderManualExpensesTotal(o);
-  // Advertising belongs to channel/CAC reporting, not to a manager's Project
-  // estimate. Keeping the key at zero preserves old callers without charging
-  // the same Google Ads spend once per Project (and again in company OpEx).
-  const marketing = 0;
+  const marketing = rev * Math.max(0, Number(pd.marketingPct) || 0) / 100;
   return {
     film, installers, gas, manager: mgr, measurer: meas,
     consumables: consum, rent, extraServicesCost: extraSvcCost, manual: manualExp,
@@ -18054,7 +18131,7 @@ function renderTeam() {
                   pc.type === 'commission' ? pc.commissionPct + '% от выручки'
                   : pc.type === 'per_sqft' ? '$' + (pc.ratePerSqft || 0.30) + '/sqft'
                   : pc.type === 'fixed_per_job' ? '$' + (pc.fixedPerJob || 0) + '/заказ'
-                  : pc.type === 'salary' ? '$' + (pc.weeklySalary || 0) + '/нед'
+                  : pc.type === 'salary' ? '$' + (pc.monthlySalary || (pc.weeklySalary || 0) * 4.33 || 0) + '/мес'
                   : '—'
                 }</span>
               </div>
@@ -19364,6 +19441,9 @@ function renderEmailChannelSettings(s, cardAttrs = 'class="card"') {
 
 function renderCompanyFixedExpenseSettings() {
   const analysis = breakEvenAnalysis();
+  const ownerSalary = companyCostPlan('opx_owner_salary', { amount: 3000 });
+  const measurerSalary = companyCostPlan('opx_measurer_salary', { amount: 4000 });
+  const pricing = db.settings.pricingDefaults || {};
   const plans = (db.opex || []).map((plan, index) => ({ plan, index }))
     .filter(({ plan }) => plan.scope !== 'personal' && plan.costBehavior !== 'variable' && plan.category !== 'tax');
   const frequencyLabel = { daily:'каждый день', weekly:'каждую неделю', monthly:'каждый месяц', quarterly:'каждый квартал', yearly:'каждый год' };
@@ -19376,6 +19456,16 @@ function renderCompanyFixedExpenseSettings() {
     <div class="flex items-start justify-between gap-3 flex-wrap">
       <div><h3 class="font-black text-lg">🎯 Точка безубыточности</h3><p class="text-sm text-gray-600 mt-1">Сколько Rolan PRO должна заработать в месяц, чтобы покрыть постоянные расходы.</p></div>
       <button class="btn-primary" onclick="financeOpenPlanModal(-1,'company-fixed')">+ Добавить расход</button>
+    </div>
+    <div class="mt-4 p-4 rounded-xl border border-blue-100 bg-blue-50">
+      <div class="font-black text-blue-950">Оклады и расходы от валовой выручки</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <div><label>Оклад владельца / месяц, $</label><input id="company-owner-salary" type="number" min="0" step="100" value="${Number(ownerSalary.amount || 0)}"></div>
+        <div><label>Оклад замерщика / месяц, $</label><input id="company-measurer-salary" type="number" min="0" step="100" value="${Number(measurerSalary.amount || 0)}"></div>
+        <div><label>Комиссия менеджера от валовой выручки, %</label><input id="company-manager-pct" type="number" min="0" step="0.5" value="${Number(pricing.managerPct || 0)}"></div>
+        <div><label>Рекламный резерв от валовой выручки, %</label><input id="company-marketing-pct" type="number" min="0" step="0.5" value="${Number(pricing.marketingPct || 0)}"></div>
+      </div>
+      <div class="flex items-center justify-between gap-3 flex-wrap mt-3"><div class="text-xs text-blue-900">Оклады входят в постоянные расходы месяца. Комиссия и реклама рассчитываются автоматически в каждом проекте от его выручки.</div><button class="btn-primary" onclick="saveCompanyCostModel()">Сохранить модель расходов</button></div>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
       <div class="p-3 rounded-xl bg-slate-50 border"><div class="text-xs text-gray-500">В месяц</div><div class="text-xl font-black">${fmtMoney(analysis.burn)}</div></div>
@@ -19750,9 +19840,8 @@ function renderSettings() {
 
     <div ${settingsPanelAttrs('pricing')}>
       <h3 class="font-semibold mb-3">${T('pricingDefaults')}</h3>
+      <div class="p-3 rounded-lg bg-blue-50 border border-blue-100 mb-3 text-sm">Оклады, комиссия менеджера и рекламный процент находятся в разделе <button class="text-blue-700 font-bold underline" onclick="openSettingsSection('company-costs')">Постоянные расходы и безубыточность</button>.</div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div><label>${T('managerPctDefault')} %</label><input type="number" step="0.5" value="${s.pricingDefaults.managerPct}" onchange="db.settings.pricingDefaults.managerPct=parseFloat(this.value)||0; save();"></div>
-        <div><label>${T('measurerPctDefault')} %</label><input type="number" step="0.5" value="${s.pricingDefaults.measurerPct}" onchange="db.settings.pricingDefaults.measurerPct=parseFloat(this.value)||0; save();"></div>
         <div><label>${T('gasPerKm')}</label><input type="number" step="0.1" value="${s.pricingDefaults.gasPerKm}" onchange="db.settings.pricingDefaults.gasPerKm=parseFloat(this.value)||0; save();"></div>
         <div><label>${T('consumablesPerSqft')}</label><input type="number" step="0.05" value="${s.pricingDefaults.consumablesPerSqft}" onchange="db.settings.pricingDefaults.consumablesPerSqft=parseFloat(this.value)||0; save();"></div>
         <div><label>${T('helperPerJob')}</label><input type="number" step="5" value="${s.pricingDefaults.helperPerJob}" onchange="db.settings.pricingDefaults.helperPerJob=parseFloat(this.value)||0; save();"></div>
@@ -21213,7 +21302,9 @@ function renderProjectEstimateWorkspace(o) {
   const installerRows = installerPay.byInstaller.map(row => `<div class="order-clean-list-row"><span>${academyEsc(row.name)}</span><b>${fmtMoney(row.amount)}</b></div>`).join('');
   const costLines = [
     ['Плёнка и отход', pss.film], ['Монтажники', pss.installers], ['Транспорт', pss.gas],
-    ['Менеджер', pss.manager], ['Замерщик', pss.measurer], ['Расходники', pss.consumables],
+    [`Менеджер (${Number(db.settings.pricingDefaults?.managerPct || 0)}% выручки)`, pss.manager],
+    [`Рекламный резерв (${Number(db.settings.pricingDefaults?.marketingPct || 0)}% выручки)`, pss.marketing],
+    ['Замерщик — оклад в постоянных расходах', pss.measurer], ['Расходники', pss.consumables],
     ['Аренда', pss.rent], ['Быстрые позиции и доп. услуги', pss.extraServicesCost],
     ['Прямые расходы', pss.manual],
   ];
@@ -31469,7 +31560,7 @@ function openUserPayConfig(userId) {
         <option value="commission" ${pc.type==='commission'?'selected':''}>% от выручки заказов (продажник/менеджер)</option>
         <option value="per_sqft" ${pc.type==='per_sqft'?'selected':''}>$/sqft за установку (монтажник)</option>
         <option value="fixed_per_job" ${pc.type==='fixed_per_job'?'selected':''}>Фикс за заказ (замерщик/хелпер)</option>
-        <option value="salary" ${pc.type==='salary'?'selected':''}>Оклад в неделю</option>
+        <option value="salary" ${pc.type==='salary'?'selected':''}>Оклад в месяц</option>
         <option value="hourly" ${pc.type==='hourly'?'selected':''}>Почасовая ставка</option>
         <option value="none" ${pc.type==='none'?'selected':''}>Не оплачивается (owner)</option>
       </select>
@@ -31505,8 +31596,8 @@ function openUserPayConfig(userId) {
       </div>
 
       <div id="pc-salary" class="pc-section mt-3" style="display:${pc.type==='salary'?'block':'none'}">
-        <label>Оклад в неделю ($)</label>
-        <input id="pc-weeklySalary" type="number" step="50" value="${pc.weeklySalary||500}">
+        <label>Оклад в месяц ($)</label>
+        <input id="pc-monthlySalary" type="number" step="100" value="${pc.monthlySalary || Math.round((pc.weeklySalary || 0) * 4.33) || 0}">
         <p class="text-xs text-gray-500 mt-1">Фиксированная сумма независимо от заказов.</p>
       </div>
 
@@ -31535,7 +31626,7 @@ function saveUserPayConfig(userId) {
   pc.commissionPct = parseFloat(document.getElementById('pc-commissionPct')?.value) || 0;
   pc.ratePerSqft = parseFloat(document.getElementById('pc-ratePerSqft')?.value) || 0;
   pc.fixedPerJob = parseFloat(document.getElementById('pc-fixedPerJob')?.value) || 0;
-  pc.weeklySalary = parseFloat(document.getElementById('pc-weeklySalary')?.value) || 0;
+  pc.monthlySalary = parseFloat(document.getElementById('pc-monthlySalary')?.value) || 0;
   pc.hourlyRate = parseFloat(document.getElementById('pc-hourlyRate')?.value) || 0;
   pc.ratesByCategory = pc.ratesByCategory || {};
   ['solar','protective','smart','decorative','privacy'].forEach(cat => {
@@ -31552,9 +31643,10 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
   const breakdown = [];
   let total = 0;
   if (pc.type === 'salary') {
-    const weeks = (endDate - startDate) / (7 * 86400000);
-    total = (pc.weeklySalary || 0) * weeks;
-    breakdown.push({ kind: 'salary', label: `Оклад × ${weeks.toFixed(1)} нед`, amount: total });
+    const months = Math.max(0, (endDate - startDate) / (30 * 86400000));
+    const monthlySalary = Number(pc.monthlySalary) || Number(pc.weeklySalary || 0) * 4.33;
+    total = monthlySalary * months;
+    breakdown.push({ kind: 'salary', label: `Оклад × ${months.toFixed(2)} мес.`, amount: total });
     return { total, breakdown };
   }
   // Commission / per-sqft / fixed-per-job — based on orders in period
