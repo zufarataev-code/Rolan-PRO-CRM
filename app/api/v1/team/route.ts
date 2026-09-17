@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
     fullName?: string;
     roles?: RoleCode[];
     password?: string;
+    legacyUserId?: string;
   } | null;
 
   if (!body?.email || !body.fullName || !body.roles?.length || !body.password) {
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
       fullName: body.fullName,
       roles: body.roles,
       password: body.password,
+      legacyUserId: body.legacyUserId,
     });
 
     return apiSuccess(created);
