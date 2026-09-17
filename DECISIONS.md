@@ -270,6 +270,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Quick entry is an estimate and does not reserve or issue stock. Actual roll deduction remains tied to production/installation flow and measured cutting data. No parallel inventory, payroll, catalog, or Project entity is permitted.
 - Implemented in PR #173. Production deployment remains a separate action.
 
+## 2026-09-16 — Quick Project Entry is a separate workflow window
+
+**Supersedes:** the PR #173 presentation that placed quick line entry as section 1 inside the full Project estimate.
+
+- `Быстрый ввод проекта` is a separate compact modal for service, Warehouse film, sqft, and customer sale price. It updates the same Project and then hands off to `Расчёт проекта` for review, internal economics, and Proposal approval.
+- The `Услуги` reference owns customer prices only. It must not ask for material cost, installer cost, or add-on cost. Warehouse purchase lots own film cost; employee Payroll cards own installation and additional-work rates; Project expenses own one-off delivery, purchases, helpers, and subcontractors.
+- This separation is presentation and responsibility ownership, not a new business entity. One Project remains the customer job from intake through Proposal, installation, payment, and completion.
+- Implemented in PR #173. Production deployment is not authorized by this decision.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

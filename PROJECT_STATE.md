@@ -366,6 +366,15 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification: all 258 automated tests passed, standalone TypeScript passed, and a clean production build completed after regenerating the Prisma client.
 - This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains separate.
 
+### 2026-09-16 correction — separate Quick Project Entry and reference-owned service costs
+
+- The prior embedded quick-entry table inside `Расчёт проекта перед КП` was incorrect. `Быстрый ввод проекта` is now a separate compact window opened from the Project card and immediately after choosing the calculation path while creating a Project.
+- The separate window writes service, in-stock film, sqft, and sale price into the same Project compatibility record. `Расчёт проекта` remains the approval and profitability workspace; no second Project, calculator entity, shell, or storage root was introduced.
+- The visible `Услуги` reference and the Project service rows now contain customer pricing only. Material cost comes from priced Warehouse lots; film/installation and additional-work pay come from employee Payroll rates. Direct one-off purchases remain Project expenses.
+- Employee Payroll cards now support per-unit rates for washing, removal, silicone, electrical work, connection, warranty, and custom work. Those rates are included automatically in Project installer cost.
+- Verification: all 261 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains a separate action.
+
 ### 2026-09-15 architecture correction — Order and Project are the same customer job
 
 - Product rule: one canonical PostgreSQL `Project` survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.

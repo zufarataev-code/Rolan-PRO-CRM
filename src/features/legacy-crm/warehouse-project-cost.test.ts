@@ -22,8 +22,9 @@ test('quick project cost is derived from priced warehouse stock and employee rat
   assert.match(html, /if \(!measureAllWindows\(o\)\.length\) return orderQuickLineMaterialCost\(o\)/);
   assert.match(html, /function installerRateForQuickLine\(user, line\)/);
   assert.match(html, /pc\.ratesByCategory\?\.\[category\]/);
-  assert.match(html, /return orderQuickInstallerPayoutForUser\(o, user, installerIds\.length\)/);
-  assert.match(html, /filter\(x => !x\.quickProjectLine\)/);
+  assert.match(html, /const filmPayout = !measureAllWindows\(o\)\.length \? orderQuickInstallerPayoutForUser\(o, user, installerIds\.length\)/);
+  assert.match(html, /return filmPayout \+ orderAdditionalWorkPayoutForUser\(o, user, installerIds\.length\)/);
+  assert.match(html, /filter\(line => !line\.quickProjectLine\)/);
 });
 
 test('project estimate does not ask for manual marketing spend', () => {
