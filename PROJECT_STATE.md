@@ -346,7 +346,7 @@ Contributors must add a row before starting substantial work and update or remov
 - A quick line records service direction, the service-scoped existing catalog item, quantity, unit, sale price per unit, derived customer total, and owner-only catalog cost per unit. `+ Добавить услугу` adds Solar, Smart, Safety, or Decorative lines to the same Project; it does not create another order, calculator, catalog, or storage root.
 - Film choices remain restricted to the selected service category and display the existing Category → Name → Model catalog identity. The same quick lines are published as individual Proposal items. Exact measurements remain mandatory only for production documents and installation release.
 - No Prisma schema change is required for this correction: it changes the active legacy Project compatibility payload and Proposal projection while preserving existing relational `ProjectPosition` work from issue #164. A separate database entity or parallel migration would violate the one-Project decision.
-- Verification: all 254 automated tests passed, TypeScript passed after the production build generated Next.js types, and the production build completed locally. Branch: `codex/quick-project-line-items`; PR and release status pending.
+- Verification: all 254 automated tests passed, TypeScript passed after the production build generated Next.js types, and the production build completed locally. Branch / PR: `codex/quick-project-line-items` / #173. Production deployment remains separate.
 
 ### 2026-09-15 architecture correction — Order and Project are the same customer job
 
