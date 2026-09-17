@@ -7,15 +7,18 @@ const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 test("project calculator exposes one fast operational summary", () => {
   assert.match(source, /Быстрый итог проекта/);
   assert.match(source, /Услуги проекта/);
-  assert.match(source, /Метраж стекла/);
+  assert.match(source, /Предварительный объём/);
   assert.match(source, /Расход плёнки/);
-  assert.match(source, /Доп\. услуги/);
+  assert.match(source, /Позиции проекта/);
   assert.match(source, /Исполнители и зарплата/);
 });
 
 test("installer labor uses employee reference rates and keeps a fallback reserve", () => {
   assert.match(source, /function installerRateForWindow\(user, w\)/);
   assert.match(source, /pc\.ratesByCategory\?\.\[category\]/);
+  assert.match(source, /function installerServiceRateByCategory\(category\)/);
+  assert.match(source, /installerRates\?\.serviceTypes\?\.\[serviceCode\]/);
+  assert.match(source, /return installerServiceRateByCategory\(category\)/);
   assert.match(source, /function orderInstallerPayoutForUser\(o, userId\)/);
   assert.match(source, /source: 'REFERENCE_DEFAULT'/);
   assert.match(source, /source: 'EMPLOYEE_REFERENCE'/);
@@ -58,10 +61,31 @@ test("owner settings keep company fixed costs and break-even in one source of tr
   assert.match(source, /Это управленческий план, а не списание денег со счёта/);
 });
 
-test("new project can continue directly into the canonical measurement workspace", () => {
+test("company compensation model separates fixed salaries from revenue percentages", () => {
+  assert.match(source, /opx_owner_salary', 'Оклад владельца — Зуфар', 3000/);
+  assert.match(source, /opx_measurer_salary', 'Оклад замерщика', 4000/);
+  assert.match(source, /s\.pricingDefaults\.managerPct = 5/);
+  assert.match(source, /s\.pricingDefaults\.marketingPct = 10/);
+  assert.match(source, /s\.pricingDefaults\.measurerPct = 0/);
+  assert.match(source, /Оклады входят в постоянные расходы месяца/);
+  assert.match(source, /Комиссия менеджера от валовой выручки/);
+  assert.match(source, /Рекламный резерв от валовой выручки/);
+});
+
+test("project PSS charges manager commission and advertising once from gross revenue", () => {
+  const pss = source.match(/function orderPSS\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(pss, /const mgr = rev \* managerPct \/ 100/);
+  assert.match(pss, /const marketing = rev \* Math\.max\(0, Number\(pd\.marketingPct\) \|\| 0\) \/ 100/);
+  assert.match(source, /legacyAds\.active = false/);
+  assert.match(source, /legacyAds\.costBehavior = 'variable'/);
+  assert.match(source, /Рекламный резерв \(\$\{Number\(db\.settings\.pricingDefaults\?\.marketingPct/);
+});
+
+test("new project opens a quick multi-service estimate without requiring measurements", () => {
   assert.match(source, /createOrder\('draft'\)/);
-  assert.match(source, /createOrder\('measure'\)/);
-  assert.match(source, /Создать и внести размеры →/);
-  assert.match(source, /function createOrder\(nextStep = 'measure'\)/);
-  assert.match(source, /openManagerMeasureModal\(o\.id\)/);
+  assert.match(source, /createOrder\('estimate'\)/);
+  assert.match(source, /Создать и быстро рассчитать →/);
+  assert.match(source, /function createOrder\(nextStep = 'estimate'\)/);
+  assert.match(source, /openProjectEstimateWorkspace\(o\.id\)/);
+  assert.match(source, /selectedServices\.forEach\(selectedService =>/);
 });

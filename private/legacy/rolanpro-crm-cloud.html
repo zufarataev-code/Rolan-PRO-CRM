@@ -6609,9 +6609,9 @@ function brandDocumentLogoHtml(className = '') {
   return `<img src="${src}" alt="Rolan PRO" class="${className}" style="display:block;height:46px;width:auto;max-width:230px;object-fit:contain;">`;
 }
 const CORE_LOGIN_ACCESS = {
-  'u_o1': { name: 'Rolan (Owner)', role: 'owner' },
+  'u_o1': { name: 'Зуфар', role: 'owner' },
   'u_m1': { name: 'Данилла', role: 'manager' },
-  'u_z1': { name: 'Зуфар', role: 'measurer' },
+  'u_z1': { name: 'Алан', role: 'measurer' },
   'u_i1': { name: 'Ринат', role: 'installer' },
   'u_i2': { name: 'Нурик', role: 'installer' },
 };
@@ -7275,6 +7275,30 @@ function migrateSchema() {
       { id: 'opx_ads',       name: 'Реклама (Google/Meta)', amount: 250, frequency: 'daily', category: 'marketing', active: true, addedAt: new Date().toISOString() },
     ];
   }
+  // ---- COMPANY COMPENSATION / REVENUE COST MODEL ----
+  // Fixed salaries belong to monthly company obligations. Manager commission
+  // and advertising reserve scale with Project revenue and are charged once in
+  // Project PSS, never duplicated in fixed OpEx.
+  if (!db._companyCostModel20260916) {
+    s.pricingDefaults.managerPct = 5;
+    s.pricingDefaults.measurerPct = 0;
+    s.pricingDefaults.marketingPct = 10;
+    const ensureFixedPlan = (id, name, amount) => {
+      const existing = db.opex.find(item => item.id === id);
+      if (existing) return;
+      db.opex.push({ id, name, amount, frequency: 'monthly', category: 'payroll', scope: 'business', costBehavior: 'fixed', active: true, addedAt: new Date().toISOString() });
+    };
+    ensureFixedPlan('opx_owner_salary', 'Оклад владельца — Зуфар', 3000);
+    ensureFixedPlan('opx_measurer_salary', 'Оклад замерщика', 4000);
+    const legacyAds = db.opex.find(item => item.id === 'opx_ads');
+    if (legacyAds) {
+      legacyAds.active = false;
+      legacyAds.costBehavior = 'variable';
+      legacyAds.note = 'Заменено автоматическим резервом 10% от валовой выручки';
+    }
+    db._companyCostModel20260916 = true;
+  }
+  if (s.pricingDefaults.marketingPct == null) s.pricingDefaults.marketingPct = 10;
   // ---- OWNER ACCOUNTING ----
   // Orders, inventory and payroll remain the source of truth. This object stores
   // only bank/cash accounts and actual movements that do not already live in an
@@ -7655,6 +7679,15 @@ function migrateSchema() {
       types: {},
     };
   }
+  s.installerRates.serviceTypes = s.installerRates.serviceTypes || {
+    SOLAR_FILM: Number(s.installerRates._defaults?.solar) || 2.5,
+    SMART_FILM: Number(s.installerRates._defaults?.smart) || 5,
+    SAFETY_FILM: Number(s.installerRates._defaults?.protective) || 3,
+    DECORATIVE_FILM: Number(s.installerRates._defaults?.decorative) || 2.5,
+  };
+  s.installerRates.workTypes = s.installerRates.workTypes || {
+    washing: 0, removal: 0, silicone: 0, electric: 0, connect: 0, warranty: 0, custom: 0,
+  };
   if (!s.projectProfitTax) {
     s.projectProfitTax = {
       entityType: 'C_CORP',
@@ -7691,10 +7724,12 @@ function migrateSchema() {
         commissionPct: u.commissionPct || (u.role === 'manager' ? 10 : u.role === 'measurer' ? 5 : 0),
         ratePerSqft: u.role === 'installer' ? 0.30 : 0,
         ratesByCategory: u.role === 'installer' ? { protective: 0.32, smart: 0.55, solar: 0.27, decorative: 0.27, privacy: 0.27, other: 0.27 } : {},
+        ratesByWorkType: {},
         fixedPerJob: u.role === 'measurer' ? 50 : 0,
         weeklySalary: 0,
       };
     }
+    u.payConfig.ratesByWorkType = u.payConfig.ratesByWorkType || {};
   });
   // Replace only the obsolete built-in installer defaults. Custom employee
   // rates remain untouched; the employee card is the source of truth.
@@ -7712,6 +7747,20 @@ function migrateSchema() {
       if (!baseRate || Math.abs(baseRate - 0.30) < 0.001) pc.ratePerSqft = 2.5;
     });
     db._installerPayRates2026 = true;
+  }
+  // Service cards now own the default film-installation rate. Keep only real
+  // employee-specific overrides; remove values that came from built-in seeds.
+  if (!db._serviceOwnedInstallerRates2026) {
+    const builtInRates = { protective: 3, smart: 5, solar: 2.5, decorative: 2.5, privacy: 2.5, other: 2.5 };
+    (db.users || []).filter(u => u.role === 'installer').forEach(u => {
+      const pc = u.payConfig = u.payConfig || {};
+      pc.ratesByCategory = pc.ratesByCategory || {};
+      Object.entries(builtInRates).forEach(([category, rate]) => {
+        if (Math.abs(Number(pc.ratesByCategory[category]) - rate) < 0.001) pc.ratesByCategory[category] = 0;
+      });
+      if (Math.abs(Number(pc.ratePerSqft) - 2.5) < 0.001) pc.ratePerSqft = 0;
+    });
+    db._serviceOwnedInstallerRates2026 = true;
   }
   // ---- ENSURE OWNER USER EXISTS ----
   if (!db.users) db.users = [];
@@ -7757,6 +7806,24 @@ function migrateSchema() {
   });
   // Legacy employee PINs are no longer authentication credentials.
   (db.users || []).forEach(user => { if (user && 'pin' in user) delete user.pin; });
+  if (!db._teamCompensationModel20260916) {
+    (db.users || []).forEach(user => {
+      user.payConfig = user.payConfig || {};
+      if (user.role === 'manager') {
+        user.payConfig.type = 'commission';
+        user.payConfig.commissionPct = 5;
+      } else if (user.role === 'measurer' && user.active !== false) {
+        user.payConfig.type = 'salary';
+        user.payConfig.monthlySalary = 4000;
+      } else if (user.role === 'owner') {
+        user.payConfig.type = 'salary';
+        user.payConfig.monthlySalary = 3000;
+      }
+      if (user.id === 'u_o1' && user.name === 'Rolan (Owner)') user.name = 'Зуфар';
+      if (user.id === 'u_z1' && user.name === 'Зуфар') user.name = 'Алан';
+    });
+    db._teamCompensationModel20260916 = true;
+  }
 
   // ---- ORDER fields migration ----
   (db.orders || []).forEach(o => {
@@ -7768,6 +7835,18 @@ function migrateSchema() {
     }
     if (o.depositReceived == null) o.depositReceived = false;
     if (!o.extraServices) o.extraServices = [];
+    o.extraServices.filter(line => line?.quickProjectLine).forEach(line => {
+      // A manager enters only sale data. Material COGS comes from warehouse
+      // receipts and installer labor comes from the employee pay reference.
+      line.unit = 'sqft';
+      delete line.unitCost;
+      delete line.cost;
+    });
+    o.extraServices.filter(line => !line?.quickProjectLine).forEach(line => {
+      // Service rows carry the customer price only. Employee work rates are
+      // configured in Payroll and direct purchases belong to Project expenses.
+      delete line.cost;
+    });
     if (!o.extraExpenses) o.extraExpenses = [];
     if (!o.leadIntentServiceType) {
       o.leadIntentServiceType = o.orderBuilder?.leadIntentServiceType || o.serviceType || (o.serviceTypes || [])[0] || '';
@@ -7842,6 +7921,40 @@ function companyFixedMonthlyBurn() {
   return (db.opex || [])
     .filter(item => item.active !== false && item.scope !== 'personal' && item.costBehavior !== 'variable' && item.category !== 'tax')
     .reduce((sum, item) => sum + opexMonthly(item), 0);
+}
+function companyCostPlan(id, fallback = {}) {
+  return (db.opex || []).find(item => item.id === id) || fallback;
+}
+function saveCompanyCostModel() {
+  if (currentUser()?.role !== 'owner') return;
+  const readAmount = id => Math.max(0, Number(document.getElementById(id)?.value) || 0);
+  const upsertFixedSalary = (id, name, amount) => {
+    let plan = (db.opex || []).find(item => item.id === id);
+    if (!plan) {
+      plan = { id, addedAt: new Date().toISOString() };
+      db.opex.push(plan);
+    }
+    Object.assign(plan, { name, amount, frequency: 'monthly', category: 'payroll', scope: 'business', costBehavior: 'fixed', active: true });
+  };
+  upsertFixedSalary('opx_owner_salary', 'Оклад владельца — Зуфар', readAmount('company-owner-salary'));
+  upsertFixedSalary('opx_measurer_salary', 'Оклад замерщика', readAmount('company-measurer-salary'));
+  db.settings.pricingDefaults.managerPct = readAmount('company-manager-pct');
+  db.settings.pricingDefaults.measurerPct = 0;
+  db.settings.pricingDefaults.marketingPct = readAmount('company-marketing-pct');
+  (db.users || []).forEach(user => {
+    user.payConfig = user.payConfig || {};
+    if (user.role === 'manager') {
+      user.payConfig.type = 'commission';
+      user.payConfig.commissionPct = db.settings.pricingDefaults.managerPct;
+    } else if (user.role === 'measurer' && user.active !== false) {
+      user.payConfig.type = 'salary';
+      user.payConfig.monthlySalary = readAmount('company-measurer-salary');
+    } else if (user.role === 'owner') {
+      user.payConfig.type = 'salary';
+      user.payConfig.monthlySalary = readAmount('company-owner-salary');
+    }
+  });
+  save(); render();
 }
 function totalDailyBurn() { return totalMonthlyBurn() / 30; }
 function totalAnnualBurn() { return totalMonthlyBurn() * 12; }
@@ -8122,6 +8235,30 @@ function inventorySummary() {
     byCat[r.catalogId].originalValue += r.costTotal;
   });
   return byCat;
+}
+function warehouseCatalogStockStats(catalogId) {
+  return inventoryByCatalogId(catalogId).reduce((stats, roll) => {
+    const remainingM = Math.max(0, Number(roll.remainingLengthM) || 0);
+    const widthMm = Math.max(0, Number(roll.widthMm) || 0);
+    if (!remainingM || !widthMm) return stats;
+    const areaSqft = mm2_to_sqft(widthMm * remainingM * 1000);
+    const originalM = Math.max(0, Number(roll.originalLengthM) || 0);
+    const lotCost = Math.max(0, Number(roll.costTotal) || 0);
+    stats.lengthM += remainingM;
+    stats.availableSqft += areaSqft;
+    stats.rolls += 1;
+    if (originalM > 0 && lotCost > 0) {
+      stats.pricedSqft += areaSqft;
+      stats.remainingValue += lotCost * remainingM / originalM;
+    } else {
+      stats.unpricedRolls += 1;
+    }
+    return stats;
+  }, { rolls: 0, lengthM: 0, availableSqft: 0, pricedSqft: 0, remainingValue: 0, unpricedRolls: 0 });
+}
+function warehouseCatalogCostPerSqft(catalogId) {
+  const stats = warehouseCatalogStockStats(catalogId);
+  return stats.pricedSqft > 0 ? stats.remainingValue / stats.pricedSqft : 0;
 }
 function lowStockItems() {
   const summary = inventorySummary();
@@ -14090,7 +14227,26 @@ function filmCategory(filmTypeName) {
 }
 function filmDefaultRate(filmTypeName) {
   const cat = filmCategory(filmTypeName);
-  return (db.settings.installerRates?._defaults || {})[cat] ?? 2.5;
+  return installerServiceRateByCategory(cat);
+}
+function installerServiceCodeByCategory(category) {
+  return ({ solar: 'SOLAR_FILM', smart: 'SMART_FILM', protective: 'SAFETY_FILM', decorative: 'DECORATIVE_FILM' })[category] || '';
+}
+function installerServiceRateByCategory(category) {
+  const serviceCode = installerServiceCodeByCategory(category);
+  const serviceRate = Number(db.settings.installerRates?.serviceTypes?.[serviceCode]);
+  if (serviceRate > 0) return serviceRate;
+  return Number(db.settings.installerRates?._defaults?.[category]) || Number(db.settings.installerRates?._defaults?.other) || 2.5;
+}
+function syncLegacyInstallerServiceRate(serviceCode, rate) {
+  const normalizedRate = Math.max(0, Number(rate) || 0);
+  if (!serviceCode) return false;
+  db.settings.installerRates.serviceTypes = db.settings.installerRates.serviceTypes || {};
+  const previousRate = Number(db.settings.installerRates.serviceTypes[serviceCode]) || 0;
+  db.settings.installerRates.serviceTypes[serviceCode] = normalizedRate;
+  const category = ({ SOLAR_FILM: 'solar', SMART_FILM: 'smart', SAFETY_FILM: 'protective', DECORATIVE_FILM: 'decorative' })[serviceCode];
+  if (category) db.settings.installerRates._defaults[category] = normalizedRate;
+  return Math.abs(previousRate - normalizedRate) > 0.001;
 }
 function filmRate(filmTypeName) {
   if (!filmTypeName) return db.settings.installerRates?._defaults?.other ?? 2.5;
@@ -14238,8 +14394,34 @@ function installerRateForWindow(user, w) {
   if (categoryRate > 0) return categoryRate;
   const baseRate = Number(pc.ratePerSqft);
   if (baseRate > 0) return baseRate;
-  const filmName = catalog ? `${catalog.brand} ${catalog.model}` : (w?.filmType || '');
-  return filmRate(filmName);
+  return installerServiceRateByCategory(category);
+}
+function installerRateForQuickLine(user, line) {
+  const pc = user?.payConfig || {};
+  const catalog = getCatalogItem(line?.catalogId);
+  const category = catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other';
+  const categoryRate = Number(pc.ratesByCategory?.[category]);
+  if (categoryRate > 0) return categoryRate;
+  const baseRate = Number(pc.ratePerSqft);
+  if (baseRate > 0) return baseRate;
+  const serviceCode = canonicalServiceCodeForOrderService(line?.serviceType);
+  const serviceRate = Number(db.settings.installerRates?.serviceTypes?.[serviceCode]);
+  return serviceRate > 0 ? serviceRate : installerServiceRateByCategory(category);
+}
+function orderQuickInstallerPayoutForUser(o, user, installerCount = 1) {
+  return projectQuickLines(o)
+    .filter(line => line.unit === 'sqft')
+    .reduce((sum, line) => sum + (Number(line.qty) || 0) * installerRateForQuickLine(user, line) / installerCount, 0);
+}
+function installerAdditionalWorkRate(user, type) {
+  const employeeRate = Number(user?.payConfig?.ratesByWorkType?.[type]);
+  if (employeeRate > 0) return employeeRate;
+  return Math.max(0, Number(db.settings.installerRates?.workTypes?.[type]) || 0);
+}
+function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
+  return (o?.extraServices || []).filter(line => !line.quickProjectLine).reduce((sum, line) => {
+    return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type) / installerCount;
+  }, 0);
 }
 function orderInstallerPayoutForUser(o, userId) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
@@ -14249,15 +14431,24 @@ function orderInstallerPayoutForUser(o, userId) {
   if (pc.type === 'fixed_per_job') return Math.max(0, Number(pc.fixedPerJob) || 0);
   if (pc.type === 'commission') return orderRevenue(o) * Math.max(0, Number(pc.commissionPct) || 0) / 100 / installerIds.length;
   if (pc.type !== 'per_sqft') return 0;
-  return measureAllWindows(o).reduce((sum, { win }) => {
+  const filmPayout = !measureAllWindows(o).length ? orderQuickInstallerPayoutForUser(o, user, installerIds.length) : measureAllWindows(o).reduce((sum, { win }) => {
     return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / installerIds.length;
   }, 0);
+  return filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length);
 }
 function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.length) {
-    const total = measureAllWindows(o).reduce((sum, { win }) => sum + windowInstallerPayout(win), 0);
-    return { total, byInstaller: [], source: 'REFERENCE_DEFAULT' };
+    const windows = measureAllWindows(o);
+    const total = windows.length
+      ? windows.reduce((sum, { win }) => sum + windowInstallerPayout(win), 0)
+      : projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => {
+          const catalog = getCatalogItem(line.catalogId);
+          const filmName = catalog ? `${catalog.brand} ${catalog.model}` : line.serviceType;
+          return sum + (Number(line.qty) || 0) * filmRate(filmName);
+        }, 0);
+    const work = orderAdditionalWorkPayoutForUser(o, null, 1);
+    return { total: total + work, byInstaller: [], source: 'REFERENCE_DEFAULT' };
   }
   const byInstaller = installerIds.map(userId => {
     const user = getUser(userId);
@@ -14278,7 +14469,9 @@ function orderExtraServicesRevenue(o) {
   return (o.extraServices || []).reduce((s, x) => s + (Number(x.price) || 0), 0);
 }
 function orderExtraServicesCost(o) {
-  return (o.extraServices || []).reduce((s, x) => s + (Number(x.cost) || 0), 0);
+  // Ordinary service rows contain the customer price only. Their labor cost is
+  // calculated through employee work rates in orderInstallerPayoutBreakdown().
+  return 0;
 }
 function orderRevenue(o) {
   return orderFilmRevenue(o) + orderExtraServicesRevenue(o);
@@ -14294,6 +14487,7 @@ function orderInstallerPayoutPerPerson(o, userId = '') {
 function orderFilmCost(o) {
   const cutCost = orderFilmCutMaterialCost(o);
   if (cutCost != null) return cutCost;
+  if (!measureAllWindows(o).length) return orderQuickLineMaterialCost(o);
   let s = 0;
   (o.measurements?.rooms || []).forEach(r => (r.windows || []).forEach(w => { s += windowFilmCost(w); }));
   return s;
@@ -14325,16 +14519,17 @@ function orderPSS(o) {
   const film = orderFilmCost(o);
   const installers = orderInstallerPayout(o);
   const gas = orderGasExpense(o);
-  const mgr = rev * (pd.managerPct || 0) / 100;
+  const assignedManager = getUser(o.managerId);
+  const managerPct = assignedManager?.payConfig?.type === 'commission'
+    ? Math.max(0, Number(assignedManager.payConfig.commissionPct) || 0)
+    : Math.max(0, Number(pd.managerPct) || 0);
+  const mgr = rev * managerPct / 100;
   const meas = rev * (pd.measurerPct || 0) / 100;
   const consum = orderConsumablesExpense(o);
   const rent = orderRentExpense(o);
   const extraSvcCost = orderExtraServicesCost(o);
   const manualExp = orderManualExpensesTotal(o);
-  // Advertising belongs to channel/CAC reporting, not to a manager's Project
-  // estimate. Keeping the key at zero preserves old callers without charging
-  // the same Google Ads spend once per Project (and again in company OpEx).
-  const marketing = 0;
+  const marketing = rev * Math.max(0, Number(pd.marketingPct) || 0) / 100;
   return {
     film, installers, gas, manager: mgr, measurer: meas,
     consumables: consum, rent, extraServicesCost: extraSvcCost, manual: manualExp,
@@ -16572,7 +16767,14 @@ async function loadCanonicalServicePricing(force = false) {
   state.canonicalPricingLoading = true;
   state.canonicalPricingError = '';
   try {
-    state.canonicalPricingData = await canonicalPricingRequest('GET');
+    const pricingData = await canonicalPricingRequest('GET');
+    state.canonicalPricingData = pricingData;
+    if (pricingData?.can_view_costs) {
+      const ratesChanged = (pricingData.services || []).reduce((changed, service) => {
+        return syncLegacyInstallerServiceRate(service.service_code, service.installation_cost_per_sqft) || changed;
+      }, false);
+      if (ratesChanged) save();
+    }
   } catch (error) {
     state.canonicalPricingError = error?.message || 'Не удалось загрузить прайс';
   } finally {
@@ -16598,14 +16800,17 @@ async function canonicalPricingSave(body, successText) {
     state.canonicalPricingNotice = successText || 'Сохранено';
     state.canonicalPricingData = null;
     await loadCanonicalServicePricing(true);
+    return true;
   } catch (error) {
     state.canonicalPricingNotice = error?.message || 'Ошибка сохранения';
     render();
+    return false;
   }
 }
 
-function saveCanonicalService(id) {
+async function saveCanonicalService(id) {
   const owner = !!state.canonicalPricingData?.can_view_costs;
+  const service = (state.canonicalPricingData?.services || []).find(row => row.service_type_id === id);
   const patch = {
     name_ru: canonicalPricingValue(`cps-${id}-name`),
     unit_type: canonicalPricingValue(`cps-${id}-unit`),
@@ -16614,16 +16819,15 @@ function saveCanonicalService(id) {
     block_revenue_price: canonicalPricingValue(`cps-${id}-block`, true),
     is_active: !!document.getElementById(`cps-${id}-active`)?.checked,
   };
-  if (owner) {
-    patch.material_cost_per_sqft = canonicalPricingValue(`cps-${id}-material`, true);
-    patch.installation_cost_per_sqft = canonicalPricingValue(`cps-${id}-installer`, true);
-    patch.block_cost_price = canonicalPricingValue(`cps-${id}-blockcost`, true);
+  if (owner) patch.installation_cost_per_sqft = canonicalPricingValue(`cps-${id}-installer`, true);
+  const saved = await canonicalPricingSave({ entity: 'service_type', id, patch }, 'Услуга сохранена');
+  if (saved && owner && service?.service_code) {
+    syncLegacyInstallerServiceRate(service.service_code, patch.installation_cost_per_sqft);
+    save();
   }
-  canonicalPricingSave({ entity: 'service_type', id, patch }, 'Услуга сохранена');
 }
 
 function saveCanonicalAddon(id) {
-  const owner = !!state.canonicalPricingData?.can_view_costs;
   const patch = {
     name_ru: canonicalPricingValue(`cpa-${id}-name`),
     unit_type: canonicalPricingValue(`cpa-${id}-unit`),
@@ -16631,11 +16835,11 @@ function saveCanonicalAddon(id) {
     min_price: canonicalPricingValue(`cpa-${id}-min`, true),
     is_active: !!document.getElementById(`cpa-${id}-active`)?.checked,
   };
-  if (owner) patch.cost_price = canonicalPricingValue(`cpa-${id}-cost`, true);
   canonicalPricingSave({ entity: 'service_addon', id, patch }, 'Дополнительная работа сохранена');
 }
 
 async function createCanonicalService() {
+  const owner = !!state.canonicalPricingData?.can_view_costs;
   const values = {
     name_ru: canonicalPricingValue('cp-new-service-name'),
     service_code: canonicalPricingValue('cp-new-service-code'),
@@ -16643,9 +16847,14 @@ async function createCanonicalService() {
     base_price: canonicalPricingValue('cp-new-service-base', true),
     min_price: canonicalPricingValue('cp-new-service-min', true),
   };
+  if (owner) values.installation_cost_per_sqft = canonicalPricingValue('cp-new-service-installer', true);
   if (!values.name_ru) return alert('Укажите название услуги');
   try {
-    await canonicalPricingRequest('POST', { entity: 'service_type', values });
+    const created = await canonicalPricingRequest('POST', { entity: 'service_type', values });
+    if (owner && created?.service_code) {
+      syncLegacyInstallerServiceRate(created.service_code, created.installation_cost_per_sqft);
+      save();
+    }
     state.canonicalPricingData = null;
     state.canonicalPricingNotice = 'Новая услуга добавлена';
     await loadCanonicalServicePricing(true);
@@ -16694,22 +16903,21 @@ function renderCanonicalServicePricing() {
 
   const serviceCards = services.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:4px">
     <summary class="cursor-pointer list-none flex items-center justify-between gap-3"><div><div class="font-black text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.service_code)} · ${academyEsc(row.unit_type)}</div></div><div class="flex items-center gap-3"><span class="font-black text-blue-700">${canonicalPricingMoney(row.base_price)}</span><span class="text-slate-400">Открыть ↓</span></div></summary>
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-5 pt-4 border-t border-slate-200">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-5 pt-4 border-t border-slate-200">
       ${canonicalPricingField(`cps-${row.service_type_id}-name`, 'Название', row.name_ru, 'text')}
       ${canonicalPricingField(`cps-${row.service_type_id}-unit`, 'Единица: sqft, zone, item', row.unit_type, 'text')}
       ${canonicalPricingField(`cps-${row.service_type_id}-base`, 'Цена клиенту, $', row.base_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-min`, 'Минимальная цена, $', row.min_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-block`, 'Блок клиенту, $', row.block_revenue_price)}
-      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-material`, 'Материал / sqft, $', row.material_cost_per_sqft) : ''}
-      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-installer`, 'Монтажник / sqft, $', row.installation_cost_per_sqft) : ''}
-      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-blockcost`, 'Себестоимость блока, $', row.block_cost_price) : ''}
+      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-installer`, 'Монтажнику / sqft, $', row.installation_cost_per_sqft) : ''}
     </div>
+    <p class="text-xs text-slate-500 mt-3">Стоимость плёнки берётся со склада. Ставка монтажа из этой услуги автоматически начисляется назначенным монтажникам; индивидуальная ставка сотрудника может её переопределить.</p>
     <div class="mt-4 flex flex-wrap items-center gap-3"><label class="tag"><input id="cps-${row.service_type_id}-active" type="checkbox" ${row.is_active ? 'checked' : ''}> Активна</label><button class="btn-primary" onclick="saveCanonicalService('${row.service_type_id}')">Сохранить услугу</button></div>
   </details>`).join('');
 
   const addonCards = addons.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:4px">
     <summary class="cursor-pointer list-none flex items-center justify-between"><div><div class="font-bold text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.addon_code)}</div></div><b class="text-blue-700">${canonicalPricingMoney(row.default_price)}</b></summary>
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 mt-4 pt-4 border-t border-slate-200">${canonicalPricingField(`cpa-${row.service_addon_id}-name`, 'Название', row.name_ru, 'text')}${canonicalPricingField(`cpa-${row.service_addon_id}-unit`, 'Единица', row.unit_type, 'text')}${canonicalPricingField(`cpa-${row.service_addon_id}-base`, 'Цена клиенту, $', row.default_price)}${canonicalPricingField(`cpa-${row.service_addon_id}-min`, 'Минимальная цена, $', row.min_price)}${owner ? canonicalPricingField(`cpa-${row.service_addon_id}-cost`, 'Себестоимость, $', row.cost_price) : ''}</div>
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-200">${canonicalPricingField(`cpa-${row.service_addon_id}-name`, 'Название', row.name_ru, 'text')}${canonicalPricingField(`cpa-${row.service_addon_id}-unit`, 'Единица', row.unit_type, 'text')}${canonicalPricingField(`cpa-${row.service_addon_id}-base`, 'Цена клиенту, $', row.default_price)}${canonicalPricingField(`cpa-${row.service_addon_id}-min`, 'Минимальная цена, $', row.min_price)}</div>
     <div class="mt-4 flex gap-3"><label class="tag"><input id="cpa-${row.service_addon_id}-active" type="checkbox" ${row.is_active ? 'checked' : ''}> Активна</label><button class="btn-primary" onclick="saveCanonicalAddon('${row.service_addon_id}')">Сохранить</button></div>
   </details>`).join('');
 
@@ -16720,7 +16928,7 @@ function renderCanonicalServicePricing() {
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Безубыточность</div><b class="text-xl">${canonicalPricingMoney(planning.break_even?.revenue)}</b><div class="text-xs">${planning.break_even?.deals || 0} сделок / ${planning.break_even?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Цель с прибылью</div><b class="text-xl">${canonicalPricingMoney(planning.target?.revenue)}</b><div class="text-xs">${planning.target?.deals || 0} сделок / ${planning.target?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">КП за месяц</div><b class="text-xl">${canonicalPricingMoney(actual.proposal_revenue)}</b></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Прогресс</div><b class="text-xl">${Number(actual.progress_percent || 0).toFixed(0)}%</b></div></div>
       ${owner ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${canonicalPricingField('cp-plan-check', 'Средний чек, $', assumptions.average_deal_value)}${canonicalPricingField('cp-plan-conversion', 'Конверсия лид → сделка, %', assumptions.lead_to_deal_percent)}${canonicalPricingField('cp-plan-profit', 'Целевая прибыль / месяц, $', assumptions.target_profit_monthly)}</div><button class="btn-primary mt-4" onclick="saveCanonicalPlanning()">Сохранить план</button>` : '<p class="text-sm text-slate-500 mt-4">Менеджер видит цели по лидам и сделкам. Расходы и прибыль меняет владелец.</p>'}
     </section>
-    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Услуги</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту услугу, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
+    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Услуги</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту услугу, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Монтажнику / sqft, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between"><div><h2 class="text-xl font-black">Дополнительные работы</h2><p class="text-sm text-slate-500">Подключение зон, демонтаж, силикон и другие допродажи.</p></div><span class="tag">${addons.length}</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить допработу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Основная услуга</span><select id="cp-new-addon-service" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2">${services.map(s => `<option value="${s.service_type_id}">${academyEsc(s.name_ru)}</option>`).join('')}</select></label>${canonicalPricingField('cp-new-addon-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-addon-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-addon-unit', 'Единица', 'item', 'text')}${canonicalPricingField('cp-new-addon-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-addon-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalAddon()">Создать допработу</button></details><div class="space-y-3 mt-4">${addonCards || '<div class="text-slate-500">Дополнительных работ пока нет</div>'}</div></section>
   </div>`;
 }
@@ -18054,7 +18262,7 @@ function renderTeam() {
                   pc.type === 'commission' ? pc.commissionPct + '% от выручки'
                   : pc.type === 'per_sqft' ? '$' + (pc.ratePerSqft || 0.30) + '/sqft'
                   : pc.type === 'fixed_per_job' ? '$' + (pc.fixedPerJob || 0) + '/заказ'
-                  : pc.type === 'salary' ? '$' + (pc.weeklySalary || 0) + '/нед'
+                  : pc.type === 'salary' ? '$' + (pc.monthlySalary || (pc.weeklySalary || 0) * 4.33 || 0) + '/мес'
                   : '—'
                 }</span>
               </div>
@@ -19364,6 +19572,9 @@ function renderEmailChannelSettings(s, cardAttrs = 'class="card"') {
 
 function renderCompanyFixedExpenseSettings() {
   const analysis = breakEvenAnalysis();
+  const ownerSalary = companyCostPlan('opx_owner_salary', { amount: 3000 });
+  const measurerSalary = companyCostPlan('opx_measurer_salary', { amount: 4000 });
+  const pricing = db.settings.pricingDefaults || {};
   const plans = (db.opex || []).map((plan, index) => ({ plan, index }))
     .filter(({ plan }) => plan.scope !== 'personal' && plan.costBehavior !== 'variable' && plan.category !== 'tax');
   const frequencyLabel = { daily:'каждый день', weekly:'каждую неделю', monthly:'каждый месяц', quarterly:'каждый квартал', yearly:'каждый год' };
@@ -19376,6 +19587,16 @@ function renderCompanyFixedExpenseSettings() {
     <div class="flex items-start justify-between gap-3 flex-wrap">
       <div><h3 class="font-black text-lg">🎯 Точка безубыточности</h3><p class="text-sm text-gray-600 mt-1">Сколько Rolan PRO должна заработать в месяц, чтобы покрыть постоянные расходы.</p></div>
       <button class="btn-primary" onclick="financeOpenPlanModal(-1,'company-fixed')">+ Добавить расход</button>
+    </div>
+    <div class="mt-4 p-4 rounded-xl border border-blue-100 bg-blue-50">
+      <div class="font-black text-blue-950">Оклады и расходы от валовой выручки</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <div><label>Оклад владельца / месяц, $</label><input id="company-owner-salary" type="number" min="0" step="100" value="${Number(ownerSalary.amount || 0)}"></div>
+        <div><label>Оклад замерщика / месяц, $</label><input id="company-measurer-salary" type="number" min="0" step="100" value="${Number(measurerSalary.amount || 0)}"></div>
+        <div><label>Комиссия менеджера от валовой выручки, %</label><input id="company-manager-pct" type="number" min="0" step="0.5" value="${Number(pricing.managerPct || 0)}"></div>
+        <div><label>Рекламный резерв от валовой выручки, %</label><input id="company-marketing-pct" type="number" min="0" step="0.5" value="${Number(pricing.marketingPct || 0)}"></div>
+      </div>
+      <div class="flex items-center justify-between gap-3 flex-wrap mt-3"><div class="text-xs text-blue-900">Оклады входят в постоянные расходы месяца. Комиссия и реклама рассчитываются автоматически в каждом проекте от его выручки.</div><button class="btn-primary" onclick="saveCompanyCostModel()">Сохранить модель расходов</button></div>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
       <div class="p-3 rounded-xl bg-slate-50 border"><div class="text-xs text-gray-500">В месяц</div><div class="text-xl font-black">${fmtMoney(analysis.burn)}</div></div>
@@ -19750,9 +19971,8 @@ function renderSettings() {
 
     <div ${settingsPanelAttrs('pricing')}>
       <h3 class="font-semibold mb-3">${T('pricingDefaults')}</h3>
+      <div class="p-3 rounded-lg bg-blue-50 border border-blue-100 mb-3 text-sm">Оклады, комиссия менеджера и рекламный процент находятся в разделе <button class="text-blue-700 font-bold underline" onclick="openSettingsSection('company-costs')">Постоянные расходы и безубыточность</button>.</div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div><label>${T('managerPctDefault')} %</label><input type="number" step="0.5" value="${s.pricingDefaults.managerPct}" onchange="db.settings.pricingDefaults.managerPct=parseFloat(this.value)||0; save();"></div>
-        <div><label>${T('measurerPctDefault')} %</label><input type="number" step="0.5" value="${s.pricingDefaults.measurerPct}" onchange="db.settings.pricingDefaults.measurerPct=parseFloat(this.value)||0; save();"></div>
         <div><label>${T('gasPerKm')}</label><input type="number" step="0.1" value="${s.pricingDefaults.gasPerKm}" onchange="db.settings.pricingDefaults.gasPerKm=parseFloat(this.value)||0; save();"></div>
         <div><label>${T('consumablesPerSqft')}</label><input type="number" step="0.05" value="${s.pricingDefaults.consumablesPerSqft}" onchange="db.settings.pricingDefaults.consumablesPerSqft=parseFloat(this.value)||0; save();"></div>
         <div><label>${T('helperPerJob')}</label><input type="number" step="5" value="${s.pricingDefaults.helperPerJob}" onchange="db.settings.pricingDefaults.helperPerJob=parseFloat(this.value)||0; save();"></div>
@@ -20584,7 +20804,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
       ? `openMeasurerV25ForOrder('${o.id}')`
       : `openWorkOrder('${o.id}')`;
   const measureSub = hasMeasurements ? `${rooms} комн. · ${windows} окон` : 'добавить комнаты и окна';
-  const proposalDisabled = !canManage || !hasMeasurements || !estimateApproved;
+  const proposalDisabled = !canManage || !estimateApproved;
   const routeHref = address ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}` : '';
   const roleLine = u?.role === 'measurer'
     ? 'режим замерщика: без денег'
@@ -20661,7 +20881,7 @@ function orderPassportActions(o, ctx) {
 
   const done = {
     measure: ctx.hasMeasurements,
-    estimate: ctx.hasMeasurements && ctx.estimateApproved,
+    estimate: ctx.estimateApproved,
     proposal: ['proposal_sent','proposal_accepted','installation_scheduled','installation_accepted',
                'installation_en_route','installation_in_progress','installation_done',
                'act_signed','payment_received','completed','review_received'].includes(o.status),
@@ -20669,22 +20889,22 @@ function orderPassportActions(o, ctx) {
   };
 
   // Первое незакрытое действие и есть следующий шаг.
-  const stage = !done.measure    ? 'measure'
-              : !done.estimate   ? 'estimate'
+  const stage = !done.estimate   ? 'estimate'
+              : !done.measure    ? 'measure'
               : !done.proposal   ? 'proposal'
               : !done.install   ? 'install'
               : 'closing';
 
   const actions = [
+    { key: 'estimate', icon: '🧮', title: 'Расчёт проекта',
+      sub: ctx.estimateApproved ? 'проверен и подтверждён' : 'услуга, количество и цена без размеров',
+      onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !ctx.canManage },
+
     { key: 'measure', icon: '📐', title: 'Замер',
       sub: ctx.measureSub, onclick: ctx.measureAction },
 
-    { key: 'estimate', icon: '🧮', title: 'Расчёт проекта',
-      sub: !ctx.hasMeasurements ? 'сначала замер' : ctx.estimateApproved ? 'проверен и подтверждён' : (orderUserCanSeeInternalEconomics(o, currentUser()) ? 'цена, расходы и маржа' : 'услуги и цена клиенту'),
-      onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !ctx.canManage || !ctx.hasMeasurements },
-
     { key: 'proposal', icon: '📄', title: 'КП',
-      sub: !ctx.hasMeasurements ? 'сначала замер' : ctx.estimateApproved ? 'единый стандарт ROLANPRO' : 'сначала подтвердите расчёт',
+      sub: ctx.estimateApproved ? 'единый стандарт ROLANPRO' : 'сначала подтвердите расчёт',
       onclick: `openProfessionalKP('${o.id}')`, disabled: ctx.proposalDisabled },
 
     { key: 'install', icon: '▣', title: 'Монтаж',
@@ -20933,12 +21153,127 @@ function projectEstimateUpdateTaxProfile(oid, field, value) {
 function projectEstimateReadiness(o) {
   const issues = [];
   const windows = measureAllWindows(o);
-  if (!windows.length) issues.push('нет замеров');
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
-  if ((o.extraServices || []).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
+  const quickLines = projectQuickLines(o);
+  const quickStockDemand = projectQuickRequiredSqftByCatalog(o);
+  if (!windows.length && !quickLines.length) issues.push('нет позиций проекта');
+  if (quickLines.some(line => !line.serviceType || !line.catalogId || !String(line.label || '').trim() || Number(line.qty) <= 0 || Number(line.unitPrice) <= 0)) issues.push('есть позиция без плёнки со склада, количества или цены продажи');
+  if (quickLines.some(line => line.catalogId && warehouseCatalogStockStats(line.catalogId).availableSqft <= 0)) issues.push('выбранной плёнки нет на складе');
+  if (Object.entries(quickStockDemand).some(([catalogId, requiredSqft]) => warehouseCatalogStockStats(catalogId).pricedSqft < requiredSqft)) issues.push('на складе недостаточно плёнки с указанной закупочной ценой');
+  if ((o.extraServices || []).filter(s => !s.quickProjectLine).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
   if (orderRevenue(o) <= 0) issues.push('сумма проекта равна нулю');
   return issues;
+}
+
+function projectQuickLines(o) {
+  return (o?.extraServices || []).filter(line => line.quickProjectLine === true);
+}
+
+function projectQuickSqft(o) {
+  return projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => sum + (Number(line.qty) || 0), 0);
+}
+
+function projectQuickRequiredSqftByCatalog(o) {
+  return projectQuickLines(o).reduce((demand, line) => {
+    if (!line.catalogId) return demand;
+    const catalog = getCatalogItem(line.catalogId);
+    const requiredSqft = (Number(line.qty) || 0) * (1 + (Number(catalog?.wastePct) || 0) / 100);
+    demand[line.catalogId] = (demand[line.catalogId] || 0) + requiredSqft;
+    return demand;
+  }, {});
+}
+
+function projectQuickLineCatalog(serviceType, selectedCatalogId = '') {
+  const category = primaryServiceInfo(serviceType)?.catalogCategory;
+  return (db.settings.catalog || []).filter(item => !item.archived && item.category === category && (
+    item.id === selectedCatalogId || warehouseCatalogStockStats(item.id).availableSqft > 0
+  ));
+}
+
+function orderQuickLineMaterialCost(o) {
+  if (measureAllWindows(o).length) return 0;
+  return projectQuickLines(o).filter(line => line.unit === 'sqft' && line.catalogId).reduce((sum, line) => {
+    const catalog = getCatalogItem(line.catalogId);
+    const sqftWithWaste = (Number(line.qty) || 0) * (1 + (Number(catalog?.wastePct) || 0) / 100);
+    return sum + sqftWithWaste * warehouseCatalogCostPerSqft(line.catalogId);
+  }, 0);
+}
+
+function projectEstimateSyncQuickLine(line) {
+  line.qty = Math.max(0, Number(line.qty) || 0);
+  line.unit = 'sqft';
+  line.unitPrice = Math.max(0, Number(line.unitPrice) || 0);
+  line.price = line.qty * line.unitPrice;
+  delete line.unitCost;
+  delete line.cost;
+}
+
+function projectEstimateSyncQuickServices(o) {
+  const measuredServices = measureAllWindows(o).map(({ win }) => win.measureScope || win.serviceType).filter(Boolean);
+  const quickServices = projectQuickLines(o).map(line => line.serviceType).filter(Boolean);
+  o.serviceTypes = [...new Set([orderLeadIntentServiceId(o), ...measuredServices, ...quickServices].filter(Boolean))];
+  o.serviceType = o.serviceTypes[0] || o.serviceType || 'smart_film';
+}
+
+function projectEstimateAddQuickLine(oid, requestedServiceType = '') {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const requestedService = ORDER_PRIMARY_SERVICES.find(service => service.id === requestedServiceType);
+  const serviceType = requestedService?.id || o.serviceTypes?.[0] || o.serviceType || 'smart_film';
+  const catalog = projectQuickLineCatalog(serviceType)[0] || null;
+  const line = {
+    id: uid(), quickProjectLine: true, serviceType,
+    catalogId: catalog?.id || '', label: catalog ? catalogLabel(catalog) : primaryServiceInfo(serviceType)?.title || 'Позиция',
+    qty: 1, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0),
+  };
+  projectEstimateSyncQuickLine(line);
+  o.extraServices = o.extraServices || [];
+  o.extraServices.push(line);
+  projectEstimateSyncQuickServices(o);
+  projectEstimateMarkChanged(o, 'Добавлена быстрая позиция проекта');
+  save(); openQuickProjectEntry(oid);
+}
+
+function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
+  const o = getOrder(oid);
+  const line = projectQuickLines(o).find(item => item.id === lineId);
+  if (!o || !line || !orderUserCanSeeMoney(o, currentUser())) return;
+  if (field === 'serviceType') {
+    const service = ORDER_PRIMARY_SERVICES.find(item => item.id === value);
+    if (!service) return;
+    line.serviceType = service.id;
+    const catalog = projectQuickLineCatalog(service.id)[0] || null;
+    line.catalogId = catalog?.id || '';
+    line.label = catalog ? catalogLabel(catalog) : service.title;
+    line.unitPrice = Number(catalog?.retailPerSqft || 0);
+  } else if (field === 'catalogId') {
+    const catalog = getCatalogItem(value);
+    const requiredCategory = primaryServiceInfo(line.serviceType)?.catalogCategory;
+    if (catalog && (catalog.archived || catalog.category !== requiredCategory || warehouseCatalogStockStats(catalog.id).availableSqft <= 0)) return;
+    line.catalogId = catalog?.id || '';
+    if (catalog) {
+      line.label = catalogLabel(catalog);
+      line.unitPrice = Number(catalog.retailPerSqft || 0);
+    }
+  } else if (['qty','unitPrice'].includes(field)) {
+    line[field] = Math.max(0, Number(value) || 0);
+  } else if (field === 'label') {
+    line.label = String(value || '').trim();
+  }
+  projectEstimateSyncQuickLine(line);
+  projectEstimateSyncQuickServices(o);
+  projectEstimateMarkChanged(o, 'Изменена быстрая позиция проекта');
+  save(); openQuickProjectEntry(oid);
+}
+
+function projectEstimateDeleteQuickLine(oid, lineId) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  o.extraServices = (o.extraServices || []).filter(line => line.id !== lineId);
+  projectEstimateSyncQuickServices(o);
+  projectEstimateMarkChanged(o, 'Удалена быстрая позиция проекта');
+  save(); openQuickProjectEntry(oid);
 }
 
 function projectEstimateMarkChanged(o, reason) {
@@ -20970,7 +21305,7 @@ function projectEstimateAddService(oid, type = 'washing') {
   const o = getOrder(oid);
   if (!o) return;
   o.extraServices = o.extraServices || [];
-  o.extraServices.push({ id: uid(), type, label: projectEstimateServiceLabel(type), qty: 1, price: 0, cost: 0 });
+  o.extraServices.push({ id: uid(), type, label: projectEstimateServiceLabel(type), qty: 1, price: 0 });
   projectEstimateMarkChanged(o, 'Добавлена дополнительная услуга');
   save(); openProjectEstimateWorkspace(oid);
 }
@@ -20979,8 +21314,7 @@ function projectEstimateUpdateService(oid, sid, field, value) {
   const o = getOrder(oid);
   const line = (o?.extraServices || []).find(s => s.id === sid);
   if (!o || !line) return;
-  if (field === 'cost' && !orderUserCanSeeInternalEconomics(o, currentUser())) return;
-  if (['qty','price','cost'].includes(field)) line[field] = Math.max(0, parseFloat(value) || 0);
+  if (['qty','price'].includes(field)) line[field] = Math.max(0, parseFloat(value) || 0);
   else line[field] = value;
   if (field === 'type') line.label = projectEstimateServiceLabel(value);
   projectEstimateMarkChanged(o, 'Изменена дополнительная услуга');
@@ -21044,7 +21378,7 @@ function approveProjectEstimateAndOpenProposal(oid) {
     areaSqft: orderActualAreaSqft(o),
     serviceCount: (o.extraServices || []).length,
     expenseCount: (o.extraExpenses || []).length,
-    measurementBasis: orderMeasurementVerificationIssues(o).length ? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED',
+    measurementBasis: !measureAllWindows(o).length ? 'QUICK_LINE_ITEMS' : orderMeasurementVerificationIssues(o).length ? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED',
     fixedExpenseAllocation: canSeeInternalEconomics ? projectProfitability(o).fixedAllocation : null,
     californiaTaxAllocation: canSeeInternalEconomics ? projectProfitability(o).taxAllocation : null,
     managementNetProfit: canSeeInternalEconomics ? projectProfitability(o).netProfit : null,
@@ -21056,8 +21390,60 @@ function approveProjectEstimateAndOpenProposal(oid) {
   openProfessionalKP(oid);
 }
 
+function renderQuickProjectEntry(o) {
+  const quickLines = projectQuickLines(o);
+  const rows = quickLines.map(line => {
+    const catalog = projectQuickLineCatalog(line.serviceType, line.catalogId);
+    const selectedStock = line.catalogId ? warehouseCatalogStockStats(line.catalogId) : null;
+    return `<tr>
+      <td data-label="Услуга"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select></td>
+      <td data-label="Плёнка со склада"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500 mt-1">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}</td>
+      <td data-label="Количество, sqft"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
+      <td data-label="Цена продажи / sqft"><input type="number" min="0" step="0.5" value="${Number(line.unitPrice || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','unitPrice',this.value)"></td>
+      <td data-label="Сумма клиенту" class="money"><b>${fmtMoney(line.price)}</b></td>
+      <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить услугу</button></td>
+    </tr>`;
+  }).join('');
+  const totalSqft = projectQuickSqft(o);
+  const total = quickLines.reduce((sum, line) => sum + Number(line.price || 0), 0);
+  return `
+    <div class="project-estimate-summary">
+      <div class="project-estimate-kpi"><span>Услуг</span><strong>${quickLines.length}</strong></div>
+      <div class="project-estimate-kpi"><span>Предварительный объём</span><strong>${totalSqft.toFixed(2)} sqft</strong></div>
+      <div class="project-estimate-kpi"><span>Сумма клиенту</span><strong class="text-emerald-700">${fmtMoney(total)}</strong></div>
+    </div>
+    <section class="project-estimate-section">
+      <div class="project-estimate-section-head"><div><h4>Услуги проекта</h4><div class="text-xs text-gray-500">Без комнат и размеров окон: выберите услугу и плёнку со склада, укажите общий sqft и цену продажи. Можно добавить несколько услуг.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
+      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Количество, sqft</th><th>Цена продажи / sqft</th><th class="money">Сумма клиенту</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
+    </section>
+    <div class="project-estimate-footer">
+      <div class="text-xs text-gray-500">Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников.</div>
+      <div class="flex gap-2 flex-wrap"><button class="btn-ghost" onclick="closeModal()">Сохранить и закрыть</button><button class="btn-primary" onclick="openProjectEstimateWorkspace('${o.id}')">Перейти к расчёту проекта →</button></div>
+    </div>`;
+}
+
+function openQuickProjectEntry(oid) {
+  const o = getOrder(oid);
+  if (!o) return;
+  if (!orderUserCanSeeMoney(o, currentUser())) { alert('Быстрый ввод доступен только владельцу и назначенному менеджеру.'); return; }
+  state.modal = `
+    <div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
+      <div class="modal-content workspace-modal order-workspace-modal" style="--workspace-color:#2563eb" onclick="event.stopPropagation()">
+        <header class="order-workspace-modal-head">
+          <div class="order-workspace-modal-heading"><span class="order-workspace-modal-icon">⚡</span><div><div class="order-workspace-modal-kicker">${academyEsc(o.number)}</div><h3>Быстрый ввод проекта</h3></div></div>
+          <button type="button" class="order-workspace-close" onclick="closeModal()" aria-label="Закрыть быстрый ввод проекта">×</button>
+        </header>
+        <div class="order-workspace-modal-body">${renderQuickProjectEntry(o)}</div>
+      </div>
+    </div>`;
+  render();
+}
+
 function renderProjectEstimateWorkspace(o) {
   const canSeeInternalEconomics = orderUserCanSeeInternalEconomics(o, currentUser());
+  const quickLines = projectQuickLines(o);
+  const measuredArea = orderActualAreaSqft(o);
+  const preliminaryArea = projectQuickSqft(o);
   const pss = orderPSS(o);
   const margin = orderMargin(o);
   const marginPct = orderMarginPct(o) * 100;
@@ -21067,10 +21453,10 @@ function renderProjectEstimateWorkspace(o) {
   const installerPay = orderInstallerPayoutBreakdown(o);
   const profitability = canSeeInternalEconomics ? projectProfitability(o) : null;
   const availableInstallers = usersByRole('installer');
-  const selectedFilms = [...new Set(measureAllWindows(o).map(({ win }) => {
+  const selectedFilms = [...new Set([...measureAllWindows(o).map(({ win }) => {
     const catalog = windowCatalog(win);
     return catalog ? `${catalog.brand} · ${catalog.model}` : '';
-  }).filter(Boolean))];
+  }), ...quickLines.map(line => line.catalogId ? catalogLabel(getCatalogItem(line.catalogId)) : line.label)].filter(Boolean))];
   const serviceTypes = ['washing','removal','silicone','electric','connect','warranty','custom'];
   const expenseTypes = ['gas','consumables','delivery','material_purchase','helper','subcontractor','electric','tools','rental','permit','other'];
   const materialRows = (o.measurements?.rooms || []).flatMap(room => (room.windows || []).map(win => {
@@ -21086,12 +21472,11 @@ function renderProjectEstimateWorkspace(o) {
       ${canSeeInternalEconomics ? `<td data-label="Себестоимость" class="money">${fmtMoney(windowFilmCost(win))}</td>` : ''}
     </tr>`;
   })).join('');
-  const serviceRows = (o.extraServices || []).map(line => `<tr>
+  const serviceRows = (o.extraServices || []).filter(line => !line.quickProjectLine).map(line => `<tr>
     <td data-label="Тип"><select onchange="projectEstimateUpdateService('${o.id}','${line.id}','type',this.value)">${serviceTypes.map(type => `<option value="${type}" ${line.type===type?'selected':''}>${projectEstimateServiceLabel(type)}</option>`).join('')}</select></td>
     <td data-label="Описание"><input value="${academyEsc(line.label || '')}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','label',this.value)"></td>
     <td data-label="Количество"><input type="number" min="0" step="1" value="${Number(line.qty || 1)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','qty',this.value)"></td>
     <td data-label="Цена клиенту"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','price',this.value)"></td>
-    ${canSeeInternalEconomics ? `<td data-label="Себестоимость"><input type="number" min="0" step="1" value="${Number(line.cost || 0)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','cost',this.value)"></td>` : ''}
     <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteService('${o.id}','${line.id}')">Удалить услугу</button></td>
   </tr>`).join('');
   const expenseRows = (o.extraExpenses || []).map(line => `<tr>
@@ -21103,25 +21488,27 @@ function renderProjectEstimateWorkspace(o) {
   const installerRows = installerPay.byInstaller.map(row => `<div class="order-clean-list-row"><span>${academyEsc(row.name)}</span><b>${fmtMoney(row.amount)}</b></div>`).join('');
   const costLines = [
     ['Плёнка и отход', pss.film], ['Монтажники', pss.installers], ['Транспорт', pss.gas],
-    ['Менеджер', pss.manager], ['Замерщик', pss.measurer], ['Расходники', pss.consumables],
-    ['Аренда', pss.rent], ['Себестоимость доп. услуг', pss.extraServicesCost],
+    [`Менеджер (${Number(db.settings.pricingDefaults?.managerPct || 0)}% выручки)`, pss.manager],
+    [`Рекламный резерв (${Number(db.settings.pricingDefaults?.marketingPct || 0)}% выручки)`, pss.marketing],
+    ['Замерщик — оклад в постоянных расходах', pss.measurer], ['Расходники', pss.consumables],
+    ['Аренда', pss.rent],
     ['Прямые расходы', pss.manual],
   ];
   return `
     <div class="project-estimate-summary">
       <div class="project-estimate-kpi"><span>Цена клиенту</span><strong class="text-emerald-700">${fmtMoney(orderRevenue(o))}</strong></div>
-      <div class="project-estimate-kpi"><span>Площадь</span><strong>${orderActualAreaSqft(o).toFixed(2)} sqft</strong></div>
-      <div class="project-estimate-kpi"><span>Услуги</span><strong>${(o.extraServices || []).length}</strong></div>
+      <div class="project-estimate-kpi"><span>${measuredArea ? 'Площадь' : 'Предварительный объём'}</span><strong>${(measuredArea || preliminaryArea).toFixed(2)} sqft</strong></div>
+      <div class="project-estimate-kpi"><span>Услуги</span><strong>${new Set(quickLines.map(line => line.serviceType)).size || (o.serviceTypes || []).length}</strong></div>
       ${canSeeInternalEconomics ? `<div class="project-estimate-kpi"><span>Себестоимость</span><strong class="text-red-600">${fmtMoney(pss.total)}</strong></div><div class="project-estimate-kpi"><span>Прибыль / маржа</span><strong class="${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(margin)} · ${marginPct.toFixed(1)}%</strong></div>` : ''}
     </div>
     <div class="project-estimate-quick">
-      <div class="project-estimate-section-head"><div><h4>Быстрый итог проекта</h4><div class="text-xs text-gray-500">Все значения берутся из этого проекта, склада и справочника сотрудников.</div></div></div>
+      <div class="project-estimate-section-head"><div><h4>Быстрый итог проекта</h4><div class="text-xs text-gray-500">Все значения берутся из этого проекта, склада и справочника сотрудников.</div></div><button class="btn-ghost text-sm" onclick="openQuickProjectEntry('${o.id}')">Изменить быстрый ввод</button></div>
       <div class="project-estimate-quick-grid">
         <div class="project-estimate-quick-card"><span>Услуги проекта</span><strong>${academyEsc(orderServiceSummaryLabel(o))}</strong></div>
         <div class="project-estimate-quick-card"><span>Плёнка</span><strong>${selectedFilms.length ? selectedFilms.map(academyEsc).join(', ') : 'не выбрана'}</strong></div>
-        <div class="project-estimate-quick-card"><span>Метраж стекла</span><strong>${orderActualAreaSqft(o).toFixed(2)} sqft</strong></div>
+        <div class="project-estimate-quick-card"><span>${measuredArea ? 'Метраж стекла' : 'Предварительный объём'}</span><strong>${(measuredArea || preliminaryArea).toFixed(2)} sqft</strong></div>
         <div class="project-estimate-quick-card"><span>Расход плёнки</span><strong>${Number(filmPlan.consumedSqft || 0).toFixed(2)} sqft</strong></div>
-        <div class="project-estimate-quick-card"><span>Доп. услуги</span><strong>${(o.extraServices || []).length} · ${fmtMoney(orderExtraServicesRevenue(o))}</strong></div>
+        <div class="project-estimate-quick-card"><span>Позиции проекта</span><strong>${quickLines.length} · ${fmtMoney(quickLines.reduce((sum, line) => sum + Number(line.price || 0), 0))}</strong></div>
         <div class="project-estimate-quick-card"><span>Исполнители</span><strong>${installerPay.byInstaller.length ? installerPay.byInstaller.map(row => academyEsc(row.name)).join(', ') : 'ставка категории · команда не назначена'}</strong></div>
         <div class="project-estimate-quick-card"><span>Материал со склада</span><strong>${fmtMoney(pss.film)}</strong></div>
         <div class="project-estimate-quick-card"><span>Оплата бригады</span><strong>${fmtMoney(pss.installers)}</strong></div>
@@ -21131,13 +21518,13 @@ function renderProjectEstimateWorkspace(o) {
     ${unverifiedMeasurements.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Предварительные размеры клиента.</b> По ним разрешено рассчитать проект и выпустить КП. Перед назначением монтажа потребуется внести и подтвердить точные размеры ${unverifiedMeasurements.length} окон.</div>` : ''}
 
     <section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>1. Замер и материалы</h4><div class="text-xs text-gray-500">Площадь и материал берутся из замера. Здесь назначается цена продажи.</div></div></div>
+      <div class="project-estimate-section-head"><div><h4>1. Замер и материалы</h4><div class="text-xs text-gray-500">Не обязательно для предварительного расчёта. Точные комнаты, окна и материал потребуются перед монтажом.</div></div></div>
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Помещение / окно</th><th>Материал</th><th class="money">sqft</th><th>Цена продажи / sqft</th><th class="money">Клиенту</th>${canSeeInternalEconomics ? '<th class="money">Себестоимость материала</th>' : ''}</tr></thead><tbody>${materialRows || `<tr><td colspan="${canSeeInternalEconomics ? 6 : 5}" class="text-gray-500">Сначала завершите замер.</td></tr>`}</tbody></table></div>
     </section>
 
     <section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>2. Дополнительные услуги</h4><div class="text-xs text-gray-500">Попадут в КП и увеличат цену для клиента.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddService('${o.id}','washing')">+ Добавить услугу</button></div>
-      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Тип</th><th>Описание</th><th>Кол-во</th><th>Цена клиенту, всего</th>${canSeeInternalEconomics ? '<th>Себестоимость</th>' : ''}<th></th></tr></thead><tbody>${serviceRows || `<tr><td colspan="${canSeeInternalEconomics ? 6 : 5}" class="text-gray-500">Дополнительных услуг нет.</td></tr>`}</tbody></table></div>
+      <div class="project-estimate-section-head"><div><h4>2. Услуги</h4><div class="text-xs text-gray-500">Здесь указываются только количество и цена клиенту. Оплата работника автоматически берётся из раздела «Зарплата».</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddService('${o.id}','washing')">+ Добавить услугу</button></div>
+      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Тип</th><th>Описание</th><th>Кол-во</th><th>Цена клиенту, всего</th><th></th></tr></thead><tbody>${serviceRows || '<tr><td colspan="5" class="text-gray-500">Дополнительных услуг нет.</td></tr>'}</tbody></table></div>
     </section>
 
     ${canSeeInternalEconomics ? `<section class="project-estimate-section">
@@ -21194,7 +21581,6 @@ function openProjectEstimateWorkspace(oid) {
   const o = getOrder(oid);
   if (!o) return;
   if (!orderUserCanSeeMoney(o, currentUser())) { alert('Расчёт проекта доступен только владельцу и назначенному менеджеру.'); return; }
-  if (!measureAllWindows(o).length) { alert('Сначала внесите размеры помещений и окон.'); return; }
   state.modal = `
     <div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
       <div class="modal-content workspace-modal order-workspace-modal" style="--workspace-color:#0f766e" onclick="event.stopPropagation()">
@@ -21224,6 +21610,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const hasMeasurements = windows.length > 0;
   const unverifiedMeasurements = orderMeasurementVerificationIssues(o);
   const estimateApproved = projectEstimateIsApproved(o);
+  const quickLines = projectQuickLines(o);
   const primary = isInstaller
     ? installerOrderPrimaryAction(o)
     : canMeasure && o.status === 'measurement_done'
@@ -21308,8 +21695,9 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     </div>
     ${proposalStripeUrl ? `<div class="order-clean-note mt-3">Stripe checkout: <a class="text-blue-700 underline break-all" href="${proposalStripeUrl}" target="_blank">${proposalStripeUrl}</a></div>` : ''}
     <div class="order-clean-actions mt-3">
-      ${renderOrderActionCard({ icon: '🧮', title: estimateApproved ? 'Расчёт проекта подтверждён' : 'Рассчитать проект', sub: hasMeasurements ? (canSeeInternalEconomics ? `цена, расходы и маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `цена клиенту ${fmtMoney(orderRevenue(o))}`) : 'сначала внесите замеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !canManage || !hasMeasurements, variant: hasMeasurements && !estimateApproved ? 'primary' : 'soft' })}
-      ${renderOrderActionCard({ icon: '📄', title: 'Единое КП', sub: !hasMeasurements ? 'сначала внесите замеры' : estimateApproved ? 'чертежи, комнаты, оплата' : 'сначала подтвердите расчёт проекта', onclick: `openProfessionalKP('${o.id}')`, disabled: !canManage || !hasMeasurements || !estimateApproved, variant: estimateApproved ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '⚡', title: 'Быстрый ввод проекта', sub: 'услуга, плёнка со склада, количество и цена', onclick: `openQuickProjectEntry('${o.id}')`, disabled: !canManage, variant: !quickLines.length ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🧮', title: estimateApproved ? 'Расчёт проекта подтверждён' : 'Расчёт проекта', sub: hasMeasurements ? (canSeeInternalEconomics ? `цена, расходы и маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `цена клиенту ${fmtMoney(orderRevenue(o))}`) : 'проверить итог и подтвердить расчёт', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !canManage, variant: !estimateApproved ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '📄', title: 'Единое КП', sub: estimateApproved ? 'позиции проекта и оплата' : 'сначала подтвердите расчёт проекта', onclick: `openProfessionalKP('${o.id}')`, disabled: !canManage || !estimateApproved, variant: estimateApproved ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '🔗', title: 'Ссылка клиенту', sub: clientPortalUrl(o.id) ? 'скопировать портал' : 'public URL не настроен', onclick: `copyPortalLink('${o.id}')`, disabled: !clientPortalUrl(o.id) })}
       ${renderOrderActionCard({ icon: '✅', title: 'КП принято', sub: 'перевести этап', onclick: `changeStatus('${o.id}','proposal_accepted')`, disabled: !canManage || o.status === 'proposal_accepted' })}
       ${renderOrderActionCard({ icon: '💳', title: 'Аванс / оплата', sub: orderDebt(o) > 0 ? `долг ${fmtMoney(orderDebt(o))}` : 'без долга', onclick: o.depositReceived ? `openProfessionalKP('${o.id}')` : `markDepositReceived('${o.id}')`, disabled: !canManage })}
@@ -21344,7 +21732,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     </div>
     <div class="order-clean-actions mt-3">
       ${renderOrderActionCard({ icon: '💰', title: o.depositReceived ? 'Аванс получен' : 'Отметить аванс', sub: o.depositReceived ? fmtDateTime(o.depositReceivedAt) : `ожидаемый ${fmtMoney(orderRevenue(o) * (db.settings.advancePct || 30) / 100)}`, onclick: o.depositReceived ? `openOrder('${o.id}')` : `markDepositReceived('${o.id}')`, variant: o.depositReceived ? 'success' : 'warning' })}
-      ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: canSeeInternalEconomics ? 'цена, расходы и маржа' : 'размеры, услуги и цена клиенту', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !hasMeasurements, variant: !estimateApproved && hasMeasurements ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: canSeeInternalEconomics ? 'услуги, цена, расходы и маржа' : 'услуги, количество и цена клиенту', onclick: `openProjectEstimateWorkspace('${o.id}')`, variant: !estimateApproved ? 'primary' : 'soft' })}
     </div>` : `<div class="order-clean-note">Финансы скрыты для роли ${academyEsc(u?.role || '')}. В рабочем режиме видны только клиент, адрес, замер, техлист и задача.</div>`;
 
   const routeBody = `
@@ -21392,7 +21780,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
         ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'client', icon: '👤', title: 'Клиент и связь', summary: c?.name || 'Данные и все каналы связи', badge: c?.phone || c?.email ? 'контакт' : 'заполнить', body: clientBody, color: '#2563eb', soft: '#eff6ff' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'measurement', icon: '📐', title: 'Замер', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : 'Размеры ещё не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : 'нужно', body: measurementBody, color: '#7c3aed', soft: '#f5f3ff' })}
-        ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '🧮', title: 'Расчёт проекта', summary: !hasMeasurements ? 'Сначала завершите замер' : estimateApproved ? (canSeeInternalEconomics ? `Подтверждён · маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `Подтверждён · ${fmtMoney(orderRevenue(o))}`) : (canSeeInternalEconomics ? 'Услуги, материалы, расходы и маржа' : 'Размеры, услуги и цена клиенту'), badge: !hasMeasurements ? 'после замера' : estimateApproved ? 'готово' : 'нужно', onclick: `openProjectEstimateWorkspace('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
+        ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '⚡', title: 'Быстрый ввод проекта', summary: quickLines.length ? `${quickLines.length} услуг · ${projectQuickSqft(o).toFixed(0)} sqft · ${fmtMoney(quickLines.reduce((sum, line) => sum + Number(line.price || 0), 0))}` : 'Услуга, плёнка, количество и цена без размеров', badge: quickLines.length ? `${quickLines.length}` : 'ввести', onclick: `openQuickProjectEntry('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'documents', icon: workDocsOnly ? '🧰' : '📄', title: workDocsOnly ? 'Рабочие документы' : 'КП и документы', summary: workDocsOnly ? 'Без коммерческих сумм' : (proposal ? 'КП создано' : estimateApproved ? 'Расчёт готов — можно формировать КП' : 'Сначала подтвердите расчёт проекта'), badge: workDocsOnly ? 'документы' : estimateApproved ? 'КП' : 'заблокировано', body: docsBody, color: '#d97706', soft: '#fff7ed' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'schedule', icon: '📅', title: isInstaller ? 'Задача и выезд' : 'Календарь и команда', summary: events.length ? `${events.length} события` : 'События не назначены', badge: isInstaller ? T(o.status) : (installers.length ? `${installers.length}` : 'команда'), body: scheduleBody, color: '#0891b2', soft: '#ecfeff' })}
         ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'payment', icon: '💵', title: 'Оплата', summary: canSeeMoney ? (orderDebt(o) > 0 ? `Долг ${fmtMoney(orderDebt(o))}` : 'Оплачено полностью') : 'Скрыто по роли', badge: canSeeMoney ? (canSeeInternalEconomics ? `${(orderMarginPct(o)*100).toFixed(0)}%` : (orderDebt(o) > 0 ? 'долг' : 'оплачено')) : 'скрыто', body: financeBody, color: '#059669', soft: '#ecfdf5' })}
@@ -24257,7 +24645,7 @@ function openOrderModal() {
         <div class="flex gap-2 justify-end" style="margin-left:auto">
           <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
           <button class="btn-ghost" onclick="createOrder('draft')">Сохранить черновик</button>
-          <button class="btn-primary" onclick="createOrder('measure')">Создать и внести размеры →</button>
+          <button class="btn-primary" onclick="createOrder('estimate')">Создать и быстро рассчитать →</button>
         </div>
       </div>
     </div>
@@ -24714,7 +25102,7 @@ function createOrderClientFromOverlay() {
   selectOrderClient(id);
 }
 
-function createOrder(nextStep = 'measure') {
+function createOrder(nextStep = 'estimate') {
   let clientId = state._newOrderClient;
   const serviceIds = Array.from(new Set((state._newOrderServices || []).filter(id => ORDER_PRIMARY_SERVICES.some(service => service.id === id))));
   const serviceId = serviceIds[0] || document.getElementById('no-svc')?.value || state._newOrderService || 'smart_film';
@@ -24821,6 +25209,16 @@ function createOrder(nextStep = 'measure') {
     clientFlow: orderClientFlow(accountTypeForOrder, relationshipForOrder),
     priceOverridePerSqft: null,
   };
+  selectedServices.forEach(selectedService => {
+    const catalog = projectQuickLineCatalog(selectedService.id)[0] || null;
+    const line = {
+      id: uid(), quickProjectLine: true, serviceType: selectedService.id,
+      catalogId: catalog?.id || '', label: catalog ? catalogLabel(catalog) : selectedService.title,
+      qty: 1, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0),
+    };
+    projectEstimateSyncQuickLine(line);
+    o.extraServices.push(line);
+  });
   stampOrderAddress(o, selectedAddress);
 
   db.orders.push(o);
@@ -24837,6 +25235,7 @@ function createOrder(nextStep = 'measure') {
   save(); closeModal();
   openOrder(o.id);
   if (nextStep === 'measure') setTimeout(() => openManagerMeasureModal(o.id), 0);
+  if (nextStep === 'estimate') setTimeout(() => openQuickProjectEntry(o.id), 0);
 }
 
 function openClientModal() {
@@ -27575,7 +27974,7 @@ function renderPremiumProposalPortal(token) {
                 ${locked ? `<span class="pp-pill">Signed ${fmtDateTime(prop.acceptedAt || prop.signedAt)}</span>` : `<span class="pp-pill">Editable proposal</span>`}
               </div>
             </div>
-            ${(order.measurements?.rooms || []).length ? (order.measurements.rooms || []).map((r, i) => premiumRenderRoom(prop, order, r, i, calc)).join('') : `<div class="pp-panel"><h3 class="text-xl font-black">No rooms measured yet</h3><p class="text-slate-400 mt-2">Add rooms and windows in CRM first, then regenerate this proposal.</p></div>`}
+            ${(order.measurements?.rooms || []).length ? (order.measurements.rooms || []).map((r, i) => premiumRenderRoom(prop, order, r, i, calc)).join('') : projectQuickLines(order).length ? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PRELIMINARY PROJECT ITEMS</div><h3 class="text-xl font-black mt-1">Scope without measurements</h3><p class="text-slate-400 mt-2">Final room and window dimensions will be verified before installation.</p><div class="mt-4">${projectQuickLines(order).map(line => `<div class="pp-total-line"><span><b>${premiumEsc(primaryServiceInfo(line.serviceType)?.title || 'Service')}</b><br><small>${premiumEsc(line.label || 'Project item')} · ${premiumNum(line.qty)} ${premiumEsc(line.unit || 'unit')} × ${fmtMoney(line.unitPrice)}</small></span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}</div></div>` : `<div class="pp-panel"><h3 class="text-xl font-black">Project scope is not filled yet</h3><p class="text-slate-400 mt-2">Add project items or rooms in CRM, then regenerate this proposal.</p></div>`}
             <div class="pp-panel">
               <div class="text-xs text-blue-200 font-bold">PRODUCTS</div>
               <h2 class="pp-section-title mt-1">Product intelligence</h2>
@@ -27910,8 +28309,19 @@ function premiumCanonicalSnapshot(prop) {
       });
     });
   });
-  if (calc.legacyServices > 0) {
-    items.push({ service_code: 'SOLAR_FILM', title_en: 'Additional project services', quantity: 1, unit_label: 'project', line_price: calc.legacyServices, item_kind: 'service' });
+  projectQuickLines(order).forEach(line => {
+    items.push({
+      service_code: canonicalServiceCodeForOrderService(line.serviceType) || 'SOLAR_FILM',
+      title_en: line.label || primaryServiceInfo(line.serviceType)?.title || 'Project service',
+      quantity: premiumNum(line.qty) || 1,
+      unit_label: line.unit || 'unit',
+      line_price: premiumNum(line.price),
+      item_kind: line.catalogId ? 'film' : 'service',
+    });
+  });
+  const regularLegacyServices = (order.extraServices || []).filter(line => !line.quickProjectLine).reduce((sum, line) => sum + premiumNum(line.price), 0);
+  if (regularLegacyServices > 0) {
+    items.push({ service_code: 'SOLAR_FILM', title_en: 'Additional project services', quantity: 1, unit_label: 'project', line_price: regularLegacyServices, item_kind: 'service' });
   }
   (calc.selectedServices || []).forEach(service => {
     items.push({
@@ -31333,7 +31743,7 @@ function openUserPayConfig(userId) {
         <option value="commission" ${pc.type==='commission'?'selected':''}>% от выручки заказов (продажник/менеджер)</option>
         <option value="per_sqft" ${pc.type==='per_sqft'?'selected':''}>$/sqft за установку (монтажник)</option>
         <option value="fixed_per_job" ${pc.type==='fixed_per_job'?'selected':''}>Фикс за заказ (замерщик/хелпер)</option>
-        <option value="salary" ${pc.type==='salary'?'selected':''}>Оклад в неделю</option>
+        <option value="salary" ${pc.type==='salary'?'selected':''}>Оклад в месяц</option>
         <option value="hourly" ${pc.type==='hourly'?'selected':''}>Почасовая ставка</option>
         <option value="none" ${pc.type==='none'?'selected':''}>Не оплачивается (owner)</option>
       </select>
@@ -31345,9 +31755,9 @@ function openUserPayConfig(userId) {
       </div>
 
       <div id="pc-per_sqft" class="pc-section mt-3" style="display:${pc.type==='per_sqft'?'block':'none'}">
-        <label>Базовая ставка $/sqft</label>
-        <input id="pc-ratePerSqft" type="number" step="0.05" value="${pc.ratePerSqft||0.30}">
-        <p class="text-xs text-gray-500 mt-1">Применяется если у плёнки нет своей ставки. Если несколько монтажников — делится поровну.</p>
+        <label>Индивидуальная ставка $/sqft (необязательно)</label>
+        <input id="pc-ratePerSqft" type="number" step="0.05" value="${pc.ratePerSqft ?? 0}">
+        <p class="text-xs text-gray-500 mt-1">0 = ставка монтажа из раздела «Услуги». Если несколько монтажников — начисление делится поровну.</p>
         <details class="mt-3">
           <summary class="text-sm font-medium cursor-pointer">⚙️ Ставки по категориям плёнок (override)</summary>
           <div class="grid grid-cols-2 gap-2 mt-2">
@@ -31358,7 +31768,19 @@ function openUserPayConfig(userId) {
               </div>
             `).join('')}
           </div>
-          <p class="text-xs text-gray-500 mt-1">0 = используется базовая ставка выше.</p>
+          <p class="text-xs text-gray-500 mt-1">0 = используется ставка монтажа выбранной услуги. Заполняйте только для индивидуального исключения сотрудника.</p>
+        </details>
+        <details class="mt-3">
+          <summary class="text-sm font-medium cursor-pointer">⚙️ Оплата дополнительных услуг ($/ед.)</summary>
+          <div class="grid grid-cols-2 gap-2 mt-2">
+            ${['washing','removal','silicone','electric','connect','warranty','custom'].map(type => `
+              <div>
+                <label class="text-xs">${projectEstimateServiceLabel(type)}</label>
+                <input id="pc-work-${type}" type="number" step="0.5" value="${pc.ratesByWorkType?.[type]||0}" placeholder="0">
+              </div>
+            `).join('')}
+          </div>
+          <p class="text-xs text-gray-500 mt-1">Эта ставка автоматически входит в себестоимость проекта. В строке услуги менеджер её не вводит.</p>
         </details>
       </div>
 
@@ -31369,8 +31791,8 @@ function openUserPayConfig(userId) {
       </div>
 
       <div id="pc-salary" class="pc-section mt-3" style="display:${pc.type==='salary'?'block':'none'}">
-        <label>Оклад в неделю ($)</label>
-        <input id="pc-weeklySalary" type="number" step="50" value="${pc.weeklySalary||500}">
+        <label>Оклад в месяц ($)</label>
+        <input id="pc-monthlySalary" type="number" step="100" value="${pc.monthlySalary || Math.round((pc.weeklySalary || 0) * 4.33) || 0}">
         <p class="text-xs text-gray-500 mt-1">Фиксированная сумма независимо от заказов.</p>
       </div>
 
@@ -31399,11 +31821,15 @@ function saveUserPayConfig(userId) {
   pc.commissionPct = parseFloat(document.getElementById('pc-commissionPct')?.value) || 0;
   pc.ratePerSqft = parseFloat(document.getElementById('pc-ratePerSqft')?.value) || 0;
   pc.fixedPerJob = parseFloat(document.getElementById('pc-fixedPerJob')?.value) || 0;
-  pc.weeklySalary = parseFloat(document.getElementById('pc-weeklySalary')?.value) || 0;
+  pc.monthlySalary = parseFloat(document.getElementById('pc-monthlySalary')?.value) || 0;
   pc.hourlyRate = parseFloat(document.getElementById('pc-hourlyRate')?.value) || 0;
   pc.ratesByCategory = pc.ratesByCategory || {};
   ['solar','protective','smart','decorative','privacy'].forEach(cat => {
     pc.ratesByCategory[cat] = parseFloat(document.getElementById('pc-rate-'+cat)?.value) || 0;
+  });
+  pc.ratesByWorkType = pc.ratesByWorkType || {};
+  ['washing','removal','silicone','electric','connect','warranty','custom'].forEach(type => {
+    pc.ratesByWorkType[type] = parseFloat(document.getElementById('pc-work-'+type)?.value) || 0;
   });
   save(); closeModal(); render();
 }
@@ -31416,9 +31842,10 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
   const breakdown = [];
   let total = 0;
   if (pc.type === 'salary') {
-    const weeks = (endDate - startDate) / (7 * 86400000);
-    total = (pc.weeklySalary || 0) * weeks;
-    breakdown.push({ kind: 'salary', label: `Оклад × ${weeks.toFixed(1)} нед`, amount: total });
+    const months = Math.max(0, (endDate - startDate) / (30 * 86400000));
+    const monthlySalary = Number(pc.monthlySalary) || Number(pc.weeklySalary || 0) * 4.33;
+    total = monthlySalary * months;
+    breakdown.push({ kind: 'salary', label: `Оклад × ${months.toFixed(2)} мес.`, amount: total });
     return { total, breakdown };
   }
   // Commission / per-sqft / fixed-per-job — based on orders in period

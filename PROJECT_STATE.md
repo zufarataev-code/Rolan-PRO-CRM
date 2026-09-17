@@ -340,6 +340,50 @@ Contributors must add a row before starting substantial work and update or remov
 - Existing role boundaries were rechecked: owner retains company P&L and settings; manager can create, measure, price, and prepare the customer proposal without internal cost/profit; surveyor and installer remain limited to assigned work and never receive company financial totals.
 - Verification: all 253 automated tests passed, TypeScript passed, and the production build completed locally. Branch / PR: `codex/project-add-service-button` / #172. The owner explicitly requested the production CRM update; next action is CI, merge to `main`, automatic production deploy, and a read-only smoke check.
 
+### 2026-09-16 correction — quick Project line items do not require dimensions
+
+- The prior primary action that opened measurements immediately was incorrect. New Project now opens the existing Project calculation with a seeded line for the selected incoming service; the manager can quote before any room, office, opening, or dimension exists.
+- A quick line records service direction, the service-scoped existing catalog item, quantity, unit, sale price per unit, derived customer total, and owner-only catalog cost per unit. `+ Добавить услугу` adds Solar, Smart, Safety, or Decorative lines to the same Project; it does not create another order, calculator, catalog, or storage root.
+- Film choices remain restricted to the selected service category and display the existing Category → Name → Model catalog identity. The same quick lines are published as individual Proposal items. Exact measurements remain mandatory only for production documents and installation release.
+- No Prisma schema change is required for this correction: it changes the active legacy Project compatibility payload and Proposal projection while preserving existing relational `ProjectPosition` work from issue #164. A separate database entity or parallel migration would violate the one-Project decision.
+- Verification: all 254 automated tests passed, TypeScript passed after the production build generated Next.js types, and the production build completed locally. Branch / PR: `codex/quick-project-line-items` / #173. Production deployment remains separate.
+
+### 2026-09-16 correction — salaries, manager commission, and advertising reserve
+
+- Owner Settings → `Постоянные расходы и безубыточность` now has one explicit compensation/cost model: owner salary $3,000/month, surveyor salary $4,000/month, assigned-manager commission 5% of Project gross revenue, and advertising reserve 10% of Project gross revenue.
+- Salaries are fixed monthly company obligations and enter the monthly break-even pool. Manager commission and advertising are variable Project PSS costs; they are calculated automatically from `orderRevenue()` and are not requested from the manager on every Project.
+- The previous seeded daily advertising plan is deactivated by an idempotent compatibility migration so the 10% reserve is not counted again as fixed OpEx. Surveyor percentage is set to zero because the approved compensation model is monthly salary.
+- Employee pay cards now show and calculate salary per month rather than per week. The Settings model keeps the manager and active surveyor/owner pay configurations synchronized with the same percentages and salaries.
+- Implemented as an extension of PR #173. Production deployment remains separate.
+
+### 2026-09-16 correction — quick Project cost comes from Warehouse and Payroll references
+
+- The fast Project service row now contains only manager-owned commercial inputs: service, an in-stock film, quantity/unit, and customer sale price. Manual material cost and manual installation price were removed from that row for every role.
+- Film choices are restricted to the selected service category and to catalog items with a positive Warehouse roll balance. The selector shows current metres and approximate sqft; an old selected item remains readable after its stock reaches zero but cannot pass Proposal readiness.
+- Preliminary material cost without dimensions is calculated from the remaining value and area of priced Warehouse purchase lots, including the catalog waste percentage. A Project cannot be approved when the selected quantity is not covered by stock with a recorded purchase price.
+- Preliminary installer cost without dimensions is calculated from the assigned employee's Payroll category rate. Until installers are assigned, the existing owner-managed category defaults remain the reserve. Quick lines no longer contribute a second embedded service cost.
+- Existing quick-line `unitCost` and `cost` compatibility fields are removed during the idempotent legacy-state migration. No second catalog, warehouse, payroll table, Project, or storage root was introduced.
+- Verification: all 258 automated tests passed, standalone TypeScript passed, and a clean production build completed after regenerating the Prisma client.
+- This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains separate.
+
+### 2026-09-16 correction — separate Quick Project Entry and reference-owned service costs
+
+- The prior embedded quick-entry table inside `Расчёт проекта перед КП` was incorrect. `Быстрый ввод проекта` is now a separate compact window opened from the Project card and immediately after choosing the calculation path while creating a Project.
+- The separate window writes service, in-stock film, sqft, and sale price into the same Project compatibility record. `Расчёт проекта` remains the approval and profitability workspace; no second Project, calculator entity, shell, or storage root was introduced.
+- The visible `Услуги` reference and the Project service rows now contain customer pricing only. Material cost comes from priced Warehouse lots; film/installation and additional-work pay come from employee Payroll rates. Direct one-off purchases remain Project expenses.
+- Employee Payroll cards now support per-unit rates for washing, removal, silicone, electrical work, connection, warranty, and custom work. Those rates are included automatically in Project installer cost.
+- Verification: all 261 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains a separate action.
+
+### 2026-09-16 correction — service-owned installer rate
+
+- The owner clarified that each film service must include `Монтажнику / sqft` directly in the `Услуги` reference. This supersedes the immediately preceding rule that Services contain customer prices only.
+- Film material cost still comes only from priced Warehouse lots. The service installation rate is the default payroll accrual for both measured openings and quick Project sqft; employee Payroll rates remain optional individual overrides.
+- Built-in employee category rates are cleared by an idempotent migration so they do not silently mask the service rate. Genuine non-default employee overrides remain unchanged.
+- The same canonical `installation_cost_per_sqft` field already used by relational Projects is restored in the `/legacy-crm` Services UI and synchronized into the compatibility Project calculator. No new entity or storage root is added.
+- Verification: all 261 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains separate.
+
 ### 2026-09-15 architecture correction — Order and Project are the same customer job
 
 - Product rule: one canonical PostgreSQL `Project` survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.

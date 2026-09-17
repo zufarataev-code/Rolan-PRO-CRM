@@ -245,6 +245,49 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Fast intake remains a continuation of the same Project: after client, site type, incoming service, and manager are selected, the primary action opens the existing site-specific measurement workspace. A draft is a state of that Project, not another entity.
 - Implemented in PR #172 for the production release requested by the owner.
 
+## 2026-09-16 — Quick Project intake is line-item pricing before measurement
+
+- This decision supersedes the final `Fast intake` paragraph in `Break-even uses fixed company obligations and the same Project margin`. The primary New Project action must not force the manager into rooms, windows, or dimensions.
+- A manager first enters simple commercial lines inside the same Project: service, catalog position, quantity, unit, and sale price per unit. Each Project may contain multiple service directions, and every film picker is filtered to that line's service category while reusing the existing FilmCatalog Category → Name → Model identity.
+- Line totals are derived as quantity × unit price. Catalog cost is an owner-only preliminary internal value. Detailed room/opening measurements later provide production truth; they remain required before technical sheets, cutting, and installation, but not before preliminary calculation or Proposal.
+- Quick lines are a compatibility projection of Project service positions, not another Order, estimate, material catalog, or browser-storage root. The public Proposal preserves each line rather than collapsing the Project into one anonymous service total.
+- Implemented on `codex/quick-project-line-items` in PR #173. Production deployment is a separate release step.
+
+## 2026-09-16 — Fixed salaries and revenue-based costs use different bases
+
+- Owner compensation of $3,000/month and surveyor compensation of $4,000/month are fixed company payroll obligations. They belong to the monthly break-even pool and are allocated across the month's revenue-bearing Projects; they are not charged in full to every Project.
+- The assigned manager earns 5% of the Project's gross customer revenue. Advertising planning reserves 10% of that same gross revenue. Both are variable direct Project costs and reduce gross margin before fixed-cost allocation.
+- The advertising percentage replaces the old seeded daily advertising plan. Keeping both active would double count marketing, so compatibility migration deactivates the old plan while preserving it for history.
+- Managers do not enter payroll or advertising manually in Project calculation. Owner controls this model in `Настройки → Постоянные расходы и безубыточность`; individual employee cards reuse the same compensation values.
+- Implemented in PR #173. Production deployment remains a separate action.
+
+## 2026-09-16 — Warehouse and Payroll are the only quick-Project cost sources
+
+- This decision supersedes the sentence `Catalog cost is an owner-only preliminary internal value` in `Quick Project intake is line-item pricing before measurement`. A Project service row must never ask a manager or owner to re-enter material cost or installation price.
+- The row owns only customer-facing commercial input: service direction, an existing in-stock FilmCatalog item, quantity/unit, and sale price. The selectable film list is the intersection of the service category and current Warehouse roll balances.
+- Preliminary material COGS is derived from actual Warehouse lot receipts: remaining roll value divided by remaining priced area, multiplied by the Project sqft and the catalog waste factor. Missing purchase price or insufficient priced stock blocks calculation approval instead of silently substituting a manually entered line cost.
+- Installer labor is derived from the assigned employee's Payroll configuration by film category. Before assignment, the owner-managed category defaults are the reserve. These references are edited in Warehouse purchasing and employee Salary settings, not inside each Project.
+- Quick entry is an estimate and does not reserve or issue stock. Actual roll deduction remains tied to production/installation flow and measured cutting data. No parallel inventory, payroll, catalog, or Project entity is permitted.
+- Implemented in PR #173. Production deployment remains a separate action.
+
+## 2026-09-16 — Quick Project Entry is a separate workflow window
+
+**Supersedes:** the PR #173 presentation that placed quick line entry as section 1 inside the full Project estimate.
+
+- `Быстрый ввод проекта` is a separate compact modal for service, Warehouse film, sqft, and customer sale price. It updates the same Project and then hands off to `Расчёт проекта` for review, internal economics, and Proposal approval.
+- The `Услуги` reference owns customer prices only. It must not ask for material cost, installer cost, or add-on cost. Warehouse purchase lots own film cost; employee Payroll cards own installation and additional-work rates; Project expenses own one-off delivery, purchases, helpers, and subcontractors.
+- This separation is presentation and responsibility ownership, not a new business entity. One Project remains the customer job from intake through Proposal, installation, payment, and completion.
+- Implemented in PR #173. Production deployment is not authorized by this decision.
+
+## 2026-09-16 — Services own the default installer rate
+
+**Supersedes:** the same-day statement that `Услуги` owns customer prices only and all labor rates belong exclusively to employee Payroll cards.
+
+- Each film service has one owner-editable `Монтажнику / sqft` value using the existing canonical `installation_cost_per_sqft` field.
+- That service rate is the default installer accrual for quick and measured Project quantities. Employee Payroll category/base rates are optional individual overrides, not duplicated mandatory setup.
+- Film purchase cost remains owned by Warehouse lots. Additional-work rates remain in employee Payroll, and one-off purchases/helpers/subcontractors remain Project expenses.
+- Implemented in PR #173. Production deployment remains a separate authorized action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

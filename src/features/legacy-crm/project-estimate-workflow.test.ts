@@ -19,7 +19,7 @@ test("measurement completion routes the manager into project calculation", () =>
 test("project calculation combines measured materials, services, expenses and margin", () => {
   assert.match(source, /function renderProjectEstimateWorkspace\(o\)/);
   assert.match(source, /1\. Замер и материалы/);
-  assert.match(source, /2\. Дополнительные услуги/);
+  assert.match(source, /2\. Услуги/);
   assert.match(source, /3\. Прямые расходы проекта/);
   assert.match(source, /Прибыль/);
   assert.match(source, /Маржа/);
@@ -111,11 +111,83 @@ test("each room exposes a service-scoped film selector and shows its selected fi
 test("manager can quote from customer dimensions but installation requires verified dimensions", () => {
   const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.doesNotMatch(readiness, /orderMeasurementVerificationIssues|windowMeasurementIsVerified/);
-  assert.match(source, /measurementBasis: orderMeasurementVerificationIssues\(o\)\.length \? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED'/);
+  assert.match(source, /measurementBasis: !measureAllWindows\(o\)\.length \? 'QUICK_LINE_ITEMS'/);
   assert.match(source, /По ним разрешено рассчитать проект и выпустить КП/);
   assert.match(source, /function orderStatusRequiresVerifiedMeasurements\(status\)/);
   assert.match(source, /'installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'/);
   assert.match(source, /if \(!ensureVerifiedMeasurementsForStatus\(o, newStatus/);
+});
+
+test("quick project entry works without dimensions and supports multiple service lines", () => {
+  const opener = source.match(/function openQuickProjectEntry\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(opener, /Сначала внесите размеры/);
+  assert.match(opener, /<h3>Быстрый ввод проекта<\/h3>/);
+  assert.match(source, /nextStep === 'estimate'\) setTimeout\(\(\) => openQuickProjectEntry\(o\.id\)/);
+  assert.match(source, /title: 'Быстрый ввод проекта'[\s\S]*?onclick: `openQuickProjectEntry/);
+  assert.match(source, /function projectEstimateAddQuickLine\(oid, requestedServiceType = ''\)/);
+  assert.match(source, /quickProjectLine: true, serviceType/);
+  assert.match(source, /line\.price = line\.qty \* line\.unitPrice/);
+  assert.match(source, /projectQuickLineCatalog\(line\.serviceType, line\.catalogId\)/);
+  assert.match(source, /ORDER_PRIMARY_SERVICES\.map\(service =>/);
+  assert.match(source, /Количество, sqft/);
+  assert.match(source, /Цена продажи \/ sqft/);
+  assert.match(source, /\+ Добавить услугу/);
+});
+
+test("quick project lines use warehouse film and never accept manual material or labor cost", () => {
+  const sync = source.match(/function projectEstimateSyncQuickLine\(line\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  assert.match(source, /function projectQuickLineCatalog\(serviceType, selectedCatalogId = ''\)/);
+  assert.match(source, /warehouseCatalogStockStats\(item\.id\)\.availableSqft > 0/);
+  assert.match(renderer, /Плёнка со склада/);
+  assert.match(renderer, /Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников/);
+  assert.match(sync, /delete line\.unitCost/);
+  assert.match(sync, /delete line\.cost/);
+  assert.match(sync, /line\.unit = 'sqft'/);
+  assert.doesNotMatch(updater, /unitCost/);
+  assert.doesNotMatch(updater, /field === 'unit'/);
+  assert.doesNotMatch(renderer, /Себестоимость \/ ед\./);
+});
+
+test("quick project entry is a separate window instead of an embedded estimate table", () => {
+  const estimateStart = source.indexOf("function renderProjectEstimateWorkspace");
+  const estimateEnd = source.indexOf("function openProjectEstimateWorkspace", estimateStart);
+  const estimateRenderer = source.slice(estimateStart, estimateEnd);
+  assert.match(source, /function renderQuickProjectEntry\(o\)/);
+  assert.match(source, /function openQuickProjectEntry\(oid\)/);
+  assert.doesNotMatch(estimateRenderer, /1\. Быстрый ввод проекта/);
+  assert.doesNotMatch(estimateRenderer, /Плёнка со склада<\/th>/);
+  assert.match(estimateRenderer, /Изменить быстрый ввод/);
+});
+
+test("project add-on rows contain customer price only and labor comes from configured work rates", () => {
+  const serviceUpdater = source.match(/function projectEstimateUpdateService\(oid, sid, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const estimateStart = source.indexOf("function renderProjectEstimateWorkspace");
+  const estimateEnd = source.indexOf("function openProjectEstimateWorkspace", estimateStart);
+  const estimateRenderer = source.slice(estimateStart, estimateEnd);
+  assert.doesNotMatch(serviceUpdater, /field === 'cost'|['"]cost['"]/);
+  assert.doesNotMatch(estimateRenderer, /projectEstimateUpdateService\([^\n]+,'cost'/);
+  assert.match(source, /ratesByWorkType/);
+  assert.match(source, /id="pc-work-\$\{type\}"/);
+  assert.match(source, /function orderAdditionalWorkPayoutForUser\(o, user, installerCount = 1\)/);
+  assert.match(source, /filmPayout \+ orderAdditionalWorkPayoutForUser/);
+});
+
+test("the Services reference owns installer pay while material stays in Warehouse", () => {
+  const rendererStart = source.indexOf("function renderCanonicalServicePricing");
+  const rendererEnd = source.indexOf("async function loadCanonicalInstallerOperations", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  assert.doesNotMatch(renderer, /cps-\$\{row\.service_type_id\}-material/);
+  assert.match(renderer, /cps-\$\{row\.service_type_id\}-installer/);
+  assert.match(renderer, /Монтажнику \/ sqft, \$/);
+  assert.doesNotMatch(renderer, /cpa-\$\{row\.service_addon_id\}-cost/);
+  assert.match(renderer, /Стоимость плёнки берётся со склада\. Ставка монтажа из этой услуги автоматически начисляется/);
+  assert.match(source, /patch\.installation_cost_per_sqft = canonicalPricingValue/);
+  assert.match(source, /syncLegacyInstallerServiceRate\(service\.service_code, patch\.installation_cost_per_sqft\)/);
+  assert.match(source, /syncLegacyInstallerServiceRate\(service\.service_code, service\.installation_cost_per_sqft\)/);
 });
 
 test("each manager-entered window starts preliminary and can be explicitly verified", () => {
