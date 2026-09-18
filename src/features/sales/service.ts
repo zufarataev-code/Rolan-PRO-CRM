@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/db";
 import { serializeClient, serializeDealCard, serializeFollowUp, serializeLead, serializeTask } from "@/features/sales/serializers";
 import { getAllowedStageTransitions, isValidStageTransition } from "@/features/sales/pipeline";
+import {
+  ensureClosedWonConversion,
+  ensureQualifiedLeadConversion,
+} from "@/features/google-ads/conversion-events";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { buildClientAccessWhere, buildDealAccessWhere } from "@/features/sales/access";
 
@@ -841,6 +845,58 @@ export async function moveDealStage(input: MoveDealStageInput) {
         data: {
           pipeline_status_id: nextStatus.pipeline_status_id,
         },
+      });
+    }
+
+    await ensureQualifiedLeadConversion(tx, {
+      dealId: deal.deal_id,
+      leadId: deal.lead_id,
+      clientId: deal.client_id,
+      attributionTouchpointId: deal.attribution_touchpoint_id,
+      pipelineStatusCode: nextStatus.status_code,
+      occurredAt: new Date(),
+      eventSource: "OTHER",
+    });
+
+    if (nextStatus.status_code === "CLOSED_WON") {
+      const proposal = await tx.proposal.findFirst({
+        where: {
+          deal_id: deal.deal_id,
+        },
+        orderBy: {
+          updated_at: "desc",
+        },
+        select: {
+          selected_total_amount: true,
+          currency: true,
+          agreement: {
+            select: {
+              status: true,
+              signed_at: true,
+            },
+          },
+          deposit: {
+            select: {
+              status: true,
+              paid_at: true,
+            },
+          },
+        },
+      });
+
+      const hasSignedAgreement = proposal?.agreement?.status === "signed" && Boolean(proposal.agreement.signed_at);
+      const hasPaidDeposit = proposal?.deposit?.status === "paid" && Boolean(proposal.deposit.paid_at);
+      const conversionValue = hasSignedAgreement && hasPaidDeposit ? proposal?.selected_total_amount ?? null : null;
+
+      await ensureClosedWonConversion(tx, {
+        dealId: deal.deal_id,
+        leadId: deal.lead_id,
+        clientId: deal.client_id,
+        attributionTouchpointId: deal.attribution_touchpoint_id,
+        occurredAt: new Date(),
+        conversionValue,
+        currency: proposal?.currency ?? "USD",
+        eventSource: "OTHER",
       });
     }
 
