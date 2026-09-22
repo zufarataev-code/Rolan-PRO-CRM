@@ -17954,6 +17954,7 @@ function renderOrderKanbanCard(o) {
           <button class="kanban-drag-handle" title="Перетащить или выбрать этап" aria-label="Переместить проект"
             onclick="event.stopPropagation(); openKanbanStagePicker('${o.id}')">↕ Этап</button>
           <button class="kanban-icon-btn" title="Открыть проект" onclick="event.stopPropagation(); openOrder('${o.id}')">↗</button>
+          ${orderUserCanSeeMoney(o, currentUser()) ? `<button class="kanban-icon-btn" title="Быстрый ввод проекта" onclick="event.stopPropagation(); openQuickProjectEntry('${o.id}')">⚡</button>` : ''}
           <a class="kanban-icon-btn" title="Позвонить" href="${callLink(c.phone)}" onclick="event.stopPropagation()">☎</a>
           <a class="kanban-icon-btn" title="WhatsApp" href="${whatsappLink(c.phone, text)}" target="_blank" onclick="event.stopPropagation()">WA</a>
           <button class="kanban-icon-btn" title="Единое КП ROLANPRO" onclick="event.stopPropagation(); openProfessionalKP('${o.id}')">КП</button>
@@ -21144,6 +21145,160 @@ function saveClientContactProfile(clientId, orderId = '') {
   if (orderId) openOrder(orderId);
 }
 
+function openProjectEditProfile(orderId) {
+  const o = getOrder(orderId);
+  const c = getClient(o?.clientId);
+  const u = currentUser();
+  if (!o || !c || !orderUserCanManage(u)) { alert('Редактирование проекта доступно владельцу и менеджеру проекта.'); return; }
+  const addr = orderAddressRecord(o) || clientAddressById(c, c.primaryAddressId) || {};
+  const preferred = c.preferredChannel || (c.phone ? 'phone' : c.email ? 'email' : '');
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6" style="max-width:54rem">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-xs font-black text-blue-600 uppercase tracking-wide">Проект ${academyEsc(o.number)}</div>
+          <h3 class="text-xl font-black mt-1">Редактировать проект</h3>
+          <p class="text-sm text-gray-500 mt-1">Клиент, контакты, адрес объекта и контакт на объекте — в одном окне.</p>
+        </div>
+        <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
+      </div>
+
+      <section class="mt-5 rounded-xl border border-slate-200 p-4 bg-white">
+        <div class="font-black text-slate-900">Клиент и контакты</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+          <div class="md:col-span-2"><label>Имя / компания</label><input id="project-edit-client-name" value="${academyEsc(c.name || '')}"></div>
+          <div><label>Телефон</label><input id="project-edit-client-phone" type="tel" value="${academyEsc(c.phone || '')}" placeholder="+1 818..."></div>
+          <div><label>Email</label><input id="project-edit-client-email" type="email" value="${academyEsc(c.email || '')}" placeholder="client@email.com"></div>
+          <div><label>WhatsApp</label><input id="project-edit-client-whatsapp" type="tel" value="${academyEsc(c.whatsappPhone || c.phone || '')}"></div>
+          <div><label>Предпочтительный канал</label><select id="project-edit-client-preferred">
+            <option value="" ${!preferred ? 'selected' : ''}>Не выбран</option>
+            <option value="phone" ${preferred==='phone'?'selected':''}>Телефон</option>
+            <option value="whatsapp" ${preferred==='whatsapp'?'selected':''}>WhatsApp</option>
+            <option value="sms" ${preferred==='sms'?'selected':''}>SMS</option>
+            <option value="email" ${preferred==='email'?'selected':''}>Email</option>
+            <option value="telegram" ${preferred==='telegram'?'selected':''}>Telegram</option>
+          </select></div>
+          <div><label>Telegram</label><input id="project-edit-client-telegram" value="${academyEsc(c.telegramUsername || '')}" placeholder="@username"></div>
+          <div><label>Instagram</label><input id="project-edit-client-instagram" value="${academyEsc(c.instagramUsername || '')}" placeholder="@username"></div>
+          <div class="md:col-span-2"><label>Facebook</label><input id="project-edit-client-facebook" value="${academyEsc(c.facebookProfile || '')}" placeholder="ссылка или username"></div>
+        </div>
+      </section>
+
+      <section class="mt-4 rounded-xl border border-slate-200 p-4 bg-slate-50">
+        <div class="font-black text-slate-900">Адрес объекта</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+          <div><label>Название адреса</label><input id="project-edit-address-label" value="${academyEsc(addr.label || 'Объект')}" placeholder="Дом, офис, объект"></div>
+          <div><label>Улица и номер</label><input id="project-edit-address-street" value="${academyEsc(addr.street || '')}" placeholder="123 Main St"></div>
+          <div><label>Unit / Suite</label><input id="project-edit-address-unit" value="${academyEsc(addr.unit || '')}" placeholder="Suite 200"></div>
+          <div><label>Город</label><input id="project-edit-address-city" value="${academyEsc(addr.city || '')}"></div>
+          <div><label>Штат</label><input id="project-edit-address-state" value="${academyEsc(addr.state || '')}" maxlength="2" placeholder="CA"></div>
+          <div><label>ZIP</label><input id="project-edit-address-zip" value="${academyEsc(addr.zip || '')}" inputmode="numeric" placeholder="91361"></div>
+          <div><label>Контакт на объекте</label><input id="project-edit-site-contact-name" value="${academyEsc(addr.contactName || '')}" placeholder="Имя"></div>
+          <div><label>Телефон контакта на объекте</label><input id="project-edit-site-contact-phone" type="tel" value="${academyEsc(addr.contactPhone || '')}"></div>
+          <div class="md:col-span-2"><label>Примечание по адресу</label><input id="project-edit-address-notes" value="${academyEsc(addr.notes || '')}" placeholder="Gate code, parking, floor..."></div>
+        </div>
+      </section>
+
+      <section class="mt-4 rounded-xl border border-slate-200 p-4 bg-white">
+        <label>Комментарий к проекту</label>
+        <textarea id="project-edit-order-notes" rows="3" placeholder="Важная информация по проекту">${academyEsc(o.notes || '')}</textarea>
+      </section>
+
+      <div class="flex justify-end gap-2 mt-5">
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+        <button class="btn-primary" onclick="saveProjectEditProfile('${o.id}')">Сохранить проект</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
+function saveProjectEditProfile(orderId) {
+  const o = getOrder(orderId);
+  const c = getClient(o?.clientId);
+  const u = currentUser();
+  if (!o || !c || !orderUserCanManage(u)) return;
+
+  const name = document.getElementById('project-edit-client-name')?.value.trim() || '';
+  const phone = document.getElementById('project-edit-client-phone')?.value.trim() || '';
+  const email = document.getElementById('project-edit-client-email')?.value.trim().toLowerCase() || '';
+  if (!name) { alert('Укажите имя клиента или название компании.'); return; }
+  if (!phone) { alert('Укажите телефон клиента.'); return; }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Проверьте email клиента.'); return; }
+
+  const currentAddr = orderAddressRecord(o) || {};
+  const addressId = currentAddr.id || o.addressId || ('addr_' + uid());
+  const addresses = normalizeClientAddresses(c);
+  const linked = addresses.find(item => item.id === addressId);
+  const wasPrimary = Boolean(linked?.isPrimary || c.primaryAddressId === addressId);
+  const street = document.getElementById('project-edit-address-street')?.value.trim() || '';
+  const unit = cleanAddressUnitValue(document.getElementById('project-edit-address-unit')?.value || '');
+  const city = document.getElementById('project-edit-address-city')?.value.trim() || '';
+  const stateCode = normalizeStateCode(document.getElementById('project-edit-address-state')?.value || '');
+  const zip = document.getElementById('project-edit-address-zip')?.value.trim() || '';
+  const fullAddress = buildAddress(street, city, stateCode, zip, unit);
+  if (!street || !city || !stateCode || !zip || !fullAddress) {
+    alert('Заполните улицу, город, штат и ZIP адреса объекта.');
+    return;
+  }
+
+  const nextAddress = makeClientAddressRecord({
+    id: addressId,
+    label: document.getElementById('project-edit-address-label')?.value.trim() || currentAddr.label || 'Объект',
+    street,
+    unit,
+    city,
+    state: stateCode,
+    zip,
+    address: fullAddress,
+    contactName: document.getElementById('project-edit-site-contact-name')?.value.trim() || '',
+    contactPhone: document.getElementById('project-edit-site-contact-phone')?.value.trim() || '',
+    notes: document.getElementById('project-edit-address-notes')?.value.trim() || '',
+    createdAt: currentAddr.createdAt || linked?.createdAt,
+    isPrimary: wasPrimary,
+  }, wasPrimary);
+
+  let target = linked;
+  if (target) {
+    Object.assign(target, nextAddress, { id: addressId, isPrimary: wasPrimary });
+  } else {
+    target = nextAddress;
+    c.addresses = addresses;
+    c.addresses.push(target);
+  }
+
+  if (wasPrimary) {
+    c.primaryAddressId = target.id;
+    c.address = target.address;
+    c.addressStreet = target.street;
+    c.addressUnit = target.unit || '';
+    c.addressCity = target.city;
+    c.addressState = target.state;
+    c.addressZip = target.zip;
+  }
+
+  c.name = name;
+  c.phone = phone;
+  c.email = email;
+  c.whatsappPhone = document.getElementById('project-edit-client-whatsapp')?.value.trim() || '';
+  c.telegramUsername = clientSocialHandle(document.getElementById('project-edit-client-telegram')?.value || '');
+  c.instagramUsername = clientSocialHandle(document.getElementById('project-edit-client-instagram')?.value || '');
+  c.facebookProfile = document.getElementById('project-edit-client-facebook')?.value.trim() || '';
+  c.preferredChannel = document.getElementById('project-edit-client-preferred')?.value || '';
+  c.updatedAt = new Date().toISOString();
+
+  stampOrderAddress(o, target);
+  o.notes = document.getElementById('project-edit-order-notes')?.value.trim() || '';
+  o.updatedAt = new Date().toISOString();
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: o.updatedAt, key: 'project_profile_updated', by: state.currentUserId, note: 'Обновлены клиент, контакты или адрес проекта' });
+
+  save();
+  closeModal();
+  openOrder(orderId);
+}
+
 function projectEstimateServiceLabel(type) {
   return ({
     washing: 'Мойка окон', removal: 'Снятие старой плёнки', silicone: 'Силикон / крепление',
@@ -22001,7 +22156,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
           <span class="client-passport-avatar">${academyEsc(clientInitials || 'К')}</span>
           <div><div class="client-passport-name">${academyEsc(c?.name || 'Без клиента')}</div><div class="client-passport-meta">${clientAccountType(c) === 'b2b' ? 'B2B аккаунт' : 'B2C клиент'} · предпочтительно: ${academyEsc(clientPreferredChannelLabel(c))}</div></div>
         </div>
-        ${canManage ? `<button type="button" class="btn-ghost text-sm" onclick="openClientContactProfile('${c?.id || ''}','${o.id}')"><i class="bi bi-pencil mr-1"></i>Редактировать</button>` : ''}
+        ${canManage ? `<button type="button" class="btn-ghost text-sm" onclick="openProjectEditProfile('${o.id}')"><i class="bi bi-pencil mr-1"></i>Редактировать проект</button>` : ''}
       </div>
       <div class="client-passport-details">
         <div class="client-passport-detail"><span>Телефон</span><strong>${academyEsc(c?.phone || 'не заполнен')}</strong></div>
@@ -22117,7 +22272,10 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   return `
     <div class="order-clean-topbar">
       <button class="btn-ghost" onclick="state.view='${isInstaller ? 'installations' : 'orders'}'; location.hash=''; render();">← ${isInstaller ? 'Мои задачи' : T('orders')}</button>
-      ${u?.role === 'owner' ? `<button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();" title="Открыть старую полную форму, если нужны все поля сразу">Расширенный режим</button>` : ''}
+      <div class="flex gap-2 flex-wrap justify-end">
+        ${canManage ? `<button class="btn-primary text-sm" onclick="openProjectEditProfile('${o.id}')">✏️ Редактировать проект</button>` : ''}
+        ${u?.role === 'owner' ? `<button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();" title="Открыть старую полную форму, если нужны все поля сразу">Расширенный режим</button>` : ''}
+      </div>
     </div>
     <div class="order-clean-shell">
       ${renderOrderPassport(o, c, u, { canManage, canMeasure, canSeeMoney })}
