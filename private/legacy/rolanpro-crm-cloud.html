@@ -21212,7 +21212,7 @@ function projectEstimateReadiness(o) {
   const quickStockDemand = projectQuickRequiredSqftByCatalog(o);
   const quickSupplyDemand = projectQuickRequiredSupplies(o);
   if (!windows.length && !quickLines.length) issues.push('нет позиций проекта');
-  if (quickLines.some(line => !line.serviceType || !line.catalogId || !String(line.label || '').trim() || Number(line.qty) <= 0 || Number(line.unitPrice) <= 0)) issues.push('есть позиция без плёнки со склада, количества или цены продажи');
+  if (quickLines.some(line => !line.serviceType || (!line.catalogId && !projectQuickManualFilmName(line)) || !String(line.label || '').trim() || Number(line.qty) <= 0 || Number(line.unitPrice) <= 0)) issues.push('есть позиция без плёнки, количества или цены продажи');
   if (quickLines.some(line => !Array.isArray(line.installerIds) || !line.installerIds.length)) issues.push('у каждой услуги нужен исполнитель');
   if (quickLines.some(line => !projectQuickDateValue(line.startDate) || !projectQuickDateValue(line.endDate))) issues.push('у каждой услуги нужны даты начала и окончания');
   if (quickLines.some(line => projectQuickDateValue(line.startDate) > projectQuickDateValue(line.endDate))) issues.push('окончание услуги не может быть раньше начала');
@@ -21227,6 +21227,10 @@ function projectEstimateReadiness(o) {
 
 function projectQuickLines(o) {
   return (o?.extraServices || []).filter(line => line.quickProjectLine === true);
+}
+
+function projectQuickManualFilmName(line) {
+  return String(line?.manualFilmName || '').trim();
 }
 
 function projectQuickDateValue(value) {
@@ -21336,6 +21340,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     line.serviceType = service.id;
     const catalog = projectQuickLineCatalog(service.id)[0] || null;
     line.catalogId = catalog?.id || '';
+    line.manualFilmName = '';
     line.label = catalog ? catalogLabel(catalog) : service.title;
     if (Number(line.price) <= 0) line.unitPrice = Number(catalog?.retailPerSqft || 0);
   } else if (field === 'catalogId') {
@@ -21344,8 +21349,18 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     if (catalog && (catalog.archived || catalog.category !== requiredCategory || warehouseCatalogStockStats(catalog.id).availableSqft <= 0)) return;
     line.catalogId = catalog?.id || '';
     if (catalog) {
+      line.manualFilmName = '';
       line.label = catalogLabel(catalog);
       if (Number(line.price) <= 0) line.unitPrice = Number(catalog.retailPerSqft || 0);
+    }
+  } else if (field === 'manualFilmName') {
+    const manualName = String(value || '').trim();
+    line.manualFilmName = manualName;
+    if (manualName) {
+      line.catalogId = '';
+      line.label = manualName;
+    } else if (!line.catalogId) {
+      line.label = primaryServiceInfo(line.serviceType)?.title || 'Позиция';
     }
   } else if (['qty','unitPrice','price'].includes(field)) {
     line[field] = Math.max(0, Number(value) || 0);
@@ -21653,6 +21668,9 @@ function projectQuickCompletionIssues(o) {
   if (projectQuickLines(o).some(line => line.catalogId && warehouseCatalogCostPerSqft(line.catalogId) <= 0)) {
     issues.push('у выбранной плёнки нет закупочной стоимости');
   }
+  if (projectQuickLines(o).some(line => !line.catalogId && projectQuickManualFilmName(line))) {
+    issues.push('ручную плёнку нужно привязать к складу перед закрытием');
+  }
   return [...new Set(issues)];
 }
 
@@ -21726,7 +21744,7 @@ function renderQuickProjectEntry(o) {
     const selectedStock = line.catalogId ? warehouseCatalogStockStats(line.catalogId) : null;
     return `<tr>
       <td data-label="Услуга"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select></td>
-      <td data-label="Плёнка со склада"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500 mt-1">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}<button class="btn-ghost text-xs mt-1" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Новая плёнка</button></td>
+      <td data-label="Плёнка"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select><div class="mt-1"><input aria-label="Ручное название плёнки" placeholder="Нет в списке — впишите вручную" value="${academyEsc(projectQuickManualFilmName(line))}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','manualFilmName',this.value)"></div>${projectQuickManualFilmName(line) ? '<div class="text-xs text-amber-700 mt-1">Ручной ввод · не привязано к складу</div>' : ''}${selectedStock ? `<div class="text-xs text-gray-500 mt-1">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs mt-1" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Новая плёнка на склад</button>` : ''}</td>
       <td data-label="Количество, sqft"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
       <td data-label="Цена проекта"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','price',this.value)"></td>
       <td data-label="Цена / sqft" class="money"><b>${Number(line.qty) > 0 ? fmtMoney(line.unitPrice) : '—'}</b></td>
