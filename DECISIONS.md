@@ -323,7 +323,8 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Websites, Cloudflare Workers, bots, and future external services must integrate through a versioned server-to-server API under `/api/external/v1`; they must not write directly to PostgreSQL, reuse employee session cookies, or create a parallel CRM store.
 - External API authentication uses a long random Bearer secret held only in protected server environment configuration. Real keys are never committed to Git or exposed through `NEXT_PUBLIC_*`.
 - Lead ingestion uses the canonical PostgreSQL Lead, pipeline, notification, and activity-log paths. `source + external_id` is the retry/idempotency identity so a provider retry cannot silently create duplicate leads.
-- The existing Facebook Messenger HMAC integration remains valid for its booking-specific contract. The external API is the stable general boundary for other services and can be extended with additional versioned resources without exposing internal CRM implementation.
+- Consultation availability reads the configured CRM consultant calendar, and external booking writes the canonical `CalendarEvent -> Consultation -> Survey` chain before firing the normal consultation pipeline/event logic. External services do not own a second calendar or booking store.
+- The existing Facebook Messenger HMAC integration remains valid for its provider-specific contract. The external API is the stable general boundary for websites, bots, Cloudflare Workers, and future services without exposing internal CRM implementation.
 - Implemented for review on `codex/external-api-v1`; production configuration and deployment remain separate release actions.
 
 ## Changing a decision
