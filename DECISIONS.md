@@ -318,6 +318,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Historical closure never sends automatic client messages. It is an owner-only accounting import action and is marked in the Project audit trail.
 - Implemented in PR #174. Production deployment remains separate until explicitly authorized.
 
+## 2026-09-22 — External integrations use one protected CRM API boundary
+
+- Websites, Cloudflare Workers, bots, and future external services must integrate through a versioned server-to-server API under `/api/external/v1`; they must not write directly to PostgreSQL, reuse employee session cookies, or create a parallel CRM store.
+- External API authentication uses a long random Bearer secret held only in protected server environment configuration. Real keys are never committed to Git or exposed through `NEXT_PUBLIC_*`.
+- Lead ingestion uses the canonical PostgreSQL Lead, pipeline, notification, and activity-log paths. `source + external_id` is the retry/idempotency identity so a provider retry cannot silently create duplicate leads.
+- The existing Facebook Messenger HMAC integration remains valid for its booking-specific contract. The external API is the stable general boundary for other services and can be extended with additional versioned resources without exposing internal CRM implementation.
+- Implemented for review on `codex/external-api-v1`; production configuration and deployment remain separate release actions.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
