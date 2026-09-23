@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Connect the live Facebook Messenger Cloudflare Worker to canonical CRM lead, slot, and booking endpoints | `codex/facebook-messenger-worker` | Codex | In progress; based on merged PR #189 | Preserve the live Worker behavior, add signed CRM calls and tests, configure protected production secrets, deploy, and run a controlled no-customer smoke test |
 | Implement issue #164: canonical multi-service Project / Solar measurement constructor | `codex/issue-164-project-constructor` / #169 | Codex | PR open; local verification green; no production deployment performed | Review #169 and its CI, merge only after approval, then run the normal migration/release workflow separately |
 | Remove the duplicate field-role CRM shell and open every employee inside the real `/legacy-crm` workspace | `codex/remove-duplicate-field-shell` / `f70355f` | Codex | Merged and deployed | Refresh/sign in through the public `/legacy-crm`; perform a controlled surveyor/installer account check of assigned records and `Рабочий день` without changing live customer data |
 | Remove standalone voice-input button from every CRM interface | `codex/remove-voice-button` / #112 | Codex | Merged and deployed | Refresh any already-open CRM tab once; voice will return only inside the future agent |
