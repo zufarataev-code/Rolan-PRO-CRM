@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -71,4 +72,14 @@ test("Worker maps the qualified conversation to the canonical CRM payload", () =
     address: undefined,
     message: "Conference-room privacy\nApproximate windows: 6",
   });
+});
+
+
+test("Worker only promises SMS when CRM reports it", () => {
+  const source = readFileSync("integrations/facebook-messenger-worker/src/index.ts", "utf8");
+  assert.match(source, /smsStatus === "sent" \|\| smsStatus === "already_sent"/);
+  assert.match(source, /Подтверждение отправлено SMS/);
+  assert.match(source, /SMS сейчас не отправилось/);
+  assert.match(source, /event: "crm_booking_confirmed"/);
+  assert.match(source, /consultationId: booking\.consultation_id/);
 });

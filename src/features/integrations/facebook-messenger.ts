@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { onConsultationScheduled } from "@/features/core/events";
+import { sendSms } from "@/features/twilio/service";
 import { prisma } from "@/lib/db";
 
 import {
@@ -13,6 +14,7 @@ import {
   facebookMessengerContactLockKeys,
   facebookMessengerEventKey,
   facebookMessengerPayloadHash,
+  formatFacebookMessengerBookingSms,
   INACTIVE_CALENDAR_STATUSES,
   parseFacebookMessengerBookingPayload,
   parseFacebookMessengerLeadPayload,
@@ -46,7 +48,14 @@ export type FacebookMessengerLeadResult = {
   idempotent_replay: boolean;
 };
 
-export type FacebookMessengerBookingResult = {
+export type FacebookMessengerBookingSmsResult = {
+  status: "sent" | "already_sent" | "failed";
+  sid?: string;
+  to?: string;
+  error?: string;
+};
+
+type FacebookMessengerBookingCoreResult = {
   lead_id: string;
   consultation_id: string;
   calendar_event_id: string | null;
@@ -57,6 +66,120 @@ export type FacebookMessengerBookingResult = {
   reused_booking: boolean;
   idempotent_replay: boolean;
 };
+
+export type FacebookMessengerBookingResult = FacebookMessengerBookingCoreResult & {
+  sms_confirmation: FacebookMessengerBookingSmsResult;
+};
+
+const FACEBOOK_MESSENGER_BOOKING_SMS_ACTION = "integration.facebook_messenger.booking_sms";
+
+async function ensureFacebookMessengerBookingSms(input: {
+  booking: FacebookMessengerBookingCoreResult;
+  phone: string;
+  actorUserId: string;
+  managerUserId: string;
+}) {
+  return prisma.$transaction(async (tx: FacebookMessengerDbClient) => {
+    await acquireFacebookMessengerLock(
+      tx,
+      "rolanpro-facebook-booking-sms",
+      input.booking.consultation_id,
+    );
+
+    const existing = await tx.activityLog.findFirst({
+      where: {
+        entity_type: "consultation",
+        entity_id: input.booking.consultation_id,
+        action_key: FACEBOOK_MESSENGER_BOOKING_SMS_ACTION,
+      },
+      orderBy: { created_at: "desc" },
+      select: { metadata: true },
+    });
+
+    if (existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)) {
+      const metadata = existing.metadata as Record<string, unknown>;
+      if (metadata.status === "sent" && typeof metadata.twilio_sid === "string") {
+        return {
+          status: "already_sent" as const,
+          sid: metadata.twilio_sid,
+          to: typeof metadata.to === "string" ? metadata.to : undefined,
+        };
+      }
+    }
+
+    try {
+      const sms = await sendSms({
+        to: input.phone,
+        body: formatFacebookMessengerBookingSms(input.booking.scheduled_start_at),
+        actorUserId: input.actorUserId,
+        rawPayload: {
+          source: FACEBOOK_MESSENGER_PROVIDER,
+          kind: "booking_confirmation",
+          consultation_id: input.booking.consultation_id,
+          lead_id: input.booking.lead_id,
+        },
+      });
+
+      await tx.activityLog.create({
+        data: {
+          actor_user_id: input.actorUserId,
+          entity_type: "consultation",
+          entity_id: input.booking.consultation_id,
+          action_key: FACEBOOK_MESSENGER_BOOKING_SMS_ACTION,
+          message: "Facebook Messenger booking confirmation SMS sent.",
+          metadata: {
+            status: "sent",
+            twilio_sid: sms.sid,
+            twilio_status: sms.status,
+            to: sms.to,
+          },
+        },
+      });
+
+      return { status: "sent" as const, sid: sms.sid, to: sms.to };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Twilio SMS failed.";
+
+      await tx.activityLog.create({
+        data: {
+          actor_user_id: input.actorUserId,
+          entity_type: "consultation",
+          entity_id: input.booking.consultation_id,
+          action_key: FACEBOOK_MESSENGER_BOOKING_SMS_ACTION,
+          message: "Facebook Messenger booking confirmation SMS failed.",
+          metadata: { status: "failed", error: message },
+        },
+      });
+
+      const priorNotification = await tx.notification.findFirst({
+        where: {
+          recipient_user_id: input.managerUserId,
+          entity_type: "consultation",
+          entity_id: input.booking.consultation_id,
+          type_key: "facebook_messenger.sms_failed",
+          is_read: false,
+        },
+        select: { notification_id: true },
+      });
+
+      if (!priorNotification) {
+        await tx.notification.create({
+          data: {
+            recipient_user_id: input.managerUserId,
+            actor_user_id: input.actorUserId,
+            entity_type: "consultation",
+            entity_id: input.booking.consultation_id,
+            type_key: "facebook_messenger.sms_failed",
+            title: "SMS клиенту не отправлено",
+            message: `Запись из Facebook сохранена, но подтверждение SMS не отправилось: ${message}`,
+          },
+        });
+      }
+
+      return { status: "failed" as const, error: message };
+    }
+  });
+}
 
 export async function captureFacebookMessengerLead(
   value: unknown,
@@ -164,7 +287,7 @@ export async function bookFacebookMessengerConsultation(
   const startsAt = new Date(payload.scheduled_start_at);
   const endsAt = new Date(payload.scheduled_end_at);
 
-  return prisma.$transaction(async (tx: FacebookMessengerDbClient) => {
+  const booking = await prisma.$transaction(async (tx: FacebookMessengerDbClient) => {
     await acquireFacebookMessengerLock(tx, "rolanpro-facebook-event", eventKey);
     const receipt = await findFacebookMessengerReceipt(
       tx,
@@ -179,7 +302,7 @@ export async function bookFacebookMessengerConsultation(
           "This external_event_id was already used with a different payload.",
         );
       }
-      const result = facebookMessengerReceiptResult<FacebookMessengerBookingResult>(receipt);
+      const result = facebookMessengerReceiptResult<FacebookMessengerBookingCoreResult>(receipt);
       if (result) return { ...result, idempotent_replay: true };
     }
 
@@ -225,7 +348,7 @@ export async function bookFacebookMessengerConsultation(
     });
 
     if (existingBooking) {
-      const result: FacebookMessengerBookingResult = {
+      const result: FacebookMessengerBookingCoreResult = {
         lead_id: lead.lead_id,
         consultation_id: existingBooking.consultation_id,
         calendar_event_id: existingBooking.calendar_event_id,
@@ -334,7 +457,21 @@ export async function bookFacebookMessengerConsultation(
       scheduledStartAt: startsAt,
     });
 
-    const result: FacebookMessengerBookingResult = {
+    if (manager.user_id !== consultant.user_id) {
+      await tx.notification.create({
+        data: {
+          recipient_user_id: manager.user_id,
+          actor_user_id: actor.user_id,
+          entity_type: "consultation",
+          entity_id: consultation.consultation_id,
+          type_key: "facebook_messenger.booking",
+          title: "Новая запись из Facebook",
+          message: `${payload.name} записан на консультацию ${startsAt.toLocaleString("ru-RU")}.`,
+        },
+      });
+    }
+
+    const result: FacebookMessengerBookingCoreResult = {
       lead_id: lead.lead_id,
       consultation_id: consultation.consultation_id,
       calendar_event_id: event.calendar_event_id,
@@ -360,4 +497,19 @@ export async function bookFacebookMessengerConsultation(
     });
     return result;
   });
+
+  const { actor, manager } = await prisma.$transaction(
+    async (tx: FacebookMessengerDbClient) => resolveFacebookMessengerActorAndManager(tx),
+  );
+  const smsConfirmation = await ensureFacebookMessengerBookingSms({
+    booking,
+    phone: payload.phone,
+    actorUserId: actor.user_id,
+    managerUserId: manager.user_id,
+  });
+
+  return {
+    ...booking,
+    sms_confirmation: smsConfirmation,
+  };
 }

@@ -65,6 +65,17 @@ type AssistantOutput = {
   lead?: LeadData;
 };
 
+type CrmBookingResult = {
+  lead_id: string;
+  consultation_id: string;
+  sms_confirmation?: {
+    status: "sent" | "already_sent" | "failed";
+    sid?: string;
+    to?: string;
+    error?: string;
+  };
+};
+
 const FALLBACK_PROMPT = `You are Danil, the AI assistant for Rolan PRO, a window-film company in Southern California. Reply briefly in the customer's language and ask one question at a time. Your goal is to qualify the customer for a free on-site consultation. Never give a final price or promise an installation date. Escalate complaints, existing-order questions, technical uncertainty, and requests for a person.`;
 
 const CRM_BOOKING_PROMPT = `
@@ -183,12 +194,22 @@ function slotPrompt(language?: string) {
   return "Here are the next available consultation times. Choose one:";
 }
 
-function bookedPrompt(slot: CrmSlot, language?: string) {
+function bookedPrompt(slot: CrmSlot, language?: string, smsSent = false) {
   const time = formatSlot(slot, language);
   const normalized = normalizeLanguage(language);
-  if (normalized === "ru") return `Готово — бесплатный замер записан на ${time}. Мы свяжемся с вами по указанному телефону.`;
-  if (normalized === "es") return `Listo: la visita gratuita está reservada para ${time}. Nos comunicaremos con usted por el teléfono indicado.`;
-  return `You're booked for a free consultation on ${time}. We'll contact you at the phone number you provided.`;
+  if (normalized === "ru") {
+    return smsSent
+      ? `Готово — бесплатный замер записан на ${time}. Подтверждение отправлено SMS на указанный номер.`
+      : `Готово — бесплатный замер записан на ${time}. SMS сейчас не отправилось, поэтому сохраните это подтверждение в Messenger.`;
+  }
+  if (normalized === "es") {
+    return smsSent
+      ? `Listo: la visita gratuita está reservada para ${time}. Enviamos la confirmación por SMS al número indicado.`
+      : `Listo: la visita gratuita está reservada para ${time}. El SMS no pudo enviarse ahora; conserve esta confirmación en Messenger.`;
+  }
+  return smsSent
+    ? `You're booked for a free consultation on ${time}. We sent an SMS confirmation to the phone number you provided.`
+    : `You're booked for a free consultation on ${time}. The SMS could not be sent right now, so please keep this Messenger confirmation.`;
 }
 
 function noSlotsPrompt(language?: string) {
@@ -248,20 +269,32 @@ async function bookSelectedSlot(
   }
 
   try {
-    await postToCrm(env, "/api/integrations/facebook-messenger/bookings", {
-      ...crmLeadPayload(
-        state.lead,
-        `${event.eventId}:booking`,
-        event.senderId,
-        env.PAGE_ID,
-      ),
-      scheduled_start_at: slot.start_at,
-      scheduled_end_at: slot.end_at,
-    });
+    const booking = await postToCrm<CrmBookingResult>(
+      env,
+      "/api/integrations/facebook-messenger/bookings",
+      {
+        ...crmLeadPayload(
+          state.lead,
+          `${event.eventId}:booking`,
+          event.senderId,
+          env.PAGE_ID,
+        ),
+        scheduled_start_at: slot.start_at,
+        scheduled_end_at: slot.end_at,
+      },
+    );
+    const smsStatus = booking.sms_confirmation?.status;
+    const smsSent = smsStatus === "sent" || smsStatus === "already_sent";
     state.stage = "booked";
     state.offeredSlots = [];
     await persistState(env, key, state);
-    await sendMessage(env, event, bookedPrompt(slot, state.lead.language));
+    console.log(JSON.stringify({
+      event: "crm_booking_confirmed",
+      leadId: booking.lead_id,
+      consultationId: booking.consultation_id,
+      smsStatus: smsStatus || "unknown",
+    }));
+    await sendMessage(env, event, bookedPrompt(slot, state.lead.language, smsSent));
   } catch (error) {
     if (error instanceof CrmRequestError && error.code === "slot_unavailable") {
       await offerSlots(env, event, key, state);

@@ -430,6 +430,18 @@ Contributors must add a row before starting substantial work and update or remov
 - A manual film is emitted to Proposal output as a film item, but historical completion is blocked until the line is mapped to a real catalog/Warehouse film so material cost cannot silently remain unknown.
 - Verification and release: PR #196 merged to `main` as `d6643933c6f7503c865c0c72ef57882fc42df338`; PR CI #423 and main CI #424 both passed tests, TypeScript, and production build. Production deploy #405 completed successfully. The production watcher applies `prisma migrate deploy` before activating a release and writes the active release only after migration, seed, build, and health checks succeed; therefore the one-time Project reset migration completed before `d6643933` became active.
 
+## 2026-09-23 handoff — Messenger booking SMS + booking visibility
+
+- Owner reported two production symptoms: the bot implied phone follow-up but no SMS arrived, and the booked appointment was not obvious in CRM.
+- Root cause confirmed in code: Facebook booking already created the canonical `Lead -> CalendarEvent -> Consultation -> Survey` chain, but `onConsultationScheduled` only created an internal consultant notification; no Twilio send was called.
+- Branch: `fix/messenger-booking-sms`.
+- Fix: after the booking transaction commits, CRM sends the confirmation through the existing Twilio `sendSms` service, records source/kind/consultation metadata on the Twilio message, and writes a dedicated `integration.facebook_messenger.booking_sms` activity receipt.
+- Repeated Meta webhook delivery is protected by a PostgreSQL advisory lock plus the successful SMS receipt, so a confirmed SMS is not sent twice. A failed SMS does not roll back the already-created booking; CRM records the error and creates an unread manager notification.
+- New Facebook bookings also create a manager-facing CRM notification `Новая запись из Facebook`. The appointment itself remains a Consultation/Calendar event, visible under `Клиенты -> Замеры` and `Расписание`, not as a Project.
+- Worker response now reads `sms_confirmation.status` from CRM. It says SMS was sent only for `sent` / `already_sent`; otherwise it tells the customer to keep the Messenger confirmation.
+- Worker logs `crm_booking_confirmed` with lead ID, consultation ID, and SMS status for production diagnosis.
+- Verification pending CI, merge/deploy of CRM, and a controlled real Messenger booking smoke test. Worker source deployment remains a separate Cloudflare release action.
+
 ## Completion rule
 
 ### 2026-09-15 correction — one Projects workspace
