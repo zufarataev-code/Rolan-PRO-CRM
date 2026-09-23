@@ -11,6 +11,31 @@ import {
   parseFacebookMessengerLeadPayload,
   verifyFacebookMessengerSignature,
 } from "./facebook-messenger-core";
+import { acquireFacebookMessengerLock } from "./facebook-messenger-db";
+
+test("Facebook Messenger advisory locks execute without deserializing PostgreSQL void", async () => {
+  let executed = false;
+  const tx = {
+    $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      executed = true;
+      assert.deepEqual(Array.from(strings), [
+        "SELECT pg_advisory_xact_lock(hashtext(",
+        "), hashtext(",
+        "))",
+      ]);
+      assert.deepEqual(values, ["facebook-messenger-lead", "page:contact"]);
+      return 1;
+    },
+  };
+
+  await acquireFacebookMessengerLock(
+    tx as Parameters<typeof acquireFacebookMessengerLock>[0],
+    "facebook-messenger-lead",
+    "page:contact",
+  );
+
+  assert.equal(executed, true);
+});
 
 test("Facebook Messenger HMAC accepts a current authentic request", () => {
   const secret = "a-very-long-test-secret-that-is-over-32-characters";
