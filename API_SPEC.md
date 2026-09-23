@@ -49,6 +49,31 @@ Idempotency:
 
 The endpoint writes through the canonical CRM lead/pipeline/event logic. It does not create another CRM store.
 
+
+### `POST /api/external/v1/slots`
+
+Returns available time slots from the configured CRM consultant/surveyor calendar.
+
+Payload:
+
+- `windows[]` with ISO `start_at` / `end_at`
+- optional `duration_minutes` (default 60)
+- optional `step_minutes` (default 30)
+- optional `limit` (default 12)
+
+### `POST /api/external/v1/bookings`
+
+Creates or reuses the lead and books the configured CRM consultant/surveyor.
+
+Uses the same lead fields plus:
+
+- `scheduled_start_at`
+- `scheduled_end_at`
+- optional `title`
+
+The booking creates the canonical CRM `CalendarEvent -> Consultation -> Survey` chain and triggers the normal consultation pipeline/event logic. A concurrent calendar conflict returns HTTP 409.
+
+
 ## Conventions
 
 - Base path: `/api/v1`
