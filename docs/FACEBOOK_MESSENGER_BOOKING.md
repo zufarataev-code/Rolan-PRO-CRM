@@ -158,7 +158,26 @@ Lead
   -> draft Survey
   -> pipeline status CONSULTATION_SCHEDULED
   -> consultant notification
+  -> manager notification for Facebook booking
 ```
+
+### SMS confirmation after booking
+
+After the PostgreSQL booking transaction commits, CRM sends a transactional confirmation SMS through the existing Twilio integration. The booking remains valid even if Twilio is temporarily unavailable.
+
+The booking response includes:
+
+```json
+{
+  "sms_confirmation": {
+    "status": "sent",
+    "sid": "SM...",
+    "to": "+18185551212"
+  }
+}
+```
+
+Possible statuses are `sent`, `already_sent`, and `failed`. A PostgreSQL advisory lock and activity-log receipt prevent duplicate SMS confirmations on repeated Messenger webhook delivery. If SMS fails, CRM records the failure and creates an unread manager notification; the Worker must not tell the customer that SMS was sent.
 
 ## Cloudflare Worker request helper
 
