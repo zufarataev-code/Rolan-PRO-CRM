@@ -238,6 +238,14 @@ export async function postToRolanproCrm(
 8. Retry the same Messenger event and confirm no duplicate records are created.
 9. Attempt the same slot concurrently and confirm only one booking succeeds.
 
-## Current rollout blocker
+## Production Worker
 
-The active Cloudflare Messenger Worker source is not present in the connected writable GitHub repositories. The CRM contract is ready for that Worker, but changing the live Messenger bot requires either its current source repository or Cloudflare Worker access.
+The source of the active Cloudflare Worker `rolanpro-bot` is now tracked in
+`integrations/facebook-messenger-worker`. It keeps disposable conversation state in the existing
+Cloudflare KV namespace and sends every lead, availability lookup, and confirmed booking through
+the signed CRM endpoints above. PostgreSQL remains the only system of record for leads and
+consultations.
+
+Deployment requires authenticated Cloudflare access plus the protected
+`ROLANPRO_CRM_SHARED_SECRET` Worker binding. Its value must match the protected CRM server variable
+`FACEBOOK_MESSENGER_SHARED_SECRET`; neither value belongs in Git.
