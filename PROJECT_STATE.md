@@ -428,7 +428,7 @@ Contributors must add a row before starting substantial work and update or remov
 - Project reset migration: `20260923182500_reset_project_data_only`. It deletes relational Projects and dependent execution rows, clears legacy `payload.orders`, removes only installer work sessions tied to deleted Project jobs, and preserves leads, clients, deals, proposals, consultations, users, catalog, services/pricing, Warehouse and independent employee shifts.
 - Quick Project Entry now accepts `manualFilmName`. This lets owner/manager save and quote the film name without creating fake Warehouse stock. New Warehouse film creation remains owner-only.
 - A manual film is emitted to Proposal output as a film item, but historical completion is blocked until the line is mapped to a real catalog/Warehouse film so material cost cannot silently remain unknown.
-- Verification pending GitHub CI before merge. Merging to `main` is destructive for current Project/order records because production deploy runs Prisma migrations automatically.
+- Verification and release: PR #196 merged to `main` as `d6643933c6f7503c865c0c72ef57882fc42df338`; PR CI #423 and main CI #424 both passed tests, TypeScript, and production build. Production deploy #405 completed successfully. The production watcher applies `prisma migrate deploy` before activating a release and writes the active release only after migration, seed, build, and health checks succeed; therefore the one-time Project reset migration completed before `d6643933` became active.
 
 ## Completion rule
 
