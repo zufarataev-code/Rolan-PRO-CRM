@@ -427,7 +427,7 @@ Contributors must add a row before starting substantial work and update or remov
 - Authentication is one Bearer secret from `ROLANPRO_EXTERNAL_API_KEY`; the real key is not committed to Git. Actor, default manager, and bookable consultant are configured by protected server environment variables.
 - Lead retries are idempotent by `source + external_id`; open leads are reused by external contact identity, email, or normalized phone. Booking uses the same retry protection, checks the live consultant calendar, and writes the canonical `CalendarEvent -> Consultation -> Survey` chain.
 - No schema migration, no second CRM store, and no production customer communication is introduced.
-- Verification: GitHub CI for the final head is required before merge. Production activation still requires protected environment configuration, merge to `main`, automatic deployment, and one controlled health/lead/slot/booking smoke test.
+- Verification: GitHub CI run #412 passed tests, TypeScript, and the production build for code head `f093e05e5f99ec29dced2d33767435962fe92dd4`. Production activation still requires protected environment configuration, merge to `main`, automatic deployment, and one controlled health/lead/slot/booking smoke test.
 
 ## Completion rule
 
