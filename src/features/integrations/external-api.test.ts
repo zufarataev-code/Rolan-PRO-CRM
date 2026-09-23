@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildAvailableSlots,
   ExternalApiError,
+  parseExternalBookingPayload,
   parseExternalLeadPayload,
+  parseExternalSlotPayload,
   verifyExternalApiBearerToken,
 } from "./external-api-core";
 
@@ -46,4 +49,57 @@ test("external lead payload rejects invalid source", () => {
       error.status === 400 &&
       error.code === "invalid_payload",
   );
+});
+
+test("external booking payload requires an increasing time range", () => {
+  assert.throws(
+    () =>
+      parseExternalBookingPayload({
+        source: "facebook_worker",
+        external_id: "booking-1",
+        name: "Jane Doe",
+        phone: "8055551212",
+        scheduled_start_at: "2026-10-01T18:00:00.000Z",
+        scheduled_end_at: "2026-10-01T17:00:00.000Z",
+      }),
+    (error) =>
+      error instanceof ExternalApiError &&
+      error.status === 400 &&
+      error.code === "invalid_payload",
+  );
+});
+
+test("external slot parser and availability remove busy ranges", () => {
+  const input = parseExternalSlotPayload({
+    windows: [
+      {
+        start_at: "2026-10-01T16:00:00.000Z",
+        end_at: "2026-10-01T19:00:00.000Z",
+      },
+    ],
+    duration_minutes: 60,
+    step_minutes: 60,
+    limit: 10,
+  });
+
+  const slots = buildAvailableSlots({
+    ...input,
+    busyRanges: [
+      {
+        startAt: new Date("2026-10-01T17:00:00.000Z"),
+        endAt: new Date("2026-10-01T18:00:00.000Z"),
+      },
+    ],
+  });
+
+  assert.deepEqual(slots, [
+    {
+      start_at: "2026-10-01T16:00:00.000Z",
+      end_at: "2026-10-01T17:00:00.000Z",
+    },
+    {
+      start_at: "2026-10-01T18:00:00.000Z",
+      end_at: "2026-10-01T19:00:00.000Z",
+    },
+  ]);
 });
