@@ -1,5 +1,54 @@
 # ROLANPRO API Specification
 
+## External API v1
+
+Purpose:
+
+- Provide one stable server-to-server entry point for websites, bots, Cloudflare Workers, and future services.
+- Keep external systems away from direct PostgreSQL access and away from employee session cookies.
+- All real keys live only in protected server environments; they are never committed to Git or exposed to the browser.
+
+Base path: `/api/external/v1`
+
+Authentication:
+
+```http
+Authorization: Bearer <ROLANPRO_EXTERNAL_API_KEY>
+```
+
+### `GET /api/external/v1/health`
+
+Verifies that the caller's API key is accepted.
+
+### `POST /api/external/v1/leads`
+
+Creates or reuses an open CRM lead.
+
+Required JSON fields:
+
+- `source` — stable integration code such as `facebook_worker` or `website`
+- `external_id` — unique event/request ID from that source; retries must reuse the same value
+- `name`
+- `phone`
+
+Optional fields:
+
+- `external_contact_id`
+- `email`
+- `service_type`
+- `property_type`
+- `city`
+- `address`
+- `message`
+
+Idempotency:
+
+- `source + external_id` is the idempotency key.
+- Repeating the same payload returns the previous result with `idempotent_replay: true`.
+- Reusing the same key with a different payload returns HTTP 409.
+
+The endpoint writes through the canonical CRM lead/pipeline/event logic. It does not create another CRM store.
+
 ## Conventions
 
 - Base path: `/api/v1`
