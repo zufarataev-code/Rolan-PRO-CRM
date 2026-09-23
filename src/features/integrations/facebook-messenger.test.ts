@@ -6,6 +6,7 @@ import {
   createFacebookMessengerSignature,
   facebookMessengerContactLockKeys,
   facebookMessengerPayloadHash,
+  formatFacebookMessengerBookingSms,
   normalizeContactPhone,
   parseFacebookMessengerBookingPayload,
   parseFacebookMessengerLeadPayload,
@@ -174,4 +175,13 @@ test("available slot builder excludes overlaps but allows touching boundaries", 
       "2026-09-24T19:00:00.000Z",
     ],
   );
+});
+
+
+test("booking SMS uses Los Angeles time and clear confirmation copy", () => {
+  const text = formatFacebookMessengerBookingSms("2026-09-24T19:00:00.000Z");
+  assert.match(text, /ROLANPRO:/);
+  assert.match(text, /Sep 24/);
+  assert.match(text, /12:00 PM/);
+  assert.match(text, /confirmed/i);
 });
