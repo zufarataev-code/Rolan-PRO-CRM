@@ -419,6 +419,16 @@ Contributors must add a row before starting substantial work and update or remov
 - The visible navigation is now consolidated as one `Проекты` workspace, but legacy `db.orders` and relational `Project` are still separate and unsynchronized behind that interface. Finishing the consolidation still requires a tested stable-ID/data migration and one PostgreSQL write path.
 - PR #172 must not be treated as the final entity-consolidation release. It may supply the Project fields and permissions, but the duplicate launch/list workflow remains migration work. No production deployment is authorized.
 
+## 2026-09-22 handoff — protected External API v1
+
+- Owner request: create one external CRM API so Facebook/Cloudflare, the website, and future services can connect without direct PostgreSQL access.
+- Branch / PR: `codex/external-api-v1` / #191.
+- Added protected server-to-server endpoints: `GET /api/external/v1/health`, `POST /api/external/v1/leads`, `POST /api/external/v1/slots`, and `POST /api/external/v1/bookings`.
+- Authentication is one Bearer secret from `ROLANPRO_EXTERNAL_API_KEY`; the real key is not committed to Git. Actor, default manager, and bookable consultant are configured by protected server environment variables.
+- Lead retries are idempotent by `source + external_id`; open leads are reused by external contact identity, email, or normalized phone. Booking uses the same retry protection, checks the live consultant calendar, and writes the canonical `CalendarEvent -> Consultation -> Survey` chain.
+- No schema migration, no second CRM store, and no production customer communication is introduced.
+- Verification: GitHub CI for the final head is required before merge. Production activation still requires protected environment configuration, merge to `main`, automatic deployment, and one controlled health/lead/slot/booking smoke test.
+
 ## Completion rule
 
 ### 2026-09-15 correction — one Projects workspace
