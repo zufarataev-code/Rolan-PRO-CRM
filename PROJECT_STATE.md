@@ -421,6 +421,15 @@ Contributors must add a row before starting substantial work and update or remov
 - The visible navigation is now consolidated as one `Проекты` workspace, but legacy `db.orders` and relational `Project` are still separate and unsynchronized behind that interface. Finishing the consolidation still requires a tested stable-ID/data migration and one PostgreSQL write path.
 - PR #172 must not be treated as the final entity-consolidation release. It may supply the Project fields and permissions, but the duplicate launch/list workflow remains migration work. No production deployment is authorized.
 
+## 2026-09-23 handoff — reset Project data and allow manager manual film
+
+- Owner request: empty all CRM Project/order data and let a manager type a film manually when it is missing from the selectable Warehouse list.
+- Branch: `codex/reset-projects-manual-film`.
+- Project reset migration: `20260923182500_reset_project_data_only`. It deletes relational Projects and dependent execution rows, clears legacy `payload.orders`, removes only installer work sessions tied to deleted Project jobs, and preserves leads, clients, deals, proposals, consultations, users, catalog, services/pricing, Warehouse and independent employee shifts.
+- Quick Project Entry now accepts `manualFilmName`. This lets owner/manager save and quote the film name without creating fake Warehouse stock. New Warehouse film creation remains owner-only.
+- A manual film is emitted to Proposal output as a film item, but historical completion is blocked until the line is mapped to a real catalog/Warehouse film so material cost cannot silently remain unknown.
+- Verification pending GitHub CI before merge. Merging to `main` is destructive for current Project/order records because production deploy runs Prisma migrations automatically.
+
 ## Completion rule
 
 ### 2026-09-15 correction — one Projects workspace

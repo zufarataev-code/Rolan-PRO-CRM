@@ -352,3 +352,23 @@ test("project estimate becomes stacked labeled rows on a phone", () => {
   assert.match(source, /Удалить расход/);
   assert.match(source, /\.project-estimate-footer > div:last-child \{[\s\S]*?grid-template-columns: 1fr/);
 });
+
+
+test("manager can type a missing film manually without creating warehouse stock", () => {
+  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(source, /function projectQuickManualFilmName\(line\)/);
+  assert.match(readiness, /!line\.catalogId && !projectQuickManualFilmName\(line\)/);
+  assert.match(updater, /field === 'manualFilmName'/);
+  assert.match(updater, /line\.catalogId = ''/);
+  assert.match(renderer, /Нет в списке — впишите вручную/);
+  assert.match(renderer, /Ручной ввод · не привязано к складу/);
+  assert.match(renderer, /currentUser\(\)\?\.role === 'owner'[\s\S]*\+ Новая плёнка на склад/);
+  assert.match(completionIssues, /ручную плёнку нужно привязать к складу перед закрытием/);
+  assert.match(source, /item_kind: line\.catalogId \|\| projectQuickManualFilmName\(line\) \? 'film' : 'service'/);
+});
