@@ -318,6 +318,24 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Historical closure never sends automatic client messages. It is an owner-only accounting import action and is marked in the Project audit trail.
 - Implemented in PR #174. Production deployment remains separate until explicitly authorized.
 
+## 2026-09-23 — Managers may use a manual film label before warehouse mapping
+
+- Quick Project Entry may accept a manager-entered film name when the required film is not yet available in the Warehouse-backed catalog.
+- A manual film label belongs only to that Project service line; it does not create a FilmCatalog item, a Warehouse roll, purchase cost, or inventory movement.
+- Selecting a real Warehouse film clears the manual label. A manually entered film is still published to the customer Proposal as a film line.
+- Final historical closure is blocked until a manual film is mapped to a real Warehouse/catalog item, so project profitability cannot silently treat unknown material cost as zero.
+- Creating a new film and Warehouse receipt from Quick Project Entry remains an owner action.
+- Implemented for review on `codex/reset-projects-manual-film`.
+
+## 2026-09-23 — One-time reset removes Projects but preserves sales and reference data
+
+- The owner authorized a one-time reset of Project data. The reset removes relational Projects and dependent execution records plus the legacy `orders` array.
+- Leads, clients, deals, proposals, consultations, users, catalog, services/pricing, and Warehouse/reference data are preserved.
+- Project-linked installer work sessions are removed; independent employee shifts remain.
+- Shared lead/deal calendar history and consultations are preserved with their Project link detached rather than deleted.
+- The migration is transactional and aborts if protected sales/reference row counts change or Project postconditions fail.
+- Implemented for review on `codex/reset-projects-manual-film`.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
