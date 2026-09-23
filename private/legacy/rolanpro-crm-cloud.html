@@ -28691,7 +28691,7 @@ function premiumCanonicalSnapshot(prop) {
       unit_label: line.unit || 'unit',
       line_price: premiumNum(line.price),
       description_en: servicePeriod ? `Service period: ${servicePeriod}` : null,
-      item_kind: line.catalogId ? 'film' : 'service',
+      item_kind: line.catalogId || projectQuickManualFilmName(line) ? 'film' : 'service',
     });
   });
   const regularLegacyServices = (order.extraServices || []).filter(line => !line.quickProjectLine).reduce((sum, line) => sum + premiumNum(line.price), 0);
