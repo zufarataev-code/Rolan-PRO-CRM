@@ -347,3 +347,22 @@ export function buildAvailableSlots(input: {
     .sort((left, right) => left.start_at.localeCompare(right.start_at))
     .slice(0, input.limit);
 }
+
+
+export function formatFacebookMessengerBookingSms(startsAt: string | Date) {
+  const date = startsAt instanceof Date ? startsAt : new Date(startsAt);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Booking start time is invalid.");
+  }
+
+  const when = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+
+  return `ROLANPRO: Your free consultation is confirmed for ${when}. Reply to this SMS if you need to reschedule.`;
+}
