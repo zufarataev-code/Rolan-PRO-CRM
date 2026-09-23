@@ -128,7 +128,7 @@ export async function acquireFacebookMessengerLock(
   namespace: string,
   key: string,
 ) {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${namespace}), hashtext(${key}))`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${namespace}), hashtext(${key}))`;
 }
 
 type ReceiptRow = { metadata: unknown };
