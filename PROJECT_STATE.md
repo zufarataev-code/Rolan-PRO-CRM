@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Make Messenger conversations follow the customer's language beyond RU/EN/ES | `fix/messenger-multilingual-20260924` | Codex | In progress; fixed Worker messages currently fall back to English outside RU/EN/ES | Persist BCP-47 language, translate Worker-owned booking/status messages, test multilingual behavior, review, merge, and deploy without changing bindings/secrets |
+| Make Messenger conversations follow the customer's language beyond RU/EN/ES | `fix/messenger-multilingual-20260924` / #206 | Codex | Merged and deployed; production Worker version `dd14f10f-8ebe-4cc4-b905-81b6f4752fbe` | Send controlled messages in two non-English languages and confirm the whole booking flow stays in each language |
 | Fix Messenger service recognition for Russian customer messages | `fix/messenger-russian-service-20260924` / #204 | Codex | Merged and deployed; production Worker version `bef48a14-24c6-4d84-95f9-c39e6f0e9103` | Repeat the reported Messenger phrase and finish one controlled booking; confirm the new lead and consultation in CRM |
 | Show canonical Messenger leads in active `/legacy-crm` New Leads inbox | `fix/messenger-new-leads-20260924` / #201 | Codex | Merged and deployed; live inbox shows the Zafar Messenger lead | Release the latest-booking selector and confirm the card opens the 10:00 Sherman Way consultation rather than the older 08:00 test booking |
 | Show canonical Messenger consultations inside the active `/legacy-crm` calendar | `fix/messenger-consultations-calendar-20260924` / #200 | Codex | Implemented and locally verified; 299 tests, TypeScript, production build, and diff check pass | Merge #200, let the normal production deployment finish, then refresh Calendar and confirm the live Zafar booking is visible at 10:00 |
@@ -476,6 +476,16 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #204 merged to `main` as `73fd7bef887f23292b1df017ec70e7e0e187b452`. Cloudflare Worker `rolanpro-bot` deployed as version `bef48a14-24c6-4d84-95f9-c39e6f0e9103`.
 - Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names were present before and after deployment; no secret value was printed or changed. The live endpoint returned the expected protected `403` response to an unsigned GET.
 - Next action: send `услуга солнцезащитная пленка` in the existing Messenger chat, answer the single next question, select a real CRM slot, and confirm the booking appears under `Новые лиды` and Calendar.
+
+## 2026-09-24 handoff — multilingual Messenger booking
+
+- The assistant now detects the latest customer's language, stores it as a BCP-47 language tag, replies naturally in that language, and changes languages when the customer does. The prompt explicitly prevents unnecessary transliteration.
+- Worker-owned messages no longer fall back permanently to English outside Russian, English, and Spanish. Slot offers, missing-field questions, booking/SMS confirmations, and failure messages are translated through the existing protected Anthropic integration; dates and times use the customer's locale.
+- Language normalization covers standard BCP-47 tags and common names for German, French, Portuguese, Italian, Ukrainian, Polish, Turkish, Arabic, Hebrew, Persian, Hindi, Chinese, Japanese, Korean, Vietnamese, Russian, Spanish, and English. Other valid BCP-47 languages pass through generically rather than requiring a hard-coded list.
+- Verification: all 304 tests passed, including German, French-Canadian, Arabic, and Chinese language normalization; TypeScript, production build, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #206 merged to `main` as `8da58b1389a32dfefc074587dea785eb3b589454`. Cloudflare Worker `rolanpro-bot` deployed as version `dd14f10f-8ebe-4cc4-b905-81b6f4752fbe`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: use an internal Messenger account to send one German and one Arabic message, complete the qualification questions, and confirm slot and booking confirmations stay in the selected language.
 
 ## Completion rule
 
