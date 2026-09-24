@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Finish protected CRM → Google Ads learning integration on current main | `feat/google-ads-crm-integration` / #140 | Codex | In progress; auditing and refreshing the existing draft instead of creating a duplicate implementation | Merge current `origin/main`, preserve current CRM workflows, run full verification, and keep live uploads disabled until Google account IDs and server credentials are configured |
 | Remove the duplicate field-role CRM shell and open every employee inside the real `/legacy-crm` workspace | `codex/remove-duplicate-field-shell` / `f70355f` | Codex | Merged and deployed | Refresh/sign in through the public `/legacy-crm`; perform a controlled surveyor/installer account check of assigned records and `Рабочий день` without changing live customer data |
 | Remove standalone voice-input button from every CRM interface | `codex/remove-voice-button` / #112 | Codex | Merged and deployed | Refresh any already-open CRM tab once; voice will return only inside the future agent |
 | Put surveyor and installer inside the single canonical CRM interface | `codex/one-crm-all-roles` / #110 | Codex | Merged and deployed | Surveyor and installer should refresh/sign in through the public CRM and use only the `/legacy-crm` role workspace |
