@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
 
+import { ensureQualifiedLeadConversion } from "@/features/google-ads/conversion-events";
+
 type DbClient = Prisma.TransactionClient;
 
 function addHours(date: Date, hours: number) {
@@ -430,7 +432,7 @@ export async function onConsultationScheduled(
     scheduledStartAt: Date;
   },
 ) {
-  await syncPipelineStage(tx, {
+  const pipelineStatusCode = await syncPipelineStage(tx, {
     actorUserId: input.actorUserId,
     leadId: input.leadId ?? null,
     dealId: input.dealId ?? null,
@@ -440,6 +442,32 @@ export async function onConsultationScheduled(
       consultation_id: input.consultationId,
     },
   });
+
+  if (pipelineStatusCode) {
+    const deal = input.dealId
+      ? await tx.deal.findUnique({
+          where: { deal_id: input.dealId },
+          select: {
+            deal_id: true,
+            lead_id: true,
+            client_id: true,
+            attribution_touchpoint_id: true,
+          },
+        })
+      : null;
+
+    if (deal?.deal_id || deal?.lead_id || deal?.client_id || input.leadId) {
+      await ensureQualifiedLeadConversion(tx, {
+        dealId: deal?.deal_id ?? null,
+        leadId: deal?.lead_id ?? input.leadId ?? null,
+        clientId: deal?.client_id ?? null,
+        attributionTouchpointId: deal?.attribution_touchpoint_id ?? null,
+        pipelineStatusCode,
+        occurredAt: new Date(),
+        eventSource: "OTHER",
+      });
+    }
+  }
 
   await ensureNotification(tx, {
     recipientUserId: input.consultantUserId ?? null,

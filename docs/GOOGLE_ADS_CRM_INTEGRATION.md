@@ -100,8 +100,16 @@ Shows safe configuration, credential presence booleans, outbox counts, problems,
 
 - `POST /api/v1/integrations/google-ads/conversions/reconcile`
 - `POST /api/v1/integrations/google-ads/conversions/process`
+- `POST /api/v1/integrations/google-ads/conversions/status`
 
-Reconciliation creates missing outbox rows for both configured `qualified_lead` and `converted_lead` events. Processing uses Google Data Manager and respects upload/validate gates.
+Reconciliation creates missing outbox rows for both configured `qualified_lead` and `converted_lead` events. Processing uses Google Data Manager and respects upload/validate gates. Live Data Manager acceptance is asynchronous: the status endpoint resolves each returned `requestId` to `confirmed` only after Google reports `SUCCESS`; `FAILED` and `PARTIAL_SUCCESS` require operator review.
+
+### Protected scheduler endpoint
+
+- `POST /api/integrations/google-ads/sync`
+- header: `Authorization: Bearer <GOOGLE_ADS_SYNC_SECRET>`
+
+This server-to-server endpoint reconciles conversion events, processes a bounded upload batch, and checks asynchronous Google request status. It is intended for a production scheduler and is unavailable until a random `GOOGLE_ADS_SYNC_SECRET` of at least 32 characters is stored in the server secret manager. It never returns customer names, emails, phone numbers, click IDs, or secret values.
 
 ### Financial corrections
 
@@ -152,7 +160,7 @@ Multi-currency results are reported separately; no implicit FX conversion is per
 
 ## Qualified Lead rule
 
-There is no hard-coded `QUALIFIED` stage in the current CRM pipeline. The owner must explicitly select `qualification_rules.pipeline_status_code` through the settings endpoint.
+There is no hard-coded `QUALIFIED` stage in the current CRM pipeline. The owner must explicitly select `qualification_rules.pipeline_status_code` through the settings endpoint. For Rolan PRO, the recommended setting is `CONSULTATION_SCHEDULED`, so a real booked consultation becomes the Qualified Lead signal even when the CRM has not created a Deal yet.
 
 Until that is configured, no Qualified Lead conversion is created.
 
@@ -171,7 +179,7 @@ Do not perform live activation until all items are complete.
 7. Set `upload_enabled=true` while keeping both DB and env validation flags true.
 8. Reconcile outboxes.
 9. Process a small controlled batch in validate-only mode for conversions, one correction test if available, and Customer Match if consented test data exists.
-10. Review `/status` and all request IDs/errors. Fix all operator-action rows.
+10. Review `/status`, run request-status reconciliation, and inspect all request IDs/errors. Fix all operator-action rows.
 11. Run a read-only cost import and verify spend against the Google Ads UI for the same date range.
 12. Verify ROAS revenue against CRM sales and any known refund/restatement.
 13. Only after owner approval, set the server environment `GOOGLE_ADS_VALIDATE_ONLY=false`.
@@ -204,11 +212,11 @@ The endpoint then sets DB `upload_enabled=true`, `validate_only=false`, and requ
 
 ## Recommended production cadence
 
-The repository currently does not contain a canonical scheduler. Do not claim these jobs are automated until production scheduling is explicitly configured.
+The repository exposes one protected sync endpoint, but scheduling remains an infrastructure setting. Do not claim these jobs are automated until production scheduling is explicitly configured with `GOOGLE_ADS_SYNC_SECRET`.
 
 Once the real Ads account timezone is known, schedule:
 
-- every 15 minutes: conversion reconciliation + conversion processor
+- every 15 minutes: call the protected sync endpoint for conversion reconciliation, processing, and request-status checks
 - every 15 minutes: adjustment processor
 - every 15 minutes: Customer Match processor
 - nightly: Customer Match reconciliation

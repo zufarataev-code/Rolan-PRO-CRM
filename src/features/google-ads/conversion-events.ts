@@ -4,8 +4,11 @@ export const GOOGLE_ADS_DEFAULT_SETTING_KEY = "default";
 export const GOOGLE_ADS_QUALIFIED_LEAD_EVENT = "qualified_lead";
 export const GOOGLE_ADS_CONVERTED_LEAD_EVENT = "converted_lead";
 
-function qualifiedTransactionId(dealId: string) {
-  return `crm-deal-${dealId}-qualified`;
+function qualifiedTransactionId(input: { dealId?: string | null; leadId?: string | null; clientId?: string | null }) {
+  if (input.dealId) return `crm-deal-${input.dealId}-qualified`;
+  if (input.leadId) return `crm-lead-${input.leadId}-qualified`;
+  if (input.clientId) return `crm-client-${input.clientId}-qualified`;
+  throw new Error("A deal, lead, or client is required for a qualified-lead conversion.");
 }
 
 function saleTransactionId(dealId: string) {
@@ -19,7 +22,7 @@ function configuredQualificationStage(rules: Prisma.JsonValue | null | undefined
 }
 
 export type QualifiedLeadConversionInput = {
-  dealId: string;
+  dealId?: string | null;
   leadId?: string | null;
   clientId?: string | null;
   attributionTouchpointId?: string | null;
@@ -27,6 +30,30 @@ export type QualifiedLeadConversionInput = {
   occurredAt: Date;
   eventSource?: string;
 };
+
+async function resolveAttributionTouchpointId(
+  tx: Prisma.TransactionClient,
+  input: {
+    attributionTouchpointId?: string | null;
+    leadId?: string | null;
+    clientId?: string | null;
+  },
+) {
+  if (input.attributionTouchpointId) return input.attributionTouchpointId;
+  if (!input.leadId && !input.clientId) return null;
+
+  const touchpoint = await tx.acquisitionTouchpoint.findFirst({
+    where: {
+      OR: [
+        ...(input.leadId ? [{ lead_id: input.leadId }] : []),
+        ...(input.clientId ? [{ client_id: input.clientId }] : []),
+      ],
+    },
+    orderBy: [{ captured_at: "desc" }, { created_at: "desc" }],
+    select: { acquisition_touchpoint_id: true },
+  });
+  return touchpoint?.acquisition_touchpoint_id ?? null;
+}
 
 /**
  * Creates the first qualified-lead event only when the owner-configured
@@ -55,22 +82,28 @@ export async function ensureQualifiedLeadConversion(
     };
   }
 
-  const transactionId = qualifiedTransactionId(input.dealId);
+  const transactionId = qualifiedTransactionId(input);
+  const businessObjectType = input.dealId ? "deal" : input.leadId ? "lead" : "client";
+  const businessObjectId = input.dealId ?? input.leadId ?? input.clientId;
+  if (!businessObjectId) {
+    throw new Error("A deal, lead, or client is required for a qualified-lead conversion.");
+  }
+  const attributionTouchpointId = await resolveAttributionTouchpointId(tx, input);
   const event = await tx.conversionEvent.upsert({
     where: { transaction_id: transactionId },
     update: {},
     create: {
       lead_id: input.leadId ?? null,
       client_id: input.clientId ?? null,
-      deal_id: input.dealId,
-      business_object_type: "deal",
-      business_object_id: input.dealId,
+      deal_id: input.dealId ?? null,
+      business_object_type: businessObjectType,
+      business_object_id: businessObjectId,
       event_type: GOOGLE_ADS_QUALIFIED_LEAD_EVENT,
       occurred_at: input.occurredAt,
       event_source: input.eventSource ?? "OTHER",
       conversion_value: null,
       currency: "USD",
-      attribution_touchpoint_id: input.attributionTouchpointId ?? null,
+      attribution_touchpoint_id: attributionTouchpointId,
       transaction_id: transactionId,
       rule_version: settings?.rule_version ?? "v1",
       payload_snapshot: {
@@ -154,6 +187,7 @@ export async function ensureClosedWonConversion(
     },
   });
 
+  const attributionTouchpointId = await resolveAttributionTouchpointId(tx, input);
   const event = await tx.conversionEvent.upsert({
     where: { transaction_id: transactionId },
     update: {},
@@ -168,7 +202,7 @@ export async function ensureClosedWonConversion(
       event_source: input.eventSource ?? "OTHER",
       conversion_value: input.conversionValue,
       currency: input.currency.toUpperCase().slice(0, 3) || "USD",
-      attribution_touchpoint_id: input.attributionTouchpointId ?? null,
+      attribution_touchpoint_id: attributionTouchpointId,
       transaction_id: transactionId,
       rule_version: settings?.rule_version ?? "v1",
       payload_snapshot: {
@@ -221,8 +255,8 @@ export async function ensureClosedWonConversion(
   };
 }
 
-export function buildQualifiedLeadTransactionId(dealId: string) {
-  return qualifiedTransactionId(dealId);
+export function buildQualifiedLeadTransactionId(input: string | { dealId?: string | null; leadId?: string | null; clientId?: string | null }) {
+  return qualifiedTransactionId(typeof input === "string" ? { dealId: input } : input);
 }
 
 export function buildClosedWonTransactionId(dealId: string) {

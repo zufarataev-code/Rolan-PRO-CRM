@@ -474,7 +474,7 @@ model AcquisitionTouchpoint {
   client                     Client?                    @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
   attributed_deals           Deal[]                     @relation("deal_attribution_touchpoint")
   conversion_events          ConversionEvent[]
-  
+
   @@index([lead_id])
   @@index([client_id])
   @@index([captured_at])
@@ -494,7 +494,7 @@ model ConsentSnapshot {
   created_at                DateTime  @default(now())
   lead                      Lead?     @relation(fields: [lead_id], references: [lead_id], onDelete: SetNull)
   client                    Client?   @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
-  
+
   @@index([lead_id])
   @@index([client_id])
   @@index([effective_at])
