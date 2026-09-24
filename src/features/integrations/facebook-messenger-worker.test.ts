@@ -184,6 +184,13 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /power supply, transformer, controller, or related control device is covered for 5 years/);
   assert.match(source, /may transfer once to a subsequent owner of the same property/);
   assert.match(source, /is not a guarantee against break-in, injury, glass breakage, penetration, or loss/);
+  assert.match(source, /Rolan PRO's own clear SAF protective-film range/);
+  assert.match(source, /SAF 50 - 2 mil, 1 ply, tensile strength 19,000 psi/);
+  assert.match(source, /SAF 200 - 8 mil, 2 ply, 19,250 psi/);
+  assert.match(source, /SAF 400 - 16 mil, 4 ply, 24,800 psi/);
+  assert.match(source, /All six cards state VLT 98%, UV rejection 98%, and IR rejection 18%/);
+  assert.match(source, /Never call the glass unbreakable, shatterproof, burglar-proof, bulletproof, blast-proof/);
+  assert.match(source, /complete system: film, glass, frame, edge attachment or anchoring/);
   assert.doesNotMatch(source, /Проверяю свободное время в CRM/);
   assert.match(source, /shouldUseQualificationPrompt\(attemptedBookingClaim, alreadyBooked\)/);
   assert.match(source, /shouldRestartBookedConversation\(attemptedBookingClaim, alreadyBooked\)/);

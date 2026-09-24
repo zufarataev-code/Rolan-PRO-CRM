@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Teach Messenger Rolan PRO's SAF protective-film range | `fix/messenger-safety-film-line` | Codex | In progress; visually reviewed the owner-provided 12-page image-only product-card PDF | Add exact models/specifications, safe recommendation logic, tests, review, merge, and deploy |
 | Teach Messenger the signed Rolan PRO architectural and Smart Film warranty terms | `fix/messenger-warranty-contracts` / #214 | Codex | Merged and deployed; production Worker version `230654c5-fc13-4e78-8ba7-1fac68e7eb70` | Ask the live bot separately about residential Solar Film and Smart Film warranty, then confirm it states the limitations rather than making an unconditional promise |
 | Teach Messenger that MAGNITRONIC PRIME is Rolan PRO's own solar-film line | `fix/messenger-own-film` / #212 | Codex | Merged and deployed; production Worker version `c493091e-0546-472c-a38d-bfd2e29e5461` | Ask the live bot whose film MAGNITRONIC PRIME is and request a recommendation for one real glass/sun scenario |
 | Prevent AI-only repeat-booking claims and force every new Messenger booking through CRM | `fix/messenger-repeat-booking-20260924` / #210 | Codex | Merged and deployed; production Worker version `8e9cc8cb-6f4d-45c5-8566-72fafd7622d0` | Send `запиши меня на новый замер`, answer any missing questions, click a real CRM slot, and confirm the record appears under `Новые лиды` and Calendar |
