@@ -9,6 +9,8 @@ test("active CRM inbox reads canonical Messenger leads without copying them into
   assert.match(source, /fetch\('\/api\/v1\/leads', \{ cache: 'no-store' \}\)/);
   assert.match(source, /lead\?\.source === 'facebook_messenger'/);
   assert.match(source, /CONSULTATION_SCHEDULED/);
+  assert.match(source, /new Date\(right\.scheduled_start_at\).*new Date\(left\.scheduled_start_at\)/);
+  assert.match(source, /!\['cancelled', 'canceled', 'deleted'\]\.includes\(item\?\.status\)/);
   assert.match(source, /startCanonicalLeadsPolling\(\)/);
   assert.doesNotMatch(source, /db\.canonicalLeads\s*=/);
 });
