@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Show canonical Messenger leads in active `/legacy-crm` New Leads inbox | `fix/messenger-new-leads-20260924` | Codex | Implemented and locally verified; 301 tests, TypeScript, production build, and diff check pass | Open PR, merge, deploy, and confirm the live Zafar card in `Новые лиды` |
 | Show canonical Messenger consultations inside the active `/legacy-crm` calendar | `fix/messenger-consultations-calendar-20260924` / #200 | Codex | Implemented and locally verified; 299 tests, TypeScript, production build, and diff check pass | Merge #200, let the normal production deployment finish, then refresh Calendar and confirm the live Zafar booking is visible at 10:00 |
 | Repair live Facebook Messenger lead capture before slot loading | `fix/facebook-messenger-advisory-lock` / #194 | Codex | Merged and deployed as `de262a4`; Prisma `P2010` from deserializing the advisory lock's PostgreSQL `void` return is fixed with `$executeRaw`; 289 tests, TypeScript, local production build, main CI, deploy, health check, and signed production slots smoke test pass | Repeat the live Messenger conversation; confirm the real Lead, Consultation, CalendarEvent, Survey, and notification in CRM |
 | Connect the live Facebook Messenger Cloudflare Worker to canonical CRM lead, slot, and booking endpoints | `codex/facebook-messenger-worker` / #192 | Codex | Merged; production Worker `rolanpro-bot` deployed as version `158a75f7-17f1-45b1-9e5f-431a4f091e59`; protected CRM/Worker secret configured | Send one message from an internal Facebook account, complete a real test booking, and confirm the resulting Lead, Consultation, CalendarEvent, Survey, and notification before public promotion |
@@ -452,6 +453,15 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification: all 299 automated tests passed, TypeScript passed, the production build passed, and `git diff --check` passed.
 - Branch / PR: `fix/messenger-consultations-calendar-20260924` / #200.
 - Next action: merge #200, wait for the standard production deployment, refresh `/legacy-crm`, open `Календарь`, and confirm the 10:00 Zafar event and detail card.
+
+## 2026-09-24 handoff — canonical Messenger leads in the active inbox
+
+- Owner clarified that a Messenger booking must appear immediately in the visible `Новые лиды` section, not only in Calendar.
+- Root cause: the active legacy inbox only read the retired external lead-backend queue and could even show `Сервер лидов не подключён`, while the bot already created the authoritative PostgreSQL Lead.
+- Fix: `/legacy-crm` now reads the role-scoped `/api/v1/leads` feed, shows active `facebook_messenger` leads including `CONSULTATION_SCHEDULED`, joins the matching Consultation for address/time/surveyor, and refreshes the visible inbox every 10 seconds.
+- A booked Messenger card opens its canonical Consultation. It does not create a duplicate legacy Project or copy canonical leads into `LegacyWorkspace.payload`.
+- Verification: all 301 automated tests passed, TypeScript passed, the production build passed, and `git diff --check` passed.
+- Branch: `fix/messenger-new-leads-20260924`.
 
 ## Completion rule
 
