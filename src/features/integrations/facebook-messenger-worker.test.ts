@@ -9,6 +9,7 @@ import {
   detectServiceType,
   leadReadyForBooking,
   normalizeLeadData,
+  normalizeLanguage,
   parseBookingPayload,
   startsNewBooking,
   zonedLocalToUtc,
@@ -116,6 +117,14 @@ test("Worker recognizes the four supported service families from customer wordin
   assert.equal(detectServiceType("матовая пленка для приватности"), "Decorative Film");
 });
 
+test("Worker preserves multilingual BCP-47 language tags for dates and operational replies", () => {
+  assert.equal(normalizeLanguage("German"), "de");
+  assert.equal(normalizeLanguage("fr-CA"), "fr-CA");
+  assert.equal(normalizeLanguage("العربية"), "ar");
+  assert.equal(normalizeLanguage("中文"), "zh");
+  assert.equal(normalizeLanguage("not a language tag"), "en");
+});
+
 test("Worker recognizes a request to book another address", () => {
   assert.equal(startsNewBooking("и еще один адрес пожалуйста"), true);
   assert.equal(startsNewBooking("I need another location"), true);
@@ -135,4 +144,8 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /normalizeLeadData\(mergeLead\(state\.lead, output\.lead\), event\.text\)/);
   assert.match(source, /qualificationPrompt\(state\.lead, state\.lead\.language\)/);
   assert.match(source, /Это жилой дом или коммерческий объект/);
+  assert.match(source, /BCP-47 language tag/);
+  assert.match(source, /If the customer switches languages, switch with them/);
+  assert.match(source, /localizeOperationalMessage/);
+  assert.match(source, /target_language: languageTag/);
 });
