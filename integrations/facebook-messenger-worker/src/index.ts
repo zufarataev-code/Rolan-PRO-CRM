@@ -8,6 +8,7 @@ import {
   normalizeLeadData,
   normalizeLanguage,
   parseBookingPayload,
+  shouldRestartBookedConversation,
   shouldUseQualificationPrompt,
   startsNewBooking,
   type CrmSlot,
@@ -440,7 +441,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
       escalated: false,
     };
   }
-  const alreadyBooked = state.stage === "booked";
+  let alreadyBooked = state.stage === "booked";
 
   const selectedSlot = parseBookingPayload(event.quickReplyPayload);
   if (selectedSlot) {
@@ -470,6 +471,13 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   state.history.push({ role: "assistant", content: JSON.stringify(output) });
   state.lead = normalizeLeadData(mergeLead(state.lead, output.lead), event.text);
   const attemptedBookingClaim = output.stage === "booked" || output.stage === "slot_offered";
+  if (shouldRestartBookedConversation(attemptedBookingClaim, alreadyBooked)) {
+    alreadyBooked = false;
+    state.leadCapturedEventId = undefined;
+    state.offeredSlots = [];
+    state.escalated = false;
+    console.log(JSON.stringify({ event: "repeat_booking_started", key }));
+  }
   state.stage = output.escalate
     ? "escalated"
     : attemptedBookingClaim

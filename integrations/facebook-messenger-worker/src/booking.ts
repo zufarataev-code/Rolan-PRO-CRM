@@ -23,12 +23,21 @@ export type CrmSlot = {
 export function startsNewBooking(text: string) {
   const value = text.trim();
   return /\b(?:another|new)\s+(?:address|location|appointment|booking)\b/i.test(value) ||
+    /\b(?:book\s+me|schedule\s+(?:a\s+)?(?:consultation|appointment|measurement)|i\s+want\s+to\s+book)\b/i.test(value) ||
     /(?:ещ[её]\s+(?:один|одна|одно)\s+(?:адрес|объект|замер|запис))/i.test(value) ||
-    /(?:otr[oa]\s+(?:direcci[oó]n|ubicaci[oó]n|cita))/i.test(value);
+    /(?:запиш(?:и|ите|ись|емся)|хочу\s+записаться|давайте\s+запишемся|назнач(?:ить|ьте)\s+замер|нуж(?:ен|на)\s+замер|забронируй)/i.test(value) ||
+    /(?:otr[oa]\s+(?:direcci[oó]n|ubicaci[oó]n|cita)|quiero\s+(?:reservar|agendar)\s+(?:una\s+)?cita|agendar\s+(?:una\s+)?cita)/i.test(value);
 }
 
 export function shouldUseQualificationPrompt(attemptedBookingClaim: boolean, alreadyBooked: boolean) {
   return attemptedBookingClaim && !alreadyBooked;
+}
+
+export function shouldRestartBookedConversation(
+  attemptedBookingClaim: boolean,
+  alreadyBooked: boolean,
+) {
+  return attemptedBookingClaim && alreadyBooked;
 }
 
 export function detectServiceType(value?: string) {
