@@ -221,11 +221,36 @@ function noSlotsPrompt(language?: string) {
   return "I couldn't load an available time. I'll pass your request to the manager for a follow-up.";
 }
 
-function qualificationPrompt(language?: string) {
+function qualificationPrompt(lead: LeadData, language?: string) {
   const normalized = normalizeLanguage(language);
-  if (normalized === "ru") return "Запись ещё не создана. Уточните услугу, тип объекта и адрес — после этого я покажу реальные свободные слоты из CRM.";
-  if (normalized === "es") return "La cita todavía no está creada. Confirme el servicio, el tipo de propiedad y la dirección; después mostraré horarios reales del CRM.";
-  return "The appointment is not booked yet. Confirm the service, property type, and address, then I'll show real CRM availability.";
+  if (!lead.name?.trim()) {
+    if (normalized === "ru") return "Как я могу к вам обращаться?";
+    if (normalized === "es") return "¿Cómo se llama?";
+    return "What is your name?";
+  }
+  if (!lead.phone?.trim()) {
+    if (normalized === "ru") return "Напишите, пожалуйста, номер телефона для подтверждения записи.";
+    if (normalized === "es") return "Indique su número de teléfono para confirmar la cita.";
+    return "Please provide your phone number for the booking confirmation.";
+  }
+  if (!lead.serviceType?.trim()) {
+    if (normalized === "ru") return "Какая услуга нужна: солнцезащитная, smart, защитная или декоративная плёнка?";
+    if (normalized === "es") return "¿Qué servicio necesita: película solar, inteligente, de seguridad o decorativa?";
+    return "Which service do you need: Solar, Smart, Safety, or Decorative Film?";
+  }
+  if (!lead.propertyType?.trim() && !lead.objectType?.trim()) {
+    if (normalized === "ru") return "Понял услугу. Это жилой дом или коммерческий объект?";
+    if (normalized === "es") return "Entendido. ¿Es una propiedad residencial o comercial?";
+    return "Got it. Is this a residential or commercial property?";
+  }
+  if (!lead.address?.trim() && !lead.city?.trim()) {
+    if (normalized === "ru") return "Напишите адрес объекта или хотя бы город — затем покажу свободное время.";
+    if (normalized === "es") return "Indique la dirección o al menos la ciudad; después mostraré los horarios disponibles.";
+    return "Please provide the property address or at least the city, then I'll show available times.";
+  }
+  if (normalized === "ru") return "Проверяю свободное время в CRM.";
+  if (normalized === "es") return "Estoy comprobando los horarios disponibles en el CRM.";
+  return "I'm checking CRM availability.";
 }
 
 async function availableSlots(env: Env) {
@@ -368,7 +393,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   }
 
   state.history.push({ role: "assistant", content: JSON.stringify(output) });
-  state.lead = normalizeLeadData(mergeLead(state.lead, output.lead));
+  state.lead = normalizeLeadData(mergeLead(state.lead, output.lead), event.text);
   const attemptedBookingClaim = output.stage === "booked" || output.stage === "slot_offered";
   state.stage = output.escalate
     ? "escalated"
@@ -407,7 +432,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
     env,
     event,
     attemptedBookingClaim
-      ? qualificationPrompt(state.lead.language)
+      ? qualificationPrompt(state.lead, state.lead.language)
       : output.reply || noSlotsPrompt(state.lead.language),
   );
   console.log(JSON.stringify({ key, stage: state.stage, leadCaptured: Boolean(state.leadCapturedEventId) }));

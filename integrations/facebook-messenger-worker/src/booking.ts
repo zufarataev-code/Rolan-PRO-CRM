@@ -27,18 +27,39 @@ export function startsNewBooking(text: string) {
     /(?:otr[oa]\s+(?:direcci[oó]n|ubicaci[oó]n|cita))/i.test(value);
 }
 
-export function normalizeLeadData(lead: LeadData): LeadData {
+export function detectServiceType(value?: string) {
+  const text = value?.trim().toLowerCase().replaceAll("ё", "е") || "";
+  if (!text) return undefined;
+
+  if (/\b(?:smart|pdlc|switchable)\b|смарт|умн(?:ая|ой|ую|ые|ый|ое)\s+плен/i.test(text)) {
+    return "Smart Film";
+  }
+  // Check Solar before Safety: Russian "солнцезащитная" contains "защит" too.
+  if (
+    /\b(?:solar|sun|sunlight|heat control)\b|солнц|солнеч|жар|блик|тониров|ультрафиолет|защит[а-я]*\s+от\s+(?:солнц|жар|блик|ультрафиолет)/i.test(text)
+  ) {
+    return "Solar Film";
+  }
+  if (
+    /\b(?:safety|security|protective)\b|защит[а-я]*\s+(?:плен|стекл|окон)|броне?плен|антиудар|взлом|оскол/i.test(text)
+  ) {
+    return "Safety Film";
+  }
+  if (/\b(?:decorative|frosted|privacy)\b|декор|матов|приват/i.test(text)) {
+    return "Decorative Film";
+  }
+  return undefined;
+}
+
+export function normalizeLeadData(lead: LeadData, latestMessage?: string): LeadData {
   const normalized = { ...lead };
   if (!normalized.propertyType?.trim() && normalized.objectType?.trim()) {
     normalized.propertyType = normalized.objectType.trim();
   }
-  if (!normalized.serviceType?.trim()) {
-    const value = normalized.goal?.trim() || "";
-    if (/smart|pdlc|смарт/i.test(value)) normalized.serviceType = "Smart Film";
-    else if (/safety|security|защит/i.test(value)) normalized.serviceType = "Safety Film";
-    else if (/solar|sun|heat|солнц|жар/i.test(value)) normalized.serviceType = "Solar Film";
-    else if (/decor|frost|privacy|декор|матов|приват/i.test(value)) normalized.serviceType = "Decorative Film";
-  }
+  const detected = detectServiceType(latestMessage) ||
+    detectServiceType(normalized.serviceType) ||
+    detectServiceType(normalized.goal);
+  if (detected) normalized.serviceType = detected;
   return normalized;
 }
 
