@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Teach Messenger the signed Rolan PRO architectural and Smart Film warranty terms | `fix/messenger-warranty-contracts` | Codex | In progress; extracted and visually checked both owner-provided limited-warranty PDFs | Add exact duration, eligibility, remedy, exclusions, claim rules, tests, review, merge, and deploy |
+| Teach Messenger the signed Rolan PRO architectural and Smart Film warranty terms | `fix/messenger-warranty-contracts` / #214 | Codex | Merged and deployed; production Worker version `230654c5-fc13-4e78-8ba7-1fac68e7eb70` | Ask the live bot separately about residential Solar Film and Smart Film warranty, then confirm it states the limitations rather than making an unconditional promise |
 | Teach Messenger that MAGNITRONIC PRIME is Rolan PRO's own solar-film line | `fix/messenger-own-film` / #212 | Codex | Merged and deployed; production Worker version `c493091e-0546-472c-a38d-bfd2e29e5461` | Ask the live bot whose film MAGNITRONIC PRIME is and request a recommendation for one real glass/sun scenario |
 | Prevent AI-only repeat-booking claims and force every new Messenger booking through CRM | `fix/messenger-repeat-booking-20260924` / #210 | Codex | Merged and deployed; production Worker version `8e9cc8cb-6f4d-45c5-8566-72fafd7622d0` | Send `запиши меня на новый замер`, answer any missing questions, click a real CRM slot, and confirm the record appears under `Новые лиды` and Calendar |
 | Make Messenger a fast film consultant and remove the post-booking CRM-check dead end | `fix/messenger-human-consultant-20260924` / #208 | Codex | Merged and deployed; production Worker version `93c64342-935b-4d81-ad48-89bc8cd2ba4c` | Send one Solar-film question in the existing booked chat and confirm a fast consultation answer rather than a CRM-check status |
@@ -523,6 +523,18 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #212 merged to `main` as `fe031ac2a4a7ea7b4376668a18ddea9ff5579143`. Cloudflare Worker `rolanpro-bot` deployed as version `c493091e-0546-472c-a38d-bfd2e29e5461`.
 - Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
 - Next action: ask the live bot `Чья это плёнка MAGNITRONIC PRIME и какую выбрать для солнечных окон?`; confirm it identifies the Rolan PRO line, explains the likely direction, and asks one glass/sun diagnostic question instead of inventing a final recommendation.
+
+## 2026-09-24 handoff — official architectural and Smart Film warranties
+
+- The owner supplied the official 5-page Architectural Window Film Limited Warranty and 4-page Smart Film Limited Warranty Agreement. Both PDFs were fully extracted and visually checked before updating the Worker.
+- Architectural Film summary: qualifying owner-occupied residential Solar and Safety/Security Film has a non-transferable Limited Lifetime term tied to the original retail purchaser's continuous ownership; commercial and other non-owner-occupied projects use the executed written term up to 12 years; workmanship is 5 years unless a longer term is written.
+- Architectural remedy/claim guardrails: the first 5 years generally include standard material and labor on an approved affected area; after year 5, qualifying residential product coverage provides replacement film material while labor/access may be charged. Claims must be reported within 30 days of discovery and before expiry, with project details and photos/video.
+- Smart Film summary: 12 years total for qualifying supplied-and-installed film on a paid project - years 1-5 under the applicable manufacturer warranty and years 6-12 under Rolan PRO's Extended Limited Warranty. Installation workmanship and Rolan PRO-supplied/installed power or control equipment are covered for 5 years, subject to the written exclusions. One transfer at the same property is allowed with proof; relocation needs written approval.
+- The bot now summarizes exclusions and performance limitations and never promises claim approval. Executed project documents and the full signed warranty control.
+- Verification: all 306 tests passed; TypeScript passed after the production build; production build, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #214 merged to `main` as `2ef85d2c444a9b5e376782bb44311c1833bb88a4`. Cloudflare Worker `rolanpro-bot` deployed as version `230654c5-fc13-4e78-8ba7-1fac68e7eb70`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: ask `Какая гарантия на солнцезащитную плёнку для моего дома?` and `Какая гарантия на Smart Film и блок питания?`; confirm the bot gives the correct conditional summary and offers human review for a specific claim.
 
 ## Completion rule
 
