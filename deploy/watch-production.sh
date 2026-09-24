@@ -143,7 +143,9 @@ build_release() {
   fi
 
   log "Building Next.js release $sha"
-  if ! (cd "$temporary_dir" && NODE_OPTIONS=--max-old-space-size=768 npm run build); then
+  # The current CRM route graph exceeds a 768 MB V8 heap during Next.js type/build analysis.
+  # Keep this bounded below total server memory while leaving room for the active release.
+  if ! (cd "$temporary_dir" && NODE_OPTIONS=--max-old-space-size=1024 npm run build); then
     log "Next.js build failed for $sha"
     return 1
   fi
