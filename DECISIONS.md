@@ -336,6 +336,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - The migration is transactional and aborts if protected sales/reference row counts change or Project postconditions fail.
 - Implemented for review on `codex/reset-projects-manual-film`.
 
+## 2026-09-24 — Google Ads learns only from verified CRM outcomes
+
+- CRM sends server-side first-party conversion events through Google Data Manager; no Google credential, OAuth token, or customer identifier is stored in browser code.
+- `CONSULTATION_SCHEDULED` is the recommended Qualified Lead milestone for Rolan PRO. A confirmed consultation may create this signal from a Lead before a Deal exists; a bot statement without a PostgreSQL consultation never qualifies.
+- Converted Lead remains the canonical `CLOSED_WON` outcome and uses the CRM sale value only after the signed-agreement and paid-deposit gate.
+- Every event uses a stable transaction ID, a durable outbox, explicit consent handling, retry-safe delivery, and asynchronous request-status confirmation. HTTP acceptance alone is not recorded as final Google success.
+- Live uploads require owner configuration plus separate environment gates. Automated processing uses a dedicated server-to-server bearer secret of at least 32 characters and returns no customer PII or credentials.
+- Implemented for review in PR #140; deployment and live activation remain separate steps.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

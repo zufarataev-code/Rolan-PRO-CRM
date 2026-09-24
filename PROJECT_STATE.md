@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Finish protected CRM → Google Ads learning integration on current main | `feat/google-ads-crm-integration` / #140 | Codex | Refreshed on current main; local verification and PR CI are green; live uploads remain disabled | Mark the draft ready, merge/deploy the disabled foundation, then configure Google IDs/credentials and validate-only traffic separately |
 | Teach Messenger the decorative static-cling and reeded film catalogs | `fix/messenger-decorative-film-catalogs` / #218 | Codex | Merged and deployed; production Worker version `cfa1403e-8e49-4098-aa14-1b3c7a256222` | Ask the live bot for a reeded or patterned privacy-film recommendation and confirm it distinguishes catalog choice from current stock |
 | Teach Messenger Rolan PRO's SAF protective-film range | `fix/messenger-safety-film-line` / #216 | Codex | Merged and deployed; production Worker version `751004dd-74c3-4025-aa10-990100892613` | Ask the live bot to compare SAF 50, SAF 200, and SAF 400 for a realistic security scenario and confirm it asks about the complete glazing system |
 | Teach Messenger the signed Rolan PRO architectural and Smart Film warranty terms | `fix/messenger-warranty-contracts` / #214 | Codex | Merged and deployed; production Worker version `230654c5-fc13-4e78-8ba7-1fac68e7eb70` | Ask the live bot separately about residential Solar Film and Smart Film warranty, then confirm it states the limitations rather than making an unconditional promise |
@@ -559,6 +560,18 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #218 merged to `main` as `8e741c42db8d294f7789bb586e3363100e40f81e`. Cloudflare Worker `rolanpro-bot` deployed as version `cfa1403e-8e49-4098-aa14-1b3c7a256222`.
 - Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
 - Next action: ask `Нужна декоративная плёнка с рифлёными полосами для офисной перегородки, какие варианты есть?`; confirm the bot explains the width/color choices and asks one question about desired privacy or glass size.
+
+## 2026-09-24 handoff — protected Google Ads CRM learning loop
+
+- The existing draft PR #140 was refreshed onto current `origin/main` instead of creating a duplicate integration. Current Messenger, consultation, project, and CRM changes were preserved.
+- CRM can accept signed website leads with `gclid`, `gbraid`, `wbraid`, UTMs, consent snapshots, and retry-safe submission IDs. Secrets remain server-side.
+- A real `CONSULTATION_SCHEDULED` transition can create a Qualified Lead conversion from either a Deal or a Lead, so a confirmed booking can train Google even before a Deal exists. Attribution falls back to the latest preserved Lead/Client touchpoint when a Deal has no explicit selected touchpoint.
+- `CLOSED_WON` creates a separate Converted Lead event and uses the sale value only after the signed-agreement plus paid-deposit gate. Stable transaction IDs and durable outboxes prevent duplicate uploads.
+- Google Data Manager uploads default to disabled and validate-only. Live acceptance is reconciled through `requestStatus:retrieve`; only `SUCCESS` becomes `confirmed`, while `FAILED` and `PARTIAL_SUCCESS` require operator review.
+- A scheduler can call `POST /api/integrations/google-ads/sync` only with the exact server-side bearer secret `GOOGLE_ADS_SYNC_SECRET` (minimum 32 characters). The response contains operational status but no customer PII or credentials.
+- Verification: 360 automated tests passed; TypeScript passed; Prisma schema validation passed; production build passed; `git diff --check` passed; PR #140 CI and bridge checks passed on `7713555`.
+- Branch / PR: `feat/google-ads-crm-integration` / #140. Live uploads were not enabled, no Google credential or account ID was added, no migration was applied to production, and no production deployment was performed in this handoff.
+- Next action: mark the draft ready and merge/deploy the disabled foundation. Then configure Cloud project/customer/action IDs and OAuth or service-account access, select `CONSULTATION_SCHEDULED`, run validate-only checks, and activate live uploads only after Google reports clean validation.
 
 ## Completion rule
 
