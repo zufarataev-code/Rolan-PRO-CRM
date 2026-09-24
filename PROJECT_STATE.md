@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Fix Messenger service recognition for Russian customer messages | `fix/messenger-russian-service-20260924` | Codex | In progress; reproduced `солнцезащитная` being confused with Safety and the generic qualification loop | Add deterministic multilingual service parsing, ask only for the next missing field, test, review, merge, and deploy the Worker while preserving bindings/secrets |
+| Fix Messenger service recognition for Russian customer messages | `fix/messenger-russian-service-20260924` / #204 | Codex | Merged and deployed; production Worker version `bef48a14-24c6-4d84-95f9-c39e6f0e9103` | Repeat the reported Messenger phrase and finish one controlled booking; confirm the new lead and consultation in CRM |
 | Show canonical Messenger leads in active `/legacy-crm` New Leads inbox | `fix/messenger-new-leads-20260924` / #201 | Codex | Merged and deployed; live inbox shows the Zafar Messenger lead | Release the latest-booking selector and confirm the card opens the 10:00 Sherman Way consultation rather than the older 08:00 test booking |
 | Show canonical Messenger consultations inside the active `/legacy-crm` calendar | `fix/messenger-consultations-calendar-20260924` / #200 | Codex | Implemented and locally verified; 299 tests, TypeScript, production build, and diff check pass | Merge #200, let the normal production deployment finish, then refresh Calendar and confirm the live Zafar booking is visible at 10:00 |
 | Repair live Facebook Messenger lead capture before slot loading | `fix/facebook-messenger-advisory-lock` / #194 | Codex | Merged and deployed as `de262a4`; Prisma `P2010` from deserializing the advisory lock's PostgreSQL `void` return is fixed with `$executeRaw`; 289 tests, TypeScript, local production build, main CI, deploy, health check, and signed production slots smoke test pass | Repeat the live Messenger conversation; confirm the real Lead, Consultation, CalendarEvent, Survey, and notification in CRM |
@@ -465,6 +465,16 @@ Contributors must add a row before starting substantial work and update or remov
 - Branch: `fix/messenger-new-leads-20260924`.
 - Live verification after #201 confirmed the Zafar card appears. Because the same Lead has both an older 08:00 test Consultation and the real 10:00 Consultation, the first release selected the earlier list item. Follow-up branch `fix/messenger-new-leads-latest-booking` selects the latest active Consultation and ignores cancelled/deleted records.
 - Live verification after the latest-booking release confirmed the card shows 10:00 and Sherman Way. A final follow-up fixes its button to call the existing canonical Consultation card action used by Calendar.
+
+## 2026-09-24 handoff — Russian Messenger service recognition
+
+- Root cause: the Worker depended on the language model to extract the service and its fallback parser checked Russian `защит` before `солнц`. Therefore `солнцезащитная плёнка` could be stored as Safety Film or remain missing, causing the same generic qualification message to repeat.
+- Fix: the latest raw customer message is now parsed deterministically for Solar, Smart, Safety, and Decorative Film wording. Solar is resolved before Safety, and an explicit current message corrects a stale model classification. The exact reported typo `услга солнцезащитная пленка` resolves to `Solar Film`.
+- Dialog correction: when the model tries to claim a booking before all required facts exist, the Worker asks only for the next missing field. After recognizing the service it asks for Residential/Commercial, then the address/city, rather than requesting service, property type, and address again.
+- Verification: all 303 tests passed, including the exact reported phrase and all four service families; TypeScript, production build, Worker dry-run, and `git diff --check` passed. GitHub PR CI also passed tests, TypeScript, and production build.
+- Release: PR #204 merged to `main` as `73fd7bef887f23292b1df017ec70e7e0e187b452`. Cloudflare Worker `rolanpro-bot` deployed as version `bef48a14-24c6-4d84-95f9-c39e6f0e9103`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names were present before and after deployment; no secret value was printed or changed. The live endpoint returned the expected protected `403` response to an unsigned GET.
+- Next action: send `услуга солнцезащитная пленка` in the existing Messenger chat, answer the single next question, select a real CRM slot, and confirm the booking appears under `Новые лиды` and Calendar.
 
 ## Completion rule
 
