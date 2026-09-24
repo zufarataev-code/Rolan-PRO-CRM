@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Teach Messenger Rolan PRO's SAF protective-film range | `fix/messenger-safety-film-line` | Codex | In progress; visually reviewed the owner-provided 12-page image-only product-card PDF | Add exact models/specifications, safe recommendation logic, tests, review, merge, and deploy |
+| Teach Messenger Rolan PRO's SAF protective-film range | `fix/messenger-safety-film-line` / #216 | Codex | Merged and deployed; production Worker version `751004dd-74c3-4025-aa10-990100892613` | Ask the live bot to compare SAF 50, SAF 200, and SAF 400 for a realistic security scenario and confirm it asks about the complete glazing system |
 | Teach Messenger the signed Rolan PRO architectural and Smart Film warranty terms | `fix/messenger-warranty-contracts` / #214 | Codex | Merged and deployed; production Worker version `230654c5-fc13-4e78-8ba7-1fac68e7eb70` | Ask the live bot separately about residential Solar Film and Smart Film warranty, then confirm it states the limitations rather than making an unconditional promise |
 | Teach Messenger that MAGNITRONIC PRIME is Rolan PRO's own solar-film line | `fix/messenger-own-film` / #212 | Codex | Merged and deployed; production Worker version `c493091e-0546-472c-a38d-bfd2e29e5461` | Ask the live bot whose film MAGNITRONIC PRIME is and request a recommendation for one real glass/sun scenario |
 | Prevent AI-only repeat-booking claims and force every new Messenger booking through CRM | `fix/messenger-repeat-booking-20260924` / #210 | Codex | Merged and deployed; production Worker version `8e9cc8cb-6f4d-45c5-8566-72fafd7622d0` | Send `запиши меня на новый замер`, answer any missing questions, click a real CRM slot, and confirm the record appears under `Новые лиды` and Calendar |
@@ -536,6 +536,17 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #214 merged to `main` as `2ef85d2c444a9b5e376782bb44311c1833bb88a4`. Cloudflare Worker `rolanpro-bot` deployed as version `230654c5-fc13-4e78-8ba7-1fac68e7eb70`.
 - Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
 - Next action: ask `Какая гарантия на солнцезащитную плёнку для моего дома?` and `Какая гарантия на Smart Film и блок питания?`; confirm the bot gives the correct conditional summary and offers human review for a specific claim.
+
+## 2026-09-24 handoff — Rolan PRO SAF protective-film range
+
+- The owner supplied the 12-page image-only `Защитные пленки.pdf`. Every page was rendered and visually reviewed because the PDF contains no extractable text layer.
+- The bot now recognizes Rolan PRO's SAF 50, SAF 100, SAF 200, SAF 300, SAF 350, and SAF 400 protective films, including the card values for thickness, ply count, tensile strength, MD/TD elongation, PLI break strength, VLT, UV rejection, and IR rejection.
+- Recommendation logic presents SAF 50 as the thin basic shard-retention option, SAF 100 as heavier-duty protection, SAF 200 for higher-risk security projects, and SAF 300/350/400 as progressively thicker high-strength options. It asks about the customer's risk goal, glass, frame, pane size, access, and attachment/anchoring requirements before recommending a model.
+- Safety guardrail: the bot never describes the glass as unbreakable, shatterproof, burglar-proof, bulletproof, blast-proof, hurricane-proof, or injury-proof. It explains that performance depends on the complete film/glass/frame/attachment system and only makes standard-specific claims when the executed project documents identify a tested system and performance level.
+- Verification: all 306 tests, production build, TypeScript, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #216 merged to `main` as `8bea3f3a9d8766b55bd6908027eef6b1c89b4ad0`. Cloudflare Worker `rolanpro-bot` deployed as version `751004dd-74c3-4025-aa10-990100892613`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: ask `Чем отличаются SAF 50, SAF 200 и SAF 400 и что выбрать для защиты витрины?`; confirm the bot explains the thickness/security ladder, avoids guarantees, and asks one diagnostic question about the glazing system or threat level.
 
 ## Completion rule
 
