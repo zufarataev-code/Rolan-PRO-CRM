@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Teach Messenger that MAGNITRONIC PRIME is Rolan PRO's own solar-film line | `fix/messenger-own-film` | Codex | In progress; validating the owner-provided 12-page product-card PDF against the live Worker knowledge | Correct ownership, model names, specifications, application guidance, tests, review, merge, and deploy |
+| Teach Messenger that MAGNITRONIC PRIME is Rolan PRO's own solar-film line | `fix/messenger-own-film` / #212 | Codex | Merged and deployed; production Worker version `c493091e-0546-472c-a38d-bfd2e29e5461` | Ask the live bot whose film MAGNITRONIC PRIME is and request a recommendation for one real glass/sun scenario |
 | Prevent AI-only repeat-booking claims and force every new Messenger booking through CRM | `fix/messenger-repeat-booking-20260924` / #210 | Codex | Merged and deployed; production Worker version `8e9cc8cb-6f4d-45c5-8566-72fafd7622d0` | Send `запиши меня на новый замер`, answer any missing questions, click a real CRM slot, and confirm the record appears under `Новые лиды` and Calendar |
 | Make Messenger a fast film consultant and remove the post-booking CRM-check dead end | `fix/messenger-human-consultant-20260924` / #208 | Codex | Merged and deployed; production Worker version `93c64342-935b-4d81-ad48-89bc8cd2ba4c` | Send one Solar-film question in the existing booked chat and confirm a fast consultation answer rather than a CRM-check status |
 | Make Messenger conversations follow the customer's language beyond RU/EN/ES | `fix/messenger-multilingual-20260924` / #206 | Codex | Merged and deployed; production Worker version `dd14f10f-8ebe-4cc4-b905-81b6f4752fbe` | Send controlled messages in two non-English languages and confirm the whole booking flow stays in each language |
@@ -511,6 +511,17 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #210 merged to `main` as `59741e22e786e7eef571c8d9e1103e8c83bb571e`. Cloudflare Worker `rolanpro-bot` deployed as version `8e9cc8cb-6f4d-45c5-8566-72fafd7622d0`.
 - Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
 - Next action: send `запиши меня на новый замер`, answer any missing questions, and click one of the real time buttons returned from CRM. Then confirm the appointment appears under `Новые лиды` and Calendar. The earlier AI-only attempt cannot be reconstructed because it did not store a valid selected CRM slot.
+
+## 2026-09-24 handoff — Rolan PRO's own MAGNITRONIC PRIME film
+
+- Owner confirmed that MAGNITRONIC PRIME is Rolan PRO's own solar-control film line. The supplied 12-page `ROLANPRO_MAGNITRONIC_PRIME_A4_Product_Cards.pdf` is the canonical source used for this Worker update.
+- The bot now says `our Rolan PRO MAGNITRONIC PRIME film` when ownership is relevant and recognizes the official SP-05, SP-15, SP-20, SP-35, SP-50, and SP-70 model names.
+- Product guidance now distinguishes specialty high-darkness, maximum glare control, strong solar control, balanced everyday use, high-daylight use, and ultra-clear use. It preserves the product-card requirement to verify glazing and thermal-stress conditions before recommending a model.
+- Specification correction: SP-20 IRR is 96.2% and SP-70 IRR is 99.1% in the owner-provided cards. The prior Worker values of 98.3% and 99.4% were replaced. All VLT, IRR, UVR, and TSER figures now match the cards.
+- Verification: all 306 tests, TypeScript, production build, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #212 merged to `main` as `fe031ac2a4a7ea7b4376668a18ddea9ff5579143`. Cloudflare Worker `rolanpro-bot` deployed as version `c493091e-0546-472c-a38d-bfd2e29e5461`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: ask the live bot `Чья это плёнка MAGNITRONIC PRIME и какую выбрать для солнечных окон?`; confirm it identifies the Rolan PRO line, explains the likely direction, and asks one glass/sun diagnostic question instead of inventing a final recommendation.
 
 ## Completion rule
 
