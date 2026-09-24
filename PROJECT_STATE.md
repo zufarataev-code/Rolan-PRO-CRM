@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Prevent AI-only repeat-booking claims and force every new Messenger booking through CRM | `fix/messenger-repeat-booking-20260924` | Codex | In progress; reproduced the already-booked guard allowing AI to say booked while suppressing a new CRM call | Expand repeat-booking intent, restart only the booking state, recapture the CRM lead event, require real slots/quick reply, test, review, merge, and deploy |
+| Prevent AI-only repeat-booking claims and force every new Messenger booking through CRM | `fix/messenger-repeat-booking-20260924` / #210 | Codex | Merged and deployed; production Worker version `8e9cc8cb-6f4d-45c5-8566-72fafd7622d0` | Send `запиши меня на новый замер`, answer any missing questions, click a real CRM slot, and confirm the record appears under `Новые лиды` and Calendar |
 | Make Messenger a fast film consultant and remove the post-booking CRM-check dead end | `fix/messenger-human-consultant-20260924` / #208 | Codex | Merged and deployed; production Worker version `93c64342-935b-4d81-ad48-89bc8cd2ba4c` | Send one Solar-film question in the existing booked chat and confirm a fast consultation answer rather than a CRM-check status |
 | Make Messenger conversations follow the customer's language beyond RU/EN/ES | `fix/messenger-multilingual-20260924` / #206 | Codex | Merged and deployed; production Worker version `dd14f10f-8ebe-4cc4-b905-81b6f4752fbe` | Send controlled messages in two non-English languages and confirm the whole booking flow stays in each language |
 | Fix Messenger service recognition for Russian customer messages | `fix/messenger-russian-service-20260924` / #204 | Codex | Merged and deployed; production Worker version `bef48a14-24c6-4d84-95f9-c39e6f0e9103` | Repeat the reported Messenger phrase and finish one controlled booking; confirm the new lead and consultation in CRM |
@@ -500,6 +500,16 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #208 merged to `main` as `e75dc88f8f75a19bdefadc88f6c6a8d8d2c8afe7`. Cloudflare Worker `rolanpro-bot` deployed as version `93c64342-935b-4d81-ad48-89bc8cd2ba4c`.
 - Binding safety: `CHAT`, the CRM URL, and the protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
 - Next action: in the same Messenger chat, ask `Расскажи про солнцезащитную плёнку и какую выбрать?`; confirm the answer explains the line and asks one diagnostic question. Then request another appointment explicitly only if a second booking is desired.
+
+## 2026-09-24 handoff — repeat Messenger bookings must reach CRM
+
+- Root cause: after one confirmed booking the conversation remained marked `booked`. The assistant could interpret a later message as another booking and say it was booked, while the Worker suppressed the second CRM call because it still considered the conversation already booked. The new appointment therefore existed only in the reply text and never in PostgreSQL.
+- Fix: explicit repeat-booking requests in Russian, English, and Spanish now restart only the booking state, clear the previous capture marker, recapture the current lead event in CRM, and load real CRM availability. If the assistant attempts a booking claim from an already-booked conversation, the same guard starts this verified flow instead of accepting an AI-only confirmation.
+- Booking invariant: a new booking is created only after the customer clicks one of the real slot quick replies and the Worker successfully calls the canonical CRM booking endpoint. The assistant cannot independently invent a time or claim that CRM has been updated.
+- Verification: all 306 tests passed, including repeat-booking intent, false-positive prevention for `запись не появилась в CRM`, and source-level guard assertions. TypeScript, production build, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #210 merged to `main` as `59741e22e786e7eef571c8d9e1103e8c83bb571e`. Cloudflare Worker `rolanpro-bot` deployed as version `8e9cc8cb-6f4d-45c5-8566-72fafd7622d0`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: send `запиши меня на новый замер`, answer any missing questions, and click one of the real time buttons returned from CRM. Then confirm the appointment appears under `Новые лиды` and Calendar. The earlier AI-only attempt cannot be reconstructed because it did not store a valid selected CRM slot.
 
 ## Completion rule
 
