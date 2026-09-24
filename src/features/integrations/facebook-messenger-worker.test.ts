@@ -11,6 +11,7 @@ import {
   normalizeLeadData,
   normalizeLanguage,
   parseBookingPayload,
+  shouldUseQualificationPrompt,
   startsNewBooking,
   zonedLocalToUtc,
 } from "../../../integrations/facebook-messenger-worker/src/booking";
@@ -132,6 +133,12 @@ test("Worker recognizes a request to book another address", () => {
   assert.equal(startsNewBooking("да"), false);
 });
 
+test("Worker never sends a qualification dead end for a customer who is already booked", () => {
+  assert.equal(shouldUseQualificationPrompt(true, false), true);
+  assert.equal(shouldUseQualificationPrompt(true, true), false);
+  assert.equal(shouldUseQualificationPrompt(false, true), false);
+});
+
 
 test("Worker only promises SMS when CRM reports it", () => {
   const source = readFileSync("integrations/facebook-messenger-worker/src/index.ts", "utf8");
@@ -148,4 +155,11 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /If the customer switches languages, switch with them/);
   assert.match(source, /localizeOperationalMessage/);
   assert.match(source, /target_language: languageTag/);
+  assert.match(source, /claude-haiku-4-5-20251001/);
+  assert.match(source, /Application state: this customer already has a confirmed booking/);
+  assert.match(source, /Magnitronic Solar Prime/);
+  assert.match(source, /SP-35 is the broadly compatible balanced option/);
+  assert.match(source, /lifetime warranty according to the written warranty terms/);
+  assert.doesNotMatch(source, /Проверяю свободное время в CRM/);
+  assert.match(source, /shouldUseQualificationPrompt\(attemptedBookingClaim, alreadyBooked\)/);
 });
