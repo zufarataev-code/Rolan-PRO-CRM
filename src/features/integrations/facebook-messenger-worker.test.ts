@@ -6,6 +6,7 @@ import {
   bookingPayload,
   buildBusinessWindows,
   crmLeadPayload,
+  detectServiceType,
   leadReadyForBooking,
   normalizeLeadData,
   parseBookingPayload,
@@ -89,6 +90,32 @@ test("Worker normalizes the legacy prompt fields before checking booking readine
   assert.equal(leadReadyForBooking(lead), true);
 });
 
+test("Worker recognizes misspelled Russian Solar Film without confusing it with Safety Film", () => {
+  assert.equal(detectServiceType("услга солнцезащитная пленка"), "Solar Film");
+  assert.equal(detectServiceType("нужна солнцезащитная плёнка"), "Solar Film");
+  assert.equal(detectServiceType("нужна защитная пленка на стекло"), "Safety Film");
+
+  const lead = normalizeLeadData(
+    {
+      name: "Zafar",
+      phone: "8183211212",
+      serviceType: "Safety Film",
+      propertyType: "commercial",
+      city: "Los Angeles",
+    },
+    "услга солнцезащитная пленка",
+  );
+  assert.equal(lead.serviceType, "Solar Film");
+  assert.equal(leadReadyForBooking(lead), true);
+});
+
+test("Worker recognizes the four supported service families from customer wording", () => {
+  assert.equal(detectServiceType("smart film for a conference room"), "Smart Film");
+  assert.equal(detectServiceType("защита от солнца и жары"), "Solar Film");
+  assert.equal(detectServiceType("антиударная бронепленка"), "Safety Film");
+  assert.equal(detectServiceType("матовая пленка для приватности"), "Decorative Film");
+});
+
 test("Worker recognizes a request to book another address", () => {
   assert.equal(startsNewBooking("и еще один адрес пожалуйста"), true);
   assert.equal(startsNewBooking("I need another location"), true);
@@ -105,5 +132,7 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /event: "crm_booking_confirmed"/);
   assert.match(source, /consultationId: booking\.consultation_id/);
   assert.match(source, /attemptedBookingClaim/);
-  assert.match(source, /qualificationPrompt/);
+  assert.match(source, /normalizeLeadData\(mergeLead\(state\.lead, output\.lead\), event\.text\)/);
+  assert.match(source, /qualificationPrompt\(state\.lead, state\.lead\.language\)/);
+  assert.match(source, /Это жилой дом или коммерческий объект/);
 });
