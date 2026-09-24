@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Restore production deployment after Google Ads merge exceeded the 768 MB Next.js build heap | `fix/google-ads-production-build-memory` | Codex | In progress; production remains on prior healthy release `69b8cc6` | Raise only the bounded build heap to 1024 MB, verify, release through CI, restart the watcher so it loads the corrected deploy script, and confirm production serves the merged Google Ads commit |
 | Finish protected CRM → Google Ads learning integration on current main | `feat/google-ads-crm-integration` / #140 | Codex | Refreshed on current main; local verification and PR CI are green; live uploads remain disabled | Mark the draft ready, merge/deploy the disabled foundation, then configure Google IDs/credentials and validate-only traffic separately |
 | Teach Messenger the decorative static-cling and reeded film catalogs | `fix/messenger-decorative-film-catalogs` / #218 | Codex | Merged and deployed; production Worker version `cfa1403e-8e49-4098-aa14-1b3c7a256222` | Ask the live bot for a reeded or patterned privacy-film recommendation and confirm it distinguishes catalog choice from current stock |
 | Teach Messenger Rolan PRO's SAF protective-film range | `fix/messenger-safety-film-line` / #216 | Codex | Merged and deployed; production Worker version `751004dd-74c3-4025-aa10-990100892613` | Ask the live bot to compare SAF 50, SAF 200, and SAF 400 for a realistic security scenario and confirm it asks about the complete glazing system |
