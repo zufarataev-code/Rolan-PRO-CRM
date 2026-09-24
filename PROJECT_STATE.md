@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Teach Messenger that MAGNITRONIC PRIME is Rolan PRO's own solar-film line | `fix/messenger-own-film` | Codex | In progress; validating the owner-provided 12-page product-card PDF against the live Worker knowledge | Correct ownership, model names, specifications, application guidance, tests, review, merge, and deploy |
 | Prevent AI-only repeat-booking claims and force every new Messenger booking through CRM | `fix/messenger-repeat-booking-20260924` / #210 | Codex | Merged and deployed; production Worker version `8e9cc8cb-6f4d-45c5-8566-72fafd7622d0` | Send `запиши меня на новый замер`, answer any missing questions, click a real CRM slot, and confirm the record appears under `Новые лиды` and Calendar |
 | Make Messenger a fast film consultant and remove the post-booking CRM-check dead end | `fix/messenger-human-consultant-20260924` / #208 | Codex | Merged and deployed; production Worker version `93c64342-935b-4d81-ad48-89bc8cd2ba4c` | Send one Solar-film question in the existing booked chat and confirm a fast consultation answer rather than a CRM-check status |
 | Make Messenger conversations follow the customer's language beyond RU/EN/ES | `fix/messenger-multilingual-20260924` / #206 | Codex | Merged and deployed; production Worker version `dd14f10f-8ebe-4cc4-b905-81b6f4752fbe` | Send controlled messages in two non-English languages and confirm the whole booking flow stays in each language |
