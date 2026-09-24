@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Teach Messenger the decorative static-cling and reeded film catalogs | `fix/messenger-decorative-film-catalogs` | Codex | In progress; extracted and visually reviewed both three-page supplier catalogs | Add catalog families/model codes, safe selection guidance, tests, review, merge, and deploy |
+| Teach Messenger the decorative static-cling and reeded film catalogs | `fix/messenger-decorative-film-catalogs` / #218 | Codex | Merged and deployed; production Worker version `cfa1403e-8e49-4098-aa14-1b3c7a256222` | Ask the live bot for a reeded or patterned privacy-film recommendation and confirm it distinguishes catalog choice from current stock |
 | Teach Messenger Rolan PRO's SAF protective-film range | `fix/messenger-safety-film-line` / #216 | Codex | Merged and deployed; production Worker version `751004dd-74c3-4025-aa10-990100892613` | Ask the live bot to compare SAF 50, SAF 200, and SAF 400 for a realistic security scenario and confirm it asks about the complete glazing system |
 | Teach Messenger the signed Rolan PRO architectural and Smart Film warranty terms | `fix/messenger-warranty-contracts` / #214 | Codex | Merged and deployed; production Worker version `230654c5-fc13-4e78-8ba7-1fac68e7eb70` | Ask the live bot separately about residential Solar Film and Smart Film warranty, then confirm it states the limitations rather than making an unconditional promise |
 | Teach Messenger that MAGNITRONIC PRIME is Rolan PRO's own solar-film line | `fix/messenger-own-film` / #212 | Codex | Merged and deployed; production Worker version `c493091e-0546-472c-a38d-bfd2e29e5461` | Ask the live bot whose film MAGNITRONIC PRIME is and request a recommendation for one real glass/sun scenario |
@@ -548,6 +548,17 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #216 merged to `main` as `8bea3f3a9d8766b55bd6908027eef6b1c89b4ad0`. Cloudflare Worker `rolanpro-bot` deployed as version `751004dd-74c3-4025-aa10-990100892613`.
 - Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
 - Next action: ask `Чем отличаются SAF 50, SAF 200 и SAF 400 и что выбрать для защиты витрины?`; confirm the bot explains the thickness/security ladder, avoids guarantees, and asks one diagnostic question about the glazing system or threat level.
+
+## 2026-09-24 handoff — decorative static-cling and reeded catalogs
+
+- The owner supplied two three-page supplier catalogs. Both were text-extracted and visually reviewed to verify model-to-image groupings.
+- The bot now knows the static-cling privacy pattern ranges AT-001-028, AT-036-043, AT-049-052, textured AT-101-104, and 3D laser-rainbow AT-029-035 plus AT-044-048.
+- Reeded/fluted options include AT-C001 25 mm; AT-C002 5 mm in clear, grey, tea, and black; AT-C004B 13 mm; AT-C004 15 mm in clear, tea, and grey; AT-C005 9 mm; AT-C006 6 mm; AT-C008 12 mm; textured AT-S50; and prismatic AT-055B. Supplier roll formats are 1.52 x 30 m and 1.52 x 50 m.
+- Catalog guardrails: supplier codes are options, not confirmation of Rolan PRO manufacture, current stock, measured performance, or an installed appearance guarantee. The bot confirms availability and sample appearance before promising a model and does not confuse decorative privacy with Solar, Safety, or Smart Film performance.
+- Verification: all 306 tests, production build, TypeScript, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #218 merged to `main` as `8e741c42db8d294f7789bb586e3363100e40f81e`. Cloudflare Worker `rolanpro-bot` deployed as version `cfa1403e-8e49-4098-aa14-1b3c7a256222`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: ask `Нужна декоративная плёнка с рифлёными полосами для офисной перегородки, какие варианты есть?`; confirm the bot explains the width/color choices and asks one question about desired privacy or glass size.
 
 ## Completion rule
 
