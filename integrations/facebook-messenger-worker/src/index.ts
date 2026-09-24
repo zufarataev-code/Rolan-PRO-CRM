@@ -8,15 +8,16 @@ import {
   normalizeLeadData,
   normalizeLanguage,
   parseBookingPayload,
+  shouldUseQualificationPrompt,
   startsNewBooking,
   type CrmSlot,
   type LeadData,
 } from "./booking";
 import { CrmRequestError, postToCrm, type CrmEnv } from "./crm";
 
-const ANTHROPIC_MODEL = "claude-sonnet-4-6";
+const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 const GRAPH_API = "https://graph.facebook.com/v21.0";
-const HISTORY_LIMIT = 20;
+const HISTORY_LIMIT = 12;
 const CONVERSATION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 type KvNamespace = {
@@ -78,13 +79,28 @@ type CrmBookingResult = {
   };
 };
 
-const FALLBACK_PROMPT = `You are Danil, the AI assistant for Rolan PRO, a window-film company in Southern California. Reply briefly in the customer's language and ask one question at a time. Your goal is to qualify the customer for a free on-site consultation. Never give a final price or promise an installation date. Escalate complaints, existing-order questions, technical uncertainty, and requests for a person.`;
+const FALLBACK_PROMPT = `You are the AI sales consultant for Rolan PRO, a professional window-film company serving Southern California. Sound natural, warm, confident, and concise. Answer the customer's actual question first; then ask at most one useful follow-up question. Do not behave like a rigid form and do not force every message into booking. Your goal is to help the customer choose the right solution and, when they are ready, qualify them for a free on-site consultation. Never give a final price or promise an installation date. Escalate complaints, existing-order questions, genuine technical uncertainty, and requests for a person.`;
+
+const ROLANPRO_KNOWLEDGE = `
+Use this verified Rolan PRO knowledge when consulting customers:
+- Rolan PRO installs Solar, Smart/Switchable, Safety/Security, and Decorative/Privacy films for homes and commercial properties in Southern California.
+- Solar film helps reduce heat, glare, infrared energy, and UV exposure while improving comfort. The exact result depends on the selected film, glass construction, orientation, and sun exposure.
+- Rolan PRO's primary premium solar line is Magnitronic Solar Prime: SP-5%, SP-15%, SP-20%, SP-35%, SP-50%, and SP-70%. A lower number is darker; a higher number keeps more visible light.
+- SP-35 is the broadly compatible balanced option. SP-50 is lighter and can suit Low-E glass and skylights after the coating surface is confirmed. SP-70 is the most transparent option and is compatible with the widest glass range. SP-5 and SP-15 are dark and have stricter glass limitations. Never recommend a model before understanding the glass.
+- Verified 2026 meter readings are: SP-5 VLT 5.7%, UV rejection 100%, IR rejection 95.6%, TSER 93.3%; SP-15 14.0%, 99.9%, 97.4%, 88.5%; SP-20 23.5%, 99.9%, 98.3%, 83.2%; SP-35 35.5%, 99.8%, 98.5%, 77.1%; SP-50 58.1%, 99.6%, 99.2%, 68.2%; SP-70 68.0%, 99.2%, 99.4%, 63.6%. Quote a figure only with its exact model and do not invent specifications.
+- To recommend Solar film, learn the customer's main problem (heat, glare, UV/fading, daytime privacy, or appearance), residential/commercial property, glass type if known (single pane, dual pane, tempered, annealed, or Low-E), sun-facing side, and desired brightness. Explain the likely direction before asking for booking details.
+- Daytime reflective privacy depends on the light balance and is not reliable privacy at night. For dependable nighttime privacy, discuss frosted/decorative or Smart film.
+- Rolan PRO uses professional-grade materials and professional installation. Eligible Rolan PRO solar-film installations carry a lifetime warranty according to the written warranty terms. Do not claim that every product or every installation is covered without confirming eligibility.
+- Never call glass unbreakable. Safety film helps retain broken glass and can delay forced entry when correctly selected and anchored.
+- Exact pricing depends on film, glass, dimensions, access, and installation complexity. Give a useful explanation, then offer a free measurement instead of inventing a quote.
+`;
 
 const CRM_BOOKING_PROMPT = `
 The CRM, not you, owns appointment availability. Never invent, suggest, or confirm a date or time in reply. The application will add real CRM slots after you have collected the required details.
 Collect these fields one at a time and return them in lead: name, phone, serviceType (Solar Film, Smart Film, Safety Film, or Decorative Film), propertyType, city, address when known, optional email, language, goal, and approximate windows.
 Detect the language of the customer's latest message and store it in lead.language as a BCP-47 language tag such as en, es, ru, de, fr, ar, zh, or the appropriate tag for any other language. Always reply naturally in that language. If the customer switches languages, switch with them and update lead.language. Never transliterate when the customer's writing system is supported.
 Use stage "qualifying" until those details are collected. Do not say that an appointment is booked; only the application may confirm that after PostgreSQL accepts the booking.
+Consult before collecting: if the customer asks about a product, benefits, warranty, film choice, heat, glare, UV, privacy, or glass compatibility, answer that question first using the verified knowledge. Then ask only one relevant diagnostic or booking question. Never reply with a vague status such as "checking CRM"; the application itself will show real slots when ready.
 Return only JSON with reply, stage, escalate, escalateReason, and lead. Use an empty string for unknown lead fields and never infer customer facts.`;
 
 async function localizeOperationalMessage(env: Env, message: string, language?: string) {
@@ -188,8 +204,12 @@ async function sendMessage(
   });
 }
 
-async function askAssistant(env: Env, history: HistoryMessage[]) {
+async function askAssistant(env: Env, history: HistoryMessage[], applicationStage: string) {
   const storedPrompt = await env.CHAT.get("sys_prompt");
+  const stateInstruction = applicationStage === "booked"
+    ? "Application state: this customer already has a confirmed booking. Answer follow-up questions normally. Do not start another booking or say you are checking CRM unless the customer explicitly asks for another appointment or address."
+    : `Application state: ${applicationStage || "new"}.`;
+  const startedAt = Date.now();
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -199,11 +219,17 @@ async function askAssistant(env: Env, history: HistoryMessage[]) {
     },
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
-      max_tokens: 1_000,
-      system: `${storedPrompt || env.SYS_PROMPT || FALLBACK_PROMPT}\n\n${CRM_BOOKING_PROMPT}`,
+      max_tokens: 500,
+      system: `${storedPrompt || env.SYS_PROMPT || FALLBACK_PROMPT}\n\n${ROLANPRO_KNOWLEDGE}\n\n${CRM_BOOKING_PROMPT}\n\n${stateInstruction}`,
       messages: history,
     }),
   });
+  console.log(JSON.stringify({
+    event: "assistant_response",
+    model: ANTHROPIC_MODEL,
+    duration_ms: Date.now() - startedAt,
+    status: response.status,
+  }));
   if (!response.ok) throw new Error(`Anthropic HTTP ${response.status}`);
   const data = await response.json() as { content?: Array<{ type: string; text?: string }> };
   const raw = (data.content || [])
@@ -285,9 +311,7 @@ function qualificationPrompt(lead: LeadData, language?: string) {
     if (normalized === "es") return "Indique la dirección o al menos la ciudad; después mostraré los horarios disponibles.";
     return "Please provide the property address or at least the city, then I'll show available times.";
   }
-  if (normalized === "ru") return "Проверяю свободное время в CRM.";
-  if (normalized === "es") return "Estoy comprobando los horarios disponibles en el CRM.";
-  return "I'm checking CRM availability.";
+  return null;
 }
 
 async function availableSlots(env: Env) {
@@ -436,7 +460,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
 
   let output: AssistantOutput;
   try {
-    output = await askAssistant(env, state.history);
+    output = await askAssistant(env, state.history, state.stage);
   } catch (error) {
     console.error("assistant", error);
     await sendMessage(env, event, await localizeOperationalMessage(env, noSlotsPrompt(state.lead.language), state.lead.language));
@@ -479,12 +503,9 @@ async function handleEvent(env: Env, event: MessengerEvent) {
 
   if (alreadyBooked && !state.escalated) state.stage = "booked";
   await persistState(env, key, state);
-  const reply = attemptedBookingClaim
-    ? await localizeOperationalMessage(
-        env,
-        qualificationPrompt(state.lead, state.lead.language),
-        state.lead.language,
-      )
+  const missingFieldPrompt = qualificationPrompt(state.lead, state.lead.language);
+  const reply = shouldUseQualificationPrompt(attemptedBookingClaim, alreadyBooked) && missingFieldPrompt
+    ? await localizeOperationalMessage(env, missingFieldPrompt, state.lead.language)
     : output.reply || await localizeOperationalMessage(
         env,
         noSlotsPrompt(state.lead.language),

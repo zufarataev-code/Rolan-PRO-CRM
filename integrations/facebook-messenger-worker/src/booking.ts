@@ -27,6 +27,10 @@ export function startsNewBooking(text: string) {
     /(?:otr[oa]\s+(?:direcci[oó]n|ubicaci[oó]n|cita))/i.test(value);
 }
 
+export function shouldUseQualificationPrompt(attemptedBookingClaim: boolean, alreadyBooked: boolean) {
+  return attemptedBookingClaim && !alreadyBooked;
+}
+
 export function detectServiceType(value?: string) {
   const text = value?.trim().toLowerCase().replaceAll("ё", "е") || "";
   if (!text) return undefined;
