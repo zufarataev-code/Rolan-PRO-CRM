@@ -19299,7 +19299,9 @@ function canonicalMessengerLeadRows() {
   return canonicalLeads
     .filter(lead => lead?.source === 'facebook_messenger' && CANONICAL_OPEN_LEAD_STATUSES.has(lead?.pipeline_status?.status_code))
     .map(lead => {
-      const consultation = canonicalConsultations.find(item => item?.lead?.lead_id === lead.lead_id) || null;
+      const consultation = canonicalConsultations
+        .filter(item => item?.lead?.lead_id === lead.lead_id && !['cancelled', 'canceled', 'deleted'].includes(item?.status))
+        .sort((left, right) => new Date(right.scheduled_start_at).getTime() - new Date(left.scheduled_start_at).getTime())[0] || null;
       return {
         id: lead.lead_id,
         name: lead.name,
