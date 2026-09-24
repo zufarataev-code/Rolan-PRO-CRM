@@ -36,7 +36,17 @@ test("dispatch events expose operational identity and timed map labels", () => {
   assert.match(source, /calendarEventPeople\(ev\).*c\?\.name/s);
   assert.match(source, /orderAddress\(o, c\) \|\| 'Адрес не указан'/);
   assert.match(source, /bindTooltip\(calendarTimeLabel\(it\.dt\).*permanent:true/);
-  assert.match(source, /onclick="openOrder\('\$\{o\.id\}'\)"/);
+  assert.match(source, /onclick="\$\{calendarOpenAction\(o\)\}"/);
+});
+
+test("canonical PostgreSQL consultations are visible in the active legacy calendar", () => {
+  assert.match(source, /let canonicalConsultations = \[\]/);
+  assert.match(source, /fetch\('\/api\/v1\/consultations'/);
+  assert.match(source, /canonicalConsultations\.forEach\(item =>/);
+  assert.match(source, /calendarEventsForOrder\(o, 'consultation'\)/);
+  assert.match(source, /function openCanonicalConsultationCard\(consultationId\)/);
+  assert.match(source, /Запись из Messenger/);
+  assert.doesNotMatch(source, /db\.canonicalConsultations\s*=/);
 });
 
 test("dispatch calendar uses the server-configured Google map with a safe fallback", () => {
