@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Make Messenger a fast film consultant and remove the post-booking CRM-check dead end | `fix/messenger-human-consultant-20260924` | Codex | In progress; reproduced the dead end from `booked` state and confirmed the Worker lacks the real Solar Prime knowledge base | Pass booking state to AI, answer consultation questions before qualification, add verified Rolan PRO film knowledge, use the latency-focused model, test, review, merge, and deploy |
+| Make Messenger a fast film consultant and remove the post-booking CRM-check dead end | `fix/messenger-human-consultant-20260924` / #208 | Codex | Merged and deployed; production Worker version `93c64342-935b-4d81-ad48-89bc8cd2ba4c` | Send one Solar-film question in the existing booked chat and confirm a fast consultation answer rather than a CRM-check status |
 | Make Messenger conversations follow the customer's language beyond RU/EN/ES | `fix/messenger-multilingual-20260924` / #206 | Codex | Merged and deployed; production Worker version `dd14f10f-8ebe-4cc4-b905-81b6f4752fbe` | Send controlled messages in two non-English languages and confirm the whole booking flow stays in each language |
 | Fix Messenger service recognition for Russian customer messages | `fix/messenger-russian-service-20260924` / #204 | Codex | Merged and deployed; production Worker version `bef48a14-24c6-4d84-95f9-c39e6f0e9103` | Repeat the reported Messenger phrase and finish one controlled booking; confirm the new lead and consultation in CRM |
 | Show canonical Messenger leads in active `/legacy-crm` New Leads inbox | `fix/messenger-new-leads-20260924` / #201 | Codex | Merged and deployed; live inbox shows the Zafar Messenger lead | Release the latest-booking selector and confirm the card opens the 10:00 Sherman Way consultation rather than the older 08:00 test booking |
@@ -487,6 +487,18 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #206 merged to `main` as `8da58b1389a32dfefc074587dea785eb3b589454`. Cloudflare Worker `rolanpro-bot` deployed as version `dd14f10f-8ebe-4cc4-b905-81b6f4752fbe`.
 - Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
 - Next action: use an internal Messenger account to send one German and one Arabic message, complete the qualification questions, and confirm slot and booking confirmations stay in the selected language.
+
+## 2026-09-24 handoff — fast human-like film consultant
+
+- Root cause of the reported hang: after a confirmed booking, the KV conversation remained in `booked`. A later product question could be interpreted as a slot claim; the Worker then emitted `Проверяю свободное время в CRM`, deliberately skipped a second slot lookup because the customer was already booked, and never sent a follow-up.
+- State fix: the real application stage is now passed to the assistant. An already-booked customer receives a normal follow-up consultation answer unless they explicitly ask for another appointment/address. The qualification override is disabled for booked conversations, and the dead-end CRM-check text is removed.
+- Consultant behavior: the assistant answers the customer's actual product question first, asks at most one relevant follow-up, and does not force every message into a booking form.
+- Product knowledge: the Worker now carries the verified Magnitronic Solar Prime SP-5%, SP-15%, SP-20%, SP-35%, SP-50%, and SP-70% range, 2026 measured VLT/UV/IR/TSER figures, glass-compatibility limits, daytime/nighttime privacy guidance, professional-installation positioning, and the owner-provided lifetime-warranty statement constrained to eligible installations and written terms.
+- Speed: customer chat and operational translation use active `claude-haiku-4-5-20251001`, history was reduced from 20 to 12 messages, output was reduced from 1,000 to 500 tokens, and latency/status telemetry is recorded without message contents or PII. Anthropic's official customer-support guidance identifies Haiku 4.5 as the latency-optimized choice.
+- Verification: all 305 tests passed, including the exact already-booked qualification guard; TypeScript, production build, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #208 merged to `main` as `e75dc88f8f75a19bdefadc88f6c6a8d8d2c8afe7`. Cloudflare Worker `rolanpro-bot` deployed as version `93c64342-935b-4d81-ad48-89bc8cd2ba4c`.
+- Binding safety: `CHAT`, the CRM URL, and the protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: in the same Messenger chat, ask `Расскажи про солнцезащитную плёнку и какую выбрать?`; confirm the answer explains the line and asks one diagnostic question. Then request another appointment explicitly only if a second booking is desired.
 
 ## Completion rule
 
