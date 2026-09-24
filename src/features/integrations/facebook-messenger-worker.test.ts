@@ -11,6 +11,7 @@ import {
   normalizeLeadData,
   normalizeLanguage,
   parseBookingPayload,
+  shouldRestartBookedConversation,
   shouldUseQualificationPrompt,
   startsNewBooking,
   zonedLocalToUtc,
@@ -128,15 +129,26 @@ test("Worker preserves multilingual BCP-47 language tags for dates and operation
 
 test("Worker recognizes a request to book another address", () => {
   assert.equal(startsNewBooking("и еще один адрес пожалуйста"), true);
+  assert.equal(startsNewBooking("запиши меня на замер"), true);
+  assert.equal(startsNewBooking("хочу записаться"), true);
   assert.equal(startsNewBooking("I need another location"), true);
+  assert.equal(startsNewBooking("book me for a consultation"), true);
   assert.equal(startsNewBooking("otra dirección"), true);
+  assert.equal(startsNewBooking("quiero agendar una cita"), true);
   assert.equal(startsNewBooking("да"), false);
+  assert.equal(startsNewBooking("запись не появилась в CRM"), false);
 });
 
 test("Worker never sends a qualification dead end for a customer who is already booked", () => {
   assert.equal(shouldUseQualificationPrompt(true, false), true);
   assert.equal(shouldUseQualificationPrompt(true, true), false);
   assert.equal(shouldUseQualificationPrompt(false, true), false);
+});
+
+test("Worker restarts a booked conversation when AI tries to create another booking", () => {
+  assert.equal(shouldRestartBookedConversation(true, true), true);
+  assert.equal(shouldRestartBookedConversation(true, false), false);
+  assert.equal(shouldRestartBookedConversation(false, true), false);
 });
 
 
@@ -162,4 +174,7 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /lifetime warranty according to the written warranty terms/);
   assert.doesNotMatch(source, /Проверяю свободное время в CRM/);
   assert.match(source, /shouldUseQualificationPrompt\(attemptedBookingClaim, alreadyBooked\)/);
+  assert.match(source, /shouldRestartBookedConversation\(attemptedBookingClaim, alreadyBooked\)/);
+  assert.match(source, /state\.leadCapturedEventId = undefined/);
+  assert.match(source, /event: "repeat_booking_started"/);
 });
