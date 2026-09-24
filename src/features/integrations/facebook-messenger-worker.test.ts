@@ -191,6 +191,13 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /All six cards state VLT 98%, UV rejection 98%, and IR rejection 18%/);
   assert.match(source, /Never call the glass unbreakable, shatterproof, burglar-proof, bulletproof, blast-proof/);
   assert.match(source, /complete system: film, glass, frame, edge attachment or anchoring/);
+  assert.match(source, /static-cling privacy patterns AT-001 through AT-028/);
+  assert.match(source, /3D laser-rainbow static patterns are AT-029 through AT-035 and AT-044 through AT-048/);
+  assert.match(source, /AT-C002 clear, grey, tea, or black 5 mm/);
+  assert.match(source, /AT-C004 clear, tea, or grey 15 mm/);
+  assert.match(source, /textured AT-S50 and prismatic AT-055B/);
+  assert.match(source, /not verified performance ratings or confirmation of current stock/);
+  assert.match(source, /do not promise complete privacy in every lighting condition/);
   assert.doesNotMatch(source, /Проверяю свободное время в CRM/);
   assert.match(source, /shouldUseQualificationPrompt\(attemptedBookingClaim, alreadyBooked\)/);
   assert.match(source, /shouldRestartBookedConversation\(attemptedBookingClaim, alreadyBooked\)/);
