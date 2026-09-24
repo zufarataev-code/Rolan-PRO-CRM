@@ -169,8 +169,12 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /target_language: languageTag/);
   assert.match(source, /claude-haiku-4-5-20251001/);
   assert.match(source, /Application state: this customer already has a confirmed booking/);
-  assert.match(source, /Magnitronic Solar Prime/);
-  assert.match(source, /SP-35 is the broadly compatible balanced option/);
+  assert.match(source, /MAGNITRONIC PRIME is Rolan PRO's own premium solar-control film series/);
+  assert.match(source, /our Rolan PRO MAGNITRONIC PRIME film/);
+  assert.match(source, /SP-05 VLT 5\.7%, IRR 95\.6%, UVR 100%, TSER 93\.3%/);
+  assert.match(source, /SP-20 VLT 23\.5%, IRR 96\.2%, UVR 99\.9%, TSER 83\.2%/);
+  assert.match(source, /SP-70 VLT 68\.0%, IRR 99\.1%, UVR 99\.2%, TSER 63\.6%/);
+  assert.match(source, /IGU\/double-pane, Low-E, tinted glass, and skylights require technical review/);
   assert.match(source, /lifetime warranty according to the written warranty terms/);
   assert.doesNotMatch(source, /Проверяю свободное время в CRM/);
   assert.match(source, /shouldUseQualificationPrompt\(attemptedBookingClaim, alreadyBooked\)/);
