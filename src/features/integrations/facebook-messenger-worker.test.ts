@@ -175,7 +175,15 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /SP-20 VLT 23\.5%, IRR 96\.2%, UVR 99\.9%, TSER 83\.2%/);
   assert.match(source, /SP-70 VLT 68\.0%, IRR 99\.1%, UVR 99\.2%, TSER 63\.6%/);
   assert.match(source, /IGU\/double-pane, Low-E, tinted glass, and skylights require technical review/);
-  assert.match(source, /lifetime warranty according to the written warranty terms/);
+  assert.match(source, /summary of Rolan PRO's written Limited Warranty/);
+  assert.match(source, /Residential Limited Lifetime warranty while the original retail purchaser continuously owns that residence/);
+  assert.match(source, /Commercial, rental, common-area, hospitality, institutional, leased/);
+  assert.match(source, /first 5 years generally include standard replacement material and standard installation labor/);
+  assert.match(source, /reported within 30 days after discovery/);
+  assert.match(source, /Years 1-5 use the applicable manufacturer warranty; years 6-12 are Rolan PRO's own Extended Limited Warranty/);
+  assert.match(source, /power supply, transformer, controller, or related control device is covered for 5 years/);
+  assert.match(source, /may transfer once to a subsequent owner of the same property/);
+  assert.match(source, /is not a guarantee against break-in, injury, glass breakage, penetration, or loss/);
   assert.doesNotMatch(source, /Проверяю свободное время в CRM/);
   assert.match(source, /shouldUseQualificationPrompt\(attemptedBookingClaim, alreadyBooked\)/);
   assert.match(source, /shouldRestartBookedConversation\(attemptedBookingClaim, alreadyBooked\)/);
