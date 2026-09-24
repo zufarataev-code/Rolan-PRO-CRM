@@ -17,6 +17,7 @@ test("active CRM inbox reads canonical Messenger leads without copying them into
 
 test("booked Messenger leads open the canonical consultation instead of creating a duplicate project", () => {
   assert.match(source, /label: 'Messenger'/);
-  assert.match(source, /openCanonicalConsultationDetails\('\$\{l\.consultation\.consultation_id\}'\)/);
+  assert.match(source, /openCanonicalConsultationCard\('\$\{l\.consultation\.consultation_id\}'\)/);
+  assert.match(source, /function openCanonicalConsultationCard\(consultationId\)/);
   assert.match(source, /l\.canonical && l\.consultation/);
 });

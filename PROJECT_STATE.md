@@ -463,6 +463,7 @@ Contributors must add a row before starting substantial work and update or remov
 - Verification: all 301 automated tests passed, TypeScript passed, the production build passed, and `git diff --check` passed.
 - Branch: `fix/messenger-new-leads-20260924`.
 - Live verification after #201 confirmed the Zafar card appears. Because the same Lead has both an older 08:00 test Consultation and the real 10:00 Consultation, the first release selected the earlier list item. Follow-up branch `fix/messenger-new-leads-latest-booking` selects the latest active Consultation and ignores cancelled/deleted records.
+- Live verification after the latest-booking release confirmed the card shows 10:00 and Sherman Way. A final follow-up fixes its button to call the existing canonical Consultation card action used by Calendar.
 
 ## Completion rule
 

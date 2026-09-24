@@ -19370,7 +19370,7 @@ function renderLeadsView() {
             </div>
             <div class="flex flex-col gap-2">
               ${l.canonical && l.consultation
-                ? `<button class="btn-primary text-sm" onclick="openCanonicalConsultationDetails('${l.consultation.consultation_id}')">Открыть запись</button>`
+                ? `<button class="btn-primary text-sm" onclick="openCanonicalConsultationCard('${l.consultation.consultation_id}')">Открыть запись</button>`
                 : l.canonical
                   ? `<a class="btn-primary text-sm text-center" href="tel:${academyEsc(l.phone || '')}">📞 Позвонить</a>`
                   : `<button class="btn-primary text-sm" onclick="convertLead('${l.id}')">➕ Создать проект</button>
