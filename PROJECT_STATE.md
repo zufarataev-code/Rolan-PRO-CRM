@@ -78,6 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
+| Show canonical Messenger consultations inside the active `/legacy-crm` calendar | `fix/messenger-consultations-calendar-20260924` / #200 | Codex | Implemented and locally verified; 299 tests, TypeScript, production build, and diff check pass | Merge #200, let the normal production deployment finish, then refresh Calendar and confirm the live Zafar booking is visible at 10:00 |
 | Repair live Facebook Messenger lead capture before slot loading | `fix/facebook-messenger-advisory-lock` / #194 | Codex | Merged and deployed as `de262a4`; Prisma `P2010` from deserializing the advisory lock's PostgreSQL `void` return is fixed with `$executeRaw`; 289 tests, TypeScript, local production build, main CI, deploy, health check, and signed production slots smoke test pass | Repeat the live Messenger conversation; confirm the real Lead, Consultation, CalendarEvent, Survey, and notification in CRM |
 | Connect the live Facebook Messenger Cloudflare Worker to canonical CRM lead, slot, and booking endpoints | `codex/facebook-messenger-worker` / #192 | Codex | Merged; production Worker `rolanpro-bot` deployed as version `158a75f7-17f1-45b1-9e5f-431a4f091e59`; protected CRM/Worker secret configured | Send one message from an internal Facebook account, complete a real test booking, and confirm the resulting Lead, Consultation, CalendarEvent, Survey, and notification before public promotion |
 | Implement issue #164: canonical multi-service Project / Solar measurement constructor | `codex/issue-164-project-constructor` / #169 | Codex | PR open; local verification green; no production deployment performed | Review #169 and its CI, merge only after approval, then run the normal migration/release workflow separately |
@@ -441,6 +442,16 @@ Contributors must add a row before starting substantial work and update or remov
 - Worker response now reads `sms_confirmation.status` from CRM. It says SMS was sent only for `sent` / `already_sent`; otherwise it tells the customer to keep the Messenger confirmation.
 - Worker logs `crm_booking_confirmed` with lead ID, consultation ID, and SMS status for production diagnosis.
 - Verification pending CI, merge/deploy of CRM, and a controlled real Messenger booking smoke test. Worker source deployment remains a separate Cloudflare release action.
+
+## 2026-09-24 handoff — canonical Messenger consultations in the active calendar
+
+- Production diagnosis confirmed that Messenger created canonical Consultation `39be9261-0f86-4dce-8179-23eeb9cf71eb`, CalendarEvent `6476f790-8367-4bde-9ad4-62c27bbafdcf`, and the related Survey before sending SMS. The booking is for Zafar at `385 Sherman Way, Los Angeles`, scheduled for 2026-09-24 10:00–11:00 America/Los_Angeles, assigned to Alan with Danil as manager.
+- Root cause: `/legacy-crm` is the only visible CRM, but its calendar read only `LegacyWorkspace.payload.orders`; the canonical PostgreSQL consultation API and the hidden modern consultation page were not represented in that calendar.
+- Fix: `/legacy-crm` now loads the existing role-scoped `/api/v1/consultations` feed during cloud startup and projects each Consultation into the existing day/week/month calendar and map at render time. It does not copy canonical consultations into the legacy payload or add another storage path.
+- Clicking a canonical event opens a compact `Запись из Messenger` card with customer, date/time, address, service, surveyor, and status inside the same CRM shell.
+- Verification: all 299 automated tests passed, TypeScript passed, the production build passed, and `git diff --check` passed.
+- Branch / PR: `fix/messenger-consultations-calendar-20260924` / #200.
+- Next action: merge #200, wait for the standard production deployment, refresh `/legacy-crm`, open `Календарь`, and confirm the 10:00 Zafar event and detail card.
 
 ## Completion rule
 
