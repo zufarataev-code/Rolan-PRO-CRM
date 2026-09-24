@@ -79,6 +79,19 @@ Target modules:
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
 | Finish protected CRM → Google Ads learning integration on current main | `feat/google-ads-crm-integration` / #140 | Codex | In progress; auditing and refreshing the existing draft instead of creating a duplicate implementation | Merge current `origin/main`, preserve current CRM workflows, run full verification, and keep live uploads disabled until Google account IDs and server credentials are configured |
+| Teach Messenger the decorative static-cling and reeded film catalogs | `fix/messenger-decorative-film-catalogs` / #218 | Codex | Merged and deployed; production Worker version `cfa1403e-8e49-4098-aa14-1b3c7a256222` | Ask the live bot for a reeded or patterned privacy-film recommendation and confirm it distinguishes catalog choice from current stock |
+| Teach Messenger Rolan PRO's SAF protective-film range | `fix/messenger-safety-film-line` / #216 | Codex | Merged and deployed; production Worker version `751004dd-74c3-4025-aa10-990100892613` | Ask the live bot to compare SAF 50, SAF 200, and SAF 400 for a realistic security scenario and confirm it asks about the complete glazing system |
+| Teach Messenger the signed Rolan PRO architectural and Smart Film warranty terms | `fix/messenger-warranty-contracts` / #214 | Codex | Merged and deployed; production Worker version `230654c5-fc13-4e78-8ba7-1fac68e7eb70` | Ask the live bot separately about residential Solar Film and Smart Film warranty, then confirm it states the limitations rather than making an unconditional promise |
+| Teach Messenger that MAGNITRONIC PRIME is Rolan PRO's own solar-film line | `fix/messenger-own-film` / #212 | Codex | Merged and deployed; production Worker version `c493091e-0546-472c-a38d-bfd2e29e5461` | Ask the live bot whose film MAGNITRONIC PRIME is and request a recommendation for one real glass/sun scenario |
+| Prevent AI-only repeat-booking claims and force every new Messenger booking through CRM | `fix/messenger-repeat-booking-20260924` / #210 | Codex | Merged and deployed; production Worker version `8e9cc8cb-6f4d-45c5-8566-72fafd7622d0` | Send `запиши меня на новый замер`, answer any missing questions, click a real CRM slot, and confirm the record appears under `Новые лиды` and Calendar |
+| Make Messenger a fast film consultant and remove the post-booking CRM-check dead end | `fix/messenger-human-consultant-20260924` / #208 | Codex | Merged and deployed; production Worker version `93c64342-935b-4d81-ad48-89bc8cd2ba4c` | Send one Solar-film question in the existing booked chat and confirm a fast consultation answer rather than a CRM-check status |
+| Make Messenger conversations follow the customer's language beyond RU/EN/ES | `fix/messenger-multilingual-20260924` / #206 | Codex | Merged and deployed; production Worker version `dd14f10f-8ebe-4cc4-b905-81b6f4752fbe` | Send controlled messages in two non-English languages and confirm the whole booking flow stays in each language |
+| Fix Messenger service recognition for Russian customer messages | `fix/messenger-russian-service-20260924` / #204 | Codex | Merged and deployed; production Worker version `bef48a14-24c6-4d84-95f9-c39e6f0e9103` | Repeat the reported Messenger phrase and finish one controlled booking; confirm the new lead and consultation in CRM |
+| Show canonical Messenger leads in active `/legacy-crm` New Leads inbox | `fix/messenger-new-leads-20260924` / #201 | Codex | Merged and deployed; live inbox shows the Zafar Messenger lead | Release the latest-booking selector and confirm the card opens the 10:00 Sherman Way consultation rather than the older 08:00 test booking |
+| Show canonical Messenger consultations inside the active `/legacy-crm` calendar | `fix/messenger-consultations-calendar-20260924` / #200 | Codex | Implemented and locally verified; 299 tests, TypeScript, production build, and diff check pass | Merge #200, let the normal production deployment finish, then refresh Calendar and confirm the live Zafar booking is visible at 10:00 |
+| Repair live Facebook Messenger lead capture before slot loading | `fix/facebook-messenger-advisory-lock` / #194 | Codex | Merged and deployed as `de262a4`; Prisma `P2010` from deserializing the advisory lock's PostgreSQL `void` return is fixed with `$executeRaw`; 289 tests, TypeScript, local production build, main CI, deploy, health check, and signed production slots smoke test pass | Repeat the live Messenger conversation; confirm the real Lead, Consultation, CalendarEvent, Survey, and notification in CRM |
+| Connect the live Facebook Messenger Cloudflare Worker to canonical CRM lead, slot, and booking endpoints | `codex/facebook-messenger-worker` / #192 | Codex | Merged; production Worker `rolanpro-bot` deployed as version `158a75f7-17f1-45b1-9e5f-431a4f091e59`; protected CRM/Worker secret configured | Send one message from an internal Facebook account, complete a real test booking, and confirm the resulting Lead, Consultation, CalendarEvent, Survey, and notification before public promotion |
+| Implement issue #164: canonical multi-service Project / Solar measurement constructor | `codex/issue-164-project-constructor` / #169 | Codex | PR open; local verification green; no production deployment performed | Review #169 and its CI, merge only after approval, then run the normal migration/release workflow separately |
 | Remove the duplicate field-role CRM shell and open every employee inside the real `/legacy-crm` workspace | `codex/remove-duplicate-field-shell` / `f70355f` | Codex | Merged and deployed | Refresh/sign in through the public `/legacy-crm`; perform a controlled surveyor/installer account check of assigned records and `Рабочий день` without changing live customer data |
 | Remove standalone voice-input button from every CRM interface | `codex/remove-voice-button` / #112 | Codex | Merged and deployed | Refresh any already-open CRM tab once; voice will return only inside the future agent |
 | Put surveyor and installer inside the single canonical CRM interface | `codex/one-crm-all-roles` / #110 | Codex | Merged and deployed | Surveyor and installer should refresh/sign in through the public CRM and use only the `/legacy-crm` role workspace |
@@ -233,7 +246,345 @@ Contributors must add a row before starting substantial work and update or remov
 - Production smoke: the exact reported address `/legacy-crm/survey/notifications` and old `/installer/today` both return 308 to `/legacy-crm`; the public build exposes only the actual `/legacy-crm` page and no longer builds the deleted field shells. An unauthenticated request remains protected. No live employee session was used to change records.
 - Next action: refresh/sign in through the public `/legacy-crm`, then perform one controlled visual check with mapped surveyor and installer accounts to confirm assigned records and `Рабочий день` without changing live customer data.
 
+## 2026-09-12 handoff — canonical Project / Solar measurement constructor
+
+- Scope: PR #169 completes issue #164 and supersedes the smaller foundation PR #161. One canonical Project now carries independent B2B/B2C customer classification, Residential/Commercial site type, multiple service positions, and service-level default films.
+- Solar V1: the existing `/legacy-crm` shell now contains one compact Projects section for owner, manager, and assigned surveyor. It supports room templates, openings, French Window/French Door overall dimensions and cells, glass construction/strength/Low-E details, removal per cell, and film inheritance from service through room/opening/cell.
+- Data integrity: PostgreSQL records source/status as `CUSTOMER`/`UNVERIFIED` or `SURVEYOR_VERIFIED`/`VERIFIED`; revisions preserve the prior measurement and a verified measurement cannot be replaced by customer data. Project, position, film category, source, revision, duplicate-cell, and role access checks are enforced on the server.
+- Film selection: compatibility is evaluated from the existing `FilmCatalog.allowed_glass_types`, `restricted_orientations`, `requires_review`, and selection note fields. The catalog also receives explicit technology, appearance, application-side, and capability taxonomy. Safety A2 is corrected to 14 mil.
+- Storage and permissions: the new section reads and writes canonical PostgreSQL APIs only; it does not create a second shell, second editor, or browser-storage source of truth. Assigned surveyors receive the operational constructor without project finance and can submit only verified measurements.
+- Verification: Prisma schema validation and client generation passed; 210 automated tests passed; TypeScript passed; the real legacy inline script compiled in regression coverage; production build passed; `git diff --check` passed. The worktree has no live `DATABASE_URL`, so no migration was applied to any database.
+- Branch / PR: `codex/issue-164-project-constructor` / #169 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/169`).
+- Release: not deployed. Review #169 and GitHub CI first; merge and deploy only through the normal release workflow, then verify the migration and role-scoped Project screens in a controlled production smoke test.
+
+### 2026-09-12 correction — structured film selection
+
+- User review found that New Order still showed one combined value such as `RolanPRO — Smart Vision Prime`. PR #169 now replaces that control with three cascading fields: film category, product name, and model.
+- Example identity is preserved exactly as `Зеркальная → Prime → NE2`; the service direction remains separate. The selected final model still resolves to one existing catalog ID.
+- Existing catalog entries are migrated in place without changing IDs. Orders save category/name/model snapshots in addition to the catalog ID so later catalog edits do not erase what was sold.
+- The same structure is available in order parameters and catalog management. Missing legacy model codes are displayed as `Модель не указана` instead of inventing a value.
+- Final UI correction: the same cascading fields now apply to the Solar service default and every room, opening, and cell override. The New Order form no longer contains the explanatory sidebar, workflow pills, long introductory copy, or redundant field guidance; only actionable validation messages remain.
+- New Order correction: site type is now a required independent choice (`RESIDENTIAL` or `COMMERCIAL`). The legacy measurement workspaces use it to show the matching residential-room or commercial-area presets, and the selected value is carried through the canonical proposal into the launched PostgreSQL Project.
+- Multi-service film correction: New Order renders one film card for every selected service. Smart, Solar, Safety, and Decorative cards are filtered to their own existing catalog category and each independently selects `Серия / категория → Название → Модель`; the order persists the exact catalog ID and snapshots in `materialsByService`, while the primary-service fields remain for backward compatibility. The selected service film becomes the default for that service's measurement rooms.
+- Lead attribution correction: New Order now captures one incoming service rather than treating every project service as a marketing origin. Managers add or remove cross-sold services inside the same project without changing `leadIntentServiceType`. The current-month report groups leads by frozen source + incoming service and reports cross-sell separately. Canonical launched Projects preserve the source and incoming ServiceType through a new relational migration.
+- Verification: 219 automated tests pass, including the real legacy script compilation, immutable lead-intent guards, monthly service attribution, cross-sell separation, proposal propagation, and canonical Project persistence. GitHub CI generated the Prisma client, passed TypeScript, and completed the production build on commit `ab31ca7`. The local Prisma CLI did not complete on this host, but the same required Prisma generation passed in the clean CI environment.
+
+### 2026-09-14 correction — strict Residential / Commercial measurement structure
+
+- Project creation now presents the property choice explicitly as `Residential · жилой · комнаты дома` or `Commercial · коммерческий · офисы и зоны`; it remains independent from B2B/B2C.
+- Both legacy and canonical measurement workspaces use site-specific terminology and presets. Residential receives home rooms only; Commercial receives offices and commercial zones only.
+- Backend validation rejects a room template that belongs to the other site type. After a typed Project has measurements, its site type is locked so existing rooms cannot be reclassified into offices, or offices into home rooms.
+- Release: PR #169 merged to `main` as `21d304a4af149172f9d5faea4325ceb248c0bd79`. Main CI run #34933721970 passed Prisma generation, 220 tests, TypeScript, and the production build. Production deploy run #34933844649 succeeded and confirmed that the server is serving the same commit.
+- Production smoke: the public login responds successfully and `/legacy-crm` remains session-protected. No customer, order, measurement, film, or employee record was edited during smoke verification.
+
+### 2026-09-15 correction — add service from the Project
+
+- The canonical Project no longer keeps a permanent service dropdown on the page. Owner and manager use one `+ Добавить услугу` button, then choose from a compact list containing only services not already present in that Project.
+- The selected service is still added as an existing `ProjectPosition` through the canonical PostgreSQL API. The incoming lead service remains unchanged, and no second order or Project is created.
+
+### 2026-09-15 correction — confirmed Smart catalog and controls
+
+- Smart-film selection now uses confirmed Rolan PRO lines: MS (Mitsubishi) with Vision 85/89/95, AR (Arshi · China) with Vision A-85/B-88/C-92, and decorative variable-pattern models DEC-SMART 1/2/3. Generic placeholder PDLC models are archived from new selection while historical references remain readable.
+- Films, power supplies, and control options are separate records. The six confirmed power supplies are Rolan Control 50W, 100W, 200W, 300W, 500W, and 1000W. Wi-Fi, multi-zone, voice, Google Home, Amazon Alexa, Apple Home, and wall switches are selectable control options.
+- The owner stated that eight power-supply variants and three manufacturers exist, but only six supply models and two named manufacturer lines plus the decorative line were identified. The two missing supply models and any separate third manufacturer remain intentionally unseeded until their exact names are confirmed.
+- This correction extends PR #172. Prices and unprovided technical specifications remain empty/zero rather than being invented. Production deployment remains a separate release action.
+- Verification on commit `1b8c07a`: all 226 tests passed locally; GitHub CI run #35043142443 generated Prisma, passed tests and TypeScript, and completed the production build. No production deployment was started.
+
+### 2026-09-15 correction — commercial office glass partitions
+
+- Commercial measurement spaces now offer `Офисная стеклянная перегородка` as a separate opening category alongside windows, doors, storefronts, and skylights. It persists as `glass_partition` with its own dimensions, panes/cells, glass characteristics, removal flags, and film inheritance.
+- The manager measurement workspace shows the new add-element category only when the order site type is `COMMERCIAL`. Canonical backend validation rejects `glass_partition` for a `RESIDENTIAL` Project.
+- This correction extends PR #172. Existing measurements and Residential choices remain unchanged; production deployment remains separate.
+
+### 2026-09-15 correction — per-window film removal and proposal readiness
+
+- Every measured window/door/partition card now has a distinct `Удаление плёнки` toggle separate from the destructive `Удалить окно` action. Selected windows contribute their measured sqft to one automatically maintained removal service line using the existing configured removal rate; changing dimensions or quantity recalculates that line.
+- The selected room/office card now exposes its service-scoped film selector directly and shows the chosen brand/model in the room list. A room-level `Удаление плёнки со всех окон` checkbox applies the same existing opening flag to every opening of the active service; per-window checkboxes remain available for exceptions.
+- The canonical opening editor also has one action to select removal for every cell in the opening while retaining per-cell control.
+- Fixed the false `есть окна без размера` proposal blocker: `measureAllWindows()` returns `{ room, win }`, and readiness now validates `win` rather than the wrapper. Positive planned dimensions are also used when stale legacy actual dimensions are zero.
+- Verification after the room-control correction: all 244 automated tests passed, TypeScript passed, and the production build completed locally.
+- This correction extends PR #172. Existing measurements migrate without deletion, and production deployment remains separate.
+
+### 2026-09-15 correction — measurement screen position is stable during editing
+
+- Measurement actions that rebuild the modal now capture the active scroll containers before changing modal state and restore them synchronously and again on the next animation frame after layout settles.
+- Browser scroll anchoring is disabled only inside the manager measurement modal because that workspace uses explicit keyed scroll restoration. Selecting film, toggling removal, changing dimensions, adding an opening, or switching an opening type must no longer jump the screen to the top.
+- Verification: the local preview remained on the second window after its removal checkbox rebuilt the modal; all 245 automated tests, TypeScript, and the production build passed locally.
+- This correction extends PR #172 and does not authorize an automatic production deployment.
+
+### 2026-09-15 correction — project calculation is usable on phones
+
+- The Project calculation modal now converts material, additional-service, and direct-expense tables into labeled stacked rows below 840px instead of retaining a 720px minimum width.
+- Inputs and selects use the full available row width, destructive actions have explicit full labels, section actions become full-width touch targets, and the sticky approval footer stacks its actions without horizontal clipping.
+- The responsive breakpoint is aligned with the modal shell at 840px, preventing a mobile modal from containing the desktop table. Visual verification at a 390×844 phone viewport showed labeled material rows and both footer actions fully inside the screen.
+- This correction extends PR #172 and does not authorize an automatic production deployment.
+
+### 2026-09-15 correction — preliminary customer dimensions versus verified field dimensions
+
+- A manager may create and price a Project from dimensions supplied by the customer. Those windows are stored as `CUSTOMER / UNVERIFIED`, remain clearly marked as preliminary, and do not block calculation or proposal generation.
+- Every measured window has an explicit action to confirm exact dimensions. Editing width, height, or quantity after confirmation returns that window to preliminary status; a field-measurement v2.5 import is recorded as `SURVEYOR_VERIFIED / VERIFIED` with provenance.
+- Installation scheduling and every later production status are blocked until all active windows have positive, verified exact dimensions. Existing Projects already in installation or completed stages are migrated as verified so historical workflows are not broken.
+- This correction extends PR #172. It stays inside the existing Project measurement history and does not authorize an automatic production deployment.
+
+### 2026-09-15 correction — manager calculation is customer pricing, not company accounting
+
+- The manager calculates the Project before creating the proposal: measured sqft, selected material, sale price per sqft, billable add-ons, and the customer total remain available.
+- Purchase/material cost, installer and team cost, marketing, direct company expenses, production cost, profit, and margin are owner-only. The manager Project workspace and payment card do not render those fields, and the old expanded form is owner-only.
+- Project material cost now follows the cut plan and consumes the proportional purchase cost of fitting warehouse lots (narrowest fitting width, oldest receipt first). Catalog cost is used only for an unpriced lot or shortage. Rates continue to come from the reference settings, and the Project calculator no longer asks for manual marketing spend.
+- The default weekly Calendar is now a dispatcher workspace modeled on TintWiz's operational pattern: hourly week grid on the left and the same filtered visits on the map on the right. Events show time, work type, responsible employee, customer and address; overlapping visits receive separate lanes; map pins retain event identity and time; employee and work-type filters update both views together. It continues to use the existing Project/order events and geocache rather than introducing a second calendar store.
+- Hidden internal expenses do not block proposal readiness. They remain attached to the same Project for owner accounting instead of becoming manager inputs or another entity.
+- This correction extends PR #172 and does not authorize an automatic production deployment.
+
+### 2026-09-16 correction — owner Project profitability from one operational record
+
+- The existing Project calculation now provides one compact operational summary: selected services and films, measured glass sqft, calculated film consumption, billable add-ons, assigned installers, warehouse material cost, and crew pay. It does not introduce another calculator, Project, or storage record.
+- Installer labor now comes from each assigned employee's pay configuration and service-category rates. Until a crew is assigned, the estimate keeps a labor reserve from the owner-managed category defaults instead of treating labor as zero. Payroll reuses the same per-employee calculation.
+- Owner-only direct Project expenses include delivery, one-off material purchases, helpers/subcontractors, hired specialists, tools/equipment, and the existing categories. These remain separate from recurring company OpEx.
+- The management profit view calculates customer revenue minus direct Project cost, then allocates the active fixed monthly OpEx equally across all revenue-bearing Projects in that Project's operating month. A configurable California corporation tax reserve is allocated by revenue share and shown separately from actual tax payments.
+- The default planning profile is California C corporation at 8.84% with the $800 annual minimum reserve. Owner may switch to the California S corporation planning rate of 1.5% or a custom rate. This is explicitly a management estimate; tax filings and paid cash remain in accounting.
+- Verification: all 251 automated tests passed, TypeScript passed, and the production build completed locally. At a 390×844 viewport the Project calculation had no horizontal overflow; the fast summary, financial cards, tax settings, and approval footer remained within the phone screen.
+- This correction extends PR #172. Production deployment remains a separate action.
+
+### 2026-09-16 release correction — fast Project intake and company break-even settings
+
+- The primary new-Project action now creates the same lifecycle record and immediately opens the existing room/office measurement workspace. `Сохранить черновик` remains available when dimensions are not ready; no second order, estimate, or storage record is created.
+- Owner Settings now has one focused `Постоянные расходы и безубыточность` section backed by the existing `db.opex` plan data. It accepts recurring company obligations, shows monthly/daily fixed burn, and calculates required Projects and sqft per month.
+- Break-even now excludes personal plans, variable expenses, and tax plans. It uses completed Projects when available and otherwise labels the result as preliminary from calculated Projects, so the owner can begin planning before the first completed month.
+- Existing role boundaries were rechecked: owner retains company P&L and settings; manager can create, measure, price, and prepare the customer proposal without internal cost/profit; surveyor and installer remain limited to assigned work and never receive company financial totals.
+- Verification: all 253 automated tests passed, TypeScript passed, and the production build completed locally. Branch / PR: `codex/project-add-service-button` / #172. The owner explicitly requested the production CRM update; next action is CI, merge to `main`, automatic production deploy, and a read-only smoke check.
+
+### 2026-09-16 correction — quick Project line items do not require dimensions
+
+- The prior primary action that opened measurements immediately was incorrect. New Project now opens the existing Project calculation with a seeded line for the selected incoming service; the manager can quote before any room, office, opening, or dimension exists.
+- A quick line records service direction, the service-scoped existing catalog item, quantity, unit, sale price per unit, derived customer total, and owner-only catalog cost per unit. `+ Добавить услугу` adds Solar, Smart, Safety, or Decorative lines to the same Project; it does not create another order, calculator, catalog, or storage root.
+- Film choices remain restricted to the selected service category and display the existing Category → Name → Model catalog identity. The same quick lines are published as individual Proposal items. Exact measurements remain mandatory only for production documents and installation release.
+- No Prisma schema change is required for this correction: it changes the active legacy Project compatibility payload and Proposal projection while preserving existing relational `ProjectPosition` work from issue #164. A separate database entity or parallel migration would violate the one-Project decision.
+- Verification: all 254 automated tests passed, TypeScript passed after the production build generated Next.js types, and the production build completed locally. Branch / PR: `codex/quick-project-line-items` / #173. Production deployment remains separate.
+
+### 2026-09-16 correction — salaries, manager commission, and advertising reserve
+
+- Owner Settings → `Постоянные расходы и безубыточность` now has one explicit compensation/cost model: owner salary $3,000/month, surveyor salary $4,000/month, assigned-manager commission 5% of Project gross revenue, and advertising reserve 10% of Project gross revenue.
+- Salaries are fixed monthly company obligations and enter the monthly break-even pool. Manager commission and advertising are variable Project PSS costs; they are calculated automatically from `orderRevenue()` and are not requested from the manager on every Project.
+- The previous seeded daily advertising plan is deactivated by an idempotent compatibility migration so the 10% reserve is not counted again as fixed OpEx. Surveyor percentage is set to zero because the approved compensation model is monthly salary.
+- Employee pay cards now show and calculate salary per month rather than per week. The Settings model keeps the manager and active surveyor/owner pay configurations synchronized with the same percentages and salaries.
+- Implemented as an extension of PR #173. Production deployment remains separate.
+
+### 2026-09-16 correction — quick Project cost comes from Warehouse and Payroll references
+
+- The fast Project service row now contains only manager-owned commercial inputs: service, an in-stock film, quantity/unit, and customer sale price. Manual material cost and manual installation price were removed from that row for every role.
+- Film choices are restricted to the selected service category and to catalog items with a positive Warehouse roll balance. The selector shows current metres and approximate sqft; an old selected item remains readable after its stock reaches zero but cannot pass Proposal readiness.
+- Preliminary material cost without dimensions is calculated from the remaining value and area of priced Warehouse purchase lots, including the catalog waste percentage. A Project cannot be approved when the selected quantity is not covered by stock with a recorded purchase price.
+- Preliminary installer cost without dimensions is calculated from the assigned employee's Payroll category rate. Until installers are assigned, the existing owner-managed category defaults remain the reserve. Quick lines no longer contribute a second embedded service cost.
+- Existing quick-line `unitCost` and `cost` compatibility fields are removed during the idempotent legacy-state migration. No second catalog, warehouse, payroll table, Project, or storage root was introduced.
+- Verification: all 258 automated tests passed, standalone TypeScript passed, and a clean production build completed after regenerating the Prisma client.
+- This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains separate.
+
+### 2026-09-16 correction — separate Quick Project Entry and reference-owned service costs
+
+- The prior embedded quick-entry table inside `Расчёт проекта перед КП` was incorrect. `Быстрый ввод проекта` is now a separate compact window opened from the Project card and immediately after choosing the calculation path while creating a Project.
+- The separate window writes service, in-stock film, sqft, and sale price into the same Project compatibility record. `Расчёт проекта` remains the approval and profitability workspace; no second Project, calculator entity, shell, or storage root was introduced.
+- The visible `Услуги` reference and the Project service rows now contain customer pricing only. Material cost comes from priced Warehouse lots; film/installation and additional-work pay come from employee Payroll rates. Direct one-off purchases remain Project expenses.
+- Employee Payroll cards now support per-unit rates for washing, removal, silicone, electrical work, connection, warranty, and custom work. Those rates are included automatically in Project installer cost.
+- Verification: all 261 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains a separate action.
+
+### 2026-09-16 correction — service-owned installer rate
+
+- The owner clarified that each film service must include `Монтажнику / sqft` directly in the `Услуги` reference. This supersedes the immediately preceding rule that Services contain customer prices only.
+- Film material cost still comes only from priced Warehouse lots. The service installation rate is the default payroll accrual for both measured openings and quick Project sqft; employee Payroll rates remain optional individual overrides.
+- Built-in employee category rates are cleared by an idempotent migration so they do not silently mask the service rate. Genuine non-default employee overrides remain unchanged.
+- The same canonical `installation_cost_per_sqft` field already used by relational Projects is restored in the `/legacy-crm` Services UI and synchronized into the compatibility Project calculator. No new entity or storage root is added.
+- Verification: all 261 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- This correction extends branch `codex/quick-project-line-items` and PR #173. Production deployment remains separate.
+
+### 2026-09-16 correction — quick import by Project total
+
+- `Быстрый ввод проекта` now matches the minimum data available from the former CRM: service direction, in-stock film, total sqft, customer-facing Project total, and Project installers.
+- For every service row, sale price per sqft is derived automatically from total divided by sqft. Existing rows that were originally entered by price per sqft remain readable and retain their previous calculation until the total is edited.
+- Every service row now has required start and end dates. Invalid reversed ranges are rejected; the service period is preserved in Proposal data, and the latest quick-service end date supplies the profitability month when no actual installation date exists.
+- Installer assignment is available inside the same compact window. The Project calculator continues to derive film COGS from Warehouse lots and installer accrual from the service/employee reference; neither cost is entered manually during import.
+- Multi-service rows continue through the existing Project revenue, Proposal, payroll, PSS, fixed-expense allocation, and management-profit formulas. No new database entity, storage root, or alternate calculation pipeline was added.
+- Verification: all 264 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- Branch: `codex/quick-project-total-and-installers`. Production deployment remains separate until explicitly authorized.
+
+### 2026-09-17 correction — per-service executors, film and supplies in Quick Project Entry
+
+- Quick Project Entry now assigns installers on each service row instead of once for the whole Project. The Project card keeps the union only for compatibility and permissions; payroll uses the actual row assignments and splits one row only among its selected installers.
+- The owner can add a new installer without leaving the row. The server account is created with its linked compatibility-card ID, the local employee card appears immediately, and it is selected for that service after the one-time password step.
+- Each service row can select Warehouse supplies, set used quantities, or create a new supply with current stock and purchase cost. Supply purchase cost is included in PSS and profit without prematurely issuing inventory.
+- A new film can be created in the same row using `brand → film category → product name → model`, plus the roll's width, length, lot, retail price, and actual purchase cost. The action writes the existing FilmCatalog and Warehouse receipt structures and immediately selects the new film.
+- New Project quick rows and migrated old rows receive independent `installerIds` and `supplyItems`; no second Project, catalog, Warehouse, employee directory, shell, or storage path was introduced.
+- Verification: all 268 automated tests passed, standalone TypeScript passed, and the production build completed locally.
+- Branch: `codex/quick-project-total-and-installers`, PR #174. Production deployment remains separate until explicitly authorized.
+
+### 2026-09-17 correction — one-step closure for completed former-CRM projects
+
+- The owner can now finish a historical import inside `Быстрый ввод проекта` with `Закрыть как выполненный и оплаченный`; no window dimensions or parallel import entity are required. Direct delivery, purchase, helper, subcontractor, tools, rental, permit, and other expenses can be recorded in the same window before closing.
+- The action uses service start/end dates and a selected payment date/method, records full payment and completion milestones, approves the Project estimate, and preserves the existing payroll, PSS, monthly fixed-cost, California-tax, and net-profit calculations.
+- The close action requires valid service data, assigned installers, film purchase cost, and valid dates. Because the material was consumed before import, it neither checks today's stock quantity nor deducts today's Warehouse; normal active-Project approval remains strict about available priced stock.
+- No automatic customer notification is sent for the historical event. The Project carries explicit import flags and audit-timeline notes.
+- Verification: all 275 automated tests passed after merging the latest `main`, standalone TypeScript passed, and the production build completed locally.
+- Branch: `codex/quick-project-total-and-installers`, PR #174. Production deployment remains separate until explicitly authorized.
+
+### 2026-09-15 architecture correction — Order and Project are the same customer job
+
+- Product rule: one canonical PostgreSQL `Project` survives unchanged from calculation through Proposal, payment, installation, and completion. Closing the sale changes its stage; it must not create a second job record.
+- The visible navigation is now consolidated as one `Проекты` workspace, but legacy `db.orders` and relational `Project` are still separate and unsynchronized behind that interface. Finishing the consolidation still requires a tested stable-ID/data migration and one PostgreSQL write path.
+- PR #172 must not be treated as the final entity-consolidation release. It may supply the Project fields and permissions, but the duplicate launch/list workflow remains migration work. No production deployment is authorized.
+
+## 2026-09-23 handoff — reset Project data and allow manager manual film
+
+- Owner request: empty all CRM Project/order data and let a manager type a film manually when it is missing from the selectable Warehouse list.
+- Branch: `codex/reset-projects-manual-film`.
+- Project reset migration: `20260923182500_reset_project_data_only`. It deletes relational Projects and dependent execution rows, clears legacy `payload.orders`, removes only installer work sessions tied to deleted Project jobs, and preserves leads, clients, deals, proposals, consultations, users, catalog, services/pricing, Warehouse and independent employee shifts.
+- Quick Project Entry now accepts `manualFilmName`. This lets owner/manager save and quote the film name without creating fake Warehouse stock. New Warehouse film creation remains owner-only.
+- A manual film is emitted to Proposal output as a film item, but historical completion is blocked until the line is mapped to a real catalog/Warehouse film so material cost cannot silently remain unknown.
+- Verification and release: PR #196 merged to `main` as `d6643933c6f7503c865c0c72ef57882fc42df338`; PR CI #423 and main CI #424 both passed tests, TypeScript, and production build. Production deploy #405 completed successfully. The production watcher applies `prisma migrate deploy` before activating a release and writes the active release only after migration, seed, build, and health checks succeed; therefore the one-time Project reset migration completed before `d6643933` became active.
+
+## 2026-09-23 handoff — Messenger booking SMS + booking visibility
+
+- Owner reported two production symptoms: the bot implied phone follow-up but no SMS arrived, and the booked appointment was not obvious in CRM.
+- Root cause confirmed in code: Facebook booking already created the canonical `Lead -> CalendarEvent -> Consultation -> Survey` chain, but `onConsultationScheduled` only created an internal consultant notification; no Twilio send was called.
+- Branch: `fix/messenger-booking-sms`.
+- Fix: after the booking transaction commits, CRM sends the confirmation through the existing Twilio `sendSms` service, records source/kind/consultation metadata on the Twilio message, and writes a dedicated `integration.facebook_messenger.booking_sms` activity receipt.
+- Repeated Meta webhook delivery is protected by a PostgreSQL advisory lock plus the successful SMS receipt, so a confirmed SMS is not sent twice. A failed SMS does not roll back the already-created booking; CRM records the error and creates an unread manager notification.
+- New Facebook bookings also create a manager-facing CRM notification `Новая запись из Facebook`. The appointment itself remains a Consultation/Calendar event, visible under `Клиенты -> Замеры` and `Расписание`, not as a Project.
+- Worker response now reads `sms_confirmation.status` from CRM. It says SMS was sent only for `sent` / `already_sent`; otherwise it tells the customer to keep the Messenger confirmation.
+- Worker logs `crm_booking_confirmed` with lead ID, consultation ID, and SMS status for production diagnosis.
+- Verification pending CI, merge/deploy of CRM, and a controlled real Messenger booking smoke test. Worker source deployment remains a separate Cloudflare release action.
+
+## 2026-09-24 handoff — canonical Messenger consultations in the active calendar
+
+- Production diagnosis confirmed that Messenger created canonical Consultation `39be9261-0f86-4dce-8179-23eeb9cf71eb`, CalendarEvent `6476f790-8367-4bde-9ad4-62c27bbafdcf`, and the related Survey before sending SMS. The booking is for Zafar at `385 Sherman Way, Los Angeles`, scheduled for 2026-09-24 10:00–11:00 America/Los_Angeles, assigned to Alan with Danil as manager.
+- Root cause: `/legacy-crm` is the only visible CRM, but its calendar read only `LegacyWorkspace.payload.orders`; the canonical PostgreSQL consultation API and the hidden modern consultation page were not represented in that calendar.
+- Fix: `/legacy-crm` now loads the existing role-scoped `/api/v1/consultations` feed during cloud startup and projects each Consultation into the existing day/week/month calendar and map at render time. It does not copy canonical consultations into the legacy payload or add another storage path.
+- Clicking a canonical event opens a compact `Запись из Messenger` card with customer, date/time, address, service, surveyor, and status inside the same CRM shell.
+- Verification: all 299 automated tests passed, TypeScript passed, the production build passed, and `git diff --check` passed.
+- Branch / PR: `fix/messenger-consultations-calendar-20260924` / #200.
+- Next action: merge #200, wait for the standard production deployment, refresh `/legacy-crm`, open `Календарь`, and confirm the 10:00 Zafar event and detail card.
+
+## 2026-09-24 handoff — canonical Messenger leads in the active inbox
+
+- Owner clarified that a Messenger booking must appear immediately in the visible `Новые лиды` section, not only in Calendar.
+- Root cause: the active legacy inbox only read the retired external lead-backend queue and could even show `Сервер лидов не подключён`, while the bot already created the authoritative PostgreSQL Lead.
+- Fix: `/legacy-crm` now reads the role-scoped `/api/v1/leads` feed, shows active `facebook_messenger` leads including `CONSULTATION_SCHEDULED`, joins the matching Consultation for address/time/surveyor, and refreshes the visible inbox every 10 seconds.
+- A booked Messenger card opens its canonical Consultation. It does not create a duplicate legacy Project or copy canonical leads into `LegacyWorkspace.payload`.
+- Verification: all 301 automated tests passed, TypeScript passed, the production build passed, and `git diff --check` passed.
+- Branch: `fix/messenger-new-leads-20260924`.
+- Live verification after #201 confirmed the Zafar card appears. Because the same Lead has both an older 08:00 test Consultation and the real 10:00 Consultation, the first release selected the earlier list item. Follow-up branch `fix/messenger-new-leads-latest-booking` selects the latest active Consultation and ignores cancelled/deleted records.
+- Live verification after the latest-booking release confirmed the card shows 10:00 and Sherman Way. A final follow-up fixes its button to call the existing canonical Consultation card action used by Calendar.
+
+## 2026-09-24 handoff — Russian Messenger service recognition
+
+- Root cause: the Worker depended on the language model to extract the service and its fallback parser checked Russian `защит` before `солнц`. Therefore `солнцезащитная плёнка` could be stored as Safety Film or remain missing, causing the same generic qualification message to repeat.
+- Fix: the latest raw customer message is now parsed deterministically for Solar, Smart, Safety, and Decorative Film wording. Solar is resolved before Safety, and an explicit current message corrects a stale model classification. The exact reported typo `услга солнцезащитная пленка` resolves to `Solar Film`.
+- Dialog correction: when the model tries to claim a booking before all required facts exist, the Worker asks only for the next missing field. After recognizing the service it asks for Residential/Commercial, then the address/city, rather than requesting service, property type, and address again.
+- Verification: all 303 tests passed, including the exact reported phrase and all four service families; TypeScript, production build, Worker dry-run, and `git diff --check` passed. GitHub PR CI also passed tests, TypeScript, and production build.
+- Release: PR #204 merged to `main` as `73fd7bef887f23292b1df017ec70e7e0e187b452`. Cloudflare Worker `rolanpro-bot` deployed as version `bef48a14-24c6-4d84-95f9-c39e6f0e9103`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names were present before and after deployment; no secret value was printed or changed. The live endpoint returned the expected protected `403` response to an unsigned GET.
+- Next action: send `услуга солнцезащитная пленка` in the existing Messenger chat, answer the single next question, select a real CRM slot, and confirm the booking appears under `Новые лиды` and Calendar.
+
+## 2026-09-24 handoff — multilingual Messenger booking
+
+- The assistant now detects the latest customer's language, stores it as a BCP-47 language tag, replies naturally in that language, and changes languages when the customer does. The prompt explicitly prevents unnecessary transliteration.
+- Worker-owned messages no longer fall back permanently to English outside Russian, English, and Spanish. Slot offers, missing-field questions, booking/SMS confirmations, and failure messages are translated through the existing protected Anthropic integration; dates and times use the customer's locale.
+- Language normalization covers standard BCP-47 tags and common names for German, French, Portuguese, Italian, Ukrainian, Polish, Turkish, Arabic, Hebrew, Persian, Hindi, Chinese, Japanese, Korean, Vietnamese, Russian, Spanish, and English. Other valid BCP-47 languages pass through generically rather than requiring a hard-coded list.
+- Verification: all 304 tests passed, including German, French-Canadian, Arabic, and Chinese language normalization; TypeScript, production build, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #206 merged to `main` as `8da58b1389a32dfefc074587dea785eb3b589454`. Cloudflare Worker `rolanpro-bot` deployed as version `dd14f10f-8ebe-4cc4-b905-81b6f4752fbe`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: use an internal Messenger account to send one German and one Arabic message, complete the qualification questions, and confirm slot and booking confirmations stay in the selected language.
+
+## 2026-09-24 handoff — fast human-like film consultant
+
+- Root cause of the reported hang: after a confirmed booking, the KV conversation remained in `booked`. A later product question could be interpreted as a slot claim; the Worker then emitted `Проверяю свободное время в CRM`, deliberately skipped a second slot lookup because the customer was already booked, and never sent a follow-up.
+- State fix: the real application stage is now passed to the assistant. An already-booked customer receives a normal follow-up consultation answer unless they explicitly ask for another appointment/address. The qualification override is disabled for booked conversations, and the dead-end CRM-check text is removed.
+- Consultant behavior: the assistant answers the customer's actual product question first, asks at most one relevant follow-up, and does not force every message into a booking form.
+- Product knowledge: the Worker now carries the verified Magnitronic Solar Prime SP-5%, SP-15%, SP-20%, SP-35%, SP-50%, and SP-70% range, 2026 measured VLT/UV/IR/TSER figures, glass-compatibility limits, daytime/nighttime privacy guidance, professional-installation positioning, and the owner-provided lifetime-warranty statement constrained to eligible installations and written terms.
+- Speed: customer chat and operational translation use active `claude-haiku-4-5-20251001`, history was reduced from 20 to 12 messages, output was reduced from 1,000 to 500 tokens, and latency/status telemetry is recorded without message contents or PII. Anthropic's official customer-support guidance identifies Haiku 4.5 as the latency-optimized choice.
+- Verification: all 305 tests passed, including the exact already-booked qualification guard; TypeScript, production build, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #208 merged to `main` as `e75dc88f8f75a19bdefadc88f6c6a8d8d2c8afe7`. Cloudflare Worker `rolanpro-bot` deployed as version `93c64342-935b-4d81-ad48-89bc8cd2ba4c`.
+- Binding safety: `CHAT`, the CRM URL, and the protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: in the same Messenger chat, ask `Расскажи про солнцезащитную плёнку и какую выбрать?`; confirm the answer explains the line and asks one diagnostic question. Then request another appointment explicitly only if a second booking is desired.
+
+## 2026-09-24 handoff — repeat Messenger bookings must reach CRM
+
+- Root cause: after one confirmed booking the conversation remained marked `booked`. The assistant could interpret a later message as another booking and say it was booked, while the Worker suppressed the second CRM call because it still considered the conversation already booked. The new appointment therefore existed only in the reply text and never in PostgreSQL.
+- Fix: explicit repeat-booking requests in Russian, English, and Spanish now restart only the booking state, clear the previous capture marker, recapture the current lead event in CRM, and load real CRM availability. If the assistant attempts a booking claim from an already-booked conversation, the same guard starts this verified flow instead of accepting an AI-only confirmation.
+- Booking invariant: a new booking is created only after the customer clicks one of the real slot quick replies and the Worker successfully calls the canonical CRM booking endpoint. The assistant cannot independently invent a time or claim that CRM has been updated.
+- Verification: all 306 tests passed, including repeat-booking intent, false-positive prevention for `запись не появилась в CRM`, and source-level guard assertions. TypeScript, production build, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #210 merged to `main` as `59741e22e786e7eef571c8d9e1103e8c83bb571e`. Cloudflare Worker `rolanpro-bot` deployed as version `8e9cc8cb-6f4d-45c5-8566-72fafd7622d0`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: send `запиши меня на новый замер`, answer any missing questions, and click one of the real time buttons returned from CRM. Then confirm the appointment appears under `Новые лиды` and Calendar. The earlier AI-only attempt cannot be reconstructed because it did not store a valid selected CRM slot.
+
+## 2026-09-24 handoff — Rolan PRO's own MAGNITRONIC PRIME film
+
+- Owner confirmed that MAGNITRONIC PRIME is Rolan PRO's own solar-control film line. The supplied 12-page `ROLANPRO_MAGNITRONIC_PRIME_A4_Product_Cards.pdf` is the canonical source used for this Worker update.
+- The bot now says `our Rolan PRO MAGNITRONIC PRIME film` when ownership is relevant and recognizes the official SP-05, SP-15, SP-20, SP-35, SP-50, and SP-70 model names.
+- Product guidance now distinguishes specialty high-darkness, maximum glare control, strong solar control, balanced everyday use, high-daylight use, and ultra-clear use. It preserves the product-card requirement to verify glazing and thermal-stress conditions before recommending a model.
+- Specification correction: SP-20 IRR is 96.2% and SP-70 IRR is 99.1% in the owner-provided cards. The prior Worker values of 98.3% and 99.4% were replaced. All VLT, IRR, UVR, and TSER figures now match the cards.
+- Verification: all 306 tests, TypeScript, production build, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #212 merged to `main` as `fe031ac2a4a7ea7b4376668a18ddea9ff5579143`. Cloudflare Worker `rolanpro-bot` deployed as version `c493091e-0546-472c-a38d-bfd2e29e5461`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: ask the live bot `Чья это плёнка MAGNITRONIC PRIME и какую выбрать для солнечных окон?`; confirm it identifies the Rolan PRO line, explains the likely direction, and asks one glass/sun diagnostic question instead of inventing a final recommendation.
+
+## 2026-09-24 handoff — official architectural and Smart Film warranties
+
+- The owner supplied the official 5-page Architectural Window Film Limited Warranty and 4-page Smart Film Limited Warranty Agreement. Both PDFs were fully extracted and visually checked before updating the Worker.
+- Architectural Film summary: qualifying owner-occupied residential Solar and Safety/Security Film has a non-transferable Limited Lifetime term tied to the original retail purchaser's continuous ownership; commercial and other non-owner-occupied projects use the executed written term up to 12 years; workmanship is 5 years unless a longer term is written.
+- Architectural remedy/claim guardrails: the first 5 years generally include standard material and labor on an approved affected area; after year 5, qualifying residential product coverage provides replacement film material while labor/access may be charged. Claims must be reported within 30 days of discovery and before expiry, with project details and photos/video.
+- Smart Film summary: 12 years total for qualifying supplied-and-installed film on a paid project - years 1-5 under the applicable manufacturer warranty and years 6-12 under Rolan PRO's Extended Limited Warranty. Installation workmanship and Rolan PRO-supplied/installed power or control equipment are covered for 5 years, subject to the written exclusions. One transfer at the same property is allowed with proof; relocation needs written approval.
+- The bot now summarizes exclusions and performance limitations and never promises claim approval. Executed project documents and the full signed warranty control.
+- Verification: all 306 tests passed; TypeScript passed after the production build; production build, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #214 merged to `main` as `2ef85d2c444a9b5e376782bb44311c1833bb88a4`. Cloudflare Worker `rolanpro-bot` deployed as version `230654c5-fc13-4e78-8ba7-1fac68e7eb70`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: ask `Какая гарантия на солнцезащитную плёнку для моего дома?` and `Какая гарантия на Smart Film и блок питания?`; confirm the bot gives the correct conditional summary and offers human review for a specific claim.
+
+## 2026-09-24 handoff — Rolan PRO SAF protective-film range
+
+- The owner supplied the 12-page image-only `Защитные пленки.pdf`. Every page was rendered and visually reviewed because the PDF contains no extractable text layer.
+- The bot now recognizes Rolan PRO's SAF 50, SAF 100, SAF 200, SAF 300, SAF 350, and SAF 400 protective films, including the card values for thickness, ply count, tensile strength, MD/TD elongation, PLI break strength, VLT, UV rejection, and IR rejection.
+- Recommendation logic presents SAF 50 as the thin basic shard-retention option, SAF 100 as heavier-duty protection, SAF 200 for higher-risk security projects, and SAF 300/350/400 as progressively thicker high-strength options. It asks about the customer's risk goal, glass, frame, pane size, access, and attachment/anchoring requirements before recommending a model.
+- Safety guardrail: the bot never describes the glass as unbreakable, shatterproof, burglar-proof, bulletproof, blast-proof, hurricane-proof, or injury-proof. It explains that performance depends on the complete film/glass/frame/attachment system and only makes standard-specific claims when the executed project documents identify a tested system and performance level.
+- Verification: all 306 tests, production build, TypeScript, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #216 merged to `main` as `8bea3f3a9d8766b55bd6908027eef6b1c89b4ad0`. Cloudflare Worker `rolanpro-bot` deployed as version `751004dd-74c3-4025-aa10-990100892613`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: ask `Чем отличаются SAF 50, SAF 200 и SAF 400 и что выбрать для защиты витрины?`; confirm the bot explains the thickness/security ladder, avoids guarantees, and asks one diagnostic question about the glazing system or threat level.
+
+## 2026-09-24 handoff — decorative static-cling and reeded catalogs
+
+- The owner supplied two three-page supplier catalogs. Both were text-extracted and visually reviewed to verify model-to-image groupings.
+- The bot now knows the static-cling privacy pattern ranges AT-001-028, AT-036-043, AT-049-052, textured AT-101-104, and 3D laser-rainbow AT-029-035 plus AT-044-048.
+- Reeded/fluted options include AT-C001 25 mm; AT-C002 5 mm in clear, grey, tea, and black; AT-C004B 13 mm; AT-C004 15 mm in clear, tea, and grey; AT-C005 9 mm; AT-C006 6 mm; AT-C008 12 mm; textured AT-S50; and prismatic AT-055B. Supplier roll formats are 1.52 x 30 m and 1.52 x 50 m.
+- Catalog guardrails: supplier codes are options, not confirmation of Rolan PRO manufacture, current stock, measured performance, or an installed appearance guarantee. The bot confirms availability and sample appearance before promising a model and does not confuse decorative privacy with Solar, Safety, or Smart Film performance.
+- Verification: all 306 tests, production build, TypeScript, Worker dry-run, `git diff --check`, and PR CI passed.
+- Release: PR #218 merged to `main` as `8e741c42db8d294f7789bb586e3363100e40f81e`. Cloudflare Worker `rolanpro-bot` deployed as version `cfa1403e-8e49-4098-aa14-1b3c7a256222`.
+- Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
+- Next action: ask `Нужна декоративная плёнка с рифлёными полосами для офисной перегородки, какие варианты есть?`; confirm the bot explains the width/color choices and asks one question about desired privacy or glass size.
+
 ## Completion rule
+
+### 2026-09-15 correction — one Projects workspace
+
+- Owner and manager navigation now contains one `Проекты` entry instead of separate `Заказы` and `Проекты` entries. New work is labeled `Новый проект`, and the funnel, cards, primary actions, and project intake use the same lifecycle language.
+- The canonical PostgreSQL constructor remains available from the Projects workspace as `Проверенные замеры`; it is a measurement tool inside the project, not a second customer-job list.
+- Compatibility is preserved: legacy `orders` keys, `#/order/...` links, `R-...` numbers, and `Заказ-наряд` documents are not deleted or rewritten. The relational ID/data migration is still required before legacy storage can be retired.
+- Verification: all 240 automated tests pass locally. GitHub CI run #35055402899 generated the current Prisma client, passed the complete test suite and TypeScript, and completed the production build on commit `3d3b146`.
+- Branch / PR: `codex/project-add-service-button` / #172. No production deployment was started.
+
+### 2026-09-15 correction — Google Maps in the dispatch calendar
+
+- The calendar/map workspace now uses Google Maps as its primary map. Project visit markers, customer/address details, calendar filters, and the existing route line remain attached to the same Project events.
+- `/legacy-crm` receives the restricted browser key from protected server environment configuration (`GOOGLE_MAPS_BROWSER_API_KEY`, with the existing `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` as compatibility fallback). The key is not committed to Git or written into CRM storage.
+- If the key is absent, rejected, or Google Maps cannot load, the existing Leaflet map remains an operational fallback instead of breaking Calendar.
+- This correction extends PR #172. Production deployment remains a separate release action.
+
+### 2026-09-15 correction — one readable dispatch workspace
+
+- The Day view no longer repeats the same events across KPI cards, an agenda card, and four appointment-type lanes. It now uses one 06:00–21:00 timeline beside the map.
+- The Week view uses the same operating model with seven time columns. The calendar receives the primary width; the map is a narrower route-planning context. Month remains a compact calendar with an optional map.
+- Date navigation, Day/Week/Month mode, event filter, employee filter, event count, and `+ Назначить` are consolidated into one two-row command bar. Decorative legends and empty dashboard cards were removed from the main scheduling surface.
+- The implementation follows the official TintWiz scheduler pattern relevant to Rolan PRO: calendar and map side by side, filtering by appointment/team member, and scheduling against the existing Project. It does not copy TintWiz data or create another scheduling entity.
+- Desktop visual verification passed at 1920×1080 for Day and Week in the local preview. This correction extends PR #172; production deployment remains a separate action.
 
 A task is shared and complete only when all applicable statements are true:
 
@@ -244,3 +595,11 @@ A task is shared and complete only when all applicable statements are true:
 - Production is verified separately when deployment is part of the task.
 
 Local edits, screenshots, chat messages, and unpushed commits do not count as shared completion.
+
+## 2026-09-14 — Mobile measurement viewport repair
+
+- Owner: Codex; branch `codex/mobile-measurement-workspace`, based on current `main`.
+- Scope: the existing legacy measurement editor; one mobile scroll surface, compact title/services/progress, collapsible summary, footer in document flow, accessible room inputs.
+- Verification: 189 automated tests passed; TypeScript passed; production build passed; inline scripts compile. Independent agent review identified adapter overrides, field focus IDs, details state, and horizontal scroll restoration; all addressed.
+- Blocker: browser rejected both local preview URLs with ERR_BLOCKED_BY_CLIENT. Actual mobile rendering, keyboard interaction, and server persistence are NOT verified. Do not claim mobile acceptance or production completion.
+- Next action: review dedicated branch/PR, test the injected legacy route at 375/390/430px and desktop with keyboard and save/reopen, then release through main after CI. Not merged or deployed.

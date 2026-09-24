@@ -62,3 +62,23 @@ test("demo login requires an explicit development-only opt in", () => {
     () => assert.equal(getEnv().demoLoginEnabled, true),
   );
 });
+
+test("Google Maps browser key prefers the server-only alias", () => {
+  withEnvironment(
+    {
+      NODE_ENV: "development",
+      GOOGLE_MAPS_BROWSER_API_KEY: "server-key",
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: "public-key",
+    },
+    () => assert.equal(getEnv().googleMapsApiKey, "server-key"),
+  );
+
+  withEnvironment(
+    {
+      NODE_ENV: "development",
+      GOOGLE_MAPS_BROWSER_API_KEY: undefined,
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: "public-key",
+    },
+    () => assert.equal(getEnv().googleMapsApiKey, "public-key"),
+  );
+});

@@ -49,6 +49,8 @@ test("server injects a mobile-only Orders card adapter into the canonical legacy
   assert.match(result, /word-break: normal/);
   assert.match(result, /writing-mode: horizontal-tb/);
   assert.match(result, /MutationObserver/);
+  assert.match(result, /rolanpro-mobile-workspace-style/);
+  assert.match(result, /@media \(max-width: 768px\)/);
   assert.match(result, /cloudBoot\(\)/);
 });
 
@@ -106,19 +108,46 @@ test("server injects service, catalog material and complexity controls into orde
 <script>cloudBoot()</script></body>`);
 
   assert.match(result, /rolanpro-order-material-section/);
-  assert.match(result, /no-material/);
+  assert.match(result, /rolanpro-new-order-material-list/);
+  assert.match(result, /servicePickerId/);
+  assert.match(result, /Плёнка по каждой услуге/);
+  assert.match(result, /Серия \/ категория/);
   assert.match(result, /db\.settings\.catalog/);
   assert.match(result, /catalogCategory/);
   assert.match(result, /materialCatalogId/);
+  assert.match(result, /materialsByService/);
+  assert.match(result, /selectedNewOrderServiceIds/);
+  assert.match(result, /return items\.filter\(\(item\) => item\.category === category\)/);
+  assert.match(result, /if \(!category\) return \[\]/);
+  assert.match(result, /chosenMaterials\[serviceId\]/);
   assert.match(result, /complexityCoef/);
   assert.match(result, /openRolanProOrderParameters/);
   assert.match(result, /saveRolanProOrderParameters/);
   assert.match(result, /rp-op-service/);
   assert.match(result, /rp-op-material/);
+  assert.match(result, /rp-op-film-category/);
+  assert.match(result, /rp-op-film-name/);
   assert.match(result, /rp-op-complexity/);
   assert.match(result, /openManagerProjectServicesModal/);
   assert.match(result, /order\.serviceTypes/);
   assert.match(result, /defaultCatalogByScope/);
+  assert.match(result, /materialCategory/);
+  assert.match(result, /materialName/);
+  assert.match(result, /materialModel/);
+  assert.match(result, /createdOrder\.materialCategory/);
+  assert.match(result, /orderBuilder\.materialModel/);
+  assert.doesNotMatch(result, /Категория, название и модель выбираются отдельно/);
+  assert.doesNotMatch(result, /Выбранная модель станет материалом заказа/);
+});
+
+test("injected order film hierarchy remains valid JavaScript", () => {
+  const result = replaceLegacyBootstrapLogin(`<!doctype html><body>
+<div id="app"><div>legacy bootstrap</div></div>
+<script>cloudBoot()</script></body>`);
+  const script = result.match(/<script id="rolanpro-order-intake-cleanup-script">\s*([\s\S]*?)\s*<\/script>/)?.[1];
+
+  assert.ok(script);
+  assert.doesNotThrow(() => new Function(script));
 });
 
 test("New Order guidance and parameter patch is injected only once", () => {

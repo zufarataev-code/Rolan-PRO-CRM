@@ -1,3 +1,4 @@
+import { injectMobileWorkspaceAdapter } from "./mobile-workspace";
 import { injectMobileProposalsCards } from "./mobile-proposals";
 
 const APP_START = '<div id="app">';
@@ -282,5 +283,5 @@ export function replaceLegacyBootstrapLogin(html: string) {
 </div>`;
 
   const withoutBootstrapLogin = `${html.slice(0, appStart)}${loadingShell}${html.slice(scriptStart)}`;
-  return injectMobileProposalsCards(injectMobileOrdersCards(withoutBootstrapLogin));
+  return injectMobileWorkspaceAdapter(injectMobileProposalsCards(injectMobileOrdersCards(withoutBootstrapLogin)));
 }

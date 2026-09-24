@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const session = await getRequestSession(request);
-  const publicAppUrl = getEnv().appUrl;
+  const env = getEnv();
+  const publicAppUrl = env.appUrl;
 
   if (!session) {
     return NextResponse.redirect(new URL("/login", publicAppUrl));
@@ -40,6 +41,11 @@ export async function GET(request: NextRequest) {
 
   const cloudHtml = replaceLegacyBootstrapLogin(html);
   const employeeLoginUrl = new URL("/login", publicAppUrl).toString();
+  const googleMapsBootstrapPatch = `
+    <script>
+      window.__ROLANPRO_GOOGLE_MAPS_API_KEY__ = ${JSON.stringify(env.googleMapsApiKey)};
+    </script>
+  `;
 
   const teamAccessPatch = `
     <script>
@@ -183,6 +189,203 @@ export async function GET(request: NextRequest) {
     </script>
   `;
 
+  const teamDirectoryPatch = session.roles.includes(ROLE_CODES.OWNER) ? `
+    <script id="rolanpro-team-directory-sync">
+      (() => {
+        const nativeFetch = window.fetch.bind(window);
+        const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
+        const serverRoleToLegacy = (roles) => {
+          if (typeof teamLegacyRoleFromServer === 'function') {
+            const mapped = teamLegacyRoleFromServer(Array.isArray(roles) ? roles : []);
+            if (mapped) return mapped;
+          }
+          const values = Array.isArray(roles) ? roles : [];
+          if (values.includes('OWNER')) return 'owner';
+          if (values.includes('MANAGER')) return 'manager';
+          if (values.includes('CONSULTANT')) return 'measurer';
+          return 'installer';
+        };
+        const legacyTitle = (role) => ({
+          owner: 'Owner',
+          manager: 'Manager',
+          measurer: 'Measurer',
+          installer: 'Installer',
+        })[role] || 'Employee';
+
+        function legacyUsersReady() {
+          return typeof db !== 'undefined' && db && Array.isArray(db.users);
+        }
+
+        function findLegacyUser(member) {
+          if (!legacyUsersReady()) return null;
+          const linkedIds = Array.isArray(member?.legacyUserIds) ? member.legacyUserIds : [];
+          const linked = db.users.find((user) => linkedIds.includes(user.id));
+          if (linked) return linked;
+          const email = normalizeEmail(member?.email);
+          return email ? db.users.find((user) => normalizeEmail(user.email) === email) || null : null;
+        }
+
+        function freshLegacyId(member) {
+          const linkedIds = Array.isArray(member?.legacyUserIds) ? member.legacyUserIds : [];
+          const freeLinked = linkedIds.find((id) => id && !db.users.some((user) => user.id === id));
+          if (freeLinked) return freeLinked;
+          const base = 'u_srv_' + String(member?.userId || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 18);
+          let candidate = base || ('u_srv_' + Date.now());
+          let suffix = 1;
+          while (db.users.some((user) => user.id === candidate)) {
+            candidate = base + '_' + suffix++;
+          }
+          return candidate;
+        }
+
+        async function materializeCanonicalMember(member) {
+          if (!legacyUsersReady() || !member?.userId) return { user: null, changed: false };
+
+          let user = findLegacyUser(member);
+          let changed = false;
+          if (!user) {
+            const role = serverRoleToLegacy(member.roles);
+            user = {
+              id: freshLegacyId(member),
+              name: member.fullName || member.email || 'Сотрудник',
+              email: normalizeEmail(member.email),
+              phone: '',
+              role,
+              title: legacyTitle(role),
+              active: member.isActive !== false,
+              commissionPct: 0,
+              hourlyRate: 0,
+              lang: 'ru',
+              payConfig: role === 'installer'
+                ? { type: 'per_sqft', ratePerSqft: 0, ratesByCategory: {}, ratesByWorkType: {} }
+                : {},
+              pin: '',
+              telegramChatId: '',
+            };
+            db.users.push(user);
+            changed = true;
+          }
+
+          const canonicalRole = serverRoleToLegacy(member.roles);
+          const canonicalEmail = normalizeEmail(member.email);
+          const canonicalName = String(member.fullName || '').trim();
+          const canonicalActive = member.isActive !== false;
+
+          if (canonicalName && user.name !== canonicalName) {
+            user.name = canonicalName;
+            changed = true;
+          }
+          if (canonicalEmail && normalizeEmail(user.email) !== canonicalEmail) {
+            user.email = canonicalEmail;
+            changed = true;
+          }
+          if (canonicalRole && user.role !== canonicalRole) {
+            user.role = canonicalRole;
+            user.title = legacyTitle(canonicalRole);
+            changed = true;
+          }
+          if (Boolean(user.active) !== canonicalActive) {
+            user.active = canonicalActive;
+            changed = true;
+          }
+
+          const linkedIds = Array.isArray(member.legacyUserIds) ? member.legacyUserIds : [];
+          if (!linkedIds.includes(user.id)) {
+            const linkResponse = await nativeFetch('/api/v1/team/' + encodeURIComponent(member.userId), {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ legacyUserId: user.id }),
+            });
+            if (!linkResponse.ok) {
+              console.warn('[Team directory] failed to link legacy card', member.userId, user.id);
+            }
+          }
+
+          return { user, changed };
+        }
+
+        async function syncCanonicalTeamDirectory(options = {}) {
+          if (window.__rolanproTeamDirectorySyncing || !legacyUsersReady()) return null;
+          window.__rolanproTeamDirectorySyncing = true;
+          try {
+            const response = await nativeFetch('/api/v1/team', { cache: 'no-store' });
+            if (!response.ok) return null;
+            const payload = await response.json();
+            const members = Array.isArray(payload?.data) ? payload.data : [];
+            let changed = false;
+            let requestedUser = null;
+            const requestedEmail = normalizeEmail(options.openEmail);
+
+            for (const member of members) {
+              const result = await materializeCanonicalMember(member);
+              changed = changed || result.changed;
+              if (requestedEmail && normalizeEmail(member.email) === requestedEmail) {
+                requestedUser = result.user;
+              }
+            }
+
+            if (changed && typeof save === 'function') save();
+            if (changed && options.render !== false && typeof render === 'function') render();
+
+            if (requestedUser && typeof openTeamMember === 'function') {
+              if (typeof closeModal === 'function') closeModal();
+              openTeamMember(requestedUser.id);
+              if (typeof cloudStatus === 'function') cloudStatus('Этот сотрудник уже был создан. Открыта его карточка.', 'blue');
+            }
+
+            return { members, changed, requestedUser };
+          } catch (error) {
+            console.error('[Team directory] synchronization failed', error);
+            return null;
+          } finally {
+            window.__rolanproTeamDirectorySyncing = false;
+          }
+        }
+
+        window.syncCanonicalTeamDirectory = syncCanonicalTeamDirectory;
+
+        window.fetch = async function rolanproTeamAwareFetch(input, init) {
+          const response = await nativeFetch(input, init);
+          const url = typeof input === 'string' ? input : String(input?.url || '');
+          const method = String(init?.method || (typeof input !== 'string' ? input?.method : '') || 'GET').toUpperCase();
+
+          if (method === 'POST' && /\/api\/v1\/team(?:\\?|$)/.test(url)) {
+            let requestedEmail = '';
+            try {
+              const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
+              requestedEmail = normalizeEmail(body?.email);
+            } catch (_) {
+              requestedEmail = '';
+            }
+            const shouldOpenExisting = !response.ok && Boolean(requestedEmail);
+            window.setTimeout(() => {
+              syncCanonicalTeamDirectory({
+                render: true,
+                openEmail: shouldOpenExisting ? requestedEmail : '',
+              });
+            }, 0);
+          }
+
+          return response;
+        };
+
+        let bootAttempts = 0;
+        const boot = () => {
+          if (legacyUsersReady()) {
+            syncCanonicalTeamDirectory({ render: true });
+            return;
+          }
+          if (bootAttempts++ < 60) window.setTimeout(boot, 250);
+        };
+
+        window.addEventListener('hashchange', () => {
+          window.setTimeout(() => syncCanonicalTeamDirectory({ render: true }), 0);
+        });
+        window.setTimeout(boot, 0);
+      })();
+    </script>
+  ` : "";
+
   const calculatorPatch = `
     <style>
       #rolanpro-calculator-overlay {
@@ -291,7 +494,8 @@ export async function GET(request: NextRequest) {
   `;
 
   const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
-  const injectedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
+  const privilegedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
+  const injectedUi = `${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}`;
   const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0
     ? `${cloudHtml.slice(0, closingBodyIndex)}${injectedUi}${cloudHtml.slice(closingBodyIndex)}`
@@ -304,7 +508,8 @@ export async function GET(request: NextRequest) {
       "Content-Disposition": "inline",
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "SAMEORIGIN",
-      "Referrer-Policy": "same-origin",
+      // Google Maps browser-key restrictions validate the requesting origin.
+      "Referrer-Policy": "strict-origin-when-cross-origin",
     },
   });
 }

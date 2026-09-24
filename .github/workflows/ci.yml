@@ -26,6 +26,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Validate Codex Builder shell syntax
+        run: bash -n .agents/bridge/build.sh
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:

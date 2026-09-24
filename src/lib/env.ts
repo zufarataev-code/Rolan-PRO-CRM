@@ -5,6 +5,7 @@ type AppEnv = {
   sessionCookieName: string;
   sessionTtlHours: number;
   appUrl: string;
+  googleMapsApiKey: string;
   nodeEnv: string;
 };
 
@@ -38,6 +39,10 @@ export function getEnv(): AppEnv {
     sessionCookieName: process.env.SESSION_COOKIE_NAME ?? "rolanpro_session",
     sessionTtlHours: Number(process.env.SESSION_TTL_HOURS ?? "168"),
     appUrl: process.env.APP_URL ?? "http://localhost:3000",
+    googleMapsApiKey:
+      process.env.GOOGLE_MAPS_BROWSER_API_KEY?.trim() ||
+      process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() ||
+      "",
     nodeEnv,
   };
 }

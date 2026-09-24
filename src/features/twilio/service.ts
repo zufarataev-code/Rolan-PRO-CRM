@@ -113,6 +113,7 @@ export async function sendSms(input: {
   orderId?: string | null;
   clientId?: string | null;
   actorUserId?: string | null;
+  rawPayload?: Record<string, unknown> | null;
 }) {
   const config = getTwilioConfig();
   if (!config.ready) throw new Error("Twilio SMS is not configured on the CRM server.");
@@ -146,9 +147,13 @@ export async function sendSms(input: {
       legacy_order_id: input.orderId ?? null,
       legacy_client_id: input.clientId ?? null,
       actor_user_id: input.actorUserId ?? null,
+      raw_payload: input.rawPayload ? { channel: "sms", ...input.rawPayload } : { channel: "sms" },
       sent_at: message.date_created ? new Date(String(message.date_created)) : new Date(),
     },
-    update: { status },
+    update: {
+      status,
+      raw_payload: input.rawPayload ? { channel: "sms", ...input.rawPayload } : { channel: "sms" },
+    },
   });
   return { sid, status, to };
 }
