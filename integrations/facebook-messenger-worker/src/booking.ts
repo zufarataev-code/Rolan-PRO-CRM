@@ -20,6 +20,28 @@ export type CrmSlot = {
   end_at: string;
 };
 
+export function startsNewBooking(text: string) {
+  const value = text.trim();
+  return /\b(?:another|new)\s+(?:address|location|appointment|booking)\b/i.test(value) ||
+    /(?:ещ[её]\s+(?:один|одна|одно)\s+(?:адрес|объект|замер|запис))/i.test(value) ||
+    /(?:otr[oa]\s+(?:direcci[oó]n|ubicaci[oó]n|cita))/i.test(value);
+}
+
+export function normalizeLeadData(lead: LeadData): LeadData {
+  const normalized = { ...lead };
+  if (!normalized.propertyType?.trim() && normalized.objectType?.trim()) {
+    normalized.propertyType = normalized.objectType.trim();
+  }
+  if (!normalized.serviceType?.trim()) {
+    const value = normalized.goal?.trim() || "";
+    if (/smart|pdlc|смарт/i.test(value)) normalized.serviceType = "Smart Film";
+    else if (/safety|security|защит/i.test(value)) normalized.serviceType = "Safety Film";
+    else if (/solar|sun|heat|солнц|жар/i.test(value)) normalized.serviceType = "Solar Film";
+    else if (/decor|frost|privacy|декор|матов|приват/i.test(value)) normalized.serviceType = "Decorative Film";
+  }
+  return normalized;
+}
+
 const zonedFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: CRM_TIME_ZONE,
   year: "numeric",

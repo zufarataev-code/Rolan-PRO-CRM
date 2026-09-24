@@ -5,8 +5,10 @@ import {
   formatSlot,
   leadReadyForBooking,
   leadReadyForCrm,
+  normalizeLeadData,
   normalizeLanguage,
   parseBookingPayload,
+  startsNewBooking,
   type CrmSlot,
   type LeadData,
 } from "./booking";
@@ -219,6 +221,13 @@ function noSlotsPrompt(language?: string) {
   return "I couldn't load an available time. I'll pass your request to the manager for a follow-up.";
 }
 
+function qualificationPrompt(language?: string) {
+  const normalized = normalizeLanguage(language);
+  if (normalized === "ru") return "Запись ещё не создана. Уточните услугу, тип объекта и адрес — после этого я покажу реальные свободные слоты из CRM.";
+  if (normalized === "es") return "La cita todavía no está creada. Confirme el servicio, el tipo de propiedad y la dirección; después mostraré horarios reales del CRM.";
+  return "The appointment is not booked yet. Confirm the service, property type, and address, then I'll show real CRM availability.";
+}
+
 async function availableSlots(env: Env) {
   const result = await postToCrm<{ slots: CrmSlot[] }>(
     env,
@@ -318,6 +327,19 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   } catch (error) {
     console.error("kv_read", error);
   }
+  state.lead = normalizeLeadData(state.lead || {});
+  if (state.stage === "booked" && startsNewBooking(event.text)) {
+    state = {
+      history: [],
+      lead: {
+        name: state.lead.name,
+        phone: state.lead.phone,
+        language: state.lead.language,
+      },
+      stage: "qualifying",
+      escalated: false,
+    };
+  }
   const alreadyBooked = state.stage === "booked";
 
   const selectedSlot = parseBookingPayload(event.quickReplyPayload);
@@ -346,8 +368,13 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   }
 
   state.history.push({ role: "assistant", content: JSON.stringify(output) });
-  state.lead = mergeLead(state.lead, output.lead);
-  state.stage = output.escalate ? "escalated" : output.stage || "qualifying";
+  state.lead = normalizeLeadData(mergeLead(state.lead, output.lead));
+  const attemptedBookingClaim = output.stage === "booked" || output.stage === "slot_offered";
+  state.stage = output.escalate
+    ? "escalated"
+    : attemptedBookingClaim
+      ? "qualifying"
+      : output.stage || "qualifying";
   state.escalated = Boolean(output.escalate);
 
   try {
@@ -376,7 +403,13 @@ async function handleEvent(env: Env, event: MessengerEvent) {
 
   if (alreadyBooked && !state.escalated) state.stage = "booked";
   await persistState(env, key, state);
-  await sendMessage(env, event, output.reply || noSlotsPrompt(state.lead.language));
+  await sendMessage(
+    env,
+    event,
+    attemptedBookingClaim
+      ? qualificationPrompt(state.lead.language)
+      : output.reply || noSlotsPrompt(state.lead.language),
+  );
   console.log(JSON.stringify({ key, stage: state.stage, leadCaptured: Boolean(state.leadCapturedEventId) }));
 }
 

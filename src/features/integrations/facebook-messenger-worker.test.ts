@@ -7,7 +7,9 @@ import {
   buildBusinessWindows,
   crmLeadPayload,
   leadReadyForBooking,
+  normalizeLeadData,
   parseBookingPayload,
+  startsNewBooking,
   zonedLocalToUtc,
 } from "../../../integrations/facebook-messenger-worker/src/booking";
 import { signCrmBody } from "../../../integrations/facebook-messenger-worker/src/crm";
@@ -74,6 +76,26 @@ test("Worker maps the qualified conversation to the canonical CRM payload", () =
   });
 });
 
+test("Worker normalizes the legacy prompt fields before checking booking readiness", () => {
+  const lead = normalizeLeadData({
+    name: "Zafar",
+    phone: "8183211212",
+    goal: "Safety Film",
+    objectType: "commercial",
+    city: "Los Angeles",
+  });
+  assert.equal(lead.serviceType, "Safety Film");
+  assert.equal(lead.propertyType, "commercial");
+  assert.equal(leadReadyForBooking(lead), true);
+});
+
+test("Worker recognizes a request to book another address", () => {
+  assert.equal(startsNewBooking("и еще один адрес пожалуйста"), true);
+  assert.equal(startsNewBooking("I need another location"), true);
+  assert.equal(startsNewBooking("otra dirección"), true);
+  assert.equal(startsNewBooking("да"), false);
+});
+
 
 test("Worker only promises SMS when CRM reports it", () => {
   const source = readFileSync("integrations/facebook-messenger-worker/src/index.ts", "utf8");
@@ -82,4 +104,6 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /SMS сейчас не отправилось/);
   assert.match(source, /event: "crm_booking_confirmed"/);
   assert.match(source, /consultationId: booking\.consultation_id/);
+  assert.match(source, /attemptedBookingClaim/);
+  assert.match(source, /qualificationPrompt/);
 });
