@@ -144,18 +144,41 @@ export function buildBusinessWindows(now = new Date(), count = 6) {
 }
 
 export function normalizeLanguage(language?: string) {
-  const value = language?.trim().toLowerCase() || "en";
-  if (value.startsWith("ru") || value.includes("russian") || value.includes("рус")) return "ru";
-  if (value.startsWith("es") || value.includes("spanish") || value.includes("españ")) return "es";
-  return "en";
+  const value = language?.trim() || "";
+  const lower = value.toLowerCase();
+  const aliases: Array<[RegExp, string]> = [
+    [/^(?:ru|russian|русский|рус)$/i, "ru"],
+    [/^(?:es|spanish|español)$/i, "es"],
+    [/^(?:en|english|английский)$/i, "en"],
+    [/^(?:de|german|deutsch|немецкий)$/i, "de"],
+    [/^(?:fr|french|français|французский)$/i, "fr"],
+    [/^(?:pt|portuguese|português|португальский)$/i, "pt"],
+    [/^(?:it|italian|italiano|итальянский)$/i, "it"],
+    [/^(?:uk|ukrainian|українська|украинский)$/i, "uk"],
+    [/^(?:pl|polish|polski|польский)$/i, "pl"],
+    [/^(?:tr|turkish|türkçe|турецкий)$/i, "tr"],
+    [/^(?:ar|arabic|العربية|арабский)$/i, "ar"],
+    [/^(?:he|hebrew|עברית|иврит)$/i, "he"],
+    [/^(?:fa|persian|farsi|فارسی|персидский)$/i, "fa"],
+    [/^(?:hi|hindi|हिन्दी|हिंदी)$/i, "hi"],
+    [/^(?:zh|chinese|中文|китайский)$/i, "zh"],
+    [/^(?:ja|japanese|日本語|японский)$/i, "ja"],
+    [/^(?:ko|korean|한국어|корейский)$/i, "ko"],
+    [/^(?:vi|vietnamese|tiếng việt|вьетнамский)$/i, "vi"],
+  ];
+  for (const [pattern, tag] of aliases) {
+    if (pattern.test(lower)) return tag;
+  }
+  try {
+    return Intl.getCanonicalLocales(value.replaceAll("_", "-"))[0] || "en";
+  } catch {
+    return "en";
+  }
 }
 
 export function formatSlot(slot: CrmSlot, language?: string) {
-  const locale = normalizeLanguage(language) === "ru"
-    ? "ru-RU"
-    : normalizeLanguage(language) === "es"
-      ? "es-US"
-      : "en-US";
+  const languageTag = normalizeLanguage(language);
+  const locale = languageTag === "ru" ? "ru-RU" : languageTag === "es" ? "es-US" : languageTag;
   return new Intl.DateTimeFormat(locale, {
     timeZone: CRM_TIME_ZONE,
     weekday: "short",

@@ -83,8 +83,45 @@ const FALLBACK_PROMPT = `You are Danil, the AI assistant for Rolan PRO, a window
 const CRM_BOOKING_PROMPT = `
 The CRM, not you, owns appointment availability. Never invent, suggest, or confirm a date or time in reply. The application will add real CRM slots after you have collected the required details.
 Collect these fields one at a time and return them in lead: name, phone, serviceType (Solar Film, Smart Film, Safety Film, or Decorative Film), propertyType, city, address when known, optional email, language, goal, and approximate windows.
+Detect the language of the customer's latest message and store it in lead.language as a BCP-47 language tag such as en, es, ru, de, fr, ar, zh, or the appropriate tag for any other language. Always reply naturally in that language. If the customer switches languages, switch with them and update lead.language. Never transliterate when the customer's writing system is supported.
 Use stage "qualifying" until those details are collected. Do not say that an appointment is booked; only the application may confirm that after PostgreSQL accepts the booking.
 Return only JSON with reply, stage, escalate, escalateReason, and lead. Use an empty string for unknown lead fields and never infer customer facts.`;
+
+async function localizeOperationalMessage(env: Env, message: string, language?: string) {
+  const languageTag = normalizeLanguage(language);
+  if (languageTag === "en" || languageTag === "ru" || languageTag === "es") return message;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 400,
+        system: "Translate the Rolan PRO customer-service message into the requested language. Preserve names, phone numbers, dates, times, SMS, CRM, and the meaning exactly. Return only the translated customer-facing message with no notes or quotation marks.",
+        messages: [{
+          role: "user",
+          content: JSON.stringify({ target_language: languageTag, message }),
+        }],
+      }),
+    });
+    if (!response.ok) throw new Error(`Anthropic translation HTTP ${response.status}`);
+    const data = await response.json() as { content?: Array<{ type: string; text?: string }> };
+    const translated = (data.content || [])
+      .filter((item) => item.type === "text")
+      .map((item) => item.text || "")
+      .join("")
+      .trim();
+    return translated || message;
+  } catch (error) {
+    console.error("translation", { languageTag, error });
+    return message;
+  }
+}
 
 function messengerEvents(body: unknown): MessengerEvent[] {
   if (!body || typeof body !== "object") return [];
@@ -278,13 +315,19 @@ async function offerSlots(env: Env, event: MessengerEvent, key: string, state: C
     state.stage = "escalated";
     state.escalated = true;
     await persistState(env, key, state);
-    await sendMessage(env, event, noSlotsPrompt(state.lead.language));
+    await sendMessage(env, event, await localizeOperationalMessage(env, noSlotsPrompt(state.lead.language), state.lead.language));
     return;
   }
   state.stage = "slot_offered";
   state.offeredSlots = slots;
   await persistState(env, key, state);
-  await sendMessage(env, event, slotPrompt(state.lead.language), slots, state.lead.language);
+  await sendMessage(
+    env,
+    event,
+    await localizeOperationalMessage(env, slotPrompt(state.lead.language), state.lead.language),
+    slots,
+    state.lead.language,
+  );
 }
 
 async function bookSelectedSlot(
@@ -328,7 +371,15 @@ async function bookSelectedSlot(
       consultationId: booking.consultation_id,
       smsStatus: smsStatus || "unknown",
     }));
-    await sendMessage(env, event, bookedPrompt(slot, state.lead.language, smsSent));
+    await sendMessage(
+      env,
+      event,
+      await localizeOperationalMessage(
+        env,
+        bookedPrompt(slot, state.lead.language, smsSent),
+        state.lead.language,
+      ),
+    );
   } catch (error) {
     if (error instanceof CrmRequestError && error.code === "slot_unavailable") {
       await offerSlots(env, event, key, state);
@@ -373,7 +424,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
       await bookSelectedSlot(env, event, key, state, selectedSlot);
     } catch (error) {
       console.error("crm_booking", error);
-      await sendMessage(env, event, noSlotsPrompt(state.lead.language));
+      await sendMessage(env, event, await localizeOperationalMessage(env, noSlotsPrompt(state.lead.language), state.lead.language));
     }
     return;
   }
@@ -388,7 +439,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
     output = await askAssistant(env, state.history);
   } catch (error) {
     console.error("assistant", error);
-    await sendMessage(env, event, noSlotsPrompt(state.lead.language));
+    await sendMessage(env, event, await localizeOperationalMessage(env, noSlotsPrompt(state.lead.language), state.lead.language));
     return;
   }
 
@@ -422,19 +473,24 @@ async function handleEvent(env: Env, event: MessengerEvent) {
     state.stage = "escalated";
     state.escalated = true;
     await persistState(env, key, state);
-    await sendMessage(env, event, noSlotsPrompt(state.lead.language));
+    await sendMessage(env, event, await localizeOperationalMessage(env, noSlotsPrompt(state.lead.language), state.lead.language));
     return;
   }
 
   if (alreadyBooked && !state.escalated) state.stage = "booked";
   await persistState(env, key, state);
-  await sendMessage(
-    env,
-    event,
-    attemptedBookingClaim
-      ? qualificationPrompt(state.lead, state.lead.language)
-      : output.reply || noSlotsPrompt(state.lead.language),
-  );
+  const reply = attemptedBookingClaim
+    ? await localizeOperationalMessage(
+        env,
+        qualificationPrompt(state.lead, state.lead.language),
+        state.lead.language,
+      )
+    : output.reply || await localizeOperationalMessage(
+        env,
+        noSlotsPrompt(state.lead.language),
+        state.lead.language,
+      );
+  await sendMessage(env, event, reply);
   console.log(JSON.stringify({ key, stage: state.stage, leadCaptured: Boolean(state.leadCapturedEventId) }));
 }
 
