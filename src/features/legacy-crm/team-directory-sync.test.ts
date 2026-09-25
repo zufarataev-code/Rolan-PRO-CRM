@@ -55,3 +55,17 @@ test("team synchronization stays inside the canonical legacy CRM shell", () => {
   assert.doesNotMatch(source, /localStorage.*team/i);
   assert.doesNotMatch(source, /sessionStorage.*team/i);
 });
+
+test("employee creation shows canonical API errors and prevents inaccessible accounts", () => {
+  const crm = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+  const service = teamService();
+
+  assert.match(crm, /function teamApiErrorMessage\(payload, status/);
+  assert.match(crm, /payload\?\.errors\?\.\[0\]\?\.message/);
+  assert.match(crm, /Добавлять сотрудников может только владелец CRM/);
+  assert.match(crm, /function setTeamSubmitBusy\(busy\)/);
+  assert.match(crm, /Сотрудник не создан/);
+  assert.match(service, /const missingRoles = input\.roles\.filter/);
+  assert.match(service, /не настроены на сервере/);
+  assert.match(service, /if \(missingRoles\.length\)[\s\S]*?prisma\.user\.create/);
+});

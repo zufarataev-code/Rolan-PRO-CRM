@@ -53,3 +53,18 @@ test("measurement actions preserve the active scroll position across a full moda
   assert.match(legacyCrm, /\.manager-measure-modal \{[\s\S]*?overflow-anchor: none/);
   assert.match(legacyCrm, /\.manager-measure-body \{[\s\S]*?overflow-anchor: none/);
 });
+
+test("dense desktop workspaces override the compact generic dialog width", () => {
+  assert.match(
+    legacyCrm,
+    /@media \(min-width: 841px\)[\s\S]*?\.modal-content\.workspace-modal\.manager-measure-modal \{[\s\S]*?max-width: 1520px/,
+  );
+  assert.match(
+    legacyCrm,
+    /\.modal-content\.workspace-modal\.erp-intake-modal \{[\s\S]*?max-width: 1280px/,
+  );
+  assert.match(
+    legacyCrm,
+    /\.modal-content\.workspace-modal\.manager-measure-modal \{[\s\S]*?max-height: 94svh/,
+  );
+});

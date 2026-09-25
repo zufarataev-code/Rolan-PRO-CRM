@@ -4553,10 +4553,23 @@
   .modal-content.workspace-modal {
     overflow: auto;
   }
-  @media (min-width: 901px) {
+  /* Workspace sizes are semantic, not accidental. Dense operational flows
+     must outrank the generic 58rem dialog rule above, while simple forms keep
+     the compact default. */
+  @media (min-width: 841px) {
     .modal-content.workspace-modal.order-workspace-modal.order-workspace-modal-wide {
       width: min(1520px, 96vw);
       max-width: 1520px;
+    }
+    .modal-content.workspace-modal.manager-measure-modal {
+      width: min(1520px, 96vw);
+      max-width: 1520px;
+      height: min(94svh, 1000px);
+      max-height: 94svh;
+    }
+    .modal-content.workspace-modal.erp-intake-modal {
+      width: min(1280px, 96vw);
+      max-width: 1280px;
     }
   }
   .modal-content.measure-modal {
@@ -12249,7 +12262,7 @@ function openProfessionalKP(oid) {
   const o = getOrder(oid);
   if (!orderUserCanViewProposal(o)) { alert('КП доступно только владельцу и назначенному менеджеру'); return; }
   if (!projectEstimateIsApproved(o)) {
-    alert('Сначала проверьте и подтвердите расчёт проекта: услуги, материалы, расходы и маржу.');
+    alert('Перед КП проверьте итог проекта. CRM сейчас покажет, что уже заполнено и чего действительно не хватает.');
     openProjectEstimateWorkspace(oid);
     return;
   }
@@ -14547,7 +14560,10 @@ function orderFilmRevenue(o) {
   return s;
 }
 function orderExtraServicesRevenue(o) {
-  return (o.extraServices || []).reduce((s, x) => s + (Number(x.price) || 0), 0);
+  const measuredProject = measureAllWindows(o).length > 0;
+  return (o.extraServices || [])
+    .filter(line => !line.quickProjectLine || !measuredProject)
+    .reduce((s, x) => s + (Number(x.price) || 0), 0);
 }
 function orderExtraServicesCost(o) {
   // Ordinary service rows contain the customer price only. Their labor cost is
@@ -14580,7 +14596,7 @@ function orderGasExpense(o) {
   return (o.distanceKm || 0) * (db.settings.pricingDefaults?.gasPerKm || 0);
 }
 function orderConsumablesExpense(o) {
-  if (projectQuickLines(o).length) return projectQuickSupplyCost(o);
+  if (projectEstimateQuickLinesForBasis(o).length) return projectQuickSupplyCost(o);
   return orderActualAreaSqft(o) * (db.settings.pricingDefaults?.consumablesPerSqft || 0);
 }
 function orderRentExpense(o) {
@@ -18750,7 +18766,7 @@ function openTeamMemberForm(quickOrderId = '', quickLineId = '') {
       <div id="tm-error" class="text-sm text-red-600 mt-3 hidden"></div>
 
       <div class="flex gap-2 mt-5">
-        <button class="btn-primary flex-1" onclick="submitTeamMember('${quickOrderId}','${quickLineId}')">Создать</button>
+        <button id="tm-submit" class="btn-primary flex-1" onclick="submitTeamMember('${quickOrderId}','${quickLineId}')">Создать сотрудника</button>
         <button class="btn-ghost" onclick="${quickInstaller ? `openQuickProjectEntry('${quickOrderId}')` : 'closeModal()'}">Отмена</button>
       </div>
     </div>
@@ -18769,18 +18785,35 @@ function showTeamError(message) {
   box.classList.remove('hidden');
 }
 
+function teamApiErrorMessage(payload, status, fallback = 'Не удалось создать сотрудника.') {
+  const serverMessage = payload?.errors?.[0]?.message || payload?.error?.message;
+  if (serverMessage) return serverMessage;
+  if (status === 401) return 'Сессия истекла. Обновите страницу и войдите снова.';
+  if (status === 403) return 'Добавлять сотрудников может только владелец CRM.';
+  return fallback;
+}
+
+function setTeamSubmitBusy(busy) {
+  const button = document.getElementById('tm-submit');
+  if (!button) return;
+  button.disabled = busy;
+  button.textContent = busy ? 'Создаём сотрудника…' : 'Создать сотрудника';
+}
+
 async function submitTeamMember(quickOrderId = '', quickLineId = '') {
   const fullName = document.getElementById('tm-name')?.value.trim();
-  const email = document.getElementById('tm-email')?.value.trim();
+  const email = document.getElementById('tm-email')?.value.trim().toLowerCase();
   const password = document.getElementById('tm-password')?.value.trim();
   const roles = collectTeamRoles();
   const legacyUserId = 'u_' + uid();
 
   if (!fullName || !email) return showTeamError('Укажите имя и почту.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showTeamError('Укажите корректную почту для входа, например name@rolan-pro.com.');
   if (!roles.length) return showTeamError('Выберите хотя бы одну роль.');
   if (!password || password.length < 10) return showTeamError('Пароль должен быть не короче 10 символов.');
 
   try {
+    setTeamSubmitBusy(true);
     const response = await fetch('/api/v1/team', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -18789,7 +18822,9 @@ async function submitTeamMember(quickOrderId = '', quickLineId = '') {
     const data = await response.json();
 
     if (!response.ok) {
-      return showTeamError(data?.error?.message || 'Не удалось создать сотрудника.');
+      showTeamError(teamApiErrorMessage(data, response.status));
+      setTeamSubmitBusy(false);
+      return;
     }
 
     const legacyRole = teamLegacyRoleFromServer(roles) || 'installer';
@@ -18807,7 +18842,8 @@ async function submitTeamMember(quickOrderId = '', quickLineId = '') {
     save();
     showTeamPasswordResult('Сотрудник создан', fullName, email, password);
   } catch (error) {
-    showTeamError('Сервер не ответил. Попробуйте ещё раз.');
+    showTeamError('Сервер не ответил. Сотрудник не создан — попробуйте ещё раз.');
+    setTeamSubmitBusy(false);
   }
 }
 
@@ -20956,7 +20992,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
       ? `openMeasurerV25ForOrder('${o.id}')`
       : `openWorkOrder('${o.id}')`;
   const measureSub = hasMeasurements ? `${rooms} комн. · ${windows} окон` : 'добавить комнаты и окна';
-  const proposalDisabled = !canManage || !estimateApproved;
+  const proposalDisabled = !canManage;
   const routeHref = address ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}` : '';
   const roleLine = u?.role === 'measurer'
     ? 'режим замерщика: без денег'
@@ -21056,7 +21092,7 @@ function orderPassportActions(o, ctx) {
       sub: ctx.measureSub, onclick: ctx.measureAction },
 
     { key: 'proposal', icon: '📄', title: 'КП',
-      sub: ctx.estimateApproved ? 'единый стандарт ROLANPRO' : 'сначала подтвердите расчёт',
+      sub: ctx.estimateApproved ? 'единый стандарт ROLANPRO' : 'проверить расчёт и сформировать',
       onclick: `openProfessionalKP('${o.id}')`, disabled: ctx.proposalDisabled },
 
     { key: 'install', icon: '▣', title: 'Монтаж',
@@ -21325,13 +21361,16 @@ function projectEstimateUpdateTaxProfile(oid, field, value) {
 function projectEstimateReadiness(o) {
   const issues = [];
   const windows = measureAllWindows(o);
-  if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
-  if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
-  const quickLines = projectQuickLines(o);
-  const quickStockDemand = projectQuickRequiredSqftByCatalog(o);
-  const quickSupplyDemand = projectQuickRequiredSupplies(o);
+  const quickLines = projectEstimateQuickLinesForBasis(o);
+  const quickStockDemand = projectQuickRequiredSqftByCatalog(o, quickLines);
+  const quickSupplyDemand = projectQuickRequiredSupplies(o, quickLines);
   if (!windows.length && !quickLines.length) issues.push('нет позиций проекта');
-  if (quickLines.some(line => !line.serviceType || (!line.catalogId && !projectQuickManualFilmName(line)) || !String(line.label || '').trim() || Number(line.qty) <= 0 || Number(line.unitPrice) <= 0)) issues.push('есть позиция без плёнки, количества или цены продажи');
+  if (windows.length) {
+    if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
+    if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
+  } else if (quickLines.some(line => !line.serviceType || (!line.catalogId && !projectQuickManualFilmName(line)) || !String(line.label || '').trim() || Number(line.qty) <= 0 || Number(line.unitPrice) <= 0)) {
+    issues.push('есть позиция без плёнки, количества или цены продажи');
+  }
   if (quickLines.some(line => line.catalogId && warehouseCatalogStockStats(line.catalogId).availableSqft <= 0)) issues.push('выбранной плёнки нет на складе');
   if (Object.entries(quickStockDemand).some(([catalogId, requiredSqft]) => warehouseCatalogStockStats(catalogId).pricedSqft < requiredSqft)) issues.push('на складе недостаточно плёнки с указанной закупочной ценой');
   if (quickLines.some(line => (line.supplyItems || []).some(item => !item.supplyId || Number(item.qty) <= 0))) issues.push('есть незаполненный расходник услуги');
@@ -21343,6 +21382,10 @@ function projectEstimateReadiness(o) {
 
 function projectQuickLines(o) {
   return (o?.extraServices || []).filter(line => line.quickProjectLine === true);
+}
+
+function projectEstimateQuickLinesForBasis(o) {
+  return measureAllWindows(o).length ? [] : projectQuickLines(o);
 }
 
 function projectQuickManualFilmName(line) {
@@ -21366,8 +21409,8 @@ function projectQuickSqft(o) {
   return projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => sum + (Number(line.qty) || 0), 0);
 }
 
-function projectQuickRequiredSqftByCatalog(o) {
-  return projectQuickLines(o).reduce((demand, line) => {
+function projectQuickRequiredSqftByCatalog(o, lines = projectQuickLines(o)) {
+  return lines.reduce((demand, line) => {
     if (!line.catalogId) return demand;
     const catalog = getCatalogItem(line.catalogId);
     const requiredSqft = (Number(line.qty) || 0) * (1 + (Number(catalog?.wastePct) || 0) / 100);
@@ -21376,8 +21419,8 @@ function projectQuickRequiredSqftByCatalog(o) {
   }, {});
 }
 
-function projectQuickRequiredSupplies(o) {
-  return projectQuickLines(o).reduce((demand, line) => {
+function projectQuickRequiredSupplies(o, lines = projectQuickLines(o)) {
+  return lines.reduce((demand, line) => {
     (line.supplyItems || []).forEach(item => {
       if (!item.supplyId) return;
       demand[item.supplyId] = (demand[item.supplyId] || 0) + (Number(item.qty) || 0);
@@ -21781,7 +21824,7 @@ function projectQuickCompletionIssues(o) {
     'на складе недостаточно расходников',
   ]);
   const issues = projectEstimateReadiness(o).filter(issue => !ignoredHistoricalStockIssues.has(issue));
-  const quickLines = projectQuickLines(o);
+  const quickLines = projectEstimateQuickLinesForBasis(o);
   if (quickLines.some(line => !Array.isArray(line.installerIds) || !line.installerIds.length)) {
     issues.push('у каждой услуги нужен исполнитель');
   }
@@ -21791,10 +21834,10 @@ function projectQuickCompletionIssues(o) {
   if (quickLines.some(line => projectQuickDateValue(line.startDate) > projectQuickDateValue(line.endDate))) {
     issues.push('окончание услуги не может быть раньше начала');
   }
-  if (projectQuickLines(o).some(line => line.catalogId && warehouseCatalogCostPerSqft(line.catalogId) <= 0)) {
+  if (quickLines.some(line => line.catalogId && warehouseCatalogCostPerSqft(line.catalogId) <= 0)) {
     issues.push('у выбранной плёнки нет закупочной стоимости');
   }
-  if (projectQuickLines(o).some(line => !line.catalogId && projectQuickManualFilmName(line))) {
+  if (quickLines.some(line => !line.catalogId && projectQuickManualFilmName(line))) {
     issues.push('ручную плёнку нужно привязать к складу перед закрытием');
   }
   return [...new Set(issues)];
@@ -21965,7 +22008,9 @@ function openQuickProjectEntry(oid) {
 
 function renderProjectEstimateWorkspace(o) {
   const canSeeInternalEconomics = orderUserCanSeeInternalEconomics(o, currentUser());
-  const quickLines = projectQuickLines(o);
+  const storedQuickLines = projectQuickLines(o);
+  const quickLines = projectEstimateQuickLinesForBasis(o);
+  const ignoredQuickLineCount = storedQuickLines.length - quickLines.length;
   const measuredArea = orderActualAreaSqft(o);
   const preliminaryArea = projectQuickSqft(o);
   const pss = orderPSS(o);
@@ -22026,7 +22071,7 @@ function renderProjectEstimateWorkspace(o) {
       ${canSeeInternalEconomics ? `<div class="project-estimate-kpi"><span>Себестоимость</span><strong class="text-red-600">${fmtMoney(pss.total)}</strong></div><div class="project-estimate-kpi"><span>Прибыль / маржа</span><strong class="${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(margin)} · ${marginPct.toFixed(1)}%</strong></div>` : ''}
     </div>
     <div class="project-estimate-quick">
-      <div class="project-estimate-section-head"><div><h4>Быстрый итог проекта</h4><div class="text-xs text-gray-500">Все значения берутся из этого проекта, склада и справочника сотрудников.</div></div><button class="btn-ghost text-sm" onclick="openQuickProjectEntry('${o.id}')">Изменить быстрый ввод</button></div>
+      <div class="project-estimate-section-head"><div><h4>Быстрый итог проекта</h4><div class="text-xs text-gray-500">Все значения берутся из этого проекта, склада и справочника сотрудников.</div></div>${measuredArea ? '<span class="tag bg-blue-50 text-blue-700">Источник: замер</span>' : `<button class="btn-ghost text-sm" onclick="openQuickProjectEntry('${o.id}')">Изменить быстрый ввод</button>`}</div>
       <div class="project-estimate-quick-grid">
         <div class="project-estimate-quick-card"><span>Услуги проекта</span><strong>${academyEsc(orderServiceSummaryLabel(o))}</strong></div>
         <div class="project-estimate-quick-card"><span>Плёнка</span><strong>${selectedFilms.length ? selectedFilms.map(academyEsc).join(', ') : 'не выбрана'}</strong></div>
@@ -22038,6 +22083,7 @@ function renderProjectEstimateWorkspace(o) {
         <div class="project-estimate-quick-card"><span>Оплата бригады</span><strong>${fmtMoney(pss.installers)}</strong></div>
       </div>
     </div>
+    ${ignoredQuickLineCount ? `<div class="order-clean-note mt-3" style="border-color:#bfdbfe;background:#eff6ff;color:#1e40af"><b>Расчёт идёт по замеру.</b> ${ignoredQuickLineCount} черновик(а) быстрого ввода не участвуют в цене и КП, поэтому пустая строка больше не блокирует документ.</div>` : ''}
     ${issues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>До КП нужно проверить:</b> ${issues.map(academyEsc).join(', ')}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Расчёт заполнен.</b> Проверьте цену клиенту и подтвердите переход к КП.</div>`}
     ${unverifiedMeasurements.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Предварительные размеры клиента.</b> По ним разрешено рассчитать проект и выпустить КП. Перед назначением монтажа потребуется внести и подтвердить точные размеры ${unverifiedMeasurements.length} окон.</div>` : ''}
 
@@ -22096,8 +22142,8 @@ function renderProjectEstimateWorkspace(o) {
     </section>` : ''}
 
     <div class="project-estimate-footer">
-      <div class="text-xs text-gray-500">${projectEstimateIsApproved(o) ? `Подтверждено ${fmtDateTime(o.projectEstimateApprovedAt)}` : 'КП заблокировано до подтверждения расчёта.'}</div>
-      <div class="flex gap-2 flex-wrap"><button class="btn-ghost" onclick="closeModal()">Сохранить черновик</button><button class="btn-primary" onclick="approveProjectEstimateAndOpenProposal('${o.id}')" ${issues.length ? 'disabled' : ''}>Подтвердить расчёт и сформировать КП →</button></div>
+      <div class="text-xs text-gray-500">${projectEstimateIsApproved(o) ? `Подтверждено ${fmtDateTime(o.projectEstimateApprovedAt)}` : issues.length ? `Нужно проверить: ${academyEsc(issues.join(', '))}.` : 'Готово к подтверждению и формированию КП.'}</div>
+      <div class="flex gap-2 flex-wrap"><button class="btn-ghost" onclick="closeModal()">Сохранить черновик</button><button class="btn-primary" onclick="approveProjectEstimateAndOpenProposal('${o.id}')">${issues.length ? 'Показать, чего не хватает' : 'Подтвердить расчёт и сформировать КП →'}</button></div>
     </div>`;
 }
 
@@ -22221,7 +22267,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     <div class="order-clean-actions mt-3">
       ${renderOrderActionCard({ icon: '⚡', title: 'Быстрый ввод проекта', sub: 'услуга, плёнка со склада, количество и цена', onclick: `openQuickProjectEntry('${o.id}')`, disabled: !canManage, variant: !quickLines.length ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '🧮', title: estimateApproved ? 'Расчёт проекта подтверждён' : 'Расчёт проекта', sub: hasMeasurements ? (canSeeInternalEconomics ? `цена, расходы и маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `цена клиенту ${fmtMoney(orderRevenue(o))}`) : 'проверить итог и подтвердить расчёт', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !canManage, variant: !estimateApproved ? 'primary' : 'soft' })}
-      ${renderOrderActionCard({ icon: '📄', title: 'Единое КП', sub: estimateApproved ? 'позиции проекта и оплата' : 'сначала подтвердите расчёт проекта', onclick: `openProfessionalKP('${o.id}')`, disabled: !canManage || !estimateApproved, variant: estimateApproved ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '📄', title: 'Единое КП', sub: estimateApproved ? 'позиции проекта и оплата' : 'проверить расчёт и сформировать', onclick: `openProfessionalKP('${o.id}')`, disabled: !canManage, variant: estimateApproved ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '🔗', title: 'Ссылка клиенту', sub: clientPortalUrl(o.id) ? 'скопировать портал' : 'public URL не настроен', onclick: `copyPortalLink('${o.id}')`, disabled: !clientPortalUrl(o.id) })}
       ${renderOrderActionCard({ icon: '✅', title: 'КП принято', sub: 'перевести этап', onclick: `changeStatus('${o.id}','proposal_accepted')`, disabled: !canManage || o.status === 'proposal_accepted' })}
       ${renderOrderActionCard({ icon: '💳', title: 'Аванс / оплата', sub: orderDebt(o) > 0 ? `долг ${fmtMoney(orderDebt(o))}` : 'без долга', onclick: o.depositReceived ? `openProfessionalKP('${o.id}')` : `markDepositReceived('${o.id}')`, disabled: !canManage })}
@@ -28833,7 +28879,7 @@ function premiumCanonicalSnapshot(prop) {
       });
     });
   });
-  projectQuickLines(order).forEach(line => {
+  projectEstimateQuickLinesForBasis(order).forEach(line => {
     const servicePeriod = [projectQuickDateValue(line.startDate), projectQuickDateValue(line.endDate)].filter(Boolean).join(' — ');
     items.push({
       service_code: canonicalServiceCodeForOrderService(line.serviceType) || 'SOLAR_FILM',
@@ -28908,7 +28954,7 @@ async function generatePremiumProposal(orderId) {
   const order = getOrder(orderId);
   if (!orderUserCanViewProposal(order)) { alert('КП доступно только владельцу и назначенному менеджеру'); return; }
   if (!projectEstimateIsApproved(order)) {
-    alert('КП ещё не сформировано. Сначала подтвердите расчёт проекта.');
+    alert('Перед КП проверьте итог проекта. CRM сейчас покажет точные недостающие данные.');
     openProjectEstimateWorkspace(orderId);
     return;
   }

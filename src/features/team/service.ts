@@ -122,6 +122,14 @@ export async function createTeamMember(input: TeamMemberInput) {
     select: { role_id: true, code: true },
   });
 
+  const resolvedCodes = new Set(roles.map((role) => role.code));
+  const missingRoles = input.roles.filter((role) => !resolvedCodes.has(role));
+  if (missingRoles.length) {
+    throw new Error(
+      `Роли ${missingRoles.join(", ")} не настроены на сервере. Обновите справочник ролей и повторите создание сотрудника.`,
+    );
+  }
+
   const user = await prisma.user.create({
     data: {
       email,

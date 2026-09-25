@@ -190,7 +190,7 @@ test("quick service adds stock supplies and includes their purchase cost", () =>
   assert.match(source, /function projectQuickAddSupply\(oid, lineId\)/);
   assert.match(source, /function openQuickProjectSupplyForm\(oid, lineId\)/);
   assert.match(source, /function saveQuickProjectSupply\(oid, lineId\)/);
-  assert.match(source, /function projectQuickRequiredSupplies\(o\)/);
+  assert.match(source, /function projectQuickRequiredSupplies\(o, lines = projectQuickLines\(o\)\)/);
   assert.match(source, /demand\[item\.supplyId\] = \(demand\[item\.supplyId\] \|\| 0\) \+ \(Number\(item\.qty\) \|\| 0\)/);
   assert.match(source, /line\.supplyItems\.push\(/);
   assert.match(source, /costPerUnit/);
@@ -358,7 +358,7 @@ test("project estimate becomes stacked labeled rows on a phone", () => {
 
 test("desktop project workspaces fit fields and refresh without rebuilding the whole CRM", () => {
   assert.match(source, /\.order-workspace-modal\.order-workspace-modal-wide[\s\S]*?max-width: 1520px/);
-  assert.match(source, /@media \(min-width: 901px\)[\s\S]*?\.modal-content\.workspace-modal\.order-workspace-modal\.order-workspace-modal-wide[\s\S]*?max-width: 1520px/);
+  assert.match(source, /@media \(min-width: 841px\)[\s\S]*?\.modal-content\.workspace-modal\.order-workspace-modal\.order-workspace-modal-wide[\s\S]*?max-width: 1520px/);
   assert.match(source, /project-estimate-table project-estimate-table--quick/);
   assert.match(source, /\.project-estimate-table--quick tr[\s\S]*?grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
   assert.match(source, /function refreshProjectWorkspaceBody\(oid, workspace, renderer, fallback\)/);
@@ -384,6 +384,30 @@ test("fullscreen kanban fits all stages and cut sheets preserve readable scale",
   assert.match(source, /Math\.min\(6000, Math\.max\(aspectHeight, minimumSegmentHeight\)\)/);
   assert.match(source, /нужны ширина и высота каждого стекла/);
   assert.doesNotMatch(source, /title: 'Лист раскроя'[\s\S]{0,220}disabled: !plan\.pieces/);
+});
+
+test("measured projects ignore stale quick-entry drafts in price and proposal readiness", () => {
+  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const revenue = source.match(/function orderExtraServicesRevenue\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const snapshot = source.match(/function premiumCanonicalSnapshot\(prop\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(source, /function projectEstimateQuickLinesForBasis\(o\)/);
+  assert.match(source, /return measureAllWindows\(o\)\.length \? \[\] : projectQuickLines\(o\)/);
+  assert.match(readiness, /const quickLines = projectEstimateQuickLinesForBasis\(o\)/);
+  assert.match(readiness, /if \(windows\.length\)/);
+  assert.match(revenue, /filter\(line => !line\.quickProjectLine \|\| !measuredProject\)/);
+  assert.match(snapshot, /projectEstimateQuickLinesForBasis\(order\)\.forEach/);
+  assert.match(source, /Расчёт идёт по замеру/);
+  assert.match(source, /пустая строка больше не блокирует документ/);
+});
+
+test("proposal actions stay clickable and explain the exact missing data", () => {
+  assert.match(source, /const proposalDisabled = !canManage;/);
+  assert.match(source, /title: 'Единое КП'[\s\S]*?disabled: !canManage/);
+  assert.match(source, /Показать, чего не хватает/);
+  assert.doesNotMatch(
+    source,
+    /onclick="approveProjectEstimateAndOpenProposal\('\$\{o\.id\}'\)" \$\{issues\.length \? 'disabled' : ''\}/,
+  );
 });
 
 

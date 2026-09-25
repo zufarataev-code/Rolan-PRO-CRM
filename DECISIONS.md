@@ -345,6 +345,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Live uploads require owner configuration plus separate environment gates. Automated processing uses a dedicated server-to-server bearer secret of at least 32 characters and returns no customer PII or credentials.
 - Implemented for review in PR #140; deployment and live activation remain separate steps.
 
+## 2026-09-24 — One calculation basis and semantic workspace sizes
+
+- A Project calculation has one active commercial basis at a time. Verified or preliminary room/window measurements take precedence over compatibility quick-entry drafts; when measurements exist, stale quick lines do not contribute revenue, costs, readiness checks, or Proposal positions.
+- Quick-entry stock and purchase-cost checks remain blocking when quick entry is the active basis. This preserves Warehouse-backed profitability and does not weaken the active-Project inventory rule.
+- Dialog width is chosen by workflow density, not by incidental CSS order. Compact forms keep the generic dialog size, intake uses the wide size, and measurement/project workspaces use the full desktop workspace size while retaining the existing mobile full-screen behavior.
+- A Proposal action remains available to an authorized owner/manager before approval so it can route to the calculation and explain the exact missing data. Approval and publishing still require a valid calculation.
+- Employee creation must surface the canonical API error and must never create an account if any requested role is absent from the server role directory.
+- Implemented on `fix/legacy-crm-workspace-architecture`; production deployment remains a separate release action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
