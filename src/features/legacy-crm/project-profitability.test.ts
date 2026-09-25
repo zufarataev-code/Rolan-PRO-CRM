@@ -10,7 +10,7 @@ test("project calculator exposes one fast operational summary", () => {
   assert.match(source, /Предварительный объём/);
   assert.match(source, /Расход плёнки/);
   assert.match(source, /Позиции проекта/);
-  assert.match(source, /Исполнители и зарплата/);
+  assert.match(source, /Резерв оплаты монтажа/);
 });
 
 test("installer labor uses employee reference rates and keeps a fallback reserve", () => {

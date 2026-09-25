@@ -131,32 +131,32 @@ test("quick project entry works without dimensions and supports multiple service
   assert.match(source, /projectQuickLineCatalog\(line\.serviceType, line\.catalogId\)/);
   assert.match(source, /ORDER_PRIMARY_SERVICES\.map\(service =>/);
   assert.match(source, /Метраж, sqft/);
-  assert.match(source, /Цена проекта/);
+  assert.match(source, /Цена клиенту/);
   assert.match(source, /Цена \/ sqft/);
   assert.match(source, /\+ Добавить услугу/);
 });
 
-test("quick project entry derives sqft price and assigns installers per service", () => {
+test("quick project entry derives sqft price and defers installers to Montage", () => {
   const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
   const renderer = source.slice(rendererStart, rendererEnd);
-  const installerToggle = source.match(/function projectQuickToggleInstaller\(oid, lineId, userId, enabled\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const schedule = source.match(/function confirmScheduleInstallation\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(updater, /\['qty','unitPrice','price'\]\.includes\(field\)/);
   assert.match(source, /if \(changedField === 'price'\) line\.pricingMode = 'total'/);
   assert.match(renderer, /Цена за sqft рассчитается автоматически/);
   assert.match(renderer, /projectEstimateUpdateQuickLine\('[^']+','[^']+','price',this\.value\)/);
-  assert.match(renderer, /projectQuickToggleInstaller\('[^']+','[^']+','[^']+',this\.checked\)/);
-  assert.match(renderer, /data-label="Исполнители"/);
-  assert.match(renderer, /\+ Новый сотрудник/);
-  assert.match(installerToggle, /line\.installerIds = \[\.\.\.selected\]/);
-  assert.match(installerToggle, /projectQuickSyncProjectInstallers\(o\)/);
-  assert.match(installerToggle, /save\(\); refreshQuickProjectEntry\(oid\)/);
+  assert.doesNotMatch(renderer, /data-label="Исполнители"/);
+  assert.doesNotMatch(renderer, /\+ Новый сотрудник/);
+  assert.match(renderer, /Монтаж позже/);
+  assert.match(renderer, /Только для переноса уже завершённого проекта из старой CRM/);
+  assert.match(schedule, /line\.installerIds = \[\.\.\.o\.installerIds\]/);
+  assert.match(schedule, /line\.startDate = dt\.slice\(0, 10\)/);
   assert.match(source, /filter\(line => line\.unit === 'sqft' && \(line\.installerIds \|\| \[\]\)\.includes\(user\?\.id\)\)/);
   assert.match(source, /new Set\(line\.installerIds \|\| \[\]\)\.size/);
 });
 
-test("quick project can create an installer and return it as a selected service card", () => {
+test("employee creation remains in Team and is not offered in quick commercial entry", () => {
   const submitter = source.match(/async function submitTeamMember\(quickOrderId = '', quickLineId = ''\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(source, /function openTeamMemberForm\(quickOrderId = '', quickLineId = ''\)/);
   assert.match(submitter, /legacyUserId = 'u_' \+ uid\(\)/);
@@ -166,6 +166,10 @@ test("quick project can create an installer and return it as a selected service 
   assert.match(submitter, /state\.quickTeamReturn = \{ orderId: quickOrderId/);
   assert.match(source, /function finishTeamPasswordResult\(\)/);
   assert.match(source, /return openQuickProjectEntry\(target\.orderId\)/);
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  assert.doesNotMatch(renderer, /openTeamMemberForm/);
 });
 
 test("quick service can create warehouse film with category, name and model", () => {
@@ -173,7 +177,7 @@ test("quick service can create warehouse film with category, name and model", ()
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
   const renderer = source.slice(rendererStart, rendererEnd);
   const saver = source.match(/function saveQuickProjectFilm\(oid, lineId, category\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.match(renderer, /\+ Новая плёнка/);
+  assert.match(renderer, /\+ Добавить плёнку на склад/);
   assert.match(source, /id="qf-category"[^>]*placeholder="Зеркальная"/);
   assert.match(source, /id="qf-name"[^>]*placeholder="Prime"/);
   assert.match(source, /id="qf-model"[^>]*placeholder="NE2"/);
@@ -256,7 +260,7 @@ test("quick project total remains the source while sqft changes", () => {
   assert.equal(existingUnitPriceLine.price, 1200);
 });
 
-test("every quick service has its own validated start and end dates", () => {
+test("quick services keep legacy dates collapsed while normal scheduling sets the start date", () => {
   const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
@@ -271,8 +275,11 @@ test("every quick service has its own validated start and end dates", () => {
   assert.match(completionIssues, /окончание услуги не может быть раньше начала/);
   assert.match(updater, /\['startDate','endDate'\]\.includes\(field\)/);
   assert.match(updater, /Дата окончания услуги не может быть раньше даты начала/);
-  assert.match(renderer, /data-label="Начало"><input type="date"/);
-  assert.match(renderer, /data-label="Окончание"><input type="date"/);
+  assert.doesNotMatch(renderer, /data-label="Начало"/);
+  assert.doesNotMatch(renderer, /data-label="Окончание"/);
+  assert.match(renderer, /<label>Начало работ<\/label><input type="date"/);
+  assert.match(renderer, /Только для переноса уже завершённого проекта из старой CRM/);
+  assert.match(source, /if \(dt && !projectQuickDateValue\(line\.startDate\)\) line\.startDate = dt\.slice\(0, 10\)/);
   assert.match(source, /quickRange\.endDate \|\| quickRange\.startDate/);
   assert.match(source, /Service period: \$\{servicePeriod\}/);
 });
@@ -375,7 +382,18 @@ test("proposal readiness does not require installation scheduling", () => {
   assert.doesNotMatch(readiness, /installerIds|startDate|endDate/);
   assert.match(completionIssues, /installerIds/);
   assert.match(completionIssues, /startDate/);
-  assert.match(source, /Для КП данных достаточно[\s\S]*?Монтажника и даты работ можно назначить позже/);
+  assert.match(source, /Монтаж позже[\s\S]*?Бригада и дата монтажа назначаются после принятия КП/);
+  assert.match(source, /Для КП данных достаточно[\s\S]*?Можно переходить к проверке расчёта/);
+});
+
+test("proposal readiness reports exact missing commercial fields", () => {
+  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(readiness, /не выбрана услуга/);
+  assert.match(readiness, /не выбрана плёнка/);
+  assert.match(readiness, /не указан метраж/);
+  assert.match(readiness, /не указана цена клиенту/);
+  assert.match(readiness, /!issues\.includes\('не указана цена клиенту'\)/);
+  assert.doesNotMatch(readiness, /есть позиция без плёнки, количества или цены продажи/);
 });
 
 test("fullscreen kanban fits all stages and cut sheets preserve readable scale", () => {
@@ -425,9 +443,9 @@ test("manager can type a missing film manually without creating warehouse stock"
   assert.match(readiness, /!line\.catalogId && !projectQuickManualFilmName\(line\)/);
   assert.match(updater, /field === 'manualFilmName'/);
   assert.match(updater, /line\.catalogId = ''/);
-  assert.match(renderer, /Нет в списке — впишите вручную/);
+  assert.match(renderer, /Плёнки нет в списке/);
   assert.match(renderer, /Ручной ввод · не привязано к складу/);
-  assert.match(renderer, /currentUser\(\)\?\.role === 'owner'[\s\S]*\+ Новая плёнка на склад/);
+  assert.match(renderer, /currentUser\(\)\?\.role === 'owner'[\s\S]*\+ Добавить плёнку на склад/);
   assert.match(completionIssues, /ручную плёнку нужно привязать к складу перед закрытием/);
   assert.match(source, /item_kind: line\.catalogId \|\| projectQuickManualFilmName\(line\) \? 'film' : 'service'/);
 });
