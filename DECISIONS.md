@@ -354,6 +354,16 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Employee creation must surface the canonical API error and must never create an account if any requested role is absent from the server role directory.
 - Implemented on `fix/legacy-crm-workspace-architecture`; production deployment remains a separate release action.
 
+## 2026-09-25 — The standard owner kanban fits all stages on a wide workstation
+
+**Supersedes:** the standard Projects-board presentation that always used seven fixed 296px columns and horizontal scrolling.
+
+- At a 1920px owner workstation, the normal Projects view must show all seven canonical stages at once. A hidden sixth or seventh stage is not an acceptable default when enough screen width exists.
+- At 1800px and wider, the board uses seven equal `minmax(0, 1fr)` tracks inside the available CRM content area. Cards, labels, fields, and actions are allowed to wrap inside their own stage, but the board itself does not extend beyond the workspace.
+- On smaller desktops and phones, preserving a readable stage width is more important than squeezing seven unusable columns together. Those layouts remain an explicit horizontal stage scroller.
+- All dialogs and shared form controls retain a zero intrinsic minimum width so long values cannot force an otherwise responsive workspace beyond its container.
+- Implemented on `fix/full-crm-visual-architecture-audit`; the PR and production verification are recorded in `PROJECT_STATE.md`.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
