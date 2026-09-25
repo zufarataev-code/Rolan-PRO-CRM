@@ -4553,6 +4553,12 @@
   .modal-content.workspace-modal {
     overflow: auto;
   }
+  @media (min-width: 901px) {
+    .modal-content.workspace-modal.order-workspace-modal.order-workspace-modal-wide {
+      width: min(1520px, 96vw);
+      max-width: 1520px;
+    }
+  }
   .modal-content.measure-modal {
     /* Замер — самый плотный экран в системе: список комнат, выбор типа
        окна, поля размеров и подбор стекла одновременно. При 88svh
