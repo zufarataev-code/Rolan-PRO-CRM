@@ -1450,9 +1450,53 @@
     font-size: .65rem;
     font-weight: 850;
   }
-  .project-estimate-table--quick td:nth-child(2),
-  .project-estimate-table--quick td:nth-child(8),
-  .project-estimate-table--quick td:nth-child(9) { grid-column: span 2; }
+  .project-estimate-table--quick td:nth-child(2) { grid-column: span 2; }
+  .project-estimate-table--quick .quick-film-alternative {
+    margin-top: .15rem;
+    color: #475569;
+    font-size: .72rem;
+  }
+  .project-estimate-table--quick .quick-film-alternative summary {
+    width: fit-content;
+    color: #2563eb;
+    cursor: pointer;
+    font-weight: 800;
+  }
+  .project-estimate-table--quick .quick-film-alternative-body {
+    display: grid;
+    gap: .35rem;
+    margin-top: .4rem;
+    padding: .55rem;
+    border: 1px solid #dbeafe;
+    border-radius: 9px;
+    background: #f8fbff;
+  }
+  .quick-commercial-price {
+    color: #64748b;
+    font-size: .7rem;
+    font-weight: 800;
+  }
+  .quick-commercial-remove {
+    width: fit-content;
+    min-height: 30px;
+    padding: .25rem .45rem;
+  }
+  .quick-production-details {
+    margin-top: .85rem;
+    border: 1px solid #dbe4ef;
+    border-radius: 12px;
+    background: #fff;
+  }
+  .quick-production-details > summary {
+    padding: .75rem .85rem;
+    color: #334155;
+    cursor: pointer;
+    font-size: .8rem;
+    font-weight: 900;
+  }
+  .quick-production-details-body {
+    padding: 0 .85rem .85rem;
+  }
   .project-estimate-table--quick input,
   .project-estimate-table--quick select {
     width: 100%;
@@ -5550,9 +5594,7 @@
     .project-estimate-table--quick tr {
       grid-template-columns: 1fr;
     }
-    .project-estimate-table--quick td:nth-child(2),
-    .project-estimate-table--quick td:nth-child(8),
-    .project-estimate-table--quick td:nth-child(9) {
+    .project-estimate-table--quick td:nth-child(2) {
       grid-column: auto;
     }
     .project-estimate-table td {
@@ -21397,15 +21439,19 @@ function projectEstimateReadiness(o) {
   if (windows.length) {
     if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
     if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
-  } else if (quickLines.some(line => !line.serviceType || (!line.catalogId && !projectQuickManualFilmName(line)) || !String(line.label || '').trim() || Number(line.qty) <= 0 || Number(line.unitPrice) <= 0)) {
-    issues.push('есть позиция без плёнки, количества или цены продажи');
+  } else {
+    if (quickLines.some(line => !line.serviceType)) issues.push('не выбрана услуга');
+    if (quickLines.some(line => !line.catalogId && !projectQuickManualFilmName(line))) issues.push('не выбрана плёнка');
+    if (quickLines.some(line => !String(line.label || '').trim())) issues.push('не указано название позиции');
+    if (quickLines.some(line => Number(line.qty) <= 0)) issues.push('не указан метраж');
+    if (quickLines.some(line => Number(line.price) <= 0)) issues.push('не указана цена клиенту');
   }
   if (quickLines.some(line => line.catalogId && warehouseCatalogStockStats(line.catalogId).availableSqft <= 0)) issues.push('выбранной плёнки нет на складе');
   if (Object.entries(quickStockDemand).some(([catalogId, requiredSqft]) => warehouseCatalogStockStats(catalogId).pricedSqft < requiredSqft)) issues.push('на складе недостаточно плёнки с указанной закупочной ценой');
   if (quickLines.some(line => (line.supplyItems || []).some(item => !item.supplyId || Number(item.qty) <= 0))) issues.push('есть незаполненный расходник услуги');
   if (Object.entries(quickSupplyDemand).some(([supplyId, requiredQty]) => Number(ensureSupplies().find(supply => supply.id === supplyId)?.qty || 0) < requiredQty)) issues.push('на складе недостаточно расходников');
   if ((o.extraServices || []).filter(s => !s.quickProjectLine).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
-  if (orderRevenue(o) <= 0) issues.push('сумма проекта равна нулю');
+  if (orderRevenue(o) <= 0 && !issues.includes('не указана цена клиенту')) issues.push('сумма проекта равна нулю');
   return issues;
 }
 
@@ -21941,18 +21987,21 @@ function renderQuickProjectEntry(o) {
     const catalog = projectQuickLineCatalog(line.serviceType, line.catalogId);
     const selectedStock = line.catalogId ? warehouseCatalogStockStats(line.catalogId) : null;
     return `<tr>
-      <td data-label="Услуга"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select></td>
-      <td data-label="Плёнка"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select><div class="mt-1"><input aria-label="Ручное название плёнки" placeholder="Нет в списке — впишите вручную" value="${academyEsc(projectQuickManualFilmName(line))}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','manualFilmName',this.value)"></div>${projectQuickManualFilmName(line) ? '<div class="text-xs text-amber-700 mt-1">Ручной ввод · не привязано к складу</div>' : ''}${selectedStock ? `<div class="text-xs text-gray-500 mt-1">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs mt-1" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Новая плёнка на склад</button>` : ''}</td>
-      <td data-label="Количество, sqft"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
-      <td data-label="Цена проекта"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','price',this.value)"></td>
-      <td data-label="Цена / sqft" class="money"><b>${Number(line.qty) > 0 ? fmtMoney(line.unitPrice) : '—'}</b></td>
-      <td data-label="Начало"><input type="date" value="${projectQuickDateValue(line.startDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','startDate',this.value)"></td>
-      <td data-label="Окончание"><input type="date" min="${projectQuickDateValue(line.startDate)}" value="${projectQuickDateValue(line.endDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','endDate',this.value)"></td>
-      <td data-label="Исполнители"><div class="project-estimate-assignees">${availableInstallers.map(user => `<label class="project-estimate-assignee"><input type="checkbox" ${(line.installerIds || []).includes(user.id) ? 'checked' : ''} onchange="projectQuickToggleInstaller('${o.id}','${line.id}','${user.id}',this.checked)">${teamAvatarHtml(user,24)}<span>${academyEsc(user.name)}</span></label>`).join('') || '<span class="text-xs text-gray-500">Нет монтажников</span>'}</div>${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs mt-1" onclick="openTeamMemberForm('${o.id}','${line.id}')">+ Новый сотрудник</button>` : ''}</td>
-      <td data-label="Расходники"><div class="space-y-1">${(line.supplyItems || []).map(item => { const supply = availableSupplies.find(candidate => candidate.id === item.supplyId); return `<div class="flex gap-1 items-center"><select onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','supplyId',this.value)"><option value="">Выберите</option>${availableSupplies.map(option => `<option value="${option.id}" ${item.supplyId===option.id?'selected':''}>${academyEsc(option.name)} · ${Number(option.qty||0)} ${supplyUnitLabel(option.unit)}</option>`).join('')}</select><input aria-label="Количество расходника" type="number" min="0" step="0.01" value="${Number(item.qty||0)}" onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','qty',this.value)" style="width:76px"><button class="btn-ghost text-red-600" onclick="projectQuickDeleteSupply('${o.id}','${line.id}','${item.id}')">×</button>${supply ? `<span class="text-xs text-gray-500">${fmtMoney((Number(item.qty)||0)*(Number(supply.costPerUnit)||0))}</span>` : ''}</div>`; }).join('')}</div><div class="flex gap-1 mt-1"><button class="btn-ghost text-xs" onclick="projectQuickAddSupply('${o.id}','${line.id}')">+ Со склада</button><button class="btn-ghost text-xs" onclick="openQuickProjectSupplyForm('${o.id}','${line.id}')">+ Новый расходник</button></div></td>
-      <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить услугу</button></td>
+      <td data-label="Услуга"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select><button class="btn-ghost text-red-600 quick-commercial-remove" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить</button></td>
+      <td data-label="Плёнка"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}${projectQuickManualFilmName(line) ? '<div class="text-xs text-amber-700">Ручной ввод · не привязано к складу</div>' : ''}<details class="quick-film-alternative" ${projectQuickManualFilmName(line) ? 'open' : ''}><summary>Плёнки нет в списке</summary><div class="quick-film-alternative-body"><input aria-label="Ручное название плёнки" placeholder="Впишите название вручную" value="${academyEsc(projectQuickManualFilmName(line))}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','manualFilmName',this.value)">${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Добавить плёнку на склад</button>` : ''}</div></details></td>
+      <td data-label="Метраж, sqft"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" placeholder="Например, 250" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
+      <td data-label="Цена клиенту"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" placeholder="Общая сумма" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','price',this.value)"><div class="quick-commercial-price">${Number(line.qty) > 0 && Number(line.price) > 0 ? `${fmtMoney(line.unitPrice)} / sqft` : 'Цена / sqft появится автоматически'}</div></td>
     </tr>`;
   }).join('');
+  const productionRows = quickLines.map(line => `<div class="card">
+    <div class="font-bold text-sm">${academyEsc(primaryServiceInfo(line.serviceType)?.title || line.label || 'Услуга')}</div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+      <div><label>Начало работ</label><input type="date" value="${projectQuickDateValue(line.startDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','startDate',this.value)"></div>
+      <div><label>Окончание работ</label><input type="date" min="${projectQuickDateValue(line.startDate)}" value="${projectQuickDateValue(line.endDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','endDate',this.value)"></div>
+    </div>
+    <div class="mt-2"><label>Исполнители старого проекта</label><div class="project-estimate-assignees">${availableInstallers.map(user => `<label class="project-estimate-assignee"><input type="checkbox" ${(line.installerIds || []).includes(user.id) ? 'checked' : ''} onchange="projectQuickToggleInstaller('${o.id}','${line.id}','${user.id}',this.checked)">${teamAvatarHtml(user,24)}<span>${academyEsc(user.name)}</span></label>`).join('') || '<span class="text-xs text-gray-500">Нет монтажников</span>'}</div></div>
+    <div class="mt-2"><label>Расходники</label><div class="space-y-1">${(line.supplyItems || []).map(item => { const supply = availableSupplies.find(candidate => candidate.id === item.supplyId); return `<div class="flex gap-1 items-center"><select onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','supplyId',this.value)"><option value="">Выберите</option>${availableSupplies.map(option => `<option value="${option.id}" ${item.supplyId===option.id?'selected':''}>${academyEsc(option.name)} · ${Number(option.qty||0)} ${supplyUnitLabel(option.unit)}</option>`).join('')}</select><input aria-label="Количество расходника" type="number" min="0" step="0.01" value="${Number(item.qty||0)}" onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','qty',this.value)" style="width:76px"><button class="btn-ghost text-red-600" onclick="projectQuickDeleteSupply('${o.id}','${line.id}','${item.id}')">×</button>${supply ? `<span class="text-xs text-gray-500">${fmtMoney((Number(item.qty)||0)*(Number(supply.costPerUnit)||0))}</span>` : ''}</div>`; }).join('')}</div><div class="flex gap-1 mt-1"><button class="btn-ghost text-xs" onclick="projectQuickAddSupply('${o.id}','${line.id}')">+ Со склада</button><button class="btn-ghost text-xs" onclick="openQuickProjectSupplyForm('${o.id}','${line.id}')">+ Новый расходник</button></div></div>
+  </div>`).join('');
   const totalSqft = projectQuickSqft(o);
   const total = quickLines.reduce((sum, line) => sum + Number(line.price || 0), 0);
   const quickRange = projectQuickDateRange(o);
@@ -21973,22 +22022,29 @@ function renderQuickProjectEntry(o) {
     </div>
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>Услуги проекта</h4><div class="text-xs text-gray-500">Без комнат и размеров окон: укажите общий метраж и цену проекта. Цена за sqft рассчитается автоматически. Можно добавить несколько услуг.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
-      <div class="project-estimate-table-wrap"><table class="project-estimate-table project-estimate-table--quick"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена проекта</th><th class="money">Цена / sqft</th><th>Начало</th><th>Окончание</th><th>Исполнители</th><th>Расходники</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="10" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
+      <div class="project-estimate-table-wrap"><table class="project-estimate-table project-estimate-table--quick"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена клиенту</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
     </section>
-    ${proposalIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Чтобы сформировать КП:</b> ${academyEsc(proposalIssues.join(', '))}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Для КП данных достаточно.</b> Монтажника и даты работ можно назначить позже.</div>`}
+    <div class="order-clean-note mt-3" style="border-color:#bfdbfe;background:#eff6ff;color:#1e40af"><b>Монтаж позже.</b> Бригада и дата монтажа назначаются после принятия КП — в карточке проекта через действие «Монтаж».</div>
+    ${proposalIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Чтобы сформировать КП:</b> ${academyEsc(proposalIssues.join(', '))}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Для КП данных достаточно.</b> Можно переходить к проверке расчёта.</div>`}
     ${currentUser()?.role === 'owner' ? `<section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>Прямые расходы проекта</h4><div class="text-xs text-gray-500">Доставка, разовая закупка, помощник, субподрядчик и другие фактические расходы.</div></div><button class="btn-ghost text-sm" onclick="projectQuickAddExpense('${o.id}')">+ Добавить расход</button></div>
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead><tbody>${quickExpenseRows || '<tr><td colspan="4" class="text-gray-500">Прямых расходов нет.</td></tr>'}</tbody></table></div>
     </section>` : ''}
-    ${currentUser()?.role === 'owner' ? `<section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>Закрытие проекта из старой CRM</h4><div class="text-xs text-gray-500">Фиксирует выполнение, полную оплату, зарплату, себестоимость и прибыль без ввода размеров окон.</div></div>${o.status === 'completed' ? '<span class="status-badge bg-emerald-100 text-emerald-800">Завершён</span>' : ''}</div>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-        <div><label>Дата полной оплаты</label><input id="quick-close-paid-date" type="date" value="${projectQuickDateValue(o.paidAt?.slice?.(0,10)) || quickRange.endDate || new Date().toISOString().slice(0,10)}"></div>
-        <div><label>Способ оплаты</label><select id="quick-close-payment-method">${PAYMENT_METHODS.map(item => `<option value="${item.id}">${item.label}</option>`).join('')}</select></div>
-        <div class="flex items-end"><button class="btn-primary w-full" onclick="closeQuickProjectAsCompleted('${o.id}')" ${completionIssues.length || o.status === 'completed' ? 'disabled' : ''}>✓ Закрыть как выполненный и оплаченный</button></div>
+    ${currentUser()?.role === 'owner' ? `<details class="quick-production-details">
+      <summary>Только для переноса уже завершённого проекта из старой CRM</summary>
+      <div class="quick-production-details-body">
+        <div class="grid gap-2">${productionRows}</div>
+        <section class="project-estimate-section">
+          <div class="project-estimate-section-head"><div><h4>Закрытие проекта из старой CRM</h4><div class="text-xs text-gray-500">Фиксирует выполнение, полную оплату, зарплату, себестоимость и прибыль без ввода размеров окон.</div></div>${o.status === 'completed' ? '<span class="status-badge bg-emerald-100 text-emerald-800">Завершён</span>' : ''}</div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+            <div><label>Дата полной оплаты</label><input id="quick-close-paid-date" type="date" value="${projectQuickDateValue(o.paidAt?.slice?.(0,10)) || quickRange.endDate || new Date().toISOString().slice(0,10)}"></div>
+            <div><label>Способ оплаты</label><select id="quick-close-payment-method">${PAYMENT_METHODS.map(item => `<option value="${item.id}">${item.label}</option>`).join('')}</select></div>
+            <div class="flex items-end"><button class="btn-primary w-full" onclick="closeQuickProjectAsCompleted('${o.id}')" ${completionIssues.length || o.status === 'completed' ? 'disabled' : ''}>✓ Закрыть как выполненный и оплаченный</button></div>
+          </div>
+          ${completionIssues.length && o.status !== 'completed' ? `<div class="text-xs text-amber-700 mt-2">Нужно заполнить: ${academyEsc(completionIssues.join(', '))}.</div>` : ''}
+        </section>
       </div>
-      ${completionIssues.length && o.status !== 'completed' ? `<div class="text-xs text-amber-700 mt-2">Нужно заполнить: ${academyEsc(completionIssues.join(', '))}.</div>` : ''}
-    </section>` : ''}
+    </details>` : ''}
     <div class="project-estimate-footer">
       <div class="text-xs text-gray-500">Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников.</div>
       <div class="flex gap-2 flex-wrap"><button class="btn-ghost" onclick="closeModal()">Сохранить и закрыть</button><button class="btn-primary" onclick="openProjectEstimateWorkspace('${o.id}')">Проверить расчёт и сформировать КП →</button></div>
@@ -22050,7 +22106,6 @@ function renderProjectEstimateWorkspace(o) {
   const filmPlan = calcFilmPlan(o);
   const installerPay = orderInstallerPayoutBreakdown(o);
   const profitability = canSeeInternalEconomics ? projectProfitability(o) : null;
-  const availableInstallers = usersByRole('installer');
   const selectedFilms = [...new Set([...measureAllWindows(o).map(({ win }) => {
     const catalog = windowCatalog(win);
     return catalog ? `${catalog.brand} · ${catalog.model}` : '';
@@ -22132,11 +22187,8 @@ function renderProjectEstimateWorkspace(o) {
     </section>` : ''}
 
     ${canSeeInternalEconomics ? `<section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>4. Исполнители и зарплата</h4><div class="text-xs text-gray-500">Ставки берутся из карточек сотрудников. Общий фонд делится между назначенной бригадой.</div></div></div>
-      <div class="project-estimate-assignees">
-        ${availableInstallers.length ? availableInstallers.map(user => `<label class="project-estimate-assignee"><input type="checkbox" ${o.installerIds?.includes(user.id) ? 'checked' : ''} onchange="projectEstimateToggleInstaller('${o.id}','${user.id}',this.checked)"><span>${academyEsc(user.name)}</span></label>`).join('') : '<span class="text-sm text-gray-500">Добавьте монтажников в разделе «Команда».</span>'}
-      </div>
-      <div class="mt-3">${installerRows || `<div class="order-clean-note">Команда ещё не назначена. В себестоимость уже включён резерв оплаты по базовым ставкам категорий: <b>${fmtMoney(installerPay.total)}</b>.</div>`}</div>
+      <div class="project-estimate-section-head"><div><h4>4. Резерв оплаты монтажа</h4><div class="text-xs text-gray-500">До принятия КП расчёт использует базовые ставки категорий. Конкретная бригада выбирается позже через действие «Монтаж».</div></div></div>
+      <div>${installerRows || `<div class="order-clean-note">Команда ещё не назначена. В себестоимость уже включён резерв оплаты по базовым ставкам категорий: <b>${fmtMoney(installerPay.total)}</b>.</div>`}</div>
     </section>` : ''}
 
     <section class="project-estimate-section">
@@ -24349,6 +24401,10 @@ function confirmScheduleInstallation(oid) {
   o.installerIds = Array.from(document.querySelectorAll('.isch-installer:checked')).map(x => x.value);
   const dt = document.getElementById('isch-dt').value;
   if (dt) o.installationAt = new Date(dt).toISOString();
+  projectQuickLines(o).forEach(line => {
+    line.installerIds = [...o.installerIds];
+    if (dt && !projectQuickDateValue(line.startDate)) line.startDate = dt.slice(0, 10);
+  });
   closeModal();
   if (changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true })) {
     notifyClientEventScheduled(oid, 'install');

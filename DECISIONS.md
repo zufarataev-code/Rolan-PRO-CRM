@@ -364,6 +364,16 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - All dialogs and shared form controls retain a zero intrinsic minimum width so long values cannot force an otherwise responsive workspace beyond its container.
 - Implemented on `fix/full-crm-visual-architecture-audit`; the PR and production verification are recorded in `PROJECT_STATE.md`.
 
+## 2026-09-25 — Proposal entry and installation scheduling are separate stages
+
+**Supersedes:** the 2026-09-17 rule that active quick-entry service rows require installers and work dates before Proposal preparation.
+
+- Quick Project Entry is a compact commercial form: service, Warehouse film, total sqft, and total customer price. It derives price per sqft and must not ask for a crew or installation dates before the customer accepts the Proposal.
+- Proposal readiness reports the exact missing commercial fields. A selected film with zero sqft and zero customer price is reported as missing sqft and price, not as a generic missing-film error.
+- The crew and installation date are selected through the existing `Монтаж` action after Proposal acceptance. That scheduling action copies the selected crew and start date to quick service rows so canonical installer payroll remains service-based.
+- Per-service dates, installers, supplies, and direct historical closure remain available only inside a collapsed owner-only section for importing already completed work from the old CRM.
+- Implemented on `fix/quick-entry-proposal-workflow`; the PR and production verification are recorded in `PROJECT_STATE.md`.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
