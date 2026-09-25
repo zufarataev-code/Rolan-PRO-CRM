@@ -78,7 +78,7 @@ Target modules:
 
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
-| Allow the website developer to submit HMAC-signed leads without an employee CRM session | `fix/website-lead-hmac-public-route` | Codex | Exact route exemption implemented; 362 tests, TypeScript, production build, and diff check pass; production key is configured | Merge/deploy, then verify an invalid signature is rejected and a correctly signed invalid payload reaches route validation without creating a lead |
+| Allow the website developer to submit HMAC-signed leads without an employee CRM session | `fix/website-lead-hmac-public-route` / #222 | Codex | Merged and deployed as `34cf876`; production key is configured and verified without creating a test lead | Give the developer the endpoint/signing contract and transfer the key separately from the Mac Keychain item `Rolan PRO Website Lead API`; rotate it if exposure is suspected |
 | Restore production deployment after Google Ads merge exceeded the 768 MB Next.js build heap | `fix/google-ads-production-build-memory` / #220 | Codex | Merged and deployed as `0556e72`; bounded build heap is now 1024 MB and production is healthy | No remaining release action; retain the bounded 1024 MB build limit unless measured deployment data justifies another change |
 | Finish protected CRM → Google Ads learning integration on current main | `feat/google-ads-crm-integration` / #140 | Codex | Merged and deployed; protected foundation is present, while credentials and live uploads intentionally remain unconfigured/disabled | Later configure Google project/customer/action IDs and protected credentials, then run validate-only traffic before enabling live uploads |
 | Teach Messenger the decorative static-cling and reeded film catalogs | `fix/messenger-decorative-film-catalogs` / #218 | Codex | Merged and deployed; production Worker version `cfa1403e-8e49-4098-aa14-1b3c7a256222` | Ask the live bot for a reeded or patterned privacy-film recommendation and confirm it distinguishes catalog choice from current stock |
@@ -562,6 +562,14 @@ Contributors must add a row before starting substantial work and update or remov
 - Release: PR #218 merged to `main` as `8e741c42db8d294f7789bb586e3363100e40f81e`. Cloudflare Worker `rolanpro-bot` deployed as version `cfa1403e-8e49-4098-aa14-1b3c7a256222`.
 - Binding safety: the existing `CHAT` KV binding, CRM URL variable, and protected `ANTHROPIC_API_KEY`, `PAGE_TOKEN`, and `ROLANPRO_CRM_SHARED_SECRET` secret names remained present after deployment. No secret value was printed or changed. The unsigned endpoint smoke returned the expected protected `403`.
 - Next action: ask `Нужна декоративная плёнка с рифлёными полосами для офисной перегородки, какие варианты есть?`; confirm the bot explains the width/color choices and asks one question about desired privacy or glass size.
+
+## 2026-09-24 handoff — protected website lead key
+
+- A dedicated 256-bit `WEBSITE_LEAD_INGEST_SECRET` was generated for `rolanpro.com`, stored in the production server environment, and saved locally in the macOS login Keychain under service `Rolan PRO Website Lead API`, account `rolanpro.com`. The value was not printed in logs, committed to Git, or included in chat.
+- The key is deliberately limited to the website lead ingestion endpoint. It does not grant CRM login, customer-list access, finance access, settings access, Google credentials, or the protected Google Ads scheduler secret.
+- Root cause found during smoke testing: the global session middleware intercepted the signed website endpoint before route-level HMAC verification. PR #222 exempts only the exact `/api/v1/integrations/website/leads` path; adjacent integration paths remain session-protected.
+- Verification: 362 tests, TypeScript, production build, diff check, PR CI, main CI, and production deploy passed. Production serves `34cf8765889e4a1f4086e71251e020b6afbeeade`. An invalid signature returned `401 invalid_signature`; a current correctly signed empty payload passed HMAC and returned `400 invalid_submission_id`, proving the secret works without creating a lead.
+- Next action: send the developer the endpoint and HMAC contract, then copy the secret from Keychain Access and transfer it separately through a secure channel. The website must preserve `gclid`, `gbraid`, `wbraid`, UTMs, consent, and a stable unique submission ID.
 
 ## 2026-09-24 handoff — protected Google Ads CRM learning loop
 
