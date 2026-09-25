@@ -1273,6 +1273,10 @@
     box-shadow: 0 30px 80px rgba(15,23,42,.25);
     animation: orderWorkspaceEnter .22s cubic-bezier(.2,.8,.2,1) both;
   }
+  .order-workspace-modal.order-workspace-modal-wide {
+    width: min(1520px, 96vw);
+    max-width: 1520px;
+  }
   .order-workspace-modal-head {
     display: flex;
     align-items: center;
@@ -1408,6 +1412,57 @@
   .project-estimate-table input,
   .project-estimate-table select { min-width: 96px; padding: .42rem .5rem; font-size: .76rem; }
   .project-estimate-table .money { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .project-estimate-table--quick {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .project-estimate-table--quick thead { display: none; }
+  .project-estimate-table--quick tbody {
+    display: grid;
+    gap: .75rem;
+  }
+  .project-estimate-table--quick tr {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: .65rem;
+    padding: .8rem;
+    border: 1px solid #dbe4ef;
+    border-radius: 12px;
+    background: #fff;
+  }
+  .project-estimate-table--quick td {
+    display: grid;
+    align-content: start;
+    gap: .32rem;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: left !important;
+    white-space: normal !important;
+  }
+  .project-estimate-table--quick td::before {
+    content: attr(data-label);
+    color: #64748b;
+    font-size: .65rem;
+    font-weight: 850;
+  }
+  .project-estimate-table--quick td:nth-child(2),
+  .project-estimate-table--quick td:nth-child(8),
+  .project-estimate-table--quick td:nth-child(9) { grid-column: span 2; }
+  .project-estimate-table--quick input,
+  .project-estimate-table--quick select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .project-estimate-table--quick td.project-estimate-action {
+    display: flex;
+    align-items: end;
+  }
+  .project-estimate-table--quick td.project-estimate-action::before { content: none; }
+  .project-estimate-table--quick td.project-estimate-action button { width: 100%; }
+  .project-estimate-table--quick td[colspan] { grid-column: 1 / -1; }
   .project-estimate-footer {
     position: sticky;
     bottom: -1.15rem;
@@ -4292,7 +4347,9 @@
     min-height: 0;
     overflow-x: auto;
     overflow-y: hidden;
-    grid-auto-columns: 320px;
+    grid-auto-flow: row;
+    grid-template-columns: repeat(7, minmax(220px, 1fr));
+    grid-auto-columns: unset;
     padding-bottom: 18px;
   }
   .kanban-fullscreen .kanban-column {
@@ -5441,6 +5498,14 @@
       border: 1px solid #dbe4ef;
       border-radius: 12px;
       background: #fff;
+    }
+    .project-estimate-table--quick tr {
+      grid-template-columns: 1fr;
+    }
+    .project-estimate-table--quick td:nth-child(2),
+    .project-estimate-table--quick td:nth-child(8),
+    .project-estimate-table--quick td:nth-child(9) {
+      grid-column: auto;
     }
     .project-estimate-table td {
       display: grid;
@@ -11713,7 +11778,8 @@ function filmCutContinuousRollHtml(run, runIndex, printMode = false) {
   const catalog = run.catalogId && run.catalogId !== '__no_catalog' ? getCatalogItem(run.catalogId) : null;
   const material = catalog ? `${catalog.brand} — ${catalog.model}` : 'Плёнка не выбрана';
   const aspectHeight = Math.round(520 * total / rollWidth);
-  const detailHeight = Math.max(480, Math.min(1200, aspectHeight));
+  const minimumSegmentHeight = Math.max(1, run.combos.length) * 150;
+  const detailHeight = Math.max(520, Math.min(6000, Math.max(aspectHeight, minimumSegmentHeight)));
   let cursor = 0;
   const marks = [`<div class="cut-continuous-ruler-mark" style="top:0%">0.00 м</div>`];
   const segments = run.combos.map((combo, comboIndex) => {
@@ -21213,7 +21279,7 @@ function projectEstimateToggleInstaller(oid, userId, enabled) {
   if (enabled) selected.add(userId); else selected.delete(userId);
   o.installerIds = [...selected];
   projectEstimateMarkChanged(o, 'Изменены исполнители проекта');
-  save(); openProjectEstimateWorkspace(oid);
+  save(); refreshProjectEstimateWorkspace(oid);
 }
 
 function projectQuickSyncProjectInstallers(o) {
@@ -21233,7 +21299,7 @@ function projectQuickToggleInstaller(oid, lineId, userId, enabled) {
   line.installerIds = [...selected];
   projectQuickSyncProjectInstallers(o);
   projectEstimateMarkChanged(o, 'Изменены исполнители услуги');
-  save(); openQuickProjectEntry(oid);
+  save(); refreshQuickProjectEntry(oid);
 }
 
 function projectEstimateUpdateTaxProfile(oid, field, value) {
@@ -21247,7 +21313,7 @@ function projectEstimateUpdateTaxProfile(oid, field, value) {
   } else if (['ratePct','annualMinimum'].includes(field)) {
     profile[field] = Math.max(0, Number(value) || 0);
   }
-  save(); openProjectEstimateWorkspace(oid);
+  save(); refreshProjectEstimateWorkspace(oid);
 }
 
 function projectEstimateReadiness(o) {
@@ -21260,9 +21326,6 @@ function projectEstimateReadiness(o) {
   const quickSupplyDemand = projectQuickRequiredSupplies(o);
   if (!windows.length && !quickLines.length) issues.push('нет позиций проекта');
   if (quickLines.some(line => !line.serviceType || (!line.catalogId && !projectQuickManualFilmName(line)) || !String(line.label || '').trim() || Number(line.qty) <= 0 || Number(line.unitPrice) <= 0)) issues.push('есть позиция без плёнки, количества или цены продажи');
-  if (quickLines.some(line => !Array.isArray(line.installerIds) || !line.installerIds.length)) issues.push('у каждой услуги нужен исполнитель');
-  if (quickLines.some(line => !projectQuickDateValue(line.startDate) || !projectQuickDateValue(line.endDate))) issues.push('у каждой услуги нужны даты начала и окончания');
-  if (quickLines.some(line => projectQuickDateValue(line.startDate) > projectQuickDateValue(line.endDate))) issues.push('окончание услуги не может быть раньше начала');
   if (quickLines.some(line => line.catalogId && warehouseCatalogStockStats(line.catalogId).availableSqft <= 0)) issues.push('выбранной плёнки нет на складе');
   if (Object.entries(quickStockDemand).some(([catalogId, requiredSqft]) => warehouseCatalogStockStats(catalogId).pricedSqft < requiredSqft)) issues.push('на складе недостаточно плёнки с указанной закупочной ценой');
   if (quickLines.some(line => (line.supplyItems || []).some(item => !item.supplyId || Number(item.qty) <= 0))) issues.push('есть незаполненный расходник услуги');
@@ -21374,7 +21437,7 @@ function projectEstimateAddQuickLine(oid, requestedServiceType = '') {
   o.extraServices.push(line);
   projectEstimateSyncQuickServices(o);
   projectEstimateMarkChanged(o, 'Добавлена быстрая позиция проекта');
-  save(); openQuickProjectEntry(oid);
+  save(); refreshQuickProjectEntry(oid);
 }
 
 function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
@@ -21423,7 +21486,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   projectEstimateSyncQuickLine(line, field);
   projectEstimateSyncQuickServices(o);
   projectEstimateMarkChanged(o, 'Изменена быстрая позиция проекта');
-  save(); openQuickProjectEntry(oid);
+  save(); refreshQuickProjectEntry(oid);
 }
 
 function projectEstimateDeleteQuickLine(oid, lineId) {
@@ -21432,7 +21495,7 @@ function projectEstimateDeleteQuickLine(oid, lineId) {
   o.extraServices = (o.extraServices || []).filter(line => line.id !== lineId);
   projectEstimateSyncQuickServices(o);
   projectEstimateMarkChanged(o, 'Удалена быстрая позиция проекта');
-  save(); openQuickProjectEntry(oid);
+  save(); refreshQuickProjectEntry(oid);
 }
 
 function projectQuickAddSupply(oid, lineId) {
@@ -21443,7 +21506,7 @@ function projectQuickAddSupply(oid, lineId) {
   const supply = ensureSupplies().find(item => Number(item.qty || 0) > 0) || ensureSupplies()[0] || null;
   line.supplyItems.push({ id: 'qsi_' + uid(), supplyId: supply?.id || '', qty: 1 });
   projectEstimateMarkChanged(o, 'Добавлен расходник услуги');
-  save(); openQuickProjectEntry(oid);
+  save(); refreshQuickProjectEntry(oid);
 }
 
 function projectQuickUpdateSupply(oid, lineId, itemId, field, value) {
@@ -21454,7 +21517,7 @@ function projectQuickUpdateSupply(oid, lineId, itemId, field, value) {
   if (field === 'qty') item.qty = Math.max(0, Number(value) || 0);
   if (field === 'supplyId') item.supplyId = String(value || '');
   projectEstimateMarkChanged(o, 'Изменён расходник услуги');
-  save(); openQuickProjectEntry(oid);
+  save(); refreshQuickProjectEntry(oid);
 }
 
 function projectQuickDeleteSupply(oid, lineId, itemId) {
@@ -21463,7 +21526,7 @@ function projectQuickDeleteSupply(oid, lineId, itemId) {
   if (!o || !line || !orderUserCanSeeMoney(o, currentUser())) return;
   line.supplyItems = (line.supplyItems || []).filter(item => item.id !== itemId);
   projectEstimateMarkChanged(o, 'Удалён расходник услуги');
-  save(); openQuickProjectEntry(oid);
+  save(); refreshQuickProjectEntry(oid);
 }
 
 function projectQuickSupplyCost(o) {
@@ -21479,7 +21542,7 @@ function projectQuickAddExpense(oid, type = 'delivery') {
   o.extraExpenses = o.extraExpenses || [];
   o.extraExpenses.push({ id: uid(), type, label: projectEstimateExpenseLabel(type), amount: 0, projectDirect: true, createdAt: new Date().toISOString() });
   projectEstimateMarkChanged(o, 'Добавлен прямой расход в быстром вводе');
-  save(); openQuickProjectEntry(oid);
+  save(); refreshQuickProjectEntry(oid);
 }
 
 function projectQuickUpdateExpense(oid, expenseId, field, value) {
@@ -21493,7 +21556,7 @@ function projectQuickUpdateExpense(oid, expenseId, field, value) {
   }
   if (field === 'label') expense.label = String(value || '').trim();
   projectEstimateMarkChanged(o, 'Изменён прямой расход в быстром вводе');
-  save(); openQuickProjectEntry(oid);
+  save(); refreshQuickProjectEntry(oid);
 }
 
 function projectQuickDeleteExpense(oid, expenseId) {
@@ -21501,7 +21564,7 @@ function projectQuickDeleteExpense(oid, expenseId) {
   if (!o || !orderUserCanSeeInternalEconomics(o, currentUser())) return;
   o.extraExpenses = (o.extraExpenses || []).filter(item => item.id !== expenseId);
   projectEstimateMarkChanged(o, 'Удалён прямой расход в быстром вводе');
-  save(); openQuickProjectEntry(oid);
+  save(); refreshQuickProjectEntry(oid);
 }
 
 function openQuickProjectSupplyForm(oid, lineId) {
@@ -21602,7 +21665,7 @@ function projectEstimateUpdateWindowPrice(oid, rid, wid, value) {
   if (!o || !w) return;
   w.pricePerSqft = value === '' ? null : Math.max(0, parseFloat(value) || 0);
   projectEstimateMarkChanged(o, 'Изменена цена плёнки');
-  save(); openProjectEstimateWorkspace(oid);
+  save(); refreshProjectEstimateWorkspace(oid);
 }
 
 function projectEstimateUpdateSetting(oid, field, value) {
@@ -21613,7 +21676,7 @@ function projectEstimateUpdateSetting(oid, field, value) {
   else if (field === 'priceOverridePerSqft') o.priceOverridePerSqft = value === '' ? null : Math.max(0, parseFloat(value) || 0);
   else o[field] = Math.max(0, parseFloat(value) || 0);
   projectEstimateMarkChanged(o, 'Изменены параметры расчёта');
-  save(); openProjectEstimateWorkspace(oid);
+  save(); refreshProjectEstimateWorkspace(oid);
 }
 
 function projectEstimateAddService(oid, type = 'washing') {
@@ -21622,7 +21685,7 @@ function projectEstimateAddService(oid, type = 'washing') {
   o.extraServices = o.extraServices || [];
   o.extraServices.push({ id: uid(), type, label: projectEstimateServiceLabel(type), qty: 1, price: 0 });
   projectEstimateMarkChanged(o, 'Добавлена дополнительная услуга');
-  save(); openProjectEstimateWorkspace(oid);
+  save(); refreshProjectEstimateWorkspace(oid);
 }
 
 function projectEstimateUpdateService(oid, sid, field, value) {
@@ -21633,7 +21696,7 @@ function projectEstimateUpdateService(oid, sid, field, value) {
   else line[field] = value;
   if (field === 'type') line.label = projectEstimateServiceLabel(value);
   projectEstimateMarkChanged(o, 'Изменена дополнительная услуга');
-  save(); openProjectEstimateWorkspace(oid);
+  save(); refreshProjectEstimateWorkspace(oid);
 }
 
 function projectEstimateDeleteService(oid, sid) {
@@ -21641,7 +21704,7 @@ function projectEstimateDeleteService(oid, sid) {
   if (!o) return;
   o.extraServices = (o.extraServices || []).filter(s => s.id !== sid);
   projectEstimateMarkChanged(o, 'Удалена дополнительная услуга');
-  save(); openProjectEstimateWorkspace(oid);
+  save(); refreshProjectEstimateWorkspace(oid);
 }
 
 function projectEstimateAddExpense(oid, type = 'other') {
@@ -21650,7 +21713,7 @@ function projectEstimateAddExpense(oid, type = 'other') {
   o.extraExpenses = o.extraExpenses || [];
   o.extraExpenses.push({ id: uid(), type, label: projectEstimateExpenseLabel(type), amount: 0, projectDirect: true, createdAt: new Date().toISOString() });
   projectEstimateMarkChanged(o, 'Добавлен прямой расход проекта');
-  save(); openProjectEstimateWorkspace(oid);
+  save(); refreshProjectEstimateWorkspace(oid);
 }
 
 function projectEstimateUpdateExpense(oid, eid, field, value) {
@@ -21661,7 +21724,7 @@ function projectEstimateUpdateExpense(oid, eid, field, value) {
   else line[field] = value;
   if (field === 'type') line.label = projectEstimateExpenseLabel(value);
   projectEstimateMarkChanged(o, 'Изменён прямой расход проекта');
-  save(); openProjectEstimateWorkspace(oid);
+  save(); refreshProjectEstimateWorkspace(oid);
 }
 
 function projectEstimateDeleteExpense(oid, eid) {
@@ -21669,7 +21732,7 @@ function projectEstimateDeleteExpense(oid, eid) {
   if (!o || !orderUserCanSeeInternalEconomics(o, currentUser())) return;
   o.extraExpenses = (o.extraExpenses || []).filter(e => e.id !== eid);
   projectEstimateMarkChanged(o, 'Удалён прямой расход проекта');
-  save(); openProjectEstimateWorkspace(oid);
+  save(); refreshProjectEstimateWorkspace(oid);
 }
 
 function approveProjectEstimateAndOpenProposal(oid) {
@@ -21712,6 +21775,16 @@ function projectQuickCompletionIssues(o) {
     'на складе недостаточно расходников',
   ]);
   const issues = projectEstimateReadiness(o).filter(issue => !ignoredHistoricalStockIssues.has(issue));
+  const quickLines = projectQuickLines(o);
+  if (quickLines.some(line => !Array.isArray(line.installerIds) || !line.installerIds.length)) {
+    issues.push('у каждой услуги нужен исполнитель');
+  }
+  if (quickLines.some(line => !projectQuickDateValue(line.startDate) || !projectQuickDateValue(line.endDate))) {
+    issues.push('у каждой услуги нужны даты начала и окончания');
+  }
+  if (quickLines.some(line => projectQuickDateValue(line.startDate) > projectQuickDateValue(line.endDate))) {
+    issues.push('окончание услуги не может быть раньше начала');
+  }
   if (projectQuickLines(o).some(line => line.catalogId && warehouseCatalogCostPerSqft(line.catalogId) <= 0)) {
     issues.push('у выбранной плёнки нет закупочной стоимости');
   }
@@ -21805,6 +21878,7 @@ function renderQuickProjectEntry(o) {
   const totalSqft = projectQuickSqft(o);
   const total = quickLines.reduce((sum, line) => sum + Number(line.price || 0), 0);
   const quickRange = projectQuickDateRange(o);
+  const proposalIssues = projectEstimateReadiness(o);
   const completionIssues = projectQuickCompletionIssues(o);
   const quickExpenseTypes = ['gas','delivery','material_purchase','helper','subcontractor','electric','tools','rental','permit','other'];
   const quickExpenseRows = (o.extraExpenses || []).map(expense => `<tr>
@@ -21821,8 +21895,9 @@ function renderQuickProjectEntry(o) {
     </div>
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>Услуги проекта</h4><div class="text-xs text-gray-500">Без комнат и размеров окон: укажите общий метраж и цену проекта. Цена за sqft рассчитается автоматически. Можно добавить несколько услуг.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
-      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена проекта</th><th class="money">Цена / sqft</th><th>Начало</th><th>Окончание</th><th>Исполнители</th><th>Расходники</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="10" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
+      <div class="project-estimate-table-wrap"><table class="project-estimate-table project-estimate-table--quick"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена проекта</th><th class="money">Цена / sqft</th><th>Начало</th><th>Окончание</th><th>Исполнители</th><th>Расходники</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="10" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
     </section>
+    ${proposalIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Чтобы сформировать КП:</b> ${academyEsc(proposalIssues.join(', '))}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Для КП данных достаточно.</b> Монтажника и даты работ можно назначить позже.</div>`}
     ${currentUser()?.role === 'owner' ? `<section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>Прямые расходы проекта</h4><div class="text-xs text-gray-500">Доставка, разовая закупка, помощник, субподрядчик и другие фактические расходы.</div></div><button class="btn-ghost text-sm" onclick="projectQuickAddExpense('${o.id}')">+ Добавить расход</button></div>
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead><tbody>${quickExpenseRows || '<tr><td colspan="4" class="text-gray-500">Прямых расходов нет.</td></tr>'}</tbody></table></div>
@@ -21838,8 +21913,31 @@ function renderQuickProjectEntry(o) {
     </section>` : ''}
     <div class="project-estimate-footer">
       <div class="text-xs text-gray-500">Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников.</div>
-      <div class="flex gap-2 flex-wrap"><button class="btn-ghost" onclick="closeModal()">Сохранить и закрыть</button><button class="btn-primary" onclick="openProjectEstimateWorkspace('${o.id}')">Перейти к расчёту проекта →</button></div>
+      <div class="flex gap-2 flex-wrap"><button class="btn-ghost" onclick="closeModal()">Сохранить и закрыть</button><button class="btn-primary" onclick="openProjectEstimateWorkspace('${o.id}')">Проверить расчёт и сформировать КП →</button></div>
     </div>`;
+}
+
+function refreshProjectWorkspaceBody(oid, workspace, renderer, fallback) {
+  const o = getOrder(oid);
+  const body = document.querySelector(`.order-workspace-modal-body[data-workspace="${workspace}"]`);
+  if (!o || !body) { fallback(oid); return; }
+  const top = body.scrollTop;
+  const horizontal = [...body.querySelectorAll('.project-estimate-table-wrap')].map(item => item.scrollLeft);
+  body.innerHTML = renderer(o);
+  const restore = () => {
+    body.scrollTop = top;
+    body.querySelectorAll('.project-estimate-table-wrap').forEach((item, index) => { item.scrollLeft = horizontal[index] || 0; });
+  };
+  restore();
+  requestAnimationFrame(restore);
+}
+
+function refreshQuickProjectEntry(oid) {
+  refreshProjectWorkspaceBody(oid, 'quick-project', renderQuickProjectEntry, openQuickProjectEntry);
+}
+
+function refreshProjectEstimateWorkspace(oid) {
+  refreshProjectWorkspaceBody(oid, 'project-estimate', renderProjectEstimateWorkspace, openProjectEstimateWorkspace);
 }
 
 function openQuickProjectEntry(oid) {
@@ -21848,12 +21946,12 @@ function openQuickProjectEntry(oid) {
   if (!orderUserCanSeeMoney(o, currentUser())) { alert('Быстрый ввод доступен только владельцу и назначенному менеджеру.'); return; }
   state.modal = `
     <div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
-      <div class="modal-content workspace-modal order-workspace-modal" style="--workspace-color:#2563eb" onclick="event.stopPropagation()">
+      <div class="modal-content workspace-modal order-workspace-modal order-workspace-modal-wide" style="--workspace-color:#2563eb" onclick="event.stopPropagation()">
         <header class="order-workspace-modal-head">
           <div class="order-workspace-modal-heading"><span class="order-workspace-modal-icon">⚡</span><div><div class="order-workspace-modal-kicker">${academyEsc(o.number)}</div><h3>Быстрый ввод проекта</h3></div></div>
           <button type="button" class="order-workspace-close" onclick="closeModal()" aria-label="Закрыть быстрый ввод проекта">×</button>
         </header>
-        <div class="order-workspace-modal-body">${renderQuickProjectEntry(o)}</div>
+        <div class="order-workspace-modal-body" data-workspace="quick-project">${renderQuickProjectEntry(o)}</div>
       </div>
     </div>`;
   render();
@@ -22003,12 +22101,12 @@ function openProjectEstimateWorkspace(oid) {
   if (!orderUserCanSeeMoney(o, currentUser())) { alert('Расчёт проекта доступен только владельцу и назначенному менеджеру.'); return; }
   state.modal = `
     <div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
-      <div class="modal-content workspace-modal order-workspace-modal" style="--workspace-color:#0f766e" onclick="event.stopPropagation()">
+      <div class="modal-content workspace-modal order-workspace-modal order-workspace-modal-wide" style="--workspace-color:#0f766e" onclick="event.stopPropagation()">
         <header class="order-workspace-modal-head">
           <div class="order-workspace-modal-heading"><span class="order-workspace-modal-icon">🧮</span><div><div class="order-workspace-modal-kicker">${academyEsc(o.number)}</div><h3>Расчёт проекта перед КП</h3></div></div>
           <button type="button" class="order-workspace-close" onclick="closeModal()" aria-label="Закрыть расчёт проекта">×</button>
         </header>
-        <div class="order-workspace-modal-body">${renderProjectEstimateWorkspace(o)}</div>
+        <div class="order-workspace-modal-body" data-workspace="project-estimate">${renderProjectEstimateWorkspace(o)}</div>
       </div>
     </div>`;
   render();
@@ -22089,14 +22187,14 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ${isInstaller ? `
       ${renderOrderActionCard({ icon: '🧰', title: 'Открыть технический лист', sub: hasMeasurements ? 'схема, размеры и материалы' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasMeasurements, variant: 'primary' })}
       ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'задача, адрес, размеры и фото' : 'ожидает замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
-      ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.pieces.length} деталей` : 'после размеров', onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
+      ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.pieces.length} деталей` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
       ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать наряд', sub: 'рабочий лист и подписи', onclick: `printWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
       ` : `
       ${renderOrderActionCard({ icon: '📐', title: measureActionTitle, sub: hasMeasurements ? `${rooms.length} комн. · ${windows.length} окон` : 'добавить комнаты и окна', onclick: measureAction, variant: 'primary' })}
       ${renderOrderActionCard({ icon: '🧭', title: 'Полевой модуль v2.5', sub: 'планшет: комнаты, окна, компас, фото, JSON', onclick: `openMeasurerV25ForOrder('${o.id}')`, variant: canMeasure ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '⬆️', title: 'Импорт JSON v2.5', sub: 'забрать выездной замер в CRM', onclick: `openMeasurerV25Import('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
-      ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.consumedSqft.toFixed(1)} sqft расход` : 'после размеров', onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
+      ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.consumedSqft.toFixed(1)} sqft расход` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
       ${renderOrderActionCard({ icon: '🖨', title: 'Печать наряда', sub: 'рабочий лист', onclick: `printWorkOrder('${o.id}')` })}
       `}
     </div>`;
@@ -22106,7 +22204,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     <div class="order-clean-actions mt-3">
       ${renderOrderActionCard({ icon: '🧰', title: 'Технический лист', sub: hasMeasurements ? 'готов к работе' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasMeasurements, variant: 'primary' })}
       ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: 'размеры, материалы и фото без цен', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
-      ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.pieces.length} деталей` : 'после размеров', onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
+      ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.pieces.length} деталей` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
     </div>` : `
     <div class="order-clean-mini-grid">
       ${renderOrderCleanMini('КП', proposal ? 'создано' : 'нет')}

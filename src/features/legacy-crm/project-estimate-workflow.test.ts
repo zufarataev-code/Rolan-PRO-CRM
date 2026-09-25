@@ -151,7 +151,7 @@ test("quick project entry derives sqft price and assigns installers per service"
   assert.match(renderer, /\+ Новый сотрудник/);
   assert.match(installerToggle, /line\.installerIds = \[\.\.\.selected\]/);
   assert.match(installerToggle, /projectQuickSyncProjectInstallers\(o\)/);
-  assert.match(installerToggle, /save\(\); openQuickProjectEntry\(oid\)/);
+  assert.match(installerToggle, /save\(\); refreshQuickProjectEntry\(oid\)/);
   assert.match(source, /filter\(line => line\.unit === 'sqft' && \(line\.installerIds \|\| \[\]\)\.includes\(user\?\.id\)\)/);
   assert.match(source, /new Set\(line\.installerIds \|\| \[\]\)\.size/);
 });
@@ -258,14 +258,17 @@ test("quick project total remains the source while sqft changes", () => {
 
 test("every quick service has its own validated start and end dates", () => {
   const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
   const renderer = source.slice(rendererStart, rendererEnd);
   assert.match(source, /function projectQuickDateValue\(value\)/);
   assert.match(source, /function projectQuickDateRange\(o\)/);
-  assert.match(readiness, /у каждой услуги нужны даты начала и окончания/);
-  assert.match(readiness, /окончание услуги не может быть раньше начала/);
+  assert.doesNotMatch(readiness, /у каждой услуги нужны даты начала и окончания/);
+  assert.doesNotMatch(readiness, /у каждой услуги нужен исполнитель/);
+  assert.match(completionIssues, /у каждой услуги нужны даты начала и окончания/);
+  assert.match(completionIssues, /окончание услуги не может быть раньше начала/);
   assert.match(updater, /\['startDate','endDate'\]\.includes\(field\)/);
   assert.match(updater, /Дата окончания услуги не может быть раньше даты начала/);
   assert.match(renderer, /data-label="Начало"><input type="date"/);
@@ -351,6 +354,35 @@ test("project estimate becomes stacked labeled rows on a phone", () => {
   assert.match(source, /Удалить услугу/);
   assert.match(source, /Удалить расход/);
   assert.match(source, /\.project-estimate-footer > div:last-child \{[\s\S]*?grid-template-columns: 1fr/);
+});
+
+test("desktop project workspaces fit fields and refresh without rebuilding the whole CRM", () => {
+  assert.match(source, /\.order-workspace-modal\.order-workspace-modal-wide[\s\S]*?max-width: 1520px/);
+  assert.match(source, /project-estimate-table project-estimate-table--quick/);
+  assert.match(source, /\.project-estimate-table--quick tr[\s\S]*?grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(source, /function refreshProjectWorkspaceBody\(oid, workspace, renderer, fallback\)/);
+  assert.match(source, /body\.innerHTML = renderer\(o\)/);
+  assert.match(source, /data-workspace="quick-project"/);
+  assert.match(source, /data-workspace="project-estimate"/);
+  assert.match(source, /save\(\); refreshQuickProjectEntry\(oid\)/);
+  assert.match(source, /save\(\); refreshProjectEstimateWorkspace\(oid\)/);
+});
+
+test("proposal readiness does not require installation scheduling", () => {
+  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(readiness, /installerIds|startDate|endDate/);
+  assert.match(completionIssues, /installerIds/);
+  assert.match(completionIssues, /startDate/);
+  assert.match(source, /Для КП данных достаточно[\s\S]*?Монтажника и даты работ можно назначить позже/);
+});
+
+test("fullscreen kanban fits all stages and cut sheets preserve readable scale", () => {
+  assert.match(source, /\.kanban-fullscreen \.kanban-funnel[\s\S]*?grid-template-columns: repeat\(7, minmax\(220px, 1fr\)\)/);
+  assert.match(source, /const minimumSegmentHeight = Math\.max\(1, run\.combos\.length\) \* 150/);
+  assert.match(source, /Math\.min\(6000, Math\.max\(aspectHeight, minimumSegmentHeight\)\)/);
+  assert.match(source, /нужны ширина и высота каждого стекла/);
+  assert.doesNotMatch(source, /title: 'Лист раскроя'[\s\S]{0,220}disabled: !plan\.pieces/);
 });
 
 
