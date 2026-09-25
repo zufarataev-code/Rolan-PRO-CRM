@@ -70,7 +70,7 @@ async function verifyEdgeSession(token: string) {
   return decoded;
 }
 
-function isPublicPath(pathname: string) {
+export function isPublicPath(pathname: string) {
   return (
     pathname === "/" ||
     pathname.startsWith("/_next") ||
@@ -79,7 +79,8 @@ function isPublicPath(pathname: string) {
     pathname.startsWith("/api/v1/auth/login") ||
     pathname.startsWith("/api/v1/auth/logout") ||
     pathname.startsWith("/api/v1/auth/forgot-password") ||
-    pathname.startsWith("/api/v1/auth/reset-password")
+    pathname.startsWith("/api/v1/auth/reset-password") ||
+    pathname === "/api/v1/integrations/website/leads"
   );
 }
 
