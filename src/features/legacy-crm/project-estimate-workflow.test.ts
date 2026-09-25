@@ -404,6 +404,8 @@ test("proposal actions stay clickable and explain the exact missing data", () =>
   assert.match(source, /const proposalDisabled = !canManage;/);
   assert.match(source, /title: 'Единое КП'[\s\S]*?disabled: !canManage/);
   assert.match(source, /Показать, чего не хватает/);
+  assert.match(source, /summary: workDocsOnly \? 'Без коммерческих сумм'[\s\S]*?'Откройте расчёт и проверьте итог'/);
+  assert.doesNotMatch(source, /estimateApproved \? 'КП' : 'заблокировано'/);
   assert.doesNotMatch(
     source,
     /onclick="approveProjectEstimateAndOpenProposal\('\$\{o\.id\}'\)" \$\{issues\.length \? 'disabled' : ''\}/,
