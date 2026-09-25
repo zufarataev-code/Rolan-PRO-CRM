@@ -358,6 +358,7 @@ test("project estimate becomes stacked labeled rows on a phone", () => {
 
 test("desktop project workspaces fit fields and refresh without rebuilding the whole CRM", () => {
   assert.match(source, /\.order-workspace-modal\.order-workspace-modal-wide[\s\S]*?max-width: 1520px/);
+  assert.match(source, /@media \(min-width: 901px\)[\s\S]*?\.modal-content\.workspace-modal\.order-workspace-modal\.order-workspace-modal-wide[\s\S]*?max-width: 1520px/);
   assert.match(source, /project-estimate-table project-estimate-table--quick/);
   assert.match(source, /\.project-estimate-table--quick tr[\s\S]*?grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
   assert.match(source, /function refreshProjectWorkspaceBody\(oid, workspace, renderer, fallback\)/);
