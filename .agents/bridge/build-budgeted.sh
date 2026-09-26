@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runtime wrapper for the existing builder.
-# Keeps the proven builder logic intact while enforcing a request-size budget
+# Keeps the proven builder logic intact while enforcing a complete request budget
 # so large issues do not hit provider TPM limits before they can build a PR.
 set -euo pipefail
 
@@ -14,18 +14,84 @@ import sys
 source, target = sys.argv[1:3]
 text = open(source, encoding="utf-8").read()
 
-replacements = {
-    "gh issue view \"$ISSUE_NUMBER\" --comments 2>/dev/null | tail -n 180 || true":
-        "gh issue view \"$ISSUE_NUMBER\" --comments 2>/dev/null | tail -n 60 || true",
-    "if len(raw) > 420000:\n    raw = raw[:420000]":
-        "if len(raw) > 120000:\n    raw = raw[:120000]",
-}
+comment_marker = '# 1. Контекст задачи.\n{'
+if text.count(comment_marker) != 1:
+    raise SystemExit("builder wrapper could not locate issue-context marker")
+text = text.replace(
+    comment_marker,
+    '# 1. Контекст задачи.\n'
+    'gh issue view "$ISSUE_NUMBER" --comments 2>/dev/null > "$WORK/comments.full" || true\n'
+    '{',
+    1,
+)
 
-for old, new in replacements.items():
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"builder wrapper expected exactly one match, got {count}: {old[:80]}")
-    text = text.replace(old, new, 1)
+old_comments = 'gh issue view "$ISSUE_NUMBER" --comments 2>/dev/null | tail -n 180 || true'
+new_comments = 'tail -n 60 "$WORK/comments.full" 2>/dev/null || true'
+if text.count(old_comments) != 1:
+    raise SystemExit("builder wrapper could not locate comments command")
+text = text.replace(old_comments, new_comments, 1)
+
+old_branch = '''REQUESTED_BRANCH=$(grep -oE 'WORK_BRANCH:[[:space:]]*[A-Za-z0-9._/-]+' "$WORK/issue.md" \
+  | tail -1 | sed -E 's/^WORK_BRANCH:[[:space:]]*//' || true)'''
+new_branch = '''REQUESTED_BRANCH=$(cat "$WORK/issue.md" "$WORK/comments.full" 2>/dev/null \
+  | grep -oE 'WORK_BRANCH:[[:space:]]*[A-Za-z0-9._/-]+' \
+  | tail -1 | sed -E 's/^WORK_BRANCH:[[:space:]]*//' || true)'''
+if text.count(old_branch) != 1:
+    raise SystemExit("builder wrapper could not locate WORK_BRANCH extraction")
+text = text.replace(old_branch, new_branch, 1)
+
+old_limit = '''if len(raw) > 420000:
+    raw = raw[:420000]'''
+new_limit = '''if len(raw) > 70000:
+    raw = raw[:70000]'''
+if text.count(old_limit) != 1:
+    raise SystemExit("builder wrapper could not locate code byte cap")
+text = text.replace(old_limit, new_limit, 1)
+
+budget_anchor = 'mv "$WORK/code.trim" "$WORK/code.md"\n\n# 3. Запрос архитектору.'
+budget_block = '''mv "$WORK/code.trim" "$WORK/code.md"
+
+# Budget the complete model-facing input conservatively. The previous failures
+# were 38k-42k TPM against a 30k limit. We estimate UTF-8 bytes at 2 bytes/token
+# (intentionally conservative for mixed Russian/English), reserve system-prompt
+# headroom, and separately cap completion tokens below.
+python3 - "$WORK/issue.md" "$WORK/code.md" <<'PY_BUDGET'
+import sys
+
+issue_path, code_path = sys.argv[1:3]
+MAX_INPUT_TOKENS = 18000
+SYSTEM_RESERVE_TOKENS = 2500
+BYTES_PER_TOKEN = 2
+ISSUE_MAX_BYTES = 14000
+
+def trim_utf8(raw: bytes, limit: int) -> str:
+    return raw[:max(0, limit)].decode("utf-8", errors="ignore")
+
+issue_raw = open(issue_path, "rb").read()
+if len(issue_raw) > ISSUE_MAX_BYTES:
+    issue_raw = issue_raw[:ISSUE_MAX_BYTES]
+issue_text = issue_raw.decode("utf-8", errors="ignore")
+open(issue_path, "w", encoding="utf-8").write(issue_text)
+
+input_budget_bytes = max(
+    12000,
+    (MAX_INPUT_TOKENS - SYSTEM_RESERVE_TOKENS) * BYTES_PER_TOKEN,
+)
+remaining = max(8000, input_budget_bytes - len(issue_text.encode("utf-8")))
+code_raw = open(code_path, "rb").read()
+open(code_path, "w", encoding="utf-8").write(trim_utf8(code_raw, remaining))
+PY_BUDGET
+
+# 3. Запрос архитектору.'''
+if text.count(budget_anchor) != 1:
+    raise SystemExit("builder wrapper could not locate request-budget anchor")
+text = text.replace(budget_anchor, budget_block, 1)
+
+request_anchor = '{\n  model: "gpt-4o",\n  response_format: {type: "json_object"},'
+request_new = '{\n  model: "gpt-4o",\n  max_tokens: 6000,\n  response_format: {type: "json_object"},'
+if text.count(request_anchor) != 1:
+    raise SystemExit("builder wrapper could not locate request JSON")
+text = text.replace(request_anchor, request_new, 1)
 
 with open(target, "w", encoding="utf-8") as handle:
     handle.write(text)
