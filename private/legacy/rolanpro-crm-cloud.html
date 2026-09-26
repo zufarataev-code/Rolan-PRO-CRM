@@ -32304,7 +32304,7 @@ function renderCalendar() {
   `;
 
   // Day and week use one permanent calendar + map workspace. Month keeps an optional map.
-  const mapBlock = document.documentElement.clientWidth > 720 && mode === 'month' && state.calendarShowMap ? renderCalendarMap(anchor, mode) : '';
+  const mapBlock = (document.documentElement.clientWidth > 720 || !isMobileCalendarViewport()) && mode === 'month' && state.calendarShowMap ? renderCalendarMap(anchor, mode) : '';
 
   if (mode === 'day') {
     return toolbar + `<div class="dispatch-workspace">${renderDispatchDay(anchor)}${renderDispatchMap(anchor, 'day')}</div>`;

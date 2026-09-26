@@ -5,7 +5,7 @@ import test from "node:test";
 const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 
 test("mobile calendar renders compact month structure", () => {
-  assert.match(source, /renderDispatchMonthMobile\(anchor\)/);
+  assert.match(source, /function renderDispatchMonthMobile\(anchor\)/);
 });
 
 test("selected day agenda exists in mobile view", () => {
