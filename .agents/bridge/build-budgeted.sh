@@ -49,7 +49,7 @@ if text.count(old_limit) != 1:
 text = text.replace(old_limit, new_limit, 1)
 
 budget_anchor = 'mv "$WORK/code.trim" "$WORK/code.md"\n\n# 3. Запрос архитектору.'
-budget_block = '''mv "$WORK/code.trim" "$WORK/code.md"
+budget_block = r'''mv "$WORK/code.trim" "$WORK/code.md"
 
 # Budget the complete model-facing input conservatively. The previous failures
 # were 38k-42k TPM against a 30k limit. We estimate UTF-8 bytes at 2 bytes/token
