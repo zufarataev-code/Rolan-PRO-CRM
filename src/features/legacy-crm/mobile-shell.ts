@@ -20,7 +20,7 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
     .replaceAll(">", "\\u003e")
     .replaceAll("&", "\\u0026");
 
-  return String.raw\`
+  return String.raw`
     <div id="rolanpro-mobile-crm" aria-label="ROLANPRO mobile CRM">
       <header class="rpm-header">
         <div>
@@ -868,5 +868,5 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
         reload();
       })();
     </script>
-  \`;
+  `;
 }
