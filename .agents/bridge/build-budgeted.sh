@@ -31,9 +31,9 @@ if text.count(old_comments) != 1:
     raise SystemExit("builder wrapper could not locate comments command")
 text = text.replace(old_comments, new_comments, 1)
 
-old_branch = '''REQUESTED_BRANCH=$(grep -oE 'WORK_BRANCH:[[:space:]]*[A-Za-z0-9._/-]+' "$WORK/issue.md" \
+old_branch = r'''REQUESTED_BRANCH=$(grep -oE 'WORK_BRANCH:[[:space:]]*[A-Za-z0-9._/-]+' "$WORK/issue.md" \
   | tail -1 | sed -E 's/^WORK_BRANCH:[[:space:]]*//' || true)'''
-new_branch = '''REQUESTED_BRANCH=$(cat "$WORK/issue.md" "$WORK/comments.full" 2>/dev/null \
+new_branch = r'''REQUESTED_BRANCH=$(cat "$WORK/issue.md" "$WORK/comments.full" 2>/dev/null \
   | grep -oE 'WORK_BRANCH:[[:space:]]*[A-Za-z0-9._/-]+' \
   | tail -1 | sed -E 's/^WORK_BRANCH:[[:space:]]*//' || true)'''
 if text.count(old_branch) != 1:
