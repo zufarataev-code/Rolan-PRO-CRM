@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { requireRequestSession } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
