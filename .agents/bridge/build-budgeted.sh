@@ -62,15 +62,25 @@ issue_path, code_path = sys.argv[1:3]
 MAX_INPUT_TOKENS = 18000
 SYSTEM_RESERVE_TOKENS = 2500
 BYTES_PER_TOKEN = 2
-ISSUE_MAX_BYTES = 14000
+BODY_MAX_BYTES = 9000
+COMMENTS_MAX_BYTES = 6000
+MARKER = "\n--- переписка ---\n"
 
-def trim_utf8(raw: bytes, limit: int) -> str:
+def trim_head_utf8(raw: bytes, limit: int) -> str:
     return raw[:max(0, limit)].decode("utf-8", errors="ignore")
 
-issue_raw = open(issue_path, "rb").read()
-if len(issue_raw) > ISSUE_MAX_BYTES:
-    issue_raw = issue_raw[:ISSUE_MAX_BYTES]
-issue_text = issue_raw.decode("utf-8", errors="ignore")
+def trim_tail_utf8(raw: bytes, limit: int) -> str:
+    return raw[-max(0, limit):].decode("utf-8", errors="ignore")
+
+issue_text_full = open(issue_path, encoding="utf-8", errors="ignore").read()
+if MARKER in issue_text_full:
+    body_text, comments_text = issue_text_full.split(MARKER, 1)
+    body_text = trim_head_utf8(body_text.encode("utf-8"), BODY_MAX_BYTES)
+    # Preserve the newest constraints/corrections even when the original issue body is large.
+    comments_text = trim_tail_utf8(comments_text.encode("utf-8"), COMMENTS_MAX_BYTES)
+    issue_text = body_text + MARKER + comments_text
+else:
+    issue_text = trim_head_utf8(issue_text_full.encode("utf-8"), BODY_MAX_BYTES + COMMENTS_MAX_BYTES)
 open(issue_path, "w", encoding="utf-8").write(issue_text)
 
 input_budget_bytes = max(
@@ -79,7 +89,7 @@ input_budget_bytes = max(
 )
 remaining = max(8000, input_budget_bytes - len(issue_text.encode("utf-8")))
 code_raw = open(code_path, "rb").read()
-open(code_path, "w", encoding="utf-8").write(trim_utf8(code_raw, remaining))
+open(code_path, "w", encoding="utf-8").write(trim_head_utf8(code_raw, remaining))
 PY_BUDGET
 
 # 3. Запрос архитектору.'''
