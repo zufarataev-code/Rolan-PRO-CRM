@@ -50,3 +50,12 @@ test("iPhone safe area and no-overflow mobile controls are explicitly styled", (
   assert.match(source, /padding-top:\s*max\(\.65rem, env\(safe-area-inset-top\)\)/);
   assert.match(source, /\.calendar-mobile-filters[\s\S]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/);
 });
+
+
+test("landscape iPhones stay on the compact mobile branch", () => {
+  assert.match(source, /max-width: 960px\) and \(pointer: coarse\)/);
+});
+
+test("mobile event cards use the same event color variable as the renderer", () => {
+  assert.match(source, /border-left:\s*4px solid var\(--event-color, #29A7E1\)/);
+});
