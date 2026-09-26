@@ -19,6 +19,7 @@ model User {
   created_at              DateTime         @default(now()) @db.Timestamptz(6)
   updated_at              DateTime         @updatedAt @db.Timestamptz(6)
   user_accesses           UserAccess[]
+  created_by_user        User?            @relation("user_created_employees", fields: [created_by_user_id], references: [user_id])
   leads_assigned          Lead[]           @relation("lead_manager")
   deals_assigned          Deal[]           @relation("deal_manager")
   managed_projects        Project[]        @relation("project_manager")

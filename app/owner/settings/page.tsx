@@ -25,7 +25,7 @@ export default async function OwnerSettingsPage() {
       activeHref="/owner/settings"
       actions={<Link href="/owner/settings/pricing" className="accent-button">Услуги, цены и план продаж</Link>}
     >
-      <OwnerSettingsEditor
+      <Link href="/owner/settings/team" className="accent-button">Команда и сотрудники</Link><OwnerSettingsEditor
         serviceTypes={settings.service_types.map((item) => ({
           service_type_id: item.service_type_id,
           service_code: item.service_code,
