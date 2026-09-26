@@ -15,7 +15,10 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
       full_name: input.user.full_name,
     },
     roles: input.roles,
-  });
+  })
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("&", "\\u0026");
 
   return String.raw\`
     <div id="rolanpro-mobile-crm" aria-label="ROLANPRO mobile CRM">
@@ -261,11 +264,15 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
 
         const roles = Array.isArray(context.roles) ? context.roles : [];
         const canSales = roles.includes('OWNER') || roles.includes('MANAGER');
+        const isConsultant = roles.includes('CONSULTANT');
+        const isInstaller = roles.includes('INSTALLER');
         const state = {
           screen: 'today',
           leads: [],
           projects: [],
           consultations: [],
+          fieldOrders: [],
+          installerJobs: [],
           leadQuery: '',
           selectedLead: null,
           selectedProject: null,
@@ -355,10 +362,12 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
           const todayKey = new Date().toISOString().slice(0, 10);
           const todayConsultations = state.consultations.filter((item) => sameLocalDay(item.scheduled_start_at, todayKey));
           const newLeads = state.leads.filter((item) => item?.pipeline_status?.status_code === 'NEW_LEAD').length;
-          const activeProjects = state.projects.filter((item) => item?.project_status?.status_code !== 'COMPLETED').length;
+          const activeProjects = canSales
+            ? state.projects.filter((item) => item?.project_status?.status_code !== 'COMPLETED').length
+            : (isInstaller ? state.installerJobs.filter((item) => item?.status !== 'completed').length : state.fieldOrders.length);
           const upcoming = state.consultations
             .filter((item) => new Date(item.scheduled_start_at).getTime() >= Date.now() - 60 * 60 * 1000)
-            .sort((a, b) => new Date(a.scheduled_start_at) - new Date(b.scheduled_start_at))
+            .sort((a, b) => new Date(a.scheduled_start_at).getTime() - new Date(b.scheduled_start_at).getTime())
             .slice(0, 5);
 
           view.innerHTML =
@@ -367,7 +376,7 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
               (canSales ? metric(newLeads, 'Новые лиды') : '') +
               metric(todayConsultations.length, 'Консультации сегодня') +
               metric(activeProjects, 'Активные проекты') +
-              metric(state.projects.filter((item) => item?.status_flags?.needs_attention).length, 'Требуют внимания') +
+              metric(canSales ? state.projects.filter((item) => item?.status_flags?.needs_attention).length : 0, 'Требуют внимания') +
             '</div>' +
             '<section class="rpm-section"><h2 class="rpm-section-title">Ближайшие консультации</h2>' +
             (upcoming.length
@@ -452,11 +461,33 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
             '<span class="rpm-badge">' + escapeHtml(status) + '</span></div></button>';
         };
 
+        const installerJobCard = (job) => {
+          const project = job?.project || {};
+          const when = job?.schedule?.date || project.install_date;
+          return '<button type="button" class="rpm-list-card" data-rpm-installer-job="' + escapeHtml(job.installer_job_id) + '">' +
+            '<div class="rpm-row"><div class="rpm-grow"><div class="rpm-name">' + escapeHtml(safeText(project.title, project.project_code || 'Работа')) + '</div>' +
+            '<div class="rpm-meta">' + escapeHtml([project.project_code, project.address, when ? formatDate(when, false) : null, job?.position?.title].filter(Boolean).join(' · ')) + '</div></div>' +
+            '<span class="rpm-badge">' + escapeHtml(safeText(job.status, 'assigned')) + '</span></div></button>';
+        };
+
+        const fieldOrderCard = (order) => {
+          const client = state.fieldClients?.find((item) => String(item.id || '') === String(order.clientId || ''));
+          const title = order.title || order.projectName || order.name || order.orderNo || order.id;
+          const date = order.installDate || order.measurementDate || order.date || order.scheduledAt;
+          return '<button type="button" class="rpm-list-card" data-rpm-field-order="' + escapeHtml(order.id) + '">' +
+            '<div class="rpm-row"><div class="rpm-grow"><div class="rpm-name">' + escapeHtml(safeText(title, 'Назначенная работа')) + '</div>' +
+            '<div class="rpm-meta">' + escapeHtml([client?.name, order.address || client?.serviceAddress || client?.address, date ? formatDate(date, false) : null].filter(Boolean).join(' · ')) + '</div></div>' +
+            '<span class="rpm-badge">' + escapeHtml(safeText(order.status, 'assigned')) + '</span></div></button>';
+        };
+
         const renderProjects = () => {
+          const cards = canSales
+            ? state.projects.map(projectCard)
+            : (isInstaller ? state.installerJobs.map(installerJobCard) : state.fieldOrders.map(fieldOrderCard));
           view.innerHTML =
-            pageHeader('Работа', 'Проекты', 'Актуальные проекты из общей CRM') +
+            pageHeader('Работа', canSales ? 'Проекты' : 'Мои работы', canSales ? 'Актуальные проекты из общей CRM' : 'Только назначенные вам работы') +
             '<section class="rpm-section">' +
-              (state.projects.length ? state.projects.map(projectCard).join('') : '<div class="rpm-empty">Проектов пока нет.</div>') +
+              (cards.length ? cards.join('') : '<div class="rpm-empty">Назначенных работ пока нет.</div>') +
             '</section>';
         };
 
@@ -475,6 +506,44 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
             '</div></div>';
         };
 
+        const renderInstallerJobDetail = (job) => {
+          const project = job?.project || {};
+          view.innerHTML =
+            '<button class="rpm-back" type="button" data-rpm-back="projects">← Мои работы</button>' +
+            '<div style="margin-top:12px">' + pageHeader('Монтаж', safeText(project.title, project.project_code || 'Работа'), project.project_code || '') + '</div>' +
+            '<div class="rpm-card"><div class="rpm-detail-list">' +
+              detailRow('Статус', job.status) +
+              detailRow('Клиент', project?.client?.name) +
+              detailRow('Телефон', project?.client?.phone) +
+              detailRow('Адрес', project.address) +
+              detailRow('Дата', job?.schedule?.date ? formatDate(job.schedule.date, false) : (project.install_date ? formatDate(project.install_date, false) : null)) +
+              detailRow('Работа', job?.position?.title || job?.position?.service_type?.name_ru) +
+              detailRow('Заметки', job?.position?.notes) +
+            '</div></div>' +
+            ((project?.client?.phone || project.address)
+              ? '<div class="rpm-toolbar">' +
+                  (project?.client?.phone ? '<a class="rpm-btn secondary" style="display:grid;place-items:center;text-decoration:none" href="tel:' + escapeHtml(project.client.phone) + '">Позвонить</a>' : '') +
+                  (project.address ? '<a class="rpm-btn blue" style="display:grid;place-items:center;text-decoration:none" href="https://maps.apple.com/?q=' + encodeURIComponent(project.address) + '">Маршрут</a>' : '') +
+                '</div>'
+              : '');
+        };
+
+        const renderFieldOrderDetail = (order) => {
+          const client = state.fieldClients?.find((item) => String(item.id || '') === String(order.clientId || ''));
+          const title = order.title || order.projectName || order.name || order.orderNo || order.id;
+          view.innerHTML =
+            '<button class="rpm-back" type="button" data-rpm-back="projects">← Мои работы</button>' +
+            '<div style="margin-top:12px">' + pageHeader('Назначенная работа', safeText(title, 'Работа'), order.orderNo || '') + '</div>' +
+            '<div class="rpm-card"><div class="rpm-detail-list">' +
+              detailRow('Статус', order.status) +
+              detailRow('Клиент', client?.name) +
+              detailRow('Телефон', client?.phone) +
+              detailRow('Адрес', order.address || client?.serviceAddress || client?.address) +
+              detailRow('Заметки', order.technicalNotes || order.measurerNotes || order.installerNotes || order.notes) +
+            '</div></div>' +
+            (client?.phone ? '<div class="rpm-toolbar"><a class="rpm-btn blue" style="display:grid;place-items:center;text-decoration:none" href="tel:' + escapeHtml(client.phone) + '">Позвонить клиенту</a></div>' : '');
+        };
+
         const consultationCard = (item) => {
           const customer = item?.client?.name || item?.lead?.name || item?.deal?.title || '';
           return '<button type="button" class="rpm-list-card" data-rpm-consultation="' + escapeHtml(item.consultation_id) + '">' +
@@ -484,12 +553,17 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
         };
 
         const renderCalendar = () => {
-          const selected = state.consultations.filter((item) => sameLocalDay(item.scheduled_start_at, state.calendarDate));
+          const selectedConsultations = state.consultations.filter((item) => sameLocalDay(item.scheduled_start_at, state.calendarDate));
+          const selectedJobs = state.installerJobs.filter((item) => {
+            const date = item?.schedule?.date || item?.project?.install_date;
+            return date && sameLocalDay(date, state.calendarDate);
+          });
+          const rows = isInstaller ? selectedJobs.map(installerJobCard) : selectedConsultations.map(consultationCard);
           view.innerHTML =
-            pageHeader('Расписание', 'Календарь', 'Консультации и выезды') +
+            pageHeader('Расписание', 'Календарь', isInstaller ? 'Назначенные монтажные работы' : 'Консультации и выезды') +
             '<div class="rpm-field rpm-day-picker"><label for="rpm-calendar-date">Дата</label><input id="rpm-calendar-date" type="date" value="' + escapeHtml(state.calendarDate) + '"></div>' +
             '<section class="rpm-section">' +
-              (selected.length ? selected.map(consultationCard).join('') : '<div class="rpm-empty">На эту дату событий нет.</div>') +
+              (rows.length ? rows.join('') : '<div class="rpm-empty">На эту дату событий нет.</div>') +
             '</section>';
         };
 
@@ -549,7 +623,11 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
           else if (state.screen === 'lead-detail' && state.selectedLead) renderLeadDetail(state.selectedLead);
           else if (state.screen === 'lead-form') renderLeadForm(state.selectedLead);
           else if (state.screen === 'projects') renderProjects();
-          else if (state.screen === 'project-detail' && state.selectedProject) renderProjectDetail(state.selectedProject);
+          else if (state.screen === 'project-detail' && state.selectedProject) {
+            if (state.selectedProject.__mobile_kind === 'installer_job') renderInstallerJobDetail(state.selectedProject);
+            else if (state.selectedProject.__mobile_kind === 'field_order') renderFieldOrderDetail(state.selectedProject);
+            else renderProjectDetail(state.selectedProject);
+          }
           else if (state.screen === 'calendar') renderCalendar();
           else if (state.screen === 'consultation-detail' && state.selectedConsultation) renderConsultationDetail(state.selectedConsultation);
           else renderMore();
@@ -561,19 +639,33 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
           state.error = '';
           render();
           try {
-            const requests = [
-              api('/api/v1/projects'),
-              api('/api/v1/consultations'),
-            ];
-            if (canSales) requests.unshift(api('/api/v1/leads'));
-            const results = await Promise.all(requests);
             if (canSales) {
-              state.leads = Array.isArray(results[0]?.items) ? results[0].items : [];
-              state.projects = Array.isArray(results[1]?.items) ? results[1].items : [];
-              state.consultations = Array.isArray(results[2]?.items) ? results[2].items : [];
-            } else {
-              state.projects = Array.isArray(results[0]?.items) ? results[0].items : [];
-              state.consultations = Array.isArray(results[1]?.items) ? results[1].items : [];
+              const [leadsData, projectsData, consultationsData] = await Promise.all([
+                api('/api/v1/leads'),
+                api('/api/v1/projects'),
+                api('/api/v1/consultations'),
+              ]);
+              state.leads = Array.isArray(leadsData?.items) ? leadsData.items : [];
+              state.projects = Array.isArray(projectsData?.items) ? projectsData.items : [];
+              state.consultations = Array.isArray(consultationsData?.items) ? consultationsData.items : [];
+            } else if (isConsultant) {
+              const [workspaceData, consultationsData] = await Promise.all([
+                api('/api/v1/legacy-crm/state'),
+                api('/api/v1/consultations'),
+              ]);
+              const payload = workspaceData?.payload || {};
+              state.fieldOrders = Array.isArray(payload.orders) ? payload.orders : [];
+              state.fieldClients = Array.isArray(payload.clients) ? payload.clients : [];
+              state.consultations = Array.isArray(consultationsData?.items) ? consultationsData.items : [];
+            } else if (isInstaller) {
+              const [workspaceData, jobsData] = await Promise.all([
+                api('/api/v1/legacy-crm/state'),
+                api('/api/v1/installer-jobs/my'),
+              ]);
+              const payload = workspaceData?.payload || {};
+              state.fieldOrders = Array.isArray(payload.orders) ? payload.orders : [];
+              state.fieldClients = Array.isArray(payload.clients) ? payload.clients : [];
+              state.installerJobs = Array.isArray(jobsData?.items) ? jobsData.items : [];
             }
           } catch (error) {
             state.error = error instanceof Error ? error.message : 'Не удалось загрузить CRM.';
@@ -631,6 +723,26 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
               state.busy = false;
               render();
             }
+            return;
+          }
+
+          const installerJobButton = event.target.closest('[data-rpm-installer-job]');
+          if (installerJobButton) {
+            const id = installerJobButton.getAttribute('data-rpm-installer-job');
+            const job = state.installerJobs.find((item) => item.installer_job_id === id) || null;
+            state.selectedProject = job ? { ...job, __mobile_kind: 'installer_job' } : null;
+            state.screen = state.selectedProject ? 'project-detail' : 'projects';
+            render();
+            return;
+          }
+
+          const fieldOrderButton = event.target.closest('[data-rpm-field-order]');
+          if (fieldOrderButton) {
+            const id = fieldOrderButton.getAttribute('data-rpm-field-order');
+            const order = state.fieldOrders.find((item) => String(item.id || '') === String(id || '')) || null;
+            state.selectedProject = order ? { ...order, __mobile_kind: 'field_order' } : null;
+            state.screen = state.selectedProject ? 'project-detail' : 'projects';
+            render();
             return;
           }
 
