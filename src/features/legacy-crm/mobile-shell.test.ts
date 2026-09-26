@@ -40,6 +40,23 @@ test("mobile shell enforces phone UX protections", () => {
   assert.match(ownerShell, /font: 500 16px/);
   assert.match(ownerShell, /overflow-x: hidden/);
   assert.match(ownerShell, /-webkit-overflow-scrolling: touch/);
+  assert.match(ownerShell, /scroll-padding-bottom:/);
+  assert.match(ownerShell, /scrollIntoView\(\{ block: 'center'/);
+});
+
+test("lead creation and editing stay limited to owner and manager roles", () => {
+  assert.match(ownerShell, /const canSales = roles\.includes\('OWNER'\) \|\| roles\.includes\('MANAGER'\)/);
+  assert.match(ownerShell, /\.\.\.\(canSales \? \[\{ key: 'leads'/);
+  assert.match(ownerShell, /if \(canSales\)/);
+  assert.match(ownerShell, /method: 'POST'/);
+  assert.match(ownerShell, /method: 'PATCH'/);
+});
+
+test("mobile shell provides desktop handoff, settings, and logout", () => {
+  assert.match(ownerShell, /\/legacy-crm\?desktop=1/);
+  assert.match(ownerShell, /\/change-password/);
+  assert.match(ownerShell, /\/api\/v1\/auth\/logout/);
+  assert.match(ownerShell, /window\.location\.assign\('\/login'\)/);
 });
 
 test("field roles use scoped work sources instead of sales endpoints", () => {

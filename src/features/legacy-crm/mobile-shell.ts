@@ -78,6 +78,8 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
           overflow-x: hidden;
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
+          overscroll-behavior-y: contain;
+          scroll-padding-bottom: calc(120px + env(safe-area-inset-bottom));
           padding: 18px 16px calc(104px + env(safe-area-inset-bottom));
         }
         .rpm-nav {
@@ -249,7 +251,7 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
 
     <script id="rolanpro-mobile-crm-script">
       (() => {
-        const context = \${context};
+        const context = ${context};
         const root = document.getElementById('rolanpro-mobile-crm');
         const view = document.getElementById('rpm-view');
         const nav = document.getElementById('rpm-nav');
@@ -810,6 +812,12 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
             state.calendarDate = event.target.value || state.calendarDate;
             renderCalendar();
           }
+        });
+
+        view.addEventListener('focusin', (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement) || !target.matches('input, textarea, select')) return;
+          window.setTimeout(() => target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120);
         });
 
         view.addEventListener('submit', async (event) => {
