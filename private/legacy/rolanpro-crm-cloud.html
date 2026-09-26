@@ -32128,7 +32128,7 @@ function renderDispatchEvent(layout) {
   const address = orderAddress(o, c) || 'Адрес не указан';
   return `<button class="dispatch-event" style="--event-color:${pal.color};top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px)" onclick="${calendarOpenAction(o)}" title="${academyEsc(ev.info.title)} · ${academyEsc(c?.name || '')} · ${academyEsc(address)}"><div class="dispatch-event-time">${calendarTimeLabel(ev.dt)} · ${academyEsc(ev.info.short)}</div><div class="dispatch-event-title">${academyEsc(calendarEventPeople(ev))} · ${academyEsc(c?.name || 'Без клиента')}</div><div class="dispatch-event-meta">${academyEsc(address)}</div></button>`;
 }
-function renderDispatchWeek(anchor) {
+function renderDispatchWeekMobile(anchor) {
   const range = calendarRangeForMode(anchor, 'week');
   const today = new Date(); today.setHours(0,0,0,0);
   const days = Array.from({ length: 7 }, (_, index) => {
@@ -32138,12 +32138,12 @@ function renderDispatchWeek(anchor) {
   });
   const height = (DISPATCH_END_HOUR - DISPATCH_START_HOUR) * DISPATCH_HOUR_HEIGHT;
   const locale = state.lang === 'ru' ? 'ru-RU' : 'en-US';
-  return `<section class="dispatch-calendar-pane"><div class="dispatch-week-head"><div></div>${days.map(day => `<div class="${day.getTime() === today.getTime() ? 'today' : ''}"><span>${academyEsc(day.toLocaleDateString(locale,{weekday:'short'}))}</span><b>${day.getDate()}</b></div>`).join('')}</div><div class="dispatch-week-scroll"><div class="dispatch-time-grid" style="--dispatch-hour-height:${DISPATCH_HOUR_HEIGHT}px;--dispatch-grid-height:${height}px"><div class="dispatch-time-gutter">${Array.from({length:DISPATCH_END_HOUR-DISPATCH_START_HOUR+1},(_,index) => `<span class="dispatch-hour-label" style="top:${index * DISPATCH_HOUR_HEIGHT}px">${String(DISPATCH_START_HOUR + index).padStart(2,'0')}:00</span>`).join('')}</div>${days.map(day => {
+  return `<section class="dispatch-calendar-pane"><div class="dispatch-week-head-mobile"><div></div>${days.map(day => `<div class="${day.getTime() === today.getTime() ? 'today' : ''}"><span>${academyEsc(day.toLocaleDateString(locale,{weekday:'short'}))}</span><b>${day.getDate()}</b></div>`).join('')}</div><div class="dispatch-week-scroll"><div class="dispatch-time-grid" style="--dispatch-hour-height:${DISPATCH_HOUR_HEIGHT}px;--dispatch-grid-height:${height}px"><div class="dispatch-time-gutter">${Array.from({length:DISPATCH_END_HOUR-DISPATCH_START_HOUR+1},(_,index) => `<span class="dispatch-hour-label" style="top:${index * DISPATCH_HOUR_HEIGHT}px">${String(DISPATCH_START_HOUR + index).padStart(2,'0')}:00</span>`).join('')}</div>${days.map(day => {
     const events = calendarEventsOnDayFull(day);
     return `<div class="dispatch-day-column ${day.getTime() === today.getTime() ? 'today' : ''}">${calendarWeekDayLayouts(events).map(renderDispatchEvent).join('')}</div>`;
   }).join('')}</div></div></section>`;
 }
-function renderDispatchDay(anchor) {
+function renderDispatchDayMobile(anchor) {
   const range = calendarRangeForMode(anchor, 'day');
   const height = (DISPATCH_END_HOUR - DISPATCH_START_HOUR) * DISPATCH_HOUR_HEIGHT;
   const locale = state.lang === 'ru' ? 'ru-RU' : 'en-US';
@@ -32153,7 +32153,7 @@ function renderDispatchDay(anchor) {
 function renderDispatchMap(anchor, mode = 'week') {
   const range = calendarRangeForMode(anchor, mode);
   setTimeout(() => renderMapForDay('cal-map', range.start, { showAll:true, periodStart:range.start, periodEnd:range.end, scheduledOnly:true }), 80);
-  return `<aside class="dispatch-map-pane"><div class="dispatch-map-toolbar"><button class="btn-primary text-sm" onclick="buildRouteOnMap()">Построить маршрут</button><button class="btn-ghost text-sm" onclick="clearRouteOnMap()">Сбросить</button><button class="btn-ghost text-sm" onclick="state.calendarMapStayLocal=!state.calendarMapStayLocal; render();">${state.calendarMapStayLocal!==false?'Показать все адреса':'Вернуться к LA'}</button><span id="route-info" class="text-sm font-semibold text-slate-800"></span><span id="map-status" class="text-xs text-gray-500"></span></div><div id="cal-map" class="dispatch-map-canvas"><div class="flex items-center justify-center h-full text-sm text-gray-400">Загрузка карты…</div></div></aside>`;
+  return `<aside class="dispatch-map-pane"><div class="dispatch-map-toolbar"><button class="btn-primary text-sm" onclick="buildRouteOnMap()">Построить маршрут</button><button class="btn-ghost text-sm" onclick="clearRouteOnMap()">Сбросить</button><button class="btn-ghost text-sm" onclick="state.calendarMapStayLocal=!state.calendarMapStayLocal; render();">${state.calendarMapStayLocal!==false?'Показать все адреса':'Вернуться к LA'}</button><span id="route-info" class="text-sm font-semibold text-slate-800"></span><span id="map-status" class="text-xs text-gray-500"></span></div><div id="cal-map" class="dispatch-map-canvas-collapsed"><div class="flex items-center justify-center h-full text-sm text-gray-400">Загрузка карты…</div></div></aside>`;
 }
 
 function openCalendarSchedulePicker() {
@@ -32304,7 +32304,7 @@ function renderCalendar() {
   `;
 
   // Day and week use one permanent calendar + map workspace. Month keeps an optional map.
-  const mapBlock = mode === 'month' && state.calendarShowMap ? renderCalendarMap(anchor, mode) : '';
+  const mapBlock = document.documentElement.clientWidth > 720 && mode === 'month' && state.calendarShowMap ? renderCalendarMap(anchor, mode) : '';
 
   if (mode === 'day') {
     return toolbar + `<div class="dispatch-workspace">${renderDispatchDay(anchor)}${renderDispatchMap(anchor, 'day')}</div>`;
