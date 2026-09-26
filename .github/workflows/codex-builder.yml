@@ -47,4 +47,4 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GH_TOKEN: ${{ secrets.CODEX_TOKEN || secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue }}
-        run: bash .agents/bridge/build.sh
+        run: bash .agents/bridge/build-budgeted.sh
