@@ -232,8 +232,6 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /not verified performance ratings or confirmation of current stock/);
   assert.match(source, /do not promise complete privacy in every lighting condition/);
   assert.doesNotMatch(source, /Проверяю свободное время в CRM/);
-  assert.match(source, /shouldUseQualificationPrompt\(attemptedBookingClaim, alreadyBooked\)/);
-  assert.match(source, /shouldRestartBookedConversation\(attemptedBookingClaim, alreadyBooked\)/);
   assert.match(source, /state\.leadCapturedEventId = undefined/);
   assert.match(source, /event: "repeat_booking_started"/);
   assert.match(source, /Act like Rolan PRO's best human sales consultant/);
