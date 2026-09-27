@@ -3,6 +3,7 @@ import {
   buildBusinessWindows,
   crmLeadPayload,
   formatSlot,
+  hasBookingIntent,
   leadHasCustomerName,
   leadReadyForBooking,
   leadReadyForCrm,
@@ -100,6 +101,7 @@ Act like Rolan PRO's best human sales consultant, not a chatbot or a questionnai
 - For Solar Film, sell the comfort and glass-specific solution—not darkness alone. For Safety Film, sell the designed glazing system—not an impossible promise. For Decorative Film, sell the intended privacy and appearance in the actual lighting.
 - Keep ordinary replies concise and conversational, usually 2-5 sentences. Use bullets only for a comparison. Never send a wall of text unless the customer asks for detail.
 - End each sales reply with one natural next step or question. Never say "checking CRM" and never claim a booking until the application confirms it.
+- When the customer gives usable dimensions or approximate square footage, you may give a clearly labeled preliminary estimate using the verified Rolan PRO pricing guidance below. Explain that final pricing depends on glass type, access, film choice, electrical/control scope for Smart Film, edge attachment for Safety Film, and field verification. Never present an estimate as a final quote.
 `;
 
 const ROLANPRO_KNOWLEDGE = `
@@ -125,6 +127,8 @@ Use this verified Rolan PRO knowledge when consulting customers:
 - Rolan PRO's decorative supplier catalogs include static-cling privacy patterns AT-001 through AT-028, AT-036 through AT-043, AT-049 through AT-052, and vertically textured AT-101 through AT-104. The 3D laser-rainbow static patterns are AT-029 through AT-035 and AT-044 through AT-048. These are catalog design codes, not verified performance ratings or confirmation of current stock.
 - Reeded/fluted catalog options are AT-C001 clear 25 mm; AT-C002 clear, grey, tea, or black 5 mm; AT-C004B clear 13 mm; AT-C004 clear, tea, or grey 15 mm; AT-C005 clear 9 mm; AT-C006 clear 6 mm; AT-C008 clear 12 mm; plus textured AT-S50 and prismatic AT-055B. The supplier lists 1.52 x 30 m and 1.52 x 50 m rolls, with the reed line running along the roll length. Confirm current availability, exact color, roll size, and sample appearance before promising a model.
 - Decorative-film consultation should first identify the desired privacy level, clear/frosted/colored look, geometric/floral/rainbow/reeded style, residential or commercial space, glass dimensions, viewing distance, lighting on both sides, and whether removable static cling or a professionally installed permanent solution is required. Decorative film obscures detail and changes appearance; do not promise complete privacy in every lighting condition, solar-control performance, safety/security performance, or Smart Film switching unless the selected product explicitly provides it.
+- Preliminary pricing guidance for customer estimates: Smart Film is typically $40-$70 per sq ft installed, with a $1,500 minimum project; Solar Film is typically $7-$15 per sq ft installed; Safety/Security Film is typically $10-$20 per sq ft installed before any required perimeter attachment/sealant, which may add about $5 per sq ft. These are estimate ranges only, not final quotes. Decorative-film pricing must be confirmed from the selected product and scope rather than invented.
+- If the customer provides dimensions, convert them to approximate square footage and show the arithmetic briefly. State the resulting range as a preliminary estimate only. For Smart Film, mention that controls, zones, power supplies, wiring, access, and glass verification can change the final price.
 - Exact pricing depends on film, glass, dimensions, access, and installation complexity. Give a useful explanation, then offer a free measurement instead of inventing a quote.
 `;
 
@@ -536,6 +540,10 @@ async function handleEvent(env: Env, event: MessengerEvent) {
     return;
   }
 
+  const previousAssistantText =
+    [...state.history].reverse().find((message) => message.role === "assistant")?.content || "";
+  const explicitBookingIntent = hasBookingIntent(event.text, previousAssistantText);
+
   state.history.push({ role: "user", content: event.text });
   if (state.history.length > HISTORY_LIMIT) state.history = state.history.slice(-HISTORY_LIMIT);
   const profilePromise = leadHasCustomerName(state.lead)
@@ -570,7 +578,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   state.history.push({ role: "assistant", content: JSON.stringify(output) });
   state.lead = normalizeLeadData(mergeLead(state.lead, output.lead), event.text);
   const attemptedBookingClaim = output.stage === "booked" || output.stage === "slot_offered";
-  if (shouldRestartBookedConversation(attemptedBookingClaim, alreadyBooked)) {
+  if (alreadyBooked && explicitBookingIntent) {
     alreadyBooked = false;
     state.leadCapturedEventId = undefined;
     state.leadSyncedFingerprint = undefined;
@@ -580,15 +588,17 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   }
   state.stage = output.escalate
     ? "escalated"
-    : attemptedBookingClaim
-      ? "qualifying"
-      : output.stage || "qualifying";
+    : explicitBookingIntent
+      ? "booking_intent"
+      : attemptedBookingClaim
+        ? "consulting"
+        : output.stage || "consulting";
   state.escalated = Boolean(output.escalate);
 
   try {
     await syncLeadToCrm(env, event, state, "conversation");
 
-    if (!alreadyBooked && !state.escalated && leadReadyForBooking(state.lead)) {
+    if (!alreadyBooked && !state.escalated && explicitBookingIntent && leadReadyForBooking(state.lead)) {
       await offerSlots(env, event, key, state);
       return;
     }
@@ -604,7 +614,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   if (alreadyBooked && !state.escalated) state.stage = "booked";
   await persistState(env, key, state);
   const missingFieldPrompt = qualificationPrompt(state.lead, state.lead.language);
-  const reply = shouldUseQualificationPrompt(attemptedBookingClaim, alreadyBooked) && missingFieldPrompt
+  const reply = explicitBookingIntent && !alreadyBooked && missingFieldPrompt
     ? await localizeOperationalMessage(env, missingFieldPrompt, state.lead.language)
     : output.reply || await localizeOperationalMessage(
         env,
