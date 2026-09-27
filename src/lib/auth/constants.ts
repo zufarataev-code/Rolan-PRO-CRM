@@ -13,6 +13,10 @@ export const ROLE_NAMES = {
     ru: "Владелец",
     en: "Owner",
   },
+  [ROLE_CODES.AI_SERVICE]: {
+    ru: "AI-сервис",
+    en: "AI Service",
+  },
   [ROLE_CODES.MANAGER]: {
     ru: "Менеджер",
     en: "Manager",
