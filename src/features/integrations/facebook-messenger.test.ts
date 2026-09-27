@@ -110,6 +110,30 @@ test("contact phones normalize to a stable US E.164 key", () => {
   );
 });
 
+test("a Messenger inquiry can enter New Leads before the customer shares a phone", () => {
+  const lead = parseFacebookMessengerLeadPayload({
+    external_event_id: "mid.first-message",
+    external_contact_id: "psid-new",
+    page_id: "page",
+    name: "Facebook profile name",
+    service_type: "Smart Film",
+    message: "Interested in privacy glass",
+  });
+
+  assert.equal(lead.phone, undefined);
+  const lockKeys = facebookMessengerContactLockKeys(lead);
+  assert.equal(lockKeys.length, 1);
+  assert.match(lockKeys[0], /^identity:[a-f0-9]{64}$/);
+  assert.throws(
+    () => parseFacebookMessengerBookingPayload({
+      ...lead,
+      scheduled_start_at: "2026-09-24T12:00:00-07:00",
+      scheduled_end_at: "2026-09-24T13:00:00-07:00",
+    }),
+    /phone is required/,
+  );
+});
+
 test("contact advisory keys are stable across formatted phone numbers", () => {
   const first = parseFacebookMessengerLeadPayload({
     external_event_id: "mid.1",

@@ -3,8 +3,12 @@ import {
   buildBusinessWindows,
   crmLeadPayload,
   formatSlot,
+  leadHasCustomerName,
   leadReadyForBooking,
   leadReadyForCrm,
+  leadSyncEventKey,
+  leadSyncFingerprint,
+  MESSENGER_LEAD_PLACEHOLDER_NAME,
   normalizeLeadData,
   normalizeLanguage,
   parseBookingPayload,
@@ -57,6 +61,7 @@ type ConversationState = {
   stage: string;
   escalated: boolean;
   leadCapturedEventId?: string;
+  leadSyncedFingerprint?: string;
   offeredSlots?: CrmSlot[];
   updated?: string;
 };
@@ -81,6 +86,21 @@ type CrmBookingResult = {
 };
 
 const FALLBACK_PROMPT = `You are the AI sales consultant for Rolan PRO, a professional window-film company serving Southern California. Sound natural, warm, confident, and concise. Answer the customer's actual question first; then ask at most one useful follow-up question. Do not behave like a rigid form and do not force every message into booking. Your goal is to help the customer choose the right solution and, when they are ready, qualify them for a free on-site consultation. Never give a final price or promise an installation date. Escalate complaints, existing-order questions, genuine technical uncertainty, and requests for a person.`;
+
+const ROLANPRO_SALES_PLAYBOOK = `
+Act like Rolan PRO's best human sales consultant, not a chatbot or a questionnaire.
+- Lead with value: answer the customer's real question in the first sentence. Then ask no more than one short, useful question.
+- Diagnose before recommending. Understand the result they want, the property/glass situation, and the urgency. Do not interrogate them or repeat a fact already known.
+- Translate features into the customer's outcome: comfort, privacy, appearance, safety, convenience, warranty confidence, or reduced disruption. Use technical facts only when they help the decision.
+- Make a clear recommendation when the verified facts support one. If information is missing, explain the likely direction and exactly what must be checked on site.
+- Advance by small commitments: invite a photo, approximate window count, city/address, phone number, or a free measurement—whichever is the easiest logical next step. Do not demand every field at once.
+- Handle objections without pressure: acknowledge the concern, answer it directly with verified evidence, reduce risk, and propose one concrete next step. Never argue, shame, create false urgency, or invent a discount.
+- Recognize buying signals such as price questions, timeline questions, installation questions, warranty questions, comparison requests, or a request to visit. When the customer is ready, confidently offer the free on-site consultation.
+- For Smart Film, sell the complete result: privacy on demand, zones and controls, power/control planning, installation, and written warranty—not just film by the square foot.
+- For Solar Film, sell the comfort and glass-specific solution—not darkness alone. For Safety Film, sell the designed glazing system—not an impossible promise. For Decorative Film, sell the intended privacy and appearance in the actual lighting.
+- Keep ordinary replies concise and conversational, usually 2-5 sentences. Use bullets only for a comparison. Never send a wall of text unless the customer asks for detail.
+- End each sales reply with one natural next step or question. Never say "checking CRM" and never claim a booking until the application confirms it.
+`;
 
 const ROLANPRO_KNOWLEDGE = `
 Use this verified Rolan PRO knowledge when consulting customers:
@@ -110,7 +130,7 @@ Use this verified Rolan PRO knowledge when consulting customers:
 
 const CRM_BOOKING_PROMPT = `
 The CRM, not you, owns appointment availability. Never invent, suggest, or confirm a date or time in reply. The application will add real CRM slots after you have collected the required details.
-Collect these fields one at a time and return them in lead: name, phone, serviceType (Solar Film, Smart Film, Safety Film, or Decorative Film), propertyType, city, address when known, optional email, language, goal, and approximate windows.
+Collect these fields progressively and return them in lead: name, phone, serviceType (Solar Film, Smart Film, Safety Film, or Decorative Film), propertyType, city, address when known, optional email, language, goal, approximate windows, optional timeline, budget, decisionRole, and objection. Never ask for all of them at once; booking requires only the core fields enforced by the application.
 Detect the language of the customer's latest message and store it in lead.language as a BCP-47 language tag such as en, es, ru, de, fr, ar, zh, or the appropriate tag for any other language. Always reply naturally in that language. If the customer switches languages, switch with them and update lead.language. Never transliterate when the customer's writing system is supported.
 Use stage "qualifying" until those details are collected. Do not say that an appointment is booked; only the application may confirm that after PostgreSQL accepts the booking.
 Consult before collecting: if the customer asks about a product, benefits, warranty, film choice, heat, glare, UV, privacy, or glass compatibility, answer that question first using the verified knowledge. Then ask only one relevant diagnostic or booking question. Never reply with a vague status such as "checking CRM"; the application itself will show real slots when ready.
@@ -190,6 +210,27 @@ async function graphPost(env: Env, path: string, payload: unknown) {
   return response;
 }
 
+async function messengerProfile(env: Env, event: MessengerEvent) {
+  const fields = event.platform === "instagram" ? "name,username" : "first_name,last_name,name";
+  try {
+    const response = await fetch(
+      `${GRAPH_API}/${event.senderId}?fields=${fields}&access_token=${encodeURIComponent(env.PAGE_TOKEN)}`,
+    );
+    if (!response.ok) throw new Error(`Graph profile HTTP ${response.status}`);
+    const profile = await response.json() as {
+      first_name?: string;
+      last_name?: string;
+      name?: string;
+      username?: string;
+    };
+    const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim();
+    return fullName || profile.name?.trim() || profile.username?.trim() || null;
+  } catch (error) {
+    console.error("graph_profile", { platform: event.platform, error });
+    return null;
+  }
+}
+
 function messagingEndpoint(env: Env, platform: MessengerEvent["platform"]) {
   if (platform === "instagram" && env.IG_ID) return `${env.IG_ID}/messages`;
   if (env.PAGE_ID) return `${env.PAGE_ID}/messages`;
@@ -217,8 +258,17 @@ async function sendMessage(
   });
 }
 
-async function askAssistant(env: Env, history: HistoryMessage[], applicationStage: string) {
+async function askAssistant(
+  env: Env,
+  history: HistoryMessage[],
+  applicationStage: string,
+  lead: LeadData,
+) {
   const storedPrompt = await env.CHAT.get("sys_prompt");
+  const visibleLead = {
+    ...lead,
+    name: leadHasCustomerName(lead) ? lead.name : "",
+  };
   const stateInstruction = applicationStage === "booked"
     ? "Application state: this customer already has a confirmed booking. Answer follow-up questions normally. Do not start another booking or say you are checking CRM unless the customer explicitly asks for another appointment or address."
     : `Application state: ${applicationStage || "new"}.`;
@@ -233,7 +283,7 @@ async function askAssistant(env: Env, history: HistoryMessage[], applicationStag
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
       max_tokens: 500,
-      system: `${storedPrompt || env.SYS_PROMPT || FALLBACK_PROMPT}\n\n${ROLANPRO_KNOWLEDGE}\n\n${CRM_BOOKING_PROMPT}\n\n${stateInstruction}`,
+      system: `${storedPrompt || env.SYS_PROMPT || FALLBACK_PROMPT}\n\n${ROLANPRO_SALES_PLAYBOOK}\n\n${ROLANPRO_KNOWLEDGE}\n\n${CRM_BOOKING_PROMPT}\n\n${stateInstruction}\nKnown lead fields from this conversation: ${JSON.stringify(visibleLead)}`,
       messages: history,
     }),
   });
@@ -299,7 +349,7 @@ function noSlotsPrompt(language?: string) {
 
 function qualificationPrompt(lead: LeadData, language?: string) {
   const normalized = normalizeLanguage(language);
-  if (!lead.name?.trim()) {
+  if (!leadHasCustomerName(lead)) {
     if (normalized === "ru") return "Как я могу к вам обращаться?";
     if (normalized === "es") return "¿Cómo se llama?";
     return "What is your name?";
@@ -344,6 +394,26 @@ async function availableSlots(env: Env) {
 async function persistState(env: Env, key: string, state: ConversationState) {
   state.updated = new Date().toISOString();
   await env.CHAT.put(key, JSON.stringify(state), { expirationTtl: CONVERSATION_TTL_SECONDS });
+}
+
+async function syncLeadToCrm(
+  env: Env,
+  event: MessengerEvent,
+  state: ConversationState,
+  phase: "profile" | "conversation",
+) {
+  if (!leadReadyForCrm(state.lead)) return false;
+  const fingerprint = leadSyncFingerprint(state.lead);
+  if (fingerprint === state.leadSyncedFingerprint) return false;
+  const captureEventId = `${event.eventId.slice(0, 210)}:lead:${phase}:${leadSyncEventKey(state.lead)}`;
+  await postToCrm(
+    env,
+    "/api/integrations/facebook-messenger/leads",
+    crmLeadPayload(state.lead, captureEventId, event.senderId, env.PAGE_ID),
+  );
+  state.leadCapturedEventId = captureEventId;
+  state.leadSyncedFingerprint = fingerprint;
+  return true;
 }
 
 async function offerSlots(env: Env, event: MessengerEvent, key: string, state: ConversationState) {
@@ -468,17 +538,34 @@ async function handleEvent(env: Env, event: MessengerEvent) {
 
   state.history.push({ role: "user", content: event.text });
   if (state.history.length > HISTORY_LIMIT) state.history = state.history.slice(-HISTORY_LIMIT);
-  await graphPost(env, endpoint, { recipient: { id: event.senderId }, sender_action: "mark_seen" });
-  await graphPost(env, endpoint, { recipient: { id: event.senderId }, sender_action: "typing_on" });
+  const profilePromise = leadHasCustomerName(state.lead)
+    ? Promise.resolve<string | null>(null)
+    : messengerProfile(env, event);
+  const [profileName] = await Promise.all([
+    profilePromise,
+    graphPost(env, endpoint, { recipient: { id: event.senderId }, sender_action: "mark_seen" }),
+    graphPost(env, endpoint, { recipient: { id: event.senderId }, sender_action: "typing_on" }),
+  ]);
+  if (!leadHasCustomerName(state.lead)) {
+    state.lead.name = profileName || MESSENGER_LEAD_PLACEHOLDER_NAME;
+  }
+
+  const initialLeadSync = syncLeadToCrm(env, event, state, "profile").catch((error) => {
+    console.error("crm_profile_lead", error);
+    return false;
+  });
 
   let output: AssistantOutput;
   try {
-    output = await askAssistant(env, state.history, state.stage);
+    output = await askAssistant(env, state.history, state.stage, state.lead);
   } catch (error) {
     console.error("assistant", error);
+    await initialLeadSync;
+    await persistState(env, key, state);
     await sendMessage(env, event, await localizeOperationalMessage(env, noSlotsPrompt(state.lead.language), state.lead.language));
     return;
   }
+  await initialLeadSync;
 
   state.history.push({ role: "assistant", content: JSON.stringify(output) });
   state.lead = normalizeLeadData(mergeLead(state.lead, output.lead), event.text);
@@ -486,6 +573,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   if (shouldRestartBookedConversation(attemptedBookingClaim, alreadyBooked)) {
     alreadyBooked = false;
     state.leadCapturedEventId = undefined;
+    state.leadSyncedFingerprint = undefined;
     state.offeredSlots = [];
     state.escalated = false;
     console.log(JSON.stringify({ event: "repeat_booking_started", key }));
@@ -498,15 +586,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   state.escalated = Boolean(output.escalate);
 
   try {
-    if (leadReadyForCrm(state.lead) && !state.leadCapturedEventId) {
-      const captureEventId = `${event.eventId}:lead`;
-      await postToCrm(
-        env,
-        "/api/integrations/facebook-messenger/leads",
-        crmLeadPayload(state.lead, captureEventId, event.senderId, env.PAGE_ID),
-      );
-      state.leadCapturedEventId = captureEventId;
-    }
+    await syncLeadToCrm(env, event, state, "conversation");
 
     if (!alreadyBooked && !state.escalated && leadReadyForBooking(state.lead)) {
       await offerSlots(env, event, key, state);

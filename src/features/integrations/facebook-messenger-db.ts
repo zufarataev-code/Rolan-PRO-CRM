@@ -31,6 +31,7 @@ type IntegrationAccess = {
 
 type ReusableLead = {
   lead_id: string;
+  name: string;
   phone: string | null;
   email: string | null;
   source: string | null;
@@ -202,6 +203,7 @@ export async function recordFacebookMessengerReceipt(
 
 const REUSABLE_LEAD_SELECT = {
   lead_id: true,
+  name: true,
   phone: true,
   email: true,
   source: true,
@@ -231,6 +233,7 @@ async function reusableLead(tx: FacebookMessengerDbClient, payload: FacebookMess
     if (byEmail) return byEmail;
   }
 
+  if (!payload.phone) return null;
   const normalizedPhone = normalizeContactPhone(payload.phone);
   const phoneCandidates = await tx.lead.findMany({
     where: { ...baseWhere, phone: { not: null } },
@@ -255,7 +258,8 @@ export async function createOrReuseFacebookMessengerLead(
     const lead = await tx.lead.update({
       where: { lead_id: existing.lead_id },
       data: {
-        phone: existing.phone || normalizeContactPhone(payload.phone),
+        name: payload.name,
+        phone: existing.phone || (payload.phone ? normalizeContactPhone(payload.phone) : null),
         email: existing.email || payload.email || null,
         assigned_manager_id: existing.assigned_manager_id || manager.user_id,
         notes: appendLeadNotes(existing.notes, notes),
@@ -279,7 +283,7 @@ export async function createOrReuseFacebookMessengerLead(
   const lead = await tx.lead.create({
     data: {
       name: payload.name,
-      phone: normalizeContactPhone(payload.phone),
+      phone: payload.phone ? normalizeContactPhone(payload.phone) : null,
       email: payload.email || null,
       source: FACEBOOK_MESSENGER_PROVIDER,
       notes,

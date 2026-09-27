@@ -391,6 +391,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Field roles do not receive vendor, inventory-cost, or purchase-request data. Phone and desktop use the same procurement records and actions, with only responsive presentation differences under the mobile parity decision.
 - Implemented on `codex/supplier-catalog-procurement` in PR #253; release state is recorded in `PROJECT_STATE.md`. Production deployment remains a separate owner-authorized action.
 
+## 2026-09-27 — Every Messenger inquiry becomes one progressively enriched CRM lead
+
+- A Facebook or Instagram inquiry is a Lead from the first customer message, even before the customer shares a phone number. The Worker uses the platform profile name when available and a clearly temporary Messenger-contact name only when profile lookup fails.
+- The platform/page/contact identity remains the canonical deduplication key. As the conversation discovers the service, phone, email, property type, city/address, goal, approximate scope, timeline, budget, decision role, or objection, the Worker updates the same open Lead instead of creating parallel cards.
+- A phone number is optional for early Lead capture but remains mandatory for a confirmed consultation and SMS. The bot may never convert a partial inquiry into a booking or claim that a visit exists without the existing PostgreSQL booking confirmation.
+- Sales behavior is consultative: answer first, ask one useful question, make only supported recommendations, handle objections without pressure, and advance through small commitments toward a free on-site consultation. Existing warranty, product-safety, glass-compatibility, pricing, multilingual, and human-escalation boundaries remain in force.
+- Facebook profile lookup, read receipt, and typing indicator run in parallel on first contact so immediate capture does not add three serial network waits to the customer response.
+- Implemented on `feat/messenger-sales-conversion`; PR and release state are recorded in `PROJECT_STATE.md`. Production Worker deployment remains a separate owner-authorized release action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

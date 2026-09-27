@@ -1,5 +1,6 @@
 export const BOOKING_PAYLOAD_PREFIX = "ROLANPRO_BOOK|";
 export const CRM_TIME_ZONE = "America/Los_Angeles";
+export const MESSENGER_LEAD_PLACEHOLDER_NAME = "Facebook Messenger contact";
 
 export type LeadData = {
   name?: string;
@@ -13,6 +14,10 @@ export type LeadData = {
   email?: string;
   goal?: string;
   windows?: string;
+  timeline?: string;
+  budget?: string;
+  decisionRole?: string;
+  objection?: string;
 };
 
 export type CrmSlot = {
@@ -216,12 +221,18 @@ export function parseBookingPayload(value?: string) {
 }
 
 export function leadReadyForCrm(lead: LeadData) {
-  return Boolean(lead.name?.trim() && lead.phone?.trim());
+  return Boolean(lead.name?.trim());
+}
+
+export function leadHasCustomerName(lead: LeadData) {
+  const name = lead.name?.trim() || "";
+  return Boolean(name && name !== MESSENGER_LEAD_PLACEHOLDER_NAME);
 }
 
 export function leadReadyForBooking(lead: LeadData) {
   return Boolean(
-    leadReadyForCrm(lead) &&
+    leadHasCustomerName(lead) &&
+    lead.phone?.trim() &&
     lead.serviceType?.trim() &&
     (lead.propertyType?.trim() || lead.objectType?.trim()) &&
     (lead.address?.trim() || lead.city?.trim()),
@@ -239,14 +250,50 @@ export function crmLeadPayload(
     external_contact_id: contactId,
     page_id: pageId,
     name: lead.name?.trim(),
-    phone: lead.phone?.trim(),
+    phone: lead.phone?.trim() || undefined,
     email: lead.email?.trim() || undefined,
     service_type: lead.serviceType?.trim() || undefined,
     property_type: lead.propertyType?.trim() || lead.objectType?.trim() || undefined,
     city: lead.city?.trim() || undefined,
     address: lead.address?.trim() || undefined,
-    message: [lead.goal, lead.windows ? `Approximate windows: ${lead.windows}` : ""]
+    message: [
+      lead.goal,
+      lead.windows ? `Approximate windows: ${lead.windows}` : "",
+      lead.timeline ? `Timeline: ${lead.timeline}` : "",
+      lead.budget ? `Budget: ${lead.budget}` : "",
+      lead.decisionRole ? `Decision role: ${lead.decisionRole}` : "",
+      lead.objection ? `Customer concern: ${lead.objection}` : "",
+    ]
       .filter(Boolean)
       .join("\n") || undefined,
   };
+}
+
+export function leadSyncFingerprint(lead: LeadData) {
+  const normalized = normalizeLeadData(lead);
+  return JSON.stringify({
+    name: normalized.name?.trim() || "",
+    phone: normalized.phone?.replace(/\D/g, "") || "",
+    email: normalized.email?.trim().toLowerCase() || "",
+    serviceType: normalized.serviceType?.trim() || "",
+    propertyType: normalized.propertyType?.trim() || normalized.objectType?.trim() || "",
+    city: normalized.city?.trim() || "",
+    address: normalized.address?.trim() || "",
+    goal: normalized.goal?.trim() || "",
+    windows: normalized.windows?.trim() || "",
+    timeline: normalized.timeline?.trim() || "",
+    budget: normalized.budget?.trim() || "",
+    decisionRole: normalized.decisionRole?.trim() || "",
+    objection: normalized.objection?.trim() || "",
+  });
+}
+
+export function leadSyncEventKey(lead: LeadData) {
+  const value = leadSyncFingerprint(lead);
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }

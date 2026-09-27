@@ -7,7 +7,12 @@ import {
   buildBusinessWindows,
   crmLeadPayload,
   detectServiceType,
+  leadHasCustomerName,
   leadReadyForBooking,
+  leadReadyForCrm,
+  leadSyncEventKey,
+  leadSyncFingerprint,
+  MESSENGER_LEAD_PLACEHOLDER_NAME,
   normalizeLeadData,
   normalizeLanguage,
   parseBookingPayload,
@@ -78,6 +83,23 @@ test("Worker maps the qualified conversation to the canonical CRM payload", () =
     address: undefined,
     message: "Conference-room privacy\nApproximate windows: 6",
   });
+});
+
+test("Worker captures a profile lead immediately but still requires real booking details", () => {
+  const earlyLead = { name: MESSENGER_LEAD_PLACEHOLDER_NAME };
+  assert.equal(leadReadyForCrm(earlyLead), true);
+  assert.equal(leadHasCustomerName(earlyLead), false);
+  assert.equal(leadReadyForBooking(earlyLead), false);
+
+  const profileLead = { name: "Maria Lopez", serviceType: "Smart Film" };
+  assert.equal(leadReadyForCrm(profileLead), true);
+  assert.equal(leadReadyForBooking(profileLead), false);
+  assert.notEqual(
+    leadSyncFingerprint(profileLead),
+    leadSyncFingerprint({ ...profileLead, phone: "818-555-1212" }),
+  );
+  assert.equal(leadSyncEventKey(profileLead), leadSyncEventKey({ ...profileLead }));
+  assert.notEqual(leadSyncEventKey(profileLead), leadSyncEventKey({ ...profileLead, city: "Malibu" }));
 });
 
 test("Worker normalizes the legacy prompt fields before checking booking readiness", () => {
@@ -203,4 +225,11 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /shouldRestartBookedConversation\(attemptedBookingClaim, alreadyBooked\)/);
   assert.match(source, /state\.leadCapturedEventId = undefined/);
   assert.match(source, /event: "repeat_booking_started"/);
+  assert.match(source, /Act like Rolan PRO's best human sales consultant/);
+  assert.match(source, /Handle objections without pressure/);
+  assert.match(source, /messengerProfile\(env, event\)/);
+  assert.match(source, /Promise\.all\(\[/);
+  assert.match(source, /syncLeadToCrm\(env, event, state, "profile"\)/);
+  assert.match(source, /syncLeadToCrm\(env, event, state, "conversation"\)/);
+  assert.match(source, /Known lead fields from this conversation/);
 });
