@@ -719,6 +719,8 @@ export async function addMeasurementsBatch(
     return null;
   }
 
+  const surveyId = surveyId;
+
   const complexityIds = Array.from(
     new Set(
       inputs
@@ -755,7 +757,7 @@ export async function addMeasurementsBatch(
 
       const measurement = await tx.measurement.create({
         data: {
-          survey_id: consultation.survey.survey_id,
+          survey_id: surveyId,
           room_name: input.room_name.trim(),
           office_name: input.office_name ?? null,
           zone_name: input.zone_name ?? null,
@@ -791,7 +793,7 @@ export async function addMeasurementsBatch(
           message: `Добавлен замер для комнаты ${measurement.room_name}.`,
           metadata: {
             consultation_id: consultationId,
-            survey_id: consultation.survey.survey_id,
+            survey_id: surveyId,
             batch: true,
           },
         },
