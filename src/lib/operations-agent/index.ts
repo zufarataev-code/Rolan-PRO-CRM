@@ -702,12 +702,6 @@ async function executeWrite(
       cityId = cityId ?? client.city_id;
       zipCode = zipCode ?? client.zip_code;
 
-      if (!phone && !email) {
-        return invalidResult(
-          action,
-          "Existing client needs phone or email so canonical project creation can reuse it safely.",
-        );
-      }
     }
 
     const projectTitle = asText(args.project_title, 160);
