@@ -15,7 +15,7 @@ type SessionLike = {
 };
 
 function isOwner(session: SessionLike) {
-  return session.roles.includes(ROLE_CODES.OWNER);
+  return session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.AI_SERVICE);
 }
 
 function isManager(session: SessionLike) {
