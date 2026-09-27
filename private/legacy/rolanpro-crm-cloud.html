@@ -7231,8 +7231,8 @@ function ensureOfficialSupplierCatalog(catalog, vendors) {
       item={ id:source.id, retailPerSqft:null, costPerSqft:null, installerRatePerSqft:null, wastePct:null, archived:false };
       catalog.push(item); itemsAdded++;
     }
-    Object.entries(source).forEach(([key,value]) => { if (item[key] == null || item[key] === '') item[key]=value; });
-    item.vendorId=vendorIds.get(source.vendorId)||source.vendorId;
+    Object.entries(source).forEach(([key,value]) => { if (key!=='vendorId' && (item[key] == null || item[key] === '')) item[key]=value; });
+    if (!item.vendorId || item.vendorId===source.vendorId) item.vendorId=vendorIds.get(source.vendorId)||source.vendorId;
     item.brand=OFFICIAL_SUPPLIERS.find(v=>v.id===source.vendorId)?.name || item.brand;
     item.series=item.productName;
     item.model=[item.productName,item.modelCode].filter(Boolean).join(' ');
@@ -33023,6 +33023,8 @@ function ensureAutoDraftPurchaseRequests() {
   let created=0;
   warehouseNeedItems().forEach(need => {
     if (!need.vendorId || activeReorderPurchaseRequest(need.kind, need.id, need.vendorId)) return;
+    const cancelled=[...db.purchaseRequests].reverse().find(p=>p.kind===need.kind&&p.itemId===need.id&&p.vendorId===need.vendorId&&!p.orderId&&p.source==='auto_reorder'&&p.status==='cancelled');
+    if (cancelled && Number(cancelled.cancelledStockQty)===Number(need.qty)) return;
     const vendor=db.vendors.find(candidate=>candidate.id===need.vendorId && candidate.active!==false);
     if (!vendor) return;
     const qty=Math.max(0, Number(need.target||0)-Number(need.qty||0));
@@ -33120,7 +33122,7 @@ function purchaseActionButtons(p) {
   if (!['owner','manager'].includes(currentUser()?.role)) return '';
   if (p.status==='draft') {
     const sending=purchaseRequestSendsInFlight.has(p.id);
-    return `<div class="flex gap-2 flex-wrap justify-end"><button class="btn-ghost text-xs" onclick="openPurchaseRequestVendorModal('${p.id}')">${p.vendorId?'Поставщик':'Назначить поставщика'}</button>${p.vendorId?`<button class="btn-primary text-xs" ${sending?'disabled':''} onclick="sendPurchaseRequest('${p.id}')">${sending?'Отправляется…':'Отправить поставщику'}</button>`:''}</div>`;
+    return `<div class="flex gap-2 flex-wrap justify-end"><button class="btn-ghost text-xs" onclick="openPurchaseRequestVendorModal('${p.id}')">${p.vendorId?'Поставщик':'Назначить поставщика'}</button>${p.vendorId?`<button class="btn-primary text-xs" ${sending?'disabled':''} onclick="sendPurchaseRequest('${p.id}')">${sending?'Отправляется…':'Отправить поставщику'}</button>`:''}<button class="btn-ghost text-xs" onclick="cancelPurchaseRequest('${p.id}')">Отменить</button></div>`;
   }
   if (p.status==='requested') return `<button class="btn-ghost text-xs" onclick="setPurchaseRequestStatus('${p.id}','approved')">Согласовать</button>`;
   if (p.status==='approved') return `<button class="btn-primary text-xs" onclick="setPurchaseRequestStatus('${p.id}','ordered')">Заказано</button>`;
@@ -33190,16 +33192,21 @@ async function sendPurchaseRequest(id) {
   }
   if (!confirm(`Отправить ${p.number} на ${vendor.email} через защищённый канал закупок?`)) return;
   purchaseRequestSendsInFlight.add(id);render();
+  let delivered=false;
   try {
     const sent=await procurementEmailApi('/messages',{method:'POST',body:JSON.stringify({purchase_request_id:p.id,to:vendor.email,subject:`Rolan PRO purchase request ${p.number}`,body:purchaseRequestEmailBody(p,vendor)})});
+    delivered=true;
     p.status='requested';p.responsibleId=p.responsibleId||state.currentUserId;p.sentAt=new Date().toISOString();p.sentBy=state.currentUserId;p.providerMessageId=sent?.message_id||null;p.updatedAt=p.sentAt;
     vendor.requestHistory=vendor.requestHistory||[];vendor.requestHistory.unshift({purchaseRequestId:p.id,number:p.number,at:p.sentAt,by:state.currentUserId,to:vendor.email,status:'sent'});
-    save();render();alert(`Заявка ${p.number} отправлена ${vendor.name}.`);
-  } catch(error) { alert(`Не удалось отправить: ${error.message||String(error)}`); }
+    save();
+    if (ROLANPRO_CLOUD && !await cloudPersistConfirmed()) throw new Error('CRM не подтвердила сохранение статуса отправки.');
+    render();alert(`Заявка ${p.number} отправлена ${vendor.name}.`);
+  } catch(error) { alert(delivered?`Письмо принято поставщиком, но CRM не сохранила статус. Повторная отправка защищена idempotency key. Обновите CRM и повторите сохранение статуса. Ошибка: ${error.message||String(error)}`:`Не удалось отправить: ${error.message||String(error)}`); }
   finally { purchaseRequestSendsInFlight.delete(id);render(); }
 }
 function openPurchaseRequestVendorModal(id){if(!['owner','manager'].includes(currentUser()?.role))return alert('Закупки доступны владельцу и менеджеру.');const p=db.purchaseRequests.find(x=>x.id===id);if(!p||p.status!=='draft')return;state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content p-6" style="max-width:30rem"><h3 class="font-semibold text-lg">Поставщик для ${academyEsc(p.number)}</h3><p class="text-sm text-gray-500 mb-4">${academyEsc(p.itemNameSnapshot||'Материал')}</p><label>Поставщик</label><select id="pr-edit-vendor"><option value="">Выберите</option>${db.vendors.filter(v=>v.active!==false).map(v=>`<option value="${v.id}" ${p.vendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="savePurchaseRequestVendor('${p.id}')">Сохранить</button></div></div></div>`;render();}
 function savePurchaseRequestVendor(id){if(!['owner','manager'].includes(currentUser()?.role))return;const p=db.purchaseRequests.find(x=>x.id===id);const vendorId=document.getElementById('pr-edit-vendor')?.value||'';if(!p||p.status!=='draft'||!vendorId)return alert('Выберите поставщика.');p.vendorId=vendorId;p.updatedAt=new Date().toISOString();save();closeModal();render();}
+function cancelPurchaseRequest(id){if(!['owner','manager'].includes(currentUser()?.role))return;const p=db.purchaseRequests.find(x=>x.id===id);if(!p||p.status!=='draft'||!confirm(`Отменить черновик ${p.number}?`))return;if(p.source==='auto_reorder'){const need=warehouseNeedItems().find(x=>x.kind===p.kind&&x.id===p.itemId&&x.vendorId===p.vendorId);p.cancelledStockQty=need?Number(need.qty):null;}p.status='cancelled';p.cancelledAt=new Date().toISOString();p.cancelledBy=state.currentUserId;p.updatedAt=p.cancelledAt;save();render();}
 function setPurchaseRequestStatus(id,status) { if(!['owner','manager'].includes(currentUser()?.role))return alert('Закупки доступны владельцу и менеджеру.');const p=db.purchaseRequests.find(x=>x.id===id);if(!p)return;p.status=status;p.updatedAt=new Date().toISOString();save();render(); }
 function receivePurchaseRequest(id) {
   if (!['owner','manager'].includes(currentUser()?.role)) return alert('Закупки доступны владельцу и менеджеру.');
@@ -34272,11 +34279,11 @@ function cloudScheduleSave() {
   cloudSaveTimer = setTimeout(cloudPersist, 700);
 }
 
-async function cloudPersist() {
-  if (!cloudReady) return;
+async function cloudPersist(options = {}) {
+  if (!cloudReady) return false;
   if (cloudSaveInFlight) {
     cloudSaveQueued = true;
-    return;
+    return false;
   }
   cloudSaveInFlight = true;
   cloudStatus('Сохраняем…');
@@ -34290,21 +34297,24 @@ async function cloudPersist() {
     const result = await response.json();
     if (response.status === 401) {
       location.assign('/login');
-      return;
+      return false;
     }
     if (response.status === 409) {
       cloudReady = false;
       cloudStatus('Данные обновлены другим сотрудником', 'red');
       alert('Другой сотрудник уже изменил данные. CRM загрузит последнюю версию, чтобы не потерять изменения.');
       location.reload();
-      return;
+      return false;
     }
     if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'save failed');
     cloudRevision = result.data.revision;
     cloudStatus('Сохранено', 'green');
+    return true;
   } catch (error) {
     console.error('[Cloud CRM] save failed', error);
     cloudStatus('Нет связи — изменения сохранены локально', 'red');
+    if (options.throwOnFailure) throw error;
+    return false;
   } finally {
     cloudSaveInFlight = false;
     if (cloudSaveQueued) {
@@ -34312,6 +34322,14 @@ async function cloudPersist() {
       cloudScheduleSave();
     }
   }
+}
+
+async function cloudPersistConfirmed() {
+  clearTimeout(cloudSaveTimer);
+  for (let attempt=0;attempt<50&&cloudSaveInFlight;attempt++) await new Promise(resolve=>setTimeout(resolve,100));
+  if (cloudSaveInFlight) return false;
+  try { return await cloudPersist({throwOnFailure:true}); }
+  catch (error) { return false; }
 }
 
 async function cloudBoot() {

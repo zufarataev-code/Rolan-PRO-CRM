@@ -106,7 +106,7 @@ test('official supplier cards and confirmed catalogs are seeded without invented
   assert.match(html, /retailPerSqft:null, costPerSqft:null/);
   assert.match(html, /ensureOfficialSupplierCatalog\(s\.catalog, db\.vendors\);/);
   assert.match(html, /vendorIds\.set\(source\.id,vendor\.id\)/);
-  assert.match(html, /item\.vendorId=vendorIds\.get\(source\.vendorId\)\|\|source\.vendorId/);
+  assert.match(html, /if \(!item\.vendorId \|\| item\.vendorId===source\.vendorId\) item\.vendorId=vendorIds\.get\(source\.vendorId\)\|\|source\.vendorId/);
   assert.match(html, /db\._officialSupplierCatalogV1 = true/);
   assert.match(html, /persistOfficialSupplierMigration = !db\._officialSupplierCatalogV1/);
   assert.match(html, /persistClientNotificationMigration \|\| persistOfficialSupplierMigration \|\| roleWasSynchronized/);
@@ -126,9 +126,13 @@ test('reorder creates one supplier-linked draft and explicit send is required', 
   assert.match(html, /purchaseRequestSendsInFlight\.has\(id\)/);
   assert.match(html, /purchaseRequestSendsInFlight\.add\(id\)/);
   assert.match(html, /purchaseRequestSendsInFlight\.delete\(id\)/);
+  assert.match(html, /await cloudPersistConfirmed\(\)/);
+  assert.match(html, /function cloudPersistConfirmed\(\)/);
   assert.match(html, /черновик не отмечен отправленным/);
   assert.match(html, /function openPurchaseRequestVendorModal\(id\)/);
   assert.match(html, /if\(!vendorId\) return alert\('Выберите поставщика/);
+  assert.match(html, /function cancelPurchaseRequest\(id\)/);
+  assert.match(html, /cancelledStockQty/);
 });
 
 test('procurement actions are restricted to owner and manager', () => {
