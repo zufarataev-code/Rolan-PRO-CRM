@@ -607,7 +607,7 @@ async function executeWrite(
   if (action === "update_client_contact_address") {
     const resolution = await resolveClient(args);
     if ("clarification" in resolution) {
-      return clarificationResult(action, "client", resolution.clarification);
+      return clarificationResult(action, "client", resolution.clarification ?? []);
     }
     if (!resolution.client) {
       return invalidResult(action, resolution.error ?? "Client was not found.", "not_found");
@@ -737,7 +737,7 @@ async function executeWrite(
   if (action === "update_project_notes" || action === "add_project_note") {
     const resolution = await resolveProject(args);
     if ("clarification" in resolution) {
-      return clarificationResult(action, "project", resolution.clarification);
+      return clarificationResult(action, "project", resolution.clarification ?? []);
     }
     if (!resolution.project) {
       return invalidResult(action, resolution.error ?? "Project was not found.", "not_found");
@@ -774,7 +774,7 @@ async function executeWrite(
   if (action === "record_project_expense") {
     const resolution = await resolveProject(args);
     if ("clarification" in resolution) {
-      return clarificationResult(action, "project", resolution.clarification);
+      return clarificationResult(action, "project", resolution.clarification ?? []);
     }
     if (!resolution.project) {
       return invalidResult(action, resolution.error ?? "Project was not found.", "not_found");
@@ -830,7 +830,7 @@ async function executeWrite(
     if (args.project_id || args.project_query || args.project) {
       const resolution = await resolveProject(args);
       if ("clarification" in resolution) {
-        return clarificationResult(action, "project", resolution.clarification);
+        return clarificationResult(action, "project", resolution.clarification ?? []);
       }
       if (!resolution.project) {
         return invalidResult(action, resolution.error ?? "Project was not found.", "not_found");
@@ -883,7 +883,7 @@ async function executeWrite(
 
     const dueAt = args.due_at !== undefined ? asDate(args.due_at) : undefined;
     if (args.due_at && !dueAt) return invalidResult(action, "due_at is invalid.");
-    const status = args.status !== undefined ? optionalText(args.status, 40) : undefined;
+    const status = args.status !== undefined ? asText(args.status, 40) || undefined : undefined;
 
     await prisma.task.update({
       where: { task_id: taskId },
@@ -932,7 +932,7 @@ async function executeWrite(
     if (args.project_query || args.project) {
       const resolution = await resolveProject(args);
       if ("clarification" in resolution) {
-        return clarificationResult(action, "project", resolution.clarification);
+        return clarificationResult(action, "project", resolution.clarification ?? []);
       }
       if (!resolution.project) {
         return invalidResult(action, resolution.error ?? "Project was not found.", "not_found");
