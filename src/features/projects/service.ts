@@ -88,7 +88,7 @@ function asJsonRecord(value: Prisma.JsonValue | null | undefined): JsonRecord {
 }
 
 function isOwner(session: ProjectSession) {
-  return session.roles.includes("OWNER");
+  return session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.AI_SERVICE);
 }
 
 function isUniqueConstraintError(error: unknown, target: string) {
