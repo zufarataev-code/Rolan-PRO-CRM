@@ -1471,6 +1471,19 @@
     border-radius: 9px;
     background: #f8fbff;
   }
+  .quick-film-picker {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .4rem;
+  }
+  .quick-film-picker label {
+    display: grid;
+    gap: .2rem;
+    min-width: 0;
+    color: #64748b;
+    font-size: .62rem;
+    font-weight: 850;
+  }
   .quick-commercial-price {
     color: #64748b;
     font-size: .7rem;
@@ -5641,6 +5654,7 @@
     .project-estimate-table--quick td:nth-child(2) {
       grid-column: auto;
     }
+    .quick-film-picker { grid-template-columns: 1fr; }
     .project-estimate-table td {
       display: grid;
       grid-template-columns: minmax(92px, .75fr) minmax(0, 1.25fr);
@@ -21731,6 +21745,26 @@ function projectQuickLineCatalog(serviceType, selectedCatalogId = '') {
   ));
 }
 
+function projectQuickAssignableCatalog(serviceType, catalogId) {
+  const catalog = getCatalogItem(catalogId);
+  const requiredCategory = primaryServiceInfo(serviceType)?.catalogCategory;
+  if (!catalog || catalog.archived || catalog.category !== requiredCategory) return null;
+  if (warehouseCatalogStockStats(catalog.id).availableSqft <= 0) return null;
+  return catalog;
+}
+
+function projectQuickCatalogDimensions(serviceType, selectedCatalogId = '') {
+  const items = projectQuickLineCatalog(serviceType, selectedCatalogId);
+  const selected = items.find(item => item.id === selectedCatalogId) || null;
+  const categories = [...new Set(items.map(catalogFilmCategory).filter(Boolean))].sort((a,b) => a.localeCompare(b));
+  const filmCategory = selected ? catalogFilmCategory(selected) : (categories[0] || '');
+  const categoryItems = items.filter(item => catalogFilmCategory(item) === filmCategory);
+  const names = [...new Set(categoryItems.map(catalogFilmName).filter(Boolean))].sort((a,b) => a.localeCompare(b));
+  const productName = selected && catalogFilmCategory(selected) === filmCategory ? catalogFilmName(selected) : (names[0] || '');
+  const models = categoryItems.filter(item => catalogFilmName(item) === productName);
+  return { items, selected, categories, filmCategory, names, productName, models };
+}
+
 function orderQuickLineMaterialCost(o) {
   if (measureAllWindows(o).length) return 0;
   return projectQuickLines(o).filter(line => line.unit === 'sqft' && line.catalogId).reduce((sum, line) => {
@@ -21797,10 +21831,23 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     line.manualFilmName = '';
     line.label = catalog ? catalogLabel(catalog) : service.title;
     if (Number(line.price) <= 0) line.unitPrice = Number(catalog?.retailPerSqft || 0);
+  } else if (field === 'filmCategory') {
+    const catalog = projectQuickLineCatalog(line.serviceType).find(item => catalogFilmCategory(item) === value) || null;
+    line.catalogId = catalog?.id || '';
+    line.manualFilmName = '';
+    line.label = catalog ? catalogLabel(catalog) : primaryServiceInfo(line.serviceType)?.title || 'Позиция';
+    if (catalog && Number(line.price) <= 0) line.unitPrice = Number(catalog.retailPerSqft || 0);
+  } else if (field === 'filmName') {
+    const selected = getCatalogItem(line.catalogId);
+    const filmCategory = catalogFilmCategory(selected) || projectQuickCatalogDimensions(line.serviceType, line.catalogId).filmCategory;
+    const catalog = projectQuickLineCatalog(line.serviceType).find(item => catalogFilmCategory(item) === filmCategory && catalogFilmName(item) === value) || null;
+    line.catalogId = catalog?.id || '';
+    line.manualFilmName = '';
+    line.label = catalog ? catalogLabel(catalog) : primaryServiceInfo(line.serviceType)?.title || 'Позиция';
+    if (catalog && Number(line.price) <= 0) line.unitPrice = Number(catalog.retailPerSqft || 0);
   } else if (field === 'catalogId') {
-    const catalog = getCatalogItem(value);
-    const requiredCategory = primaryServiceInfo(line.serviceType)?.catalogCategory;
-    if (catalog && (catalog.archived || catalog.category !== requiredCategory || warehouseCatalogStockStats(catalog.id).availableSqft <= 0)) return;
+    const catalog = value ? projectQuickAssignableCatalog(line.serviceType, value) : null;
+    if (value && !catalog) return;
     line.catalogId = catalog?.id || '';
     if (catalog) {
       line.manualFilmName = '';
@@ -22204,11 +22251,11 @@ function renderQuickProjectEntry(o) {
   const availableInstallers = usersByRole('installer');
   const availableSupplies = ensureSupplies();
   const rows = quickLines.map(line => {
-    const catalog = projectQuickLineCatalog(line.serviceType, line.catalogId);
+    const film = projectQuickCatalogDimensions(line.serviceType, line.catalogId);
     const selectedStock = line.catalogId ? warehouseCatalogStockStats(line.catalogId) : null;
     return `<tr>
       <td data-label="Услуга"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select><button class="btn-ghost text-red-600 quick-commercial-remove" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить</button></td>
-      <td data-label="Плёнка"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}${projectQuickManualFilmName(line) ? '<div class="text-xs text-amber-700">Ручной ввод · не привязано к складу</div>' : ''}<details class="quick-film-alternative" ${projectQuickManualFilmName(line) ? 'open' : ''}><summary>Плёнки нет в списке</summary><div class="quick-film-alternative-body"><input aria-label="Ручное название плёнки" placeholder="Впишите название вручную" value="${academyEsc(projectQuickManualFilmName(line))}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','manualFilmName',this.value)">${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Добавить плёнку на склад</button>` : ''}</div></details></td>
+      <td data-label="Плёнка"><div class="quick-film-picker"><label>Категория<select data-film-field="category" ${film.categories.length ? '' : 'disabled'} onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','filmCategory',this.value)">${film.categories.length ? film.categories.map(value => `<option value="${academyEsc(value)}" ${film.filmCategory===value?'selected':''}>${academyEsc(value)}</option>`).join('') : '<option>Нет плёнки на складе</option>'}</select></label><label>Название<select data-film-field="name" ${film.names.length ? '' : 'disabled'} onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','filmName',this.value)">${film.names.length ? film.names.map(value => `<option value="${academyEsc(value)}" ${film.productName===value?'selected':''}>${academyEsc(value)}</option>`).join('') : '<option>—</option>'}</select></label><label>Модель<select data-film-field="model" ${film.models.length ? '' : 'disabled'} onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)">${film.models.length ? `<option value="" ${line.catalogId?'':'selected'}>Выберите модель</option>${film.models.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogFilmModel(item) || catalogFilmName(item) || 'Модель не указана')} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}` : '<option>—</option>'}</select></label></div>${selectedStock ? `<div class="text-xs text-gray-500">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}${projectQuickManualFilmName(line) ? '<div class="text-xs text-amber-700">Ручной ввод · не привязано к складу</div>' : ''}<details class="quick-film-alternative" ${projectQuickManualFilmName(line) ? 'open' : ''}><summary>Плёнки нет в списке</summary><div class="quick-film-alternative-body"><input aria-label="Ручное название плёнки" placeholder="Впишите название вручную" value="${academyEsc(projectQuickManualFilmName(line))}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','manualFilmName',this.value)">${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Добавить плёнку на склад</button>` : ''}</div></details></td>
       <td data-label="Метраж, sqft"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" placeholder="Например, 250" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
       <td data-label="Цена клиенту"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" placeholder="Общая сумма" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','price',this.value)"><div class="quick-commercial-price">${Number(line.qty) > 0 && Number(line.price) > 0 ? `${fmtMoney(line.unitPrice)} / sqft` : 'Цена / sqft появится автоматически'}</div></td>
     </tr>`;
@@ -34025,26 +34072,59 @@ function renderCatalogBrowser() {
   return controls + rows;
 }
 
+function warehouseRollReceiptCatalog(vendorId, category, selectedCatalogId = '') {
+  return (db.settings.catalog || []).filter(item => !item.archived && item.category === category && (
+    item.vendorId === vendorId || item.id === selectedCatalogId
+  ));
+}
+function warehouseRollReceiptCategories(vendorId, selectedCatalogId = '') {
+  return [...new Set((db.settings.catalog || []).filter(item => !item.archived && (
+    item.vendorId === vendorId || item.id === selectedCatalogId
+  )).map(item => item.category).filter(Boolean))];
+}
+function warehouseRollReceiptCategoryChanged(selectedCatalogId = '') {
+  const vendorId=document.getElementById('ar-vendor')?.value||'';
+  const category=document.getElementById('ar-category')?.value||'';
+  const model=document.getElementById('ar-cat');
+  if(!model)return;
+  const previous=selectedCatalogId||model.value||'';
+  const previousItem=getCatalogItem(previous);
+  const validPrevious=previousItem&&previousItem.category===category&&(!previousItem.vendorId||previousItem.vendorId===vendorId)?previous:'';
+  const items=warehouseRollReceiptCatalog(vendorId,category,validPrevious);
+  model.innerHTML=items.length?items.map(item=>`<option value="${item.id}" ${item.id===validPrevious?'selected':''}>${academyEsc(catalogFilmName(item))} · ${academyEsc(catalogFilmModel(item)||'модель не указана')}</option>`).join(''):'<option value="">Нет моделей у этого поставщика</option>';
+  model.disabled=!items.length;
+}
+function warehouseRollReceiptVendorChanged(selectedCatalogId = '') {
+  const vendorId=document.getElementById('ar-vendor')?.value||'';
+  const category=document.getElementById('ar-category');
+  if(!category)return;
+  const previous=category.value||getCatalogItem(selectedCatalogId)?.category||'';
+  const categories=warehouseRollReceiptCategories(vendorId,selectedCatalogId);
+  category.innerHTML=categories.length?categories.map(value=>`<option value="${value}" ${value===previous?'selected':''}>${academyEsc(catLabel(value))}</option>`).join(''):'<option value="">Нет категорий у поставщика</option>';
+  category.disabled=!categories.length;
+  warehouseRollReceiptCategoryChanged(selectedCatalogId);
+}
 function openAddRollModal(presetCatId, purchaseRequestId='') {
   const request=(db.purchaseRequests||[]).find(x=>x.id===purchaseRequestId);
+  const presetCatalog=getCatalogItem(presetCatId);
+  const selectedVendorId=request?.vendorId||presetCatalog?.vendorId||db.vendors.find(v=>v.active!==false&&(db.settings.catalog||[]).some(item=>item.vendorId===v.id))?.id||'';
+  const categories=warehouseRollReceiptCategories(selectedVendorId,presetCatId);
+  const selectedCategory=presetCatalog?.category||categories[0]||'';
+  const models=warehouseRollReceiptCatalog(selectedVendorId,selectedCategory,presetCatId);
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6" style="max-width: 32rem;">
       <h3 class="font-semibold text-lg mb-3">📦 Принять рулон на склад</h3>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <label>Плёнка из каталога</label>
-          <select id="ar-cat">
-            ${(() => {
-              const groups = catalogByCategory();
-              return Object.entries(groups).map(([cat, items]) => `<optgroup label="${catLabel(cat)}">${items.map(c => `<option value="${c.id}" ${presetCatId===c.id?'selected':''}>${c.brand} — ${c.model}</option>`).join('')}</optgroup>`).join('');
-            })()}
-          </select>
+          <label>Поставщик</label>
+          <select id="ar-vendor" onchange="warehouseRollReceiptVendorChanged()"><option value="">Выберите поставщика</option>${db.vendors.filter(v=>v.active!==false).map(v => `<option value="${v.id}" ${selectedVendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select>
         </div>
         <div>
-          <label>Поставщик</label>
-          <select id="ar-vendor">${db.vendors.map(v => `<option value="${v.id}" ${request?.vendorId===v.id?'selected':''}>${v.name}</option>`).join('')}</select>
+          <label>Категория плёнки</label>
+          <select id="ar-category" onchange="warehouseRollReceiptCategoryChanged()" ${categories.length?'':'disabled'}>${categories.length?categories.map(value=>`<option value="${value}" ${selectedCategory===value?'selected':''}>${academyEsc(catLabel(value))}</option>`).join(''):'<option value="">Сначала выберите поставщика</option>'}</select>
         </div>
+        <div class="md:col-span-2"><label>Модель плёнки</label><select id="ar-cat" ${models.length?'':'disabled'}>${models.length?models.map(item=>`<option value="${item.id}" ${presetCatId===item.id?'selected':''}>${academyEsc(catalogFilmName(item))} · ${academyEsc(catalogFilmModel(item)||'модель не указана')}</option>`).join(''):'<option value="">Нет моделей в выбранной категории</option>'}</select></div>
         <div><label>Lot / партия</label><input id="ar-lot" placeholder="например 240315-A"></div>
         <div><label>Ширина (мм)</label><select id="ar-width">${(db.settings.filmRolls?.widths||[1520,1820,910]).map(w => `<option value="${w}">${(w/1000).toFixed(2)} м</option>`).join('')}</select></div>
         <div><label>Длина рулона (м)</label><input id="ar-len" type="number" step="1" value="30" placeholder="30"></div>
@@ -34062,9 +34142,19 @@ function openAddRollModal(presetCatId, purchaseRequestId='') {
   render();
 }
 function confirmAddRoll() {
+  const vendorId=document.getElementById('ar-vendor')?.value||'';
+  const category=document.getElementById('ar-category')?.value||'';
+  const catalogId=document.getElementById('ar-cat')?.value||'';
+  const catalog=getCatalogItem(catalogId);
+  if(!vendorId)return alert('Выберите поставщика.');
+  if(!category)return alert('Выберите категорию плёнки.');
+  if(!catalog)return alert('Выберите модель плёнки.');
+  if(catalog.category !== category)return alert('Модель не относится к выбранной категории.');
+  if(catalog.vendorId && catalog.vendorId !== vendorId)return alert('Модель не относится к выбранному поставщику.');
+  if(!catalog.vendorId)catalog.vendorId=vendorId;
   const roll=addInventoryRoll({
-    catalogId: document.getElementById('ar-cat').value,
-    vendorId: document.getElementById('ar-vendor').value,
+    catalogId,
+    vendorId,
     lotNumber: document.getElementById('ar-lot').value,
     widthMm: parseInt(document.getElementById('ar-width').value),
     originalLengthM: parseFloat(document.getElementById('ar-len').value),
@@ -34074,8 +34164,7 @@ function confirmAddRoll() {
   });
   const requestId=document.getElementById('ar-request')?.value||null;
   const request=(db.purchaseRequests||[]).find(x=>x.id===requestId);
-  const cat=getCatalogItem(roll.catalogId);
-  recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(cat),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,responsibleId:request?.responsibleId||null,reason:request?`Приход по ${request.number}`:'Приход рулона'});
+  recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(catalog),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,responsibleId:request?.responsibleId||null,reason:request?`Приход по ${request.number}`:'Приход рулона'});
   if(request){request.status='received';request.updatedAt=new Date().toISOString();}
   save();
   closeModal();

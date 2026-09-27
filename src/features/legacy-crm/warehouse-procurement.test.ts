@@ -69,6 +69,40 @@ test('film category navigation reuses existing catalog and inventory records', (
   assert.match(html, /state\.inventoryFilmCategory=film\?\.category\|\|null;state\.inventoryFilmModel=roll\.catalogId\|\|null/);
 });
 
+test('roll receiving follows supplier, category, then exact catalog model', () => {
+  const receipt = html.match(/function openAddRollModal\(presetCatId, purchaseRequestId=''\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const confirmation = html.match(/function confirmAddRoll\(\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(receipt, /id="ar-vendor"[\s\S]*?warehouseRollReceiptVendorChanged/);
+  assert.match(receipt, /id="ar-category"[\s\S]*?warehouseRollReceiptCategoryChanged/);
+  assert.match(receipt, /id="ar-cat"/);
+  assert.ok(receipt.indexOf('id="ar-vendor"') < receipt.indexOf('id="ar-category"'));
+  assert.ok(receipt.indexOf('id="ar-category"') < receipt.indexOf('id="ar-cat"'));
+  assert.match(html, /function warehouseRollReceiptCatalog\(vendorId, category, selectedCatalogId = ''\)/);
+  assert.match(html, /item\.vendorId === vendorId/);
+  assert.match(confirmation, /catalog\.vendorId !== vendorId/);
+  assert.match(confirmation, /catalog\.category !== category/);
+});
+
+test('roll receipt catalog never mixes another supplier into the selected category', () => {
+  const helper = html.match(/function warehouseRollReceiptCatalog\(vendorId, category, selectedCatalogId = ''\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const db = {
+    settings: {
+      catalog: [
+        { id: 'solar-a', vendorId: 'vendor-a', category: 'solar' },
+        { id: 'solar-b', vendorId: 'vendor-b', category: 'solar' },
+        { id: 'safety-a', vendorId: 'vendor-a', category: 'protective' },
+      ],
+    },
+  };
+  const selectCatalog = new Function('db', `${helper}; return warehouseRollReceiptCatalog;`)(db) as (
+    vendorId: string,
+    category: string,
+    selectedCatalogId?: string,
+  ) => Array<{ id: string }>;
+  assert.deepEqual(selectCatalog('vendor-a', 'solar').map((item) => item.id), ['solar-a']);
+  assert.deepEqual(selectCatalog('vendor-a', 'protective').map((item) => item.id), ['safety-a']);
+});
+
 test('Magnitronic Solar Prime series is seeded with verified meter readings', () => {
   for (const model of ['SP-5%', 'SP-15%', 'SP-20%', 'SP-35%', 'SP-50%', 'SP-70%']) {
     assert.match(html, new RegExp(model.replace('%', '%')));

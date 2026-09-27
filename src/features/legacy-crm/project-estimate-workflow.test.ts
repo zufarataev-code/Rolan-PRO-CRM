@@ -128,12 +128,27 @@ test("quick project entry works without dimensions and supports multiple service
   assert.match(source, /quickProjectLine: true, serviceType/);
   assert.match(source, /line\.price = line\.qty \* line\.unitPrice/);
   assert.match(source, /line\.unitPrice = line\.qty > 0 \? line\.price \/ line\.qty : 0/);
-  assert.match(source, /projectQuickLineCatalog\(line\.serviceType, line\.catalogId\)/);
+  assert.match(source, /projectQuickCatalogDimensions\(line\.serviceType, line\.catalogId\)/);
   assert.match(source, /ORDER_PRIMARY_SERVICES\.map\(service =>/);
   assert.match(source, /Метраж, sqft/);
   assert.match(source, /Цена клиенту/);
   assert.match(source, /Цена \/ sqft/);
   assert.match(source, /\+ Добавить услугу/);
+});
+
+test("quick project film picker selects warehouse category, name, and exact model", () => {
+  const rendererStart = source.indexOf("function renderQuickProjectEntry");
+  const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
+  const renderer = source.slice(rendererStart, rendererEnd);
+  const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(source, /function projectQuickCatalogDimensions\(serviceType, selectedCatalogId = ''\)/);
+  assert.match(renderer, /data-film-field="category"/);
+  assert.match(renderer, /data-film-field="name"/);
+  assert.match(renderer, /data-film-field="model"/);
+  assert.match(updater, /field === 'filmCategory'/);
+  assert.match(updater, /field === 'filmName'/);
+  assert.match(updater, /field === 'catalogId'/);
+  assert.match(updater, /projectQuickAssignableCatalog/);
 });
 
 test("quick project entry derives sqft price and defers installers to Montage", () => {
