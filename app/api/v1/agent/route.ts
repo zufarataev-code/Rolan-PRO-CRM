@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
         ok: false,
         error: {
           code: "actor_not_configured",
-          message: "CRM Operations Agent actor is not configured as an active owner or manager.",
+          message: "CRM Operations Agent service identity is missing or inactive.",
         },
       },
       { status: 503 },
