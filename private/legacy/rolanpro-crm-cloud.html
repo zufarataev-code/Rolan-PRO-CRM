@@ -7212,6 +7212,7 @@ const OFFICIAL_SUPPLIERS = [
 function ensureOfficialSupplierCatalog(catalog, vendors) {
   if (!Array.isArray(catalog) || !Array.isArray(vendors)) return { vendors:0, items:0 };
   let vendorsAdded=0, itemsAdded=0;
+  const vendorIds=new Map();
   OFFICIAL_SUPPLIERS.forEach(source => {
     let vendor=vendors.find(candidate => candidate.id===source.id || String(candidate.name||'').toLowerCase()===source.name.toLowerCase());
     if (!vendor) { vendor={ id:source.id }; vendors.push(vendor); vendorsAdded++; }
@@ -7222,6 +7223,7 @@ function ensureOfficialSupplierCatalog(catalog, vendors) {
     if (vendor.active == null) vendor.active=true;
     if (vendor.leadTimeDays == null) vendor.leadTimeDays=null;
     if (!Array.isArray(vendor.requestHistory)) vendor.requestHistory=[];
+    vendorIds.set(source.id,vendor.id);
   });
   OFFICIAL_SUPPLIER_CATALOG.forEach(source => {
     let item=catalog.find(candidate => candidate?.id===source.id);
@@ -7230,6 +7232,7 @@ function ensureOfficialSupplierCatalog(catalog, vendors) {
       catalog.push(item); itemsAdded++;
     }
     Object.entries(source).forEach(([key,value]) => { if (item[key] == null || item[key] === '') item[key]=value; });
+    item.vendorId=vendorIds.get(source.vendorId)||source.vendorId;
     item.brand=OFFICIAL_SUPPLIERS.find(v=>v.id===source.vendorId)?.name || item.brand;
     item.series=item.productName;
     item.model=[item.productName,item.modelCode].filter(Boolean).join(' ');
@@ -31471,6 +31474,15 @@ async function marketingEmailApi(path, options = {}) {
   if (!r.ok) throw new Error(payload?.errors?.[0]?.message || `Marketing email ${r.status}`);
   return payload?.data;
 }
+async function procurementEmailApi(path, options = {}) {
+  const r = await fetch(`/api/v1/integrations/procurement-email${path}`, {
+    credentials: 'same-origin', cache: 'no-store', ...options,
+    headers: {'Content-Type':'application/json', ...(options.headers || {})},
+  });
+  const payload = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(payload?.errors?.[0]?.message || `Procurement email ${r.status}`);
+  return payload?.data;
+}
 async function refreshEmailChannelStatus(sync = false) {
   if (!ROLANPRO_CLOUD) return;
   try {
@@ -32974,6 +32986,7 @@ const PURCHASE_STATUS = {
   received: ['Получено', 'bg-emerald-100 text-emerald-800'],
   cancelled: ['Отменено', 'bg-gray-100 text-gray-600'],
 };
+const purchaseRequestSendsInFlight = new Set();
 function warehouseCategoryLabel(id) { return WAREHOUSE_CATEGORIES.find(x => x.id === id)?.label || 'Прочее'; }
 function warehouseOrders() { return db.orders.filter(o => !['completed','cancelled','lost'].includes(o.status)); }
 function warehouseOrderLabel(o) {
@@ -33105,7 +33118,10 @@ function renderPurchaseTable(rows, compact=false) {
 }
 function purchaseActionButtons(p) {
   if (!['owner','manager'].includes(currentUser()?.role)) return '';
-  if (p.status==='draft') return `<button class="btn-primary text-xs" onclick="sendPurchaseRequest('${p.id}')">Отправить поставщику</button>`;
+  if (p.status==='draft') {
+    const sending=purchaseRequestSendsInFlight.has(p.id);
+    return `<div class="flex gap-2 flex-wrap justify-end"><button class="btn-ghost text-xs" onclick="openPurchaseRequestVendorModal('${p.id}')">${p.vendorId?'Поставщик':'Назначить поставщика'}</button>${p.vendorId?`<button class="btn-primary text-xs" ${sending?'disabled':''} onclick="sendPurchaseRequest('${p.id}')">${sending?'Отправляется…':'Отправить поставщику'}</button>`:''}</div>`;
+  }
   if (p.status==='requested') return `<button class="btn-ghost text-xs" onclick="setPurchaseRequestStatus('${p.id}','approved')">Согласовать</button>`;
   if (p.status==='approved') return `<button class="btn-primary text-xs" onclick="setPurchaseRequestStatus('${p.id}','ordered')">Заказано</button>`;
   if (p.status==='ordered') return `<button class="btn-primary text-xs" onclick="receivePurchaseRequest('${p.id}')">Принять</button>`;
@@ -33122,15 +33138,18 @@ function openPurchaseRequestModal(kind='', itemId='', presetOrderId='', presetQt
   const supplyOptions=ensureSupplies().map(s=>`<option value="supply:${s.id}" ${kind==='supply'&&itemId===s.id?'selected':''}>Расходник · ${academyEsc(s.name)}</option>`).join('');
   const qtyValue = Number(presetQty) > 0 ? Number(presetQty).toFixed(2) : (match ? Math.max(match.target-match.qty,1) : 1);
   const cancelAction = presetOrderId ? `refreshManagerMeasureModal('${presetOrderId}')` : 'closeModal()';
+  const selectedItem=kind==='film'?getCatalogItem(itemId):ensureSupplies().find(x=>x.id===itemId);
+  const initialVendorId=presetVendorId||match?.vendorId||selectedItem?.vendorId||'';
   state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)${cancelAction}"><div class="modal-content workspace-modal p-6" style="max-width:42rem"><h3 class="font-semibold text-lg">Новая заявка на закупку</h3><p class="text-sm text-gray-500 mb-4">Укажите для какого проекта нужен материал и кто отвечает за закупку.</p><input id="pr-return-order" type="hidden" value="${academyEsc(presetOrderId)}"><input id="pr-requirements" type="hidden" value="${academyEsc(JSON.stringify(requirements || []))}"><div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-  <div class="md:col-span-2"><label>Материал</label><select id="pr-item">${filmOptions}${supplyOptions}</select></div>
+  <div class="md:col-span-2"><label>Материал</label><select id="pr-item" onchange="syncPurchaseRequestVendor(this.value)">${filmOptions}${supplyOptions}</select></div>
   <div><label>Количество</label><input id="pr-qty" type="number" min="0.01" step="0.01" value="${qtyValue}"></div>
   <div><label>Нужно к дате</label><input id="pr-date" type="date"></div>
   <div><label>Проект / заказ</label><select id="pr-order"><option value="">Общий запас склада</option>${warehouseOrders().map(o=>`<option value="${o.id}" ${presetOrderId===o.id?'selected':''}>${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div>
   <div><label>Ответственный</label><select id="pr-owner"><option value="">Выберите</option>${db.users.filter(u=>u.active!==false).map(u=>`<option value="${u.id}">${academyEsc(u.name)} · ${academyEsc(u.role||'сотрудник')}</option>`).join('')}</select></div>
-  <div><label>Поставщик</label><select id="pr-vendor"><option value="">Не выбран</option>${db.vendors.filter(v=>v.active!==false).map(v=>`<option value="${v.id}" ${(presetVendorId||match?.vendorId)===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
+  <div><label>Поставщик</label><select id="pr-vendor"><option value="">Не выбран</option>${db.vendors.filter(v=>v.active!==false).map(v=>`<option value="${v.id}" ${initialVendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
   <div class="md:col-span-2"><label>Комментарий</label><textarea id="pr-note" rows="3" placeholder="Срочность, размер, цвет...">${academyEsc(presetNote)}</textarea></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="${cancelAction}">Отмена</button><button class="btn-primary" onclick="savePurchaseRequest()">Создать заявку</button></div></div></div>`;render();
 }
+function syncPurchaseRequestVendor(value){const [kind,itemId]=String(value||'').split(':');const item=kind==='film'?getCatalogItem(itemId):ensureSupplies().find(x=>x.id===itemId);const select=document.getElementById('pr-vendor');if(select&&item?.vendorId&&[...select.options].some(option=>option.value===item.vendorId))select.value=item.vendorId;}
 function savePurchaseRequest() {
   if (!['owner','manager'].includes(currentUser()?.role)) return alert('Закупки доступны владельцу и менеджеру.');
   const [kind,itemId]=(document.getElementById('pr-item')?.value||'').split(':');
@@ -33141,6 +33160,7 @@ function savePurchaseRequest() {
   if(!item||qty<=0) return alert('Выберите материал и количество.');
   if(!responsibleId) return alert('Назначьте ответственного за закупку.');
   const vendorId=document.getElementById('pr-vendor')?.value||null;
+  if(!vendorId) return alert('Выберите поставщика. Его можно изменить в черновике до отправки.');
   const duplicate=kind==='film'&&orderId?activeProjectFilmPurchaseRequest(orderId,itemId):(!orderId?activeReorderPurchaseRequest(kind,itemId,vendorId):null);
   if(duplicate) return alert(`Для этой плёнки уже создана заявка ${duplicate.number}.`);
   let requirements=[];try{requirements=JSON.parse(document.getElementById('pr-requirements')?.value||'[]')}catch(e){}
@@ -33161,20 +33181,25 @@ function purchaseRequestEmailBody(p, vendor) {
 }
 async function sendPurchaseRequest(id) {
   if (!['owner','manager'].includes(currentUser()?.role)) return alert('Закупки доступны владельцу и менеджеру.');
+  if (purchaseRequestSendsInFlight.has(id)) return;
   const p=db.purchaseRequests.find(x=>x.id===id);if(!p||p.status!=='draft')return;
   const vendor=db.vendors.find(x=>x.id===p.vendorId);if(!vendor)return alert('Назначьте поставщика.');
   if (!vendor.email) {
     if (vendor.orderUrl) window.open(vendor.orderUrl,'_blank','noopener');
     return alert('У поставщика нет подтверждённого email. Открыта официальная контактная страница; черновик не отмечен отправленным.');
   }
-  if (!confirm(`Отправить ${p.number} на ${vendor.email} через корпоративный Gmail?`)) return;
+  if (!confirm(`Отправить ${p.number} на ${vendor.email} через защищённый канал закупок?`)) return;
+  purchaseRequestSendsInFlight.add(id);render();
   try {
-    const sent=await workMailApi('/messages',{method:'POST',body:JSON.stringify({to:vendor.email,subject:`Rolan PRO purchase request ${p.number}`,body:purchaseRequestEmailBody(p,vendor),purpose:'order_transactional'})});
-    p.status='requested';p.responsibleId=p.responsibleId||state.currentUserId;p.sentAt=new Date().toISOString();p.sentBy=state.currentUserId;p.gmailMessageId=sent?.message_id||null;p.updatedAt=p.sentAt;
+    const sent=await procurementEmailApi('/messages',{method:'POST',body:JSON.stringify({purchase_request_id:p.id,to:vendor.email,subject:`Rolan PRO purchase request ${p.number}`,body:purchaseRequestEmailBody(p,vendor)})});
+    p.status='requested';p.responsibleId=p.responsibleId||state.currentUserId;p.sentAt=new Date().toISOString();p.sentBy=state.currentUserId;p.providerMessageId=sent?.message_id||null;p.updatedAt=p.sentAt;
     vendor.requestHistory=vendor.requestHistory||[];vendor.requestHistory.unshift({purchaseRequestId:p.id,number:p.number,at:p.sentAt,by:state.currentUserId,to:vendor.email,status:'sent'});
     save();render();alert(`Заявка ${p.number} отправлена ${vendor.name}.`);
   } catch(error) { alert(`Не удалось отправить: ${error.message||String(error)}`); }
+  finally { purchaseRequestSendsInFlight.delete(id);render(); }
 }
+function openPurchaseRequestVendorModal(id){if(!['owner','manager'].includes(currentUser()?.role))return alert('Закупки доступны владельцу и менеджеру.');const p=db.purchaseRequests.find(x=>x.id===id);if(!p||p.status!=='draft')return;state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content p-6" style="max-width:30rem"><h3 class="font-semibold text-lg">Поставщик для ${academyEsc(p.number)}</h3><p class="text-sm text-gray-500 mb-4">${academyEsc(p.itemNameSnapshot||'Материал')}</p><label>Поставщик</label><select id="pr-edit-vendor"><option value="">Выберите</option>${db.vendors.filter(v=>v.active!==false).map(v=>`<option value="${v.id}" ${p.vendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="savePurchaseRequestVendor('${p.id}')">Сохранить</button></div></div></div>`;render();}
+function savePurchaseRequestVendor(id){if(!['owner','manager'].includes(currentUser()?.role))return;const p=db.purchaseRequests.find(x=>x.id===id);const vendorId=document.getElementById('pr-edit-vendor')?.value||'';if(!p||p.status!=='draft'||!vendorId)return alert('Выберите поставщика.');p.vendorId=vendorId;p.updatedAt=new Date().toISOString();save();closeModal();render();}
 function setPurchaseRequestStatus(id,status) { if(!['owner','manager'].includes(currentUser()?.role))return alert('Закупки доступны владельцу и менеджеру.');const p=db.purchaseRequests.find(x=>x.id===id);if(!p)return;p.status=status;p.updatedAt=new Date().toISOString();save();render(); }
 function receivePurchaseRequest(id) {
   if (!['owner','manager'].includes(currentUser()?.role)) return alert('Закупки доступны владельцу и менеджеру.');

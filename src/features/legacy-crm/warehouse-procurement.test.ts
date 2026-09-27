@@ -105,6 +105,8 @@ test('official supplier cards and confirmed catalogs are seeded without invented
   assert.equal(suppliers.every((supplier) => Array.isArray(supplier.sourceUrls)), true);
   assert.match(html, /retailPerSqft:null, costPerSqft:null/);
   assert.match(html, /ensureOfficialSupplierCatalog\(s\.catalog, db\.vendors\);/);
+  assert.match(html, /vendorIds\.set\(source\.id,vendor\.id\)/);
+  assert.match(html, /item\.vendorId=vendorIds\.get\(source\.vendorId\)\|\|source\.vendorId/);
   assert.match(html, /db\._officialSupplierCatalogV1 = true/);
   assert.match(html, /persistOfficialSupplierMigration = !db\._officialSupplierCatalogV1/);
   assert.match(html, /persistClientNotificationMigration \|\| persistOfficialSupplierMigration \|\| roleWasSynchronized/);
@@ -118,10 +120,15 @@ test('reorder creates one supplier-linked draft and explicit send is required', 
   assert.match(html, /!\['received','cancelled'\]\.includes\(p\.status\)/);
   assert.match(html, /function sendPurchaseRequest\(id\)/);
   assert.match(html, /confirm\(`Отправить \$\{p\.number\}/);
-  assert.match(html, /workMailApi\('\/messages'/);
-  assert.match(html, /purpose:'order_transactional'/);
-  assert.ok(html.indexOf("const sent=await workMailApi('/messages'") < html.indexOf("p.status='requested'"));
+  assert.match(html, /procurementEmailApi\('\/messages'/);
+  assert.match(html, /purchase_request_id:p\.id/);
+  assert.ok(html.indexOf("const sent=await procurementEmailApi('/messages'") < html.indexOf("p.status='requested'"));
+  assert.match(html, /purchaseRequestSendsInFlight\.has\(id\)/);
+  assert.match(html, /purchaseRequestSendsInFlight\.add\(id\)/);
+  assert.match(html, /purchaseRequestSendsInFlight\.delete\(id\)/);
   assert.match(html, /черновик не отмечен отправленным/);
+  assert.match(html, /function openPurchaseRequestVendorModal\(id\)/);
+  assert.match(html, /if\(!vendorId\) return alert\('Выберите поставщика/);
 });
 
 test('procurement actions are restricted to owner and manager', () => {
