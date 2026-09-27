@@ -954,7 +954,7 @@ async function executeWrite(
     let managerId = optionalText(args.assigned_manager_id, 80);
     let address = optionalText(args.location_address, 1000);
 
-    if (args.project_query || args.project) {
+    if (args.project_id || args.project_query || args.project) {
       const resolution = await resolveProject(args);
       if ("clarification" in resolution) {
         return clarificationResult(action, "project", resolution.clarification ?? []);
