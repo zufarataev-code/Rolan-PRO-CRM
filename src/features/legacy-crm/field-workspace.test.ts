@@ -54,6 +54,9 @@ const workspace = {
     companyOverhead: 10000,
     stripe: { secretKey: "secret" },
   },
+  vendors: [{ id: "vendor", name: "Supplier", dealerPrice: 4 }],
+  inventory: [{ id: "roll", catalogId: "film", costTotal: 500 }],
+  purchaseRequests: [{ id: "request", itemId: "film", quotedPrice: 300 }],
 };
 
 test("surveyor receives only assigned work and no customer or company money", () => {
@@ -70,6 +73,9 @@ test("surveyor receives only assigned work and no customer or company money", ()
   assert.equal("lifetimeValue" in clients[0], false);
   assert.equal("companyOverhead" in settings, false);
   assert.equal("stripe" in settings, false);
+  assert.equal("vendors" in field, false);
+  assert.equal("inventory" in field, false);
+  assert.equal("purchaseRequests" in field, false);
   assert.equal(
     (orders[0].timeline as Array<{ key: string }>).some((event) => event.key === "payment_received"),
     false,

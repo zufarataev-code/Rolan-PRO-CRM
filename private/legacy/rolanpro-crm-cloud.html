@@ -5795,6 +5795,29 @@
   .manager-measure-overview > summary { cursor:pointer; font-size:12px; color:#64748b; padding:8px 0; }
   .manager-measure-services { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px; }
   @media (max-width:840px) {
+    .procurement-table,
+    .procurement-table tbody,
+    .procurement-table tr,
+    .procurement-table td { display:block; width:100%; }
+    .procurement-table thead { display:none; }
+    .procurement-table tr {
+      margin-bottom:12px; padding:10px; border:1px solid #dbe3ee;
+      border-radius:12px; background:#fff;
+    }
+    .procurement-table td {
+      display:grid; grid-template-columns:minmax(92px,.42fr) minmax(0,1fr);
+      gap:10px; align-items:start; padding:7px 4px; border:0;
+      overflow-wrap:anywhere;
+    }
+    .procurement-table td::before {
+      content:attr(data-label); color:#64748b; font-size:12px; font-weight:700;
+    }
+    .procurement-table td:not([data-label]) { display:flex; justify-content:flex-end; }
+    .procurement-table td:not([data-label])::before { content:none; }
+    .procurement-table button,
+    .procurement-table a,
+    .vendor-procurement-actions button,
+    .vendor-procurement-actions a { min-height:44px; }
     .modal-backdrop.manager-measure-backdrop { padding:0; align-items:stretch; }
     .modal-content.manager-measure-modal {
       width:100%; max-width:none; height:100dvh; max-height:100dvh; border-radius:0;
@@ -7101,6 +7124,124 @@ function ensureRolanSmartCatalog(catalog) {
   return added;
 }
 
+// Official manufacturer catalogs used by Warehouse and Procurement.
+// Only manufacturer-published architectural products are listed. Purchase
+// prices, dealer SKUs, lead times and warranty terms intentionally stay empty
+// until Rolan PRO receives them from an actual supplier agreement.
+const OFFICIAL_SUPPLIER_CATALOG = [
+  // Madico architectural Solar Control product families.
+  { vendorId:'v_madico', id:'film_madico_nova', category:'solar', filmCategory:'Solar Control', productName:'Nova', modelCode:'' },
+  { vendorId:'v_madico', id:'film_madico_optivision', category:'solar', filmCategory:'Solar Control', productName:'Optivision', modelCode:'' },
+  { vendorId:'v_madico', id:'film_madico_optivision_reflective', category:'solar', filmCategory:'Solar Control', productName:'Optivision Reflective', modelCode:'' },
+  { vendorId:'v_madico', id:'film_madico_reflective_silver', category:'solar', filmCategory:'Solar Control', productName:'Reflective Silver', modelCode:'' },
+
+  // LLumar North America architectural solar-control performance sheet (08/25).
+  ...[
+    ['Reflective','RN07G SR CDF','solar',6,84], ['Reflective','R15B SR CDF','solar',8,78],
+    ['Reflective','R15BL SR PS','solar',9,78], ['Reflective','R15G SR CDF','solar',6,77],
+    ['Reflective','R15GO SR PS','solar',13,80], ['Reflective','R20 SR CDF','solar',15,80],
+    ['Reflective','R35 SR CDF','solar',28,70], ['Reflective','R50 SR CDF','solar',49,53],
+    ['Dual-Reflective','DR05 SR CDF','solar',6,83], ['Dual-Reflective','DR15 SR CDF','solar',15,71],
+    ['Dual-Reflective','DRN25 SR CDF','solar',21,65], ['Dual-Reflective','DRN35 SR CDF','solar',34,54],
+    ['Deluxe','DL05G SR CDF','solar',7,69], ['Deluxe','DL15B SR CDF','solar',14,56],
+    ['Deluxe','DL15G SR CDF','solar',16,56], ['Deluxe','DL30GN SR PS','solar',33,52],
+    ['Neutral','N1020 SR CDF','solar',23,63], ['Neutral','N1040 SR CDF','solar',37,51],
+    ['Neutral','N1050 SR CDF','solar',50,41], ['Neutral','N1065 SR CDF','solar',69,28],
+    ['Neutral','N1020B SR CDF','solar',21,77], ['Neutral','N1035B SR CDF','solar',37,64],
+    ['Exterior','NHE20 ER HPR','solar',23,64], ['Exterior','NHE35 ER HPR','solar',38,51],
+    ['Exterior','RHE20 ER HPR','solar',16,80], ['Exterior','RHE35 ER HPR','solar',29,70],
+    ['Exterior','RHE50 ER HPR','solar',49,52],
+  ].map(([filmCategory,modelCode,category,vlt,tser]) => ({
+    vendorId:'v_llumar', id:`film_llumar_${String(modelCode).toLowerCase().replace(/[^a-z0-9]+/g,'_')}`,
+    category, filmCategory, productName:'Solar Control', modelCode, vlt, tser, uvBlock:99,
+  })),
+
+  // Johnson Architectural and Specialty Series.
+  ...[
+    ['Architectural','MBL35','solar',35,50,'Blue Silver'], ['Architectural','MBL20','solar',19,68,'Blue Silver'],
+    ['Architectural','MGN35','solar',35,48,'Green Silver'], ['Architectural','MGN20','solar',19,68,'Green Silver'],
+    ['Architectural','MGD35','solar',32,65,'Gold Silver'], ['Architectural','MGD20','solar',17,77,'Gold Silver'],
+    ['Specialty','UVCLR','solar',91,12,'Clear'], ['Specialty','WHT FROST','decorative',75,24,'White Frost'],
+    ['Specialty','BLKOUT','privacy',0,70,'Black'], ['Specialty','WHTOUT','privacy',null,null,'White Out'],
+    ['Specialty','SS20AB','solar',19,77,'Silver'], ['Specialty','SS20ABEXT','solar',20,75,'Silver'],
+    ['Specialty','PRT2CLR','decorative',89,15,'Printable Clear'], ['Specialty','PRT2WOUT','decorative',14,71,'Printable White Out'],
+  ].map(([filmCategory,modelCode,category,vlt,tser,appearance]) => ({
+    vendorId:'v_johnson', id:`film_johnson_${String(modelCode).toLowerCase().replace(/[^a-z0-9]+/g,'_')}`,
+    category, filmCategory, productName:appearance, modelCode, vlt, tser, uvBlock:modelCode==='UVCLR'?98:99,
+  })),
+
+  // NEXFIL official architectural/application chart and decorative catalog.
+  ...[
+    ['Sputter Reflective','Elegance','20%','solar'], ['Sputter Reflective','Elegance','35%','solar'],
+    ['Sputter Reflective','Prestigious Silver','20%','solar'], ['Sputter Reflective','Prestigious Silver','35%','solar'],
+    ['Sputter Reflective','Solar Bronze','20%','solar'], ['Sputter Reflective','Solar Bronze','35%','solar'],
+    ['Reflective','Silver','05%','solar'], ['Reflective','Silver','20%','solar'], ['Reflective','Silver','35%','solar'],
+    ['Matte','White Frost','','decorative'], ['Matte','Silver Matte','','decorative'],
+    ['Privacy','Blackout','','privacy'], ['Privacy','Whiteout','','privacy'],
+    ['Decorative','INT 100 Series','','decorative'], ['Decorative','Silver Color Series','','decorative'],
+  ].map(([filmCategory,productName,modelCode,category]) => ({
+    vendorId:'v_nexfil', id:`film_nexfil_${`${productName}_${modelCode}`.toLowerCase().replace(/[^a-z0-9]+/g,'_')}`,
+    category, filmCategory, productName, modelCode,
+  })),
+
+  // Armolan USA architectural and clear safety products.
+  ...[
+    ['Reflective','Gray Reflective','10%','solar'], ['Reflective','Gray Reflective','15%','solar'], ['Reflective','Gray Reflective','20%','solar'],
+    ['Non-Reflective','Non Reflective Charcoal','05%','solar'], ['Non-Reflective','Non Reflective Charcoal','15%','solar'],
+    ['Non-Reflective','Non Reflective Charcoal','20%','solar'], ['Non-Reflective','Non Reflective Charcoal','35%','solar'],
+    ['Non-Reflective','Non Reflective Charcoal','50%','solar'], ['Non-Reflective','Non Reflective Charcoal','70%','solar'],
+    ['Reflective','Silver Reflective','15%','solar'], ['Reflective','Silver Reflective','20%','solar'], ['Reflective','Silver Reflective','35%','solar'],
+    ['Architectural Specialty','Clear Architectural','CW','solar'], ['Matte','Bronze Matte','','decorative'],
+    ['Safety / Security','Clear Safety','2 mil','protective'], ['Safety / Security','Clear Safety','4 mil','protective'],
+    ['Safety / Security','Clear Safety','7 mil','protective'], ['Safety / Security','Clear Safety','8 mil','protective'],
+    ['Safety / Security','Clear Safety','12 mil','protective'],
+  ].map(([filmCategory,productName,modelCode,category]) => ({
+    vendorId:'v_armolan', id:`film_armolan_${`${productName}_${modelCode}`.toLowerCase().replace(/[^a-z0-9]+/g,'_')}`,
+    category, filmCategory, productName, modelCode, thickness:category==='protective'?modelCode:null,
+  })),
+];
+
+const OFFICIAL_SUPPLIERS = [
+  { id:'v_madico', name:'Madico', legalName:'Madico, Inc.', country:'USA', phone:'+1 (888) 887-2022', email:'', address:'9251 Belcher Road N, Pinellas Park, FL 33782', website:'https://madico.com', orderUrl:'https://madico.com/professionals/contact-us', categories:['Solar','Decorative','Safety & Security','Special Purpose'], sourceUrls:['https://madico.com/architectural','https://madico.com/architectural/solar-control','https://madico.com/professionals/contact-us'] },
+  { id:'v_llumar', name:'LLumar', legalName:'Eastman Performance Films, LLC', country:'USA', phone:'', email:'', address:'', website:'https://llumar.com', orderUrl:'https://llumar.com/en/contact/', categories:['Solar','Decorative','Safety & Security','Vista'], sourceUrls:['https://llumar.com/en/coverage/architectural-film/','https://llumar.com/content/dam/eastman/performance-films/llumar/nar/documents/english/arch/arch-solar-control-window-film-specs-na.pdf','https://llumar.com/en/contact/'] },
+  { id:'v_johnson', name:'Johnson Window Films', legalName:'Johnson Window Films, Inc.', country:'USA', phone:'+1 (800) 448-8468', email:'info@johnsonwindowfilms.com', address:'5305 Production Dr, Huntington Beach, CA 92649', website:'https://johnsonwindowfilms.com', orderUrl:'https://johnsonwindowfilms.com/contact-us/', categories:['Architectural','Specialty','Protective'], sourceUrls:['https://johnsonwindowfilms.com/residential-commercial/architectural/','https://johnsonwindowfilms.com/residential-commercial/specialty-series/'] },
+  { id:'v_nexfil', name:'NEXFIL', legalName:'Nexfil USA', country:'USA', phone:'+1 (310) 516-8986', email:'info@nexfilusa.com', address:'14462 South Avalon Blvd, Gardena, CA 90248', website:'https://nexfilusa.com', orderUrl:'https://nexfilusa.com/contact/', categories:['Architectural','Security','Decorative'], sourceUrls:['https://nexfilusa.com/architectural/','https://nexfilusa.com/decorative/','https://nexfilusa.com/specifications/'] },
+  { id:'v_armolan', name:'Armolan', legalName:'Armolan Window Films', country:'USA', phone:'+1 (818) 384-2145', email:'sales@armolanusa.com', address:'7404 Fulton Ave Unit 5, North Hollywood, CA 91605', website:'https://armolanusa.com', orderUrl:'https://armolanusa.com/contact/', categories:['Architectural','Decorative','Safety & Security','Tools'], sourceUrls:['https://armolanusa.com/product-category/architectural-window-films/','https://armolanusa.com/contact/'] },
+];
+
+function ensureOfficialSupplierCatalog(catalog, vendors) {
+  if (!Array.isArray(catalog) || !Array.isArray(vendors)) return { vendors:0, items:0 };
+  let vendorsAdded=0, itemsAdded=0;
+  const vendorIds=new Map();
+  OFFICIAL_SUPPLIERS.forEach(source => {
+    let vendor=vendors.find(candidate => candidate.id===source.id || String(candidate.name||'').toLowerCase()===source.name.toLowerCase());
+    if (!vendor) { vendor={ id:source.id }; vendors.push(vendor); vendorsAdded++; }
+    Object.entries(source).forEach(([key,value]) => {
+      if (key==='id') return;
+      if (vendor[key] == null || vendor[key] === '' || (Array.isArray(vendor[key]) && !vendor[key].length)) vendor[key]=Array.isArray(value)?[...value]:value;
+    });
+    if (vendor.active == null) vendor.active=true;
+    if (vendor.leadTimeDays == null) vendor.leadTimeDays=null;
+    if (!Array.isArray(vendor.requestHistory)) vendor.requestHistory=[];
+    vendorIds.set(source.id,vendor.id);
+  });
+  OFFICIAL_SUPPLIER_CATALOG.forEach(source => {
+    let item=catalog.find(candidate => candidate?.id===source.id);
+    if (!item) {
+      item={ id:source.id, retailPerSqft:null, costPerSqft:null, installerRatePerSqft:null, wastePct:null, archived:false };
+      catalog.push(item); itemsAdded++;
+    }
+    Object.entries(source).forEach(([key,value]) => { if (key!=='vendorId' && (item[key] == null || item[key] === '')) item[key]=value; });
+    if (!item.vendorId || item.vendorId===source.vendorId) item.vendorId=vendorIds.get(source.vendorId)||source.vendorId;
+    item.brand=OFFICIAL_SUPPLIERS.find(v=>v.id===source.vendorId)?.name || item.brand;
+    item.series=item.productName;
+    item.model=[item.productName,item.modelCode].filter(Boolean).join(' ');
+    item.officialSource=true;
+    item.sourceUrls=OFFICIAL_SUPPLIERS.find(v=>v.id===source.vendorId)?.sourceUrls || [];
+  });
+  return { vendors:vendorsAdded, items:itemsAdded };
+}
+
 function buildArchitecturalCatalog() {
   const c = (brand, model, category, retail, cost, rate = null, waste = 12) => ({
     id: uid(), brand, model, category,
@@ -7442,6 +7583,8 @@ function migrateSchema() {
       { id: 'v_solargard', name: 'Solar Gard', contact: '', leadTimeDays: 7 },
     ];
   }
+  ensureOfficialSupplierCatalog(s.catalog, db.vendors);
+  db._officialSupplierCatalogV1 = true;
   if (!s.inventoryAlerts) {
     s.inventoryAlerts = { reorderBelowM: 5, criticalBelowM: 2 };
   }
@@ -7467,7 +7610,10 @@ function migrateSchema() {
     if (v.active == null) v.active = true;
     if (!v.country) v.country = '';
     if (!v.paymentTerms) v.paymentTerms = '';
+    if (!v.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v.contact || '').trim())) v.email = String(v.contact).trim();
+    if (!v.contact) v.contact = v.email || v.phone || '';
   });
+  ensureAutoDraftPurchaseRequests();
   // ---- OPERATING EXPENSES (recurring) ----
   if (!db.opex) {
     db.opex = [
@@ -8467,11 +8613,11 @@ function warehouseCatalogCostPerSqft(catalogId) {
 }
 function lowStockItems() {
   const summary = inventorySummary();
-  const reorderBelow = db.settings.inventoryAlerts?.reorderBelowM || 5;
-  const criticalBelow = db.settings.inventoryAlerts?.criticalBelowM || 2;
   return Object.entries(summary).map(([catId, data]) => {
     const cat = getCatalogItem(catId);
     if (!cat) return null;
+    const reorderBelow = Number(cat.reorderThresholdM ?? db.settings.inventoryAlerts?.reorderBelowM ?? 5);
+    const criticalBelow = Math.min(reorderBelow, Number(cat.criticalThresholdM ?? db.settings.inventoryAlerts?.criticalBelowM ?? 2));
     const status = data.lengthM < criticalBelow ? 'critical' : data.lengthM < reorderBelow ? 'reorder' : 'ok';
     return { catalogId: catId, catalog: cat, ...data, status };
   }).filter(Boolean).filter(x => x.status !== 'ok').sort((a,b) => a.lengthM - b.lengthM);
@@ -15031,6 +15177,7 @@ function orderDebt(o) {
   return Math.max(0, orderRevenue(o) - (Number(o.paid) || 0));
 }
 function save() {
+  if (db?.purchaseRequests && db?.vendors && db?.settings?.catalog) ensureAutoDraftPurchaseRequests();
   localStorage.setItem('rolanpro_crm', JSON.stringify(db));
   if (ROLANPRO_CLOUD && cloudReady) cloudScheduleSave();
 }
@@ -31327,6 +31474,15 @@ async function marketingEmailApi(path, options = {}) {
   if (!r.ok) throw new Error(payload?.errors?.[0]?.message || `Marketing email ${r.status}`);
   return payload?.data;
 }
+async function procurementEmailApi(path, options = {}) {
+  const r = await fetch(`/api/v1/integrations/procurement-email${path}`, {
+    credentials: 'same-origin', cache: 'no-store', ...options,
+    headers: {'Content-Type':'application/json', ...(options.headers || {})},
+  });
+  const payload = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(payload?.errors?.[0]?.message || `Procurement email ${r.status}`);
+  return payload?.data;
+}
 async function refreshEmailChannelStatus(sync = false) {
   if (!ROLANPRO_CLOUD) return;
   try {
@@ -32823,12 +32979,14 @@ const WAREHOUSE_CATEGORIES = [
   { id:'other', label:'Прочее' },
 ];
 const PURCHASE_STATUS = {
+  draft: ['Черновик', 'bg-slate-100 text-slate-700'],
   requested: ['Заявка', 'bg-amber-100 text-amber-800'],
   approved: ['Согласовано', 'bg-blue-100 text-blue-800'],
   ordered: ['Заказано', 'bg-purple-100 text-purple-800'],
   received: ['Получено', 'bg-emerald-100 text-emerald-800'],
   cancelled: ['Отменено', 'bg-gray-100 text-gray-600'],
 };
+const purchaseRequestSendsInFlight = new Set();
 function warehouseCategoryLabel(id) { return WAREHOUSE_CATEGORIES.find(x => x.id === id)?.label || 'Прочее'; }
 function warehouseOrders() { return db.orders.filter(o => !['completed','cancelled','lost'].includes(o.status)); }
 function warehouseOrderLabel(o) {
@@ -32836,7 +32994,7 @@ function warehouseOrderLabel(o) {
   return `${o.number || o.id} · ${c?.name || c?.company || 'Клиент'}`;
 }
 function warehouseNeedItems() {
-  const film = lowStockItems().map(x => ({ kind:'film', id:x.catalogId, name:catalogLabel(x.catalog), qty:x.lengthM, min:db.settings.inventoryAlerts?.reorderBelowM || 5, target:db.settings.inventoryAlerts?.targetStockM || 30, unit:'м', vendorId:x.catalog?.vendorId || null, critical:x.status === 'critical' }));
+  const film = lowStockItems().map(x => ({ kind:'film', id:x.catalogId, name:catalogLabel(x.catalog), qty:x.lengthM, min:Number(x.catalog?.reorderThresholdM ?? db.settings.inventoryAlerts?.reorderBelowM ?? 5), target:Number(x.catalog?.reorderTargetM ?? db.settings.inventoryAlerts?.targetStockM ?? 30), unit:'м', vendorId:x.catalog?.vendorId || null, critical:x.status === 'critical' }));
   const supplies = lowSupplies().map(x => ({ kind:'supply', id:x.id, name:x.name, qty:Number(x.qty||0), min:Number(x.minQty||0), target:Number(x.maxQty||Math.max((x.minQty||0)*3,1)), unit:supplyUnitLabel(x.unit), vendorId:x.vendorId || null, critical:x.status === 'critical' }));
   return [...film, ...supplies];
 }
@@ -32854,6 +33012,35 @@ function activeProjectFilmPurchaseRequest(orderId, catalogId) {
     && p.itemId === catalogId
     && p.orderId === orderId
     && !['received','cancelled'].includes(p.status));
+}
+function activeReorderPurchaseRequest(kind, itemId, vendorId) {
+  return (db.purchaseRequests || []).find(p => p.kind===kind && p.itemId===itemId
+    && (p.vendorId || null)===(vendorId || null) && !p.orderId
+    && !['received','cancelled'].includes(p.status));
+}
+function ensureAutoDraftPurchaseRequests() {
+  if (!db || !Array.isArray(db.purchaseRequests) || !Array.isArray(db.vendors)) return 0;
+  let created=0;
+  warehouseNeedItems().forEach(need => {
+    if (!need.vendorId || activeReorderPurchaseRequest(need.kind, need.id, need.vendorId)) return;
+    const cancelled=[...db.purchaseRequests].reverse().find(p=>p.kind===need.kind&&p.itemId===need.id&&p.vendorId===need.vendorId&&!p.orderId&&p.source==='auto_reorder'&&p.status==='cancelled');
+    if (cancelled && Number(cancelled.cancelledStockQty)===Number(need.qty)) return;
+    const vendor=db.vendors.find(candidate=>candidate.id===need.vendorId && candidate.active!==false);
+    if (!vendor) return;
+    const qty=Math.max(0, Number(need.target||0)-Number(need.qty||0));
+    if (qty<=0) return;
+    const now=new Date().toISOString();
+    db.purchaseRequests.push({
+      id:'pr_'+uid(), number:purchaseRequestNumber(), kind:need.kind, itemId:need.id,
+      itemNameSnapshot:need.name, qty:Math.round(qty*100)/100, unit:need.unit,
+      orderId:null, vendorId:vendor.id, responsibleId:null, neededBy:null,
+      note:`Автоматически: остаток ${Number(need.qty||0).toFixed(2)} ${need.unit}, порог ${Number(need.min||0).toFixed(2)} ${need.unit}.`,
+      requirements:[], status:'draft', source:'auto_reorder', requestedBy:null,
+      createdAt:now, updatedAt:now,
+    });
+    created++;
+  });
+  return created;
 }
 function projectFilmShortageSnapshot(orderId, catalogId) {
   const order = getOrder(orderId);
@@ -32906,7 +33093,7 @@ function renderInventory() {
   return `<div class="card mb-4">
     <div class="flex items-center justify-between gap-3 flex-wrap">
       <div><h2 class="font-semibold text-lg">📦 Склад и снабжение</h2><p class="text-sm text-gray-500">Реальный остаток, закупки под проекты и ответственный за каждую заявку.</p></div>
-      <div class="flex gap-2"><button class="btn-ghost text-sm" onclick="openWarehouseQrSearch()">▦ Найти по QR</button><button class="btn-primary text-sm" onclick="openPurchaseRequestModal()">+ Заявка на закупку</button></div>
+      <div class="flex gap-2"><button class="btn-ghost text-sm" onclick="openWarehouseQrSearch()">▦ Найти по QR</button>${['owner','manager'].includes(currentUser()?.role)?'<button class="btn-primary text-sm" onclick="openPurchaseRequestModal()">+ Заявка на закупку</button>':''}</div>
     </div>
     <div class="flex gap-2 mt-4 flex-wrap">${tabs.map(([id,label]) => `<button class="btn-${tab===id?'primary':'ghost'} text-sm" onclick="state.inventoryTab='${id}';${id==='film' ? "state.inventoryFilmCategory=null;state.inventoryFilmModel=null;state.inventoryFilmQuery='';" : ''}render();">${label}${id==='overview'&&needs.length?` · ${needs.length}⚠️`:''}</button>`).join('')}</div>
   </div>${body}`;
@@ -32922,16 +33109,21 @@ function renderWarehouseOverview() {
     <div class="card"><div class="text-sm text-gray-500">Нет в наличии</div><div class="kpi-value ${out?'text-red-600':''}">${out}</div></div>
     <div class="card"><div class="text-sm text-gray-500">Закупок в работе</div><div class="kpi-value text-blue-600">${active.length}</div></div>
   </div>
-  <div class="card mb-4"><div class="flex items-center justify-between mb-3"><div><h3 class="font-semibold">Что нужно закупить</h3><p class="text-sm text-gray-500">Минимальный остаток формирует подсказку, но заказ создаёт сотрудник.</p></div></div>
-  ${needs.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Материал</th><th class="text-left p-2">Есть</th><th class="text-left p-2">Нужно иметь</th><th class="text-left p-2">Поставщик</th><th></th></tr></thead><tbody>${needs.map(x=>{const v=db.vendors.find(v=>v.id===x.vendorId);return `<tr class="border-t ${x.critical?'bg-red-50':''}"><td class="p-2"><div class="font-medium">${academyEsc(x.name)}</div><div class="text-xs text-gray-500">${x.kind==='film'?'Плёнка':'Расходник'}</div></td><td class="p-2 ${x.critical?'text-red-700 font-bold':'text-amber-700'}">${x.qty.toFixed(1)} ${x.unit}</td><td class="p-2">${x.target} ${x.unit}</td><td class="p-2">${academyEsc(v?.name||'не назначен')}</td><td class="p-2"><button class="btn-primary text-xs" onclick="openPurchaseRequestModal('${x.kind}','${x.id}')">Создать заявку</button></td></tr>`}).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="icon">✅</div><div>Все материалы выше минимального остатка.</div></div>`}
+  <div class="card mb-4"><div class="flex items-center justify-between mb-3"><div><h3 class="font-semibold">Что нужно закупить</h3><p class="text-sm text-gray-500">При остатке ниже порога CRM автоматически создаёт один активный черновик у назначенного поставщика.</p></div></div>
+  ${needs.length ? `<div class="overflow-x-auto"><table class="w-full text-sm procurement-table"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Материал</th><th class="text-left p-2">Есть</th><th class="text-left p-2">Нужно иметь</th><th class="text-left p-2">Поставщик</th><th></th></tr></thead><tbody>${needs.map(x=>{const v=db.vendors.find(v=>v.id===x.vendorId);const draft=activeReorderPurchaseRequest(x.kind,x.id,x.vendorId);return `<tr class="border-t ${x.critical?'bg-red-50':''}"><td data-label="Материал" class="p-2"><div class="font-medium">${academyEsc(x.name)}</div><div class="text-xs text-gray-500">${x.kind==='film'?'Плёнка':'Расходник'}</div></td><td data-label="Есть" class="p-2 ${x.critical?'text-red-700 font-bold':'text-amber-700'}">${x.qty.toFixed(1)} ${x.unit}</td><td data-label="Нужно иметь" class="p-2">${x.target} ${x.unit}</td><td data-label="Поставщик" class="p-2">${academyEsc(v?.name||'не назначен')}</td><td class="p-2">${draft?`<span class="tag">${academyEsc(draft.number)} · черновик</span>`:['owner','manager'].includes(currentUser()?.role)?`<button class="btn-primary text-xs" onclick="openPurchaseRequestModal('${x.kind}','${x.id}')">Создать заявку</button>`:''}</td></tr>`}).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="icon">✅</div><div>Все материалы выше минимального остатка.</div></div>`}
   </div>
   <div class="card"><div class="flex items-center justify-between mb-3"><div><h3 class="font-semibold">Закупки в работе</h3><p class="text-sm text-gray-500">Видно проект, срок и кто отвечает.</p></div><button class="btn-ghost text-sm" onclick="state.inventoryTab='purchases';render();">Все закупки →</button></div>${renderPurchaseTable(active.slice(0,6), true)}</div>`;
 }
 function renderPurchaseTable(rows, compact=false) {
   if (!rows.length) return `<div class="empty-state"><div class="icon">🧾</div><div>Активных заявок пока нет.</div></div>`;
-  return `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Заявка</th><th class="text-left p-2">Материал</th><th class="text-left p-2">Проект</th><th class="text-left p-2">Ответственный</th><th class="text-left p-2">Статус</th>${compact?'':'<th></th>'}</tr></thead><tbody>${rows.map(p=>{const st=PURCHASE_STATUS[p.status]||PURCHASE_STATUS.requested;const o=getOrder(p.orderId);const u=getUser(p.responsibleId);return `<tr class="border-t"><td class="p-2"><div class="font-medium">${p.number}</div><div class="text-xs text-gray-500">${fmtDate(p.createdAt)}</div></td><td class="p-2"><div>${academyEsc(p.itemNameSnapshot||'Материал')}</div><div class="text-xs text-gray-500">${p.qty} ${academyEsc(p.unit||'')}</div></td><td class="p-2">${o?`<button class="link" onclick="openOrder('${o.id}')">${academyEsc(warehouseOrderLabel(o))}</button>`:'Общий запас'}</td><td class="p-2">${academyEsc(u?.name||'не назначен')}</td><td class="p-2"><span class="tag ${st[1]}">${st[0]}</span></td>${compact?'':`<td class="p-2">${purchaseActionButtons(p)}</td>`}</tr>`}).join('')}</tbody></table></div>`;
+  return `<div class="overflow-x-auto"><table class="w-full text-sm procurement-table"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Заявка</th><th class="text-left p-2">Материал</th><th class="text-left p-2">Проект</th><th class="text-left p-2">Ответственный</th><th class="text-left p-2">Статус</th>${compact?'':'<th></th>'}</tr></thead><tbody>${rows.map(p=>{const st=PURCHASE_STATUS[p.status]||PURCHASE_STATUS.requested;const o=getOrder(p.orderId);const u=getUser(p.responsibleId);return `<tr class="border-t"><td data-label="Заявка" class="p-2"><div class="font-medium">${p.number}</div><div class="text-xs text-gray-500">${fmtDate(p.createdAt)}</div></td><td data-label="Материал" class="p-2"><div>${academyEsc(p.itemNameSnapshot||'Материал')}</div><div class="text-xs text-gray-500">${p.qty} ${academyEsc(p.unit||'')}</div></td><td data-label="Проект" class="p-2">${o?`<button class="link" onclick="openOrder('${o.id}')">${academyEsc(warehouseOrderLabel(o))}</button>`:'Общий запас'}</td><td data-label="Ответственный" class="p-2">${academyEsc(u?.name||'не назначен')}</td><td data-label="Статус" class="p-2"><span class="tag ${st[1]}">${st[0]}</span></td>${compact?'':`<td class="p-2">${purchaseActionButtons(p)}</td>`}</tr>`}).join('')}</tbody></table></div>`;
 }
 function purchaseActionButtons(p) {
+  if (!['owner','manager'].includes(currentUser()?.role)) return '';
+  if (p.status==='draft') {
+    const sending=purchaseRequestSendsInFlight.has(p.id);
+    return `<div class="flex gap-2 flex-wrap justify-end"><button class="btn-ghost text-xs" onclick="openPurchaseRequestVendorModal('${p.id}')">${p.vendorId?'Поставщик':'Назначить поставщика'}</button>${p.vendorId?`<button class="btn-primary text-xs" ${sending?'disabled':''} onclick="sendPurchaseRequest('${p.id}')">${sending?'Отправляется…':'Отправить поставщику'}</button>`:''}<button class="btn-ghost text-xs" onclick="cancelPurchaseRequest('${p.id}')">Отменить</button></div>`;
+  }
   if (p.status==='requested') return `<button class="btn-ghost text-xs" onclick="setPurchaseRequestStatus('${p.id}','approved')">Согласовать</button>`;
   if (p.status==='approved') return `<button class="btn-primary text-xs" onclick="setPurchaseRequestStatus('${p.id}','ordered')">Заказано</button>`;
   if (p.status==='ordered') return `<button class="btn-primary text-xs" onclick="receivePurchaseRequest('${p.id}')">Принять</button>`;
@@ -32939,24 +33131,29 @@ function purchaseActionButtons(p) {
 }
 function renderPurchaseRequests() {
   const rows=[...(db.purchaseRequests||[])].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
-  return `<div class="card"><div class="flex items-center justify-between mb-3"><div><h3 class="font-semibold">Заявки и заказы на закупку</h3><p class="text-sm text-gray-500">Материал привязан к проекту, а выполнение — к ответственному сотруднику.</p></div><button class="btn-primary text-sm" onclick="openPurchaseRequestModal()">+ Новая заявка</button></div>${renderPurchaseTable(rows)}</div>`;
+  return `<div class="card"><div class="flex items-center justify-between mb-3 gap-3 flex-wrap"><div><h3 class="font-semibold">Заявки и заказы на закупку</h3><p class="text-sm text-gray-500">Черновики формируются автоматически; внешняя отправка — только по явной команде.</p></div>${['owner','manager'].includes(currentUser()?.role)?'<button class="btn-primary text-sm" onclick="openPurchaseRequestModal()">+ Новая заявка</button>':''}</div>${renderPurchaseTable(rows)}</div>`;
 }
-function openPurchaseRequestModal(kind='', itemId='', presetOrderId='', presetQty='', presetNote='', requirements=[]) {
+function openPurchaseRequestModal(kind='', itemId='', presetOrderId='', presetQty='', presetNote='', requirements=[], presetVendorId='') {
+  if (!['owner','manager'].includes(currentUser()?.role)) return alert('Закупки доступны владельцу и менеджеру.');
   const needs=warehouseNeedItems(); const match=needs.find(x=>x.kind===kind&&x.id===itemId);
   const filmOptions=(db.settings.catalog||[]).map(c=>`<option value="film:${c.id}" ${kind==='film'&&itemId===c.id?'selected':''}>Плёнка · ${academyEsc(c.brand)} ${academyEsc(c.model)}</option>`).join('');
   const supplyOptions=ensureSupplies().map(s=>`<option value="supply:${s.id}" ${kind==='supply'&&itemId===s.id?'selected':''}>Расходник · ${academyEsc(s.name)}</option>`).join('');
   const qtyValue = Number(presetQty) > 0 ? Number(presetQty).toFixed(2) : (match ? Math.max(match.target-match.qty,1) : 1);
   const cancelAction = presetOrderId ? `refreshManagerMeasureModal('${presetOrderId}')` : 'closeModal()';
+  const selectedItem=kind==='film'?getCatalogItem(itemId):ensureSupplies().find(x=>x.id===itemId);
+  const initialVendorId=presetVendorId||match?.vendorId||selectedItem?.vendorId||'';
   state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)${cancelAction}"><div class="modal-content workspace-modal p-6" style="max-width:42rem"><h3 class="font-semibold text-lg">Новая заявка на закупку</h3><p class="text-sm text-gray-500 mb-4">Укажите для какого проекта нужен материал и кто отвечает за закупку.</p><input id="pr-return-order" type="hidden" value="${academyEsc(presetOrderId)}"><input id="pr-requirements" type="hidden" value="${academyEsc(JSON.stringify(requirements || []))}"><div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-  <div class="md:col-span-2"><label>Материал</label><select id="pr-item">${filmOptions}${supplyOptions}</select></div>
+  <div class="md:col-span-2"><label>Материал</label><select id="pr-item" onchange="syncPurchaseRequestVendor(this.value)">${filmOptions}${supplyOptions}</select></div>
   <div><label>Количество</label><input id="pr-qty" type="number" min="0.01" step="0.01" value="${qtyValue}"></div>
   <div><label>Нужно к дате</label><input id="pr-date" type="date"></div>
   <div><label>Проект / заказ</label><select id="pr-order"><option value="">Общий запас склада</option>${warehouseOrders().map(o=>`<option value="${o.id}" ${presetOrderId===o.id?'selected':''}>${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div>
   <div><label>Ответственный</label><select id="pr-owner"><option value="">Выберите</option>${db.users.filter(u=>u.active!==false).map(u=>`<option value="${u.id}">${academyEsc(u.name)} · ${academyEsc(u.role||'сотрудник')}</option>`).join('')}</select></div>
-  <div><label>Поставщик</label><select id="pr-vendor"><option value="">Не выбран</option>${db.vendors.filter(v=>v.active!==false).map(v=>`<option value="${v.id}" ${match?.vendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
+  <div><label>Поставщик</label><select id="pr-vendor"><option value="">Не выбран</option>${db.vendors.filter(v=>v.active!==false).map(v=>`<option value="${v.id}" ${initialVendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
   <div class="md:col-span-2"><label>Комментарий</label><textarea id="pr-note" rows="3" placeholder="Срочность, размер, цвет...">${academyEsc(presetNote)}</textarea></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="${cancelAction}">Отмена</button><button class="btn-primary" onclick="savePurchaseRequest()">Создать заявку</button></div></div></div>`;render();
 }
+function syncPurchaseRequestVendor(value){const [kind,itemId]=String(value||'').split(':');const item=kind==='film'?getCatalogItem(itemId):ensureSupplies().find(x=>x.id===itemId);const select=document.getElementById('pr-vendor');if(select&&item?.vendorId&&[...select.options].some(option=>option.value===item.vendorId))select.value=item.vendorId;}
 function savePurchaseRequest() {
+  if (!['owner','manager'].includes(currentUser()?.role)) return alert('Закупки доступны владельцу и менеджеру.');
   const [kind,itemId]=(document.getElementById('pr-item')?.value||'').split(':');
   const item=kind==='film'?getCatalogItem(itemId):ensureSupplies().find(x=>x.id===itemId);
   const qty=parseFloat(document.getElementById('pr-qty')?.value||0); const responsibleId=document.getElementById('pr-owner')?.value||null;
@@ -32964,19 +33161,49 @@ function savePurchaseRequest() {
   const returnOrderId=document.getElementById('pr-return-order')?.value||'';
   if(!item||qty<=0) return alert('Выберите материал и количество.');
   if(!responsibleId) return alert('Назначьте ответственного за закупку.');
-  const duplicate=kind==='film'&&orderId?activeProjectFilmPurchaseRequest(orderId,itemId):null;
+  const vendorId=document.getElementById('pr-vendor')?.value||null;
+  if(!vendorId) return alert('Выберите поставщика. Его можно изменить в черновике до отправки.');
+  const duplicate=kind==='film'&&orderId?activeProjectFilmPurchaseRequest(orderId,itemId):(!orderId?activeReorderPurchaseRequest(kind,itemId,vendorId):null);
   if(duplicate) return alert(`Для этой плёнки уже создана заявка ${duplicate.number}.`);
   let requirements=[];try{requirements=JSON.parse(document.getElementById('pr-requirements')?.value||'[]')}catch(e){}
-  const request={id:'pr_'+uid(),number:purchaseRequestNumber(),kind,itemId,itemNameSnapshot:kind==='film'?`${item.brand} ${item.model}`:item.name,qty,unit:kind==='film'?'м':supplyUnitLabel(item.unit),orderId,vendorId:document.getElementById('pr-vendor')?.value||null,responsibleId,neededBy:document.getElementById('pr-date')?.value||null,note:document.getElementById('pr-note')?.value||'',requirements,status:'requested',requestedBy:state.currentUserId,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  const request={id:'pr_'+uid(),number:purchaseRequestNumber(),kind,itemId,itemNameSnapshot:kind==='film'?catalogLabel(item):item.name,qty,unit:kind==='film'?'м':supplyUnitLabel(item.unit),orderId,vendorId,responsibleId,neededBy:document.getElementById('pr-date')?.value||null,note:document.getElementById('pr-note')?.value||'',requirements,status:'draft',source:'manual',requestedBy:state.currentUserId,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   db.purchaseRequests.push(request);
   const order=orderId?getOrder(orderId):null;
-  if(order){order.purchaseRequestIds=Array.from(new Set([...(order.purchaseRequestIds||[]),request.id]));order.timeline=order.timeline||[];order.timeline.push({at:new Date().toISOString(),key:'purchase_requested',by:state.currentUserId,note:`Закупка ${request.number}: ${request.itemNameSnapshot}, ${request.qty} ${request.unit}`});}
+  if(order){order.purchaseRequestIds=Array.from(new Set([...(order.purchaseRequestIds||[]),request.id]));order.timeline=order.timeline||[];order.timeline.push({at:new Date().toISOString(),key:'purchase_requested',by:state.currentUserId,note:`Черновик закупки ${request.number}: ${request.itemNameSnapshot}, ${request.qty} ${request.unit}`});}
   save();
   if(returnOrderId){alert(`Заявка ${request.number} создана и назначена ответственному.`);return refreshManagerMeasureModal(returnOrderId);}
   closeModal();state.inventoryTab='purchases';render();
 }
-function setPurchaseRequestStatus(id,status) { const p=db.purchaseRequests.find(x=>x.id===id);if(!p)return;p.status=status;p.updatedAt=new Date().toISOString();save();render(); }
+async function sendPurchaseRequest(id) {
+  if (!['owner','manager'].includes(currentUser()?.role)) return alert('Закупки доступны владельцу и менеджеру.');
+  if (purchaseRequestSendsInFlight.has(id)) return;
+  const p=db.purchaseRequests.find(x=>x.id===id);if(!p||p.status!=='draft')return;
+  const vendor=db.vendors.find(x=>x.id===p.vendorId);if(!vendor)return alert('Назначьте поставщика.');
+  if (!vendor.email) {
+    if (vendor.orderUrl) window.open(vendor.orderUrl,'_blank','noopener');
+    return alert('У поставщика нет подтверждённого email. Открыта официальная контактная страница; черновик не отмечен отправленным.');
+  }
+  if (!confirm(`Отправить ${p.number} на ${vendor.email} через защищённый канал закупок?`)) return;
+  purchaseRequestSendsInFlight.add(id);render();
+  let delivered=false;
+  try {
+    if (ROLANPRO_CLOUD && !await cloudPersistConfirmed()) throw new Error('CRM не подтвердила сохранение черновика.');
+    const sent=await procurementEmailApi('/messages',{method:'POST',body:JSON.stringify({purchase_request_id:p.id})});
+    delivered=true;
+    p.status='requested';p.responsibleId=p.responsibleId||state.currentUserId;p.sentAt=new Date().toISOString();p.sentBy=state.currentUserId;p.providerMessageId=sent?.message_id||null;p.updatedAt=p.sentAt;
+    vendor.requestHistory=vendor.requestHistory||[];vendor.requestHistory.unshift({purchaseRequestId:p.id,number:p.number,at:p.sentAt,by:state.currentUserId,to:vendor.email,status:'sent'});
+    if (Number.isInteger(sent?.workspace_revision)) cloudRevision=sent.workspace_revision;
+    localStorage.setItem('rolanpro_crm',JSON.stringify(db));
+    render();alert(`Заявка ${p.number} отправлена ${vendor.name}.`);
+  } catch(error) { alert(delivered?`Письмо принято поставщиком, но CRM не сохранила статус. Повторная отправка защищена idempotency key. Обновите CRM и повторите сохранение статуса. Ошибка: ${error.message||String(error)}`:`Не удалось отправить: ${error.message||String(error)}`); }
+  finally { purchaseRequestSendsInFlight.delete(id);render(); }
+}
+function openPurchaseRequestVendorModal(id){if(!['owner','manager'].includes(currentUser()?.role))return alert('Закупки доступны владельцу и менеджеру.');const p=db.purchaseRequests.find(x=>x.id===id);if(!p||p.status!=='draft')return;state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content p-6" style="max-width:30rem"><h3 class="font-semibold text-lg">Поставщик для ${academyEsc(p.number)}</h3><p class="text-sm text-gray-500 mb-4">${academyEsc(p.itemNameSnapshot||'Материал')}</p><label>Поставщик</label><select id="pr-edit-vendor"><option value="">Выберите</option>${db.vendors.filter(v=>v.active!==false).map(v=>`<option value="${v.id}" ${p.vendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="savePurchaseRequestVendor('${p.id}')">Сохранить</button></div></div></div>`;render();}
+function savePurchaseRequestVendor(id){if(!['owner','manager'].includes(currentUser()?.role))return;const p=db.purchaseRequests.find(x=>x.id===id);const vendorId=document.getElementById('pr-edit-vendor')?.value||'';if(!p||p.status!=='draft'||!vendorId)return alert('Выберите поставщика.');p.vendorId=vendorId;if(p.source==='auto_reorder'){const item=p.kind==='film'?getCatalogItem(p.itemId):ensureSupplies().find(x=>x.id===p.itemId);if(item)item.vendorId=vendorId;}p.updatedAt=new Date().toISOString();save();closeModal();render();}
+function cancelPurchaseRequest(id){if(!['owner','manager'].includes(currentUser()?.role))return;const p=db.purchaseRequests.find(x=>x.id===id);if(!p||p.status!=='draft'||!confirm(`Отменить черновик ${p.number}?`))return;if(p.source==='auto_reorder'){const need=warehouseNeedItems().find(x=>x.kind===p.kind&&x.id===p.itemId&&x.vendorId===p.vendorId);p.cancelledStockQty=need?Number(need.qty):null;}p.status='cancelled';p.cancelledAt=new Date().toISOString();p.cancelledBy=state.currentUserId;p.updatedAt=p.cancelledAt;save();render();}
+function setPurchaseRequestStatus(id,status) { if(!['owner','manager'].includes(currentUser()?.role))return alert('Закупки доступны владельцу и менеджеру.');const p=db.purchaseRequests.find(x=>x.id===id);if(!p)return;p.status=status;p.updatedAt=new Date().toISOString();save();render(); }
 function receivePurchaseRequest(id) {
+  if (!['owner','manager'].includes(currentUser()?.role)) return alert('Закупки доступны владельцу и менеджеру.');
   const p=db.purchaseRequests.find(x=>x.id===id);if(!p)return;
   if(p.kind==='film') return openAddRollModal(p.itemId,p.id);
   const s=ensureSupplies().find(x=>x.id===p.itemId);if(!s)return alert('Расходник не найден.');
@@ -32984,10 +33211,24 @@ function receivePurchaseRequest(id) {
   s.qty=Number(s.qty||0)+actual;recordInventoryMovement({kind:'supply',itemId:s.id,itemName:s.name,direction:'receipt',qty:actual,unit:supplyUnitLabel(s.unit),orderId:p.orderId,vendorId:p.vendorId,responsibleId:p.responsibleId,purchaseRequestId:p.id,reason:`Приход по ${p.number}`});p.status='received';p.updatedAt=new Date().toISOString();save();render();
 }
 function renderWarehouseVendors() {
-  return `<div class="card"><div class="flex items-center justify-between mb-3"><div><h3 class="font-semibold">Поставщики</h3><p class="text-sm text-gray-500">Плёнка, расходники, сроки поставки и контакты в одном месте.</p></div><button class="btn-primary text-sm" onclick="openVendorModal()">+ Поставщик</button></div><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Поставщик</th><th class="text-left p-2">Категории</th><th class="text-left p-2">Контакт</th><th class="text-left p-2">Срок</th><th></th></tr></thead><tbody>${db.vendors.map(v=>`<tr class="border-t"><td class="p-2 font-medium">${academyEsc(v.name)}</td><td class="p-2">${(v.categories||[]).map(x=>`<span class="tag mr-1">${academyEsc(x)}</span>`).join('')||'—'}</td><td class="p-2">${academyEsc(v.contact||'—')}</td><td class="p-2">${v.leadTimeDays||7} дн.</td><td class="p-2"><button class="btn-ghost text-xs" onclick="openVendorModal('${v.id}')">Изменить</button></td></tr>`).join('')}</tbody></table></div></div>`;
+  const canPurchase=['owner','manager'].includes(currentUser()?.role);
+  return `<div class="card"><div class="flex items-center justify-between mb-3 gap-3 flex-wrap"><div><h3 class="font-semibold">Поставщики</h3><p class="text-sm text-gray-500">Официальные контакты, связанный каталог и история заявок.</p></div>${canPurchase?'<button class="btn-primary text-sm" onclick="openVendorModal()">+ Поставщик</button>':''}</div>
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">${db.vendors.map(v=>{
+    const items=(db.settings.catalog||[]).filter(item=>item.vendorId===v.id);
+    const requests=(db.purchaseRequests||[]).filter(p=>p.vendorId===v.id).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+    const draft=requests.find(p=>p.status==='draft');
+    return `<article class="border rounded-xl p-4 min-w-0">
+      <div class="flex items-start justify-between gap-3"><div class="min-w-0"><h4 class="font-black text-lg">${academyEsc(v.name)}</h4><div class="text-xs text-gray-500">${academyEsc(v.legalName||'')}</div></div><span class="tag">${items.length} поз.</span></div>
+      <div class="flex flex-wrap gap-1 mt-3">${(v.categories||[]).map(x=>`<span class="tag">${academyEsc(x)}</span>`).join('')}</div>
+      <div class="text-sm mt-3 space-y-1"><div>${academyEsc(v.email||'email не опубликован')}</div><div>${academyEsc(v.phone||'телефон не опубликован')}</div><div>${academyEsc(v.address||'')}</div></div>
+      <div class="vendor-procurement-actions flex gap-2 flex-wrap mt-4">${canPurchase?`<button class="btn-ghost text-xs" onclick="openPurchaseRequestModal('','','','','',[],'${v.id}')">Создать заявку</button>${draft?`<button class="btn-primary text-xs" onclick="sendPurchaseRequest('${draft.id}')">Отправить ${draft.number}</button>`:''}<button class="btn-ghost text-xs" onclick="openVendorModal('${v.id}')">Изменить</button>`:''}${v.website?`<a class="btn-ghost text-xs" href="${academyEsc(v.website)}" target="_blank" rel="noopener">Официальный сайт</a>`:''}</div>
+      <details class="mt-3"><summary class="text-sm font-semibold cursor-pointer">История заявок · ${requests.length}</summary><div class="mt-2 space-y-2">${requests.slice(0,8).map(p=>{const st=PURCHASE_STATUS[p.status]||PURCHASE_STATUS.draft;return `<div class="p-2 bg-slate-50 rounded-lg text-xs"><div class="flex justify-between gap-2"><b>${academyEsc(p.number)}</b><span class="tag ${st[1]}">${st[0]}</span></div><div>${academyEsc(p.itemNameSnapshot)} · ${p.qty} ${academyEsc(p.unit||'')}</div><div class="text-gray-500">${fmtDateTime(p.sentAt||p.createdAt)}</div></div>`;}).join('')||'<div class="text-xs text-gray-500">Заявок пока нет.</div>'}</div></details>
+      ${v.sourceUrls?.length?`<details class="mt-2"><summary class="text-xs text-blue-700 cursor-pointer">Официальные источники</summary><div class="mt-1 space-y-1">${v.sourceUrls.map((url,index)=>`<a class="block text-xs text-blue-700 underline break-all" href="${academyEsc(url)}" target="_blank" rel="noopener">Источник ${index+1}</a>`).join('')}</div></details>`:''}
+    </article>`;
+  }).join('')}</div></div>`;
 }
-function openVendorModal(id='') { const v=db.vendors.find(x=>x.id===id)||{name:'',contact:'',leadTimeDays:7,country:'',paymentTerms:'',categories:[],active:true};state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:34rem"><h3 class="font-semibold text-lg mb-4">${id?'Поставщик':'Новый поставщик'}</h3><input id="v-id" type="hidden" value="${id}"><div class="grid grid-cols-2 gap-3"><div class="col-span-2"><label>Название</label><input id="v-name" value="${academyEsc(v.name)}"></div><div><label>Контакт</label><input id="v-contact" value="${academyEsc(v.contact||'')}"></div><div><label>Страна</label><input id="v-country" value="${academyEsc(v.country||'')}"></div><div><label>Срок поставки, дней</label><input id="v-lead" type="number" value="${v.leadTimeDays||7}"></div><div><label>Условия оплаты</label><input id="v-terms" value="${academyEsc(v.paymentTerms||'')}"></div><div class="col-span-2"><label>Что поставляет</label><input id="v-categories" value="${academyEsc((v.categories||[]).join(', '))}" placeholder="Плёнка, расходники, доставка"></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveVendor()">Сохранить</button></div></div></div>`;render(); }
-function saveVendor(){const id=document.getElementById('v-id').value;let v=db.vendors.find(x=>x.id===id);if(!v){v={id:'v_'+uid(),active:true};db.vendors.push(v)}v.name=document.getElementById('v-name').value.trim();if(!v.name)return alert('Введите название.');v.contact=document.getElementById('v-contact').value.trim();v.country=document.getElementById('v-country').value.trim();v.leadTimeDays=parseInt(document.getElementById('v-lead').value)||7;v.paymentTerms=document.getElementById('v-terms').value.trim();v.categories=document.getElementById('v-categories').value.split(',').map(x=>x.trim()).filter(Boolean);save();closeModal();render();}
+function openVendorModal(id='') { if(!['owner','manager'].includes(currentUser()?.role))return;const v=db.vendors.find(x=>x.id===id)||{name:'',email:'',phone:'',address:'',website:'',orderUrl:'',leadTimeDays:null,country:'',paymentTerms:'',categories:[],active:true};state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:42rem"><h3 class="font-semibold text-lg mb-4">${id?'Поставщик':'Новый поставщик'}</h3><input id="v-id" type="hidden" value="${id}"><div class="grid grid-cols-1 md:grid-cols-2 gap-3"><div class="md:col-span-2"><label>Название</label><input id="v-name" value="${academyEsc(v.name)}"></div><div><label>Email для заказов</label><input id="v-email" type="email" value="${academyEsc(v.email||'')}"></div><div><label>Телефон</label><input id="v-phone" value="${academyEsc(v.phone||'')}"></div><div class="md:col-span-2"><label>Адрес</label><input id="v-address" value="${academyEsc(v.address||'')}"></div><div><label>Официальный сайт</label><input id="v-website" type="url" value="${academyEsc(v.website||'')}"></div><div><label>Страница заказа / контакта</label><input id="v-order-url" type="url" value="${academyEsc(v.orderUrl||'')}"></div><div><label>Страна</label><input id="v-country" value="${academyEsc(v.country||'')}"></div><div><label>Срок поставки, дней</label><input id="v-lead" type="number" value="${v.leadTimeDays??''}" placeholder="не подтверждён"></div><div class="md:col-span-2"><label>Условия оплаты</label><input id="v-terms" value="${academyEsc(v.paymentTerms||'')}" placeholder="оставьте пустым, если не подтверждены"></div><div class="md:col-span-2"><label>Что поставляет</label><input id="v-categories" value="${academyEsc((v.categories||[]).join(', '))}" placeholder="Плёнка, расходники, доставка"></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveVendor()">Сохранить</button></div></div></div>`;render(); }
+function saveVendor(){const id=document.getElementById('v-id').value;let v=db.vendors.find(x=>x.id===id);if(!v){v={id:'v_'+uid(),active:true,requestHistory:[]};db.vendors.push(v)}v.name=document.getElementById('v-name').value.trim();if(!v.name)return alert('Введите название.');v.email=document.getElementById('v-email').value.trim();v.phone=document.getElementById('v-phone').value.trim();v.contact=v.email||v.phone;v.address=document.getElementById('v-address').value.trim();v.website=document.getElementById('v-website').value.trim();v.orderUrl=document.getElementById('v-order-url').value.trim();v.country=document.getElementById('v-country').value.trim();v.leadTimeDays=parseInt(document.getElementById('v-lead').value)||null;v.paymentTerms=document.getElementById('v-terms').value.trim();v.categories=document.getElementById('v-categories').value.split(',').map(x=>x.trim()).filter(Boolean);save();closeModal();render();}
 function renderWarehouseMovements(){const rows=(db.inventoryMovements||[]).slice(0,200);return `<div class="card"><div><h3 class="font-semibold">Журнал прихода и списания</h3><p class="text-sm text-gray-500 mb-3">Кто, когда, какой материал и по какому проекту.</p></div>${rows.length?`<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Дата</th><th class="text-left p-2">Операция</th><th class="text-left p-2">Материал</th><th class="text-left p-2">Количество</th><th class="text-left p-2">Проект</th><th class="text-left p-2">Кто</th></tr></thead><tbody>${rows.map(m=>{const o=getOrder(m.orderId);return `<tr class="border-t"><td class="p-2">${fmtDate(m.at)}</td><td class="p-2"><span class="tag ${m.direction==='receipt'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}">${m.direction==='receipt'?'Приход':'Списание'}</span></td><td class="p-2">${academyEsc(m.itemName||'Материал')}</td><td class="p-2">${m.direction==='receipt'?'+':'−'}${m.qty} ${academyEsc(m.unit||'')}</td><td class="p-2">${o?academyEsc(warehouseOrderLabel(o)):'—'}</td><td class="p-2">${academyEsc(getUser(m.createdBy)?.name||getUser(m.responsibleId)?.name||'—')}</td></tr>`}).join('')}</tbody></table></div>`:`<div class="empty-state"><div class="icon">↕️</div><div>Движений пока нет.</div></div>`}</div>`;}
 function openWarehouseQr(kind,id){const item=kind==='film'?db.inventory.find(x=>x.id===id):ensureSupplies().find(x=>x.id===id);if(!item)return;const code=item.qrCode||item.sku||`RP-${id}`;const name=kind==='film'?(catalogLabel(getCatalogItem(item.catalogId))+' · Lot '+(item.lotNumber||'—')):item.name;const src=`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(code)}`;state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content p-6 text-center" style="max-width:24rem"><h3 class="font-semibold">QR-этикетка</h3><p class="text-sm text-gray-500 mb-3">${academyEsc(name)}</p><img src="${src}" alt="QR ${academyEsc(code)}" style="width:220px;height:220px;margin:auto"><div class="font-mono mt-2">${academyEsc(code)}</div><div class="flex gap-2 mt-4"><button class="btn-ghost flex-1" onclick="closeModal()">Закрыть</button><button class="btn-primary flex-1" onclick="window.print()">Печать</button></div></div></div>`;render();}
 function openWarehouseQrSearch(){const code=prompt('Введите или отсканируйте QR-код:');if(!code)return;const roll=db.inventory.find(x=>(x.qrCode||'').toLowerCase()===code.trim().toLowerCase());if(roll){const film=getCatalogItem(roll.catalogId);state.inventoryTab='film';state.inventoryFilmCategory=film?.category||null;state.inventoryFilmModel=roll.catalogId||null;render();return alert('Рулон найден: '+catalogLabel(film)+' · остаток '+Number(roll.remainingLengthM||0).toFixed(2)+' м');}const s=ensureSupplies().find(x=>(x.sku||'').toLowerCase()===code.trim().toLowerCase());if(s){state.inventoryTab='supplies';render();return alert('Найдено: '+s.name+' · остаток '+s.qty+' '+supplyUnitLabel(s.unit));}alert('Материал с таким QR-кодом не найден.');}
@@ -34032,11 +34273,11 @@ function cloudScheduleSave() {
   cloudSaveTimer = setTimeout(cloudPersist, 700);
 }
 
-async function cloudPersist() {
-  if (!cloudReady) return;
+async function cloudPersist(options = {}) {
+  if (!cloudReady) return false;
   if (cloudSaveInFlight) {
     cloudSaveQueued = true;
-    return;
+    return false;
   }
   cloudSaveInFlight = true;
   cloudStatus('Сохраняем…');
@@ -34050,21 +34291,24 @@ async function cloudPersist() {
     const result = await response.json();
     if (response.status === 401) {
       location.assign('/login');
-      return;
+      return false;
     }
     if (response.status === 409) {
       cloudReady = false;
       cloudStatus('Данные обновлены другим сотрудником', 'red');
       alert('Другой сотрудник уже изменил данные. CRM загрузит последнюю версию, чтобы не потерять изменения.');
       location.reload();
-      return;
+      return false;
     }
     if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'save failed');
     cloudRevision = result.data.revision;
     cloudStatus('Сохранено', 'green');
+    return true;
   } catch (error) {
     console.error('[Cloud CRM] save failed', error);
     cloudStatus('Нет связи — изменения сохранены локально', 'red');
+    if (options.throwOnFailure) throw error;
+    return false;
   } finally {
     cloudSaveInFlight = false;
     if (cloudSaveQueued) {
@@ -34072,6 +34316,14 @@ async function cloudPersist() {
       cloudScheduleSave();
     }
   }
+}
+
+async function cloudPersistConfirmed() {
+  clearTimeout(cloudSaveTimer);
+  for (let attempt=0;attempt<50&&cloudSaveInFlight;attempt++) await new Promise(resolve=>setTimeout(resolve,100));
+  if (cloudSaveInFlight) return false;
+  try { return await cloudPersist({throwOnFailure:true}); }
+  catch (error) { return false; }
 }
 
 async function cloudBoot() {
@@ -34117,6 +34369,7 @@ async function cloudBoot() {
       cloudAllowedLegacyIds = cloudAllowedLegacyIds.filter(id => db._allowedLegacyUserIds.includes(id));
     }
     const persistClientNotificationMigration = !db._clientStageNotificationsV1;
+    const persistOfficialSupplierMigration = !db._officialSupplierCatalogV1;
     migrateSchema();
     normalizeClientAccountData();
     const firstAllowed = cloudAllowedLegacyIds.map(getUser).find(Boolean);
@@ -34130,7 +34383,7 @@ async function cloudBoot() {
     cloudReady = true;
     startCanonicalLeadsPolling();
     localStorage.setItem('rolanpro_crm', JSON.stringify(db));
-    if (persistClientNotificationMigration || roleWasSynchronized) cloudScheduleSave();
+    if (persistClientNotificationMigration || persistOfficialSupplierMigration || roleWasSynchronized) cloudScheduleSave();
     parseHash();
     render();
     cloudStatus('Сохранено', 'green');
