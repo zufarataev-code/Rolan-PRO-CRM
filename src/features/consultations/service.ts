@@ -719,7 +719,7 @@ export async function addMeasurementsBatch(
     return null;
   }
 
-  const surveyId = surveyId;
+  const surveyId: string = consultation.survey.survey_id;
 
   const complexityIds = Array.from(
     new Set(
