@@ -227,7 +227,7 @@ function buildInstallerJobWhereForSession(session: ProjectSession, installerJobI
     return {
       ...(installerJobId ? { installer_job_id: installerJobId } : {}),
       project: {
-        manager_id: session.user.user_id,
+        manager_id: manager?.user_id ?? session.user.user_id,
       },
     };
   }
@@ -554,6 +554,7 @@ export async function createManualProject(
   session: ProjectSession,
   input: {
     client_id?: string | null;
+    manager_id?: string | null;
     client_name: string;
     phone?: string | null;
     email?: string | null;
@@ -586,7 +587,7 @@ export async function createManualProject(
     return "invalid_payload" as const;
   }
 
-  const [projectStatusId, positionStatusId, serviceType, film, city, installer, explicitClient] = await Promise.all([
+  const [projectStatusId, positionStatusId, serviceType, film, city, installer, explicitClient, manager] = await Promise.all([
     getProjectStatusId("NEW"),
     getPositionStatusId("READY"),
     prisma.serviceType.findFirst({
@@ -660,6 +661,26 @@ export async function createManualProject(
           },
         })
       : Promise.resolve(null),
+    input.manager_id
+      ? prisma.user.findFirst({
+          where: {
+            user_id: input.manager_id,
+            is_active: true,
+            user_accesses: {
+              some: {
+                is_active: true,
+                role: {
+                  is_active: true,
+                  code: { in: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER] },
+                },
+              },
+            },
+          },
+          select: {
+            user_id: true,
+          },
+        })
+      : Promise.resolve(null),
   ]);
 
   if (!projectStatusId || !positionStatusId) {
@@ -684,6 +705,14 @@ export async function createManualProject(
 
   if (input.client_id && !explicitClient) {
     return "invalid_client" as const;
+  }
+
+  if (input.manager_id && !manager) {
+    return "invalid_manager" as const;
+  }
+
+  if (session.roles.includes(ROLE_CODES.AI_SERVICE) && !manager) {
+    return "missing_manager" as const;
   }
 
   const clientUnitPrice =
