@@ -280,7 +280,7 @@ export async function resolveOperationsAgentActor(): Promise<AgentActor | null> 
           is_active: true,
           role: {
             is_active: true,
-            code: { in: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER] },
+            code: ROLE_CODES.OWNER,
           },
         },
       },
