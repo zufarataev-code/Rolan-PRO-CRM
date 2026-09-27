@@ -788,7 +788,7 @@ export async function addMeasurementsBatch(
           entity_type: "measurement",
           entity_id: measurement.measurement_id,
           action_key: "measurement.created",
-          message: \`Добавлен замер для комнаты \${measurement.room_name}.\`,
+          message: `Добавлен замер для комнаты ${measurement.room_name}.`,
           metadata: {
             consultation_id: consultationId,
             survey_id: consultation.survey.survey_id,
