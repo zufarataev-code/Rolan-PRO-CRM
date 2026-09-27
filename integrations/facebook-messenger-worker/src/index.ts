@@ -541,6 +541,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   const previousAssistantText =
     [...state.history].reverse().find((message) => message.role === "assistant")?.content || "";
   const explicitBookingIntent = hasBookingIntent(event.text, previousAssistantText);
+  const bookingFlowActive = state.stage === "booking_intent" || explicitBookingIntent;
 
   state.history.push({ role: "user", content: event.text });
   if (state.history.length > HISTORY_LIMIT) state.history = state.history.slice(-HISTORY_LIMIT);
@@ -586,7 +587,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   }
   state.stage = output.escalate
     ? "escalated"
-    : explicitBookingIntent
+    : bookingFlowActive
       ? "booking_intent"
       : attemptedBookingClaim
         ? "consulting"
@@ -596,7 +597,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   try {
     await syncLeadToCrm(env, event, state, "conversation");
 
-    if (!alreadyBooked && !state.escalated && explicitBookingIntent && leadReadyForBooking(state.lead)) {
+    if (!alreadyBooked && !state.escalated && bookingFlowActive && leadReadyForBooking(state.lead)) {
       await offerSlots(env, event, key, state);
       return;
     }
@@ -612,7 +613,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   if (alreadyBooked && !state.escalated) state.stage = "booked";
   await persistState(env, key, state);
   const missingFieldPrompt = qualificationPrompt(state.lead, state.lead.language);
-  const reply = explicitBookingIntent && !alreadyBooked && missingFieldPrompt
+  const reply = bookingFlowActive && !alreadyBooked && missingFieldPrompt
     ? await localizeOperationalMessage(env, missingFieldPrompt, state.lead.language)
     : output.reply || await localizeOperationalMessage(
         env,
