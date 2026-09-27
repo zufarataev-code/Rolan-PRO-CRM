@@ -271,11 +271,9 @@ export async function runIdempotentOperation(
     } satisfies OperationsAgentResult;
   }
 
+  let result: OperationsAgentResult;
   try {
-    const result = await execute();
-    const completed = { ...result, audit_id: reservation.auditId };
-    await finishReceipt(reservation.auditId, input, requestFingerprint, completed);
-    return completed;
+    result = await execute();
   } catch (cause) {
     console.error("operations_agent_action_failed", {
       action: input.action,
@@ -294,6 +292,22 @@ export async function runIdempotentOperation(
     await finishReceipt(reservation.auditId, input, requestFingerprint, failed).catch(() => undefined);
     return failed;
   }
+
+  const completed = { ...result, audit_id: reservation.auditId };
+  try {
+    await finishReceipt(reservation.auditId, input, requestFingerprint, completed);
+  } catch (cause) {
+    console.error("operations_agent_receipt_finalize_failed_after_success", {
+      action: input.action,
+      requestId: input.requestId,
+      auditId: reservation.auditId,
+      error: cause instanceof Error ? cause.message : String(cause),
+    });
+    // The business mutation already succeeded. Keep the reserved receipt in place so
+    // the same idempotency key cannot re-run the write, and do not misreport the
+    // committed business action as a failure.
+  }
+  return completed;
 }
 
 export async function resolveOperationsAgentActor(): Promise<AgentActor | null> {
@@ -607,8 +621,16 @@ async function executeRead(
     };
   }
 
-  const start = asDate(args.start_at) ?? new Date();
-  const end = asDate(args.end_at) ?? new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const hasStart = Object.prototype.hasOwnProperty.call(args, "start_at");
+  const hasEnd = Object.prototype.hasOwnProperty.call(args, "end_at");
+  const parsedStart = hasStart ? asDate(args.start_at) : null;
+  const parsedEnd = hasEnd ? asDate(args.end_at) : null;
+
+  if (hasStart && !parsedStart) return invalidResult(action, "start_at is invalid.");
+  if (hasEnd && !parsedEnd) return invalidResult(action, "end_at is invalid.");
+
+  const start = parsedStart ?? new Date();
+  const end = parsedEnd ?? new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
   if (end <= start) return invalidResult(action, "end_at must be after start_at.");
 
   const consultantId = asText(args.assigned_consultant_id, 80);
@@ -1052,16 +1074,20 @@ async function executeWrite(
       address = address ?? resolution.project.address;
     }
 
-    if (!managerId) {
-      const managerResolution = await resolveBusinessManager(args);
-      if ("clarification" in managerResolution) {
-        return clarificationResult(action, "manager", managerResolution.clarification ?? []);
-      }
-      if (!managerResolution.manager) {
-        return invalidResult(action, managerResolution.error ?? "Consultation manager is required.", "missing_manager");
-      }
-      managerId = managerResolution.manager.user_id;
+    const managerResolution = await resolveBusinessManager(
+      managerId ? { assigned_manager_id: managerId } : args,
+    );
+    if ("clarification" in managerResolution) {
+      return clarificationResult(action, "manager", managerResolution.clarification ?? []);
     }
+    if (!managerResolution.manager) {
+      return invalidResult(
+        action,
+        managerResolution.error ?? "Consultation manager is required.",
+        "missing_manager",
+      );
+    }
+    managerId = managerResolution.manager.user_id;
 
     const consultation = await createConsultation(actor.user_id, {
       title,
