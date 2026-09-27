@@ -683,6 +683,127 @@ export async function addMeasurement(
   return measurement;
 }
 
+
+export async function addMeasurementsBatch(
+  session: SessionLike,
+  consultationId: string,
+  inputs: Array<{
+    room_name: string;
+    office_name?: string | null;
+    zone_name?: string | null;
+    floor?: string | null;
+    window_id?: string | null;
+    width?: number | null;
+    height?: number | null;
+    sqft?: number | null;
+    quantity?: number | null;
+    glass_type?: string | null;
+    orientation?: string | null;
+    access_type?: string | null;
+    complexity_level_id?: string | null;
+    notes?: string | null;
+    drawing_data?: Prisma.InputJsonValue | null;
+    project_position_id?: string | null;
+    supersedes_measurement_id?: string | null;
+    measurement_source?: MeasurementSource | null;
+    sort_order?: number;
+  }>,
+) {
+  if (inputs.length < 1 || inputs.length > 100 || inputs.some((input) => !input.room_name.trim())) {
+    return "invalid_measurements" as const;
+  }
+
+  const consultation = await getConsultationForMutation(session, consultationId);
+
+  if (!consultation?.survey) {
+    return null;
+  }
+
+  const complexityIds = Array.from(
+    new Set(
+      inputs
+        .map((input) => input.complexity_level_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  return prisma.$transaction(async (tx) => {
+    if (complexityIds.length > 0) {
+      const validComplexities = await tx.complexityLevel.findMany({
+        where: {
+          complexity_level_id: {
+            in: complexityIds,
+          },
+        },
+        select: {
+          complexity_level_id: true,
+        },
+      });
+
+      if (validComplexities.length !== complexityIds.length) {
+        throw new Error("invalid_complexity_level");
+      }
+    }
+
+    const created = [];
+
+    for (const input of inputs) {
+      const width = input.width ?? null;
+      const height = input.height ?? null;
+      const sqft = input.sqft ?? calculateSqft(width, height);
+      const quantity = normalizeQuantity(input.quantity);
+
+      const measurement = await tx.measurement.create({
+        data: {
+          survey_id: consultation.survey.survey_id,
+          room_name: input.room_name.trim(),
+          office_name: input.office_name ?? null,
+          zone_name: input.zone_name ?? null,
+          floor: input.floor ?? null,
+          window_id: input.window_id ?? null,
+          width,
+          height,
+          sqft,
+          quantity,
+          glass_type: input.glass_type ?? null,
+          orientation: input.orientation ?? null,
+          access_type: input.access_type ?? null,
+          complexity_level_id: input.complexity_level_id ?? null,
+          notes: input.notes ?? null,
+          drawing_data: nullableJson(input.drawing_data),
+          project_position_id: input.project_position_id ?? null,
+          supersedes_measurement_id: input.supersedes_measurement_id ?? null,
+          recorded_by_user_id: session.user.user_id,
+          measurement_source: input.measurement_source ?? null,
+          verification_status: input.measurement_source
+            ? verificationStatusForSource(input.measurement_source)
+            : null,
+          sort_order: input.sort_order ?? 0,
+        },
+      });
+
+      await tx.activityLog.create({
+        data: {
+          actor_user_id: session.user.user_id,
+          entity_type: "measurement",
+          entity_id: measurement.measurement_id,
+          action_key: "measurement.created",
+          message: \`Добавлен замер для комнаты \${measurement.room_name}.\`,
+          metadata: {
+            consultation_id: consultationId,
+            survey_id: consultation.survey.survey_id,
+            batch: true,
+          },
+        },
+      });
+
+      created.push(measurement);
+    }
+
+    return created;
+  });
+}
+
 export async function updateMeasurement(
   session: SessionLike,
   measurementId: string,
