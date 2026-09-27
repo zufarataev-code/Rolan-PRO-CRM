@@ -31,6 +31,15 @@ type IntegrationAccess = {
 
 const MESSENGER_LEAD_PLACEHOLDER_NAME = "Facebook Messenger contact";
 
+export function chooseMessengerLeadName(existingName: string, incomingName: string) {
+  const existing = existingName.trim();
+  const incoming = incomingName.trim();
+  if ((!existing || existing === MESSENGER_LEAD_PLACEHOLDER_NAME) && incoming && incoming !== MESSENGER_LEAD_PLACEHOLDER_NAME) {
+    return incoming;
+  }
+  return existingName;
+}
+
 type ReusableLead = {
   lead_id: string;
   name: string;
@@ -260,11 +269,7 @@ export async function createOrReuseFacebookMessengerLead(
     const lead = await tx.lead.update({
       where: { lead_id: existing.lead_id },
       data: {
-        name:
-          (!existing.name.trim() || existing.name.trim() === MESSENGER_LEAD_PLACEHOLDER_NAME) &&
-          payload.name.trim() !== MESSENGER_LEAD_PLACEHOLDER_NAME
-            ? payload.name
-            : existing.name,
+        name: chooseMessengerLeadName(existing.name, payload.name),
         phone: existing.phone || (payload.phone ? normalizeContactPhone(payload.phone) : null),
         email: existing.email || payload.email || null,
         assigned_manager_id: existing.assigned_manager_id || manager.user_id,
