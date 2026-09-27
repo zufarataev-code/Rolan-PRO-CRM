@@ -129,6 +129,9 @@ test('reorder creates one supplier-linked draft and explicit send is required', 
   assert.match(html, /await cloudPersistConfirmed\(\)/);
   assert.match(html, /function cloudPersistConfirmed\(\)/);
   assert.match(html, /workspace_revision/);
+  assert.match(html, /expected_revision:cloudRevision/);
+  assert.match(html, /function safeHttpUrl\(value\)/);
+  assert.match(html, /\['http:','https:'\]\.includes\(parsed\.protocol\)/);
   assert.match(html, /черновик не отмечен отправленным/);
   assert.match(html, /function openPurchaseRequestVendorModal\(id\)/);
   assert.match(html, /if\(!vendorId\) return alert\('Выберите поставщика/);
