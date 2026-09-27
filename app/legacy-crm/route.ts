@@ -7,6 +7,7 @@ import { getRequestSession } from "@/lib/auth/server";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { getEnv } from "@/lib/env";
 import { replaceLegacyBootstrapLogin } from "@/features/legacy-crm/html-shell";
+import { buildMobileCrmShell } from "@/features/legacy-crm/mobile-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -495,7 +496,15 @@ export async function GET(request: NextRequest) {
 
   const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
   const privilegedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
-  const injectedUi = `${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}`;
+  const mobileUi = buildMobileCrmShell({
+    user: {
+      user_id: session.user.user_id,
+      email: session.user.email,
+      full_name: session.user.full_name,
+    },
+    roles: session.roles,
+  });
+  const injectedUi = `${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}${mobileUi}`;
   const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0
     ? `${cloudHtml.slice(0, closingBodyIndex)}${injectedUi}${cloudHtml.slice(closingBodyIndex)}`
