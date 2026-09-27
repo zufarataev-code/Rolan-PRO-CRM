@@ -13,8 +13,6 @@ import {
   normalizeLeadData,
   normalizeLanguage,
   parseBookingPayload,
-  shouldRestartBookedConversation,
-  shouldUseQualificationPrompt,
   startsNewBooking,
   type CrmSlot,
   type LeadData,
