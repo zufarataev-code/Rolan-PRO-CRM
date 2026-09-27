@@ -8247,6 +8247,24 @@ function migrateSchema() {
               : 'ceiling';
           }
           if (w.smart.connectionPointDetail == null) w.smart.connectionPointDetail = '';
+          if (!Array.isArray(w.smart.panelZones)) {
+            const baseZone = String(w.smart.zone || w.filmZone || r.name || 'Zone').trim() || 'Zone';
+            const legacyPanels = Array.isArray(w.panels) && w.panels.length
+              ? w.panels
+              : [{ id: '', label: w.name || 'Glass', width: w.width || 0, height: w.height || 0 }];
+            w.smart.panelZones = legacyPanels.map((panel, panelIndex) => ({
+              panelId: panel.id || '',
+              panelIndex,
+              panelLabel: panel.label || `Panel ${panelIndex + 1}`,
+              zone: `${baseZone} — ${panel.label || `Panel ${panelIndex + 1}`}`,
+            }));
+          }
+          if (w.smart.siliconeRequired == null) w.smart.siliconeRequired = false;
+          if (w.smart.edgeTrimRequired == null) w.smart.edgeTrimRequired = false;
+          if (w.smart.edgeTrimType == null) w.smart.edgeTrimType = '';
+          if (w.smart.outletCount == null) w.smart.outletCount = 0;
+          if (w.smart.outletLocations == null) w.smart.outletLocations = '';
+          if (w.smart.electricalScope == null) w.smart.electricalScope = '';
         }
         // Resolve filmType to catalogId if possible
         if (w.filmType && !w.catalogId) {
@@ -9776,6 +9794,10 @@ const ROLAN_SMART_POWER_SUPPLIES = [
   'Rolan Control 500W',
   'Rolan Control 1000W',
 ];
+const ROLAN_SMART_POWER_SUPPLY_SPECS = ROLAN_SMART_POWER_SUPPLIES.map(model => ({
+  model,
+  watts: parseInt(model.match(/(\d+)W/)?.[1] || '0'),
+}));
 const ROLAN_SMART_CONTROL_OPTIONS = [
   { id:'wifi', label:'Wi-Fi' },
   { id:'multizone', label:'Мультизона' },
@@ -10041,15 +10063,18 @@ function measurerV25WindowToField(win, room, order) {
   const widthIn = Number(mm_to_inches(win.width || win.actualWidth || 0).toFixed(2));
   const heightIn = Number(mm_to_inches(win.height || win.actualHeight || 0).toFixed(2));
   const crmPanels = measureWindowPanels(win);
-  const zones = (win.zones || win.smart?.zones || []).map((z, idx) => ({
-    id: measurerV25NumericId(z.id || `${win.id}-z-${idx}`),
-    name: z.name || z.label || `Zone ${idx + 1}`,
-    width_in: Number(mm_to_inches(z.width || z.actualWidth || win.width || 0).toFixed(2)),
-    height_in: Number(mm_to_inches(z.height || z.actualHeight || win.height || 0).toFixed(2)),
-    control: z.control || win.smart?.controlType || 'Wall Switch',
-    voltage: z.voltage || win.smart?.voltageVac || '',
-    note: z.note || '',
-  }));
+  const zones = (win.zones || win.smart?.zones || win.smart?.panelZones || []).map((z, idx) => {
+    const panel = measureWindowPanels(win)[Number.isInteger(Number(z.panelIndex)) ? Number(z.panelIndex) : idx] || {};
+    return {
+      id: measurerV25NumericId(z.id || `${win.id}-z-${idx}`),
+      name: z.name || z.label || z.zone || `Zone ${idx + 1}`,
+      width_in: Number(mm_to_inches(z.width || z.actualWidth || panel.width || win.width || 0).toFixed(2)),
+      height_in: Number(mm_to_inches(z.height || z.actualHeight || panel.height || win.height || 0).toFixed(2)),
+      control: z.control || win.smart?.controlType || 'Wall Switch',
+      voltage: z.voltage || win.smart?.voltageVac || '',
+      note: z.note || panel.role || '',
+    };
+  });
   const fieldZones = zones.length ? zones : (scopeKey === 'smart_film' && crmPanels.length ? crmPanels.map((p, idx) => ({
     id: measurerV25NumericId(`${win.id}-panel-zone-${idx}`),
     name: p.label || `Zone ${idx + 1}`,
@@ -10340,6 +10365,62 @@ function measureSmartLoad(win) {
   const powerWm2 = parseFloat(win.smart?.powerWm2) || 6;
   const areaM2 = Array.isArray(win.panels) && win.panels.length ? measurePanelAreaSqft(win) * M2_PER_SQFT : measureAreaM2(win);
   return areaM2 * powerWm2;
+}
+function smartPowerSupplyPlan(loadW = 0) {
+  let remaining = Math.max(0, Number(loadW) || 0) * 1.2;
+  const plan = [];
+  const largest = ROLAN_SMART_POWER_SUPPLY_SPECS[ROLAN_SMART_POWER_SUPPLY_SPECS.length - 1];
+  while (remaining > largest.watts) {
+    plan.push(largest);
+    remaining -= largest.watts;
+  }
+  const finalBlock = ROLAN_SMART_POWER_SUPPLY_SPECS.find(item => item.watts >= remaining) || largest;
+  if (remaining > 0 || !plan.length) plan.push(finalBlock);
+  return plan;
+}
+function smartPanelZoneAssignments(win, roomName = '') {
+  const smart = win?.smart || {};
+  const saved = Array.isArray(smart.panelZones) ? smart.panelZones : [];
+  const baseName = String(smart.zone || roomName || win?.filmZone || 'Zone').trim() || 'Zone';
+  const powerWm2 = Number(smart.powerWm2) || 6;
+  const qty = Math.max(1, Number(win?.qty) || 1);
+  return measureWindowPanels(win).map((panel, panelIndex) => {
+    const prior = saved.find(item => item.panelId && item.panelId === panel.id)
+      || saved.find(item => Number(item.panelIndex) === panelIndex)
+      || saved.find(item => item.panelLabel && item.panelLabel === panel.label);
+    const areaSqft = mm2_to_sqft((Number(panel.width) || 0) * (Number(panel.height) || 0)) * qty;
+    return {
+      panelId: panel.id || '',
+      panelIndex,
+      panelLabel: panel.label || `Panel ${panelIndex + 1}`,
+      zone: String(prior?.zone || `${baseName} — ${panel.label || `Panel ${panelIndex + 1}`}`).trim(),
+      width: Number(panel.width) || 0,
+      height: Number(panel.height) || 0,
+      areaSqft,
+      loadW: areaSqft * M2_PER_SQFT * powerWm2,
+    };
+  });
+}
+function smartZoneElectricalPlan(win, roomName = '') {
+  const groups = new Map();
+  smartPanelZoneAssignments(win, roomName).forEach(item => {
+    const key = item.zone || `Zone ${item.panelIndex + 1}`;
+    const group = groups.get(key) || { zone: key, panels: [], areaSqft: 0, loadW: 0 };
+    group.panels.push(item);
+    group.areaSqft += item.areaSqft;
+    group.loadW += item.loadW;
+    groups.set(key, group);
+  });
+  return Array.from(groups.values()).map(group => {
+    const supplies = smartPowerSupplyPlan(group.loadW);
+    return { ...group, reserveW: group.loadW * 1.2, supplies, blocks: supplies.length };
+  });
+}
+function smartRecommendedBlockCount(win) {
+  return smartZoneElectricalPlan(win).reduce((sum, zone) => sum + zone.blocks, 0) || 1;
+}
+function smartRecommendedPowerSupplyText(win) {
+  return smartZoneElectricalPlan(win).map(zone => `${zone.zone}: ${zone.supplies.map(item => item.model).join(' + ')}`).join(' · ');
 }
 const US_ROOM_PRESETS = [
   'Living room', 'Family room', 'Kitchen', 'Dining room', 'Breakfast nook',
@@ -10672,6 +10753,40 @@ function measureStudioPanelRowsHtml(win) {
     </table>
     <div class="text-[11px] text-slate-400 mt-1">Для sliding/French меняйте каждую панель отдельно. Общий размер сверху остается размером конструкции.</div>`;
 }
+function measureStudioSmartZoneMapHtml(win = {}) {
+  const unit = db.settings.inputUnits === 'inches' ? 'in' : 'мм';
+  const assignments = smartPanelZoneAssignments(win);
+  return assignments.length ? `
+    <div class="text-xs font-bold text-blue-900 mb-1">Зоны по панелям</div>
+    <div class="text-[11px] text-blue-700 mb-2">По умолчанию каждая панель — отдельная зона. Чтобы объединить панели, укажите им одинаковое название зоны.</div>
+    <div style="display:grid;gap:.4rem;">
+      ${assignments.map(item => `
+        <div data-smart-panel-zone-row data-panel-index="${item.panelIndex}" data-panel-label="${academyEsc(item.panelLabel)}" style="display:grid;grid-template-columns:minmax(110px,.8fr) minmax(160px,1.2fr);gap:.5rem;align-items:center;">
+          <div class="text-xs text-slate-600"><b>${academyEsc(item.panelLabel)}</b><br>${measureMmToInput(item.width)} × ${measureMmToInput(item.height)} ${unit}</div>
+          <input data-smart-panel-zone value="${academyEsc(item.zone)}" placeholder="Зона ${item.panelIndex + 1}" oninput="measureStudioPreview()">
+        </div>`).join('')}
+    </div>` : '<div class="text-xs text-slate-500">Сначала укажите размеры панели.</div>';
+}
+function measureStudioReadSmartPanelZones() {
+  return Array.from(document.querySelectorAll('[data-smart-panel-zone-row]')).map((row, panelIndex) => ({
+    panelIndex: Number(row.dataset.panelIndex ?? panelIndex),
+    panelLabel: row.dataset.panelLabel || `Panel ${panelIndex + 1}`,
+    zone: (row.querySelector('[data-smart-panel-zone]')?.value || '').trim(),
+  }));
+}
+function measureStudioRefreshSmartZoneMap() {
+  const wrap = document.getElementById('ms-smart-zone-map');
+  if (!wrap) return;
+  const saved = measureStudioReadSmartPanelZones();
+  const base = measureStudioBaseWindowFromForm();
+  const panels = measureStudioReadPanelRows();
+  const smart = {
+    zone: (document.getElementById('ms-smart-zone')?.value || '').trim(),
+    powerWm2: parseFloat(document.getElementById('ms-power')?.value) || 6,
+    panelZones: saved,
+  };
+  wrap.innerHTML = measureStudioSmartZoneMapHtml({ ...base, panels, smart });
+}
 function measureStudioScopeSpecificHtml(scopeKey, win = {}) {
   const scope = measureScopeInfo(scopeKey);
   const solar = win.solar || {};
@@ -10961,17 +11076,19 @@ function openEngineeringMeasureStudio(orderId) {
                 <div><label>Server / LV room</label><input id="ms-server-room" value="${academyEsc(smart.serverRoom || '')}" placeholder="Server room / LV closet"></div>
               </div>
               <div class="grid grid-cols-2 gap-2">
-                <div><label>Зона</label><input id="ms-smart-zone" value="${academyEsc(smart.zone || win?.filmZone || '')}" placeholder="Conference room A"></div>
+                <div><label>Группа зон / помещение</label><input id="ms-smart-zone" value="${academyEsc(smart.zone || win?.filmZone || room?.name || '')}" placeholder="Conference room A" oninput="measureStudioPreview()"></div>
                 <div><label>Voltage</label><select id="ms-voltage">
                   ${[48, 60].map(v => `<option value="${v}" ${Number(smart.voltageVac || 48) === v ? 'selected' : ''}>${v}V AC</option>`).join('')}
                 </select></div>
               </div>
+              <div id="ms-smart-zone-map" class="mt-2 p-2 rounded-lg bg-white border border-blue-100">${measureStudioSmartZoneMapHtml({ ...(win || {}), smart: { ...smart, zone: smart.zone || win?.filmZone || room?.name || '' } })}</div>
               <div class="grid grid-cols-2 gap-2 mt-2">
                 <div><label>W/m²</label><input id="ms-power" type="number" step="0.5" value="${smart.powerWm2 || 6}" oninput="measureStudioPreview()"></div>
-                <div><label>Блоков питания</label><input id="ms-blocks" type="number" min="1" value="${smart.blocks || 1}"></div>
+                <div><label>Блоков питания (авто)</label><input id="ms-blocks" type="number" min="1" value="${smartRecommendedBlockCount({ ...(win || {}), smart })}" readonly></div>
               </div>
               <label class="mt-2">Модель блока питания</label>
-              <select id="ms-power-supply-model"><option value="">— выбрать —</option>${ROLAN_SMART_POWER_SUPPLIES.map(v => `<option value="${v}" ${smart.powerSupplyModel === v ? 'selected' : ''}>${v}</option>`).join('')}</select>
+              <select id="ms-power-supply-model"><option value="">Автоматически по нагрузке</option>${ROLAN_SMART_POWER_SUPPLIES.map(v => `<option value="${v}" ${smart.powerSupplyModel === v ? 'selected' : ''}>${v}</option>`).join('')}</select>
+              <div class="text-[11px] text-blue-700 mt-1">CRM подбирает блок отдельно для каждой зоны с запасом мощности 20%. Ручной выбор выше заменяет рекомендацию.</div>
               <label class="mt-2">Контроллер</label>
               <select id="ms-controller">${SMART_CONTROL_TYPES.map(v => `<option value="${v}" ${(smart.controllerType || 'Wall switch') === v ? 'selected' : ''}>${v}</option>`).join('')}</select>
               <div class="grid grid-cols-2 gap-2 mt-2">
@@ -11000,6 +11117,21 @@ function openEngineeringMeasureStudio(orderId) {
                   ${SMART_SIGNAL_PLANS.map(v => `<option value="${v.id}" ${(smart.signalPlan || smartTemplate.signalPlan) === v.id ? 'selected' : ''}>${academyEsc(v.label)}</option>`).join('')}
                 </select></div>
                 <label class="flex items-center gap-2 text-sm mt-6"><input id="ms-electrician" type="checkbox" ${(smart.electricianNeeded ?? smartTemplate.electricianNeeded) ? 'checked' : ''} style="width:auto;"> Электрик нужен</label>
+              </div>
+              <div class="mt-3 p-2 rounded-lg bg-white border border-blue-100">
+                <div class="text-xs font-bold text-blue-900 mb-2">Дополнительные работы и электрика</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="flex items-center gap-2 text-sm"><input id="ms-smart-silicone" type="checkbox" ${smart.siliconeRequired ? 'checked' : ''} style="width:auto;"> Силикон по периметру</label>
+                  <label class="flex items-center gap-2 text-sm"><input id="ms-smart-trim" type="checkbox" ${smart.edgeTrimRequired ? 'checked' : ''} style="width:auto;"> Накладки / профиль</label>
+                </div>
+                <label class="mt-2">Тип накладки / профиль</label>
+                <input id="ms-smart-trim-type" value="${academyEsc(smart.edgeTrimType || '')}" placeholder="Белый профиль, алюминий, скрытая накладка">
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                  <div><label>Розетки 110/120V для блоков</label><input id="ms-outlet-count" type="number" min="0" step="1" value="${Number(smart.outletCount) || 0}" oninput="measureStudioPreview()"></div>
+                  <div><label>Где нужны розетки</label><input id="ms-outlet-locations" value="${academyEsc(smart.outletLocations || '')}" placeholder="Closet A, над дверью, серверная"></div>
+                </div>
+                <label class="mt-2">Задача электрику</label>
+                <textarea id="ms-electrical-scope" rows="2" placeholder="Новая линия 120V, точки розеток, pre-wire, доступ к блокам">${academyEsc(smart.electricalScope || '')}</textarea>
               </div>
               <label class="mt-2">Smart notes</label>
               <textarea id="ms-smart-notes" rows="2" placeholder="Трансформатор, зона, управление, риски">${academyEsc(smart.notes || '')}</textarea>
@@ -11123,6 +11255,7 @@ function measureStudioSyncPanelCountFromRows() {
 }
 function measureStudioPanelRowsChanged() {
   measureStudioSyncPanelCountFromRows();
+  measureStudioRefreshSmartZoneMap();
   measureStudioPreview();
 }
 function measureStudioSetPanelRows(panels) {
@@ -11132,6 +11265,7 @@ function measureStudioSetPanelRows(panels) {
   const clean = (panels || []).filter(p => Number(p.width) > 0 && Number(p.height) > 0);
   wrap.innerHTML = measureStudioPanelRowsHtml({ ...base, panels: clean.length ? clean : measureDefaultPanels(base) });
   measureStudioSyncPanelCountFromRows();
+  measureStudioRefreshSmartZoneMap();
   measureStudioPreview();
 }
 function measureStudioAddPanelRow() {
@@ -11171,6 +11305,7 @@ function measureStudioRefreshPanelTable(force = false) {
   wrap.innerHTML = measureStudioPanelRowsHtml({ ...base, panels: existing.length ? existing : measureDefaultPanels(base) });
   const hint = document.getElementById('ms-construction-hint');
   if (hint) hint.textContent = measureStudioConstructionHint(base.winType);
+  measureStudioRefreshSmartZoneMap();
   measureStudioPreview();
 }
 function measureStudioApplyTypeGuidance(resetPanels = false) {
@@ -11216,7 +11351,7 @@ function measureStudioFormWindow() {
     voltageVac: parseFloat(document.getElementById('ms-voltage')?.value) || 48,
     powerWm2: parseFloat(document.getElementById('ms-power')?.value) || 6,
     transformerOutput: `${parseFloat(document.getElementById('ms-voltage')?.value) || 48}V AC`,
-    blocks: parseInt(document.getElementById('ms-blocks')?.value) || 1,
+    blocks: 1,
     powerSupplyModel: document.getElementById('ms-power-supply-model')?.value || '',
     controllerType: (document.getElementById('ms-controller')?.value || '').trim(),
     controlOptions: Array.from(document.querySelectorAll('[data-smart-control-option]:checked')).map(x => x.value),
@@ -11231,9 +11366,18 @@ function measureStudioFormWindow() {
     blockDistanceFt: parseFloat(document.getElementById('ms-block-distance')?.value) || null,
     signalPlan: document.getElementById('ms-signal-plan')?.value || 'local_remote',
     electricianNeeded: !!document.getElementById('ms-electrician')?.checked,
+    panelZones: measureStudioReadSmartPanelZones(),
+    siliconeRequired: !!document.getElementById('ms-smart-silicone')?.checked,
+    edgeTrimRequired: !!document.getElementById('ms-smart-trim')?.checked,
+    edgeTrimType: (document.getElementById('ms-smart-trim-type')?.value || '').trim(),
+    outletCount: Math.max(0, parseInt(document.getElementById('ms-outlet-count')?.value) || 0),
+    outletLocations: (document.getElementById('ms-outlet-locations')?.value || '').trim(),
+    electricalScope: (document.getElementById('ms-electrical-scope')?.value || '').trim(),
     notes: (document.getElementById('ms-smart-notes')?.value || '').trim(),
   };
   smartBase.calculatedW = measureSmartLoad({ width, height, qty, panels: finalPanels, smart: smartBase });
+  smartBase.blocks = smartRecommendedBlockCount({ width, height, qty, panels: finalPanels, smart: smartBase });
+  smartBase.recommendedPowerSupplies = smartRecommendedPowerSupplyText({ width, height, qty, panels: finalPanels, smart: smartBase });
   smartBase.repeaterNeeded = smartNeedsRepeater(smartBase);
   const solar = {
     goal: document.getElementById('ms-solar-goal')?.value || '',
@@ -11301,7 +11445,10 @@ function measureStudioPreview() {
   if (smartLoad && win.smart) {
     const tpl = smartConnectionTemplateInfo(win.smart.connectionTemplate);
     const repeater = smartNeedsRepeater(win.smart) ? ' · нужен repeater/bridge' : '';
-    smartLoad.textContent = `Smart ТЗ: ${tpl.short} · ${Math.round(measureSmartLoad(win))}W · ${win.smart.voltageVac}V AC · ${win.smart.blocks || 1} блок(а)${repeater}`;
+    const recommended = smartRecommendedPowerSupplyText(win);
+    const blockInput = document.getElementById('ms-blocks');
+    if (blockInput) blockInput.value = String(smartRecommendedBlockCount(win));
+    smartLoad.textContent = `Smart ТЗ: ${tpl.short} · ${Math.round(measureSmartLoad(win))}W · ${win.smart.voltageVac}V AC · ${smartRecommendedBlockCount(win)} блок(а) · ${recommended}${repeater}`;
   }
   else if (smartLoad) smartLoad.textContent = 'Smart-нагрузка считается только в режиме Smart film.';
   const needle = document.getElementById('ms-compass-needle');
@@ -11566,9 +11713,31 @@ async function measureCaptureCompass() {
 function technicalSheetSmartSummary(order) {
   const wins = measureAllWindows(order).map(x => x.win).filter(w => w.measureScope === 'smart_film' || windowCatalog(w)?.category === 'smart');
   const totalW = wins.reduce((s, w) => s + (Number(w.smart?.calculatedW) || measureSmartLoad(w)), 0);
-  const blocks = wins.reduce((s, w) => s + (parseInt(w.smart?.blocks) || 0), 0);
+  const blocks = wins.reduce((s, w) => s + smartRecommendedBlockCount(w), 0);
   const repeaters = wins.filter(w => smartNeedsRepeater(w.smart || {})).length;
-  return { windows: wins.length, totalW, blocks, repeaters };
+  const zones = wins.reduce((s, w) => s + smartZoneElectricalPlan(w).length, 0);
+  const outlets = wins.reduce((s, w) => s + (Math.max(0, parseInt(w.smart?.outletCount)) || 0), 0);
+  return { windows: wins.length, totalW, blocks, zones, outlets, repeaters };
+}
+function smartZoneSupplyLabel(win, zonePlan) {
+  return win.smart?.powerSupplyModel || zonePlan.supplies.map(item => item.model).join(' + ');
+}
+function renderSmartZonePlanTable(win, roomName = '') {
+  const unit = db.settings.inputUnits === 'inches' ? 'in' : 'мм';
+  const plans = smartZoneElectricalPlan(win, roomName);
+  if (!plans.length) return '';
+  return `
+    <div style="overflow-x:auto;margin-top:.65rem;">
+      <table style="width:100%;border-collapse:collapse;font-size:.72rem;">
+        <thead><tr><th style="text-align:left;padding:5px;border-bottom:1px solid #bfdbfe;">Зона</th><th style="text-align:left;padding:5px;border-bottom:1px solid #bfdbfe;">Панель / размер</th><th style="text-align:left;padding:5px;border-bottom:1px solid #bfdbfe;">Нагрузка + 20%</th><th style="text-align:left;padding:5px;border-bottom:1px solid #bfdbfe;">Блок питания</th></tr></thead>
+        <tbody>${plans.map(zone => `<tr>
+          <td style="padding:5px;border-bottom:1px solid #dbeafe;"><b>${academyEsc(zone.zone)}</b></td>
+          <td style="padding:5px;border-bottom:1px solid #dbeafe;">${zone.panels.map(panel => `${academyEsc(panel.panelLabel)} ${measureMmToInput(panel.width)}×${measureMmToInput(panel.height)} ${unit}`).join('<br>')}</td>
+          <td style="padding:5px;border-bottom:1px solid #dbeafe;">${Math.round(zone.loadW)}W → ${Math.ceil(zone.reserveW)}W</td>
+          <td style="padding:5px;border-bottom:1px solid #dbeafe;"><b>${academyEsc(smartZoneSupplyLabel(win, zone))}</b></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
 }
 function renderTechPanelChips(win) {
   const panels = measureWindowPanels(win);
@@ -11626,7 +11795,7 @@ function smartInstallationDiagramSvg(win, roomName = '') {
     <text x="344" y="72" text-anchor="middle" font-size="11" font-weight="900" fill="#93c5fd">POWER BLOCK</text>
     <text x="344" y="92" text-anchor="middle" font-size="12" font-weight="800" fill="#fff">${academyEsc(blockLabel)}</text>
     <text x="344" y="111" text-anchor="middle" font-size="10" fill="#cbd5e1">${academyEsc(smart.controllerType || 'controller TBD')}</text>
-    <text x="108" y="173" text-anchor="middle" font-size="11" font-weight="800" fill="#334155">${academyEsc(win.name || 'Window')} · ${academyEsc(smart.zone || roomName || 'Zone')}</text>
+    <text x="108" y="173" text-anchor="middle" font-size="11" font-weight="800" fill="#334155">${academyEsc(win.name || 'Window')} · ${smartZoneElectricalPlan(win, roomName).length} zone(s)</text>
   </svg>`;
 }
 function renderSmartRoomInstallationPlans(order) {
@@ -11643,11 +11812,12 @@ function renderSmartRoomInstallationPlans(order) {
       </div>
       ${roomPlans.map(({ room, windows }, roomIndex) => `
         <div class="smart-room-plan">
-          <div class="smart-room-title"><span>${roomIndex + 1}</span><b>${academyEsc(room.name || 'Room')}</b><small>${windows.length} зон(ы)</small></div>
+          <div class="smart-room-title"><span>${roomIndex + 1}</span><b>${academyEsc(room.name || 'Room')}</b><small>${windows.reduce((sum, win) => sum + smartZoneElectricalPlan(win, room.name).length, 0)} зон(ы)</small></div>
           <div class="smart-room-diagrams">
             ${windows.map(win => `<div class="smart-room-diagram">
               ${smartInstallationDiagramSvg(win, room.name)}
-              <div class="smart-room-route"><b>Точка:</b> ${academyEsc(smartConnectionPointInfo(win.smart?.connectionPointSide || win.smart?.busbarSide).label)}${win.smart?.connectionPointDetail ? ` · ${academyEsc(win.smart.connectionPointDetail)}` : ''}<br><b>Блок:</b> ${academyEsc(win.smart?.powerSupplyModel || 'модель не выбрана')} · ${academyEsc(smartBlockPlacementInfo(win.smart?.blockPlacement).label)} · ${academyEsc(win.smart?.powerSupplyLocation || 'точное место не указано')}<br><b>Опции:</b> ${academyEsc((win.smart?.controlOptions || []).map(id => ROLAN_SMART_CONTROL_OPTIONS.find(option => option.id === id)?.label || id).join(', ') || 'нет')}<br><b>Трасса:</b> ${academyEsc(win.smart?.wirePath || 'не указана')}</div>
+              <div class="smart-room-route"><b>Точка:</b> ${academyEsc(smartConnectionPointInfo(win.smart?.connectionPointSide || win.smart?.busbarSide).label)}${win.smart?.connectionPointDetail ? ` · ${academyEsc(win.smart.connectionPointDetail)}` : ''}<br><b>Блоки:</b> ${academyEsc(win.smart?.powerSupplyModel || smartRecommendedPowerSupplyText(win) || 'не рассчитаны')} · ${academyEsc(smartBlockPlacementInfo(win.smart?.blockPlacement).label)} · ${academyEsc(win.smart?.powerSupplyLocation || 'точное место не указано')}<br><b>Розетки 110/120V:</b> ${Math.max(0, parseInt(win.smart?.outletCount)) || 0} · ${academyEsc(win.smart?.outletLocations || 'места не указаны')}<br><b>Опции:</b> ${academyEsc((win.smart?.controlOptions || []).map(id => ROLAN_SMART_CONTROL_OPTIONS.find(option => option.id === id)?.label || id).join(', ') || 'нет')}<br><b>Трасса:</b> ${academyEsc(win.smart?.wirePath || 'не указана')}</div>
+              ${renderSmartZonePlanTable(win, room.name)}
             </div>`).join('')}
           </div>
         </div>`).join('')}
@@ -11660,7 +11830,7 @@ function renderSmartTechnicalAssignment(win) {
   const route = [
     `Подключение: ${smartConnectionPointInfo(connectionSide).label}${smart.connectionPointDetail ? ` (${smart.connectionPointDetail})` : ''}`,
     smart.wirePath ? `Трасса: ${smart.wirePath}` : tpl.wirePath,
-    `Блок: ${smart.powerSupplyModel || 'модель не выбрана'} · ${smartBlockPlacementInfo(smart.blockPlacement).label}${smart.powerSupplyLocation ? ` — ${smart.powerSupplyLocation}` : ''}`,
+    `Блок: ${smart.powerSupplyModel || smartRecommendedPowerSupplyText(win) || 'не рассчитан'} · ${smartBlockPlacementInfo(smart.blockPlacement).label}${smart.powerSupplyLocation ? ` — ${smart.powerSupplyLocation}` : ''}`,
     smart.controllerType ? `Управление: ${smart.controllerType}` : tpl.controllerType,
     (smart.controlOptions || []).length ? `Опции: ${(smart.controlOptions || []).map(id => ROLAN_SMART_CONTROL_OPTIONS.find(option => option.id === id)?.label || id).join(', ')}` : '',
   ].filter(Boolean).join(' → ');
@@ -11675,11 +11845,15 @@ function renderSmartTechnicalAssignment(win) {
         <span class="tag" style="background:${repeater ? '#fef3c7' : '#dbeafe'};color:${repeater ? '#92400e' : '#1d4ed8'}">${repeater ? 'Repeater / bridge' : 'Signal OK'}</span>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 mt-2">
-        <div><b>Нагрузка:</b> ${academyEsc(smart.voltageVac || 48)}V AC · ${Math.round(smart.calculatedW || measureSmartLoad(win))}W · блоков ${academyEsc(smart.blocks || 1)}</div>
+        <div><b>Нагрузка:</b> ${academyEsc(smart.voltageVac || 48)}V AC · ${Math.round(smart.calculatedW || measureSmartLoad(win))}W · блоков ${smartRecommendedBlockCount(win)}</div>
         <div><b>Server/LV:</b> ${academyEsc(smart.serverRoom || '—')}</div>
         <div><b>Conduit:</b> ${academyEsc(smart.conduit || tpl.conduit || '—')} · <b>wire:</b> ${smart.wireLengthFt || '—'} ft</div>
         <div><b>Distance:</b> ${smart.blockDistanceFt || '—'} ft · <b>signal:</b> ${academyEsc(smartSignalPlanLabel(smart.signalPlan || tpl.signalPlan))}</div>
+        <div><b>Розетки 110/120V:</b> ${Math.max(0, parseInt(smart.outletCount)) || 0} · ${academyEsc(smart.outletLocations || 'места не указаны')}</div>
+        <div><b>Допы:</b> ${[smart.siliconeRequired ? 'силикон' : '', smart.edgeTrimRequired ? `накладки${smart.edgeTrimType ? ` (${smart.edgeTrimType})` : ''}` : ''].filter(Boolean).map(academyEsc).join(', ') || 'нет'}</div>
       </div>
+      ${smart.electricalScope ? `<div class="mt-2 text-xs"><b>Задача электрику:</b> ${academyEsc(smart.electricalScope)}</div>` : ''}
+      ${renderSmartZonePlanTable(win, smart.zone || '')}
       <div class="smart-install-inline mt-3">${smartInstallationDiagramSvg(win, smart.zone || '')}</div>
       <div class="mt-2 text-xs"><b>Схема:</b> ${academyEsc(route)}</div>
       <div class="mt-2">
@@ -11763,6 +11937,8 @@ function renderWorkOrderHtml(order, printMode = false) {
         <div class="wo-block-title">Особенности объекта</div>
         <div>${academyEsc(notes)}</div>
       </div>` : ''}
+
+      ${renderSmartRoomInstallationPlans(order)}
 
       <div class="wo-block">
         <div class="wo-block-title">Объём: ${totalWindows} проёмов · ${orderPlannedAreaSqft(order).toFixed(2)} sqft</div>
@@ -11900,6 +12076,17 @@ function workOrderPrintCss() {
     .wo-window-body { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: #475569; margin-top: 3px; }
     .wo-window-film { font-weight: 700; color: #0f172a; }
     .wo-missing { color: #dc2626; }
+    .smart-install-plan { margin: 0 0 14px; border: 1px solid #bfdbfe; border-radius: 8px; background: #f8fbff; padding: 9px; }
+    .smart-install-plan-head, .smart-room-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .smart-install-plan-head h2 { font-size: 15px; margin: 2px 0; }
+    .smart-room-plan, .smart-room-diagram { break-inside: avoid; page-break-inside: avoid; }
+    .smart-room-title { border-bottom: 1px solid #dbeafe; padding: 5px 0; }
+    .smart-room-title span { width: 22px; height: 22px; border-radius: 99px; display: inline-grid; place-items: center; background: #1d4ed8; color: #fff; font-size: 10px; font-weight: 900; }
+    .smart-room-title small { margin-left: auto; color: #64748b; }
+    .smart-room-diagrams { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; margin-top: 6px; }
+    .smart-room-diagram { border: 1px solid #dbeafe; border-radius: 7px; background: #fff; padding: 6px; }
+    .smart-install-svg { display: block; width: 100%; height: auto; }
+    .smart-room-route { font-size: 10px; line-height: 1.4; color: #334155; }
     .wo-photos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
     .wo-photos img { width: 100%; height: 90px; object-fit: cover; border-radius: 5px; }
     .wo-checklist label { display: block; font-size: 13px; margin: 4px 0; }
@@ -11932,6 +12119,8 @@ function renderTechnicalSheetHtml(order, printMode = false) {
         <div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Площадь</div><div class="font-black text-lg">${orderPlannedAreaSqft(order).toFixed(2)} sqft</div></div>
         <div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Smart load</div><div class="font-black text-lg">${smart.windows ? Math.round(smart.totalW) + 'W' : '—'}</div></div>
         <div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Smart блоки</div><div class="font-black text-lg">${smart.blocks || '—'}</div></div>
+        ${smart.windows ? `<div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Smart зоны</div><div class="font-black text-lg">${smart.zones}</div></div>` : ''}
+        ${smart.windows ? `<div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Новые розетки</div><div class="font-black text-lg">${smart.outlets}</div></div>` : ''}
         ${smart.windows ? `<div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Repeater zones</div><div class="font-black text-lg">${smart.repeaters || '—'}</div></div>` : ''}
       </div>
       ${renderSmartRoomInstallationPlans(order)}

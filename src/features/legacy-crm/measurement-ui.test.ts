@@ -68,3 +68,25 @@ test("dense desktop workspaces override the compact generic dialog width", () =>
     /\.modal-content\.workspace-modal\.manager-measure-modal \{[\s\S]*?max-height: 94svh/,
   );
 });
+
+test("Smart Film measurement creates an electrical plan for every measured panel", () => {
+  assert.match(legacyCrm, /function smartPanelZoneAssignments\(win, roomName = ''\)/);
+  assert.match(legacyCrm, /По умолчанию каждая панель — отдельная зона/);
+  assert.match(legacyCrm, /panelZones: measureStudioReadSmartPanelZones\(\)/);
+  assert.match(legacyCrm, /function smartZoneElectricalPlan\(win, roomName = ''\)/);
+  assert.match(legacyCrm, /function smartPowerSupplyPlan\(loadW = 0\)/);
+  assert.match(legacyCrm, /Math\.max\(0, Number\(loadW\) \|\| 0\) \* 1\.2/);
+  assert.match(legacyCrm, /Автоматически по нагрузке/);
+  assert.match(legacyCrm, /Блоков питания \(авто\)/);
+});
+
+test("Smart Film working plan keeps mains outlets, low voltage, and add-ons explicit", () => {
+  assert.match(legacyCrm, /Розетки 110\/120V для блоков/);
+  assert.match(legacyCrm, /Силикон по периметру/);
+  assert.match(legacyCrm, /Накладки \/ профиль/);
+  assert.match(legacyCrm, /Задача электрику/);
+  assert.match(legacyCrm, /outletCount: Math\.max/);
+  assert.match(legacyCrm, /electricalScope:/);
+  assert.match(legacyCrm, /function renderSmartZonePlanTable/);
+  assert.match(legacyCrm, /\$\{renderSmartRoomInstallationPlans\(order\)\}/);
+});
