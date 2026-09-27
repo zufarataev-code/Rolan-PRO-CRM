@@ -227,7 +227,7 @@ function buildInstallerJobWhereForSession(session: ProjectSession, installerJobI
     return {
       ...(installerJobId ? { installer_job_id: installerJobId } : {}),
       project: {
-        manager_id: manager?.user_id ?? session.user.user_id,
+        manager_id: session.user.user_id,
       },
     };
   }
@@ -779,7 +779,7 @@ export async function createManualProject(
       data: {
         project_code: createProjectCode(),
         client_id: clientRecord.client_id,
-        manager_id: session.user.user_id,
+        manager_id: manager?.user_id ?? session.user.user_id,
         lead_installer_id: installer?.user_id ?? null,
         project_status_id: projectStatusId,
         city_id: city?.city_id ?? null,
