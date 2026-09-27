@@ -382,6 +382,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Responsive adapters may stack fields, convert tables into labeled rows, preserve touch targets, apply safe areas, and center focused inputs above the keyboard. They may not replace the full application with a smaller API-specific shell.
 - This decision supersedes the dedicated reduced mobile shell previously introduced for PR #248. The correction remains on the same PR branch; release still requires review and deployment from `main`.
 
+## 2026-09-26 — Supplier purchasing extends the existing Warehouse workflow
+
+- Supplier cards, manufacturer catalog links, Warehouse stock, reorder thresholds, and purchase requests remain fields of the existing canonical legacy CRM payload while that Warehouse module is active. A second supplier/procurement schema or browser-only store is not permitted.
+- Manufacturer catalog seeds contain only products and characteristics confirmed by an official manufacturer source. Stable internal IDs are allowed for CRM linking, but unknown dealer SKU, purchase price, warranty, payment terms, and lead time stay empty until Rolan PRO receives them directly.
+- Low stock may create a purchase-request draft automatically, but it may never contact a supplier automatically. One active general-stock request per item/vendor suppresses duplicates; receipt or cancellation allows a later reorder draft.
+- Sending a supplier request is an explicit Owner/Manager action through the existing authenticated corporate Gmail integration. A draft becomes requested only after confirmed API success. When no official email is published, CRM opens the official contact path and preserves the unsent draft.
+- Field roles do not receive vendor, inventory-cost, or purchase-request data. Phone and desktop use the same procurement records and actions, with only responsive presentation differences under the mobile parity decision.
+- Implemented on `codex/supplier-catalog-procurement`; PR and release state are recorded in `PROJECT_STATE.md`. Production deployment remains a separate owner-authorized action.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
