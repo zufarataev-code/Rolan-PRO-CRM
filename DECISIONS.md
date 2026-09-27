@@ -389,7 +389,7 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Low stock may create a purchase-request draft automatically, but it may never contact a supplier automatically. One active general-stock request per item/vendor suppresses duplicates; receipt or cancellation allows a later reorder draft.
 - Sending a supplier request is an explicit Owner/Manager action through the existing authenticated corporate Gmail integration. A draft becomes requested only after confirmed API success. When no official email is published, CRM opens the official contact path and preserves the unsent draft.
 - Field roles do not receive vendor, inventory-cost, or purchase-request data. Phone and desktop use the same procurement records and actions, with only responsive presentation differences under the mobile parity decision.
-- Implemented on `codex/supplier-catalog-procurement`; PR and release state are recorded in `PROJECT_STATE.md`. Production deployment remains a separate owner-authorized action.
+- Implemented on `codex/supplier-catalog-procurement` in PR #253; release state is recorded in `PROJECT_STATE.md`. Production deployment remains a separate owner-authorized action.
 
 ## Changing a decision
 
