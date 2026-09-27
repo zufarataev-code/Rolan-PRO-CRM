@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireRequestSession } from "@/lib/auth/server";
+//requireRequestSession больше не нужен для /api/v1/agent
+//защита обеспечивается HMAC и CRM_OPERATIONS_AGENT_SECRET
 import { handleAction } from "@/lib/operations-agent";
 
 export async function POST(request: NextRequest) {
-  const auth = await requireRequestSession(request, ["AI_SERVICE_ROLE"]);
+  const authResult = await verifyHMAC(request);
 
-  if (!auth.ok) {
+  if (!authResult.ok) {
     return NextResponse.json({ ok: false, error: "Authorization failed." }, { status: 403 });
   }
 
