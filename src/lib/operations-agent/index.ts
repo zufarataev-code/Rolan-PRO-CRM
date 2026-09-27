@@ -339,6 +339,71 @@ function actorSession(actor: AgentActor) {
   return { user: { user_id: actor.user_id }, roles: actor.roles };
 }
 
+async function resolveBusinessManager(args: Record<string, unknown>) {
+  const explicitId = asText(args.manager_id ?? args.assigned_manager_id, 80);
+
+  if (explicitId) {
+    const manager = await prisma.user.findFirst({
+      where: {
+        user_id: explicitId,
+        is_active: true,
+        user_accesses: {
+          some: {
+            is_active: true,
+            role: {
+              is_active: true,
+              code: { in: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER] },
+            },
+          },
+        },
+      },
+      select: {
+        user_id: true,
+        full_name: true,
+        email: true,
+      },
+    });
+
+    return manager ? { manager } : { error: "Manager was not found or is inactive." };
+  }
+
+  const owners = await prisma.user.findMany({
+    where: {
+      is_active: true,
+      user_accesses: {
+        some: {
+          is_active: true,
+          role: {
+            is_active: true,
+            code: ROLE_CODES.OWNER,
+          },
+        },
+      },
+    },
+    orderBy: {
+      full_name: "asc",
+    },
+    take: 3,
+    select: {
+      user_id: true,
+      full_name: true,
+      email: true,
+    },
+  });
+
+  if (owners.length === 1) return { manager: owners[0] };
+  if (owners.length === 0) return { error: "No active Owner is configured as the default business manager." };
+
+  return {
+    clarification: owners.map((owner) => ({
+      user_id: owner.user_id,
+      full_name: owner.full_name,
+      email: owner.email,
+    })),
+  };
+}
+
+
 async function findClientCandidates(query: string) {
   return prisma.client.findMany({
     where: {
@@ -703,6 +768,14 @@ async function executeWrite(
 
     }
 
+    const managerResolution = await resolveBusinessManager(args);
+    if ("clarification" in managerResolution) {
+      return clarificationResult(action, "manager", managerResolution.clarification ?? []);
+    }
+    if (!managerResolution.manager) {
+      return invalidResult(action, managerResolution.error ?? "Business manager is required.", "missing_manager");
+    }
+
     const projectTitle = asText(args.project_title, 160);
     const serviceTypeId = asText(args.service_type_id, 80);
     const filmId = asText(args.film_id, 80);
@@ -717,6 +790,7 @@ async function executeWrite(
 
     const created = await createManualProject(actorSession(actor), {
       client_id: clientId || null,
+      manager_id: managerResolution.manager.user_id,
       client_name: clientName,
       phone,
       email,
@@ -861,7 +935,18 @@ async function executeWrite(
       }
       entityType = "project";
       entityId = resolution.project.project_id;
-      assignedTo = assignedTo ?? resolution.project.manager_id ?? actor.user_id;
+      assignedTo = assignedTo ?? resolution.project.manager_id;
+    }
+
+    if (!assignedTo) {
+      const managerResolution = await resolveBusinessManager(args);
+      if ("clarification" in managerResolution) {
+        return clarificationResult(action, "manager", managerResolution.clarification ?? []);
+      }
+      if (!managerResolution.manager) {
+        return invalidResult(action, managerResolution.error ?? "Task assignee is required.", "missing_manager");
+      }
+      assignedTo = managerResolution.manager.user_id;
     }
 
     const dueAt = args.due_at ? asDate(args.due_at) : null;
@@ -878,7 +963,7 @@ async function executeWrite(
         status: optionalText(args.status, 40) ?? "open",
         priority: optionalText(args.priority, 30) ?? "normal",
         due_at: dueAt,
-        assigned_to: assignedTo ?? actor.user_id,
+        assigned_to: assignedTo,
         created_by: actor.user_id,
       },
       select: { task_id: true, title: true },
@@ -965,6 +1050,17 @@ async function executeWrite(
       clientId = clientId ?? resolution.project.client_id;
       managerId = managerId ?? resolution.project.manager_id;
       address = address ?? resolution.project.address;
+    }
+
+    if (!managerId) {
+      const managerResolution = await resolveBusinessManager(args);
+      if ("clarification" in managerResolution) {
+        return clarificationResult(action, "manager", managerResolution.clarification ?? []);
+      }
+      if (!managerResolution.manager) {
+        return invalidResult(action, managerResolution.error ?? "Consultation manager is required.", "missing_manager");
+      }
+      managerId = managerResolution.manager.user_id;
     }
 
     const consultation = await createConsultation(actor.user_id, {
