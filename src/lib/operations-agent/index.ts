@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 
-import { addMeasurement, createConsultation } from "@/features/consultations/service";
+import { addMeasurementsBatch, createConsultation } from "@/features/consultations/service";
 import { createManualProject, getProjectCardByIdForSession } from "@/features/projects/service";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
@@ -12,6 +12,7 @@ import {
   type OperationsAgentReadAction,
   type OperationsAgentWriteAction,
 } from "@/lib/operations-agent/policy";
+import { buildOperationsRequestFingerprint } from "@/lib/operations-agent/idempotency";
 
 const RECEIPT_ACTION_KEY = "operations_agent.request";
 const EXPENSE_ACTION_KEY = "finance.expense.recorded";
@@ -138,6 +139,11 @@ function storedResult(metadata: unknown) {
   return result as OperationsAgentResult | null;
 }
 
+function storedFingerprint(metadata: unknown) {
+  const meta = asObject(metadata);
+  return typeof meta?.request_fingerprint === "string" ? meta.request_fingerprint : null;
+}
+
 async function findReceipt(idempotencyKey: string) {
   const rows = await prisma.$queryRawUnsafe<ReceiptRow[]>(
     "SELECT activity_id, metadata FROM activity_log WHERE action_key = $1 AND metadata ->> 'idempotency_key' = $2 ORDER BY created_at DESC LIMIT 1",
@@ -147,7 +153,10 @@ async function findReceipt(idempotencyKey: string) {
   return rows[0] ?? null;
 }
 
-async function reserveReceipt(input: HandleInput & { idempotencyKey: string }) {
+async function reserveReceipt(
+  input: HandleInput & { idempotencyKey: string },
+  requestFingerprint: string,
+) {
   try {
     const receipt = await prisma.activityLog.create({
       data: {
@@ -159,6 +168,7 @@ async function reserveReceipt(input: HandleInput & { idempotencyKey: string }) {
         message: "CRM Operations Agent request: " + input.action,
         metadata: {
           idempotency_key: input.idempotencyKey,
+          request_fingerprint: requestFingerprint,
           request_id: input.requestId ?? null,
           action: input.action,
           status: "processing",
@@ -177,6 +187,7 @@ async function reserveReceipt(input: HandleInput & { idempotencyKey: string }) {
         kind: "existing" as const,
         auditId: existing.activity_id,
         result: storedResult(existing.metadata),
+        storedFingerprint: storedFingerprint(existing.metadata),
       };
     }
     throw cause;
@@ -186,6 +197,7 @@ async function reserveReceipt(input: HandleInput & { idempotencyKey: string }) {
 async function finishReceipt(
   auditId: string,
   input: HandleInput & { idempotencyKey: string },
+  requestFingerprint: string,
   result: OperationsAgentResult,
 ) {
   const status = result.ok
@@ -205,6 +217,7 @@ async function finishReceipt(
       message: "CRM Operations Agent " + input.action + ": " + status,
       metadata: {
         idempotency_key: input.idempotencyKey,
+        request_fingerprint: requestFingerprint,
         request_id: input.requestId ?? null,
         action: input.action,
         status,
@@ -221,9 +234,26 @@ export async function runIdempotentOperation(
   input: HandleInput & { idempotencyKey: string },
   execute: () => Promise<OperationsAgentResult>,
 ) {
-  const reservation = await reserveReceipt(input);
+  const requestFingerprint = buildOperationsRequestFingerprint(input.action, input.args);
+  const reservation = await reserveReceipt(input, requestFingerprint);
 
   if (reservation.kind === "existing") {
+    if (
+      !reservation.storedFingerprint ||
+      reservation.storedFingerprint !== requestFingerprint
+    ) {
+      return {
+        ok: false,
+        action: input.action,
+        summary: "The idempotency key was already used for a different CRM request.",
+        audit_id: reservation.auditId,
+        duplicate: true,
+        error: {
+          code: "idempotency_conflict",
+          message: "Reuse the original payload or send a new idempotency key.",
+        },
+      } satisfies OperationsAgentResult;
+    }
     if (reservation.result) {
       return { ...reservation.result, audit_id: reservation.auditId, duplicate: true };
     }
@@ -244,7 +274,7 @@ export async function runIdempotentOperation(
   try {
     const result = await execute();
     const completed = { ...result, audit_id: reservation.auditId };
-    await finishReceipt(reservation.auditId, input, completed);
+    await finishReceipt(reservation.auditId, input, requestFingerprint, completed);
     return completed;
   } catch (cause) {
     console.error("operations_agent_action_failed", {
@@ -261,7 +291,7 @@ export async function runIdempotentOperation(
       error: { code: "action_failed", message: "CRM action failed. No success was reported." },
     } satisfies OperationsAgentResult;
 
-    await finishReceipt(reservation.auditId, input, failed).catch(() => undefined);
+    await finishReceipt(reservation.auditId, input, requestFingerprint, failed).catch(() => undefined);
     return failed;
   }
 }
@@ -693,6 +723,7 @@ async function executeWrite(
     }
 
     const created = await createManualProject(actorSession(actor), {
+      client_id: clientId || null,
       client_name: clientName,
       phone,
       email,
@@ -992,9 +1023,10 @@ async function executeWrite(
     normalizedRows.push(measurement);
   }
 
-  const measurementIds: string[] = [];
-  for (const measurement of normalizedRows) {
-    const created = await addMeasurement(actorSession(actor), consultationId, {
+  const created = await addMeasurementsBatch(
+    actorSession(actor),
+    consultationId,
+    normalizedRows.map((measurement) => ({
       room_name: asText(measurement.room_name, 160),
       office_name: optionalText(measurement.office_name, 160),
       zone_name: optionalText(measurement.zone_name, 160),
@@ -1010,13 +1042,17 @@ async function executeWrite(
       complexity_level_id: optionalText(measurement.complexity_level_id, 80),
       notes: optionalText(measurement.notes, 4000),
       sort_order: asNumber(measurement.sort_order) ?? 0,
-    });
+    })),
+  );
 
-    if (!created) {
-      return invalidResult(action, "Consultation or survey was not found.", "not_found");
-    }
-    measurementIds.push(created.measurement_id);
+  if (!created) {
+    return invalidResult(action, "Consultation or survey was not found.", "not_found");
   }
+  if (typeof created === "string") {
+    return invalidResult(action, "Measurements payload is invalid.", created);
+  }
+
+  const measurementIds = created.map((measurement) => measurement.measurement_id);
 
   return {
     ok: true,
