@@ -398,7 +398,7 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - CRM calculates connected load from measured panel area and configured W/m², adds 20% capacity reserve, and recommends the smallest suitable Rolan Control power supply for each zone. A documented manual model selection may override the recommended model without hiding the calculated load.
 - 110/120V receptacles and electrician scope are recorded separately from the 48/60V AC Smart Film output. Silicone, edge trim/profile, block service location, receptacle count/location, and control options are explicit execution scope, not implied by film square footage.
 - The customer and site address remain on the canonical Project. The technical sheet and installer work order render the same room-by-room zone, panel, load, power-supply, outlet, accessory, and wiring plan without exposing project financials to installers.
-- Implemented on `feat/smart-project-engineering-workspace`; PR and release state are recorded in `PROJECT_STATE.md`.
+- Implemented on `feat/smart-project-engineering-workspace` in PR #257; release state is recorded in `PROJECT_STATE.md`.
 
 ## Changing a decision
 
