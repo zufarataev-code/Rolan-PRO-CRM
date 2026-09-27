@@ -34,6 +34,19 @@ export function startsNewBooking(text: string) {
     /(?:otr[oa]\s+(?:direcci[oó]n|ubicaci[oó]n|cita)|quiero\s+(?:reservar|agendar)\s+(?:una\s+)?cita|agendar\s+(?:una\s+)?cita)/i.test(value);
 }
 
+export function hasBookingIntent(text: string, previousAssistantText?: string) {
+  if (startsNewBooking(text)) return true;
+
+  const value = text.trim().toLowerCase().replaceAll("ё", "е");
+  const affirmative =
+    /^(?:yes|yes please|sure|ok|okay|sounds good|let'?s do it|да|давайте|конечно|ок|окей|хорошо|согласен|согласна|ага|si|sí|claro|vale)$/i.test(value);
+  if (!affirmative || !previousAssistantText) return false;
+
+  return /(?:free\s+(?:on-site\s+)?(?:consultation|measurement)|schedule|book(?:ing)?|appointment|consultation|measurement|консультац|замер|запис|выезд|agendar|reservar|cita)/i.test(
+    previousAssistantText,
+  );
+}
+
 export function shouldUseQualificationPrompt(attemptedBookingClaim: boolean, alreadyBooked: boolean) {
   return attemptedBookingClaim && !alreadyBooked;
 }
