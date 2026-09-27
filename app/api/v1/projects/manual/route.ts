@@ -105,6 +105,18 @@ export async function POST(request: NextRequest) {
     return apiError(404, "invalid_installer", "Selected installer was not found.");
   }
 
+  if (project === "invalid_client") {
+    return apiError(404, "invalid_client", "Selected client was not found.");
+  }
+
+  if (project === "invalid_manager") {
+    return apiError(404, "invalid_manager", "Selected manager was not found.");
+  }
+
+  if (project === "missing_manager") {
+    return apiError(400, "missing_manager", "A business manager is required.");
+  }
+
   return apiSuccess({
     project,
     project_id: project.project_id,
