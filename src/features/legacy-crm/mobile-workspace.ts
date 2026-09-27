@@ -478,6 +478,12 @@ const MOBILE_WORKSPACE_PATCH = `
 
     const observer = new MutationObserver(queueEnhancement);
     observer.observe(document.documentElement, { childList: true, subtree: true });
+    document.addEventListener('focusin', (event) => {
+      if (window.innerWidth > MOBILE_MAX) return;
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !target.matches('input, textarea, select')) return;
+      window.setTimeout(() => target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120);
+    });
     window.addEventListener('resize', queueEnhancement, { passive: true });
     window.addEventListener('orientationchange', queueEnhancement, { passive: true });
     window.addEventListener('hashchange', queueEnhancement);

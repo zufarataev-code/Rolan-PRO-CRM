@@ -23,6 +23,7 @@ test("mobile workspace adapter keeps mobile behavior isolated and protects speci
   assert.match(result, /calendar\|календар\|scheduler\|расписан\|gantt/);
   assert.match(result, /MutationObserver/);
   assert.match(result, /orientationchange/);
+  assert.match(result, /scrollIntoView\(\{ block: 'center', behavior: 'smooth' \}\)/);
 });
 
 test("mobile workspace adapter is injected only once", () => {

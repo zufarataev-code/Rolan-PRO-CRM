@@ -374,6 +374,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Per-service dates, installers, supplies, and direct historical closure remain available only inside a collapsed owner-only section for importing already completed work from the old CRM.
 - Implemented on `fix/quick-entry-proposal-workflow`; the PR and production verification are recorded in `PROJECT_STATE.md`.
 
+## 2026-09-26 — Mobile and desktop have functional parity
+
+- A phone layout is not a separate or reduced CRM. Every role must receive the same authorized business functions, actions, and records on phone and desktop; only presentation, navigation density, and interaction layout may differ.
+- `/legacy-crm` remains the one visible CRM document. Mobile shortcuts call the same existing `selectAppView()` routes and `renderView()` modules used by desktop.
+- The mobile bottom dock contains only frequent role-specific shortcuts. `Ещё` opens the complete existing sidebar so no authorized module, Settings entry, profile context, or logout action is lost on a phone.
+- Responsive adapters may stack fields, convert tables into labeled rows, preserve touch targets, apply safe areas, and center focused inputs above the keyboard. They may not replace the full application with a smaller API-specific shell.
+- This decision supersedes the dedicated reduced mobile shell previously introduced for PR #248. The correction remains on the same PR branch; release still requires review and deployment from `main`.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
