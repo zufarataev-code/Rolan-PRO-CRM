@@ -12,6 +12,7 @@ import {
 } from "@/lib/operations-agent";
 
 function statusForResult(result: OperationsAgentResult) {
+  if (result.error?.code === "idempotency_conflict") return 409;
   if (result.ok || result.needs_clarification || result.requires_approval || result.duplicate) return 200;
   if (result.error?.code === "not_found") return 404;
   if (result.error?.code === "action_failed") return 500;
