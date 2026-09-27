@@ -553,6 +553,7 @@ export function calculatePositionFinance(
 export async function createManualProject(
   session: ProjectSession,
   input: {
+    client_id?: string | null;
     client_name: string;
     phone?: string | null;
     email?: string | null;
@@ -585,7 +586,7 @@ export async function createManualProject(
     return "invalid_payload" as const;
   }
 
-  const [projectStatusId, positionStatusId, serviceType, film, city, installer] = await Promise.all([
+  const [projectStatusId, positionStatusId, serviceType, film, city, installer, explicitClient] = await Promise.all([
     getProjectStatusId("NEW"),
     getPositionStatusId("READY"),
     prisma.serviceType.findFirst({
@@ -649,6 +650,16 @@ export async function createManualProject(
           },
         })
       : Promise.resolve(null),
+    input.client_id
+      ? prisma.client.findUnique({
+          where: {
+            client_id: input.client_id,
+          },
+          select: {
+            client_id: true,
+          },
+        })
+      : Promise.resolve(null),
   ]);
 
   if (!projectStatusId || !positionStatusId) {
@@ -671,6 +682,10 @@ export async function createManualProject(
     return "invalid_installer" as const;
   }
 
+  if (input.client_id && !explicitClient) {
+    return "invalid_client" as const;
+  }
+
   const clientUnitPrice =
     input.client_unit_price && input.client_unit_price > 0
       ? input.client_unit_price
@@ -685,7 +700,8 @@ export async function createManualProject(
 
   const project = await prisma.$transaction(async (tx) => {
     const reusableClient =
-      normalizedEmail || normalizedPhone
+      explicitClient ??
+      (normalizedEmail || normalizedPhone
         ? await tx.client.findFirst({
             where: {
               OR: [
@@ -697,7 +713,7 @@ export async function createManualProject(
               client_id: true,
             },
           })
-        : null;
+        : null);
 
     const clientRecord = reusableClient
       ? await tx.client.update({
