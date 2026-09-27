@@ -44,6 +44,12 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
         --rpm-line: #E5EAF0;
         --rpm-danger: #B42318;
         --rpm-success: #18794E;
+        --rpm-warning: #B54708;
+        --rpm-soft-blue: #EAF8FE;
+        --rpm-soft-navy: #EDF2F7;
+        --rpm-soft-green: #ECF8F3;
+        --rpm-soft-amber: #FFF6E8;
+        --rpm-soft-red: #FFF0EF;
       }
       #rolanpro-mobile-crm { display: none; }
       @media (max-width: 820px) {
@@ -126,6 +132,47 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
           font-size: 22px;
         }
         .rpm-title { margin: 0; font-size: 25px; line-height: 1.15; font-weight: 700; letter-spacing: -.025em; }
+        .rpm-hero {
+          position: relative;
+          overflow: hidden;
+          border-radius: 22px;
+          padding: 18px;
+          color: #fff;
+          background: var(--rpm-navy);
+          box-shadow: 0 14px 34px rgba(16,37,63,.18);
+        }
+        .rpm-hero::after {
+          content: "";
+          position: absolute;
+          inset: auto 0 0 0;
+          height: 4px;
+          background: var(--rpm-blue);
+        }
+        .rpm-hero .rpm-kicker { color: #7FD5F5; }
+        .rpm-hero .rpm-title { color: #fff; font-size: 27px; }
+        .rpm-hero .rpm-muted { color: rgba(255,255,255,.72); }
+        .rpm-quick-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0,1fr));
+          gap: 9px;
+          margin-top: 12px;
+        }
+        .rpm-quick {
+          min-height: 74px;
+          border: 1px solid var(--rpm-line);
+          border-radius: 16px;
+          background: #fff;
+          color: var(--rpm-text);
+          padding: 11px 8px;
+          text-align: left;
+          font: inherit;
+          cursor: pointer;
+        }
+        .rpm-quick strong { display: block; font-size: 18px; line-height: 1; margin-bottom: 8px; }
+        .rpm-quick span { display: block; font-size: 11px; font-weight: 700; line-height: 1.25; }
+        .rpm-quick.is-blue { background: var(--rpm-soft-blue); border-color: #BDE9F8; color: #096B93; }
+        .rpm-quick.is-navy { background: var(--rpm-soft-navy); border-color: #D6E0E9; color: var(--rpm-navy); }
+        .rpm-quick.is-green { background: var(--rpm-soft-green); border-color: #C9EBDD; color: var(--rpm-success); }
         .rpm-kicker { margin: 0 0 6px; color: var(--rpm-blue); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
         .rpm-muted { color: var(--rpm-muted); font-size: 13px; line-height: 1.45; }
         .rpm-section { margin-top: 22px; }
@@ -138,7 +185,11 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
           border-radius: 18px;
           box-shadow: 0 4px 18px rgba(16,37,63,.045);
         }
-        .rpm-metric { padding: 15px; }
+        .rpm-metric { padding: 15px; border-top: 3px solid transparent; }
+        .rpm-metric.is-blue { background: var(--rpm-soft-blue); border-color: #7CD5F4; }
+        .rpm-metric.is-green { background: var(--rpm-soft-green); border-color: #7BC9A7; }
+        .rpm-metric.is-amber { background: var(--rpm-soft-amber); border-color: #F3BD6B; }
+        .rpm-metric.is-red { background: var(--rpm-soft-red); border-color: #E69A92; }
         .rpm-metric-value { font-size: 27px; font-weight: 700; line-height: 1; }
         .rpm-metric-label { margin-top: 7px; font-size: 12px; color: var(--rpm-muted); line-height: 1.35; }
         .rpm-card { padding: 15px; margin-top: 10px; }
@@ -153,6 +204,11 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
           color: var(--rpm-text);
         }
         .rpm-list-card:active { transform: scale(.995); }
+        .rpm-list-card.is-blue { border-left: 4px solid var(--rpm-blue); }
+        .rpm-list-card.is-green { border-left: 4px solid #46A77D; }
+        .rpm-list-card.is-amber { border-left: 4px solid #E3A447; }
+        .rpm-list-card.is-red { border-left: 4px solid #D96B62; }
+        .rpm-list-card.is-navy { border-left: 4px solid var(--rpm-navy); }
         .rpm-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
         .rpm-grow { min-width: 0; flex: 1; }
         .rpm-name { font-size: 15px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
@@ -170,6 +226,10 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
           text-overflow: ellipsis;
           white-space: nowrap;
         }
+        .rpm-badge.is-blue { background: var(--rpm-soft-blue); color: #096B93; }
+        .rpm-badge.is-green { background: var(--rpm-soft-green); color: var(--rpm-success); }
+        .rpm-badge.is-amber { background: var(--rpm-soft-amber); color: var(--rpm-warning); }
+        .rpm-badge.is-red { background: var(--rpm-soft-red); color: var(--rpm-danger); }
         .rpm-toolbar { display: flex; gap: 8px; margin-top: 14px; }
         .rpm-btn {
           border-radius: 13px;
@@ -273,6 +333,7 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
           leads: [],
           projects: [],
           consultations: [],
+          tasks: [],
           fieldOrders: [],
           installerJobs: [],
           leadQuery: '',
@@ -294,6 +355,15 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
         const safeText = (value, fallback) => {
           const text = String(value ?? '').trim();
           return text || fallback || '—';
+        };
+
+        const statusTone = (value) => {
+          const key = String(value || '').toLowerCase();
+          if (/overdue|problem|cancel|failed|lost|reject/.test(key)) return 'is-red';
+          if (/done|complete|won|paid|accepted/.test(key)) return 'is-green';
+          if (/scheduled|pending|waiting|pause|attention|measure/.test(key)) return 'is-amber';
+          if (/new|lead|consult|active|progress|route/.test(key)) return 'is-blue';
+          return 'is-navy';
         };
 
         const apiMessage = (payload, fallback) =>
@@ -356,43 +426,75 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
           '<h1 class="rpm-title">' + escapeHtml(title) + '</h1>' +
           (subtitle ? '<div class="rpm-muted" style="margin-top:7px">' + escapeHtml(subtitle) + '</div>' : '');
 
-        const metric = (value, label) =>
-          '<div class="rpm-metric"><div class="rpm-metric-value">' + escapeHtml(value) + '</div>' +
+        const metric = (value, label, tone) =>
+          '<div class="rpm-metric ' + (tone || 'is-navy') + '"><div class="rpm-metric-value">' + escapeHtml(value) + '</div>' +
           '<div class="rpm-metric-label">' + escapeHtml(label) + '</div></div>';
+
+        const taskCard = (task) => {
+          const tone = task?.is_overdue ? 'is-red' : statusTone(task?.priority || task?.status);
+          return '<div class="rpm-list-card ' + tone + '">' +
+            '<div class="rpm-row"><div class="rpm-grow"><div class="rpm-name">' + escapeHtml(safeText(task.title, 'Задача')) + '</div>' +
+            '<div class="rpm-meta">' + escapeHtml([task.due_at ? formatDate(task.due_at, true) : null, task?.assigned_to?.full_name].filter(Boolean).join(' · ') || 'Без срока') + '</div></div>' +
+            '<span class="rpm-badge ' + tone + '">' + escapeHtml(task?.is_overdue ? 'Просрочено' : safeText(task.status, 'open')) + '</span></div></div>';
+        };
 
         const renderToday = () => {
           const todayKey = new Date().toISOString().slice(0, 10);
           const todayConsultations = state.consultations.filter((item) => sameLocalDay(item.scheduled_start_at, todayKey));
           const newLeads = state.leads.filter((item) => item?.pipeline_status?.status_code === 'NEW_LEAD').length;
+          const openTasks = state.tasks.filter((item) => !['done', 'completed', 'canceled'].includes(String(item?.status || '').toLowerCase()));
+          const overdueTasks = openTasks.filter((item) => item?.is_overdue);
+          const todayTasks = openTasks.filter((item) => item?.due_at && sameLocalDay(item.due_at, todayKey));
           const activeProjects = canSales
             ? state.projects.filter((item) => item?.project_status?.status_code !== 'COMPLETED').length
             : (isInstaller ? state.installerJobs.filter((item) => item?.status !== 'completed').length : state.fieldOrders.length);
           const upcoming = state.consultations
             .filter((item) => new Date(item.scheduled_start_at).getTime() >= Date.now() - 60 * 60 * 1000)
             .sort((a, b) => new Date(a.scheduled_start_at).getTime() - new Date(b.scheduled_start_at).getTime())
-            .slice(0, 5);
+            .slice(0, 4);
+          const priorityTasks = [...overdueTasks, ...todayTasks.filter((item) => !item?.is_overdue)].slice(0, 4);
 
           view.innerHTML =
-            pageHeader('Рабочий день', 'Сегодня', context.user.full_name || context.user.email) +
+            '<section class="rpm-hero">' +
+              pageHeader('ROLANPRO CRM', 'Сегодня', context.user.full_name || context.user.email) +
+            '</section>' +
+            (canSales
+              ? '<div class="rpm-quick-grid">' +
+                  '<button class="rpm-quick is-blue" type="button" data-rpm-quick="leads"><strong>＋</strong><span>Новый лид</span></button>' +
+                  '<button class="rpm-quick is-navy" type="button" data-rpm-screen="projects"><strong>▣</strong><span>Проекты</span></button>' +
+                  '<button class="rpm-quick is-green" type="button" data-rpm-screen="calendar"><strong>◷</strong><span>Календарь</span></button>' +
+                '</div>'
+              : '') +
             '<div class="rpm-grid">' +
-              (canSales ? metric(newLeads, 'Новые лиды') : '') +
-              metric(todayConsultations.length, 'Консультации сегодня') +
-              metric(activeProjects, 'Активные проекты') +
-              metric(canSales ? state.projects.filter((item) => item?.status_flags?.needs_attention).length : 0, 'Требуют внимания') +
+              (canSales ? metric(newLeads, 'Новые лиды', 'is-blue') : '') +
+              metric(todayConsultations.length, 'Консультации сегодня', 'is-green') +
+              metric(activeProjects, canSales ? 'Активные проекты' : 'Мои работы', 'is-navy') +
+              (canSales ? metric(overdueTasks.length, 'Просроченные задачи', overdueTasks.length ? 'is-red' : 'is-amber') : '') +
             '</div>' +
+            (canSales
+              ? '<section class="rpm-section"><h2 class="rpm-section-title">Задачи на сегодня</h2>' +
+                  (priorityTasks.length ? priorityTasks.map(taskCard).join('') : '<div class="rpm-empty">Срочных задач на сегодня нет.</div>') +
+                '</section>'
+              : '') +
             '<section class="rpm-section"><h2 class="rpm-section-title">Ближайшие консультации</h2>' +
-            (upcoming.length
-              ? upcoming.map((item) => consultationCard(item)).join('')
-              : '<div class="rpm-empty">Ближайших консультаций нет.</div>') +
-            '</section>';
+              (upcoming.length
+                ? upcoming.map((item) => consultationCard(item)).join('')
+                : '<div class="rpm-empty">Ближайших консультаций нет.</div>') +
+            '</section>' +
+            (canSales
+              ? '<section class="rpm-section"><h2 class="rpm-section-title">Проекты в работе</h2>' +
+                  (state.projects.length ? state.projects.slice(0, 3).map(projectCard).join('') : '<div class="rpm-empty">Активных проектов пока нет.</div>') +
+                '</section>'
+              : '');
         };
 
         const leadCard = (lead) => {
           const status = lead?.pipeline_status?.name_ru || lead?.pipeline_status?.name_en || 'Лид';
-          return '<button type="button" class="rpm-list-card" data-rpm-lead="' + escapeHtml(lead.lead_id) + '">' +
+          const tone = statusTone(lead?.pipeline_status?.status_code || status);
+          return '<button type="button" class="rpm-list-card ' + tone + '" data-rpm-lead="' + escapeHtml(lead.lead_id) + '">' +
             '<div class="rpm-row"><div class="rpm-grow"><div class="rpm-name">' + escapeHtml(safeText(lead.name, 'Без имени')) + '</div>' +
             '<div class="rpm-meta">' + escapeHtml([lead.phone, lead.email, lead.source].filter(Boolean).join(' · ') || 'Контакты не указаны') + '</div></div>' +
-            '<span class="rpm-badge">' + escapeHtml(status) + '</span></div></button>';
+            '<span class="rpm-badge ' + tone + '">' + escapeHtml(status) + '</span></div></button>';
         };
 
         const renderLeads = () => {
@@ -457,10 +559,11 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
         const projectCard = (project) => {
           const status = project?.project_status?.name_ru || project?.project_status?.status_code || 'Проект';
           const when = project.install_date ? formatDate(project.install_date, false) : 'Дата не назначена';
-          return '<button type="button" class="rpm-list-card" data-rpm-project="' + escapeHtml(project.project_id) + '">' +
+          const tone = project?.status_flags?.needs_attention ? 'is-red' : statusTone(project?.project_status?.status_code || status);
+          return '<button type="button" class="rpm-list-card ' + tone + '" data-rpm-project="' + escapeHtml(project.project_id) + '">' +
             '<div class="rpm-row"><div class="rpm-grow"><div class="rpm-name">' + escapeHtml(safeText(project.title, project.project_code)) + '</div>' +
             '<div class="rpm-meta">' + escapeHtml([project.project_code, project.address, when].filter(Boolean).join(' · ')) + '</div></div>' +
-            '<span class="rpm-badge">' + escapeHtml(status) + '</span></div></button>';
+            '<span class="rpm-badge ' + tone + '">' + escapeHtml(status) + '</span></div></button>';
         };
 
         const installerJobCard = (job) => {
@@ -548,10 +651,11 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
 
         const consultationCard = (item) => {
           const customer = item?.client?.name || item?.lead?.name || item?.deal?.title || '';
-          return '<button type="button" class="rpm-list-card" data-rpm-consultation="' + escapeHtml(item.consultation_id) + '">' +
+          const tone = statusTone(item?.status || 'scheduled');
+          return '<button type="button" class="rpm-list-card ' + tone + '" data-rpm-consultation="' + escapeHtml(item.consultation_id) + '">' +
             '<div class="rpm-row"><div class="rpm-grow"><div class="rpm-name">' + escapeHtml(safeText(item.title, 'Консультация')) + '</div>' +
             '<div class="rpm-meta">' + escapeHtml([formatDate(item.scheduled_start_at, true), customer, item.location_address].filter(Boolean).join(' · ')) + '</div></div>' +
-            '<span class="rpm-badge">' + escapeHtml(safeText(item.status, 'scheduled')) + '</span></div></button>';
+            '<span class="rpm-badge ' + tone + '">' + escapeHtml(safeText(item.status, 'scheduled')) + '</span></div></button>';
         };
 
         const renderCalendar = () => {
@@ -642,14 +746,16 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
           render();
           try {
             if (canSales) {
-              const [leadsData, projectsData, consultationsData] = await Promise.all([
+              const [leadsData, projectsData, consultationsData, tasksData] = await Promise.all([
                 api('/api/v1/leads'),
                 api('/api/v1/projects'),
                 api('/api/v1/consultations'),
+                api('/api/v1/tasks'),
               ]);
               state.leads = Array.isArray(leadsData?.items) ? leadsData.items : [];
               state.projects = Array.isArray(projectsData?.items) ? projectsData.items : [];
               state.consultations = Array.isArray(consultationsData?.items) ? consultationsData.items : [];
+              state.tasks = Array.isArray(tasksData?.items) ? tasksData.items : [];
             } else if (isConsultant) {
               const [workspaceData, consultationsData] = await Promise.all([
                 api('/api/v1/legacy-crm/state'),
@@ -764,6 +870,13 @@ export function buildMobileCrmShell(input: MobileCrmShellInput) {
               state.busy = false;
               render();
             }
+            return;
+          }
+
+          if (event.target.closest('[data-rpm-quick="leads"]')) {
+            state.selectedLead = null;
+            state.screen = 'lead-form';
+            render();
             return;
           }
 
