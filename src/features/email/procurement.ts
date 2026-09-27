@@ -20,6 +20,25 @@ export function procurementEmailConfig() {
   return { configured: Boolean(apiKey && from), provider: "resend" as const, from: from || null, replyTo: replyTo || null };
 }
 
+export function buildProcurementMessage(
+  request: { number?: unknown; itemNameSnapshot?: unknown; qty?: unknown; unit?: unknown; neededBy?: unknown; note?: unknown },
+  vendor: { name?: unknown },
+) {
+  const number = String(request.number || "Purchase request");
+  const vendorName = String(vendor.name || "Supplier");
+  const lines = [
+    `Hello ${vendorName} team,`, "", "Please provide availability and an order confirmation for:",
+    `Request: ${number}`,
+    `Product: ${String(request.itemNameSnapshot || "Material")}`,
+    `Quantity: ${String(request.qty || "")} ${String(request.unit || "")}`.trim(),
+    request.neededBy ? `Needed by: ${String(request.neededBy)}` : "",
+    request.note ? `Notes: ${String(request.note)}` : "",
+    "", "Please reply with dealer price, availability, lead time, shipping terms, and your confirmed manufacturer SKU.",
+    "", "Rolan PRO",
+  ];
+  return { subject: `Rolan PRO purchase request ${number}`, text: lines.filter(Boolean).join("\n") };
+}
+
 export async function sendProcurementEmail(input: {
   to: string;
   subject: string;

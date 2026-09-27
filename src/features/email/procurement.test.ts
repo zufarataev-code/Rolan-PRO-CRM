@@ -18,6 +18,16 @@ test("supplier email is idempotent by purchase request", () => {
   assert.match(route, /purchase_request_id: purchaseRequestId/);
 });
 
+test("supplier request recipient and content come from the locked persisted workspace", () => {
+  assert.match(route, /FROM legacy_workspaces WHERE workspace_id = 'primary' FOR UPDATE/);
+  assert.match(route, /purchaseRequest = requests\.find/);
+  assert.match(route, /vendor = vendors\.find/);
+  assert.match(route, /buildProcurementMessage\(purchaseRequest, vendor\)/);
+  assert.doesNotMatch(route, /body\?\.(?:to|subject|body)/);
+  assert.match(route, /purchaseRequest\.status = "requested"/);
+  assert.match(route, /workspace_revision: result\.revision/);
+});
+
 test("only owner and manager can send supplier requests", () => {
   assert.match(route, /ROLE_CODES\.OWNER, ROLE_CODES\.MANAGER/);
   assert.match(route, /requireRequestSession\(request, ROLES\)/);

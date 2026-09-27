@@ -128,11 +128,13 @@ test('reorder creates one supplier-linked draft and explicit send is required', 
   assert.match(html, /purchaseRequestSendsInFlight\.delete\(id\)/);
   assert.match(html, /await cloudPersistConfirmed\(\)/);
   assert.match(html, /function cloudPersistConfirmed\(\)/);
+  assert.match(html, /workspace_revision/);
   assert.match(html, /черновик не отмечен отправленным/);
   assert.match(html, /function openPurchaseRequestVendorModal\(id\)/);
   assert.match(html, /if\(!vendorId\) return alert\('Выберите поставщика/);
   assert.match(html, /function cancelPurchaseRequest\(id\)/);
   assert.match(html, /cancelledStockQty/);
+  assert.match(html, /if\(p\.source==='auto_reorder'\)[\s\S]*?if\(item\)item\.vendorId=vendorId/);
 });
 
 test('procurement actions are restricted to owner and manager', () => {
