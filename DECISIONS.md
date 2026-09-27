@@ -398,7 +398,7 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - A phone number is optional for early Lead capture but remains mandatory for a confirmed consultation and SMS. The bot may never convert a partial inquiry into a booking or claim that a visit exists without the existing PostgreSQL booking confirmation.
 - Sales behavior is consultative: answer first, ask one useful question, make only supported recommendations, handle objections without pressure, and advance through small commitments toward a free on-site consultation. Existing warranty, product-safety, glass-compatibility, pricing, multilingual, and human-escalation boundaries remain in force.
 - Facebook profile lookup, read receipt, and typing indicator run in parallel on first contact so immediate capture does not add three serial network waits to the customer response.
-- Implemented on `feat/messenger-sales-conversion`; PR and release state are recorded in `PROJECT_STATE.md`. Production Worker deployment remains a separate owner-authorized release action.
+- Implemented on `feat/messenger-sales-conversion` in PR #258; release state is recorded in `PROJECT_STATE.md`. Production Worker deployment remains a separate owner-authorized release action.
 
 ## Changing a decision
 
