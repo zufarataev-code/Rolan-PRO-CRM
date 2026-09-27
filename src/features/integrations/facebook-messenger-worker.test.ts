@@ -7,6 +7,7 @@ import {
   buildBusinessWindows,
   crmLeadPayload,
   detectServiceType,
+  hasBookingIntent,
   leadHasCustomerName,
   leadReadyForBooking,
   leadReadyForCrm,
@@ -149,6 +150,16 @@ test("Worker preserves multilingual BCP-47 language tags for dates and operation
   assert.equal(normalizeLanguage("not a language tag"), "en");
 });
 
+test("Worker requires explicit booking intent and only treats yes as consent after a booking offer", () => {
+  assert.equal(hasBookingIntent("What film is best for heat?"), false);
+  assert.equal(hasBookingIntent("How much is Smart Film?"), false);
+  assert.equal(hasBookingIntent("да"), false);
+  assert.equal(hasBookingIntent("yes"), false);
+  assert.equal(hasBookingIntent("I want to schedule a free consultation"), true);
+  assert.equal(hasBookingIntent("да", "Хотите назначить бесплатный замер?"), true);
+  assert.equal(hasBookingIntent("yes", "Would you like a free on-site consultation?"), true);
+});
+
 test("Worker recognizes a request to book another address", () => {
   assert.equal(startsNewBooking("и еще один адрес пожалуйста"), true);
   assert.equal(startsNewBooking("запиши меня на замер"), true);
@@ -232,4 +243,14 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /syncLeadToCrm\(env, event, state, "profile"\)/);
   assert.match(source, /syncLeadToCrm\(env, event, state, "conversation"\)/);
   assert.match(source, /Known lead fields from this conversation/);
+  assert.match(source, /bookingFlowActive && leadReadyForBooking\(state\.lead\)/);
+  assert.doesNotMatch(source, /!alreadyBooked && !state\.escalated && leadReadyForBooking\(state\.lead\)/);
+  assert.match(source, /Preliminary pricing guidance for customer estimates/);
+  assert.match(source, /Smart Film is typically \$40-\$70 per sq ft installed/);
+  assert.match(source, /Solar Film is typically \$7-\$15 per sq ft installed/);
+  assert.match(source, /Safety\/Security Film is typically \$10-\$20 per sq ft installed/);
+
+  const dbSource = readFileSync("src/features/integrations/facebook-messenger-db.ts", "utf8");
+  assert.match(dbSource, /chooseMessengerLeadName\(existing\.name, payload\.name\)/);
+  assert.match(dbSource, /existing === MESSENGER_LEAD_PLACEHOLDER_NAME/);
 });
