@@ -298,8 +298,7 @@ export async function runIdempotentOperation(
 
 export async function resolveOperationsAgentActor(): Promise<AgentActor | null> {
   const userId = process.env.CRM_OPERATIONS_AGENT_ACTOR_USER_ID?.trim();
-  const email = process.env.CRM_OPERATIONS_AGENT_ACTOR_EMAIL?.trim().toLowerCase();
-  if (!userId && !email) return null;
+  const email = (process.env.CRM_OPERATIONS_AGENT_ACTOR_EMAIL?.trim() || "crm-operations-agent@rolanpro.internal").toLowerCase();
 
   const user = await prisma.user.findFirst({
     where: {
@@ -310,7 +309,7 @@ export async function resolveOperationsAgentActor(): Promise<AgentActor | null> 
           is_active: true,
           role: {
             is_active: true,
-            code: ROLE_CODES.OWNER,
+            code: ROLE_CODES.AI_SERVICE,
           },
         },
       },
