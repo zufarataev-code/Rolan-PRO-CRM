@@ -14,6 +14,9 @@ type ClientCreatePanelProps = {
 type ApiEnvelope = {
   data?: {
     client_id?: string;
+    client_name?: string;
+    reused?: boolean;
+    matched_by?: "email" | "phone" | null;
   };
   errors?: Array<{
     message?: string;
@@ -68,6 +71,8 @@ export function ClientCreatePanel({ cities }: ClientCreatePanelProps) {
         throw new Error(payload?.errors?.[0]?.message ?? "Не удалось создать клиента.");
       }
 
+      const reused = Boolean(payload.data.reused);
+      const clientName = payload.data.client_name || name.trim();
       setName("");
       setPhone("");
       setEmail("");
@@ -76,7 +81,11 @@ export function ClientCreatePanel({ cities }: ClientCreatePanelProps) {
       setZipCode("");
       setCityId("");
       setNotes("");
-      setMessage("Клиент создан. Таблица обновлена.");
+      setMessage(
+        reused
+          ? `Клиент ${clientName} уже существует — существующая карточка подтянута, дубль не создан.`
+          : "Клиент создан. Таблица обновлена.",
+      );
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось создать клиента.");

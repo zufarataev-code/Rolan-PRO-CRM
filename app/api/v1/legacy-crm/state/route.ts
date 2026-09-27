@@ -16,8 +16,34 @@ import {
   isPrivilegedLegacyWorkspaceRole,
   mergeFieldWorkspace,
 } from "@/features/legacy-crm/field-workspace";
+import {
+  findClientIdentityDuplicates,
+  findIntroducedClientIdentityDuplicate,
+} from "@/features/sales/client-identity";
 
 const WORKSPACE_ID = "primary";
+
+function workspaceClients(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+  const clients = (payload as Record<string, unknown>).clients;
+  if (!Array.isArray(clients)) return [];
+  return clients.filter(
+    (client): client is { id?: string; phone?: string | null; email?: string | null } =>
+      Boolean(client && typeof client === "object" && !Array.isArray(client)),
+  );
+}
+
+function duplicateClientError(duplicate: {
+  existingClientId: string;
+  duplicateClientId: string;
+  matchedBy: "email" | "phone";
+}) {
+  return apiError(409, "duplicate_client", "Клиент с таким телефоном или email уже существует.", {
+    existing_client_id: duplicate.existingClientId,
+    duplicate_client_id: duplicate.duplicateClientId,
+    matched_by: duplicate.matchedBy,
+  });
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireRequestSession(request, LEGACY_WORKSPACE_VIEW_ROLES);
@@ -86,6 +112,9 @@ export async function PUT(request: NextRequest) {
       return apiError(403, "forbidden", "Only the owner can initialize CRM data.");
     }
 
+    const duplicate = findClientIdentityDuplicates(workspaceClients(payload))[0];
+    if (duplicate) return duplicateClientError(duplicate);
+
     try {
       const workspace = await prisma.legacyWorkspace.create({
         data: {
@@ -126,6 +155,12 @@ export async function PUT(request: NextRequest) {
           auth.session.user.legacy_user_ids,
         ),
       );
+
+  const introducedDuplicate = findIntroducedClientIdentityDuplicate(
+    workspaceClients(currentWorkspace.payload),
+    workspaceClients(nextPayload),
+  );
+  if (introducedDuplicate) return duplicateClientError(introducedDuplicate);
 
   const updated = await prisma.legacyWorkspace.updateMany({
     where: {

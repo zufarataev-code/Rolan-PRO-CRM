@@ -2,6 +2,11 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
 import { getEnv } from "@/lib/env";
+import {
+  findExistingClientByIdentity,
+  lockClientIdentity,
+  normalizeClientEmail,
+} from "@/features/sales/client-identity";
 
 type SessionLike = {
   user: { user_id: string };
@@ -58,7 +63,7 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
   const token = cleanText(input.token, 120);
   const legacyOrderId = cleanText(input.legacy_order_id, 120);
   const clientName = cleanText(input.client?.name, 160);
-  const email = cleanText(input.client?.email, 191).toLowerCase();
+  const email = normalizeClientEmail(cleanText(input.client?.email, 191)) || "";
   const phone = cleanText(input.client?.phone, 40);
   const siteType = cleanSiteType(input.site_type);
   const leadSource = cleanText(input.lead_source, 120) || null;
@@ -139,27 +144,11 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
     let clientId = existing?.client_id;
     let dealId = existing?.deal_id;
     if (!clientId || !dealId) {
-      const match = snapshot.email || snapshot.phone
-        ? await tx.client.findFirst({
-            where: {
-              OR: [
-                ...(snapshot.email ? [{ email: { equals: snapshot.email, mode: "insensitive" as const } }] : []),
-                ...(snapshot.phone ? [{ phone: snapshot.phone }] : []),
-              ],
-            },
-            orderBy: { updated_at: "desc" },
-          })
-        : null;
+      const contact = { email: snapshot.email, phone: snapshot.phone };
+      await lockClientIdentity(tx, contact);
+      const match = await findExistingClientByIdentity(tx, contact);
       const client = match
-        ? await tx.client.update({
-            where: { client_id: match.client_id },
-            data: {
-              name: snapshot.clientName,
-              email: snapshot.email || match.email,
-              phone: snapshot.phone || match.phone,
-              service_address: snapshot.address || match.service_address,
-            },
-          })
+        ? match.client
         : await tx.client.create({
         data: {
           client_code: `LEG-${crypto.randomUUID().slice(0, 8)}`,
@@ -186,12 +175,15 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
       dealId = deal.deal_id;
     }
 
+    const contact = { email: snapshot.email, phone: snapshot.phone };
+    await lockClientIdentity(tx, contact);
+    const identityConflict = await findExistingClientByIdentity(tx, contact, clientId!);
     await tx.client.update({
       where: { client_id: clientId! },
       data: {
         name: snapshot.clientName,
-        email: snapshot.email || undefined,
-        phone: snapshot.phone || undefined,
+        email: identityConflict ? undefined : snapshot.email || undefined,
+        phone: identityConflict ? undefined : snapshot.phone || undefined,
         service_address: snapshot.address || undefined,
       },
     });

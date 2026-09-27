@@ -380,7 +380,15 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - `/legacy-crm` remains the one visible CRM document. Mobile shortcuts call the same existing `selectAppView()` routes and `renderView()` modules used by desktop.
 - The mobile bottom dock contains only frequent role-specific shortcuts. `Ещё` opens the complete existing sidebar so no authorized module, Settings entry, profile context, or logout action is lost on a phone.
 - Responsive adapters may stack fields, convert tables into labeled rows, preserve touch targets, apply safe areas, and center focused inputs above the keyboard. They may not replace the full application with a smaller API-specific shell.
-- This decision supersedes the dedicated reduced mobile shell previously introduced for PR #248. The correction remains on the same PR branch; release still requires review and deployment from `main`.
+- This decision supersedes the dedicated reduced mobile shell previously introduced for PR #248. The correction was later fast-forwarded to `main` with owner authorization and released as recorded in `PROJECT_STATE.md`.
+
+## 2026-09-26 — Phone and email identify an existing client account
+
+- A normalized phone number or normalized email may belong to only one client card. Formatting differences in a US phone number, email letter case, and Gmail dot or `+alias` variations do not create a new identity.
+- Client creation, Lead conversion, Project creation, proposal publication, CSV import, and legacy workspace writes must reuse the existing client card when either identity matches. A contact edit that would collide with another card is rejected.
+- The Project keeps its own job address and commercial snapshot. Reusing a client must not overwrite established account details merely because a new Project or Lead supplied a different display value.
+- PostgreSQL creation paths serialize writes by normalized identity before checking and creating. The legacy workspace performs the same identity check in the browser and rejects newly introduced duplicate pairs on the server.
+- Existing historical duplicate pairs are not silently merged or deleted. They remain readable until a separately reviewed merge workflow resolves their linked Projects, Deals, communications, and audit history.
 
 ## Changing a decision
 
