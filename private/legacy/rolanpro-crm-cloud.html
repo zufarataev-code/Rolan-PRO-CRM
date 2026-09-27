@@ -5825,6 +5825,74 @@
     .manager-measure-modal .manager-measure-footer button { min-height:44px; flex:1 1 auto; font-size:14px; padding:10px; }
   }
 
+  /* The surveyor uses one cloud workspace with two deliberate field layouts.
+     Tablet keeps the input sheet visible beside project context; phone becomes
+     a full-screen, single-column task with large controls and a sticky save. */
+  .measure-device-mode { display:none; background:#eef2ff; color:#3730a3; border-color:#c7d2fe; }
+  @media (min-width:769px) and (max-width:1180px) {
+    .measurement-studio-backdrop { padding:10px; }
+    .modal-content.measure-modal {
+      width:100%; max-width:none; height:calc(100dvh - 20px); max-height:calc(100dvh - 20px);
+      border-radius:16px;
+    }
+    .measure-modal .measure-studio {
+      grid-template-columns:minmax(0,1.45fr) minmax(300px,.85fr);
+      max-height:calc(100dvh - 104px);
+      gap:12px; padding:12px;
+    }
+    .measure-workbench { grid-column:1; grid-row:1 / span 2; }
+    .measure-context { grid-column:2; grid-row:1; min-width:0; }
+    .measure-checklist { grid-column:2; grid-row:2; min-width:0; }
+    .measure-device-tablet { display:inline-flex; }
+    .measure-preview { min-height:230px; }
+    .measure-type-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  }
+  @media (max-width:768px) {
+    .modal-backdrop.measurement-studio-backdrop { padding:0; align-items:stretch; }
+    .modal-content.measure-modal {
+      width:100%; max-width:none; height:100dvh; max-height:100dvh;
+      border-radius:0; overflow:hidden;
+    }
+    .measure-modal .measure-head {
+      position:sticky; top:0; z-index:5; display:grid; grid-template-columns:minmax(0,1fr);
+      align-items:start; gap:8px; padding:calc(8px + env(safe-area-inset-top)) 56px 8px 12px;
+    }
+    .measure-head h3 { font-size:17px; line-height:1.2; overflow-wrap:anywhere; }
+    .measure-head p { font-size:11px; line-height:1.35; overflow-wrap:anywhere; }
+    .measure-head-actions { width:auto; justify-content:flex-start; align-items:center; }
+    .measure-head-actions > .btn-ghost:not(:last-child),
+    .measure-head-actions > .btn-primary { min-height:40px; padding:7px 9px; font-size:12px; }
+    .measure-head-actions > .btn-ghost:last-child {
+      position:absolute; top:calc(8px + env(safe-area-inset-top)); right:8px;
+      min-width:44px; width:44px; min-height:44px; padding:0; font-size:0;
+    }
+    .measure-head-actions > .btn-ghost:last-child::after { content:'✕'; font-size:18px; }
+    .measure-device-phone { display:inline-flex; }
+    #ms-mode-pill { display:none; }
+    .measure-modal .measure-studio {
+      display:grid; grid-template-columns:minmax(0,1fr); gap:10px; padding:10px 10px calc(18px + env(safe-area-inset-bottom));
+      max-height:calc(100dvh - 92px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain;
+      -webkit-overflow-scrolling:touch; scroll-padding-block:12px;
+    }
+    .measure-workbench, .measure-context, .measure-checklist { grid-column:auto; grid-row:auto; min-width:0; }
+    .measure-panel { padding:12px; border-radius:12px; box-shadow:none; }
+    .measure-step { gap:8px; }
+    .measure-step-sub { font-size:12px; }
+    .measure-panel input, .measure-panel select, .measure-panel textarea,
+    .measure-panel button { min-height:44px; max-width:100%; font-size:16px; scroll-margin-block:12px; }
+    .measure-two-col, .measure-three-col, .measure-action-row { grid-template-columns:minmax(0,1fr); }
+    .measure-scope-grid, .measure-type-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .measure-scope-btn { min-height:76px; padding:9px; }
+    .measure-scope-desc { display:none; }
+    .measure-type-card { min-height:76px; }
+    .measure-preview { min-height:220px; }
+    .measure-panel-table { min-width:520px; }
+    .measure-sticky-actions {
+      bottom:-12px; margin:10px -12px -12px; padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+    }
+    .measure-sticky-actions .flex { display:grid; grid-template-columns:minmax(0,1fr); }
+  }
+
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
 <style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.mb-1{margin-bottom:0.25rem}.mb-2{margin-bottom:0.5rem}.mb-3{margin-bottom:0.75rem}.mt-1{margin-top:0.25rem}.mt-2{margin-top:0.5rem}.mt-3{margin-top:0.75rem}.mt-4{margin-top:1rem}.flex{display:flex}.grid{display:grid}.min-h-screen{min-height:100vh}.w-auto{width:auto}.w-full{width:100%}.max-w-md{max-width:28rem}.cursor-pointer{cursor:pointer}.grid-cols-2{grid-template-columns:repeat(2, minmax(0, 1fr))}.items-center{align-items:center}.justify-end{justify-content:flex-end}.justify-center{justify-content:center}.gap-2{gap:0.5rem}.overflow-hidden{overflow:hidden}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded-2xl{border-radius:1rem}.rounded-lg{border-radius:0.5rem}.border-t{border-top-width:1px}.bg-gray-50{--tw-bg-opacity:1;background-color:rgb(249 250 251 / var(--tw-bg-opacity, 1))}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}.bg-gradient-to-br{background-image:linear-gradient(to bottom right, var(--tw-gradient-stops))}.from-amber-400{--tw-gradient-from:#fbbf24 var(--tw-gradient-from-position);--tw-gradient-to:rgb(251 191 36 / 0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from), var(--tw-gradient-to)}.from-blue-500{--tw-gradient-from:#3b82f6 var(--tw-gradient-from-position);--tw-gradient-to:rgb(59 130 246 / 0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from), var(--tw-gradient-to)}.from-indigo-500{--tw-gradient-from:#6366f1 var(--tw-gradient-from-position);--tw-gradient-to:rgb(99 102 241 / 0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from), var(--tw-gradient-to)}.from-purple-500{--tw-gradient-from:#a855f7 var(--tw-gradient-from-position);--tw-gradient-to:rgb(168 85 247 / 0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from), var(--tw-gradient-to)}.to-amber-600{--tw-gradient-to:#d97706 var(--tw-gradient-to-position)}.to-blue-700{--tw-gradient-to:#1d4ed8 var(--tw-gradient-to-position)}.to-indigo-700{--tw-gradient-to:#4338ca var(--tw-gradient-to-position)}.to-purple-700{--tw-gradient-to:#7e22ce var(--tw-gradient-to-position)}.p-3{padding:0.75rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.pt-4{padding-top:1rem}.text-left{text-align:left}.text-center{text-align:center}.text-2xl{font-size:1.5rem;line-height:2rem}.text-3xl{font-size:1.875rem;line-height:2.25rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.text-xs{font-size:0.75rem;line-height:1rem}.font-black{font-weight:900}.font-semibold{font-weight:600}.tracking-tight{letter-spacing:-0.025em}.text-gray-500{--tw-text-opacity:1;color:rgb(107 114 128 / var(--tw-text-opacity, 1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}.opacity-80{opacity:0.8}.opacity-90{opacity:0.9}.shadow-2xl{--tw-shadow:0 25px 50px -12px rgb(0 0 0 / 0.25);--tw-shadow-colored:0 25px 50px -12px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.transition{transition-property:color, background-color, border-color, fill, stroke, opacity, box-shadow, transform, filter, -webkit-text-decoration-color, -webkit-backdrop-filter;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter, -webkit-text-decoration-color, -webkit-backdrop-filter;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.hover\:scale-105:hover{--tw-scale-x:1.05;--tw-scale-y:1.05;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}</style></head>
@@ -9814,13 +9882,8 @@ function measureMmToInput(mm) {
   return db.settings.inputUnits === 'inches' ? Number(mm_to_inches(mm || 0).toFixed(2)) : Math.round(mm || 0);
 }
 
-// Bridge to the standalone tablet measurer module. The CRM keeps the order,
-// catalog, inventory, proposal and finance; measurer_v2_5.html is the field UI.
-const MEASURER_V25_PATH = '/Users/zufarataev/Desktop/CRM/Модуль замера /measurer_v2_5.html';
-function measurerV25Url(oid = '') {
-  const hash = oid ? `#crmOrder=${encodeURIComponent(oid)}` : '';
-  return `file://${encodeURI(MEASURER_V25_PATH)}${hash}`;
-}
+// Compatibility helpers for historical v2.5 JSON exports. New field work is
+// performed inside the cloud CRM so the same order is available on every device.
 function measurerV25FilmFromScope(scopeKey = '') {
   const key = measureScopeInfo(scopeKey).key;
   if (key === 'smart_film') return 'smart';
@@ -9981,21 +10044,9 @@ function measurerV25SeedFromOrder(oid) {
   };
 }
 function openMeasurerV25ForOrder(oid) {
-  const payload = measurerV25SeedFromOrder(oid);
-  if (!payload) return;
-  try {
-    localStorage.setItem('rolanpro_measurer_v25_payload', JSON.stringify(payload));
-    localStorage.setItem('rolanpro_measurer_v25_order_id', oid);
-  } catch (e) {
-    console.warn('Measurer v2.5 payload was not saved', e);
-  }
   const o = getOrder(oid);
-  if (o) {
-    o.timeline = o.timeline || [];
-    o.timeline.push({ at: new Date().toISOString(), key: 'measurement_v25_opened', by: state.currentUserId, note: 'Открыт полевой модуль замера v2.5' });
-    save();
-  }
-  window.open(measurerV25Url(oid), '_blank');
+  if (!o) return;
+  openEngineeringMeasureStudio(oid);
 }
 function openMeasurerV25Import(oid) {
   const o = getOrder(oid);
@@ -10609,15 +10660,17 @@ function openEngineeringMeasureStudio(orderId) {
   const isSmart = scopeKey === 'smart_film' || orderIsSmart(order);
   const smartTemplate = smartConnectionTemplateInfo(smart.connectionTemplate || smart.template || 'retrofit_local_block');
   state.modal = `
-    <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
-      <div class="modal-content measure-modal">
+    <div class="modal-backdrop measurement-studio-backdrop" onclick="if(event.target===this) closeModal()">
+      <div class="modal-content measure-modal" role="dialog" aria-modal="true" aria-label="Полевой замер ${academyEsc(order.number)}">
         <div class="measure-head">
           <div>
-            <div class="text-xs font-bold" style="color:${scope.accent}">Engineering Measurement Studio</div>
-            <h3 class="text-xl font-black">Инженерный замер · ${academyEsc(order.number)}</h3>
-            <p id="ms-scope-title-line" class="text-sm text-gray-600 mt-1">${academyEsc(client.name || 'Клиент')} · ${academyEsc(scope.title)} · ${academyEsc(orderServiceTypeLabel(order.serviceType))}</p>
+            <div class="text-xs font-bold" style="color:${scope.accent}">ПОЛЕВОЙ ЗАМЕР</div>
+            <h3 class="text-xl font-black">${academyEsc(order.number)} · ${academyEsc(client.name || 'Клиент')}</h3>
+            <p id="ms-scope-title-line" class="text-sm text-gray-600 mt-1">${academyEsc(orderAddress(order, client) || 'Адрес не указан')} · ${academyEsc(scope.title)}</p>
           </div>
           <div class="measure-head-actions">
+            <span class="tag measure-device-mode measure-device-tablet">Планшет</span>
+            <span class="tag measure-device-mode measure-device-phone">Телефон</span>
             <span id="ms-mode-pill" class="tag" style="background:${scope.accent}14;border-color:${scope.accent}44;color:${scope.accent}">${academyEsc(scope.short)} режим</span>
             <button class="btn-ghost" onclick="openWorkOrder('${order.id}')">Заказ-наряд</button>
             ${canManage ? `<button class="btn-primary bg-slate-900 hover:bg-slate-800" onclick="generatePremiumProposal('${order.id}')">✦ КП</button>` : ''}
@@ -10625,7 +10678,7 @@ function openEngineeringMeasureStudio(orderId) {
           </div>
         </div>
         <div class="measure-studio">
-          <section class="measure-panel">
+          <section class="measure-panel measure-workbench">
             <div class="measure-step">
               <span class="measure-step-no">1</span>
               <div class="min-w-0 flex-1">
@@ -10757,7 +10810,7 @@ function openEngineeringMeasureStudio(orderId) {
             </div>
           </section>
 
-          <section class="space-y-3">
+          <section class="space-y-3 measure-context">
             <div class="measure-panel">
               <div class="flex items-center justify-between gap-2 mb-2">
                 <h4 class="mb-0">Чертёж и расчёт</h4>
@@ -10784,7 +10837,7 @@ function openEngineeringMeasureStudio(orderId) {
             </div>
           </section>
 
-          <section class="space-y-3">
+          <section class="space-y-3 measure-checklist">
             ${measureStudioStandardsHtml(scopeKey)}
             <div class="measure-panel">
               <h4>Фото и тип стекла</h4>
@@ -15602,7 +15655,7 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'new') return { icon: '📞', title: 'Назначить консультацию', sub: 'Событие попадёт в календарь, клиент получит время по SMS/email.', variant: 'primary', onclick: `scheduleConsultationPrompt('${o.id}')` };
   if (o.status === 'consultation_scheduled') return { icon: '📐', title: 'Назначить замер', sub: 'Выберите замерщика и точное время выезда.', variant: 'primary', onclick: `scheduleMeasurementPrompt('${o.id}')` };
   if (o.status === 'measurement_scheduled') return o.measurerId
-    ? { icon: '🧭', title: 'Контроль замера', sub: 'Замерщик видит заказ без денег. Основной модуль замера v2.5.', variant: 'soft', onclick: `openMeasurerV25ForOrder('${o.id}')` }
+    ? { icon: '🧭', title: 'Контроль замера', sub: 'Замерщик видит заказ без денег. Замер работает в CRM на телефоне и планшете.', variant: 'soft', onclick: `openMeasurerV25ForOrder('${o.id}')` }
     : { icon: '👷', title: 'Назначить замерщика', sub: 'Без ответственного замерщик не увидит задачу в своём кабинете.', variant: 'warning', onclick: `openAssignTeam('${o.id}')` };
   if (o.status === 'measurement_done' && !projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: orderUserCanSeeInternalEconomics(o, currentUser()) ? 'Проверьте цену, расходы и маржу до формирования КП.' : 'Проверьте размеры, услуги и цену клиенту до формирования КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
   if (o.status === 'measurement_done') return { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
@@ -20779,7 +20832,7 @@ function renderMeasurerList(tasks) {
         </div>
         <div class="mt-3 flex gap-2 flex-wrap">
           ${scheduled && !accepted ? `<button class="btn-primary bg-emerald-600 hover:bg-emerald-700" onclick="acceptMeasurementTask('${o.id}', true)">✓ Принять</button>` : ''}
-          <button class="btn-primary flex-1" onclick="openMeasurerV25ForOrder('${o.id}')">📐 Модуль замера v2.5</button>
+          <button class="btn-primary flex-1" onclick="openMeasurerV25ForOrder('${o.id}')">📐 Открыть замер</button>
           <button class="btn-ghost" onclick="openOrder('${o.id}')">Карточка</button>
           <button class="btn-ghost" onclick="startCall('${c.phone}','${c.id}','${o.id}')">📞</button>
           <a class="btn-ghost" href="${whatsappLink(c.phone, 'Здравствуйте, я замерщик RolanPRO, еду к вам на замер.')}" target="_blank">💬</a>
@@ -22397,8 +22450,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать наряд', sub: 'рабочий лист и подписи', onclick: `printWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
       ` : `
       ${renderOrderActionCard({ icon: '📐', title: measureActionTitle, sub: hasMeasurements ? `${rooms.length} комн. · ${windows.length} окон` : 'добавить комнаты и окна', onclick: measureAction, variant: 'primary' })}
-      ${renderOrderActionCard({ icon: '🧭', title: 'Полевой модуль v2.5', sub: 'планшет: комнаты, окна, компас, фото, JSON', onclick: `openMeasurerV25ForOrder('${o.id}')`, variant: canMeasure ? 'primary' : 'soft' })}
-      ${renderOrderActionCard({ icon: '⬆️', title: 'Импорт JSON v2.5', sub: 'забрать выездной замер в CRM', onclick: `openMeasurerV25Import('${o.id}')`, disabled: !canManage })}
+      ${renderOrderActionCard({ icon: '🧭', title: 'Полевой замер', sub: 'телефон и планшет: комнаты, окна, компас и фото', onclick: `openMeasurerV25ForOrder('${o.id}')`, variant: canMeasure ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
       ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.consumedSqft.toFixed(1)} sqft расход` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
       ${renderOrderActionCard({ icon: '🖨', title: 'Печать наряда', sub: 'рабочий лист', onclick: `printWorkOrder('${o.id}')` })}
@@ -22658,7 +22710,7 @@ function renderOrderDetails(id) {
           ${(canMeasure || canManage) ? `<div class="flex gap-2 flex-wrap">
             ${canMeasure && !o.measurementAcceptedAt && o.status === 'measurement_scheduled' ? `<button class="btn-primary text-sm bg-emerald-600 hover:bg-emerald-700" onclick="acceptMeasurementTask('${o.id}', true)">✓ Принять замер</button>` : ''}
             ${canManage ? `<button class="btn-primary text-sm" onclick="openManagerMeasureModal('${o.id}')">➕ Замеры по объекту</button>` : ''}
-            ${canMeasure ? `<button class="btn-primary text-sm bg-slate-900 hover:bg-slate-800" onclick="openMeasurerV25ForOrder('${o.id}')">🧭 Модуль замерщика v2.5</button>` : ''}
+            ${canMeasure ? `<button class="btn-primary text-sm bg-slate-900 hover:bg-slate-800" onclick="openMeasurerV25ForOrder('${o.id}')">🧭 Полевой замер</button>` : ''}
             <button class="btn-ghost text-sm" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button>
             ${canManage ? `<button class="btn-ghost text-sm" onclick="openWindowTemplateModal('${o.id}')">📋 Шаблон раскладки</button>` : ''}
             ${canManage ? `<button class="btn-primary text-sm" onclick="addRoom('${o.id}')">+ ${T('addRoom')}</button>` : ''}
