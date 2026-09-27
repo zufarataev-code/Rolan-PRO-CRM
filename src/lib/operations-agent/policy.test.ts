@@ -31,11 +31,13 @@ test("implementation persists real business writes and durable receipts", () => 
 
   assert.match(source, /createManualProject/);
   assert.match(source, /createConsultation/);
-  assert.match(source, /addMeasurement/);
+  assert.match(source, /addMeasurementsBatch/);
   assert.match(source, /finance\.expense\.recorded/);
   assert.match(source, /prisma\.task\.create/);
   assert.match(source, /operations_agent\.request/);
   assert.match(source, /duplicate: true/);
+  assert.match(source, /idempotency_conflict/);
+  assert.match(source, /client_id: clientId \|\| null/);
   assert.doesNotMatch(source, /Placeholder for action handling logic/);
   assert.match(migration, /UNIQUE INDEX/);
   assert.match(migration, /idempotency_key/);
