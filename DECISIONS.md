@@ -275,6 +275,12 @@ This file records durable decisions. Current activity, blockers, and next steps 
 **Supersedes:** the PR #173 presentation that placed quick line entry as section 1 inside the full Project estimate.
 
 - `Быстрый ввод проекта` is a separate compact modal for service, Warehouse film, sqft, and customer sale price. It updates the same Project and then hands off to `Расчёт проекта` for review, internal economics, and Proposal approval.
+
+### 2026-09-27 — superseded: quick entry is not a live project workflow
+
+- The decision above is retained as history but no longer governs new Projects. A parallel quick-entry path allowed a Proposal to be prepared without the rooms, openings, dimensions, and material selection required by the operating workflow.
+- The only live Project path is now: client and property → service → measurement → estimate and Proposal → client acceptance and deposit → production preparation (verified dimensions, cut plan, material and stock) → installation → act and payment.
+- New Projects no longer create quick lines or expose a quick-entry button. Historical quick-entry records remain stored and readable only for compatibility; they are not accepted as the basis of a new estimate or Proposal.
 - The `Услуги` reference owns customer prices only. It must not ask for material cost, installer cost, or add-on cost. Warehouse purchase lots own film cost; employee Payroll cards own installation and additional-work rates; Project expenses own one-off delivery, purchases, helpers, and subcontractors.
 - This separation is presentation and responsibility ownership, not a new business entity. One Project remains the customer job from intake through Proposal, installation, payment, and completion.
 - Implemented in PR #173. Production deployment is not authorized by this decision.

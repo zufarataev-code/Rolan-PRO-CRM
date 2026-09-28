@@ -14656,6 +14656,31 @@ function orderMeasurementVerificationIssues(o) {
     .filter(({ win }) => !windowMeasurementIsVerified(win))
     .map(({ room, win }) => `${room.name || 'Помещение'} · ${win.name || 'Окно'}`);
 }
+function projectProductionReadiness(o, { requireReady = true } = {}) {
+  const issues = [];
+  const acceptedStatuses = [
+    'proposal_accepted','installation_scheduled','installation_accepted','installation_en_route',
+    'installation_in_progress','installation_done','act_signed','payment_received','completed','review_received',
+  ];
+  if (!acceptedStatuses.includes(o?.status)) issues.push('КП ещё не принято клиентом');
+  if (!o?.depositReceived) issues.push('аванс ещё не получен');
+  if (!projectEstimateIsApproved(o)) issues.push('расчёт проекта не подтверждён');
+  issues.push(...orderMeasurementVerificationIssues(o));
+
+  const plan = calcFilmPlan(o);
+  if (plan.unfit?.length) issues.push('есть детали, которые не помещаются на доступный рулон');
+  const usage = filmPlanUsageByCatalog(o, plan);
+  Object.entries(usage).forEach(([catalogId, material]) => {
+    if (catalogId === '__no_catalog') {
+      issues.push('не для всех окон выбрана плёнка');
+      return;
+    }
+    const stock = filmPlanInventoryStatus(catalogId, material);
+    if (!stock.enough) issues.push(`недостаточно материала: ${catalogLabel(getCatalogItem(catalogId))}`);
+  });
+  if (requireReady && !o?.productionReadyAt) issues.push('подготовка производства не подтверждена');
+  return Array.from(new Set(issues));
+}
 function orderStatusRequiresVerifiedMeasurements(status) {
   return [
     'installation_scheduled','installation_accepted','installation_en_route','installation_in_progress',
@@ -14669,6 +14694,13 @@ function ensureVerifiedMeasurementsForStatus(o, status, openMeasurement = true) 
   const preview = issues.slice(0, 4).join(', ');
   alert(`Перед назначением и выполнением монтажа нужны точные проверенные размеры всех окон. Не подтверждены: ${preview}${issues.length > 4 ? ` и ещё ${issues.length - 4}` : ''}.`);
   if (openMeasurement && orderUserCanManage(currentUser())) openManagerMeasureModal(o.id);
+  return false;
+}
+function ensureProductionReadyForInstallation(o) {
+  const issues = projectProductionReadiness(o);
+  if (!issues.length) return true;
+  alert(`До назначения монтажа завершите подготовку производства: ${issues.join(', ')}.`);
+  if (orderUserCanManage(currentUser())) openProjectProductionWorkspace(o.id);
   return false;
 }
 function orderRemovalAreaSqft(o) {
@@ -14964,6 +14996,8 @@ function projectEstimateIsApproved(o) {
 }
 function invalidateProjectEstimate(o, reason = '') {
   if (!o) return;
+  o.productionReadyAt = null;
+  o.productionReadyBy = null;
   if (o.projectEstimateApprovedAt) {
     o.projectEstimateApprovedAt = null;
     o.projectEstimateApprovedBy = null;
@@ -15402,6 +15436,7 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   const o = getOrder(orderId);
   if (!o) return false;
   if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return false;
+  if (newStatus === 'installation_scheduled' && !ensureProductionReadyForInstallation(o)) return false;
   if (o.status === newStatus && !opts.force) {
     render();
     return true;
@@ -15756,7 +15791,8 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'proposal_sent') return { icon: '✅', title: 'Отметить КП принятым', sub: 'Используйте, если клиент подтвердил предложение вне портала.', variant: 'primary', onclick: `changeStatus('${o.id}','proposal_accepted')` };
   if (o.status === 'proposal_accepted' && !o.depositReceived) return { icon: '💰', title: 'Отметить аванс', sub: 'После аванса можно уверенно закреплять дату монтажа.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
   if (o.status === 'proposal_accepted' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
-  if (o.status === 'proposal_accepted') return { icon: '🔧', title: 'Назначить монтаж', sub: 'Точные размеры подтверждены. Монтажники увидят свои наряды и маршрут.', variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
+  if (o.status === 'proposal_accepted' && !o.productionReadyAt) return { icon: '🏭', title: 'Подготовить производство', sub: 'Проверить раскрой, материал и склад перед назначением бригады.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
+  if (o.status === 'proposal_accepted') return { icon: '🔧', title: 'Назначить монтаж', sub: 'Производство подготовлено. Назначьте бригаду и дату.', variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
   if (o.status === 'installation_done') return { icon: '📝', title: 'Подписать акт', sub: 'Закрываем выполненную работу документально.', variant: 'primary', onclick: `changeStatus('${o.id}','act_signed')` };
   if (o.status === 'act_signed') return { icon: '💳', title: 'Отметить оплату', sub: 'Фиксируем финальную оплату по заказу.', variant: 'primary', onclick: `changeStatus('${o.id}','payment_received')` };
   if (o.status === 'payment_received') return { icon: '⭐', title: 'Закрыть и запросить отзыв', sub: 'Финальный шаг: заказ закрыт, клиенту отправляем отзыв.', variant: 'success', onclick: `changeStatus('${o.id}','completed'); askForReview('${o.id}');` };
@@ -21283,7 +21319,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
       ? `openMeasurerV25ForOrder('${o.id}')`
       : `openWorkOrder('${o.id}')`;
   const measureSub = hasMeasurements ? `${rooms} комн. · ${windows} окон` : 'добавить комнаты и окна';
-  const proposalDisabled = !canManage;
+  const proposalDisabled = !canManage || !estimateApproved;
   const routeHref = address ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}` : '';
   const roleLine = u?.role === 'measurer'
     ? 'режим замерщика: без денег'
@@ -21361,34 +21397,40 @@ function orderPassportActions(o, ctx) {
   const done = {
     measure: ctx.hasMeasurements,
     estimate: ctx.estimateApproved,
-    proposal: ['proposal_sent','proposal_accepted','installation_scheduled','installation_accepted',
+    proposal: ['proposal_accepted','installation_scheduled','installation_accepted',
                'installation_en_route','installation_in_progress','installation_done',
                'act_signed','payment_received','completed','review_received'].includes(o.status),
+    production: Boolean(o.productionReadyAt),
     install: Boolean(o.installationAt),
   };
 
   // Первое незакрытое действие и есть следующий шаг.
-  const stage = !done.estimate   ? 'estimate'
-              : !done.measure    ? 'measure'
+  const stage = !done.measure    ? 'measure'
+              : !done.estimate   ? 'estimate'
               : !done.proposal   ? 'proposal'
+              : !done.production ? 'production'
               : !done.install   ? 'install'
               : 'closing';
 
   const actions = [
-    { key: 'estimate', icon: '🧮', title: 'Расчёт проекта',
-      sub: ctx.estimateApproved ? 'проверен и подтверждён' : 'услуга, количество и цена без размеров',
-      onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !ctx.canManage },
-
     { key: 'measure', icon: '📐', title: 'Замер',
       sub: ctx.measureSub, onclick: ctx.measureAction },
+
+    { key: 'estimate', icon: '🧮', title: 'Расчёт проекта',
+      sub: ctx.estimateApproved ? 'проверен и подтверждён' : 'по помещениям, размерам и выбранной плёнке',
+      onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !ctx.canManage || !ctx.hasMeasurements },
 
     { key: 'proposal', icon: '📄', title: 'КП',
       sub: ctx.estimateApproved ? 'единый стандарт ROLANPRO' : 'проверить расчёт и сформировать',
       onclick: `openProfessionalKP('${o.id}')`, disabled: ctx.proposalDisabled },
 
+    { key: 'production', icon: '🏭', title: 'Производство',
+      sub: done.production ? 'раскрой и материалы подготовлены' : 'после принятия КП и аванса',
+      onclick: `openProjectProductionWorkspace('${o.id}')`, disabled: !done.proposal },
+
     { key: 'install', icon: '▣', title: 'Монтаж',
       sub: o.installationAt ? fmtDateTime(o.installationAt) : 'запланировать',
-      onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.proposal },
+      onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.production },
 
     { key: 'workorder', icon: '📋', title: 'Заказ-наряд',
       sub: ctx.hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера',
@@ -21477,12 +21519,16 @@ function openOrderWorkspaceFromTemplate(templateId, title, icon = '•', color =
 
 function renderOrderCleanProgress(o) {
   const curStep = getOrderStatus(o).step;
+  const labels = ['stepNew','stepConsultation','stepMeasurement','stepProposal','Производство','stepInstallation','stepAct','stepPayment','stepDone'];
+  let activeStep = curStep >= 4 ? curStep + 1 : curStep;
+  if (o.status === 'proposal_accepted' && !o.productionReadyAt) activeStep = 4;
+  if (o.productionReadyAt && !o.installationAt && curStep <= 3) activeStep = 5;
   return `
     <div class="order-clean-progress">
-      ${['stepNew','stepConsultation','stepMeasurement','stepProposal','stepInstallation','stepAct','stepPayment','stepDone'].map((lbl, i) => `
-        <div class="order-clean-progress-step ${i < curStep ? 'done' : i === curStep ? 'current' : ''}">
+      ${labels.map((lbl, i) => `
+        <div class="order-clean-progress-step ${i < activeStep ? 'done' : i === activeStep ? 'current' : ''}">
           <div class="order-clean-progress-line"></div>
-          <div class="order-clean-progress-label">${T(lbl)}</div>
+          <div class="order-clean-progress-label">${lbl === 'Производство' ? lbl : T(lbl)}</div>
         </div>`).join('')}
     </div>`;
 }
@@ -21652,26 +21698,11 @@ function projectEstimateUpdateTaxProfile(oid, field, value) {
 function projectEstimateReadiness(o) {
   const issues = [];
   const windows = measureAllWindows(o);
-  const quickLines = projectEstimateQuickLinesForBasis(o);
-  const quickStockDemand = projectQuickRequiredSqftByCatalog(o, quickLines);
-  const quickSupplyDemand = projectQuickRequiredSupplies(o, quickLines);
-  if (!windows.length && !quickLines.length) issues.push('нет позиций проекта');
-  if (windows.length) {
-    if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
-    if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
-  } else {
-    if (quickLines.some(line => !line.serviceType)) issues.push('не выбрана услуга');
-    if (quickLines.some(line => !line.catalogId && !projectQuickManualFilmName(line))) issues.push('не выбрана плёнка');
-    if (quickLines.some(line => !String(line.label || '').trim())) issues.push('не указано название позиции');
-    if (quickLines.some(line => Number(line.qty) <= 0)) issues.push('не указан метраж');
-    if (quickLines.some(line => Number(line.price) <= 0)) issues.push('не указана цена клиенту');
-  }
-  if (quickLines.some(line => line.catalogId && warehouseCatalogStockStats(line.catalogId).availableSqft <= 0)) issues.push('выбранной плёнки нет на складе');
-  if (Object.entries(quickStockDemand).some(([catalogId, requiredSqft]) => warehouseCatalogStockStats(catalogId).pricedSqft < requiredSqft)) issues.push('на складе недостаточно плёнки с указанной закупочной ценой');
-  if (quickLines.some(line => (line.supplyItems || []).some(item => !item.supplyId || Number(item.qty) <= 0))) issues.push('есть незаполненный расходник услуги');
-  if (Object.entries(quickSupplyDemand).some(([supplyId, requiredQty]) => Number(ensureSupplies().find(supply => supply.id === supplyId)?.qty || 0) < requiredQty)) issues.push('на складе недостаточно расходников');
+  if (!windows.length) issues.push('не внесены помещения и размеры');
+  if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
+  if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
   if ((o.extraServices || []).filter(s => !s.quickProjectLine).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
-  if (orderRevenue(o) <= 0 && !issues.includes('не указана цена клиенту')) issues.push('сумма проекта равна нулю');
+  if (orderRevenue(o) <= 0) issues.push('сумма проекта равна нулю');
   return issues;
 }
 
@@ -21680,7 +21711,7 @@ function projectQuickLines(o) {
 }
 
 function projectEstimateQuickLinesForBasis(o) {
-  return measureAllWindows(o).length ? [] : projectQuickLines(o);
+  return o?.quickProjectImportedCompleted === true ? projectQuickLines(o) : [];
 }
 
 function projectQuickManualFilmName(line) {
@@ -22118,8 +22149,25 @@ function projectQuickCompletionIssues(o) {
     'на складе недостаточно плёнки с указанной закупочной ценой',
     'на складе недостаточно расходников',
   ]);
-  const issues = projectEstimateReadiness(o).filter(issue => !ignoredHistoricalStockIssues.has(issue));
-  const quickLines = projectEstimateQuickLinesForBasis(o);
+  const quickLines = projectQuickLines(o);
+  const quickStockDemand = projectQuickRequiredSqftByCatalog(o, quickLines);
+  const quickSupplyDemand = projectQuickRequiredSupplies(o, quickLines);
+  const issues = [];
+  if (!quickLines.length) issues.push('нет позиций проекта');
+  if (quickLines.some(line => !line.serviceType)) issues.push('не выбрана услуга');
+  if (quickLines.some(line => !line.catalogId && !projectQuickManualFilmName(line))) issues.push('не выбрана плёнка');
+  if (quickLines.some(line => !String(line.label || '').trim())) issues.push('не указано название позиции');
+  if (quickLines.some(line => Number(line.qty) <= 0)) issues.push('не указан метраж');
+  if (quickLines.some(line => Number(line.price) <= 0)) issues.push('не указана цена клиенту');
+  if (quickLines.some(line => line.catalogId && warehouseCatalogStockStats(line.catalogId).availableSqft <= 0)) issues.push('выбранной плёнки нет на складе');
+  if (Object.entries(quickStockDemand).some(([catalogId, requiredSqft]) => warehouseCatalogStockStats(catalogId).pricedSqft < requiredSqft)) issues.push('на складе недостаточно плёнки с указанной закупочной ценой');
+  if (quickLines.some(line => (line.supplyItems || []).some(item => !item.supplyId || Number(item.qty) <= 0))) issues.push('есть незаполненный расходник услуги');
+  if (Object.entries(quickSupplyDemand).some(([supplyId, requiredQty]) => Number(ensureSupplies().find(supply => supply.id === supplyId)?.qty || 0) < requiredQty)) issues.push('на складе недостаточно расходников');
+  if (orderRevenue(o) <= 0) issues.push('сумма проекта равна нулю');
+  ignoredHistoricalStockIssues.forEach(issue => {
+    const index = issues.indexOf(issue);
+    if (index >= 0) issues.splice(index, 1);
+  });
   if (quickLines.some(line => !Array.isArray(line.installerIds) || !line.installerIds.length)) {
     issues.push('у каждой услуги нужен исполнитель');
   }
@@ -22317,7 +22365,6 @@ function renderProjectEstimateWorkspace(o) {
   const quickLines = projectEstimateQuickLinesForBasis(o);
   const ignoredQuickLineCount = storedQuickLines.length - quickLines.length;
   const measuredArea = orderActualAreaSqft(o);
-  const preliminaryArea = projectQuickSqft(o);
   const pss = orderPSS(o);
   const margin = orderMargin(o);
   const marginPct = orderMarginPct(o) * 100;
@@ -22370,18 +22417,18 @@ function renderProjectEstimateWorkspace(o) {
   return `
     <div class="project-estimate-summary">
       <div class="project-estimate-kpi"><span>Цена клиенту</span><strong class="text-emerald-700">${fmtMoney(orderRevenue(o))}</strong></div>
-      <div class="project-estimate-kpi"><span>${measuredArea ? 'Площадь' : 'Предварительный объём'}</span><strong>${(measuredArea || preliminaryArea).toFixed(2)} sqft</strong></div>
+      <div class="project-estimate-kpi"><span>Площадь по замеру</span><strong>${measuredArea.toFixed(2)} sqft</strong></div>
       <div class="project-estimate-kpi"><span>Услуги</span><strong>${new Set(quickLines.map(line => line.serviceType)).size || (o.serviceTypes || []).length}</strong></div>
       ${canSeeInternalEconomics ? `<div class="project-estimate-kpi"><span>Себестоимость</span><strong class="text-red-600">${fmtMoney(pss.total)}</strong></div><div class="project-estimate-kpi"><span>Прибыль / маржа</span><strong class="${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(margin)} · ${marginPct.toFixed(1)}%</strong></div>` : ''}
     </div>
     <div class="project-estimate-quick">
-      <div class="project-estimate-section-head"><div><h4>Быстрый итог проекта</h4><div class="text-xs text-gray-500">Все значения берутся из этого проекта, склада и справочника сотрудников.</div></div>${measuredArea ? '<span class="tag bg-blue-50 text-blue-700">Источник: замер</span>' : `<button class="btn-ghost text-sm" onclick="openQuickProjectEntry('${o.id}')">Изменить быстрый ввод</button>`}</div>
+      <div class="project-estimate-section-head"><div><h4>Итог по замеру</h4><div class="text-xs text-gray-500">Расчёт строится по помещениям, размерам, выбранной плёнке, складу и справочнику сотрудников.</div></div>${measuredArea ? '<span class="tag bg-blue-50 text-blue-700">Источник: замер</span>' : `<button class="btn-primary text-sm" onclick="openManagerMeasureModal('${o.id}')">Перейти к замеру</button>`}</div>
       <div class="project-estimate-quick-grid">
         <div class="project-estimate-quick-card"><span>Услуги проекта</span><strong>${academyEsc(orderServiceSummaryLabel(o))}</strong></div>
         <div class="project-estimate-quick-card"><span>Плёнка</span><strong>${selectedFilms.length ? selectedFilms.map(academyEsc).join(', ') : 'не выбрана'}</strong></div>
-        <div class="project-estimate-quick-card"><span>${measuredArea ? 'Метраж стекла' : 'Предварительный объём'}</span><strong>${(measuredArea || preliminaryArea).toFixed(2)} sqft</strong></div>
+        <div class="project-estimate-quick-card"><span>Метраж стекла</span><strong>${measuredArea.toFixed(2)} sqft</strong></div>
         <div class="project-estimate-quick-card"><span>Расход плёнки</span><strong>${Number(filmPlan.consumedSqft || 0).toFixed(2)} sqft</strong></div>
-        <div class="project-estimate-quick-card"><span>Позиции проекта</span><strong>${quickLines.length} · ${fmtMoney(quickLines.reduce((sum, line) => sum + Number(line.price || 0), 0))}</strong></div>
+        <div class="project-estimate-quick-card"><span>Окна / двери</span><strong>${measureAllWindows(o).length} · ${fmtMoney(orderRevenue(o))}</strong></div>
         <div class="project-estimate-quick-card"><span>Исполнители</span><strong>${installerPay.byInstaller.length ? installerPay.byInstaller.map(row => academyEsc(row.name)).join(', ') : 'ставка категории · команда не назначена'}</strong></div>
         <div class="project-estimate-quick-card"><span>Материал со склада</span><strong>${fmtMoney(pss.film)}</strong></div>
         <div class="project-estimate-quick-card"><span>Оплата бригады</span><strong>${fmtMoney(pss.installers)}</strong></div>
@@ -22392,7 +22439,7 @@ function renderProjectEstimateWorkspace(o) {
     ${unverifiedMeasurements.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Предварительные размеры клиента.</b> По ним разрешено рассчитать проект и выпустить КП. Перед назначением монтажа потребуется внести и подтвердить точные размеры ${unverifiedMeasurements.length} окон.</div>` : ''}
 
     <section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>1. Замер и материалы</h4><div class="text-xs text-gray-500">Не обязательно для предварительного расчёта. Точные комнаты, окна и материал потребуются перед монтажом.</div></div></div>
+      <div class="project-estimate-section-head"><div><h4>1. Замер и материалы</h4><div class="text-xs text-gray-500">Обязательная основа расчёта и КП: помещения, окна, размеры и выбранная плёнка.</div></div></div>
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Помещение / окно</th><th>Материал</th><th class="money">sqft</th><th>Цена продажи / sqft</th><th class="money">Клиенту</th>${canSeeInternalEconomics ? '<th class="money">Себестоимость материала</th>' : ''}</tr></thead><tbody>${materialRows || `<tr><td colspan="${canSeeInternalEconomics ? 6 : 5}" class="text-gray-500">Сначала завершите замер.</td></tr>`}</tbody></table></div>
     </section>
 
@@ -22566,12 +22613,11 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     </div>
     ${proposalStripeUrl ? `<div class="order-clean-note mt-3">Stripe checkout: <a class="text-blue-700 underline break-all" href="${proposalStripeUrl}" target="_blank">${proposalStripeUrl}</a></div>` : ''}
     <div class="order-clean-actions mt-3">
-      ${renderOrderActionCard({ icon: '⚡', title: 'Быстрый ввод проекта', sub: 'услуга, плёнка со склада, количество и цена', onclick: `openQuickProjectEntry('${o.id}')`, disabled: !canManage, variant: !quickLines.length ? 'primary' : 'soft' })}
-      ${renderOrderActionCard({ icon: '🧮', title: estimateApproved ? 'Расчёт проекта подтверждён' : 'Расчёт проекта', sub: hasMeasurements ? (canSeeInternalEconomics ? `цена, расходы и маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `цена клиенту ${fmtMoney(orderRevenue(o))}`) : 'проверить итог и подтвердить расчёт', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !canManage, variant: !estimateApproved ? 'primary' : 'soft' })}
-      ${renderOrderActionCard({ icon: '📄', title: 'Единое КП', sub: estimateApproved ? 'позиции проекта и оплата' : 'проверить расчёт и сформировать', onclick: `openProfessionalKP('${o.id}')`, disabled: !canManage, variant: estimateApproved ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🧮', title: estimateApproved ? 'Расчёт проекта подтверждён' : 'Расчёт проекта', sub: hasMeasurements ? (canSeeInternalEconomics ? `цена, расходы и маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `цена клиенту ${fmtMoney(orderRevenue(o))}`) : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !canManage || !hasMeasurements, variant: !estimateApproved && hasMeasurements ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '📄', title: 'Единое КП', sub: estimateApproved ? 'позиции проекта и оплата' : 'сначала подтвердите расчёт по замеру', onclick: `openProfessionalKP('${o.id}')`, disabled: !canManage || !estimateApproved, variant: estimateApproved ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '🔗', title: 'Ссылка клиенту', sub: clientPortalUrl(o.id) ? 'скопировать портал' : 'public URL не настроен', onclick: `copyPortalLink('${o.id}')`, disabled: !clientPortalUrl(o.id) })}
-      ${renderOrderActionCard({ icon: '✅', title: 'КП принято', sub: 'перевести этап', onclick: `changeStatus('${o.id}','proposal_accepted')`, disabled: !canManage || o.status === 'proposal_accepted' })}
-      ${renderOrderActionCard({ icon: '💳', title: 'Аванс / оплата', sub: orderDebt(o) > 0 ? `долг ${fmtMoney(orderDebt(o))}` : 'без долга', onclick: o.depositReceived ? `openProfessionalKP('${o.id}')` : `markDepositReceived('${o.id}')`, disabled: !canManage })}
+      ${renderOrderActionCard({ icon: '✅', title: 'КП принято', sub: 'перевести этап', onclick: `changeStatus('${o.id}','proposal_accepted')`, disabled: !canManage || !['proposal_sent','proposal_accepted'].includes(o.status) || o.status === 'proposal_accepted' })}
+      ${renderOrderActionCard({ icon: '💳', title: 'Аванс / оплата', sub: orderDebt(o) > 0 ? `долг ${fmtMoney(orderDebt(o))}` : 'без долга', onclick: o.depositReceived ? `openProfessionalKP('${o.id}')` : `markDepositReceived('${o.id}')`, disabled: !canManage || !['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done','act_signed','payment_received','completed','review_received'].includes(o.status) })}
     </div>`;
 
   const scheduleBody = `
@@ -22587,7 +22633,8 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ` : `
       ${renderOrderActionCard({ icon: '📞', title: 'Консультация', sub: o.consultationAt ? fmtDateTime(o.consultationAt) : 'назначить', onclick: `scheduleConsultationPrompt('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '📐', title: 'Замер', sub: o.measurementAt ? fmtDateTime(o.measurementAt) : 'назначить', onclick: `scheduleMeasurementPrompt('${o.id}')`, disabled: !canManage })}
-      ${renderOrderActionCard({ icon: unverifiedMeasurements.length ? '📐' : '🔧', title: unverifiedMeasurements.length ? 'Сначала точные размеры' : 'Монтаж', sub: unverifiedMeasurements.length ? `${unverifiedMeasurements.length} окон не подтверждено` : (o.installationAt ? fmtDateTime(o.installationAt) : 'назначить'), onclick: unverifiedMeasurements.length ? `openManagerMeasureModal('${o.id}')` : `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage, variant: unverifiedMeasurements.length ? 'warning' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🏭', title: o.productionReadyAt ? 'Производство готово' : 'Подготовка производства', sub: o.productionReadyAt ? fmtDateTime(o.productionReadyAt) : 'раскрой, материал и склад', onclick: `openProjectProductionWorkspace('${o.id}')`, disabled: !canManage || !['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done','act_signed','payment_received','completed','review_received'].includes(o.status), variant: o.productionReadyAt ? 'success' : 'warning' })}
+      ${renderOrderActionCard({ icon: unverifiedMeasurements.length ? '📐' : '🔧', title: unverifiedMeasurements.length ? 'Сначала точные размеры' : 'Монтаж', sub: unverifiedMeasurements.length ? `${unverifiedMeasurements.length} окон не подтверждено` : (o.installationAt ? fmtDateTime(o.installationAt) : 'назначить после производства'), onclick: unverifiedMeasurements.length ? `openManagerMeasureModal('${o.id}')` : `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage || !o.productionReadyAt, variant: unverifiedMeasurements.length || !o.productionReadyAt ? 'warning' : 'soft' })}
       ${renderOrderActionCard({ icon: '👷', title: 'Команда', sub: installers.length ? installers.join(', ') : 'назначить', onclick: `openAssignTeam('${o.id}')`, disabled: !canManage })}
       `}
     </div>`;
@@ -22603,7 +22650,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     </div>
     <div class="order-clean-actions mt-3">
       ${renderOrderActionCard({ icon: '💰', title: o.depositReceived ? 'Аванс получен' : 'Отметить аванс', sub: o.depositReceived ? fmtDateTime(o.depositReceivedAt) : `ожидаемый ${fmtMoney(orderRevenue(o) * (db.settings.advancePct || 30) / 100)}`, onclick: o.depositReceived ? `openOrder('${o.id}')` : `markDepositReceived('${o.id}')`, variant: o.depositReceived ? 'success' : 'warning' })}
-      ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: canSeeInternalEconomics ? 'услуги, цена, расходы и маржа' : 'услуги, количество и цена клиенту', onclick: `openProjectEstimateWorkspace('${o.id}')`, variant: !estimateApproved ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: hasMeasurements ? (canSeeInternalEconomics ? 'замер, цена, расходы и маржа' : 'замер, услуги и цена клиенту') : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !hasMeasurements, variant: !estimateApproved && hasMeasurements ? 'primary' : 'soft' })}
     </div>` : `<div class="order-clean-note">Финансы скрыты для роли ${academyEsc(u?.role || '')}. В рабочем режиме видны только клиент, адрес, замер, техлист и задача.</div>`;
 
   const routeBody = `
@@ -22651,7 +22698,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
         ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'client', icon: '👤', title: 'Клиент и связь', summary: c?.name || 'Данные и все каналы связи', badge: c?.phone || c?.email ? 'контакт' : 'заполнить', body: clientBody, color: '#2563eb', soft: '#eff6ff' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'measurement', icon: '📐', title: 'Замер', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : 'Размеры ещё не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : 'нужно', body: measurementBody, color: '#7c3aed', soft: '#f5f3ff' })}
-        ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '⚡', title: 'Быстрый ввод проекта', summary: quickLines.length ? `${quickLines.length} услуг · ${projectQuickSqft(o).toFixed(0)} sqft · ${fmtMoney(quickLines.reduce((sum, line) => sum + Number(line.price || 0), 0))}` : 'Услуга, плёнка, количество и цена без размеров', badge: quickLines.length ? `${quickLines.length}` : 'ввести', onclick: `openQuickProjectEntry('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
+        ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '🧮', title: 'Расчёт по замеру', summary: hasMeasurements ? `${windows.length} окон · ${orderActualAreaSqft(o).toFixed(0)} sqft · ${fmtMoney(orderRevenue(o))}` : 'Сначала внесите помещения, окна и размеры', badge: estimateApproved ? 'подтверждён' : hasMeasurements ? 'рассчитать' : 'нужен замер', onclick: hasMeasurements ? `openProjectEstimateWorkspace('${o.id}')` : `openManagerMeasureModal('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'documents', icon: workDocsOnly ? '🧰' : '📄', title: workDocsOnly ? 'Рабочие документы' : 'КП и документы', summary: workDocsOnly ? 'Без коммерческих сумм' : (proposal ? 'КП создано' : estimateApproved ? 'Расчёт готов — можно формировать КП' : 'Откройте расчёт и проверьте итог'), badge: workDocsOnly ? 'документы' : estimateApproved ? 'КП' : 'проверить', body: docsBody, color: '#d97706', soft: '#fff7ed' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'schedule', icon: '📅', title: isInstaller ? 'Задача и выезд' : 'Календарь и команда', summary: events.length ? `${events.length} события` : 'События не назначены', badge: isInstaller ? T(o.status) : (installers.length ? `${installers.length}` : 'команда'), body: scheduleBody, color: '#0891b2', soft: '#ecfeff' })}
         ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'payment', icon: '💵', title: 'Оплата', summary: canSeeMoney ? (orderDebt(o) > 0 ? `Долг ${fmtMoney(orderDebt(o))}` : 'Оплачено полностью') : 'Скрыто по роли', badge: canSeeMoney ? (canSeeInternalEconomics ? `${(orderMarginPct(o)*100).toFixed(0)}%` : (orderDebt(o) > 0 ? 'долг' : 'оплачено')) : 'скрыто', body: financeBody, color: '#059669', soft: '#ecfdf5' })}
@@ -24584,9 +24631,61 @@ function addWorkType(oid) {
   openWorkTypeSettings(oid);
 }
 
+function openProjectProductionWorkspace(oid) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanManage(currentUser())) return;
+  const blockingIssues = projectProductionReadiness(o, { requireReady: false });
+  const plan = calcFilmPlan(o);
+  const usage = filmPlanUsageByCatalog(o, plan);
+  const materialRows = Object.entries(usage).map(([catalogId, material]) => {
+    const catalog = catalogId === '__no_catalog' ? null : getCatalogItem(catalogId);
+    const stock = catalog ? filmPlanInventoryStatus(catalogId, material) : null;
+    return `<div class="order-clean-list-row"><span>${academyEsc(catalog ? catalogLabel(catalog) : 'Плёнка не выбрана')}</span><b class="${stock?.enough ? 'text-emerald-700' : 'text-red-600'}">${material.consumedSqft.toFixed(1)} sqft · ${stock?.enough ? 'склад OK' : 'нужно пополнить'}</b></div>`;
+  }).join('');
+  state.modal = `
+    <div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
+      <div class="modal-content workspace-modal order-workspace-modal" style="--workspace-color:#7c3aed" onclick="event.stopPropagation()">
+        <header class="order-workspace-modal-head">
+          <div class="order-workspace-modal-heading"><span class="order-workspace-modal-icon">🏭</span><div><div class="order-workspace-modal-kicker">${academyEsc(o.number)}</div><h3>Подготовка производства</h3></div></div>
+          <button type="button" class="order-workspace-close" onclick="closeModal()" aria-label="Закрыть подготовку производства">×</button>
+        </header>
+        <div class="order-workspace-modal-body">
+          <div class="order-clean-note"><b>Этап перед монтажом.</b> Здесь проверяются принятое КП, аванс, точные размеры, раскрой и наличие материала.</div>
+          ${materialRows ? `<div class="order-clean-list mt-3">${materialRows}</div>` : '<div class="order-clean-note mt-3">Сначала внесите помещения, окна, размеры и материал.</div>'}
+          ${blockingIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Не готово:</b> ${blockingIssues.map(academyEsc).join(', ')}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Проверка пройдена.</b> Можно подтвердить готовность производства.</div>`}
+          <div class="order-clean-actions mt-3">
+            ${renderOrderActionCard({ icon: '📐', title: 'Проверить точные размеры', sub: `${measureAllWindows(o).length} окон`, onclick: `openManagerMeasureModal('${o.id}')` })}
+            ${renderOrderActionCard({ icon: '🎞', title: 'Открыть лист раскроя', sub: `${plan.pieces?.length || 0} деталей`, onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
+            ${renderOrderActionCard({ icon: '📋', title: 'Открыть заказ-наряд', sub: 'материалы и задача бригады', onclick: `openWorkOrder('${o.id}')`, disabled: !measureAllWindows(o).length })}
+          </div>
+          <div class="project-estimate-footer">
+            <div class="text-xs text-gray-500">После подтверждения CRM разрешит назначить монтаж.</div>
+            <div class="flex gap-2"><button class="btn-ghost" onclick="closeModal()">Закрыть</button><button class="btn-primary" onclick="confirmProjectProductionReady('${o.id}')" ${blockingIssues.length ? 'disabled' : ''}>Подтвердить готовность →</button></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  render();
+}
+
+function confirmProjectProductionReady(oid) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanManage(currentUser())) return;
+  const issues = projectProductionReadiness(o, { requireReady: false });
+  if (issues.length) { alert('Производство пока не готово: ' + issues.join(', ') + '.'); return; }
+  o.productionReadyAt = new Date().toISOString();
+  o.productionReadyBy = state.currentUserId;
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: o.productionReadyAt, key: 'production_ready', by: state.currentUserId, note: 'Раскрой, материал и склад проверены' });
+  save();
+  closeModal();
+  scheduleInstallationPrompt(oid);
+}
+
 function scheduleInstallationPrompt(oid) {
   const o = getOrder(oid);
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
+  if (!ensureProductionReadyForInstallation(o)) return;
   const installers = usersByRole('installer');
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
@@ -25520,7 +25619,7 @@ function openOrderModal() {
         <div class="flex gap-2 justify-end" style="margin-left:auto">
           <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
           <button class="btn-ghost" onclick="createOrder('draft')">Сохранить черновик</button>
-          <button class="btn-primary" onclick="createOrder('estimate')">Создать и быстро рассчитать →</button>
+          <button class="btn-primary" onclick="createOrder('measure')">Создать и перейти к замеру →</button>
         </div>
       </div>
     </div>
@@ -25977,7 +26076,7 @@ function createOrderClientFromOverlay() {
   selectOrderClient(id);
 }
 
-function createOrder(nextStep = 'estimate') {
+function createOrder(nextStep = 'measure') {
   let clientId = state._newOrderClient;
   const serviceIds = Array.from(new Set((state._newOrderServices || []).filter(id => ORDER_PRIMARY_SERVICES.some(service => service.id === id))));
   const serviceId = serviceIds[0] || document.getElementById('no-svc')?.value || state._newOrderService || 'smart_film';
@@ -26084,16 +26183,6 @@ function createOrder(nextStep = 'estimate') {
     clientFlow: orderClientFlow(accountTypeForOrder, relationshipForOrder),
     priceOverridePerSqft: null,
   };
-  selectedServices.forEach(selectedService => {
-    const catalog = projectQuickLineCatalog(selectedService.id)[0] || null;
-    const line = {
-      id: uid(), quickProjectLine: true, serviceType: selectedService.id,
-      catalogId: catalog?.id || '', label: catalog ? catalogLabel(catalog) : selectedService.title,
-      qty: 0, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0), price: 0, pricingMode: 'total', startDate: '', endDate: '', installerIds: [], supplyItems: [],
-    };
-    projectEstimateSyncQuickLine(line);
-    o.extraServices.push(line);
-  });
   stampOrderAddress(o, selectedAddress);
 
   db.orders.push(o);
@@ -26110,7 +26199,6 @@ function createOrder(nextStep = 'estimate') {
   save(); closeModal();
   openOrder(o.id);
   if (nextStep === 'measure') setTimeout(() => openManagerMeasureModal(o.id), 0);
-  if (nextStep === 'estimate') setTimeout(() => openQuickProjectEntry(o.id), 0);
 }
 
 function openClientModal() {

@@ -657,3 +657,12 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Verification: 189 automated tests passed; TypeScript passed; production build passed; inline scripts compile. Independent agent review identified adapter overrides, field focus IDs, details state, and horizontal scroll restoration; all addressed.
 - Blocker: browser rejected both local preview URLs with ERR_BLOCKED_BY_CLIENT. Actual mobile rendering, keyboard interaction, and server persistence are NOT verified. Do not claim mobile acceptance or production completion.
 - Next action: review dedicated branch/PR, test the injected legacy route at 375/390/430px and desktop with keyboard and save/reopen, then release through main after CI. Not merged or deployed.
+
+## 2026-09-27 — canonical project-stage workflow (in progress)
+
+- Owner: Codex; branch `fix/canonical-project-stage-workflow`, based on current `main`.
+- Scope: remove the new-project `Быстрый ввод` bypass and enforce one project path: client/property/service → measurement → estimate/proposal → production preparation → installation → act/payment.
+- Compatibility: historical quick-entry data remains readable; no customer or project data is deleted.
+- Implementation: new Projects open the measurement workspace and do not create quick lines; estimates require measured openings and selected catalog film; Proposals require an approved measured estimate; installation requires accepted Proposal, deposit, verified dimensions, feasible cut plan, sufficient stock, and explicit production readiness.
+- Verification: 388/388 automated tests passed; TypeScript passed; production build completed all 110 routes; `git diff --check` passed.
+- Release state: ready for review on `fix/canonical-project-stage-workflow`. No production deployment is authorized by this task.
