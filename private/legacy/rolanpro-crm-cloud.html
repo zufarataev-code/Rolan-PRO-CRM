@@ -6815,6 +6815,7 @@ let cloudReady = false;
 let cloudSaveTimer = null;
 let cloudSaveInFlight = false;
 let cloudSaveQueued = false;
+let cloudBaseSnapshot = null;
 let cloudAllowedLegacyIds = [];
 let cloudCurrentUser = null;
 let canonicalConsultations = [];
@@ -34580,6 +34581,88 @@ function cloudScheduleSave() {
   cloudSaveTimer = setTimeout(cloudPersist, 700);
 }
 
+function cloneCloudWorkspaceValue(value) {
+  return value === undefined ? value : JSON.parse(JSON.stringify(value));
+}
+
+function cloudWorkspaceValuesEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function isCloudWorkspaceRecord(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cloudWorkspaceHasStableIds(values) {
+  return values.every(value => isCloudWorkspaceRecord(value) && (typeof value.id === 'string' || typeof value.id === 'number'));
+}
+
+function mergeCloudWorkspaceArrays(base, local, remote) {
+  const combined = [...base, ...local, ...remote];
+  if (!cloudWorkspaceHasStableIds(combined)) {
+    const isPrefix = (prefix, values) => prefix.length <= values.length && prefix.every((value, index) => cloudWorkspaceValuesEqual(value, values[index]));
+    if (!isPrefix(base, local) || !isPrefix(base, remote)) return cloneCloudWorkspaceValue(local);
+    const merged = cloneCloudWorkspaceValue(remote);
+    const seen = new Set(merged.map(value => JSON.stringify(value)));
+    local.slice(base.length).forEach(value => {
+      const key = JSON.stringify(value);
+      if (!seen.has(key)) { seen.add(key); merged.push(cloneCloudWorkspaceValue(value)); }
+    });
+    return merged;
+  }
+
+  const byId = values => new Map(values.map(value => [String(value.id), value]));
+  const baseById = byId(base), localById = byId(local), remoteById = byId(remote);
+  const orderedIds = [...remote.map(value => String(value.id)), ...local.map(value => String(value.id))]
+    .filter((id, index, values) => values.indexOf(id) === index);
+  return orderedIds.flatMap(id => {
+    const baseHas = baseById.has(id), localHas = localById.has(id), remoteHas = remoteById.has(id);
+    if (!localHas) return baseHas ? [] : [cloneCloudWorkspaceValue(remoteById.get(id))];
+    if (!remoteHas) {
+      if (baseHas && cloudWorkspaceValuesEqual(localById.get(id), baseById.get(id))) return [];
+      return [cloneCloudWorkspaceValue(localById.get(id))];
+    }
+    if (!baseHas) return [cloudWorkspaceValuesEqual(localById.get(id), remoteById.get(id))
+      ? cloneCloudWorkspaceValue(localById.get(id))
+      : mergeCloudWorkspaceSnapshots(undefined, localById.get(id), remoteById.get(id))];
+    return [mergeCloudWorkspaceSnapshots(baseById.get(id), localById.get(id), remoteById.get(id))];
+  });
+}
+
+function mergeCloudWorkspaceRecords(base, local, remote) {
+  const result = {};
+  const keys = new Set([...Object.keys(base), ...Object.keys(remote), ...Object.keys(local)]);
+  keys.forEach(key => {
+    const baseHas = Object.prototype.hasOwnProperty.call(base, key);
+    const localHas = Object.prototype.hasOwnProperty.call(local, key);
+    const remoteHas = Object.prototype.hasOwnProperty.call(remote, key);
+    if (!localHas) {
+      if (!baseHas && remoteHas) result[key] = cloneCloudWorkspaceValue(remote[key]);
+      return;
+    }
+    if (!remoteHas) {
+      if (!baseHas || !cloudWorkspaceValuesEqual(local[key], base[key])) result[key] = cloneCloudWorkspaceValue(local[key]);
+      return;
+    }
+    if (!baseHas) {
+      result[key] = cloudWorkspaceValuesEqual(local[key], remote[key])
+        ? cloneCloudWorkspaceValue(local[key])
+        : mergeCloudWorkspaceSnapshots(undefined, local[key], remote[key]);
+      return;
+    }
+    result[key] = mergeCloudWorkspaceSnapshots(base[key], local[key], remote[key]);
+  });
+  return result;
+}
+
+function mergeCloudWorkspaceSnapshots(base, local, remote) {
+  if (cloudWorkspaceValuesEqual(local, base)) return cloneCloudWorkspaceValue(remote);
+  if (cloudWorkspaceValuesEqual(remote, base) || cloudWorkspaceValuesEqual(local, remote)) return cloneCloudWorkspaceValue(local);
+  if (Array.isArray(base) && Array.isArray(local) && Array.isArray(remote)) return mergeCloudWorkspaceArrays(base, local, remote);
+  if (isCloudWorkspaceRecord(base) && isCloudWorkspaceRecord(local) && isCloudWorkspaceRecord(remote)) return mergeCloudWorkspaceRecords(base, local, remote);
+  return cloneCloudWorkspaceValue(local);
+}
+
 async function cloudPersist(options = {}) {
   if (!cloudReady) return false;
   if (cloudSaveInFlight) {
@@ -34588,29 +34671,45 @@ async function cloudPersist(options = {}) {
   }
   cloudSaveInFlight = true;
   cloudStatus('Сохраняем…');
-  const snapshot = JSON.parse(JSON.stringify(db));
+  let snapshot = JSON.parse(JSON.stringify(db));
   try {
-    const response = await fetch('/api/v1/legacy-crm/state', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ revision: cloudRevision, payload: snapshot }),
-    });
-    const result = await response.json();
-    if (response.status === 401) {
-      location.assign('/login');
-      return false;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const response = await fetch('/api/v1/legacy-crm/state', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ revision: cloudRevision, payload: snapshot }),
+      });
+      const result = await response.json();
+      if (response.status === 401) {
+        location.assign('/login');
+        return false;
+      }
+      if (response.status === 409) {
+        cloudStatus('Объединяем изменения…');
+        const latestResponse = await fetch('/api/v1/legacy-crm/state', { cache: 'no-store' });
+        if (latestResponse.status === 401) {
+          location.assign('/login');
+          return false;
+        }
+        const latestResult = await latestResponse.json();
+        if (!latestResponse.ok) throw new Error(latestResult?.errors?.[0]?.message || 'workspace refresh failed');
+        const remotePayload = latestResult.data.payload;
+        snapshot = mergeCloudWorkspaceSnapshots(cloudBaseSnapshot, JSON.parse(JSON.stringify(db)), remotePayload);
+        db = cloneCloudWorkspaceValue(snapshot);
+        cloudRevision = latestResult.data.revision;
+        cloudBaseSnapshot = cloneCloudWorkspaceValue(remotePayload);
+        localStorage.setItem('rolanpro_crm', JSON.stringify(db));
+        continue;
+      }
+      if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'save failed');
+      cloudRevision = result.data.revision;
+      cloudBaseSnapshot = cloneCloudWorkspaceValue(snapshot);
+      cloudStatus('Сохранено', 'green');
+      return true;
     }
-    if (response.status === 409) {
-      cloudReady = false;
-      cloudStatus('Данные обновлены другим сотрудником', 'red');
-      alert('Другой сотрудник уже изменил данные. CRM загрузит последнюю версию, чтобы не потерять изменения.');
-      location.reload();
-      return false;
-    }
-    if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'save failed');
-    cloudRevision = result.data.revision;
-    cloudStatus('Сохранено', 'green');
-    return true;
+    cloudSaveQueued = true;
+    cloudStatus('Сохраняем повторно…');
+    return false;
   } catch (error) {
     console.error('[Cloud CRM] save failed', error);
     cloudStatus('Нет связи — изменения сохранены локально', 'red');
@@ -34672,6 +34771,7 @@ async function cloudBoot() {
     cloudAllowedLegacyIds = Array.isArray(cloudCurrentUser.legacy_user_ids) ? cloudCurrentUser.legacy_user_ids : [];
     cloudRevision = stateResult.data.revision;
     db = stateResult.data.payload;
+    cloudBaseSnapshot = cloneCloudWorkspaceValue(db);
     if (Array.isArray(db._allowedLegacyUserIds)) {
       cloudAllowedLegacyIds = cloudAllowedLegacyIds.filter(id => db._allowedLegacyUserIds.includes(id));
     }
