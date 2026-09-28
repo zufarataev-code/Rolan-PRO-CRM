@@ -29,7 +29,8 @@ let cloudSaveTimer = null;
 let cloudSaveInFlight = false;
 let cloudSaveQueued = false;
 let cloudAllowedLegacyIds = [];
-let cloudCurrentUser = null;`,
+let cloudCurrentUser = null;
+let cloudBasePayload = null;`,
 );
 
 html = html.replace(
@@ -105,7 +106,7 @@ async function cloudPersist() {
     const response = await fetch('/api/v1/legacy-crm/state', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ revision: cloudRevision, payload: snapshot }),
+      body: JSON.stringify({ revision: cloudRevision, payload: snapshot, base_payload: cloudBasePayload }),
     });
     const result = await response.json();
     if (response.status === 401) {
@@ -114,14 +115,22 @@ async function cloudPersist() {
     }
     if (response.status === 409) {
       cloudReady = false;
-      cloudStatus('Данные обновлены другим сотрудником', 'red');
-      alert('Другой сотрудник уже изменил данные. CRM загрузит последнюю версию, чтобы не потерять изменения.');
-      location.reload();
-      return;
+      cloudSaveQueued = false;
+      cloudStatus('Не сохранено: изменено то же поле в другой вкладке', 'red');
+      console.warn('[Cloud CRM] same-field conflict', result?.errors?.[0]?.details || result);
+      return false;
     }
     if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'save failed');
     cloudRevision = result.data.revision;
-    cloudStatus('Сохранено', 'green');
+    const authoritativePayload = result.data?.payload || snapshot;
+    if (result.data?.payload) {
+      db = authoritativePayload;
+      localStorage.setItem('rolanpro_crm', JSON.stringify(db));
+      render();
+    }
+    cloudBasePayload = JSON.parse(JSON.stringify(authoritativePayload));
+    cloudStatus(result.data?.merged_concurrent_changes ? 'Изменения вкладок объединены' : 'Сохранено', 'green');
+    return true;
   } catch (error) {
     console.error('[Cloud CRM] save failed', error);
     cloudStatus('Нет связи — изменения сохранены локально', 'red');
@@ -156,6 +165,7 @@ async function cloudBoot() {
     cloudAllowedLegacyIds = Array.isArray(cloudCurrentUser.legacy_user_ids) ? cloudCurrentUser.legacy_user_ids : [];
     cloudRevision = stateResult.data.revision;
     db = stateResult.data.payload;
+    cloudBasePayload = JSON.parse(JSON.stringify(stateResult.data.payload));
     migrateSchema();
     normalizeClientAccountData();
     const firstAllowed = cloudAllowedLegacyIds.map(getUser).find(Boolean);
