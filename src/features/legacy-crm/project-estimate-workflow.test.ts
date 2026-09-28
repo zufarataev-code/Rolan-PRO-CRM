@@ -458,3 +458,35 @@ test("historical quick import can retain a manual film but live proposals requir
   assert.match(completionIssues, /ручную плёнку нужно привязать к складу перед закрытием/);
   assert.match(source, /item_kind: line\.catalogId \|\| projectQuickManualFilmName\(line\) \? 'film' : 'service'/);
 });
+
+test("kanban cannot bypass the client-to-measurement-to-proposal-to-installation workflow", () => {
+  const transition = source.match(/function orderWorkflowTransitionIssues\(o, newStatus\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const changeStatus = source.match(/function changeStatus\(orderId, newStatus, by, opts = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const kanbanMove = source.match(/function kanbanMoveOrder\(orderId, targetStatus\) \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(transition, /newStatus === 'measurement_scheduled'/);
+  assert.match(transition, /orderMeasurementCompletionIssues\(o\)/);
+  assert.match(transition, /projectEstimateIsApproved\(o\)/);
+  assert.match(transition, /publishedPremiumProposalForOrder\(o\.id\)/);
+  assert.match(transition, /назначьте монтажников/);
+  assert.match(changeStatus, /ensureOrderWorkflowTransition\(o, newStatus/);
+  assert.match(kanbanMove, /return changeStatus\(orderId, targetStatus/);
+  assert.doesNotMatch(kanbanMove, /changeStatus\(orderId, targetStatus[^\n]+\n\s*return true/);
+});
+
+test("measurement completion requires dimensions, warehouse film and smart configuration", () => {
+  const readiness = source.match(/function orderMeasurementCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const completion = source.match(/function completeManagerMeasurement\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(readiness, /windowActualAreaSqft\(win\) <= 0/);
+  assert.match(readiness, /!windowCatalog\(win\)/);
+  assert.match(readiness, /managerSmartMeasurementIssues\(o\)/);
+  assert.match(completion, /orderMeasurementCompletionIssues\(o\)/);
+});
+
+test("published proposals synchronize the order stage milestone", () => {
+  const generator = source.match(/async function generatePremiumProposal\(orderId\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const sender = source.match(/async function premiumSendCanonicalProposal\(token\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(generator, /order\.proposalSentAt = order\.proposalSentAt \|\| prop\.sentAt/);
+  assert.match(sender, /order\.proposalSentAt = order\.proposalSentAt \|\| prop\.sentAt/);
+});

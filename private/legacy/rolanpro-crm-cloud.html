@@ -15566,9 +15566,77 @@ function roomArea(r) { return (r.windows || []).reduce((s, w) => s + windowArea(
 function orderArea(o) { return (o.measurements?.rooms || []).reduce((s, r) => s + roomArea(r), 0); }
 function orderPrice(o) { return orderArea(o) * (o.pricePerM2 || db.settings.pricePerM2 || 0); }
 
+function orderMeasurementCompletionIssues(o) {
+  const issues = [];
+  const windows = measureAllWindows(o);
+  if (!windows.length) return ['добавьте хотя бы одно окно или панель'];
+  const missingScopes = orderMeasureScopes(o).filter(scopeKey => !windows.some(({ win }) => (
+    (win.measureScope || orderMeasureScope(o)) === scopeKey
+    && Number(win.width) > 0
+    && Number(win.height) > 0
+    && Number(win.qty || 1) > 0
+  )));
+  if (missingScopes.length) issues.push('Добавьте размеры для каждой услуги: ' + missingScopes.map(key => measureScopeInfo(key).short).join(', '));
+  if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('заполните размеры и количество для всех окон');
+  if (windows.some(({ win }) => !windowCatalog(win))) issues.push('выберите плёнку со склада для каждого окна');
+  issues.push(...managerSmartMeasurementIssues(o));
+  return issues;
+}
+
+function publishedPremiumProposalForOrder(orderId) {
+  const proposal = getPremiumProposalByOrder(orderId);
+  return proposal && (proposal.canonicalPublicUrl || ['Sent', 'Viewed', 'Accepted', 'Payment Pending', 'Deposit Paid', 'Paid in Full'].includes(proposal.status))
+    ? proposal
+    : null;
+}
+
+function orderWorkflowTransitionIssues(o, newStatus) {
+  const issues = [];
+  if (newStatus === 'measurement_scheduled') {
+    if (!o.measurerId) issues.push('выберите замерщика');
+    if (!o.measurementAt) issues.push('укажите дату и время замера');
+  }
+  if (newStatus === 'measurement_done') issues.push(...orderMeasurementCompletionIssues(o));
+  if (newStatus === 'proposal_sent') {
+    issues.push(...orderMeasurementCompletionIssues(o));
+    if (!projectEstimateIsApproved(o)) issues.push('подтвердите расчёт проекта');
+    if (!publishedPremiumProposalForOrder(o.id)) issues.push('сформируйте и опубликуйте КП');
+  }
+  if (newStatus === 'proposal_accepted') {
+    if (!projectEstimateIsApproved(o)) issues.push('подтвердите расчёт проекта');
+    if (!publishedPremiumProposalForOrder(o.id)) issues.push('сначала сформируйте и отправьте КП');
+  }
+  if (newStatus === 'installation_scheduled') {
+    if (!(o.installerIds || []).length) issues.push('назначьте монтажников');
+    if (!o.installationAt) issues.push('укажите дату и время монтажа');
+  }
+  if (newStatus === 'act_signed' && !o.installationDoneAt && o.status !== 'installation_done') issues.push('сначала завершите монтаж');
+  if (newStatus === 'payment_received' && !o.actSignedAt && o.status !== 'act_signed') issues.push('сначала подпишите акт');
+  if (newStatus === 'completed' && !o.paidAt && o.status !== 'payment_received') issues.push('сначала зафиксируйте оплату');
+  return [...new Set(issues)];
+}
+
+function openRequiredOrderWorkflowStep(o, newStatus) {
+  if (newStatus === 'measurement_scheduled') { scheduleMeasurementPrompt(o.id); return; }
+  if (newStatus === 'measurement_done') { openManagerMeasureModal(o.id); return; }
+  if (newStatus === 'proposal_sent' || newStatus === 'proposal_accepted') {
+    if (!projectEstimateIsApproved(o)) openProjectEstimateWorkspace(o.id);
+    else openProfessionalKP(o.id);
+  }
+}
+
+function ensureOrderWorkflowTransition(o, newStatus, openWorkspace = true) {
+  const issues = orderWorkflowTransitionIssues(o, newStatus);
+  if (!issues.length) return true;
+  alert('Нельзя перейти на этап «' + T(newStatus) + '»:\n\n• ' + issues.join('\n• '));
+  if (openWorkspace) openRequiredOrderWorkflowStep(o, newStatus);
+  return false;
+}
+
 function changeStatus(orderId, newStatus, by, opts = {}) {
   const o = getOrder(orderId);
   if (!o) return false;
+  if (!opts.skipWorkflowGuard && !ensureOrderWorkflowTransition(o, newStatus, opts.openWorkspace !== false)) return false;
   if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return false;
   if (newStatus === 'installation_scheduled' && !ensureProductionReadyForInstallation(o)) return false;
   if (o.status === newStatus && !opts.force) {
@@ -18186,7 +18254,7 @@ function orderKanbanAdvance(orderId, event) {
   const o = getOrder(orderId);
   const next = o ? orderKanbanNextStatus(o.status) : null;
   if (!next) return;
-  changeStatus(orderId, next, state.currentUserId);
+  return changeStatus(orderId, next, state.currentUserId);
 }
 function openOrderFromKanban(orderId, event) {
   const interactive = event?.target?.closest?.('a,button,.kanban-drag-handle');
@@ -18211,8 +18279,7 @@ function kanbanMoveOrder(orderId, targetStatus) {
   const currentColumn = kanbanColumnForStatus(o.status);
   const targetColumn = kanbanColumnForStatus(targetStatus);
   if (currentColumn && targetColumn && currentColumn.id === targetColumn.id) return false;
-  changeStatus(orderId, targetStatus, state.currentUserId);
-  return true;
+  return changeStatus(orderId, targetStatus, state.currentUserId);
 }
 function kanbanPointerStart(event, orderId) {
   if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
@@ -24313,11 +24380,8 @@ function managerSmartMeasurementIssues(order) {
 function completeManagerMeasurement(oid) {
   const o = getOrder(oid);
   if (!o) return;
-  if (!measureAllWindows(o).length) { alert('Добавьте хотя бы одно окно или панель с размерами.'); return; }
-  const missingScopes = orderMeasureScopes(o).filter(scopeKey => !measureAllWindows(o).some(({ win }) => (win.measureScope || orderMeasureScope(o)) === scopeKey && Number(win.width) > 0 && Number(win.height) > 0 && Number(win.qty || 1) > 0));
-  if (missingScopes.length) { alert('Добавьте размеры для каждой услуги: ' + missingScopes.map(key => measureScopeInfo(key).short).join(', ')); return; }
-  const smartIssues = managerSmartMeasurementIssues(o);
-  if (smartIssues.length) { alert('Заполните Smart-комплектацию:\n\n' + smartIssues.join('\n')); return; }
+  const issues = orderMeasurementCompletionIssues(o);
+  if (issues.length) { alert('Замер ещё не готов:\n\n• ' + issues.join('\n• ')); return; }
   if (o.status === 'measurement_done') {
     invalidateProjectEstimate(o, 'Замер изменён — требуется повторный расчёт проекта');
     save();
@@ -29578,6 +29642,7 @@ async function generatePremiumProposal(orderId) {
     if (!premiumProposalLocked(prop) && prop.status === 'Draft') {
       prop.status = 'Sent';
       prop.sentAt = new Date().toISOString();
+      order.proposalSentAt = order.proposalSentAt || prop.sentAt;
       order.timeline = order.timeline || [];
       order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_sent', by: state.currentUserId, note: 'Public client proposal published' });
       if (['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done'].includes(order.status)) order.status = 'proposal_sent';
@@ -29601,6 +29666,8 @@ async function premiumSendCanonicalProposal(token) {
     if (!response.ok) throw new Error(payload?.errors?.[0]?.message || 'Email could not be sent.');
     prop.status = 'Sent';
     prop.sentAt = prop.sentAt || new Date().toISOString();
+    order.proposalSentAt = order.proposalSentAt || prop.sentAt;
+    if (['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done'].includes(order.status)) order.status = 'proposal_sent';
     save();
     openPremiumProposalManagerModal(token);
     alert(`КП отправлено клиенту с корпоративной почты на ${client.email}.`);
@@ -29686,6 +29753,8 @@ async function newPremiumProposalVersion(orderId) {
     prop.status = 'Sent';
     prop.sentAt = new Date().toISOString();
     const order = getOrder(orderId);
+    order.proposalSentAt = order.proposalSentAt || prop.sentAt;
+    if (['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done'].includes(order.status)) order.status = 'proposal_sent';
     order.timeline = order.timeline || [];
     order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_new_version', by: state.currentUserId, note: `Premium proposal v${prop.version || 1}` });
     save();
