@@ -56,7 +56,7 @@ test("Smart control options include the confirmed ecosystems", () => {
 test("generic Smart defaults are archived and hidden from new selection", () => {
   assert.match(legacy, /Replaced by confirmed Rolan PRO Smart catalog/);
   assert.match(legacy, /if \(c\.archived\) return/);
-  assert.match(legacy, /!c\.archived \|\| c\.id === selectedId/);
+  assert.match(legacy, /if \(catalog\.archiveReason === 'Replaced by confirmed Rolan PRO Smart catalog'\) return catalog\.id === selectedId/);
 });
 
 test("Smart field seeding targets SMART_FILM", () => {

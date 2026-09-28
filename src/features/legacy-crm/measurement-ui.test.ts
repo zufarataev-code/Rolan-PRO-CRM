@@ -27,8 +27,17 @@ test("measurement workspace keeps costing and cutting out of the primary input v
 });
 
 test("measurement material picker is scoped to the selected service category", () => {
+  assert.match(legacyCrm, /function canonicalCatalogCategory\(value\)/);
+  assert.match(legacyCrm, /safety_film: 'protective'/);
+  assert.match(legacyCrm, /privacy_film: 'decorative'/);
+  assert.match(legacyCrm, /function catalogMatchesCategory\(catalog, category\)/);
   assert.match(legacyCrm, /function managerScopedCatalogOptionsHtml/);
-  assert.match(legacyCrm, /c\.category === category \|\| c\.id === selectedId/);
+  assert.match(legacyCrm, /catalogCanBeSelected\(c, selectedId\)/);
+  assert.match(legacyCrm, /catalogMatchesCategory\(c, category\) \|\| c\.id === selectedId/);
+  assert.match(legacyCrm, /function catalogHasWarehouseStock\(catalogId\)/);
+  assert.match(legacyCrm, /const aStock = catalogHasWarehouseStock\(a\.id\)/);
+  assert.match(legacyCrm, /academyEsc\(catalogLabel\(c\)\)/);
+  assert.doesNotMatch(legacyCrm, /if \(!items\.length\) return managerCatalogOptionsHtml/);
 });
 
 test("one project supports separate measurements for multiple film services", () => {

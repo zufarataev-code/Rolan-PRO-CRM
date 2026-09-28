@@ -117,7 +117,8 @@ test("server injects service, catalog material and complexity controls into orde
   assert.match(result, /materialCatalogId/);
   assert.match(result, /materialsByService/);
   assert.match(result, /selectedNewOrderServiceIds/);
-  assert.match(result, /return items\.filter\(\(item\) => item\.category === category\)/);
+  assert.match(result, /catalogMatchesCategory\(item, category\)/);
+  assert.match(result, /catalogCanBeSelected\(item\)/);
   assert.match(result, /if \(!category\) return \[\]/);
   assert.match(result, /chosenMaterials\[serviceId\]/);
   assert.match(result, /complexityCoef/);
