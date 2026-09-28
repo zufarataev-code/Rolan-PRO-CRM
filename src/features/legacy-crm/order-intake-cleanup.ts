@@ -324,6 +324,30 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       (typeof catLabel === 'function' && item?.category ? catLabel(item.category) : item?.category) || '',
     );
 
+    const materialCategoryKey = (item) => {
+      const raw = materialCategory(item)
+        .toLocaleLowerCase('ru-RU')
+        .replace(/ё/g, 'е')
+        .replace(/[^a-zа-я0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      const aliases = {
+        smart_film: 'smart', pdlc: 'smart', смарт: 'smart', смарт_пленка: 'smart',
+        solar_film: 'solar', солнцезащитная: 'solar', солнцезащитная_пленка: 'solar',
+        protective_film: 'protective', safety: 'protective', security: 'protective', защитная: 'protective', защитная_пленка: 'protective',
+        decorative_film: 'decorative', privacy: 'decorative', декоративная: 'decorative', декоративная_пленка: 'decorative',
+      };
+      return aliases[raw] || raw;
+    };
+
+    const materialCategoryLabel = (item) => {
+      const key = materialCategoryKey(item);
+      if (key === 'smart') return 'Smart / PDLC';
+      if (key === 'solar') return 'Солнцезащитная';
+      if (key === 'protective') return 'Защитная / Safety';
+      if (key === 'decorative') return 'Декоративная / Privacy';
+      return materialCategory(item) || 'Без серии';
+    };
+
     const materialName = (item) => normalize(
       item?.productName || item?.series || legacyProductParts(item?.model).name || '',
     );
@@ -391,17 +415,24 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
 
       const items = materialsForService(serviceId).slice().sort((left, right) => materialLabel(left).localeCompare(materialLabel(right)));
       const preferred = items.find((item) => item.id === preferredId) || null;
-      const categories = uniqueSorted(items.map(materialCategory));
-      let category = preferred ? materialCategory(preferred) : categorySelect.value;
-      if (!categories.includes(category)) category = categories[0] || '';
-      categorySelect.innerHTML = optionListHtml(categories, category, 'Нет категорий');
+      const categories = [];
+      items.forEach((item) => {
+        const key = materialCategoryKey(item);
+        if (key && !categories.some((entry) => entry.key === key)) categories.push({ key, label: materialCategoryLabel(item) });
+      });
+      categories.sort((left, right) => left.label.localeCompare(right.label));
+      let category = preferred ? materialCategoryKey(preferred) : categorySelect.value;
+      if (!categories.some((entry) => entry.key === category)) category = '';
+      categorySelect.innerHTML = '<option value="">Выберите тип / серию</option>' + categories
+        .map((entry) => '<option value="' + esc(entry.key) + '"' + (entry.key === category ? ' selected' : '') + '>' + esc(entry.label) + '</option>')
+        .join('');
       categorySelect.value = category;
 
-      const categoryItems = items.filter((item) => materialCategory(item) === category);
+      const categoryItems = category ? items.filter((item) => materialCategoryKey(item) === category) : [];
       const names = uniqueSorted(categoryItems.map(materialName));
-      let name = preferred && materialCategory(preferred) === category ? materialName(preferred) : nameSelect.value;
+      let name = preferred && materialCategoryKey(preferred) === category ? materialName(preferred) : nameSelect.value;
       if (!names.includes(name)) name = names[0] || '';
-      nameSelect.innerHTML = optionListHtml(names, name, 'Нет названий');
+      nameSelect.innerHTML = optionListHtml(names, name, category ? 'Нет названий' : 'Сначала выберите тип / серию');
       nameSelect.value = name;
 
       const modelItems = categoryItems.filter((item) => materialName(item) === name);
@@ -485,7 +516,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         return '<div class="rolanpro-service-film-card" data-new-order-material-service="' + esc(serviceId) + '">' +
           '<div class="rolanpro-service-film-title">' + esc(service?.icon || '') + ' ' + esc(service?.title || serviceId) + '</div>' +
           '<div class="rolanpro-film-picker-grid">' +
-            '<div><label>Серия / категория</label><select data-film-field="category" id="' + esc(servicePickerId(serviceId, 'category')) + '"></select></div>' +
+            '<div><label>Тип / серия плёнки</label><select data-film-field="category" id="' + esc(servicePickerId(serviceId, 'category')) + '"></select></div>' +
             '<div><label>Название</label><select data-film-field="name" id="' + esc(servicePickerId(serviceId, 'name')) + '"></select></div>' +
             '<div><label>Модель</label><select data-film-field="model" id="' + esc(servicePickerId(serviceId, 'model')) + '"></select></div>' +
           '</div>' +

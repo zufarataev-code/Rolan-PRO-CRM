@@ -112,7 +112,11 @@ test("server injects service, catalog material and complexity controls into orde
   assert.match(result, /rolanpro-new-order-material-list/);
   assert.match(result, /servicePickerId/);
   assert.match(result, /Плёнка по каждой услуге/);
-  assert.match(result, /Серия \/ категория/);
+  assert.match(result, /Тип \/ серия плёнки/);
+  assert.match(result, /materialCategoryKey/);
+  assert.match(result, /смарт: 'smart'/);
+  assert.match(result, /Выберите тип \/ серию/);
+  assert.match(result, /Smart \/ PDLC/);
   assert.match(result, /db\.settings\.catalog/);
   assert.match(result, /catalogCategory/);
   assert.match(result, /materialCatalogId/);
