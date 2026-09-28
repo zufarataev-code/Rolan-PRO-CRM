@@ -397,7 +397,7 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - The server performs a three-way merge against the current workspace. Non-overlapping changes, including changes to different projects, are combined by stable entity `id`; the authenticated session remains the authoritative `updated_by` identity.
 - If two tabs change the same field differently, the server rejects the save and identifies the conflicting paths. The browser keeps the current project and local draft open, shows a precise non-blocking error, and never reloads or redirects the user automatically.
 - The old warning “another employee changed the data” was removed because a revision conflict can be caused by the same person using multiple tabs and is not evidence of another employee.
-- Implemented on `fix/legacy-crm-concurrent-tabs`; PR and release state are recorded in `PROJECT_STATE.md`.
+- Implemented on `fix/legacy-crm-concurrent-tabs` in PR #259; release state is recorded in `PROJECT_STATE.md`.
 
 ## Changing a decision
 
