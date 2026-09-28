@@ -10374,6 +10374,53 @@ function measureSmartLoad(win) {
   const areaM2 = Array.isArray(win.panels) && win.panels.length ? measurePanelAreaSqft(win) * M2_PER_SQFT : measureAreaM2(win);
   return areaM2 * powerWm2;
 }
+function syncSmartWindowPlan(win, roomName = '') {
+  if (!win || win.measureScope !== 'smart_film') return win;
+  const current = win.smart || {};
+  const qty = Math.max(1, parseInt(win.qty) || 1);
+  const baseZone = String(current.zone || win.filmZone || `${roomName || 'Room'} · ${win.name || 'Window'}`).trim();
+  const existingZones = Array.isArray(current.zones) ? current.zones : (Array.isArray(win.zones) ? win.zones : []);
+  const zones = Array.from({ length: qty }, (_, index) => ({
+    ...(existingZones[index] || {}),
+    id: existingZones[index]?.id || uid(),
+    name: existingZones[index]?.name || `${baseZone}${qty > 1 ? ` · ${index + 1}` : ''}`,
+    windowId: win.id,
+    connectionPointSide: existingZones[index]?.connectionPointSide || current.connectionPointSide || current.busbarSide || 'top',
+  }));
+  win.smart = {
+    connectionTemplate: current.connectionTemplate || 'retrofit_local_block',
+    projectStage: current.projectStage || 'retrofit',
+    zone: baseZone,
+    voltageVac: Number(current.voltageVac) || 48,
+    powerWm2: Number(current.powerWm2) || 6,
+    transformerOutput: current.transformerOutput || `${Number(current.voltageVac) || 48}V AC`,
+    blocks: Math.max(1, parseInt(current.blocks) || 1),
+    powerSupplyModel: current.powerSupplyModel || '',
+    controllerType: current.controllerType || 'Wall switch',
+    controlOptions: Array.isArray(current.controlOptions) ? current.controlOptions : ['wall_switch'],
+    blockPlacement: current.blockPlacement || 'ceiling',
+    powerSupplyLocation: current.powerSupplyLocation || '',
+    wirePath: current.wirePath || '',
+    conduit: current.conduit || '1/2 in',
+    connectionPointSide: current.connectionPointSide || current.busbarSide || 'top',
+    connectionPointDetail: current.connectionPointDetail || '',
+    busbarSide: current.connectionPointSide || current.busbarSide || 'top',
+    electricianNeeded: current.electricianNeeded !== false,
+    siliconeRequired: current.siliconeRequired !== false,
+    siliconeQty: Math.max(0, Number(current.siliconeQty ?? qty) || 0),
+    wireLengthFt: Number(current.wireLengthFt) || null,
+    blockDistanceFt: Number(current.blockDistanceFt) || null,
+    signalPlan: current.signalPlan || 'local_remote',
+    notes: current.notes || '',
+    zones,
+    calculatedW: 0,
+  };
+  win.smart.calculatedW = measureSmartLoad(win);
+  win.smart.repeaterNeeded = smartNeedsRepeater(win.smart);
+  win.filmZone = baseZone;
+  win.zones = zones;
+  return win;
+}
 const US_ROOM_PRESETS = [
   'Living room', 'Family room', 'Kitchen', 'Dining room', 'Breakfast nook',
   'Primary bedroom', 'Master bedroom', 'Bedroom', 'Guest bedroom', 'Kids bedroom', 'Nursery',
@@ -11597,11 +11644,21 @@ async function measureCaptureCompass() {
   }
 }
 function technicalSheetSmartSummary(order) {
-  const wins = measureAllWindows(order).map(x => x.win).filter(w => w.measureScope === 'smart_film' || windowCatalog(w)?.category === 'smart');
-  const totalW = wins.reduce((s, w) => s + (Number(w.smart?.calculatedW) || measureSmartLoad(w)), 0);
-  const blocks = wins.reduce((s, w) => s + (parseInt(w.smart?.blocks) || 0), 0);
-  const repeaters = wins.filter(w => smartNeedsRepeater(w.smart || {})).length;
-  return { windows: wins.length, totalW, blocks, repeaters };
+  const wins = measureAllWindows(order).filter(({ win }) => win.measureScope === 'smart_film' || canonicalCatalogCategory(windowCatalog(win)?.category) === 'smart');
+  wins.forEach(({ room, win }) => syncSmartWindowPlan(win, room?.name || ''));
+  const totalW = wins.reduce((sum, item) => sum + (Number(item.win.smart?.calculatedW) || measureSmartLoad(item.win)), 0);
+  const blocks = wins.reduce((sum, item) => sum + (parseInt(item.win.smart?.blocks) || 0), 0);
+  const zones = wins.reduce((sum, item) => sum + Math.max(1, parseInt(item.win.qty) || 1), 0);
+  const areaSqft = wins.reduce((sum, item) => sum + measurePanelAreaSqft(item.win), 0);
+  const siliconeQty = wins.reduce((sum, item) => sum + (Number(item.win.smart?.siliconeQty) || 0), 0);
+  const repeaters = wins.filter(item => smartNeedsRepeater(item.win.smart || {})).length;
+  const electricianRequired = wins.some(item => item.win.smart?.electricianNeeded);
+  const powerSupplies = {};
+  wins.forEach(({ win }) => {
+    const model = win.smart?.powerSupplyModel || 'Модель не выбрана';
+    powerSupplies[model] = (powerSupplies[model] || 0) + (parseInt(win.smart?.blocks) || 1);
+  });
+  return { windows: zones, zones, areaSqft, totalW, blocks, siliconeQty, repeaters, electricianRequired, powerSupplies };
 }
 function renderTechPanelChips(win) {
   const panels = measureWindowPanels(win);
@@ -11648,10 +11705,12 @@ function smartInstallationDiagramSvg(win, roomName = '') {
   const point = points[side] || points.top;
   const pointLabel = smartConnectionPointInfo(side).short;
   const blockLabel = smartBlockPlacementInfo(smart.blockPlacement || 'ceiling').label.split(' / ')[0];
+  const panels = measureWindowPanels(win).slice(0, 6);
+  const panelWidth = panels.length ? 132 / panels.length : 132;
   return `<svg class="smart-install-svg" viewBox="0 0 430 180" role="img" aria-label="Монтажная схема ${academyEsc(roomName)} ${academyEsc(win.name || '')}" xmlns="http://www.w3.org/2000/svg">
     <defs><marker id="smart-arrow-${academyEsc(win.id || 'window')}" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"/></marker></defs>
     <rect x="36" y="28" width="144" height="116" rx="8" fill="#eff6ff" stroke="#1d4ed8" stroke-width="3"/>
-    <line x1="108" y1="28" x2="108" y2="144" stroke="#bfdbfe" stroke-width="2"/>
+    ${panels.map((panel, index) => `<rect x="${42 + index * panelWidth}" y="36" width="${Math.max(12, panelWidth - 4)}" height="98" rx="3" fill="#fff" stroke="#93c5fd"/><text x="${42 + index * panelWidth + Math.max(12, panelWidth - 4) / 2}" y="88" text-anchor="middle" font-size="8" font-weight="800" fill="#1d4ed8">P${index + 1}</text>`).join('')}
     <circle cx="${point.x}" cy="${point.y}" r="8" fill="#f97316" stroke="#fff" stroke-width="3"/>
     <text x="${point.tx}" y="${point.ty}" text-anchor="middle" font-size="11" font-weight="900" fill="#c2410c">${academyEsc(pointLabel)}</text>
     <path d="M ${point.x} ${point.y} C 230 ${point.y}, 226 88, 276 88" fill="none" stroke="#2563eb" stroke-width="4" stroke-dasharray="8 5" marker-end="url(#smart-arrow-${academyEsc(win.id || 'window')})"/>
@@ -11665,7 +11724,17 @@ function smartInstallationDiagramSvg(win, roomName = '') {
 function renderSmartRoomInstallationPlans(order) {
   const roomPlans = (order?.measurements?.rooms || []).map(room => ({
     room,
-    windows: (room.windows || []).filter(win => win.measureScope === 'smart_film' || windowCatalog(win)?.category === 'smart'),
+    windows: (room.windows || []).filter(win => win.measureScope === 'smart_film' || canonicalCatalogCategory(windowCatalog(win)?.category) === 'smart').flatMap(win => {
+      syncSmartWindowPlan(win, room.name || '');
+      const qty = Math.max(1, parseInt(win.qty) || 1);
+      return Array.from({ length: qty }, (_, index) => ({
+        ...win,
+        id: `${win.id}-zone-${index + 1}`,
+        name: `${win.name || 'Window'}${qty > 1 ? ` · ${index + 1}` : ''}`,
+        qty: 1,
+        smart: { ...win.smart, zone: win.smart?.zones?.[index]?.name || win.smart?.zone || room.name },
+      }));
+    }),
   })).filter(item => item.windows.length);
   if (!roomPlans.length) return '';
   return `
@@ -11685,6 +11754,22 @@ function renderSmartRoomInstallationPlans(order) {
           </div>
         </div>`).join('')}
     </section>`;
+}
+function renderSmartWorkOrderKit(order) {
+  const smart = technicalSheetSmartSummary(order);
+  if (!smart.zones) return '';
+  return `<div class="wo-block smart-work-order-kit">
+    <div class="wo-block-title">Smart-комплектация</div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+      <div class="p-2 rounded border"><b>Smart-плёнка</b><br>${smart.areaSqft.toFixed(2)} sqft</div>
+      <div class="p-2 rounded border"><b>Зоны</b><br>${smart.zones} — по количеству окон</div>
+      <div class="p-2 rounded border"><b>Блоки питания</b><br>${smart.blocks}</div>
+      <div class="p-2 rounded border"><b>Силикон</b><br>${smart.siliconeQty} шт.</div>
+    </div>
+    <div class="text-sm mt-2"><b>Модели блоков:</b> ${academyEsc(Object.entries(smart.powerSupplies).map(([model, qty]) => `${model} × ${qty}`).join(' · '))}</div>
+    <div class="text-sm mt-1"><b>Электрик:</b> ${smart.electricianRequired ? 'нужен' : 'не требуется'}</div>
+    ${smart.electricianRequired ? `<div class="wo-work-row mt-2" style="border-left:4px solid #f97316"><div class="wo-work-name">Электрические работы Smart</div><div class="wo-work-meta">Подготовить питание, установить указанные блоки, подключить зоны по схемам ниже и проверить управление.</div></div>` : ''}
+  </div>`;
 }
 function renderSmartTechnicalAssignment(win) {
   const smart = win.smart || {};
@@ -11758,6 +11843,7 @@ function renderWorkOrderHtml(order, printMode = false) {
   const photos = Array.isArray(order.photos) ? order.photos : [];
   const notes = order.notes || '';
   const workPlan = orderWorkPlanRows(order);
+  const smart = technicalSheetSmartSummary(order);
 
   const totalWindows = rows.reduce((s, x) => s + (Number(x.win.qty) || 1), 0);
 
@@ -11801,6 +11887,8 @@ function renderWorkOrderHtml(order, printMode = false) {
         <div class="wo-block-title">Объём: ${totalWindows} проёмов · ${orderPlannedAreaSqft(order).toFixed(2)} sqft</div>
         ${renderWorkOrderWindows(order, rows)}
       </div>
+
+      ${smart.zones ? `${renderSmartWorkOrderKit(order)}${renderSmartRoomInstallationPlans(order)}` : ''}
 
       <div class="wo-block">
         <div class="wo-block-title">Раскрой</div>
@@ -11933,6 +12021,18 @@ function workOrderPrintCss() {
     .wo-window-body { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: #475569; margin-top: 3px; }
     .wo-window-film { font-weight: 700; color: #0f172a; }
     .wo-missing { color: #dc2626; }
+    .smart-work-order-kit { padding: 10px; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; }
+    .smart-install-plan { margin: 14px 0; break-inside: auto; }
+    .smart-install-plan-head, .smart-room-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .smart-install-plan-head h2 { margin: 2px 0; font-size: 16px; }
+    .smart-room-plan { margin-top: 10px; break-inside: avoid; }
+    .smart-room-title { padding: 5px 8px; border-radius: 6px; background: #dbeafe; }
+    .smart-room-title span { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 5px; background: #1d4ed8; color: #fff; }
+    .smart-room-title small { margin-left: auto; color: #475569; }
+    .smart-room-diagrams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+    .smart-room-diagram { padding: 7px; border: 1px solid #dbeafe; border-radius: 7px; break-inside: avoid; }
+    .smart-install-svg { display: block; width: 100%; height: auto; }
+    .smart-room-route { margin-top: 4px; font-size: 10px; line-height: 1.4; }
     .wo-photos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
     .wo-photos img { width: 100%; height: 90px; object-fit: cover; border-radius: 5px; }
     .wo-checklist label { display: block; font-size: 13px; margin: 4px 0; }
@@ -23753,7 +23853,8 @@ function managerWindowDefaults(o, room, opts = {}) {
     measurement_source: 'CUSTOMER',
     verificationStatus: 'UNVERIFIED',
   };
-  return syncWindowPanelsForType(win, scopeKey);
+  syncWindowPanelsForType(win, scopeKey);
+  return syncSmartWindowPlan(win, room?.name || '');
 }
 function syncWindowPanelsForType(win, scopeKey = '') {
   if (!win) return win;
@@ -24003,6 +24104,27 @@ function managerMeasureProgressHtml(order, scopeKey = '') {
     }).join('')}
   </div>`;
 }
+function managerSmartWindowFieldsHtml(oid, room, win) {
+  syncSmartWindowPlan(win, room?.name || '');
+  const smart = win.smart || {};
+  const zones = smart.zones || [];
+  return `<details class="erp-intake-disclosure mt-3" open>
+    <summary>⚡ Smart-комплект и подключение · ${zones.length} зон(ы)</summary>
+    <div class="manager-window-fields mt-3">
+      <div class="manager-window-field wide"><label>Название зоны</label><input value="${academyEsc(smart.zone || '')}" onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','zone',this.value)"></div>
+      <div class="manager-window-field"><label>Зон подключения</label><input value="${zones.length}" readonly title="Количество зон равно количеству окон"></div>
+      <div class="manager-window-field wide"><label>Блок питания</label><select onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','powerSupplyModel',this.value)"><option value="">— выбрать модель —</option>${ROLAN_SMART_POWER_SUPPLIES.map(model => `<option value="${academyEsc(model)}" ${smart.powerSupplyModel === model ? 'selected' : ''}>${academyEsc(model)}</option>`).join('')}</select></div>
+      <div class="manager-window-field"><label>Количество блоков</label><input type="number" min="1" value="${smart.blocks || 1}" onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','blocks',this.value)"></div>
+      <div class="manager-window-field"><label>Силикон, шт.</label><input type="number" min="0" step="1" value="${smart.siliconeQty ?? zones.length}" onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','siliconeQty',this.value)"></div>
+      <div class="manager-window-field wide"><label>Место блока</label><select onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','blockPlacement',this.value)">${SMART_BLOCK_PLACEMENTS.map(item => `<option value="${item.id}" ${smart.blockPlacement === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
+      <div class="manager-window-field"><label>Точка подключения</label><select onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','connectionPointSide',this.value)">${SMART_CONNECTION_POINTS.map(item => `<option value="${item.id}" ${smart.connectionPointSide === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
+      <div class="manager-window-field wide"><label>Управление</label><select onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','controllerType',this.value)">${SMART_CONTROL_TYPES.map(item => `<option value="${academyEsc(item)}" ${smart.controllerType === item ? 'selected' : ''}>${academyEsc(item)}</option>`).join('')}</select></div>
+      <div class="manager-window-field wide"><label>Трасса провода</label><input value="${academyEsc(smart.wirePath || '')}" placeholder="Busbar → рама → блок → выключатель" onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','wirePath',this.value)"></div>
+      <label class="manager-window-field wide flex items-center gap-2"><input type="checkbox" ${smart.electricianNeeded ? 'checked' : ''} onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','electricianNeeded',this.checked)" style="width:18px;height:18px"> Нужен электрик</label>
+    </div>
+    <div class="text-xs text-blue-700 mt-2">CRM сформирует в заказ-наряде: ${zones.map(zone => academyEsc(zone.name)).join(' · ')} · панели · блок питания · силикон · схему подключения.</div>
+  </details>`;
+}
 function managerScopedCatalogOptionsHtml(selectedId = '', category = '') {
   const items = db.settings.catalog
     .filter(c => catalogCanBeSelected(c, selectedId) && (catalogMatchesCategory(c, category) || c.id === selectedId))
@@ -24140,6 +24262,7 @@ function renderManagerMeasureModal(oid) {
                           ${needsSolar ? `<div class="manager-window-field"><label>Сторона фасада</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','orientation',this.value)">${managerOrientationOptionsHtml(w.orientation || '')}</select></div><div class="manager-window-field wide"><label>Тип стекла</label>${managerGlassChipHtml(oid, r.id, w)}${managerSolarRiskHtml(w)}</div>` : ''}
                         </div>
                       </div>
+                      ${scopeKey === 'smart_film' ? managerSmartWindowFieldsHtml(oid, r, w) : ''}
                     </article>`;
                   }).join('') : `<div class="rounded-lg border border-dashed p-6 text-center text-sm text-gray-500">Для услуги ${scope.icon} ${academyEsc(scope.short)} в этой комнате размеров пока нет. Выберите окно, дверь или skylight и нажмите «Добавить».</div>`}
                 </div>
@@ -24173,12 +24296,27 @@ function openManagerMeasureModal(oid) {
   state.modal = renderManagerMeasureModal(oid);
   render();
 }
+function managerSmartMeasurementIssues(order) {
+  const issues = [];
+  measureAllWindows(order).forEach(({ room, win }) => {
+    if ((win.measureScope || orderMeasureScope(order)) !== 'smart_film') return;
+    syncSmartWindowPlan(win, room?.name || '');
+    const label = `${room?.name || 'Помещение'} · ${win.name || 'Окно'}`;
+    if (!win.smart?.powerSupplyModel) issues.push(`${label}: выберите блок питания`);
+    if (!String(win.smart?.wirePath || '').trim()) issues.push(`${label}: укажите трассу провода`);
+    if ((win.smart?.zones || []).length !== Math.max(1, parseInt(win.qty) || 1)) issues.push(`${label}: количество зон должно соответствовать количеству окон`);
+    if (win.smart?.siliconeRequired && Number(win.smart?.siliconeQty) <= 0) issues.push(`${label}: укажите количество силикона`);
+  });
+  return issues;
+}
 function completeManagerMeasurement(oid) {
   const o = getOrder(oid);
   if (!o) return;
   if (!measureAllWindows(o).length) { alert('Добавьте хотя бы одно окно или панель с размерами.'); return; }
   const missingScopes = orderMeasureScopes(o).filter(scopeKey => !measureAllWindows(o).some(({ win }) => (win.measureScope || orderMeasureScope(o)) === scopeKey && Number(win.width) > 0 && Number(win.height) > 0 && Number(win.qty || 1) > 0));
   if (missingScopes.length) { alert('Добавьте размеры для каждой услуги: ' + missingScopes.map(key => measureScopeInfo(key).short).join(', ')); return; }
+  const smartIssues = managerSmartMeasurementIssues(o);
+  if (smartIssues.length) { alert('Заполните Smart-комплектацию:\n\n' + smartIssues.join('\n')); return; }
   if (o.status === 'measurement_done') {
     invalidateProjectEstimate(o, 'Замер изменён — требуется повторный расчёт проекта');
     save();
@@ -24324,8 +24462,29 @@ function managerUpdateWin(oid, rid, wid, field, val) {
     markWindowMeasurementUnverified(w);
   }
   else w[field] = val;
+  syncSmartWindowPlan(w, r?.name || '');
   if (windowRemovalRequired(w)) syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменены данные замера');
+  save();
+  refreshManagerMeasureModal(oid);
+}
+function managerUpdateSmartWin(oid, rid, wid, field, val) {
+  const o = getOrder(oid);
+  const room = o?.measurements?.rooms?.find(item => item.id === rid);
+  const win = room?.windows?.find(item => item.id === wid);
+  if (!o || !room || !win || win.measureScope !== 'smart_film') return;
+  syncSmartWindowPlan(win, room.name || '');
+  if (['blocks', 'siliconeQty'].includes(field)) win.smart[field] = Math.max(field === 'blocks' ? 1 : 0, Number(val) || 0);
+  else if (field === 'electricianNeeded') win.smart[field] = Boolean(val);
+  else win.smart[field] = String(val || '').trim();
+  if (field === 'connectionPointSide') win.smart.busbarSide = win.smart.connectionPointSide;
+  if (field === 'zone') {
+    win.filmZone = win.smart.zone;
+    (win.smart.zones || []).forEach((zone, index) => { zone.name = `${win.smart.zone}${win.smart.zones.length > 1 ? ` · ${index + 1}` : ''}`; });
+    win.zones = win.smart.zones;
+  }
+  win.smart.calculatedW = measureSmartLoad(win);
+  invalidateProjectEstimate(o, 'Изменена Smart-комплектация и схема подключения');
   save();
   refreshManagerMeasureModal(oid);
 }
@@ -24336,6 +24495,7 @@ function managerSetWindowType(oid, rid, wid, typeKey) {
   if (!w) return;
   w.winType = normalizeMeasureWindowTypeForScope(w.measureScope || orderMeasureScope(o), typeKey);
   syncWindowPanelsForType(w, w.measureScope || orderMeasureScope(o));
+  syncSmartWindowPlan(w, r?.name || '');
   if (windowRemovalRequired(w)) syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменён тип окна в замере');
   save();
@@ -24351,6 +24511,7 @@ function managerSetExistingWindowType(oid, rid, wid, objectKind, typeKey) {
   w.isSkylight = kind === 'skylight';
   w.winType = normalizeMeasureWindowTypeForScope(w.measureScope || orderMeasureScope(o), typeKey);
   syncWindowPanelsForType(w, w.measureScope || orderMeasureScope(o));
+  syncSmartWindowPlan(w, r?.name || '');
   if (windowRemovalRequired(w)) syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменён тип элемента в замере');
   save();
@@ -24370,6 +24531,7 @@ function managerUpdateWinDim(oid, rid, wid, field, val) {
   }
   markWindowMeasurementUnverified(w);
   syncWindowPanelsForType(w, w.measureScope || orderMeasureScope(o));
+  syncSmartWindowPlan(w, r?.name || '');
   syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменены размеры окна');
   save();
@@ -24388,6 +24550,7 @@ function managerSetWinCatalog(oid, rid, wid, catalogId) {
       w.measureScope = measureScopeByCatalog(c);
       w.winType = normalizeMeasureWindowTypeForScope(w.measureScope, w.winType);
       syncWindowPanelsForType(w, w.measureScope);
+      syncSmartWindowPlan(w, r?.name || '');
       r.defaultCatalogByScope = r.defaultCatalogByScope || {};
       r.defaultCatalogByScope[w.measureScope] = catalogId;
     }
@@ -24413,6 +24576,7 @@ function managerApplyFilmToRoom(oid, rid, catalogId) {
       w.measureScope = measureScopeByCatalog(c);
       w.winType = normalizeMeasureWindowTypeForScope(w.measureScope, w.winType);
       syncWindowPanelsForType(w, w.measureScope);
+      syncSmartWindowPlan(w, r?.name || '');
     }
   });
   invalidateProjectEstimate(o, 'Изменён материал помещения');
