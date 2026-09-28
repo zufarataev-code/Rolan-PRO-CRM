@@ -1,6 +1,6 @@
 const MOBILE_PROPOSALS_PATCH = `
 <style id="rolanpro-mobile-proposals-cards-style">
-  @media (max-width: 768px) {
+  @media (max-width: 520px), (max-width: 768px) and (pointer: coarse) {
     [data-rolanpro-mobile-proposals-wrap="1"],
     [data-rolanpro-mobile-proposals-card="1"] {
       width: 100% !important;
@@ -159,6 +159,9 @@ const MOBILE_PROPOSALS_PATCH = `
 <script id="rolanpro-mobile-proposals-cards-script">
   (() => {
     const MOBILE_MAX = 768;
+    const phoneLayoutActive = () => window.innerWidth <= 520 || (
+      window.innerWidth <= MOBILE_MAX && window.matchMedia?.('(pointer: coarse)').matches
+    );
     const FALLBACK_LABELS = ['КП / заказ', 'Кому отправлено', 'Менеджер', 'Статус', 'Отправлено', 'Просмотрено', 'Сумма', 'Действия'];
     const FALLBACK_ROLES = ['proposal', 'contact', 'owner', 'status', 'sent', 'viewed', 'amount', 'actions'];
 
@@ -235,7 +238,7 @@ const MOBILE_PROPOSALS_PATCH = `
     };
 
     const enhanceProposalsTable = () => {
-      if (window.innerWidth > MOBILE_MAX) return;
+      if (!phoneLayoutActive()) return;
 
       const table = findProposalsTable();
       if (!table) return;

@@ -40,7 +40,7 @@ test("server injects a mobile-only Orders card adapter into the canonical legacy
 <script>cloudBoot()</script></body>`);
 
   assert.match(result, /rolanpro-mobile-orders-cards-style/);
-  assert.match(result, /@media \(max-width: 768px\)/);
+  assert.match(result, /@media \(max-width: 520px\), \(max-width: 768px\) and \(pointer: coarse\)/);
   assert.match(result, /data-rolanpro-mobile-orders/);
   assert.match(result, /hasOrdersHeading/);
   assert.match(result, /looksLikeOrdersTable/);
@@ -50,7 +50,7 @@ test("server injects a mobile-only Orders card adapter into the canonical legacy
   assert.match(result, /writing-mode: horizontal-tb/);
   assert.match(result, /MutationObserver/);
   assert.match(result, /rolanpro-mobile-workspace-style/);
-  assert.match(result, /@media \(max-width: 768px\)/);
+  assert.match(result, /@media \(max-width: 520px\), \(max-width: 768px\) and \(pointer: coarse\)/);
   assert.match(result, /cloudBoot\(\)/);
 });
 

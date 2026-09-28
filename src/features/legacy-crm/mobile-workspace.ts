@@ -1,6 +1,6 @@
 const MOBILE_WORKSPACE_PATCH = `
 <style id="rolanpro-mobile-workspace-style">
-  @media (max-width: 768px) {
+  @media (max-width: 520px), (max-width: 768px) and (pointer: coarse) {
     html,
     body,
     #app {
@@ -274,10 +274,53 @@ const MOBILE_WORKSPACE_PATCH = `
       }
     }
   }
+
+  /* A narrow browser panel on a computer is not a phone. Keep a compact
+     desktop rail and remove the phone dock when a precise pointer is present. */
+  @media (min-width: 521px) and (max-width: 840px) and (pointer: fine) {
+    .app-shell,
+    .app-shell.sidebar-collapsed {
+      grid-template-columns: 76px minmax(0, 1fr) !important;
+    }
+    .app-sidebar {
+      position: sticky !important;
+      top: 0 !important;
+      width: 76px !important;
+      max-width: 76px !important;
+      height: 100svh !important;
+      transform: none !important;
+      box-shadow: 10px 0 24px rgba(15,23,42,.12) !important;
+    }
+    .app-shell:not(.sidebar-collapsed) .sidebar-mark { display: inline-flex !important; }
+    .sidebar-logo-panel,
+    .sidebar-brand-text,
+    .nav-label,
+    .sidebar-user-meta,
+    .sidebar-logout-label { display: none !important; }
+    .app-sidebar .nav-item { justify-content: center !important; padding: .72rem !important; }
+    .mobile-primary-nav,
+    .mobile-sidebar-scrim { display: none !important; }
+    .app-main { max-height: 100svh !important; min-height: 0 !important; overflow: hidden !important; }
+    .app-content { min-height: 0 !important; overflow: auto !important; padding: .85rem !important; }
+    .modal-backdrop { align-items: center !important; padding: 12px !important; }
+    .modal-content,
+    .workspace-modal,
+    [role="dialog"] {
+      width: min(100%, calc(100vw - 100px)) !important;
+      max-width: calc(100vw - 100px) !important;
+      height: auto !important;
+      max-height: calc(100dvh - 24px) !important;
+      border-radius: 16px !important;
+      align-self: center !important;
+    }
+  }
 </style>
 <script id="rolanpro-mobile-workspace-script">
   (() => {
     const MOBILE_MAX = 768;
+    const phoneLayoutActive = () => window.innerWidth <= 520 || (
+      window.innerWidth <= MOBILE_MAX && window.matchMedia?.('(pointer: coarse)').matches
+    );
     const SPECIAL_TABLE_SELECTOR = [
       'table[data-rolanpro-mobile-orders="1"]',
       'table[data-rolanpro-mobile-proposals="1"]',
@@ -451,7 +494,7 @@ const MOBILE_WORKSPACE_PATCH = `
     };
 
     const enhanceMobileWorkspace = () => {
-      if (window.innerWidth > MOBILE_MAX) {
+      if (!phoneLayoutActive()) {
         clearMobileAnnotations();
         return;
       }
@@ -479,7 +522,7 @@ const MOBILE_WORKSPACE_PATCH = `
     const observer = new MutationObserver(queueEnhancement);
     observer.observe(document.documentElement, { childList: true, subtree: true });
     document.addEventListener('focusin', (event) => {
-      if (window.innerWidth > MOBILE_MAX) return;
+      if (!phoneLayoutActive()) return;
       const target = event.target;
       if (!(target instanceof HTMLElement) || !target.matches('input, textarea, select')) return;
       window.setTimeout(() => target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120);
