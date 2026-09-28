@@ -391,6 +391,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Field roles do not receive vendor, inventory-cost, or purchase-request data. Phone and desktop use the same procurement records and actions, with only responsive presentation differences under the mobile parity decision.
 - Implemented on `codex/supplier-catalog-procurement` in PR #253; release state is recorded in `PROJECT_STATE.md`. Production deployment remains a separate owner-authorized action.
 
+## 2026-09-27 — Concurrent legacy CRM tabs merge non-overlapping workspace edits
+
+- The cloud legacy CRM still persists one versioned workspace, but a stale tab now sends the exact payload it originally loaded together with its edited payload.
+- The server performs a three-way merge against the current workspace. Non-overlapping changes, including changes to different projects, are combined by stable entity `id`; the authenticated session remains the authoritative `updated_by` identity.
+- If two tabs change the same field differently, the server rejects the save and identifies the conflicting paths. The browser keeps the current project and local draft open, shows a precise non-blocking error, and never reloads or redirects the user automatically.
+- The old warning “another employee changed the data” was removed because a revision conflict can be caused by the same person using multiple tabs and is not evidence of another employee.
+- Implemented on `fix/legacy-crm-concurrent-tabs`; PR and release state are recorded in `PROJECT_STATE.md`.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

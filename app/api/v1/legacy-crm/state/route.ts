@@ -16,6 +16,7 @@ import {
   isPrivilegedLegacyWorkspaceRole,
   mergeFieldWorkspace,
 } from "@/features/legacy-crm/field-workspace";
+import { mergeLegacyWorkspacePayload } from "@/features/legacy-crm/three-way-merge";
 
 const WORKSPACE_ID = "primary";
 
@@ -66,7 +67,7 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = (await request.json().catch(() => null)) as
-    | { payload?: unknown; revision?: number }
+    | { base_payload?: unknown; payload?: unknown; revision?: number }
     | null;
 
   if (!body || !Number.isInteger(body.revision) || !validateLegacyPayload(body.payload)) {
@@ -79,7 +80,7 @@ export async function PUT(request: NextRequest) {
     return apiError(403, "forbidden", "Legacy CRM workspace update denied.");
   }
 
-  const payload = sanitizeLegacyPayload(body.payload);
+  const payload = sanitizeLegacyPayload(body.payload) as Prisma.InputJsonObject;
 
   if (body.revision === 0) {
     if (!auth.session.roles.includes(ROLE_CODES.OWNER)) {
@@ -109,28 +110,74 @@ export async function PUT(request: NextRequest) {
     where: { workspace_id: WORKSPACE_ID },
   });
 
-  if (!currentWorkspace || currentWorkspace.revision !== body.revision) {
+  if (!currentWorkspace) {
     return apiError(409, "revision_conflict", "CRM data changed in another browser.", {
-      current_revision: currentWorkspace?.revision ?? null,
-      updated_at: currentWorkspace?.updated_at ?? null,
+      current_revision: null,
+      updated_at: null,
     });
   }
 
-  const nextPayload = isPrivileged
-    ? payload
-    : sanitizeLegacyPayload(
-        mergeFieldWorkspace(
-          currentWorkspace.payload as Record<string, unknown>,
-          body.payload,
+  let mergedConcurrentChanges = false;
+  let nextPayload: Prisma.InputJsonObject;
+
+  if (currentWorkspace.revision !== body.revision) {
+    if (!validateLegacyPayload(body.base_payload)) {
+      return apiError(409, "revision_conflict", "CRM data changed in another browser.", {
+        current_revision: currentWorkspace.revision,
+        updated_at: currentWorkspace.updated_at,
+      });
+    }
+
+    const currentPayload = currentWorkspace.payload as Record<string, unknown>;
+    const remoteVisiblePayload = isPrivileged
+      ? currentPayload
+      : createFieldWorkspace(
+          currentPayload,
           auth.session.roles,
           auth.session.user.legacy_user_ids,
-        ),
-      );
+        );
+    const mergeResult = mergeLegacyWorkspacePayload(
+      sanitizeLegacyPayload(body.base_payload),
+      payload,
+      remoteVisiblePayload,
+    );
+
+    if (!mergeResult.ok || !validateLegacyPayload(mergeResult.value)) {
+      return apiError(409, "field_conflict", "The same CRM fields changed in another browser.", {
+        current_revision: currentWorkspace.revision,
+        updated_at: currentWorkspace.updated_at,
+        conflict_paths: mergeResult.ok ? ["payload"] : mergeResult.conflictPaths.slice(0, 25),
+      });
+    }
+
+    nextPayload = isPrivileged
+      ? (sanitizeLegacyPayload(mergeResult.value) as Prisma.InputJsonObject)
+      : (sanitizeLegacyPayload(
+          mergeFieldWorkspace(
+            currentPayload,
+            mergeResult.value,
+            auth.session.roles,
+            auth.session.user.legacy_user_ids,
+          ),
+        ) as Prisma.InputJsonObject);
+    mergedConcurrentChanges = true;
+  } else {
+    nextPayload = isPrivileged
+      ? payload
+      : (sanitizeLegacyPayload(
+          mergeFieldWorkspace(
+            currentWorkspace.payload as Record<string, unknown>,
+            body.payload,
+            auth.session.roles,
+            auth.session.user.legacy_user_ids,
+          ),
+        ) as Prisma.InputJsonObject);
+  }
 
   const updated = await prisma.legacyWorkspace.updateMany({
     where: {
       workspace_id: WORKSPACE_ID,
-      revision: body.revision,
+      revision: currentWorkspace.revision,
     },
     data: {
       payload: nextPayload,
@@ -156,5 +203,19 @@ export async function PUT(request: NextRequest) {
     select: { revision: true, updated_at: true },
   });
 
-  return apiSuccess(workspace);
+  const responsePayload = mergedConcurrentChanges
+    ? isPrivileged
+      ? nextPayload
+      : createFieldWorkspace(
+          nextPayload as Record<string, unknown>,
+          auth.session.roles,
+          auth.session.user.legacy_user_ids,
+        )
+    : undefined;
+
+  return apiSuccess({
+    ...workspace,
+    merged_concurrent_changes: mergedConcurrentChanges,
+    payload: responsePayload,
+  });
 }

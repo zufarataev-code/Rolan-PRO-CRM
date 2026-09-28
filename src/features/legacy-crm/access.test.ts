@@ -27,6 +27,20 @@ test("legacy workspace API applies role-aware filtering to reads and writes", ()
   assert.equal(guardedCalls?.length, 2);
 });
 
+test("concurrent CRM tabs merge from a shared base without forcing project navigation", () => {
+  const route = readFileSync("app/api/v1/legacy-crm/state/route.ts", "utf8");
+  const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+
+  assert.match(route, /base_payload/);
+  assert.match(route, /mergeLegacyWorkspacePayload/);
+  assert.match(route, /merged_concurrent_changes/);
+  assert.match(source, /base_payload: cloudBasePayload/);
+  assert.match(source, /Изменения вкладок объединены/);
+  assert.match(source, /Не сохранено: изменено то же поле в другой вкладке/);
+  assert.doesNotMatch(source, /alert\('Другой сотрудник уже изменил данные/);
+  assert.doesNotMatch(source, /cloudStatus\('Данные обновлены другим сотрудником'/);
+});
+
 test("owner settings use a section directory with employee access entry", () => {
   const source = readFileSync(
     "private/legacy/rolanpro-crm-cloud.html",
