@@ -80,7 +80,8 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/api/v1/auth/logout") ||
     pathname.startsWith("/api/v1/auth/forgot-password") ||
     pathname.startsWith("/api/v1/auth/reset-password") ||
-    pathname === "/api/v1/integrations/website/leads"
+    pathname === "/api/v1/integrations/website/leads" ||
+    pathname === "/api/v1/agent"
   );
 }
 

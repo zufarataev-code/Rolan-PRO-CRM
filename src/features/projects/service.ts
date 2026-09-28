@@ -88,7 +88,7 @@ function asJsonRecord(value: Prisma.JsonValue | null | undefined): JsonRecord {
 }
 
 function isOwner(session: ProjectSession) {
-  return session.roles.includes("OWNER");
+  return session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.AI_SERVICE);
 }
 
 function isUniqueConstraintError(error: unknown, target: string) {
@@ -553,6 +553,8 @@ export function calculatePositionFinance(
 export async function createManualProject(
   session: ProjectSession,
   input: {
+    client_id?: string | null;
+    manager_id?: string | null;
     client_name: string;
     phone?: string | null;
     email?: string | null;
@@ -585,7 +587,7 @@ export async function createManualProject(
     return "invalid_payload" as const;
   }
 
-  const [projectStatusId, positionStatusId, serviceType, film, city, installer] = await Promise.all([
+  const [projectStatusId, positionStatusId, serviceType, film, city, installer, explicitClient, manager] = await Promise.all([
     getProjectStatusId("NEW"),
     getPositionStatusId("READY"),
     prisma.serviceType.findFirst({
@@ -649,6 +651,36 @@ export async function createManualProject(
           },
         })
       : Promise.resolve(null),
+    input.client_id
+      ? prisma.client.findUnique({
+          where: {
+            client_id: input.client_id,
+          },
+          select: {
+            client_id: true,
+          },
+        })
+      : Promise.resolve(null),
+    input.manager_id
+      ? prisma.user.findFirst({
+          where: {
+            user_id: input.manager_id,
+            is_active: true,
+            user_accesses: {
+              some: {
+                is_active: true,
+                role: {
+                  is_active: true,
+                  code: { in: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER] },
+                },
+              },
+            },
+          },
+          select: {
+            user_id: true,
+          },
+        })
+      : Promise.resolve(null),
   ]);
 
   if (!projectStatusId || !positionStatusId) {
@@ -671,6 +703,18 @@ export async function createManualProject(
     return "invalid_installer" as const;
   }
 
+  if (input.client_id && !explicitClient) {
+    return "invalid_client" as const;
+  }
+
+  if (input.manager_id && !manager) {
+    return "invalid_manager" as const;
+  }
+
+  if (session.roles.includes(ROLE_CODES.AI_SERVICE) && !manager) {
+    return "missing_manager" as const;
+  }
+
   const clientUnitPrice =
     input.client_unit_price && input.client_unit_price > 0
       ? input.client_unit_price
@@ -685,7 +729,8 @@ export async function createManualProject(
 
   const project = await prisma.$transaction(async (tx) => {
     const reusableClient =
-      normalizedEmail || normalizedPhone
+      explicitClient ??
+      (normalizedEmail || normalizedPhone
         ? await tx.client.findFirst({
             where: {
               OR: [
@@ -697,7 +742,7 @@ export async function createManualProject(
               client_id: true,
             },
           })
-        : null;
+        : null);
 
     const clientRecord = reusableClient
       ? await tx.client.update({
@@ -734,7 +779,7 @@ export async function createManualProject(
       data: {
         project_code: createProjectCode(),
         client_id: clientRecord.client_id,
-        manager_id: session.user.user_id,
+        manager_id: manager?.user_id ?? session.user.user_id,
         lead_installer_id: installer?.user_id ?? null,
         project_status_id: projectStatusId,
         city_id: city?.city_id ?? null,

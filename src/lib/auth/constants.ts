@@ -1,5 +1,6 @@
 export const ROLE_CODES = {
   OWNER: "OWNER",
+  AI_SERVICE: "AI_SERVICE",
   MANAGER: "MANAGER",
   CONSULTANT: "CONSULTANT",
   INSTALLER: "INSTALLER",
@@ -11,6 +12,10 @@ export const ROLE_NAMES = {
   [ROLE_CODES.OWNER]: {
     ru: "Владелец",
     en: "Owner",
+  },
+  [ROLE_CODES.AI_SERVICE]: {
+    ru: "AI-сервис",
+    en: "AI Service",
   },
   [ROLE_CODES.MANAGER]: {
     ru: "Менеджер",

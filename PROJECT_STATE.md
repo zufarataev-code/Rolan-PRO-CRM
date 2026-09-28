@@ -27,6 +27,7 @@ Before doing any work:
 
 | PR | Purpose | Branch | State at last verification |
 | --- | --- | --- | --- |
+| Add CRM Operations Agent safe-write layer for Owner → ChatGPT → CRM commands | `codex/crm-operations-agent-init-09261547` / #241, issue #236 | ChatGPT + Codex review | HMAC service endpoint, allowlisted real CRM writes, durable idempotency receipt/audit, ambiguity handling, real backend IDs, migration, tests, typecheck and production build are implemented; latest CI is green; independent Codex review on the latest head is pending | Complete latest-head Codex review, merge only if no blocking findings, then configure secure runtime secret + service actor and run controlled non-production expense/project smoke tests before any production write |
 | #19 | Hide project finance from surveyors and installers | `security/hide-project-finance-field-roles` | Open; review and merge still required |
 | #18 | Enforce manager record scope | `security/enforce-manager-record-scope` | Open; review and merge still required |
 | #17 | Remove embedded customer export | `security/remove-embedded-wiz-data` | Open; review and merge still required |
