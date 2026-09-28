@@ -234,6 +234,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       const text = textOf(element);
       return [
         'Клиент и объект',
+        'Выберите контакт',
         'Направление услуги',
         'Услуги проекта',
         'Создать проект',
@@ -259,10 +260,8 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
     };
 
     const cleanupOrderIntake = () => {
-      const modal = findSmallestContaining(document.body, [
-        'Новый проект',
-        'Клиент и объект',
-      ]);
+      const modal = findSmallestContaining(document.body, ['Новый проект', 'Выберите контакт']) ||
+        findSmallestContaining(document.body, ['Новый проект', 'Клиент и объект']);
       if (!modal) return;
 
       const firstCard =
@@ -508,6 +507,8 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         section = document.createElement('section');
         section.id = 'rolanpro-order-material-section';
         section.className = 'erp-intake-card';
+        section.setAttribute('data-new-order-after-client', '');
+        section.style.display = typeof state !== 'undefined' && state._newOrderClient ? '' : 'none';
         section.innerHTML =
           '<div class="erp-intake-card-head"><div>' +
             '<div class="erp-intake-card-title">Плёнка по каждой услуге <span class="order-required">*</span></div>' +

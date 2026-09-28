@@ -10,10 +10,23 @@ test("new client from order opens in its own workspace", () => {
   const orderModal = html.slice(start, end);
 
   assert.match(orderModal, /onclick="openOrderClientOverlay\(\)"/);
+  assert.match(orderModal, /Выберите контакт/);
+  assert.match(orderModal, /\+ Добавить контакт/);
+  assert.match(orderModal, /Поиск по имени, телефону или адресу/);
+  assert.match(orderModal, /data-new-order-after-client style="display:none"/);
   assert.match(html, /function openOrderClientOverlay\(\)/);
   assert.match(html, /id="order-client-overlay" class="address-overlay"/);
   assert.match(html, /Новый проект · карточка клиента/);
   assert.doesNotMatch(orderModal, /id="no-newclient"/);
+});
+
+test("project details open only after selecting or creating a contact", () => {
+  assert.match(html, /function setNewOrderClientGate\(hasClient\)/);
+  assert.match(html, /document\.querySelectorAll\('\[data-new-order-after-client\]'\)/);
+  assert.match(html, /function resetNewOrderClientSelection\(\)/);
+  assert.match(html, /setNewOrderClientGate\(false\)/);
+  assert.match(html, /function selectOrderClient\(clientId\)[\s\S]*?setNewOrderClientGate\(true\)/);
+  assert.match(html, /Контакт не найден\. Нажмите «Добавить контакт»/);
 });
 
 test("saved client is selected back in the unfinished order", () => {

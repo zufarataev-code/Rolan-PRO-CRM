@@ -99,6 +99,7 @@ test("server injects cleanup for redundant New Order guidance sidebar", () => {
   assert.match(result, /Что происходит дальше/);
   assert.match(result, /data-rolanpro-order-intake-sidebar/);
   assert.match(result, /data-rolanpro-order-intake-layout/);
+  assert.match(result, /Выберите контакт/);
   assert.match(result, /grid-template-columns: minmax\(0, 1fr\)/);
 });
 

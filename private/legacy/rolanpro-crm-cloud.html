@@ -25578,16 +25578,17 @@ function openOrderModal() {
             <section class="erp-intake-card">
               <div class="erp-intake-card-head">
                 <div>
-                  <div class="erp-intake-card-title"><span class="erp-intake-step">1</span> Клиент и объект <span class="order-required">*</span></div>
+                  <div class="erp-intake-card-title"><span class="erp-intake-step">1</span> Выберите контакт <span class="order-required">*</span></div>
+                  <div class="text-sm text-gray-500 mt-1">Найдите существующего клиента или добавьте нового.</div>
                 </div>
-                <button id="no-client-new-btn" class="btn-primary text-sm" onclick="openOrderClientOverlay()">+ Новый клиент</button>
+                <button id="no-client-new-btn" class="btn-primary text-sm" onclick="openOrderClientOverlay()">+ Добавить контакт</button>
               </div>
               <div class="relative">
-                <input id="no-client-search" placeholder="Имя, телефон или адрес" oninput="renderClientSearch(this.value)" autocomplete="off">
+                <input id="no-client-search" placeholder="Поиск по имени, телефону или адресу" oninput="renderClientSearch(this.value)" autocomplete="off">
                 <div id="no-client-results" class="absolute left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto z-30" style="display:none;"></div>
               </div>
               <div id="no-client-selected" class="mt-2"></div>
-              <div class="mt-3">
+              <div class="mt-3" data-new-order-after-client style="display:none">
                 <label class="text-xs">Тип объекта <span class="order-required">*</span></label>
                 <div class="grid grid-cols-2 gap-2 mt-1" id="no-site-type-buttons">
                   <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="RESIDENTIAL" onclick="selectOrderSiteType('RESIDENTIAL')"><div class="font-semibold text-sm">🏠 Residential · жилой</div><div class="text-xs text-gray-500">Комнаты дома</div></button>
@@ -25597,7 +25598,7 @@ function openOrderModal() {
               </div>
             </section>
 
-            <section class="erp-intake-card">
+            <section class="erp-intake-card" data-new-order-after-client style="display:none">
               <div class="erp-intake-card-head">
                 <div>
                   <div class="erp-intake-card-title"><span class="erp-intake-step">2</span> По какой услуге пришёл лид <span class="order-required">*</span></div>
@@ -25614,7 +25615,7 @@ function openOrderModal() {
               <input type="hidden" id="no-svc" value="smart_film">
             </section>
 
-            <section class="erp-intake-card">
+            <section class="erp-intake-card" data-new-order-after-client style="display:none">
               <div class="erp-intake-card-head">
                 <div>
                   <div class="erp-intake-card-title"><span class="erp-intake-step">3</span> Управление заказом <span class="order-required">*</span></div>
@@ -25651,7 +25652,7 @@ function openOrderModal() {
         </div>
       </div>
 
-      <div class="erp-intake-footer">
+      <div class="erp-intake-footer" data-new-order-after-client style="display:none">
         <div class="flex gap-2 justify-end" style="margin-left:auto">
           <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
           <button class="btn-ghost" onclick="createOrder('draft')">Сохранить черновик</button>
@@ -25709,7 +25710,7 @@ function renderClientSearch(q) {
   if (!q || !q.trim()) { dropdown.style.display = 'none'; return; }
   const results = searchClientsFuzzy(q);
   if (!results.length) {
-    dropdown.innerHTML = `<div class="p-3 text-sm text-gray-500">Не найдено. Создайте нового клиента ниже.</div>`;
+    dropdown.innerHTML = `<div class="p-3 text-sm text-gray-500">Контакт не найден. Нажмите «Добавить контакт».</div>`;
   } else {
     dropdown.innerHTML = results.map(c => {
       const addresses = clientAddressBook(c);
@@ -25789,7 +25790,7 @@ function renderOrderClientSelection(c) {
             </select>
           </div>
         </div>
-        <button class="btn-ghost text-xs text-red-600" onclick="state._newOrderClient=null; state._newOrderAddressId=null; document.getElementById('no-client-selected').innerHTML=''; document.getElementById('no-client-search')?.focus();">Сбросить</button>
+        <button class="btn-ghost text-xs text-red-600" onclick="resetNewOrderClientSelection()">Выбрать другой контакт</button>
       </div>
 
       <div class="address-choice-grid mt-3">
@@ -25817,6 +25818,23 @@ function renderOrderClientSelection(c) {
     </div>
   `;
 }
+function setNewOrderClientGate(hasClient) {
+  document.querySelectorAll('[data-new-order-after-client]').forEach(element => {
+    element.style.display = hasClient ? '' : 'none';
+  });
+}
+function resetNewOrderClientSelection() {
+  state._newOrderClient = null;
+  state._newOrderAddressId = null;
+  const selected = document.getElementById('no-client-selected');
+  const results = document.getElementById('no-client-results');
+  const search = document.getElementById('no-client-search');
+  if (selected) selected.innerHTML = '';
+  if (results) results.style.display = 'none';
+  if (search) search.value = '';
+  setNewOrderClientGate(false);
+  search?.focus();
+}
 function selectOrderClient(clientId) {
   const c = getClient(clientId);
   if (!c) return;
@@ -25830,6 +25848,7 @@ function selectOrderClient(clientId) {
   if (search) search.value = '';
   if (results) results.style.display = 'none';
   if (selected) selected.innerHTML = renderOrderClientSelection(c);
+  setNewOrderClientGate(true);
   save();
 }
 
