@@ -490,3 +490,55 @@ test("published proposals synchronize the order stage milestone", () => {
   assert.match(generator, /order\.proposalSentAt = order\.proposalSentAt \|\| prop\.sentAt/);
   assert.match(sender, /order\.proposalSentAt = order\.proposalSentAt \|\| prop\.sentAt/);
 });
+
+test("solar measurement requires glass, facade, installation side and access complexity", () => {
+  const readiness = source.match(/function managerSolarMeasurementIssues\(order\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const accessSync = source.match(/function managerSyncOrderComplexityFromWindows\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(readiness, /укажите тип стекла/);
+  assert.match(readiness, /укажите сторону фасада/);
+  assert.match(readiness, /внутреннюю или наружную установку/);
+  assert.match(readiness, /выберите доступ и высоту/);
+  assert.match(source, /Маленькая лестница/);
+  assert.match(source, /Большая лестница \/ выше 10 ft/);
+  assert.match(source, /Леса \/ тура/);
+  assert.match(source, /Подъёмник \/ scissor lift/);
+  assert.match(accessSync, /o\.complexity = complexities/);
+});
+
+test("solar estimate exposes optimized film waste and warehouse consumption", () => {
+  const estimateStart = source.indexOf("function renderProjectEstimateWorkspace");
+  const estimateEnd = source.indexOf("function openProjectEstimateWorkspace", estimateStart);
+  const estimate = source.slice(estimateStart, estimateEnd);
+  assert.match(estimate, /Расход плёнки/);
+  assert.match(estimate, /Отход раскроя/);
+  assert.match(estimate, /filmPlan\.wastePct/);
+  assert.match(estimate, /Материал со склада/);
+});
+
+test("manager-approved payment after completion is explicit and auditable", () => {
+  const production = source.match(/function projectProductionReadiness\(o, \{ requireReady = true \} = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const calculator = source.match(/function premiumPaymentDue\(prop, calc\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(source, /function projectEstimateConfirmPostpay\(oid, confirmed\)/);
+  assert.match(source, /paymentTermsConfirmedBy = confirmed \? state\.currentUserId/);
+  assert.match(source, /function orderPaymentReadyForProduction\(o\)/);
+  assert.match(production, /orderPaymentReadyForProduction\(o\)/);
+  assert.match(calculator, /mode === 'after_completion'/);
+  assert.match(source, /Pay After Completion/);
+});
+
+test("proposal includes technical solar facts and written change-order acceptance", () => {
+  assert.match(source, /Façade:/);
+  assert.match(source, /Access:/);
+  assert.match(source, /Cutting waste/);
+  assert.match(source, /PREMIUM_AGREEMENT_ITEMS/);
+  assert.match(source, /change to price, material or scope must be documented and approved in writing/);
+  assert.match(source, /PREMIUM_AGREEMENT_ITEMS\.every/);
+});
+
+test("residential premium proposal applies the California home-improvement deposit cap", () => {
+  const calculator = source.match(/function premiumProposalCalc\(prop\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(calculator, /orderSiteType\(order\) === 'RESIDENTIAL'/);
+  assert.match(calculator, /Math\.min\(result\.total \* 0\.10, 1000\)/);
+  assert.match(source, /Legal Deposit \(max 10% \/ \$1,000\)/);
+});

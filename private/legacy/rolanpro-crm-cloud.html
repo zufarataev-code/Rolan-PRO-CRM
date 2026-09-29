@@ -8178,6 +8178,7 @@ function migrateSchema() {
   // ---- ORDER fields migration ----
   (db.orders || []).forEach(o => {
     if (o.complexity == null) o.complexity = 'standard';
+    if (!o.paymentTerms) o.paymentTerms = 'deposit_before_work';
     if (o.distanceKm == null) o.distanceKm = 0;
     if (o.marketing == null) o.marketing = 0;
     if (o.paid == null) {
@@ -14790,6 +14791,9 @@ function orderMeasurementVerificationIssues(o) {
     .filter(({ win }) => !windowMeasurementIsVerified(win))
     .map(({ room, win }) => `${room.name || 'Помещение'} · ${win.name || 'Окно'}`);
 }
+function orderPaymentReadyForProduction(o) {
+  return !!o?.depositReceived || (o?.paymentTerms === 'after_completion' && !!o?.paymentTermsConfirmedAt);
+}
 function projectProductionReadiness(o, { requireReady = true } = {}) {
   const issues = [];
   const acceptedStatuses = [
@@ -14797,7 +14801,7 @@ function projectProductionReadiness(o, { requireReady = true } = {}) {
     'installation_in_progress','installation_done','act_signed','payment_received','completed','review_received',
   ];
   if (!acceptedStatuses.includes(o?.status)) issues.push('КП ещё не принято клиентом');
-  if (!o?.depositReceived) issues.push('аванс ещё не получен');
+  if (!orderPaymentReadyForProduction(o)) issues.push('аванс ещё не получен или не подтверждена оплата после выполнения');
   if (!projectEstimateIsApproved(o)) issues.push('расчёт проекта не подтверждён');
   issues.push(...orderMeasurementVerificationIssues(o));
 
@@ -15579,6 +15583,7 @@ function orderMeasurementCompletionIssues(o) {
   if (missingScopes.length) issues.push('Добавьте размеры для каждой услуги: ' + missingScopes.map(key => measureScopeInfo(key).short).join(', '));
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('заполните размеры и количество для всех окон');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('выберите плёнку со склада для каждого окна');
+  issues.push(...managerSolarMeasurementIssues(o));
   issues.push(...managerSmartMeasurementIssues(o));
   return issues;
 }
@@ -15991,7 +15996,7 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'measurement_done' && !projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: orderUserCanSeeInternalEconomics(o, currentUser()) ? 'Проверьте цену, расходы и маржу до формирования КП.' : 'Проверьте размеры, услуги и цену клиенту до формирования КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
   if (o.status === 'measurement_done') return { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
   if (o.status === 'proposal_sent') return { icon: '✅', title: 'Отметить КП принятым', sub: 'Используйте, если клиент подтвердил предложение вне портала.', variant: 'primary', onclick: `changeStatus('${o.id}','proposal_accepted')` };
-  if (o.status === 'proposal_accepted' && !o.depositReceived) return { icon: '💰', title: 'Отметить аванс', sub: 'После аванса можно уверенно закреплять дату монтажа.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
+  if (o.status === 'proposal_accepted' && !orderPaymentReadyForProduction(o)) return { icon: '💰', title: 'Отметить аванс', sub: 'Либо подтвердите в расчёте согласованную оплату после выполнения.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
   if (o.status === 'proposal_accepted' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
   if (o.status === 'proposal_accepted' && !o.productionReadyAt) return { icon: '🏭', title: 'Подготовить производство', sub: 'Проверить раскрой, материал и склад перед назначением бригады.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
   if (o.status === 'proposal_accepted') return { icon: '🔧', title: 'Назначить монтаж', sub: 'Производство подготовлено. Назначьте бригаду и дату.', variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
@@ -21903,6 +21908,7 @@ function projectEstimateReadiness(o) {
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
   if ((o.extraServices || []).filter(s => !s.quickProjectLine).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
+  if (o.paymentTerms === 'after_completion' && !o.paymentTermsConfirmedAt) issues.push('менеджер не подтвердил ответственность за оплату после выполнения');
   if (orderRevenue(o) <= 0) issues.push('сумма проекта равна нулю');
   return issues;
 }
@@ -22252,6 +22258,30 @@ function projectEstimateUpdateSetting(oid, field, value) {
   else if (field === 'priceOverridePerSqft') o.priceOverridePerSqft = value === '' ? null : Math.max(0, parseFloat(value) || 0);
   else o[field] = Math.max(0, parseFloat(value) || 0);
   projectEstimateMarkChanged(o, 'Изменены параметры расчёта');
+  save(); refreshProjectEstimateWorkspace(oid);
+}
+
+function projectEstimateSetPaymentTerms(oid, terms) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  o.paymentTerms = terms === 'after_completion' ? 'after_completion' : 'deposit_before_work';
+  o.paymentTermsConfirmedAt = null;
+  o.paymentTermsConfirmedBy = null;
+  const proposal = getPremiumProposalByOrder(oid);
+  if (proposal && !premiumProposalLocked(proposal)) {
+    proposal.selections = proposal.selections || premiumDefaultSelections(o);
+    proposal.selections.paymentMode = o.paymentTerms === 'after_completion' ? 'after_completion' : 'deposit50';
+  }
+  projectEstimateMarkChanged(o, 'Изменены условия оплаты проекта');
+  save(); refreshProjectEstimateWorkspace(oid);
+}
+
+function projectEstimateConfirmPostpay(oid, confirmed) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser()) || o.paymentTerms !== 'after_completion') return;
+  o.paymentTermsConfirmedAt = confirmed ? new Date().toISOString() : null;
+  o.paymentTermsConfirmedBy = confirmed ? state.currentUserId : null;
+  projectEstimateMarkChanged(o, confirmed ? 'Менеджер подтвердил оплату после выполнения' : 'Подтверждение оплаты после выполнения снято');
   save(); refreshProjectEstimateWorkspace(oid);
 }
 
@@ -22629,6 +22659,8 @@ function renderProjectEstimateWorkspace(o) {
         <div class="project-estimate-quick-card"><span>Плёнка</span><strong>${selectedFilms.length ? selectedFilms.map(academyEsc).join(', ') : 'не выбрана'}</strong></div>
         <div class="project-estimate-quick-card"><span>Метраж стекла</span><strong>${measuredArea.toFixed(2)} sqft</strong></div>
         <div class="project-estimate-quick-card"><span>Расход плёнки</span><strong>${Number(filmPlan.consumedSqft || 0).toFixed(2)} sqft</strong></div>
+        <div class="project-estimate-quick-card"><span>Отход раскроя</span><strong>${Number(filmPlan.wastePct || 0).toFixed(1)}% · ${Number(filmPlan.rollWasteSqft || 0).toFixed(2)} sqft</strong></div>
+        <div class="project-estimate-quick-card"><span>Доступ / сложность</span><strong>${T('complexity'+(o.complexity||'standard').charAt(0).toUpperCase()+(o.complexity||'standard').slice(1))} · ×${Number(db.settings.complexityCoefs?.[o.complexity||'standard'] || 1).toFixed(2)}</strong></div>
         <div class="project-estimate-quick-card"><span>Окна / двери</span><strong>${measureAllWindows(o).length} · ${fmtMoney(orderRevenue(o))}</strong></div>
         <div class="project-estimate-quick-card"><span>Исполнители</span><strong>${installerPay.byInstaller.length ? installerPay.byInstaller.map(row => academyEsc(row.name)).join(', ') : 'ставка категории · команда не назначена'}</strong></div>
         <div class="project-estimate-quick-card"><span>Материал со склада</span><strong>${fmtMoney(pss.film)}</strong></div>
@@ -22664,8 +22696,10 @@ function renderProjectEstimateWorkspace(o) {
       <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
         <div><label>Сложность</label><select onchange="projectEstimateUpdateSetting('${o.id}','complexity',this.value)">${['standard','ladder','tower','alpinism'].map(key => `<option value="${key}" ${(o.complexity||'standard')===key?'selected':''}>${T('complexity'+key.charAt(0).toUpperCase()+key.slice(1))} ×${db.settings.complexityCoefs[key].toFixed(2)}</option>`).join('')}</select></div>
         <div><label>Цена продажи / sqft</label><input type="number" min="0" step="0.5" value="${o.priceOverridePerSqft == null ? '' : Number(o.priceOverridePerSqft)}" placeholder="Из каталога" onchange="projectEstimateUpdateSetting('${o.id}','priceOverridePerSqft',this.value)"></div>
+        <div><label>Условия оплаты</label><select onchange="projectEstimateSetPaymentTerms('${o.id}',this.value)"><option value="deposit_before_work" ${(o.paymentTerms||'deposit_before_work')==='deposit_before_work'?'selected':''}>Аванс до производства</option><option value="after_completion" ${o.paymentTerms==='after_completion'?'selected':''}>Оплата после выполнения</option></select></div>
         ${canSeeInternalEconomics ? `<div><label>Расстояние, км</label><input type="number" min="0" step="1" value="${Number(o.distanceKm || 0)}" onchange="projectEstimateUpdateSetting('${o.id}','distanceKm',this.value)"></div>` : ''}
       </div>
+      ${o.paymentTerms === 'after_completion' ? `<label class="order-clean-note mt-2" style="display:flex;align-items:flex-start;gap:.6rem;border-color:#fcd34d;background:#fffbeb;color:#92400e"><input type="checkbox" style="width:auto;margin-top:.2rem" ${o.paymentTermsConfirmedAt?'checked':''} onchange="projectEstimateConfirmPostpay('${o.id}',this.checked)"><span><b>Ответственность менеджера.</b> Подтверждаю согласованную с клиентом оплату после выполненной работы. CRM разрешит производство без аванса и сохранит, кто принял решение.</span></label>` : ''}
       ${canSeeInternalEconomics ? `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">${costLines.map(([label, amount]) => `<div class="order-clean-list-row"><span>${label}</span><b>${fmtMoney(amount)}</b></div>`).join('')}</div><div class="order-clean-list-row mt-2" style="border-top:2px solid #cbd5e1"><span><b>Общая себестоимость проекта</b></span><b class="text-red-600">${fmtMoney(pss.total)}</b></div>` : ''}
     </section>
 
@@ -22763,7 +22797,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       <div class="client-passport-head">
         <div class="client-passport-person">
           <span class="client-passport-avatar">${academyEsc(clientInitials || 'К')}</span>
-          <div><div class="client-passport-name">${academyEsc(c?.name || 'Без клиента')}</div><div class="client-passport-meta">${clientAccountType(c) === 'b2b' ? 'B2B аккаунт' : 'B2C клиент'} · предпочтительно: ${academyEsc(clientPreferredChannelLabel(c))}</div></div>
+          <div><div class="client-passport-name">${academyEsc(c?.name || 'Без клиента')}</div><div class="client-passport-meta">CRM ID: ${academyEsc(c?.id || '—')} · ${clientAccountType(c) === 'b2b' ? 'B2B аккаунт' : 'B2C клиент'} · предпочтительно: ${academyEsc(clientPreferredChannelLabel(c))}</div></div>
         </div>
         ${canManage ? `<button type="button" class="btn-ghost text-sm" onclick="openClientContactProfile('${c?.id || ''}','${o.id}')"><i class="bi bi-pencil mr-1"></i>Редактировать</button>` : ''}
       </div>
@@ -23865,11 +23899,48 @@ function openManagerGlassTypeModal(oid, rid, wid) {
   render();
 }
 function managerSetGlassType(oid, rid, wid, glassType) {
-  const w = getOrder(oid)?.measurements?.rooms?.find(x => x.id === rid)?.windows?.find(x => x.id === wid);
-  if (!w) return;
+  const o = getOrder(oid);
+  const w = o?.measurements?.rooms?.find(x => x.id === rid)?.windows?.find(x => x.id === wid);
+  if (!o || !w) return;
   w.glassType = glassType || '';
+  invalidateProjectEstimate(o, 'Изменён тип стекла');
   save();
   refreshManagerMeasureModal(oid);
+}
+const MANAGER_SOLAR_ACCESS_OPTIONS = [
+  { id: 'normal', label: 'С пола', complexity: 'standard' },
+  { id: 'step_ladder', label: 'Маленькая лестница', complexity: 'ladder' },
+  { id: 'ladder', label: 'Большая лестница / выше 10 ft', complexity: 'alpinism' },
+  { id: 'scaffold', label: 'Леса / тура', complexity: 'tower' },
+  { id: 'lift', label: 'Подъёмник / scissor lift', complexity: 'tower' },
+  { id: 'rope', label: 'Верёвочный доступ', complexity: 'alpinism' },
+];
+function managerSolarAccessOption(id) {
+  return MANAGER_SOLAR_ACCESS_OPTIONS.find(item => item.id === id) || null;
+}
+function managerSolarAccessLabel(win = {}) {
+  return managerSolarAccessOption(win.access)?.label || 'не указан';
+}
+function managerSyncOrderComplexityFromWindows(o) {
+  const rank = { standard: 0, ladder: 1, tower: 2, alpinism: 3 };
+  const complexities = measureAllWindows(o)
+    .filter(({ win }) => (win.measureScope || orderMeasureScope(o)) === 'solar_film')
+    .map(({ win }) => managerSolarAccessOption(win.access)?.complexity)
+    .filter(Boolean);
+  if (complexities.length) o.complexity = complexities.sort((a, b) => rank[b] - rank[a])[0];
+}
+function managerSetSolarAccess(oid, rid, wid, access) {
+  const o = getOrder(oid);
+  const w = o?.measurements?.rooms?.find(x => x.id === rid)?.windows?.find(x => x.id === wid);
+  if (!o || !w) return;
+  w.access = managerSolarAccessOption(access) ? access : '';
+  managerSyncOrderComplexityFromWindows(o);
+  invalidateProjectEstimate(o, 'Изменён доступ к окну и коэффициент сложности');
+  save();
+  refreshManagerMeasureModal(oid);
+}
+function managerSolarAccessOptionsHtml(selected = '') {
+  return `<option value="">Выберите доступ</option>` + MANAGER_SOLAR_ACCESS_OPTIONS.map(item => `<option value="${item.id}" ${selected === item.id ? 'selected' : ''}>${item.label} · ×${Number(db.settings.complexityCoefs?.[item.complexity] || 1).toFixed(2)}</option>`).join('');
 }
 function managerSolarRiskHtml(win = {}) {
   const glass = String(win.glassType || '').trim();
@@ -23916,7 +23987,8 @@ function managerWindowDefaults(o, room, opts = {}) {
     orientation: '',
     filmType: cat ? `${cat.brand} — ${cat.model}` : '',
     catalogId: cat?.id || null,
-    side: 'in',
+    side: scopeKey === 'solar_film' ? '' : 'in',
+    access: scopeKey === 'solar_film' ? '' : 'normal',
     measurementSource: 'CUSTOMER',
     measurement_source: 'CUSTOMER',
     verificationStatus: 'UNVERIFIED',
@@ -24327,7 +24399,7 @@ function renderManagerMeasureModal(oid) {
                           <div class="manager-window-field"><label>Ширина (${inUnits ? 'in' : 'мм'})</label><input id="mm-width-${w.id}" aria-label="Ширина" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.width || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></div>
                           <div class="manager-window-field"><label>Высота (${inUnits ? 'in' : 'мм'})</label><input id="mm-height-${w.id}" aria-label="Высота" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.height || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></div>
                           <div class="manager-window-field"><label>Количество</label><input id="mm-qty-${w.id}" aria-label="Количество" type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></div>
-                          ${needsSolar ? `<div class="manager-window-field"><label>Сторона фасада</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','orientation',this.value)">${managerOrientationOptionsHtml(w.orientation || '')}</select></div><div class="manager-window-field wide"><label>Тип стекла</label>${managerGlassChipHtml(oid, r.id, w)}${managerSolarRiskHtml(w)}</div>` : ''}
+                          ${needsSolar ? `<div class="manager-window-field"><label>Сторона фасада</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','orientation',this.value)">${managerOrientationOptionsHtml(w.orientation || '')}</select></div><div class="manager-window-field"><label>Сторона установки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','side',this.value)"><option value="">Выберите</option><option value="in" ${w.side==='in'?'selected':''}>Изнутри</option><option value="out" ${w.side==='out'?'selected':''}>Снаружи</option></select></div><div class="manager-window-field"><label>Доступ / высота</label><select onchange="managerSetSolarAccess('${oid}','${r.id}','${w.id}',this.value)">${managerSolarAccessOptionsHtml(w.access || '')}</select></div><div class="manager-window-field wide"><label>Тип стекла</label>${managerGlassChipHtml(oid, r.id, w)}${managerSolarRiskHtml(w)}</div>` : ''}
                         </div>
                       </div>
                       ${scopeKey === 'smart_film' ? managerSmartWindowFieldsHtml(oid, r, w) : ''}
@@ -24363,6 +24435,18 @@ function managerMeasureDetailsToggle(oid, key, open) {
 function openManagerMeasureModal(oid) {
   state.modal = renderManagerMeasureModal(oid);
   render();
+}
+function managerSolarMeasurementIssues(order) {
+  const issues = [];
+  measureAllWindows(order).forEach(({ room, win }) => {
+    if ((win.measureScope || orderMeasureScope(order)) !== 'solar_film') return;
+    const label = `${room?.name || 'Помещение'} · ${win.name || 'Окно'}`;
+    if (!String(win.glassType || '').trim()) issues.push(`${label}: укажите тип стекла`);
+    if (!String(win.orientation || '').trim()) issues.push(`${label}: укажите сторону фасада`);
+    if (!['in', 'out'].includes(win.side)) issues.push(`${label}: укажите внутреннюю или наружную установку`);
+    if (!managerSolarAccessOption(win.access)) issues.push(`${label}: выберите доступ и высоту`);
+  });
+  return issues;
 }
 function managerSmartMeasurementIssues(order) {
   const issues = [];
@@ -26424,6 +26508,7 @@ function createOrder(nextStep = 'measure') {
     createdAt: new Date().toISOString(),
     pricePerM2: db.settings.pricePerM2,
     complexity, distanceKm: 0, marketing: 0, paid: 0,
+    paymentTerms: 'deposit_before_work', paymentTermsConfirmedAt: null, paymentTermsConfirmedBy: null,
     measurements: { rooms: [] },
     siteType,
     extraServices: [],
@@ -28489,7 +28574,7 @@ function premiumDefaultSelections(order) {
     windows: {},
     products: {},
     services: {},
-    paymentMode: 'deposit50',
+    paymentMode: order?.paymentTerms === 'after_completion' ? 'after_completion' : 'deposit50',
     customDeposit: null,
     signature: '',
     drawnSignature: '',
@@ -28662,7 +28747,9 @@ function premiumProposalCalc(prop) {
   result.discount = premiumClamp(premiumNum(prop.discount), 0, result.subtotal);
   result.tax = Math.max(0, result.subtotal - result.discount) * premiumNum(prop.taxPct) / 100;
   result.total = Math.max(0, result.subtotal - result.discount) + result.tax;
-  result.deposit50 = result.total * 0.5;
+  result.deposit50 = orderSiteType(order) === 'RESIDENTIAL'
+    ? Math.min(result.total * 0.10, 1000)
+    : result.total * 0.5;
   result.currentPaid = premiumNum(order.paid);
   result.balanceDue = Math.max(0, result.total - result.currentPaid);
   result.paymentDue = premiumPaymentDue(prop, result);
@@ -28673,7 +28760,7 @@ function premiumPaymentDue(prop, calc) {
   const mode = prop.selections.paymentMode || 'deposit50';
   if (mode === 'full') return calc.balanceDue;
   if (mode === 'custom') return premiumClamp(premiumNum(prop.selections.customDeposit), 0, calc.balanceDue);
-  if (mode === 'financing') return 0;
+  if (mode === 'financing' || mode === 'after_completion') return 0;
   return Math.min(calc.deposit50, calc.balanceDue);
 }
 function premiumFinancingMonthly(total) {
@@ -28878,10 +28965,12 @@ function premiumRenderSummary(prop, calc) {
   const locked = premiumProposalLocked(prop);
   const stripeReady = premiumStripeLinkFresh(prop, calc);
   const payMode = prop.selections.paymentMode || 'deposit50';
-  const canCheckout = payMode !== 'financing' && calc.paymentDue > 0;
+  const canCheckout = !['financing', 'after_completion'].includes(payMode) && calc.paymentDue > 0;
   const checkoutStatus = prop.stripe?.paid || calc.order?.stripe?.paid
     ? 'Paid'
-    : !premiumStripeConfigured()
+    : payMode === 'after_completion'
+      ? 'Due after work'
+      : !premiumStripeConfigured()
       ? 'Setup needed'
       : payMode === 'financing'
       ? 'Financing review'
@@ -28922,13 +29011,13 @@ function premiumRenderSummary(prop, calc) {
         <div class="flex items-start justify-between gap-3">
           <div>
             <div class="text-xs text-blue-100 font-bold">PAYMENT</div>
-            <div class="text-lg font-black mt-1">Choose bank or card</div>
+            <div class="text-lg font-black mt-1">${payMode === 'after_completion' ? 'Payment due after completed work' : 'Choose bank or card'}</div>
           </div>
           <span class="pp-pill">${prop.paymentClaim?.status === 'pending_review' ? 'Verification pending' : (locked ? 'Ready' : 'After approval')}</span>
         </div>
         <div class="pp-payment-rail">
           <div><span>Due now</span><strong>${fmtMoney(calc.paymentDue)}</strong></div>
-          <div><span>Method</span><strong>${payMode === 'financing' ? 'Financing' : 'Zelle / ACH / Card'}</strong></div>
+          <div><span>Method</span><strong>${payMode === 'financing' ? 'Financing' : payMode === 'after_completion' ? 'Due after completion' : 'Zelle / ACH / Card'}</strong></div>
           <div><span>Balance</span><strong>${fmtMoney(calc.balanceAfterPayment)}</strong></div>
         </div>
         ${canCheckout && locked ? `<button class="pp-btn chase w-full mt-4" onclick="premiumOpenPaymentOptions('${prop.token}')">Pay now · ${fmtMoney(calc.paymentDue)}</button>` : ''}
@@ -29002,7 +29091,7 @@ function premiumRenderWindow(prop, order, room, window, idx, calc) {
             <div class="text-xs text-blue-200 font-bold">Window ${idx + 1}</div>
             <div class="font-black text-lg">${premiumEsc(window.name || ('Window ' + (idx + 1)))}</div>
             <div class="text-xs text-slate-400 mt-1">${window.width || 0} × ${window.height || 0} mm · qty ${qty} · ${priced.area.toFixed(2)} sqft · ${premiumEsc(premiumWindowShapeLabel(window))}</div>
-            <div class="text-xs text-slate-400">Glass: ${premiumEsc(window.glassType || 'To be confirmed')}</div>
+            <div class="text-xs text-slate-400">Glass: ${premiumEsc(window.glassType || 'To be confirmed')} · Façade: ${premiumEsc(window.orientation || 'TBD')} · Install: ${window.side === 'out' ? 'exterior' : window.side === 'in' ? 'interior' : 'TBD'} · Access: ${premiumEsc(managerSolarAccessLabel(window))}</div>
             ${premiumWindowEngineeringBlock(window)}
           </div>
           <button class="pp-btn ghost" onclick="premiumToggleWindow('${prop.token}','${room.id}','${window.id}')" ${locked || !premiumRoomIncluded(prop, room.id) ? 'disabled' : ''}>${included ? 'Remove' : 'Include'}</button>
@@ -29047,9 +29136,18 @@ function premiumRenderServices(prop, calc) {
       }).join('')}
     </div>`;
 }
+const PREMIUM_AGREEMENT_ITEMS = [
+  ['scope', 'I confirm the selected rooms, openings, dimensions, products and services shown in this proposal.'],
+  ['payment', 'I confirm the contract price and the payment schedule selected above.'],
+  ['glass', 'I disclosed known glass conditions and understand final film compatibility is subject to field verification before installation.'],
+  ['warranty', 'I understand that labor and manufacturer warranty coverage follows the written warranty documents for the selected product.'],
+  ['change_order', 'I understand that any change to price, material or scope must be documented and approved in writing before the changed work begins.'],
+  ['installation', 'I authorize ROLANPRO to schedule and perform the approved installation scope and provide the agreed site access.'],
+];
 function premiumRenderPayment(prop, calc) {
   const locked = premiumProposalLocked(prop);
   const mode = prop.selections.paymentMode || 'deposit50';
+  const depositLabel = orderSiteType(calc.order) === 'RESIDENTIAL' ? 'Legal Deposit (max 10% / $1,000)' : '50% Deposit';
   const paidScreen = ['Deposit Paid', 'Paid in Full', 'Financing Approved'].includes(prop.status);
   if (paidScreen) {
     return `
@@ -29071,7 +29169,11 @@ function premiumRenderPayment(prop, calc) {
   const stripeReady = premiumStripeLinkFresh(prop, calc);
   const primaryMethod = premiumPrimaryPaymentMethod();
   const methodLabels = { zelle: 'Zelle to Chase', ach: 'ACH bank transfer', chase: 'Chase payment', card: 'secure card payment' };
-  const primaryAction = mode === 'financing'
+  const primaryAction = mode === 'after_completion'
+    ? (locked
+      ? `<button class="pp-btn" disabled>Approved · payment due after completion</button>`
+      : `<button class="pp-btn chase" onclick="premiumAcceptProposal('${prop.token}')">Accept proposal · pay after completion</button>`)
+    : mode === 'financing'
     ? (locked
       ? `<button class="pp-btn" disabled>Financing request submitted</button>`
       : `<button class="pp-btn" onclick="premiumAcceptProposal('${prop.token}')">Submit financing request</button>`)
@@ -29090,8 +29192,9 @@ function premiumRenderPayment(prop, calc) {
       <div class="grid md:grid-cols-4 gap-3 mt-5">
         ${[
           ['full', 'Pay in Full', calc.balanceDue],
-          ['deposit50', '50% Deposit', calc.deposit50],
+          ['deposit50', depositLabel, calc.deposit50],
           ['custom', 'Custom Deposit', premiumNum(prop.selections.customDeposit)],
+          ['after_completion', 'Pay After Completion', 0],
           ['financing', 'Financing', 0],
         ].map(([id, label, amount]) => `
           <label class="pp-product ${mode === id ? '' : 'off'}">
@@ -29099,7 +29202,7 @@ function premiumRenderPayment(prop, calc) {
               <input type="radio" name="pp-pay-mode" ${mode === id ? 'checked' : ''} onchange="premiumSetPaymentMode('${prop.token}','${id}')" ${locked ? 'disabled' : ''}>
               <span class="font-black">${label}</span>
             </div>
-            <div class="text-sm text-slate-400 mt-2">${id === 'financing' ? `Upgrade your home from ${fmtMoney(premiumFinancingMonthly(calc.total))}/month` : fmtMoney(amount || 0)}</div>
+            <div class="text-sm text-slate-400 mt-2">${id === 'financing' ? `Upgrade your home from ${fmtMoney(premiumFinancingMonthly(calc.total))}/month` : id === 'after_completion' ? 'Balance due after completed work' : fmtMoney(amount || 0)}</div>
           </label>
         `).join('')}
 	      </div>
@@ -29117,9 +29220,9 @@ function premiumRenderPayment(prop, calc) {
 	        <div class="flex items-start justify-between gap-3">
 	          <div>
 	            <div class="text-xs text-blue-100 font-bold">PAYMENT STEP</div>
-	            <div class="text-lg font-black mt-1">${mode === 'financing' ? 'Financing request first' : `${methodLabels[primaryMethod] || 'Choose payment method'} after approval`}</div>
+            <div class="text-lg font-black mt-1">${mode === 'financing' ? 'Financing request first' : mode === 'after_completion' ? 'No payment due now' : `${methodLabels[primaryMethod] || 'Choose payment method'} after approval`}</div>
 	          </div>
-	          <span class="pp-pill">${mode === 'financing' ? 'No payment due now' : (prop.paymentClaim?.status === 'pending_review' ? 'Verification pending' : 'Bank or card')}</span>
+	          <span class="pp-pill">${['financing','after_completion'].includes(mode) ? 'No payment due now' : (prop.paymentClaim?.status === 'pending_review' ? 'Verification pending' : 'Bank or card')}</span>
 	        </div>
 	        <div class="pp-payment-rail">
 	          <div><span>Proposal total</span><strong>${fmtMoney(calc.total)}</strong></div>
@@ -29127,7 +29230,9 @@ function premiumRenderPayment(prop, calc) {
 	          <div><span>After payment</span><strong>${fmtMoney(calc.balanceAfterPayment)}</strong></div>
 	        </div>
 	        <div class="text-xs text-slate-300 mt-4">
-	          ${mode === 'financing'
+	          ${mode === 'after_completion'
+	            ? 'No payment is collected now. The full balance becomes due after the agreed work is completed.'
+	            : mode === 'financing'
 	            ? 'After approval the request is locked for manager review. Payment schedule is confirmed separately.'
 	            : `After approval, choose Zelle, ACH, Chase or card for exactly ${fmtMoney(calc.paymentDue)}. Bank payments are verified before the order is marked paid.`}
 	        </div>
@@ -29148,12 +29253,7 @@ function premiumRenderPayment(prop, calc) {
         ${!locked ? `<button class="pp-btn ghost mt-2" onclick="premiumClearSignature('${prop.token}')">Clear signature</button>` : ''}
       </div>
       <div class="grid md:grid-cols-2 gap-2 mt-5 text-sm">
-        ${[
-          ['scope', 'I confirm selected rooms, windows, products and services.'],
-          ['payment', 'I confirm the total price and selected payment option.'],
-          ['warranty', 'I understand product warranty terms are based on the selected film.'],
-          ['installation', 'I authorize ROLANPRO to schedule and perform the installation.'],
-        ].map(([id, label]) => `
+        ${PREMIUM_AGREEMENT_ITEMS.map(([id, label]) => `
           <label class="flex items-start gap-2 p-3 rounded-lg border border-slate-700 bg-slate-900/70">
             <input type="checkbox" ${prop.selections.agreements?.[id] ? 'checked' : ''} onchange="premiumSetAgreement('${prop.token}','${id}',this.checked)" ${locked ? 'disabled' : ''}>
             <span>${label}</span>
@@ -29185,6 +29285,7 @@ function renderPremiumProposalPortal(token) {
   }
   const client = getClient(order.clientId) || {};
   const calc = premiumProposalCalc(prop);
+  const filmPlan = calcFilmPlan(order);
   const cover = premiumCoverImage(order);
   const locked = premiumProposalLocked(prop);
   setTimeout(() => premiumHydrateSignatureCanvas(token), 80);
@@ -29219,6 +29320,12 @@ function renderPremiumProposalPortal(token) {
                   <p class="text-slate-300 mt-3">Review each room, choose the film package, add services and approve the exact scope before payment.</p>
                 </div>
                 ${locked ? `<span class="pp-pill">Signed ${fmtDateTime(prop.acceptedAt || prop.signedAt)}</span>` : `<span class="pp-pill">Editable proposal</span>`}
+              </div>
+              <div class="grid md:grid-cols-4 gap-3 mt-5 text-sm">
+                <div class="pp-product"><div class="text-slate-400">Measured glass</div><div class="text-xl font-black">${filmPlan.usefulSqft.toFixed(1)} sqft</div></div>
+                <div class="pp-product"><div class="text-slate-400">Film consumption</div><div class="text-xl font-black">${filmPlan.consumedSqft.toFixed(1)} sqft</div></div>
+                <div class="pp-product"><div class="text-slate-400">Cutting waste</div><div class="text-xl font-black">${filmPlan.wastePct.toFixed(1)}%</div></div>
+                <div class="pp-product"><div class="text-slate-400">Access complexity</div><div class="text-xl font-black">×${Number(db.settings.complexityCoefs?.[order.complexity || 'standard'] || 1).toFixed(2)}</div></div>
               </div>
             </div>
             ${(order.measurements?.rooms || []).length ? (order.measurements.rooms || []).map((r, i) => premiumRenderRoom(prop, order, r, i, calc)).join('') : projectQuickLines(order).length ? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PRELIMINARY PROJECT ITEMS</div><h3 class="text-xl font-black mt-1">Scope without measurements</h3><p class="text-slate-400 mt-2">Final room and window dimensions will be verified before installation.</p><div class="mt-4">${projectQuickLines(order).map(line => `<div class="pp-total-line"><span><b>${premiumEsc(primaryServiceInfo(line.serviceType)?.title || 'Service')}</b><br><small>${premiumEsc(line.label || 'Project item')} · ${premiumNum(line.qty)} ${premiumEsc(line.unit || 'unit')} × ${fmtMoney(line.unitPrice)}</small></span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}</div></div>` : `<div class="pp-panel"><h3 class="text-xl font-black">Project scope is not filled yet</h3><p class="text-slate-400 mt-2">Add project items or rooms in CRM, then regenerate this proposal.</p></div>`}
@@ -29404,13 +29511,13 @@ function premiumAcceptProposal(token) {
   if (!prop || premiumProposalLocked(prop)) return;
   const calc = premiumProposalCalc(prop);
   const agreements = prop.selections.agreements || {};
-  const allAgreed = ['scope', 'payment', 'warranty', 'installation'].every(k => agreements[k]);
+  const allAgreed = PREMIUM_AGREEMENT_ITEMS.every(([key]) => agreements[key]);
   if (!prop.selections.signature?.trim()) { alert('Please type your full name before accepting.'); return; }
   if (!prop.selections.drawnSignature) { alert('Please draw your signature before accepting.'); return; }
   if (!allAgreed) { alert('Please confirm all agreement checkboxes.'); return; }
   prop.acceptedAt = new Date().toISOString();
   prop.signedAt = prop.acceptedAt;
-  prop.status = prop.selections.paymentMode === 'financing' ? 'Financing Submitted' : 'Payment Pending';
+  prop.status = prop.selections.paymentMode === 'financing' ? 'Financing Submitted' : prop.selections.paymentMode === 'after_completion' ? 'Accepted' : 'Payment Pending';
   prop.lockedSnapshot = premiumBuildSignedSnapshot(prop, calc);
   const order = getOrder(prop.orderId);
   if (order) {
@@ -29551,6 +29658,8 @@ function premiumCanonicalSnapshot(prop) {
           site_type: orderSiteType(order) || null,
           glass_type: windowItem.glassType || null,
           installation_side: windowItem.side || null,
+          facade_orientation: windowItem.orientation || null,
+          access_method: windowItem.access || null,
         },
         item_kind: 'film',
       });
