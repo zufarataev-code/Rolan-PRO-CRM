@@ -1,8 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { ClientProposalView } from "@/components/client-proposal-view";
-import { PublicPaymentOptions } from "@/components/public-payment-options";
-import { PublicWarrantySummary } from "@/components/public-warranty-summary";
+import { PublicProposalPackage } from "@/components/public-proposal-package";
 import { getPublicPaymentOptions } from "@/features/payments/public-options";
 import { getPublicProposal } from "@/features/proposals/service";
 
@@ -10,10 +8,12 @@ type PageProps = {
   params: Promise<{
     accessToken: string;
   }>;
+  searchParams: Promise<{ lang?: string }>;
 };
 
-export default async function PublicProposalPage({ params }: PageProps) {
+export default async function PublicProposalPage({ params, searchParams }: PageProps) {
   const { accessToken } = await params;
+  const { lang } = await searchParams;
   const [proposal, paymentOptions] = await Promise.all([
     getPublicProposal(accessToken),
     getPublicPaymentOptions(accessToken),
@@ -25,9 +25,12 @@ export default async function PublicProposalPage({ params }: PageProps) {
 
   return (
     <main className="landing-shell proposal-page-shell">
-      <ClientProposalView initialProposal={{ ...proposal, access_token: accessToken }} />
-      <PublicWarrantySummary />
-      <PublicPaymentOptions accessToken={accessToken} initialData={paymentOptions} />
+      <PublicProposalPackage
+        proposal={{ ...proposal, access_token: accessToken }}
+        paymentOptions={paymentOptions}
+        accessToken={accessToken}
+        initialLanguage={lang === "ru" ? "ru" : "en"}
+      />
     </main>
   );
 }

@@ -298,7 +298,11 @@ export function serializePublicProposal(proposal: any) {
       zone_name: item.zone_name,
       window_id: item.window_id,
       title: item.title_en,
+      title_ru: item.title_ru,
+      title_en: item.title_en,
       description: item.description_en,
+      description_ru: item.description_ru,
+      description_en: item.description_en,
       measurement_snapshot: item.measurement_snapshot,
       dynamic_fields: item.dynamic_fields,
       addons_snapshot: item.addons_snapshot,
@@ -324,15 +328,24 @@ export function serializePublicProposal(proposal: any) {
         : null,
       service_type: item.service_type
         ? {
-            service_code: item.service_type.service_code,
-            name: item.service_type.name_en,
+          service_code: item.service_type.service_code,
+          name: item.service_type.name_en,
+          name_ru: item.service_type.name_ru,
+          name_en: item.service_type.name_en,
           }
         : null,
       film: item.film
         ? {
+            film_id: item.film.film_id,
             category_name: item.film.category_name_en,
+            category_name_ru: item.film.category_name_ru,
+            category_name_en: item.film.category_name_en,
             brand_name: item.film.brand_name_en,
+            brand_name_ru: item.film.brand_name_ru,
+            brand_name_en: item.film.brand_name_en,
             model_name: item.film.model_name_en,
+            model_name_ru: item.film.model_name_ru,
+            model_name_en: item.film.model_name_en,
             thickness: item.film.thickness,
             vlt_percent: item.film.vlt_percent == null ? null : toNumber(item.film.vlt_percent),
             uv_rejection_percent:

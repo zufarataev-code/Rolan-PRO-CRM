@@ -28,6 +28,8 @@ export type LegacyProposalSnapshot = {
   site_type?: string | null;
   lead_source?: string | null;
   lead_intent_service_code?: string | null;
+  payment_due?: number | null;
+  payment_mode?: string | null;
   title?: string;
   client?: {
     legacy_client_id?: string;
@@ -63,6 +65,8 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
   const siteType = cleanSiteType(input.site_type);
   const leadSource = cleanText(input.lead_source, 120) || null;
   const leadIntentServiceCode = cleanText(input.lead_intent_service_code, 50).toUpperCase() || null;
+  const paymentDue = cleanMoney(input.payment_due);
+  const paymentMode = cleanText(input.payment_mode, 40) || null;
   if (!/^pp_[a-z0-9]+$/i.test(token) || !legacyOrderId || !clientName) {
     throw new Error("Legacy proposal token, order and client are required.");
   }
@@ -107,6 +111,8 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
     siteType,
     leadSource,
     leadIntentServiceCode,
+    paymentDue,
+    paymentMode,
     items,
   };
 }
@@ -205,6 +211,7 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
             status: existing.status,
             subtotal_amount: total,
             selected_total_amount: total,
+            property_type: snapshot.siteType === "COMMERCIAL" ? "commercial" : "residential",
             client_message: "Review the saved project scope below, approve the proposal, and continue to payment when ready.",
             notes: `Canonical copy of legacy order ${snapshot.legacyOrderId}.`,
           },
@@ -220,6 +227,7 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
             currency: "USD",
             subtotal_amount: total,
             selected_total_amount: total,
+            property_type: snapshot.siteType === "COMMERCIAL" ? "commercial" : "residential",
             client_message: "Review the saved project scope below, approve the proposal, and continue to payment when ready.",
             notes: `Canonical copy of legacy order ${snapshot.legacyOrderId}.`,
           },
@@ -249,6 +257,31 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
         sort_order: index + 1,
       })),
     });
+
+    const existingDeposit = await tx.deposit.findUnique({
+      where: { proposal_id: proposal.proposal_id },
+      select: { deposit_id: true, status: true },
+    });
+    const legalCap = snapshot.siteType === "RESIDENTIAL" ? Math.min(total * 0.1, 1_000) : null;
+    if (snapshot.paymentDue > 0 && existingDeposit?.status !== "paid") {
+      await tx.deposit.upsert({
+        where: { proposal_id: proposal.proposal_id },
+        update: {
+          amount: snapshot.paymentDue,
+          legal_cap_amount: legalCap,
+          payment_reference: snapshot.paymentMode,
+        },
+        create: {
+          proposal_id: proposal.proposal_id,
+          amount: snapshot.paymentDue,
+          status: "pending",
+          legal_cap_amount: legalCap,
+          payment_reference: snapshot.paymentMode,
+        },
+      });
+    } else if (snapshot.paymentDue === 0 && existingDeposit?.status === "pending") {
+      await tx.deposit.delete({ where: { deposit_id: existingDeposit.deposit_id } });
+    }
 
     await tx.deal.update({
       where: { deal_id: dealId! },

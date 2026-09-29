@@ -47,6 +47,13 @@ test("selected site type follows the order into the canonical project", () => {
   assert.match(projectLaunch, /site_type: siteType/);
 });
 
+test("canonical client proposal carries the exact legacy payment amount", () => {
+  assert.match(legacyCrm, /payment_due: calc\.paymentDue/);
+  assert.match(legacyCrm, /payment_mode: prop\.selections\.paymentMode/);
+  assert.match(legacyProposalPublisher, /paymentDue/);
+  assert.match(legacyProposalPublisher, /tx\.deposit\.upsert/);
+});
+
 test("incoming lead service remains separate from additional project services", () => {
   assert.match(legacyCrm, /lead_intent_service_code: canonicalServiceCodeForOrderService/);
   assert.match(legacyCrm, /lead_source: orderLeadSource\(order\)/);
