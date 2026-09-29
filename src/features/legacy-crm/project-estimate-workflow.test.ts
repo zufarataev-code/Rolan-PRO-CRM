@@ -97,12 +97,12 @@ test("window and room removal checkboxes create an area-based calculated service
   assert.match(source, /type="checkbox"[\s\S]*?managerSetWindowRemoval/);
   assert.match(source, /function orderRemovalAreaSqft\(o\)/);
   assert.match(source, /line\.price = Number\(\(area \* unitPrice\)\.toFixed\(2\)\)/);
-  assert.match(source, /Удаление плёнки\$\{windowRemovalRequired\(w\)/);
+  assert.match(source, /Требуется демонтаж старой плёнки\$\{windowRemovalRequired\(w\)/);
   assert.match(source, /Удалить окно/);
 });
 
 test("each room exposes a service-scoped film selector and shows its selected film", () => {
-  assert.match(source, /Плёнка для помещения · \$\{academyEsc\(scope\.short\)\}/);
+  assert.match(source, /Плёнка и склад · \$\{academyEsc\(scope\.short\)\}/);
   assert.match(source, /managerApplyFilmToRoom\('\$\{oid\}','\$\{room\.id\}',this\.value\)/);
   assert.match(source, /const roomFilm = roomCatalog \? `\$\{roomCatalog\.brand\} · \$\{roomCatalog\.model\}` : 'плёнка не выбрана'/);
   assert.match(source, /managerRoomFilmPickerHtml\(oid, r, selectedRoomCatalog, preferredCategory\)/);
