@@ -11,14 +11,14 @@ import { after, before, test } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
 
+import { assertSafeE2eTarget } from "./guard";
+
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const SEED_PASSWORD = process.env.E2E_SEED_PASSWORD ?? "ChangeMe123!";
 const OWNER_EMAIL = "owner@rolanpro.local";
 const MANAGER_EMAIL = "manager@rolanpro.local";
 
-if (/rolan-pro\.com|runcloud/i.test(BASE_URL)) {
-  throw new Error(`Refusing to run the E2E gate against ${BASE_URL}: it creates records.`);
-}
+assertSafeE2eTarget(BASE_URL);
 
 const prisma = new PrismaClient();
 const runTag = `e2e${Date.now()}`;
