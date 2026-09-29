@@ -75,6 +75,8 @@ jobs:
       ENABLE_DEMO_LOGIN: "false"
       APP_URL: http://127.0.0.1:3000
       E2E_BASE_URL: http://127.0.0.1:3000
+      # Disposable CI database only; the E2E guard refuses anything non-local.
+      E2E_ALLOW_WRITES: "1"
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

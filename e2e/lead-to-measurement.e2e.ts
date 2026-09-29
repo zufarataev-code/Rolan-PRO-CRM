@@ -6,23 +6,24 @@
  * `clean-build-e2e`). It drives the same HTTP API the product uses, as a real
  * manager and a real surveyor, and checks what each of them is allowed to see.
  *
- *   E2E_BASE_URL=http://localhost:3000 pnpm test:e2e
+ *   E2E_ALLOW_WRITES=1 E2E_BASE_URL=http://localhost:3000 pnpm test:e2e
  *
- * Never point this at production: it creates records.
+ * It creates records, so it refuses to run unless the app and database are
+ * local and E2E_ALLOW_WRITES=1 is set (see ./guard.ts).
  */
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
 
+import { assertSafeE2eTarget } from "./guard";
+
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const PASSWORD = process.env.E2E_SEED_PASSWORD ?? "ChangeMe123!";
 const MANAGER_EMAIL = "manager@rolanpro.local";
 const SURVEYOR_EMAIL = "consultant@rolanpro.local";
 
-if (/rolan-pro\.com|runcloud/i.test(BASE_URL)) {
-  throw new Error(`Refusing to run the E2E gate against ${BASE_URL}: it creates records.`);
-}
+assertSafeE2eTarget(BASE_URL);
 
 const prisma = new PrismaClient();
 const runTag = `E2E-${Date.now()}`;
