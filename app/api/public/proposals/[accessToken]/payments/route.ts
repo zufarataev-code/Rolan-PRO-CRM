@@ -35,6 +35,10 @@ export async function POST(request: Request, context: RouteContext) {
     return apiError(409, "deposit_not_ready", "Deposit amount is not ready yet.");
   }
 
+  if (result === "agreement_not_signed") {
+    return apiError(409, "agreement_not_signed", "Please sign the proposal before choosing a payment method.");
+  }
+
   if (result === "deposit_already_paid") {
     return apiError(409, "deposit_already_paid", "Deposit is already paid.");
   }

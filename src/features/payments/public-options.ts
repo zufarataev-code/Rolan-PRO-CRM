@@ -1,4 +1,4 @@
-import { calculatePaymentAmount, isPaymentMethod, PAYMENT_METHODS, type PaymentMethod } from "@/features/payments/policy";
+import { calculatePaymentAmount, calculateSuggestedDeposit, isPaymentMethod, PAYMENT_METHODS, type PaymentMethod } from "@/features/payments/policy";
 import { createStripeDepositCheckout, isStripeCheckoutConfigured } from "@/features/payments/stripe-checkout";
 import { prisma } from "@/lib/db";
 
@@ -42,6 +42,8 @@ export async function getPublicPaymentOptions(accessToken: string) {
     select: {
       proposal_id: true,
       currency: true,
+      selected_total_amount: true,
+      property_type: true,
       agreement: {
         select: { status: true, signed_at: true },
       },
@@ -67,7 +69,11 @@ export async function getPublicPaymentOptions(accessToken: string) {
   if (!proposal) return null;
 
   const instructions = protectedPaymentInstructions();
-  const baseAmount = money(proposal.deposit?.amount);
+  const suggestedBaseAmount = calculateSuggestedDeposit(
+    money(proposal.selected_total_amount),
+    proposal.property_type,
+  );
+  const baseAmount = proposal.deposit ? money(proposal.deposit.amount) : suggestedBaseAmount;
   const selectedMethod = isPaymentMethod(proposal.deposit?.payment_method)
     ? proposal.deposit?.payment_method
     : null;
@@ -85,6 +91,7 @@ export async function getPublicPaymentOptions(accessToken: string) {
     proposal_id: proposal.proposal_id,
     currency: proposal.currency,
     agreement_signed: proposal.agreement?.status === "signed" && Boolean(proposal.agreement.signed_at),
+    suggested_base_amount: suggestedBaseAmount,
     deposit: proposal.deposit
       ? {
           deposit_id: proposal.deposit.deposit_id,
@@ -131,8 +138,13 @@ export async function selectPublicPaymentMethod(accessToken: string, method: Pay
     select: {
       proposal_id: true,
       currency: true,
+      selected_total_amount: true,
+      property_type: true,
       client: {
         select: { email: true },
+      },
+      agreement: {
+        select: { status: true, signed_at: true },
       },
       deposit: {
         select: {
@@ -145,10 +157,35 @@ export async function selectPublicPaymentMethod(accessToken: string, method: Pay
   });
 
   if (!proposal) return null;
-  if (!proposal.deposit) return "deposit_not_ready" as const;
-  if (proposal.deposit.status === "paid") return "deposit_already_paid" as const;
+  if (proposal.agreement?.status !== "signed" || !proposal.agreement.signed_at) {
+    return "agreement_not_signed" as const;
+  }
 
-  const calculated = calculatePaymentAmount(money(proposal.deposit.amount), method);
+  const suggestedAmount = calculateSuggestedDeposit(
+    money(proposal.selected_total_amount),
+    proposal.property_type,
+  );
+  if (suggestedAmount <= 0) return "deposit_not_ready" as const;
+
+  const deposit = proposal.deposit ?? await prisma.deposit.upsert({
+    where: { proposal_id: proposal.proposal_id },
+    update: {},
+    create: {
+      proposal_id: proposal.proposal_id,
+      amount: suggestedAmount,
+      status: "pending",
+      legal_cap_amount: proposal.property_type === "residential" ? suggestedAmount : null,
+    },
+    select: {
+      deposit_id: true,
+      amount: true,
+      status: true,
+    },
+  });
+
+  if (deposit.status === "paid") return "deposit_already_paid" as const;
+
+  const calculated = calculatePaymentAmount(money(deposit.amount), method);
   let checkout:
     | { checkoutSessionId: string; checkoutUrl: string; amountCents: number }
     | null = null;
@@ -157,7 +194,7 @@ export async function selectPublicPaymentMethod(accessToken: string, method: Pay
     const created = await createStripeDepositCheckout({
       accessToken,
       proposalId: proposal.proposal_id,
-      depositId: proposal.deposit.deposit_id,
+      depositId: deposit.deposit_id,
       currency: proposal.currency,
       clientEmail: proposal.client.email,
       baseAmount: calculated.base_amount,
@@ -173,7 +210,7 @@ export async function selectPublicPaymentMethod(accessToken: string, method: Pay
 
   await prisma.$transaction(async (tx) => {
     await tx.deposit.update({
-      where: { deposit_id: proposal.deposit!.deposit_id },
+      where: { deposit_id: deposit.deposit_id },
       data: {
         payment_method: method,
         // Never reuse a generic/base-amount processor link. Online links are
@@ -200,7 +237,7 @@ export async function selectPublicPaymentMethod(accessToken: string, method: Pay
           event_key: "payment.checkout_created",
           message: "Fee-aware secure online checkout created for the selected deposit.",
           metadata: {
-            deposit_id: proposal.deposit!.deposit_id,
+            deposit_id: deposit.deposit_id,
             checkout_session_id: checkout.checkoutSessionId,
             base_amount: calculated.base_amount,
             fee_percent: calculated.fee_percent,

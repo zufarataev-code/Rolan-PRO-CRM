@@ -30073,6 +30073,8 @@ function premiumCanonicalSnapshot(prop) {
     site_type: orderSiteType(order) || null,
     lead_source: orderLeadSource(order),
     lead_intent_service_code: canonicalServiceCodeForOrderService(orderLeadIntentServiceId(order)) || null,
+    payment_due: calc.paymentDue,
+    payment_mode: prop.selections.paymentMode || 'deposit50',
     title: `ROLANPRO Proposal ${order.number || ''}`.trim(),
     client: {
       legacy_client_id: client.id,

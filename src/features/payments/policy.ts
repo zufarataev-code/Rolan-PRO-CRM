@@ -8,6 +8,13 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[keyof typeof PAYMENT_METHOD
 
 export const PAYMENT_SYSTEM_FEE_PERCENT = 3.5;
 
+export function calculateSuggestedDeposit(total: number, propertyType: string | null | undefined) {
+  const normalizedTotal = Math.max(0, Number.isFinite(total) ? total : 0);
+  return propertyType === "residential"
+    ? Math.min(normalizedTotal * 0.1, 1_000)
+    : normalizedTotal * 0.5;
+}
+
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }

@@ -4,6 +4,8 @@ import { useState } from "react";
 
 type ClientProposalViewProps = {
   initialProposal: any;
+  language?: "en" | "ru";
+  onAgreementSigned?: () => void;
 };
 
 function formatCurrency(value: number) {
@@ -14,17 +16,17 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function formatDate(value: string | null | undefined) {
+function formatDate(value: string | null | undefined, language: "en" | "ru" = "en") {
   if (!value) {
-    return "Not specified";
+    return language === "ru" ? "не указано" : "Not specified";
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "Not specified";
+    return language === "ru" ? "не указано" : "Not specified";
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(language === "ru" ? "ru-RU" : "en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -151,13 +153,57 @@ const SERVICE_INTROS: Record<string, { title: string; body: string; points: stri
   },
 };
 
-function serviceIntroFor(items: any[]) {
+const SERVICE_INTROS_RU: typeof SERVICE_INTROS = {
+  solar: {
+    title: "Солнцезащитная плёнка",
+    body: "Многослойная плёнка устанавливается на внутреннюю сторону существующего стекла. Она отражает тепло и блокирует ультрафиолет, сохраняя обзор.",
+    points: [
+      "В помещении прохладнее, кондиционер работает меньше",
+      "Блокирует до 99% ультрафиолета и защищает интерьер от выцветания",
+      "Стекло остаётся прозрачным, если не выбран зеркальный эффект",
+      "Монтаж выполняется изнутри аккуратно и без строительного мусора",
+    ],
+  },
+  protective: {
+    title: "Защитная плёнка",
+    body: "Толстый ламинирующий слой прочно соединяется со стеклом. При ударе стекло может треснуть, но осколки остаются на плёнке.",
+    points: [
+      "Удерживает разбитое стекло и защищает людей",
+      "Замедляет проникновение через окно",
+      "Может крепиться по периметру к раме для усиления",
+      "После установки практически незаметна",
+    ],
+  },
+  smart: {
+    title: "Переключаемая smart-плёнка",
+    body: "Плёнка меняет состояние с прозрачного на матовое при подаче электричества. Приватность по команде — без жалюзи и штор.",
+    points: [
+      "Переключение из прозрачного состояния в приватное менее чем за секунду",
+      "Управление выключателем, пультом или телефоном",
+      "В матовом состоянии может использоваться как проекционная поверхность",
+      "Монтаж включает электрику, плёнку, подключение и сдачу системы",
+    ],
+  },
+  decorative: {
+    title: "Декоративная плёнка",
+    body: "Матовая или узорчатая плёнка меняет внешний вид стекла и уровень приватности без замены самого стекла.",
+    points: [
+      "Матовые, узорчатые, градиентные и индивидуальные дизайны",
+      "Больше приватности при сохранении естественного света",
+      "Значительно дешевле замены стекла на декоративные панели",
+      "Покрытие можно заменить в будущем",
+    ],
+  },
+};
+
+function serviceIntroFor(items: any[], language: "en" | "ru") {
+  const intros = language === "ru" ? SERVICE_INTROS_RU : SERVICE_INTROS;
   for (const item of items || []) {
     const raw = `${item?.film?.category_name ?? ""} ${item?.service_type?.name ?? ""}`.toLowerCase();
-    if (raw.includes("smart")) return SERVICE_INTROS.smart;
-    if (raw.includes("safety") || raw.includes("security") || raw.includes("protect")) return SERVICE_INTROS.protective;
-    if (raw.includes("decor")) return SERVICE_INTROS.decorative;
-    if (raw.includes("solar") || raw.includes("sun")) return SERVICE_INTROS.solar;
+    if (raw.includes("smart")) return intros.smart;
+    if (raw.includes("safety") || raw.includes("security") || raw.includes("protect")) return intros.protective;
+    if (raw.includes("decor")) return intros.decorative;
+    if (raw.includes("solar") || raw.includes("sun")) return intros.solar;
   }
   return null;
 }
@@ -179,18 +225,18 @@ function uniqueFilmsWithSpecs(items: any[]) {
   return [...seen.values()];
 }
 
-function filmSpecChips(film: any): string[] {
+function filmSpecChips(film: any, language: "en" | "ru" = "en"): string[] {
   if (!film) return [];
   const chips: string[] = [];
-  if (film.vlt_percent != null) chips.push(`Visible light ${film.vlt_percent}%`);
-  if (film.tser_percent != null) chips.push(`Heat rejected ${film.tser_percent}%`);
-  if (film.uv_rejection_percent != null) chips.push(`UV blocked ${film.uv_rejection_percent}%`);
-  if (film.ir_rejection_percent != null) chips.push(`Infrared blocked ${film.ir_rejection_percent}%`);
+  if (film.vlt_percent != null) chips.push(`${language === "ru" ? "Светопропускание" : "Visible light"} ${film.vlt_percent}%`);
+  if (film.tser_percent != null) chips.push(`${language === "ru" ? "Отражение тепла" : "Heat rejected"} ${film.tser_percent}%`);
+  if (film.uv_rejection_percent != null) chips.push(`${language === "ru" ? "Блокировка UV" : "UV blocked"} ${film.uv_rejection_percent}%`);
+  if (film.ir_rejection_percent != null) chips.push(`${language === "ru" ? "Блокировка IR" : "Infrared blocked"} ${film.ir_rejection_percent}%`);
   if (film.thickness) chips.push(String(film.thickness));
   return chips;
 }
 
-function localizeItemText(text: unknown): string {
+function localizeItemText(text: unknown, language: "en" | "ru" = "en"): string {
   if (typeof text !== "string" || !text.trim()) {
     // Возвращаемый тип объявлен явно: при strict вывод из `text ?? ""`
     // давал {} вместо string, и разметка отказывалась это принимать.
@@ -217,13 +263,21 @@ function localizeItemText(text: unknown): string {
   // Граница слова \b в JavaScript опирается на латиницу, поэтому с
   // кириллицей не срабатывает: /\bОкно\b/ не находит «Окно».
   // Используем проверку на соседние буквы любого алфавита.
-  const words: Array<[RegExp, string]> = [
-    [/(?<!\p{L})Окно(?!\p{L})/gu, "Window"],
-    [/(?<!\p{L})Дверь(?!\p{L})/gu, "Door"],
-    [/(?<!\p{L})Перегородка(?!\p{L})/gu, "Partition"],
-    [/(?<!\p{L})Витрина(?!\p{L})/gu, "Storefront"],
-    [/(?<!\p{L})шт\.?(?!\p{L})/gu, "pcs"],
-  ];
+  const words: Array<[RegExp, string]> = language === "ru"
+    ? [
+        [/(?<!\p{L})Window(?!\p{L})/giu, "Окно"],
+        [/(?<!\p{L})Door(?!\p{L})/giu, "Дверь"],
+        [/(?<!\p{L})Partition(?!\p{L})/giu, "Перегородка"],
+        [/(?<!\p{L})Storefront(?!\p{L})/giu, "Витрина"],
+        [/(?<!\p{L})pcs\.?(?!\p{L})/giu, "шт."],
+      ]
+    : [
+        [/(?<!\p{L})Окно(?!\p{L})/gu, "Window"],
+        [/(?<!\p{L})Дверь(?!\p{L})/gu, "Door"],
+        [/(?<!\p{L})Перегородка(?!\p{L})/gu, "Partition"],
+        [/(?<!\p{L})Витрина(?!\p{L})/gu, "Storefront"],
+        [/(?<!\p{L})шт\.?(?!\p{L})/gu, "pcs"],
+      ];
 
   for (const [pattern, replacement] of words) {
     result = result.replace(pattern, replacement);
@@ -271,7 +325,7 @@ function groupItemsByRoom(items: any[]) {
   return Array.from(groups, ([room, roomItems]) => ({ room, items: roomItems }));
 }
 
-function getDynamicFieldSummary(item: any) {
+function getDynamicFieldSummary(item: any, language: "en" | "ru" = "en") {
   const fields = item?.dynamic_fields;
 
   if (!fields || typeof fields !== "object") {
@@ -281,17 +335,17 @@ function getDynamicFieldSummary(item: any) {
   const record = fields as Record<string, unknown>;
   const entries = [
     record.sqft ? `${parseNumber(record.sqft)} sqft` : null,
-    record.zones_qty ? `${parseNumber(record.zones_qty)} zones` : null,
-    record.blocks_qty ? `${parseNumber(record.blocks_qty)} blocks` : null,
-    record.windows_qty ? `${parseNumber(record.windows_qty)} windows` : null,
-    typeof record.block_type === "string" && record.block_type.trim() ? `Block type: ${record.block_type}` : null,
-    typeof record.thickness === "string" && record.thickness.trim() ? `Thickness: ${record.thickness}` : null,
+    record.zones_qty ? `${parseNumber(record.zones_qty)} ${language === "ru" ? "зон" : "zones"}` : null,
+    record.blocks_qty ? `${parseNumber(record.blocks_qty)} ${language === "ru" ? "блоков" : "blocks"}` : null,
+    record.windows_qty ? `${parseNumber(record.windows_qty)} ${language === "ru" ? "окон" : "windows"}` : null,
+    typeof record.block_type === "string" && record.block_type.trim() ? `${language === "ru" ? "Тип блока" : "Block type"}: ${record.block_type}` : null,
+    typeof record.thickness === "string" && record.thickness.trim() ? `${language === "ru" ? "Толщина" : "Thickness"}: ${record.thickness}` : null,
   ];
 
   return entries.filter((entry): entry is string => Boolean(entry));
 }
 
-function getMeasurementSummary(item: any) {
+function getMeasurementSummary(item: any, language: "en" | "ru" = "en") {
   const snapshot = item?.measurement_snapshot;
   if (!snapshot || typeof snapshot !== "object") return [];
 
@@ -299,16 +353,16 @@ function getMeasurementSummary(item: any) {
   const height = parseNumber(snapshot.height);
   const sqft = parseNumber(snapshot.sqft);
   const facts = [
-    width > 0 && height > 0 ? localizeItemText(`${width} × ${height}`) : null,
+    width > 0 && height > 0 ? localizeItemText(`${width} × ${height}`, language) : null,
     sqft > 0 ? `${sqft.toFixed(1)} sqft` : null,
-    snapshot.glass_type ? `Glass: ${String(snapshot.glass_type)}` : null,
-    snapshot.installation_side ? `Install: ${String(snapshot.installation_side)}` : null,
+    snapshot.glass_type ? `${language === "ru" ? "Стекло" : "Glass"}: ${String(snapshot.glass_type)}` : null,
+    snapshot.installation_side ? `${language === "ru" ? "Монтаж" : "Install"}: ${String(snapshot.installation_side)}` : null,
   ];
 
   return facts.filter((fact): fact is string => Boolean(fact));
 }
 
-function getAddonSummary(addonsSnapshot: unknown) {
+function getAddonSummary(addonsSnapshot: unknown, language: "en" | "ru" = "en") {
   if (!Array.isArray(addonsSnapshot)) {
     return [];
   }
@@ -324,7 +378,7 @@ function getAddonSummary(addonsSnapshot: unknown) {
         (typeof record.manual_label === "string" && record.manual_label.trim()) ||
         (typeof record.name_en === "string" && record.name_en.trim()) ||
         (typeof record.addon_code === "string" && record.addon_code.trim()) ||
-        "Add-on";
+        (language === "ru" ? "Дополнительная услуга" : "Add-on");
       const quantity =
         typeof record.quantity === "number"
           ? record.quantity
@@ -353,9 +407,18 @@ function getAddonSummary(addonsSnapshot: unknown) {
     .filter((entry): entry is string => Boolean(entry));
 }
 
-export function ClientProposalView({ initialProposal }: ClientProposalViewProps) {
+export function ClientProposalView({
+  initialProposal,
+  language = "en",
+  onAgreementSigned,
+}: ClientProposalViewProps) {
+  const ru = language === "ru";
   const [proposal, setProposal] = useState(initialProposal);
-  const [message, setMessage] = useState("Review the services below and keep only what you want to approve.");
+  const [message, setMessage] = useState(
+    ru
+      ? "Проверьте услуги ниже и оставьте только то, что хотите согласовать."
+      : "Review the services below and keep only what you want to approve.",
+  );
   const [saving, setSaving] = useState(false);
   const [agreement, setAgreement] = useState({
     signer_name: proposal.agreement?.signer_name ?? "",
@@ -377,7 +440,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
 
   async function saveSelection() {
     setSaving(true);
-    setMessage("Saving your selection...");
+    setMessage(ru ? "Сохраняем выбранные услуги..." : "Saving your selection...");
 
     try {
       const updated = await parseProposal(
@@ -397,10 +460,10 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
       );
 
       setProposal((current: any) => ({ ...updated, access_token: current.access_token }));
-      setMessage("Your selection has been updated.");
+      setMessage(ru ? "Выбранные услуги обновлены." : "Your selection has been updated.");
       return updated;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not save your selection.");
+      setMessage(error instanceof Error ? error.message : (ru ? "Не удалось сохранить выбранные услуги." : "Could not save your selection."));
       return null;
     } finally {
       setSaving(false);
@@ -409,7 +472,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
 
   async function signAgreement() {
     setSaving(true);
-    setMessage("Signing agreement...");
+    setMessage(ru ? "Подписываем договор..." : "Signing agreement...");
 
     try {
       await saveSelection();
@@ -425,16 +488,17 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
       );
 
       setProposal((current: any) => ({ ...updated, access_token: current.access_token }));
-      setMessage("Agreement signed successfully.");
+      setMessage(ru ? "Договор успешно подписан. Теперь можно перейти к оплате." : "Agreement signed successfully. You can now continue to payment.");
+      onAgreementSigned?.();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not sign agreement.");
+      setMessage(error instanceof Error ? error.message : (ru ? "Не удалось подписать договор." : "Could not sign agreement."));
     } finally {
       setSaving(false);
     }
   }
 
   const isLocked = proposal.status === "agreement_signed" || proposal.status === "approved";
-  const serviceIntro = serviceIntroFor(proposal.items);
+  const serviceIntro = serviceIntroFor(proposal.items, language);
   const filmsWithSpecs = uniqueFilmsWithSpecs(proposal.items);
 
   return (
@@ -445,39 +509,39 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
             <img src="/landing/rolan-logo.webp" alt="Rolan PRO" className="proposal-print-logo" />
           </div>
           <div className="proposal-print-meta">
-            <strong>{proposal.proposal_code ?? "Proposal"}</strong>
-            <span>Prepared {formatDate(proposal.created_at)}</span>
-            <span>Valid through {formatDate(proposal.expires_at)}</span>
+            <strong>{proposal.proposal_code ?? (ru ? "Коммерческое предложение" : "Proposal")}</strong>
+            <span>{ru ? "Подготовлено" : "Prepared"} {formatDate(proposal.created_at, language)}</span>
+            <span>{ru ? "Действительно до" : "Valid through"} {formatDate(proposal.expires_at, language)}</span>
           </div>
         </header>
 
         <section className="proposal-print-intro">
           <div>
-            <div className="proposal-print-kicker">Project proposal</div>
+            <div className="proposal-print-kicker">{ru ? "Коммерческое предложение" : "Project proposal"}</div>
             <h1>{proposal.title}</h1>
             <p>
-              A clear scope of selected services, materials, and project pricing prepared for your property.
+              {ru ? "Понятный состав выбранных услуг, материалов и стоимости проекта для вашего объекта." : "A clear scope of selected services, materials, and project pricing prepared for your property."}
             </p>
           </div>
           <div className="proposal-print-client">
-            <span>Prepared for</span>
-            <strong>{proposal.client?.name ?? "Client"}</strong>
+            <span>{ru ? "Подготовлено для" : "Prepared for"}</span>
+            <strong>{proposal.client?.name ?? (ru ? "Клиент" : "Client")}</strong>
             {proposal.client?.service_address ? <p>{proposal.client.service_address}</p> : null}
             {proposal.client?.email ? <p>{proposal.client.email}</p> : null}
           </div>
         </section>
 
         <section className="proposal-print-overview">
-          <div><span>Project areas</span><strong>{projectSummary.rooms || "—"}</strong></div>
-          <div><span>Glass sections</span><strong>{projectSummary.windows || "—"}</strong></div>
-          <div><span>Measured area</span><strong>{projectSummary.area ? `${projectSummary.area.toFixed(1)} sqft` : "Project scope"}</strong></div>
-          <div><span>Selected investment</span><strong>{formatCurrency(localSelectedTotal)}</strong></div>
+          <div><span>{ru ? "Помещения / зоны" : "Project areas"}</span><strong>{projectSummary.rooms || "—"}</strong></div>
+          <div><span>{ru ? "Стеклянные элементы" : "Glass sections"}</span><strong>{projectSummary.windows || "—"}</strong></div>
+          <div><span>{ru ? "Измеренная площадь" : "Measured area"}</span><strong>{projectSummary.area ? `${projectSummary.area.toFixed(1)} sqft` : (ru ? "Объём проекта" : "Project scope")}</strong></div>
+          <div><span>{ru ? "Стоимость выбранных работ" : "Selected investment"}</span><strong>{formatCurrency(localSelectedTotal)}</strong></div>
         </section>
 
         {serviceIntro ? (
           <section className="proposal-print-solution">
             <div>
-              <span>Recommended solution</span>
+              <span>{ru ? "Рекомендуемое решение" : "Recommended solution"}</span>
               <h2>{serviceIntro.title}</h2>
               <p>{serviceIntro.body}</p>
             </div>
@@ -488,16 +552,22 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
         <section className="proposal-print-scope">
           <div className="proposal-print-section-heading">
             <div>
-              <span>Selected scope</span>
-              <h2>Services included in this proposal</h2>
+              <span>{ru ? "Выбранный объём" : "Selected scope"}</span>
+              <h2>{ru ? "Услуги, включённые в это КП" : "Services included in this proposal"}</h2>
             </div>
-            <strong>{printableItems.length} line{printableItems.length === 1 ? "" : "s"}</strong>
+            <strong>{printableItems.length} {ru ? "поз." : `line${printableItems.length === 1 ? "" : "s"}`}</strong>
           </div>
 
           <div className="proposal-print-items">
             {printableItems.map((item: any, index: number) => {
-              const fieldSummary = [...new Set([...getMeasurementSummary(item), ...getDynamicFieldSummary(item)])];
-              const addonSummary = getAddonSummary(item.addons_snapshot);
+              const fieldSummary = [...new Set([...getMeasurementSummary(item, language), ...getDynamicFieldSummary(item, language)])];
+              const addonSummary = getAddonSummary(item.addons_snapshot, language);
+              const itemTitle = localizeItemText(ru ? item.title_ru || item.title : item.title_en || item.title, language);
+              const itemDescription = localizeItemText(ru ? item.description_ru || item.description : item.description_en || item.description, language);
+              const serviceName = ru ? item.service_type?.name_ru || item.service_type?.name : item.service_type?.name_en || item.service_type?.name;
+              const filmName = item.film
+                ? `${ru ? item.film.brand_name_ru || item.film.brand_name : item.film.brand_name_en || item.film.brand_name} ${ru ? item.film.model_name_ru || item.film.model_name : item.film.model_name_en || item.film.model_name} - ${ru ? item.film.category_name_ru || item.film.category_name : item.film.category_name_en || item.film.category_name}`
+                : null;
 
               return (
                 <section key={item.proposal_item_id} className="proposal-print-item">
@@ -505,19 +575,17 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
                   <div className="proposal-print-item-copy">
                     <div className="proposal-print-item-heading">
                       <div>
-                        <h3>{item.title}</h3>
-                        <p>{item.room_name ?? "General"} - {item.service_type?.name ?? "Service"}</p>
+                        <h3>{itemTitle}</h3>
+                        <p>{localizeItemText(item.room_name ?? (ru ? "Общее" : "General"), language)} - {serviceName ?? (ru ? "Услуга" : "Service")}</p>
                       </div>
                       <strong>{formatCurrency(item.line_price)}</strong>
                     </div>
                     <p className="proposal-print-description">
-                      {item.film
-                        ? `${item.film.brand_name} ${item.film.model_name} - ${item.film.category_name}`
-                        : item.description ?? "Custom project service"}
+                      {(filmName ?? itemDescription) || (ru ? "Индивидуальная услуга проекта" : "Custom project service")}
                     </p>
-                    {filmSpecChips(item.film).length > 0 && (
+                    {filmSpecChips(item.film, language).length > 0 && (
                       <p className="proposal-print-description">
-                        {filmSpecChips(item.film).join(" · ")}
+                        {filmSpecChips(item.film, language).join(" · ")}
                       </p>
                     )}
                     {fieldSummary.length || addonSummary.length ? (
@@ -536,30 +604,30 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
 
         <section className="proposal-print-closing">
           <div className="proposal-print-note">
-            <span>Project note</span>
-            <p>{proposal.client_message || "Thank you for the opportunity to prepare this proposal."}</p>
+            <span>{ru ? "Примечание к проекту" : "Project note"}</span>
+            <p>{proposal.client_message || (ru ? "Благодарим за возможность подготовить это предложение." : "Thank you for the opportunity to prepare this proposal.")}</p>
           </div>
           <div className="proposal-print-total">
-            <span>Selected project total</span>
+            <span>{ru ? "Итого по выбранным работам" : "Selected project total"}</span>
             <strong>{formatCurrency(localSelectedTotal)}</strong>
-            <small>Final scope is based on the selected services above.</small>
+            <small>{ru ? "Окончательный объём определяется выбранными выше услугами." : "Final scope is based on the selected services above."}</small>
           </div>
         </section>
 
         <section className="proposal-print-signatures">
           <div>
-            <span>{proposal.agreement?.signer_name || "Client approval"}</span>
-            <small>Signature / date</small>
+            <span>{proposal.agreement?.signer_name || (ru ? "Согласование клиента" : "Client approval")}</span>
+            <small>{ru ? "Подпись / дата" : "Signature / date"}</small>
           </div>
           <div>
-            <span>ROLANPRO representative</span>
-            <small>Signature / date</small>
+            <span>{ru ? "Представитель Rolan PRO" : "ROLANPRO representative"}</span>
+            <small>{ru ? "Подпись / дата" : "Signature / date"}</small>
           </div>
         </section>
 
         <footer className="proposal-print-footer">
           <strong>ROLANPRO</strong>
-          <span>Professional window film solutions - Los Angeles</span>
+          <span>{ru ? "Профессиональные решения для остекления — Лос-Анджелес" : "Professional window film solutions - Los Angeles"}</span>
         </footer>
       </article>
 
@@ -567,44 +635,46 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
         <div className="proposal-hero-nav">
           <img src="/landing/rolan-logo.webp" alt="Rolan PRO" className="proposal-hero-logo" />
           <div className="proposal-hero-meta">
-            <strong>{proposal.proposal_code ?? "Project proposal"}</strong>
-            <span>Valid through {formatDate(proposal.expires_at)}</span>
+            <strong>{proposal.proposal_code ?? (ru ? "Коммерческое предложение" : "Project proposal")}</strong>
+            <span>{ru ? "Действительно до" : "Valid through"} {formatDate(proposal.expires_at, language)}</span>
           </div>
         </div>
 
         <div className="proposal-hero-copy">
-          <div className="landing-kicker">Window film proposal prepared for</div>
+          <div className="landing-kicker">{ru ? "КП на установку плёнки подготовлено для" : "Window film proposal prepared for"}</div>
           <h1 className="client-proposal-title">{proposal.client?.name ?? proposal.title}</h1>
-          <p className="client-proposal-address">{proposal.client?.service_address || "Southern California"}</p>
+          <p className="client-proposal-address">{proposal.client?.service_address || (ru ? "Южная Калифорния" : "Southern California")}</p>
           <p className="landing-text">
-            A measured, project-specific solution for your glass — materials, installation scope and
-            investment presented in one clear document.
+            {ru
+              ? "Индивидуальное решение на основе замера: материалы, объём монтажа и стоимость собраны в одном понятном документе."
+              : "A measured, project-specific solution for your glass — materials, installation scope and investment presented in one clear document."}
           </p>
           <div className="proposal-hero-actions">
-            <a href="#project-scope" className="proposal-primary-link">Review project scope</a>
+            <a href="#project-scope" className="proposal-primary-link">{ru ? "Проверить состав проекта" : "Review project scope"}</a>
+            <a href="#proposal-payment" className="proposal-primary-link">{ru ? "Перейти к оплате" : "Go to payment"}</a>
             <button type="button" className="proposal-print-trigger" onClick={() => window.print()}>
-              Download PDF
+              {ru ? "Скачать PDF" : "Download PDF"}
             </button>
           </div>
         </div>
 
         <div className="client-proposal-summary">
-          <span>Your selected investment</span>
+          <span>{ru ? "Стоимость выбранных работ" : "Your selected investment"}</span>
           <strong>{formatCurrency(localSelectedTotal)}</strong>
-          <small>{selectedCount} selected service {selectedCount === 1 ? "line" : "lines"}</small>
+          <small>{selectedCount} {ru ? "выбранных позиций" : `selected service ${selectedCount === 1 ? "line" : "lines"}`}</small>
         </div>
       </header>
 
       <section className="proposal-overview-strip" aria-label="Project summary">
-        <div><span>Proposal</span><strong>{proposal.proposal_code ?? "Prepared"}</strong></div>
-        <div><span>Project areas</span><strong>{projectSummary.rooms || "—"}</strong></div>
-        <div><span>Glass sections</span><strong>{projectSummary.windows || "—"}</strong></div>
-        <div><span>Measured area</span><strong>{projectSummary.area ? `${projectSummary.area.toFixed(1)} sqft` : "—"}</strong></div>
+        <div><span>{ru ? "КП" : "Proposal"}</span><strong>{proposal.proposal_code ?? (ru ? "Подготовлено" : "Prepared")}</strong></div>
+        <div><span>{ru ? "Помещения / зоны" : "Project areas"}</span><strong>{projectSummary.rooms || "—"}</strong></div>
+        <div><span>{ru ? "Стеклянные элементы" : "Glass sections"}</span><strong>{projectSummary.windows || "—"}</strong></div>
+        <div><span>{ru ? "Измеренная площадь" : "Measured area"}</span><strong>{projectSummary.area ? `${projectSummary.area.toFixed(1)} sqft` : "—"}</strong></div>
       </section>
 
       {serviceIntro ? (
         <section className="proposal-solution-section">
-          <div className="proposal-section-label">01 / Recommended solution</div>
+          <div className="proposal-section-label">01 / {ru ? "Рекомендуемое решение" : "Recommended solution"}</div>
           <div className="proposal-solution-copy">
             <h2>{serviceIntro.title}</h2>
             <p>{serviceIntro.body}</p>
@@ -620,47 +690,51 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
       <section className="client-proposal-grid">
         <div className="client-proposal-band">
           <section className="surface proposal-scope-section" id="project-scope">
-            <div className="proposal-section-label">02 / Measured scope</div>
-            <h2 className="surface-title">Your project, room by room</h2>
+            <div className="proposal-section-label">02 / {ru ? "Объём по замеру" : "Measured scope"}</div>
+            <h2 className="surface-title">{ru ? "Проект по помещениям" : "Your project, room by room"}</h2>
             <p className="surface-subtitle">
-              Every line is tied to the measured glass. Optional services can be included or removed before signing.
+              {ru ? "Каждая позиция привязана к измеренному стеклу. Дополнительные услуги можно включить или убрать до подписания." : "Every line is tied to the measured glass. Optional services can be included or removed before signing."}
             </p>
 
             {roomGroups.map((group) => (
               <div key={group.room} className="client-room-group">
                 <div className="client-room-head">
-                  <h3 className="client-room-title">{localizeItemText(group.room)}</h3>
+                  <h3 className="client-room-title">{localizeItemText(group.room, language)}</h3>
                   <span className="client-room-count">
-                    {group.items.length} {group.items.length === 1 ? "line" : "lines"}
+                    {group.items.length} {ru ? "поз." : (group.items.length === 1 ? "line" : "lines")}
                   </span>
                 </div>
 
             <div className="client-item-list">
               {group.items.map((item: any) => {
-                const fieldSummary = [...new Set([...getMeasurementSummary(item), ...getDynamicFieldSummary(item)])];
-                const addonSummary = getAddonSummary(item.addons_snapshot);
+                const fieldSummary = [...new Set([...getMeasurementSummary(item, language), ...getDynamicFieldSummary(item, language)])];
+                const addonSummary = getAddonSummary(item.addons_snapshot, language);
+                const itemTitle = localizeItemText(ru ? item.title_ru || item.title : item.title_en || item.title, language);
+                const itemDescription = localizeItemText(ru ? item.description_ru || item.description : item.description_en || item.description, language);
+                const serviceName = ru ? item.service_type?.name_ru || item.service_type?.name : item.service_type?.name_en || item.service_type?.name;
+                const filmName = item.film
+                  ? `${ru ? item.film.brand_name_ru || item.film.brand_name : item.film.brand_name_en || item.film.brand_name} ${ru ? item.film.model_name_ru || item.film.model_name : item.film.model_name_en || item.film.model_name} · ${ru ? item.film.category_name_ru || item.film.category_name : item.film.category_name_en || item.film.category_name}`
+                  : null;
 
                 return (
                   <article key={item.proposal_item_id} className="client-item-card">
                     <div className="client-item-top">
                       <div>
-                        <div className="row-title">{localizeItemText(item.title)}</div>
+                        <div className="row-title">{itemTitle}</div>
                         <div className="row-meta">
-                          {item.room_name ?? "General"} · {item.service_type?.name ?? "Service"}
+                          {localizeItemText(item.room_name ?? (ru ? "Общее" : "General"), language)} · {serviceName ?? (ru ? "Услуга" : "Service")}
                         </div>
                       </div>
                       <div className="chip chip-accent">{formatCurrency(item.line_price)}</div>
                     </div>
 
                     <div className="row-meta">
-                      {item.film
-                        ? `${item.film.brand_name} ${item.film.model_name} · ${item.film.category_name}`
-                        : localizeItemText(item.description) || "Custom line item"}
+                      {(filmName ?? itemDescription) || (ru ? "Индивидуальная позиция" : "Custom line item")}
                     </div>
 
-                    {filmSpecChips(item.film).length > 0 && (
+                    {filmSpecChips(item.film, language).length > 0 && (
                       <div className="proposal-detail-chips">
-                        {filmSpecChips(item.film).map((spec) => (
+                        {filmSpecChips(item.film, language).map((spec) => (
                           <span key={spec} className="chip chip-spec">
                             {spec}
                           </span>
@@ -711,7 +785,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
                           }))
                         }
                       />
-                      <span>{item.is_optional ? "Select optional item" : "Keep this service"}</span>
+                      <span>{item.is_optional ? (ru ? "Добавить дополнительную услугу" : "Select optional item") : (ru ? "Оставить эту услугу" : "Keep this service")}</span>
                     </label>
                   </article>
                 );
@@ -728,19 +802,19 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
               его отсутствие. */}
           {filmsWithSpecs.length > 0 && (
             <section className="surface">
-              <h2 className="surface-title">Technical specification</h2>
+              <h2 className="surface-title">{ru ? "Технические характеристики" : "Technical specification"}</h2>
               <p className="surface-subtitle">
-                Measured performance of the films selected for your project.
+                {ru ? "Измеренные характеристики плёнок, выбранных для проекта." : "Measured performance of the films selected for your project."}
               </p>
               <div className="client-item-list">
                 {filmsWithSpecs.map((film: any) => (
                   <div key={film.film_id} className="client-item-card">
                     <div className="row-title">
-                      {film.brand_name} {film.model_name}
+                      {ru ? film.brand_name_ru || film.brand_name : film.brand_name_en || film.brand_name} {ru ? film.model_name_ru || film.model_name : film.model_name_en || film.model_name}
                     </div>
-                    <div className="row-meta">{film.category_name}</div>
+                    <div className="row-meta">{ru ? film.category_name_ru || film.category_name : film.category_name_en || film.category_name}</div>
                     <div className="proposal-detail-chips">
-                      {filmSpecChips(film).map((spec) => (
+                      {filmSpecChips(film, language).map((spec) => (
                         <span key={spec} className="chip">
                           {spec}
                         </span>
@@ -750,29 +824,29 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
                 ))}
               </div>
               <p className="landing-text">
-                Visible light is how much daylight passes through. Heat rejected is the
-                share of solar energy kept out of the room. UV blocking protects floors,
-                furniture and artwork from fading.
+                {ru
+                  ? "Светопропускание показывает, сколько дневного света проходит через стекло. Отражение тепла — какую долю солнечной энергии плёнка не пускает в помещение. Блокировка UV защищает полы, мебель и предметы интерьера от выцветания."
+                  : "Visible light is how much daylight passes through. Heat rejected is the share of solar energy kept out of the room. UV blocking protects floors, furniture and artwork from fading."}
               </p>
             </section>
           )}
 
           <section className="proposal-assurance-section">
-            <div className="proposal-section-label">03 / Delivery standard</div>
-            <h2>What happens after approval</h2>
+            <div className="proposal-section-label">03 / {ru ? "Порядок выполнения" : "Delivery standard"}</div>
+            <h2>{ru ? "Что происходит после согласования" : "What happens after approval"}</h2>
             <div className="proposal-process-grid">
-              <div><span>01</span><strong>Final confirmation</strong><p>We confirm the selected scope, film and installation access.</p></div>
-              <div><span>02</span><strong>Scheduling</strong><p>Your manager coordinates the installation window and preparation.</p></div>
-              <div><span>03</span><strong>Professional install</strong><p>The crew protects the work area, installs the film and checks every section.</p></div>
-              <div><span>04</span><strong>Handover</strong><p>You receive care guidance and the applicable product and workmanship terms.</p></div>
+              <div><span>01</span><strong>{ru ? "Итоговое подтверждение" : "Final confirmation"}</strong><p>{ru ? "Подтверждаем объём, выбранную плёнку и доступ для монтажа." : "We confirm the selected scope, film and installation access."}</p></div>
+              <div><span>02</span><strong>{ru ? "Планирование" : "Scheduling"}</strong><p>{ru ? "Менеджер согласует дату монтажа и подготовку объекта." : "Your manager coordinates the installation window and preparation."}</p></div>
+              <div><span>03</span><strong>{ru ? "Профессиональный монтаж" : "Professional install"}</strong><p>{ru ? "Бригада защищает рабочую зону, устанавливает плёнку и проверяет каждый элемент." : "The crew protects the work area, installs the film and checks every section."}</p></div>
+              <div><span>04</span><strong>{ru ? "Сдача проекта" : "Handover"}</strong><p>{ru ? "Вы получаете инструкции по уходу и применимые условия гарантии." : "You receive care guidance and the applicable product and workmanship terms."}</p></div>
             </div>
           </section>
 
           <section className="surface proposal-notes-section">
-            <div className="proposal-section-label">04 / Questions</div>
-            <h2 className="surface-title">Notes for your project manager</h2>
+            <div className="proposal-section-label">04 / {ru ? "Вопросы" : "Questions"}</div>
+            <h2 className="surface-title">{ru ? "Примечания для менеджера проекта" : "Notes for your project manager"}</h2>
             <label className="calculator-notes">
-              <span>Your message</span>
+              <span>{ru ? "Ваше сообщение" : "Your message"}</span>
               <textarea
                 value={proposal.client_message ?? ""}
                 disabled={isLocked || saving}
@@ -784,7 +858,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
 
             <div className="proposal-builder-footer">
               <button type="button" className="accent-button" onClick={saveSelection} disabled={isLocked || saving}>
-                Update Selection
+                {ru ? "Сохранить выбор" : "Update Selection"}
               </button>
               <div className="row-meta">{message}</div>
             </div>
@@ -794,19 +868,19 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
         <aside className="client-proposal-side">
           <section className="surface proposal-agreement-panel">
             <div className="proposal-side-total">
-              <span>Selected project total</span>
+              <span>{ru ? "Итого по выбранным работам" : "Selected project total"}</span>
               <strong>{formatCurrency(localSelectedTotal)}</strong>
-              <small>{selectedCount} of {proposal.items.length} service lines included</small>
+              <small>{ru ? `Включено ${selectedCount} из ${proposal.items.length} позиций` : `${selectedCount} of ${proposal.items.length} service lines included`}</small>
             </div>
-            <div className="proposal-section-label">05 / Approval</div>
-            <h2 className="surface-title">Approve your proposal</h2>
+            <div className="proposal-section-label">05 / {ru ? "Согласование" : "Approval"}</div>
+            <h2 className="surface-title">{ru ? "Согласовать коммерческое предложение" : "Approve your proposal"}</h2>
             <p className="surface-subtitle">
-              Signing confirms the selected services and authorizes the project to move forward.
+              {ru ? "Подпись подтверждает выбранные услуги и разрешает перейти к следующему этапу проекта." : "Signing confirms the selected services and authorizes the project to move forward."}
             </p>
 
             <div className="proposal-item-grid">
               <label className="calculator-field">
-                <span>Full Name</span>
+                <span>{ru ? "Полное имя" : "Full Name"}</span>
                 <input
                   value={agreement.signer_name}
                   disabled={isLocked || saving}
@@ -824,7 +898,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
               </label>
 
               <label className="calculator-field">
-                <span>Title</span>
+                <span>{ru ? "Должность" : "Title"}</span>
                 <input
                   value={agreement.signer_title}
                   disabled={isLocked || saving}
@@ -833,7 +907,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
               </label>
 
               <label className="calculator-field">
-                <span>Type your full name as signature</span>
+                <span>{ru ? "Введите полное имя в качестве подписи" : "Type your full name as signature"}</span>
                 <input
                   value={agreement.signature_text}
                   disabled={isLocked || saving}
@@ -843,7 +917,7 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
             </div>
 
             <label className="calculator-notes">
-              <span>Client Notes</span>
+              <span>{ru ? "Примечания клиента" : "Client Notes"}</span>
               {/* rows задан явно: без него браузер тянул поле вниз, и блок
                   подтверждения согласия наезжал на него поверх. В остальных
                   местах системы у этого класса rows тоже проставлен. */}
@@ -864,12 +938,12 @@ export function ClientProposalView({ initialProposal }: ClientProposalViewProps)
                   setAgreement((current) => ({ ...current, accepted_terms: event.target.checked }))
                 }
               />
-              <span>I confirm the selected services and agree to proceed.</span>
+              <span>{ru ? "Я подтверждаю выбранные услуги и согласен продолжить." : "I confirm the selected services and agree to proceed."}</span>
             </label>
 
             <div className="proposal-builder-footer">
               <button type="button" className="accent-button" onClick={signAgreement} disabled={isLocked || saving}>
-                {isLocked ? "Agreement Signed" : "Sign Agreement"}
+                {isLocked ? (ru ? "Договор подписан" : "Agreement Signed") : (ru ? "Подписать КП" : "Sign Agreement")}
               </button>
             </div>
 
