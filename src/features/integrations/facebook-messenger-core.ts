@@ -14,7 +14,7 @@ export type FacebookMessengerLeadPayload = {
   external_contact_id: string;
   page_id: string;
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
   service_type?: string;
   property_type?: string;
@@ -23,7 +23,8 @@ export type FacebookMessengerLeadPayload = {
   message?: string;
 };
 
-export type FacebookMessengerBookingPayload = FacebookMessengerLeadPayload & {
+export type FacebookMessengerBookingPayload = Omit<FacebookMessengerLeadPayload, "phone"> & {
+  phone: string;
   title?: string;
   scheduled_start_at: string;
   scheduled_end_at: string;
@@ -112,8 +113,8 @@ export function parseFacebookMessengerLeadPayload(value: unknown): FacebookMesse
     throw new FacebookMessengerIntegrationError(400, "invalid_payload", "email is invalid.");
   }
 
-  const phone = requiredString(value, "phone", 40);
-  if (!/^\+\d{8,15}$/.test(normalizeContactPhone(phone))) {
+  const phone = optionalString(value, "phone", 40);
+  if (phone && !/^\+\d{8,15}$/.test(normalizeContactPhone(phone))) {
     throw new FacebookMessengerIntegrationError(400, "invalid_payload", "phone is invalid.");
   }
 
@@ -135,6 +136,7 @@ export function parseFacebookMessengerLeadPayload(value: unknown): FacebookMesse
 export function parseFacebookMessengerBookingPayload(value: unknown): FacebookMessengerBookingPayload {
   const lead = parseFacebookMessengerLeadPayload(value);
   const source = value as Record<string, unknown>;
+  const phone = requiredString(source, "phone", 40);
   const startsAt = parseIsoDate(requiredString(source, "scheduled_start_at", 80), "scheduled_start_at");
   const endsAt = parseIsoDate(requiredString(source, "scheduled_end_at", 80), "scheduled_end_at");
   const durationMs = endsAt.getTime() - startsAt.getTime();
@@ -149,6 +151,7 @@ export function parseFacebookMessengerBookingPayload(value: unknown): FacebookMe
 
   return {
     ...lead,
+    phone,
     title: optionalString(source, "title", 180),
     scheduled_start_at: startsAt.toISOString(),
     scheduled_end_at: endsAt.toISOString(),
@@ -238,7 +241,7 @@ export function facebookMessengerEventKey(
 export function facebookMessengerContactLockKeys(payload: FacebookMessengerLeadPayload) {
   return [...new Set([
     `identity:${facebookMessengerIdentityHash(payload)}`,
-    `phone:${normalizeContactPhone(payload.phone)}`,
+    payload.phone ? `phone:${normalizeContactPhone(payload.phone)}` : null,
     payload.email ? `email:${payload.email.toLowerCase()}` : null,
   ].filter((value): value is string => Boolean(value)))].sort();
 }
@@ -253,7 +256,7 @@ export function facebookMessengerPayloadHash(
         external_contact_id: payload.external_contact_id,
         page_id: payload.page_id,
         name: payload.name,
-        phone: normalizeContactPhone(payload.phone),
+        phone: payload.phone ? normalizeContactPhone(payload.phone) : null,
         email: payload.email ?? null,
         service_type: payload.service_type ?? null,
         property_type: payload.property_type ?? null,

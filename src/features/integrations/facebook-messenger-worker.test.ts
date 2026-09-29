@@ -7,7 +7,13 @@ import {
   buildBusinessWindows,
   crmLeadPayload,
   detectServiceType,
+  hasBookingIntent,
+  leadHasCustomerName,
   leadReadyForBooking,
+  leadReadyForCrm,
+  leadSyncEventKey,
+  leadSyncFingerprint,
+  MESSENGER_LEAD_PLACEHOLDER_NAME,
   normalizeLeadData,
   normalizeLanguage,
   parseBookingPayload,
@@ -80,6 +86,23 @@ test("Worker maps the qualified conversation to the canonical CRM payload", () =
   });
 });
 
+test("Worker captures a profile lead immediately but still requires real booking details", () => {
+  const earlyLead = { name: MESSENGER_LEAD_PLACEHOLDER_NAME };
+  assert.equal(leadReadyForCrm(earlyLead), true);
+  assert.equal(leadHasCustomerName(earlyLead), false);
+  assert.equal(leadReadyForBooking(earlyLead), false);
+
+  const profileLead = { name: "Maria Lopez", serviceType: "Smart Film" };
+  assert.equal(leadReadyForCrm(profileLead), true);
+  assert.equal(leadReadyForBooking(profileLead), false);
+  assert.notEqual(
+    leadSyncFingerprint(profileLead),
+    leadSyncFingerprint({ ...profileLead, phone: "818-555-1212" }),
+  );
+  assert.equal(leadSyncEventKey(profileLead), leadSyncEventKey({ ...profileLead }));
+  assert.notEqual(leadSyncEventKey(profileLead), leadSyncEventKey({ ...profileLead, city: "Malibu" }));
+});
+
 test("Worker normalizes the legacy prompt fields before checking booking readiness", () => {
   const lead = normalizeLeadData({
     name: "Zafar",
@@ -125,6 +148,16 @@ test("Worker preserves multilingual BCP-47 language tags for dates and operation
   assert.equal(normalizeLanguage("العربية"), "ar");
   assert.equal(normalizeLanguage("中文"), "zh");
   assert.equal(normalizeLanguage("not a language tag"), "en");
+});
+
+test("Worker requires explicit booking intent and only treats yes as consent after a booking offer", () => {
+  assert.equal(hasBookingIntent("What film is best for heat?"), false);
+  assert.equal(hasBookingIntent("How much is Smart Film?"), false);
+  assert.equal(hasBookingIntent("да"), false);
+  assert.equal(hasBookingIntent("yes"), false);
+  assert.equal(hasBookingIntent("I want to schedule a free consultation"), true);
+  assert.equal(hasBookingIntent("да", "Хотите назначить бесплатный замер?"), true);
+  assert.equal(hasBookingIntent("yes", "Would you like a free on-site consultation?"), true);
 });
 
 test("Worker recognizes a request to book another address", () => {
@@ -199,8 +232,23 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /not verified performance ratings or confirmation of current stock/);
   assert.match(source, /do not promise complete privacy in every lighting condition/);
   assert.doesNotMatch(source, /Проверяю свободное время в CRM/);
-  assert.match(source, /shouldUseQualificationPrompt\(attemptedBookingClaim, alreadyBooked\)/);
-  assert.match(source, /shouldRestartBookedConversation\(attemptedBookingClaim, alreadyBooked\)/);
   assert.match(source, /state\.leadCapturedEventId = undefined/);
   assert.match(source, /event: "repeat_booking_started"/);
+  assert.match(source, /Act like Rolan PRO's best human sales consultant/);
+  assert.match(source, /Handle objections without pressure/);
+  assert.match(source, /messengerProfile\(env, event\)/);
+  assert.match(source, /Promise\.all\(\[/);
+  assert.match(source, /syncLeadToCrm\(env, event, state, "profile"\)/);
+  assert.match(source, /syncLeadToCrm\(env, event, state, "conversation"\)/);
+  assert.match(source, /Known lead fields from this conversation/);
+  assert.match(source, /bookingFlowActive && leadReadyForBooking\(state\.lead\)/);
+  assert.doesNotMatch(source, /!alreadyBooked && !state\.escalated && leadReadyForBooking\(state\.lead\)/);
+  assert.match(source, /Preliminary pricing guidance for customer estimates/);
+  assert.match(source, /Smart Film is typically \$40-\$70 per sq ft installed/);
+  assert.match(source, /Solar Film is typically \$7-\$15 per sq ft installed/);
+  assert.match(source, /Safety\/Security Film is typically \$10-\$20 per sq ft installed/);
+
+  const dbSource = readFileSync("src/features/integrations/facebook-messenger-db.ts", "utf8");
+  assert.match(dbSource, /chooseMessengerLeadName\(existing\.name, payload\.name\)/);
+  assert.match(dbSource, /existing === MESSENGER_LEAD_PLACEHOLDER_NAME/);
 });
