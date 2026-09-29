@@ -30,7 +30,7 @@ jobs:
           printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Inspect production service controls
+      - name: Inspect deployment control tail
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/rolanpro_production" \
@@ -38,25 +38,13 @@ jobs:
             -o IdentitiesOnly=yes \
             runcloud@143.110.136.211 'bash -s' <<'REMOTE'
           set -euo pipefail
-          app_dir=/home/runcloud/webapps/rolanpro-crm
-          cd "$app_dir"
-
-          echo 'supervisor_begin'
-          supervisorctl status 2>&1 || true
-          echo 'supervisor_end'
-
-          echo 'deploy_files_begin'
-          find deploy -maxdepth 2 -type f -printf '%p\n' 2>/dev/null | sort || true
-          echo 'deploy_files_end'
-
-          if [ -f deploy/watch-production.sh ]; then
-            echo 'watch_script_begin'
-            sed -n '1,240p' deploy/watch-production.sh | \
-              sed -E 's/(password|token|secret|key)=("[^"]*"|[^ ]+)/\1=[redacted]/Ig'
-            echo 'watch_script_end'
-          fi
-
-          echo 'supervisor_configs_begin'
-          grep -RIl 'rolanpro-crm\|next-server\|npm.*start\|next start' /etc/supervisor 2>/dev/null | head -n 20 || true
-          echo 'supervisor_configs_end'
+          cd /home/runcloud/webapps/rolanpro-crm
+          echo 'watch_tail_begin'
+          sed -n '240,420p' deploy/watch-production.sh | \
+            sed -E 's/(password|token|secret|key)=("[^"]*"|[^ ]+)/\1=[redacted]/Ig'
+          echo 'watch_tail_end'
+          echo 'run_script_begin'
+          sed -n '1,260p' deploy/run-production.sh | \
+            sed -E 's/(password|token|secret|key)=("[^"]*"|[^ ]+)/\1=[redacted]/Ig'
+          echo 'run_script_end'
           REMOTE
