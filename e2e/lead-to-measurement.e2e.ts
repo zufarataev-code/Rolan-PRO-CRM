@@ -70,6 +70,7 @@ async function login(email: string): Promise<Session> {
 
 let manager: Session;
 let surveyor: Session;
+let surveyedConsultationId: string | undefined;
 
 before(async () => {
   // Seeded demo accounts start with a forced password change; the gate tests
@@ -122,6 +123,7 @@ test("a project moves from lead to verified measurement in one system", async ()
   assert.equal(consultation.status, 200, `create consultation: ${JSON.stringify(consultation.json)}`);
   const consultationId = data<{ consultation_id: string }>(consultation.json).consultation_id;
   assert.ok(consultationId);
+  surveyedConsultationId = consultationId;
 
   // 4. Surveyor records two windows; the server computes square footage.
   const windows = [
@@ -151,15 +153,46 @@ test("a project moves from lead to verified measurement in one system", async ()
   assert.equal(dealsForLead, 1, "exactly one deal for this lead");
 });
 
-test("the surveyor cannot create sales records and sees no deal value", async () => {
+test("the surveyor cannot create sales records and sees no financial data", async () => {
   const denied = await call(surveyor, "POST", "/api/v1/leads", { name: `${runTag} should be rejected` });
   assert.ok([401, 403].includes(denied.status), `surveyor created a lead: ${denied.status}`);
 
-  const surveyorList = await call(surveyor, "GET", "/api/v1/consultations");
-  assert.equal(surveyorList.status, 200, `surveyor list: ${JSON.stringify(surveyorList.json)}`);
-  const text = JSON.stringify(surveyorList.json);
-  assert.ok(!/"estimated_value"\s*:\s*"?12000/.test(text), "surveyor must not see the deal value");
+  assert.ok(surveyedConsultationId, "the lifecycle test must run first");
+  const views = {
+    list: await call(surveyor, "GET", "/api/v1/consultations"),
+    detail: await call(surveyor, "GET", `/api/v1/consultations/${surveyedConsultationId}`),
+  };
+  for (const [name, view] of Object.entries(views)) {
+    assert.equal(view.status, 200, `surveyor ${name}: ${JSON.stringify(view.json)}`);
+    const leaked = findFinancialKeys(view.json);
+    assert.deepEqual(leaked, [], `surveyor ${name} exposes financial fields: ${leaked.join(", ")}`);
+  }
+
+  // The manager still sees the deal value on the same record.
+  const managerDetail = await call(manager, "GET", `/api/v1/consultations/${surveyedConsultationId}`);
+  assert.ok(findFinancialKeys(managerDetail.json).includes("estimated_value"), "manager must see the deal value");
 });
+
+// Field roles must never receive selling prices, deal values, costs or margins.
+const FINANCIAL_KEY = /^(estimated_value|currency|price|unit_price|.*_price|total|.*_total|amount|.*_amount|cost|.*_cost|margin|.*_margin|profit|commission|payout)$/;
+
+function findFinancialKeys(json: unknown): string[] {
+  const found = new Set<string>();
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+        if (FINANCIAL_KEY.test(key) && child !== null && child !== undefined) found.add(key);
+        visit(child);
+      }
+    }
+  };
+  visit(json);
+  return [...found].sort();
+}
 
 function findMeasurements(json: unknown): Array<Record<string, unknown>> {
   const found: Array<Record<string, unknown>> = [];

@@ -313,7 +313,24 @@ export async function getConsultationByIdForSession(session: SessionLike, consul
     return null;
   }
 
-  return serializeConsultationDetail(consultation);
+  return redactConsultationDetailForSession(session, serializeConsultationDetail(consultation));
+}
+
+/**
+ * Surveyors and installers must never receive deal value or currency
+ * (DECISIONS.md, "Financial visibility"). Redaction happens in the server
+ * response, not by hiding fields in the interface.
+ */
+export function redactConsultationDetailForSession<T extends { deal: Record<string, unknown> | null }>(
+  session: SessionLike,
+  detail: T,
+): T {
+  if (isOwner(session) || isManager(session) || !detail.deal) {
+    return detail;
+  }
+
+  const { estimated_value: _estimatedValue, currency: _currency, ...deal } = detail.deal;
+  return { ...detail, deal };
 }
 
 async function getConsultationForMutation(session: SessionLike, consultationId: string) {
