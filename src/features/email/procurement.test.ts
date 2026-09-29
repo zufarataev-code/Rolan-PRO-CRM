@@ -20,6 +20,8 @@ test("supplier email is idempotent by purchase request", () => {
 
 test("supplier request recipient and content come from the locked persisted workspace", () => {
   assert.match(route, /FROM legacy_workspaces WHERE workspace_id = 'primary' FOR UPDATE/);
+  assert.match(route, /expected_revision/);
+  assert.match(route, /workspace\.revision !== expectedRevision/);
   assert.match(route, /purchaseRequest = requests\.find/);
   assert.match(route, /vendor = vendors\.find/);
   assert.match(route, /buildProcurementMessage\(purchaseRequest, vendor\)/);

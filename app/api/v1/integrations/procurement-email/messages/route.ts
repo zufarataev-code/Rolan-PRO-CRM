@@ -17,10 +17,11 @@ function apiFailure(status: number, code: string, message: string) {
 export async function POST(request: NextRequest) {
   const auth = await requireRequestSession(request, ROLES);
   if (!auth.ok) return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Procurement email access denied.");
-  const body = await request.json().catch(() => null) as null | { purchase_request_id?: string };
+  const body = await request.json().catch(() => null) as null | { purchase_request_id?: string; expected_revision?: number };
   const purchaseRequestId = body?.purchase_request_id?.trim() || "";
-  if (!/^[a-zA-Z0-9_-]{3,100}$/.test(purchaseRequestId)) {
-    return apiError(400, "invalid_payload", "A valid purchase request id is required.");
+  const expectedRevision = body?.expected_revision;
+  if (!/^[a-zA-Z0-9_-]{3,100}$/.test(purchaseRequestId) || !Number.isInteger(expectedRevision) || Number(expectedRevision) < 1) {
+    return apiError(400, "invalid_payload", "A valid purchase request id and workspace revision are required.");
   }
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -29,6 +30,9 @@ export async function POST(request: NextRequest) {
       );
       const workspace = rows[0];
       if (!workspace) throw apiFailure(404, "workspace_not_initialized", "CRM workspace is not initialized.");
+      if (workspace.revision !== expectedRevision) {
+        throw apiFailure(409, "revision_conflict", "CRM data changed in another browser. Refresh before sending.");
+      }
       const payload = structuredClone(workspace.payload) as JsonObject;
       const requests = Array.isArray(payload.purchaseRequests) ? payload.purchaseRequests as JsonObject[] : [];
       const vendors = Array.isArray(payload.vendors) ? payload.vendors as JsonObject[] : [];
