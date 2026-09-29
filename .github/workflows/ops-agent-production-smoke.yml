@@ -11,9 +11,9 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  activate-and-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     environment: production
     steps:
       - name: Configure SSH
@@ -30,7 +30,7 @@ jobs:
           printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Inspect deployment control tail
+      - name: Activate and smoke test CRM Operations Agent
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/rolanpro_production" \
@@ -38,13 +38,147 @@ jobs:
             -o IdentitiesOnly=yes \
             runcloud@143.110.136.211 'bash -s' <<'REMOTE'
           set -euo pipefail
-          cd /home/runcloud/webapps/rolanpro-crm
-          echo 'watch_tail_begin'
-          sed -n '240,420p' deploy/watch-production.sh | \
-            sed -E 's/(password|token|secret|key)=("[^"]*"|[^ ]+)/\1=[redacted]/Ig'
-          echo 'watch_tail_end'
-          echo 'run_script_begin'
-          sed -n '1,260p' deploy/run-production.sh | \
-            sed -E 's/(password|token|secret|key)=("[^"]*"|[^ ]+)/\1=[redacted]/Ig'
-          echo 'run_script_end'
+
+          app_dir=/home/runcloud/webapps/rolanpro-crm
+          runtime_dir=/home/runcloud/rolanpro-runtime
+          env_backup=/home/runcloud/.rolanpro-crm.env.production.local
+          state_file=/home/runcloud/.rolanpro-crm-active-release
+          endpoint=https://rolanpro-crm.143-110-136-211.sslip.io/api/v1/agent
+
+          cd "$app_dir"
+          export PATH="$runtime_dir/bin:$PATH"
+
+          IFS=$'\t' read -r active_sha active_dir <"$state_file"
+          test -n "$active_sha"
+          test -d "$active_dir"
+          test -f "$env_backup"
+          test -f "$active_dir/.env.production.local"
+
+          get_secret() {
+            sed -n 's/^CRM_OPERATIONS_AGENT_SECRET=//p' "$1" | tail -n 1 | tr -d '"\r'
+          }
+
+          secret="$(get_secret "$env_backup")"
+          if [ -z "$secret" ] || [ "${#secret}" -lt 32 ]; then
+            secret="$(openssl rand -hex 32)"
+            printf '\nCRM_OPERATIONS_AGENT_SECRET="%s"\n' "$secret" >>"$env_backup"
+            chmod 600 "$env_backup"
+            echo "secret_action=generated"
+          else
+            echo "secret_action=preserved"
+          fi
+
+          sync_secret() {
+            file="$1"
+            tmp="${file}.ops-agent.tmp"
+            grep -v '^CRM_OPERATIONS_AGENT_SECRET=' "$file" >"$tmp" || true
+            printf '\nCRM_OPERATIONS_AGENT_SECRET="%s"\n' "$secret" >>"$tmp"
+            chmod 600 "$tmp"
+            mv "$tmp" "$file"
+          }
+
+          sync_secret "$app_dir/.env.production.local"
+          sync_secret "$active_dir/.env.production.local"
+          echo "secret_runtime=installed"
+
+          set -a
+          . "$active_dir/.env.production.local"
+          set +a
+
+          if (cd "$active_dir" && ./node_modules/.bin/prisma migrate status >/tmp/ops-agent-migrate-status.txt 2>&1); then
+            echo "prisma_migrations=ok"
+          else
+            echo "prisma_migrations=problem"
+            tail -n 30 /tmp/ops-agent-migrate-status.txt | sed -E 's#(postgres(ql)?://)[^ ]+#\1[redacted]#g'
+            exit 1
+          fi
+
+          old_pid="$(fuser 3000/tcp 2>/dev/null | awk '{print $1}' || true)"
+          if [ -n "$old_pid" ]; then
+            kill -TERM "$old_pid"
+            echo "next_restart=requested"
+          fi
+
+          for attempt in $(seq 1 45); do
+            if curl --silent --fail --max-time 5 https://rolanpro-crm.143-110-136-211.sslip.io/ >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 45 ]; then
+              echo "next_restart=failed"
+              exit 1
+            fi
+            sleep 2
+          done
+          sleep 2
+          echo "next_restart=healthy"
+
+          unsigned_body='{"action":"find_client","arguments":{"query":"__rolanpro_agent_unsigned_probe__"},"request_id":"ops-agent-unsigned-after-enable"}'
+          unsigned_http="$(curl -sS -o /tmp/ops-agent-unsigned.json -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' --data "$unsigned_body" "$endpoint")"
+          printf 'unsigned_http=%s\n' "$unsigned_http"
+          grep -q '"code":"invalid_signature"' /tmp/ops-agent-unsigned.json
+          test "$unsigned_http" = "401"
+
+          sign_body() {
+            BODY="$1" TS="$2" CRM_OPERATIONS_AGENT_SECRET="$secret" "$runtime_dir/bin/node" -e \
+              "const c=require('crypto');process.stdout.write(c.createHmac('sha256',process.env.CRM_OPERATIONS_AGENT_SECRET).update(process.env.TS+'.'+process.env.BODY).digest('hex'))"
+          }
+
+          call_agent() {
+            body="$1"
+            outfile="$2"
+            ts="$(date +%s)"
+            sig="$(sign_body "$body" "$ts")"
+            curl -sS -o "$outfile" -w '%{http_code}' -X POST \
+              -H 'content-type: application/json' \
+              -H "x-rolan-agent-timestamp: $ts" \
+              -H "x-rolan-agent-signature: $sig" \
+              --data "$body" "$endpoint"
+          }
+
+          read_body='{"action":"find_client","arguments":{"query":"__rolanpro_agent_signed_probe_20260928__"},"request_id":"ops-agent-signed-read-20260928"}'
+          read_http="$(call_agent "$read_body" /tmp/ops-agent-read.json)"
+          test "$read_http" = "200"
+          "$runtime_dir/bin/node" - <<'NODE'
+          const fs=require("fs");
+          const r=JSON.parse(fs.readFileSync("/tmp/ops-agent-read.json","utf8"));
+          if(!r.ok || r.action!=="find_client") process.exit(1);
+          console.log("signed_read=ok");
+          console.log("signed_read_items="+(Array.isArray(r.items)?r.items.length:"n/a"));
+          NODE
+
+          idem="rolanpro-agent-smoke-client-v1"
+          create_body='{"action":"create_client","arguments":{"name":"ROLANPRO AGENT SMOKE TEST","notes":"Permanent controlled smoke-test fixture for CRM Operations Agent. Do not use as a real customer."},"idempotency_key":"rolanpro-agent-smoke-client-v1","request_id":"ops-agent-production-smoke-create-v1"}'
+          create_http="$(call_agent "$create_body" /tmp/ops-agent-create.json)"
+          test "$create_http" = "200"
+
+          "$runtime_dir/bin/node" - <<'NODE'
+          const fs=require("fs");
+          const r=JSON.parse(fs.readFileSync("/tmp/ops-agent-create.json","utf8"));
+          if(!r.ok || !r.client_id || !r.audit_id) process.exit(1);
+          console.log("create_client=ok");
+          console.log("client_id="+r.client_id);
+          console.log("audit_id="+r.audit_id);
+          NODE
+
+          retry_http="$(call_agent "$create_body" /tmp/ops-agent-retry.json)"
+          test "$retry_http" = "200"
+          "$runtime_dir/bin/node" - <<'NODE'
+          const fs=require("fs");
+          const a=JSON.parse(fs.readFileSync("/tmp/ops-agent-create.json","utf8"));
+          const b=JSON.parse(fs.readFileSync("/tmp/ops-agent-retry.json","utf8"));
+          if(!b.ok || !b.duplicate || a.client_id!==b.client_id || a.audit_id!==b.audit_id) process.exit(1);
+          console.log("idempotent_retry=ok");
+          console.log("retry_same_client_id="+b.client_id);
+          console.log("retry_same_audit_id="+b.audit_id);
+          NODE
+
+          conflict_body='{"action":"create_client","arguments":{"name":"ROLANPRO AGENT SMOKE TEST CHANGED","notes":"This payload must not execute because the idempotency key is already reserved."},"idempotency_key":"rolanpro-agent-smoke-client-v1","request_id":"ops-agent-production-smoke-conflict-v1"}'
+          conflict_http="$(call_agent "$conflict_body" /tmp/ops-agent-conflict.json)"
+          test "$conflict_http" = "409"
+          grep -q '"code":"idempotency_conflict"' /tmp/ops-agent-conflict.json
+          echo "idempotency_conflict=ok"
+
+          echo "operations_agent_live=yes"
+          printf 'active_sha=%s\n' "$active_sha"
           REMOTE
