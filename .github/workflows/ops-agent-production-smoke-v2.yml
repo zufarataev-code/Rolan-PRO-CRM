@@ -1,0 +1,117 @@
+name: Operations Agent extended production smoke
+
+on:
+  push:
+    branches:
+      - ops/agent-production-smoke-20260928
+    paths:
+      - .github/workflows/ops-agent-production-smoke-v2.yml
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: production
+    steps:
+      - name: Configure SSH
+        env:
+          PRODUCTION_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          PRODUCTION_SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$PRODUCTION_SSH_KEY" > "$HOME/.ssh/rolanpro_production"
+          chmod 600 "$HOME/.ssh/rolanpro_production"
+          printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Project and expense smoke
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/rolanpro_production" -o BatchMode=yes -o IdentitiesOnly=yes \
+            runcloud@143.110.136.211 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          runtime_dir=/home/runcloud/rolanpro-runtime
+          endpoint=https://rolanpro-crm.143-110-136-211.sslip.io/api/v1/agent
+          IFS=$'\t' read -r active_sha active_dir </home/runcloud/.rolanpro-crm-active-release
+          export PATH="$runtime_dir/bin:$PATH"
+          cd "$active_dir"
+          set -a
+          . "$active_dir/.env.production.local"
+          set +a
+
+          sign() {
+            BODY="$1" TS="$2" "$runtime_dir/bin/node" -e "const c=require('crypto');process.stdout.write(c.createHmac('sha256',process.env.CRM_OPERATIONS_AGENT_SECRET).update(process.env.TS+'.'+process.env.BODY).digest('hex'))"
+          }
+          call_agent() {
+            body="$1"; out="$2"; ts="$(date +%s)"; sig="$(BODY="$body" TS="$ts" sign "$body" "$ts")"
+            curl -sS -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' \
+              -H "x-rolan-agent-timestamp: $ts" -H "x-rolan-agent-signature: $sig" --data "$body" "$endpoint"
+          }
+
+          read service_type_id film_id manager_id < <("$runtime_dir/bin/node" - <<'NODE'
+          const {PrismaClient}=require("@prisma/client");
+          const p=new PrismaClient();
+          (async()=>{
+            const [s,f,o]=await Promise.all([
+              p.serviceType.findFirst({where:{is_active:true},orderBy:[{sort_order:"asc"},{service_code:"asc"}],select:{service_type_id:true}}),
+              p.filmCatalog.findFirst({where:{is_active:true},orderBy:{model_code:"asc"},select:{film_id:true}}),
+              p.user.findFirst({where:{is_active:true,user_accesses:{some:{is_active:true,role:{is_active:true,code:"OWNER"}}}},orderBy:{full_name:"asc"},select:{user_id:true}})
+            ]);
+            if(!s||!f||!o) process.exit(2);
+            console.log(s.service_type_id,f.film_id,o.user_id);
+          })().finally(()=>p.$disconnect());
+          NODE
+          )
+          echo "project_prerequisites=ok"
+
+          client_id="defb126b-08a6-4323-b7c4-2ee4682465fc"
+          project_body="$(CLIENT_ID="$client_id" MANAGER_ID="$manager_id" SERVICE_TYPE_ID="$service_type_id" FILM_ID="$film_id" "$runtime_dir/bin/node" -e 'process.stdout.write(JSON.stringify({action:"create_manual_project",arguments:{client_id:process.env.CLIENT_ID,manager_id:process.env.MANAGER_ID,project_title:"ROLANPRO AGENT SMOKE PROJECT",service_type_id:process.env.SERVICE_TYPE_ID,film_id:process.env.FILM_ID,billable_sqft:1,actual_film_sqft:1,client_unit_price:1,project_notes:"Permanent controlled smoke-test project for CRM Operations Agent. Not a real customer job."},idempotency_key:"rolanpro-agent-smoke-project-v1",request_id:"ops-agent-production-smoke-project-v1"}))')"
+          project_http="$(call_agent "$project_body" /tmp/project.json)"
+          test "$project_http" = "200"
+          read project_id project_audit_id < <("$runtime_dir/bin/node" - <<'NODE'
+          const r=require("/tmp/project.json");
+          if(!r.ok||!r.project_id||!r.audit_id) { console.error(JSON.stringify(r)); process.exit(1); }
+          console.log(r.project_id,r.audit_id);
+          NODE
+          )
+          echo "create_project=ok"
+          echo "project_id=$project_id"
+          echo "project_audit_id=$project_audit_id"
+
+          retry_http="$(call_agent "$project_body" /tmp/project-retry.json)"
+          test "$retry_http" = "200"
+          PROJECT_ID="$project_id" AUDIT_ID="$project_audit_id" "$runtime_dir/bin/node" - <<'NODE'
+          const r=require("/tmp/project-retry.json");
+          if(!r.ok||!r.duplicate||r.project_id!==process.env.PROJECT_ID||r.audit_id!==process.env.AUDIT_ID) process.exit(1);
+          console.log("project_idempotent_retry=ok");
+          NODE
+
+          expense_body="$(PROJECT_ID="$project_id" "$runtime_dir/bin/node" -e 'process.stdout.write(JSON.stringify({action:"record_project_expense",arguments:{project_id:process.env.PROJECT_ID,category:"SMOKE_TEST",amount:0.01,description:"Controlled CRM Operations Agent production smoke test expense."},idempotency_key:"rolanpro-agent-smoke-expense-v1",request_id:"ops-agent-production-smoke-expense-v1"}))')"
+          expense_http="$(call_agent "$expense_body" /tmp/expense.json)"
+          test "$expense_http" = "200"
+          read expense_id expense_audit_id < <("$runtime_dir/bin/node" - <<'NODE'
+          const r=require("/tmp/expense.json");
+          if(!r.ok||!r.expense_id||!r.audit_id) { console.error(JSON.stringify(r)); process.exit(1); }
+          console.log(r.expense_id,r.audit_id);
+          NODE
+          )
+          echo "record_expense=ok"
+          echo "expense_id=$expense_id"
+          echo "expense_audit_id=$expense_audit_id"
+
+          expense_retry_http="$(call_agent "$expense_body" /tmp/expense-retry.json)"
+          test "$expense_retry_http" = "200"
+          EXPENSE_ID="$expense_id" AUDIT_ID="$expense_audit_id" "$runtime_dir/bin/node" - <<'NODE'
+          const r=require("/tmp/expense-retry.json");
+          if(!r.ok||!r.duplicate||r.expense_id!==process.env.EXPENSE_ID||r.audit_id!==process.env.AUDIT_ID) process.exit(1);
+          console.log("expense_idempotent_retry=ok");
+          NODE
+
+          echo "extended_smoke=passed"
+          echo "operations_agent_live=yes"
+          echo "active_sha=$active_sha"
+          REMOTE
