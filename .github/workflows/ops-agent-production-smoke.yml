@@ -30,7 +30,7 @@ jobs:
           printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Inspect production Operations Agent runtime
+      - name: Inspect production service controls
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/rolanpro_production" \
@@ -39,44 +39,24 @@ jobs:
             runcloud@143.110.136.211 'bash -s' <<'REMOTE'
           set -euo pipefail
           app_dir=/home/runcloud/webapps/rolanpro-crm
-          endpoint=https://rolanpro-crm.143-110-136-211.sslip.io/api/v1/agent
           cd "$app_dir"
 
-          printf 'active_sha=%s\n' "$(head -n 1 /home/runcloud/.rolanpro-crm-active-release 2>/dev/null | cut -f 1 || true)"
-          printf 'git_head=%s\n' "$(git rev-parse HEAD)"
-          printf 'git_branch=%s\n' "$(git branch --show-current)"
-          printf 'git_dirty=%s\n' "$(test -n "$(git status --porcelain)" && echo yes || echo no)"
+          echo 'supervisor_begin'
+          supervisorctl status 2>&1 || true
+          echo 'supervisor_end'
 
-          for f in .env.production.local .env.production .env.local .env; do
-            if [ -f "$f" ]; then
-              echo "env_file=$f"
-              if grep -q '^CRM_OPERATIONS_AGENT_SECRET=' "$f"; then echo "secret_declared_in=$f"; fi
-              if grep -q '^CRM_OPERATIONS_AGENT_ACTOR_' "$f"; then echo "actor_override_declared_in=$f"; fi
-              if grep -q '^DATABASE_URL=' "$f"; then echo "database_url_declared_in=$f"; fi
-            fi
-          done
+          echo 'deploy_files_begin'
+          find deploy -maxdepth 2 -type f -printf '%p\n' 2>/dev/null | sort || true
+          echo 'deploy_files_end'
 
-          unsigned_body='{"action":"find_client","arguments":{"query":"__rolanpro_agent_unsigned_probe__"},"request_id":"ops-agent-unsigned-probe"}'
-          unsigned_status="$(curl -sS -o /tmp/ops-agent-unsigned.json -w '%{http_code}' \
-            -X POST -H 'content-type: application/json' --data "$unsigned_body" "$endpoint")"
-          printf 'unsigned_http=%s\n' "$unsigned_status"
-          printf 'unsigned_body='
-          tr -d '\n' </tmp/ops-agent-unsigned.json | sed -E 's/"message":"[^"]*"/"message":"[redacted]"/g'
-          printf '\n'
+          if [ -f deploy/watch-production.sh ]; then
+            echo 'watch_script_begin'
+            sed -n '1,240p' deploy/watch-production.sh | \
+              sed -E 's/(password|token|secret|key)=("[^"]*"|[^ ]+)/\1=[redacted]/Ig'
+            echo 'watch_script_end'
+          fi
 
-          for cmd in node npm pnpm npx openssl psql pm2 supervisorctl systemctl; do
-            if command -v "$cmd" >/dev/null 2>&1; then
-              printf 'command_%s=%s\n' "$cmd" "$(command -v "$cmd")"
-            else
-              printf 'command_%s=missing\n' "$cmd"
-            fi
-          done
-
-          echo 'processes_begin'
-          ps -eo pid,user,args | grep -E '[n]ext|[n]ode|[p]m2|[s]upervisor|rolanpro-crm' | sed -E 's/(--password|password=|token=|secret=)[^ ]+/\1[redacted]/Ig' | head -n 25 || true
-          echo 'processes_end'
-
-          echo 'app_dir_files_begin'
-          find "$app_dir" -maxdepth 1 -type f -printf '%f\n' | sort | head -n 60
-          echo 'app_dir_files_end'
+          echo 'supervisor_configs_begin'
+          grep -RIl 'rolanpro-crm\|next-server\|npm.*start\|next start' /etc/supervisor 2>/dev/null | head -n 20 || true
+          echo 'supervisor_configs_end'
           REMOTE
