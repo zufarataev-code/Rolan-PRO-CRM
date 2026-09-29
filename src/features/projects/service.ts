@@ -7,6 +7,11 @@ import { prisma } from "@/lib/db";
 import { omitSensitiveFinancialFields } from "@/lib/finance/visibility";
 import { onInstallationAssigned, onJobStarted, onProjectCompleted, onProjectCreated } from "@/features/core/events";
 import { recordInstallerPayrollAccrual } from "@/features/installer-operations/service";
+import {
+  findExistingClientByIdentity,
+  lockClientIdentity,
+  normalizeClientEmail,
+} from "@/features/sales/client-identity";
 
 const FILM_SERVICE_CODES = new Set(["SMART_FILM", "SOLAR_FILM", "SAFETY_FILM"]);
 const ACTIVE_INSTALLER_JOB_STATUSES = new Set<string>([
@@ -577,7 +582,7 @@ export async function createManualProject(
   const trimmedClientName = input.client_name.trim();
   const trimmedProjectTitle = input.project_title.trim();
   const normalizedPhone = input.phone?.trim() || null;
-  const normalizedEmail = input.email?.trim().toLowerCase() || null;
+  const normalizedEmail = normalizeClientEmail(input.email) || null;
   const normalizedAddress = input.service_address?.trim() || null;
   const normalizedZip = input.zip_code?.trim() || null;
   const normalizedProjectNotes = input.project_notes?.trim() || null;
@@ -728,39 +733,12 @@ export async function createManualProject(
   const positionTitle = `${serviceType.name_ru} · ${film.brand_name_ru} ${film.model_name_ru}`;
 
   const project = await prisma.$transaction(async (tx) => {
-    const reusableClient =
-      explicitClient ??
-      (normalizedEmail || normalizedPhone
-        ? await tx.client.findFirst({
-            where: {
-              OR: [
-                ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
-                ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
-              ],
-            },
-            select: {
-              client_id: true,
-            },
-          })
-        : null);
+    const contact = { email: normalizedEmail, phone: normalizedPhone };
+    await lockClientIdentity(tx, contact);
+    const reusableClient = await findExistingClientByIdentity(tx, contact);
 
     const clientRecord = reusableClient
-      ? await tx.client.update({
-          where: {
-            client_id: reusableClient.client_id,
-          },
-          data: {
-            name: trimmedClientName,
-            phone: normalizedPhone,
-            email: normalizedEmail,
-            service_address: normalizedAddress,
-            city_id: city?.city_id ?? null,
-            zip_code: normalizedZip,
-          },
-          select: {
-            client_id: true,
-          },
-        })
+      ? { client_id: reusableClient.client.client_id }
       : await tx.client.create({
           data: {
             name: trimmedClientName,

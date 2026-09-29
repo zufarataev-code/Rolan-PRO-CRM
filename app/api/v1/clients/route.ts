@@ -5,6 +5,11 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES, getManagerScope } from "@/features/sales/api";
+import {
+  findExistingClientByIdentity,
+  lockClientIdentity,
+  normalizeClientEmail,
+} from "@/features/sales/client-identity";
 import { listClients } from "@/features/sales/service";
 
 export async function GET(request: NextRequest) {
@@ -47,28 +52,48 @@ export async function POST(request: NextRequest) {
 
   const trimmedName = body.name.trim();
 
-  const client = await prisma.client.create({
-    data: {
-      name: trimmedName,
-      phone: body.phone?.trim() || null,
-      email: body.email?.trim().toLowerCase() || null,
-      billing_address: body.billing_address?.trim() || null,
-      service_address: body.service_address?.trim() || null,
-      city_id: body.city_id ?? null,
-      zip_code: body.zip_code?.trim() || null,
-      notes: body.notes?.trim() || null,
-    },
+  const contact = {
+    phone: body.phone?.trim() || null,
+    email: normalizeClientEmail(body.email) || null,
+  };
+  const result = await prisma.$transaction(async (tx) => {
+    await lockClientIdentity(tx, contact);
+    const existing = await findExistingClientByIdentity(tx, contact);
+    if (existing) {
+      return { client: existing.client, reused: true, matchedBy: existing.matchedBy } as const;
+    }
+
+    const client = await tx.client.create({
+      data: {
+        name: trimmedName,
+        phone: contact.phone,
+        email: contact.email,
+        billing_address: body.billing_address?.trim() || null,
+        service_address: body.service_address?.trim() || null,
+        city_id: body.city_id ?? null,
+        zip_code: body.zip_code?.trim() || null,
+        notes: body.notes?.trim() || null,
+      },
+    });
+    return { client, reused: false, matchedBy: null } as const;
   });
 
-  await logSalesActivity({
-    actorUserId: auth.session.user.user_id,
-    entityType: "client",
-    entityId: client.client_id,
-    actionKey: "client.created",
-    message: `Создан клиент ${client.name}.`,
-  });
+  const { client } = result;
+
+  if (!result.reused) {
+    await logSalesActivity({
+      actorUserId: auth.session.user.user_id,
+      entityType: "client",
+      entityId: client.client_id,
+      actionKey: "client.created",
+      message: `Создан клиент ${client.name}.`,
+    });
+  }
 
   return apiSuccess({
     client_id: client.client_id,
+    client_name: client.name,
+    reused: result.reused,
+    matched_by: result.matchedBy,
   });
 }

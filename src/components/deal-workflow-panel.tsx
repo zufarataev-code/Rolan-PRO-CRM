@@ -194,7 +194,11 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       }),
     );
 
-    setMessage("Клиент создан из лида и привязан к сделке.");
+    setMessage(
+      createdClient.reused
+        ? "Найден существующий клиент по телефону или email; его карточка привязана к сделке."
+        : "Клиент создан из лида и привязан к сделке.",
+    );
   }
 
   async function scheduleConsultation() {
