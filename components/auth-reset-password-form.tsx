@@ -2,6 +2,8 @@
 
 import { FormEvent, useState } from "react";
 
+import { PASSWORD_MIN_LENGTH } from "@/lib/auth/password-policy";
+
 import styles from "./auth-card.module.css";
 
 type ApiResponse = {
@@ -25,8 +27,8 @@ export function AuthResetPasswordForm({ token }: { token: string }) {
       setError("Ссылка восстановления неполная. Запросите новую ссылку.");
       return;
     }
-    if (password.length < 10) {
-      setError("Пароль должен быть не короче 10 символов.");
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      setError(`Пароль должен быть не короче ${PASSWORD_MIN_LENGTH} символов.`);
       return;
     }
     if (password !== confirmPassword) {
@@ -70,7 +72,7 @@ export function AuthResetPasswordForm({ token }: { token: string }) {
               autoComplete="new-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              minLength={10}
+              minLength={PASSWORD_MIN_LENGTH}
               required
             />
           </label>
@@ -82,7 +84,7 @@ export function AuthResetPasswordForm({ token }: { token: string }) {
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              minLength={10}
+              minLength={PASSWORD_MIN_LENGTH}
               required
             />
           </label>

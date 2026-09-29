@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getEnv } from "@/lib/env";
 import { canonicalRolePath } from "@/lib/auth/canonical-route";
+import { PREVIEW_COOKIE, isPreviewWriteAllowed } from "@/lib/auth/preview-edge";
 import { getRolesForPath, hasAnyRole } from "@/lib/auth/rbac";
 
 type EdgeSessionPayload = {
@@ -138,6 +139,16 @@ export async function middleware(request: NextRequest) {
 
     if (requiredRoles && !hasAnyRole(session.roles, requiredRoles)) {
       return deny(request, 403, "forbidden", "Insufficient role permissions.");
+    }
+
+    // "View as employee" is read-only. The server helpers enforce this too;
+    // stopping it here keeps a preview from reaching any write handler.
+    if (
+      request.cookies.get(PREVIEW_COOKIE)?.value &&
+      session.roles.includes("OWNER") &&
+      !isPreviewWriteAllowed(request.method, pathname)
+    ) {
+      return deny(request, 403, "preview_read_only", "Просмотр глазами сотрудника — только чтение.");
     }
   }
 

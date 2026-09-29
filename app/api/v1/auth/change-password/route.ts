@@ -1,3 +1,4 @@
+import { PASSWORD_MIN_LENGTH } from "@/lib/auth/password-policy";
 import { NextRequest } from "next/server";
 
 import { requireRequestSession } from "@/lib/auth/server";
@@ -19,8 +20,8 @@ export async function POST(request: NextRequest) {
     | null;
   const password = body?.password ?? "";
 
-  if (password.length < 12) {
-    return apiError(400, "weak_password", "Password must contain at least 12 characters.");
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return apiError(400, "weak_password", `Пароль должен быть не короче ${PASSWORD_MIN_LENGTH} символов.`);
   }
 
   const currentUser = auth.session.user;

@@ -8278,7 +8278,9 @@ function migrateSchema() {
   // ---- ENSURE OWNER USER EXISTS ----
   if (!db.users) db.users = [];
   const hasOwner = db.users.some(u => u.role === 'owner');
-  if (!hasOwner) {
+  // In the cloud CRM employee cards come from the server directory
+  // (src/features/team/directory.ts); never invent an owner card here.
+  if (!hasOwner && !ROLANPRO_CLOUD) {
     db.users.unshift({
       id: 'u_o1', role: 'owner', name: 'Rolan (Owner)',
       phone: '+12125551100', email: '', telegramChatId: '', lang: 'ru',
@@ -8306,8 +8308,10 @@ function migrateSchema() {
     db._realTeamApplied = true;
   }
   // ---- CORE TEAM SAFETY ----
-  // Keep the main working roles available. Authentication is handled by the cloud account.
-  Object.entries(CORE_LOGIN_ACCESS).forEach(([uid, info]) => {
+  // Offline/local file only. In the cloud CRM, forcing fixed roles and
+  // active=true here overrode the owner's role changes and made it impossible
+  // to switch an employee off; the server directory is authoritative instead.
+  if (!ROLANPRO_CLOUD) Object.entries(CORE_LOGIN_ACCESS).forEach(([uid, info]) => {
     let u = db.users.find(x => x.id === uid);
     if (!u) {
       u = { id: uid, phone: '', email: '', telegramChatId: '', lang: 'ru', hourlyRate: 0, commissionPct: 0 };
@@ -19491,7 +19495,7 @@ async function submitTeamMember(quickOrderId = '', quickLineId = '') {
   if (!fullName || !email) return showTeamError('Укажите имя и почту.');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showTeamError('Укажите корректную почту для входа, например name@rolan-pro.com.');
   if (!roles.length) return showTeamError('Выберите хотя бы одну роль.');
-  if (!password || password.length < 10) return showTeamError('Пароль должен быть не короче 10 символов.');
+  if (!password || password.length < 12) return showTeamError('Пароль должен быть не короче 12 символов.');
 
   try {
     setTeamSubmitBusy(true);
@@ -19599,7 +19603,7 @@ async function openTeamMemberAccess(legacyUserId) {
 async function submitTeamPassword(email) {
   const password = document.getElementById('tm-password')?.value.trim();
 
-  if (!password || password.length < 10) return showTeamError('Пароль должен быть не короче 10 символов.');
+  if (!password || password.length < 12) return showTeamError('Пароль должен быть не короче 12 символов.');
   if (!email) return showTeamError('У сотрудника не указана почта — сначала добавьте её.');
 
   try {

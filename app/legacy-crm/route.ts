@@ -10,6 +10,10 @@ import { replaceLegacyBootstrapLogin } from "@/features/legacy-crm/html-shell";
 
 export const dynamic = "force-dynamic";
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+}
+
 export async function GET(request: NextRequest) {
   const session = await getRequestSession(request);
   const env = getEnv();
@@ -30,7 +34,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/", publicAppUrl));
   }
 
-  if (session.user.must_change_password) {
+  // During "view as employee" the owner is looking, not the employee: never
+  // send the owner to the employee's password-change screen.
+  if (session.user.must_change_password && !session.preview) {
     return NextResponse.redirect(new URL("/change-password", publicAppUrl));
   }
 
@@ -126,8 +132,8 @@ export async function GET(request: NextRequest) {
           if (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
             return showTeamError('Укажите корректную почту сотрудника.');
           }
-          if (password && password.length < 10) {
-            return showTeamError('Пароль должен быть не короче 10 символов.');
+          if (password && password.length < 12) {
+            return showTeamError('Пароль должен быть не короче 12 символов.');
           }
 
           try {
@@ -189,199 +195,61 @@ export async function GET(request: NextRequest) {
     </script>
   `;
 
-  const teamDirectoryPatch = session.roles.includes(ROLE_CODES.OWNER) ? `
-    <script id="rolanpro-team-directory-sync">
+  // Employee cards are derived from PostgreSQL on the server (see
+  // src/features/team/directory.ts); the old in-browser directory sync that
+  // re-rendered on every navigation is gone. Owners get a link to the
+  // canonical employee screen.
+  const teamDirectoryPatch = session.roles.includes(ROLE_CODES.OWNER) && !session.preview ? `
+    <script id="rolanpro-team-screen-link">
       (() => {
-        const nativeFetch = window.fetch.bind(window);
-        const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
-        const serverRoleToLegacy = (roles) => {
-          if (typeof teamLegacyRoleFromServer === 'function') {
-            const mapped = teamLegacyRoleFromServer(Array.isArray(roles) ? roles : []);
-            if (mapped) return mapped;
-          }
-          const values = Array.isArray(roles) ? roles : [];
-          if (values.includes('OWNER')) return 'owner';
-          if (values.includes('MANAGER')) return 'manager';
-          if (values.includes('CONSULTANT')) return 'measurer';
-          return 'installer';
+        function ensureTeamLink() {
+          const navs = Array.from(document.querySelectorAll('nav'));
+          const nav = navs.find((candidate) => candidate.querySelector('.nav-item'));
+          if (!nav || nav.querySelector('[data-rolanpro-team-nav="1"]')) return;
+          const item = document.createElement('a');
+          item.className = 'nav-item';
+          item.href = '/team';
+          item.setAttribute('data-rolanpro-team-nav', '1');
+          item.title = 'Сотрудники: роли, доступ, просмотр глазами сотрудника';
+          item.innerHTML = '<span class="nav-icon">👥</span><span class="nav-label">Сотрудники</span>';
+          nav.appendChild(item);
+        }
+        new MutationObserver(() => window.requestAnimationFrame(ensureTeamLink))
+          .observe(document.documentElement, { childList: true, subtree: true });
+        window.requestAnimationFrame(ensureTeamLink);
+      })();
+    </script>
+  ` : "";
+
+  const previewPatch = session.preview ? `
+    <style>
+      #rolanpro-preview-bar {
+        position: fixed; left: 0; right: 0; top: 0; z-index: 2147483600;
+        display: flex; align-items: center; justify-content: center; gap: 12px;
+        padding: 8px 14px; background: #7c2d12; color: #fff;
+        font: 600 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      #rolanpro-preview-bar button {
+        border: 0; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+        background: #fff; color: #7c2d12; font: inherit;
+      }
+      body { padding-top: 40px !important; }
+    </style>
+    <div id="rolanpro-preview-bar" role="status">
+      <span>Вы смотрите глазами: ${escapeHtml(session.user.full_name)}. Только просмотр — изменения не сохраняются.</span>
+      <button type="button" id="rolanpro-preview-exit">Выйти из просмотра</button>
+    </div>
+    <script>
+      (() => {
+        // The server rejects every change during a preview; do not even try,
+        // so the page never reports a false "saved locally".
+        window.cloudPersist = async function cloudPersistPreview() {
+          if (typeof cloudStatus === 'function') cloudStatus('Режим просмотра: изменения не сохраняются', 'blue');
         };
-        const legacyTitle = (role) => ({
-          owner: 'Owner',
-          manager: 'Manager',
-          measurer: 'Measurer',
-          installer: 'Installer',
-        })[role] || 'Employee';
-
-        function legacyUsersReady() {
-          return typeof db !== 'undefined' && db && Array.isArray(db.users);
-        }
-
-        function findLegacyUser(member) {
-          if (!legacyUsersReady()) return null;
-          const linkedIds = Array.isArray(member?.legacyUserIds) ? member.legacyUserIds : [];
-          const linked = db.users.find((user) => linkedIds.includes(user.id));
-          if (linked) return linked;
-          const email = normalizeEmail(member?.email);
-          return email ? db.users.find((user) => normalizeEmail(user.email) === email) || null : null;
-        }
-
-        function freshLegacyId(member) {
-          const linkedIds = Array.isArray(member?.legacyUserIds) ? member.legacyUserIds : [];
-          const freeLinked = linkedIds.find((id) => id && !db.users.some((user) => user.id === id));
-          if (freeLinked) return freeLinked;
-          const base = 'u_srv_' + String(member?.userId || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 18);
-          let candidate = base || ('u_srv_' + Date.now());
-          let suffix = 1;
-          while (db.users.some((user) => user.id === candidate)) {
-            candidate = base + '_' + suffix++;
-          }
-          return candidate;
-        }
-
-        async function materializeCanonicalMember(member) {
-          if (!legacyUsersReady() || !member?.userId) return { user: null, changed: false };
-
-          let user = findLegacyUser(member);
-          let changed = false;
-          if (!user) {
-            const role = serverRoleToLegacy(member.roles);
-            user = {
-              id: freshLegacyId(member),
-              name: member.fullName || member.email || 'Сотрудник',
-              email: normalizeEmail(member.email),
-              phone: '',
-              role,
-              title: legacyTitle(role),
-              active: member.isActive !== false,
-              commissionPct: 0,
-              hourlyRate: 0,
-              lang: 'ru',
-              payConfig: role === 'installer'
-                ? { type: 'per_sqft', ratePerSqft: 0, ratesByCategory: {}, ratesByWorkType: {} }
-                : {},
-              pin: '',
-              telegramChatId: '',
-            };
-            db.users.push(user);
-            changed = true;
-          }
-
-          const canonicalRole = serverRoleToLegacy(member.roles);
-          const canonicalEmail = normalizeEmail(member.email);
-          const canonicalName = String(member.fullName || '').trim();
-          const canonicalActive = member.isActive !== false;
-
-          if (canonicalName && user.name !== canonicalName) {
-            user.name = canonicalName;
-            changed = true;
-          }
-          if (canonicalEmail && normalizeEmail(user.email) !== canonicalEmail) {
-            user.email = canonicalEmail;
-            changed = true;
-          }
-          if (canonicalRole && user.role !== canonicalRole) {
-            user.role = canonicalRole;
-            user.title = legacyTitle(canonicalRole);
-            changed = true;
-          }
-          if (Boolean(user.active) !== canonicalActive) {
-            user.active = canonicalActive;
-            changed = true;
-          }
-
-          const linkedIds = Array.isArray(member.legacyUserIds) ? member.legacyUserIds : [];
-          if (!linkedIds.includes(user.id)) {
-            const linkResponse = await nativeFetch('/api/v1/team/' + encodeURIComponent(member.userId), {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ legacyUserId: user.id }),
-            });
-            if (!linkResponse.ok) {
-              console.warn('[Team directory] failed to link legacy card', member.userId, user.id);
-            }
-          }
-
-          return { user, changed };
-        }
-
-        async function syncCanonicalTeamDirectory(options = {}) {
-          if (window.__rolanproTeamDirectorySyncing || !legacyUsersReady()) return null;
-          window.__rolanproTeamDirectorySyncing = true;
-          try {
-            const response = await nativeFetch('/api/v1/team', { cache: 'no-store' });
-            if (!response.ok) return null;
-            const payload = await response.json();
-            const members = Array.isArray(payload?.data) ? payload.data : [];
-            let changed = false;
-            let requestedUser = null;
-            const requestedEmail = normalizeEmail(options.openEmail);
-
-            for (const member of members) {
-              const result = await materializeCanonicalMember(member);
-              changed = changed || result.changed;
-              if (requestedEmail && normalizeEmail(member.email) === requestedEmail) {
-                requestedUser = result.user;
-              }
-            }
-
-            if (changed && typeof save === 'function') save();
-            if (changed && options.render !== false && typeof render === 'function') render();
-
-            if (requestedUser && typeof openTeamMember === 'function') {
-              if (typeof closeModal === 'function') closeModal();
-              openTeamMember(requestedUser.id);
-              if (typeof cloudStatus === 'function') cloudStatus('Этот сотрудник уже был создан. Открыта его карточка.', 'blue');
-            }
-
-            return { members, changed, requestedUser };
-          } catch (error) {
-            console.error('[Team directory] synchronization failed', error);
-            return null;
-          } finally {
-            window.__rolanproTeamDirectorySyncing = false;
-          }
-        }
-
-        window.syncCanonicalTeamDirectory = syncCanonicalTeamDirectory;
-
-        window.fetch = async function rolanproTeamAwareFetch(input, init) {
-          const response = await nativeFetch(input, init);
-          const url = typeof input === 'string' ? input : String(input?.url || '');
-          const method = String(init?.method || (typeof input !== 'string' ? input?.method : '') || 'GET').toUpperCase();
-
-          if (method === 'POST' && /\/api\/v1\/team(?:\\?|$)/.test(url)) {
-            let requestedEmail = '';
-            try {
-              const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
-              requestedEmail = normalizeEmail(body?.email);
-            } catch (_) {
-              requestedEmail = '';
-            }
-            const shouldOpenExisting = !response.ok && Boolean(requestedEmail);
-            window.setTimeout(() => {
-              syncCanonicalTeamDirectory({
-                render: true,
-                openEmail: shouldOpenExisting ? requestedEmail : '',
-              });
-            }, 0);
-          }
-
-          return response;
-        };
-
-        let bootAttempts = 0;
-        const boot = () => {
-          if (legacyUsersReady()) {
-            syncCanonicalTeamDirectory({ render: true });
-            return;
-          }
-          if (bootAttempts++ < 60) window.setTimeout(boot, 250);
-        };
-
-        window.addEventListener('hashchange', () => {
-          window.setTimeout(() => syncCanonicalTeamDirectory({ render: true }), 0);
+        document.getElementById('rolanpro-preview-exit')?.addEventListener('click', async () => {
+          await fetch('/api/v1/team/preview', { method: 'DELETE' }).catch(() => null);
+          location.assign('/team');
         });
-        window.setTimeout(boot, 0);
       })();
     </script>
   ` : "";
@@ -495,7 +363,7 @@ export async function GET(request: NextRequest) {
 
   const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
   const privilegedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
-  const injectedUi = `${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}`;
+  const injectedUi = `${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}${previewPatch}`;
   const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0
     ? `${cloudHtml.slice(0, closingBodyIndex)}${injectedUi}${cloudHtml.slice(closingBodyIndex)}`

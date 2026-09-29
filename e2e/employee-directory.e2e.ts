@@ -1,0 +1,189 @@
+/**
+ * End-to-end gate: one employee directory and read-only "view as employee".
+ *
+ * Owner adds an employee with two roles, changes the roles, the employee signs
+ * in and is recognised by the legacy CRM without the owner ever opening it,
+ * and the owner can view the CRM as that employee without being able to change
+ * anything. Runs against a live server + real database (see ci.yml).
+ */
+import assert from "node:assert/strict";
+import { after, before, test } from "node:test";
+
+import { PrismaClient } from "@prisma/client";
+
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+const SEED_PASSWORD = process.env.E2E_SEED_PASSWORD ?? "ChangeMe123!";
+const OWNER_EMAIL = "owner@rolanpro.local";
+const MANAGER_EMAIL = "manager@rolanpro.local";
+
+if (/rolan-pro\.com|runcloud/i.test(BASE_URL)) {
+  throw new Error(`Refusing to run the E2E gate against ${BASE_URL}: it creates records.`);
+}
+
+const prisma = new PrismaClient();
+const runTag = `e2e${Date.now()}`;
+const employeeEmail = `${runTag}@example.com`;
+const employeePassword = `Temp-${runTag}-Aa1`;
+
+type Json = Record<string, unknown>;
+
+class Browser {
+  cookies = new Map<string, string>();
+
+  async call(method: string, path: string, body?: unknown) {
+    const response = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers: {
+        "content-type": "application/json",
+        cookie: [...this.cookies].map(([name, value]) => `${name}=${value}`).join("; "),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      redirect: "manual",
+    });
+    for (const header of response.headers.getSetCookie()) {
+      const [pair, ...attributes] = header.split(";");
+      const [name, ...rest] = pair.split("=");
+      const value = rest.join("=");
+      const expired = attributes.some((attribute) => /max-age=0/i.test(attribute.trim()));
+      if (expired || value === "") this.cookies.delete(name.trim());
+      else this.cookies.set(name.trim(), value);
+    }
+    const text = await response.text();
+    let json: Json = {};
+    try {
+      json = text ? (JSON.parse(text) as Json) : {};
+    } catch {
+      json = { raw: text.slice(0, 200) };
+    }
+    return { status: response.status, json, location: response.headers.get("location") };
+  }
+
+  async login(email: string, password: string) {
+    const response = await this.call("POST", "/api/v1/auth/login", { email, password });
+    assert.equal(response.status, 200, `login ${email}: ${JSON.stringify(response.json)}`);
+  }
+}
+
+const data = <T = Json>(json: Json) => (json.data ?? json) as T;
+
+let owner: Browser;
+let employeeId: string;
+
+before(async () => {
+  await prisma.user.updateMany({
+    where: { email: { in: [OWNER_EMAIL, MANAGER_EMAIL] } },
+    data: { must_change_password: false },
+  });
+  owner = new Browser();
+  await owner.login(OWNER_EMAIL, SEED_PASSWORD);
+});
+
+after(async () => {
+  await prisma.$disconnect();
+});
+
+test("owner adds an employee with several roles and changes them in one step", async () => {
+  const created = await owner.call("POST", "/api/v1/team", {
+    email: employeeEmail,
+    fullName: `${runTag} Surveyor`,
+    roles: ["CONSULTANT", "INSTALLER"],
+    password: employeePassword,
+  });
+  assert.equal(created.status, 200, `create: ${JSON.stringify(created.json)}`);
+  employeeId = data<{ userId: string }>(created.json).userId;
+
+  const tooShort = await owner.call("PATCH", `/api/v1/team/${employeeId}`, { password: "short-pass" });
+  assert.equal(tooShort.status, 400, "one password rule everywhere: 12+ characters");
+
+  const changed = await owner.call("PATCH", `/api/v1/team/${employeeId}`, { roles: ["CONSULTANT"] });
+  assert.equal(changed.status, 200, `change roles: ${JSON.stringify(changed.json)}`);
+
+  const roles = await prisma.userAccess.findMany({
+    where: { user_id: employeeId },
+    include: { role: { select: { code: true } } },
+  });
+  assert.deepEqual(roles.map((access) => access.role.code).sort(), ["CONSULTANT"]);
+});
+
+test("a new employee is recognised by the CRM without the owner opening it first", async () => {
+  // Employees used to see "Доступ не настроен" until the owner's browser
+  // happened to synchronize the legacy card. The server now guarantees it.
+  await prisma.user.update({ where: { user_id: employeeId }, data: { must_change_password: false } });
+  const employee = new Browser();
+  await employee.login(employeeEmail, employeePassword);
+
+  const me = await employee.call("GET", "/api/v1/auth/me");
+  const legacyIds = data<{ user: { legacy_user_ids: string[] } }>(me.json).user.legacy_user_ids;
+  assert.ok(legacyIds.length > 0, "employee has a legacy card id");
+
+  const state = await employee.call("GET", "/api/v1/legacy-crm/state");
+  assert.equal(state.status, 200, `state: ${JSON.stringify(state.json).slice(0, 300)}`);
+  const cards = (data<{ payload: { users: Array<{ id: string; role: string; name: string }> } }>(state.json).payload.users) ?? [];
+  const card = cards.find((candidate) => legacyIds.includes(candidate.id));
+  assert.ok(card, "the employee's own card is in their workspace");
+  assert.equal(card.role, "measurer", "card role follows PostgreSQL, not the browser");
+});
+
+test("a browser save cannot change an employee's role", async () => {
+  const manager = new Browser();
+  await manager.login(MANAGER_EMAIL, SEED_PASSWORD);
+  const state = await manager.call("GET", "/api/v1/legacy-crm/state");
+  const { payload, revision } = data<{ payload: { users: Array<Record<string, unknown>> }; revision: number }>(state.json);
+  const employeeLegacyIds = (await prisma.user.findUniqueOrThrow({ where: { user_id: employeeId } })).legacy_user_ids;
+
+  const tampered = {
+    ...payload,
+    users: payload.users.map((card) =>
+      employeeLegacyIds.includes(card.id as string) ? { ...card, role: "owner", phone: "+1 805 555 0199" } : card,
+    ),
+  };
+  const saved = await manager.call("PUT", "/api/v1/legacy-crm/state", { payload: tampered, revision });
+  assert.equal(saved.status, 200, `save: ${JSON.stringify(saved.json)}`);
+
+  const stored = await prisma.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } });
+  const storedCard = ((stored.payload as { users: Array<Record<string, unknown>> }).users).find((card) =>
+    employeeLegacyIds.includes(card.id as string),
+  );
+  assert.equal(storedCard?.role, "measurer", "role is re-applied from PostgreSQL");
+  assert.equal(storedCard?.phone, "+1 805 555 0199", "legacy-only fields are still editable");
+});
+
+test("owner views the CRM as the employee, read-only, and can leave", async () => {
+  const started = await owner.call("POST", "/api/v1/team/preview", { userId: employeeId });
+  assert.equal(started.status, 200, `start preview: ${JSON.stringify(started.json)}`);
+
+  const me = await owner.call("GET", "/api/v1/auth/me");
+  const viewed = data<{ user: { user_id: string; roles: string[] } }>(me.json).user;
+  assert.equal(viewed.user_id, employeeId, "the owner now sees the employee's identity");
+  assert.deepEqual(viewed.roles, ["CONSULTANT"]);
+  assert.ok((me.json as { data?: { preview?: unknown } }).data?.preview, "preview is flagged");
+
+  const page = await owner.call("GET", "/legacy-crm");
+  assert.equal(page.status, 200, "no redirect to the employee's password screen");
+  assert.match(String(page.json.raw ?? ""), /./);
+
+  const write = await owner.call("POST", "/api/v1/leads", { name: `${runTag} must not be created` });
+  assert.equal(write.status, 403, "writes are blocked during preview");
+  const save = await owner.call("PUT", "/api/v1/legacy-crm/state", { payload: {}, revision: 1 });
+  assert.equal(save.status, 403, "workspace saves are blocked during preview");
+  assert.equal(await prisma.lead.count({ where: { name: { startsWith: runTag } } }), 0);
+
+  const stopped = await owner.call("DELETE", "/api/v1/team/preview");
+  assert.equal(stopped.status, 200);
+  const back = await owner.call("GET", "/api/v1/auth/me");
+  assert.ok(data<{ user: { roles: string[] } }>(back.json).user.roles.includes("OWNER"), "owner is back");
+});
+
+test("only the owner can start a preview, and another employee cannot use the cookie", async () => {
+  const manager = new Browser();
+  await manager.login(MANAGER_EMAIL, SEED_PASSWORD);
+  const denied = await manager.call("POST", "/api/v1/team/preview", { userId: employeeId });
+  assert.equal(denied.status, 403);
+
+  manager.cookies.set("rolanpro_preview_as", employeeId);
+  const me = await manager.call("GET", "/api/v1/auth/me");
+  assert.ok(
+    data<{ user: { roles: string[] } }>(me.json).user.roles.includes("MANAGER"),
+    "a forged preview cookie is ignored for non-owners",
+  );
+});

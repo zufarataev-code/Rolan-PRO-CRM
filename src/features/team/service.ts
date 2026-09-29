@@ -1,5 +1,6 @@
 import { ROLE_CODES, type RoleCode } from "@/lib/auth/constants";
 import { hashPassword } from "@/lib/auth/password";
+import { PASSWORD_MIN_LENGTH } from "@/lib/auth/password-policy";
 import { prisma } from "@/lib/db";
 
 /**
@@ -12,7 +13,7 @@ import { prisma } from "@/lib/db";
  * его создал, знать постоянный пароль сотрудника не должен.
  */
 
-export const MIN_PASSWORD_LENGTH = 10;
+export const MIN_PASSWORD_LENGTH = PASSWORD_MIN_LENGTH;
 
 export type TeamMemberInput = {
   email: string;
@@ -227,26 +228,40 @@ export async function updateTeamMember(
     }
   }
 
-  if (input.roles) {
-    const roles = await prisma.role.findMany({
-      where: { code: { in: input.roles } },
-      select: { role_id: true },
-    });
+  const roleIds = input.roles
+    ? await prisma.role.findMany({
+        where: { code: { in: input.roles } },
+        select: { role_id: true, code: true },
+      })
+    : null;
 
-    await prisma.userAccess.deleteMany({ where: { user_id: userId } });
-    await prisma.userAccess.createMany({
-      data: roles.map((role) => ({ user_id: userId, role_id: role.role_id })),
-    });
+  if (input.roles && roleIds) {
+    const resolved = new Set(roleIds.map((role) => role.code));
+    const missing = input.roles.filter((role) => !resolved.has(role));
+    if (missing.length) {
+      throw new Error(`Роли ${missing.join(", ")} не настроены на сервере.`);
+    }
   }
 
-  const updated = await prisma.user.update({
-    where: { user_id: userId },
-    data: {
-      email,
-      full_name: input.fullName?.trim() ?? undefined,
-      is_active: input.isActive ?? undefined,
-      legacy_user_ids: shouldLinkLegacyUser && legacyUserId ? { push: legacyUserId } : undefined,
-    },
+  // Roles and profile change together or not at all: a failure halfway used
+  // to leave an employee with no roles.
+  const updated = await prisma.$transaction(async (tx) => {
+    if (roleIds) {
+      await tx.userAccess.deleteMany({ where: { user_id: userId } });
+      await tx.userAccess.createMany({
+        data: roleIds.map((role, index) => ({ user_id: userId, role_id: role.role_id, is_primary: index === 0 })),
+      });
+    }
+
+    return tx.user.update({
+      where: { user_id: userId },
+      data: {
+        email,
+        full_name: input.fullName?.trim() ?? undefined,
+        is_active: input.isActive ?? undefined,
+        legacy_user_ids: shouldLinkLegacyUser && legacyUserId ? { push: legacyUserId } : undefined,
+      },
+    });
   });
 
   return { userId, email: updated.email, legacyUserIds: updated.legacy_user_ids };

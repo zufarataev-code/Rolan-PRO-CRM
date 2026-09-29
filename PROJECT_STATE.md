@@ -689,3 +689,17 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Verification (local, 2026-09-29): empty DB builds with `prisma migrate deploy && pnpm db:seed`; drift exit code 0; 422/422 unit tests; TypeScript; end-to-end 2/2 against a running server.
 - Known gaps for the next stages (not changed here): employees are still duplicated between PostgreSQL `User` and the legacy payload (a valid manager sees "Доступ не настроен" in `/legacy-crm` on a clean database); nearly all operating data remains in `LegacyWorkspace.payload`; migration `20260923182500_reset_project_data_only` performs a destructive data reset inside the schema migration history.
 - Next action: Codex review of this PR; after Owner approval, merge. Deploying runs the two new idempotent migrations on production — take a database backup first.
+
+## 2026-09-29 handoff — TASK-010 stage 1: one employee directory and "view as employee"
+
+- Governing decision: `DECISIONS.md` → "2026-09-29 — CRM core consolidation", item 3 (one employee directory). Builder: Claude. Reviewer: Codex. Builds on TASK-009 (PR #266).
+- Owner-reported symptoms: adding an employee was confusing, the UI jumped between screens, roles could not be changed in the employee card, an employee's workspace could not be inspected.
+- Root causes found: employee cards lived in both PostgreSQL and the legacy payload; an in-browser sync (owner only, on every navigation) created links and re-rendered; the legacy card editor reverted the owner's role choice asynchronously and saved only one role; legacy `migrateSchema` forced fixed roles and `active=true` on `u_o1,u_m1,u_z1,u_i1,u_i2` on every load; an employee who signed in before the owner opened the CRM got "Доступ не настроен"; owner-issued passwords allowed 10 characters while change-password required 12; role replacement was not transactional.
+- What changed:
+  - `src/features/team/directory.ts`: the server derives legacy employee cards from PostgreSQL on every workspace read and save; name, email, role and access always come from PostgreSQL; legacy-only fields stay editable; unlinked historical cards are kept. Every CRM employee gets a stable server-assigned legacy id (`/api/v1/auth/me`, state route).
+  - The in-browser team directory sync is removed from `/legacy-crm`; the cloud legacy CRM no longer forces fixed roles/active or invents an owner card.
+  - New owner screen `/team`: add employee, several roles, enable/disable access, temporary password, "Посмотреть глазами".
+  - "View as employee": `POST/DELETE /api/v1/team/preview` sets/clears an httpOnly cookie honoured only for a real owner session; every API and page is then served as the employee. Read-only is enforced in middleware and in `requireRequestSession`; the legacy page shows a banner and does not attempt saves.
+  - One password rule (`src/lib/auth/password-policy.ts`, 12 characters) for owner-issued, change and reset flows; role replacement runs in one transaction.
+- Verification (local): 424/424 unit tests, TypeScript, 7/7 end-to-end (`e2e/employee-directory.e2e.ts` + lifecycle gate); manually: owner added an employee with two roles, previewed the surveyor portal read-only, exited; a manager lands on "Портал менеджера" instead of "Доступ не настроен".
+- Next action: Codex review; Owner approval; merge after #266. No production deploy without a fresh database backup and explicit Owner approval.
