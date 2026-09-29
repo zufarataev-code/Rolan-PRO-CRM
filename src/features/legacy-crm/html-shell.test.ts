@@ -103,16 +103,18 @@ test("server injects cleanup for redundant New Order guidance sidebar", () => {
   assert.match(result, /grid-template-columns: minmax\(0, 1fr\)/);
 });
 
-test("server injects service, catalog material and complexity controls into order flow", () => {
+test("server defers film selection to measurement and keeps project parameter controls", () => {
   const result = replaceLegacyBootstrapLogin(`<!doctype html><body>
 <div id="app"><div>legacy bootstrap</div></div>
 <script>cloudBoot()</script></body>`);
 
-  assert.match(result, /rolanpro-order-material-section/);
-  assert.match(result, /rolanpro-new-order-material-list/);
-  assert.match(result, /servicePickerId/);
-  assert.match(result, /Плёнка по каждой услуге/);
-  assert.match(result, /Тип \/ серия плёнки/);
+  assert.match(result, /rolanpro-order-measurement-note/);
+  assert.match(result, /Плёнка выбирается на замере/);
+  assert.match(result, /подходящие модели со склада/);
+  assert.match(result, /для помещения и отдельно для каждого окна/);
+  assert.doesNotMatch(result, /rolanpro-new-order-material-list/);
+  assert.doesNotMatch(result, /Плёнка по каждой услуге/);
+  assert.doesNotMatch(result, /chosenMaterials/);
   assert.match(result, /materialCategoryKey/);
   assert.match(result, /смарт: 'smart'/);
   assert.match(result, /Выберите тип \/ серию/);
@@ -125,7 +127,6 @@ test("server injects service, catalog material and complexity controls into orde
   assert.match(result, /catalogMatchesCategory\(item, category\)/);
   assert.match(result, /catalogCanBeSelected\(item\)/);
   assert.match(result, /if \(!category\) return \[\]/);
-  assert.match(result, /chosenMaterials\[serviceId\]/);
   assert.match(result, /complexityCoef/);
   assert.match(result, /openRolanProOrderParameters/);
   assert.match(result, /saveRolanProOrderParameters/);
@@ -140,7 +141,7 @@ test("server injects service, catalog material and complexity controls into orde
   assert.match(result, /materialCategory/);
   assert.match(result, /materialName/);
   assert.match(result, /materialModel/);
-  assert.match(result, /createdOrder\.materialCategory/);
+  assert.doesNotMatch(result, /createdOrder\.materialCategory/);
   assert.match(result, /orderBuilder\.materialModel/);
   assert.doesNotMatch(result, /Категория, название и модель выбираются отдельно/);
   assert.doesNotMatch(result, /Выбранная модель станет материалом заказа/);

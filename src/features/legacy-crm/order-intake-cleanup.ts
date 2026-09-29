@@ -14,14 +14,12 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
     max-width: 100% !important;
   }
 
-  #rolanpro-order-material-section select,
   #rolanpro-order-parameters-overlay select,
   #rolanpro-order-parameters-overlay input {
     width: 100%;
     min-height: 44px;
   }
 
-  #rolanpro-order-material-section .rolanpro-material-note,
   #rolanpro-order-parameters-overlay .rolanpro-params-note {
     margin-top: 7px;
     color: #64748b;
@@ -60,6 +58,26 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
     color: #0f172a;
     font-size: 13px;
     font-weight: 800;
+  }
+
+  #rolanpro-order-measurement-note {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+  }
+
+  .rolanpro-measurement-note-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    color: #1e3a8a;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .rolanpro-measurement-note-icon {
+    flex: 0 0 auto;
+    font-size: 20px;
+    line-height: 1;
   }
 
   #rolanpro-order-parameters-overlay {
@@ -480,129 +498,38 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       return selected.length ? selected : [fallback];
     };
 
-    const newOrderMaterialState = () => {
-      if (typeof state === 'undefined') return {};
-      state._newOrderMaterialsByService = state._newOrderMaterialsByService || {};
-      return state._newOrderMaterialsByService;
-    };
-
-    const servicePickerId = (serviceId, field) => 'no-film-' + serviceId.replace(/[^a-z0-9_-]/gi, '-') + '-' + field;
-
-    const syncNewOrderMaterialPicker = (serviceId, preferredId = '') => {
-      const selected = syncMaterialPicker({
-        serviceId,
-        categoryId: servicePickerId(serviceId, 'category'),
-        nameId: servicePickerId(serviceId, 'name'),
-        materialId: servicePickerId(serviceId, 'model'),
-        preferredId: preferredId || newOrderMaterialState()[serviceId] || '',
-      });
-      newOrderMaterialState()[serviceId] = selected;
-      return selected;
-    };
-
-    const refreshNewOrderMaterials = () => {
-      const container = document.getElementById('rolanpro-new-order-material-list');
-      if (!container) return;
-      container.querySelectorAll('[data-new-order-material-service]').forEach((card) => {
-        const serviceId = card.dataset.newOrderMaterialService || '';
-        const value = card.querySelector('[data-film-field="model"]')?.value || '';
-        if (serviceId && value) newOrderMaterialState()[serviceId] = value;
-      });
-
-      const serviceIds = selectedNewOrderServiceIds();
-      container.innerHTML = serviceIds.map((serviceId) => {
-        const service = serviceInfoSafe(serviceId);
-        const hasMaterials = materialsForService(serviceId).length > 0;
-        return '<div class="rolanpro-service-film-card" data-new-order-material-service="' + esc(serviceId) + '">' +
-          '<div class="rolanpro-service-film-title">' + esc(service?.icon || '') + ' ' + esc(service?.title || serviceId) + '</div>' +
-          '<div class="rolanpro-film-picker-grid">' +
-            '<div><label>Тип / серия плёнки</label><select data-film-field="category" id="' + esc(servicePickerId(serviceId, 'category')) + '"></select></div>' +
-            '<div><label>Название</label><select data-film-field="name" id="' + esc(servicePickerId(serviceId, 'name')) + '"></select></div>' +
-            '<div><label>Модель</label><select data-film-field="model" id="' + esc(servicePickerId(serviceId, 'model')) + '"></select></div>' +
-          '</div>' +
-          (hasMaterials ? '' : '<div class="rolanpro-material-note">Для этой услуги нет плёнок в каталоге.</div>') +
-        '</div>';
-      }).join('');
-      serviceIds.forEach((serviceId) => syncNewOrderMaterialPicker(serviceId));
-    };
-
-    const ensureNewOrderMaterialField = () => {
+    const ensureNewOrderMeasurementNote = () => {
       const serviceInput = document.getElementById('no-svc');
       if (!serviceInput) return;
       const modal = serviceInput.closest('.modal-content, [role="dialog"], [class*="modal"]') || serviceInput.parentElement;
       if (!modal) return;
 
-      let section = document.getElementById('rolanpro-order-material-section');
+      let section = document.getElementById('rolanpro-order-measurement-note');
       if (!section) {
         const serviceSection = serviceInput.closest('section') || serviceInput.parentElement;
         section = document.createElement('section');
-        section.id = 'rolanpro-order-material-section';
+        section.id = 'rolanpro-order-measurement-note';
         section.className = 'erp-intake-card';
         section.setAttribute('data-new-order-after-client', '');
         section.style.display = typeof state !== 'undefined' && state._newOrderClient ? '' : 'none';
         section.innerHTML =
-          '<div class="erp-intake-card-head"><div>' +
-            '<div class="erp-intake-card-title">Плёнка по каждой услуге <span class="order-required">*</span></div>' +
-          '</div></div>' +
-          '<div id="rolanpro-new-order-material-list" class="rolanpro-service-film-list"></div>';
+          '<div class="rolanpro-measurement-note-body">' +
+            '<span class="rolanpro-measurement-note-icon">📐</span>' +
+            '<div><strong>Плёнка выбирается на замере.</strong><br>' +
+            'После размеров и проверки типа стекла CRM покажет подходящие модели со склада. Выбор можно задать для помещения и отдельно для каждого окна.</div>' +
+          '</div>';
 
         if (serviceSection?.parentElement) serviceSection.insertAdjacentElement('afterend', section);
         else modal.appendChild(section);
-
-        section.addEventListener('change', (event) => {
-          const field = event.target?.dataset?.filmField || '';
-          const card = event.target?.closest?.('[data-new-order-material-service]');
-          const serviceId = card?.dataset?.newOrderMaterialService || '';
-          if (!serviceId || !field) return;
-          if (field === 'category') {
-            const nameSelect = document.getElementById(servicePickerId(serviceId, 'name'));
-            const materialSelect = document.getElementById(servicePickerId(serviceId, 'model'));
-            if (nameSelect) nameSelect.value = '';
-            if (materialSelect) materialSelect.value = '';
-            newOrderMaterialState()[serviceId] = '';
-            syncNewOrderMaterialPicker(serviceId);
-          } else if (field === 'name') {
-            const materialSelect = document.getElementById(servicePickerId(serviceId, 'model'));
-            if (materialSelect) materialSelect.value = '';
-            newOrderMaterialState()[serviceId] = '';
-            syncNewOrderMaterialPicker(serviceId);
-          } else {
-            newOrderMaterialState()[serviceId] = event.target.value || '';
-          }
-        });
       }
-
-      refreshNewOrderMaterials();
     };
 
     const installNewOrderWrappers = () => {
-      if (typeof window.selectOrderService === 'function' && !window.selectOrderService.__rolanproMaterialWrapped) {
-        const originalSelectOrderService = window.selectOrderService;
-        const wrappedSelectOrderService = function wrappedSelectOrderService(serviceId) {
-          const result = originalSelectOrderService.apply(this, arguments);
-          window.requestAnimationFrame(() => refreshNewOrderMaterials());
-          return result;
-        };
-        wrappedSelectOrderService.__rolanproMaterialWrapped = true;
-        window.selectOrderService = wrappedSelectOrderService;
-      }
-
-      if (typeof window.createOrder === 'function' && !window.createOrder.__rolanproMaterialWrapped) {
+      if (typeof window.createOrder === 'function' && !window.createOrder.__rolanproWorkflowWrapped) {
         const originalCreateOrder = window.createOrder;
         const wrappedCreateOrder = function wrappedCreateOrder() {
           const serviceIds = selectedNewOrderServiceIds();
           const complexityKey = document.getElementById('no-complexity')?.value || 'standard';
-          const chosenMaterials = {};
-          for (const serviceId of serviceIds) {
-            const availableMaterials = materialsForService(serviceId);
-            const materialId = document.getElementById(servicePickerId(serviceId, 'model'))?.value || newOrderMaterialState()[serviceId] || '';
-            const material = availableMaterials.find((item) => item.id === materialId) || null;
-            if (availableMaterials.length && !material) {
-              alert('Выберите плёнку для услуги «' + (serviceInfoSafe(serviceId)?.title || serviceId) + '»');
-              return;
-            }
-            if (material) chosenMaterials[serviceId] = material;
-          }
 
           const beforeIds = new Set((typeof db !== 'undefined' && Array.isArray(db.orders) ? db.orders : []).map((order) => order.id));
           const result = originalCreateOrder.apply(this, arguments);
@@ -611,26 +538,8 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
           const createdOrder = db.orders.find((order) => !beforeIds.has(order.id));
           if (!createdOrder) return result;
 
-          const primaryServiceId = createdOrder.serviceType || serviceIds[0] || '';
-          const material = chosenMaterials[primaryServiceId] || null;
-          const materialsByService = {};
-          Object.entries(chosenMaterials).forEach(([serviceId, item]) => {
-            materialsByService[serviceId] = materialSnapshot(item);
-          });
-          createdOrder.materialsByService = materialsByService;
-          createdOrder.materialCatalogId = material?.id || '';
-          createdOrder.materialLabel = material ? materialLabel(material) : '';
-          createdOrder.materialCategory = material ? materialCategory(material) : '';
-          createdOrder.materialName = material ? materialName(material) : '';
-          createdOrder.materialModel = material ? materialModel(material) : '';
           createdOrder.complexityCoef = complexityCoef(complexityKey);
           createdOrder.orderBuilder = createdOrder.orderBuilder || {};
-          createdOrder.orderBuilder.materialsByService = materialsByService;
-          createdOrder.orderBuilder.materialId = material?.id || '';
-          createdOrder.orderBuilder.materialLabel = material ? materialLabel(material) : '';
-          createdOrder.orderBuilder.materialCategory = material ? materialCategory(material) : '';
-          createdOrder.orderBuilder.materialName = material ? materialName(material) : '';
-          createdOrder.orderBuilder.materialModel = material ? materialModel(material) : '';
           createdOrder.orderBuilder.complexity = complexityKey;
           createdOrder.orderBuilder.complexityCoef = complexityCoef(complexityKey);
           createdOrder.timeline = Array.isArray(createdOrder.timeline) ? createdOrder.timeline : [];
@@ -638,18 +547,15 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
             at: new Date().toISOString(),
             key: 'orderParametersSet',
             by: typeof state !== 'undefined' ? state.currentUserId : null,
-            note: serviceIds.map((serviceId) => {
-              const service = serviceInfoSafe(serviceId);
-              const scopedMaterial = chosenMaterials[serviceId];
-              return (service?.title || serviceId) + ': ' + (scopedMaterial ? materialLabel(scopedMaterial) : 'Материал TBD');
-            }).join(' · ') + ' · ' + complexityLabel(complexityKey) + ' ×' + complexityCoef(complexityKey).toFixed(2),
+            note: serviceIds.map((serviceId) => serviceInfoSafe(serviceId)?.title || serviceId).join(' · ') +
+              ' · плёнка выбирается на замере · ' + complexityLabel(complexityKey) + ' ×' + complexityCoef(complexityKey).toFixed(2),
           });
 
           if (typeof save === 'function') save();
           if (typeof render === 'function') render();
           return result;
         };
-        wrappedCreateOrder.__rolanproMaterialWrapped = true;
+        wrappedCreateOrder.__rolanproWorkflowWrapped = true;
         window.createOrder = wrappedCreateOrder;
       }
     };
@@ -899,7 +805,7 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         queued = false;
         cleanupOrderIntake();
         installNewOrderWrappers();
-        ensureNewOrderMaterialField();
+        ensureNewOrderMeasurementNote();
         enhanceOrderParametersAction();
       });
     };
