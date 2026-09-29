@@ -1,7 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const sourcePath = process.argv[2] || "/Users/zufarataev/Downloads/rolanpro-backup-2026-07-31.json";
+const sourcePath = process.argv[2];
+if (!sourcePath) {
+  console.error("Usage: node scripts/build-empty-legacy-workspace.mjs <legacy-backup.json> [output.json]");
+  process.exit(1);
+}
 const outputPath = process.argv[3] || path.resolve("data/legacy-crm-empty.json");
 const source = JSON.parse(await readFile(sourcePath, "utf8"));
 

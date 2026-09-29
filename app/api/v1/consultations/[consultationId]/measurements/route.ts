@@ -67,8 +67,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError(400, "invalid_payload", "room_name is required.");
   }
 
-  const constructorInput = body.constructor === undefined ? null : parseMeasurementConstructorInput(body.constructor);
-  if (body.constructor !== undefined && !constructorInput) {
+  // `constructor` is inherited by every JSON object (Object.prototype.constructor),
+  // so presence must be checked as an own property, not `!== undefined`.
+  const constructorPayload = Object.hasOwn(body, "constructor") ? body.constructor : undefined;
+  const constructorInput =
+    constructorPayload === undefined ? null : parseMeasurementConstructorInput(constructorPayload);
+  if (constructorPayload !== undefined && !constructorInput) {
     return apiError(
       400,
       "invalid_constructor_payload",
