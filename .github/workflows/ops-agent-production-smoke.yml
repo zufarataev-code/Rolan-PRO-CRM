@@ -1,0 +1,100 @@
+name: Operations Agent production probe
+
+on:
+  push:
+    branches:
+      - ops/agent-production-smoke-20260928
+    paths:
+      - .github/workflows/ops-agent-production-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Configure SSH
+        env:
+          PRODUCTION_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          PRODUCTION_SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$PRODUCTION_SSH_KEY"
+          test -n "$PRODUCTION_SSH_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$PRODUCTION_SSH_KEY" > "$HOME/.ssh/rolanpro_production"
+          chmod 600 "$HOME/.ssh/rolanpro_production"
+          printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Probe production Operations Agent
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/rolanpro_production" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            runcloud@143.110.136.211 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          app_dir=/home/runcloud/webapps/rolanpro-crm
+          endpoint=https://rolanpro-crm.143-110-136-211.sslip.io/api/v1/agent
+          cd "$app_dir"
+
+          printf 'active_sha=%s\n' "$(head -n 1 /home/runcloud/.rolanpro-crm-active-release 2>/dev/null | cut -f 1 || true)"
+
+          for f in .env.production.local .env.production .env.local .env; do
+            if [ -f "$f" ]; then
+              echo "env_file=$f"
+              if grep -q '^CRM_OPERATIONS_AGENT_SECRET=' "$f"; then
+                echo "secret_declared_in=$f"
+              fi
+              if grep -q '^CRM_OPERATIONS_AGENT_ACTOR_' "$f"; then
+                echo "actor_override_declared_in=$f"
+              fi
+            fi
+          done
+
+          unsigned_body='{"action":"find_client","arguments":{"query":"__rolanpro_agent_unsigned_probe__"},"request_id":"ops-agent-unsigned-probe"}'
+          unsigned_status="$(curl -sS -o /tmp/ops-agent-unsigned.json -w '%{http_code}' \
+            -X POST -H 'content-type: application/json' --data "$unsigned_body" "$endpoint")"
+          printf 'unsigned_http=%s\n' "$unsigned_status"
+          node -e "const fs=require('fs'); const r=JSON.parse(fs.readFileSync('/tmp/ops-agent-unsigned.json','utf8')); console.log('unsigned_code='+(r.error?.code||'none'));"
+
+          set +u
+          for f in .env .env.local .env.production .env.production.local; do
+            if [ -f "$f" ]; then
+              set -a
+              . "./$f" >/dev/null 2>&1 || true
+              set +a
+            fi
+          done
+          set -u
+
+          if [ -z "${CRM_OPERATIONS_AGENT_SECRET:-}" ]; then
+            echo "runtime_secret=missing_from_shell_env_files"
+          elif [ "${#CRM_OPERATIONS_AGENT_SECRET}" -lt 32 ]; then
+            echo "runtime_secret=too_short"
+          else
+            echo "runtime_secret=present"
+            body='{"action":"find_client","arguments":{"query":"__rolanpro_agent_signed_probe_20260928__"},"request_id":"ops-agent-signed-probe-20260928"}'
+            ts="$(date +%s)"
+            sig="$(BODY="$body" TS="$ts" CRM_OPERATIONS_AGENT_SECRET="$CRM_OPERATIONS_AGENT_SECRET" node -e "const crypto=require('crypto'); process.stdout.write(crypto.createHmac('sha256',process.env.CRM_OPERATIONS_AGENT_SECRET).update(process.env.TS+'.'+process.env.BODY).digest('hex'))")"
+            signed_status="$(curl -sS -o /tmp/ops-agent-signed.json -w '%{http_code}' \
+              -X POST -H 'content-type: application/json' \
+              -H "x-rolan-agent-timestamp: $ts" \
+              -H "x-rolan-agent-signature: $sig" \
+              --data "$body" "$endpoint")"
+            printf 'signed_http=%s\n' "$signed_status"
+            node -e "const fs=require('fs'); const r=JSON.parse(fs.readFileSync('/tmp/ops-agent-signed.json','utf8')); console.log('signed_ok='+String(!!r.ok)); console.log('signed_code='+(r.error?.code||'none')); console.log('signed_action='+(r.action||'none')); console.log('signed_items='+(Array.isArray(r.items)?r.items.length:'n/a'));"
+          fi
+
+          if npx prisma migrate status >/tmp/ops-agent-migrate-status.txt 2>&1; then
+            echo "prisma_migrations=ok"
+          else
+            echo "prisma_migrations=problem"
+            tail -n 25 /tmp/ops-agent-migrate-status.txt | sed -E 's#(postgres(ql)?://)[^ ]+#\1[redacted]#g'
+            exit 1
+          fi
+          REMOTE
