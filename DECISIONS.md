@@ -397,6 +397,17 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Field roles do not receive vendor, inventory-cost, or purchase-request data. Phone and desktop use the same procurement records and actions, with only responsive presentation differences under the mobile parity decision.
 - Implemented on `codex/supplier-catalog-procurement` in PR #253; release state is recorded in `PROJECT_STATE.md`. Production deployment remains a separate owner-authorized action.
 
+## 2026-09-26 — Field measurement is one cloud workspace with phone and tablet presentations
+
+**Supersedes:** the standalone `measurer_v2_5.html` launch through a developer Mac `file://` path.
+
+- Every surveyor measurement entry point opens the assigned Project inside the canonical `/legacy-crm` document. A production device must never depend on a local desktop file, browser-to-browser JSON handoff, or a second copy of the Project.
+- The same role-authorized measurement data and actions are used on every device. Surveyors continue to see technical data without prices, margin, payments, payroll, or internal economics.
+- Phone is a full-screen single-column field flow with touch-sized controls and a persistent save action. Tablet is a two-column workspace with the active input sheet beside drawing, existing windows, photos, standards, and service-specific checks.
+- Address, client, Project number, and active film direction stay visible in the measurement header so measurements cannot be entered into the wrong job.
+- Historical v2.5 JSON conversion helpers may remain temporarily for old exports, but they are not a live measurement path and must not be presented as the normal surveyor workflow.
+- Implemented on `codex/surveyor-phone-tablet-measurement`; release still requires PR review and deployment from `main`.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

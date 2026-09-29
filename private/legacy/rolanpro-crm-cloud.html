@@ -2330,7 +2330,7 @@
   }
   .manager-room-focus-head {
     display: grid;
-    grid-template-columns: minmax(180px, .7fr) minmax(280px, 1.25fr) minmax(230px, .85fr) auto;
+    grid-template-columns: minmax(220px, 1fr) minmax(250px, 1fr) auto;
     gap: .7rem;
     align-items: end;
     padding: .85rem;
@@ -2350,6 +2350,36 @@
   .manager-room-film-control {
     display: grid;
     gap: .45rem;
+  }
+  .manager-room-film-disclosure {
+    margin: .75rem .85rem 0;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #f8fbff;
+    overflow: hidden;
+  }
+  .manager-room-film-disclosure > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .75rem .85rem;
+    cursor: pointer;
+    list-style: none;
+    color: #0f172a;
+    font-size: .78rem;
+    font-weight: 950;
+  }
+  .manager-room-film-disclosure > summary::-webkit-details-marker { display: none; }
+  .manager-room-film-disclosure > summary::after {
+    content: 'Изменить';
+    color: #2563eb;
+    font-size: .7rem;
+  }
+  .manager-room-film-disclosure[open] > summary::after { content: 'Свернуть'; }
+  .manager-room-film-disclosure .manager-room-film-control {
+    border-top: 1px solid #dbeafe;
+    padding: .75rem .85rem;
   }
   .manager-film-picker-grid {
     display: grid;
@@ -2376,6 +2406,9 @@
   }
   @media (max-width: 900px) {
     .manager-film-picker-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .manager-window-notes {
       grid-template-columns: minmax(0, 1fr);
     }
   }
@@ -2496,6 +2529,36 @@
   }
   .manager-window-field.wide {
     grid-column: 1 / -1;
+  }
+  .manager-window-field.readonly input {
+    background: #f8fafc;
+    color: #0f172a;
+    font-weight: 900;
+  }
+  .manager-window-technical {
+    grid-column: 1 / -1;
+    border-top: 1px solid #eef2f7;
+    padding-top: .55rem;
+  }
+  .manager-window-technical > summary {
+    cursor: pointer;
+    list-style: none;
+    color: #334155;
+    font-size: .72rem;
+    font-weight: 950;
+  }
+  .manager-window-technical > summary::-webkit-details-marker { display: none; }
+  .manager-window-notes {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .55rem;
+    align-items: end;
+  }
+  .manager-window-notes textarea {
+    width: 100%;
+    min-height: 64px;
+    resize: vertical;
   }
   .manager-room-summary {
     display: flex;
@@ -5878,6 +5941,74 @@
     .manager-measure-footer > div:first-child { margin-bottom:8px; }
     .manager-measure-footer > div:last-child { display:flex; flex-wrap:wrap; }
     .manager-measure-modal .manager-measure-footer button { min-height:44px; flex:1 1 auto; font-size:14px; padding:10px; }
+  }
+
+  /* The surveyor uses one cloud workspace with two deliberate field layouts.
+     Tablet keeps the input sheet visible beside project context; phone becomes
+     a full-screen, single-column task with large controls and a sticky save. */
+  .measure-device-mode { display:none; background:#eef2ff; color:#3730a3; border-color:#c7d2fe; }
+  @media (min-width:769px) and (max-width:1180px) {
+    .measurement-studio-backdrop { padding:10px; }
+    .modal-content.measure-modal {
+      width:100%; max-width:none; height:calc(100dvh - 20px); max-height:calc(100dvh - 20px);
+      border-radius:16px;
+    }
+    .measure-modal .measure-studio {
+      grid-template-columns:minmax(0,1.45fr) minmax(300px,.85fr);
+      max-height:calc(100dvh - 104px);
+      gap:12px; padding:12px;
+    }
+    .measure-workbench { grid-column:1; grid-row:1 / span 2; }
+    .measure-context { grid-column:2; grid-row:1; min-width:0; }
+    .measure-checklist { grid-column:2; grid-row:2; min-width:0; }
+    .measure-device-tablet { display:inline-flex; }
+    .measure-preview { min-height:230px; }
+    .measure-type-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  }
+  @media (max-width:768px) {
+    .modal-backdrop.measurement-studio-backdrop { padding:0; align-items:stretch; }
+    .modal-content.measure-modal {
+      width:100%; max-width:none; height:100dvh; max-height:100dvh;
+      border-radius:0; overflow:hidden;
+    }
+    .measure-modal .measure-head {
+      position:sticky; top:0; z-index:5; display:grid; grid-template-columns:minmax(0,1fr);
+      align-items:start; gap:8px; padding:calc(8px + env(safe-area-inset-top)) 56px 8px 12px;
+    }
+    .measure-head h3 { font-size:17px; line-height:1.2; overflow-wrap:anywhere; }
+    .measure-head p { font-size:11px; line-height:1.35; overflow-wrap:anywhere; }
+    .measure-head-actions { width:auto; justify-content:flex-start; align-items:center; }
+    .measure-head-actions > .btn-ghost:not(:last-child),
+    .measure-head-actions > .btn-primary { min-height:40px; padding:7px 9px; font-size:12px; }
+    .measure-head-actions > .btn-ghost:last-child {
+      position:absolute; top:calc(8px + env(safe-area-inset-top)); right:8px;
+      min-width:44px; width:44px; min-height:44px; padding:0; font-size:0;
+    }
+    .measure-head-actions > .btn-ghost:last-child::after { content:'✕'; font-size:18px; }
+    .measure-device-phone { display:inline-flex; }
+    #ms-mode-pill { display:none; }
+    .measure-modal .measure-studio {
+      display:grid; grid-template-columns:minmax(0,1fr); gap:10px; padding:10px 10px calc(18px + env(safe-area-inset-bottom));
+      max-height:calc(100dvh - 92px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain;
+      -webkit-overflow-scrolling:touch; scroll-padding-block:12px;
+    }
+    .measure-workbench, .measure-context, .measure-checklist { grid-column:auto; grid-row:auto; min-width:0; }
+    .measure-panel { padding:12px; border-radius:12px; box-shadow:none; }
+    .measure-step { gap:8px; }
+    .measure-step-sub { font-size:12px; }
+    .measure-panel input, .measure-panel select, .measure-panel textarea,
+    .measure-panel button { min-height:44px; max-width:100%; font-size:16px; scroll-margin-block:12px; }
+    .measure-two-col, .measure-three-col, .measure-action-row { grid-template-columns:minmax(0,1fr); }
+    .measure-scope-grid, .measure-type-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .measure-scope-btn { min-height:76px; padding:9px; }
+    .measure-scope-desc { display:none; }
+    .measure-type-card { min-height:76px; }
+    .measure-preview { min-height:220px; }
+    .measure-panel-table { min-width:520px; }
+    .measure-sticky-actions {
+      bottom:-12px; margin:10px -12px -12px; padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+    }
+    .measure-sticky-actions .flex { display:grid; grid-template-columns:minmax(0,1fr); }
   }
 
 </style>
@@ -10027,13 +10158,8 @@ function measureMmToInput(mm) {
   return db.settings.inputUnits === 'inches' ? Number(mm_to_inches(mm || 0).toFixed(2)) : Math.round(mm || 0);
 }
 
-// Bridge to the standalone tablet measurer module. The CRM keeps the order,
-// catalog, inventory, proposal and finance; measurer_v2_5.html is the field UI.
-const MEASURER_V25_PATH = '/Users/zufarataev/Desktop/CRM/Модуль замера /measurer_v2_5.html';
-function measurerV25Url(oid = '') {
-  const hash = oid ? `#crmOrder=${encodeURIComponent(oid)}` : '';
-  return `file://${encodeURI(MEASURER_V25_PATH)}${hash}`;
-}
+// Compatibility helpers for historical v2.5 JSON exports. New field work is
+// performed inside the cloud CRM so the same order is available on every device.
 function measurerV25FilmFromScope(scopeKey = '') {
   const key = measureScopeInfo(scopeKey).key;
   if (key === 'smart_film') return 'smart';
@@ -10194,21 +10320,9 @@ function measurerV25SeedFromOrder(oid) {
   };
 }
 function openMeasurerV25ForOrder(oid) {
-  const payload = measurerV25SeedFromOrder(oid);
-  if (!payload) return;
-  try {
-    localStorage.setItem('rolanpro_measurer_v25_payload', JSON.stringify(payload));
-    localStorage.setItem('rolanpro_measurer_v25_order_id', oid);
-  } catch (e) {
-    console.warn('Measurer v2.5 payload was not saved', e);
-  }
   const o = getOrder(oid);
-  if (o) {
-    o.timeline = o.timeline || [];
-    o.timeline.push({ at: new Date().toISOString(), key: 'measurement_v25_opened', by: state.currentUserId, note: 'Открыт полевой модуль замера v2.5' });
-    save();
-  }
-  window.open(measurerV25Url(oid), '_blank');
+  if (!o) return;
+  openEngineeringMeasureStudio(oid);
 }
 function openMeasurerV25Import(oid) {
   const o = getOrder(oid);
@@ -10869,15 +10983,17 @@ function openEngineeringMeasureStudio(orderId) {
   const isSmart = scopeKey === 'smart_film' || orderIsSmart(order);
   const smartTemplate = smartConnectionTemplateInfo(smart.connectionTemplate || smart.template || 'retrofit_local_block');
   state.modal = `
-    <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
-      <div class="modal-content measure-modal">
+    <div class="modal-backdrop measurement-studio-backdrop" onclick="if(event.target===this) closeModal()">
+      <div class="modal-content measure-modal" role="dialog" aria-modal="true" aria-label="Полевой замер ${academyEsc(order.number)}">
         <div class="measure-head">
           <div>
-            <div class="text-xs font-bold" style="color:${scope.accent}">Engineering Measurement Studio</div>
-            <h3 class="text-xl font-black">Инженерный замер · ${academyEsc(order.number)}</h3>
-            <p id="ms-scope-title-line" class="text-sm text-gray-600 mt-1">${academyEsc(client.name || 'Клиент')} · ${academyEsc(scope.title)} · ${academyEsc(orderServiceTypeLabel(order.serviceType))}</p>
+            <div class="text-xs font-bold" style="color:${scope.accent}">ПОЛЕВОЙ ЗАМЕР</div>
+            <h3 class="text-xl font-black">${academyEsc(order.number)} · ${academyEsc(client.name || 'Клиент')}</h3>
+            <p id="ms-scope-title-line" class="text-sm text-gray-600 mt-1">${academyEsc(orderAddress(order, client) || 'Адрес не указан')} · ${academyEsc(scope.title)}</p>
           </div>
           <div class="measure-head-actions">
+            <span class="tag measure-device-mode measure-device-tablet">Планшет</span>
+            <span class="tag measure-device-mode measure-device-phone">Телефон</span>
             <span id="ms-mode-pill" class="tag" style="background:${scope.accent}14;border-color:${scope.accent}44;color:${scope.accent}">${academyEsc(scope.short)} режим</span>
             <button class="btn-ghost" onclick="openWorkOrder('${order.id}')">Заказ-наряд</button>
             ${canManage ? `<button class="btn-primary bg-slate-900 hover:bg-slate-800" onclick="generatePremiumProposal('${order.id}')">✦ КП</button>` : ''}
@@ -10885,7 +11001,7 @@ function openEngineeringMeasureStudio(orderId) {
           </div>
         </div>
         <div class="measure-studio">
-          <section class="measure-panel">
+          <section class="measure-panel measure-workbench">
             <div class="measure-step">
               <span class="measure-step-no">1</span>
               <div class="min-w-0 flex-1">
@@ -11017,7 +11133,7 @@ function openEngineeringMeasureStudio(orderId) {
             </div>
           </section>
 
-          <section class="space-y-3">
+          <section class="space-y-3 measure-context">
             <div class="measure-panel">
               <div class="flex items-center justify-between gap-2 mb-2">
                 <h4 class="mb-0">Чертёж и расчёт</h4>
@@ -11044,7 +11160,7 @@ function openEngineeringMeasureStudio(orderId) {
             </div>
           </section>
 
-          <section class="space-y-3">
+          <section class="space-y-3 measure-checklist">
             ${measureStudioStandardsHtml(scopeKey)}
             <div class="measure-panel">
               <h4>Фото и тип стекла</h4>
@@ -16023,7 +16139,7 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'new') return { icon: '📞', title: 'Назначить консультацию', sub: 'Событие попадёт в календарь, клиент получит время по SMS/email.', variant: 'primary', onclick: `scheduleConsultationPrompt('${o.id}')` };
   if (o.status === 'consultation_scheduled') return { icon: '📐', title: 'Назначить замер', sub: 'Выберите замерщика и точное время выезда.', variant: 'primary', onclick: `scheduleMeasurementPrompt('${o.id}')` };
   if (o.status === 'measurement_scheduled') return o.measurerId
-    ? { icon: '🧭', title: 'Контроль замера', sub: 'Замерщик видит заказ без денег. Основной модуль замера v2.5.', variant: 'soft', onclick: `openMeasurerV25ForOrder('${o.id}')` }
+    ? { icon: '🧭', title: 'Контроль замера', sub: 'Замерщик видит заказ без денег. Замер работает в CRM на телефоне и планшете.', variant: 'soft', onclick: `openMeasurerV25ForOrder('${o.id}')` }
     : { icon: '👷', title: 'Назначить замерщика', sub: 'Без ответственного замерщик не увидит задачу в своём кабинете.', variant: 'warning', onclick: `openAssignTeam('${o.id}')` };
   if (o.status === 'measurement_done' && !projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: orderUserCanSeeInternalEconomics(o, currentUser()) ? 'Проверьте цену, расходы и маржу до формирования КП.' : 'Проверьте размеры, услуги и цену клиенту до формирования КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
   if (o.status === 'measurement_done') return { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
@@ -21200,7 +21316,7 @@ function renderMeasurerList(tasks) {
         </div>
         <div class="mt-3 flex gap-2 flex-wrap">
           ${scheduled && !accepted ? `<button class="btn-primary bg-emerald-600 hover:bg-emerald-700" onclick="acceptMeasurementTask('${o.id}', true)">✓ Принять</button>` : ''}
-          <button class="btn-primary flex-1" onclick="openMeasurerV25ForOrder('${o.id}')">📐 Модуль замера v2.5</button>
+          <button class="btn-primary flex-1" onclick="openMeasurerV25ForOrder('${o.id}')">📐 Открыть замер</button>
           <button class="btn-ghost" onclick="openOrder('${o.id}')">Карточка</button>
           <button class="btn-ghost" onclick="startCall('${c.phone}','${c.id}','${o.id}')">📞</button>
           <a class="btn-ghost" href="${whatsappLink(c.phone, 'Здравствуйте, я замерщик RolanPRO, еду к вам на замер.')}" target="_blank">💬</a>
@@ -22858,8 +22974,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать наряд', sub: 'рабочий лист и подписи', onclick: `printWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
       ` : `
       ${renderOrderActionCard({ icon: '📐', title: measureActionTitle, sub: hasMeasurements ? `${rooms.length} комн. · ${windows.length} окон` : 'добавить комнаты и окна', onclick: measureAction, variant: 'primary' })}
-      ${renderOrderActionCard({ icon: '🧭', title: 'Полевой модуль v2.5', sub: 'планшет: комнаты, окна, компас, фото, JSON', onclick: `openMeasurerV25ForOrder('${o.id}')`, variant: canMeasure ? 'primary' : 'soft' })}
-      ${renderOrderActionCard({ icon: '⬆️', title: 'Импорт JSON v2.5', sub: 'забрать выездной замер в CRM', onclick: `openMeasurerV25Import('${o.id}')`, disabled: !canManage })}
+      ${renderOrderActionCard({ icon: '🧭', title: 'Полевой замер', sub: 'телефон и планшет: комнаты, окна, компас и фото', onclick: `openMeasurerV25ForOrder('${o.id}')`, variant: canMeasure ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
       ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.consumedSqft.toFixed(1)} sqft расход` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
       ${renderOrderActionCard({ icon: '🖨', title: 'Печать наряда', sub: 'рабочий лист', onclick: `printWorkOrder('${o.id}')` })}
@@ -23119,7 +23234,7 @@ function renderOrderDetails(id) {
           ${(canMeasure || canManage) ? `<div class="flex gap-2 flex-wrap">
             ${canMeasure && !o.measurementAcceptedAt && o.status === 'measurement_scheduled' ? `<button class="btn-primary text-sm bg-emerald-600 hover:bg-emerald-700" onclick="acceptMeasurementTask('${o.id}', true)">✓ Принять замер</button>` : ''}
             ${canManage ? `<button class="btn-primary text-sm" onclick="openManagerMeasureModal('${o.id}')">➕ Замеры по объекту</button>` : ''}
-            ${canMeasure ? `<button class="btn-primary text-sm bg-slate-900 hover:bg-slate-800" onclick="openMeasurerV25ForOrder('${o.id}')">🧭 Модуль замерщика v2.5</button>` : ''}
+            ${canMeasure ? `<button class="btn-primary text-sm bg-slate-900 hover:bg-slate-800" onclick="openMeasurerV25ForOrder('${o.id}')">🧭 Полевой замер</button>` : ''}
             <button class="btn-ghost text-sm" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button>
             ${canManage ? `<button class="btn-ghost text-sm" onclick="openWindowTemplateModal('${o.id}')">📋 Шаблон раскладки</button>` : ''}
             ${canManage ? `<button class="btn-primary text-sm" onclick="addRoom('${o.id}')">+ ${T('addRoom')}</button>` : ''}
@@ -23874,6 +23989,15 @@ function managerOrientationOptionsHtml(selected = '') {
     `<option value="${academyEsc(o.value)}" ${selected === o.value ? 'selected' : ''}>${academyEsc(o.label)}</option>`
   ).join('');
 }
+function managerFilmDirectionOptionsHtml(selected = '') {
+  const options = [
+    { value: '', label: 'Не указано' },
+    { value: 'vertical', label: 'Вертикально' },
+    { value: 'horizontal', label: 'Горизонтально' },
+    { value: 'either', label: 'Без разницы' },
+  ];
+  return options.map(item => `<option value="${item.value}" ${selected === item.value ? 'selected' : ''}>${item.label}</option>`).join('');
+}
 function managerGlassTypeOptionsHtml(selected = '') {
   const values = MEASURE_GLASS_TYPES.includes(selected)
     ? MEASURE_GLASS_TYPES
@@ -24086,6 +24210,8 @@ function managerWindowDefaults(o, room, opts = {}) {
     isSkylight: objectKind === 'skylight',
     glassType: '',
     orientation: '',
+    filmDirection: '',
+    internalNotes: '',
     filmType: cat ? `${cat.brand} — ${cat.model}` : '',
     catalogId: cat?.id || null,
     side: scopeKey === 'solar_film' ? '' : 'in',
@@ -24505,10 +24631,6 @@ function renderManagerMeasureModal(oid) {
                     <label class="text-xs">${academyEsc(roomTerms.name)}</label>
                     <input id="mm-room-name-${r.id}" value="${academyEsc(r.name || '')}" onchange="managerUpdateRoomName('${oid}','${r.id}',this.value)">
                   </div>
-                  <div class="manager-room-film-control">
-                    <label class="text-xs font-black">Плёнка для помещения · ${academyEsc(scope.short)}</label>
-                    ${managerRoomFilmPickerHtml(oid, r, selectedRoomCatalog, preferredCategory)}
-                  </div>
                   <label class="manager-removal-check ${allRoomRemoval || someRoomRemoval ? 'active' : ''}">
                     <input type="checkbox" ${allRoomRemoval ? 'checked' : ''} ${serviceWindows.length ? '' : 'disabled'} onchange="managerSetRoomRemoval('${oid}','${r.id}','${activeScopeKey}',this.checked)">
                     <span>Удаление плёнки со всех окон</span>
@@ -24516,6 +24638,13 @@ function renderManagerMeasureModal(oid) {
                   </label>
                   <button class="btn-ghost text-sm text-red-600" onclick="managerDeleteRoom('${oid}','${r.id}')">${academyEsc(roomTerms.deleteLabel)}</button>
                 </div>
+
+                <details class="manager-room-film-disclosure" ${selectedRoomCatalog ? '' : 'open'}>
+                  <summary><span>🎞 Плёнка и склад · ${academyEsc(scope.short)}</span><span>${roomCatalog ? academyEsc(`${catalogFilmCategory(roomCatalog)} · ${roomCatalog.brand} · ${catalogFilmName(roomCatalog)} ${catalogFilmModel(roomCatalog)}`.trim()) : 'не выбрана'}</span></summary>
+                  <div class="manager-room-film-control">
+                    ${managerRoomFilmPickerHtml(oid, r, selectedRoomCatalog, preferredCategory)}
+                  </div>
+                </details>
 
                 ${managerRoomAddChooserHtml(oid, r, roomScopeKey)}
 
@@ -24532,16 +24661,28 @@ function renderManagerMeasureModal(oid) {
                         </div>
                         <div class="manager-window-card-area">${windowActualAreaSqft(w).toFixed(2)} sqft</div>
                         <button class="btn-ghost text-xs ${windowMeasurementIsVerified(w) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}" aria-pressed="${windowMeasurementIsVerified(w) ? 'true' : 'false'}" onclick="managerConfirmWindowMeasurement('${oid}','${r.id}','${w.id}')">${windowMeasurementIsVerified(w) ? '✓ Точные размеры' : 'От клиента · подтвердить точные'}</button>
-                        <label class="manager-window-removal-check ${windowRemovalRequired(w) ? 'active' : ''}"><input type="checkbox" ${windowRemovalRequired(w) ? 'checked' : ''} onchange="managerSetWindowRemoval('${oid}','${r.id}','${w.id}',this.checked)"><span>Удаление плёнки${windowRemovalRequired(w) ? ` · ${windowActualAreaSqft(w).toFixed(2)} sqft` : ''}</span></label>
                         <button class="btn-ghost text-red-600 text-xs" aria-label="Удалить элемент" onclick="managerDeleteWin('${oid}','${r.id}','${w.id}')">Удалить окно</button>
                       </div>
                       <div class="manager-window-card-body">
                         <div>${managerWindowTypeCompactHtml(oid, r.id, w, scopeKey)}</div>
                         <div class="manager-window-fields">
+                          <div class="manager-window-field"><label>Направление плёнки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','filmDirection',this.value)">${managerFilmDirectionOptionsHtml(w.filmDirection || '')}</select></div>
+                          <div class="manager-window-field"><label>Количество панелей</label><input id="mm-qty-${w.id}" aria-label="Количество панелей" type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></div>
                           <div class="manager-window-field"><label>Ширина (${inUnits ? 'in' : 'мм'})</label><input id="mm-width-${w.id}" aria-label="Ширина" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.width || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></div>
                           <div class="manager-window-field"><label>Высота (${inUnits ? 'in' : 'мм'})</label><input id="mm-height-${w.id}" aria-label="Высота" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.height || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></div>
-                          <div class="manager-window-field"><label>Количество</label><input id="mm-qty-${w.id}" aria-label="Количество" type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></div>
-                          ${needsSolar ? `<div class="manager-window-field"><label>Сторона фасада</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','orientation',this.value)">${managerOrientationOptionsHtml(w.orientation || '')}</select></div><div class="manager-window-field"><label>Сторона установки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','side',this.value)"><option value="">Выберите</option><option value="in" ${w.side==='in'?'selected':''}>Изнутри</option><option value="out" ${w.side==='out'?'selected':''}>Снаружи</option></select></div><div class="manager-window-field"><label>Доступ / высота</label><select onchange="managerSetSolarAccess('${oid}','${r.id}','${w.id}',this.value)">${managerSolarAccessOptionsHtml(w.access || '')}</select></div><div class="manager-window-field wide"><label>Тип стекла</label>${managerGlassChipHtml(oid, r.id, w)}${managerSolarRiskHtml(w)}</div>` : ''}
+                          <div class="manager-window-field readonly"><label>Площадь, sqft</label><input aria-label="Площадь" value="${windowActualAreaSqft(w).toFixed(2)}" readonly></div>
+                          <details class="manager-window-technical">
+                            <summary>Стекло, доступ и технические характеристики${windowRemovalRequired(w) ? ' · требуется демонтаж' : ''}</summary>
+                            <div class="manager-window-fields mt-3">
+                              ${needsSolar ? `<div class="manager-window-field"><label>Сторона фасада</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','orientation',this.value)">${managerOrientationOptionsHtml(w.orientation || '')}</select></div><div class="manager-window-field"><label>Сторона установки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','side',this.value)"><option value="">Выберите</option><option value="in" ${w.side==='in'?'selected':''}>Изнутри</option><option value="out" ${w.side==='out'?'selected':''}>Снаружи</option></select></div><div class="manager-window-field"><label>Доступ / высота</label><select onchange="managerSetSolarAccess('${oid}','${r.id}','${w.id}',this.value)">${managerSolarAccessOptionsHtml(w.access || '')}</select></div>` : ''}
+                              <div class="manager-window-field wide"><label>Тип и прочность стекла</label>${managerGlassChipHtml(oid, r.id, w)}${needsSolar ? managerSolarRiskHtml(w) : ''}</div>
+                              <label class="manager-window-removal-check ${windowRemovalRequired(w) ? 'active' : ''}"><input type="checkbox" ${windowRemovalRequired(w) ? 'checked' : ''} onchange="managerSetWindowRemoval('${oid}','${r.id}','${w.id}',this.checked)"><span>Требуется демонтаж старой плёнки${windowRemovalRequired(w) ? ` · ${windowActualAreaSqft(w).toFixed(2)} sqft` : ''}</span></label>
+                            </div>
+                          </details>
+                          <div class="manager-window-notes">
+                            <div class="manager-window-field"><label>Внутренние примечания</label><textarea aria-label="Внутренние примечания" placeholder="Особенности стекла, доступа или монтажа" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','internalNotes',this.value)">${academyEsc(w.internalNotes || w.notes || '')}</textarea></div>
+                            <button type="button" class="btn-ghost" onclick="addWindowMeasurementPhoto('${oid}','${r.id}','${w.id}')">📷 Фото ${managerWindowPhotoCount(o, r.id, w.id) ? `(${managerWindowPhotoCount(o, r.id, w.id)})` : ''}</button>
+                          </div>
                         </div>
                       </div>
                       ${scopeKey === 'smart_film' ? managerSmartWindowFieldsHtml(oid, r, w) : ''}
@@ -27192,6 +27333,41 @@ function renderGlobalSearch() {
 }
 
 // ---------- PHOTO UPLOADS ----------
+function managerWindowPhotoCount(order, roomId, windowId) {
+  return (order?.photos || []).filter(photo => photo.roomId === roomId && photo.windowId === windowId).length;
+}
+function addWindowMeasurementPhoto(oid, roomId, windowId) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.multiple = true;
+  inp.onchange = async () => {
+    const o = getOrder(oid);
+    if (!o) return;
+    o.photos = o.photos || [];
+    for (const file of Array.from(inp.files || [])) {
+      if (file.size > 2 * 1024 * 1024) { alert(T('photoSize') + ': ' + file.name); continue; }
+      const dataUrl = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+      o.photos.push({
+        id: uid(),
+        name: file.name,
+        category: 'measurement',
+        roomId,
+        windowId,
+        dataUrl,
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: state.currentUserId,
+      });
+    }
+    save();
+    refreshManagerMeasureModal(oid);
+  };
+  inp.click();
+}
 function addOrderPhoto(oid) {
   const cat = state.photoCategory || 'measurement';
   const inp = document.createElement('input');
