@@ -2347,6 +2347,38 @@
   .manager-room-film-control select {
     margin-top: .25rem;
   }
+  .manager-room-film-control {
+    display: grid;
+    gap: .45rem;
+  }
+  .manager-film-picker-grid {
+    display: grid;
+    grid-template-columns: minmax(130px, .8fr) minmax(130px, .8fr) minmax(180px, 1.4fr);
+    gap: .45rem;
+  }
+  .manager-film-picker-grid label {
+    color: #64748b;
+    font-size: .64rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+  .manager-film-picker-grid select {
+    width: 100%;
+    min-height: 40px;
+  }
+  .manager-film-picker-help {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    color: #64748b;
+    font-size: .68rem;
+  }
+  @media (max-width: 900px) {
+    .manager-film-picker-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
   .manager-removal-check {
     min-height: 62px;
     display: grid;
@@ -23797,8 +23829,7 @@ function defaultCatalogIdForOrder(o) {
   const scoped = o?.materialsByService?.[activeScope] || o?.orderBuilder?.materialsByService?.[activeScope];
   if (scoped?.catalogId && db.settings.catalog.some(c => c.id === scoped.catalogId && catalogMatchesCategory(c, scope.catalogCategory))) return scoped.catalogId;
   if (o?.materialCatalogId && db.settings.catalog.some(c => c.id === o.materialCatalogId && catalogMatchesCategory(c, scope.catalogCategory))) return o.materialCatalogId;
-  const preferred = db.settings.catalog.find(c => catalogCanBeSelected(c) && catalogMatchesCategory(c, scope.catalogCategory));
-  return preferred?.id || '';
+  return '';
 }
 function managerRoomCatalogId(room, scopeKey = '') {
   const relevant = scopeKey ? (room?.windows || []).filter(w => (w.measureScope || measureScopeByCatalog(windowCatalog(w))) === scopeKey) : (room?.windows || []);
@@ -23857,15 +23888,63 @@ function measureGlassCardInfo(value = '') {
     || (normalized ? { value: normalized, icon: '◇', title: normalized, sub: 'custom', risk: 'Проверить' }
       : { value: '', icon: '➕', title: 'Выбрать', sub: 'тип стекла', risk: 'нужно' });
 }
+const MANAGER_GLASS_CONSTRUCTIONS = [
+  { id: 'unknown', label: 'Неизвестно / проверить', legacy: 'Unknown / verify on site' },
+  { id: 'single_pane', label: 'Одинарное стекло', legacy: 'Single pane' },
+  { id: 'double_pane_igu', label: 'Двойной стеклопакет / IGU', legacy: 'Double pane / IGU' },
+  { id: 'triple_pane_igu', label: 'Тройной стеклопакет / IGU', legacy: 'Triple pane / IGU' },
+];
+const MANAGER_GLASS_TREATMENTS = [
+  { id: 'unknown', label: 'Неизвестно / проверить', legacy: '' },
+  { id: 'annealed', label: 'Обычное / annealed', legacy: '' },
+  { id: 'heat_strengthened', label: 'Термоупрочнённое', legacy: 'Heat-strengthened glass' },
+  { id: 'tempered', label: 'Закалённое / tempered', legacy: 'Tempered glass' },
+  { id: 'laminated', label: 'Ламинированное', legacy: 'Laminated glass' },
+  { id: 'wired', label: 'Армированное', legacy: 'Wired glass' },
+];
+function managerGlassProfile(win = {}) {
+  const legacy = String(win.glassType || '');
+  let construction = win.glassConstruction || '';
+  let treatment = win.glassTreatment || '';
+  if (!construction) {
+    if (/triple pane/i.test(legacy)) construction = 'triple_pane_igu';
+    else if (/double pane|IGU/i.test(legacy)) construction = 'double_pane_igu';
+    else if (/single pane/i.test(legacy)) construction = 'single_pane';
+    else construction = 'unknown';
+  }
+  if (!treatment) {
+    if (/tempered/i.test(legacy)) treatment = 'tempered';
+    else if (/laminated/i.test(legacy)) treatment = 'laminated';
+    else if (/wired/i.test(legacy)) treatment = 'wired';
+    else if (/heat.strengthened/i.test(legacy)) treatment = 'heat_strengthened';
+    else treatment = 'unknown';
+  }
+  return {
+    construction,
+    treatment,
+    lowE: win.glassLowE ?? /Low-E/i.test(legacy),
+    tinted: win.glassTinted ?? /Tinted/i.test(legacy),
+  };
+}
+function managerGlassProfileLabel(profile = {}) {
+  const construction = MANAGER_GLASS_CONSTRUCTIONS.find(item => item.id === profile.construction);
+  const treatment = MANAGER_GLASS_TREATMENTS.find(item => item.id === profile.treatment);
+  const parts = [construction?.legacy || 'Unknown / verify on site'];
+  if (treatment?.legacy) parts.push(treatment.legacy);
+  if (profile.lowE) parts.push('Low-E glass');
+  if (profile.tinted) parts.push('Tinted glass');
+  return parts.join(' · ');
+}
 function managerGlassChipHtml(oid, rid, w) {
+  const profile = managerGlassProfile(w);
   const info = measureGlassCardInfo(w.glassType || '');
   const empty = !w.glassType;
   return `
     <button type="button" class="manager-glass-chip ${empty ? 'empty' : ''}" onclick="openManagerGlassTypeModal('${oid}','${rid}','${w.id}')">
       <span class="manager-glass-icon">${info.icon}</span>
       <span>
-        <span class="manager-glass-name">${academyEsc(info.title)}</span>
-        <span class="manager-glass-sub">${academyEsc(info.sub)}</span>
+        <span class="manager-glass-name">${academyEsc(MANAGER_GLASS_CONSTRUCTIONS.find(item => item.id === profile.construction)?.label || info.title)}</span>
+        <span class="manager-glass-sub">${academyEsc([MANAGER_GLASS_TREATMENTS.find(item => item.id === profile.treatment)?.label, profile.lowE ? 'Low-E' : '', profile.tinted ? 'Tinted' : ''].filter(Boolean).join(' · ') || info.sub)}</span>
       </span>
     </button>`;
 }
@@ -23879,24 +23958,46 @@ function openManagerGlassTypeModal(oid, rid, wid) {
     <div class="modal-content workspace-modal p-6" style="max-width: 44rem;" onclick="event.stopPropagation()">
       <div class="flex items-start justify-between gap-3 mb-4">
         <div>
-          <div class="text-xs font-black text-blue-700 uppercase">Glass type</div>
-          <h3 class="font-black text-xl">Выберите тип стекла</h3>
-          <div class="text-sm text-gray-500 mt-1">${academyEsc(r.name || '')} · ${academyEsc(w.name || '')}. Это влияет на рекомендации пленки и риск термошока.</div>
+          <div class="text-xs font-black text-blue-700 uppercase">Glass profile</div>
+          <h3 class="font-black text-xl">Параметры стекла</h3>
+          <div class="text-sm text-gray-500 mt-1">${academyEsc(r.name || '')} · ${academyEsc(w.name || '')}. Конструкция, прочность и Low-E указываются отдельно — это влияет на совместимость плёнки.</div>
         </div>
         <button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Назад</button>
       </div>
-      <div class="manager-glass-picker-grid">
-        ${MEASURE_GLASS_CARDS.map(card => `
-          <button type="button" class="manager-glass-card ${w.glassType === card.value ? 'active' : ''}" onclick="managerSetGlassType('${oid}','${rid}','${wid}','${academyEsc(card.value)}')">
-            <span class="manager-glass-icon">${card.icon}</span>
-            <span class="manager-glass-name">${academyEsc(card.title)}</span>
-            <span class="manager-glass-sub">${academyEsc(card.sub)}</span>
-            <span class="manager-solar-risk ${/Low-E|Tinted|Wired|Unknown|Double/i.test(card.value) ? 'warning' : 'ok'}">${academyEsc(card.risk)}</span>
-          </button>`).join('')}
+      ${(() => { const profile = managerGlassProfile(w); return `<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label>Конструкция стекла<select id="mg-construction">${MANAGER_GLASS_CONSTRUCTIONS.map(item => `<option value="${item.id}" ${profile.construction === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></label>
+        <label>Прочность / обработка<select id="mg-treatment">${MANAGER_GLASS_TREATMENTS.map(item => `<option value="${item.id}" ${profile.treatment === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></label>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <label class="flex items-center gap-2 rounded-lg border p-3"><input id="mg-low-e" type="checkbox" ${profile.lowE ? 'checked' : ''} style="width:18px;height:18px"><span><b>Low-E покрытие</b><br><span class="text-xs text-gray-500">Проверить сторону покрытия</span></span></label>
+        <label class="flex items-center gap-2 rounded-lg border p-3"><input id="mg-tinted" type="checkbox" ${profile.tinted ? 'checked' : ''} style="width:18px;height:18px"><span><b>Стекло уже тонированное</b><br><span class="text-xs text-gray-500">Повышенный риск нагрева</span></span></label>
+      </div>`; })()}
+      <div class="flex justify-end gap-2 mt-5">
+        <button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Отмена</button>
+        <button class="btn-primary" onclick="saveManagerGlassProfile('${oid}','${rid}','${wid}')">Сохранить параметры стекла</button>
       </div>
     </div>
   </div>`;
   render();
+}
+function saveManagerGlassProfile(oid, rid, wid) {
+  const o = getOrder(oid);
+  const w = o?.measurements?.rooms?.find(x => x.id === rid)?.windows?.find(x => x.id === wid);
+  if (!o || !w) return;
+  const profile = {
+    construction: document.getElementById('mg-construction')?.value || 'unknown',
+    treatment: document.getElementById('mg-treatment')?.value || 'unknown',
+    lowE: Boolean(document.getElementById('mg-low-e')?.checked),
+    tinted: Boolean(document.getElementById('mg-tinted')?.checked),
+  };
+  w.glassConstruction = profile.construction;
+  w.glassTreatment = profile.treatment;
+  w.glassLowE = profile.lowE;
+  w.glassTinted = profile.tinted;
+  w.glassType = managerGlassProfileLabel(profile);
+  invalidateProjectEstimate(o, 'Изменены параметры стекла');
+  save();
+  refreshManagerMeasureModal(oid);
 }
 function managerSetGlassType(oid, rid, wid, glassType) {
   const o = getOrder(oid);
@@ -23966,7 +24067,7 @@ function managerSolarFieldsHtml(oid, rid, w) {
 }
 function managerWindowDefaults(o, room, opts = {}) {
   const requestedScope = opts.scopeKey || managerActiveMeasureScope(o);
-  const catalogId = opts.catalogId || room?.defaultCatalogByScope?.[requestedScope] || managerRoomCatalogId(room, requestedScope) || db.settings.catalog.find(c => catalogCanBeSelected(c) && catalogMatchesCategory(c, measureScopeInfo(requestedScope).catalogCategory))?.id || '';
+  const catalogId = opts.catalogId || room?.defaultCatalogByScope?.[requestedScope] || managerRoomCatalogId(room, requestedScope) || '';
   const cat = getCatalogItem(catalogId);
   const scopeKey = cat ? measureScopeByCatalog(cat) : requestedScope;
   const objectKind = opts.objectKind || managerRoomAddKindValue(room?.id || '') || 'window';
@@ -24265,23 +24366,66 @@ function managerSmartWindowFieldsHtml(oid, room, win) {
     <div class="text-xs text-blue-700 mt-2">CRM сформирует в заказ-наряде: ${zones.map(zone => academyEsc(zone.name)).join(' · ')} · панели · блок питания · силикон · схему подключения.</div>
   </details>`;
 }
-function managerScopedCatalogOptionsHtml(selectedId = '', category = '') {
-  const items = db.settings.catalog
+function managerWarehouseFilmItems(selectedId = '', category = '') {
+  const ranked = db.settings.catalog
     .filter(c => catalogCanBeSelected(c, selectedId) && (catalogMatchesCategory(c, category) || c.id === selectedId))
+    .filter(c => c.id === selectedId || catalogHasWarehouseStock(c.id))
     .sort((a, b) => {
       if (a.id === selectedId) return -1;
       if (b.id === selectedId) return 1;
-      const aStock = catalogHasWarehouseStock(a.id) ? 1 : 0;
-      const bStock = catalogHasWarehouseStock(b.id) ? 1 : 0;
-      if (aStock !== bStock) return bStock - aStock;
-      return `${a.brand} ${catalogLabel(a)}`.localeCompare(`${b.brand} ${catalogLabel(b)}`);
+      return `${catalogFilmCategory(a)} ${a.brand} ${catalogFilmName(a)} ${catalogFilmModel(a)}`.localeCompare(`${catalogFilmCategory(b)} ${b.brand} ${catalogFilmName(b)} ${catalogFilmModel(b)}`);
     });
-  if (!items.length) return '<option value="">— для этой услуги нет моделей в каталоге —</option>';
-  return `<option value="">— выбрать материал —</option>` + items.map(c => {
-    const stockM = inventoryByCatalogId(c.id).reduce((sum, roll) => sum + (Number(roll.remainingLengthM) || 0), 0);
-    const stock = stockM > 0 ? `склад ${stockM.toFixed(1)}м` : 'нет на складе';
-    return `<option value="${c.id}" ${selectedId === c.id ? 'selected' : ''}>${academyEsc(c.brand)} — ${academyEsc(catalogLabel(c))} · $${Number(c.retailPerSqft || 0).toFixed(2)}/sqft · ${stock}</option>`;
-  }).join('');
+  const unique = new Map();
+  ranked.forEach(item => {
+    const key = [catalogFilmCategory(item), item.brand, catalogFilmName(item), catalogFilmModel(item)]
+      .map(value => String(value || '').trim().toLowerCase())
+      .join('|');
+    const existing = unique.get(key);
+    if (!existing || item.id === selectedId || warehouseCatalogStockStats(item.id).availableSqft > warehouseCatalogStockStats(existing.id).availableSqft) unique.set(key, item);
+  });
+  return Array.from(unique.values());
+}
+function managerRoomFilmDraft(oid, rid, selectedCatalog, category) {
+  state._managerRoomFilmDrafts = state._managerRoomFilmDrafts || {};
+  const key = `${oid}:${rid}:${managerActiveMeasureScope(getOrder(oid))}`;
+  const saved = state._managerRoomFilmDrafts[key] || {};
+  return {
+    key,
+    category: saved.category ?? (selectedCatalog ? catalogFilmCategory(selectedCatalog) : ''),
+    brand: saved.brand ?? (selectedCatalog?.brand || ''),
+    serviceCategory: category,
+  };
+}
+function managerRoomFilmPickerHtml(oid, room, selectedId = '', category = '') {
+  const selected = selectedId ? getCatalogItem(selectedId) : null;
+  const draft = managerRoomFilmDraft(oid, room.id, selected, category);
+  const items = managerWarehouseFilmItems(selectedId, category);
+  const categories = [...new Set(items.map(catalogFilmCategory).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const activeCategory = categories.includes(draft.category) ? draft.category : '';
+  const categoryItems = activeCategory ? items.filter(item => catalogFilmCategory(item) === activeCategory) : [];
+  const brands = [...new Set(categoryItems.map(item => String(item.brand || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const activeBrand = brands.includes(draft.brand) ? draft.brand : '';
+  const models = activeBrand ? categoryItems.filter(item => String(item.brand || '').trim() === activeBrand) : [];
+  const selectedStock = selected ? warehouseCatalogStockStats(selected.id) : null;
+  return `<div class="manager-film-picker-grid">
+    <label>Категория / серия<select onchange="managerSetRoomFilmFilter('${oid}','${room.id}','category',this.value)"><option value="">Выберите категорию</option>${categories.map(value => `<option value="${academyEsc(value)}" ${value === activeCategory ? 'selected' : ''}>${academyEsc(value)}</option>`).join('')}</select></label>
+    <label>Бренд<select ${activeCategory ? '' : 'disabled'} onchange="managerSetRoomFilmFilter('${oid}','${room.id}','brand',this.value)"><option value="">Выберите бренд</option>${brands.map(value => `<option value="${academyEsc(value)}" ${value === activeBrand ? 'selected' : ''}>${academyEsc(value)}</option>`).join('')}</select></label>
+    <label>Модель<select id="mm-room-film-${room.id}" ${activeBrand ? '' : 'disabled'} onchange="managerApplyFilmToRoom('${oid}','${room.id}',this.value)"><option value="">Выберите модель</option>${models.map(item => { const stock = warehouseCatalogStockStats(item.id); const name = [catalogFilmName(item), catalogFilmModel(item)].filter(Boolean).join(' · ') || item.model || 'Без названия'; return `<option value="${item.id}" ${item.id === selectedId ? 'selected' : ''}>${academyEsc(name)} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select></label>
+  </div>
+  <div class="manager-film-picker-help"><span>${selectedStock ? `В наличии: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft` : (items.length ? 'Показаны только модели с остатком на складе' : 'Для этой услуги нет плёнки в наличии')}</span><button type="button" class="btn-ghost text-xs" onclick="openManagerFilmReceiptForm('${oid}','${room.id}')">+ Добавить на склад</button></div>`;
+}
+function managerSetRoomFilmFilter(oid, rid, field, value) {
+  const o = getOrder(oid);
+  if (!o) return;
+  state._managerRoomFilmDrafts = state._managerRoomFilmDrafts || {};
+  const key = `${oid}:${rid}:${managerActiveMeasureScope(o)}`;
+  const draft = state._managerRoomFilmDrafts[key] || {};
+  if (field === 'category') {
+    draft.category = value || '';
+    draft.brand = '';
+  } else if (field === 'brand') draft.brand = value || '';
+  state._managerRoomFilmDrafts[key] = draft;
+  refreshManagerMeasureModal(oid);
 }
 function renderManagerMeasureModal(oid) {
   const o = getOrder(oid);
@@ -24363,9 +24507,7 @@ function renderManagerMeasureModal(oid) {
                   </div>
                   <div class="manager-room-film-control">
                     <label class="text-xs font-black">Плёнка для помещения · ${academyEsc(scope.short)}</label>
-                    <select id="mm-room-film-${r.id}" onchange="managerApplyFilmToRoom('${oid}','${r.id}',this.value)">
-                      ${managerScopedCatalogOptionsHtml(selectedRoomCatalog, preferredCategory)}
-                    </select>
+                    ${managerRoomFilmPickerHtml(oid, r, selectedRoomCatalog, preferredCategory)}
                   </div>
                   <label class="manager-removal-check ${allRoomRemoval || someRoomRemoval ? 'active' : ''}">
                     <input type="checkbox" ${allRoomRemoval ? 'checked' : ''} ${serviceWindows.length ? '' : 'disabled'} onchange="managerSetRoomRemoval('${oid}','${r.id}','${activeScopeKey}',this.checked)">
@@ -24729,8 +24871,54 @@ function managerApplyFilmToRoom(oid, rid, catalogId) {
     }
   });
   invalidateProjectEstimate(o, 'Изменён материал помещения');
+  if (state._managerRoomFilmDrafts) delete state._managerRoomFilmDrafts[`${oid}:${rid}:${activeScope}`];
   save();
   refreshManagerMeasureModal(oid);
+}
+
+function openManagerFilmReceiptForm(oid, rid) {
+  const o = getOrder(oid);
+  const room = o?.measurements?.rooms?.find(item => item.id === rid);
+  if (!o || !room || !orderUserCanManage(currentUser())) return;
+  const serviceCategory = measureScopeInfo(managerActiveMeasureScope(o)).catalogCategory || 'solar';
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) refreshManagerMeasureModal('${oid}')"><div class="modal-content workspace-modal p-6" style="max-width:42rem" onclick="event.stopPropagation()">
+    <h3 class="font-semibold text-lg">Добавить плёнку на склад</h3><p class="text-xs text-gray-500 mb-4">Модель и приход рулона создаются вместе. После сохранения плёнка будет выбрана для ${academyEsc(room.name || 'помещения')}.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div><label>Направление</label><input value="${academyEsc(catLabel(serviceCategory))}" disabled></div>
+      <div><label>Бренд</label><input id="mrf-brand" value="Rolan PRO"></div>
+      <div><label>Категория / серия</label><input id="mrf-category" placeholder="Зеркальная, Ceramic, Prime"></div>
+      <div><label>Название</label><input id="mrf-name" placeholder="Prime"></div>
+      <div><label>Модель</label><input id="mrf-model" placeholder="NE2"></div>
+      <div><label>Продажа / sqft, $</label><input id="mrf-retail" type="number" min="0" step="0.5" value="0"></div>
+      <div><label>Ширина рулона</label><select id="mrf-width">${(db.settings.filmRolls?.widths || [1524,1829]).map(width => `<option value="${width}">${(Number(width)/25.4).toFixed(0)}&quot; · ${(Number(width)/1000).toFixed(2)} м</option>`).join('')}</select></div>
+      <div><label>Длина рулона, м</label><input id="mrf-length" type="number" min="0.01" step="0.1" value="30"></div>
+      <div><label>Стоимость рулона, $</label><input id="mrf-cost" type="number" min="0.01" step="1" placeholder="500"></div>
+      <div><label>Lot / партия</label><input id="mrf-lot" value="MEASURE-${new Date().toISOString().slice(0,10)}"></div>
+    </div>
+    <div id="mrf-error" class="text-sm text-red-600 mt-3 hidden"></div>
+    <div class="flex gap-2 mt-5"><button class="btn-primary flex-1" onclick="saveManagerFilmReceipt('${oid}','${rid}','${serviceCategory}')">Создать, принять и выбрать</button><button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Отмена</button></div>
+  </div></div>`;
+  render();
+}
+function saveManagerFilmReceipt(oid, rid, serviceCategory) {
+  const o = getOrder(oid);
+  const room = o?.measurements?.rooms?.find(item => item.id === rid);
+  const brand = document.getElementById('mrf-brand')?.value.trim() || '';
+  const filmCategory = document.getElementById('mrf-category')?.value.trim() || '';
+  const productName = document.getElementById('mrf-name')?.value.trim() || '';
+  const modelCode = document.getElementById('mrf-model')?.value.trim() || '';
+  const length = Math.max(0, Number(document.getElementById('mrf-length')?.value) || 0);
+  const costTotal = Math.max(0, Number(document.getElementById('mrf-cost')?.value) || 0);
+  const fail = message => { const box = document.getElementById('mrf-error'); if (box) { box.textContent = message; box.classList.remove('hidden'); } };
+  if (!o || !room || !brand || !filmCategory || !productName || !modelCode) return fail('Заполните бренд, категорию, название и модель.');
+  if (length <= 0 || costTotal <= 0) return fail('Укажите длину и закупочную стоимость рулона.');
+  const duplicate = (db.settings.catalog || []).find(item => item.category === serviceCategory && String(item.brand || '').toLowerCase() === brand.toLowerCase() && String(catalogFilmName(item)).toLowerCase() === productName.toLowerCase() && String(catalogFilmModel(item)).toLowerCase() === modelCode.toLowerCase());
+  if (duplicate) return fail('Такая модель уже есть в каталоге. Сделайте приход рулона через склад.');
+  const catalog = { id: 'film_' + uid(), brand, filmCategory, productName, modelCode, model: `${productName} ${modelCode}`, category: serviceCategory, retailPerSqft: Math.max(0, Number(document.getElementById('mrf-retail')?.value) || 0), costPerSqft: null, installerRatePerSqft: null, wastePct: serviceCategory === 'smart' ? 8 : 12, archived: false };
+  db.settings.catalog.push(catalog);
+  const roll = addInventoryRoll({ catalogId: catalog.id, lotNumber: document.getElementById('mrf-lot')?.value.trim() || '', widthMm: Number(document.getElementById('mrf-width')?.value) || 1524, originalLengthM: length, costTotal, dateReceived: new Date().toISOString().slice(0,10), location: 'Warehouse' });
+  recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(catalog), direction: 'receipt', qty: length, unit: 'м', orderId: oid, reason: 'Добавлено из замера проекта' });
+  managerApplyFilmToRoom(oid, rid, catalog.id);
 }
 
 function scheduleConsultationPrompt(oid) {

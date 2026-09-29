@@ -103,9 +103,9 @@ test("window and room removal checkboxes create an area-based calculated service
 
 test("each room exposes a service-scoped film selector and shows its selected film", () => {
   assert.match(source, /Плёнка для помещения · \$\{academyEsc\(scope\.short\)\}/);
-  assert.match(source, /managerApplyFilmToRoom\('\$\{oid\}','\$\{r\.id\}',this\.value\)/);
+  assert.match(source, /managerApplyFilmToRoom\('\$\{oid\}','\$\{room\.id\}',this\.value\)/);
   assert.match(source, /const roomFilm = roomCatalog \? `\$\{roomCatalog\.brand\} · \$\{roomCatalog\.model\}` : 'плёнка не выбрана'/);
-  assert.match(source, /managerScopedCatalogOptionsHtml\(selectedRoomCatalog, preferredCategory\)/);
+  assert.match(source, /managerRoomFilmPickerHtml\(oid, r, selectedRoomCatalog, preferredCategory\)/);
 });
 
 test("manager can quote from customer dimensions but installation requires verified dimensions", () => {

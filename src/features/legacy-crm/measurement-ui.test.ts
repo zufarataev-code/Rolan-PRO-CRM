@@ -31,13 +31,41 @@ test("measurement material picker is scoped to the selected service category", (
   assert.match(legacyCrm, /safety_film: 'protective'/);
   assert.match(legacyCrm, /privacy_film: 'decorative'/);
   assert.match(legacyCrm, /function catalogMatchesCategory\(catalog, category\)/);
-  assert.match(legacyCrm, /function managerScopedCatalogOptionsHtml/);
+  assert.match(legacyCrm, /function managerWarehouseFilmItems/);
+  assert.match(legacyCrm, /function managerRoomFilmPickerHtml/);
   assert.match(legacyCrm, /catalogCanBeSelected\(c, selectedId\)/);
   assert.match(legacyCrm, /catalogMatchesCategory\(c, category\) \|\| c\.id === selectedId/);
   assert.match(legacyCrm, /function catalogHasWarehouseStock\(catalogId\)/);
-  assert.match(legacyCrm, /const aStock = catalogHasWarehouseStock\(a\.id\)/);
-  assert.match(legacyCrm, /academyEsc\(catalogLabel\(c\)\)/);
+  assert.match(legacyCrm, /filter\(c => c\.id === selectedId \|\| catalogHasWarehouseStock\(c\.id\)\)/);
+  assert.match(legacyCrm, /Категория \/ серия/);
+  assert.match(legacyCrm, /Выберите бренд/);
+  assert.match(legacyCrm, /Выберите модель/);
+  assert.match(legacyCrm, /Показаны только модели с остатком на складе/);
+  assert.match(legacyCrm, /function openManagerFilmReceiptForm/);
+  assert.match(legacyCrm, /function saveManagerFilmReceipt/);
   assert.doesNotMatch(legacyCrm, /if \(!items\.length\) return managerCatalogOptionsHtml/);
+});
+
+test("new measurement rooms do not silently receive the first catalog film", () => {
+  const defaults = legacyCrm.match(/function defaultCatalogIdForOrder\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const windowDefaults = legacyCrm.match(/function managerWindowDefaults\(o, room, opts = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(defaults, /return ''/);
+  assert.doesNotMatch(defaults, /db\.settings\.catalog\.find/);
+  assert.doesNotMatch(windowDefaults, /db\.settings\.catalog\.find/);
+});
+
+test("solar glass profile separates pane construction, treatment and Low-E", () => {
+  assert.match(legacyCrm, /const MANAGER_GLASS_CONSTRUCTIONS/);
+  assert.match(legacyCrm, /single_pane/);
+  assert.match(legacyCrm, /double_pane_igu/);
+  assert.match(legacyCrm, /triple_pane_igu/);
+  assert.match(legacyCrm, /const MANAGER_GLASS_TREATMENTS/);
+  assert.match(legacyCrm, /function managerGlassProfile\(win = \{\}\)/);
+  assert.match(legacyCrm, /function saveManagerGlassProfile/);
+  assert.match(legacyCrm, /w\.glassConstruction = profile\.construction/);
+  assert.match(legacyCrm, /w\.glassTreatment = profile\.treatment/);
+  assert.match(legacyCrm, /w\.glassLowE = profile\.lowE/);
+  assert.match(legacyCrm, /Low-E покрытие/);
 });
 
 test("one project supports separate measurements for multiple film services", () => {
