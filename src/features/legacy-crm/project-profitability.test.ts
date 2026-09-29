@@ -4,12 +4,12 @@ import test from "node:test";
 
 const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 
-test("project calculator exposes one fast operational summary", () => {
-  assert.match(source, /Быстрый итог проекта/);
+test("project calculator exposes one measured operational summary", () => {
+  assert.match(source, /Итог по замеру/);
   assert.match(source, /Услуги проекта/);
-  assert.match(source, /Предварительный объём/);
+  assert.match(source, /Площадь по замеру/);
   assert.match(source, /Расход плёнки/);
-  assert.match(source, /Позиции проекта/);
+  assert.match(source, /Окна \/ двери/);
   assert.match(source, /Резерв оплаты монтажа/);
 });
 
@@ -81,11 +81,12 @@ test("project PSS charges manager commission and advertising once from gross rev
   assert.match(source, /Рекламный резерв \(\$\{Number\(db\.settings\.pricingDefaults\?\.marketingPct/);
 });
 
-test("new project opens a quick multi-service estimate without requiring measurements", () => {
+test("new project opens the measurement stage before calculation", () => {
   assert.match(source, /createOrder\('draft'\)/);
-  assert.match(source, /createOrder\('estimate'\)/);
-  assert.match(source, /Создать и быстро рассчитать →/);
-  assert.match(source, /function createOrder\(nextStep = 'estimate'\)/);
-  assert.match(source, /openProjectEstimateWorkspace\(o\.id\)/);
-  assert.match(source, /selectedServices\.forEach\(selectedService =>/);
+  assert.match(source, /createOrder\('measure'\)/);
+  assert.match(source, /Создать и перейти к замеру →/);
+  assert.match(source, /function createOrder\(nextStep = 'measure'\)/);
+  assert.match(source, /nextStep === 'measure'[\s\S]*?openManagerMeasureModal\(o\.id\)/);
+  const creator = source.match(/function createOrder\(nextStep = 'measure'\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(creator, /quickProjectLine: true/);
 });

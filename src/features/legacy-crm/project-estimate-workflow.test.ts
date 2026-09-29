@@ -103,9 +103,9 @@ test("window and room removal checkboxes create an area-based calculated service
 
 test("each room exposes a service-scoped film selector and shows its selected film", () => {
   assert.match(source, /Плёнка для помещения · \$\{academyEsc\(scope\.short\)\}/);
-  assert.match(source, /managerApplyFilmToRoom\('\$\{oid\}','\$\{r\.id\}',this\.value\)/);
+  assert.match(source, /managerApplyFilmToRoom\('\$\{oid\}','\$\{room\.id\}',this\.value\)/);
   assert.match(source, /const roomFilm = roomCatalog \? `\$\{roomCatalog\.brand\} · \$\{roomCatalog\.model\}` : 'плёнка не выбрана'/);
-  assert.match(source, /managerScopedCatalogOptionsHtml\(selectedRoomCatalog, preferredCategory\)/);
+  assert.match(source, /managerRoomFilmPickerHtml\(oid, r, selectedRoomCatalog, preferredCategory\)/);
 });
 
 test("manager can quote from customer dimensions but installation requires verified dimensions", () => {
@@ -118,22 +118,30 @@ test("manager can quote from customer dimensions but installation requires verif
   assert.match(source, /if \(!ensureVerifiedMeasurementsForStatus\(o, newStatus/);
 });
 
-test("quick project entry works without dimensions and supports multiple service lines", () => {
-  const opener = source.match(/function openQuickProjectEntry\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.doesNotMatch(opener, /Сначала внесите размеры/);
-  assert.match(opener, /<h3>Быстрый ввод проекта<\/h3>/);
-  assert.match(source, /nextStep === 'estimate'\) setTimeout\(\(\) => openQuickProjectEntry\(o\.id\)/);
-  assert.match(source, /title: 'Быстрый ввод проекта'[\s\S]*?onclick: `openQuickProjectEntry/);
-  assert.match(source, /function projectEstimateAddQuickLine\(oid, requestedServiceType = ''\)/);
-  assert.match(source, /quickProjectLine: true, serviceType/);
-  assert.match(source, /line\.price = line\.qty \* line\.unitPrice/);
-  assert.match(source, /line\.unitPrice = line\.qty > 0 \? line\.price \/ line\.qty : 0/);
-  assert.match(source, /projectQuickLineCatalog\(line\.serviceType, line\.catalogId\)/);
-  assert.match(source, /ORDER_PRIMARY_SERVICES\.map\(service =>/);
-  assert.match(source, /Метраж, sqft/);
-  assert.match(source, /Цена клиенту/);
-  assert.match(source, /Цена \/ sqft/);
-  assert.match(source, /\+ Добавить услугу/);
+test("new projects follow measurement before estimate and expose no quick-entry button", () => {
+  const creator = source.match(/function createOrder\(nextStep = 'measure'\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const passport = source.match(/function orderPassportActions\(o, ctx\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(source, /createOrder\('measure'\)/);
+  assert.match(source, /Создать и перейти к замеру →/);
+  assert.match(creator, /nextStep === 'measure'\) setTimeout\(\(\) => openManagerMeasureModal\(o\.id\)/);
+  assert.doesNotMatch(creator, /quickProjectLine: true/);
+  assert.doesNotMatch(source, /title: 'Быстрый ввод проекта'[\s\S]*?onclick: `openQuickProjectEntry/);
+  assert.match(passport, /const stage = !done\.measure[\s\S]*?!done\.estimate/);
+  assert.match(passport, /disabled: !ctx\.canManage \|\| !ctx\.hasMeasurements/);
+});
+
+test("accepted proposal must pass production preparation before installation", () => {
+  const nextAction = source.match(/function orderPrimaryNextAction\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const scheduler = source.match(/function scheduleInstallationPrompt\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(source, /function projectProductionReadiness\(o, \{ requireReady = true \} = \{\}\)/);
+  assert.match(source, /КП ещё не принято клиентом/);
+  assert.match(source, /аванс ещё не получен/);
+  assert.match(source, /недостаточно материала/);
+  assert.match(nextAction, /title: 'Подготовить производство'/);
+  assert.match(source, /function confirmProjectProductionReady\(oid\)/);
+  assert.match(source, /o\.productionReadyAt = new Date\(\)\.toISOString\(\)/);
+  assert.match(scheduler, /ensureProductionReadyForInstallation\(o\)/);
+  assert.match(source, /'Производство','stepInstallation'/);
 });
 
 test("quick project entry derives sqft price and defers installers to Montage", () => {
@@ -189,7 +197,7 @@ test("quick service can create warehouse film with category, name and model", ()
 });
 
 test("quick service adds stock supplies and includes their purchase cost", () => {
-  const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const consumables = source.match(/function orderConsumablesExpense\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(source, /function projectQuickAddSupply\(oid, lineId\)/);
   assert.match(source, /function openQuickProjectSupplyForm\(oid, lineId\)/);
@@ -198,8 +206,8 @@ test("quick service adds stock supplies and includes their purchase cost", () =>
   assert.match(source, /demand\[item\.supplyId\] = \(demand\[item\.supplyId\] \|\| 0\) \+ \(Number\(item\.qty\) \|\| 0\)/);
   assert.match(source, /line\.supplyItems\.push\(/);
   assert.match(source, /costPerUnit/);
-  assert.match(readiness, /есть незаполненный расходник услуги/);
-  assert.match(readiness, /на складе недостаточно расходников/);
+  assert.match(completionIssues, /есть незаполненный расходник услуги/);
+  assert.match(completionIssues, /на складе недостаточно расходников/);
   assert.match(consumables, /projectQuickSupplyCost\(o\)/);
 });
 
@@ -291,6 +299,8 @@ test("quick project lines use warehouse film and never accept manual material or
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
   const renderer = source.slice(rendererStart, rendererEnd);
   assert.match(source, /function projectQuickLineCatalog\(serviceType, selectedCatalogId = ''\)/);
+  assert.match(source, /catalogCanBeSelected\(item, selectedCatalogId\)/);
+  assert.match(source, /catalogMatchesCategory\(item, category\)/);
   assert.match(source, /warehouseCatalogStockStats\(item\.id\)\.availableSqft > 0/);
   assert.match(renderer, /Плёнка со склада/);
   assert.match(renderer, /Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников/);
@@ -302,15 +312,15 @@ test("quick project lines use warehouse film and never accept manual material or
   assert.doesNotMatch(renderer, /Себестоимость \/ ед\./);
 });
 
-test("quick project entry is a separate window instead of an embedded estimate table", () => {
+test("project estimate uses the canonical measurement basis", () => {
   const estimateStart = source.indexOf("function renderProjectEstimateWorkspace");
   const estimateEnd = source.indexOf("function openProjectEstimateWorkspace", estimateStart);
   const estimateRenderer = source.slice(estimateStart, estimateEnd);
-  assert.match(source, /function renderQuickProjectEntry\(o\)/);
-  assert.match(source, /function openQuickProjectEntry\(oid\)/);
   assert.doesNotMatch(estimateRenderer, /1\. Быстрый ввод проекта/);
   assert.doesNotMatch(estimateRenderer, /Плёнка со склада<\/th>/);
-  assert.match(estimateRenderer, /Изменить быстрый ввод/);
+  assert.match(estimateRenderer, /Итог по замеру/);
+  assert.match(estimateRenderer, /Перейти к замеру/);
+  assert.match(estimateRenderer, /Обязательная основа расчёта и КП/);
 });
 
 test("project add-on rows contain customer price only and labor comes from configured work rates", () => {
@@ -388,12 +398,11 @@ test("proposal readiness does not require installation scheduling", () => {
 
 test("proposal readiness reports exact missing commercial fields", () => {
   const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.match(readiness, /не выбрана услуга/);
-  assert.match(readiness, /не выбрана плёнка/);
-  assert.match(readiness, /не указан метраж/);
-  assert.match(readiness, /не указана цена клиенту/);
-  assert.match(readiness, /!issues\.includes\('не указана цена клиенту'\)/);
-  assert.doesNotMatch(readiness, /есть позиция без плёнки, количества или цены продажи/);
+  assert.match(readiness, /не внесены помещения и размеры/);
+  assert.match(readiness, /есть окна без размера/);
+  assert.match(readiness, /не выбрана плёнка для всех окон/);
+  assert.match(readiness, /сумма проекта равна нулю/);
+  assert.doesNotMatch(readiness, /projectEstimateQuickLinesForBasis/);
 });
 
 test("fullscreen kanban fits all stages and cut sheets preserve readable scale", () => {
@@ -404,23 +413,23 @@ test("fullscreen kanban fits all stages and cut sheets preserve readable scale",
   assert.doesNotMatch(source, /title: 'Лист раскроя'[\s\S]{0,220}disabled: !plan\.pieces/);
 });
 
-test("measured projects ignore stale quick-entry drafts in price and proposal readiness", () => {
+test("quick-entry records are calculation input only for completed historical imports", () => {
   const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const revenue = source.match(/function orderExtraServicesRevenue\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const snapshot = source.match(/function premiumCanonicalSnapshot\(prop\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(source, /function projectEstimateQuickLinesForBasis\(o\)/);
-  assert.match(source, /return measureAllWindows\(o\)\.length \? \[\] : projectQuickLines\(o\)/);
-  assert.match(readiness, /const quickLines = projectEstimateQuickLinesForBasis\(o\)/);
-  assert.match(readiness, /if \(windows\.length\)/);
+  assert.match(source, /return o\?\.quickProjectImportedCompleted === true \? projectQuickLines\(o\) : \[\]/);
+  assert.doesNotMatch(readiness, /projectEstimateQuickLinesForBasis/);
+  assert.match(readiness, /if \(!windows\.length\)/);
   assert.match(revenue, /filter\(line => !line\.quickProjectLine \|\| !measuredProject\)/);
   assert.match(snapshot, /projectEstimateQuickLinesForBasis\(order\)\.forEach/);
   assert.match(source, /Расчёт идёт по замеру/);
   assert.match(source, /пустая строка больше не блокирует документ/);
 });
 
-test("proposal actions stay clickable and explain the exact missing data", () => {
-  assert.match(source, /const proposalDisabled = !canManage;/);
-  assert.match(source, /title: 'Единое КП'[\s\S]*?disabled: !canManage/);
+test("proposal actions remain locked until the measured estimate is approved", () => {
+  assert.match(source, /const proposalDisabled = !canManage \|\| !estimateApproved;/);
+  assert.match(source, /title: 'Единое КП'[\s\S]*?disabled: !canManage \|\| !estimateApproved/);
   assert.match(source, /Показать, чего не хватает/);
   assert.match(source, /summary: workDocsOnly \? 'Без коммерческих сумм'[\s\S]*?'Откройте расчёт и проверьте итог'/);
   assert.doesNotMatch(source, /estimateApproved \? 'КП' : 'заблокировано'/);
@@ -431,7 +440,7 @@ test("proposal actions stay clickable and explain the exact missing data", () =>
 });
 
 
-test("manager can type a missing film manually without creating warehouse stock", () => {
+test("historical quick import can retain a manual film but live proposals require catalog material", () => {
   const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
@@ -440,7 +449,7 @@ test("manager can type a missing film manually without creating warehouse stock"
   const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
 
   assert.match(source, /function projectQuickManualFilmName\(line\)/);
-  assert.match(readiness, /!line\.catalogId && !projectQuickManualFilmName\(line\)/);
+  assert.match(readiness, /!windowCatalog\(win\)/);
   assert.match(updater, /field === 'manualFilmName'/);
   assert.match(updater, /line\.catalogId = ''/);
   assert.match(renderer, /Плёнки нет в списке/);
@@ -448,4 +457,88 @@ test("manager can type a missing film manually without creating warehouse stock"
   assert.match(renderer, /currentUser\(\)\?\.role === 'owner'[\s\S]*\+ Добавить плёнку на склад/);
   assert.match(completionIssues, /ручную плёнку нужно привязать к складу перед закрытием/);
   assert.match(source, /item_kind: line\.catalogId \|\| projectQuickManualFilmName\(line\) \? 'film' : 'service'/);
+});
+
+test("kanban cannot bypass the client-to-measurement-to-proposal-to-installation workflow", () => {
+  const transition = source.match(/function orderWorkflowTransitionIssues\(o, newStatus\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const changeStatus = source.match(/function changeStatus\(orderId, newStatus, by, opts = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const kanbanMove = source.match(/function kanbanMoveOrder\(orderId, targetStatus\) \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(transition, /newStatus === 'measurement_scheduled'/);
+  assert.match(transition, /orderMeasurementCompletionIssues\(o\)/);
+  assert.match(transition, /projectEstimateIsApproved\(o\)/);
+  assert.match(transition, /publishedPremiumProposalForOrder\(o\.id\)/);
+  assert.match(transition, /назначьте монтажников/);
+  assert.match(changeStatus, /ensureOrderWorkflowTransition\(o, newStatus/);
+  assert.match(kanbanMove, /return changeStatus\(orderId, targetStatus/);
+  assert.doesNotMatch(kanbanMove, /changeStatus\(orderId, targetStatus[^\n]+\n\s*return true/);
+});
+
+test("measurement completion requires dimensions, warehouse film and smart configuration", () => {
+  const readiness = source.match(/function orderMeasurementCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const completion = source.match(/function completeManagerMeasurement\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(readiness, /windowActualAreaSqft\(win\) <= 0/);
+  assert.match(readiness, /!windowCatalog\(win\)/);
+  assert.match(readiness, /managerSmartMeasurementIssues\(o\)/);
+  assert.match(completion, /orderMeasurementCompletionIssues\(o\)/);
+});
+
+test("published proposals synchronize the order stage milestone", () => {
+  const generator = source.match(/async function generatePremiumProposal\(orderId\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const sender = source.match(/async function premiumSendCanonicalProposal\(token\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(generator, /order\.proposalSentAt = order\.proposalSentAt \|\| prop\.sentAt/);
+  assert.match(sender, /order\.proposalSentAt = order\.proposalSentAt \|\| prop\.sentAt/);
+});
+
+test("solar measurement requires glass, facade, installation side and access complexity", () => {
+  const readiness = source.match(/function managerSolarMeasurementIssues\(order\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const accessSync = source.match(/function managerSyncOrderComplexityFromWindows\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(readiness, /укажите тип стекла/);
+  assert.match(readiness, /укажите сторону фасада/);
+  assert.match(readiness, /внутреннюю или наружную установку/);
+  assert.match(readiness, /выберите доступ и высоту/);
+  assert.match(source, /Маленькая лестница/);
+  assert.match(source, /Большая лестница \/ выше 10 ft/);
+  assert.match(source, /Леса \/ тура/);
+  assert.match(source, /Подъёмник \/ scissor lift/);
+  assert.match(accessSync, /o\.complexity = complexities/);
+});
+
+test("solar estimate exposes optimized film waste and warehouse consumption", () => {
+  const estimateStart = source.indexOf("function renderProjectEstimateWorkspace");
+  const estimateEnd = source.indexOf("function openProjectEstimateWorkspace", estimateStart);
+  const estimate = source.slice(estimateStart, estimateEnd);
+  assert.match(estimate, /Расход плёнки/);
+  assert.match(estimate, /Отход раскроя/);
+  assert.match(estimate, /filmPlan\.wastePct/);
+  assert.match(estimate, /Материал со склада/);
+});
+
+test("manager-approved payment after completion is explicit and auditable", () => {
+  const production = source.match(/function projectProductionReadiness\(o, \{ requireReady = true \} = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const calculator = source.match(/function premiumPaymentDue\(prop, calc\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(source, /function projectEstimateConfirmPostpay\(oid, confirmed\)/);
+  assert.match(source, /paymentTermsConfirmedBy = confirmed \? state\.currentUserId/);
+  assert.match(source, /function orderPaymentReadyForProduction\(o\)/);
+  assert.match(production, /orderPaymentReadyForProduction\(o\)/);
+  assert.match(calculator, /mode === 'after_completion'/);
+  assert.match(source, /Pay After Completion/);
+});
+
+test("proposal includes technical solar facts and written change-order acceptance", () => {
+  assert.match(source, /Façade:/);
+  assert.match(source, /Access:/);
+  assert.match(source, /Cutting waste/);
+  assert.match(source, /PREMIUM_AGREEMENT_ITEMS/);
+  assert.match(source, /change to price, material or scope must be documented and approved in writing/);
+  assert.match(source, /PREMIUM_AGREEMENT_ITEMS\.every/);
+});
+
+test("residential premium proposal applies the California home-improvement deposit cap", () => {
+  const calculator = source.match(/function premiumProposalCalc\(prop\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(calculator, /orderSiteType\(order\) === 'RESIDENTIAL'/);
+  assert.match(calculator, /Math\.min\(result\.total \* 0\.10, 1000\)/);
+  assert.match(source, /Legal Deposit \(max 10% \/ \$1,000\)/);
 });

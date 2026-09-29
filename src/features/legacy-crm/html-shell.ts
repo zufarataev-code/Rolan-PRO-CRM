@@ -6,7 +6,7 @@ const SCRIPT_START = "\n<script>";
 
 const MOBILE_ORDERS_PATCH = `
 <style id="rolanpro-mobile-orders-cards-style">
-  @media (max-width: 768px) {
+  @media (max-width: 520px), (max-width: 768px) and (pointer: coarse) {
     table[data-rolanpro-mobile-orders="1"] {
       display: block !important;
       width: 100% !important;
@@ -155,6 +155,9 @@ const MOBILE_ORDERS_PATCH = `
 <script id="rolanpro-mobile-orders-cards-script">
   (() => {
     const MOBILE_MAX = 768;
+    const phoneLayoutActive = () => window.innerWidth <= 520 || (
+      window.innerWidth <= MOBILE_MAX && window.matchMedia?.('(pointer: coarse)').matches
+    );
     const FALLBACK_LABELS = ['Заказ', 'Клиент', 'Статус', 'Площадь', 'Сумма'];
     const FALLBACK_ROLES = ['order', 'client', 'status', 'area', 'amount'];
 
@@ -215,7 +218,7 @@ const MOBILE_ORDERS_PATCH = `
     };
 
     const enhanceOrdersTable = () => {
-      if (window.innerWidth > MOBILE_MAX) return;
+      if (!phoneLayoutActive()) return;
 
       const table = findOrdersTable();
       if (!table) return;

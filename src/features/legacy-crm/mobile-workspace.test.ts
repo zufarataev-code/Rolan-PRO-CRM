@@ -16,7 +16,10 @@ test("mobile workspace adapter preserves compact checkbox and radio controls", (
 test("mobile workspace adapter keeps mobile behavior isolated and protects special views", () => {
   const result = injectMobileWorkspaceAdapter("<!doctype html><body><main></main></body>");
 
-  assert.match(result, /@media \(max-width: 768px\)/);
+  assert.match(result, /@media \(max-width: 520px\), \(max-width: 768px\) and \(pointer: coarse\)/);
+  assert.match(result, /const phoneLayoutActive/);
+  assert.match(result, /\(min-width: 521px\) and \(max-width: 840px\) and \(pointer: fine\)/);
+  assert.match(result, /\.mobile-primary-nav,[\s\S]*?display: none !important/);
   assert.match(result, /SPECIAL_TABLE_SELECTOR/);
   assert.match(result, /data-rolanpro-mobile-orders/);
   assert.match(result, /data-rolanpro-mobile-proposals/);
