@@ -69,6 +69,11 @@ export const ROUTE_ROLE_RULES: Array<{
     roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
   },
   {
+    // Managers read difficulty coefficients to price work; only the owner edits (route-level check).
+    prefix: "/api/v1/settings/complexity",
+    roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
+  },
+  {
     prefix: "/api/v1/settings",
     roles: [ROLE_CODES.OWNER],
   },

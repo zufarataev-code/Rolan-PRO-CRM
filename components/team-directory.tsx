@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 
+import { RateDirectory } from "./rate-directory";
 import styles from "./team-directory.module.css";
 
 type Member = {
@@ -36,6 +37,13 @@ function closePanel() {
   }
 }
 
+/** Tells the CRM window to reload its data when this overlay closes. */
+function notifyCrmChanged() {
+  if (window.top && window.top !== window) {
+    window.top.postMessage({ type: "rolanpro-team-changed" }, window.location.origin);
+  }
+}
+
 async function api(path: string, method: string, body?: unknown) {
   const response = await fetch(path, {
     method,
@@ -63,6 +71,7 @@ export function TeamDirectory({
   const [members, setMembers] = useState(initialMembers);
   const [editing, setEditing] = useState<Member | "new" | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [tab, setTab] = useState<"team" | "rates">("team");
 
   if (previewName) {
     return (
@@ -106,20 +115,38 @@ export function TeamDirectory({
       <header className={styles.header}>
         <div>
           <button type="button" className={styles.back} onClick={closePanel}>← В CRM</button>
-          <h1>Сотрудники</h1>
-          <p className={styles.muted}>Единый список. Роли и доступ меняются здесь и сразу действуют везде.</p>
+          <h1>{tab === "team" ? "Сотрудники" : "Расценки"}</h1>
+          <p className={styles.muted}>
+            {tab === "team"
+              ? "Единый список. Роли и доступ меняются здесь и сразу действуют везде."
+              : "Справочник для зарплаты и рентабельности. Изменения действуют сразу."}
+          </p>
         </div>
-        <button className={styles.primary} onClick={() => setEditing("new")}>
-          + Добавить сотрудника
-        </button>
+        {tab === "team" ? (
+          <button className={styles.primary} onClick={() => setEditing("new")}>
+            + Добавить сотрудника
+          </button>
+        ) : null}
       </header>
 
-      {notice ? (
+      <div className={styles.tabs} role="tablist">
+        <button role="tab" aria-selected={tab === "team"} className={tab === "team" ? styles.tabActive : styles.tab} onClick={() => setTab("team")}>
+          Сотрудники
+        </button>
+        <button role="tab" aria-selected={tab === "rates"} className={tab === "rates" ? styles.tabActive : styles.tab} onClick={() => setTab("rates")}>
+          Расценки
+        </button>
+      </div>
+
+      {tab === "rates" ? <RateDirectory onChanged={notifyCrmChanged} /> : null}
+
+      {tab === "team" && notice ? (
         <p className={notice.tone === "ok" ? styles.ok : styles.error} role="status">
           {notice.text}
         </p>
       ) : null}
 
+      {tab === "team" ? <>
       <MemberList
         title={`Работают (${active.length})`}
         members={active}
@@ -136,6 +163,7 @@ export function TeamDirectory({
           onPreview={preview}
         />
       ) : null}
+      </> : null}
 
       {editing ? (
         <MemberForm
@@ -146,9 +174,7 @@ export function TeamDirectory({
           onSaved={async (text) => {
             setEditing(null);
             setNotice({ tone: "ok", text });
-            if (window.top && window.top !== window) {
-              window.top.postMessage({ type: "rolanpro-team-changed" }, window.location.origin);
-            }
+            notifyCrmChanged();
             await reload();
           }}
         />
