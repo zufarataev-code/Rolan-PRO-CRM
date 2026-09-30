@@ -11,7 +11,7 @@ import { after, before, test } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
 
-import { assertSafeE2eTarget } from "./guard";
+import { assertSafeE2eTarget, assertServerUsesTestDatabase } from "./guard";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const SEED_PASSWORD = process.env.E2E_SEED_PASSWORD ?? "ChangeMe123!";
@@ -70,6 +70,7 @@ let owner: Browser;
 let employeeId: string;
 
 before(async () => {
+  await assertServerUsesTestDatabase(BASE_URL, prisma);
   await prisma.user.updateMany({
     where: { email: { in: [OWNER_EMAIL, MANAGER_EMAIL] } },
     data: { must_change_password: false },
@@ -170,10 +171,27 @@ test("owner views the CRM as the employee, read-only, and can leave", async () =
   assert.equal(sideEffectGet.status, 403, "side-effecting GET routes are blocked during preview");
   assert.equal(await prisma.lead.count({ where: { name: { startsWith: runTag } } }), 0);
 
+  // Preview must not write: an unlinked employee stays unlinked while viewed.
+  await prisma.user.update({ where: { user_id: employeeId }, data: { legacy_user_ids: { set: [] } } });
+  await owner.call("GET", "/api/v1/auth/me");
+  await owner.call("GET", "/api/v1/legacy-crm/state");
+  const untouched = await prisma.user.findUniqueOrThrow({ where: { user_id: employeeId } });
+  assert.deepEqual(untouched.legacy_user_ids, [], "preview reads do not persist identity links");
+
   const stopped = await owner.call("DELETE", "/api/v1/team/preview");
   assert.equal(stopped.status, 200);
   const back = await owner.call("GET", "/api/v1/auth/me");
   assert.ok(data<{ user: { roles: string[] } }>(back.json).user.roles.includes("OWNER"), "owner is back");
+});
+
+test("logging out ends the preview", async () => {
+  const started = await owner.call("POST", "/api/v1/team/preview", { userId: employeeId });
+  assert.equal(started.status, 200);
+  await owner.call("POST", "/api/v1/auth/logout");
+  assert.equal(owner.cookies.has("rolanpro_preview_as"), false, "preview cookie cleared on logout");
+  await owner.login(OWNER_EMAIL, SEED_PASSWORD);
+  const me = await owner.call("GET", "/api/v1/auth/me");
+  assert.ok(data<{ user: { roles: string[] } }>(me.json).user.roles.includes("OWNER"));
 });
 
 test("only the owner can start a preview, and another employee cannot use the cookie", async () => {

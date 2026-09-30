@@ -40,7 +40,10 @@ export async function GET(request: NextRequest) {
   }
 
   // Employee cards always come from PostgreSQL (one employee directory).
-  const members = await loadDirectoryMembers((workspace.payload as { users?: unknown }).users ?? []);
+  // During "view as employee" this read must not write anything.
+  const members = await loadDirectoryMembers((workspace.payload as { users?: unknown }).users ?? [], {
+    persist: !auth.session.preview,
+  });
   const payload = applyEmployeeDirectory(workspace.payload as Record<string, unknown>, members);
   const legacyUserIds =
     members.find((member) => member.userId === auth.session.user.user_id)?.legacyUserIds ??

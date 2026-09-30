@@ -141,7 +141,11 @@ export function resolveLegacyIdForUser(
  * created without one (or before this rule) get a stable server-assigned id,
  * persisted once, so their login never depends on a browser sync.
  */
-export async function loadDirectoryMembers(payloadUsers?: unknown): Promise<DirectoryMember[]> {
+export async function loadDirectoryMembers(
+  payloadUsers?: unknown,
+  options: { persist?: boolean } = {},
+): Promise<DirectoryMember[]> {
+  const persist = options.persist !== false;
   const users = await prisma.user.findMany({
     include: {
       user_accesses: {
@@ -161,12 +165,17 @@ export async function loadDirectoryMembers(payloadUsers?: unknown): Promise<Dire
     if (legacyUserIds.length === 0 && legacyRoleForServerRoles(roles)) {
       const assigned = resolveLegacyIdForUser(user, cards, linked);
       linked.add(assigned);
-      const updated = await prisma.user.update({
-        where: { user_id: user.user_id },
-        data: { legacy_user_ids: { set: [assigned] } },
-        select: { legacy_user_ids: true },
-      });
-      legacyUserIds = updated.legacy_user_ids;
+      if (persist) {
+        const updated = await prisma.user.update({
+          where: { user_id: user.user_id },
+          data: { legacy_user_ids: { set: [assigned] } },
+          select: { legacy_user_ids: true },
+        });
+        legacyUserIds = updated.legacy_user_ids;
+      } else {
+        // Read-only callers (preview) get the same id without writing it.
+        legacyUserIds = [assigned];
+      }
     }
     members.push({
       userId: user.user_id,
@@ -187,6 +196,7 @@ export async function loadDirectoryMembers(payloadUsers?: unknown): Promise<Dire
 export async function ensureLegacyIdentity(
   user: { user_id: string; email: string; legacy_user_ids: string[] },
   roles: readonly string[],
+  options: { persist?: boolean } = {},
 ) {
   if (user.legacy_user_ids.length > 0 || !legacyRoleForServerRoles(roles)) {
     return user.legacy_user_ids;
@@ -197,6 +207,9 @@ export async function ensureLegacyIdentity(
   });
   const linked = new Set(others.flatMap((other) => other.legacy_user_ids));
   const assigned = resolveLegacyIdForUser(user, await loadWorkspaceUsers(), linked);
+  if (options.persist === false) {
+    return [assigned];
+  }
   const updated = await prisma.user.update({
     where: { user_id: user.user_id },
     data: { legacy_user_ids: { set: [assigned] } },
