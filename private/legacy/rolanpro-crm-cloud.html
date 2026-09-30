@@ -26167,11 +26167,11 @@ function openManagerConfirmProposal(oid) {
 // payment choice (paid Deposit with the received amount, or no pending Deposit
 // for pay-after-completion). Throws on failure so nothing is finalized
 // locally and the manager can simply try again.
-async function managerConfirmProposalOnServer(canonicalProposalId, payment, depositAmount) {
+async function managerConfirmProposalOnServer(canonicalProposalId, payment, depositAmount, channel = 'phone', note = '') {
   const response = await fetch('/api/v1/proposals/' + encodeURIComponent(canonicalProposalId) + '/manager-confirm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ payment, amount: payment === 'deposit' ? depositAmount : undefined }),
+    body: JSON.stringify({ payment, amount: payment === 'deposit' ? depositAmount : undefined, channel, note }),
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result?.errors?.[0]?.message || ('HTTP ' + response.status));
@@ -26202,10 +26202,15 @@ async function confirmProposalByManagerOnce(oid) {
   if (payment === 'deposit' && !(deposit > 0)) { alert('Укажите сумму полученного аванса.'); return; }
 
   const proposal = getPremiumProposalByOrder(oid);
-  if (proposal?.canonicalProposalId) {
+  // Without a server copy the CRM and PostgreSQL would disagree; publish first.
+  if (!proposal?.canonicalProposalId) {
+    alert('Это КП ещё не опубликовано на сервере. Откройте КП и нажмите «Опубликовать / отправить», затем подтвердите снова.');
+    return;
+  }
+  {
     if (typeof cloudStatus === 'function') cloudStatus('Подтверждаем КП на сервере…');
     try {
-      await managerConfirmProposalOnServer(proposal.canonicalProposalId, payment, deposit);
+      await managerConfirmProposalOnServer(proposal.canonicalProposalId, payment, deposit, channel, note);
     } catch (error) {
       console.warn('[Proposal] server confirmation failed', error);
       alert('Сервер не подтвердил КП: ' + (error?.message || 'нет связи') + '.\n\nВ CRM ничего не изменено — попробуйте ещё раз.');
@@ -26217,8 +26222,15 @@ async function confirmProposalByManagerOnce(oid) {
   if (proposal && !premiumProposalLocked(proposal)) {
     // The locked KP must show the payment path actually agreed with the client.
     proposal.selections = proposal.selections || {};
-    if (payment === 'after_completion') proposal.selections.paymentMode = 'after_completion';
-    else if (proposal.selections.paymentMode === 'after_completion') proposal.selections.paymentMode = 'deposit50';
+    if (payment === 'after_completion') {
+      proposal.selections.paymentMode = 'after_completion';
+    } else if (payment === 'deposit') {
+      // The locked KP shows exactly the deposit that was received.
+      proposal.selections.paymentMode = 'custom';
+      proposal.selections.customDeposit = deposit;
+    } else if (proposal.selections.paymentMode === 'after_completion') {
+      proposal.selections.paymentMode = 'deposit50';
+    }
     const calc = premiumProposalCalc(proposal);
     proposal.acceptedAt = at;
     proposal.acceptedVia = 'manager';

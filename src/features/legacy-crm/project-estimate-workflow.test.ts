@@ -572,7 +572,11 @@ test("manager confirms a KP on the client's behalf: server first, ledger deposit
   // Server approval and a paid Deposit happen before anything is finalized locally.
   // One server step records approval and the payment choice together.
   assert.match(server, /\/manager-confirm'/);
-  assert.match(server, /JSON\.stringify\(\{ payment, amount: payment === 'deposit' \? depositAmount : undefined \}\)/);
+  assert.match(server, /JSON\.stringify\(\{ payment, amount: payment === 'deposit' \? depositAmount : undefined, channel, note \}\)/);
+  // A KP without a server copy is refused, never confirmed only locally.
+  assert.match(confirm, /if \(!proposal\?\.canonicalProposalId\) \{/);
+  // The locked KP carries the received deposit.
+  assert.match(confirm, /proposal\.selections\.customDeposit = deposit;/);
   // A double click cannot record the deposit twice.
   assert.match(guard, /if \(managerProposalConfirmInFlight\) return;/);
   assert.match(confirm, /if \(o\.proposalConfirmedByManager\) \{ closeModal\(\); return; \}/);
