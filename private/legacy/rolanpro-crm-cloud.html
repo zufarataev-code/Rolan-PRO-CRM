@@ -15872,8 +15872,16 @@ function orderUserCanMeasure(order, user = currentUser()) {
 function orderUserCanInstall(order, user = currentUser()) {
   return !!order && !!user && user.role === 'installer' && (order.installerIds || []).includes(user.id);
 }
+// Installation team lead: jobs of the lead's group installers (no prices, distribution only).
+function orderInLeadGroup(order, user = currentUser()) {
+  return !!order && !!user && user.role === 'installer' && !!user.installerLead
+    && (order.installerIds || []).some(id => id !== user.id && getUser(id)?.groupLeadId === user.id);
+}
+function orderInstallerSees(order, user = currentUser()) {
+  return (order?.installerIds || []).includes(user?.id) || orderInLeadGroup(order, user);
+}
 function orderUserCanAccess(order, user = currentUser()) {
-  return orderUserOwns(order, user) || orderUserCanMeasure(order, user) || orderUserCanInstall(order, user);
+  return orderUserOwns(order, user) || orderUserCanMeasure(order, user) || orderUserCanInstall(order, user) || orderInLeadGroup(order, user);
 }
 function orderUserCanSeeMoney(order, user = currentUser()) {
   return orderUserOwns(order, user);
@@ -21548,7 +21556,7 @@ function renderMeasurerList(tasks) {
 // ---------- INSTALLER VIEWS ----------
 function renderInstallerDashboard() {
   const u = currentUser();
-  const myTasks = db.orders.filter(o => (o.installerIds||[]).includes(u.id) && !['completed','review_received'].includes(o.status));
+  const myTasks = db.orders.filter(o => orderInstallerSees(o, u) && !['completed','review_received'].includes(o.status));
   // Today's payout total (only what user earned)
   const today = new Date(); today.setHours(0,0,0,0);
   const todayTasks = myTasks.filter(o => o.installationAt && new Date(o.installationAt).toDateString() === today.toDateString());
@@ -21772,7 +21780,7 @@ function renderInstallerPayHistory() {
 
 function renderInstallerTasks() {
   const u = currentUser();
-  const tasks = db.orders.filter(o => (o.installerIds||[]).includes(u.id))
+  const tasks = db.orders.filter(o => orderInstallerSees(o, u))
                 .sort((a,b) => (b.createdAt).localeCompare(a.createdAt));
   return buildDayRouteBar(u) + renderInstallerList(tasks);
 }
@@ -23339,7 +23347,9 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
           ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать ТЗ', sub: 'размеры, схема и раскрой', onclick: `printTechnicalSheet('${o.id}')`, disabled: !hasMeasurements })}
           ${projectAddress ? renderOrderActionCard({ icon: '🧭', title: 'Маршрут', sub: projectAddress, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(projectAddress)}` }) : ''}
           ${renderOrderActionCard({ icon: '📷', title: 'Добавить фото', sub: 'до или после монтажа', onclick: `addOrderPhoto('${o.id}')` })}
+          ${u.installerLead && ((o.installerIds || []).includes(u.id) || orderInLeadGroup(o, u)) ? renderOrderActionCard({ icon: '👥', title: 'Распределить бригаду', sub: 'монтажники вашей группы', onclick: `openLeadDistribute('${o.id}')` }) : ''}
         </div>
+        ${!(o.installerIds || []).includes(u.id) && orderInLeadGroup(o, u) ? `<div class="mt-3 text-sm text-gray-600">Это работа вашей группы: ${academyEsc((o.installerIds || []).map(id => getUser(id)?.name || id).join(', '))}. Вы распределяете бригаду; выполняют назначенные монтажники.</div>` : ''}
       </section>
       <div class="card p-0 overflow-hidden">
         ${renderTechnicalSheetHtml(o)}
