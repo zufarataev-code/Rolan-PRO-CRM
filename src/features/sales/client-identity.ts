@@ -96,11 +96,39 @@ function duplicateKey(duplicate: ClientIdentityDuplicate) {
   return `${duplicate.matchedBy}:${[duplicate.existingClientId, duplicate.duplicateClientId].sort().join(":")}`;
 }
 
+/** Every pair of cards sharing an identity, so comparisons do not depend on list order. */
+function allDuplicatePairKeys(clients: ClientIdentityCandidate[]) {
+  const groups = new Map<string, Set<string>>();
+  clients.forEach((client, index) => {
+    const id = clientId(client, index);
+    const identities: Array<[ClientIdentityMatch, string | null]> = [
+      ["email", normalizeClientEmail(client.email)],
+      ["phone", normalizeClientPhone(client.phone)],
+    ];
+    for (const [matchedBy, value] of identities) {
+      if (!value) continue;
+      const key = `${matchedBy}:${value}`;
+      groups.set(key, (groups.get(key) ?? new Set()).add(id));
+    }
+  });
+  const keys = new Set<string>();
+  for (const [key, members] of groups) {
+    const matchedBy = key.slice(0, key.indexOf(":")) as ClientIdentityMatch;
+    const ids = [...members];
+    for (let i = 0; i < ids.length; i += 1) {
+      for (let j = i + 1; j < ids.length; j += 1) {
+        keys.add(duplicateKey({ existingClientId: ids[i], duplicateClientId: ids[j], matchedBy }));
+      }
+    }
+  }
+  return keys;
+}
+
 export function findIntroducedClientIdentityDuplicate(
   currentClients: ClientIdentityCandidate[],
   nextClients: ClientIdentityCandidate[],
 ) {
-  const currentPairs = new Set(findClientIdentityDuplicates(currentClients).map(duplicateKey));
+  const currentPairs = allDuplicatePairKeys(currentClients);
   return findClientIdentityDuplicates(nextClients).find(
     (duplicate) => !currentPairs.has(duplicateKey(duplicate)),
   ) ?? null;

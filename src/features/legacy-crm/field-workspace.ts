@@ -172,7 +172,12 @@ function effectiveLegacyRole(roles: readonly string[]) {
 }
 
 function safeUser(user: JsonObject, own: boolean, roles: readonly string[]) {
-  const effectiveRole = own ? effectiveLegacyRole(roles) : null;
+  // An employee with several field roles has one card per role (surveyor card,
+  // installer card); keep each own card's role instead of collapsing both.
+  const heldRoles = legacyRoleNames(roles);
+  const effectiveRole = own
+    ? (heldRoles.has(String(user.role || "")) ? String(user.role) : effectiveLegacyRole(roles))
+    : null;
   const result: JsonObject = {
     id: user.id,
     role: effectiveRole || user.role,

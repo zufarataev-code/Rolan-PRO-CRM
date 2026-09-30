@@ -135,6 +135,27 @@ export async function recordInstallerPayrollAccrual(
   });
 }
 
+/** Owner paid an employee for a period: their accruals and lead overrides become paid. */
+export async function markInstallerPayrollPaid(input: { legacyUserId: string; start: Date; end: Date }) {
+  const user = await prisma.user.findFirst({
+    where: { legacy_user_ids: { has: input.legacyUserId } },
+    select: { user_id: true },
+  });
+  if (!user) return null;
+  const period = { gte: input.start, lte: input.end };
+  return prisma.$transaction(async (tx) => {
+    const own = await tx.installerPayrollAccrual.updateMany({
+      where: { installer_id: user.user_id, status: "owed", accrued_at: period },
+      data: { status: "paid" },
+    });
+    const lead = await tx.installerPayrollAccrual.updateMany({
+      where: { lead_id: user.user_id, lead_override_status: "owed", lead_override_amount: { gt: 0 }, accrued_at: period },
+      data: { lead_override_status: "paid" },
+    });
+    return { user_id: user.user_id, accruals_paid: own.count, lead_overrides_paid: lead.count };
+  });
+}
+
 function sessionDurationMinutes(startedAt: Date, endedAt: Date | null, storedMinutes: number) {
   if (endedAt) return storedMinutes;
   return Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 60_000));
@@ -184,7 +205,7 @@ const workSessionInclude = {
 
 export async function getInstallerOperationsDashboard(session: InstallerSession) {
   const installerId = session.user.user_id;
-  const [activeSession, history, accruals, jobs, leadRows] = await Promise.all([
+  const [activeSession, history, accruals, jobs, leadRows, ownTotals, leadTotals] = await Promise.all([
     prisma.installerWorkSession.findFirst({
       where: { installer_id: installerId, ended_at: null },
       include: workSessionInclude,
@@ -220,20 +241,28 @@ export async function getInstallerOperationsDashboard(session: InstallerSession)
       orderBy: { accrued_at: "desc" },
       take: 40,
     }),
+    // Totals over all rows; the lists above only show recent history.
+    prisma.installerPayrollAccrual.groupBy({
+      by: ["status"],
+      where: { installer_id: installerId },
+      _sum: { amount: true },
+    }),
+    prisma.installerPayrollAccrual.groupBy({
+      by: ["lead_override_status"],
+      where: { lead_id: installerId, lead_override_amount: { gt: 0 } },
+      _sum: { lead_override_amount: true },
+    }),
   ]);
 
   const serializedHistory = history.map(serializeWorkSession);
   const totalMinutes = serializedHistory.reduce((sum, item) => sum + item.work_minutes, 0) +
     (activeSession ? sessionDurationMinutes(activeSession.started_at, null, 0) : 0);
   const totalMiles = serializedHistory.reduce((sum, item) => sum + item.miles_driven, 0);
-  const leadOwed = leadRows
-    .filter((item) => item.lead_override_status === "owed")
-    .reduce((sum, item) => sum + toNumber(item.lead_override_amount), 0);
-  const leadPaid = leadRows
-    .filter((item) => item.lead_override_status === "paid")
-    .reduce((sum, item) => sum + toNumber(item.lead_override_amount), 0);
-  const owed = accruals.filter((item) => item.status === "owed").reduce((sum, item) => sum + toNumber(item.amount), 0) + leadOwed;
-  const paid = accruals.filter((item) => item.status === "paid").reduce((sum, item) => sum + toNumber(item.amount), 0) + leadPaid;
+  const ownSum = (status: string) => toNumber(ownTotals.find((row) => row.status === status)?._sum.amount ?? 0);
+  const leadSum = (status: string) =>
+    toNumber(leadTotals.find((row) => row.lead_override_status === status)?._sum.lead_override_amount ?? 0);
+  const owed = Number((ownSum("owed") + leadSum("owed")).toFixed(2));
+  const paid = Number((ownSum("paid") + leadSum("paid")).toFixed(2));
 
   return {
     active_session: activeSession ? serializeWorkSession(activeSession) : null,

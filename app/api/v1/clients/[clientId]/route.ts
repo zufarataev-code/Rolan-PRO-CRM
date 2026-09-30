@@ -38,6 +38,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     email: normalizeClientEmail(body.email) || null,
   };
   const result = await prisma.$transaction(async (tx) => {
+    // Authorize the target first: the duplicate answer names another client and
+    // must never be reachable for a card the caller cannot edit.
+    const target = await tx.client.findFirst({
+      where: buildClientAccessWhere(clientId, managerId),
+      select: { client_id: true },
+    });
+    if (!target) return { client: null, duplicate: null } as const;
+
     await lockClientIdentity(tx, contact);
     const duplicate = await findExistingClientByIdentity(tx, contact, clientId);
     if (duplicate) return { client: null, duplicate } as const;
