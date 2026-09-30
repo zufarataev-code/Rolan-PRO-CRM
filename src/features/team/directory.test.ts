@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applyEmployeeDirectory, legacyIdForUser, legacyRoleForServerRoles, type DirectoryMember } from "./directory";
+import {
+  applyEmployeeDirectory,
+  legacyIdForUser,
+  legacyIdsForRoles,
+  legacyRoleForServerRoles,
+  legacyRolesForServerRoles,
+  type DirectoryMember,
+} from "./directory";
 
 const alan: DirectoryMember = {
   userId: "11111111-1111-4111-8111-111111111111",
@@ -9,7 +16,7 @@ const alan: DirectoryMember = {
   fullName: "Alan",
   roles: ["CONSULTANT", "INSTALLER"],
   isActive: true,
-  legacyUserIds: ["u_z1"],
+  legacyUserIds: ["u_z1", "u_i1"],
 };
 
 test("server roles map to one legacy role by priority", () => {
@@ -33,20 +40,41 @@ test("a stored card cannot override name, email, role or access from PostgreSQL"
 
   assert.equal(card.name, "Alan");
   assert.equal(card.email, "alan@example.com");
-  assert.equal(card.role, "measurer");
+  // The card already has a role the employee holds (installer); the other role gets the other card.
+  assert.equal(card.role, "installer");
   assert.equal(card.active, true);
   assert.equal(card.phone, "+1 805 555 0100", "legacy-only fields are kept");
   assert.equal(payload.users[0].role, "installer", "input payload is not mutated");
 });
 
-test("an employee without a card gets one, so login never depends on a browser sync", () => {
-  const member = { ...alan, legacyUserIds: [legacyIdForUser(alan.userId)] };
-  const result = applyEmployeeDirectory({ users: [] }, [member]);
+test("an employee without a card gets one per role, so login never depends on a browser sync", () => {
+  const ids = legacyIdsForRoles(alan.userId, [], legacyRolesForServerRoles(alan.roles));
+  const result = applyEmployeeDirectory({ users: [] }, [{ ...alan, legacyUserIds: ids }]);
   const cards = result.users as Array<Record<string, unknown>>;
 
-  assert.equal(cards.length, 1);
-  assert.equal(cards[0].id, legacyIdForUser(alan.userId));
-  assert.equal(cards[0].role, "measurer");
+  assert.deepEqual(ids, [legacyIdForUser(alan.userId), `${legacyIdForUser(alan.userId)}_installer`]);
+  assert.deepEqual(cards.map((card) => card.role), ["measurer", "installer"]);
+});
+
+test("a surveyor + installer keeps one card per role (production u_z1 / u_i1)", () => {
+  const payload = {
+    users: [
+      { id: "u_z1", role: "measurer", active: true },
+      { id: "u_i1", role: "installer", active: true },
+    ],
+  };
+  const cards = applyEmployeeDirectory(payload, [alan]).users as Array<Record<string, unknown>>;
+  assert.deepEqual(cards.map((card) => [card.id, card.role, card.active]), [
+    ["u_z1", "measurer", true],
+    ["u_i1", "installer", true],
+  ]);
+
+  // Installer role removed: the installer card is switched off, not turned into a second surveyor.
+  const surveyorOnly = applyEmployeeDirectory(payload, [{ ...alan, roles: ["CONSULTANT"] }]).users as Array<Record<string, unknown>>;
+  assert.deepEqual(surveyorOnly.map((card) => [card.id, card.role, card.active]), [
+    ["u_z1", "measurer", true],
+    ["u_i1", "measurer", false],
+  ]);
 });
 
 test("cards not linked to any employee are kept for historical orders", () => {
@@ -56,7 +84,7 @@ test("cards not linked to any employee are kept for historical orders", () => {
   );
   const ids = (result.users as Array<{ id: string }>).map((card) => card.id).sort();
 
-  assert.deepEqual(ids, ["u_old", "u_z1"]);
+  assert.deepEqual(ids, ["u_i1", "u_old", "u_z1"]);
 });
 
 test("disabling an employee in PostgreSQL disables the card", () => {
@@ -64,7 +92,7 @@ test("disabling an employee in PostgreSQL disables the card", () => {
     { ...alan, isActive: false },
   ]);
 
-  assert.equal((result.users as Array<{ active: boolean }>)[0].active, false);
+  assert.ok((result.users as Array<{ active: boolean }>).every((card) => card.active === false));
 });
 
 test("an unlinked employee reuses their existing card by email, keeping assigned orders", async () => {
