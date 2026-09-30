@@ -163,3 +163,20 @@ test("installer workday stays inside the actual legacy CRM after duplicate shell
   assert.match(html, /\/api\/v1\/installer-work-sessions/);
   assert.match(html, /Рабочая геолокация/);
 });
+
+test("an employee with surveyor and installer cards keeps both roles in their workspace", async () => {
+  const { createFieldWorkspace } = await import("./field-workspace");
+  const payload = {
+    users: [
+      { id: "u_z1", role: "measurer", name: "Alan" },
+      { id: "u_i1", role: "installer", name: "Alan" },
+    ],
+    orders: [],
+  };
+  const workspace = createFieldWorkspace(payload, ["CONSULTANT", "INSTALLER"], ["u_z1", "u_i1"]) as unknown as {
+    users: Array<{ id: string; role: string }>;
+  };
+  const roles = Object.fromEntries(workspace.users.map((user) => [user.id, user.role]));
+  assert.equal(roles.u_z1, "measurer");
+  assert.equal(roles.u_i1, "installer");
+});
