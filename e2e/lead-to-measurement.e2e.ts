@@ -16,7 +16,7 @@ import { after, before, test } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
 
-import { assertSafeE2eTarget } from "./guard";
+import { assertSafeE2eTarget, assertServerUsesTestDatabase } from "./guard";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const PASSWORD = process.env.E2E_SEED_PASSWORD ?? "ChangeMe123!";
@@ -74,6 +74,7 @@ let surveyor: Session;
 let surveyedConsultationId: string | undefined;
 
 before(async () => {
+  await assertServerUsesTestDatabase(BASE_URL, prisma);
   // Seeded demo accounts start with a forced password change; the gate tests
   // the sales workflow, not onboarding, so it clears that flag on the test DB.
   await prisma.user.updateMany({

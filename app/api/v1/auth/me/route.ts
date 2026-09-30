@@ -13,7 +13,9 @@ export async function GET(request: NextRequest) {
 
   const { user } = result.session;
   // The legacy CRM resolves the employee by these ids; never return none.
-  const legacyUserIds = await ensureLegacyIdentity(user, result.session.roles);
+  const legacyUserIds = await ensureLegacyIdentity(user, result.session.roles, {
+    persist: !result.session.preview,
+  });
 
   return apiSuccess({
     user: {

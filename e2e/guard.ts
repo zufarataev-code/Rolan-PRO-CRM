@@ -1,10 +1,16 @@
 /**
  * The E2E gate creates records and clears flags on seeded accounts. It must
- * never run against production, so it requires an explicit opt-in AND checks
- * that both the application URL and the database are local. A hostname
- * blacklist is not enough: production is reachable under several names, and a
- * local server can be pointed at a production database.
+ * never run against production, so before any write it requires:
+ *
+ * 1. an explicit opt-in (E2E_ALLOW_WRITES=1) for the test process;
+ * 2. a local app URL and a local DATABASE_URL;
+ * 3. a handshake proving the running server uses the very same database:
+ *    the server exposes /api/v1/e2e/sentinel only when it was itself started
+ *    with E2E_ALLOW_WRITES=1, and its database identity must equal the test
+ *    process's own connection.
  */
+import type { PrismaClient } from "@prisma/client";
+
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
 function hostOf(value: string | undefined, label: string) {
@@ -24,5 +30,22 @@ export function assertSafeE2eTarget(baseUrl: string) {
   const dbHost = hostOf(process.env.DATABASE_URL, "DATABASE_URL");
   if (!LOCAL_HOSTS.has(appHost) || !LOCAL_HOSTS.has(dbHost)) {
     throw new Error(`E2E gate refused: app (${appHost}) and database (${dbHost}) must both be local.`);
+  }
+}
+
+export async function assertServerUsesTestDatabase(baseUrl: string, prisma: PrismaClient) {
+  assertSafeE2eTarget(baseUrl);
+  const response = await fetch(`${baseUrl}/api/v1/e2e/sentinel`, { cache: "no-store" });
+  if (response.status !== 200) {
+    throw new Error("E2E gate refused: the server was not started with E2E_ALLOW_WRITES=1.");
+  }
+  const server = ((await response.json()) as { data: { database: string; started: string } }).data;
+  const [local] = await prisma.$queryRaw<Array<{ database: string; started: Date }>>`
+    SELECT current_database() AS database, pg_postmaster_start_time() AS started
+  `;
+  if (server.database !== local.database || server.started !== local.started.toISOString()) {
+    throw new Error(
+      `E2E gate refused: the server uses database "${server.database}", the test uses "${local.database}".`,
+    );
   }
 }
