@@ -39,5 +39,5 @@ test("employee creation shows canonical API errors and prevents inaccessible acc
   assert.match(crm, /Сотрудник не создан/);
   assert.match(service, /const missingRoles = input\.roles\.filter/);
   assert.match(service, /не настроены на сервере/);
-  assert.match(service, /if \(missingRoles\.length\)[\s\S]*?prisma\.user\.create/);
+  assert.match(service, /if \(missingRoles\.length\)[\s\S]*?(?:tx|prisma)\.user\.create/);
 });

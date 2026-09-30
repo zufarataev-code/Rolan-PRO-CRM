@@ -46,11 +46,23 @@ export function legacyRolesForServerRoles(roles: readonly string[]): string[] {
 }
 
 /** Card ids an employee needs: one per legacy role, existing ids first. */
-export function legacyIdsForRoles(userId: string, existing: readonly string[], legacyRoles: readonly string[]) {
+export function legacyIdsForRoles(
+  userId: string,
+  existing: readonly string[],
+  legacyRoles: readonly string[],
+  taken: ReadonlySet<string> = new Set(),
+) {
   const ids = [...existing];
   const base = ids[0] ?? legacyIdForUser(userId);
   if (!ids.length && legacyRoles.length) ids.push(base);
-  for (const role of legacyRoles.slice(ids.length)) ids.push(`${base}_${role}`);
+  // New card ids must not collide with existing cards or ids of other employees.
+  const used = new Set([...taken, ...ids]);
+  for (const role of legacyRoles.slice(ids.length)) {
+    let candidate = `${base}_${role}`;
+    for (let suffix = 2; used.has(candidate); suffix += 1) candidate = `${base}_${role}_${suffix}`;
+    used.add(candidate);
+    ids.push(candidate);
+  }
   return ids;
 }
 
@@ -236,7 +248,8 @@ export async function loadDirectoryMembers(
       const first = legacyUserIds.length
         ? legacyUserIds
         : [resolveLegacyIdForUser(user, cards, linked)];
-      const needed = legacyIdsForRoles(user.user_id, first, legacyRoles);
+      const cardIds = new Set(cardsOf(cards).map((card) => card.id));
+      const needed = legacyIdsForRoles(user.user_id, first, legacyRoles, new Set([...linked, ...cardIds]));
       needed.forEach((id) => linked.add(id));
       if (persist) {
         const updated = await prisma.user.update({
@@ -284,7 +297,8 @@ export async function ensureLegacyIdentity(
   const first = user.legacy_user_ids.length
     ? user.legacy_user_ids
     : [resolveLegacyIdForUser(user, await loadWorkspaceUsers(), linked)];
-  const needed = legacyIdsForRoles(user.user_id, first, legacyRoles);
+  const workspaceCards = cardsOf(await loadWorkspaceUsers()).map((card) => card.id);
+  const needed = legacyIdsForRoles(user.user_id, first, legacyRoles, new Set([...linked, ...workspaceCards]));
   if (options.persist === false) {
     return needed;
   }

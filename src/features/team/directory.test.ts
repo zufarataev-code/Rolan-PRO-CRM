@@ -135,3 +135,8 @@ test("group links reach the legacy cards: lead flag and the lead's card id", () 
   assert.equal(cards.u_inst.groupLeadId, "u_lead");
   assert.equal(cards.u_inst.installerLead, false);
 });
+
+test("a new role card never reuses an id that already exists", () => {
+  const ids = legacyIdsForRoles(alan.userId, ["u_z1"], ["measurer", "installer"], new Set(["u_z1_installer"]));
+  assert.deepEqual(ids, ["u_z1", "u_z1_installer_2"]);
+});

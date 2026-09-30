@@ -294,6 +294,9 @@ function MemberForm({
     event.preventDefault();
     setError(null);
     if (!roles.length) return setError("Выберите хотя бы одну роль.");
+    if (roles.includes("INSTALLER_LEAD") && isActive && (groupIds.length < 1 || groupIds.length > MAX_GROUP)) {
+      return setError(`Выберите монтажников группы: от 1 до ${MAX_GROUP}.`);
+    }
     if (!member && password.length < minPasswordLength) {
       return setError(`Временный пароль — не короче ${minPasswordLength} символов.`);
     }
@@ -304,7 +307,14 @@ function MemberForm({
     setBusy(true);
     try {
       if (!member) {
-        await api("/api/v1/team", "POST", { email, fullName, roles, password });
+        await api("/api/v1/team", "POST", {
+          email,
+          fullName,
+          roles,
+          password,
+          installerLeadId: roles.includes("INSTALLER") && !roles.includes("INSTALLER_LEAD") && installerLeadId ? installerLeadId : null,
+          ...(roles.includes("INSTALLER_LEAD") ? { groupInstallerIds: groupIds } : {}),
+        });
         await onSaved(`${fullName} добавлен(а). Передайте почту и временный пароль лично — при первом входе CRM попросит его сменить.`);
       } else {
         await api(`/api/v1/team/${member.userId}`, "PATCH", {
@@ -313,7 +323,8 @@ function MemberForm({
           roles,
           isActive,
           installerLeadId: roles.includes("INSTALLER") && installerLeadId ? installerLeadId : null,
-          ...(roles.includes("INSTALLER_LEAD") ? { groupInstallerIds: groupIds } : {}),
+          // A lead being switched off releases the group: no list is sent then.
+          ...(roles.includes("INSTALLER_LEAD") && isActive ? { groupInstallerIds: groupIds } : {}),
           ...(password ? { password } : {}),
         });
         await onSaved(password ? `Сохранено. Новый временный пароль для ${fullName} действует со следующего входа.` : "Сохранено.");
@@ -351,11 +362,11 @@ function MemberForm({
           ))}
         </fieldset>
 
-        {roles.includes("INSTALLER_LEAD") && member ? (
+        {roles.includes("INSTALLER_LEAD") ? (
           <fieldset className={styles.field}>
             <span>Монтажники группы ({groupIds.length} из {MAX_GROUP}) — получает 10% с заработка каждого</span>
             {installers
-              .filter((item) => item.userId !== member.userId)
+              .filter((item) => item.userId !== member?.userId)
               .map((item) => (
                 <label key={item.userId} className={styles.check}>
                   <input
@@ -366,7 +377,7 @@ function MemberForm({
                   />
                   <span>
                     {item.fullName}
-                    {item.installerLeadId && item.installerLeadId !== member.userId ? (
+                    {item.installerLeadId && item.installerLeadId !== member?.userId ? (
                       <span className={styles.muted}> · сейчас в другой группе</span>
                     ) : null}
                   </span>
@@ -375,13 +386,13 @@ function MemberForm({
           </fieldset>
         ) : null}
 
-        {roles.includes("INSTALLER") && !roles.includes("INSTALLER_LEAD") && member ? (
+        {roles.includes("INSTALLER") && !roles.includes("INSTALLER_LEAD") ? (
           <label className={styles.field}>
             <span>Руководитель монтажной группы</span>
             <select id="tm-installer-lead" value={installerLeadId} onChange={(event) => setInstallerLeadId(event.target.value)}>
               <option value="">— без группы —</option>
               {leads
-                .filter((lead) => lead.userId !== member.userId)
+                .filter((lead) => lead.userId !== member?.userId)
                 .map((lead) => (
                   <option key={lead.userId} value={lead.userId}>{lead.fullName}</option>
                 ))}

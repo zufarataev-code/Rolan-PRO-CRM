@@ -79,3 +79,8 @@ test("historical duplicate cards with the same phone are reported, not silently 
   const match = await findExistingClientByIdentity(tx, { phone: "805-555-0142" });
   assert.ok(match?.conflictingClient, "two historical cards share the phone");
 });
+
+test("reordering historical duplicate cards is not reported as a new duplicate", () => {
+  const card = (id: string) => ({ id, email: null, phone: "8055550111" });
+  assert.equal(findIntroducedClientIdentityDuplicate([card("A"), card("B"), card("C")], [card("B"), card("A"), card("C")]), null);
+});
