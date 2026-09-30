@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Employee cards always come from PostgreSQL (one employee directory).
-  const members = await loadDirectoryMembers();
+  const members = await loadDirectoryMembers((workspace.payload as { users?: unknown }).users ?? []);
   const payload = applyEmployeeDirectory(workspace.payload as Record<string, unknown>, members);
   const legacyUserIds =
     members.find((member) => member.userId === auth.session.user.user_id)?.legacyUserIds ??
@@ -132,7 +132,7 @@ export async function PUT(request: NextRequest) {
   // employee's name, email, role or access — those are re-applied from PostgreSQL.
   const nextPayload = applyEmployeeDirectory(
     mergedPayload as Record<string, unknown>,
-    await loadDirectoryMembers(),
+    await loadDirectoryMembers((mergedPayload as { users?: unknown }).users ?? []),
   ) as typeof mergedPayload;
 
   const updated = await prisma.legacyWorkspace.updateMany({

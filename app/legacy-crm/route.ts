@@ -200,23 +200,48 @@ export async function GET(request: NextRequest) {
   // re-rendered on every navigation is gone. Owners get a link to the
   // canonical employee screen.
   const teamDirectoryPatch = session.roles.includes(ROLE_CODES.OWNER) && !session.preview ? `
+    <style>
+      #rolanpro-team-overlay { position: fixed; inset: 0; z-index: 2147483000; background: rgba(15,23,42,.48); display: grid; place-items: center; padding: 14px; }
+      #rolanpro-team-frame { width: min(980px, 100%); height: min(94dvh, 980px); border: 0; border-radius: 18px; background: #f1f5f9; box-shadow: 0 24px 80px rgba(15,23,42,.28); }
+      @media (max-width: 640px) { #rolanpro-team-overlay { padding: 0; } #rolanpro-team-frame { height: 100dvh; border-radius: 0; } }
+    </style>
     <script id="rolanpro-team-screen-link">
       (() => {
+        // Employee management is part of this CRM: it opens as an overlay
+        // inside /legacy-crm (same pattern as the calculator).
+        window.closeRolanProTeam = function closeRolanProTeam() {
+          document.getElementById('rolanpro-team-overlay')?.remove();
+        };
+        window.openRolanProTeam = function openRolanProTeam() {
+          window.closeRolanProTeam();
+          const overlay = document.createElement('div');
+          overlay.id = 'rolanpro-team-overlay';
+          overlay.innerHTML = '<iframe id="rolanpro-team-frame" title="Сотрудники" src="/legacy-crm/team?embed=1"></iframe>';
+          overlay.addEventListener('click', (event) => { if (event.target === overlay) window.closeRolanProTeam(); });
+          document.body.appendChild(overlay);
+        };
+        window.addEventListener('message', (event) => {
+          if (event.origin === window.location.origin && event.data?.type === 'rolanpro-team-close') window.closeRolanProTeam();
+        });
         function ensureTeamLink() {
           const navs = Array.from(document.querySelectorAll('nav'));
           const nav = navs.find((candidate) => candidate.querySelector('.nav-item'));
           if (!nav || nav.querySelector('[data-rolanpro-team-nav="1"]')) return;
-          const item = document.createElement('a');
+          const item = document.createElement('div');
           item.className = 'nav-item';
-          item.href = '/team';
           item.setAttribute('data-rolanpro-team-nav', '1');
           item.title = 'Сотрудники: роли, доступ, просмотр глазами сотрудника';
           item.innerHTML = '<span class="nav-icon">👥</span><span class="nav-label">Сотрудники</span>';
+          item.addEventListener('click', () => window.openRolanProTeam());
           nav.appendChild(item);
         }
         new MutationObserver(() => window.requestAnimationFrame(ensureTeamLink))
           .observe(document.documentElement, { childList: true, subtree: true });
         window.requestAnimationFrame(ensureTeamLink);
+        if (new URLSearchParams(location.search).get('panel') === 'team') {
+          history.replaceState(null, '', location.pathname + location.hash);
+          window.requestAnimationFrame(() => window.openRolanProTeam());
+        }
       })();
     </script>
   ` : "";
@@ -248,7 +273,7 @@ export async function GET(request: NextRequest) {
         };
         document.getElementById('rolanpro-preview-exit')?.addEventListener('click', async () => {
           await fetch('/api/v1/team/preview', { method: 'DELETE' }).catch(() => null);
-          location.assign('/team');
+          location.assign('/legacy-crm?panel=team');
         });
       })();
     </script>

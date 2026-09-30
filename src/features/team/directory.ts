@@ -110,12 +110,38 @@ export function applyEmployeeDirectory<T extends Record<string, unknown>>(
   return { ...payload, users: cards };
 }
 
+function cardsOf(payloadUsers: unknown): LegacyCard[] {
+  return Array.isArray(payloadUsers)
+    ? payloadUsers.filter((card): card is LegacyCard => Boolean(card && typeof card === "object" && typeof (card as LegacyCard).id === "string"))
+    : [];
+}
+
+/**
+ * The legacy card id an unlinked employee should get: an existing card with
+ * the same email (not already linked to someone else) keeps the employee's
+ * history — orders are assigned by card id — otherwise a stable new id.
+ */
+export function resolveLegacyIdForUser(
+  user: { user_id: string; email: string },
+  payloadUsers: unknown,
+  idsLinkedToOthers: ReadonlySet<string>,
+) {
+  const email = user.email.trim().toLowerCase();
+  const existing = cardsOf(payloadUsers).find(
+    (card) =>
+      !idsLinkedToOthers.has(card.id) &&
+      typeof card.email === "string" &&
+      card.email.trim().toLowerCase() === email,
+  );
+  return existing?.id ?? legacyIdForUser(user.user_id);
+}
+
 /**
  * Loads every employee and makes sure each has a legacy card id. Employees
  * created without one (or before this rule) get a stable server-assigned id,
  * persisted once, so their login never depends on a browser sync.
  */
-export async function loadDirectoryMembers(): Promise<DirectoryMember[]> {
+export async function loadDirectoryMembers(payloadUsers?: unknown): Promise<DirectoryMember[]> {
   const users = await prisma.user.findMany({
     include: {
       user_accesses: {
@@ -125,13 +151,16 @@ export async function loadDirectoryMembers(): Promise<DirectoryMember[]> {
     },
   });
 
+  const cards = payloadUsers === undefined ? await loadWorkspaceUsers() : payloadUsers;
+  const linked = new Set(users.flatMap((user) => user.legacy_user_ids));
   const members: DirectoryMember[] = [];
   for (const user of users) {
     const roles = user.user_accesses.map((access) => access.role.code);
     let legacyUserIds = user.legacy_user_ids;
     // Only CRM workspace roles need a card; service actors (AI_SERVICE) do not.
     if (legacyUserIds.length === 0 && legacyRoleForServerRoles(roles)) {
-      const assigned = legacyIdForUser(user.user_id);
+      const assigned = resolveLegacyIdForUser(user, cards, linked);
+      linked.add(assigned);
       const updated = await prisma.user.update({
         where: { user_id: user.user_id },
         data: { legacy_user_ids: { set: [assigned] } },
@@ -155,14 +184,31 @@ export async function loadDirectoryMembers(): Promise<DirectoryMember[]> {
  * Same guarantee as `loadDirectoryMembers`, for one user: returns the user's
  * legacy card ids, assigning a stable one first if a CRM employee has none.
  */
-export async function ensureLegacyIdentity(user: { user_id: string; legacy_user_ids: string[] }, roles: readonly string[]) {
+export async function ensureLegacyIdentity(
+  user: { user_id: string; email: string; legacy_user_ids: string[] },
+  roles: readonly string[],
+) {
   if (user.legacy_user_ids.length > 0 || !legacyRoleForServerRoles(roles)) {
     return user.legacy_user_ids;
   }
+  const others = await prisma.user.findMany({
+    where: { user_id: { not: user.user_id } },
+    select: { legacy_user_ids: true },
+  });
+  const linked = new Set(others.flatMap((other) => other.legacy_user_ids));
+  const assigned = resolveLegacyIdForUser(user, await loadWorkspaceUsers(), linked);
   const updated = await prisma.user.update({
     where: { user_id: user.user_id },
-    data: { legacy_user_ids: { set: [legacyIdForUser(user.user_id)] } },
+    data: { legacy_user_ids: { set: [assigned] } },
     select: { legacy_user_ids: true },
   });
   return updated.legacy_user_ids;
+}
+
+async function loadWorkspaceUsers() {
+  const workspace = await prisma.legacyWorkspace.findUnique({
+    where: { workspace_id: "primary" },
+    select: { payload: true },
+  });
+  return (workspace?.payload as { users?: unknown } | null)?.users ?? [];
 }

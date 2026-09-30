@@ -40,6 +40,11 @@ export async function POST(request: NextRequest) {
   if (!subject) {
     return apiError(404, "not_found", "Сотрудник не найден.");
   }
+  // Preview is for employees' workspaces. Viewing as another owner would hand
+  // the preview every owner-only route, including integrations.
+  if (subject.user_accesses.some((access) => access.role.code === ROLE_CODES.OWNER)) {
+    return apiError(400, "invalid_payload", "Смотреть глазами можно сотрудников, но не другого владельца.");
+  }
 
   const response = NextResponse.json({
     data: {
@@ -57,7 +62,7 @@ export async function POST(request: NextRequest) {
 
 /** Leaves the preview. Allowed for anyone: clearing the cookie is always safe. */
 export async function DELETE() {
-  const response = NextResponse.json({ data: { redirectTo: "/team" }, meta: {}, errors: [] });
+  const response = NextResponse.json({ data: { redirectTo: "/legacy-crm?panel=team" }, meta: {}, errors: [] });
   response.cookies.set(previewCookie("", 0));
   return response;
 }
