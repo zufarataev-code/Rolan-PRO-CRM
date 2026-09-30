@@ -48,9 +48,11 @@ async function installerZoneRate(tx: Prisma.TransactionClient, installerId: stri
     tx.serviceType.findUnique({ where: { service_code: "ZONE_CONNECTION" }, select: { installation_cost_per_sqft: true } }),
   ]);
   const cards = ((workspace?.payload as { users?: unknown } | null)?.users ?? []) as Array<Record<string, unknown>>;
-  const card = Array.isArray(cards)
-    ? cards.find((candidate) => (user?.legacy_user_ids ?? []).includes(String(candidate?.id ?? "")))
-    : undefined;
+  const ownCards = Array.isArray(cards)
+    ? cards.filter((candidate) => (user?.legacy_user_ids ?? []).includes(String(candidate?.id ?? "")))
+    : [];
+  // Multi-role employees: the connection rate lives on the installer card.
+  const card = ownCards.find((candidate) => candidate?.role === "installer") ?? ownCards[0];
   const own = Number(
     ((card?.payConfig as { ratesByWorkType?: Record<string, unknown> } | undefined)?.ratesByWorkType ?? {}).connect,
   );

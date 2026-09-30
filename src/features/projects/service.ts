@@ -478,7 +478,9 @@ export async function getZoneInstallerRateResolver(positionIds: string[]) {
   const cards = (Array.isArray(rawCards) ? rawCards : []) as Array<Record<string, unknown>>;
   const rateByInstaller = new Map(
     users.map((user) => {
-      const card = cards.find((candidate) => user.legacy_user_ids.includes(String(candidate?.id ?? "")));
+      const ownCards = cards.filter((candidate) => user.legacy_user_ids.includes(String(candidate?.id ?? "")));
+      // Multi-role employees: the connection rate lives on the installer card.
+      const card = ownCards.find((candidate) => candidate?.role === "installer") ?? ownCards[0];
       const own = Number(
         ((card?.payConfig as { ratesByWorkType?: Record<string, unknown> } | undefined)?.ratesByWorkType ?? {}).connect,
       );
@@ -576,7 +578,11 @@ export function calculatePositionFinance(
   const addonCostTotal = addonRows.reduce((sum, addon) => sum + addon.estimated_cost, 0);
   const materialCostTotal = actualFilmSqft * toNumber(position.service_type.material_cost_per_sqft);
   // Smart zone connections are installer labor too, multiplied like the film.
-  const zoneCount = position.service_type.service_code === "SMART_FILM" ? asNumber(dynamic.zones_qty) : 0;
+  // Automatic zone labor applies from 2026-09-01 (positions installed earlier are flagged by the migration).
+  const zoneCount =
+    position.service_type.service_code === "SMART_FILM" && dynamic.owner_pay_rules !== false
+      ? asNumber(dynamic.zones_qty)
+      : 0;
   const zoneLabor = zoneCount * Math.max(0, options.zoneInstallerRate ?? 0);
   const installationCostTotal =
     (actualFilmSqft * installationCostPerSqft + zoneLabor) * complexityMultiplier;

@@ -16,13 +16,16 @@
 -- before the shared rows change (calculatePositionFinance prefers the snapshot).
 UPDATE project_positions AS p
 SET dynamic_fields = COALESCE(p.dynamic_fields::jsonb, '{}'::jsonb)
-      || jsonb_build_object('manual_installation_cost_per_sqft', st.installation_cost_per_sqft),
+      || CASE WHEN jsonb_typeof(p.dynamic_fields::jsonb -> 'manual_installation_cost_per_sqft') = 'number'
+              THEN '{}'::jsonb
+              ELSE jsonb_build_object('manual_installation_cost_per_sqft', st.installation_cost_per_sqft) END
+      -- Automatic Smart-zone labor is a rule from 2026-09-01; older positions never had it.
+      || jsonb_build_object('owner_pay_rules', false),
     updated_at = NOW()
 FROM projects AS pr, service_types AS st
 WHERE pr.project_id = p.project_id
   AND st.service_type_id = p.service_type_id
-  AND pr.install_date < DATE '2026-09-01'
-  AND jsonb_typeof(p.dynamic_fields::jsonb -> 'manual_installation_cost_per_sqft') IS DISTINCT FROM 'number';
+  AND pr.install_date < DATE '2026-09-01';
 
 UPDATE project_positions AS p
 SET dynamic_fields = COALESCE(p.dynamic_fields::jsonb, '{}'::jsonb)

@@ -37,8 +37,10 @@ FROM (
   SELECT
     j.installer_job_id,
     COALESCE(NULLIF((p.dynamic_fields::jsonb ->> 'manual_installation_cost_per_sqft'), '')::numeric, st.installation_cost_per_sqft) AS rate,
-    COALESCE(cl.multiplier, 1) AS multiplier,
+    -- Positions installed before the cutoff keep their snapshotted coefficient and get no zone pay.
+    COALESCE(NULLIF((p.dynamic_fields::jsonb ->> 'complexity_multiplier'), '')::numeric, cl.multiplier, 1) AS multiplier,
     CASE WHEN st.service_code = 'SMART_FILM'
+          AND (p.dynamic_fields::jsonb ->> 'owner_pay_rules') IS DISTINCT FROM 'false'
          THEN COALESCE(NULLIF((p.dynamic_fields::jsonb ->> 'zones_qty'), '')::numeric, 0)
          ELSE 0 END AS zones,
     COALESCE((SELECT installation_cost_per_sqft FROM service_types WHERE service_code = 'ZONE_CONNECTION'), 0) AS zone_rate
