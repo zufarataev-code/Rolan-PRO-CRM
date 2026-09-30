@@ -8225,6 +8225,14 @@ function migrateSchema() {
     s.installerRates.serviceTypes.ZONE_CONNECTION = 50;
     db._ownerRateDirectory20260901 = true;
   }
+  // Completed orders get their team-lead snapshot once, so a later group move
+  // never transfers a recorded 10% to someone else.
+  if (!db._installerLeadSnapshotV1) {
+    (db.orders || []).forEach(o => {
+      if (o.installationDoneAt && !o.installerLeadAtCompletion && typeof snapshotInstallerLeads === 'function') snapshotInstallerLeads(o);
+    });
+    db._installerLeadSnapshotV1 = true;
+  }
   if (!s.projectProfitTax) {
     s.projectProfitTax = {
       entityType: 'C_CORP',
@@ -22811,6 +22819,7 @@ function closeQuickProjectAsCompleted(oid) {
   o.depositReceivedAt = o.depositReceivedAt || paidAt;
   o.installationAt = o.installationAt || startAt;
   o.installationDoneAt = o.installationDoneAt || endAt;
+  if (!o.installerLeadAtCompletion) snapshotInstallerLeads(o);
   o.actSignedAt = o.actSignedAt || endAt;
   o.paidAt = paidAt;
   o.status = 'completed';
@@ -34088,13 +34097,28 @@ function renderPayroll() {
   `;
 }
 
-function markPayoutPaid(userId, startISO, endISO) {
+async function markPayoutPaid(userId, startISO, endISO) {
   const u = getUser(userId);
   const start = new Date(startISO), end = new Date(endISO);
   const calc = calcUserPayoutForPeriod(userId, start, end);
   const amountDue = Math.max(0, calc.total - payrollPaidForPeriod(userId, start, end));
   if (amountDue <= 0) return alert('За выбранный период всё уже выплачено.');
   if (!confirm(`Подтвердить выплату ${fmtMoney(amountDue)} для ${u.name}?\n\nВ хронологию каждого заказа добавится запись.`)) return;
+  // The server records the payment first (accruals and lead overrides become
+  // paid); only then the CRM records it, so a failed request can be retried.
+  let res = null;
+  try {
+    res = await fetch('/api/v1/installer-operations/payroll-paid', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ legacyUserId: userId, periodStart: startISO, periodEnd: endISO }),
+    });
+  } catch (_) {}
+  // 404: a card without a server account has no server accruals to mark.
+  if (!res || (!res.ok && res.status !== 404)) {
+    return alert('Сервер не записал выплату — ничего не изменено. Проверьте связь и нажмите «Выплачено» ещё раз.');
+  }
   const paymentBatchId = 'pay_' + uid();
   const paidAt = new Date().toISOString();
   db.payrollPayments = db.payrollPayments || [];
@@ -34118,15 +34142,6 @@ function markPayoutPaid(userId, startISO, endISO) {
     o.timeline.push({ at: new Date().toISOString(), key: 'payout_paid', by: state.currentUserId, note: `Выплачено ${u.name}: ${fmtMoney(b.amount)} (${b.label})` });
   });
   save();
-  // The same payment in PostgreSQL: accruals and lead overrides of the period become paid.
-  fetch('/api/v1/installer-operations/payroll-paid', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ legacyUserId: userId, periodStart: startISO, periodEnd: endISO }),
-  }).then(res => {
-    if (!res.ok && res.status !== 404) alert('Выплата записана в CRM, но сервер не отметил начисления. Повторите позже или сообщите разработчику.');
-  }).catch(() => alert('Выплата записана в CRM, но сервер не ответил. Повторите позже.'));
   alert(`Выплачено ${fmtMoney(amountDue)} → ${u.name}`);
   render();
 }
