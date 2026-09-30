@@ -444,6 +444,15 @@ async function upsertInstallerJobs(
   return savedJobs;
 }
 
+/** Installer pay per Smart zone connection (rate directory, ZONE_CONNECTION). */
+export async function getZoneInstallerRate() {
+  const service = await prisma.serviceType.findUnique({
+    where: { service_code: "ZONE_CONNECTION" },
+    select: { installation_cost_per_sqft: true },
+  });
+  return toNumber(service?.installation_cost_per_sqft);
+}
+
 export function calculatePositionFinance(
   position: {
     actual_price: Prisma.Decimal;
@@ -475,6 +484,8 @@ export function calculatePositionFinance(
       };
     }>;
   },
+  // Installer pay per Smart zone (ZONE_CONNECTION rate from the rate directory).
+  options: { zoneInstallerRate?: number } = {},
 ) {
   const dynamic = asJsonRecord(position.dynamic_fields);
   const isFilmService = FILM_SERVICE_CODES.has(position.service_type.service_code);
@@ -515,8 +526,11 @@ export function calculatePositionFinance(
   const addonsRevenue = addonRows.reduce((sum, addon) => sum + addon.total_price, 0);
   const addonCostTotal = addonRows.reduce((sum, addon) => sum + addon.estimated_cost, 0);
   const materialCostTotal = actualFilmSqft * toNumber(position.service_type.material_cost_per_sqft);
+  // Smart zone connections are installer labor too, multiplied like the film.
+  const zoneCount = position.service_type.service_code === "SMART_FILM" ? asNumber(dynamic.zones_qty) : 0;
+  const zoneLabor = zoneCount * Math.max(0, options.zoneInstallerRate ?? 0);
   const installationCostTotal =
-    actualFilmSqft * installationCostPerSqft * (isFilmService ? complexityMultiplier : 1);
+    (actualFilmSqft * installationCostPerSqft + zoneLabor) * (isFilmService ? complexityMultiplier : 1);
   const blockCostTotal = blocksQty * toNumber(position.service_type.block_cost_price);
   const estimatedCost = materialCostTotal + installationCostTotal + blockCostTotal + addonCostTotal + extraCosts;
   const revenueSubtotal = filmRevenue + blockRevenue + addonsRevenue;
@@ -2121,9 +2135,12 @@ async function fetchProjectsForSession(session: ProjectSession) {
 
 export async function listProjectsForSession(session: ProjectSession) {
   const projects = await fetchProjectsForSession(session);
+  const zoneInstallerRate = await getZoneInstallerRate();
 
   return projects.map((project) => {
-    const financeLines = project.project_positions.map(calculatePositionFinance);
+    const financeLines = project.project_positions.map((position) =>
+      calculatePositionFinance(position, { zoneInstallerRate }),
+    );
     const revenueTotal = Number(financeLines.reduce((sum, line) => sum + line.revenue_subtotal, 0).toFixed(2));
     const estimatedCostTotal = Number(financeLines.reduce((sum, line) => sum + line.estimated_cost, 0).toFixed(2));
     const estimatedProfitTotal = Number(
@@ -2453,8 +2470,9 @@ export async function getProjectCardByIdForSession(session: ProjectSession, proj
     }),
   ]);
 
+  const zoneInstallerRate = await getZoneInstallerRate();
   const positionCards = project.project_positions.map((position) => {
-    const finance = calculatePositionFinance(position);
+    const finance = calculatePositionFinance(position, { zoneInstallerRate });
     const dynamic = asJsonRecord(position.dynamic_fields);
 
     return {

@@ -36,6 +36,27 @@ export function calculatePayrollAmount(
   return Number((labor * Math.max(1, complexityMultiplier)).toFixed(2));
 }
 
+/**
+ * Installer pay per Smart zone: the employee's own connection rate (legacy
+ * card payConfig.ratesByWorkType.connect) if set, else the rate directory
+ * (ZONE_CONNECTION) — the same order the CRM uses for profitability.
+ */
+async function installerZoneRate(tx: Prisma.TransactionClient, installerId: string) {
+  const [user, workspace, service] = await Promise.all([
+    tx.user.findUnique({ where: { user_id: installerId }, select: { legacy_user_ids: true } }),
+    tx.legacyWorkspace.findUnique({ where: { workspace_id: "primary" }, select: { payload: true } }),
+    tx.serviceType.findUnique({ where: { service_code: "ZONE_CONNECTION" }, select: { installation_cost_per_sqft: true } }),
+  ]);
+  const cards = ((workspace?.payload as { users?: unknown } | null)?.users ?? []) as Array<Record<string, unknown>>;
+  const card = Array.isArray(cards)
+    ? cards.find((candidate) => (user?.legacy_user_ids ?? []).includes(String(candidate?.id ?? "")))
+    : undefined;
+  const own = Number(
+    ((card?.payConfig as { ratesByWorkType?: Record<string, unknown> } | undefined)?.ratesByWorkType ?? {}).connect,
+  );
+  return own > 0 ? own : toNumber(service?.installation_cost_per_sqft);
+}
+
 export async function recordInstallerPayrollAccrual(
   tx: Prisma.TransactionClient,
   installerJobId: string,
@@ -68,16 +89,7 @@ export async function recordInstallerPayrollAccrual(
     ownerRules && job.position.service_type.service_code === "SMART_FILM"
       ? jsonNumber(job.position.dynamic_fields, "zones_qty")
       : 0;
-  const zoneRate = zoneCount
-    ? toNumber(
-        (
-          await tx.serviceType.findUnique({
-            where: { service_code: "ZONE_CONNECTION" },
-            select: { installation_cost_per_sqft: true },
-          })
-        )?.installation_cost_per_sqft,
-      )
-    : 0;
+  const zoneRate = zoneCount ? await installerZoneRate(tx, job.installer_id) : 0;
   const amount = calculatePayrollAmount(quantitySqft, ratePerSqft, multiplier, zoneCount, zoneRate);
 
   return tx.installerPayrollAccrual.upsert({
