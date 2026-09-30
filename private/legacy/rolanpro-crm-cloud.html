@@ -15731,9 +15731,15 @@ function orderMeasurementCompletionIssues(o) {
   if (missingScopes.length) issues.push('Добавьте размеры для каждой услуги: ' + missingScopes.map(key => measureScopeInfo(key).short).join(', '));
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('заполните размеры и количество для всех окон');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('выберите плёнку со склада для каждого окна');
-  issues.push(...managerSolarMeasurementIssues(o));
-  issues.push(...managerSmartMeasurementIssues(o));
   return issues;
+}
+
+// Technical survey details (facade side, inside/outside, access, glass type,
+// Smart power supply and wire route). A manager can price and send a KP from
+// the customer's own dimensions; these details are confirmed by the surveyor
+// and are required only before installation is scheduled.
+function orderTechnicalMeasurementIssues(o) {
+  return [...managerSolarMeasurementIssues(o), ...managerSmartMeasurementIssues(o)];
 }
 
 function publishedPremiumProposalForOrder(orderId) {
@@ -15760,6 +15766,7 @@ function orderWorkflowTransitionIssues(o, newStatus) {
     if (!publishedPremiumProposalForOrder(o.id)) issues.push('сначала сформируйте и отправьте КП');
   }
   if (newStatus === 'installation_scheduled') {
+    issues.push(...orderTechnicalMeasurementIssues(o));
     if (!(o.installerIds || []).length) issues.push('назначьте монтажников');
     if (!o.installationAt) issues.push('укажите дату и время монтажа');
   }
@@ -24749,6 +24756,10 @@ function completeManagerMeasurement(oid) {
   if (!o) return;
   const issues = orderMeasurementCompletionIssues(o);
   if (issues.length) { alert('Замер ещё не готов:\n\n• ' + issues.join('\n• ')); return; }
+  const technical = orderTechnicalMeasurementIssues(o);
+  if (technical.length) {
+    alert('Расчёт и КП можно делать по размерам клиента.\n\nДо назначения монтажа замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
+  }
   if (o.status === 'measurement_done') {
     invalidateProjectEstimate(o, 'Замер изменён — требуется повторный расчёт проекта');
     save();
