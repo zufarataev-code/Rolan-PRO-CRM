@@ -8207,6 +8207,17 @@ function migrateSchema() {
   s.installerRates.workTypes = s.installerRates.workTypes || {
     washing: 0, removal: 0, silicone: 0, electric: 0, connect: 0, warranty: 0, custom: 0,
   };
+  // ---- OWNER RATE DIRECTORY (decided 2026-09-30, pay rules from 2026-09-01) ----
+  // Difficulty multiplies the whole deal: client price AND installer pay.
+  // Installer pay per sq ft by direction, plus $50 per Smart zone connection.
+  if (!db._ownerRateDirectory20260901) {
+    s.complexityCoefs = { standard: 1.0, ladder: 1.2, tower: 1.5, alpinism: 2.0 };
+    s.installerRates._defaults = { ...(s.installerRates._defaults || {}), smart: 5, protective: 3, solar: 2.5, decorative: 2.5 };
+    s.installerRates.serviceTypes = { ...(s.installerRates.serviceTypes || {}), SMART_FILM: 5, SAFETY_FILM: 3, SOLAR_FILM: 2.5, DECORATIVE_FILM: 2.5 };
+    s.installerRates.smartZone = 50;
+    db._ownerRateDirectory20260901 = true;
+  }
+  if (s.installerRates.smartZone == null) s.installerRates.smartZone = 50;
   if (!s.projectProfitTax) {
     s.projectProfitTax = {
       entityType: 'C_CORP',
@@ -15102,6 +15113,34 @@ function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
     return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type) / installerCount;
   }, 0);
 }
+// Pay rules decided by the owner on 2026-09-30, applied to installations from
+// 2026-09-01: the deal's difficulty coefficient multiplies installer pay, and
+// every Smart zone connection pays the Smart zone rate. Earlier installations
+// keep the rules they were paid under.
+const OWNER_PAY_RULES_FROM = '2026-09-01';
+function orderUsesOwnerPayRules(o) {
+  const date = String(o?.installationDoneAt || o?.installationAt || o?.createdAt || '');
+  return !date || date.slice(0, 10) >= OWNER_PAY_RULES_FROM;
+}
+function orderPayComplexityCoef(o) {
+  if (!orderUsesOwnerPayRules(o)) return 1;
+  return Number(db.settings.complexityCoefs?.[o?.complexity || 'standard']) || 1;
+}
+function orderSmartZoneCount(o) {
+  return measureAllWindows(o)
+    .filter(({ win }) => (win.measureScope || orderMeasureScope(o)) === 'smart_film')
+    .reduce((sum, { win }) => sum + Math.max((win.smart?.zones || []).length, win.smart ? 1 : 0), 0);
+}
+function orderSmartZonePayout(o, user, installerCount = 1) {
+  if (!orderUsesOwnerPayRules(o)) return 0;
+  // A manual "connect" work line already pays connections; never pay twice.
+  if ((o?.extraServices || []).some(line => line.type === 'connect' && !line.quickProjectLine)) return 0;
+  const zones = orderSmartZoneCount(o);
+  if (!zones) return 0;
+  const employeeRate = Number(user?.payConfig?.ratesByWorkType?.smartZone);
+  const rate = employeeRate > 0 ? employeeRate : Math.max(0, Number(db.settings.installerRates?.smartZone) || 0);
+  return zones * rate / Math.max(1, installerCount);
+}
 function orderInstallerPayoutForUser(o, userId) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.includes(userId)) return 0;
@@ -15113,7 +15152,9 @@ function orderInstallerPayoutForUser(o, userId) {
   const filmPayout = !measureAllWindows(o).length ? orderQuickInstallerPayoutForUser(o, user) : measureAllWindows(o).reduce((sum, { win }) => {
     return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / installerIds.length;
   }, 0);
-  return filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length);
+  return filmPayout * orderPayComplexityCoef(o)
+    + orderSmartZonePayout(o, user, installerIds.length)
+    + orderAdditionalWorkPayoutForUser(o, user, installerIds.length);
 }
 function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
@@ -15127,7 +15168,11 @@ function orderInstallerPayoutBreakdown(o) {
           return sum + (Number(line.qty) || 0) * filmRate(filmName);
         }, 0);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
-    return { total: total + work, byInstaller: [], source: 'REFERENCE_DEFAULT' };
+    return {
+      total: total * orderPayComplexityCoef(o) + orderSmartZonePayout(o, null, 1) + work,
+      byInstaller: [],
+      source: 'REFERENCE_DEFAULT',
+    };
   }
   const byInstaller = installerIds.map(userId => {
     const user = getUser(userId);

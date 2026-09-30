@@ -134,16 +134,19 @@ async function seedStatusesAndReferences() {
   }
 
   const complexityLevels = [
-    ["LOW", "Стандарт", "Standard", 1, "1.00", "slate", 1],
+    // Owner rules (2026-09-30): floor ×1, ladder ×1.2, tower ×1.5, above 10 ft ×2.
+    ["LOW", "С пола", "Floor", 1, "1.00", "slate", 1],
     ["STANDARD", "Лестница", "Ladder", 2, "1.20", "blue", 2],
-    ["HIGH", "Тура / техника", "Access Equipment", 3, "1.30", "orange", 3],
-    ["EXPERT", "Альпинизм", "Alpine", 4, "1.50", "red", 4],
+    ["HIGH", "Вышка-тура / техника", "Tower / lift", 3, "1.50", "orange", 3],
+    ["EXPERT", "Выше 10 футов", "Above 10 ft", 4, "2.00", "red", 4],
   ] as const;
 
   for (const [level_code, name_ru, name_en, numeric_rank, multiplier, color_token, sort_order] of complexityLevels) {
     await prisma.complexityLevel.upsert({
       where: { level_code },
-      update: { name_ru, name_en, numeric_rank, multiplier, color_token, sort_order },
+      // The seed runs on every production boot: it must never overwrite a
+      // multiplier the owner set. Values are only written on first creation.
+      update: { name_ru, name_en, numeric_rank, color_token, sort_order },
       create: { level_code, name_ru, name_en, numeric_rank, multiplier, color_token, sort_order },
     });
   }
@@ -213,15 +216,16 @@ async function seedStatusesAndReferences() {
 
 async function seedServiceReferences() {
   const serviceTypes = [
-    ["SMART_FILM", "Смарт-плёнка", "Smart Film", "sqft", "85.00", "72.00", "38.00", "14.00", "420.00", "280.00", 1],
-    ["SOLAR_FILM", "Солнцезащитная плёнка", "Solar Film", "sqft", "19.00", "16.00", "5.50", "4.25", "0.00", "0.00", 2],
-    ["SAFETY_FILM", "Защитная плёнка", "Safety Film", "sqft", "24.00", "20.00", "7.20", "5.60", "0.00", "0.00", 3],
+    // installation_cost_per_sqft = installer pay per sq ft (owner rates 2026-09-30).
+    ["SMART_FILM", "Смарт-плёнка", "Smart Film", "sqft", "85.00", "72.00", "38.00", "5.00", "420.00", "280.00", 1],
+    ["SOLAR_FILM", "Солнцезащитная плёнка", "Solar Film", "sqft", "19.00", "16.00", "5.50", "2.50", "0.00", "0.00", 2],
+    ["SAFETY_FILM", "Защитная плёнка", "Safety Film", "sqft", "24.00", "20.00", "7.20", "3.00", "0.00", "0.00", 3],
     ["REMOVAL", "Удаление старой плёнки", "Removal", "sqft", "2.50", "2.00", "0.00", "0.00", "0.00", "0.00", 4],
     ["WASHING", "Мойка", "Washing", "sqft", "1.50", "1.20", "0.00", "0.00", "0.00", "0.00", 5],
     ["SILICONE", "Силикон", "Silicone", "sqft", "1.75", "1.50", "0.00", "0.00", "0.00", "0.00", 6],
     ["ELECTRICAL_WORK", "Электрика", "Electrical Work", "fixed", "350.00", "300.00", "0.00", "0.00", "0.00", "0.00", 7],
     ["BLOCK_INSTALLATION", "Установка блоков", "Block Installation", "qty", "420.00", "380.00", "0.00", "0.00", "0.00", "0.00", 8],
-    ["ZONE_CONNECTION", "Подключение зон", "Zone Connection", "qty", "95.00", "80.00", "0.00", "0.00", "0.00", "0.00", 9],
+    ["ZONE_CONNECTION", "Подключение зон", "Zone Connection", "qty", "95.00", "80.00", "0.00", "50.00", "0.00", "0.00", 9],
     ["WARRANTY_SERVICE", "Сервис / гарантия", "Warranty / Service", "fixed", "250.00", "200.00", "0.00", "0.00", "0.00", "0.00", 10],
   ] as const;
 
@@ -240,16 +244,13 @@ async function seedServiceReferences() {
   ] of serviceTypes) {
     await prisma.serviceType.upsert({
       where: { service_code },
+      // The seed runs on every production boot. Prices and costs are owner
+      // data edited in «Услуги и цены»; overwriting them here reset every
+      // owner change on each deploy. They are written on first creation only.
       update: {
         name_ru,
         name_en,
         unit_type,
-        base_price,
-        min_price,
-        material_cost_per_sqft,
-        installation_cost_per_sqft,
-        block_revenue_price,
-        block_cost_price,
         sort_order,
       },
       create: {

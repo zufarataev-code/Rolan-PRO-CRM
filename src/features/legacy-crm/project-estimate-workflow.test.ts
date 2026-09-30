@@ -333,7 +333,7 @@ test("project add-on rows contain customer price only and labor comes from confi
   assert.match(source, /ratesByWorkType/);
   assert.match(source, /id="pc-work-\$\{type\}"/);
   assert.match(source, /function orderAdditionalWorkPayoutForUser\(o, user, installerCount = 1\)/);
-  assert.match(source, /filmPayout \+ orderAdditionalWorkPayoutForUser/);
+  assert.match(source, /filmPayout \* orderPayComplexityCoef\(o\)[\s\S]*?\+ orderAdditionalWorkPayoutForUser\(o, user, installerIds\.length\)/);
 });
 
 test("the Services reference owns installer pay while material stays in Warehouse", () => {
