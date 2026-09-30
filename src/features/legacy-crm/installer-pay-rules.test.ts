@@ -103,3 +103,14 @@ test("difficulty multiplies film, zone and add-on labor alike", () => {
     /\(filmPayout\s*\+ orderSmartZonePayout\(o, user, installerIds\.length\)\s*\+ orderAdditionalWorkPayoutForUser\(o, user, installerIds\.length\)\) \* orderPayComplexityCoef\(o\)/,
   );
 });
+
+test("orders before 2026-09-01 keep the coefficients and rates frozen at the switch", () => {
+  assert.match(source, /s\.ratesBefore20260901 = JSON\.parse\(JSON\.stringify\(\{/);
+  const helper = source.match(/function ratesForOrder\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(helper, /!orderUsesOwnerPayRules\(o\)/);
+  // Revenue, installer film rate and add-on work rate all read the order's rates.
+  assert.match(source, /ratesForOrder\(order\)\.complexityCoefs\?\.\[complexity\]/);
+  assert.match(source, /function installerServiceRateByCategory\(category, o = null\) \{\n  const rates = ratesForOrder\(o\);/);
+  assert.match(source, /ratesForOrder\(o\)\.installerWorkTypes\?\.\[type\]/);
+  assert.doesNotMatch(source, /windowRetailPrice\(w, cx, ov\);/);
+});
