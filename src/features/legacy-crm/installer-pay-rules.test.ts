@@ -21,6 +21,7 @@ function load(db: unknown, windows: Array<{ win: Record<string, unknown> }>) {
     pick("orderUsesOwnerPayRules"),
     pick("orderPayComplexityCoef"),
     pick("orderSmartZoneCount"),
+    pick("smartZoneRate"),
     pick("orderSmartZonePayout"),
     "return { orderUsesOwnerPayRules, orderPayComplexityCoef, orderSmartZoneCount, orderSmartZonePayout };",
   ].join("\n");
@@ -39,7 +40,7 @@ function load(db: unknown, windows: Array<{ win: Record<string, unknown> }>) {
 const db = {
   settings: {
     complexityCoefs: { standard: 1, ladder: 1.2, tower: 1.5, alpinism: 2 },
-    installerRates: { smartZone: 50 },
+    installerRates: { serviceTypes: { ZONE_CONNECTION: 50 } },
   },
 };
 
@@ -71,13 +72,28 @@ test("each Smart zone pays $50, split between installers, never twice", () => {
     "a manual connection line already pays zones",
   );
   assert.equal(rules.orderSmartZonePayout({ ...order, installationAt: "2026-08-15" }, null, 1), 0);
+  assert.equal(
+    rules.orderSmartZonePayout(order, { payConfig: { ratesByWorkType: { connect: 60 } } }, 1),
+    180,
+    "the employee's own connection rate wins",
+  );
+});
+
+test("older imports without a zone list count the window quantity", () => {
+  const rules = load(db, [{ win: { measureScope: "smart_film", qty: 3, smart: {} } }]);
+  assert.equal(rules.orderSmartZoneCount({}), 3);
+});
+
+test("manual zone rows use the zone rate only for installations from 2026-09-01", () => {
+  const rate = source.match(/function installerAdditionalWorkRate\(user, type, o = null\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(rate, /type === 'connect' && o && orderUsesOwnerPayRules\(o\)\) return smartZoneRate\(user\)/);
+  assert.doesNotMatch(source, /s\.installerRates\.workTypes\.connect = 50/, "no retroactive change for older rows");
 });
 
 test("the one-time rate directory sets the owner's values", () => {
   assert.match(source, /s\.complexityCoefs = \{ standard: 1\.0, ladder: 1\.2, tower: 1\.5, alpinism: 2\.0 \}/);
   assert.match(source, /smart: 5, protective: 3, solar: 2\.5, decorative: 2\.5/);
-  assert.match(source, /s\.installerRates\.smartZone = 50/);
-  assert.match(source, /s\.installerRates\.workTypes\.connect = 50/, "a manual zone row pays $50 per zone too");
+  assert.match(source, /s\.installerRates\.serviceTypes\.ZONE_CONNECTION = 50/);
 });
 
 test("difficulty multiplies film, zone and add-on labor alike", () => {
