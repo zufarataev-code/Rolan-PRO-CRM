@@ -14884,9 +14884,9 @@ function filmCategory(filmTypeName) {
   if (n.includes('decor') || n.includes('frost') || n.includes('matte') || n.includes('декор') || n.includes('матов')) return 'decorative';
   return 'other';
 }
-function filmDefaultRate(filmTypeName) {
+function filmDefaultRate(filmTypeName, o = null) {
   const cat = filmCategory(filmTypeName);
-  return installerServiceRateByCategory(cat);
+  return installerServiceRateByCategory(cat, o);
 }
 function installerServiceCodeByCategory(category) {
   return ({ solar: 'SOLAR_FILM', smart: 'SMART_FILM', protective: 'SAFETY_FILM', decorative: 'DECORATIVE_FILM' })[category] || '';
@@ -14908,10 +14908,10 @@ function syncLegacyInstallerServiceRate(serviceCode, rate) {
   if (category) db.settings.installerRates._defaults[category] = normalizedRate;
   return Math.abs(previousRate - normalizedRate) > 0.001;
 }
-function filmRate(filmTypeName) {
-  if (!filmTypeName) return db.settings.installerRates?._defaults?.other ?? 2.5;
+function filmRate(filmTypeName, o = null) {
+  if (!filmTypeName) return ratesForOrder(o).installerDefaults?.other ?? 2.5;
   const explicit = db.settings.installerRates?.types?.[filmTypeName];
-  return explicit != null ? explicit : filmDefaultRate(filmTypeName);
+  return explicit != null ? explicit : filmDefaultRate(filmTypeName, o);
 }
 // Window area helpers (sqft and m²)
 function windowAreaSqft(w) {
@@ -15088,10 +15088,10 @@ function windowFilmCost(w) {
   const withWaste = sqft * (1 + (c.wastePct || 0) / 100);
   return withWaste * c.costPerSqft;
 }
-function windowInstallerPayout(w) {
+function windowInstallerPayout(w, o = null) {
   const c = windowCatalog(w);
   const filmName = c ? `${c.brand} ${c.model}` : (w.filmType || '');
-  return windowActualAreaSqft(w) * filmRate(filmName);
+  return windowActualAreaSqft(w) * filmRate(filmName, o);
 }
 function installerRateForWindow(user, w, o = null) {
   const pc = user?.payConfig || {};
@@ -15141,7 +15141,9 @@ function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
 // keep the rules they were paid under.
 const OWNER_PAY_RULES_FROM = '2026-09-01';
 function orderUsesOwnerPayRules(o) {
-  const date = String(o?.installationDoneAt || o?.installationAt || o?.createdAt || '');
+  // Only an actual installation date keeps an order on the old rules;
+  // unscheduled work (whenever it was created) is priced and paid by the directory.
+  const date = String(o?.installationDoneAt || o?.installationAt || '');
   return !date || date.slice(0, 10) >= OWNER_PAY_RULES_FROM;
 }
 function orderPayComplexityCoef(o) {
@@ -15194,11 +15196,11 @@ function orderInstallerPayoutBreakdown(o) {
   if (!installerIds.length) {
     const windows = measureAllWindows(o);
     const total = windows.length
-      ? windows.reduce((sum, { win }) => sum + windowInstallerPayout(win), 0)
+      ? windows.reduce((sum, { win }) => sum + windowInstallerPayout(win, o), 0)
       : projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => {
           const catalog = getCatalogItem(line.catalogId);
           const filmName = catalog ? `${catalog.brand} ${catalog.model}` : line.serviceType;
-          return sum + (Number(line.qty) || 0) * filmRate(filmName);
+          return sum + (Number(line.qty) || 0) * filmRate(filmName, o);
         }, 0);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
     return {
@@ -29164,7 +29166,7 @@ function premiumWindowPrice(prop, order, window) {
   }
   if (!perSqft) perSqft = selectedCat?.retailPerSqft || 10;
   const area = windowActualAreaSqft(window);
-  const coef = db.settings.complexityCoefs?.[order.complexity || 'standard'] ?? 1;
+  const coef = ratesForOrder(order).complexityCoefs?.[order.complexity || 'standard'] ?? 1;
   const price = area * perSqft * coef;
   const original = windowRetailPrice(window, order.complexity || 'standard', order.priceOverridePerSqft, order);
   return { area, price, perSqft, catalog: selectedCat || baseCat, original, delta: price - original };
