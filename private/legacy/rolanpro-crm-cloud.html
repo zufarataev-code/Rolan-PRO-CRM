@@ -23160,6 +23160,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     <div class="order-clean-actions mt-3">
       ${renderOrderActionCard({ icon: '🧰', title: 'Технический лист', sub: hasMeasurements ? 'готов к работе' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasMeasurements, variant: 'primary' })}
       ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: 'размеры, материалы и фото без цен', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ${currentUser()?.installerLead ? renderOrderActionCard({ icon: '👥', title: 'Распределить бригаду', sub: 'монтажники вашей группы', onclick: `openLeadDistribute('${o.id}')` }) : ''}
       ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.pieces.length} деталей` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
     </div>` : `
     <div class="order-clean-mini-grid">
@@ -26264,6 +26265,49 @@ function markDepositReceived(orderId) {
   o.timeline = o.timeline || [];
   o.timeline.push({ at: o.depositReceivedAt, key: 'deposit_received', by: state.currentUserId, note: `Аванс ${fmtMoney(advance)}` });
   save(); render();
+}
+
+// ---------- TEAM LEAD: DISTRIBUTE A JOB INSIDE THE GROUP ----------
+// Owner decision 2026-09-30: a team lead assigns the installers of their own
+// group (1–5 people) to jobs of the group. No prices are involved; the server
+// accepts only installers from the lead's group (field-workspace.ts).
+function leadGroupMembers(leadId) {
+  return (db.users || []).filter(u => u.active !== false && (u.id === leadId || u.groupLeadId === leadId));
+}
+function openLeadDistribute(oid) {
+  const o = getOrder(oid);
+  const me = currentUser();
+  if (!o || !me?.installerLead) return;
+  const members = leadGroupMembers(me.id);
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content p-6">
+      <h3 class="font-semibold text-lg">Распределить бригаду</h3>
+      <p class="text-sm text-gray-500 mt-1">Кто из вашей группы работает на этом объекте.</p>
+      <div class="grid gap-2 mt-4">
+        ${members.map(u => `<label class="flex items-center gap-2"><input type="checkbox" class="lead-dist-member" value="${u.id}" ${(o.installerIds || []).includes(u.id) ? 'checked' : ''}> ${academyEsc(u.name || '')}${u.id === me.id ? ' (вы)' : ''}</label>`).join('')}
+      </div>
+      <div class="flex gap-2 mt-5 justify-end">
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+        <button class="btn-primary" onclick="saveLeadDistribute('${oid}')">Сохранить</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+function saveLeadDistribute(oid) {
+  const o = getOrder(oid);
+  const me = currentUser();
+  if (!o || !me?.installerLead) return;
+  const allowed = new Set(leadGroupMembers(me.id).map(u => u.id));
+  const selected = Array.from(document.querySelectorAll('.lead-dist-member:checked')).map(x => x.value).filter(id => allowed.has(id));
+  if (!selected.length) { alert('Выберите хотя бы одного монтажника.'); return; }
+  o.installerIds = selected;
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: new Date().toISOString(), key: 'crew_distributed', by: me.id, note: 'Бригада: ' + selected.map(id => getUser(id)?.name || id).join(', ') });
+  closeModal();
+  save();
+  render();
 }
 
 // ---------- CLIENT-SIDE PROPOSAL CONFIRMATION ----------

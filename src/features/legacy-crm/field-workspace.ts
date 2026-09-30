@@ -130,6 +130,29 @@ function fieldIdentityIds(payload: JsonObject, roles: readonly string[], legacyU
   );
 }
 
+/**
+ * Installation team lead: the legacy card ids of the installers in the lead's
+ * group (cards carry groupLeadId from the PostgreSQL directory).
+ */
+function groupInstallerIds(payload: JsonObject, identityIds: Set<string>, roles: readonly string[]) {
+  if (!roles.includes(ROLE_CODES.INSTALLER_LEAD)) return new Set<string>();
+  const users = Array.isArray(payload.users) ? payload.users : [];
+  return new Set(
+    users
+      .filter((user) => isObject(user) && identityIds.has(String(user.groupLeadId || "")))
+      .map((user) => String((user as JsonObject).id)),
+  );
+}
+
+/** Jobs a team lead manages: assigned to the lead or to anyone in the group. */
+function orderInLeadScope(order: JsonObject, identityIds: Set<string>, groupIds: Set<string>) {
+  return (
+    groupIds.size > 0 &&
+    Array.isArray(order.installerIds) &&
+    order.installerIds.some((id) => identityIds.has(String(id)) || groupIds.has(String(id)))
+  );
+}
+
 function orderAssignedTo(order: JsonObject, identityIds: Set<string>, roles: readonly string[]) {
   if (
     roles.includes(ROLE_CODES.CONSULTANT) &&
@@ -160,6 +183,9 @@ function safeUser(user: JsonObject, own: boolean, roles: readonly string[]) {
     lang: user.lang,
     active: user.active,
     photo: user.photo,
+    // Installation group links (no money): lets a lead distribute group jobs.
+    installerLead: user.installerLead === true,
+    groupLeadId: user.groupLeadId ?? null,
   };
 
   // An installer may see their own configured work rates, never another
@@ -198,11 +224,15 @@ export function createFieldWorkspace(
   legacyUserIds: readonly string[],
 ) {
   const identityIds = fieldIdentityIds(payload, roles, legacyUserIds);
+  const groupIds = groupInstallerIds(payload, identityIds, roles);
   const allOrders = (Array.isArray(payload.orders) ? payload.orders : []).filter(isObject);
-  const assignedOrders = allOrders.filter((order) => orderAssignedTo(order, identityIds, roles));
+  const assignedOrders = allOrders.filter(
+    (order) => orderAssignedTo(order, identityIds, roles) || orderInLeadScope(order, identityIds, groupIds),
+  );
   const orderIds = new Set(assignedOrders.map((order) => String(order.id || "")));
   const clientIds = new Set(assignedOrders.map((order) => String(order.clientId || "")).filter(Boolean));
-  const referencedUserIds = new Set(identityIds);
+  // A lead sees the names of their group to distribute jobs (never their pay settings).
+  const referencedUserIds = new Set([...identityIds, ...groupIds]);
   for (const order of assignedOrders) {
     for (const id of [order.managerId, order.measurerId]) {
       if (id) referencedUserIds.add(String(id));
@@ -238,6 +268,7 @@ export function createFieldWorkspace(
 
   return {
     _allowedLegacyUserIds: [...identityIds],
+    _installerGroupIds: [...groupIds],
     users,
     clients,
     orders: assignedOrders.map((order) => redactFinancialData(clone(order))),
@@ -263,6 +294,8 @@ export function mergeFieldWorkspace(
   legacyUserIds: readonly string[],
 ) {
   const identityIds = fieldIdentityIds(currentPayload, roles, legacyUserIds);
+  const groupIds = groupInstallerIds(currentPayload, identityIds, roles);
+  const teamIds = new Set([...identityIds, ...groupIds]);
   const currentOrders = (Array.isArray(currentPayload.orders) ? currentPayload.orders : []).filter(isObject);
   const submittedOrders = new Map(
     (Array.isArray(submittedPayload.orders) ? submittedPayload.orders : [])
@@ -275,11 +308,22 @@ export function mergeFieldWorkspace(
   const clientIds = new Set(assignedOrders.map((order) => String(order.clientId || "")).filter(Boolean));
 
   const mergedOrders = currentOrders.map((currentOrder) => {
-    if (!orderAssignedTo(currentOrder, identityIds, roles)) return currentOrder;
+    const assigned = orderAssignedTo(currentOrder, identityIds, roles);
+    const leadScope = orderInLeadScope(currentOrder, identityIds, groupIds);
+    if (!assigned && !leadScope) return currentOrder;
     const submitted = submittedOrders.get(String(currentOrder.id || ""));
     if (!submitted) return currentOrder;
 
     const next = clone(currentOrder);
+    // Team lead distributes the job inside the group only: every installer
+    // must be the lead or a group member, and the job never leaves the group.
+    if (leadScope && Array.isArray(submitted.installerIds)) {
+      const requested = [...new Set(submitted.installerIds.map(String).filter(Boolean))];
+      if (requested.length > 0 && requested.every((id) => teamIds.has(id))) {
+        next.installerIds = requested;
+      }
+    }
+    if (!assigned) return next;
     for (const key of MUTABLE_ORDER_FIELDS) {
       if (!(key in submitted)) continue;
       if (key === "status") {

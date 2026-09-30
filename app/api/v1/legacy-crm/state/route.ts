@@ -150,11 +150,15 @@ export async function PUT(request: NextRequest) {
     });
   }
 
+  const directoryMembers = await loadDirectoryMembers(
+    ((currentWorkspace.payload as { users?: unknown }).users ?? []),
+  );
   const mergedPayload = isPrivileged
     ? payload
     : sanitizeLegacyPayload(
         mergeFieldWorkspace(
-          currentWorkspace.payload as Record<string, unknown>,
+          // Group links must be current when a team lead's changes are checked.
+          applyEmployeeDirectory(currentWorkspace.payload as Record<string, unknown>, directoryMembers),
           body.payload,
           auth.session.roles,
           auth.session.user.legacy_user_ids,
