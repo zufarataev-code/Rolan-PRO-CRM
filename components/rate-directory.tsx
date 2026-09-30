@@ -56,7 +56,8 @@ export function RateDirectory({ onChanged }: { onChanged: () => void }) {
 
   async function saveServiceRate(service: Service, value: string) {
     const rate = Number(value);
-    if (!Number.isFinite(rate) || rate < 0) return setNotice({ tone: "error", text: "Ставка должна быть числом не меньше 0." });
+    // 0 would silently fall back to a default rate in payroll; require a real rate.
+    if (!Number.isFinite(rate) || rate <= 0) return setNotice({ tone: "error", text: "Ставка должна быть больше 0." });
     try {
       await request("/api/v1/settings/pricing", "PATCH", {
         entity: "service_type",
@@ -114,7 +115,7 @@ export function RateDirectory({ onChanged }: { onChanged: () => void }) {
                   <input
                     id={`rate-${service.service_code}`}
                     type="number"
-                    min="0"
+                    min="0.01"
                     step="0.25"
                     defaultValue={Number(service.installation_cost_per_sqft ?? 0).toFixed(2)}
                     onBlur={(event) => {
