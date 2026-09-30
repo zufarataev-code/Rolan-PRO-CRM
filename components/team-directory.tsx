@@ -279,7 +279,11 @@ function MemberForm({
 
   function toggleRole(code: string) {
     setRoles((current) => {
-      if (current.includes(code)) return current.filter((role) => role !== code);
+      if (current.includes(code)) {
+        // Without the installer role a lead could not use the CRM: drop both together.
+        const removed = code === "INSTALLER" ? ["INSTALLER", "INSTALLER_LEAD"] : [code];
+        return current.filter((role) => !removed.includes(role));
+      }
       // A team lead works on sites too, so the lead role always comes with the installer role.
       if (code === "INSTALLER_LEAD" && !current.includes("INSTALLER")) return [...current, "INSTALLER", code];
       return [...current, code];

@@ -112,6 +112,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(canonicalUrl, 308);
   }
 
+  // "View as employee" is read-only everywhere, including public routes such
+  // as password recovery, so this runs before the public-path shortcut.
+  const previewCookie = request.cookies.get(PREVIEW_COOKIE)?.value;
+  if (previewCookie && pathname.startsWith("/api/v1") && !isPreviewWriteAllowed(request.method, pathname)) {
+    const token = request.cookies.get(getEnv().sessionCookieName)?.value;
+    const previewSession = token ? await verifyEdgeSession(token) : null;
+    if (previewSession?.roles.includes("OWNER")) {
+      return deny(request, 403, "preview_read_only", "Просмотр глазами сотрудника — только чтение.");
+    }
+  }
+
   if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
