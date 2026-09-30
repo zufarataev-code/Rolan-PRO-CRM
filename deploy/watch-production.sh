@@ -7,6 +7,7 @@ RELEASES_DIR="/home/runcloud/rolanpro-crm-releases"
 STATE_FILE="/home/runcloud/.rolanpro-crm-active-release"
 ENV_BACKUP="/home/runcloud/.rolanpro-crm.env.production.local"
 POLL_SECONDS=15
+BACKUP_DIR="/home/runcloud/backups"
 
 export PATH="$RUNTIME_DIR/bin:$PATH"
 export NODE_ENV="production"
@@ -14,6 +15,8 @@ export NODE_ENV="production"
 child_pid=""
 active_dir=""
 active_sha=""
+SELF_PATH="$(readlink -f "$0")"
+SELF_HASH="$(sha256sum "$SELF_PATH" | cut -d' ' -f1)"
 
 log() {
   printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
@@ -101,13 +104,15 @@ wait_for_database() {
 
 backup_database() {
   local sha="$1"
-  local backup_dir=/home/runcloud/backups
+  local backup_dir="$BACKUP_DIR"
   local name partial db_url
   install -d -m 700 "$backup_dir" || return 1
   db_url="$(set -a; . "$ENV_BACKUP"; set +a; printf '%s' "${DATABASE_URL%%\?*}")"
   [ -n "$db_url" ] || return 1
   name="rolanpro-$(date -u +%Y%m%dT%H%M%SZ)-${sha:0:7}-premigrate.dump"
   partial="$backup_dir/.partial-$name"
+  # Only one watcher runs: any partial left by an interrupted dump is garbage.
+  rm -f "$backup_dir"/.partial-*
   if ! pg_dump --format=custom --no-owner --no-privileges --file="$partial" "$db_url" \
     || ! chmod 600 "$partial" \
     || ! test -s "$partial" \
@@ -257,7 +262,24 @@ deploy_sha() {
   return 1
 }
 
-trap 'stop_next; exit 0' INT TERM
+cleanup_partials() {
+  rm -f "$BACKUP_DIR"/.partial-* 2>/dev/null || true
+}
+
+# A deploy that changes this script re-executes it, so new deploy steps (like
+# the pre-migration backup) apply to the very next release. The running
+# Next.js child is handed over, not restarted.
+reexec_if_script_changed() {
+  local hash
+  hash="$(sha256sum "$SELF_PATH" 2>/dev/null | cut -d' ' -f1)"
+  if [ -n "$hash" ] && [ "$hash" != "$SELF_HASH" ] && bash -n "$SELF_PATH"; then
+    log "Watcher script changed; re-executing"
+    export ROLANPRO_ADOPT_CHILD_PID="$child_pid"
+    exec "$SELF_PATH"
+  fi
+}
+
+trap 'cleanup_partials; stop_next; exit 0' INT TERM
 
 mkdir -p "$RELEASES_DIR"
 
@@ -266,7 +288,7 @@ if [ ! -s "$ENV_BACKUP" ]; then
   exit 1
 fi
 
-clear_stale_next
+cleanup_partials
 
 current_sha="$(cd "$APP_DIR" && git rev-parse HEAD)"
 
@@ -274,7 +296,19 @@ if [ -s "$STATE_FILE" ]; then
   IFS=$'\t' read -r active_sha active_dir <"$STATE_FILE" || true
 fi
 
-if [ -n "$active_sha" ] && [ -f "$active_dir/.next/BUILD_ID" ]; then
+adopt_pid="${ROLANPRO_ADOPT_CHILD_PID:-}"
+unset ROLANPRO_ADOPT_CHILD_PID
+if [ -n "$adopt_pid" ] && kill -0 "$adopt_pid" 2>/dev/null && [ -n "$active_sha" ]; then
+  # Re-executed after a script update: keep serving from the running process.
+  child_pid="$adopt_pid"
+  log "Adopted running Next.js process $child_pid for $active_sha"
+else
+  clear_stale_next
+fi
+
+if [ -n "$child_pid" ]; then
+  :
+elif [ -n "$active_sha" ] && [ -f "$active_dir/.next/BUILD_ID" ]; then
   start_next "$active_dir" || exit 1
 elif [ -z "$active_sha" ] && [ -f "$APP_DIR/.next/BUILD_ID" ]; then
   active_sha="$current_sha"
@@ -299,6 +333,7 @@ while true; do
   if [ -z "$current_sha" ] || [ "$current_sha" = "$active_sha" ]; then
     continue
   fi
+  reexec_if_script_changed
 
   log "Detected new Git commit $current_sha"
   deploy_sha "$current_sha" || log "Deployment $current_sha failed; will retry"
