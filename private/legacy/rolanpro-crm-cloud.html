@@ -8214,13 +8214,9 @@ function migrateSchema() {
     s.complexityCoefs = { standard: 1.0, ladder: 1.2, tower: 1.5, alpinism: 2.0 };
     s.installerRates._defaults = { ...(s.installerRates._defaults || {}), smart: 5, protective: 3, solar: 2.5, decorative: 2.5 };
     s.installerRates.serviceTypes = { ...(s.installerRates.serviceTypes || {}), SMART_FILM: 5, SAFETY_FILM: 3, SOLAR_FILM: 2.5, DECORATIVE_FILM: 2.5 };
-    s.installerRates.smartZone = 50;
-    // A manual «Подключение зоны» row pays per zone at the same rate.
-    s.installerRates.workTypes = { ...(s.installerRates.workTypes || {}) };
-    if (!(Number(s.installerRates.workTypes.connect) > 0)) s.installerRates.workTypes.connect = 50;
+    s.installerRates.serviceTypes.ZONE_CONNECTION = 50;
     db._ownerRateDirectory20260901 = true;
   }
-  if (s.installerRates.smartZone == null) s.installerRates.smartZone = 50;
   if (!s.projectProfitTax) {
     s.projectProfitTax = {
       entityType: 'C_CORP',
@@ -15106,14 +15102,16 @@ function orderQuickInstallerPayoutForUser(o, user) {
       return sum + (Number(line.qty) || 0) * installerRateForQuickLine(user, line) / installerCount;
     }, 0);
 }
-function installerAdditionalWorkRate(user, type) {
+function installerAdditionalWorkRate(user, type, o = null) {
+  // From 2026-09-01 a manual zone row pays the same zone rate as automatic zones.
+  if (type === 'connect' && o && orderUsesOwnerPayRules(o)) return smartZoneRate(user);
   const employeeRate = Number(user?.payConfig?.ratesByWorkType?.[type]);
   if (employeeRate > 0) return employeeRate;
   return Math.max(0, Number(db.settings.installerRates?.workTypes?.[type]) || 0);
 }
 function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
   return (o?.extraServices || []).filter(line => !line.quickProjectLine).reduce((sum, line) => {
-    return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type) / installerCount;
+    return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type, o) / installerCount;
   }, 0);
 }
 // Pay rules decided by the owner on 2026-09-30, applied to installations from
@@ -15132,7 +15130,19 @@ function orderPayComplexityCoef(o) {
 function orderSmartZoneCount(o) {
   return measureAllWindows(o)
     .filter(({ win }) => (win.measureScope || orderMeasureScope(o)) === 'smart_film')
-    .reduce((sum, { win }) => sum + Math.max((win.smart?.zones || []).length, win.smart ? 1 : 0), 0);
+    .reduce((sum, { win }) => {
+      const zones = (win.smart?.zones || []).length;
+      // Older imports have a smart block with a window quantity but no zone list.
+      return sum + (zones || (win.smart ? Math.max(1, parseInt(win.qty) || 1) : 0));
+    }, 0);
+}
+// One zone rate for automatic zones and manual «Подключение зоны» rows:
+// the employee's own connection rate, else the rate directory
+// (ZONE_CONNECTION, synced from «Расценки»).
+function smartZoneRate(user) {
+  const employeeRate = Number(user?.payConfig?.ratesByWorkType?.connect);
+  if (employeeRate > 0) return employeeRate;
+  return Math.max(0, Number(db.settings.installerRates?.serviceTypes?.ZONE_CONNECTION) || 0);
 }
 function orderSmartZonePayout(o, user, installerCount = 1) {
   if (!orderUsesOwnerPayRules(o)) return 0;
@@ -15140,9 +15150,7 @@ function orderSmartZonePayout(o, user, installerCount = 1) {
   if ((o?.extraServices || []).some(line => line.type === 'connect' && !line.quickProjectLine)) return 0;
   const zones = orderSmartZoneCount(o);
   if (!zones) return 0;
-  const employeeRate = Number(user?.payConfig?.ratesByWorkType?.smartZone);
-  const rate = employeeRate > 0 ? employeeRate : Math.max(0, Number(db.settings.installerRates?.smartZone) || 0);
-  return zones * rate / Math.max(1, installerCount);
+  return zones * smartZoneRate(user) / Math.max(1, installerCount);
 }
 function orderInstallerPayoutForUser(o, userId) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
