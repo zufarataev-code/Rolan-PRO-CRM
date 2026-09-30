@@ -99,6 +99,28 @@ wait_for_database() {
   done
 }
 
+backup_database() {
+  local sha="$1"
+  local backup_dir=/home/runcloud/backups
+  local name partial db_url
+  install -d -m 700 "$backup_dir" || return 1
+  db_url="$(set -a; . "$ENV_BACKUP"; set +a; printf '%s' "${DATABASE_URL%%\?*}")"
+  [ -n "$db_url" ] || return 1
+  name="rolanpro-$(date -u +%Y%m%dT%H%M%SZ)-${sha:0:7}-premigrate.dump"
+  partial="$backup_dir/.partial-$name"
+  if ! pg_dump --format=custom --no-owner --no-privileges --file="$partial" "$db_url" \
+    || ! chmod 600 "$partial" \
+    || ! test -s "$partial" \
+    || ! pg_restore --list "$partial" > /dev/null; then
+    rm -f "$partial"
+    return 1
+  fi
+  mv "$partial" "$backup_dir/$name" || return 1
+  log "Database backup before migrations: $backup_dir/$name"
+  ls -1t "$backup_dir"/rolanpro-*.dump | tail -n +31 | xargs -r rm -f
+  return 0
+}
+
 build_release() {
   local sha="$1"
   local release_dir="$RELEASES_DIR/$sha"
@@ -151,6 +173,14 @@ build_release() {
   fi
 
   if ! wait_for_database; then
+    return 1
+  fi
+
+  # Backup taken immediately before migrations (after the long build), so a
+  # restore loses at most the seconds between this dump and the migration.
+  # The deploy workflow also takes one before the release starts building.
+  if ! backup_database "$sha"; then
+    log "Database backup failed for $sha; migrations not applied"
     return 1
   fi
 
