@@ -110,3 +110,8 @@ test("an unlinked employee reuses their existing card by email, keeping assigned
     "a card already linked to another employee is never taken over",
   );
 });
+
+test("a new role card never reuses an id that already exists", () => {
+  const ids = legacyIdsForRoles(alan.userId, ["u_z1"], ["measurer", "installer"], new Set(["u_z1_installer"]));
+  assert.deepEqual(ids, ["u_z1", "u_z1_installer_2"]);
+});
