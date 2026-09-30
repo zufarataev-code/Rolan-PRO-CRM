@@ -192,7 +192,14 @@ export function resolveLegacyIdForUser(
       typeof card.email === "string" &&
       card.email.trim().toLowerCase() === email,
   );
-  return existing?.id ?? legacyIdForUser(user.user_id);
+  if (existing) return existing.id;
+  // The deterministic id may already belong to an unrelated historical card
+  // (different email): never take it over — its orders would change owner.
+  const base = legacyIdForUser(user.user_id);
+  const taken = new Set([...cardsOf(payloadUsers).map((card) => card.id), ...idsLinkedToOthers]);
+  let candidate = base;
+  for (let suffix = 2; taken.has(candidate); suffix += 1) candidate = `${base}_${suffix}`;
+  return candidate;
 }
 
 /**
