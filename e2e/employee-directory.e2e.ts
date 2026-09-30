@@ -194,9 +194,19 @@ test("logging out ends the preview", async () => {
   assert.ok(data<{ user: { roles: string[] } }>(me.json).user.roles.includes("OWNER"));
 });
 
+test("a new login never lands inside an earlier preview", async () => {
+  const started = await owner.call("POST", "/api/v1/team/preview", { userId: employeeId });
+  assert.equal(started.status, 200);
+  await owner.login(OWNER_EMAIL, SEED_PASSWORD);
+  assert.equal(owner.cookies.has("rolanpro_preview_as"), false, "login clears the preview cookie");
+  const me = await owner.call("GET", "/api/v1/auth/me");
+  assert.ok(data<{ user: { roles: string[] } }>(me.json).user.roles.includes("OWNER"));
+});
+
 test("only the owner can start a preview, and another employee cannot use the cookie", async () => {
   const manager = new Browser();
   await manager.login(MANAGER_EMAIL, SEED_PASSWORD);
+  const ownerRowForForgery = await prisma.user.findUniqueOrThrow({ where: { email: OWNER_EMAIL } });
   const denied = await manager.call("POST", "/api/v1/team/preview", { userId: employeeId });
   assert.equal(denied.status, 403);
 
@@ -209,7 +219,7 @@ test("only the owner can start a preview, and another employee cannot use the co
     assert.equal(ownerPreview.status, 400, "another owner cannot be previewed");
   }
 
-  manager.cookies.set("rolanpro_preview_as", employeeId);
+  manager.cookies.set("rolanpro_preview_as", `${employeeId}.${ownerRowForForgery.user_id}`);
   const me = await manager.call("GET", "/api/v1/auth/me");
   assert.ok(
     data<{ user: { roles: string[] } }>(me.json).user.roles.includes("MANAGER"),

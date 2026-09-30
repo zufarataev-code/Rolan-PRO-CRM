@@ -1,3 +1,4 @@
+import { PREVIEW_COOKIE } from "@/lib/auth/preview-edge";
 import { prisma } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
@@ -88,6 +89,8 @@ export async function POST(request: Request) {
     path: "/",
     maxAge: getEnv().sessionTtlHours * 60 * 60,
   });
+  // A fresh login never starts inside someone else's preview.
+  response.cookies.set({ name: PREVIEW_COOKIE, value: "", path: "/", maxAge: 0 });
 
   return response;
 }
