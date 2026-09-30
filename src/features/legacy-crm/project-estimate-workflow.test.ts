@@ -561,24 +561,27 @@ test("residential premium proposal applies the California home-improvement depos
   assert.match(source, /Legal Deposit \(max 10% \/ \$1,000\)/);
 });
 
-test("manager confirms a KP on the client's behalf: locks it, records who and how, chooses payment", () => {
+test("manager confirms a KP on the client's behalf: server first, ledger deposit, locked KP", () => {
   const open = source.match(/function openManagerConfirmProposal\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   const confirm = source.match(/async function confirmProposalByManager\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const server = source.match(/async function managerConfirmProposalOnServer\([^)]*\) \{[\s\S]*?\n\}/)?.[0] || "";
 
-  // Same guards as any move to "proposal accepted".
   assert.match(open, /orderWorkflowTransitionIssues\(o, 'proposal_accepted'\)/);
   assert.match(confirm, /orderWorkflowTransitionIssues\(o, 'proposal_accepted'\)/);
-  // Locked like a client signature, so a later edit or second signature is impossible.
-  assert.match(confirm, /proposal\.lockedSnapshot = premiumBuildSignedSnapshot\(proposal, calc\)/);
+  // Server approval and a paid Deposit happen before anything is finalized locally.
+  assert.match(server, /\/approve'/);
+  assert.match(server, /'\/api\/v1\/deposits', \{ proposal_id: canonicalProposalId, amount: depositAmount \}/);
+  assert.match(server, /\/pay'/);
+  assert.ok(confirm.indexOf("managerConfirmProposalOnServer(") < confirm.indexOf("proposal.lockedSnapshot"), "server before local lock");
+  assert.match(confirm, /В CRM ничего не изменено — попробуйте ещё раз/);
+  // The agreed payment mode is applied before the KP is locked.
+  assert.ok(confirm.indexOf("proposal.selections.paymentMode = 'after_completion'") < confirm.indexOf("premiumBuildSignedSnapshot(proposal, calc)"));
   assert.match(confirm, /proposal\.acceptedVia = 'manager'/);
   assert.match(confirm, /o\.proposalConfirmedByManager = \{ by: state\.currentUserId, at, channel, channelLabel, note \}/);
-  // Payment path chosen in the same step, so installation can be planned.
-  assert.match(confirm, /o\.depositReceived = true/);
+  // Deposit goes through the payments ledger, not only the o.paid scalar.
+  assert.match(confirm, /orderPayments\(o\)\.push\(/);
+  assert.match(confirm, /syncOrderPaid\(o\)/);
+  assert.doesNotMatch(confirm, /o\.paid = \(o\.paid \|\| 0\) \+ deposit/);
   assert.match(confirm, /o\.paymentTerms = 'after_completion'/);
-  assert.match(confirm, /o\.paymentTermsConfirmedAt = at/);
-  // Server proposal is approved too.
-  assert.match(confirm, /\/api\/v1\/proposals\/' \+ encodeURIComponent\(proposal\.canonicalProposalId\) \+ '\/approve'/);
-  // Both entry points open this dialog instead of silently changing the status.
   assert.match(source, /title: 'Подтвердить КП'[^\n]*openManagerConfirmProposal/);
-  assert.doesNotMatch(source, /title: 'КП принято', sub: 'перевести этап', onclick: `changeStatus\('\$\{o\.id\}','proposal_accepted'\)`/);
 });

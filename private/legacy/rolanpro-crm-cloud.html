@@ -26163,6 +26163,29 @@ function openManagerConfirmProposal(oid) {
   </div>`;
   render();
 }
+// Server first: approve the canonical proposal and, when a deposit was
+// received, record it as a paid Deposit. Throws on any failure so nothing is
+// finalized locally and the manager can simply try again.
+async function managerConfirmProposalOnServer(canonicalProposalId, payment, depositAmount) {
+  const call = async (url, body) => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result?.errors?.[0]?.message || ('HTTP ' + response.status));
+    return result?.data || {};
+  };
+  const id = encodeURIComponent(canonicalProposalId);
+  await call('/api/v1/proposals/' + id + '/approve');
+  if (payment !== 'deposit') return;
+  const created = await call('/api/v1/deposits', { proposal_id: canonicalProposalId, amount: depositAmount });
+  const deposit = created.deposit || {};
+  if (deposit.deposit_id && String(deposit.status || '').toLowerCase() !== 'paid') {
+    await call('/api/v1/deposits/' + encodeURIComponent(deposit.deposit_id) + '/pay');
+  }
+}
 async function confirmProposalByManager(oid) {
   const o = getOrder(oid);
   if (!o) return;
@@ -26174,10 +26197,25 @@ async function confirmProposalByManager(oid) {
   const payment = document.querySelector('input[name="mcp-pay"]:checked')?.value || 'later';
   const deposit = Number(document.getElementById('mcp-deposit')?.value || 0);
   if (payment === 'deposit' && !(deposit > 0)) { alert('Укажите сумму полученного аванса.'); return; }
-  const at = new Date().toISOString();
 
   const proposal = getPremiumProposalByOrder(oid);
+  if (proposal?.canonicalProposalId) {
+    if (typeof cloudStatus === 'function') cloudStatus('Подтверждаем КП на сервере…');
+    try {
+      await managerConfirmProposalOnServer(proposal.canonicalProposalId, payment, deposit);
+    } catch (error) {
+      console.warn('[Proposal] server confirmation failed', error);
+      alert('Сервер не подтвердил КП: ' + (error?.message || 'нет связи') + '.\n\nВ CRM ничего не изменено — попробуйте ещё раз.');
+      return;
+    }
+  }
+
+  const at = new Date().toISOString();
   if (proposal && !premiumProposalLocked(proposal)) {
+    // The locked KP must show the payment path actually agreed with the client.
+    proposal.selections = proposal.selections || {};
+    if (payment === 'after_completion') proposal.selections.paymentMode = 'after_completion';
+    else if (proposal.selections.paymentMode === 'after_completion') proposal.selections.paymentMode = 'deposit50';
     const calc = premiumProposalCalc(proposal);
     proposal.acceptedAt = at;
     proposal.acceptedVia = 'manager';
@@ -26193,9 +26231,19 @@ async function confirmProposalByManager(oid) {
   o.timeline.push({ at, key: 'proposal_confirmed_by_manager', by: state.currentUserId, note: `КП подтверждено менеджером (${channelLabel})${note ? ': ' + note : ''}` });
 
   if (payment === 'deposit') {
+    // Through the payments ledger, so «К оплате» and later payments see it.
+    orderPayments(o).push({
+      id: 'pay_' + uid(),
+      amount: deposit,
+      date: at.slice(0, 10),
+      method: 'other',
+      note: 'Аванс, подтверждён менеджером' + (note ? ': ' + note : ''),
+      recordedBy: state.currentUserId || null,
+      recordedAt: at,
+    });
+    syncOrderPaid(o);
     o.depositReceived = true;
     o.depositReceivedAt = at;
-    o.paid = (o.paid || 0) + deposit;
     o.timeline.push({ at, key: 'deposit_received', by: state.currentUserId, note: `Аванс ${fmtMoney(deposit)}` });
   } else if (payment === 'after_completion') {
     o.paymentTerms = 'after_completion';
@@ -26205,18 +26253,7 @@ async function confirmProposalByManager(oid) {
   }
 
   closeModal();
-  if (!changeStatus(oid, 'proposal_accepted', state.currentUserId, { openWorkspace: false })) { save(); render(); return; }
-
-  // Keep the server proposal in the same state; the order is already saved.
-  if (proposal?.canonicalProposalId) {
-    try {
-      const response = await fetch('/api/v1/proposals/' + encodeURIComponent(proposal.canonicalProposalId) + '/approve', { method: 'POST' });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-    } catch (error) {
-      console.warn('[Proposal] server approval failed', error);
-      if (typeof cloudStatus === 'function') cloudStatus('КП подтверждено в CRM, но сервер КП не обновился — сообщите администратору', 'red');
-    }
-  }
+  if (!changeStatus(oid, 'proposal_accepted', state.currentUserId, { openWorkspace: false })) { save(); render(); }
 }
 
 // ---------- CLIENT-SIDE PROPOSAL CONFIRMATION ----------
