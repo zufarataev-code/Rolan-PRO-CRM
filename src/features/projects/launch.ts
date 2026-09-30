@@ -147,7 +147,9 @@ export async function launchProjectFromClosedSale(
     return "agreement_not_signed" as const;
   }
 
-  const depositPaid = proposal.deposit?.status === "paid" && Boolean(proposal.deposit.paid_at);
+  const depositPaid =
+    proposal.payment_terms === "after_completion" ||
+    (proposal.deposit?.status === "paid" && Boolean(proposal.deposit?.paid_at));
   if (!depositPaid) {
     return "deposit_not_paid" as const;
   }

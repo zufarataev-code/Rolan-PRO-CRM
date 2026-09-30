@@ -26101,16 +26101,34 @@ function renderClientPortal() {
   </div>`;
 }
 
-function markDepositReceived(orderId) {
+async function markDepositReceived(orderId) {
   const o = getOrder(orderId);
   if (!o) return;
-  const advance = orderRevenue(o) * (db.settings.advancePct || 30) / 100;
-  if (!confirm(`Подтверждаете получение аванса ${fmtMoney(advance)}?`)) return;
+  const proposal = getPremiumProposalByOrder(orderId);
+  const suggested = proposal ? premiumProposalCalc(proposal).paymentDue : orderRevenue(o) * (db.settings.advancePct || 30) / 100;
+  const entered = prompt('Сумма полученного аванса, $', String(Math.round(suggested * 100) / 100));
+  if (entered === null) return;
+  const advance = Number(String(entered).replace(',', '.'));
+  if (!(advance > 0)) { alert('Укажите сумму аванса.'); return; }
+  // A confirmed KP on the server must record the same paid deposit.
+  if (proposal?.canonicalProposalId && o.status === 'proposal_accepted') {
+    try {
+      await managerConfirmProposalOnServer(proposal.canonicalProposalId, 'deposit', advance, 'phone', 'Аванс отмечен после подтверждения КП');
+    } catch (error) {
+      alert('Сервер не записал аванс: ' + (error?.message || 'нет связи') + '. В CRM ничего не изменено — попробуйте ещё раз.');
+      return;
+    }
+  }
+  const at = new Date().toISOString();
+  orderPayments(o).push({
+    id: 'pay_' + uid(), amount: advance, date: at.slice(0, 10), method: 'other',
+    note: 'Аванс', recordedBy: state.currentUserId || null, recordedAt: at,
+  });
+  syncOrderPaid(o);
   o.depositReceived = true;
-  o.depositReceivedAt = new Date().toISOString();
-  o.paid = (o.paid || 0) + advance;
+  o.depositReceivedAt = at;
   o.timeline = o.timeline || [];
-  o.timeline.push({ at: o.depositReceivedAt, key: 'deposit_received', by: state.currentUserId, note: `Аванс ${fmtMoney(advance)}` });
+  o.timeline.push({ at, key: 'deposit_received', by: state.currentUserId, note: `Аванс ${fmtMoney(advance)}` });
   save(); render();
 }
 
@@ -26202,6 +26220,14 @@ async function confirmProposalByManagerOnce(oid) {
   if (payment === 'deposit' && !(deposit > 0)) { alert('Укажите сумму полученного аванса.'); return; }
 
   const proposal = getPremiumProposalByOrder(oid);
+  if (payment === 'deposit' && proposal) {
+    const calc = premiumProposalCalc(proposal);
+    if (deposit > calc.balanceDue + 0.009) { alert(`Аванс не может быть больше суммы к оплате по КП (${fmtMoney(calc.balanceDue)}).`); return; }
+    if (orderSiteType(o) === 'RESIDENTIAL' && deposit > calc.deposit50 + 0.009) {
+      alert(`Для частного клиента в Калифорнии аванс не больше $1 000 или 10% суммы (здесь ${fmtMoney(calc.deposit50)}).`);
+      return;
+    }
+  }
   // Without a server copy the CRM and PostgreSQL would disagree; publish first.
   if (!proposal?.canonicalProposalId) {
     alert('Это КП ещё не опубликовано на сервере. Откройте КП и нажмите «Опубликовать / отправить», затем подтвердите снова.');

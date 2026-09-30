@@ -22,13 +22,13 @@ export function isSaleCloseReady(input: {
   agreementSignedAt?: Date | null;
   depositStatus?: string | null;
   depositPaidAt?: Date | null;
+  /** "after_completion": pay after the work was agreed — no deposit required. */
+  paymentTerms?: string | null;
 }) {
-  return (
-    input.agreementStatus === "signed" &&
-    Boolean(input.agreementSignedAt) &&
-    input.depositStatus === "paid" &&
-    Boolean(input.depositPaidAt)
-  );
+  const depositSatisfied =
+    input.paymentTerms === "after_completion" ||
+    (input.depositStatus === "paid" && Boolean(input.depositPaidAt));
+  return input.agreementStatus === "signed" && Boolean(input.agreementSignedAt) && depositSatisfied;
 }
 
 async function reconcileIncompleteSale(input: {
@@ -120,12 +120,15 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
   if (!proposal) return null;
 
   const agreementSigned = proposal.agreement?.status === "signed" && Boolean(proposal.agreement?.signed_at);
-  const depositPaid = proposal.deposit?.status === "paid" && Boolean(proposal.deposit?.paid_at);
+  const depositPaid =
+    proposal.payment_terms === "after_completion" ||
+    (proposal.deposit?.status === "paid" && Boolean(proposal.deposit?.paid_at));
   const ready = isSaleCloseReady({
     agreementStatus: proposal.agreement?.status,
     agreementSignedAt: proposal.agreement?.signed_at,
     depositStatus: proposal.deposit?.status,
     depositPaidAt: proposal.deposit?.paid_at,
+    paymentTerms: proposal.payment_terms,
   });
 
   if (!ready) {

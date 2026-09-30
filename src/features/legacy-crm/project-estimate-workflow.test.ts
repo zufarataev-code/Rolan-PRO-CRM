@@ -593,3 +593,13 @@ test("manager confirms a KP on the client's behalf: server first, ledger deposit
   assert.match(confirm, /o\.paymentTerms = 'after_completion'/);
   assert.match(source, /title: 'Подтвердить КП'[^\n]*openManagerConfirmProposal/);
 });
+
+test("a deposit recorded later goes through the server and the payments ledger, within limits", () => {
+  const later = source.match(/async function markDepositReceived\(orderId\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(later, /managerConfirmProposalOnServer\(proposal\.canonicalProposalId, 'deposit', advance/);
+  assert.match(later, /orderPayments\(o\)\.push\(/);
+  assert.doesNotMatch(later, /o\.paid = \(o\.paid \|\| 0\) \+ advance/);
+  const confirm = source.match(/async function confirmProposalByManagerOnce\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(confirm, /deposit > calc\.balanceDue \+ 0\.009/);
+  assert.match(confirm, /orderSiteType\(o\) === 'RESIDENTIAL' && deposit > calc\.deposit50/);
+});

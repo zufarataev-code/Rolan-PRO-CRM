@@ -70,14 +70,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const existing = await prisma.deposit.findFirst({ where: { proposal_id: proposalId } });
 
   if (payment === "after_completion") {
-    if (existing && existing.status !== DEPOSIT_STATUSES.PAID) {
-      await prisma.deposit.delete({ where: { deposit_id: existing.deposit_id } });
-    }
-    return apiSuccess({ proposal_id: proposalId, payment });
+    await prisma.$transaction(async (tx) => {
+      if (existing && existing.status !== DEPOSIT_STATUSES.PAID) {
+        await tx.deposit.delete({ where: { deposit_id: existing.deposit_id } });
+      }
+      // Canonical record of the agreed terms: sale closure and project launch honour it.
+      await tx.proposal.update({ where: { proposal_id: proposalId }, data: { payment_terms: "after_completion" } });
+    });
+    const sale = await closeSaleIfReady({ proposalId, actorUserId: auth.session.user.user_id });
+    return apiSuccess({ proposal_id: proposalId, payment, sale });
   }
 
   if (payment === "later") {
     return apiSuccess({ proposal_id: proposalId, payment });
+  }
+
+  // The received deposit can never exceed the proposal total.
+  const totals = await prisma.proposal.findUniqueOrThrow({
+    where: { proposal_id: proposalId },
+    select: { selected_total_amount: true },
+  });
+  const selectedTotal = Number(totals.selected_total_amount);
+  if (selectedTotal > 0 && amount > selectedTotal + 0.009) {
+    return apiError(400, "deposit_above_total", "Аванс не может быть больше суммы КП.");
   }
 
   let depositId = existing?.deposit_id;
@@ -85,7 +100,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (Math.abs(Number(existing.amount) - amount) > 0.009) {
       return apiError(409, "deposit_already_paid", "A different deposit amount is already recorded as paid.");
     }
-    return apiSuccess({ proposal_id: proposalId, payment, deposit_id: existing.deposit_id });
+    // Idempotent, but still (re)try closing the sale — a previous attempt may have failed there.
+    const sale = await closeSaleIfReady({ depositId: existing.deposit_id, actorUserId: auth.session.user.user_id });
+    return apiSuccess({ proposal_id: proposalId, payment, deposit_id: existing.deposit_id, sale });
   }
   if (existing) {
     // Publishing created a pending Deposit for the planned amount; record the amount actually received.

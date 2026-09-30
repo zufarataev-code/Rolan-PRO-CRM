@@ -1040,6 +1040,9 @@ model Proposal {
   created_by                   String         @db.Uuid
   title                        String         @db.VarChar(180)
   status                       String         @default("draft") @db.VarChar(50)
+  /// "deposit" (default) or "after_completion": pay-after-completion agreed with
+  /// the client (manager confirmation). Then no deposit gates the sale/launch.
+  payment_terms                String         @default("deposit") @db.VarChar(30)
   access_token                 String         @unique @db.VarChar(120)
   currency                     String         @default("USD") @db.VarChar(3)
   subtotal_amount              Decimal        @default(0) @db.Decimal(12, 2)

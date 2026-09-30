@@ -60,3 +60,12 @@ test("a manager cannot assign a record to another manager", () => {
   assert.equal(isCrossManagerAssignment(managerA, undefined), false);
   assert.equal(isCrossManagerAssignment(undefined, managerB), false);
 });
+
+test("pay-after-completion closes the sale without a deposit; otherwise a paid deposit is required", async () => {
+  const { isSaleCloseReady } = await import("./close-sale");
+  const signed = { agreementStatus: "signed", agreementSignedAt: new Date() };
+  assert.equal(isSaleCloseReady({ ...signed, paymentTerms: "after_completion" }), true);
+  assert.equal(isSaleCloseReady({ ...signed, paymentTerms: "deposit" }), false);
+  assert.equal(isSaleCloseReady({ ...signed, depositStatus: "paid", depositPaidAt: new Date() }), true);
+  assert.equal(isSaleCloseReady({ paymentTerms: "after_completion" }), false, "the agreement is always required");
+});
