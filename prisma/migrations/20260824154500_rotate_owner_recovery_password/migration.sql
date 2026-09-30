@@ -3,15 +3,6 @@ DO $$
 DECLARE
   affected_rows INTEGER;
 BEGIN
-  -- Fresh/empty databases (CI, staging, restore rehearsals) have no owner to
-  -- recover. This one-time production recovery is a no-op there. Production
-  -- already applied this migration before the guard existed; Prisma does not
-  -- re-run applied migrations, so production behaviour is unchanged.
-  IF NOT EXISTS (SELECT 1 FROM "users") THEN
-    RAISE NOTICE 'No users present; skipping one-time owner recovery.';
-    RETURN;
-  END IF;
-
   UPDATE "users"
   SET
     "password_hash" = 'scrypt$fd8f9624888d5fce703ad3e8a36b103e$ff18c336ab2b92e40f1ae1eda5679b4e51a2ba2557122a1583dc981a624e4d4dc0531848a7d62b9bb500a2783f5b57966e1417b0b26f5a20afa99d655221d027',
