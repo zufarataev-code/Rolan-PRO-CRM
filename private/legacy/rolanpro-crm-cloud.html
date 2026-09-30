@@ -34112,6 +34112,15 @@ function markPayoutPaid(userId, startISO, endISO) {
     o.timeline.push({ at: new Date().toISOString(), key: 'payout_paid', by: state.currentUserId, note: `Выплачено ${u.name}: ${fmtMoney(b.amount)} (${b.label})` });
   });
   save();
+  // The same payment in PostgreSQL: accruals and lead overrides of the period become paid.
+  fetch('/api/v1/installer-operations/payroll-paid', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ legacyUserId: userId, periodStart: startISO, periodEnd: endISO }),
+  }).then(res => {
+    if (!res.ok && res.status !== 404) alert('Выплата записана в CRM, но сервер не отметил начисления. Повторите позже или сообщите разработчику.');
+  }).catch(() => alert('Выплата записана в CRM, но сервер не ответил. Повторите позже.'));
   alert(`Выплачено ${fmtMoney(amountDue)} → ${u.name}`);
   render();
 }
