@@ -28,8 +28,10 @@ BEGIN
     RETURN;
   END IF;
 
+  -- Moved fields become active: the seed deliberately deactivates some of
+  -- them for Smart Film (e.g. windows_qty), but Safety Film requires them.
   UPDATE service_field_config AS f
-  SET service_type_id = safety_id
+  SET service_type_id = safety_id, is_active = TRUE
   WHERE f.service_type_id = smart_id
     AND f.field_key = ANY (safety_only_keys)
     AND NOT EXISTS (
