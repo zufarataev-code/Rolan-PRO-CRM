@@ -121,6 +121,29 @@ test("owner adds an employee with several roles and changes them in one step", a
   assert.deepEqual(roles.map((access) => access.role.code).sort(), ["CONSULTANT"]);
 });
 
+test("installation groups: a team lead can be assigned; a non-lead cannot", async () => {
+  const lead = await owner.call("POST", "/api/v1/team", {
+    email: `lead-${runTag}@example.com`,
+    fullName: `${runTag} Lead`,
+    roles: ["INSTALLER", "INSTALLER_LEAD"],
+    password: employeePassword,
+  });
+  assert.equal(lead.status, 200, `create lead: ${JSON.stringify(lead.json)}`);
+  const leadId = data<{ userId: string }>(lead.json).userId;
+
+  const assigned = await owner.call("PATCH", `/api/v1/team/${employeeId}`, { installerLeadId: leadId });
+  assert.equal(assigned.status, 200, `assign lead: ${JSON.stringify(assigned.json)}`);
+  const stored = await prisma.user.findUniqueOrThrow({ where: { user_id: employeeId } });
+  assert.equal(stored.installer_lead_id, leadId);
+
+  const notALead = await owner.call("PATCH", `/api/v1/team/${leadId}`, { installerLeadId: employeeId });
+  assert.equal(notALead.status, 400, "only an INSTALLER_LEAD can lead a group");
+
+  const removed = await owner.call("PATCH", `/api/v1/team/${employeeId}`, { installerLeadId: null });
+  assert.equal(removed.status, 200);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { user_id: employeeId } })).installer_lead_id, null);
+});
+
 test("a new employee is recognised by the CRM without the owner opening it first", async () => {
   // Employees used to see "Доступ не настроен" until the owner's browser
   // happened to synchronize the legacy card. The server now guarantees it.

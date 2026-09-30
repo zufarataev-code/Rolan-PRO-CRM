@@ -110,3 +110,10 @@ test("the difficulty coefficient also multiplies add-on revenue (whole deal)", (
   // The old settings editor is read-only; the rate directory is the only source.
   assert.match(source, /value="\$\{s\.complexityCoefs\[k\]\}" disabled title="Меняется в «Сотрудники → Расценки»"/);
 });
+
+test("a new installer without personal rates is paid from the rate directory", () => {
+  const block = source.match(/\/\/ ---- USER PAY CONFIG migration ----[\s\S]*?u\.payConfig\.ratesByWorkType = u\.payConfig\.ratesByWorkType \|\| \{\};/)?.[0] || "";
+  assert.match(block, /ratePerSqft: 0,/);
+  assert.match(block, /ratesByCategory: \{\},/);
+  assert.doesNotMatch(block, /smart: 0\.55/);
+});

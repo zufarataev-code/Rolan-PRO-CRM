@@ -33,6 +33,8 @@ export type TeamMember = {
   isActive: boolean;
   mustChangePassword: boolean;
   lastLoginAt: Date | null;
+  /** Team lead of this installer's installation group, if any. */
+  installerLeadId: string | null;
 };
 
 function normalizeEmail(email: string) {
@@ -83,6 +85,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
     isActive: user.is_active,
     mustChangePassword: user.must_change_password,
     lastLoginAt: user.last_login_at,
+    installerLeadId: user.installer_lead_id,
   }));
 }
 
@@ -162,8 +165,26 @@ export async function updateTeamMember(
     roles?: RoleCode[];
     isActive?: boolean;
     legacyUserId?: string;
+    /** null removes the installer from a group. */
+    installerLeadId?: string | null;
   },
 ) {
+  if (input.installerLeadId) {
+    if (input.installerLeadId === userId) {
+      throw new Error("Сотрудник не может быть руководителем сам себе.");
+    }
+    const lead = await prisma.user.findFirst({
+      where: {
+        user_id: input.installerLeadId,
+        is_active: true,
+        user_accesses: { some: { is_active: true, role: { code: ROLE_CODES.INSTALLER_LEAD } } },
+      },
+      select: { user_id: true },
+    });
+    if (!lead) {
+      throw new Error("Выбранный сотрудник не руководитель монтажной группы.");
+    }
+  }
   if (input.roles) {
     assertValidRoles(input.roles);
   }
@@ -260,6 +281,7 @@ export async function updateTeamMember(
         full_name: input.fullName?.trim() ?? undefined,
         is_active: input.isActive ?? undefined,
         legacy_user_ids: shouldLinkLegacyUser && legacyUserId ? { push: legacyUserId } : undefined,
+        installer_lead_id: input.installerLeadId === undefined ? undefined : input.installerLeadId,
       },
     });
   });

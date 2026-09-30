@@ -4,6 +4,9 @@ export const ROLE_CODES = {
   MANAGER: "MANAGER",
   CONSULTANT: "CONSULTANT",
   INSTALLER: "INSTALLER",
+  // Added on top of INSTALLER: runs an installation group (distributes jobs,
+  // earns 10% of each group installer's pay on top). Never sees prices.
+  INSTALLER_LEAD: "INSTALLER_LEAD",
 } as const;
 
 export type RoleCode = (typeof ROLE_CODES)[keyof typeof ROLE_CODES];
@@ -26,8 +29,12 @@ export const ROLE_NAMES = {
     en: "Consultant / Surveyor",
   },
   [ROLE_CODES.INSTALLER]: {
-    ru: "Монтажник",
-    en: "Installer",
+    ru: "Главный специалист по установке",
+    en: "Lead installation specialist",
+  },
+  [ROLE_CODES.INSTALLER_LEAD]: {
+    ru: "Руководитель монтажной группы",
+    en: "Installation team lead",
   },
 } as const;
 

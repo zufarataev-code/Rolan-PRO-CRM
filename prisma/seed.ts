@@ -43,6 +43,14 @@ async function seedRoles() {
       description_en: "Works only with assigned installs and personal stats.",
       sort_order: 4,
     },
+    {
+      code: ROLE_CODES.INSTALLER_LEAD,
+      name_ru: ROLE_NAMES[ROLE_CODES.INSTALLER_LEAD].ru,
+      name_en: ROLE_NAMES[ROLE_CODES.INSTALLER_LEAD].en,
+      description_ru: "Распределяет работы своей монтажной группы, получает 10% с каждого монтажника группы. Цены не видит.",
+      description_en: "Distributes the group's installation jobs; earns 10% of each group installer's pay. No prices.",
+      sort_order: 5,
+    },
   ];
 
   for (const role of roles) {

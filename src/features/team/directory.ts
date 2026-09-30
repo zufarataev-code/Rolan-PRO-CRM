@@ -41,7 +41,7 @@ const LEGACY_TITLES: Record<string, string> = {
   owner: "Owner",
   manager: "Manager",
   measurer: "Measurer",
-  installer: "Installer",
+  installer: "Installation specialist",
 };
 
 export function legacyIdForUser(userId: string) {

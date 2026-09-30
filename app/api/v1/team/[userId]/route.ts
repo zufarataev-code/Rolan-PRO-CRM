@@ -31,6 +31,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     isActive?: boolean;
     password?: string;
     legacyUserId?: string;
+    installerLeadId?: string | null;
   } | null;
 
   if (!body) {
@@ -51,7 +52,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       body.fullName !== undefined ||
       body.roles !== undefined ||
       body.isActive !== undefined ||
-      body.legacyUserId !== undefined
+      body.legacyUserId !== undefined ||
+      body.installerLeadId !== undefined
     ) {
       profileResult = await updateTeamMember(userId, {
         email: body.email,
@@ -59,6 +61,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         roles: body.roles,
         isActive: body.isActive,
         legacyUserId: body.legacyUserId,
+        installerLeadId: body.installerLeadId,
       });
     }
 

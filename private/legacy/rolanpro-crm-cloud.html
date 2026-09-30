@@ -6170,7 +6170,7 @@ const I18N = {
     status: 'Статус',
     manager: 'Менеджер',
     measurer: 'Замерщик',
-    installer: 'Монтажник',
+    installer: 'Главный специалист по установке',
     installers: 'Монтажники',
     role: 'Роль',
     save: 'Сохранить',
@@ -8251,8 +8251,11 @@ function migrateSchema() {
       u.payConfig = {
         type: u.role === 'manager' ? 'commission' : u.role === 'installer' ? 'per_sqft' : u.role === 'measurer' ? 'fixed_per_job' : 'salary',
         commissionPct: u.commissionPct || (u.role === 'manager' ? 10 : u.role === 'measurer' ? 5 : 0),
-        ratePerSqft: u.role === 'installer' ? 0.30 : 0,
-        ratesByCategory: u.role === 'installer' ? { protective: 0.32, smart: 0.55, solar: 0.27, decorative: 0.27, privacy: 0.27, other: 0.27 } : {},
+        // No built-in installer rates: without a personal override the rate
+        // directory («Сотрудники → Расценки») applies. The old defaults
+        // (0.30 base, 0.55 Smart) paid new installers a fraction of the rate.
+        ratePerSqft: 0,
+        ratesByCategory: {},
         ratesByWorkType: {},
         fixedPerJob: u.role === 'measurer' ? 50 : 0,
         weeklySalary: 0,

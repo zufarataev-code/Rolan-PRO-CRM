@@ -13,13 +13,15 @@ type Member = {
   isActive: boolean;
   mustChangePassword: boolean;
   lastLoginAt: string | null;
+  installerLeadId?: string | null;
 };
 
 const ROLE_OPTIONS = [
   { code: "OWNER", label: "Владелец", hint: "всё, включая сотрудников и финансы" },
   { code: "MANAGER", label: "Менеджер", hint: "лиды, сделки, КП, свои клиенты" },
   { code: "CONSULTANT", label: "Замерщик", hint: "свои замеры, без цен" },
-  { code: "INSTALLER", label: "Монтажник", hint: "свои объекты, без цен" },
+  { code: "INSTALLER", label: "Главный специалист по установке", hint: "свои объекты, без цен" },
+  { code: "INSTALLER_LEAD", label: "Руководитель монтажной группы", hint: "распределяет работы группы, +10% с каждого монтажника, без цен" },
 ] as const;
 
 const roleLabel = (code: string) => ROLE_OPTIONS.find((role) => role.code === code)?.label ?? code;
@@ -150,6 +152,7 @@ export function TeamDirectory({
       <MemberList
         title={`Работают (${active.length})`}
         members={active}
+        allMembers={members}
         ownUserId={ownUserId}
         onEdit={setEditing}
         onPreview={preview}
@@ -158,6 +161,7 @@ export function TeamDirectory({
         <MemberList
           title={`Доступ выключен (${inactive.length})`}
           members={inactive}
+          allMembers={members}
           ownUserId={ownUserId}
           onEdit={setEditing}
           onPreview={preview}
@@ -168,6 +172,7 @@ export function TeamDirectory({
       {editing ? (
         <MemberForm
           member={editing === "new" ? null : editing}
+          leads={members.filter((item) => item.isActive && item.roles.includes("INSTALLER_LEAD"))}
           isSelf={editing !== "new" && editing.userId === ownUserId}
           minPasswordLength={minPasswordLength}
           onClose={() => setEditing(null)}
@@ -186,12 +191,14 @@ export function TeamDirectory({
 function MemberList({
   title,
   members,
+  allMembers,
   ownUserId,
   onEdit,
   onPreview,
 }: {
   title: string;
   members: Member[];
+  allMembers: Member[];
   ownUserId: string;
   onEdit: (member: Member) => void;
   onPreview: (member: Member) => void;
@@ -210,6 +217,11 @@ function MemberList({
                   <span key={role} className={styles.role}>{roleLabel(role)}</span>
                 ))}
                 {member.mustChangePassword ? <span className={styles.warn}>ждёт первого входа</span> : null}
+                {member.installerLeadId ? (
+                  <span className={styles.role}>
+                    группа: {allMembers.find((lead) => lead.userId === member.installerLeadId)?.fullName ?? "—"}
+                  </span>
+                ) : null}
               </span>
             </div>
             <div className={styles.actions}>
@@ -231,12 +243,14 @@ function MemberList({
 
 function MemberForm({
   member,
+  leads,
   isSelf,
   minPasswordLength,
   onClose,
   onSaved,
 }: {
   member: Member | null;
+  leads: Member[];
   isSelf: boolean;
   minPasswordLength: number;
   onClose: () => void;
@@ -247,11 +261,17 @@ function MemberForm({
   const [roles, setRoles] = useState<string[]>(member?.roles ?? ["INSTALLER"]);
   const [isActive, setIsActive] = useState(member?.isActive ?? true);
   const [password, setPassword] = useState("");
+  const [installerLeadId, setInstallerLeadId] = useState<string>(member?.installerLeadId ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   function toggleRole(code: string) {
-    setRoles((current) => (current.includes(code) ? current.filter((role) => role !== code) : [...current, code]));
+    setRoles((current) => {
+      if (current.includes(code)) return current.filter((role) => role !== code);
+      // A team lead works on sites too, so the lead role always comes with the installer role.
+      if (code === "INSTALLER_LEAD" && !current.includes("INSTALLER")) return [...current, "INSTALLER", code];
+      return [...current, code];
+    });
   }
 
   async function submit(event: FormEvent) {
@@ -276,6 +296,7 @@ function MemberForm({
           fullName,
           roles,
           isActive,
+          installerLeadId: roles.includes("INSTALLER") && installerLeadId ? installerLeadId : null,
           ...(password ? { password } : {}),
         });
         await onSaved(password ? `Сохранено. Новый временный пароль для ${fullName} действует со следующего входа.` : "Сохранено.");
@@ -313,6 +334,20 @@ function MemberForm({
           ))}
         </fieldset>
 
+        {roles.includes("INSTALLER") && member ? (
+          <label className={styles.field}>
+            <span>Руководитель монтажной группы</span>
+            <select id="tm-installer-lead" value={installerLeadId} onChange={(event) => setInstallerLeadId(event.target.value)}>
+              <option value="">— без группы —</option>
+              {leads
+                .filter((lead) => lead.userId !== member.userId)
+                .map((lead) => (
+                  <option key={lead.userId} value={lead.userId}>{lead.fullName}</option>
+                ))}
+            </select>
+          </label>
+        ) : null}
+
         {member && !isSelf ? (
           <label className={styles.check}>
             <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
@@ -335,6 +370,27 @@ function MemberForm({
         {error ? <p className={styles.error} role="alert">{error}</p> : null}
 
         <div className={styles.dialogActions}>
+          {member && !isSelf && member.isActive ? (
+            <button
+              type="button"
+              className={styles.danger}
+              disabled={busy}
+              onClick={async () => {
+                if (!window.confirm(`Убрать ${member.fullName}? Доступ в CRM закроется, история заказов и зарплаты сохранится.`)) return;
+                setBusy(true);
+                try {
+                  await api(`/api/v1/team/${member.userId}`, "PATCH", { isActive: false });
+                  await onSaved(`${member.fullName} убран(а): доступ закрыт, история сохранена. Вернуть можно в разделе «Доступ выключен».`);
+                } catch (caught) {
+                  setError((caught as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Убрать сотрудника
+            </button>
+          ) : null}
           <button type="button" className={styles.secondary} onClick={onClose}>Отмена</button>
           <button type="submit" className={styles.primary} disabled={busy}>{busy ? "Сохраняю…" : "Сохранить"}</button>
         </div>
