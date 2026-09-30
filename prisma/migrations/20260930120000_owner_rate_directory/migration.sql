@@ -11,6 +11,29 @@
 -- ×1.20/1.30/1.50). The seed no longer overwrites them; this migration sets
 -- the owner's values once. Only these columns change; no rows are deleted.
 
+-- Positions installed before 2026-09-01 keep the coefficient and installer rate
+-- they were priced and paid with: both are snapshotted into dynamic_fields
+-- before the shared rows change (calculatePositionFinance prefers the snapshot).
+UPDATE project_positions AS p
+SET dynamic_fields = COALESCE(p.dynamic_fields::jsonb, '{}'::jsonb)
+      || jsonb_build_object('manual_installation_cost_per_sqft', st.installation_cost_per_sqft),
+    updated_at = NOW()
+FROM projects AS pr, service_types AS st
+WHERE pr.project_id = p.project_id
+  AND st.service_type_id = p.service_type_id
+  AND pr.install_date < DATE '2026-09-01'
+  AND jsonb_typeof(p.dynamic_fields::jsonb -> 'manual_installation_cost_per_sqft') IS DISTINCT FROM 'number';
+
+UPDATE project_positions AS p
+SET dynamic_fields = COALESCE(p.dynamic_fields::jsonb, '{}'::jsonb)
+      || jsonb_build_object('complexity_multiplier', cl.multiplier),
+    updated_at = NOW()
+FROM projects AS pr, complexity_levels AS cl
+WHERE pr.project_id = p.project_id
+  AND cl.complexity_level_id = p.complexity_level_id
+  AND pr.install_date < DATE '2026-09-01'
+  AND jsonb_typeof(p.dynamic_fields::jsonb -> 'complexity_multiplier') IS DISTINCT FROM 'number';
+
 UPDATE service_types SET installation_cost_per_sqft = 5.00, updated_at = NOW() WHERE service_code = 'SMART_FILM';
 UPDATE service_types SET installation_cost_per_sqft = 3.00, updated_at = NOW() WHERE service_code = 'SAFETY_FILM';
 UPDATE service_types SET installation_cost_per_sqft = 2.50, updated_at = NOW() WHERE service_code = 'SOLAR_FILM';
