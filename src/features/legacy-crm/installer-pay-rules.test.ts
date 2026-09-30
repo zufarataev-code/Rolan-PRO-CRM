@@ -117,3 +117,38 @@ test("a new installer without personal rates is paid from the rate directory", (
   assert.match(block, /ratesByCategory: \{\},/);
   assert.doesNotMatch(block, /smart: 0\.55/);
 });
+
+test("team lead earns own pay plus 10% of each group installer (owner's example)", () => {
+  // $500 job, lead L and installer I (in L's group) → $250 each; L gets $250 + $25.
+  const users: Record<string, Record<string, unknown>> = {
+    L: { id: "L", installerLead: true },
+    I: { id: "I", groupLeadId: "L" },
+    X: { id: "X" },
+  };
+  const constant = source.match(/const OWNER_PAY_RULES_FROM = '[^']+';/)?.[0] ?? "";
+  const leadConst = source.match(/const INSTALLER_LEAD_OVERRIDE_PCT = \d+;/)?.[0] ?? "";
+  const body = [
+    constant,
+    leadConst,
+    pick("orderUsesOwnerPayRules"),
+    pick("orderLeadOverrideForUser"),
+    pick("orderGroupLeadIds"),
+    "return { orderLeadOverrideForUser, orderGroupLeadIds };",
+  ].join("\n");
+  const lead = new Function("getUser", "orderInstallerPayoutForUser", body)(
+    (id: string) => users[id],
+    () => 250,
+  ) as { orderLeadOverrideForUser: (o: object, id: string) => number; orderGroupLeadIds: (o: object) => string[] };
+
+  const job = { installerIds: ["L", "I"], installationDoneAt: "2026-09-20" };
+  assert.equal(lead.orderLeadOverrideForUser(job, "L"), 25, "10% of the group installer's $250");
+  assert.equal(250 + lead.orderLeadOverrideForUser(job, "L"), 275);
+  assert.deepEqual(lead.orderGroupLeadIds(job), ["L"]);
+
+  // The lead is not on the job but leads the installer: still 10%.
+  assert.equal(lead.orderLeadOverrideForUser({ installerIds: ["I"], installationDoneAt: "2026-09-20" }, "L"), 25);
+  // An installer outside the group earns the lead nothing.
+  assert.equal(lead.orderLeadOverrideForUser({ installerIds: ["L", "X"], installationDoneAt: "2026-09-20" }, "L"), 0);
+  // Before 2026-09-01 the rule does not apply.
+  assert.equal(lead.orderLeadOverrideForUser({ installerIds: ["L", "I"], installationDoneAt: "2026-08-20" }, "L"), 0);
+});

@@ -15175,6 +15175,23 @@ function orderInstallerPayoutForUser(o, userId) {
     + orderSmartZonePayout(o, user, installerIds.length)
     + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * orderPayComplexityCoef(o);
 }
+// Installation team lead (owner decision 2026-09-30): on top of their own
+// work, a lead earns 10% of the pay of each installer of their group on the
+// order, paid by the company (the installer keeps full pay). Group links come
+// from PostgreSQL via the employee directory (card.groupLeadId, installerLead).
+const INSTALLER_LEAD_OVERRIDE_PCT = 10;
+function orderLeadOverrideForUser(o, leadId) {
+  if (!orderUsesOwnerPayRules(o)) return 0;
+  if (!getUser(leadId)?.installerLead) return 0;
+  return [...new Set((o?.installerIds || []).filter(Boolean))]
+    .filter(id => id !== leadId && getUser(id)?.groupLeadId === leadId)
+    .reduce((sum, id) => sum + orderInstallerPayoutForUser(o, id) * INSTALLER_LEAD_OVERRIDE_PCT / 100, 0);
+}
+function orderGroupLeadIds(o) {
+  return [...new Set((o?.installerIds || [])
+    .map(id => getUser(id)?.groupLeadId)
+    .filter(leadId => leadId && getUser(leadId)?.installerLead))];
+}
 function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.length) {
@@ -15196,6 +15213,11 @@ function orderInstallerPayoutBreakdown(o) {
   const byInstaller = installerIds.map(userId => {
     const user = getUser(userId);
     return { userId, name: user?.name || 'Исполнитель', amount: orderInstallerPayoutForUser(o, userId) };
+  });
+  // Team-lead 10% is a company cost of the project, shown as its own line.
+  orderGroupLeadIds(o).forEach(leadId => {
+    const amount = orderLeadOverrideForUser(o, leadId);
+    if (amount > 0) byInstaller.push({ userId: leadId, name: `${getUser(leadId)?.name || 'Руководитель'} · 10% с группы`, amount, leadOverride: true });
   });
   return { total: byInstaller.reduce((sum, row) => sum + row.amount, 0), byInstaller, source: 'EMPLOYEE_REFERENCE' };
 }
@@ -33899,6 +33921,20 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
       total += amount;
     }
   });
+  // Team lead: 10% of each group installer's pay on completed orders in the period.
+  if (u.installerLead) {
+    db.orders.forEach(o => {
+      if (!o.installationDoneAt) return;
+      const dt = new Date(o.installationDoneAt);
+      if (dt < startDate || dt > endDate) return;
+      const amount = orderLeadOverrideForUser(o, u.id);
+      if (!(amount > 0)) return;
+      const names = (o.installerIds || []).filter(id => id !== u.id && getUser(id)?.groupLeadId === u.id).map(id => getUser(id)?.name || id);
+      const isPaid = (o.payouts || []).some(p => p.userId === u.id && p.kind === 'lead_override' && p.paid);
+      breakdown.push({ kind: 'lead_override', orderId: o.id, orderNumber: o.number, label: `10% с группы: ${names.join(', ')}`, amount, date: o.installationDoneAt, paid: isPaid });
+      total += amount;
+    });
+  }
   return { total, breakdown };
 }
 
