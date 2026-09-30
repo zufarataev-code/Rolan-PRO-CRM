@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { setInstallerGroup, setTeamMemberPassword, updateTeamMember } from "@/features/team/service";
+import { setTeamMemberPassword, updateTeamMember } from "@/features/team/service";
 import { ROLE_CODES, type RoleCode } from "@/lib/auth/constants";
 import { requireRequestSession } from "@/lib/auth/server";
 import { createSessionToken, sessionCredentialFingerprint } from "@/lib/auth/session";
@@ -55,7 +55,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       body.roles !== undefined ||
       body.isActive !== undefined ||
       body.legacyUserId !== undefined ||
-      body.installerLeadId !== undefined
+      body.installerLeadId !== undefined ||
+      Array.isArray(body.groupInstallerIds)
     ) {
       profileResult = await updateTeamMember(userId, {
         email: body.email,
@@ -64,14 +65,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         isActive: body.isActive,
         legacyUserId: body.legacyUserId,
         installerLeadId: body.installerLeadId,
+        // Profile, roles and group are validated first and written in one transaction.
+        groupInstallerIds: Array.isArray(body.groupInstallerIds) ? body.groupInstallerIds : undefined,
       });
-    }
-
-    if (Array.isArray(body.groupInstallerIds)) {
-      await setInstallerGroup(userId, body.groupInstallerIds);
-      if (!profileResult && !body.password) {
-        return apiSuccess({ userId, groupInstallerIds: body.groupInstallerIds });
-      }
     }
 
     if (body.password) {

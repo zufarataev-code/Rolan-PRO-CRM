@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { ROLE_CODES, type RoleCode } from "@/lib/auth/constants";
 import { hashPassword } from "@/lib/auth/password";
 import { PASSWORD_MIN_LENGTH } from "@/lib/auth/password-policy";
@@ -57,6 +58,11 @@ function assertValidRoles(roles: RoleCode[]) {
 
   if (invalid.length) {
     throw new Error(`Неизвестная роль: ${invalid.join(", ")}`);
+  }
+
+  // A team lead works on sites too; without INSTALLER the account could not use the CRM.
+  if (roles.includes(ROLE_CODES.INSTALLER_LEAD) && !roles.includes(ROLE_CODES.INSTALLER)) {
+    throw new Error("Руководитель монтажной группы должен иметь и роль «Главный специалист по установке».");
   }
 }
 
@@ -167,6 +173,8 @@ export async function updateTeamMember(
     legacyUserId?: string;
     /** null removes the installer from a group. */
     installerLeadId?: string | null;
+    /** For a team lead: the complete group (validated before anything is written). */
+    groupInstallerIds?: string[];
   },
 ) {
   if (input.installerLeadId) {
@@ -193,6 +201,13 @@ export async function updateTeamMember(
   }
   if (input.roles) {
     assertValidRoles(input.roles);
+  }
+  if (input.groupInstallerIds) {
+    const willBeLead = input.roles ? input.roles.includes(ROLE_CODES.INSTALLER_LEAD) : true;
+    input = {
+      ...input,
+      groupInstallerIds: await validateInstallerGroup(userId, input.groupInstallerIds, willBeLead && input.isActive !== false),
+    };
   }
 
   const email = input.email === undefined ? undefined : normalizeEmail(input.email);
@@ -280,6 +295,21 @@ export async function updateTeamMember(
       });
     }
 
+    // A lead who is switched off or loses the lead role releases their group.
+    const staysLead =
+      (input.isActive ?? user.is_active) &&
+      (input.roles ?? user.user_accesses.map((access) => access.role.code as RoleCode)).includes(ROLE_CODES.INSTALLER_LEAD);
+    if (!staysLead) {
+      await tx.user.updateMany({ where: { installer_lead_id: userId }, data: { installer_lead_id: null } });
+    }
+    if (input.groupInstallerIds && staysLead) {
+      await tx.user.updateMany({
+        where: { installer_lead_id: userId, user_id: { notIn: input.groupInstallerIds } },
+        data: { installer_lead_id: null },
+      });
+      await tx.user.updateMany({ where: { user_id: { in: input.groupInstallerIds } }, data: { installer_lead_id: userId } });
+    }
+
     return tx.user.update({
       where: { user_id: userId },
       data: {
@@ -301,7 +331,8 @@ export const MAX_GROUP_INSTALLERS = 5;
  * Installation group of a team lead: 1–5 installers chosen by name (owner
  * decision 2026-09-30). Replaces the lead's group in one transaction.
  */
-export async function setInstallerGroup(leadId: string, installerIds: string[]) {
+/** Validates a lead's group request without writing anything. */
+export async function validateInstallerGroup(leadId: string, installerIds: string[], leadWillBeEligible = true) {
   const ids = [...new Set(installerIds.filter(Boolean))];
   if (ids.length > MAX_GROUP_INSTALLERS) {
     throw new Error(`В группе может быть не больше ${MAX_GROUP_INSTALLERS} монтажников.`);
@@ -309,15 +340,9 @@ export async function setInstallerGroup(leadId: string, installerIds: string[]) 
   if (ids.includes(leadId)) {
     throw new Error("Руководитель не может быть в своей группе как подчинённый.");
   }
-  const lead = await prisma.user.findFirst({
-    where: {
-      user_id: leadId,
-      user_accesses: { some: { is_active: true, role: { code: ROLE_CODES.INSTALLER_LEAD } } },
-    },
-    select: { user_id: true },
-  });
-  if (!lead) throw new Error("Этот сотрудник не руководитель монтажной группы.");
-
+  if (ids.length && !leadWillBeEligible) {
+    throw new Error("Группу можно назначить только действующему руководителю монтажной группы.");
+  }
   const installers = await prisma.user.findMany({
     where: {
       user_id: { in: ids },
@@ -329,14 +354,29 @@ export async function setInstallerGroup(leadId: string, installerIds: string[]) 
   if (installers.length !== ids.length) {
     throw new Error("В группу можно добавить только действующих специалистов по установке.");
   }
+  return ids;
+}
 
-  await prisma.$transaction([
-    prisma.user.updateMany({
-      where: { installer_lead_id: leadId, user_id: { notIn: ids } },
-      data: { installer_lead_id: null },
-    }),
-    prisma.user.updateMany({ where: { user_id: { in: ids } }, data: { installer_lead_id: leadId } }),
-  ]);
+/**
+ * Installation group of a team lead: 1–5 installers chosen by name (owner
+ * decision 2026-09-30). Replaces the lead's group in one transaction.
+ */
+export async function setInstallerGroup(leadId: string, installerIds: string[], tx: Prisma.TransactionClient = prisma) {
+  const ids = await validateInstallerGroup(leadId, installerIds);
+  const lead = await tx.user.findFirst({
+    where: {
+      user_id: leadId,
+      is_active: true,
+      user_accesses: { some: { is_active: true, role: { code: ROLE_CODES.INSTALLER_LEAD } } },
+    },
+    select: { user_id: true },
+  });
+  if (!lead) throw new Error("Этот сотрудник не руководитель монтажной группы.");
+  await tx.user.updateMany({
+    where: { installer_lead_id: leadId, user_id: { notIn: ids } },
+    data: { installer_lead_id: null },
+  });
+  await tx.user.updateMany({ where: { user_id: { in: ids } }, data: { installer_lead_id: leadId } });
   return { leadId, installerIds: ids };
 }
 
