@@ -40,7 +40,9 @@ test("canonical client APIs lock identity and reuse or reject matching clients",
   assert.match(clientsRoute, /lockClientIdentity\(tx, contact\)/);
   assert.match(clientsRoute, /findExistingClientByIdentity\(tx, contact\)/);
   assert.match(clientsRoute, /reused: true/);
-  assert.match(clientRoute, /findExistingClientByIdentity\(tx, contact, clientId\)/);
+  // Updates lock old + new identities and check only the contacts that change.
+  assert.match(clientRoute, /lockClientIdentityUpdate\(tx, clientId, contact\)/);
+  assert.match(clientRoute, /findExistingClientByIdentity\(tx, changed, clientId\)/);
   assert.match(clientRoute, /"duplicate_client"/);
 });
 

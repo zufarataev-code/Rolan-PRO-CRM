@@ -115,3 +115,11 @@ test("a new role card never reuses an id that already exists", () => {
   const ids = legacyIdsForRoles(alan.userId, ["u_z1"], ["measurer", "installer"], new Set(["u_z1_installer"]));
   assert.deepEqual(ids, ["u_z1", "u_z1_installer_2"]);
 });
+
+test("a new employee never takes over an unrelated historical card with the same generated id", async () => {
+  const { resolveLegacyIdForUser, legacyIdForUser } = await import("./directory");
+  const user = { user_id: "55555555-5555-4555-8555-555555555555", email: "new@example.com" };
+  const base = legacyIdForUser(user.user_id);
+  const id = resolveLegacyIdForUser(user, [{ id: base, email: "someone-else@example.com" }], new Set());
+  assert.notEqual(id, base);
+});
