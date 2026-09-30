@@ -456,6 +456,12 @@
     animation: slideUp 0.25s cubic-bezier(.4,0,.2,1);
   }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  /* Re-renders keep already-visible modals and cards still (see renderNow). */
+  body.rp-keep-modal .modal-backdrop,
+  body.rp-keep-modal .modal-content,
+  body.rp-keep-modal .order-workspace-modal,
+  body.rp-keep-view .kanban-card,
+  body.rp-keep-view .kanban-fullscreen { animation: none !important; }
   @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   /* === Timeline === */
   .timeline-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand-blue); flex-shrink: 0; margin-top: 6px; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
@@ -16490,6 +16496,7 @@ function restoreRenderPosition(snapshot) {
 }
 
 let __lastRenderedHtml = '';
+let __lastRenderedView = null;
 let __pendingRenderPosition = null;
 
 function preservePositionForNextRender(snapshot = captureRenderPosition()) {
@@ -16563,8 +16570,16 @@ function renderNow() {
     return;
   }
 
+  // Every change rebuilds the page. Entry animations (modal fade + 20px
+  // slide, kanban card rise) must play only when something first appears,
+  // not on every save — replaying them made the CRM jump after each action.
+  const hadModal = Boolean(root.querySelector('.modal-backdrop'));
+  const sameView = __lastRenderedView === state.view;
   __lastRenderedHtml = html;
   root.innerHTML = html;
+  document.body.classList.toggle('rp-keep-modal', hadModal);
+  document.body.classList.toggle('rp-keep-view', sameView);
+  __lastRenderedView = state.view;
   attachGlobalListeners();
   restoreRenderPositionStable(snapshot);
 }
