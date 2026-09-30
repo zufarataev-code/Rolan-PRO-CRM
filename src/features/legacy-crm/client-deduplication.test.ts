@@ -48,8 +48,16 @@ test("project and proposal creation reuse identity without creating or overwriti
   assert.match(projectService, /findExistingClientByIdentity\(tx, contact\)/);
   assert.match(projectService, /\? \{ client_id: reusableClient\.client\.client_id \}/);
   assert.match(proposalPublisher, /findExistingClientByIdentity\(tx, contact, clientId!\)/);
-  assert.match(proposalPublisher, /email: identityConflict \? undefined/);
-  assert.match(proposalPublisher, /phone: identityConflict \? undefined/);
+  // An existing client card is never rewritten by a proposal: only missing
+  // contact fields are filled, and only without an identity conflict.
+  assert.match(proposalPublisher, /if \(!identityConflict && current\)/);
+  assert.match(proposalPublisher, /email: current\.email \? undefined : snapshot\.email/);
+  const reuseUpdate = proposalPublisher.slice(
+    proposalPublisher.indexOf("Publishing a proposal never rewrites"),
+    proposalPublisher.indexOf("const total = snapshot.items"),
+  );
+  assert.doesNotMatch(reuseUpdate, /name: snapshot\.clientName/);
+  assert.doesNotMatch(reuseUpdate, /service_address:/);
 });
 
 test("legacy workspace server rejects a newly introduced duplicate identity", () => {

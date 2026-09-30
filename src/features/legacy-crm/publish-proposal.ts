@@ -185,18 +185,26 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
       dealId = deal.deal_id;
     }
 
+    // Publishing a proposal never rewrites an existing client card: a repeat
+    // customer's new property is the job address of this proposal/project,
+    // not the client's account address or name. Only contact fields the card
+    // is missing are filled in, and only when no other client owns them.
     const contact = { email: snapshot.email, phone: snapshot.phone };
     await lockClientIdentity(tx, contact);
     const identityConflict = await findExistingClientByIdentity(tx, contact, clientId!);
-    await tx.client.update({
+    const current = await tx.client.findUnique({
       where: { client_id: clientId! },
-      data: {
-        name: snapshot.clientName,
-        email: identityConflict ? undefined : snapshot.email || undefined,
-        phone: identityConflict ? undefined : snapshot.phone || undefined,
-        service_address: snapshot.address || undefined,
-      },
+      select: { email: true, phone: true },
     });
+    if (!identityConflict && current) {
+      await tx.client.update({
+        where: { client_id: clientId! },
+        data: {
+          email: current.email ? undefined : snapshot.email || undefined,
+          phone: current.phone ? undefined : snapshot.phone || undefined,
+        },
+      });
+    }
 
     const total = snapshot.items.reduce((sum, item) => sum + item.linePrice, 0);
     const proposal = existing

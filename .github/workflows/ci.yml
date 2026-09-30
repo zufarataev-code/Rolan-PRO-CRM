@@ -97,16 +97,16 @@ jobs:
       - name: Build empty database from migrations
         run: node scripts/db-bootstrap-empty.mjs
 
+      # The database above was built from the migration history, so comparing
+      # it with schema.prisma proves the history and the schema agree.
+      - name: Migrations match schema.prisma (no drift)
+        run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
       # Marks this database as disposable. The E2E gate refuses to write to any
       # database without this marker, even a local one or one reached through
       # a tunnel. Production never has it.
       - name: Mark database as disposable test data
         run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d rolanpro_ci -c "CREATE TABLE e2e_disposable_marker (created_at timestamptz NOT NULL DEFAULT now()); INSERT INTO e2e_disposable_marker DEFAULT VALUES;"
-
-      # The database above was built from the migration history, so comparing
-      # it with schema.prisma proves the history and the schema agree.
-      - name: Migrations match schema.prisma (no drift)
-        run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
 
       - name: Seed reference and demo data
         run: npm run db:seed
