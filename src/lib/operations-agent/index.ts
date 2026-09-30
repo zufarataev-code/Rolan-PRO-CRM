@@ -1,4 +1,8 @@
-import { findExistingClientByIdentity, lockClientIdentity } from "@/features/sales/client-identity";
+import {
+  findExistingClientByIdentity,
+  lockClientIdentity,
+  lockClientIdentityUpdate,
+} from "@/features/sales/client-identity";
 import { Prisma } from "@prisma/client";
 
 import { addMeasurementsBatch, createConsultation } from "@/features/consultations/service";
@@ -744,10 +748,9 @@ async function executeWrite(
     const targetId = resolution.client.client_id;
 
     const client = await prisma.$transaction(async (tx) => {
-      const contact = { phone: nextPhone ?? null, email: nextEmail ?? null };
-      await lockClientIdentity(tx, contact);
+      const changed = await lockClientIdentityUpdate(tx, targetId, { phone: nextPhone, email: nextEmail });
       // A contact that already belongs to another client is refused, not copied.
-      const collision = await findExistingClientByIdentity(tx, contact, targetId);
+      const collision = await findExistingClientByIdentity(tx, changed, targetId);
       if (collision) return null;
       return tx.client.update({
       where: { client_id: targetId },

@@ -8,7 +8,7 @@ import { MANAGER_ROLES } from "@/features/sales/api";
 import { buildClientAccessWhere, getRecordManagerScope } from "@/features/sales/access";
 import {
   findExistingClientByIdentity,
-  lockClientIdentity,
+  lockClientIdentityUpdate,
   normalizeClientEmail,
 } from "@/features/sales/client-identity";
 
@@ -44,11 +44,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       where: buildClientAccessWhere(clientId, managerId),
       select: { client_id: true },
     });
-    if (!target) return { client: null, duplicate: null } as const;
+    if (!target) return { client: null, duplicate: null, visible: false } as const;
 
-    await lockClientIdentity(tx, contact);
-    const duplicate = await findExistingClientByIdentity(tx, contact, clientId);
-    if (duplicate) return { client: null, duplicate } as const;
+    const changed = await lockClientIdentityUpdate(tx, clientId, contact);
+    const duplicate = await findExistingClientByIdentity(tx, changed, clientId);
+    if (duplicate) {
+      // Name the other card only if this manager may see it.
+      const visible = await tx.client.count({ where: buildClientAccessWhere(duplicate.client.client_id, managerId) });
+      return { client: null, duplicate, visible: visible > 0 } as const;
+    }
 
     const result = await tx.client.updateMany({
       where: buildClientAccessWhere(clientId, managerId),
@@ -67,15 +71,22 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const client = result.count === 1
       ? await tx.client.findUnique({ where: { client_id: clientId } })
       : null;
-    return { client, duplicate: null } as const;
+    return { client, duplicate: null, visible: false } as const;
   });
 
   if (result.duplicate) {
-    return apiError(409, "duplicate_client", "Клиент с таким телефоном или email уже существует.", {
-      existing_client_id: result.duplicate.client.client_id,
-      existing_client_name: result.duplicate.client.name,
-      matched_by: result.duplicate.matchedBy,
-    });
+    return apiError(
+      409,
+      "duplicate_client",
+      "Клиент с таким телефоном или email уже существует.",
+      result.visible
+        ? {
+            existing_client_id: result.duplicate.client.client_id,
+            existing_client_name: result.duplicate.client.name,
+            matched_by: result.duplicate.matchedBy,
+          }
+        : undefined,
+    );
   }
 
   const client = result.client;
