@@ -4,6 +4,7 @@ import { requireRequestSession } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
+import { buildClientAccessWhere, getRecordManagerScope } from "@/features/sales/access";
 import { MANAGER_ROLES, getManagerScope } from "@/features/sales/api";
 import {
   findExistingClientByIdentity,
@@ -59,6 +60,15 @@ export async function POST(request: NextRequest) {
   const result = await prisma.$transaction(async (tx) => {
     await lockClientIdentity(tx, contact);
     const existing = await findExistingClientByIdentity(tx, contact);
+    if (existing) {
+      // Another manager's customer: refuse without revealing who it is.
+      const managerId = getRecordManagerScope(auth.session);
+      const ids = [existing.client.client_id, existing.conflictingClient?.client_id].filter(Boolean) as string[];
+      const visible = await tx.client.count({
+        where: { ...buildClientAccessWhere(undefined, managerId), client_id: { in: ids } },
+      });
+      if (visible < ids.length) return { hidden: true } as const;
+    }
     if (existing && existing.conflictingClient) {
       return {
         conflict: { emailClientId: existing.client.client_id, phoneClientId: existing.conflictingClient.client_id },
@@ -82,6 +92,14 @@ export async function POST(request: NextRequest) {
     });
     return { client, reused: false, matchedBy: null } as const;
   });
+
+  if ("hidden" in result) {
+    return apiError(
+      409,
+      "client_owned_by_other_manager",
+      "Клиент с таким телефоном или почтой уже есть в CRM у другого менеджера. Обратитесь к руководителю.",
+    );
+  }
 
   if (result.conflict) {
     return apiError(
