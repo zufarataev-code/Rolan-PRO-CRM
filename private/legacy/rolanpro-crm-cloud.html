@@ -17471,6 +17471,16 @@ async function saveCanonicalOpening() {
 }
 
 // ---------- INSTALLER WORKDAY INSIDE THE ONE CRM ----------
+// Accrual formula as paid: (sq ft × rate + Smart zone connections) × difficulty.
+// The zone part is what the amount holds beyond sq ft × rate, so the shown equation always matches.
+function installerAccrualFormula(item) {
+  const sqft = Number(item.quantity_sqft || 0), rate = Number(item.rate_per_sqft || 0);
+  const mult = Number(item.complexity_multiplier || 1) || 1;
+  const zonePart = Math.round((Number(item.amount || 0) / mult - sqft * rate) * 100) / 100;
+  const base = `${sqft.toFixed(1)} sqft × ${installerWorkdayMoney(rate)}`;
+  const labor = zonePart > 0.009 ? `(${base} + подключение зон ${installerWorkdayMoney(zonePart)})` : base;
+  return mult !== 1 ? `${labor} × ${mult}` : labor;
+}
 function installerWorkdayMoney(value) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
 }
@@ -17623,7 +17633,7 @@ function renderCanonicalInstallerWorkday() {
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="card"><h3 class="font-semibold mb-3">История смен</h3>${history.length ? history.map(item => `<div class="border-t py-3 first:border-t-0"><div class="font-semibold">${academyEsc(item.installer_job?.position?.title || item.installer_job?.project?.title || 'Общая смена')}</div><div class="text-sm text-gray-600">${fmtDateTime(item.started_at)} · ${installerWorkdayHours(item.work_minutes)} · ${Number(item.miles_driven || 0).toFixed(1)} miles</div>${item.notes ? `<div class="text-xs text-gray-500 mt-1">${academyEsc(item.notes)}</div>` : ''}</div>`).join('') : '<div class="text-sm text-gray-500">Завершённые смены появятся здесь.</div>'}</div>
-      <div class="card"><h3 class="font-semibold mb-1">Моя зарплата</h3><p class="text-xs text-gray-500 mb-3">Только ваши начисления. Цена клиента и маржа компании скрыты.</p>${payroll.length ? payroll.map(item => `<div class="border-t py-3 first:border-t-0 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.service_name)}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${Number(item.quantity_sqft || 0).toFixed(1)} sqft × ${installerWorkdayMoney(item.rate_per_sqft)} × ${Number(item.complexity_multiplier || 1)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('') : '<div class="text-sm text-gray-500">Начислений пока нет.</div>'}</div>
+      <div class="card"><h3 class="font-semibold mb-1">Моя зарплата</h3><p class="text-xs text-gray-500 mb-3">Только ваши начисления. Цена клиента и маржа компании скрыты.</p>${payroll.length ? payroll.map(item => `<div class="border-t py-3 first:border-t-0 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.service_name)}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${installerAccrualFormula(item)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('') : '<div class="text-sm text-gray-500">Начислений пока нет.</div>'}</div>
     </div>`;
 }
 
@@ -18073,7 +18083,7 @@ function renderOwnerPanel() {
       if (!byCategory[key]) byCategory[key] = { revenue: 0, cost: 0, sqft: 0 };
       const px = windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft, o);
       byCategory[key].revenue += px;
-      byCategory[key].cost += windowFilmCost(w) + windowInstallerPayout(w);
+      byCategory[key].cost += windowFilmCost(w) + windowInstallerPayout(w, o);
       byCategory[key].sqft += windowActualAreaSqft(w);
     }));
   });
@@ -23460,7 +23470,7 @@ function renderOrderDetails(id) {
                     const planned = windowAreaSqft(w);
                     const actual = windowActualAreaSqft(w);
                     const rate = c?.installerRatePerSqft ?? 0.27;
-                    const payout = windowInstallerPayout(w);
+                    const payout = windowInstallerPayout(w, o);
                     const diff = actual - planned;
                     const inUnits = db.settings.inputUnits === 'inches';
                     const aw = w.actualWidth ?? w.width;
@@ -35113,7 +35123,7 @@ function buildProductPnL() {
       const id = cat?.id || 'unknown';
       if (!products[id]) products[id] = { catalog: cat, revenue: 0, cogs: 0, sqft: 0, orders: new Set() };
       products[id].revenue += windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft, o);
-      products[id].cogs += windowFilmCost(w) + windowInstallerPayout(w);
+      products[id].cogs += windowFilmCost(w) + windowInstallerPayout(w, o);
       products[id].sqft += windowActualAreaSqft(w);
       products[id].orders.add(o.id);
     }));
