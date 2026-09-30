@@ -13,8 +13,15 @@ export async function GET() {
   if (process.env.E2E_ALLOW_WRITES !== "1") {
     return apiError(404, "not_found", "Not found.");
   }
-  const [identity] = await prisma.$queryRaw<Array<{ database: string; started: Date }>>`
-    SELECT current_database() AS database, pg_postmaster_start_time() AS started
+  const [identity] = await prisma.$queryRaw<Array<{ database: string; started: Date; disposable: boolean }>>`
+    SELECT current_database() AS database,
+           pg_postmaster_start_time() AS started,
+           to_regclass('public.e2e_disposable_marker') IS NOT NULL AS disposable
   `;
-  return apiSuccess({ database: identity.database, started: identity.started.toISOString() });
+  return apiSuccess({
+    database: identity.database,
+    started: identity.started.toISOString(),
+    // Only databases created for tests carry this marker table (see ci.yml).
+    disposable: identity.disposable,
+  });
 }
