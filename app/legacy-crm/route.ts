@@ -209,39 +209,67 @@ export async function GET(request: NextRequest) {
       (() => {
         // Employee management is part of this CRM: it opens as an overlay
         // inside /legacy-crm (same pattern as the calculator).
+        // The directory lives in PostgreSQL. Every way of closing the overlay
+        // (button, backdrop) reloads the CRM after a change, so assignment
+        // lists and roles are never stale.
+        let teamChanged = false;
         window.closeRolanProTeam = function closeRolanProTeam() {
-          document.getElementById('rolanpro-team-overlay')?.remove();
+          const overlay = document.getElementById('rolanpro-team-overlay');
+          if (!overlay) return;
+          overlay.remove();
+          if (teamChanged) location.reload();
         };
         window.openRolanProTeam = function openRolanProTeam() {
-          window.closeRolanProTeam();
+          document.getElementById('rolanpro-team-overlay')?.remove();
           const overlay = document.createElement('div');
           overlay.id = 'rolanpro-team-overlay';
           overlay.innerHTML = '<iframe id="rolanpro-team-frame" title="Сотрудники" src="/legacy-crm/team?embed=1"></iframe>';
           overlay.addEventListener('click', (event) => { if (event.target === overlay) window.closeRolanProTeam(); });
           document.body.appendChild(overlay);
         };
-        // The directory lives in PostgreSQL. After a change the legacy page
-        // reloads so assignment lists and roles are never stale.
-        let teamChanged = false;
         window.addEventListener('message', (event) => {
           if (event.origin !== window.location.origin) return;
           if (event.data?.type === 'rolanpro-team-changed') teamChanged = true;
-          if (event.data?.type === 'rolanpro-team-close') {
-            window.closeRolanProTeam();
-            if (teamChanged) location.reload();
-          }
+          if (event.data?.type === 'rolanpro-team-close') window.closeRolanProTeam();
         });
-        // The old Team editor saved one role per employee and would silently
-        // drop secondary roles. For the owner, the existing «Команда» section
-        // now opens the canonical directory instead (no second editor).
-        window.renderTeam = function renderTeamCanonical() {
-          window.requestAnimationFrame(() => {
-            if (!document.getElementById('rolanpro-team-overlay')) window.openRolanProTeam();
-          });
-          return '<div class="card p-6 text-center"><div class="font-black text-lg">Сотрудники</div>'
-            + '<p class="text-sm text-gray-500 mt-1">Роли, доступ и «Посмотреть глазами» — в едином списке сотрудников.</p>'
-            + '<button class="btn-primary mt-4" onclick="openRolanProTeam()">Открыть сотрудников</button></div>';
+
+        // The existing «Команда» section keeps phone, photo and pay settings.
+        // Roles, login email and access are edited only in the canonical
+        // directory: the old single-role editor would drop secondary roles.
+        const originalRenderTeam = window.renderTeam;
+        if (typeof originalRenderTeam === 'function') {
+          window.renderTeam = function renderTeamWithDirectory() {
+            return '<div class="card p-4 mb-4 flex items-center justify-between gap-3 flex-wrap">'
+              + '<div><div class="font-black">Роли, доступ и «Посмотреть глазами»</div>'
+              + '<div class="text-sm text-gray-500">Добавление сотрудников, роли и вход — в едином списке. Здесь — телефон, фото и оплата.</div></div>'
+              + '<button class="btn-primary" onclick="openRolanProTeam()">Открыть сотрудников и расценки</button></div>'
+              + originalRenderTeam();
+          };
+        }
+        const nativeTeamFetch = window.fetch.bind(window);
+        window.fetch = function teamSafeFetch(input, init) {
+          const url = typeof input === 'string' ? input : String(input?.url || '');
+          const method = String(init?.method || 'GET').toUpperCase();
+          const isTeamMemberPatch = method === 'PATCH' && url.includes('/api/v1/team/') && !url.includes('/api/v1/team/preview');
+          if (isTeamMemberPatch && typeof init?.body === 'string') {
+            try {
+              const body = JSON.parse(init.body);
+              delete body.roles;
+              delete body.email;
+              init = { ...init, body: JSON.stringify(body) };
+            } catch (_) { /* not JSON: send as is */ }
+          }
+          return nativeTeamFetch(input, init);
         };
+        new MutationObserver(() => {
+          ['tm-edit-role', 'tm-edit-email'].forEach((id) => {
+            const field = document.getElementById(id);
+            if (field && !field.disabled) {
+              field.disabled = true;
+              field.title = 'Меняется в разделе «Сотрудники»';
+            }
+          });
+        }).observe(document.documentElement, { childList: true, subtree: true });
         if (new URLSearchParams(location.search).get('panel') === 'team') {
           history.replaceState(null, '', location.pathname + location.hash);
           window.requestAnimationFrame(() => window.openRolanProTeam());

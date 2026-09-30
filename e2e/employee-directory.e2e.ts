@@ -83,6 +83,21 @@ after(async () => {
   await prisma.$disconnect();
 });
 
+test("every script injected into the owner's CRM page compiles", async () => {
+  // Injected scripts live in TypeScript template literals, where escapes are
+  // easy to lose; one syntax error silently disables the whole patch.
+  const response = await fetch(`${BASE_URL}/legacy-crm`, {
+    headers: { cookie: [...owner.cookies].map(([name, value]) => `${name}=${value}`).join("; ") },
+  });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  const scripts = [...html.matchAll(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+  assert.ok(scripts.length > 1);
+  scripts.forEach((code, index) => {
+    assert.doesNotThrow(() => new Function(code), `inline script #${index} has a syntax error`);
+  });
+});
+
 test("owner adds an employee with several roles and changes them in one step", async () => {
   const created = await owner.call("POST", "/api/v1/team", {
     email: employeeEmail,
