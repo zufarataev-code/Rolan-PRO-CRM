@@ -153,6 +153,38 @@ export async function lockClientIdentity(
   }
 }
 
+/**
+ * For updating a client's contacts: locks both the identities the card gives
+ * up and the ones it takes (so a concurrent create cannot reuse a card that is
+ * about to lose its phone/email), and returns only the identities that change —
+ * unchanged contacts of preserved historical duplicates never block an edit.
+ */
+export async function lockClientIdentityUpdate(
+  tx: Prisma.TransactionClient,
+  clientId: string,
+  next: ContactInput,
+) {
+  const current = await tx.client.findUnique({
+    where: { client_id: clientId },
+    select: { phone: true, email: true },
+  });
+  const keys = new Set([
+    ...identityLockKeys(next),
+    ...(current ? identityLockKeys(current) : []),
+  ]);
+  for (const key of [...keys].sort()) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+  }
+  const phoneChanged =
+    next.phone !== undefined && normalizeClientPhone(next.phone) !== normalizeClientPhone(current?.phone);
+  const emailChanged =
+    next.email !== undefined && normalizeClientEmail(next.email) !== normalizeClientEmail(current?.email);
+  return {
+    phone: phoneChanged ? next.phone ?? null : null,
+    email: emailChanged ? next.email ?? null : null,
+  };
+}
+
 export type ExistingClientIdentity = {
   client: Client;
   matchedBy: ClientIdentityMatch;

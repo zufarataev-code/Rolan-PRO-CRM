@@ -84,3 +84,16 @@ test("reordering historical duplicate cards is not reported as a new duplicate",
   const card = (id: string) => ({ id, email: null, phone: "8055550111" });
   assert.equal(findIntroducedClientIdentityDuplicate([card("A"), card("B"), card("C")], [card("B"), card("A"), card("C")]), null);
 });
+
+test("an update locks the identities it gives up and checks only changed contacts", async () => {
+  const { lockClientIdentityUpdate } = await import("./client-identity");
+  const locked: string[] = [];
+  const tx = {
+    client: { findUnique: async () => ({ phone: "(805) 555-0100", email: "old@example.com" }) },
+    $executeRaw: async (_parts: TemplateStringsArray, key: string) => { locked.push(key); return 0; },
+  } as never;
+  const changed = await lockClientIdentityUpdate(tx, "A", { phone: "+1 805 555 0100", email: "new@example.com" });
+  assert.deepEqual(changed, { phone: null, email: "new@example.com" }, "unchanged phone is not re-checked");
+  assert.ok(locked.some((key) => key.includes("old@example.com")), "the email being given up is locked");
+  assert.ok(locked.some((key) => key.includes("new@example.com")));
+});

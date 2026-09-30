@@ -173,6 +173,8 @@ export async function createTeamMember(input: TeamMemberInput) {
   }
 
   const user = await prisma.$transaction(async (tx) => {
+    await lockInstallerGroups(tx);
+    const previousLeads = createsLead ? await currentLeadsOf(tx, groupIds) : [];
     const created = await tx.user.create({
       data: {
         email,
@@ -188,6 +190,7 @@ export async function createTeamMember(input: TeamMemberInput) {
       },
     });
     if (createsLead) await setInstallerGroup(created.user_id, groupIds, tx);
+    await assertInstallerGroupsValid(tx, [leadId, created.user_id, ...previousLeads]);
     return created;
   });
 
@@ -317,6 +320,14 @@ export async function updateTeamMember(
   // Roles and profile change together or not at all: a failure halfway used
   // to leave an employee with no roles.
   const updated = await prisma.$transaction(async (tx) => {
+    await lockInstallerGroups(tx);
+    const before = await tx.user.findUnique({ where: { user_id: userId }, select: { installer_lead_id: true } });
+    const affectedLeads = [
+      userId,
+      before?.installer_lead_id,
+      input.installerLeadId,
+      ...(await currentLeadsOf(tx, input.groupInstallerIds ?? [])),
+    ];
     if (roleIds) {
       await tx.userAccess.deleteMany({ where: { user_id: userId } });
       await tx.userAccess.createMany({
@@ -337,7 +348,7 @@ export async function updateTeamMember(
       await tx.user.updateMany({ where: { user_id: { in: input.groupInstallerIds } }, data: { installer_lead_id: userId } });
     }
 
-    return tx.user.update({
+    const result = await tx.user.update({
       where: { user_id: userId },
       data: {
         email,
@@ -350,12 +361,63 @@ export async function updateTeamMember(
           : input.installerLeadId === undefined ? undefined : input.installerLeadId,
       },
     });
+    await assertInstallerGroupsValid(tx, affectedLeads);
+    return result;
   });
 
   return { userId, email: updated.email, legacyUserIds: updated.legacy_user_ids };
 }
 
 export const MAX_GROUP_INSTALLERS = 5;
+
+/** Serializes every installation-group change (capacity checks must see committed state). */
+async function lockInstallerGroups(tx: Prisma.TransactionClient) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('team:installer-groups'))`;
+}
+
+/**
+ * After a change, every affected active lead must still have 1–5 active
+ * installers. Runs inside the transaction, so a violation rolls everything back.
+ */
+async function assertInstallerGroupsValid(tx: Prisma.TransactionClient, leadIds: Iterable<string | null | undefined>) {
+  const ids = [...new Set([...leadIds].filter((id): id is string => Boolean(id)))];
+  if (!ids.length) return;
+  const leads = await tx.user.findMany({
+    where: {
+      user_id: { in: ids },
+      is_active: true,
+      user_accesses: { some: { is_active: true, role: { code: ROLE_CODES.INSTALLER_LEAD } } },
+    },
+    select: { user_id: true, full_name: true },
+  });
+  for (const lead of leads) {
+    const size = await tx.user.count({
+      where: {
+        installer_lead_id: lead.user_id,
+        is_active: true,
+        user_accesses: { some: { is_active: true, role: { code: ROLE_CODES.INSTALLER } } },
+      },
+    });
+    if (size < 1) {
+      throw new Error(
+        `У руководителя ${lead.full_name} не останется ни одного монтажника. Сначала добавьте ему другого монтажника или снимите роль руководителя.`,
+      );
+    }
+    if (size > MAX_GROUP_INSTALLERS) {
+      throw new Error(`В группе руководителя ${lead.full_name} уже ${MAX_GROUP_INSTALLERS} монтажников.`);
+    }
+  }
+}
+
+/** Leads whose groups a change can touch: current leads of the given installers. */
+async function currentLeadsOf(tx: Prisma.TransactionClient, installerIds: string[]) {
+  if (!installerIds.length) return [];
+  const rows = await tx.user.findMany({
+    where: { user_id: { in: installerIds } },
+    select: { installer_lead_id: true },
+  });
+  return rows.map((row) => row.installer_lead_id);
+}
 
 /**
  * Installation group of a team lead: 1–5 installers chosen by name (owner

@@ -16859,6 +16859,12 @@ function tryLogin() {
 function logout() {
   state.currentUserId = null;
   if (ROLANPRO_CLOUD) {
+    // Several role cards (e.g. surveyor + installer): «Сменить» opens the role chooser.
+    if (cloudAllowedLegacyIds.length > 1) {
+      try { localStorage.removeItem('rolanpro_cloud_card'); } catch (_) {}
+      render();
+      return;
+    }
     cloudServerLogout();
     return;
   }
@@ -35418,6 +35424,7 @@ function cloudSelectRole(userId) {
   if (!cloudAllowedLegacyIds.includes(userId)) return;
   const user = getUser(userId);
   if (!user) return;
+  try { localStorage.setItem('rolanpro_cloud_card', userId); } catch (_) {}
   loginAsUser(user);
   render();
 }
@@ -35639,10 +35646,14 @@ async function cloudBoot() {
     const persistOfficialSupplierMigration = !db._officialSupplierCatalogV1;
     migrateSchema();
     normalizeClientAccountData();
-    const firstAllowed = cloudAllowedLegacyIds.map(getUser).find(Boolean);
+    const allowedCards = cloudAllowedLegacyIds.map(getUser).filter(Boolean);
+    let rememberedCard = null;
+    try { rememberedCard = localStorage.getItem('rolanpro_cloud_card'); } catch (_) {}
+    const firstAllowed = allowedCards.find(card => card.id === rememberedCard) || allowedCards[0];
     const authenticatedLegacyRole = teamLegacyRoleFromServer(cloudCurrentUser.roles);
+    // Multi-role employees have one server-derived card per role; never rewrite their roles here.
     const roleWasSynchronized = Boolean(
-      firstAllowed && authenticatedLegacyRole && firstAllowed.role !== authenticatedLegacyRole,
+      allowedCards.length === 1 && firstAllowed && authenticatedLegacyRole && firstAllowed.role !== authenticatedLegacyRole,
     );
     if (roleWasSynchronized) firstAllowed.role = authenticatedLegacyRole;
     state.currentUserId = firstAllowed?.id || null;
