@@ -8215,6 +8215,9 @@ function migrateSchema() {
     s.installerRates._defaults = { ...(s.installerRates._defaults || {}), smart: 5, protective: 3, solar: 2.5, decorative: 2.5 };
     s.installerRates.serviceTypes = { ...(s.installerRates.serviceTypes || {}), SMART_FILM: 5, SAFETY_FILM: 3, SOLAR_FILM: 2.5, DECORATIVE_FILM: 2.5 };
     s.installerRates.smartZone = 50;
+    // A manual «Подключение зоны» row pays per zone at the same rate.
+    s.installerRates.workTypes = { ...(s.installerRates.workTypes || {}) };
+    if (!(Number(s.installerRates.workTypes.connect) > 0)) s.installerRates.workTypes.connect = 50;
     db._ownerRateDirectory20260901 = true;
   }
   if (s.installerRates.smartZone == null) s.installerRates.smartZone = 50;
@@ -15152,9 +15155,10 @@ function orderInstallerPayoutForUser(o, userId) {
   const filmPayout = !measureAllWindows(o).length ? orderQuickInstallerPayoutForUser(o, user) : measureAllWindows(o).reduce((sum, { win }) => {
     return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / installerIds.length;
   }, 0);
-  return filmPayout * orderPayComplexityCoef(o)
+  // The deal difficulty multiplies all installer labor: film, zones, add-ons.
+  return (filmPayout
     + orderSmartZonePayout(o, user, installerIds.length)
-    + orderAdditionalWorkPayoutForUser(o, user, installerIds.length);
+    + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * orderPayComplexityCoef(o);
 }
 function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
@@ -15169,7 +15173,7 @@ function orderInstallerPayoutBreakdown(o) {
         }, 0);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
     return {
-      total: total * orderPayComplexityCoef(o) + orderSmartZonePayout(o, null, 1) + work,
+      total: (total + orderSmartZonePayout(o, null, 1) + work) * orderPayComplexityCoef(o),
       byInstaller: [],
       source: 'REFERENCE_DEFAULT',
     };

@@ -77,4 +77,13 @@ test("the one-time rate directory sets the owner's values", () => {
   assert.match(source, /s\.complexityCoefs = \{ standard: 1\.0, ladder: 1\.2, tower: 1\.5, alpinism: 2\.0 \}/);
   assert.match(source, /smart: 5, protective: 3, solar: 2\.5, decorative: 2\.5/);
   assert.match(source, /s\.installerRates\.smartZone = 50/);
+  assert.match(source, /s\.installerRates\.workTypes\.connect = 50/, "a manual zone row pays $50 per zone too");
+});
+
+test("difficulty multiplies film, zone and add-on labor alike", () => {
+  const payout = source.match(/function orderInstallerPayoutForUser\(o, userId\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(
+    payout,
+    /\(filmPayout\s*\+ orderSmartZonePayout\(o, user, installerIds\.length\)\s*\+ orderAdditionalWorkPayoutForUser\(o, user, installerIds\.length\)\) \* orderPayComplexityCoef\(o\)/,
+  );
 });
