@@ -563,15 +563,19 @@ test("residential premium proposal applies the California home-improvement depos
 
 test("manager confirms a KP on the client's behalf: server first, ledger deposit, locked KP", () => {
   const open = source.match(/function openManagerConfirmProposal\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
-  const confirm = source.match(/async function confirmProposalByManager\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const confirm = source.match(/async function confirmProposalByManagerOnce\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const guard = source.match(/async function confirmProposalByManager\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   const server = source.match(/async function managerConfirmProposalOnServer\([^)]*\) \{[\s\S]*?\n\}/)?.[0] || "";
 
   assert.match(open, /orderWorkflowTransitionIssues\(o, 'proposal_accepted'\)/);
   assert.match(confirm, /orderWorkflowTransitionIssues\(o, 'proposal_accepted'\)/);
   // Server approval and a paid Deposit happen before anything is finalized locally.
-  assert.match(server, /\/approve'/);
-  assert.match(server, /'\/api\/v1\/deposits', \{ proposal_id: canonicalProposalId, amount: depositAmount \}/);
-  assert.match(server, /\/pay'/);
+  // One server step records approval and the payment choice together.
+  assert.match(server, /\/manager-confirm'/);
+  assert.match(server, /JSON\.stringify\(\{ payment, amount: payment === 'deposit' \? depositAmount : undefined \}\)/);
+  // A double click cannot record the deposit twice.
+  assert.match(guard, /if \(managerProposalConfirmInFlight\) return;/);
+  assert.match(confirm, /if \(o\.proposalConfirmedByManager\) \{ closeModal\(\); return; \}/);
   assert.ok(confirm.indexOf("managerConfirmProposalOnServer(") < confirm.indexOf("proposal.lockedSnapshot"), "server before local lock");
   assert.match(confirm, /В CRM ничего не изменено — попробуйте ещё раз/);
   // The agreed payment mode is applied before the KP is locked.

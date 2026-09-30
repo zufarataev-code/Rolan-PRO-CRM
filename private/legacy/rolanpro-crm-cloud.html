@@ -26163,32 +26163,35 @@ function openManagerConfirmProposal(oid) {
   </div>`;
   render();
 }
-// Server first: approve the canonical proposal and, when a deposit was
-// received, record it as a paid Deposit. Throws on any failure so nothing is
-// finalized locally and the manager can simply try again.
+// Server first, in one step: approve the canonical proposal and record the
+// payment choice (paid Deposit with the received amount, or no pending Deposit
+// for pay-after-completion). Throws on failure so nothing is finalized
+// locally and the manager can simply try again.
 async function managerConfirmProposalOnServer(canonicalProposalId, payment, depositAmount) {
-  const call = async (url, body) => {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result?.errors?.[0]?.message || ('HTTP ' + response.status));
-    return result?.data || {};
-  };
-  const id = encodeURIComponent(canonicalProposalId);
-  await call('/api/v1/proposals/' + id + '/approve');
-  if (payment !== 'deposit') return;
-  const created = await call('/api/v1/deposits', { proposal_id: canonicalProposalId, amount: depositAmount });
-  const deposit = created.deposit || {};
-  if (deposit.deposit_id && String(deposit.status || '').toLowerCase() !== 'paid') {
-    await call('/api/v1/deposits/' + encodeURIComponent(deposit.deposit_id) + '/pay');
+  const response = await fetch('/api/v1/proposals/' + encodeURIComponent(canonicalProposalId) + '/manager-confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ payment, amount: payment === 'deposit' ? depositAmount : undefined }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result?.errors?.[0]?.message || ('HTTP ' + response.status));
+  return result?.data || {};
+}
+let managerProposalConfirmInFlight = false;
+async function confirmProposalByManager(oid) {
+  // Single flight: a double click must not record the deposit twice.
+  if (managerProposalConfirmInFlight) return;
+  managerProposalConfirmInFlight = true;
+  try {
+    await confirmProposalByManagerOnce(oid);
+  } finally {
+    managerProposalConfirmInFlight = false;
   }
 }
-async function confirmProposalByManager(oid) {
+async function confirmProposalByManagerOnce(oid) {
   const o = getOrder(oid);
   if (!o) return;
+  if (o.proposalConfirmedByManager) { closeModal(); return; }
   const issues = orderWorkflowTransitionIssues(o, 'proposal_accepted');
   if (issues.length) { alert('Нельзя подтвердить КП:\n\n• ' + issues.join('\n• ')); return; }
   const channel = document.getElementById('mcp-channel')?.value || 'phone';
