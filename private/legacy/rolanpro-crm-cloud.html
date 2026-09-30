@@ -15693,6 +15693,27 @@ function existingClientByContact(phone, email, excludeClientId = '') {
   }
   return phoneKey ? clients.find(client => clientIdentityPhoneKey(client.phone) === phoneKey) || null : null;
 }
+// All distinct clients matching the phone or the email. More than one means
+// the contact is ambiguous (email of one card, phone of another, or historical
+// duplicates): actions must not pick one silently.
+function clientsMatchingContact(phone, email, excludeClientId = '') {
+  const phoneKey = clientIdentityPhoneKey(phone);
+  const emailKey = clientIdentityEmailKey(email);
+  if (!phoneKey && !emailKey) return [];
+  return (db.clients || []).filter(client => client.id !== excludeClientId && (
+    (emailKey && clientIdentityEmailKey(client.email) === emailKey) ||
+    (phoneKey && clientIdentityPhoneKey(client.phone) === phoneKey)
+  ));
+}
+// For actions that attach a lead, order or address to a client. Returns the
+// single existing client, null when there is none, or false after telling the
+// manager that the contact matches several clients.
+function uniqueExistingClientByContact(phone, email) {
+  const matches = clientsMatchingContact(phone, email);
+  if (matches.length <= 1) return matches[0] || null;
+  alert('Телефон и почта совпадают с несколькими клиентами: ' + matches.map(c => c.name || c.id).join(', ') + '.\n\nВыберите нужного клиента вручную — CRM не будет угадывать.');
+  return false;
+}
 function focusExistingClientCard(client) {
   if (!client) return;
   state.modal = null;
@@ -19916,7 +19937,8 @@ function openColdHistory(id) {
 function coldConvertToB2B(id, openOrderAfter = false) {
   const p = coldProspect(id); if (!p) return null;
   if (!p.clientId) {
-    const existing = existingClientByContact(p.phone, p.email);
+    const existing = uniqueExistingClientByContact(p.phone, p.email);
+    if (existing === false) return null;
     if (existing) p.clientId = existing.id;
     else {
       const clientId = 'c'+uid();
@@ -20233,7 +20255,8 @@ async function convertLead(leadId) {
   if (!l) return;
   const src = LEAD_SOURCES[l.source] || { crmSource: 'other' };
   // Клиент: всегда переиспользуем существующую карточку по телефону или email.
-  let client = existingClientByContact(l.phone, l.email);
+  let client = uniqueExistingClientByContact(l.phone, l.email);
+  if (client === false) return;
   if (!client) {
     client = {
       id: 'c' + uid(),
@@ -26775,7 +26798,8 @@ function createOrderClientFromOverlay() {
     .filter(([field]) => !field).map(([, label]) => label);
   if (required.length) { alert('Заполните обязательные поля: ' + required.join(', ')); return; }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Проверьте email клиента.'); return; }
-  const existing = existingClientByContact(phone, email);
+  const existing = uniqueExistingClientByContact(phone, email);
+  if (existing === false) return;
   if (existing) {
     // Repeat customer, possibly a new property: keep the address the manager
     // just typed. Add it to the existing client's address book (if new) and
@@ -27042,7 +27066,8 @@ function createClient() {
   const phone = document.getElementById('nc-phone').value.trim();
   const email = document.getElementById('nc-email').value.trim().toLowerCase();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Проверьте email клиента.'); return; }
-  const existing = existingClientByContact(phone, email);
+  const existing = uniqueExistingClientByContact(phone, email);
+  if (existing === false) return;
   if (existing) { focusExistingClientCard(existing); return; }
   db.clients.push({
     id: 'c'+uid(), name,

@@ -64,3 +64,18 @@ test("a contact whose email and phone belong to two different clients is reporte
   assert.equal(clean?.client.client_id, "A");
   assert.equal(clean?.conflictingClient, undefined);
 });
+
+test("historical duplicate cards with the same phone are reported, not silently picked", async () => {
+  const { findExistingClientByIdentity } = await import("./client-identity");
+  const tx = {
+    client: {
+      findMany: async () => [
+        { client_id: "OLD1", email: null, phone: "+18055550142" },
+        { client_id: "OLD2", email: null, phone: "(805) 555-0142" },
+      ],
+    },
+  } as never;
+
+  const match = await findExistingClientByIdentity(tx, { phone: "805-555-0142" });
+  assert.ok(match?.conflictingClient, "two historical cards share the phone");
+});

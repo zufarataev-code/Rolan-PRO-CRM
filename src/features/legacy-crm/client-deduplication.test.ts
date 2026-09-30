@@ -21,9 +21,10 @@ test("manual legacy client creation opens or selects an existing matching card",
   const createClient = functionSource("createClient", "closeModal");
   const createOrderClient = functionSource("createOrderClientFromOverlay", "createOrder");
 
-  assert.match(createClient, /existingClientByContact\(phone, email\)/);
+  assert.match(createClient, /uniqueExistingClientByContact\(phone, email\)/);
+  assert.match(createClient, /existing === false\) return/);
   assert.match(createClient, /focusExistingClientCard\(existing\)/);
-  assert.match(createOrderClient, /existingClientByContact\(phone, email\)/);
+  assert.match(createOrderClient, /uniqueExistingClientByContact\(phone, email\)/);
   assert.match(createOrderClient, /selectOrderClient\(existing\.id\)/);
 });
 
@@ -32,7 +33,7 @@ test("legacy contact edits and lead conversions cannot introduce duplicate cards
   const convertLead = functionSource("convertLead", "dismissLead");
 
   assert.match(saveContact, /existingClientByContact\(phone, email, clientId\)/);
-  assert.match(convertLead, /existingClientByContact\(l\.phone, l\.email\)/);
+  assert.match(convertLead, /uniqueExistingClientByContact\(l\.phone, l\.email\)/);
 });
 
 test("canonical client APIs lock identity and reuse or reject matching clients", () => {

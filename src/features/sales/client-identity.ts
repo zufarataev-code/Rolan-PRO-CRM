@@ -146,14 +146,22 @@ export async function findExistingClientByIdentity(
   if (!normalizedEmail && !normalizedPhone) return null;
 
   const clients = await tx.client.findMany({ orderBy: { updated_at: "desc" } });
-  const byEmail = normalizedEmail ? findClientIdentityMatch(clients, { email: contact.email }, excludeClientId) : null;
-  const byPhone = normalizedPhone ? findClientIdentityMatch(clients, { phone: contact.phone }, excludeClientId) : null;
-  const primary = byEmail ?? byPhone;
-  if (!primary) return null;
+  // Collect every distinct card matching either identity: historical
+  // duplicates are preserved, so "first match" could silently pick the wrong one.
+  const matches = clients.filter(
+    (client) =>
+      client.client_id !== excludeClientId &&
+      ((normalizedEmail && normalizeClientEmail(client.email) === normalizedEmail) ||
+        (normalizedPhone && normalizeClientPhone(client.phone) === normalizedPhone)),
+  );
+  if (!matches.length) return null;
 
-  const conflicting =
-    byEmail && byPhone && byEmail.client.client_id !== byPhone.client.client_id ? byPhone.client : undefined;
-  return { client: primary.client, matchedBy: primary.matchedBy, conflictingClient: conflicting };
+  const primary =
+    matches.find((client) => normalizedEmail && normalizeClientEmail(client.email) === normalizedEmail) ?? matches[0];
+  const matchedBy: ClientIdentityMatch =
+    normalizedEmail && normalizeClientEmail(primary.email) === normalizedEmail ? "email" : "phone";
+  const conflicting = matches.find((client) => client.client_id !== primary.client_id);
+  return { client: primary, matchedBy, conflictingClient: conflicting };
 }
 
 export class ClientIdentityConflictError extends Error {
