@@ -202,6 +202,26 @@ test("installation groups: a team lead can be assigned; a non-lead cannot", asyn
   const reactivated = await owner.call("PATCH", `/api/v1/team/${leadId}`, { isActive: true, groupInstallerIds: [installerId] });
   assert.equal(reactivated.status, 200, `reactivate lead: ${JSON.stringify(reactivated.json)}`);
 
+  const installer2 = await owner.call("POST", "/api/v1/team", {
+    email: `inst2-${runTag}@example.com`,
+    fullName: `${runTag} Installer 2`,
+    roles: ["INSTALLER"],
+    password: employeePassword,
+  });
+  const installer2Id = data<{ userId: string }>(installer2.json).userId;
+  const lead2 = await owner.call("POST", "/api/v1/team", {
+    email: `lead2-${runTag}@example.com`,
+    fullName: `${runTag} Lead 2`,
+    roles: ["INSTALLER", "INSTALLER_LEAD"],
+    password: employeePassword,
+    groupInstallerIds: [installer2Id],
+  });
+  assert.equal(lead2.status, 200, `create lead 2: ${JSON.stringify(lead2.json)}`);
+  const steal = await owner.call("PATCH", `/api/v1/team/${leadId}`, { groupInstallerIds: [installerId, installer2Id] });
+  assert.equal(steal.status, 400, "taking the only installer of another lead would leave that group empty");
+  const lastMemberOff = await owner.call("PATCH", `/api/v1/team/${installer2Id}`, { isActive: false });
+  assert.equal(lastMemberOff.status, 400, "the last installer of a group cannot be switched off silently");
+
   const demoted = await owner.call("PATCH", `/api/v1/team/${leadId}`, { roles: ["INSTALLER"] });
   assert.equal(demoted.status, 200);
   assert.equal(
