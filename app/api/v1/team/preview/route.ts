@@ -56,7 +56,9 @@ export async function POST(request: NextRequest) {
     meta: {},
     errors: [],
   });
-  response.cookies.set(previewCookie(subject.user_id, PREVIEW_TTL_SECONDS));
+  // Bound to this owner: another owner signing in on the same browser does
+  // not inherit the preview (see resolvePreviewSession).
+  response.cookies.set(previewCookie(`${subject.user_id}.${session.user.user_id}`, PREVIEW_TTL_SECONDS));
   return response;
 }
 

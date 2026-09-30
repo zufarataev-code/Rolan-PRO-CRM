@@ -146,6 +146,9 @@ export function TeamDirectory({
           onSaved={async (text) => {
             setEditing(null);
             setNotice({ tone: "ok", text });
+            if (window.top && window.top !== window) {
+              window.top.postMessage({ type: "rolanpro-team-changed" }, window.location.origin);
+            }
             await reload();
           }}
         />

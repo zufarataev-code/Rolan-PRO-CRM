@@ -48,12 +48,15 @@ export type PreviewInfo = {
  */
 export async function resolvePreviewSession<P>(
   realSession: { user: NonNullable<SessionUser>; roles: string[]; payload: P },
-  previewUserId: string | undefined,
+  previewCookieValue: string | undefined,
 ) {
+  // Cookie format: "<subjectUserId>.<actorUserId>" — only the owner who
+  // started the preview is served as the employee.
+  const [previewUserId, actorUserId] = String(previewCookieValue || "").split(".");
   if (!realSession.roles.includes(ROLE_CODES.OWNER) || !isValidPreviewTarget(previewUserId)) {
     return null;
   }
-  if (previewUserId === realSession.user.user_id) {
+  if (actorUserId !== realSession.user.user_id || previewUserId === realSession.user.user_id) {
     return null;
   }
 
