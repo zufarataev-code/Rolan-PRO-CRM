@@ -693,7 +693,7 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
   - `prisma/seed.ts`: Safety Film fields are created under `SAFETY_FILM` (was `SMART_FILM`); non-production seeds provision the empty legacy workspace from `data/legacy-crm-empty.json`.
   - `scripts/build-empty-legacy-workspace.mjs` no longer defaults to a file in the Owner's `~/Downloads`.
   - Bug fix: `POST /api/v1/consultations/:id/measurements` rejected every measurement without an explicit `constructor` field, because `body.constructor` resolves to the inherited `Object.prototype.constructor`. It now checks an own property. Found by the new end-to-end gate.
-  - New CI job `clean-build-e2e`: empty PostgreSQL → `scripts/db-bootstrap-empty.mjs` → `e2e_disposable_marker` → drift check → seed → production build → `next start` → `npm run test:e2e`.
+  - New CI job `clean-build-e2e`: empty PostgreSQL → `scripts/db-bootstrap-empty.mjs` → drift check → `e2e_disposable_marker` → seed → production build → `next start` → `npm run test:e2e`.
   - E2E safety: needs `E2E_ALLOW_WRITES=1`, local app and DB, a server sentinel proving the server uses the same database, and the `e2e_disposable_marker` table (never present in production).
   - New `e2e/lead-to-measurement.e2e.ts`: manager creates lead → deal → site survey for the surveyor; surveyor records two windows; manager sees both with server-computed square footage; one lead and one deal only; surveyor cannot create leads and does not see the deal value.
 - Verification (local, 2026-09-29): empty DB builds with `prisma migrate deploy && pnpm db:seed`; drift exit code 0; 422/422 unit tests; TypeScript; end-to-end 2/2 against a running server.
@@ -722,3 +722,11 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Bug found by the E2E gate and fixed: `lockClientIdentity` used `$queryRaw` on `pg_advisory_xact_lock`, which returns `void`; Prisma failed to deserialize it, so **every client create with a phone or email returned 500** (also in project and proposal creation paths). Now `$executeRaw`.
 - New `e2e/client-identity.e2e.ts`: `(805) 555-0142` and `+1 805-555-0142` resolve to one client; email match is case/space insensitive; a legacy save adding a second card for the same phone is rejected with `duplicate_client`. E2E files run serially (shared legacy workspace revision).
 - Known limitation: client lookup scans all clients per create (fine at current volume); add normalized, indexed identity columns before tens of thousands of clients. Legacy-workspace clients and PostgreSQL clients are still two stores until the client collection migrates.
+
+## 2026-09-30 handoff — installation roles and groups (PR #275)
+
+- Governing decision: `DECISIONS.md` → "2026-09-30 — Installation roles, groups and team-lead pay". Builder: Claude. Reviewer: Codex. Stacked on #273.
+- What changed: `ROLE_CODES.INSTALLER_LEAD` (seeded); INSTALLER display name «Главный специалист по установке»; `users.installer_lead_id` (migration `20260930150000_installer_groups`); team service validates the lead/installer pairing, group size 1–5, active installers only, and writes profile, roles and group in one transaction; a lead losing eligibility releases the group; «Сотрудники» shows group selectors and «Убрать сотрудника»; legacy new installers no longer receive built-in 0.30/0.55 per-sq-ft defaults.
+- Verification (local): unit tests green; E2E 13/13 incl. installation groups (assign, non-lead rejected, surveyor rejected, >5 rejected, lead-only role rejected, invalid group writes nothing, demotion releases the group).
+- Blocker: none in code; production deploy needs Codex review and Owner approval (deploy takes a DB backup first, PR #274).
+- Next action: #276 lead pay (10% on top) and #277 lead workspace/distribution, then review/merge of the stack.

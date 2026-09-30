@@ -158,6 +158,28 @@ test("installation groups: a team lead can be assigned; a non-lead cannot", asyn
   });
   assert.equal(tooMany.status, 400, "a group has at most 5 installers");
 
+  const leadOnly = await owner.call("PATCH", `/api/v1/team/${leadId}`, { roles: ["INSTALLER_LEAD"] });
+  assert.equal(leadOnly.status, 400, "a lead must keep the installer role");
+
+  const staleGroup = await owner.call("PATCH", `/api/v1/team/${leadId}`, {
+    fullName: `${runTag} Lead renamed`,
+    groupInstallerIds: [employeeId],
+  });
+  assert.equal(staleGroup.status, 400, "invalid group rejects the whole update");
+  assert.notEqual(
+    (await prisma.user.findUniqueOrThrow({ where: { user_id: leadId } })).full_name,
+    `${runTag} Lead renamed`,
+    "nothing was written when the group was invalid",
+  );
+
+  const demoted = await owner.call("PATCH", `/api/v1/team/${leadId}`, { roles: ["INSTALLER"] });
+  assert.equal(demoted.status, 200);
+  assert.equal(
+    (await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } })).installer_lead_id,
+    null,
+    "losing the lead role releases the group",
+  );
+
   const removed = await owner.call("PATCH", `/api/v1/team/${installerId}`, { installerLeadId: null });
   assert.equal(removed.status, 200);
   assert.equal((await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } })).installer_lead_id, null);
@@ -283,6 +305,8 @@ test("owner views the CRM as the employee, read-only, and can leave", async () =
   assert.equal(write.status, 403, "writes are blocked during preview");
   const save = await owner.call("PUT", "/api/v1/legacy-crm/state", { payload: {}, revision: 1 });
   assert.equal(save.status, 403, "workspace saves are blocked during preview");
+  const recovery = await owner.call("POST", "/api/v1/auth/forgot-password", { email: employeeEmail });
+  assert.equal(recovery.status, 403, "public recovery routes are blocked during preview too");
   const sideEffectGet = await owner.call("GET", "/api/v1/integrations/gmail/connect");
   assert.equal(sideEffectGet.status, 403, "side-effecting GET routes are blocked during preview");
   assert.equal(await prisma.lead.count({ where: { name: { startsWith: runTag } } }), 0);

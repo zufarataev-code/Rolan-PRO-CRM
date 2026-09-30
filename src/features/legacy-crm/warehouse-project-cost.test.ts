@@ -20,7 +20,7 @@ test('quick project cost is derived from priced warehouse stock and employee rat
   assert.match(html, /function orderQuickLineMaterialCost\(o\)/);
   assert.match(html, /sqftWithWaste \* warehouseCatalogCostPerSqft\(line\.catalogId\)/);
   assert.match(html, /if \(!measureAllWindows\(o\)\.length\) return orderQuickLineMaterialCost\(o\)/);
-  assert.match(html, /function installerRateForQuickLine\(user, line\)/);
+  assert.match(html, /function installerRateForQuickLine\(user, line, o = null\)/);
   assert.match(html, /pc\.ratesByCategory\?\.\[category\]/);
   assert.match(html, /const filmPayout = !measureAllWindows\(o\)\.length \? orderQuickInstallerPayoutForUser\(o, user\)/);
   assert.match(html, /filter\(line => line\.unit === 'sqft' && \(line\.installerIds \|\| \[\]\)\.includes\(user\?\.id\)\)/);

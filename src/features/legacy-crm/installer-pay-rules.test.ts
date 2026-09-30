@@ -152,3 +152,14 @@ test("team lead earns own pay plus 10% of each group installer (owner's example)
   // Before 2026-09-01 the rule does not apply.
   assert.equal(lead.orderLeadOverrideForUser({ installerIds: ["L", "I"], installationDoneAt: "2026-08-20" }, "L"), 0);
 });
+
+test("orders before 2026-09-01 keep the coefficients and rates frozen at the switch", () => {
+  assert.match(source, /s\.ratesBefore20260901 = JSON\.parse\(JSON\.stringify\(\{/);
+  const helper = source.match(/function ratesForOrder\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(helper, /!orderUsesOwnerPayRules\(o\)/);
+  // Revenue, installer film rate and add-on work rate all read the order's rates.
+  assert.match(source, /ratesForOrder\(order\)\.complexityCoefs\?\.\[complexity\]/);
+  assert.match(source, /function installerServiceRateByCategory\(category, o = null\) \{\n  const rates = ratesForOrder\(o\);/);
+  assert.match(source, /ratesForOrder\(o\)\.installerWorkTypes\?\.\[type\]/);
+  assert.doesNotMatch(source, /windowRetailPrice\(w, cx, ov\);/);
+});
