@@ -15207,9 +15207,12 @@ function orderFilmRevenue(o) {
 }
 function orderExtraServicesRevenue(o) {
   const measuredProject = measureAllWindows(o).length > 0;
-  return (o.extraServices || [])
+  const base = (o.extraServices || [])
     .filter(line => !line.quickProjectLine || !measuredProject)
     .reduce((s, x) => s + (Number(x.price) || 0), 0);
+  // Owner rule: the difficulty coefficient multiplies the whole deal, add-ons
+  // included (film lines already carry it per window). Same date rule as pay.
+  return base * orderPayComplexityCoef(o);
 }
 function orderExtraServicesCost(o) {
   // Ordinary service rows contain the customer price only. Their labor cost is
@@ -20908,11 +20911,12 @@ function renderSettings() {
 
     <div ${settingsPanelAttrs('complexity')}>
       <h3 class="font-semibold mb-3">${T('complexity')} — ${T('coefficient')}</h3>
+      <p class="text-sm text-gray-500 mb-3">Коэффициенты задаются в едином справочнике: «Сотрудники → Расценки». Здесь — только просмотр.</p>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         ${['standard','ladder','tower','alpinism'].map(k => `
           <div>
             <label>${T('complexity'+k.charAt(0).toUpperCase()+k.slice(1))}</label>
-            <input type="number" step="0.05" value="${s.complexityCoefs[k]}" onchange="db.settings.complexityCoefs['${k}']=parseFloat(this.value)||1; save();">
+            <input type="number" step="0.05" value="${s.complexityCoefs[k]}" disabled title="Меняется в «Сотрудники → Расценки»">
           </div>
         `).join('')}
       </div>

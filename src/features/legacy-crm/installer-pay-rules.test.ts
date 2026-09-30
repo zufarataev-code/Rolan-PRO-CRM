@@ -103,3 +103,10 @@ test("difficulty multiplies film, zone and add-on labor alike", () => {
     /\(filmPayout\s*\+ orderSmartZonePayout\(o, user, installerIds\.length\)\s*\+ orderAdditionalWorkPayoutForUser\(o, user, installerIds\.length\)\) \* orderPayComplexityCoef\(o\)/,
   );
 });
+
+test("the difficulty coefficient also multiplies add-on revenue (whole deal)", () => {
+  const revenue = source.match(/function orderExtraServicesRevenue\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(revenue, /return base \* orderPayComplexityCoef\(o\)/);
+  // The old settings editor is read-only; the rate directory is the only source.
+  assert.match(source, /value="\$\{s\.complexityCoefs\[k\]\}" disabled title="Меняется в «Сотрудники → Расценки»"/);
+});

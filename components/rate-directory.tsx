@@ -63,6 +63,13 @@ export function RateDirectory({ onChanged }: { onChanged: () => void }) {
         id: service.service_type_id,
         patch: { installation_cost_per_sqft: rate },
       });
+      // Keep local state in step with the database, so a later edit back to
+      // the previous value is still detected and saved.
+      setServices((current) =>
+        (current || []).map((item) =>
+          item.service_type_id === service.service_type_id ? { ...item, installation_cost_per_sqft: rate } : item,
+        ),
+      );
       setNotice({ tone: "ok", text: `${service.name_ru}: ставка монтажнику $${rate.toFixed(2)} ${RATE_SERVICES[service.service_code]}.` });
       onChanged();
     } catch (error) {
