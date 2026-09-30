@@ -26777,9 +26777,22 @@ function createOrderClientFromOverlay() {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Проверьте email клиента.'); return; }
   const existing = existingClientByContact(phone, email);
   if (existing) {
+    // Repeat customer, possibly a new property: keep the address the manager
+    // just typed. Add it to the existing client's address book (if new) and
+    // select it for this project instead of an old address.
+    const enteredAddress = buildAddress(street, city, stateCode, zip, unit);
+    const addresses = normalizeClientAddresses(existing);
+    const sameAddress = addresses.find(a => String(a.address || '').trim().toLowerCase() === enteredAddress.trim().toLowerCase());
+    const addressRecord = sameAddress || makeClientAddressRecord({
+      label: value('oc-address-label') || 'Объект', street, unit, city, state: stateCode, zip, address: enteredAddress,
+    }, false);
+    if (!sameAddress) existing.addresses = [...addresses, addressRecord];
     closeOrderClientOverlay();
     selectOrderClient(existing.id);
-    alert(`Клиент ${existing.name} уже есть в CRM. Для проекта выбрана существующая карточка; дубль не создан.`);
+    state._newOrderAddressId = addressRecord.id;
+    refreshOrderClientSelection();
+    save();
+    alert(`Клиент ${existing.name} уже есть в CRM. Для проекта выбрана существующая карточка с введённым адресом; дубль не создан.`);
     return;
   }
 

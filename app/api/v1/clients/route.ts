@@ -59,6 +59,11 @@ export async function POST(request: NextRequest) {
   const result = await prisma.$transaction(async (tx) => {
     await lockClientIdentity(tx, contact);
     const existing = await findExistingClientByIdentity(tx, contact);
+    if (existing && existing.conflictingClient) {
+      return {
+        conflict: { emailClientId: existing.client.client_id, phoneClientId: existing.conflictingClient.client_id },
+      } as const;
+    }
     if (existing) {
       return { client: existing.client, reused: true, matchedBy: existing.matchedBy } as const;
     }
@@ -77,6 +82,18 @@ export async function POST(request: NextRequest) {
     });
     return { client, reused: false, matchedBy: null } as const;
   });
+
+  if (result.conflict) {
+    return apiError(
+      409,
+      "client_identity_conflict",
+      "Телефон и почта принадлежат двум разным клиентам. Выберите клиента вручную.",
+      {
+        email_client_id: result.conflict.emailClientId,
+        phone_client_id: result.conflict.phoneClientId,
+      },
+    );
+  }
 
   const { client } = result;
 

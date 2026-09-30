@@ -47,3 +47,20 @@ test("reports duplicate cards and distinguishes a newly introduced duplicate", (
     matchedBy: "phone",
   });
 });
+
+test("a contact whose email and phone belong to two different clients is reported as a conflict", async () => {
+  const { findExistingClientByIdentity } = await import("./client-identity");
+  const clients = [
+    { client_id: "A", email: "anna@example.com", phone: "+18055550100" },
+    { client_id: "B", email: "bob@example.com", phone: "+18055550199" },
+  ];
+  const tx = { client: { findMany: async () => clients } } as never;
+
+  const conflict = await findExistingClientByIdentity(tx, { email: "ANNA@example.com", phone: "(805) 555-0199" });
+  assert.equal(conflict?.client.client_id, "A");
+  assert.equal(conflict?.conflictingClient?.client_id, "B", "the second match is not silently ignored");
+
+  const clean = await findExistingClientByIdentity(tx, { email: "anna@example.com", phone: "805-555-0100" });
+  assert.equal(clean?.client.client_id, "A");
+  assert.equal(clean?.conflictingClient, undefined);
+});

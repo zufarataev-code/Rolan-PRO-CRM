@@ -125,16 +125,40 @@ export async function lockClientIdentity(
   }
 }
 
+export type ExistingClientIdentity = {
+  client: Client;
+  matchedBy: ClientIdentityMatch;
+  /**
+   * Set when the email belongs to one client and the phone to another.
+   * Callers must not pick either card silently: attaching a deal or proposal
+   * to the wrong customer is worse than asking the manager.
+   */
+  conflictingClient?: Client;
+};
+
 export async function findExistingClientByIdentity(
   tx: Prisma.TransactionClient,
   contact: ContactInput,
   excludeClientId?: string,
-): Promise<{ client: Client; matchedBy: ClientIdentityMatch } | null> {
+): Promise<ExistingClientIdentity | null> {
   const normalizedEmail = normalizeClientEmail(contact.email);
   const normalizedPhone = normalizeClientPhone(contact.phone);
   if (!normalizedEmail && !normalizedPhone) return null;
 
   const clients = await tx.client.findMany({ orderBy: { updated_at: "desc" } });
-  const match = findClientIdentityMatch(clients, contact, excludeClientId);
-  return match ? { client: match.client, matchedBy: match.matchedBy } : null;
+  const byEmail = normalizedEmail ? findClientIdentityMatch(clients, { email: contact.email }, excludeClientId) : null;
+  const byPhone = normalizedPhone ? findClientIdentityMatch(clients, { phone: contact.phone }, excludeClientId) : null;
+  const primary = byEmail ?? byPhone;
+  if (!primary) return null;
+
+  const conflicting =
+    byEmail && byPhone && byEmail.client.client_id !== byPhone.client.client_id ? byPhone.client : undefined;
+  return { client: primary.client, matchedBy: primary.matchedBy, conflictingClient: conflicting };
+}
+
+export class ClientIdentityConflictError extends Error {
+  constructor(readonly emailClientId: string, readonly phoneClientId: string) {
+    super("Телефон и почта принадлежат двум разным клиентам. Выберите клиента вручную.");
+    this.name = "ClientIdentityConflictError";
+  }
 }

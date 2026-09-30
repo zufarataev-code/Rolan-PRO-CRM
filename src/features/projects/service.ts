@@ -8,6 +8,7 @@ import { omitSensitiveFinancialFields } from "@/lib/finance/visibility";
 import { onInstallationAssigned, onJobStarted, onProjectCompleted, onProjectCreated } from "@/features/core/events";
 import { recordInstallerPayrollAccrual } from "@/features/installer-operations/service";
 import {
+  ClientIdentityConflictError,
   findExistingClientByIdentity,
   lockClientIdentity,
   normalizeClientEmail,
@@ -735,9 +736,19 @@ export async function createManualProject(
   const project = await prisma.$transaction(async (tx) => {
     const contact = { email: normalizedEmail, phone: normalizedPhone };
     await lockClientIdentity(tx, contact);
-    const reusableClient = await findExistingClientByIdentity(tx, contact);
+    // A client the manager explicitly selected always wins; identity matching
+    // only decides when no client was chosen.
+    const reusableClient = explicitClient ? null : await findExistingClientByIdentity(tx, contact);
+    if (reusableClient?.conflictingClient) {
+      throw new ClientIdentityConflictError(
+        reusableClient.client.client_id,
+        reusableClient.conflictingClient.client_id,
+      );
+    }
 
-    const clientRecord = reusableClient
+    const clientRecord = explicitClient
+      ? { client_id: explicitClient.client_id }
+      : reusableClient
       ? { client_id: reusableClient.client.client_id }
       : await tx.client.create({
           data: {

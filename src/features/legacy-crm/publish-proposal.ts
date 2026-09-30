@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import {
+  ClientIdentityConflictError,
   findExistingClientByIdentity,
   lockClientIdentity,
   normalizeClientEmail,
@@ -153,6 +154,9 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
       const contact = { email: snapshot.email, phone: snapshot.phone };
       await lockClientIdentity(tx, contact);
       const match = await findExistingClientByIdentity(tx, contact);
+      if (match?.conflictingClient) {
+        throw new ClientIdentityConflictError(match.client.client_id, match.conflictingClient.client_id);
+      }
       const client = match
         ? match.client
         : await tx.client.create({
