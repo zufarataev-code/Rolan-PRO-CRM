@@ -560,3 +560,25 @@ test("residential premium proposal applies the California home-improvement depos
   assert.match(calculator, /Math\.min\(result\.total \* 0\.10, 1000\)/);
   assert.match(source, /Legal Deposit \(max 10% \/ \$1,000\)/);
 });
+
+test("manager confirms a KP on the client's behalf: locks it, records who and how, chooses payment", () => {
+  const open = source.match(/function openManagerConfirmProposal\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const confirm = source.match(/async function confirmProposalByManager\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+
+  // Same guards as any move to "proposal accepted".
+  assert.match(open, /orderWorkflowTransitionIssues\(o, 'proposal_accepted'\)/);
+  assert.match(confirm, /orderWorkflowTransitionIssues\(o, 'proposal_accepted'\)/);
+  // Locked like a client signature, so a later edit or second signature is impossible.
+  assert.match(confirm, /proposal\.lockedSnapshot = premiumBuildSignedSnapshot\(proposal, calc\)/);
+  assert.match(confirm, /proposal\.acceptedVia = 'manager'/);
+  assert.match(confirm, /o\.proposalConfirmedByManager = \{ by: state\.currentUserId, at, channel, channelLabel, note \}/);
+  // Payment path chosen in the same step, so installation can be planned.
+  assert.match(confirm, /o\.depositReceived = true/);
+  assert.match(confirm, /o\.paymentTerms = 'after_completion'/);
+  assert.match(confirm, /o\.paymentTermsConfirmedAt = at/);
+  // Server proposal is approved too.
+  assert.match(confirm, /\/api\/v1\/proposals\/' \+ encodeURIComponent\(proposal\.canonicalProposalId\) \+ '\/approve'/);
+  // Both entry points open this dialog instead of silently changing the status.
+  assert.match(source, /title: 'Подтвердить КП'[^\n]*openManagerConfirmProposal/);
+  assert.doesNotMatch(source, /title: 'КП принято', sub: 'перевести этап', onclick: `changeStatus\('\$\{o\.id\}','proposal_accepted'\)`/);
+});
