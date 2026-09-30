@@ -122,15 +122,6 @@ test("owner adds an employee with several roles and changes them in one step", a
 });
 
 test("installation groups: a team lead can be assigned; a non-lead cannot", async () => {
-  const lead = await owner.call("POST", "/api/v1/team", {
-    email: `lead-${runTag}@example.com`,
-    fullName: `${runTag} Lead`,
-    roles: ["INSTALLER", "INSTALLER_LEAD"],
-    password: employeePassword,
-  });
-  assert.equal(lead.status, 200, `create lead: ${JSON.stringify(lead.json)}`);
-  const leadId = data<{ userId: string }>(lead.json).userId;
-
   const installer = await owner.call("POST", "/api/v1/team", {
     email: `inst-${runTag}@example.com`,
     fullName: `${runTag} Installer`,
@@ -139,6 +130,35 @@ test("installation groups: a team lead can be assigned; a non-lead cannot", asyn
   });
   assert.equal(installer.status, 200, `create installer: ${JSON.stringify(installer.json)}`);
   const installerId = data<{ userId: string }>(installer.json).userId;
+
+  const leadWithoutGroup = await owner.call("POST", "/api/v1/team", {
+    email: `lead-empty-${runTag}@example.com`,
+    fullName: `${runTag} Lead without group`,
+    roles: ["INSTALLER", "INSTALLER_LEAD"],
+    password: employeePassword,
+  });
+  assert.equal(leadWithoutGroup.status, 400, "a new lead needs 1–5 installers");
+
+  const lead = await owner.call("POST", "/api/v1/team", {
+    email: `lead-${runTag}@example.com`,
+    fullName: `${runTag} Lead`,
+    roles: ["INSTALLER", "INSTALLER_LEAD"],
+    password: employeePassword,
+    groupInstallerIds: [installerId],
+  });
+  assert.equal(lead.status, 200, `create lead: ${JSON.stringify(lead.json)}`);
+  const leadId = data<{ userId: string }>(lead.json).userId;
+  assert.equal(
+    (await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } })).installer_lead_id,
+    leadId,
+    "the initial group is assigned at creation",
+  );
+
+  const emptyGroup = await owner.call("PATCH", `/api/v1/team/${leadId}`, { groupInstallerIds: [] });
+  assert.equal(emptyGroup.status, 400, "a lead keeps at least one installer");
+
+  const nonLeadGroup = await owner.call("PATCH", `/api/v1/team/${employeeId}`, { groupInstallerIds: [installerId] });
+  assert.equal(nonLeadGroup.status, 400, "only a lead can get a group, even when roles are not sent");
 
   const assigned = await owner.call("PATCH", `/api/v1/team/${installerId}`, { installerLeadId: leadId });
   assert.equal(assigned.status, 200, `assign lead: ${JSON.stringify(assigned.json)}`);
@@ -171,6 +191,16 @@ test("installation groups: a team lead can be assigned; a non-lead cannot", asyn
     `${runTag} Lead renamed`,
     "nothing was written when the group was invalid",
   );
+
+  const disabled = await owner.call("PATCH", `/api/v1/team/${leadId}`, { isActive: false, groupInstallerIds: [installerId] });
+  assert.equal(disabled.status, 200, `disable lead: ${JSON.stringify(disabled.json)}`);
+  assert.equal(
+    (await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } })).installer_lead_id,
+    null,
+    "a switched-off lead releases the group",
+  );
+  const reactivated = await owner.call("PATCH", `/api/v1/team/${leadId}`, { isActive: true, groupInstallerIds: [installerId] });
+  assert.equal(reactivated.status, 200, `reactivate lead: ${JSON.stringify(reactivated.json)}`);
 
   const demoted = await owner.call("PATCH", `/api/v1/team/${leadId}`, { roles: ["INSTALLER"] });
   assert.equal(demoted.status, 200);
