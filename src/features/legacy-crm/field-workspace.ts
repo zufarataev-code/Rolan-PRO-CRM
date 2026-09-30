@@ -137,9 +137,25 @@ function fieldIdentityIds(payload: JsonObject, roles: readonly string[], legacyU
 function groupInstallerIds(payload: JsonObject, identityIds: Set<string>, roles: readonly string[]) {
   if (!roles.includes(ROLE_CODES.INSTALLER_LEAD)) return new Set<string>();
   const users = Array.isArray(payload.users) ? payload.users : [];
+  // Only installer cards: a multi-role member's surveyor card is never crew.
   return new Set(
     users
-      .filter((user) => isObject(user) && identityIds.has(String(user.groupLeadId || "")))
+      .filter(
+        (user) =>
+          isObject(user) &&
+          String(user.role || "") === "installer" &&
+          identityIds.has(String(user.groupLeadId || "")),
+      )
+      .map((user) => String((user as JsonObject).id)),
+  );
+}
+
+/** The lead's own installer card(s) — the only own cards that can be crew. */
+function ownInstallerCardIds(payload: JsonObject, identityIds: Set<string>) {
+  const users = Array.isArray(payload.users) ? payload.users : [];
+  return new Set(
+    users
+      .filter((user) => isObject(user) && String(user.role || "") === "installer" && identityIds.has(String(user.id || "")))
       .map((user) => String((user as JsonObject).id)),
   );
 }
@@ -300,7 +316,7 @@ export function mergeFieldWorkspace(
 ) {
   const identityIds = fieldIdentityIds(currentPayload, roles, legacyUserIds);
   const groupIds = groupInstallerIds(currentPayload, identityIds, roles);
-  const teamIds = new Set([...identityIds, ...groupIds]);
+  const teamIds = new Set([...ownInstallerCardIds(currentPayload, identityIds), ...groupIds]);
   const currentOrders = (Array.isArray(currentPayload.orders) ? currentPayload.orders : []).filter(isObject);
   const submittedOrders = new Map(
     (Array.isArray(submittedPayload.orders) ? submittedPayload.orders : [])
@@ -332,7 +348,24 @@ export function mergeFieldWorkspace(
         next.installerIds = [...others, ...requestedTeam];
       }
     }
-    if (!assigned) return next;
+    if (!assigned) {
+      // Group-only job: keep the lead's distribution record (and nothing else from the timeline).
+      const currentTimeline = Array.isArray(currentOrder.timeline) ? currentOrder.timeline : [];
+      const known = new Set(
+        currentTimeline.filter(isObject).map((event) => `${String(event.key || "")}|${String(event.at || "")}`),
+      );
+      const distributed = (Array.isArray(submitted.timeline) ? submitted.timeline : [])
+        .filter(isObject)
+        .filter((event) => event.key === "crew_distributed" && !known.has(`crew_distributed|${String(event.at || "")}`))
+        .map((event) => ({
+          at: String(event.at || new Date().toISOString()),
+          key: "crew_distributed",
+          by: event.by ?? null,
+          note: String(event.note || "").slice(0, 500),
+        }));
+      if (distributed.length) next.timeline = [...clone(currentTimeline), ...distributed];
+      return next;
+    }
     for (const key of MUTABLE_ORDER_FIELDS) {
       if (!(key in submitted)) continue;
       if (key === "status") {
