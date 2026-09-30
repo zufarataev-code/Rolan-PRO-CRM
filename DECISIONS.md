@@ -434,6 +434,14 @@ Decision:
 
 Execution is tracked as TASK-009 in `zufarataev-code/rolanpro-ai-system`. Builder: Codex. Reviewer: Claude. Production deploys and data migrations require explicit Owner approval.
 
+## 2026-09-30 — Exception to the legacy freeze for urgent operational features
+
+Owner decision in chat on 2026-09-30 (chosen over waiting for the relational installation/payment stage). Amends item 1 of "2026-09-29 — CRM core consolidation".
+
+- Allowed in `LegacyWorkspace.payload` / the legacy HTML until the installation and payment stage moves to PostgreSQL: manager KP confirmation (PR #271), the installer rate directory and pay rules (PRs #272, #273), installation roles/groups, team-lead pay and job distribution (PRs #275–#277).
+- Each such feature keeps server-side authority where it already exists (roles, groups, rates and approvals live in PostgreSQL; the legacy payload only mirrors them) and is listed for migration in the installation/payment stage.
+- Everything else remains frozen as decided on 2026-09-29.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
