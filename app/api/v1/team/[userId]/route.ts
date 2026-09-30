@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { setTeamMemberPassword, updateTeamMember } from "@/features/team/service";
+import { setInstallerGroup, setTeamMemberPassword, updateTeamMember } from "@/features/team/service";
 import { ROLE_CODES, type RoleCode } from "@/lib/auth/constants";
 import { requireRequestSession } from "@/lib/auth/server";
 import { createSessionToken, sessionCredentialFingerprint } from "@/lib/auth/session";
@@ -32,6 +32,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     password?: string;
     legacyUserId?: string;
     installerLeadId?: string | null;
+    /** For a team lead: the installers of their group (1–5). */
+    groupInstallerIds?: string[];
   } | null;
 
   if (!body) {
@@ -63,6 +65,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         legacyUserId: body.legacyUserId,
         installerLeadId: body.installerLeadId,
       });
+    }
+
+    if (Array.isArray(body.groupInstallerIds)) {
+      await setInstallerGroup(userId, body.groupInstallerIds);
+      if (!profileResult && !body.password) {
+        return apiSuccess({ userId, groupInstallerIds: body.groupInstallerIds });
+      }
     }
 
     if (body.password) {

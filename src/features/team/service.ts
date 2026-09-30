@@ -184,6 +184,12 @@ export async function updateTeamMember(
     if (!lead) {
       throw new Error("Выбранный сотрудник не руководитель монтажной группы.");
     }
+    const groupSize = await prisma.user.count({
+      where: { installer_lead_id: input.installerLeadId, user_id: { not: userId } },
+    });
+    if (groupSize >= MAX_GROUP_INSTALLERS) {
+      throw new Error(`В группе этого руководителя уже ${MAX_GROUP_INSTALLERS} монтажников.`);
+    }
   }
   if (input.roles) {
     assertValidRoles(input.roles);
@@ -287,6 +293,51 @@ export async function updateTeamMember(
   });
 
   return { userId, email: updated.email, legacyUserIds: updated.legacy_user_ids };
+}
+
+export const MAX_GROUP_INSTALLERS = 5;
+
+/**
+ * Installation group of a team lead: 1–5 installers chosen by name (owner
+ * decision 2026-09-30). Replaces the lead's group in one transaction.
+ */
+export async function setInstallerGroup(leadId: string, installerIds: string[]) {
+  const ids = [...new Set(installerIds.filter(Boolean))];
+  if (ids.length > MAX_GROUP_INSTALLERS) {
+    throw new Error(`В группе может быть не больше ${MAX_GROUP_INSTALLERS} монтажников.`);
+  }
+  if (ids.includes(leadId)) {
+    throw new Error("Руководитель не может быть в своей группе как подчинённый.");
+  }
+  const lead = await prisma.user.findFirst({
+    where: {
+      user_id: leadId,
+      user_accesses: { some: { is_active: true, role: { code: ROLE_CODES.INSTALLER_LEAD } } },
+    },
+    select: { user_id: true },
+  });
+  if (!lead) throw new Error("Этот сотрудник не руководитель монтажной группы.");
+
+  const installers = await prisma.user.findMany({
+    where: {
+      user_id: { in: ids },
+      is_active: true,
+      user_accesses: { some: { is_active: true, role: { code: ROLE_CODES.INSTALLER } } },
+    },
+    select: { user_id: true },
+  });
+  if (installers.length !== ids.length) {
+    throw new Error("В группу можно добавить только действующих специалистов по установке.");
+  }
+
+  await prisma.$transaction([
+    prisma.user.updateMany({
+      where: { installer_lead_id: leadId, user_id: { notIn: ids } },
+      data: { installer_lead_id: null },
+    }),
+    prisma.user.updateMany({ where: { user_id: { in: ids } }, data: { installer_lead_id: leadId } }),
+  ]);
+  return { leadId, installerIds: ids };
 }
 
 /** Задаёт новый пароль сотруднику. Сотрудник сменит его при входе. */

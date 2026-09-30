@@ -173,6 +173,7 @@ export function TeamDirectory({
         <MemberForm
           member={editing === "new" ? null : editing}
           leads={members.filter((item) => item.isActive && item.roles.includes("INSTALLER_LEAD"))}
+          installers={members.filter((item) => item.isActive && item.roles.includes("INSTALLER"))}
           isSelf={editing !== "new" && editing.userId === ownUserId}
           minPasswordLength={minPasswordLength}
           onClose={() => setEditing(null)}
@@ -244,6 +245,7 @@ function MemberList({
 function MemberForm({
   member,
   leads,
+  installers,
   isSelf,
   minPasswordLength,
   onClose,
@@ -251,6 +253,7 @@ function MemberForm({
 }: {
   member: Member | null;
   leads: Member[];
+  installers: Member[];
   isSelf: boolean;
   minPasswordLength: number;
   onClose: () => void;
@@ -262,6 +265,15 @@ function MemberForm({
   const [isActive, setIsActive] = useState(member?.isActive ?? true);
   const [password, setPassword] = useState("");
   const [installerLeadId, setInstallerLeadId] = useState<string>(member?.installerLeadId ?? "");
+  const [groupIds, setGroupIds] = useState<string[]>(
+    member ? installers.filter((item) => item.installerLeadId === member.userId).map((item) => item.userId) : [],
+  );
+  const MAX_GROUP = 5;
+  function toggleGroupMember(id: string) {
+    setGroupIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : current.length >= MAX_GROUP ? current : [...current, id],
+    );
+  }
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -297,6 +309,7 @@ function MemberForm({
           roles,
           isActive,
           installerLeadId: roles.includes("INSTALLER") && installerLeadId ? installerLeadId : null,
+          ...(roles.includes("INSTALLER_LEAD") ? { groupInstallerIds: groupIds } : {}),
           ...(password ? { password } : {}),
         });
         await onSaved(password ? `Сохранено. Новый временный пароль для ${fullName} действует со следующего входа.` : "Сохранено.");
@@ -334,7 +347,31 @@ function MemberForm({
           ))}
         </fieldset>
 
-        {roles.includes("INSTALLER") && member ? (
+        {roles.includes("INSTALLER_LEAD") && member ? (
+          <fieldset className={styles.field}>
+            <span>Монтажники группы ({groupIds.length} из {MAX_GROUP}) — получает 10% с заработка каждого</span>
+            {installers
+              .filter((item) => item.userId !== member.userId)
+              .map((item) => (
+                <label key={item.userId} className={styles.check}>
+                  <input
+                    type="checkbox"
+                    checked={groupIds.includes(item.userId)}
+                    disabled={!groupIds.includes(item.userId) && groupIds.length >= MAX_GROUP}
+                    onChange={() => toggleGroupMember(item.userId)}
+                  />
+                  <span>
+                    {item.fullName}
+                    {item.installerLeadId && item.installerLeadId !== member.userId ? (
+                      <span className={styles.muted}> · сейчас в другой группе</span>
+                    ) : null}
+                  </span>
+                </label>
+              ))}
+          </fieldset>
+        ) : null}
+
+        {roles.includes("INSTALLER") && !roles.includes("INSTALLER_LEAD") && member ? (
           <label className={styles.field}>
             <span>Руководитель монтажной группы</span>
             <select id="tm-installer-lead" value={installerLeadId} onChange={(event) => setInstallerLeadId(event.target.value)}>

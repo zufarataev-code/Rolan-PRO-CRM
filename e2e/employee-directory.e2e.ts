@@ -131,17 +131,36 @@ test("installation groups: a team lead can be assigned; a non-lead cannot", asyn
   assert.equal(lead.status, 200, `create lead: ${JSON.stringify(lead.json)}`);
   const leadId = data<{ userId: string }>(lead.json).userId;
 
-  const assigned = await owner.call("PATCH", `/api/v1/team/${employeeId}`, { installerLeadId: leadId });
+  const installer = await owner.call("POST", "/api/v1/team", {
+    email: `inst-${runTag}@example.com`,
+    fullName: `${runTag} Installer`,
+    roles: ["INSTALLER"],
+    password: employeePassword,
+  });
+  assert.equal(installer.status, 200, `create installer: ${JSON.stringify(installer.json)}`);
+  const installerId = data<{ userId: string }>(installer.json).userId;
+
+  const assigned = await owner.call("PATCH", `/api/v1/team/${installerId}`, { installerLeadId: leadId });
   assert.equal(assigned.status, 200, `assign lead: ${JSON.stringify(assigned.json)}`);
-  const stored = await prisma.user.findUniqueOrThrow({ where: { user_id: employeeId } });
+  const stored = await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } });
   assert.equal(stored.installer_lead_id, leadId);
 
-  const notALead = await owner.call("PATCH", `/api/v1/team/${leadId}`, { installerLeadId: employeeId });
+  const notALead = await owner.call("PATCH", `/api/v1/team/${leadId}`, { installerLeadId: installerId });
   assert.equal(notALead.status, 400, "only an INSTALLER_LEAD can lead a group");
 
-  const removed = await owner.call("PATCH", `/api/v1/team/${employeeId}`, { installerLeadId: null });
+  const notAnInstaller = await owner.call("PATCH", `/api/v1/team/${leadId}`, { groupInstallerIds: [employeeId] });
+  assert.equal(notAnInstaller.status, 400, "a surveyor cannot be put into an installation group");
+
+  const group = await owner.call("PATCH", `/api/v1/team/${leadId}`, { groupInstallerIds: [installerId] });
+  assert.equal(group.status, 200, `set group: ${JSON.stringify(group.json)}`);
+  const tooMany = await owner.call("PATCH", `/api/v1/team/${leadId}`, {
+    groupInstallerIds: Array.from({ length: 6 }, (_, index) => `00000000-0000-4000-8000-00000000000${index}`),
+  });
+  assert.equal(tooMany.status, 400, "a group has at most 5 installers");
+
+  const removed = await owner.call("PATCH", `/api/v1/team/${installerId}`, { installerLeadId: null });
   assert.equal(removed.status, 200);
-  assert.equal((await prisma.user.findUniqueOrThrow({ where: { user_id: employeeId } })).installer_lead_id, null);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } })).installer_lead_id, null);
 });
 
 test("a new employee is recognised by the CRM without the owner opening it first", async () => {
