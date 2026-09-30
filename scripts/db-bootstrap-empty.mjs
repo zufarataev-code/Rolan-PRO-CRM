@@ -11,6 +11,8 @@
  */
 import { execFileSync } from "node:child_process";
 
+import { PrismaClient } from "@prisma/client";
+
 const ONE_TIME_OWNER_RECOVERY = new Set([
   "20260824153000_reset_owner_password_recovery",
   "20260824154500_rotate_owner_recovery_password",
@@ -27,6 +29,15 @@ for (let attempt = 0; attempt < ONE_TIME_OWNER_RECOVERY.size + 1; attempt += 1) 
     const failed = [...ONE_TIME_OWNER_RECOVERY].find((name) => output.includes(name));
     if (!failed || !/Expected exactly one owner account, updated 0/.test(output)) {
       process.stderr.write(output);
+      process.exit(1);
+    }
+    // The error text only proves one email is missing; the invariant is an
+    // EMPTY database. Refuse anything that already has users.
+    const prismaClient = new PrismaClient();
+    const [{ count }] = await prismaClient.$queryRaw`SELECT count(*)::int AS count FROM users`;
+    await prismaClient.$disconnect();
+    if (count > 0) {
+      console.error(`db-bootstrap-empty refused: the database has ${count} user(s); it is not empty.`);
       process.exit(1);
     }
     console.log(`Empty database: marking one-time owner recovery ${failed} as applied.`);
