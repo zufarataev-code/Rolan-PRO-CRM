@@ -23,6 +23,19 @@ const ROLE_OPTIONS = [
 
 const roleLabel = (code: string) => ROLE_OPTIONS.find((role) => role.code === code)?.label ?? code;
 
+/** The page runs inside the CRM overlay; navigate the CRM window, not the frame. */
+function goTo(path: string) {
+  (window.top ?? window).location.assign(path);
+}
+
+function closePanel() {
+  if (window.top && window.top !== window) {
+    window.top.postMessage({ type: "rolanpro-team-close" }, window.location.origin);
+  } else {
+    location.assign("/legacy-crm");
+  }
+}
+
 async function api(path: string, method: string, body?: unknown) {
   const response = await fetch(path, {
     method,
@@ -61,7 +74,7 @@ export function TeamDirectory({
             className={styles.primary}
             onClick={async () => {
               await fetch("/api/v1/team/preview", { method: "DELETE" });
-              location.assign("/team");
+              goTo("/legacy-crm?panel=team");
             }}
           >
             Выйти из просмотра
@@ -79,7 +92,7 @@ export function TeamDirectory({
   async function preview(member: Member) {
     try {
       await api("/api/v1/team/preview", "POST", { userId: member.userId });
-      location.assign("/legacy-crm");
+      goTo("/legacy-crm");
     } catch (error) {
       setNotice({ tone: "error", text: (error as Error).message });
     }
@@ -92,7 +105,7 @@ export function TeamDirectory({
     <div className={styles.shell}><main className={styles.page}>
       <header className={styles.header}>
         <div>
-          <a className={styles.back} href="/legacy-crm">← В CRM</a>
+          <button type="button" className={styles.back} onClick={closePanel}>← В CRM</button>
           <h1>Сотрудники</h1>
           <p className={styles.muted}>Единый список. Роли и доступ меняются здесь и сразу действуют везде.</p>
         </div>
@@ -171,7 +184,7 @@ function MemberList({
               </span>
             </div>
             <div className={styles.actions}>
-              {member.userId !== ownUserId && member.isActive ? (
+              {member.userId !== ownUserId && member.isActive && !member.roles.includes("OWNER") ? (
                 <button className={styles.secondary} onClick={() => onPreview(member)}>
                   Посмотреть глазами
                 </button>

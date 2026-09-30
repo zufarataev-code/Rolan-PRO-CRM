@@ -416,6 +416,32 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Historical v2.5 JSON conversion helpers may remain temporarily for old exports, but they are not a live measurement path and must not be presented as the normal surveyor workflow.
 - Implemented on `codex/surveyor-phone-tablet-measurement`; release still requires PR review and deployment from `main`.
 
+## 2026-09-29 — CRM core consolidation: legacy freeze, staged migration, end-to-end gate
+
+Approved by the Owner on 2026-09-29. Reinforces the 2026-08-24 "One CRM data source" and "One operational workflow" decisions, which were recorded but not enforced.
+
+Evidence (clean local build of `main` at `2b4003d`, 2026-09-29):
+
+- Nearly all operating CRM data (clients, orders, proposals, tasks, employees, photos) lives in one `LegacyWorkspace.payload` JSON row shared by every user. Concurrent saves overwrite each other; the row grows with every photo.
+- Employees exist twice: as PostgreSQL `User` records and as a separate list inside the legacy payload. A valid manager login opened `/legacy-crm` with "Доступ не настроен".
+- The database cannot be rebuilt from scratch: migrations `20260824153000_reset_owner_password_recovery` and `20260824154500_rotate_owner_recovery_password` require one existing production owner row. `prisma db push` from `schema.prisma` also fails the seed because `proposal_code_sequence` exists only in raw migrations. Restore from backup is therefore unverifiable.
+- `prisma/seed.ts` upserts Safety Film field configs with `where: SAFETY_FILM` but `create: SMART_FILM`, which fails on a clean database and may have attached safety-film fields to Smart Film.
+- Legacy bootstrap depends on a backup file in the Owner's local `~/Downloads`.
+- 422/422 unit tests and TypeScript pass; no test exercises a project end-to-end against a real database, so none of the above is caught.
+
+Decision:
+
+1. **Legacy freeze.** No new features, fields, or modules in `LegacyWorkspace.payload` or the legacy HTML. Only data-loss and security fixes are allowed there.
+2. **Staged migration along the canonical lifecycle.** Order: Lead → Consultation/Survey → Measurement → Proposal → Agreement/Deposit → Project → Installation → Closeout/Payment. Each stage moves to relational PostgreSQL records, is verified, then its legacy write path becomes read-only. Existing records are migrated, never deleted.
+3. **One employee directory.** PostgreSQL `User` + roles is the only employee list. The legacy list is derived, never edited.
+4. **Server-only calculations.** Totals, margins, payouts and taxes are computed by the backend once; interfaces display them.
+5. **Clean-build and end-to-end gate.** CI must build an empty database from migrations, run the seed, and run an end-to-end test of every migrated lifecycle stage. A stage is not done until this gate is green.
+6. **File storage.** Photos and documents go to object storage (`AttachmentFile`, Cloudflare R2 target), never into JSON payloads or base64 in the database.
+7. **Role-specific mobile screens** for surveyor, installer and manager are built on migrated stages, not as a shrunken desktop.
+8. **Open PR triage.** Open PRs that extend legacy-only behavior are closed or reduced to data-loss/security fixes.
+
+Execution is tracked as TASK-009 in `zufarataev-code/rolanpro-ai-system`. Builder: Codex. Reviewer: Claude. Production deploys and data migrations require explicit Owner approval.
+
 ## Changing a decision
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.

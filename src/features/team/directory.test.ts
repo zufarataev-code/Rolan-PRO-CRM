@@ -66,3 +66,19 @@ test("disabling an employee in PostgreSQL disables the card", () => {
 
   assert.equal((result.users as Array<{ active: boolean }>)[0].active, false);
 });
+
+test("an unlinked employee reuses their existing card by email, keeping assigned orders", async () => {
+  const { resolveLegacyIdForUser } = await import("./directory");
+  const payloadUsers = [
+    { id: "u_i1", email: "Rinat@Example.com ", role: "installer" },
+    { id: "u_i2", email: "taken@example.com", role: "installer" },
+  ];
+  const user = { user_id: "22222222-2222-4222-8222-222222222222", email: "rinat@example.com" };
+
+  assert.equal(resolveLegacyIdForUser(user, payloadUsers, new Set()), "u_i1");
+  assert.equal(
+    resolveLegacyIdForUser({ ...user, email: "taken@example.com" }, payloadUsers, new Set(["u_i2"])),
+    legacyIdForUser(user.user_id),
+    "a card already linked to another employee is never taken over",
+  );
+});

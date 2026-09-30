@@ -503,6 +503,8 @@ async function seedServiceReferences() {
         },
       },
       update: {
+        // Canonical Safety Film fields are always active (see repair migration).
+        is_active: true,
         field_label_ru,
         field_label_en,
         input_type,

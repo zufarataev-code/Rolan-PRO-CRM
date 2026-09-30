@@ -58,7 +58,7 @@ export async function resolvePreviewSession<P>(
   }
 
   const subject = await loadSessionUser(previewUserId);
-  if (!subject) {
+  if (!subject || subject.user_accesses.some((access) => access.role.code === ROLE_CODES.OWNER)) {
     return null;
   }
 

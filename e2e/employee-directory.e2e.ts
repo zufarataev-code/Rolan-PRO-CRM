@@ -166,6 +166,8 @@ test("owner views the CRM as the employee, read-only, and can leave", async () =
   assert.equal(write.status, 403, "writes are blocked during preview");
   const save = await owner.call("PUT", "/api/v1/legacy-crm/state", { payload: {}, revision: 1 });
   assert.equal(save.status, 403, "workspace saves are blocked during preview");
+  const sideEffectGet = await owner.call("GET", "/api/v1/integrations/gmail/connect");
+  assert.equal(sideEffectGet.status, 403, "side-effecting GET routes are blocked during preview");
   assert.equal(await prisma.lead.count({ where: { name: { startsWith: runTag } } }), 0);
 
   const stopped = await owner.call("DELETE", "/api/v1/team/preview");
@@ -179,6 +181,15 @@ test("only the owner can start a preview, and another employee cannot use the co
   await manager.login(MANAGER_EMAIL, SEED_PASSWORD);
   const denied = await manager.call("POST", "/api/v1/team/preview", { userId: employeeId });
   assert.equal(denied.status, 403);
+
+  const ownerRow = await prisma.user.findUniqueOrThrow({ where: { email: OWNER_EMAIL } });
+  const secondOwner = await prisma.user.findFirst({
+    where: { user_id: { not: ownerRow.user_id }, user_accesses: { some: { role: { code: "OWNER" } } } },
+  });
+  if (secondOwner) {
+    const ownerPreview = await owner.call("POST", "/api/v1/team/preview", { userId: secondOwner.user_id });
+    assert.equal(ownerPreview.status, 400, "another owner cannot be previewed");
+  }
 
   manager.cookies.set("rolanpro_preview_as", employeeId);
   const me = await manager.call("GET", "/api/v1/auth/me");
