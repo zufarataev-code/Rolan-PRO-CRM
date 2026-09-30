@@ -10,7 +10,7 @@ import { after, before, test } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
 
-import { assertSafeE2eTarget } from "./guard";
+import { assertSafeE2eTarget, assertServerUsesTestDatabase } from "./guard";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const SEED_PASSWORD = process.env.E2E_SEED_PASSWORD ?? "ChangeMe123!";
@@ -39,6 +39,7 @@ async function call(method: string, path: string, body?: unknown) {
 }
 
 before(async () => {
+  await assertServerUsesTestDatabase(BASE_URL, prisma);
   await prisma.user.updateMany({ where: { email: MANAGER_EMAIL }, data: { must_change_password: false } });
   const login = await call("POST", "/api/v1/auth/login", { email: MANAGER_EMAIL, password: SEED_PASSWORD });
   assert.equal(login.status, 200, `login: ${JSON.stringify(login.json)}`);
