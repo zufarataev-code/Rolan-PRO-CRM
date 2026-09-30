@@ -15201,17 +15201,29 @@ function orderInstallerPayoutForUser(o, userId) {
 // order, paid by the company (the installer keeps full pay). Group links come
 // from PostgreSQL via the employee directory (card.groupLeadId, installerLead).
 const INSTALLER_LEAD_OVERRIDE_PCT = 10;
+// Who led each installer on this order: frozen at completion, so moving an
+// installer to another group later never rewrites historical pay.
+function orderInstallerLeadOf(o, installerId) {
+  if (o?.installerLeadAtCompletion) return o.installerLeadAtCompletion[installerId] || null;
+  const leadId = getUser(installerId)?.groupLeadId || null;
+  return leadId && getUser(leadId)?.installerLead ? leadId : null;
+}
+function snapshotInstallerLeads(o) {
+  o.installerLeadAtCompletion = Object.fromEntries(
+    [...new Set((o?.installerIds || []).filter(Boolean))].map(id => {
+      const leadId = getUser(id)?.groupLeadId || null;
+      return [id, leadId && getUser(leadId)?.installerLead ? leadId : null];
+    }),
+  );
+}
 function orderLeadOverrideForUser(o, leadId) {
   if (!orderUsesOwnerPayRules(o)) return 0;
-  if (!getUser(leadId)?.installerLead) return 0;
   return [...new Set((o?.installerIds || []).filter(Boolean))]
-    .filter(id => id !== leadId && getUser(id)?.groupLeadId === leadId)
+    .filter(id => id !== leadId && orderInstallerLeadOf(o, id) === leadId)
     .reduce((sum, id) => sum + orderInstallerPayoutForUser(o, id) * INSTALLER_LEAD_OVERRIDE_PCT / 100, 0);
 }
 function orderGroupLeadIds(o) {
-  return [...new Set((o?.installerIds || [])
-    .map(id => getUser(id)?.groupLeadId)
-    .filter(leadId => leadId && getUser(leadId)?.installerLead))];
+  return [...new Set((o?.installerIds || []).map(id => orderInstallerLeadOf(o, id)).filter(Boolean))];
 }
 function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
@@ -15975,6 +15987,7 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
     return true;
   }
   o.status = newStatus;
+  if (newStatus === 'installation_done' && !o.installerLeadAtCompletion) snapshotInstallerLeads(o);
   o.timeline = o.timeline || [];
   o.timeline.push({ at: new Date().toISOString(), key: newStatus, by: by || state.currentUserId });
   // milestone fields
@@ -17676,6 +17689,7 @@ function renderCanonicalInstallerWorkday() {
   const jobs = Array.isArray(data.jobs) ? data.jobs : [];
   const history = Array.isArray(data.history) ? data.history : [];
   const payroll = Array.isArray(data.payroll) ? data.payroll : [];
+  const leadPayroll = Array.isArray(data.lead_payroll) ? data.lead_payroll : [];
   const totals = data.totals || {};
   return `
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
@@ -17708,7 +17722,7 @@ function renderCanonicalInstallerWorkday() {
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="card"><h3 class="font-semibold mb-3">История смен</h3>${history.length ? history.map(item => `<div class="border-t py-3 first:border-t-0"><div class="font-semibold">${academyEsc(item.installer_job?.position?.title || item.installer_job?.project?.title || 'Общая смена')}</div><div class="text-sm text-gray-600">${fmtDateTime(item.started_at)} · ${installerWorkdayHours(item.work_minutes)} · ${Number(item.miles_driven || 0).toFixed(1)} miles</div>${item.notes ? `<div class="text-xs text-gray-500 mt-1">${academyEsc(item.notes)}</div>` : ''}</div>`).join('') : '<div class="text-sm text-gray-500">Завершённые смены появятся здесь.</div>'}</div>
-      <div class="card"><h3 class="font-semibold mb-1">Моя зарплата</h3><p class="text-xs text-gray-500 mb-3">Только ваши начисления. Цена клиента и маржа компании скрыты.</p>${payroll.length ? payroll.map(item => `<div class="border-t py-3 first:border-t-0 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.service_name)}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${Number(item.quantity_sqft || 0).toFixed(1)} sqft × ${installerWorkdayMoney(item.rate_per_sqft)} × ${Number(item.complexity_multiplier || 1)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('') : '<div class="text-sm text-gray-500">Начислений пока нет.</div>'}</div>
+      <div class="card"><h3 class="font-semibold mb-1">Моя зарплата</h3><p class="text-xs text-gray-500 mb-3">Только ваши начисления. Цена клиента и маржа компании скрыты.</p>${payroll.length ? payroll.map(item => `<div class="border-t py-3 first:border-t-0 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.service_name)}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${Number(item.quantity_sqft || 0).toFixed(1)} sqft × ${installerWorkdayMoney(item.rate_per_sqft)} × ${Number(item.complexity_multiplier || 1)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('') : '<div class="text-sm text-gray-500">Начислений пока нет.</div>'}${leadPayroll.length ? `<h4 class="font-semibold mt-4 mb-1">10% с моей группы</h4>${leadPayroll.map(item => `<div class="border-t py-3 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.installer_name || '')}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · 10% от ${installerWorkdayMoney(item.installer_amount)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('')}` : ''}</div>
     </div>`;
 }
 
@@ -33909,6 +33923,7 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
     const monthlySalary = Number(pc.monthlySalary) || Number(pc.weeklySalary || 0) * 4.33;
     total = monthlySalary * months;
     breakdown.push({ kind: 'salary', label: `Оклад × ${months.toFixed(2)} мес.`, amount: total });
+    total += addLeadOverrides(u, startDate, endDate, breakdown);
     return { total, breakdown };
   }
   // Commission / per-sqft / fixed-per-job — based on orders in period
@@ -33942,21 +33957,27 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
       total += amount;
     }
   });
-  // Team lead: 10% of each group installer's pay on completed orders in the period.
-  if (u.installerLead) {
-    db.orders.forEach(o => {
-      if (!o.installationDoneAt) return;
-      const dt = new Date(o.installationDoneAt);
-      if (dt < startDate || dt > endDate) return;
-      const amount = orderLeadOverrideForUser(o, u.id);
-      if (!(amount > 0)) return;
-      const names = (o.installerIds || []).filter(id => id !== u.id && getUser(id)?.groupLeadId === u.id).map(id => getUser(id)?.name || id);
-      const isPaid = (o.payouts || []).some(p => p.userId === u.id && p.kind === 'lead_override' && p.paid);
-      breakdown.push({ kind: 'lead_override', orderId: o.id, orderNumber: o.number, label: `10% с группы: ${names.join(', ')}`, amount, date: o.installationDoneAt, paid: isPaid });
-      total += amount;
-    });
-  }
+  total += addLeadOverrides(u, startDate, endDate, breakdown);
   return { total, breakdown };
+}
+
+// Team lead: 10% of each group installer's pay on orders completed in the
+// period (whatever the lead's own pay type is). Returns the added amount.
+function addLeadOverrides(u, startDate, endDate, breakdown) {
+  if (!u?.installerLead) return 0;
+  let added = 0;
+  db.orders.forEach(o => {
+    if (!o.installationDoneAt) return;
+    const dt = new Date(o.installationDoneAt);
+    if (dt < startDate || dt > endDate) return;
+    const amount = orderLeadOverrideForUser(o, u.id);
+    if (!(amount > 0)) return;
+    const names = (o.installerIds || []).filter(id => id !== u.id && orderInstallerLeadOf(o, id) === u.id).map(id => getUser(id)?.name || id);
+    const isPaid = (o.payouts || []).some(p => p.userId === u.id && (p.type === 'lead_override' || p.kind === 'lead_override') && p.paid);
+    breakdown.push({ kind: 'lead_override', orderId: o.id, orderNumber: o.number, label: `10% с группы: ${names.join(', ')}`, amount, date: o.installationDoneAt, paid: isPaid });
+    added += amount;
+  });
+  return added;
 }
 
 function payrollPaidForPeriod(userId, startDate, endDate) {

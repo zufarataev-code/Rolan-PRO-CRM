@@ -131,6 +131,7 @@ test("team lead earns own pay plus 10% of each group installer (owner's example)
     constant,
     leadConst,
     pick("orderUsesOwnerPayRules"),
+    pick("orderInstallerLeadOf"),
     pick("orderLeadOverrideForUser"),
     pick("orderGroupLeadIds"),
     "return { orderLeadOverrideForUser, orderGroupLeadIds };",
@@ -151,6 +152,22 @@ test("team lead earns own pay plus 10% of each group installer (owner's example)
   assert.equal(lead.orderLeadOverrideForUser({ installerIds: ["L", "X"], installationDoneAt: "2026-09-20" }, "L"), 0);
   // Before 2026-09-01 the rule does not apply.
   assert.equal(lead.orderLeadOverrideForUser({ installerIds: ["L", "I"], installationDoneAt: "2026-08-20" }, "L"), 0);
+
+  // Frozen at completion: I later moves to another lead; the finished job still pays L, not the new lead.
+  users.I.groupLeadId = "L2";
+  users.L2 = { id: "L2", installerLead: true };
+  const finished = { installerIds: ["L", "I"], installationDoneAt: "2026-09-20", installerLeadAtCompletion: { L: null, I: "L" } };
+  assert.equal(lead.orderLeadOverrideForUser(finished, "L"), 25);
+  assert.equal(lead.orderLeadOverrideForUser(finished, "L2"), 0);
+});
+
+test("the group lead is frozen on the order when the installation is completed", () => {
+  const change = source.match(/function changeStatus\(orderId, newStatus, by, opts = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(change, /newStatus === 'installation_done' && !o\.installerLeadAtCompletion\) snapshotInstallerLeads\(o\)/);
+  // A lead on salary also gets the 10%, and a paid override is recognised by its stored type.
+  const period = source.match(/function calcUserPayoutForPeriod\(userId, startDate, endDate\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(period, /total \+= addLeadOverrides\(u, startDate, endDate, breakdown\);\n    return \{ total, breakdown \};/);
+  assert.match(source, /p\.type === 'lead_override'/);
 });
 
 test("orders before 2026-09-01 keep the coefficients and rates frozen at the switch", () => {

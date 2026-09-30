@@ -31,6 +31,7 @@ model User {
   installer_jobs          InstallerJob[]   @relation("installer_job_user")
   installer_work_sessions InstallerWorkSession[] @relation("installer_work_session_user")
   installer_payroll_accruals InstallerPayrollAccrual[] @relation("installer_payroll_user")
+  lead_payroll_accruals   InstallerPayrollAccrual[] @relation("installer_payroll_lead")
   uploaded_files          AttachmentFile[] @relation("attachment_uploaded_by")
   created_documents       Document[]       @relation("document_created_by")
   activity_logs           ActivityLog[]    @relation("activity_actor")
@@ -915,17 +916,24 @@ model InstallerPayrollAccrual {
   complexity_multiplier        Decimal        @default(1) @db.Decimal(6, 2)
   amount                       Decimal        @default(0) @db.Decimal(12, 2)
   status                       String         @default("owed") @db.VarChar(30)
+  /// Team lead of the installer when the job was completed (snapshot) and
+  /// their 10% on top of this accrual (owner decision 2026-09-30).
+  lead_id                      String?        @db.Uuid
+  lead_override_amount         Decimal        @default(0) @db.Decimal(12, 2)
+  lead_override_status         String         @default("owed") @db.VarChar(30)
   accrued_at                   DateTime       @default(now()) @db.Timestamptz(6)
   paid_at                      DateTime?      @db.Timestamptz(6)
   created_at                   DateTime       @default(now()) @db.Timestamptz(6)
   updated_at                   DateTime       @updatedAt @db.Timestamptz(6)
   installer                    User           @relation("installer_payroll_user", fields: [installer_id], references: [user_id], onDelete: Restrict)
+  lead                         User?          @relation("installer_payroll_lead", fields: [lead_id], references: [user_id], onDelete: SetNull)
   installer_job                InstallerJob   @relation(fields: [installer_job_id], references: [installer_job_id], onDelete: Cascade)
   project                      Project        @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
 
   @@index([installer_id, accrued_at])
   @@index([project_id])
   @@index([status])
+  @@index([lead_id])
   @@map("installer_payroll_accruals")
 }
 

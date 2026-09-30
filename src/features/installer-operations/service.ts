@@ -18,6 +18,9 @@ function jsonNumber(value: Prisma.JsonValue | null | undefined, key: string) {
   return toNumber((value as Record<string, unknown>)[key] as number | string | null | undefined);
 }
 
+/** Team lead earns this % of each group installer's pay, on top (owner decision 2026-09-30). */
+export const INSTALLER_LEAD_OVERRIDE_PCT = 10;
+
 /** Owner pay rules (decided 2026-09-30) apply to work accrued from this date. */
 export const OWNER_PAY_RULES_FROM = new Date("2026-09-01T00:00:00Z");
 
@@ -92,6 +95,27 @@ export async function recordInstallerPayrollAccrual(
   const zoneRate = zoneCount ? await installerZoneRate(tx, job.installer_id) : 0;
   const amount = calculatePayrollAmount(quantitySqft, ratePerSqft, multiplier, zoneCount, zoneRate);
 
+  // Team lead at completion (snapshot): 10% of this installer's pay, on top.
+  const installer = await tx.user.findUnique({
+    where: { user_id: job.installer_id },
+    select: {
+      installer_lead: {
+        select: {
+          user_id: true,
+          is_active: true,
+          user_accesses: { where: { is_active: true }, select: { role: { select: { code: true } } } },
+        },
+      },
+    },
+  });
+  const lead = installer?.installer_lead;
+  const leadEligible =
+    ownerRules &&
+    lead?.is_active &&
+    lead.user_id !== job.installer_id &&
+    lead.user_accesses.some((access) => access.role.code === "INSTALLER_LEAD");
+  const leadOverrideAmount = leadEligible ? Number((amount * INSTALLER_LEAD_OVERRIDE_PCT / 100).toFixed(2)) : 0;
+
   return tx.installerPayrollAccrual.upsert({
     where: { installer_job_id: installerJobId },
     create: {
@@ -103,6 +127,8 @@ export async function recordInstallerPayrollAccrual(
       rate_per_sqft: ratePerSqft,
       complexity_multiplier: multiplier,
       amount,
+      lead_id: leadEligible ? lead!.user_id : null,
+      lead_override_amount: leadOverrideAmount,
       accrued_at: accruedAt,
     },
     update: {},
@@ -158,7 +184,7 @@ const workSessionInclude = {
 
 export async function getInstallerOperationsDashboard(session: InstallerSession) {
   const installerId = session.user.user_id;
-  const [activeSession, history, accruals, jobs] = await Promise.all([
+  const [activeSession, history, accruals, jobs, leadRows] = await Promise.all([
     prisma.installerWorkSession.findFirst({
       where: { installer_id: installerId, ended_at: null },
       include: workSessionInclude,
@@ -184,14 +210,30 @@ export async function getInstallerOperationsDashboard(session: InstallerSession)
       },
       orderBy: { created_at: "desc" },
     }),
+    // A team lead's 10% of each group installer's completed job.
+    prisma.installerPayrollAccrual.findMany({
+      where: { lead_id: installerId, lead_override_amount: { gt: 0 } },
+      include: {
+        project: { select: { project_code: true, title: true } },
+        installer: { select: { full_name: true } },
+      },
+      orderBy: { accrued_at: "desc" },
+      take: 40,
+    }),
   ]);
 
   const serializedHistory = history.map(serializeWorkSession);
   const totalMinutes = serializedHistory.reduce((sum, item) => sum + item.work_minutes, 0) +
     (activeSession ? sessionDurationMinutes(activeSession.started_at, null, 0) : 0);
   const totalMiles = serializedHistory.reduce((sum, item) => sum + item.miles_driven, 0);
-  const owed = accruals.filter((item) => item.status === "owed").reduce((sum, item) => sum + toNumber(item.amount), 0);
-  const paid = accruals.filter((item) => item.status === "paid").reduce((sum, item) => sum + toNumber(item.amount), 0);
+  const leadOwed = leadRows
+    .filter((item) => item.lead_override_status === "owed")
+    .reduce((sum, item) => sum + toNumber(item.lead_override_amount), 0);
+  const leadPaid = leadRows
+    .filter((item) => item.lead_override_status === "paid")
+    .reduce((sum, item) => sum + toNumber(item.lead_override_amount), 0);
+  const owed = accruals.filter((item) => item.status === "owed").reduce((sum, item) => sum + toNumber(item.amount), 0) + leadOwed;
+  const paid = accruals.filter((item) => item.status === "paid").reduce((sum, item) => sum + toNumber(item.amount), 0) + leadPaid;
 
   return {
     active_session: activeSession ? serializeWorkSession(activeSession) : null,
@@ -203,6 +245,17 @@ export async function getInstallerOperationsDashboard(session: InstallerSession)
       rate_per_sqft: toNumber(item.rate_per_sqft),
       complexity_multiplier: toNumber(item.complexity_multiplier),
       amount: toNumber(item.amount),
+      lead_override_amount: toNumber(item.lead_override_amount),
+    })),
+    lead_payroll: leadRows.map((item) => ({
+      payroll_accrual_id: item.payroll_accrual_id,
+      project: item.project,
+      installer_name: item.installer.full_name,
+      service_name: item.service_name,
+      installer_amount: toNumber(item.amount),
+      amount: toNumber(item.lead_override_amount),
+      status: item.lead_override_status,
+      accrued_at: item.accrued_at,
     })),
     totals: { work_minutes: totalMinutes, miles: Number(totalMiles.toFixed(1)), owed, paid },
   };
