@@ -56,6 +56,24 @@ jobs:
           git fetch --prune origin main
           fetched_sha="$(git rev-parse origin/main)"
           test "$fetched_sha" = "$EXPECTED_SHA"
+
+          # Database backup BEFORE the new release can run migrations.
+          # Any failure here stops the deploy. Keeps the last 30 backups.
+          backup_dir=/home/runcloud/backups
+          install -d -m 700 "$backup_dir"
+          export PATH="/home/runcloud/rolanpro-runtime/bin:$PATH"
+          set -a
+          . "$app_dir/.env.production.local"
+          set +a
+          db_url="${DATABASE_URL%%\?*}"
+          backup_file="$backup_dir/rolanpro-$(date -u +%Y%m%dT%H%M%SZ)-${EXPECTED_SHA:0:7}.dump"
+          pg_dump --format=custom --no-owner --no-privileges --file="$backup_file" "$db_url"
+          chmod 600 "$backup_file"
+          test -s "$backup_file"
+          pg_restore --list "$backup_file" > /dev/null
+          echo "Database backup: $backup_file ($(du -h "$backup_file" | cut -f1))"
+          ls -1t "$backup_dir"/rolanpro-*.dump | tail -n +31 | xargs -r rm -f
+
           git merge --ff-only "$fetched_sha"
           REMOTE
 
