@@ -18,7 +18,6 @@ import {
   mergeFieldWorkspace,
 } from "@/features/legacy-crm/field-workspace";
 import {
-  findClientIdentityDuplicates,
   findIntroducedClientIdentityDuplicate,
 } from "@/features/sales/client-identity";
 
@@ -117,8 +116,9 @@ export async function PUT(request: NextRequest) {
       return apiError(403, "forbidden", "Only the owner can initialize CRM data.");
     }
 
-    const duplicate = findClientIdentityDuplicates(workspaceClients(payload))[0];
-    if (duplicate) return duplicateClientError(duplicate);
+    // The first snapshot is the baseline: historical duplicates it contains
+    // are preserved (restore/migration must not require merging customers).
+    // Only duplicates introduced by later saves are rejected.
 
     try {
       const workspace = await prisma.legacyWorkspace.create({

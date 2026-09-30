@@ -27571,13 +27571,25 @@ function importCsvAuto() {
 function importWizRows(rows) {
   if (!confirm(`Импортировать ${rows.length} ${rows.length===1?'запись':'записей'} из Wiz CSV?`)) return;
   let createdClients = 0, createdOrders = 0, skipped = 0;
+  const ambiguousRows = [];
 
   rows.forEach(r => {
     if (!r.po_number && !r.contact_name) { skipped++; return; }
     // Match or create client by contact_code (preferred) or by name+phone
     let client = null;
     if (r.contact_code) client = db.clients.find(c => c._wizContactCode === r.contact_code);
-    if (!client) client = existingClientByContact(r.contact_phone, r.contact_email);
+    if (!client) {
+      // A contact matching several cards (email of one, phone of another, or
+      // historical duplicates) is not guessed: the row is skipped and listed
+      // for manual mapping instead of attaching the order to the wrong client.
+      const matches = clientsMatchingContact(r.contact_phone, r.contact_email);
+      if (matches.length > 1) {
+        ambiguousRows.push(`${r.po_number || r.code || '—'} · ${r.contact_name || ''}: ${matches.map(c => c.name || c.id).join(' / ')}`);
+        skipped++;
+        return;
+      }
+      client = matches[0] || null;
+    }
     if (!client && r.contact_name) {
       client = db.clients.find(c => c.name === r.contact_name && c.phone === r.contact_phone);
     }
@@ -27697,7 +27709,7 @@ function importWizRows(rows) {
   });
   normalizeClientAccountData();
   save();
-  alert(`Импорт Wiz CSV завершён:\n— Клиентов добавлено: ${createdClients}\n— Заказов добавлено: ${createdOrders}\n— Пропущено: ${skipped}`);
+  alert(`Импорт Wiz CSV завершён:\n— Клиентов добавлено: ${createdClients}\n— Заказов добавлено: ${createdOrders}\n— Пропущено: ${skipped}${ambiguousRows.length ? `\n\nНе импортированы — контакт совпадает с несколькими клиентами (сопоставьте вручную):\n• ${ambiguousRows.slice(0, 20).join('\n• ')}` : ''}`);
   state.view = 'orders'; render();
 }
 
@@ -27719,7 +27731,12 @@ function importWizRowsSilently(rows) {
   rows.forEach(r => {
     let client = null;
     if (r.contact_code) client = db.clients.find(c => c._wizContactCode === r.contact_code);
-    if (!client) client = existingClientByContact(r.contact_phone, r.contact_email);
+    if (!client) {
+      // Same rule as the interactive import: never guess between several cards.
+      const matches = clientsMatchingContact(r.contact_phone, r.contact_email);
+      if (matches.length > 1) return;
+      client = matches[0] || null;
+    }
     if (!client && r.contact_name) {
       client = db.clients.find(c => c.name === r.contact_name && c.phone === r.contact_phone);
     }
