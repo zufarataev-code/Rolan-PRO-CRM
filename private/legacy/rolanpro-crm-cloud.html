@@ -456,6 +456,12 @@
     animation: slideUp 0.25s cubic-bezier(.4,0,.2,1);
   }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  /* Re-renders keep already-visible modals and cards still (see renderNow). */
+  body.rp-keep-modal .modal-backdrop,
+  body.rp-keep-modal .modal-content,
+  body.rp-keep-modal .order-workspace-modal,
+  body.rp-keep-view .kanban-card,
+  body.rp-keep-view .kanban-fullscreen { animation: none !important; }
   @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   /* === Timeline === */
   .timeline-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand-blue); flex-shrink: 0; margin-top: 6px; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
@@ -8201,6 +8207,20 @@ function migrateSchema() {
   s.installerRates.workTypes = s.installerRates.workTypes || {
     washing: 0, removal: 0, silicone: 0, electric: 0, connect: 0, warranty: 0, custom: 0,
   };
+  // ---- OWNER RATE DIRECTORY (decided 2026-09-30, pay rules from 2026-09-01) ----
+  // Difficulty multiplies the whole deal: client price AND installer pay.
+  // Installer pay per sq ft by direction, plus $50 per Smart zone connection.
+  if (!db._ownerRateDirectory20260901) {
+    s.complexityCoefs = { standard: 1.0, ladder: 1.2, tower: 1.5, alpinism: 2.0 };
+    s.installerRates._defaults = { ...(s.installerRates._defaults || {}), smart: 5, protective: 3, solar: 2.5, decorative: 2.5 };
+    s.installerRates.serviceTypes = { ...(s.installerRates.serviceTypes || {}), SMART_FILM: 5, SAFETY_FILM: 3, SOLAR_FILM: 2.5, DECORATIVE_FILM: 2.5 };
+    s.installerRates.smartZone = 50;
+    // A manual «Подключение зоны» row pays per zone at the same rate.
+    s.installerRates.workTypes = { ...(s.installerRates.workTypes || {}) };
+    if (!(Number(s.installerRates.workTypes.connect) > 0)) s.installerRates.workTypes.connect = 50;
+    db._ownerRateDirectory20260901 = true;
+  }
+  if (s.installerRates.smartZone == null) s.installerRates.smartZone = 50;
   if (!s.projectProfitTax) {
     s.projectProfitTax = {
       entityType: 'C_CORP',
@@ -15100,6 +15120,34 @@ function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
     return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type) / installerCount;
   }, 0);
 }
+// Pay rules decided by the owner on 2026-09-30, applied to installations from
+// 2026-09-01: the deal's difficulty coefficient multiplies installer pay, and
+// every Smart zone connection pays the Smart zone rate. Earlier installations
+// keep the rules they were paid under.
+const OWNER_PAY_RULES_FROM = '2026-09-01';
+function orderUsesOwnerPayRules(o) {
+  const date = String(o?.installationDoneAt || o?.installationAt || o?.createdAt || '');
+  return !date || date.slice(0, 10) >= OWNER_PAY_RULES_FROM;
+}
+function orderPayComplexityCoef(o) {
+  if (!orderUsesOwnerPayRules(o)) return 1;
+  return Number(db.settings.complexityCoefs?.[o?.complexity || 'standard']) || 1;
+}
+function orderSmartZoneCount(o) {
+  return measureAllWindows(o)
+    .filter(({ win }) => (win.measureScope || orderMeasureScope(o)) === 'smart_film')
+    .reduce((sum, { win }) => sum + Math.max((win.smart?.zones || []).length, win.smart ? 1 : 0), 0);
+}
+function orderSmartZonePayout(o, user, installerCount = 1) {
+  if (!orderUsesOwnerPayRules(o)) return 0;
+  // A manual "connect" work line already pays connections; never pay twice.
+  if ((o?.extraServices || []).some(line => line.type === 'connect' && !line.quickProjectLine)) return 0;
+  const zones = orderSmartZoneCount(o);
+  if (!zones) return 0;
+  const employeeRate = Number(user?.payConfig?.ratesByWorkType?.smartZone);
+  const rate = employeeRate > 0 ? employeeRate : Math.max(0, Number(db.settings.installerRates?.smartZone) || 0);
+  return zones * rate / Math.max(1, installerCount);
+}
 function orderInstallerPayoutForUser(o, userId) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.includes(userId)) return 0;
@@ -15111,7 +15159,10 @@ function orderInstallerPayoutForUser(o, userId) {
   const filmPayout = !measureAllWindows(o).length ? orderQuickInstallerPayoutForUser(o, user) : measureAllWindows(o).reduce((sum, { win }) => {
     return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / installerIds.length;
   }, 0);
-  return filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length);
+  // The deal difficulty multiplies all installer labor: film, zones, add-ons.
+  return (filmPayout
+    + orderSmartZonePayout(o, user, installerIds.length)
+    + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * orderPayComplexityCoef(o);
 }
 function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
@@ -15125,7 +15176,11 @@ function orderInstallerPayoutBreakdown(o) {
           return sum + (Number(line.qty) || 0) * filmRate(filmName);
         }, 0);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
-    return { total: total + work, byInstaller: [], source: 'REFERENCE_DEFAULT' };
+    return {
+      total: (total + orderSmartZonePayout(o, null, 1) + work) * orderPayComplexityCoef(o),
+      byInstaller: [],
+      source: 'REFERENCE_DEFAULT',
+    };
   }
   const byInstaller = installerIds.map(userId => {
     const user = getUser(userId);
@@ -15790,9 +15845,15 @@ function orderMeasurementCompletionIssues(o) {
   if (missingScopes.length) issues.push('Добавьте размеры для каждой услуги: ' + missingScopes.map(key => measureScopeInfo(key).short).join(', '));
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('заполните размеры и количество для всех окон');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('выберите плёнку со склада для каждого окна');
-  issues.push(...managerSolarMeasurementIssues(o));
-  issues.push(...managerSmartMeasurementIssues(o));
   return issues;
+}
+
+// Technical survey details (facade side, inside/outside, access, glass type,
+// Smart power supply and wire route). A manager can price and send a KP from
+// the customer's own dimensions; these details are confirmed by the surveyor
+// and are required only before installation is scheduled.
+function orderTechnicalMeasurementIssues(o) {
+  return [...managerSolarMeasurementIssues(o), ...managerSmartMeasurementIssues(o)];
 }
 
 function publishedPremiumProposalForOrder(orderId) {
@@ -15819,6 +15880,7 @@ function orderWorkflowTransitionIssues(o, newStatus) {
     if (!publishedPremiumProposalForOrder(o.id)) issues.push('сначала сформируйте и отправьте КП');
   }
   if (newStatus === 'installation_scheduled') {
+    issues.push(...orderTechnicalMeasurementIssues(o));
     if (!(o.installerIds || []).length) issues.push('назначьте монтажников');
     if (!o.installationAt) issues.push('укажите дату и время монтажа');
   }
@@ -16542,6 +16604,7 @@ function restoreRenderPosition(snapshot) {
 }
 
 let __lastRenderedHtml = '';
+let __lastRenderedView = null;
 let __pendingRenderPosition = null;
 
 function preservePositionForNextRender(snapshot = captureRenderPosition()) {
@@ -16615,8 +16678,16 @@ function renderNow() {
     return;
   }
 
+  // Every change rebuilds the page. Entry animations (modal fade + 20px
+  // slide, kanban card rise) must play only when something first appears,
+  // not on every save — replaying them made the CRM jump after each action.
+  const hadModal = Boolean(root.querySelector('.modal-backdrop'));
+  const sameView = __lastRenderedView === state.view;
   __lastRenderedHtml = html;
   root.innerHTML = html;
+  document.body.classList.toggle('rp-keep-modal', hadModal);
+  document.body.classList.toggle('rp-keep-view', sameView);
+  __lastRenderedView = state.view;
   attachGlobalListeners();
   restoreRenderPositionStable(snapshot);
 }
@@ -24815,6 +24886,10 @@ function completeManagerMeasurement(oid) {
   if (!o) return;
   const issues = orderMeasurementCompletionIssues(o);
   if (issues.length) { alert('Замер ещё не готов:\n\n• ' + issues.join('\n• ')); return; }
+  const technical = orderTechnicalMeasurementIssues(o);
+  if (technical.length) {
+    alert('Расчёт и КП можно делать по размерам клиента.\n\nДо назначения монтажа замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
+  }
   if (o.status === 'measurement_done') {
     invalidateProjectEstimate(o, 'Замер изменён — требуется повторный расчёт проекта');
     save();
@@ -25461,6 +25536,18 @@ function scheduleInstallationPrompt(oid) {
 function confirmScheduleInstallation(oid) {
   const o = getOrder(oid);
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
+  // Check the surveyor's technical details before touching the order, so a
+  // refused schedule never leaves installers or dates behind.
+  const technical = orderTechnicalMeasurementIssues(o);
+  if (technical.length) {
+    alert('Нельзя назначить монтаж — замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
+    return;
+  }
+  const previous = {
+    installerIds: o.installerIds,
+    installationAt: o.installationAt,
+    lines: projectQuickLines(o).map(line => ({ line, installerIds: line.installerIds, startDate: line.startDate })),
+  };
   o.installerIds = Array.from(document.querySelectorAll('.isch-installer:checked')).map(x => x.value);
   const dt = document.getElementById('isch-dt').value;
   if (dt) o.installationAt = new Date(dt).toISOString();
@@ -25471,7 +25558,16 @@ function confirmScheduleInstallation(oid) {
   closeModal();
   if (changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true })) {
     notifyClientEventScheduled(oid, 'install');
+    return;
   }
+  // Any other refused guard: restore the order exactly as it was.
+  o.installerIds = previous.installerIds;
+  o.installationAt = previous.installationAt;
+  previous.lines.forEach(({ line, installerIds, startDate }) => {
+    line.installerIds = installerIds;
+    line.startDate = startDate;
+  });
+  render();
 }
 
 function openAssignTeam(oid) {
