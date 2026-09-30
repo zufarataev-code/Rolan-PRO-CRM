@@ -120,9 +120,9 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
   if (!proposal) return null;
 
   const agreementSigned = proposal.agreement?.status === "signed" && Boolean(proposal.agreement?.signed_at);
-  const depositPaid =
-    proposal.payment_terms === "after_completion" ||
-    (proposal.deposit?.status === "paid" && Boolean(proposal.deposit?.paid_at));
+  // Actual cash received; "after_completion" only waives the deposit gate.
+  const depositPaid = proposal.deposit?.status === "paid" && Boolean(proposal.deposit?.paid_at);
+  const payAfterCompletion = proposal.payment_terms === "after_completion" && !depositPaid;
   const ready = isSaleCloseReady({
     agreementStatus: proposal.agreement?.status,
     agreementSignedAt: proposal.agreement?.signed_at,
@@ -138,7 +138,7 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
       managerUserId: proposal.deal.assigned_manager_id,
       actorUserId: input.actorUserId,
       agreementSigned,
-      depositPaid,
+      depositPaid: depositPaid || payAfterCompletion,
     });
 
     return {
@@ -149,6 +149,7 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
       project_id: proposal.project?.project_id ?? null,
       agreement_signed: agreementSigned,
       deposit_paid: depositPaid,
+      pay_after_completion: payAfterCompletion,
     };
   }
 
@@ -184,12 +185,15 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
           entity_type: "deal",
           entity_id: proposal.deal_id,
           action_key: "sales.closed_won",
-          message: "Сделка закрыта успешно: договор подписан и аванс оплачен.",
+          message: payAfterCompletion
+            ? "Сделка закрыта успешно: договор подписан, оплата после выполнения работ."
+            : "Сделка закрыта успешно: договор подписан и аванс оплачен.",
           metadata: {
             proposal_id: proposal.proposal_id,
             deposit_id: proposal.deposit?.deposit_id ?? null,
             agreement_signed: true,
-            deposit_paid: true,
+            deposit_paid: depositPaid,
+            pay_after_completion: payAfterCompletion,
           },
         },
       });
@@ -282,6 +286,7 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
     closed: true,
     project_id: proposal.project?.project_id ?? null,
     agreement_signed: true,
-    deposit_paid: true,
+    deposit_paid: depositPaid,
+    pay_after_completion: payAfterCompletion,
   };
 }

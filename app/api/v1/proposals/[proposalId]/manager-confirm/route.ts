@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 
 import { AGREEMENT_STATUSES, DEPOSIT_STATUSES, PROPOSAL_MANAGER_ROLES } from "@/features/proposals/api";
 import { approveProposal, createDepositForProposal, getProposalById, markDepositPaid } from "@/features/proposals/service";
+import { RESIDENTIAL_DEPOSIT_CAP_PERCENT, RESIDENTIAL_DEPOSIT_CAP_USD } from "@/features/proposals/pricing";
 import { closeSaleIfReady } from "@/features/sales/close-sale";
 import { requireRequestSession } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
@@ -54,6 +55,36 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // this manager cannot see.
   const visible = await getProposalById(auth.session, proposalId);
   if (!visible) return apiError(404, "not_found", "Proposal was not found.");
+
+  // Validate the deposit before anything is written: never above the KP total,
+  // and for residential jobs never above the legal cap (10% / $1,000, or the
+  // cap persisted on the Deposit when the KP was published).
+  if (payment === "deposit") {
+    const [totals, pendingDeposit] = await Promise.all([
+      prisma.proposal.findUniqueOrThrow({
+        where: { proposal_id: proposalId },
+        select: { selected_total_amount: true, property_type: true },
+      }),
+      prisma.deposit.findFirst({ where: { proposal_id: proposalId }, select: { legal_cap_amount: true } }),
+    ]);
+    const selectedTotal = Number(totals.selected_total_amount);
+    if (selectedTotal > 0 && amount > selectedTotal + 0.009) {
+      return apiError(400, "deposit_above_total", "Аванс не может быть больше суммы КП.");
+    }
+    const legalCap = pendingDeposit?.legal_cap_amount != null
+      ? Number(pendingDeposit.legal_cap_amount)
+      : totals.property_type === "residential"
+        ? Math.min(RESIDENTIAL_DEPOSIT_CAP_USD, (selectedTotal * RESIDENTIAL_DEPOSIT_CAP_PERCENT) / 100)
+        : null;
+    if (legalCap !== null && amount > legalCap + 0.009) {
+      return apiError(
+        400,
+        "deposit_above_legal_cap",
+        `Для жилого объекта аванс не больше $${legalCap.toFixed(2)} (10% суммы, максимум $1 000).`,
+      );
+    }
+  }
+
   const existingAgreement = await prisma.agreement.findUnique({ where: { proposal_id: proposalId } });
   if (!existingAgreement) {
     await prisma.agreement.create({ data: { proposal_id: proposalId, ...agreementData } });
@@ -83,16 +114,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   if (payment === "later") {
     return apiSuccess({ proposal_id: proposalId, payment });
-  }
-
-  // The received deposit can never exceed the proposal total.
-  const totals = await prisma.proposal.findUniqueOrThrow({
-    where: { proposal_id: proposalId },
-    select: { selected_total_amount: true },
-  });
-  const selectedTotal = Number(totals.selected_total_amount);
-  if (selectedTotal > 0 && amount > selectedTotal + 0.009) {
-    return apiError(400, "deposit_above_total", "Аванс не может быть больше суммы КП.");
   }
 
   let depositId = existing?.deposit_id;
