@@ -452,6 +452,13 @@ Owner decisions in chat on 2026-09-30.
 - Team-lead pay: own work as an installer plus 10% of each group installer's pay on the order, paid by the company on top (the installer keeps full pay). Example: $500 job, two people at $250 each → the lead receives $250 + $25. Applies from 2026-09-01 like the other pay rules.
 - Employees are removed by switching access off (history of orders and pay is kept); there is no hard delete.
 - Implemented in PRs #275 (roles, groups, removal), #276 (lead pay) and #277 (lead workspace, distribution).
+## 2026-09-30 — Exception to the legacy freeze for urgent operational features
+
+Owner decision in chat on 2026-09-30 (chosen over waiting for the relational installation/payment stage). Amends item 1 of "2026-09-29 — CRM core consolidation".
+
+- Allowed in `LegacyWorkspace.payload` / the legacy HTML until the installation and payment stage moves to PostgreSQL: manager KP confirmation (PR #271), the installer rate directory and pay rules (PRs #272, #273), installation roles/groups, team-lead pay and job distribution (PRs #275–#277).
+- Each such feature keeps server-side authority where it already exists (roles, groups, rates and approvals live in PostgreSQL; the legacy payload only mirrors them) and is listed for migration in the installation/payment stage.
+- Everything else remains frozen as decided on 2026-09-29.
 
 ## Changing a decision
 
