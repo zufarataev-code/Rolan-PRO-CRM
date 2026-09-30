@@ -495,6 +495,11 @@ test("a manager can price from customer dimensions; technical survey details gat
   assert.match(completion, /orderMeasurementCompletionIssues\(o\)/);
   assert.match(completion, /orderTechnicalMeasurementIssues\(o\)/);
   assert.match(completion, /До назначения монтажа замерщик должен уточнить/);
+
+  // A refused installation schedule must not leave installers or dates on the order.
+  const schedule = source.match(/function confirmScheduleInstallation\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(schedule.indexOf("orderTechnicalMeasurementIssues(o)") < schedule.indexOf("o.installerIds = Array.from"));
+  assert.match(schedule, /o\.installerIds = previous\.installerIds/);
 });
 
 test("published proposals synchronize the order stage milestone", () => {

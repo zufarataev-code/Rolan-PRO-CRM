@@ -25406,6 +25406,18 @@ function scheduleInstallationPrompt(oid) {
 function confirmScheduleInstallation(oid) {
   const o = getOrder(oid);
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
+  // Check the surveyor's technical details before touching the order, so a
+  // refused schedule never leaves installers or dates behind.
+  const technical = orderTechnicalMeasurementIssues(o);
+  if (technical.length) {
+    alert('Нельзя назначить монтаж — замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
+    return;
+  }
+  const previous = {
+    installerIds: o.installerIds,
+    installationAt: o.installationAt,
+    lines: projectQuickLines(o).map(line => ({ line, installerIds: line.installerIds, startDate: line.startDate })),
+  };
   o.installerIds = Array.from(document.querySelectorAll('.isch-installer:checked')).map(x => x.value);
   const dt = document.getElementById('isch-dt').value;
   if (dt) o.installationAt = new Date(dt).toISOString();
@@ -25416,7 +25428,16 @@ function confirmScheduleInstallation(oid) {
   closeModal();
   if (changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true })) {
     notifyClientEventScheduled(oid, 'install');
+    return;
   }
+  // Any other refused guard: restore the order exactly as it was.
+  o.installerIds = previous.installerIds;
+  o.installationAt = previous.installationAt;
+  previous.lines.forEach(({ line, installerIds, startDate }) => {
+    line.installerIds = installerIds;
+    line.startDate = startDate;
+  });
+  render();
 }
 
 function openAssignTeam(oid) {
