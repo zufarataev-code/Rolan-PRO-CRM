@@ -5,8 +5,11 @@ export const PREVIEW_TTL_SECONDS = 60 * 60;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Запросы, разрешённые во время просмотра: выход из просмотра и выход из CRM. */
-const PREVIEW_WRITE_ALLOWLIST = ["/api/v1/team/preview", "/api/v1/auth/logout"];
+/**
+ * Запросы, разрешённые во время просмотра: выход из просмотра, выход из CRM
+ * и новый вход (он сам сбрасывает просмотр).
+ */
+const PREVIEW_WRITE_ALLOWLIST = ["/api/v1/team/preview", "/api/v1/auth/logout", "/api/v1/auth/login"];
 
 /**
  * Some GET routes have side effects (OAuth callbacks that store credentials,
@@ -15,7 +18,6 @@ const PREVIEW_WRITE_ALLOWLIST = ["/api/v1/team/preview", "/api/v1/auth/logout"];
  */
 const PREVIEW_BLOCKED_PREFIXES = [
   "/api/v1/integrations/",
-  "/api/v1/auth/login",
   "/api/v1/auth/demo-login",
   "/api/v1/auth/change-password",
   "/api/v1/auth/reset-password",

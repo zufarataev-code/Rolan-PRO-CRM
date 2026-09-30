@@ -693,7 +693,7 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
   - `prisma/seed.ts`: Safety Film fields are created under `SAFETY_FILM` (was `SMART_FILM`); non-production seeds provision the empty legacy workspace from `data/legacy-crm-empty.json`.
   - `scripts/build-empty-legacy-workspace.mjs` no longer defaults to a file in the Owner's `~/Downloads`.
   - Bug fix: `POST /api/v1/consultations/:id/measurements` rejected every measurement without an explicit `constructor` field, because `body.constructor` resolves to the inherited `Object.prototype.constructor`. It now checks an own property. Found by the new end-to-end gate.
-  - New CI job `clean-build-e2e`: empty PostgreSQL → `scripts/db-bootstrap-empty.mjs` → `e2e_disposable_marker` → drift check → seed → production build → `next start` → `npm run test:e2e`.
+  - New CI job `clean-build-e2e`: empty PostgreSQL → `scripts/db-bootstrap-empty.mjs` → drift check → `e2e_disposable_marker` → seed → production build → `next start` → `npm run test:e2e`.
   - E2E safety: needs `E2E_ALLOW_WRITES=1`, local app and DB, a server sentinel proving the server uses the same database, and the `e2e_disposable_marker` table (never present in production).
   - New `e2e/lead-to-measurement.e2e.ts`: manager creates lead → deal → site survey for the surveyor; surveyor records two windows; manager sees both with server-computed square footage; one lead and one deal only; surveyor cannot create leads and does not see the deal value.
 - Verification (local, 2026-09-29): empty DB builds with `prisma migrate deploy && pnpm db:seed`; drift exit code 0; 422/422 unit tests; TypeScript; end-to-end 2/2 against a running server.
