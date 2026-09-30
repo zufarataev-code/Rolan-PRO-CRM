@@ -26322,8 +26322,10 @@ function saveLeadDistribute(oid) {
   if (!o || !me?.installerLead) return;
   const allowed = new Set(leadGroupMembers(me.id).map(u => u.id));
   const selected = Array.from(document.querySelectorAll('.lead-dist-member:checked')).map(x => x.value).filter(id => allowed.has(id));
-  if (!selected.length) { alert('Выберите хотя бы одного монтажника.'); return; }
-  o.installerIds = selected;
+  // Installers of other groups stay on the job; only this group's part changes.
+  const others = (o.installerIds || []).filter(id => !allowed.has(id));
+  if (!selected.length && !others.length) { alert('Выберите хотя бы одного монтажника.'); return; }
+  o.installerIds = [...others, ...selected];
   o.timeline = o.timeline || [];
   o.timeline.push({ at: new Date().toISOString(), key: 'crew_distributed', by: me.id, note: 'Бригада: ' + selected.map(id => getUser(id)?.name || id).join(', ') });
   closeModal();

@@ -318,9 +318,13 @@ export function mergeFieldWorkspace(
     // Team lead distributes the job inside the group only: every installer
     // must be the lead or a group member, and the job never leaves the group.
     if (leadScope && Array.isArray(submitted.installerIds)) {
-      const requested = [...new Set(submitted.installerIds.map(String).filter(Boolean))];
-      if (requested.length > 0 && requested.every((id) => teamIds.has(id))) {
-        next.installerIds = requested;
+      // The lead replaces only their own group's part of the crew; installers
+      // from other groups (assigned by a manager) always stay on the job.
+      const current = Array.isArray(currentOrder.installerIds) ? currentOrder.installerIds.map(String) : [];
+      const others = current.filter((id) => !teamIds.has(id));
+      const requestedTeam = [...new Set(submitted.installerIds.map(String).filter((id) => teamIds.has(id)))];
+      if (requestedTeam.length > 0 || others.length > 0) {
+        next.installerIds = [...others, ...requestedTeam];
       }
     }
     if (!assigned) return next;
