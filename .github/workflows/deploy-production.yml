@@ -67,11 +67,22 @@ jobs:
           set -a
           . /home/runcloud/.rolanpro-crm.env.production.local
           set +a
-          db_url="${DATABASE_URL%%\?*}"
+          # Connection details go to libpq through the environment (readable
+          # only by this user), never through argv where `ps` shows them.
+          eval "$(python3 -c '
+          import os, shlex, urllib.parse as u
+          p = u.urlsplit(os.environ["DATABASE_URL"])
+          q = dict(u.parse_qsl(p.query))
+          vals = {"PGHOST": p.hostname or q.get("host", ""), "PGPORT": str(p.port or ""), "PGUSER": u.unquote(p.username or ""), "PGPASSWORD": u.unquote(p.password or ""), "PGDATABASE": u.unquote(p.path.lstrip("/"))}
+          for k, v in vals.items():
+              if v: print("export %s=%s" % (k, shlex.quote(v)))
+          ')"
+          unset DATABASE_URL
+          test -n "${PGHOST:-}" && test -n "${PGDATABASE:-}"
           backup_name="rolanpro-$(date -u +%Y%m%dT%H%M%SZ)-${EXPECTED_SHA}.dump"
           partial="$backup_dir/.partial-$backup_name"
           trap 'rm -f "$partial"' EXIT
-          pg_dump --format=custom --no-owner --no-privileges --file="$partial" "$db_url"
+          pg_dump --format=custom --no-owner --no-privileges --file="$partial"
           chmod 600 "$partial"
           test -s "$partial"
           pg_restore --list "$partial" > /dev/null

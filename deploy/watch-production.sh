@@ -102,10 +102,32 @@ wait_for_database() {
   done
 }
 
+# Connection details reach libpq through the environment of a subshell
+# (readable only by this user), never through argv where `ps` shows them.
+pg_dump_from_env() {
+  local file="$1"
+  (
+    set -a
+    . "$ENV_BACKUP" || exit 1
+    set +a
+    eval "$(python3 -c '
+import os, shlex, urllib.parse as u
+p = u.urlsplit(os.environ["DATABASE_URL"])
+q = dict(u.parse_qsl(p.query))
+vals = {"PGHOST": p.hostname or q.get("host", ""), "PGPORT": str(p.port or ""), "PGUSER": u.unquote(p.username or ""), "PGPASSWORD": u.unquote(p.password or ""), "PGDATABASE": u.unquote(p.path.lstrip("/"))}
+for k, v in vals.items():
+    if v: print("export %s=%s" % (k, shlex.quote(v)))
+')" || exit 1
+    unset DATABASE_URL
+    [ -n "${PGHOST:-}" ] && [ -n "${PGDATABASE:-}" ] || exit 1
+    pg_dump --format=custom --no-owner --no-privileges --file="$file"
+  )
+}
+
 backup_database() {
   local sha="$1"
   local backup_dir="$BACKUP_DIR"
-  local name partial db_url
+  local name partial
   install -d -m 700 "$backup_dir" || return 1
   # A failed migration is retried on the next poll. The first dump of this
   # commit is the clean pre-migration state: keep it, never replace it with a
@@ -115,13 +137,11 @@ backup_database() {
     log "Pre-migration backup for ${sha:0:7} already exists; keeping the first one"
     return 0
   fi
-  db_url="$(set -a; . "$ENV_BACKUP"; set +a; printf '%s' "${DATABASE_URL%%\?*}")"
-  [ -n "$db_url" ] || return 1
   name="rolanpro-$(date -u +%Y%m%dT%H%M%SZ)-${sha}-premigrate.dump"
   partial="$backup_dir/.partial-$name"
   # Only one watcher runs: any partial left by an interrupted dump is garbage.
   rm -f "$backup_dir"/.partial-*
-  if ! pg_dump --format=custom --no-owner --no-privileges --file="$partial" "$db_url" \
+  if ! pg_dump_from_env "$partial" \
     || ! chmod 600 "$partial" \
     || ! test -s "$partial" \
     || ! pg_restore --list "$partial" > /dev/null; then
