@@ -48,3 +48,16 @@ test("mobile workspace adapter is injected only once", () => {
   assert.equal((twice.match(/id="rolanpro-mobile-workspace-style"/g) || []).length, 1);
   assert.equal((twice.match(/id="rolanpro-mobile-workspace-script"/g) || []).length, 1);
 });
+
+
+test("mobile calendar keeps weekdays horizontal instead of stacking them vertically", () => {
+  const result = injectMobileWorkspaceAdapter("<!doctype html><body><main></main></body>");
+
+  assert.match(result, /\.mobile-calendar-week-strip \{[\s\S]*?grid-template-columns: repeat\(7, minmax\(0, 1fr\)\) !important/);
+  assert.match(result, /\.mobile-calendar-month-weekdays,[\s\S]*?grid-template-columns: repeat\(7, minmax\(0, 1fr\)\) !important/);
+  assert.match(result, /const isProtectedCalendarLayout/);
+  assert.match(result, /\.dispatch-week-head/);
+  assert.match(result, /\.dispatch-time-grid/);
+  assert.match(result, /protectCalendarLayouts\(\)/);
+  assert.match(result, /isProtectedCalendarLayout\(element\)/);
+});
