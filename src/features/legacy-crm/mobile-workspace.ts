@@ -387,28 +387,28 @@ const MOBILE_WORKSPACE_PATCH = `
     }
 
     .mobile-primary-nav > *:nth-child(1) {
-      --mobile-nav-accent: #2563eb;
-      --mobile-nav-soft: #eff6ff;
+      --mobile-nav-accent: #29A7E1;
+      --mobile-nav-soft: #EAF8FE;
     }
 
     .mobile-primary-nav > *:nth-child(2) {
-      --mobile-nav-accent: #168a5b;
-      --mobile-nav-soft: #ecf8f3;
+      --mobile-nav-accent: #10253F;
+      --mobile-nav-soft: #EDF2F7;
     }
 
     .mobile-primary-nav > *:nth-child(3) {
-      --mobile-nav-accent: #b56a08;
-      --mobile-nav-soft: #fff6e8;
+      --mobile-nav-accent: #475569;
+      --mobile-nav-soft: #F1F5F9;
     }
 
     .mobile-primary-nav > *:nth-child(4) {
-      --mobile-nav-accent: #168bc0;
-      --mobile-nav-soft: #eaf8fe;
+      --mobile-nav-accent: #147DAC;
+      --mobile-nav-soft: #EAF8FE;
     }
 
     .mobile-primary-nav > *:nth-child(5) {
-      --mobile-nav-accent: #6d5bd0;
-      --mobile-nav-soft: #f3f0ff;
+      --mobile-nav-accent: #64748B;
+      --mobile-nav-soft: #F8FAFC;
     }
 
     .mobile-primary-nav > *.active,
