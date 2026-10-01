@@ -64,10 +64,10 @@ test("mobile bottom navigation has restrained semantic color accents", () => {
   const result = injectMobileWorkspaceAdapter("<!doctype html><body><main></main></body>");
 
   assert.match(result, /\.mobile-primary-nav > \*:nth-child\(1\)/);
-  assert.match(result, /--mobile-nav-accent: #2563eb/);
-  assert.match(result, /--mobile-nav-accent: #168a5b/);
-  assert.match(result, /--mobile-nav-accent: #b56a08/);
-  assert.match(result, /--mobile-nav-accent: #168bc0/);
-  assert.match(result, /--mobile-nav-accent: #6d5bd0/);
+  assert.match(result, /--mobile-nav-accent: #29A7E1/);
+  assert.match(result, /--mobile-nav-accent: #10253F/);
+  assert.match(result, /--mobile-nav-accent: #475569/);
+  assert.match(result, /--mobile-nav-accent: #147DAC/);
+  assert.match(result, /--mobile-nav-accent: #64748B/);
   assert.match(result, /aria-current="page"/);
 });
