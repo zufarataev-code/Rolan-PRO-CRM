@@ -19120,7 +19120,7 @@ function renderClients() {
         </div>
         <div class="text-sm text-gray-600 mt-2">${addressAnchor(primary?.address || c.address)}</div>
         <div class="flex items-center gap-2 mt-2 text-xs">
-          <span class="tag">${T(`source${c.source.charAt(0).toUpperCase() + c.source.slice(1)}`) || c.source}</span>
+          <span class="tag">${academyEsc(sourceDisplayLabel(c.source))}</span>
           <span class="tag">🎁 ${c.referralCode}</span>
           <span class="client-account-badge ${relationship === 'regular' ? 'regular' : ''}">${relationshipLabel(relationship)}</span>
         </div>
