@@ -3892,6 +3892,47 @@
       font-size: .78rem;
       text-align: center;
     }
+    /* The dispatch week is also semantic calendar layout. Never let the
+       generic mobile adapter collapse its 7 day columns vertically. */
+    .dispatch-week-head {
+      grid-template-columns: 44px repeat(7, minmax(0, 1fr)) !important;
+      min-width: 0 !important;
+      width: 100% !important;
+    }
+    .dispatch-time-grid {
+      grid-template-columns: 44px repeat(7, minmax(0, 1fr)) !important;
+      min-width: 0 !important;
+      width: 100% !important;
+    }
+    .dispatch-week-head > div {
+      min-width: 0 !important;
+      font-size: .61rem !important;
+    }
+    .dispatch-week-scroll {
+      overflow-x: hidden !important;
+    }
+    .dispatch-time-gutter .dispatch-hour-label {
+      right: .25rem;
+      font-size: .58rem;
+    }
+    .dispatch-day-column {
+      min-width: 0 !important;
+      overflow: visible !important;
+    }
+    .dispatch-event {
+      padding: .18rem .16rem !important;
+      border-left-width: 3px !important;
+    }
+    .dispatch-event-time {
+      font-size: .56rem !important;
+    }
+    .dispatch-event-title {
+      font-size: .58rem !important;
+      line-height: 1.04 !important;
+    }
+    .dispatch-event-meta {
+      display: none !important;
+    }
     .calendar-mode-switch {
       width: 100%;
     }
