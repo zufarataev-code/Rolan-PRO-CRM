@@ -15995,6 +15995,13 @@ function ensureOrderWorkflowTransition(o, newStatus, openWorkspace = true) {
 function changeStatus(orderId, newStatus, by, opts = {}) {
   const o = getOrder(orderId);
   if (!o) return false;
+  // A team lead only distributes group jobs: job milestones (and the client
+  // notifications they trigger) belong to the installers actually assigned.
+  const actor = currentUser();
+  if (actor?.role === 'installer' && !(o.installerIds || []).includes(actor.id)) {
+    alert('Статус меняют назначенные на работу монтажники. Вы можете распределить бригаду.');
+    return false;
+  }
   if (!opts.skipWorkflowGuard && !ensureOrderWorkflowTransition(o, newStatus, opts.openWorkspace !== false)) return false;
   if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return false;
   if (newStatus === 'installation_scheduled' && !ensureProductionReadyForInstallation(o)) return false;
@@ -21813,12 +21820,14 @@ function renderInstallerList(tasks) {
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
     ${tasks.map(o => {
       const c = getClient(o.clientId);
-      const canAccept = o.status === 'installation_scheduled';
-      const canGo     = o.status === 'installation_accepted';
-      const canStart  = o.status === 'installation_en_route';
-      const canFinish = o.status === 'installation_in_progress';
+      // Group-only jobs (team lead): no milestone buttons, no payout line.
+      const assigned = (o.installerIds || []).includes(u.id);
+      const canAccept = assigned && o.status === 'installation_scheduled';
+      const canGo     = assigned && o.status === 'installation_accepted';
+      const canStart  = assigned && o.status === 'installation_en_route';
+      const canFinish = assigned && o.status === 'installation_in_progress';
       // Show only personal payout (not order revenue)
-      const myPayout = orderInstallerPayoutPerPerson(o, u.id);
+      const myPayout = assigned ? orderInstallerPayoutPerPerson(o, u.id) : 0;
       // Films summary (no prices)
       const films = {};
       (o.measurements?.rooms||[]).forEach(r => (r.windows||[]).forEach(w => {
@@ -21845,7 +21854,7 @@ function renderInstallerList(tasks) {
           <div class="text-gray-500 mb-1">Площадь: <b class="text-slate-800">${orderActualAreaSqft(o).toFixed(2)} sqft</b></div>
           <div class="text-gray-500">Комнат: <b class="text-slate-800">${(o.measurements?.rooms||[]).length}</b></div>
           ${filmsList ? `<div class="text-gray-500 mt-1">Плёнки: ${filmsList}</div>` : ''}
-          <div class="mt-2 p-2 bg-emerald-50 rounded text-emerald-800"><b>💰 Ваша выплата:</b> ${fmtMoney(myPayout)}</div>
+          ${assigned ? `<div class="mt-2 p-2 bg-emerald-50 rounded text-emerald-800"><b>💰 Ваша выплата:</b> ${fmtMoney(myPayout)}</div>` : `<div class="mt-2 p-2 bg-sky-50 rounded text-sky-800"><b>👥 Работа вашей группы</b> — распределите бригаду в ТЗ-листе.</div>`}
         </div>
         <div class="mt-3 flex gap-2 flex-wrap">
           <button class="btn-primary" onclick="openOrder('${o.id}')">Открыть ТЗ-лист</button>
@@ -23347,7 +23356,7 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
           <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
         </div>
         <div class="order-clean-actions mt-3">
-          ${renderOrderActionCard(primary)}
+          ${(o.installerIds || []).includes(u.id) ? renderOrderActionCard(primary) : ''}
           ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать ТЗ', sub: 'размеры, схема и раскрой', onclick: `printTechnicalSheet('${o.id}')`, disabled: !hasMeasurements })}
           ${projectAddress ? renderOrderActionCard({ icon: '🧭', title: 'Маршрут', sub: projectAddress, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(projectAddress)}` }) : ''}
           ${renderOrderActionCard({ icon: '📷', title: 'Добавить фото', sub: 'до или после монтажа', onclick: `addOrderPhoto('${o.id}')` })}
