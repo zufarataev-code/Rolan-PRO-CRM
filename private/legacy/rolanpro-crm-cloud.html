@@ -20492,6 +20492,7 @@ function canonicalMessengerLeadRows() {
         companyName: lead.company_name || '',
         companyType: lead.company_type || '',
         contactTitle: lead.contact_title || '',
+        statusCode: lead.pipeline_status?.status_code || '',
         phone: lead.phone,
         email: lead.email,
         source: lead.source,
@@ -20588,20 +20589,31 @@ async function fetchLeads(force) {
 function canonicalLeadRow(leadId) {
   return canonicalMessengerLeadRows().find(row => row.id === leadId) || null;
 }
-/** A handled website lead leaves «Новые лиды»: CONTACTED after a project, CLOSED_LOST when dismissed. */
-async function setCanonicalLeadStatus(leadId, statusCode) {
+/**
+ * A handled website lead leaves «Новые лиды»: CONTACTED after a project,
+ * CLOSED_LOST when dismissed. The change applies only while the lead is still in
+ * one of `expectedStatusCodes` (compare-and-set on the server), so a second click
+ * or a second manager cannot process the same lead twice.
+ */
+async function setCanonicalLeadStatus(leadId, statusCode, expectedStatusCodes = [...CANONICAL_OPEN_LEAD_STATUSES], options = {}) {
   try {
     const response = await fetch('/api/v1/leads/' + encodeURIComponent(leadId), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pipeline_status_code: statusCode }),
+      body: JSON.stringify({ pipeline_status_code: statusCode, expected_status_codes: expectedStatusCodes }),
     });
-    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const result = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message = result?.errors?.[0]?.message || 'Не удалось обновить статус заявки на сервере. Обновите список и попробуйте ещё раз.';
+      if (!options.silent) alert(message);
+      fetchCanonicalLeads({ renderIfVisible: true });
+      return false;
+    }
     canonicalLeads = canonicalLeads.filter(lead => lead?.lead_id !== leadId);
     return true;
   } catch (error) {
     console.warn('[Leads] status update failed', error);
-    alert('Не удалось обновить статус заявки на сервере. Обновите список и попробуйте ещё раз.');
+    if (!options.silent) alert('Сервер не ответил. Проверьте связь и попробуйте ещё раз.');
     return false;
   }
 }
@@ -20615,7 +20627,15 @@ async function markLeadProcessed(leadId, statusCode = 'CONTACTED') {
   } catch (e) { console.warn('markLeadProcessed failed', e); }
   state.leadsCache = (state.leadsCache || []).filter(l => l.id !== leadId);
 }
+const convertingLeadIds = new Set();
 async function convertLead(leadId) {
+  // A double click while the first conversion runs is ignored.
+  if (convertingLeadIds.has(leadId)) return;
+  convertingLeadIds.add(leadId);
+  try { await convertLeadOnce(leadId); }
+  finally { convertingLeadIds.delete(leadId); }
+}
+async function convertLeadOnce(leadId) {
   const l = (state.leadsCache || []).find(x => x.id === leadId) || canonicalLeadRow(leadId);
   if (!l) return;
   const src = LEAD_SOURCES[l.source] || { crmSource: 'other' };
@@ -20626,7 +20646,9 @@ async function convertLead(leadId) {
   // if the claim fails (network, or another manager took it) no client or order
   // is created, so a retry or a second manager can never produce a duplicate.
   const canonical = Boolean(canonicalLeadRow(leadId));
+  const previousStatus = canonicalLeadRow(leadId)?.statusCode || 'NEW_LEAD';
   if (canonical && !(await setCanonicalLeadStatus(leadId, 'CONTACTED'))) return;
+  const createdClient = !client;
   if (!client) {
     const identity = clientIdentityFromLead(l);
     client = {
@@ -20656,7 +20678,23 @@ async function convertLead(leadId) {
   };
   db.orders.push(o);
   save();
-  if (!canonical) await markLeadProcessed(leadId);
+  if (canonical) {
+    // The lead may leave the shared inbox only together with a project that the
+    // server has confirmed. If the save fails, nothing stays half-done: the new
+    // order (and client) are rolled back and the lead returns to the inbox.
+    if (!(await cloudPersistConfirmed())) {
+      db.orders = db.orders.filter(order => order.id !== o.id);
+      if (createdClient) db.clients = db.clients.filter(item => item.id !== client.id);
+      localStorage.setItem('rolanpro_crm', JSON.stringify(db));
+      await setCanonicalLeadStatus(leadId, previousStatus, ['CONTACTED'], { silent: true });
+      fetchCanonicalLeads({ renderIfVisible: true });
+      render();
+      alert('Проект не сохранился на сервере — заявка возвращена в «Новые лиды». Проверьте связь и попробуйте ещё раз.');
+      return;
+    }
+  } else {
+    await markLeadProcessed(leadId);
+  }
   openOrder(o.id);
 }
 async function dismissLead(leadId) {

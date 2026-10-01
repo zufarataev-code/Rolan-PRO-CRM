@@ -124,7 +124,18 @@ test("a website lead is claimed on the server before the client and order are wr
   assert.ok(claim < convert.indexOf("db.clients.push(client)"), "claim before the client is written");
   assert.ok(claim < convert.indexOf("db.orders.push(o)"), "claim before the order is written");
   assert.match(convert, /if \(canonical && !\(await setCanonicalLeadStatus\(leadId, 'CONTACTED'\)\)\) return;/);
-  assert.match(convert, /if \(!canonical\) await markLeadProcessed\(leadId\);/);
+  // One run per lead; the lead leaves the inbox only with a server-confirmed project,
+  // otherwise the order/client are rolled back and the lead is released.
+  assert.match(convert, /if \(convertingLeadIds\.has\(leadId\)\) return;/);
+  assert.match(convert, /if \(!\(await cloudPersistConfirmed\(\)\)\) \{/);
+  assert.match(convert, /db\.orders = db\.orders\.filter\(order => order\.id !== o\.id\);/);
+  assert.match(convert, /await setCanonicalLeadStatus\(leadId, previousStatus, \['CONTACTED'\], \{ silent: true \}\);/);
+  assert.ok(convert.indexOf("cloudPersistConfirmed()") < convert.indexOf("openOrder(o.id)"));
+  // Status changes are compare-and-set on the server.
+  assert.match(html, /body: JSON\.stringify\(\{ pipeline_status_code: statusCode, expected_status_codes: expectedStatusCodes \}\)/);
+  const route = readFileSync("app/api/v1/leads/[leadId]/route.ts", "utf8");
+  assert.match(route, /pipeline_status: \{ status_code: \{ in: expectedStatusCodes \} \}/);
+  assert.match(route, /"lead_status_changed"/);
 });
 
 test("creating a project keeps «Разовый клиент» for a company", () => {

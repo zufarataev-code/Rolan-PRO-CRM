@@ -450,6 +450,14 @@ Owner decision in chat on 2026-09-30 (chosen over waiting for the relational ins
 - Each such feature keeps server-side authority where it already exists (roles, groups, rates and approvals live in PostgreSQL; the legacy payload only mirrors them) and is listed for migration in the installation/payment stage.
 - Everything else remains frozen as decided on 2026-09-29.
 
+## 2026-10-01 — Exception to the legacy freeze: installer analytics and client identity fields
+
+Owner decision in chat on 2026-10-01 (asked whether to wait for the relational stages, chose to build now). Amends item 1 of "2026-09-29 — CRM core consolidation", like the 2026-09-30 exception.
+
+- Allowed in the legacy HTML until their stages move to PostgreSQL: the installer «Аналитика по объектам» view (PR #282; it reads legacy orders, the only place installation data exists today) and the client identity fields — B2C first/last name; B2B company, company type, representative and job title; explicit «Постоянный партнёр» (PR #284; mirrored in the PostgreSQL `leads` / `clients` columns).
+- Migration: the analytics moves with the installation and payment stage (relational installer jobs and payroll accruals); client identity moves with the lead/client stage.
+- Everything else remains frozen as decided on 2026-09-29.
+
 ## Changing a decision
 
 ## 2026-09-30 — Surveyor mobile navigation is organized around field work
