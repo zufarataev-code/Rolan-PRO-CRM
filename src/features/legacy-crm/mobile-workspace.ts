@@ -339,33 +339,33 @@ const MOBILE_WORKSPACE_PATCH = `
       overflow: hidden !important;
     }
 
-    .dispatch-week-scroll {
+    .dispatch-week-head + .dispatch-week-scroll {
       width: 100% !important;
       max-width: 100% !important;
       overflow-x: hidden !important;
     }
 
-    .dispatch-time-gutter .dispatch-hour-label {
+    .dispatch-week-head + .dispatch-week-scroll .dispatch-time-gutter .dispatch-hour-label {
       right: .2rem !important;
       font-size: .56rem !important;
     }
 
-    .dispatch-event {
+    .dispatch-week-head + .dispatch-week-scroll .dispatch-event {
       padding: .16rem .14rem !important;
       border-left-width: 3px !important;
     }
 
-    .dispatch-event-time {
+    .dispatch-week-head + .dispatch-week-scroll .dispatch-event-time {
       font-size: .55rem !important;
       line-height: 1 !important;
     }
 
-    .dispatch-event-title {
+    .dispatch-week-head + .dispatch-week-scroll .dispatch-event-title {
       font-size: .57rem !important;
       line-height: 1.04 !important;
     }
 
-    .dispatch-event-meta {
+    .dispatch-week-head + .dispatch-week-scroll .dispatch-event-meta {
       display: none !important;
     }
 
