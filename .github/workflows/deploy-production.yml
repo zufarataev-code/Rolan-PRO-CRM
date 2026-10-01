@@ -56,7 +56,65 @@ jobs:
           git fetch --prune origin main
           fetched_sha="$(git rev-parse origin/main)"
           test "$fetched_sha" = "$EXPECTED_SHA"
+
+          # Database backup BEFORE the new release can run migrations.
+          # Any failure here stops the deploy. Keeps the last 30 verified backups.
+          # Credentials come from the canonical env file used by
+          # deploy/watch-production.sh for every release.
+          backup_dir=/home/runcloud/backups/crm-db
+          install -d -m 700 "$backup_dir"
+          export PATH="/home/runcloud/rolanpro-runtime/bin:$PATH"
+          set -a
+          . /home/runcloud/.rolanpro-crm.env.production.local
+          set +a
+          # Connection details go to libpq through the environment (readable
+          # only by this user), never through argv where `ps` shows them.
+          eval "$(python3 -c '
+          import os, shlex, urllib.parse as u
+          p = u.urlsplit(os.environ["DATABASE_URL"])
+          q = dict(u.parse_qsl(p.query))
+          vals = {"PGHOST": p.hostname or q.get("host", ""), "PGPORT": str(p.port or ""), "PGUSER": u.unquote(p.username or ""), "PGPASSWORD": u.unquote(p.password or ""), "PGDATABASE": u.unquote(p.path.lstrip("/"))}
+          for k, v in vals.items():
+              if v: print("export %s=%s" % (k, shlex.quote(v)))
+          ')"
+          unset DATABASE_URL
+          test -n "${PGHOST:-}" && test -n "${PGDATABASE:-}"
+          backup_name="rolanpro-$(date -u +%Y%m%dT%H%M%SZ)-${EXPECTED_SHA}.dump"
+          partial="$backup_dir/.partial-$backup_name"
+          trap 'rm -f "$partial"' EXIT
+          pg_dump --format=custom --no-owner --no-privileges --file="$partial"
+          chmod 600 "$partial"
+          test -s "$partial"
+          pg_restore --list "$partial" > /dev/null
+          # Only a verified dump gets the final name counted by retention.
+          mv "$partial" "$backup_dir/$backup_name"
+          trap - EXIT
+          echo "Database backup: $backup_dir/$backup_name ($(du -h "$backup_dir/$backup_name" | cut -f1))"
+          ls -1t "$backup_dir"/rolanpro-*.dump | tail -n +31 | xargs -r rm -f
+
+          previous_sha="$(git rev-parse HEAD)"
           git merge --ff-only "$fetched_sha"
+
+          # A running bash process keeps the watcher code it started with. When
+          # this commit changes the watcher, stop it now (before it notices the
+          # new commit): supervisor (autorestart=true) starts the new script,
+          # which then builds this commit with the new steps — including the
+          # backup right before migrations. Brief restart of the current release.
+          if ! git diff --quiet "$previous_sha" "$fetched_sha" -- deploy/watch-production.sh; then
+            watcher_pids="$(pgrep -u runcloud -f "deploy/watch-production.sh" || true)"
+            if [ -n "$watcher_pids" ]; then
+              echo "Watcher script changed; restarting watcher ($watcher_pids) via supervisor"
+              kill -TERM $watcher_pids
+              for attempt in $(seq 1 30); do
+                sleep 2
+                new_pids="$(pgrep -u runcloud -f "deploy/watch-production.sh" || true)"
+                if [ -n "$new_pids" ] && [ "$new_pids" != "$watcher_pids" ]; then
+                  echo "Watcher restarted: $new_pids"
+                  break
+                fi
+              done
+            fi
+          fi
           REMOTE
 
       - name: Wait for server deployment
