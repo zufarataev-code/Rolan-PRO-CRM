@@ -721,3 +721,19 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Responsive verification: the four primary Surveyor screens were visually reviewed at 390×844. Tablet 1024×768 and desktop 1440×900 have no document-level horizontal overflow. The approved calm navy/blue field-app visual language was applied without changing desktop business logic or authorization.
 - Automated verification: 34 targeted tests passed for mobile parity, Surveyor v4, measurement, field workspace, and dispatch calendar/map; the legacy inline script compiles; `git diff --check` passes. The repository-wide test command remains unstable on the local Node 24 machine because its unbounded parallel `tsx/esbuild` launch stops shared transform services; CI on Node 20 is the release gate for the full suite, TypeScript, and production build.
 - Release branch: `codex/surveyor-mobile-v4-release`, rebased at the Git object level onto current `main` `acd2e60`. Production deployment proceeds only after the required PR CI succeeds and the PR is merged into `main`.
+
+## 2026-10-01 handoff — «Специалист по установке» and per-object analytics (PR #282)
+
+- Owner decision (DECISIONS.md «Installation job titles»): «монтажник» is not used anywhere; regular installer = «Специалист по установке», senior = «Руководитель отдела монтажа». Internal codes (`INSTALLER` / `installer`) unchanged.
+- Renamed in the legacy CRM, new screens, `ROLE_NAMES` (seeded into `roles.name_ru`), `data/legacy-crm-empty.json`, and stored SMS templates via data migration `20261001130000_installer_title_in_sms_templates` (idempotent, revision bump).
+- New installer view «Аналитика»: period filter; objects finished, own sq ft, own earnings, pending earnings; sq ft by film type; one card per object. Measured windows are shared by the order crew; quick lines count only for the installers assigned to each line (same rule as `orderQuickInstallerPayoutForUser`). No client price, cost or margin.
+- Verification: full unit suite and `tsc` green; `installer-analytics.test.ts` runs the calculation in a VM; migration checked twice on a scratch database.
+- Production build: CI job «Test, typecheck, and build» (`npm run build`) runs on every push of PR #282 and is green; the clean-database + E2E gate is green too.
+- Not done: the lead role «Руководитель отдела монтажа» lives in the #275–#277 stack and must adopt the new titles when that stack is rebuilt on top of Codex PR #281.
+- Next action: Codex 👍, Owner «да», merge, deploy (pre-migration backup is automatic).
+
+## 2026-10-01 handoff — CRM no longer jumps after every click (PR #285, deployed 03:56 UTC)
+
+- Cause: seven DOM patches injected by `/legacy-crm` waited for the next animation frame, so the unpatched page was painted first (menu items moved 52 px, the top bar resized).
+- Fix: `src/features/legacy-crm/before-paint.ts` (`beforePaint`: microtask before paint, runaway guard → next frame). All patches use it; new patches must too. Client list no longer crashes on a client without a source.
+- Verified locally with a `layout-shift` observer (0 shifts on menu clicks) and in production (deploy 06a58ab healthy).

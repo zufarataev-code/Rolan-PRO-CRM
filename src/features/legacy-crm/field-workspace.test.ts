@@ -180,3 +180,20 @@ test("an employee with surveyor and installer cards keeps both roles in their wo
   assert.equal(roles.u_z1, "measurer");
   assert.equal(roles.u_i1, "installer");
 });
+
+test("an installer receives the owner's installer rate directory; a surveyor does not", () => {
+  const payload = {
+    users: [{ id: "u_i1", role: "installer", name: "Installer" }],
+    orders: [],
+    settings: {
+      companyName: "Rolan PRO",
+      installerRates: { serviceTypes: { SMART_FILM: 6, SAFETY_FILM: 3 }, workTypes: { connect: 50 } },
+      pricePerM2: 99,
+    },
+  };
+  const installer = createFieldWorkspace(payload, [ROLE_CODES.INSTALLER], ["u_i1"]);
+  assert.deepEqual(installer.settings.installerRates, { serviceTypes: { SMART_FILM: 6, SAFETY_FILM: 3 }, workTypes: { connect: 50 } });
+  assert.equal("pricePerM2" in installer.settings, false, "client prices stay hidden");
+  const surveyor = createFieldWorkspace(payload, [ROLE_CODES.CONSULTANT], ["u_z1"]);
+  assert.equal("installerRates" in surveyor.settings, false);
+});

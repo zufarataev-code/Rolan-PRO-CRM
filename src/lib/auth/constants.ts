@@ -26,7 +26,7 @@ export const ROLE_NAMES = {
     en: "Consultant / Surveyor",
   },
   [ROLE_CODES.INSTALLER]: {
-    ru: "Монтажник",
+    ru: "Специалист по установке",
     en: "Installer",
   },
 } as const;

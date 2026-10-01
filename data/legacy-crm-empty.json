@@ -1466,7 +1466,7 @@
         "act_signed": "RolanPRO: Акт по {orderNo} подписан. Спасибо!",
         "completed": "RolanPRO: Заказ {orderNo} завершён. Реферальная программа: {portalUrl}",
         "review_request": "RolanPRO: Будем благодарны за отзыв о {orderNo}: {portalUrl}",
-        "installation_accepted": "RolanPRO: Монтажник принял ваш заказ {orderNo} и готовится к выезду. 👷",
+        "installation_accepted": "RolanPRO: Специалист по установке принял ваш заказ {orderNo} и готовится к выезду. 👷",
         "installation_en_route": "RolanPRO: Бригада выехала к вам по заказу {orderNo}! 🚗 Скоро будем."
       }
     },
