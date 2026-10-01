@@ -456,6 +456,12 @@
     animation: slideUp 0.25s cubic-bezier(.4,0,.2,1);
   }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  /* Re-renders keep already-visible modals and cards still (see renderNow). */
+  body.rp-keep-modal .modal-backdrop,
+  body.rp-keep-modal .modal-content,
+  body.rp-keep-modal .order-workspace-modal,
+  body.rp-keep-view .kanban-card,
+  body.rp-keep-view .kanban-fullscreen { animation: none !important; }
   @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   /* === Timeline === */
   .timeline-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand-blue); flex-shrink: 0; margin-top: 6px; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
@@ -5820,6 +5826,145 @@
   @media (prefers-reduced-motion: reduce) {
     .order-workspace-tile { transition: none; }
     .order-workspace-modal { animation: none; }
+  }
+
+  /* === Field app v4: one canonical CRM, mobile-first presentation === */
+  .field-day-hero {
+    position: relative;
+    overflow: hidden;
+    padding: 1.15rem;
+    border-radius: 20px;
+    background: linear-gradient(145deg, #071b2f 0%, #123f62 58%, #168bbc 100%);
+    color: #fff;
+    box-shadow: 0 16px 34px rgba(16, 37, 63, .2);
+  }
+  .field-day-hero::after {
+    content: '';
+    position: absolute;
+    width: 190px;
+    height: 190px;
+    right: -72px;
+    top: -86px;
+    border: 34px solid rgba(255,255,255,.08);
+    border-radius: 50%;
+  }
+  .field-day-hero > * { position: relative; z-index: 1; }
+  .field-day-overline {
+    color: #8be4ff;
+    font-size: .69rem;
+    font-weight: 900;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .field-day-hero h2 {
+    margin: .45rem 0 .25rem;
+    font-size: clamp(1.35rem, 5vw, 1.9rem);
+    line-height: 1.08;
+    letter-spacing: -.035em;
+  }
+  .field-day-hero p { margin: 0; color: #c8dceb; font-size: .82rem; }
+  .field-day-next {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .75rem;
+    margin-top: 1rem;
+    padding: .8rem;
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 15px;
+    background: rgba(4, 20, 35, .4);
+    backdrop-filter: blur(12px);
+  }
+  .field-day-time { color: #7fe0ff; font-size: 1rem; font-weight: 900; }
+  .field-day-next strong, .field-day-next span { display: block; min-width: 0; }
+  .field-day-next strong { font-size: .84rem; }
+  .field-day-next span { margin-top: .15rem; color: #bcd0df; font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .field-day-next button { min-height: 40px; border: 0; border-radius: 11px; padding: 0 .8rem; background: #2aa9e2; color: #fff; font-size: .74rem; font-weight: 850; }
+  .field-metric-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: .8rem;
+    border: 1px solid #dce5ee;
+    border-radius: 15px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .field-metric-strip > div { padding: .75rem; border-right: 1px solid #e4ebf2; }
+  .field-metric-strip > div:last-child { border-right: 0; }
+  .field-metric-strip small { display: block; color: #718096; font-size: .67rem; }
+  .field-metric-strip strong { display: block; margin-top: .2rem; color: #10253f; font-size: 1.08rem; }
+  .field-section-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: 1.15rem .1rem .55rem; }
+  .field-section-head h3 { margin: 0; font-size: .9rem; }
+  .field-section-head button { border: 0; background: transparent; color: #168bbc; font-size: .75rem; font-weight: 800; }
+  .field-task-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: .75rem; }
+  .field-task-card { border: 1px solid #dce5ee; border-radius: 17px; background: #fff; overflow: hidden; box-shadow: 0 2px 10px rgba(16,37,63,.04); }
+  .field-task-card-main { padding: .9rem; }
+  .field-task-card .field-task-kicker { color: #168bbc; font-size: .67rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+  .field-task-card h3 { margin: .25rem 0 .3rem; color: #102033; font-size: 1rem; }
+  .field-task-card .field-task-meta { color: #66778d; font-size: .76rem; line-height: 1.45; }
+  .field-task-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px,1fr)); border-top: 1px solid #e2e8f0; background: #f8fafc; }
+  .field-task-actions > * { min-width: 0; min-height: 48px; display: grid; place-items: center; padding: .4rem; border: 0; border-right: 1px solid #e2e8f0; border-radius: 0; background: transparent; color: #334155; font-size: .7rem; font-weight: 800; text-align: center; }
+  .field-task-actions > *:last-child { border-right: 0; }
+  .field-task-actions .field-primary-action { background: #10253f; color: #fff; }
+  .field-task-compose { border: 1px solid #dce5ee; border-radius: 17px; background: #fff; overflow: hidden; }
+  .field-task-compose > summary { padding: .9rem 1rem; cursor: pointer; color: #10253f; font-weight: 850; list-style: none; }
+  .field-task-compose > summary::-webkit-details-marker { display: none; }
+  .field-task-compose > summary::after { content: '+'; float: right; color: #168bbc; font-size: 1.15rem; }
+  .field-task-compose[open] > summary::after { content: '−'; }
+  .field-task-compose-body { padding: 0 1rem 1rem; }
+  .field-task-center .field-task-row { border: 1px solid #dce5ee; border-radius: 14px; background: #fff; }
+
+  @media (max-width: 840px) {
+    .app-shell.role-measurer,
+    .app-shell.role-installer { background: #f4f8fb; }
+    .app-shell.role-measurer .app-topbar,
+    .app-shell.role-installer .app-topbar {
+      min-height: 64px;
+      padding: calc(.55rem + env(safe-area-inset-top)) .85rem .55rem;
+      border-bottom: 1px solid #dce5ee;
+      background: rgba(255,255,255,.94);
+      backdrop-filter: blur(18px);
+    }
+    .app-shell.role-measurer .topbar-eyebrow,
+    .app-shell.role-installer .topbar-eyebrow { color: #168bbc; font-size: .62rem; letter-spacing: .11em; }
+    .app-shell.role-measurer .topbar-title h1,
+    .app-shell.role-installer .topbar-title h1 { font-size: 1.08rem; }
+    .app-shell.role-measurer .topbar-subtitle,
+    .app-shell.role-installer .topbar-subtitle,
+    .app-shell.role-measurer .topbar-actions,
+    .app-shell.role-installer .topbar-actions { display: none; }
+    .app-shell.role-measurer .app-content,
+    .app-shell.role-installer .app-content { padding: .8rem .85rem calc(98px + env(safe-area-inset-bottom)); }
+    .app-shell.role-measurer .mobile-primary-nav,
+    .app-shell.role-installer .mobile-primary-nav {
+      height: calc(74px + env(safe-area-inset-bottom));
+      padding: 6px 5px calc(7px + env(safe-area-inset-bottom));
+      border-top: 1px solid #dce5ee;
+      background: rgba(255,255,255,.95);
+      box-shadow: 0 -10px 30px rgba(16,37,63,.08);
+      backdrop-filter: blur(22px);
+    }
+    .app-shell.role-measurer .mobile-primary-nav button,
+    .app-shell.role-installer .mobile-primary-nav button { min-height: 54px; border-radius: 13px; color: #728197; font-size: .66rem; font-weight: 800; }
+    .app-shell.role-measurer .mobile-primary-nav button.active,
+    .app-shell.role-installer .mobile-primary-nav button.active { background: #e8f7fd; color: #1189bc; }
+    .field-task-grid { grid-template-columns: 1fr; }
+    .field-day-next { grid-template-columns: auto minmax(0,1fr); }
+    .field-day-next button { grid-column: 1 / -1; width: 100%; }
+    .field-metric-strip > div { padding: .62rem; }
+    .field-task-card .tag { white-space: normal; }
+    .field-task-actions { grid-template-columns: repeat(auto-fit, minmax(64px,1fr)); }
+    .field-task-actions > * { font-size: .65rem; overflow-wrap: anywhere; }
+    .field-calendar-mobile.field-calendar-schedule .dispatch-map-pane { display: none !important; }
+    .field-calendar-mobile.field-calendar-map .dispatch-calendar-pane { display: none !important; }
+    .field-calendar-mobile.field-calendar-map .dispatch-map-pane { display: block !important; min-height: calc(100dvh - 245px); }
+    .field-calendar-mobile.field-calendar-map .dispatch-map-canvas { min-height: calc(100dvh - 245px) !important; }
+    .field-calendar-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: .65rem; padding: 4px; border: 1px solid #dce5ee; border-radius: 12px; background: #fff; }
+    .field-calendar-toggle button { min-height: 39px; border: 0; border-radius: 9px; background: transparent; color: #66778d; font-size: .75rem; font-weight: 850; }
+    .field-calendar-toggle button.active { background: #10253f; color: #fff; }
+    .view-calendar.role-measurer .calendar-toolbar-secondary > .tag { display: none; }
+    .view-calendar.role-measurer .calendar-period-title { font-size: .92rem; text-transform: capitalize; }
+    .view-calendar.role-measurer .calendar-period-count { font-size: .7rem; }
   }
   /* === Owner settings directory === */
   .settings-hub { max-width: 980px; }
@@ -15735,9 +15880,15 @@ function orderMeasurementCompletionIssues(o) {
   if (missingScopes.length) issues.push('Добавьте размеры для каждой услуги: ' + missingScopes.map(key => measureScopeInfo(key).short).join(', '));
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('заполните размеры и количество для всех окон');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('выберите плёнку со склада для каждого окна');
-  issues.push(...managerSolarMeasurementIssues(o));
-  issues.push(...managerSmartMeasurementIssues(o));
   return issues;
+}
+
+// Technical survey details (facade side, inside/outside, access, glass type,
+// Smart power supply and wire route). A manager can price and send a KP from
+// the customer's own dimensions; these details are confirmed by the surveyor
+// and are required only before installation is scheduled.
+function orderTechnicalMeasurementIssues(o) {
+  return [...managerSolarMeasurementIssues(o), ...managerSmartMeasurementIssues(o)];
 }
 
 function publishedPremiumProposalForOrder(orderId) {
@@ -15764,6 +15915,7 @@ function orderWorkflowTransitionIssues(o, newStatus) {
     if (!publishedPremiumProposalForOrder(o.id)) issues.push('сначала сформируйте и отправьте КП');
   }
   if (newStatus === 'installation_scheduled') {
+    issues.push(...orderTechnicalMeasurementIssues(o));
     if (!(o.installerIds || []).length) issues.push('назначьте монтажников');
     if (!o.installationAt) issues.push('укажите дату и время монтажа');
   }
@@ -16487,6 +16639,7 @@ function restoreRenderPosition(snapshot) {
 }
 
 let __lastRenderedHtml = '';
+let __lastRenderedView = null;
 let __pendingRenderPosition = null;
 
 function preservePositionForNextRender(snapshot = captureRenderPosition()) {
@@ -16560,8 +16713,16 @@ function renderNow() {
     return;
   }
 
+  // Every change rebuilds the page. Entry animations (modal fade + 20px
+  // slide, kanban card rise) must play only when something first appears,
+  // not on every save — replaying them made the CRM jump after each action.
+  const hadModal = Boolean(root.querySelector('.modal-backdrop'));
+  const sameView = __lastRenderedView === state.view;
   __lastRenderedHtml = html;
   root.innerHTML = html;
+  document.body.classList.toggle('rp-keep-modal', hadModal);
+  document.body.classList.toggle('rp-keep-view', sameView);
+  __lastRenderedView = state.view;
   attachGlobalListeners();
   restoreRenderPositionStable(snapshot);
 }
@@ -16776,9 +16937,9 @@ function renderAppShell() {
     ['calendar', 'Календарь', '□'],
   ] : (role === 'measurer') ? [
     ['dashboard', 'Сегодня', '⌂'],
-    ['canonicalProjects', 'Проекты', '▣'],
-    ['measurements', 'Замеры', '⌗'],
     ['calendar', 'Календарь', '□'],
+    ['tasks', 'Мои задачи', '✓'],
+    ['measurements', 'Замеры', '⌗'],
   ] : (role === 'installer') ? [
     ['dashboard', 'Сегодня', '⌂'],
     ['installations', 'Работы', '▣'],
@@ -16792,7 +16953,7 @@ function renderAppShell() {
   const canSearch = role === 'manager' || role === 'owner';
 
   return `
-  <div class="app-shell ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'mobile-sidebar-open' : ''}">
+  <div class="app-shell role-${academyEsc(role)} view-${academyEsc(state.view)} ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'mobile-sidebar-open' : ''}">
     <button type="button" class="mobile-sidebar-scrim" onclick="closeMobileSidebar()" aria-label="Закрыть меню"></button>
     <!-- Sidebar -->
     <aside class="app-sidebar">
@@ -16902,7 +17063,7 @@ function headerTitle() {
     case 'clients': return T('clients');
     case 'paymentsdue': return '💵 Ожидают оплаты';
     case 'inventory': return '🎞 Склад плёнок';
-    case 'tasks': return '✅ Задачи';
+    case 'tasks': return u?.role === 'measurer' || u?.role === 'installer' ? 'Мои задачи' : '✅ Задачи';
     case 'academy': return '🧭 Академия и процессы';
     case 'leads': return '📥 Новые лиды';
     case 'coldcalls': return '📞 Холодные звонки';
@@ -19948,7 +20109,7 @@ function renderTasksView() {
     // Candidates for "исполнитель": the assigned team, or (if no team set) everyone
     const candidates = team.length ? team : db.users;
     return `
-    <div class="flex items-start gap-3 p-3 rounded-lg ${t.status==='done' ? 'bg-gray-50 opacity-60' : overdue ? 'bg-red-50' : 'bg-white border'}">
+    <div class="field-task-row flex items-start gap-3 p-3 ${t.status==='done' ? 'bg-gray-50 opacity-60' : overdue ? 'bg-red-50' : ''}">
       <input type="checkbox" ${t.status==='done'?'checked':''} onchange="toggleTaskDone('${t.id}')" class="mt-1 w-5 h-5">
       <div class="flex-1 min-w-0">
         <div class="text-sm font-medium ${t.status==='done'?'line-through text-gray-400':''}">${t.title}</div>
@@ -19976,8 +20137,11 @@ function renderTasksView() {
   }
 
   return `
-  <div class="card mb-4">
-    <h3 class="font-semibold mb-3">➕ Новая задача</h3>
+  <div class="field-task-center">
+  <div class="field-section-head"><h3>${isManager ? 'Задачи команды' : 'Мои задачи'}</h3><button type="button" onclick="selectAppView('calendar')">Календарь →</button></div>
+  <details class="field-task-compose mb-4" ${isManager ? 'open' : ''}>
+    <summary>Новая задача</summary>
+    <div class="field-task-compose-body">
     <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
       <input id="nt-title" placeholder="Например: Позвонить клиенту / Купить плёнку" class="md:col-span-2">
       <input id="nt-date" type="date" value="${todayStr}">
@@ -20004,7 +20168,8 @@ function renderTasksView() {
       <input id="nt-notes" placeholder="Заметка (необязательно)" class="md:col-span-2">
     </div>
     <button class="btn-primary mt-3" onclick="addTask()">Добавить задачу</button>
-  </div>
+    </div>
+  </details>
 
   ${buckets.overdue.length ? `
   <div class="card mb-4 border-l-4 border-red-500">
@@ -20033,6 +20198,7 @@ function renderTasksView() {
     <h3 class="font-semibold mb-2 text-gray-500">✅ Выполнено (${done.length})</h3>
     <div class="space-y-2">${done.slice(0,20).map(taskRow).join('')}</div>
   </div>` : ''}
+  </div>
   `;
 }
 
@@ -21255,23 +21421,55 @@ async function testLeadBackend() {
 // ---------- MEASURER VIEWS ----------
 function renderMeasurerDashboard() {
   const u = currentUser();
-  const myTasks = db.orders.filter(o => o.measurerId === u.id && ['measurement_scheduled','measurement_done'].includes(o.status))
-                  .sort((a,b) => (a.measurementAt||'').localeCompare(b.measurementAt||''));
+  const now = new Date();
+  const todayKey = now.toISOString().slice(0,10);
+  const assigned = db.orders.filter(o => o.measurerId === u.id);
+  const myTasks = assigned.filter(o => ['measurement_scheduled','measurement_done'].includes(o.status))
+    .sort((a,b) => (a.measurementAt||'9999').localeCompare(b.measurementAt||'9999'));
+  const todayTasks = myTasks.filter(o => o.measurementAt?.slice(0,10) === todayKey && !o.measurementDoneAt);
+  const nextTask = todayTasks.find(o => new Date(o.measurementAt) >= now) || todayTasks[0] || myTasks.find(o => !o.measurementDoneAt) || null;
+  const nextClient = nextTask ? getClient(nextTask.clientId) : null;
+  const openPersonalTasks = (db.tasks || []).filter(t => t.status !== 'done' && ((t.teamIds || []).includes(u.id) || t.responsibleId === u.id));
+  const attentionCount = myTasks.filter(o => o.status === 'measurement_scheduled' && !o.measurementAcceptedAt).length + openPersonalTasks.filter(t => t.dueAt && t.dueAt.slice(0,10) <= todayKey).length;
+  const completedThisMonth = assigned.filter(o => o.measurementDoneAt && new Date(o.measurementDoneAt).getMonth()===now.getMonth() && new Date(o.measurementDoneAt).getFullYear()===now.getFullYear()).length;
+  const route = buildMeasurerRouteBar(u);
   return `
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-    <div class="card"><div class="text-sm text-gray-500">${T('pendingTasks')}</div><div class="text-3xl font-bold">${myTasks.filter(t=>t.status==='measurement_scheduled').length}</div></div>
-    <div class="card"><div class="text-sm text-gray-500">${T('measurementDone')}</div><div class="text-3xl font-bold text-green-600">${db.orders.filter(o=>o.measurerId===u.id && o.measurementDoneAt).length}</div></div>
-    <div class="card"><div class="text-sm text-gray-500">${T('thisMonth')}</div><div class="text-3xl font-bold text-blue-600">${db.orders.filter(o=>o.measurerId===u.id && o.measurementDoneAt && new Date(o.measurementDoneAt).getMonth()===new Date().getMonth()).length}</div></div>
+  <section class="field-day-hero" aria-label="Рабочий день замерщика">
+    <div class="field-day-overline">${academyEsc(u.name)} · замерщик · online</div>
+    <h2>${todayTasks.length ? `Сегодня ${todayTasks.length} ${todayTasks.length === 1 ? 'выезд' : 'выезда'}` : 'Сегодня выездов нет'}</h2>
+    <p>${attentionCount ? `Требует внимания: ${attentionCount}` : 'Все срочные действия под контролем'}</p>
+    ${nextTask ? `
+      <div class="field-day-next">
+        <div class="field-day-time">${new Date(nextTask.measurementAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div>
+        <div>
+          <strong>${academyEsc(nextClient?.name || nextTask.number)}</strong>
+          <span>${academyEsc(orderAddress(nextTask, nextClient) || 'Адрес не указан')}</span>
+        </div>
+        <button type="button" onclick="openMeasurerV25ForOrder('${nextTask.id}')">Продолжить замер</button>
+      </div>` : `
+      <div class="field-day-next">
+        <div class="field-day-time">✓</div>
+        <div><strong>Рабочий день свободен</strong><span>Новые назначения появятся здесь автоматически</span></div>
+        <button type="button" onclick="selectAppView('calendar')">Открыть календарь</button>
+      </div>`}
+  </section>
+
+  <div class="field-metric-strip" aria-label="Сводка замерщика">
+    <div><small>Сегодня</small><strong>${todayTasks.length}</strong></div>
+    <div><small>Мои задачи</small><strong>${openPersonalTasks.length}</strong></div>
+    <div><small>За месяц</small><strong>${completedThisMonth}</strong></div>
   </div>
-  <h3 class="font-semibold mb-3">${T('myTasks')}</h3>
-  ${renderMeasurerList(myTasks)}
+
+  ${route}
+  <div class="field-section-head"><h3>Ближайшие замеры</h3><button type="button" onclick="selectAppView('measurements')">Все замеры →</button></div>
+  ${renderMeasurerList(myTasks.filter(o => !o.measurementDoneAt).slice(0,4))}
   `;
 }
 function renderMeasurerTasks() {
   const u = currentUser();
   const tasks = db.orders.filter(o => o.measurerId === u.id)
                 .sort((a,b) => (b.createdAt).localeCompare(a.createdAt));
-  return buildMeasurerRouteBar(u) + renderMeasurerList(tasks);
+  return `<div class="field-section-head"><h3>Мои замеры</h3><button type="button" onclick="selectAppView('calendar')">Календарь →</button></div>` + buildMeasurerRouteBar(u) + renderMeasurerList(tasks);
 }
 function buildMeasurerRouteBar(u) {
   const today = new Date().toISOString().slice(0,10);
@@ -21296,19 +21494,20 @@ function buildMeasurerRouteBar(u) {
 function renderMeasurerList(tasks) {
   if (tasks.length === 0) return `<div class="card text-center text-gray-500">${T('noPendingWork')}</div>`;
   return `
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  <div class="field-task-grid">
     ${tasks.map(o => {
       const c = getClient(o.clientId);
       const accepted = !!o.measurementAcceptedAt;
       const scheduled = o.status === 'measurement_scheduled';
       return `
-      <div class="card">
+      <article class="field-task-card">
+        <div class="field-task-card-main">
         <div class="flex items-start justify-between">
           <div>
-            <div class="text-xs text-gray-500">${o.number}</div>
-            <div class="font-semibold mt-1">${c.name}</div>
-            <div class="text-sm text-gray-600 mt-1">${addressAnchor(orderAddress(o, c))}</div>
-            <div class="text-sm text-gray-600">📞 ${c.phone}</div>
+            <div class="field-task-kicker">${academyEsc(o.number)}</div>
+            <h3>${academyEsc(c?.name || 'Клиент')}</h3>
+            <div class="field-task-meta">${addressAnchor(orderAddress(o, c) || 'Адрес не указан')}</div>
+            <div class="field-task-meta">${academyEsc(c?.phone || 'Телефон не указан')}</div>
           </div>
           <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
         </div>
@@ -21324,15 +21523,18 @@ function renderMeasurerList(tasks) {
           <span class="text-gray-500">${T('area')}:</span>
           <span class="font-semibold">${orderArea(o).toFixed(2)} ${T('m2')}</span>
         </div>
-        <div class="mt-3 flex gap-2 flex-wrap">
-          ${scheduled && !accepted ? `<button class="btn-primary bg-emerald-600 hover:bg-emerald-700" onclick="acceptMeasurementTask('${o.id}', true)">✓ Принять</button>` : ''}
-          <button class="btn-primary flex-1" onclick="openMeasurerV25ForOrder('${o.id}')">📐 Открыть замер</button>
-          <button class="btn-ghost" onclick="openOrder('${o.id}')">Карточка</button>
-          <button class="btn-ghost" onclick="startCall('${c.phone}','${c.id}','${o.id}')">📞</button>
-          <a class="btn-ghost" href="${whatsappLink(c.phone, 'Здравствуйте, я замерщик RolanPRO, еду к вам на замер.')}" target="_blank">💬</a>
-          ${scheduled && accepted ? `<button class="btn-primary bg-blue-600 hover:bg-blue-700" onclick="changeStatus('${o.id}','measurement_done')">✓ Завершить</button>` : ''}
         </div>
-      </div>`;
+        </div>
+        <div class="field-task-actions">
+          ${scheduled && !accepted
+            ? `<button type="button" onclick="acceptMeasurementTask('${o.id}', true)">Принять</button>`
+            : `<button type="button" onclick="openOrder('${o.id}')">Проект</button>`}
+          <button type="button" class="field-primary-action" onclick="openMeasurerV25ForOrder('${o.id}')">Открыть замер</button>
+          <button type="button" onclick="startCall('${academyEsc(c?.phone || '')}','${academyEsc(c?.id || '')}','${o.id}')">Позвонить</button>
+          <a href="${whatsappLink(c?.phone || '', 'Здравствуйте, я замерщик Rolan PRO, еду к вам на замер.')}" target="_blank" rel="noopener">WhatsApp</a>
+          ${scheduled && accepted ? `<button type="button" onclick="changeStatus('${o.id}','measurement_done')">Завершить</button>` : ''}
+        </div>
+      </article>`;
     }).join('')}
   </div>
   `;
@@ -24759,6 +24961,10 @@ function completeManagerMeasurement(oid) {
   if (!o) return;
   const issues = orderMeasurementCompletionIssues(o);
   if (issues.length) { alert('Замер ещё не готов:\n\n• ' + issues.join('\n• ')); return; }
+  const technical = orderTechnicalMeasurementIssues(o);
+  if (technical.length) {
+    alert('Расчёт и КП можно делать по размерам клиента.\n\nДо назначения монтажа замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
+  }
   if (o.status === 'measurement_done') {
     invalidateProjectEstimate(o, 'Замер изменён — требуется повторный расчёт проекта');
     save();
@@ -25405,6 +25611,18 @@ function scheduleInstallationPrompt(oid) {
 function confirmScheduleInstallation(oid) {
   const o = getOrder(oid);
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
+  // Check the surveyor's technical details before touching the order, so a
+  // refused schedule never leaves installers or dates behind.
+  const technical = orderTechnicalMeasurementIssues(o);
+  if (technical.length) {
+    alert('Нельзя назначить монтаж — замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
+    return;
+  }
+  const previous = {
+    installerIds: o.installerIds,
+    installationAt: o.installationAt,
+    lines: projectQuickLines(o).map(line => ({ line, installerIds: line.installerIds, startDate: line.startDate })),
+  };
   o.installerIds = Array.from(document.querySelectorAll('.isch-installer:checked')).map(x => x.value);
   const dt = document.getElementById('isch-dt').value;
   if (dt) o.installationAt = new Date(dt).toISOString();
@@ -25415,7 +25633,16 @@ function confirmScheduleInstallation(oid) {
   closeModal();
   if (changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true })) {
     notifyClientEventScheduled(oid, 'install');
+    return;
   }
+  // Any other refused guard: restore the order exactly as it was.
+  o.installerIds = previous.installerIds;
+  o.installationAt = previous.installationAt;
+  previous.lines.forEach(({ line, installerIds, startDate }) => {
+    line.installerIds = installerIds;
+    line.startDate = startDate;
+  });
+  render();
 }
 
 function openAssignTeam(oid) {
@@ -33343,6 +33570,8 @@ function renderCalendarMap(anchor, mode) {
 function renderCalendar() {
   const mode = state.calendarMode || 'week';
   const u = currentUser();
+  const fieldMobileCalendar = isCompactViewport() && (u?.role === 'measurer' || u?.role === 'installer');
+  const fieldCalendarPanel = state.fieldCalendarPanel === 'map' ? 'map' : 'schedule';
   const canRoleFilter = u && (u.role === 'owner' || u.role === 'manager');
   const dispatchStaff = canRoleFilter ? db.users.filter(user => user.isActive !== false && ['owner','manager','measurer','installer'].includes(user.role)) : [];
   const today = new Date(); today.setHours(0,0,0,0);
@@ -33394,15 +33623,21 @@ function renderCalendar() {
   </div>
   `;
 
+  const fieldPanelToggle = fieldMobileCalendar && mode !== 'month' ? `
+    <div class="field-calendar-toggle" aria-label="Вид календаря">
+      <button type="button" class="${fieldCalendarPanel === 'schedule' ? 'active' : ''}" onclick="state.fieldCalendarPanel='schedule'; render();">Расписание</button>
+      <button type="button" class="${fieldCalendarPanel === 'map' ? 'active' : ''}" onclick="state.fieldCalendarPanel='map'; render();">Карта и маршрут</button>
+    </div>` : '';
+
   // Day and week use one permanent calendar + map workspace. Month keeps an optional map.
   const mapBlock = mode === 'month' && state.calendarShowMap ? renderCalendarMap(anchor, mode) : '';
 
   if (mode === 'day') {
-    return toolbar + `<div class="dispatch-workspace">${renderDispatchDay(anchor)}${renderDispatchMap(anchor, 'day')}</div>`;
+    return toolbar + fieldPanelToggle + `<div class="${fieldMobileCalendar ? `field-calendar-mobile field-calendar-${fieldCalendarPanel}` : ''}"><div class="dispatch-workspace">${renderDispatchDay(anchor)}${renderDispatchMap(anchor, 'day')}</div></div>`;
   }
 
   if (mode === 'week') {
-    return toolbar + `<div class="dispatch-workspace">${renderDispatchWeek(anchor)}${renderDispatchMap(anchor, 'week')}</div>`;
+    return toolbar + fieldPanelToggle + `<div class="${fieldMobileCalendar ? `field-calendar-mobile field-calendar-${fieldCalendarPanel}` : ''}"><div class="dispatch-workspace">${renderDispatchWeek(anchor)}${renderDispatchMap(anchor, 'week')}</div></div>`;
     const monday = range.start;
     const days = [];
     for (let i = 0; i < 7; i++) {

@@ -444,4 +444,11 @@ Owner decision in chat on 2026-09-30 (chosen over waiting for the relational ins
 
 ## Changing a decision
 
+## 2026-09-30 — Surveyor mobile navigation is organized around field work
+
+- The Surveyor's frequent mobile destinations are `Сегодня`, `Календарь`, `Мои задачи`, and `Замеры`; `Ещё` continues to expose every other role-authorized module from the canonical sidebar.
+- `Сегодня` is a presentation of assigned canonical Projects and existing operational actions, not a new job store. `Мои задачи` is the shared task module, and Calendar reuses the canonical dispatch events, filters, schedule, and map.
+- The phone presentation may prioritize the next visit, route, touch actions, and a schedule/map switch. Tablet and desktop keep the same records and commands with roomier layouts. Role authorization and financial redaction do not change.
+- Implemented for review on `codex/surveyor-mobile-v4`; deployment remains a separate owner-authorized action.
+
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
