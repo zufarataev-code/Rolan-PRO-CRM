@@ -117,25 +117,28 @@ test("cold-call companies keep the representative's title out of the last name",
     { companyName: "Acme", companyType: "retail", firstName: "John", lastName: "Smith", contactTitle: "Owner" });
 });
 
-test("a website lead is claimed on the server before the client and order are written", () => {
+test("a website lead is reserved, the project saved, and only then the lead is closed", () => {
   const convert = block("async function convertLead(leadId)", "async function dismissLead(");
-  const claim = convert.indexOf("setCanonicalLeadStatus(leadId, 'CONTACTED')");
-  assert.ok(claim > 0, "claim present");
-  assert.ok(claim < convert.indexOf("db.clients.push(client)"), "claim before the client is written");
-  assert.ok(claim < convert.indexOf("db.orders.push(o)"), "claim before the order is written");
-  assert.match(convert, /if \(canonical && !\(await setCanonicalLeadStatus\(leadId, 'CONTACTED'\)\)\) return;/);
-  // One run per lead; the lead leaves the inbox only with a server-confirmed project,
-  // otherwise the order/client are rolled back and the lead is released.
+  const claim = convert.indexOf("claimCanonicalLead(leadId, 'claim')");
+  const persisted = convert.indexOf("cloudPersistConfirmed()");
+  const complete = convert.indexOf("claimCanonicalLead(leadId, 'complete')");
+  assert.ok(claim > 0 && claim < convert.indexOf("db.clients.push(client)") && claim < convert.indexOf("db.orders.push(o)"), "reserve before writing");
+  assert.ok(persisted > 0 && persisted < complete, "close only after the confirmed save");
   assert.match(convert, /if \(convertingLeadIds\.has\(leadId\)\) return;/);
-  assert.match(convert, /if \(!\(await cloudPersistConfirmed\(\)\)\) \{/);
+  assert.match(convert, /await claimCanonicalLead\(leadId, 'release'\);/);
   assert.match(convert, /db\.orders = db\.orders\.filter\(order => order\.id !== o\.id\);/);
-  assert.match(convert, /await setCanonicalLeadStatus\(leadId, previousStatus, \['CONTACTED'\], \{ silent: true \}\);/);
-  assert.ok(convert.indexOf("cloudPersistConfirmed()") < convert.indexOf("openOrder(o.id)"));
-  // Status changes are compare-and-set on the server.
-  assert.match(html, /body: JSON\.stringify\(\{ pipeline_status_code: statusCode, expected_status_codes: expectedStatusCodes \}\)/);
-  const route = readFileSync("app/api/v1/leads/[leadId]/route.ts", "utf8");
-  assert.match(route, /pipeline_status: \{ status_code: \{ in: expectedStatusCodes \} \}/);
-  assert.match(route, /"lead_status_changed"/);
+  // A project already saved for the lead is never duplicated: the lead is only closed.
+  assert.match(convert, /const existingOrder = db\.orders\.find\(order => order\.canonicalLeadId === leadId\);/);
+  assert.match(convert, /\.\.\.\(canonical \? \{ canonicalLeadId: leadId \} : \{\}\)/);
+
+  const route = readFileSync("app/api/v1/leads/[leadId]/claim/route.ts", "utf8");
+  assert.match(route, /where = \{ AND: \[base, open, claimableBy\(userId, now\)\] \};/);
+  assert.match(route, /where = \{ AND: \[base, open, \{ claimed_by_user_id: userId \}\] \};/, "only the claimant closes");
+  assert.match(route, /where = \{ AND: \[base, \{ claimed_by_user_id: userId \}\] \};/, "only the claimant releases");
+  assert.match(readFileSync("src/features/sales/lead-claim.ts", "utf8"), /LEAD_CLAIM_TTL_MS = 10 \* 60 \* 1000/);
+  assert.match(readFileSync("prisma/migrations/20261001140000_lead_claims/migration.sql", "utf8"), /"claimed_by_user_id" UUID/);
+  // Dismissing respects another manager's active reservation.
+  assert.match(readFileSync("app/api/v1/leads/[leadId]/route.ts", "utf8"), /claimableBy\(auth\.session\.user\.user_id, new Date\(\)\)/);
 });
 
 test("creating a project keeps «Разовый клиент» for a company", () => {

@@ -37,6 +37,8 @@ export function serializeLead(lead: Lead & {
     company_name: lead.company_name,
     company_type: lead.company_type,
     contact_title: lead.contact_title,
+    claimed_by_user_id: lead.claimed_by_user_id,
+    claimed_at: lead.claimed_at,
     phone: lead.phone,
     email: lead.email,
     source: lead.source,

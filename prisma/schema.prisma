@@ -364,6 +364,8 @@ model Lead {
   company_name                 String?           @db.VarChar(160)
   company_type                 String?           @db.VarChar(40)
   contact_title                String?           @db.VarChar(120)
+  claimed_by_user_id           String?           @db.Uuid
+  claimed_at                   DateTime?         @db.Timestamptz(6)
   phone                        String?           @db.VarChar(40)
   email                        String?           @db.VarChar(191)
   source                       String?           @db.VarChar(120)

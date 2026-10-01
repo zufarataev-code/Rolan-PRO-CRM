@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES, getPipelineStatusId } from "@/features/sales/api";
+import { claimableBy } from "@/features/sales/lead-claim";
 import { buildLeadAccessWhere, getRecordManagerScope, isCrossManagerAssignment } from "@/features/sales/access";
 
 type RouteContext = {
@@ -88,8 +89,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const lead = await prisma.$transaction(async (tx) => {
     const result = await tx.lead.updateMany({
       where: {
-        ...buildLeadAccessWhere(leadId, managerId),
-        ...(expectedStatusCodes.length ? { pipeline_status: { status_code: { in: expectedStatusCodes } } } : {}),
+        AND: [
+          buildLeadAccessWhere(leadId, managerId),
+          ...(expectedStatusCodes.length
+            ? [
+                { pipeline_status: { status_code: { in: expectedStatusCodes } } },
+                // Another manager's active «Создать проект» reservation wins.
+                claimableBy(auth.session.user.user_id, new Date()),
+              ]
+            : []),
+        ],
       },
       data,
     });

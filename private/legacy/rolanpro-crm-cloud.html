@@ -20493,6 +20493,7 @@ function canonicalMessengerLeadRows() {
         companyType: lead.company_type || '',
         contactTitle: lead.contact_title || '',
         statusCode: lead.pipeline_status?.status_code || '',
+        claimedAt: lead.claimed_at || '',
         phone: lead.phone,
         email: lead.email,
         source: lead.source,
@@ -20553,6 +20554,7 @@ function renderLeadsView() {
                 ${l.phone ? `<a class="text-blue-600 hover:underline cursor-pointer" onclick="startCall('${academyEsc(jsQuote(l.phone))}','${academyEsc(jsQuote(existing ? existing.id : ''))}')">📞 ${academyEsc(l.phone)}</a>` : ''}
                 ${l.email ? `<span class="text-gray-600">✉️ ${academyEsc(l.email)}</span>` : ''}
               </div>
+              ${l.claimedAt && Date.now() - new Date(l.claimedAt).getTime() < 10 * 60 * 1000 ? `<div class="text-xs text-amber-700 mt-1">⏳ Проект по заявке уже оформляется</div>` : ''}
               ${l.companyName ? `<div class="text-sm text-gray-700 mt-1">🏢 ${academyEsc([clientCompanyTypeLabel(l.companyType), [l.firstName, l.lastName].filter(Boolean).join(' '), l.contactTitle].filter(Boolean).join(' · '))}</div>` : ''}
               ${l.message ? `<div class="text-sm text-gray-600 mt-1 bg-gray-50 rounded p-2">${academyEsc(l.message)}</div>` : ''}
               ${l.consultation ? `<div class="text-xs text-gray-500 mt-2">📅 ${fmtDateTime(l.consultation.scheduled_start_at)} · ${academyEsc(l.consultation.assigned_consultant?.full_name || 'Не назначен')}</div>` : ''}
@@ -20627,6 +20629,32 @@ async function markLeadProcessed(leadId, statusCode = 'CONTACTED') {
   } catch (e) { console.warn('markLeadProcessed failed', e); }
   state.leadsCache = (state.leadsCache || []).filter(l => l.id !== leadId);
 }
+/**
+ * «Создать проект» from a PostgreSQL lead: reserve it (it stays open), save the
+ * project, then close it. See app/api/v1/leads/[leadId]/claim/route.ts.
+ */
+async function claimCanonicalLead(leadId, action) {
+  try {
+    const response = await fetch('/api/v1/leads/' + encodeURIComponent(leadId) + '/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) return { ok: false, message: result?.errors?.[0]?.message || 'Не удалось обновить заявку на сервере.' };
+    return { ok: true };
+  } catch (error) {
+    console.warn('[Leads] claim ' + action + ' failed', error);
+    return { ok: false, message: 'Сервер не ответил. Проверьте связь и попробуйте ещё раз.' };
+  }
+}
+async function closeCanonicalLead(leadId) {
+  const claim = await claimCanonicalLead(leadId, 'claim');
+  const done = claim.ok ? await claimCanonicalLead(leadId, 'complete') : claim;
+  if (done.ok) canonicalLeads = canonicalLeads.filter(lead => lead?.lead_id !== leadId);
+  fetchCanonicalLeads({ renderIfVisible: true });
+  return done;
+}
 const convertingLeadIds = new Set();
 async function convertLead(leadId) {
   // A double click while the first conversion runs is ignored.
@@ -20646,8 +20674,23 @@ async function convertLeadOnce(leadId) {
   // if the claim fails (network, or another manager took it) no client or order
   // is created, so a retry or a second manager can never produce a duplicate.
   const canonical = Boolean(canonicalLeadRow(leadId));
-  const previousStatus = canonicalLeadRow(leadId)?.statusCode || 'NEW_LEAD';
-  if (canonical && !(await setCanonicalLeadStatus(leadId, 'CONTACTED'))) return;
+  if (canonical) {
+    // A project already saved for this lead (its closing was interrupted last
+    // time): only close the lead, never create a second project.
+    const existingOrder = db.orders.find(order => order.canonicalLeadId === leadId);
+    if (existingOrder) {
+      await closeCanonicalLead(leadId);
+      openOrder(existingOrder.id);
+      return;
+    }
+    // Reserve the lead; it stays open and visible until the project is saved.
+    const claim = await claimCanonicalLead(leadId, 'claim');
+    if (!claim.ok) {
+      alert(claim.message);
+      fetchCanonicalLeads({ renderIfVisible: true });
+      return;
+    }
+  }
   const createdClient = !client;
   if (!client) {
     const identity = clientIdentityFromLead(l);
@@ -20665,6 +20708,7 @@ async function convertLeadOnce(leadId) {
   const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(db.orders.length + 1).padStart(3, '0');
   const o = {
     id: 'o' + uid(), number: num, clientId: client.id,
+    ...(canonical ? { canonicalLeadId: leadId } : {}),
     status: 'new', managerId: currentUser().id,
     measurerId: null, installerIds: [],
     createdAt: new Date().toISOString(),
@@ -20679,19 +20723,25 @@ async function convertLeadOnce(leadId) {
   db.orders.push(o);
   save();
   if (canonical) {
-    // The lead may leave the shared inbox only together with a project that the
-    // server has confirmed. If the save fails, nothing stays half-done: the new
-    // order (and client) are rolled back and the lead returns to the inbox.
+    // The lead is closed only after the server confirmed the project. If the
+    // save fails, the new order (and client) are rolled back and the reservation
+    // is released; if the tab closes first, the lead simply stays open and the
+    // reservation expires.
     if (!(await cloudPersistConfirmed())) {
       db.orders = db.orders.filter(order => order.id !== o.id);
       if (createdClient) db.clients = db.clients.filter(item => item.id !== client.id);
       localStorage.setItem('rolanpro_crm', JSON.stringify(db));
-      await setCanonicalLeadStatus(leadId, previousStatus, ['CONTACTED'], { silent: true });
+      await claimCanonicalLead(leadId, 'release');
       fetchCanonicalLeads({ renderIfVisible: true });
       render();
-      alert('Проект не сохранился на сервере — заявка возвращена в «Новые лиды». Проверьте связь и попробуйте ещё раз.');
+      alert('Проект не сохранился на сервере — заявка осталась в «Новых лидах». Проверьте связь и попробуйте ещё раз.');
       return;
     }
+    const closed = await claimCanonicalLead(leadId, 'complete');
+    if (closed.ok) canonicalLeads = canonicalLeads.filter(lead => lead?.lead_id !== leadId);
+    // If closing failed, the saved project carries the lead id: the next
+    // «Создать проект» on this lead only closes it.
+    fetchCanonicalLeads({ renderIfVisible: true });
   } else {
     await markLeadProcessed(leadId);
   }
