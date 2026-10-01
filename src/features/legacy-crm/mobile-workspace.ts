@@ -369,18 +369,6 @@ const MOBILE_WORKSPACE_PATCH = `
       display: none !important;
     }
 
-    .mobile-calendar-month-weekdays,
-    .mobile-calendar-month-grid,
-    .calendar-month-grid {
-      display: grid !important;
-      grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
-      width: 100% !important;
-      min-width: 0 !important;
-      max-width: 100% !important;
-      gap: 0 !important;
-      overflow: visible !important;
-    }
-
     @media (max-width: 430px) {
       [data-rolanpro-mobile-action-row="1"] {
         grid-template-columns: minmax(0, 1fr) !important;
@@ -512,27 +500,20 @@ const MOBILE_WORKSPACE_PATCH = `
     const isProtectedCalendarLayout = (element) => {
       if (!(element instanceof HTMLElement)) return false;
       return Boolean(element.closest([
-        '.mobile-calendar-month-weekdays',
-        '.mobile-calendar-month-grid',
-        '.calendar-month-grid',
         '.dispatch-workspace',
         '.dispatch-week-head',
         '.dispatch-time-grid',
         '.dispatch-day-grid',
-        '[class*="calendar-"]',
-        '[id*="calendar-"]',
+        '.dispatch-day-head',
       ].join(',')));
     };
 
     const protectCalendarLayouts = () => {
       document.querySelectorAll([
-        '.mobile-calendar-week-strip',
-        '.mobile-calendar-month-weekdays',
-        '.mobile-calendar-month-grid',
-        '.calendar-month-grid',
         '.dispatch-week-head',
         '.dispatch-time-grid',
         '.dispatch-day-grid',
+        '.dispatch-day-head',
       ].join(',')).forEach((element) => {
         if (!(element instanceof HTMLElement)) return;
         element.removeAttribute('data-rolanpro-mobile-stack');
