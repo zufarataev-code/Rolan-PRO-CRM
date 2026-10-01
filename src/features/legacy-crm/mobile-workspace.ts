@@ -311,6 +311,119 @@ const MOBILE_WORKSPACE_PATCH = `
       max-width: 100% !important;
     }
 
+    /* Calendar is a semantic grid, not a generic form grid. The global mobile
+       adapter must preserve its seven columns instead of stacking weekdays. */
+    .calendar-toolbar {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      gap: 10px !important;
+    }
+
+    .calendar-toolbar > * {
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
+
+    .card:has(.calendar-month-grid) {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      overflow-x: hidden !important;
+    }
+
+    .card:has(.calendar-month-grid) > .grid.grid-cols-7,
+    .card:has(.calendar-month-grid) > .grid.grid-cols-7[data-rolanpro-mobile-stack="1"],
+    .calendar-month-grid,
+    .calendar-month-grid[data-rolanpro-mobile-stack="1"] {
+      display: grid !important;
+      grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      gap: 0 !important;
+      overflow: visible !important;
+    }
+
+    .card:has(.calendar-month-grid) > .grid.grid-cols-7 > * {
+      min-width: 0 !important;
+      padding: 8px 2px !important;
+      font-size: 10px !important;
+      line-height: 1.1 !important;
+      text-align: center !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+
+    .calendar-month-grid > * {
+      min-width: 0 !important;
+      min-height: 72px !important;
+      padding: 6px 5px !important;
+      overflow: hidden !important;
+      box-sizing: border-box !important;
+    }
+
+    .calendar-month-grid button,
+    .calendar-month-grid [role="button"] {
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
+
+    /* Bottom dock gets restrained semantic color cues. Active items keep the
+       same accent with a soft background; inactive items stay clean and readable. */
+    .mobile-primary-nav {
+      background: rgba(255, 255, 255, .96) !important;
+      border-top: 1px solid #dbe5ef !important;
+      box-shadow: 0 -8px 26px rgba(16, 37, 63, .08) !important;
+      backdrop-filter: blur(14px);
+    }
+
+    .mobile-primary-nav > * {
+      --mobile-nav-accent: #64748b;
+      --mobile-nav-soft: #f8fafc;
+      color: var(--mobile-nav-accent) !important;
+      border-radius: 14px !important;
+      transition: background-color .16s ease, color .16s ease, transform .16s ease !important;
+    }
+
+    .mobile-primary-nav > *:nth-child(1) {
+      --mobile-nav-accent: #2563eb;
+      --mobile-nav-soft: #eff6ff;
+    }
+
+    .mobile-primary-nav > *:nth-child(2) {
+      --mobile-nav-accent: #168a5b;
+      --mobile-nav-soft: #ecf8f3;
+    }
+
+    .mobile-primary-nav > *:nth-child(3) {
+      --mobile-nav-accent: #b56a08;
+      --mobile-nav-soft: #fff6e8;
+    }
+
+    .mobile-primary-nav > *:nth-child(4) {
+      --mobile-nav-accent: #168bc0;
+      --mobile-nav-soft: #eaf8fe;
+    }
+
+    .mobile-primary-nav > *:nth-child(5) {
+      --mobile-nav-accent: #6d5bd0;
+      --mobile-nav-soft: #f3f0ff;
+    }
+
+    .mobile-primary-nav > *.active,
+    .mobile-primary-nav > *.is-active,
+    .mobile-primary-nav > *[aria-current="page"] {
+      background: var(--mobile-nav-soft) !important;
+      color: var(--mobile-nav-accent) !important;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mobile-nav-accent) 22%, transparent) !important;
+    }
+
+    .mobile-primary-nav > *:active {
+      transform: scale(.97);
+      background: var(--mobile-nav-soft) !important;
+    }
+
     @media (max-width: 430px) {
       [data-rolanpro-mobile-action-row="1"] {
         grid-template-columns: minmax(0, 1fr) !important;
@@ -439,9 +552,37 @@ const MOBILE_WORKSPACE_PATCH = `
       });
     };
 
+    const isProtectedCalendarLayout = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      if (element.closest('.calendar-toolbar, .calendar-month-grid, .dispatch-workspace, [class*="calendar-"], [id*="calendar-"]')) {
+        return true;
+      }
+
+      const parent = element.parentElement;
+      return Boolean(
+        element.classList.contains('grid-cols-7') &&
+        parent?.querySelector(':scope > .calendar-month-grid'),
+      );
+    };
+
+    const protectCalendarLayouts = () => {
+      document.querySelectorAll('.calendar-month-grid').forEach((grid) => {
+        if (!(grid instanceof HTMLElement)) return;
+        grid.removeAttribute('data-rolanpro-mobile-stack');
+        grid.removeAttribute('data-rolanpro-mobile-scroll');
+
+        const parent = grid.parentElement;
+        const weekdayHeader = parent?.querySelector(':scope > .grid.grid-cols-7');
+        if (weekdayHeader instanceof HTMLElement) {
+          weekdayHeader.removeAttribute('data-rolanpro-mobile-stack');
+          weekdayHeader.removeAttribute('data-rolanpro-mobile-scroll');
+        }
+      });
+    };
+
     const enhanceGrid = (element) => {
       if (!(element instanceof HTMLElement) || !isVisible(element)) return;
-      if (element.closest('table, .manager-measure-modal')) return;
+      if (element.closest('table, .manager-measure-modal') || isProtectedCalendarLayout(element)) return;
       const style = window.getComputedStyle(element);
       if (style.display !== 'grid') return;
       const columns = style.gridTemplateColumns.split(' ').filter(Boolean);
@@ -542,8 +683,10 @@ const MOBILE_WORKSPACE_PATCH = `
         return;
       }
 
+      protectCalendarLayouts();
       document.querySelectorAll('table').forEach(enhanceGenericTable);
       document.querySelectorAll('form > div, main .grid, section .grid, .modal-content .grid, .workspace-modal .grid').forEach(enhanceGrid);
+      protectCalendarLayouts();
       document.querySelectorAll('form > div, main > div, section > div, .modal-content > div, .workspace-modal > div').forEach(enhanceToolbar);
       enhanceDialogs();
       enhanceNavigation();
