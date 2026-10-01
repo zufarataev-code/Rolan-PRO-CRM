@@ -21787,26 +21787,34 @@ const INSTALLER_COMPLEXITY_LABELS = {
 
 function installerObjectAnalytics(o, userId) {
   const team = new Set((o.installerIds || []).filter(Boolean)).size || 1;
-  const byCategory = {};
-  const add = (category, sqft) => {
+  const byCategory = {}; // this installer's share, sq ft
+  let sqft = 0;          // the whole object
+  const add = (category, total, share) => {
     const key = INSTALLER_CATEGORY_LABELS[category] ? category : 'other';
-    byCategory[key] = (byCategory[key] || 0) + (Number(sqft) || 0);
+    sqft += Number(total) || 0;
+    if (share > 0) byCategory[key] = (byCategory[key] || 0) + share;
   };
   const windows = measureAllWindows(o);
   if (windows.length) {
-    windows.forEach(({ win }) => add(windowCatalog(win)?.category || filmCategory(win?.filmType || ''), windowActualAreaSqft(win)));
+    // Measured windows are shared by the whole order crew, as in the payroll.
+    windows.forEach(({ win }) => {
+      const area = Number(windowActualAreaSqft(win)) || 0;
+      add(windowCatalog(win)?.category || filmCategory(win?.filmType || ''), area, area / team);
+    });
   } else {
+    // Quick projects: every line has its own crew (orderQuickInstallerPayoutForUser).
     projectQuickLines(o).filter(line => line.unit === 'sqft').forEach(line => {
-      add(getCatalogItem(line.catalogId)?.category || primaryServiceInfo(line.serviceType)?.catalogCategory || 'other', line.qty);
+      const crew = new Set((line.installerIds || []).filter(Boolean));
+      const qty = Number(line.qty) || 0;
+      add(getCatalogItem(line.catalogId)?.category || primaryServiceInfo(line.serviceType)?.catalogCategory || 'other', qty, crew.has(userId) ? qty / crew.size : 0);
     });
   }
-  const sqft = Object.values(byCategory).reduce((sum, value) => sum + value, 0);
   return {
     order: o,
     date: o.installationDoneAt || o.installationAt || o.createdAt || '',
     done: Boolean(o.installationDoneAt) || ['installation_done', 'completed', 'review_received'].includes(o.status),
     sqft,
-    mySqft: sqft / team,
+    mySqft: Object.values(byCategory).reduce((sum, value) => sum + value, 0),
     team,
     byCategory,
     earned: orderInstallerPayoutPerPerson(o, userId),
@@ -21841,7 +21849,7 @@ function renderInstallerAnalytics() {
   const pendingEarned = pending.reduce((sum, o) => sum + orderInstallerPayoutPerPerson(o, u.id), 0);
   const categories = {};
   rows.forEach(row => Object.entries(row.byCategory).forEach(([key, sqft]) => {
-    categories[key] = (categories[key] || 0) + sqft / row.team;
+    categories[key] = (categories[key] || 0) + sqft;
   }));
   const fmtSqft = value => `${(Number(value) || 0).toFixed(1)} sq ft`;
   const tile = (label, value, sub = '') => `
@@ -21894,7 +21902,7 @@ function renderInstallerAnalytics() {
         </div>
       </div>
       <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-600">
-        <span>${fmtSqft(row.mySqft)}${row.team > 1 ? ` из ${fmtSqft(row.sqft)} · бригада ${row.team}` : ''}</span>
+        <span>${fmtSqft(row.mySqft)}${row.sqft - row.mySqft > 0.05 ? ` из ${fmtSqft(row.sqft)}` : ''}</span>
         ${films ? `<span>${academyEsc(films)}</span>` : ''}
         <span>${INSTALLER_COMPLEXITY_LABELS[o.complexity || 'standard'] || INSTALLER_COMPLEXITY_LABELS.standard}</span>
         ${row.mySqft ? `<span>${fmtMoney(row.earned / row.mySqft)} / sq ft</span>` : ''}

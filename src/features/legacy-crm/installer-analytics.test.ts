@@ -69,26 +69,46 @@ test("object analytics splits the area across the crew and groups it by film typ
   assert.equal(row.sqft, 100);
   assert.equal(row.mySqft, 50);
   assert.equal(row.done, true);
-  assert.deepEqual({ ...row.byCategory }, { smart: 60, solar: 40 });
+  assert.deepEqual({ ...row.byCategory }, { smart: 30, solar: 20 }, "this installer's share by film type");
   assert.equal(row.earned, 250);
 });
 
-test("quick project lines count only square-foot lines", () => {
+test("quick project lines count only square-foot lines assigned to this installer", () => {
   const analytics = loadAnalytics([]);
   const row = analytics.installerObjectAnalytics(
     {
       installerIds: ["u_1"],
       status: "installation_scheduled",
       quick: [
-        { unit: "sqft", qty: 30, catalogId: "cat_smart" },
-        { unit: "zone", qty: 2 },
+        { unit: "sqft", qty: 30, catalogId: "cat_smart", installerIds: ["u_1"] },
+        { unit: "zone", qty: 2, installerIds: ["u_1"] },
       ],
     },
     "u_1",
   );
 
   assert.equal(row.sqft, 30);
+  assert.equal(row.mySqft, 30);
   assert.equal(row.done, false);
+});
+
+test("quick lines assigned to different installers are split per line, as in the payroll", () => {
+  const analytics = loadAnalytics([]);
+  const order = {
+    installerIds: ["A", "B"],
+    installationDoneAt: "2026-09-10T18:00:00Z",
+    quick: [
+      { unit: "sqft", qty: 30, catalogId: "cat_smart", installerIds: ["A"] },
+      { unit: "sqft", qty: 90, serviceType: "solar", installerIds: ["B"] },
+      { unit: "sqft", qty: 20, catalogId: "cat_smart", installerIds: ["A", "B"] },
+    ],
+  };
+  const a = analytics.installerObjectAnalytics(order, "A");
+  assert.equal(a.sqft, 140);
+  assert.equal(a.mySqft, 40);
+  assert.deepEqual({ ...a.byCategory }, { smart: 40 }, "only A's film types");
+  const b = analytics.installerObjectAnalytics(order, "B");
+  assert.equal(b.mySqft, 100);
 });
 
 test("the analytics screen lists only finished objects of the chosen period, without client prices", () => {
@@ -123,6 +143,12 @@ test("the installer reaches analytics from the menu and from «Сегодня»"
 
 test("the installer title is «Специалист по установке» everywhere", () => {
   assert.doesNotMatch(html, /[Мм]онтажник/);
+  // The provisioning workspace and the stored SMS templates too.
+  assert.doesNotMatch(readFileSync("data/legacy-crm-empty.json", "utf8"), /[Мм]онтажник/);
+  assert.match(
+    readFileSync("prisma/migrations/20261001130000_installer_title_in_sms_templates/migration.sql", "utf8"),
+    /'Монтажник', 'Специалист по установке'/,
+  );
   assert.match(html, /installer: 'Специалист по установке'/);
   assert.match(html, /\{ role: 'installer', title: T\('installers'\) \}/);
   assert.match(readFileSync("components/team-directory.tsx", "utf8"), /label: "Специалист по установке"/);
