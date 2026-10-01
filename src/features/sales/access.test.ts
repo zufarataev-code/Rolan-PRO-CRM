@@ -19,10 +19,12 @@ test("record filters bind each manager to their own assigned records", () => {
     deal_id: "deal-1",
     assigned_manager_id: managerA,
   });
+  // Leads: own ones plus the shared queue of unassigned website/Messenger leads.
   assert.deepEqual(buildLeadAccessWhere("lead-1", managerB), {
     lead_id: "lead-1",
-    assigned_manager_id: managerB,
+    OR: [{ assigned_manager_id: managerB }, { assigned_manager_id: null }],
   });
+  assert.deepEqual(buildLeadAccessWhere("lead-1"), { lead_id: "lead-1" });
   assert.deepEqual(buildTaskAccessWhere("task-1", managerA), {
     task_id: "task-1",
     assigned_to: managerA,

@@ -358,6 +358,14 @@ model Lead {
   lead_id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   lead_code                    String?           @unique @db.VarChar(40)
   name                         String            @db.VarChar(160)
+  first_name                   String?           @db.VarChar(80)
+  last_name                    String?           @db.VarChar(80)
+  customer_type                String?           @db.VarChar(20)
+  company_name                 String?           @db.VarChar(160)
+  company_type                 String?           @db.VarChar(40)
+  contact_title                String?           @db.VarChar(120)
+  claimed_by_user_id           String?           @db.Uuid
+  claimed_at                   DateTime?         @db.Timestamptz(6)
   phone                        String?           @db.VarChar(40)
   email                        String?           @db.VarChar(191)
   source                       String?           @db.VarChar(120)
@@ -393,6 +401,11 @@ model Client {
   client_id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   client_code                  String?           @unique @db.VarChar(40)
   name                         String            @db.VarChar(160)
+  first_name                   String?           @db.VarChar(80)
+  last_name                    String?           @db.VarChar(80)
+  company_name                 String?           @db.VarChar(160)
+  company_type                 String?           @db.VarChar(40)
+  contact_title                String?           @db.VarChar(120)
   phone                        String?           @db.VarChar(40)
   email                        String?           @db.VarChar(191)
   billing_address              String?           @db.Text

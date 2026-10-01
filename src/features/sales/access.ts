@@ -17,10 +17,19 @@ export function buildDealAccessWhere(dealId: string, managerId?: string): Prisma
   };
 }
 
+/**
+ * A manager works their own leads and the shared queue of unassigned ones
+ * (website and Messenger leads arrive without a manager). Another manager's
+ * lead stays out of reach; processing an unassigned lead claims it.
+ */
+export function buildLeadScopeWhere(managerId?: string): Prisma.LeadWhereInput {
+  return managerId ? { OR: [{ assigned_manager_id: managerId }, { assigned_manager_id: null }] } : {};
+}
+
 export function buildLeadAccessWhere(leadId: string, managerId?: string): Prisma.LeadWhereInput {
   return {
     lead_id: leadId,
-    ...(managerId ? { assigned_manager_id: managerId } : {}),
+    ...buildLeadScopeWhere(managerId),
   };
 }
 

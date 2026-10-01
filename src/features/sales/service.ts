@@ -6,7 +6,7 @@ import {
   ensureQualifiedLeadConversion,
 } from "@/features/google-ads/conversion-events";
 import { ROLE_CODES } from "@/lib/auth/constants";
-import { buildClientAccessWhere, buildDealAccessWhere } from "@/features/sales/access";
+import { buildClientAccessWhere, buildDealAccessWhere, buildLeadScopeWhere } from "@/features/sales/access";
 
 function toNumber(value: { toString(): string } | null | undefined) {
   return value ? Number(value.toString()) : 0;
@@ -566,11 +566,7 @@ export async function listConsultantOptions() {
 
 export async function listLeads(managerId?: string) {
   const leads = await prisma.lead.findMany({
-    where: managerId
-      ? {
-          assigned_manager_id: managerId,
-        }
-      : undefined,
+    where: managerId ? buildLeadScopeWhere(managerId) : undefined,
     include: {
       pipeline_status: true,
       city: {
