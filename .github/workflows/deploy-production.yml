@@ -61,7 +61,7 @@ jobs:
           # Any failure here stops the deploy. Keeps the last 30 verified backups.
           # Credentials come from the canonical env file used by
           # deploy/watch-production.sh for every release.
-          backup_dir=/home/runcloud/backups
+          backup_dir=/home/runcloud/backups/crm-db
           install -d -m 700 "$backup_dir"
           export PATH="/home/runcloud/rolanpro-runtime/bin:$PATH"
           set -a

@@ -7,7 +7,7 @@ RELEASES_DIR="/home/runcloud/rolanpro-crm-releases"
 STATE_FILE="/home/runcloud/.rolanpro-crm-active-release"
 ENV_BACKUP="/home/runcloud/.rolanpro-crm.env.production.local"
 POLL_SECONDS=15
-BACKUP_DIR="/home/runcloud/backups"
+BACKUP_DIR="/home/runcloud/backups/crm-db"
 
 export PATH="$RUNTIME_DIR/bin:$PATH"
 export NODE_ENV="production"
