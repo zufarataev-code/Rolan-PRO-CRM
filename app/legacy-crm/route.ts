@@ -198,11 +198,12 @@ export async function GET(request: NextRequest) {
               return showTeamError('Сервер не сохранил новую почту. Обновите страницу и попробуйте ещё раз.');
             }
 
+            // An employee with several field roles has one card per role: every
+            // linked card shows the new login, not only the one that was opened.
+            const linkedIds = new Set([legacyUserId, ...(Array.isArray(member.legacyUserIds) ? member.legacyUserIds : [])]);
+            linkedIds.forEach((id) => { const card = getUser(id); if (card) card.email = savedEmail; });
             const legacyUser = getUser(legacyUserId);
-            if (legacyUser) {
-              legacyUser.email = savedEmail;
-              save();
-            }
+            save();
             window.__teamAccessCurrentEmail = savedEmail;
 
             if (password) {

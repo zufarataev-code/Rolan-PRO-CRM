@@ -90,3 +90,10 @@ test("card email changes only when the owner typed a new address", () => {
   // Hydration never overwrites a field the owner has typed in.
   assert.match(html, /if \(emailInput && emailInput\.dataset\.touched !== '1' && /);
 });
+
+test("a new login email reaches every card linked to the account", () => {
+  const route = readFileSync("app/legacy-crm/route.ts", "utf8");
+  const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+  assert.match(route, /linkedIds\.forEach\(\(id\) => \{ const card = getUser\(id\); if \(card\) card\.email = savedEmail; \}\);/);
+  assert.match(html, /\.forEach\(id => \{ const card = getUser\(id\); if \(card\) card\.email = email; \}\);/);
+});

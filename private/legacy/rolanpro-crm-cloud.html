@@ -19577,7 +19577,9 @@ async function submitTeamMemberEdit(userId) {
       });
       const update = await updateResponse.json();
       if (!updateResponse.ok) return fail(apiMessage(update, 'Не удалось изменить данные и роль сотрудника.'));
-      u.email = email;
+      // Every card linked to this account (one per field role) gets the new login.
+      new Set([userId, ...(Array.isArray(member.legacyUserIds) ? member.legacyUserIds : [])])
+        .forEach(id => { const card = getUser(id); if (card) card.email = email; });
       u.role = requestedRole;
     } catch (error) {
       console.error('[Team card] employee update failed', error);
