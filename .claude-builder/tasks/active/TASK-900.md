@@ -1,0 +1,33 @@
+# ROLANPRO CRM Task
+
+- task_id: TASK-900
+- title: Claude Builder transport smoke test
+- owner_intent: Prove that ChatGPT can hand a safe CRM task to Claude Builder and receive a deterministic PR handoff.
+- business_outcome: One harmless documentation-only Claude change is published to a task branch/PR with no production action.
+- status: READY_FOR_BUILD
+- priority: HIGH
+- risk_level: R0
+- requested_by: Owner
+- planner: ChatGPT Orchestrator
+- builder: Claude Builder
+- reviewer: Codex Reviewer
+- required_skills: []
+- required_tools: [GitHub Actions, Claude Builder, Codex GitHub review]
+- tool_permissions: [Claude model job repository read-only; deterministic publisher generated task branch and PR only]
+- source_of_truth: [AGENTS.md, CLAUDE.md, .claude-builder/README.md, GitHub issue #187]
+- scope_in: [create docs/claude-builder-smoke.md with a short dated statement that the CRM Claude transport smoke task ran through the canonical workflow]
+- scope_out: [application code, database, Prisma, production systems, credentials, customer data, deployment, merge, existing business documentation]
+- dependencies: [PR #186 merged to main; ANTHROPIC_API_KEY configured as a repository Actions secret]
+- assumptions: []
+- definition_of_done: [only docs/claude-builder-smoke.md changes; deterministic publisher opens a PR; handoff reports READY_FOR_REVIEW; no production action]
+- implementation_plan: [read canonical task and policies; create the one smoke-test markdown file; return COMPLETED with no blockers]
+- branch_or_pr:
+- changed_files: []
+- tests_run: []
+- review_findings: []
+- approval_requirements: [independent Codex review; Owner merge approval]
+- approval_evidence: []
+- acceptance_result:
+- next_action: After PR #186 is merged and authentication is confirmed, comment exactly @claude build TASK-900 on issue #187.
+- created_at: 2026-09-22
+- updated_at: 2026-09-22
