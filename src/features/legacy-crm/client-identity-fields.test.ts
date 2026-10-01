@@ -23,11 +23,12 @@ function loadIdentity(fields: Record<string, string> = {}) {
     block("function clientAccountType(c)", "function clientRelationshipType(c)"),
   ].join("\n");
   vm.runInContext(
-    `${source}; Object.assign(this, { readClientIdentityFields, clientDisplayName, clientRepresentativeLine, clientIdentityFromLead, clientIdentityFieldsHtml });`,
+    `${source}; Object.assign(this, { readClientIdentityFields, readClientCorrespondenceFields, clientDisplayName, clientRepresentativeLine, clientIdentityFromLead, clientIdentityFieldsHtml });`,
     context,
   );
   return context as unknown as {
     readClientIdentityFields: (prefix: string) => { error?: string; fields?: Record<string, string> };
+    readClientCorrespondenceFields: (prefix: string) => Record<string, string>;
     clientDisplayName: (client: Record<string, unknown>) => string;
     clientRepresentativeLine: (client: Record<string, unknown>) => string;
     clientIdentityFromLead: (lead: Record<string, unknown>) => Record<string, string>;
@@ -83,11 +84,27 @@ test("all client forms use the shared identity block, and website leads show in 
 });
 
 test("an existing company card opens with its company fields visible", () => {
-  const markup = loadIdentity().clientIdentityFieldsHtml("cc", { accountType: "b2b", companyName: "Acme", firstName: "John", contactTitle: "Owner" });
+  const markup = loadIdentity().clientIdentityFieldsHtml("cc", { accountType: "b2b", companyName: "Acme", firstName: "John", contactTitle: "Owner", legalAddress: "100 Main St", mailingAddress: "PO Box 7" });
   assert.match(markup, /<option value="b2b" selected>/);
   assert.match(markup, /id="cc-company" value="Acme"/);
   assert.match(markup, /id="cc-title" value="Owner"/);
+  assert.match(markup, /id="cc-legal-address"[^>]*>100 Main St<\/textarea>/);
+  assert.match(markup, /id="cc-mailing-address"[^>]*>PO Box 7<\/textarea>/);
   assert.doesNotMatch(markup, /id="cc-company-block" class="[^"]*hidden/);
+});
+
+test("legal/mailing addresses are separate from project object addresses", () => {
+  const identity = loadIdentity({
+    "nc-kind": "b2b",
+    "nc-legal-address": "100 Main St, Los Angeles, CA 90001",
+    "nc-mailing-address": "PO Box 7, Los Angeles, CA 90002",
+  });
+  assert.deepEqual({ ...identity.readClientCorrespondenceFields("nc") }, {
+    legalAddress: "100 Main St, Los Angeles, CA 90001",
+    mailingAddress: "PO Box 7, Los Angeles, CA 90002",
+  });
+  assert.match(html, /Адреса объектов хранятся отдельно и их может быть несколько/);
+  assert.match(html, /openClientAddressOverlay\('\$\{c\.id\}'\)/);
 });
 
 test("public lead values are escaped in «Новые лиды» and in shared contact renderers", () => {
