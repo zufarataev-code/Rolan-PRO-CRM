@@ -87,9 +87,16 @@ export async function recordInstallerPayrollAccrual(
   const ratePerSqft =
     jsonNumber(job.position.dynamic_fields, "manual_installation_cost_per_sqft") ||
     toNumber(job.position.service_type.installation_cost_per_sqft);
-  const multiplier = toNumber(job.position.complexity_level?.multiplier) || 1;
+  // Positions installed before 2026-09-01 carry a snapshot (migration 20260930120000):
+  // their own coefficient and no automatic zone pay, even if closed later.
+  const multiplier =
+    jsonNumber(job.position.dynamic_fields, "complexity_multiplier") ||
+    toNumber(job.position.complexity_level?.multiplier) ||
+    1;
+  const legacyPosition =
+    (job.position.dynamic_fields as Record<string, unknown> | null)?.owner_pay_rules === false;
   // Smart zone connections pay the ZONE_CONNECTION installer rate (rate directory).
-  const ownerRules = accruedAt >= OWNER_PAY_RULES_FROM;
+  const ownerRules = accruedAt >= OWNER_PAY_RULES_FROM && !legacyPosition;
   const zoneCount =
     ownerRules && job.position.service_type.service_code === "SMART_FILM"
       ? jsonNumber(job.position.dynamic_fields, "zones_qty")
@@ -283,7 +290,6 @@ export async function getInstallerOperationsDashboard(session: InstallerSession)
       project: item.project,
       installer_name: item.installer.full_name,
       service_name: item.service_name,
-      installer_amount: toNumber(item.amount),
       amount: toNumber(item.lead_override_amount),
       status: item.lead_override_status,
       accrued_at: item.accrued_at,

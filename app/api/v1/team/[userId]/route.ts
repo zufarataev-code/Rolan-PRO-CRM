@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { setTeamMemberPassword, updateTeamMember } from "@/features/team/service";
+import { assertValidPassword, setTeamMemberPassword, updateTeamMember } from "@/features/team/service";
 import { ROLE_CODES, type RoleCode } from "@/lib/auth/constants";
 import { requireRequestSession } from "@/lib/auth/server";
 import { createSessionToken, sessionCredentialFingerprint } from "@/lib/auth/session";
@@ -41,6 +41,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   try {
+    // An invalid password must fail before anything else is written.
+    if (body.password) assertValidPassword(body.password);
     // Profile fields and password can be changed in one request.
     // legacyUserId is accepted only on this owner-only endpoint and is used
     // to permanently link an old legacy employee card to its PostgreSQL user.

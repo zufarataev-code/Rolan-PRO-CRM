@@ -32,7 +32,7 @@ test("legacy contact edits and lead conversions cannot introduce duplicate cards
   const saveContact = functionSource("saveClientContactProfile", "projectEstimateServiceLabel");
   const convertLead = functionSource("convertLead", "dismissLead");
 
-  assert.match(saveContact, /existingClientByContact\(phone, email, clientId\)/);
+  assert.match(saveContact, /existingClientByContact\(phoneChanged \? phone : '', emailChanged \? email : '', clientId\)/);
   assert.match(convertLead, /uniqueExistingClientByContact\(l\.phone, l\.email\)/);
 });
 

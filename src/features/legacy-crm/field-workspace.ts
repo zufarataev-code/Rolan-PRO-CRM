@@ -308,6 +308,19 @@ export function createFieldWorkspace(
   };
 }
 
+/** installerId → team lead card id (or null) at completion, from the server-derived cards. */
+export function installerLeadSnapshot(payload: JsonObject, order: JsonObject) {
+  const users = (Array.isArray(payload.users) ? payload.users : []).filter(isObject);
+  const byId = new Map(users.map((user) => [String(user.id || ""), user]));
+  const installerIds = [...new Set((Array.isArray(order.installerIds) ? order.installerIds : []).map(String).filter(Boolean))];
+  return Object.fromEntries(
+    installerIds.map((id) => {
+      const leadId = String(byId.get(id)?.groupLeadId || "") || null;
+      return [id, leadId && byId.get(leadId)?.installerLead === true ? leadId : null];
+    }),
+  );
+}
+
 export function mergeFieldWorkspace(
   currentPayload: JsonObject,
   submittedPayload: JsonObject,
@@ -370,7 +383,16 @@ export function mergeFieldWorkspace(
       if (!(key in submitted)) continue;
       if (key === "status") {
         const status = String(submitted.status || "");
-        if (allowedStatuses.has(status)) next.status = status;
+        if (allowedStatuses.has(status)) {
+          next.status = status;
+          // The team-lead snapshot is taken here, on the server, from the
+          // server-derived cards: the field client neither sees group links
+          // nor may write this field, and a later group move must not move
+          // an earned 10% to someone else.
+          if ((status === "installation_done" || status === "completed") && !isObject(currentOrder.installerLeadAtCompletion)) {
+            next.installerLeadAtCompletion = installerLeadSnapshot(currentPayload, next);
+          }
+        }
         continue;
       }
       if (key === "timeline") {

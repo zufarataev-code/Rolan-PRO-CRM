@@ -213,3 +213,22 @@ test("a team lead distributes only installer cards and the distribution is recor
   assert.deepEqual(merged.orders[0].installerIds, ["u_i2"], "surveyor cards never become crew");
   assert.deepEqual(merged.orders[0].timeline.map((event) => event.key), ["crew_distributed"]);
 });
+
+test("completing a job snapshots team leads on the server", async () => {
+  const { mergeFieldWorkspace } = await import("./field-workspace");
+  const current = {
+    users: [
+      { id: "u_lead", role: "installer", installerLead: true },
+      { id: "u_i2", role: "installer", groupLeadId: "u_lead" },
+    ],
+    orders: [{ id: "o1", status: "installation_in_progress", installerIds: ["u_i2"] }],
+  };
+  const merged = mergeFieldWorkspace(
+    current,
+    { orders: [{ id: "o1", status: "installation_done", installerLeadAtCompletion: { u_i2: "forged" } }] },
+    ["INSTALLER"],
+    ["u_i2"],
+  ) as unknown as { orders: Array<{ status: string; installerLeadAtCompletion?: Record<string, string | null> }> };
+  assert.equal(merged.orders[0].status, "installation_done");
+  assert.deepEqual(merged.orders[0].installerLeadAtCompletion, { u_i2: "u_lead" });
+});
