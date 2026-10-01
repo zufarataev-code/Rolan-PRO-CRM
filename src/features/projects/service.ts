@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
 
+import { buildClientAccessWhere, getRecordManagerScope } from "@/features/sales/access";
+
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { INSTALLER_JOB_STATUSES } from "@/features/projects/api";
 import { PROPOSAL_STATUSES } from "@/features/proposals/api";
@@ -9,6 +11,7 @@ import { onInstallationAssigned, onJobStarted, onProjectCompleted, onProjectCrea
 import { recordInstallerPayrollAccrual } from "@/features/installer-operations/service";
 import {
   ClientIdentityConflictError,
+  ClientNotAccessibleError,
   findExistingClientByIdentity,
   lockClientIdentity,
   normalizeClientEmail,
@@ -808,6 +811,15 @@ export async function createManualProject(
     // A client the manager explicitly selected always wins; identity matching
     // only decides when no client was chosen.
     const reusableClient = explicitClient ? null : await findExistingClientByIdentity(tx, contact);
+    if (reusableClient) {
+      // A manager may reuse (or be told about) only clients they can already see.
+      const managerId = getRecordManagerScope(session);
+      if (managerId) {
+        const ids = [reusableClient.client.client_id, reusableClient.conflictingClient?.client_id].filter(Boolean) as string[];
+        const visible = await tx.client.count({ where: { ...buildClientAccessWhere(undefined, managerId), client_id: { in: ids } } });
+        if (visible < ids.length) throw new ClientNotAccessibleError();
+      }
+    }
     if (reusableClient?.conflictingClient) {
       throw new ClientIdentityConflictError(
         reusableClient.client.client_id,
