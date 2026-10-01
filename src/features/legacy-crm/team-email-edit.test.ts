@@ -81,9 +81,10 @@ test("login email edits reach the server account and the access dialog shows its
   assert.match(route, /if \(savedEmail !== email\)/);
 });
 
-test("card email edits are compared with the server login, not the stale card email", () => {
+test("card email changes only when the owner typed a new address", () => {
   const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
   assert.match(html, /emailInput\.dataset\.serverEmail = String\(member\.email \|\| ''\)/);
-  assert.match(html, /const baselineEmail = String\(document\.getElementById\('tm-edit-email'\)\?\.dataset\.serverEmail \|\| currentEmail\);/);
-  assert.match(html, /const emailWasEdited = Boolean\(enteredEmail && enteredEmail !== baselineEmail\);/);
+  // Only a typed change is sent; an untouched field (even before hydration) keeps the server login.
+  assert.match(html, /id="tm-edit-email" type="email" value="\$\{academyEsc\(u\.email \|\| ''\)\}" oninput="this\.dataset\.touched = '1'"/);
+  assert.match(html, /const emailWasEdited = Boolean\(emailTouched && enteredEmail && enteredEmail !== canonicalEmail\);/);
 });

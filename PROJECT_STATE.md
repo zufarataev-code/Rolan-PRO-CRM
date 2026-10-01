@@ -721,3 +721,11 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Responsive verification: the four primary Surveyor screens were visually reviewed at 390×844. Tablet 1024×768 and desktop 1440×900 have no document-level horizontal overflow. The approved calm navy/blue field-app visual language was applied without changing desktop business logic or authorization.
 - Automated verification: 34 targeted tests passed for mobile parity, Surveyor v4, measurement, field workspace, and dispatch calendar/map; the legacy inline script compiles; `git diff --check` passes. The repository-wide test command remains unstable on the local Node 24 machine because its unbounded parallel `tsx/esbuild` launch stops shared transform services; CI on Node 20 is the release gate for the full suite, TypeScript, and production build.
 - Release branch: `codex/surveyor-mobile-v4-release`, rebased at the Git object level onto current `main` `acd2e60`. Production deployment proceeds only after the required PR CI succeeds and the PR is merged into `main`.
+
+## 2026-10-01 handoff — one login email per employee (PR #280)
+
+- Owner report (three days): employee «Ринат» showed one email in the card and another in «Доступ».
+- Causes: (1) two PostgreSQL accounts were linked to the same legacy cards (resolved on production 2026-10-01 by deactivating the extra accounts, Owner request); (2) the owner-only fetch guard in `/legacy-crm` stripped `email` from every team PATCH, so «Доступ» reported success while PostgreSQL kept the old address.
+- Fix: only `roles` is stripped; the «Доступ» dialog loads the PostgreSQL account before rendering (Save disabled without one) and reports success only when the server returns the new email; the card sends a new email only when the owner typed it.
+- Verification: full unit suite and `tsc` green; `team-email-edit.test.ts`.
+- Next action: Codex 👍, Owner «да», merge, deploy (no migration).

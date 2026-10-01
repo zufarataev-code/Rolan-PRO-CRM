@@ -19448,7 +19448,7 @@ function openTeamMemberEdit(userId) {
       <input id="tm-edit-phone" value="${academyEsc(u.phone || '')}" placeholder="+1 818...">
 
       <label class="mt-3">Почта для входа</label>
-      <input id="tm-edit-email" type="email" value="${academyEsc(u.email || '')}"
+      <input id="tm-edit-email" type="email" value="${academyEsc(u.email || '')}" oninput="this.dataset.touched = '1'"
              placeholder="name@rolan-pro.com"
              ${isOwner ? '' : 'disabled style="opacity:.6;cursor:not-allowed;"'}>
       <div class="text-xs text-gray-400 mt-1">После сохранения новая почта сразу станет логином сотрудника.</div>
@@ -19559,8 +19559,11 @@ async function submitTeamMemberEdit(userId) {
       if (!member) return fail('Серверная учётная запись сотрудника не найдена. Откройте «Изменить пароль и доступ» и проверьте привязку.');
 
       const canonicalEmail = String(member.email || '').trim().toLowerCase();
-      const baselineEmail = String(document.getElementById('tm-edit-email')?.dataset.serverEmail || currentEmail);
-      const emailWasEdited = Boolean(enteredEmail && enteredEmail !== baselineEmail);
+      // The login changes only when the owner typed in the field. Until then the
+      // server email is sent back unchanged — also when Save is pressed before the
+      // card has loaded the server email, so a stale card value never wins.
+      const emailTouched = document.getElementById('tm-edit-email')?.dataset.touched === '1';
+      const emailWasEdited = Boolean(emailTouched && enteredEmail && enteredEmail !== canonicalEmail);
       const email = emailWasEdited ? enteredEmail : (canonicalEmail || enteredEmail);
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return fail('Укажите корректную почту для входа.');
