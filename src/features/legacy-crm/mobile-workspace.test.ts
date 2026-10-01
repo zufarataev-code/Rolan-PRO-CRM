@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import { injectMobileWorkspaceAdapter } from "./mobile-workspace";
 
@@ -47,4 +49,49 @@ test("mobile workspace adapter is injected only once", () => {
 
   assert.equal((twice.match(/id="rolanpro-mobile-workspace-style"/g) || []).length, 1);
   assert.equal((twice.match(/id="rolanpro-mobile-workspace-script"/g) || []).length, 1);
+});
+
+
+test("mobile workspace preserves the seven-column month calendar instead of stacking weekdays", () => {
+  const result = injectMobileWorkspaceAdapter("<!doctype html><body><main></main></body>");
+
+  assert.match(result, /const isProtectedCalendarLayout/);
+  assert.match(result, /\.calendar-month-grid/);
+  assert.match(result, /grid-template-columns: repeat\(7, minmax\(0, 1fr\)\) !important/);
+  assert.match(result, /protectCalendarLayouts\(\)/);
+  assert.match(result, /element\.classList\.contains\('grid-cols-7'\)/);
+});
+
+test("mobile bottom navigation has restrained semantic color accents", () => {
+  const result = injectMobileWorkspaceAdapter("<!doctype html><body><main></main></body>");
+
+  assert.match(result, /\.mobile-primary-nav > \*:nth-child\(1\)/);
+  assert.match(result, /--mobile-nav-accent: #29A7E1/);
+  assert.match(result, /--mobile-nav-accent: #10253F/);
+  assert.match(result, /--mobile-nav-accent: #475569/);
+  assert.match(result, /--mobile-nav-accent: #147DAC/);
+  assert.match(result, /--mobile-nav-accent: #64748B/);
+  assert.match(result, /aria-current="page"/);
+});
+
+
+test("legacy CRM implements a phone-specific month calendar with day drill-down", async () => {
+  const source = await readFile(join(process.cwd(), "private/legacy/rolanpro-crm-cloud.html"), "utf8");
+
+  assert.match(source, /\.calendar-mobile-month-grid/);
+  assert.match(source, /grid-template-columns: repeat\(7, minmax\(0, 1fr\)\)/);
+  assert.match(source, /calendar-mobile-day-dots/);
+  assert.match(source, /calendar-mobile-day-count/);
+  assert.match(source, /calendarMobileSelectedDate/);
+  assert.match(source, /calendar-mobile-agenda/);
+  assert.match(source, /selectedEvents\.map\(ev => renderCalendarEventCard/);
+});
+
+
+test("mobile workspace protects the seven-day dispatch week from generic stacking", () => {
+  const result = injectMobileWorkspaceAdapter("<!doctype html><body><main></main></body>");
+
+  assert.match(result, /\.dispatch-week-head/);
+  assert.match(result, /\.dispatch-time-grid/);
+  assert.match(result, /isProtectedCalendarLayout/);
 });
