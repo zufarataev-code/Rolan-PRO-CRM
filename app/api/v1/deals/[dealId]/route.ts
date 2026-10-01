@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES } from "@/features/sales/api";
-import { buildDealAccessWhere, getRecordManagerScope, isCrossManagerAssignment } from "@/features/sales/access";
+import { buildDealAccessWhere, getRecordManagerScope, isCrossManagerAssignment, buildClientReuseWhere } from "@/features/sales/access";
 import { getDealCardById } from "@/features/sales/service";
 
 type RouteContext = {
@@ -62,6 +62,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   if (isCrossManagerAssignment(managerId, body.assigned_manager_id)) {
     return apiError(403, "forbidden", "Managers cannot reassign deals to another user.");
+  }
+
+  if (managerId && body.client_id) {
+    // A manager may link only a client they can already see (own or unowned).
+    const visible = await prisma.client.count({
+      where: { client_id: body.client_id, ...buildClientReuseWhere(managerId) },
+    });
+    if (!visible) {
+      return apiError(403, "forbidden", "Этот клиент недоступен.");
+    }
   }
 
   const updated = await prisma.$transaction(async (tx) => {
