@@ -737,3 +737,12 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Cause: seven DOM patches injected by `/legacy-crm` waited for the next animation frame, so the unpatched page was painted first (menu items moved 52 px, the top bar resized).
 - Fix: `src/features/legacy-crm/before-paint.ts` (`beforePaint`: microtask before paint, runaway guard → next frame). All patches use it; new patches must too. Client list no longer crashes on a client without a source.
 - Verified locally with a `layout-shift` observer (0 shifts on menu clicks) and in production (deploy 06a58ab healthy).
+
+## 2026-10-01 handoff — manually written film → project → purchase request
+
+- Owner request: a manager writes in a film that is not in the warehouse list; it must be fixed in the project so it can be purchased and received and the project cost is correct. Solar films get subtypes.
+- Quick project editor, «Плёнки нет в списке»: «✍️ Вписать плёнку вручную и заказать» (owner and manager). Form: type (solar: Зеркальная / Керамическая / Магнетронная (напылённая) / Фотохромная / Другая), name, vendor, roll width, note. Saving creates a catalog film with `pendingPurchase` (reused if the same name exists), puts it on the project line, and creates a draft purchase request for this order (`source: manual_project_film`, metres = sq ft × 92.903 / width mm × 1.1, rounded up to 0.5 m). Changing the line quantity updates the draft. The line shows «Вписана вручную · ожидает закупки · заявка …». Receiving the roll uses the existing «Закупки» flow; the project's material cost then comes from that roll.
+- The owner's «+ Добавить плёнку на склад» (roll already in hand) is unchanged and suggests the solar subtypes.
+- Verification: full unit suite and `tsc` green; `manual-film-purchase.test.ts` runs the flow in a VM; checked in a local CRM (main + this branch): the form, the pending film on the line, PUR-… draft for 300 sq ft = 20.5 m, labels and status in Russian. Production build: CI job «Test, typecheck, and build».
+- Next action: Codex 👍, Owner «да», merge, deploy (no migration).
+

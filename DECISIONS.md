@@ -450,6 +450,13 @@ Owner decision in chat on 2026-10-01 (asked whether to wait for the relational s
 - Migration: the analytics moves with the installation and payment stage (relational installer jobs and payroll accruals); client identity moves with the lead/client stage.
 - Everything else remains frozen as decided on 2026-09-29.
 
+## 2026-10-01 — Exception to the legacy freeze: a manually written film is fixed in the project and ordered
+
+Owner request in chat on 2026-10-01: a manager must be able to write in a film that is not in the warehouse list; «это должно фиксироваться в рамках проекта обязательно, чтобы потом можно было закупить и сделать приход, чтобы проект правильно посчитался». Solar films have subtypes (зеркальная, керамическая, магнетронная, фотохромная, другая).
+
+- Allowed in the legacy HTML until the warehouse/purchasing stage moves to PostgreSQL: «Плёнки нет в списке → Вписать плёнку вручную и заказать» in the quick project editor (PR for this exception). It creates a catalog film «ожидает закупки» on the project line and a draft project purchase request; the existing receipt flow brings the real roll cost into the project.
+- Migration: moves with the warehouse/purchasing stage (relational catalog, purchase requests and receipts).
+
 ## Changing a decision
 
 ## 2026-09-30 — Surveyor mobile navigation is organized around field work
