@@ -87,4 +87,6 @@ test("card email changes only when the owner typed a new address", () => {
   // Only a typed change is sent; an untouched field (even before hydration) keeps the server login.
   assert.match(html, /id="tm-edit-email" type="email" value="\$\{academyEsc\(u\.email \|\| ''\)\}" oninput="this\.dataset\.touched = '1'"/);
   assert.match(html, /const emailWasEdited = Boolean\(emailTouched && enteredEmail && enteredEmail !== canonicalEmail\);/);
+  // Hydration never overwrites a field the owner has typed in.
+  assert.match(html, /if \(emailInput && emailInput\.dataset\.touched !== '1' && /);
 });

@@ -19493,7 +19493,8 @@ async function hydrateTeamMemberAccount(userId) {
     if (!member) return;
 
     const emailInput = document.getElementById('tm-edit-email');
-    if (emailInput && (!emailInput.value || emailInput.value.trim().toLowerCase() === currentEmail)) {
+    // Never overwrite what the owner has already typed.
+    if (emailInput && emailInput.dataset.touched !== '1' && (!emailInput.value || emailInput.value.trim().toLowerCase() === currentEmail)) {
       emailInput.value = member.email || '';
     }
     // Edits are compared with the server login, not the (possibly stale) card email.
