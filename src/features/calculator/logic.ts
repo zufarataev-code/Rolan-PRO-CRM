@@ -430,7 +430,12 @@ export function calculateLineEconomics(
   }, 0);
 
   const materialCostTotal = actualFilmSqft * serviceType.material_cost_per_sqft * (isFilmService ? 1 : 0);
-  const installationCostTotal = actualFilmSqft * serviceType.installation_cost_per_sqft * (isFilmService ? 1 : 0);
+  // Smart zone connections are installer labor too (ZONE_CONNECTION rate from the rate directory).
+  const zoneCount = serviceType.service_code === "SMART_FILM" ? asNumber(card.dynamic_fields.zones_qty) : 0;
+  const zoneRate =
+    bootstrap.service_types.find((candidate) => candidate.service_code === "ZONE_CONNECTION")?.installation_cost_per_sqft ?? 0;
+  const installationCostTotal =
+    actualFilmSqft * serviceType.installation_cost_per_sqft * (isFilmService ? 1 : 0) + zoneCount * Number(zoneRate || 0);
   const blockCostTotal = blocksQty * serviceType.block_cost_price;
   const estimatedCostTotal = materialCostTotal + installationCostTotal + blockCostTotal + addonCostTotal;
   const estimatedProfit = line.line_total - estimatedCostTotal;
