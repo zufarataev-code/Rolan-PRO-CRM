@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 import { PROJECT_ACCESS_ROLES } from "@/features/projects/api";
 import { createManualProject } from "@/features/projects/service";
+import { prisma } from "@/lib/db";
 import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { ROLE_CODES } from "@/lib/auth/constants";
@@ -29,6 +30,8 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json().catch(() => null)) as
     | {
+        /** The client the manager picked after a contact conflict. */
+        client_id?: string | null;
         client_name?: string;
         phone?: string | null;
         email?: string | null;
@@ -63,6 +66,7 @@ export async function POST(request: NextRequest) {
   let project: Awaited<ReturnType<typeof createManualProject>>;
   try {
     project = await createManualProject(auth.session, {
+      client_id: body.client_id || null,
       client_name: body.client_name,
       phone: body.phone ?? null,
       email: body.email ?? null,
@@ -88,9 +92,15 @@ export async function POST(request: NextRequest) {
       return apiError(409, "client_owned_by_other_manager", error.message);
     }
     if (error instanceof ClientIdentityConflictError) {
+      // The candidates passed the manager's access check before the conflict was raised.
+      const candidates = await prisma.client.findMany({
+        where: { client_id: { in: error.candidateIds } },
+        select: { client_id: true, name: true, phone: true, email: true },
+      });
       return apiError(409, "client_identity_conflict", error.message, {
         email_client_id: error.emailClientId,
         phone_client_id: error.phoneClientId,
+        candidates,
       });
     }
     throw error;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { getAllowedFilmCategoryCodes } from "@/features/calculator/logic";
 import type { CalculatorFilm, CalculatorServiceType } from "@/features/calculator/types";
@@ -41,8 +41,19 @@ type ApiEnvelope = {
     project_id?: string;
   };
   errors?: Array<{
+    code?: string;
     message?: string;
   }>;
+  meta?: {
+    candidates?: ClientCandidate[];
+  };
+};
+
+type ClientCandidate = {
+  client_id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
 };
 
 function formatMoney(amount: number) {
@@ -109,6 +120,11 @@ export function ProjectManualCreatePanel({
   const [projectNotes, setProjectNotes] = useState(initialValues?.project_notes ?? "");
   const [positionNotes, setPositionNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  // The phone/email match several client cards: the manager picks one and the
+  // project is created for that client.
+  const [clientCandidates, setClientCandidates] = useState<ClientCandidate[]>([]);
+  const chosenClientId = useRef<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [message, setMessage] = useState("Заполните проект и сохраните его в operational CRM.");
 
   const selectedServiceType = findServiceType(serviceTypes, serviceTypeId);
@@ -182,6 +198,7 @@ export function ProjectManualCreatePanel({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          client_id: chosenClientId.current,
           client_name: clientName.trim(),
           phone: phone.trim() || null,
           email: email.trim() || null,
@@ -204,9 +221,17 @@ export function ProjectManualCreatePanel({
 
       const payload = (await response.json().catch(() => null)) as ApiEnvelope | null;
 
+      if (payload?.errors?.[0]?.code === "client_identity_conflict" && payload.meta?.candidates?.length) {
+        setClientCandidates(payload.meta.candidates);
+        setMessage("Телефон и почта совпадают с несколькими клиентами. Выберите, для кого этот проект.");
+        return;
+      }
+
       if (!response.ok || !payload?.data?.project?.project_id) {
         throw new Error(payload?.errors?.[0]?.message ?? "Не удалось создать проект.");
       }
+
+      setClientCandidates([]);
 
       setMessage("Проект создан. Открываю карточку проекта.");
       router.push(`/manager/projects/${payload.data.project.project_id}`);
@@ -214,12 +239,18 @@ export function ProjectManualCreatePanel({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось создать проект.");
     } finally {
+      chosenClientId.current = null;
       setSaving(false);
     }
   }
 
+  function chooseClient(clientId: string) {
+    chosenClientId.current = clientId;
+    formRef.current?.requestSubmit();
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="split-grid">
+    <form ref={formRef} onSubmit={handleSubmit} className="split-grid">
       <div className="surface">
         <div className="detail-hero">
           <div>
@@ -462,6 +493,21 @@ export function ProjectManualCreatePanel({
           <div className="inspector-item">
             <div className="row-title">Статус</div>
             <div className="row-meta">{message}</div>
+            {clientCandidates.length ? (
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                {clientCandidates.map((candidate) => (
+                  <button
+                    key={candidate.client_id}
+                    type="button"
+                    className="soft-button"
+                    disabled={saving}
+                    onClick={() => chooseClient(candidate.client_id)}
+                  >
+                    {candidate.name} · {[candidate.phone, candidate.email].filter(Boolean).join(" · ") || "без контактов"}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
 
