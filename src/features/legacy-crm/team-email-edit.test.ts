@@ -100,6 +100,6 @@ test("a new login email reaches every card linked to the account", () => {
 
 test("a slow account load never replaces a modal the owner opened or closed meanwhile", () => {
   const route = readFileSync("app/legacy-crm/route.ts", "utf8");
-  assert.match(route, /const modalWhenClicked = state\.modal;/);
-  assert.match(route, /if \(window\.__teamAccessRequest !== request \|\| state\.modal !== modalWhenClicked\) return;/);
+  assert.match(route, /const modalNodeWhenClicked = document\.querySelector\('#app \.modal-backdrop'\);/);
+  assert.match(route, /document\.querySelector\('#app \.modal-backdrop'\) !== modalNodeWhenClicked\) return;/);
 });

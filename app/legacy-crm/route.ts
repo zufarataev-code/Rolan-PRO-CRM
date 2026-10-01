@@ -102,12 +102,14 @@ export async function GET(request: NextRequest) {
 
           // The dialog opens only if nothing else happened while the account
           // loaded: a newer click or a modal the owner opened/closed meanwhile wins.
+          // The modal on screen is compared as a DOM node: closing and reopening
+          // an editor (even with identical markup) creates a new node.
           const request = (window.__teamAccessRequest || 0) + 1;
           window.__teamAccessRequest = request;
-          const modalWhenClicked = state.modal;
+          const modalNodeWhenClicked = document.querySelector('#app .modal-backdrop');
           window.__teamAccessLegacyUserId = legacyUserId;
           const account = await loadTeamAccessAccount(legacyUserId, user.email || '');
-          if (window.__teamAccessRequest !== request || state.modal !== modalWhenClicked) return;
+          if (window.__teamAccessRequest !== request || document.querySelector('#app .modal-backdrop') !== modalNodeWhenClicked) return;
           const serverEmail = account.member?.email || '';
           window.__teamAccessCurrentEmail = serverEmail;
 
