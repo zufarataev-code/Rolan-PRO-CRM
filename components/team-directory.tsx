@@ -18,7 +18,7 @@ const ROLE_OPTIONS = [
   { code: "OWNER", label: "Владелец", hint: "всё, включая сотрудников и финансы" },
   { code: "MANAGER", label: "Менеджер", hint: "лиды, сделки, КП, свои клиенты" },
   { code: "CONSULTANT", label: "Замерщик", hint: "свои замеры, без цен" },
-  { code: "INSTALLER", label: "Монтажник", hint: "свои объекты, без цен" },
+  { code: "INSTALLER", label: "Специалист по установке", hint: "свои объекты, без цен" },
 ] as const;
 
 const roleLabel = (code: string) => ROLE_OPTIONS.find((role) => role.code === code)?.label ?? code;
