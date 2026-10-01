@@ -71,3 +71,16 @@ test("mobile bottom navigation has restrained semantic color accents", () => {
   assert.match(result, /--mobile-nav-accent: #64748B/);
   assert.match(result, /aria-current="page"/);
 });
+
+
+test("legacy CRM implements a phone-specific month calendar with day drill-down", async () => {
+  const source = await readFile(join(process.cwd(), "private/legacy/rolanpro-crm-cloud.html"), "utf8");
+
+  assert.match(source, /\.calendar-mobile-month-grid/);
+  assert.match(source, /grid-template-columns: repeat\(7, minmax\(0, 1fr\)\)/);
+  assert.match(source, /calendar-mobile-day-dots/);
+  assert.match(source, /calendar-mobile-day-count/);
+  assert.match(source, /calendarMobileSelectedDate/);
+  assert.match(source, /calendar-mobile-agenda/);
+  assert.match(source, /selectedEvents\.map\(ev => renderCalendarEventCard/);
+});
