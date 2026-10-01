@@ -722,3 +722,11 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Bug found by the E2E gate and fixed: `lockClientIdentity` used `$queryRaw` on `pg_advisory_xact_lock`, which returns `void`; Prisma failed to deserialize it, so **every client create with a phone or email returned 500** (also in project and proposal creation paths). Now `$executeRaw`.
 - New `e2e/client-identity.e2e.ts`: `(805) 555-0142` and `+1 805-555-0142` resolve to one client; email match is case/space insensitive; a legacy save adding a second card for the same phone is rejected with `duplicate_client`. E2E files run serially (shared legacy workspace revision).
 - Known limitation: client lookup scans all clients per create (fine at current volume); add normalized, indexed identity columns before tens of thousands of clients. Legacy-workspace clients and PostgreSQL clients are still two stores until the client collection migrates.
+
+## 2026-09-30 handoff — installation roles and groups (PR #275)
+
+- Governing decision: `DECISIONS.md` → "2026-09-30 — Installation roles, groups and team-lead pay". Builder: Claude. Reviewer: Codex. Stacked on #273.
+- What changed: `ROLE_CODES.INSTALLER_LEAD` (seeded); INSTALLER display name «Главный специалист по установке»; `users.installer_lead_id` (migration `20260930150000_installer_groups`); team service validates the lead/installer pairing, group size 1–5, active installers only, and writes profile, roles and group in one transaction; a lead losing eligibility releases the group; «Сотрудники» shows group selectors and «Убрать сотрудника»; legacy new installers no longer receive built-in 0.30/0.55 per-sq-ft defaults.
+- Verification (local): unit tests green; E2E 13/13 incl. installation groups (assign, non-lead rejected, surveyor rejected, >5 rejected, lead-only role rejected, invalid group writes nothing, demotion releases the group).
+- Blocker: none in code; production deploy needs Codex review and Owner approval (deploy takes a DB backup first, PR #274).
+- Next action: #276 lead pay (10% on top) and #277 lead workspace/distribution, then review/merge of the stack.

@@ -31,6 +31,8 @@ export async function POST(request: NextRequest) {
     roles?: RoleCode[];
     password?: string;
     legacyUserId?: string;
+    installerLeadId?: string | null;
+    groupInstallerIds?: string[];
   } | null;
 
   if (!body?.email || !body.fullName || !body.roles?.length || !body.password) {
@@ -44,6 +46,8 @@ export async function POST(request: NextRequest) {
       roles: body.roles,
       password: body.password,
       legacyUserId: body.legacyUserId,
+      installerLeadId: body.installerLeadId ?? null,
+      groupInstallerIds: Array.isArray(body.groupInstallerIds) ? body.groupInstallerIds.map(String) : undefined,
     });
 
     return apiSuccess(created);

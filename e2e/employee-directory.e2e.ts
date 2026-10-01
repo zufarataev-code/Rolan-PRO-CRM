@@ -121,6 +121,120 @@ test("owner adds an employee with several roles and changes them in one step", a
   assert.deepEqual(roles.map((access) => access.role.code).sort(), ["CONSULTANT"]);
 });
 
+test("installation groups: a team lead can be assigned; a non-lead cannot", async () => {
+  const installer = await owner.call("POST", "/api/v1/team", {
+    email: `inst-${runTag}@example.com`,
+    fullName: `${runTag} Installer`,
+    roles: ["INSTALLER"],
+    password: employeePassword,
+  });
+  assert.equal(installer.status, 200, `create installer: ${JSON.stringify(installer.json)}`);
+  const installerId = data<{ userId: string }>(installer.json).userId;
+
+  const leadWithoutGroup = await owner.call("POST", "/api/v1/team", {
+    email: `lead-empty-${runTag}@example.com`,
+    fullName: `${runTag} Lead without group`,
+    roles: ["INSTALLER", "INSTALLER_LEAD"],
+    password: employeePassword,
+  });
+  assert.equal(leadWithoutGroup.status, 400, "a new lead needs 1–5 installers");
+
+  const lead = await owner.call("POST", "/api/v1/team", {
+    email: `lead-${runTag}@example.com`,
+    fullName: `${runTag} Lead`,
+    roles: ["INSTALLER", "INSTALLER_LEAD"],
+    password: employeePassword,
+    groupInstallerIds: [installerId],
+  });
+  assert.equal(lead.status, 200, `create lead: ${JSON.stringify(lead.json)}`);
+  const leadId = data<{ userId: string }>(lead.json).userId;
+  assert.equal(
+    (await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } })).installer_lead_id,
+    leadId,
+    "the initial group is assigned at creation",
+  );
+
+  const emptyGroup = await owner.call("PATCH", `/api/v1/team/${leadId}`, { groupInstallerIds: [] });
+  assert.equal(emptyGroup.status, 400, "a lead keeps at least one installer");
+
+  const nonLeadGroup = await owner.call("PATCH", `/api/v1/team/${employeeId}`, { groupInstallerIds: [installerId] });
+  assert.equal(nonLeadGroup.status, 400, "only a lead can get a group, even when roles are not sent");
+
+  const assigned = await owner.call("PATCH", `/api/v1/team/${installerId}`, { installerLeadId: leadId });
+  assert.equal(assigned.status, 200, `assign lead: ${JSON.stringify(assigned.json)}`);
+  const stored = await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } });
+  assert.equal(stored.installer_lead_id, leadId);
+
+  const notALead = await owner.call("PATCH", `/api/v1/team/${leadId}`, { installerLeadId: installerId });
+  assert.equal(notALead.status, 400, "only an INSTALLER_LEAD can lead a group");
+
+  const notAnInstaller = await owner.call("PATCH", `/api/v1/team/${leadId}`, { groupInstallerIds: [employeeId] });
+  assert.equal(notAnInstaller.status, 400, "a surveyor cannot be put into an installation group");
+
+  const group = await owner.call("PATCH", `/api/v1/team/${leadId}`, { groupInstallerIds: [installerId] });
+  assert.equal(group.status, 200, `set group: ${JSON.stringify(group.json)}`);
+  const tooMany = await owner.call("PATCH", `/api/v1/team/${leadId}`, {
+    groupInstallerIds: Array.from({ length: 6 }, (_, index) => `00000000-0000-4000-8000-00000000000${index}`),
+  });
+  assert.equal(tooMany.status, 400, "a group has at most 5 installers");
+
+  const leadOnly = await owner.call("PATCH", `/api/v1/team/${leadId}`, { roles: ["INSTALLER_LEAD"] });
+  assert.equal(leadOnly.status, 400, "a lead must keep the installer role");
+
+  const staleGroup = await owner.call("PATCH", `/api/v1/team/${leadId}`, {
+    fullName: `${runTag} Lead renamed`,
+    groupInstallerIds: [employeeId],
+  });
+  assert.equal(staleGroup.status, 400, "invalid group rejects the whole update");
+  assert.notEqual(
+    (await prisma.user.findUniqueOrThrow({ where: { user_id: leadId } })).full_name,
+    `${runTag} Lead renamed`,
+    "nothing was written when the group was invalid",
+  );
+
+  const disabled = await owner.call("PATCH", `/api/v1/team/${leadId}`, { isActive: false, groupInstallerIds: [installerId] });
+  assert.equal(disabled.status, 200, `disable lead: ${JSON.stringify(disabled.json)}`);
+  assert.equal(
+    (await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } })).installer_lead_id,
+    null,
+    "a switched-off lead releases the group",
+  );
+  const reactivated = await owner.call("PATCH", `/api/v1/team/${leadId}`, { isActive: true, groupInstallerIds: [installerId] });
+  assert.equal(reactivated.status, 200, `reactivate lead: ${JSON.stringify(reactivated.json)}`);
+
+  const installer2 = await owner.call("POST", "/api/v1/team", {
+    email: `inst2-${runTag}@example.com`,
+    fullName: `${runTag} Installer 2`,
+    roles: ["INSTALLER"],
+    password: employeePassword,
+  });
+  const installer2Id = data<{ userId: string }>(installer2.json).userId;
+  const lead2 = await owner.call("POST", "/api/v1/team", {
+    email: `lead2-${runTag}@example.com`,
+    fullName: `${runTag} Lead 2`,
+    roles: ["INSTALLER", "INSTALLER_LEAD"],
+    password: employeePassword,
+    groupInstallerIds: [installer2Id],
+  });
+  assert.equal(lead2.status, 200, `create lead 2: ${JSON.stringify(lead2.json)}`);
+  const steal = await owner.call("PATCH", `/api/v1/team/${leadId}`, { groupInstallerIds: [installerId, installer2Id] });
+  assert.equal(steal.status, 400, "taking the only installer of another lead would leave that group empty");
+  const lastMemberOff = await owner.call("PATCH", `/api/v1/team/${installer2Id}`, { isActive: false });
+  assert.equal(lastMemberOff.status, 400, "the last installer of a group cannot be switched off silently");
+
+  const demoted = await owner.call("PATCH", `/api/v1/team/${leadId}`, { roles: ["INSTALLER"] });
+  assert.equal(demoted.status, 200);
+  assert.equal(
+    (await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } })).installer_lead_id,
+    null,
+    "losing the lead role releases the group",
+  );
+
+  const removed = await owner.call("PATCH", `/api/v1/team/${installerId}`, { installerLeadId: null });
+  assert.equal(removed.status, 200);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } })).installer_lead_id, null);
+});
+
 test("a new employee is recognised by the CRM without the owner opening it first", async () => {
   // Employees used to see "Доступ не настроен" until the owner's browser
   // happened to synchronize the legacy card. The server now guarantees it.

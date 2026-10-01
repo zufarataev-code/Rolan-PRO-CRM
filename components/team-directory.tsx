@@ -13,13 +13,15 @@ type Member = {
   isActive: boolean;
   mustChangePassword: boolean;
   lastLoginAt: string | null;
+  installerLeadId?: string | null;
 };
 
 const ROLE_OPTIONS = [
   { code: "OWNER", label: "Владелец", hint: "всё, включая сотрудников и финансы" },
   { code: "MANAGER", label: "Менеджер", hint: "лиды, сделки, КП, свои клиенты" },
   { code: "CONSULTANT", label: "Замерщик", hint: "свои замеры, без цен" },
-  { code: "INSTALLER", label: "Монтажник", hint: "свои объекты, без цен" },
+  { code: "INSTALLER", label: "Главный специалист по установке", hint: "свои объекты, без цен" },
+  { code: "INSTALLER_LEAD", label: "Руководитель монтажной группы", hint: "распределяет работы группы, +10% с каждого монтажника, без цен" },
 ] as const;
 
 const roleLabel = (code: string) => ROLE_OPTIONS.find((role) => role.code === code)?.label ?? code;
@@ -150,6 +152,7 @@ export function TeamDirectory({
       <MemberList
         title={`Работают (${active.length})`}
         members={active}
+        allMembers={members}
         ownUserId={ownUserId}
         onEdit={setEditing}
         onPreview={preview}
@@ -158,6 +161,7 @@ export function TeamDirectory({
         <MemberList
           title={`Доступ выключен (${inactive.length})`}
           members={inactive}
+          allMembers={members}
           ownUserId={ownUserId}
           onEdit={setEditing}
           onPreview={preview}
@@ -168,6 +172,8 @@ export function TeamDirectory({
       {editing ? (
         <MemberForm
           member={editing === "new" ? null : editing}
+          leads={members.filter((item) => item.isActive && item.roles.includes("INSTALLER_LEAD"))}
+          installers={members.filter((item) => item.isActive && item.roles.includes("INSTALLER"))}
           isSelf={editing !== "new" && editing.userId === ownUserId}
           minPasswordLength={minPasswordLength}
           onClose={() => setEditing(null)}
@@ -186,12 +192,14 @@ export function TeamDirectory({
 function MemberList({
   title,
   members,
+  allMembers,
   ownUserId,
   onEdit,
   onPreview,
 }: {
   title: string;
   members: Member[];
+  allMembers: Member[];
   ownUserId: string;
   onEdit: (member: Member) => void;
   onPreview: (member: Member) => void;
@@ -210,6 +218,11 @@ function MemberList({
                   <span key={role} className={styles.role}>{roleLabel(role)}</span>
                 ))}
                 {member.mustChangePassword ? <span className={styles.warn}>ждёт первого входа</span> : null}
+                {member.installerLeadId ? (
+                  <span className={styles.role}>
+                    группа: {allMembers.find((lead) => lead.userId === member.installerLeadId)?.fullName ?? "—"}
+                  </span>
+                ) : null}
               </span>
             </div>
             <div className={styles.actions}>
@@ -231,12 +244,16 @@ function MemberList({
 
 function MemberForm({
   member,
+  leads,
+  installers,
   isSelf,
   minPasswordLength,
   onClose,
   onSaved,
 }: {
   member: Member | null;
+  leads: Member[];
+  installers: Member[];
   isSelf: boolean;
   minPasswordLength: number;
   onClose: () => void;
@@ -247,17 +264,39 @@ function MemberForm({
   const [roles, setRoles] = useState<string[]>(member?.roles ?? ["INSTALLER"]);
   const [isActive, setIsActive] = useState(member?.isActive ?? true);
   const [password, setPassword] = useState("");
+  const [installerLeadId, setInstallerLeadId] = useState<string>(member?.installerLeadId ?? "");
+  const [groupIds, setGroupIds] = useState<string[]>(
+    member ? installers.filter((item) => item.installerLeadId === member.userId).map((item) => item.userId) : [],
+  );
+  const MAX_GROUP = 5;
+  function toggleGroupMember(id: string) {
+    setGroupIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : current.length >= MAX_GROUP ? current : [...current, id],
+    );
+  }
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   function toggleRole(code: string) {
-    setRoles((current) => (current.includes(code) ? current.filter((role) => role !== code) : [...current, code]));
+    setRoles((current) => {
+      if (current.includes(code)) {
+        // Without the installer role a lead could not use the CRM: drop both together.
+        const removed = code === "INSTALLER" ? ["INSTALLER", "INSTALLER_LEAD"] : [code];
+        return current.filter((role) => !removed.includes(role));
+      }
+      // A team lead works on sites too, so the lead role always comes with the installer role.
+      if (code === "INSTALLER_LEAD" && !current.includes("INSTALLER")) return [...current, "INSTALLER", code];
+      return [...current, code];
+    });
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     if (!roles.length) return setError("Выберите хотя бы одну роль.");
+    if (roles.includes("INSTALLER_LEAD") && isActive && (groupIds.length < 1 || groupIds.length > MAX_GROUP)) {
+      return setError(`Выберите монтажников группы: от 1 до ${MAX_GROUP}.`);
+    }
     if (!member && password.length < minPasswordLength) {
       return setError(`Временный пароль — не короче ${minPasswordLength} символов.`);
     }
@@ -268,7 +307,14 @@ function MemberForm({
     setBusy(true);
     try {
       if (!member) {
-        await api("/api/v1/team", "POST", { email, fullName, roles, password });
+        await api("/api/v1/team", "POST", {
+          email,
+          fullName,
+          roles,
+          password,
+          installerLeadId: roles.includes("INSTALLER") && !roles.includes("INSTALLER_LEAD") && installerLeadId ? installerLeadId : null,
+          ...(roles.includes("INSTALLER_LEAD") ? { groupInstallerIds: groupIds } : {}),
+        });
         await onSaved(`${fullName} добавлен(а). Передайте почту и временный пароль лично — при первом входе CRM попросит его сменить.`);
       } else {
         await api(`/api/v1/team/${member.userId}`, "PATCH", {
@@ -276,6 +322,9 @@ function MemberForm({
           fullName,
           roles,
           isActive,
+          installerLeadId: roles.includes("INSTALLER") && installerLeadId ? installerLeadId : null,
+          // A lead being switched off releases the group: no list is sent then.
+          ...(roles.includes("INSTALLER_LEAD") && isActive ? { groupInstallerIds: groupIds } : {}),
           ...(password ? { password } : {}),
         });
         await onSaved(password ? `Сохранено. Новый временный пароль для ${fullName} действует со следующего входа.` : "Сохранено.");
@@ -313,6 +362,44 @@ function MemberForm({
           ))}
         </fieldset>
 
+        {roles.includes("INSTALLER_LEAD") ? (
+          <fieldset className={styles.field}>
+            <span>Монтажники группы ({groupIds.length} из {MAX_GROUP}) — получает 10% с заработка каждого</span>
+            {installers
+              .filter((item) => item.userId !== member?.userId)
+              .map((item) => (
+                <label key={item.userId} className={styles.check}>
+                  <input
+                    type="checkbox"
+                    checked={groupIds.includes(item.userId)}
+                    disabled={!groupIds.includes(item.userId) && groupIds.length >= MAX_GROUP}
+                    onChange={() => toggleGroupMember(item.userId)}
+                  />
+                  <span>
+                    {item.fullName}
+                    {item.installerLeadId && item.installerLeadId !== member?.userId ? (
+                      <span className={styles.muted}> · сейчас в другой группе</span>
+                    ) : null}
+                  </span>
+                </label>
+              ))}
+          </fieldset>
+        ) : null}
+
+        {roles.includes("INSTALLER") && !roles.includes("INSTALLER_LEAD") ? (
+          <label className={styles.field}>
+            <span>Руководитель монтажной группы</span>
+            <select id="tm-installer-lead" value={installerLeadId} onChange={(event) => setInstallerLeadId(event.target.value)}>
+              <option value="">— без группы —</option>
+              {leads
+                .filter((lead) => lead.userId !== member?.userId)
+                .map((lead) => (
+                  <option key={lead.userId} value={lead.userId}>{lead.fullName}</option>
+                ))}
+            </select>
+          </label>
+        ) : null}
+
         {member && !isSelf ? (
           <label className={styles.check}>
             <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
@@ -335,6 +422,27 @@ function MemberForm({
         {error ? <p className={styles.error} role="alert">{error}</p> : null}
 
         <div className={styles.dialogActions}>
+          {member && !isSelf && member.isActive ? (
+            <button
+              type="button"
+              className={styles.danger}
+              disabled={busy}
+              onClick={async () => {
+                if (!window.confirm(`Убрать ${member.fullName}? Доступ в CRM закроется, история заказов и зарплаты сохранится.`)) return;
+                setBusy(true);
+                try {
+                  await api(`/api/v1/team/${member.userId}`, "PATCH", { isActive: false });
+                  await onSaved(`${member.fullName} убран(а): доступ закрыт, история сохранена. Вернуть можно в разделе «Доступ выключен».`);
+                } catch (caught) {
+                  setError((caught as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Убрать сотрудника
+            </button>
+          ) : null}
           <button type="button" className={styles.secondary} onClick={onClose}>Отмена</button>
           <button type="submit" className={styles.primary} disabled={busy}>{busy ? "Сохраняю…" : "Сохранить"}</button>
         </div>

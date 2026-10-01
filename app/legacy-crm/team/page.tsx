@@ -45,6 +45,7 @@ export default async function LegacyCrmTeamPage() {
           isActive: member.isActive,
           mustChangePassword: member.mustChangePassword,
           lastLoginAt: member.lastLoginAt ? member.lastLoginAt.toISOString() : null,
+          installerLeadId: member.installerLeadId,
         }))}
       ownUserId={session.user.user_id}
       minPasswordLength={PASSWORD_MIN_LENGTH}

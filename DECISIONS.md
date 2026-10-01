@@ -442,6 +442,16 @@ Decision:
 
 Execution is tracked as TASK-009 in `zufarataev-code/rolanpro-ai-system`. Builder: Codex. Reviewer: Claude. Production deploys and data migrations require explicit Owner approval.
 
+## 2026-09-30 — Installation roles, groups and team-lead pay
+
+Owner decisions in chat on 2026-09-30.
+
+- `INSTALLER` is shown as «Главный специалист по установке» (code unchanged).
+- New role `INSTALLER_LEAD` «Руководитель монтажной группы», always held together with `INSTALLER` (the lead works on sites too). The lead distributes the jobs of their group among its installers and never sees prices, costs or margins.
+- A group is 1–5 installers chosen by name (`users.installer_lead_id`). A lead who is switched off or loses the lead role releases the group.
+- Team-lead pay: own work as an installer plus 10% of each group installer's pay on the order, paid by the company on top (the installer keeps full pay). Example: $500 job, two people at $250 each → the lead receives $250 + $25. Applies from 2026-09-01 like the other pay rules.
+- Employees are removed by switching access off (history of orders and pay is kept); there is no hard delete.
+- Implemented in PRs #275 (roles, groups, removal), #276 (lead pay) and #277 (lead workspace, distribution).
 ## 2026-09-30 — Exception to the legacy freeze for urgent operational features
 
 Owner decision in chat on 2026-09-30 (chosen over waiting for the relational installation/payment stage). Amends item 1 of "2026-09-29 — CRM core consolidation".
