@@ -48,3 +48,26 @@ test("mobile workspace adapter is injected only once", () => {
   assert.equal((twice.match(/id="rolanpro-mobile-workspace-style"/g) || []).length, 1);
   assert.equal((twice.match(/id="rolanpro-mobile-workspace-script"/g) || []).length, 1);
 });
+
+
+test("mobile workspace preserves the seven-column month calendar instead of stacking weekdays", () => {
+  const result = injectMobileWorkspaceAdapter("<!doctype html><body><main></main></body>");
+
+  assert.match(result, /const isProtectedCalendarLayout/);
+  assert.match(result, /\.calendar-month-grid/);
+  assert.match(result, /grid-template-columns: repeat\(7, minmax\(0, 1fr\)\) !important/);
+  assert.match(result, /protectCalendarLayouts\(\)/);
+  assert.match(result, /element\.classList\.contains\('grid-cols-7'\)/);
+});
+
+test("mobile bottom navigation has restrained semantic color accents", () => {
+  const result = injectMobileWorkspaceAdapter("<!doctype html><body><main></main></body>");
+
+  assert.match(result, /\.mobile-primary-nav > \*:nth-child\(1\)/);
+  assert.match(result, /--mobile-nav-accent: #2563eb/);
+  assert.match(result, /--mobile-nav-accent: #168a5b/);
+  assert.match(result, /--mobile-nav-accent: #b56a08/);
+  assert.match(result, /--mobile-nav-accent: #168bc0/);
+  assert.match(result, /--mobile-nav-accent: #6d5bd0/);
+  assert.match(result, /aria-current="page"/);
+});
