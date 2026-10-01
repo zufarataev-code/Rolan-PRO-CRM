@@ -71,7 +71,17 @@ export async function POST(request: NextRequest) {
     }
     if (existing && existing.conflictingClient) {
       return {
-        conflict: { emailClientId: existing.client.client_id, phoneClientId: existing.conflictingClient.client_id },
+        conflict: {
+          emailClientId: existing.client.client_id,
+          phoneClientId: existing.conflictingClient.client_id,
+          // Every matching card passed the visibility check above.
+          candidates: existing.matches.map((client) => ({
+            client_id: client.client_id,
+            name: client.name,
+            phone: client.phone,
+            email: client.email,
+          })),
+        },
       } as const;
     }
     if (existing) {
@@ -109,6 +119,7 @@ export async function POST(request: NextRequest) {
       {
         email_client_id: result.conflict.emailClientId,
         phone_client_id: result.conflict.phoneClientId,
+        candidates: result.conflict.candidates,
       },
     );
   }

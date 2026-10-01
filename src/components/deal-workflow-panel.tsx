@@ -45,6 +45,18 @@ function isoInputValue(value: Date) {
   )}`;
 }
 
+type ClientCandidate = {
+  client_id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+};
+
+type ConflictEnvelope = {
+  errors?: Array<{ code?: string; message?: string }>;
+  meta?: { candidates?: ClientCandidate[] };
+};
+
 async function parseEnvelope(response: Response) {
   const payload = (await response.json().catch(() => null)) as ApiEnvelope | null;
 
@@ -98,6 +110,8 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
     deal.client?.service_address ?? deal.client?.billing_address ?? deal.workflow?.latest_consultation?.location_address ?? "",
   );
   const [consultationNotes, setConsultationNotes] = useState(deal.notes ?? "");
+  // The lead's phone/email match several client cards: the manager picks one.
+  const [clientCandidates, setClientCandidates] = useState<ClientCandidate[]>([]);
 
   const latestConsultation = deal.workflow?.latest_consultation ?? null;
   const latestSurvey = latestConsultation?.survey ?? null;
@@ -166,8 +180,7 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
       throw new Error("Для этой сделки нет лида, из которого можно создать клиента.");
     }
 
-    const createdClient = await parseEnvelope(
-      await fetch("/api/v1/clients", {
+    const response = await fetch("/api/v1/clients", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -179,8 +192,13 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
           service_address: consultationAddress.trim() || null,
           notes: `Создано из лида ${deal.lead.lead_code ?? deal.lead.name}.`,
         }),
-      }),
-    );
+      });
+    const conflict = (await response.clone().json().catch(() => null)) as ConflictEnvelope | null;
+    if (conflict?.errors?.[0]?.code === "client_identity_conflict" && conflict.meta?.candidates?.length) {
+      setClientCandidates(conflict.meta.candidates);
+      throw new Error("Телефон и почта лида совпадают с несколькими клиентами. Выберите клиента ниже.");
+    }
+    const createdClient = await parseEnvelope(response);
 
     await parseEnvelope(
       await fetch(`/api/v1/deals/${deal.deal_id}`, {
@@ -199,6 +217,20 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
         ? "Найден существующий клиент по телефону или email; его карточка привязана к сделке."
         : "Клиент создан из лида и привязан к сделке.",
     );
+  }
+
+  async function linkExistingClient(clientId: string) {
+    await parseEnvelope(
+      await fetch(`/api/v1/deals/${deal.deal_id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ client_id: clientId }),
+      }),
+    );
+    setClientCandidates([]);
+    setMessage("Выбранный клиент привязан к сделке.");
   }
 
   async function scheduleConsultation() {
@@ -328,14 +360,27 @@ export function DealWorkflowPanel({ deal, consultants }: DealWorkflowPanelProps)
                 Открыть клиентов
               </Link>
             ) : canCreateClientFromLead ? (
-              <button
-                type="button"
-                className="accent-button"
-                onClick={() => runAction("Создаю клиента из лида...", createClientFromLead)}
-                disabled={saving}
-              >
-                Создать клиента из лида
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="accent-button"
+                  onClick={() => runAction("Создаю клиента из лида...", createClientFromLead)}
+                  disabled={saving}
+                >
+                  Создать клиента из лида
+                </button>
+                {clientCandidates.map((candidate) => (
+                  <button
+                    key={candidate.client_id}
+                    type="button"
+                    className="soft-button"
+                    onClick={() => runAction("Привязываю клиента...", () => linkExistingClient(candidate.client_id))}
+                    disabled={saving}
+                  >
+                    {candidate.name} · {[candidate.phone, candidate.email].filter(Boolean).join(" · ") || "без контактов"}
+                  </button>
+                ))}
+              </>
             ) : (
               <Link href="/manager/crm/clients#new-client" className="accent-button">
                 Создать клиента

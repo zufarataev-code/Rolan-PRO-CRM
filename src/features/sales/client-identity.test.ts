@@ -154,3 +154,25 @@ test("an identity conflict carries every matching card", async () => {
   assert.deepEqual(new ClientIdentityConflictError("A", "B", ["A", "B", "C"]).candidateIds, ["A", "B", "C"]);
   assert.deepEqual(new ClientIdentityConflictError("A", "B").candidateIds, ["A", "B"]);
 });
+
+test("lead conversion and proposal publishing let the manager pick a client after a contact conflict", () => {
+  const clientsRoute = readFileSync("app/api/v1/clients/route.ts", "utf8");
+  const dealRoute = readFileSync("app/api/v1/deals/[dealId]/route.ts", "utf8");
+  const dealPanel = readFileSync("src/components/deal-workflow-panel.tsx", "utf8");
+  const publish = readFileSync("src/features/legacy-crm/publish-proposal.ts", "utf8");
+  const publishRoute = readFileSync("app/api/v1/legacy-crm/proposals/publish/route.ts", "utf8");
+  const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+
+  // Lead → client: candidates in the 409, a picker in the deal panel, and a scope check on linking.
+  assert.match(clientsRoute, /candidates: result\.conflict\.candidates/);
+  assert.match(dealPanel, /setClientCandidates\(conflict\.meta\.candidates\)/);
+  assert.match(dealPanel, /linkExistingClient\(candidate\.client_id\)/);
+  assert.match(dealRoute, /where: \{ client_id: body\.client_id, \.\.\.buildClientReuseWhere\(managerId\) \}/);
+
+  // Legacy proposal publishing: candidates, a chooser, and a scope-checked chosen client.
+  assert.match(publishRoute, /return apiError\(409, "client_identity_conflict", error\.message, \{ candidates \}\)/);
+  assert.match(publish, /where: \{ client_id: snapshot\.chosenClientId, \.\.\.buildClientReuseWhere\(managerId\) \}/);
+  assert.match(publish, /match\.matches\.map\(\(item\) => item\.client_id\)/);
+  assert.match(html, /const choice = await chooseProposalClient\(candidates\);/);
+  assert.match(html, /return premiumPublishCanonicalProposal\(prop, choice\);/);
+});

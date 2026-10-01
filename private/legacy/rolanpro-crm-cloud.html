@@ -30432,13 +30432,22 @@ function premiumCanonicalSnapshot(prop) {
     items,
   };
 }
-async function premiumPublishCanonicalProposal(prop) {
+async function premiumPublishCanonicalProposal(prop, chosenClientId = '') {
+  const snapshot = premiumCanonicalSnapshot(prop);
+  if (chosenClientId) snapshot.client = { ...(snapshot.client || {}), client_id: chosenClientId };
   const response = await fetch('/api/v1/legacy-crm/proposals/publish', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(premiumCanonicalSnapshot(prop)),
+    body: JSON.stringify(snapshot),
   });
   const payload = await response.json().catch(() => ({}));
+  const candidates = payload?.meta?.candidates;
+  if (!chosenClientId && payload?.errors?.[0]?.code === 'client_identity_conflict' && Array.isArray(candidates) && candidates.length) {
+    // Contacts shared by several preserved client cards: the manager picks one.
+    const choice = await chooseProposalClient(candidates);
+    if (!choice) throw new Error('Клиент для КП не выбран.');
+    return premiumPublishCanonicalProposal(prop, choice);
+  }
   if (!response.ok || !payload?.data?.proposal) {
     throw new Error(payload?.errors?.[0]?.message || 'The client proposal could not be published.');
   }
@@ -30447,6 +30456,23 @@ async function premiumPublishCanonicalProposal(prop) {
   prop.canonicalPublicUrl = payload.data.proposal.public_url;
   save();
   return payload.data.proposal;
+}
+function chooseProposalClient(candidates) {
+  return new Promise(resolve => {
+    window.__resolveProposalClient = (clientId) => { window.__resolveProposalClient = null; closeModal(); resolve(clientId || ''); };
+    state.modal = `
+    <div class="modal-backdrop">
+      <div class="modal-content workspace-modal p-6">
+        <h3 class="font-semibold text-lg mb-1">Для кого это КП?</h3>
+        <p class="text-xs text-gray-500 mb-4">Телефон и почта совпадают с несколькими карточками клиентов. Выберите нужную.</p>
+        <div class="space-y-2">
+          ${candidates.map(candidate => `<button type="button" class="btn-ghost w-full text-left" onclick="__resolveProposalClient('${academyEsc(jsQuote(candidate.client_id))}')">${academyEsc(candidate.name || 'Без имени')} · ${academyEsc([candidate.phone, candidate.email].filter(Boolean).join(' · ') || 'без контактов')}</button>`).join('')}
+        </div>
+        <button type="button" class="btn-ghost w-full mt-4" onclick="__resolveProposalClient('')">Отмена</button>
+      </div>
+    </div>`;
+    render();
+  });
 }
 async function generatePremiumProposal(orderId) {
   const order = getOrder(orderId);
