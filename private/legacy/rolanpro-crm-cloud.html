@@ -6210,19 +6210,19 @@
 
               <button class="bg-gradient-to-br from-purple-500 to-purple-700 text-white p-3 rounded-lg text-left hover:scale-105 transition" onclick="document.getElementById('login-user').value='u_i1'; document.getElementById('login-pin').focus();">
                 <div class="text-2xl">🔧</div>
-                <div class="text-xs opacity-90 mt-1">Монтажник</div>
+                <div class="text-xs opacity-90 mt-1">Специалист по установке</div>
                 <div class="font-semibold text-sm truncate">Ринат</div>
               </button>
 
               <button class="bg-gradient-to-br from-purple-500 to-purple-700 text-white p-3 rounded-lg text-left hover:scale-105 transition" onclick="document.getElementById('login-user').value='u_i2'; document.getElementById('login-pin').focus();">
                 <div class="text-2xl">🔧</div>
-                <div class="text-xs opacity-90 mt-1">Монтажник</div>
+                <div class="text-xs opacity-90 mt-1">Специалист по установке</div>
                 <div class="font-semibold text-sm truncate">Нурик</div>
               </button>
 
               <button class="bg-gradient-to-br from-purple-500 to-purple-700 text-white p-3 rounded-lg text-left hover:scale-105 transition" onclick="document.getElementById('login-user').value='u_i3'; document.getElementById('login-pin').focus();">
                 <div class="text-2xl">🔧</div>
-                <div class="text-xs opacity-90 mt-1">Монтажник</div>
+                <div class="text-xs opacity-90 mt-1">Специалист по установке</div>
                 <div class="font-semibold text-sm truncate">Данила</div>
               </button>
 
@@ -6231,7 +6231,7 @@
           <summary class="text-xs text-gray-500 cursor-pointer">Все пользователи списком ↓</summary>
           <div class="mt-2">
             <select id="login-user">
-              <option value="u_o1">Rolan (Owner) — owner</option><option value="u_m1">Данилла — Менеджер</option><option value="u_m2">Oleg Petrov — Менеджер</option><option value="u_z1">Зуфар — Замерщик</option><option value="u_z2">Farrukh Saidov — Замерщик</option><option value="u_i1">Ринат — Монтажник</option><option value="u_i2">Нурик — Монтажник</option><option value="u_i3">Данила — Монтажник</option><option value="u_i4">Паша — Монтажник</option>
+              <option value="u_o1">Rolan (Owner) — owner</option><option value="u_m1">Данилла — Менеджер</option><option value="u_m2">Oleg Petrov — Менеджер</option><option value="u_z1">Зуфар — Замерщик</option><option value="u_z2">Farrukh Saidov — Замерщик</option><option value="u_i1">Ринат — Специалист по установке</option><option value="u_i2">Нурик — Специалист по установке</option><option value="u_i3">Данила — Специалист по установке</option><option value="u_i4">Паша — Специалист по установке</option>
             </select>
           </div>
         </details>
@@ -6247,7 +6247,7 @@
           <div>🧑‍💼 Менеджер Anna — 1111</div>
           <div>🧑‍💼 Менеджер Oleg — 1112</div>
           <div>📐 Замерщик Rustam — 2111</div>
-          <div>🔧 Монтажник Renat — 3111</div>
+          <div>🔧 Специалист по установке Renat — 3111</div>
         </div>
       </div>
     </div>
@@ -6309,8 +6309,8 @@ const I18N = {
     status: 'Статус',
     manager: 'Менеджер',
     measurer: 'Замерщик',
-    installer: 'Монтажник',
-    installers: 'Монтажники',
+    installer: 'Специалист по установке',
+    installers: 'Специалисты по установке',
     role: 'Роль',
     save: 'Сохранить',
     cancel: 'Отмена',
@@ -6373,7 +6373,7 @@ const I18N = {
     measurementScheduled: 'Замер назначен',
     measurementDone: 'Замер завершён',
     installationScheduled: 'Монтаж назначен',
-    installationAccepted: 'Монтажник принял заказ',
+    installationAccepted: 'Специалист по установке принял заказ',
     installationInProgress: 'Монтаж в работе',
     installationDone: 'Монтаж завершён',
     // snake_case ключи статусов воронки (используются в бейджах T(o.status))
@@ -6385,7 +6385,7 @@ const I18N = {
     proposal_sent: 'КП отправлено',
     proposal_accepted: 'КП принято',
     installation_scheduled: 'Монтаж назначен',
-    installation_accepted: '✓ Монтажник принял',
+    installation_accepted: '✓ Специалист по установке принял',
     installation_en_route: '🚗 Бригада выехала',
     installation_in_progress: '⚙️ Монтаж идёт',
     installation_done: 'Монтаж завершён',
@@ -6419,7 +6419,7 @@ const I18N = {
     telegramHint: 'Создайте бота через @BotFather, вставьте токен. Каждый сотрудник отправляет боту /start и его chat_id заполняется автоматически.',
     testNotification: 'Тест уведомления',
     notifyClient: 'Уведомить клиента',
-    notifyInstaller: 'Уведомить монтажников',
+    notifyInstaller: 'Уведомить специалистов по установке',
     telegramSend: 'Отправить в Telegram',
     whatsappSend: 'Отправить в WhatsApp',
     smsSend: 'Отправить SMS',
@@ -6455,7 +6455,7 @@ const I18N = {
     scheduleMeasurement: 'Запланировать замер',
     scheduleInstallation: 'Запланировать монтаж',
     assignMeasurer: 'Назначить замерщика',
-    assignInstaller: 'Назначить монтажника',
+    assignInstaller: 'Назначить специалиста по установке',
     sendProposal: 'Отправить КП',
     markProposalAccepted: 'Отметить КП принятым',
     markActSigned: 'Отметить акт подписанным',
@@ -6469,7 +6469,7 @@ const I18N = {
     noAccess: 'Нет доступа',
     welcomeOwner: 'Кабинет владельца',
     welcomeMeasurer: 'Портал замерщика',
-    welcomeInstaller: 'Портал монтажника',
+    welcomeInstaller: 'Портал специалиста по установке',
     welcomeClient: 'Портал клиента',
     welcomeManager: 'Портал менеджера',
     stepNew: 'Новый',
@@ -6526,7 +6526,7 @@ const I18N = {
     revenueByMonth: 'Выручка по месяцам',
     ordersByMonth: 'Заказы по месяцам',
     conversionFunnel: 'Воронка конверсии',
-    installerLoad: 'Загрузка монтажников',
+    installerLoad: 'Загрузка специалистов по установке',
     measurerLoad: 'Загрузка замерщиков',
     sourceBreakdown: 'Источники клиентов',
     avgOrderValue: 'Средний чек',
@@ -6556,17 +6556,17 @@ const I18N = {
     actualArea: 'Фактический м²',
     plannedArea: 'Плановый м²',
     actualMeasurements: 'Фактический замер',
-    actualMeasurementsHint: 'Фактически установленный метраж — основа выплаты монтажникам. По умолчанию = плановый замер.',
+    actualMeasurementsHint: 'Фактически установленный метраж — основа выплаты специалистам по установке. По умолчанию = плановый замер.',
     actualWidth: 'Факт. ширина',
     actualHeight: 'Факт. высота',
     actualQty: 'Факт. кол-во',
     diff: 'Отклонение',
     copyFromPlanned: 'Скопировать с замера',
-    installerPayout: 'Выплата монтажнику',
+    installerPayout: 'Выплата специалисту по установке',
     installerPayoutTotal: 'К выплате (всего)',
-    installerPayoutPer: 'Выплата на 1 монтажника',
-    installerRates: 'Ставки монтажников ($/м²)',
-    installerRatesHint: 'Ставка применяется к фактическому метражу. При нескольких монтажниках сумма делится поровну.',
+    installerPayoutPer: 'Выплата на 1 специалиста по установке',
+    installerRates: 'Ставки специалистов по установке ($/м²)',
+    installerRatesHint: 'Ставка применяется к фактическому метражу. При нескольких специалистах по установке сумма делится поровну.',
     payoutByFilm: 'Выплата по типам плёнки',
     filmCategoryProtective: 'Защитная',
     filmCategoryDecorative: 'Декоративная',
@@ -6579,7 +6579,7 @@ const I18N = {
     grossMargin: 'Валовая маржа',
     calendarWeek: 'Неделя',
     calendarMonth: 'Месяц',
-    weekByInstaller: 'Неделя × Монтажник',
+    weekByInstaller: 'Неделя × Специалист по установке',
     today: 'Сегодня',
     prev: '←',
     next: '→',
@@ -8286,7 +8286,7 @@ function migrateSchema() {
       consultation_scheduled: 'RolanPRO: Консультация по {orderNo} назначена. {portalUrl}',
       measurement_scheduled: 'RolanPRO: Замер по {orderNo} запланирован. {portalUrl}',
       measurement_done: 'RolanPRO: Замер по {orderNo} выполнен. КП готовим.',
-      installation_accepted: 'RolanPRO: Монтажник принял ваш заказ {orderNo} и готовится к выезду. 👷',
+      installation_accepted: 'RolanPRO: Специалист по установке принял ваш заказ {orderNo} и готовится к выезду. 👷',
       installation_en_route: 'RolanPRO: Бригада выехала к вам по заказу {orderNo}! 🚗 Скоро будем.',
       installation_in_progress: 'RolanPRO: Бригада начала работу по {orderNo}. ⚙️',
       act_signed: 'RolanPRO: Акт по {orderNo} подписан. Спасибо!',
@@ -10225,7 +10225,7 @@ const SMART_CONNECTION_TEMPLATES = [
       'Разбить объект на зоны управления: комната, офис, переговорная, ванная.',
       'Для каждой зоны указать свой блок и место обслуживания.',
       'Проверить суммарную нагрузку на блок и запас 20%.',
-      'Передать монтажникам таблицу: окно → зона → блок → контроллер.',
+      'Передать специалистам по установке таблицу: окно → зона → блок → контроллер.',
     ],
   },
   {
@@ -10856,7 +10856,7 @@ function measureStudioStandardsHtml(scopeKey) {
       <h4>${scope.icon} Что проверить</h4>
       <div class="measure-helper-card mb-3" style="background:color-mix(in srgb, ${scope.accent} 10%, white);border-color:${scope.accent}33;color:#0f172a">
         <div class="helper-title" style="color:${scope.accent}">${academyEsc(scope.short)} · зачем эти поля</div>
-        <div class="helper-text">${academyEsc(scope.brief)} Эти данные уходят в КП, техлист, наряд монтажника и список материалов.</div>
+        <div class="helper-text">${academyEsc(scope.brief)} Эти данные уходят в КП, техлист, наряд специалиста по установке и список материалов.</div>
       </div>
       <ul class="measure-standard-list">
         ${scope.standards.map(x => `<li>${academyEsc(x)}</li>`).join('')}
@@ -10995,7 +10995,7 @@ function measureStudioConstructionHint(winType) {
     panoramic_door: 'Панорамная дверь: большое стекло, проверяем вес, доступ, Low-E/IGU и риск термошока.',
     transom: 'Фрамуга: отделяем верхнее стекло от основной части.',
   };
-  return hints[type.key] || 'Заполните панели так, чтобы монтажник мог резать без догадок.';
+  return hints[type.key] || 'Заполните панели так, чтобы специалист по установке мог резать без догадок.';
 }
 function measureStudioPanelConfigHtml(win, unit) {
   const type = winTypeInfo(win?.winType);
@@ -11165,7 +11165,7 @@ function openEngineeringMeasureStudio(orderId) {
               <span class="measure-step-no">2</span>
               <div class="min-w-0 flex-1">
                 <div class="measure-step-title">Комната и окно</div>
-                <div class="measure-step-sub">Сначала зона, потом конкретное окно. Так монтажник увидит, куда относится каждый размер.</div>
+                <div class="measure-step-sub">Сначала зона, потом конкретное окно. Так специалист по установке увидит, куда относится каждый размер.</div>
                 <div class="measure-form-grid mt-3">
                   <div>
                     <label>Комната / зона</label>
@@ -11258,7 +11258,7 @@ function openEngineeringMeasureStudio(orderId) {
               <span class="measure-step-no">5</span>
               <div class="min-w-0 flex-1">
                 <div class="measure-step-title">Доступ и заметки</div>
-                <div class="measure-step-sub">Эти данные идут монтажнику в наряд, чтобы он не гадал на объекте.</div>
+                <div class="measure-step-sub">Эти данные идут специалисту по установке в наряд, чтобы он не гадал на объекте.</div>
                 <div class="measure-form-grid mt-3">
                   <div class="measure-two-col">
                     <div><label>Этаж / высота</label><input id="ms-floor" value="${academyEsc(win?.floor || '')}" placeholder="1 floor / 12 ft"></div>
@@ -11268,7 +11268,7 @@ function openEngineeringMeasureStudio(orderId) {
                   </div>
                   <div>
                     <label>Технические заметки</label>
-                    <textarea id="ms-notes" rows="3" placeholder="Рама, подрезка, риски, доступ, что показать монтажникам">${academyEsc(win?.technicalNotes || '')}</textarea>
+                    <textarea id="ms-notes" rows="3" placeholder="Рама, подрезка, риски, доступ, что показать специалистам по установке">${academyEsc(win?.technicalNotes || '')}</textarea>
                   </div>
                 </div>
               </div>
@@ -12115,7 +12115,7 @@ function renderSmartTechnicalAssignment(win) {
 // адрес в карточке заказа, комментарии замерщика в третьем месте,
 // фотографии в четвёртом.
 //
-// Монтажник НЕ ВИДИТ ДЕНЕГ: ни сумм, ни маржи, ни стоимости материалов.
+// Специалист по установке НЕ ВИДИТ ДЕНЕГ: ни сумм, ни маржи, ни стоимости материалов.
 // Наряд строится как последовательность действий, а не таблица
 // характеристик: куда ехать, во сколько, что делать, чем подтвердить.
 
@@ -12220,7 +12220,7 @@ function renderWorkOrderHtml(order, printMode = false) {
     </div>`;
 }
 
-/** Список проёмов без денежных полей — монтажнику цены не показываем. */
+/** Список проёмов без денежных полей — специалисту по установке цены не показываем. */
 /** Размер проёма в тех единицах, которые выбраны в настройках. */
 function workOrderSizeLabel(w) {
   const width = Number(w?.width) || 0;
@@ -12588,7 +12588,7 @@ function renderCutSheetHtml(order, printMode = false, embedded = false) {
   const empty = !plan.pieces.length;
   return `
     <div class="cut-sheet ${embedded ? 'mt-5' : ''} ${printMode ? '' : 'p-5'}">
-      ${embedded ? `<h2 class="text-xl font-black mb-3">🎞 Лист раскроя для монтажников</h2>` : `
+      ${embedded ? `<h2 class="text-xl font-black mb-3">🎞 Лист раскроя для специалистов по установке</h2>` : `
       <div class="flex items-start justify-between gap-4 mb-5">
         <div>
           <div class="text-xs font-bold text-blue-700">ROLANPRO CUT SHEET</div>
@@ -12648,7 +12648,7 @@ function openCutSheet(orderId) {
         <div class="measure-head">
           <div>
             <div class="text-xs font-bold text-blue-700">Cut sheet</div>
-            <h3 class="text-xl font-black">🎞 Лист раскроя для монтажников</h3>
+            <h3 class="text-xl font-black">🎞 Лист раскроя для специалистов по установке</h3>
           </div>
           <div class="flex gap-2 flex-wrap justify-end">
             <button class="btn-ghost" onclick="printCutSheet('${order.id}')">🖨 Печать</button>
@@ -15916,7 +15916,7 @@ function orderWorkflowTransitionIssues(o, newStatus) {
   }
   if (newStatus === 'installation_scheduled') {
     issues.push(...orderTechnicalMeasurementIssues(o));
-    if (!(o.installerIds || []).length) issues.push('назначьте монтажников');
+    if (!(o.installerIds || []).length) issues.push('назначьте специалистов по установке');
     if (!o.installationAt) issues.push('укажите дату и время монтажа');
   }
   if (newStatus === 'act_signed' && !o.installationDoneAt && o.status !== 'installation_done') issues.push('сначала завершите монтаж');
@@ -16381,7 +16381,7 @@ function renderOrderCommandCenter(o, c) {
       ${renderOrderActionCard({ icon: '📞', title: 'Консультация', sub: o.consultationAt ? fmtDateTime(o.consultationAt) : 'Назначить время консультации', onclick: `scheduleConsultationPrompt('${o.id}')` })}
       ${renderOrderActionCard({ icon: '📐', title: 'Замер', sub: o.measurementAt ? fmtDateTime(o.measurementAt) : 'Назначить замерщика и дату', onclick: `scheduleMeasurementPrompt('${o.id}')` })}
       ${renderOrderActionCard({ icon: '🔧', title: 'Монтаж', sub: o.installationAt ? fmtDateTime(o.installationAt) : 'Назначить бригаду и дату', onclick: `scheduleInstallationPrompt('${o.id}')` })}
-      ${renderOrderActionCard({ icon: '👷', title: 'Команда заказа', sub: 'Менеджер, замерщик, монтажники', onclick: `openAssignTeam('${o.id}')` })}
+      ${renderOrderActionCard({ icon: '👷', title: 'Команда заказа', sub: 'Менеджер, замерщик, специалисты по установке', onclick: `openAssignTeam('${o.id}')` })}
     </div>`;
   const clientBody = `
     ${portalUrl ? renderOrderActionCard({ icon: '🔗', title: 'Ссылка клиенту', sub: 'Кабинет заказа: статус, КП, перенос или отмена визита', onclick: `copyPortalLink('${o.id}')` }) : renderOrderActionCard({ icon: '⚠️', title: 'Публичная ссылка не настроена', sub: 'Для SMS/email клиенту укажите Public URL CRM в настройках.', onclick: `state.view='settings'; render();`, variant: 'warning' })}
@@ -16903,7 +16903,7 @@ function renderAppShell() {
     ['proposals', 'КП', '📄'],
     ['servicePricing', 'Услуги и цены', '💲'],
     ['calendar', T('calendar'), '📅'],
-    ['installerOps', 'Монтажники сейчас', '📍'],
+    ['installerOps', 'Специалисты по установке сейчас', '📍'],
     ['tasks', 'Задачи', '✅'],
     ['academy', 'Академия', '🧭'],
     ['clients', T('clients'), '👥'],
@@ -16926,6 +16926,7 @@ function renderAppShell() {
     ['dashboard', T('dashboard'), '🏠'],
     ['workday', 'Рабочий день', '⏱'],
     ['installations', T('myTasks'), '🔧'],
+    ['analytics', 'Аналитика', '📈'],
     ['calendar', T('calendar'), '📅'],
     ['tasks', 'Задачи', '✅'],
   ] : [];
@@ -17057,8 +17058,9 @@ function headerTitle() {
     case 'canonicalProjects': return state.canonicalProjectId ? '📐 Конструктор замеров' : '📐 Проверенные замеры';
     case 'proposals': return '📄 Коммерческие предложения';
     case 'servicePricing': return '💲 Услуги и цены';
-    case 'installerOps': return '📍 Монтажники сейчас';
+    case 'installerOps': return '📍 Специалисты по установке сейчас';
     case 'workday': return '⏱ Рабочий день';
+    case 'analytics': return '📈 Аналитика по объектам';
     case 'calendar': return T('calendar');
     case 'clients': return T('clients');
     case 'paymentsdue': return '💵 Ожидают оплаты';
@@ -17088,9 +17090,10 @@ function headerSubtitle() {
     case 'orders': return 'Один проект от первого обращения до замера, КП, монтажа и оплаты';
     case 'canonicalProjects': return 'Точные замеры и услуги внутри существующего проекта';
     case 'proposals': return 'Кому отправлено, кто посмотрел и к какому заказу относится КП';
-    case 'servicePricing': return 'Единый прайс, ставки монтажников и план продаж — внутри основной CRM';
+    case 'servicePricing': return 'Единый прайс, ставки специалистов по установке и план продаж — внутри основной CRM';
     case 'installerOps': return 'Активные смены, объекты и последнее добровольно переданное местоположение';
     case 'workday': return 'Смена, часы, пробег и личные начисления в одной истории';
+    case 'analytics': return 'Сданные объекты, метраж и заработок — без цен клиента';
     case 'orderDetails': return 'Единая карточка проекта: объект, услуги, замер, КП, монтаж, оплата и история';
     case 'clients': return 'Клиенты, адреса объектов, B2B/B2C и постоянные аккаунты';
     case 'coldcalls': return 'Поиск компаний, журнал обзвона, повторные звонки и перевод в B2B';
@@ -17099,7 +17102,7 @@ function headerSubtitle() {
     case 'accounting': return 'Деньги компании из заказов, склада, зарплаты и фактических операций';
     case 'paymentsdue': return 'Zelle, переводы, чеки и наличные — отметить поступление';
     case 'measurements': return 'Задачи замерщика без финансовых данных';
-    case 'installations': return 'Наряды монтажника, маршрут, приёмка и сдача работы';
+    case 'installations': return 'Наряды специалиста по установке, маршрут, приёмка и сдача работы';
     case 'academy': return 'Процессы компании, обучение, чек-листы и стандарты';
     default: return `${T(u.role)} · быстрый доступ к рабочим модулям`;
   }
@@ -17146,6 +17149,7 @@ function renderView() {
       case 'dashboard': return renderInstallerDashboard();
       case 'workday': return renderCanonicalInstallerWorkday();
       case 'installations': return renderInstallerTasks();
+      case 'analytics': return renderInstallerAnalytics();
       case 'calendar': return renderCalendar();
       case 'tasks': return renderTasksView();
     }
@@ -17861,9 +17865,9 @@ function renderCanonicalServicePricing() {
       ${canonicalPricingField(`cps-${row.service_type_id}-base`, 'Цена клиенту, $', row.base_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-min`, 'Минимальная цена, $', row.min_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-block`, 'Блок клиенту, $', row.block_revenue_price)}
-      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-installer`, 'Монтажнику / sqft, $', row.installation_cost_per_sqft) : ''}
+      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-installer`, 'Специалисту по установке / sqft, $', row.installation_cost_per_sqft) : ''}
     </div>
-    <p class="text-xs text-slate-500 mt-3">Стоимость плёнки берётся со склада. Ставка монтажа из этой услуги автоматически начисляется назначенным монтажникам; индивидуальная ставка сотрудника может её переопределить.</p>
+    <p class="text-xs text-slate-500 mt-3">Стоимость плёнки берётся со склада. Ставка монтажа из этой услуги автоматически начисляется назначенным специалистам по установке; индивидуальная ставка сотрудника может её переопределить.</p>
     <div class="mt-4 flex flex-wrap items-center gap-3"><label class="tag"><input id="cps-${row.service_type_id}-active" type="checkbox" ${row.is_active ? 'checked' : ''}> Активна</label><button class="btn-primary" onclick="saveCanonicalService('${row.service_type_id}')">Сохранить услугу</button></div>
   </details>`).join('');
 
@@ -17880,7 +17884,7 @@ function renderCanonicalServicePricing() {
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Безубыточность</div><b class="text-xl">${canonicalPricingMoney(planning.break_even?.revenue)}</b><div class="text-xs">${planning.break_even?.deals || 0} сделок / ${planning.break_even?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Цель с прибылью</div><b class="text-xl">${canonicalPricingMoney(planning.target?.revenue)}</b><div class="text-xs">${planning.target?.deals || 0} сделок / ${planning.target?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">КП за месяц</div><b class="text-xl">${canonicalPricingMoney(actual.proposal_revenue)}</b></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Прогресс</div><b class="text-xl">${Number(actual.progress_percent || 0).toFixed(0)}%</b></div></div>
       ${owner ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${canonicalPricingField('cp-plan-check', 'Средний чек, $', assumptions.average_deal_value)}${canonicalPricingField('cp-plan-conversion', 'Конверсия лид → сделка, %', assumptions.lead_to_deal_percent)}${canonicalPricingField('cp-plan-profit', 'Целевая прибыль / месяц, $', assumptions.target_profit_monthly)}</div><button class="btn-primary mt-4" onclick="saveCanonicalPlanning()">Сохранить план</button>` : '<p class="text-sm text-slate-500 mt-4">Менеджер видит цели по лидам и сделкам. Расходы и прибыль меняет владелец.</p>'}
     </section>
-    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Услуги</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту услугу, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Монтажнику / sqft, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
+    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Услуги</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту услугу, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Специалисту по установке / sqft, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between"><div><h2 class="text-xl font-black">Дополнительные работы</h2><p class="text-sm text-slate-500">Подключение зон, демонтаж, силикон и другие допродажи.</p></div><span class="tag">${addons.length}</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить допработу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Основная услуга</span><select id="cp-new-addon-service" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2">${services.map(s => `<option value="${s.service_type_id}">${academyEsc(s.name_ru)}</option>`).join('')}</select></label>${canonicalPricingField('cp-new-addon-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-addon-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-addon-unit', 'Единица', 'item', 'text')}${canonicalPricingField('cp-new-addon-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-addon-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalAddon()">Создать допработу</button></details><div class="space-y-3 mt-4">${addonCards || '<div class="text-slate-500">Дополнительных работ пока нет</div>'}</div></section>
   </div>`;
 }
@@ -17896,7 +17900,7 @@ async function loadCanonicalInstallerOperations(force = false) {
     if (!response.ok) throw new Error(payload?.errors?.[0]?.message || `HTTP ${response.status}`);
     state.installerOperationsData = payload?.data?.installers || [];
   } catch (error) {
-    state.installerOperationsError = error?.message || 'Не удалось загрузить монтажников';
+    state.installerOperationsError = error?.message || 'Не удалось загрузить специалистов по установке';
   } finally {
     state.installerOperationsLoading = false;
     render();
@@ -17910,15 +17914,15 @@ function renderCanonicalInstallerOperations() {
   if (state.installerOperationsError) return `<div class="card border border-red-200 bg-red-50"><b>${academyEsc(state.installerOperationsError)}</b><button class="btn-primary mt-3" onclick="state.installerOperationsError='';loadCanonicalInstallerOperations(true)">Повторить</button></div>`;
   const activeCount = installers.filter(item => item.active_session).length;
   return `<div class="space-y-4">
-    <div class="grid grid-cols-2 gap-3"><div class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="text-xs text-slate-500">На смене</div><div class="text-3xl font-black text-emerald-700">${activeCount}</div></div><div class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="text-xs text-slate-500">Всего монтажников</div><div class="text-3xl font-black">${installers.length}</div></div></div>
-    <div class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex items-center justify-between"><div><h2 class="text-xl font-black">Бригада сейчас</h2><p class="text-sm text-slate-500">Обновляется по данным приложения монтажника.</p></div><button class="btn-ghost" onclick="loadCanonicalInstallerOperations(true)">Обновить</button></div><div class="space-y-3 mt-4">${installers.map(item => {
+    <div class="grid grid-cols-2 gap-3"><div class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="text-xs text-slate-500">На смене</div><div class="text-3xl font-black text-emerald-700">${activeCount}</div></div><div class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="text-xs text-slate-500">Всего специалистов по установке</div><div class="text-3xl font-black">${installers.length}</div></div></div>
+    <div class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex items-center justify-between"><div><h2 class="text-xl font-black">Бригада сейчас</h2><p class="text-sm text-slate-500">Обновляется по данным приложения специалиста по установке.</p></div><button class="btn-ghost" onclick="loadCanonicalInstallerOperations(true)">Обновить</button></div><div class="space-y-3 mt-4">${installers.map(item => {
       const active = item.active_session;
       const job = active?.installer_job;
       const hours = active ? (Number(active.work_minutes || 0) / 60).toFixed(1) : '0.0';
       const hasLocation = active?.last_location_at && active?.last_latitude != null && active?.last_longitude != null;
       return `<div class="border border-slate-200 bg-slate-50 p-4 grid grid-cols-1 md:grid-cols-[140px_1fr_auto] gap-3 items-center" style="border-radius:3px"><span class="tag ${active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}">${active ? 'На смене' : 'Не на смене'}</span><div><div class="font-black">${academyEsc(item.full_name)}</div><div class="text-sm text-slate-600">${academyEsc(job?.position?.title || job?.project?.title || 'Объект не выбран')}</div><div class="text-xs text-slate-500">${active ? `${hours} ч · ${academyEsc(job?.project?.address || 'без адреса')}` : academyEsc(item.email || '')}</div></div><div>${hasLocation ? `<a class="btn-primary" target="_blank" rel="noreferrer" href="https://www.google.com/maps?q=${active.last_latitude},${active.last_longitude}">Открыть на карте</a><div class="text-xs text-slate-500 mt-1">${new Date(active.last_location_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>` : '<span class="text-xs text-slate-500">Геолокация не передаётся</span>'}</div></div>`;
-    }).join('') || '<div class="text-slate-500">Монтажники пока не добавлены.</div>'}</div></div>
-    <div class="card border border-blue-200 bg-blue-50 text-blue-900" style="border-radius:4px"><b>Рабочая геолокация:</b> монтажник включает её сам при начале смены. После завершения смены передача прекращается; скрытого круглосуточного отслеживания нет.</div>
+    }).join('') || '<div class="text-slate-500">Специалисты по установке пока не добавлены.</div>'}</div></div>
+    <div class="card border border-blue-200 bg-blue-50 text-blue-900" style="border-radius:4px"><b>Рабочая геолокация:</b> специалист по установке включает её сам при начале смены. После завершения смены передача прекращается; скрытого круглосуточного отслеживания нет.</div>
   </div>`;
 }
 
@@ -18170,7 +18174,7 @@ function renderOwnerPanel() {
       <div><div class="text-xs opacity-75">Общая выручка (по плану)</div><div class="text-2xl font-bold">${fmtMoney(totalRevenue)}</div></div>
       <div><div class="text-xs opacity-75">Получено наличными</div><div class="text-2xl font-bold text-emerald-300">${fmtMoney(totalPaid)}</div></div>
       <div><div class="text-xs opacity-75">Дебиторская задолженность</div><div class="text-2xl font-bold ${totalDebt>0?'text-red-300':''}">${fmtMoney(totalDebt)}</div></div>
-      <div><div class="text-xs opacity-75">К выплате монтажникам</div><div class="text-2xl font-bold text-amber-300">${fmtMoney(installerPayoutsPending)}</div></div>
+      <div><div class="text-xs opacity-75">К выплате специалистам по установке</div><div class="text-2xl font-bold text-amber-300">${fmtMoney(installerPayoutsPending)}</div></div>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3 pt-3 border-t border-white/20">
       <div><div class="text-xs opacity-75">ПСС</div><div class="text-xl font-semibold">${fmtMoney(totalPSS)}</div></div>
@@ -18275,7 +18279,7 @@ function renderOwnerPanel() {
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <div class="p-3 bg-emerald-50 rounded-lg"><div class="text-xs text-emerald-700">Cash position</div><div class="text-xl font-bold text-emerald-700">${fmtMoney(cash.currentCash)}</div></div>
         <div class="p-3 bg-blue-50 rounded-lg"><div class="text-xs text-blue-700">Прогноз на 30 дней</div><div class="text-xl font-bold text-blue-700">+${fmtMoney(cash.predictedIn)}</div></div>
-        <div class="p-3 bg-amber-50 rounded-lg"><div class="text-xs text-amber-700">К выплате монтажникам</div><div class="text-xl font-bold text-amber-700">${fmtMoney(cash.pendingPayouts)}</div></div>
+        <div class="p-3 bg-amber-50 rounded-lg"><div class="text-xs text-amber-700">К выплате специалистам по установке</div><div class="text-xl font-bold text-amber-700">${fmtMoney(cash.pendingPayouts)}</div></div>
         <div class="p-3 bg-red-50 rounded-lg"><div class="text-xs text-red-700">Дебиторская задолж.</div><div class="text-xl font-bold text-red-700">${fmtMoney(Object.values(cash.buckets).reduce((s,v)=>s+v,0))}</div></div>
       </div>
       <div class="text-sm font-medium mb-2">📅 Возраст долгов (AR Aging)</div>
@@ -19154,7 +19158,7 @@ function renderTeam() {
     { role: 'owner', title: 'Владелец' },
     { role: 'manager', title: T('manager') + 'ы' },
     { role: 'measurer', title: T('measurer') + 'и' },
-    { role: 'installer', title: T('installer') + 'и' },
+    { role: 'installer', title: T('installers') },
   ];
   const canManage = currentUser()?.role === 'owner';
   return `
@@ -19243,7 +19247,7 @@ function renderTeam() {
 const TEAM_ROLE_OPTIONS = [
   { code: 'MANAGER', legacyRole: 'manager', name: 'Менеджер', label: 'Менеджер — продажи, заказы, клиенты' },
   { code: 'CONSULTANT', legacyRole: 'measurer', name: 'Замерщик', label: 'Замерщик — выезды и замеры, без финансов' },
-  { code: 'INSTALLER', legacyRole: 'installer', name: 'Монтажник', label: 'Монтажник — свои работы и фотоотчёт' },
+  { code: 'INSTALLER', legacyRole: 'installer', name: 'Специалист по установке', label: 'Специалист по установке — свои работы и фотоотчёт' },
   { code: 'OWNER', legacyRole: 'owner', name: 'Владелец', label: 'Владелец — полный доступ, включая деньги' },
 ];
 
@@ -19621,7 +19625,7 @@ function openTeamMemberForm(quickOrderId = '', quickLineId = '') {
 
       <label class="mt-3">Роль</label>
       ${quickInstaller
-        ? '<input type="checkbox" class="tm-role" value="INSTALLER" checked hidden><div class="p-3 rounded-lg border bg-slate-50 text-sm font-semibold">Монтажник · исполнитель услуги</div>'
+        ? '<input type="checkbox" class="tm-role" value="INSTALLER" checked hidden><div class="p-3 rounded-lg border bg-slate-50 text-sm font-semibold">Специалист по установке · исполнитель услуги</div>'
         : `<div class="grid grid-cols-1 gap-2">${teamRoleCheckboxes(['MANAGER'])}</div>`}
 
       <div id="tm-error" class="text-sm text-red-600 mt-3 hidden"></div>
@@ -20516,7 +20520,7 @@ function settingsSections() {
     { key: 'telegram', icon: '✈️', title: T('telegramConfigure'), description: 'Telegram-бот и Chat ID сотрудников' },
     { key: 'communication', icon: '💬', title: 'Автосвязь с клиентами', description: 'Каналы, автоматические сообщения и AI-продавец' },
     { key: 'integrations', icon: '🔌', title: 'Интеграции', description: 'Google Voice, Gmail, Maps, лиды и внешние сервисы' },
-    { key: 'catalog', icon: '🎞', title: T('catalog'), description: 'Плёнки, поставщики, цены и выплаты монтажникам' },
+    { key: 'catalog', icon: '🎞', title: T('catalog'), description: 'Плёнки, поставщики, цены и выплаты специалистам по установке' },
     { key: 'complexity', icon: '🪜', title: `${T('complexity')} — ${T('coefficient')}`, description: 'Коэффициенты сложности и стоимость аренды' },
     { key: 'client-payments', icon: '💵', title: 'Как клиент платит', description: 'Доступные способы и приоритет оплаты' },
     { key: 'pricing', icon: '📊', title: T('pricingDefaults'), description: 'Проценты, топливо, расходники и помощники' },
@@ -21579,6 +21583,11 @@ function renderInstallerDashboard() {
     </div>
   </div>
 
+  <button type="button" class="card w-full text-left mb-4 flex items-center justify-between gap-3" onclick="selectAppView('analytics')">
+    <span><span class="font-semibold">📈 Аналитика по объектам</span><span class="block text-xs text-gray-500">Сданные объекты, метраж и заработок за месяц</span></span>
+    <span class="text-blue-700 font-semibold">Открыть →</span>
+  </button>
+
   <h3 class="font-semibold mb-3">${T('myTasks')}</h3>
   ${renderInstallerList(myTasks)}
   `;
@@ -21774,6 +21783,144 @@ function renderInstallerPayHistory() {
   `;
 }
 
+// ---------- АНАЛИТИКА ПО ОБЪЕКТАМ (специалист по установке) ----------
+// Только свои объекты, свой метраж и свой заработок. Цена для клиента,
+// себестоимость и маржа сюда не попадают.
+const INSTALLER_CATEGORY_LABELS = {
+  solar: 'Солнцезащитная', protective: 'Защитная', smart: 'Smart',
+  decorative: 'Декоративная', privacy: 'Privacy', other: 'Другое',
+};
+const INSTALLER_COMPLEXITY_LABELS = {
+  standard: 'С пола', ladder: 'С лестницы', tower: 'С вышки-туры', alpinism: 'Высота выше 10 ft',
+};
+
+function installerObjectAnalytics(o, userId) {
+  const team = new Set((o.installerIds || []).filter(Boolean)).size || 1;
+  const byCategory = {}; // this installer's share, sq ft
+  let sqft = 0;          // the whole object
+  const add = (category, total, share) => {
+    const key = INSTALLER_CATEGORY_LABELS[category] ? category : 'other';
+    sqft += Number(total) || 0;
+    if (share > 0) byCategory[key] = (byCategory[key] || 0) + share;
+  };
+  const windows = measureAllWindows(o);
+  if (windows.length) {
+    // Measured windows are shared by the whole order crew, as in the payroll.
+    windows.forEach(({ win }) => {
+      const area = Number(windowActualAreaSqft(win)) || 0;
+      add(windowCatalog(win)?.category || filmCategory(win?.filmType || ''), area, area / team);
+    });
+  } else {
+    // Quick projects: every line has its own crew (orderQuickInstallerPayoutForUser).
+    projectQuickLines(o).filter(line => line.unit === 'sqft').forEach(line => {
+      const crew = new Set((line.installerIds || []).filter(Boolean));
+      const qty = Number(line.qty) || 0;
+      add(getCatalogItem(line.catalogId)?.category || primaryServiceInfo(line.serviceType)?.catalogCategory || 'other', qty, crew.has(userId) ? qty / crew.size : 0);
+    });
+  }
+  return {
+    order: o,
+    date: o.installationDoneAt || o.installationAt || o.createdAt || '',
+    done: Boolean(o.installationDoneAt) || ['installation_done', 'completed', 'review_received'].includes(o.status),
+    sqft,
+    mySqft: Object.values(byCategory).reduce((sum, value) => sum + value, 0),
+    team,
+    byCategory,
+    earned: orderInstallerPayoutPerPerson(o, userId),
+  };
+}
+
+function installerAnalyticsRange(period) {
+  const now = new Date();
+  const monthStart = offset => new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  if (period === 'month') return [monthStart(0), null];
+  if (period === 'prev') return [monthStart(-1), monthStart(0)];
+  if (period === 'quarter') return [monthStart(-2), null];
+  return [null, null];
+}
+
+function renderInstallerAnalytics() {
+  const u = currentUser();
+  const period = state.installerAnalyticsPeriod || 'month';
+  const [from, to] = installerAnalyticsRange(period);
+  const inPeriod = row => {
+    if (!row.date) return period === 'all';
+    const date = new Date(row.date);
+    return (!from || date >= from) && (!to || date < to);
+  };
+  const mine = db.orders.filter(o => (o.installerIds || []).includes(u.id));
+  const rows = mine.map(o => installerObjectAnalytics(o, u.id))
+    .filter(row => row.done && inPeriod(row))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const pending = mine.filter(o => !o.installationDoneAt && !['installation_done', 'completed', 'review_received'].includes(o.status));
+  const earned = rows.reduce((sum, row) => sum + row.earned, 0);
+  const mySqft = rows.reduce((sum, row) => sum + row.mySqft, 0);
+  const pendingEarned = pending.reduce((sum, o) => sum + orderInstallerPayoutPerPerson(o, u.id), 0);
+  const categories = {};
+  rows.forEach(row => Object.entries(row.byCategory).forEach(([key, sqft]) => {
+    categories[key] = (categories[key] || 0) + sqft;
+  }));
+  const fmtSqft = value => `${(Number(value) || 0).toFixed(1)} sq ft`;
+  const tile = (label, value, sub = '') => `
+    <div class="card">
+      <div class="text-xs text-gray-500">${label}</div>
+      <div class="text-2xl font-bold mt-1">${value}</div>
+      ${sub ? `<div class="text-xs text-gray-500 mt-1">${sub}</div>` : ''}
+    </div>`;
+  const periods = [['month', 'Этот месяц'], ['prev', 'Прошлый месяц'], ['quarter', '3 месяца'], ['all', 'Всё время']];
+
+  return `
+  <div class="flex gap-2 flex-wrap mb-4">
+    ${periods.map(([key, label]) => `<button type="button" class="${key === period ? 'btn-primary' : 'btn-ghost'} text-sm" onclick="state.installerAnalyticsPeriod='${key}'; render()">${label}</button>`).join('')}
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+    ${tile('Объектов сдано', rows.length)}
+    ${tile('Установлено мной', fmtSqft(mySqft))}
+    ${tile('Заработано', fmtMoney(earned), rows.length ? `в среднем ${fmtMoney(earned / rows.length)} за объект` : '')}
+    ${tile('Ожидает сдачи', fmtMoney(pendingEarned), `${pending.length} в работе`)}
+  </div>
+
+  ${Object.keys(categories).length ? `
+  <div class="card mb-4">
+    <h3 class="font-semibold mb-3">По типам плёнки</h3>
+    <div class="space-y-2">
+      ${Object.entries(categories).sort((a, b) => b[1] - a[1]).map(([key, sqft]) => `
+        <div class="flex items-center justify-between gap-3 text-sm">
+          <span>${INSTALLER_CATEGORY_LABELS[key]}</span>
+          <span class="font-semibold">${fmtSqft(sqft)} · ${mySqft ? Math.round(sqft / mySqft * 100) : 0}%</span>
+        </div>`).join('')}
+    </div>
+  </div>` : ''}
+
+  <h3 class="font-semibold mb-3">По объектам</h3>
+  ${rows.length ? `<div class="space-y-2">${rows.map(row => {
+    const o = row.order;
+    const c = getClient(o.clientId);
+    const films = Object.keys(row.byCategory).map(key => INSTALLER_CATEGORY_LABELS[key]).join(', ');
+    return `
+    <button type="button" class="card w-full text-left block" onclick="openOrder('${o.id}')">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="font-semibold">${academyEsc(o.number || '')} · ${academyEsc(c?.name || 'Клиент')}</div>
+          <div class="text-xs text-gray-500 truncate">${academyEsc(orderAddress(o, c) || '—')}</div>
+        </div>
+        <div class="text-right shrink-0">
+          <div class="font-bold text-emerald-700">${fmtMoney(row.earned)}</div>
+          <div class="text-xs text-gray-500">${fmtDate(row.date)}</div>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-600">
+        <span>${fmtSqft(row.mySqft)}${row.sqft - row.mySqft > 0.05 ? ` из ${fmtSqft(row.sqft)}` : ''}</span>
+        ${films ? `<span>${academyEsc(films)}</span>` : ''}
+        <span>${INSTALLER_COMPLEXITY_LABELS[o.complexity || 'standard'] || INSTALLER_COMPLEXITY_LABELS.standard}</span>
+        ${row.mySqft ? `<span>${fmtMoney(row.earned / row.mySqft)} / sq ft</span>` : ''}
+      </div>
+    </button>`;
+  }).join('')}</div>` : `<div class="card text-center text-gray-500">За выбранный период сданных объектов нет</div>`}
+  `;
+}
+
 function renderInstallerTasks() {
   const u = currentUser();
   const tasks = db.orders.filter(o => (o.installerIds||[]).includes(u.id))
@@ -21899,7 +22046,7 @@ function renderOrderPassport(o, c, u, opts = {}) {
   const roleLine = u?.role === 'measurer'
     ? 'режим замерщика: без денег'
     : u?.role === 'installer'
-      ? 'режим монтажника: только рабочие данные'
+      ? 'режим специалиста по установке: только рабочие данные'
       : 'паспорт проекта';
 
   return `
@@ -22867,7 +23014,7 @@ function renderQuickProjectEntry(o) {
       <div><label>Начало работ</label><input type="date" value="${projectQuickDateValue(line.startDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','startDate',this.value)"></div>
       <div><label>Окончание работ</label><input type="date" min="${projectQuickDateValue(line.startDate)}" value="${projectQuickDateValue(line.endDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','endDate',this.value)"></div>
     </div>
-    <div class="mt-2"><label>Исполнители старого проекта</label><div class="project-estimate-assignees">${availableInstallers.map(user => `<label class="project-estimate-assignee"><input type="checkbox" ${(line.installerIds || []).includes(user.id) ? 'checked' : ''} onchange="projectQuickToggleInstaller('${o.id}','${line.id}','${user.id}',this.checked)">${teamAvatarHtml(user,24)}<span>${academyEsc(user.name)}</span></label>`).join('') || '<span class="text-xs text-gray-500">Нет монтажников</span>'}</div></div>
+    <div class="mt-2"><label>Исполнители старого проекта</label><div class="project-estimate-assignees">${availableInstallers.map(user => `<label class="project-estimate-assignee"><input type="checkbox" ${(line.installerIds || []).includes(user.id) ? 'checked' : ''} onchange="projectQuickToggleInstaller('${o.id}','${line.id}','${user.id}',this.checked)">${teamAvatarHtml(user,24)}<span>${academyEsc(user.name)}</span></label>`).join('') || '<span class="text-xs text-gray-500">Нет специалистов по установке</span>'}</div></div>
     <div class="mt-2"><label>Расходники</label><div class="space-y-1">${(line.supplyItems || []).map(item => { const supply = availableSupplies.find(candidate => candidate.id === item.supplyId); return `<div class="flex gap-1 items-center"><select onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','supplyId',this.value)"><option value="">Выберите</option>${availableSupplies.map(option => `<option value="${option.id}" ${item.supplyId===option.id?'selected':''}>${academyEsc(option.name)} · ${Number(option.qty||0)} ${supplyUnitLabel(option.unit)}</option>`).join('')}</select><input aria-label="Количество расходника" type="number" min="0" step="0.01" value="${Number(item.qty||0)}" onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','qty',this.value)" style="width:76px"><button class="btn-ghost text-red-600" onclick="projectQuickDeleteSupply('${o.id}','${line.id}','${item.id}')">×</button>${supply ? `<span class="text-xs text-gray-500">${fmtMoney((Number(item.qty)||0)*(Number(supply.costPerUnit)||0))}</span>` : ''}</div>`; }).join('')}</div><div class="flex gap-1 mt-1"><button class="btn-ghost text-xs" onclick="projectQuickAddSupply('${o.id}','${line.id}')">+ Со склада</button><button class="btn-ghost text-xs" onclick="openQuickProjectSupplyForm('${o.id}','${line.id}')">+ Новый расходник</button></div></div>
   </div>`).join('');
   const totalSqft = projectQuickSqft(o);
@@ -23007,7 +23154,7 @@ function renderProjectEstimateWorkspace(o) {
   </tr>`).join('');
   const installerRows = installerPay.byInstaller.map(row => `<div class="order-clean-list-row"><span>${academyEsc(row.name)}</span><b>${fmtMoney(row.amount)}</b></div>`).join('');
   const costLines = [
-    ['Плёнка и отход', pss.film], ['Монтажники', pss.installers], ['Транспорт', pss.gas],
+    ['Плёнка и отход', pss.film], ['Специалисты по установке', pss.installers], ['Транспорт', pss.gas],
     [`Менеджер (${Number(db.settings.pricingDefaults?.managerPct || 0)}% выручки)`, pss.manager],
     [`Рекламный резерв (${Number(db.settings.pricingDefaults?.marketingPct || 0)}% выручки)`, pss.marketing],
     ['Замерщик — оклад в постоянных расходах', pss.measurer], ['Расходники', pss.consumables],
@@ -23318,7 +23465,7 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
   return `
     <div class="order-clean-topbar">
       <button class="btn-ghost" onclick="state.view='installations'; location.hash=''; render();">← Мои задачи</button>
-      <span class="tag">Монтажнику доступен только ТЗ-лист</span>
+      <span class="tag">Специалисту по установке доступен только ТЗ-лист</span>
     </div>
     <div class="order-clean-shell">
       <section class="order-clean-stage">
@@ -23753,7 +23900,7 @@ function renderOrderDetails(id) {
           const p = orderPSS(o);
           const lines = [
             ['Плёнка (с отходом)', p.film],
-            ['Выплата монтажникам', p.installers],
+            ['Выплата специалистам по установке', p.installers],
             ['Бензин', p.gas],
             ['% менеджера', p.manager],
             ['% замерщика', p.measurer],
@@ -25505,7 +25652,7 @@ function openWorkTypeSettings(oid) {
             <input type="color" value="${w.color}" onchange="updateWorkType('${w.id}','color',this.value)">
             <input value="${academyEsc(w.name)}" onchange="updateWorkType('${w.id}','name',this.value)">
             <select onchange="updateWorkType('${w.id}','role',this.value)">
-              <option value="installer" ${w.role === 'installer' ? 'selected' : ''}>Монтажники</option>
+              <option value="installer" ${w.role === 'installer' ? 'selected' : ''}>Специалисты по установке</option>
               <option value="measurer" ${w.role === 'measurer' ? 'selected' : ''}>Замерщики</option>
             </select>
           </div>`).join('')}
@@ -25600,7 +25747,7 @@ function scheduleInstallationPrompt(oid) {
           <label class="work-person">
             <input type="checkbox" class="isch-installer" value="${m.id}" ${(o?.installerIds||[]).includes(m.id)?'checked':''}>
             <span>${academyEsc(m.name)}</span>
-          </label>`).join('') || '<div class="text-xs text-gray-400">Монтажники не заведены</div>'}
+          </label>`).join('') || '<div class="text-xs text-gray-400">Специалисты по установке не заведены</div>'}
       </div>
       <label class="mt-3">${T('date')} / ${T('time')}</label>
       <input type="datetime-local" id="isch-dt" value="${datetimeLocalValue(o?.installationAt)}">
@@ -25870,7 +26017,7 @@ function printWorkOrder(oid) {
     </div>
 
     <div style="display:flex;justify-content:space-between;margin-top:3rem">
-      <div style="width:40%;border-top:1px solid #333;padding-top:0.5rem;text-align:center;font-size:12px">Подпись монтажника</div>
+      <div style="width:40%;border-top:1px solid #333;padding-top:0.5rem;text-align:center;font-size:12px">Подпись специалиста по установке</div>
       <div style="width:40%;border-top:1px solid #333;padding-top:0.5rem;text-align:center;font-size:12px">Подпись клиента</div>
     </div>
     <script>setTimeout(()=>window.print(), 300);</${'script'}>
@@ -28220,7 +28367,7 @@ const ACADEMY_ROLES = [
   { id: 'direction', name: 'Руководитель направления', icon: '🧭' },
   { id: 'manager', name: 'Менеджер', icon: '🧑‍💼' },
   { id: 'measurer', name: 'Замерщик', icon: '📐' },
-  { id: 'installer', name: 'Монтажник', icon: '🔧' },
+  { id: 'installer', name: 'Специалист по установке', icon: '🔧' },
   { id: 'warehouse', name: 'Склад', icon: '🎞' },
 ];
 
@@ -28267,9 +28414,9 @@ const ACADEMY_EXAMS = {
   stage2: {
     title: 'Экзамен этапа 2 — практика и качество',
     questions: [
-      { q: 'Что обязательно должен вернуть замерщик после объекта?', options: ['Размеры, фото, тип стекла, риски и рекомендации', 'Только общую площадь', 'Только устный комментарий'], correct: 0, explain: 'Замер должен быть технической картой для менеджера, склада и монтажника.' },
+      { q: 'Что обязательно должен вернуть замерщик после объекта?', options: ['Размеры, фото, тип стекла, риски и рекомендации', 'Только общую площадь', 'Только устный комментарий'], correct: 0, explain: 'Замер должен быть технической картой для менеджера, склада и специалиста по установке.' },
       { q: 'Что делать с Low-E стеклом?', options: ['Проверить совместимость и утвердить пленку', 'Ставить любую темную пленку', 'Игнорировать тип стекла'], correct: 0, explain: 'Low-E несет риск термошока и требует правильного подбора.' },
-      { q: 'Когда начисляется зарплата монтажнику?', options: ['После выполненной и принятой услуги', 'Сразу после создания проекта', 'Когда клиент только спросил цену'], correct: 0, explain: 'Начисление должно быть связано с принятой работой, иначе финансы искажаются.' },
+      { q: 'Когда начисляется зарплата специалисту по установке?', options: ['После выполненной и принятой услуги', 'Сразу после создания проекта', 'Когда клиент только спросил цену'], correct: 0, explain: 'Начисление должно быть связано с принятой работой, иначе финансы искажаются.' },
       { q: 'Smart пленка чем отличается от обычной?', options: ['Нужно питание, контроллер, проводка и финальный тест', 'Ничем', 'Ее можно ставить без замера'], correct: 0, explain: 'Smart направление требует электрики и отдельного контроля качества.' },
       { q: 'Как правильно списывать материал в проекте с несколькими услугами?', options: ['К каждой услуге свой материал и расходник', 'Все списать одной строкой пленки', 'Не списывать со склада'], correct: 0, explain: 'Иначе себестоимость по услугам и остатки склада будут неверными.' },
       { q: 'Что делать при рекламации на закрытый объект?', options: ['Открыть рекламацию, классифицировать причину, назначить решение', 'Удалить заказ', 'Сразу обвинить клиента'], correct: 0, explain: 'Рекламация должна стать управляемым процессом качества.' },
@@ -28337,7 +28484,7 @@ const ACADEMY_PROCESSES = [
       { name: 'КП и предложение', owner: 'Менеджер + руководитель направления', output: 'КП отправлено с 2-3 вариантами и сроком действия', controls: ['указаны материалы', 'срок монтажа', 'условия аванса', 'допуслуги'] },
       { name: 'Возражения и follow-up', owner: 'Менеджер', output: 'Следующий контакт запланирован, причина отказа не потеряна', controls: ['добавлен follow-up на 1/3/7 день', 'есть причина отказа', 'предложена альтернатива'] },
       { name: 'Закрытие сделки', owner: 'Менеджер', output: 'Статус принят, аванс, дата монтажа, исполнители', controls: ['проверен склад', 'зарезервирован материал', 'создан маршрут/задача'] },
-      { name: 'Монтаж и акт', owner: 'Монтажник', output: 'Работа сдана, акт/фото, финальная оплата', controls: ['фото до/после', 'подпись клиента', 'заметки по гарантиям'] },
+      { name: 'Монтаж и акт', owner: 'Специалист по установке', output: 'Работа сдана, акт/фото, финальная оплата', controls: ['фото до/после', 'подпись клиента', 'заметки по гарантиям'] },
     ],
     kpi: ['скорость ответа до 5 минут', 'конверсия лид -> замер', 'конверсия КП -> сделка', 'доля лидов с заполненным источником'],
   },
@@ -28353,7 +28500,7 @@ const ACADEMY_PROCESSES = [
       { name: 'Быстрая квалификация объекта', owner: 'Менеджер', output: 'Понятен адрес, объем, направление, срочность', controls: ['номер заказа клиента/PO', 'срок сдачи', 'доступ на объект'] },
       { name: 'Замер или расчет по плану', owner: 'Замерщик', output: 'Новый объект связан с клиентом и прошлой историей', controls: ['площадь и стекла', 'фото/чертежи', 'особые правила клиента'] },
       { name: 'Согласование', owner: 'Руководитель направления', output: 'Цена согласована быстро, маржа не потеряна', controls: ['скидки только по правилу', 'материал и сроки подтверждены', 'риск рекламации отмечен'] },
-      { name: 'Монтаж / закрытие / отчет', owner: 'Монтажник + менеджер', output: 'Акт, счет, фотоотчет, следующее касание', controls: ['все документы прикреплены', 'оплата или долг видны', 'создан follow-up на повтор'] },
+      { name: 'Монтаж / закрытие / отчет', owner: 'Специалист по установке + менеджер', output: 'Акт, счет, фотоотчет, следующее касание', controls: ['все документы прикреплены', 'оплата или долг видны', 'создан follow-up на повтор'] },
     ],
     kpi: ['повторная выручка', 'срок от заявки до КП', 'дебиторка по аккаунту', 'NPS/отзывы'],
   },
@@ -28413,7 +28560,7 @@ const ACADEMY_WAREHOUSE_FLOW = [
   { name: 'Закупка', owner: 'Склад / владелец', output: 'Поставщик, счет, дата, категория, стоимость и фото чека' },
   { name: 'Приход', owner: 'Склад', output: 'Рулон или расходник появился в остатках, указана партия и локация' },
   { name: 'Резерв под проект', owner: 'Менеджер / склад', output: 'Материал закреплен за заказом до монтажа' },
-  { name: 'Списание', owner: 'Монтажник', output: 'Фактический расход списан по услуге и попал в себестоимость' },
+  { name: 'Списание', owner: 'Специалист по установке', output: 'Фактический расход списан по услуге и попал в себестоимость' },
   { name: 'Возврат / остаток', owner: 'Склад', output: 'Остаток вернулся на склад или списан как отход' },
   { name: 'Минимальный запас', owner: 'Руководитель направления', output: 'Система показывает что купить заранее' },
 ];
@@ -28423,10 +28570,10 @@ const ACADEMY_LESSONS = [
   { id: 'direction-leader-basics', role: 'direction', direction: 'all', minutes: 25, title: 'Роль руководителя направления', outcome: 'Контролировать качество, продукт, маржу и обучение команды в своем направлении.', checklist: ['проверять сложные КП', 'обновлять правила совместимости', 'разбирать рекламации'] },
   { id: 'manager-first-consult', role: 'manager', direction: 'all', minutes: 20, title: 'Первичная консультация и квалификация', outcome: 'Не терять лиды и сразу понимать следующий шаг.', checklist: ['боль клиента', 'адрес/срок', 'тип стекла', 'следующее действие'] },
   { id: 'manager-objections', role: 'manager', direction: 'all', minutes: 18, title: 'Возражения и follow-up', outcome: 'Возвращать клиентов без давления и хаоса.', checklist: ['дорого', 'подумаю', 'нужно сравнить', 'нет времени'] },
-  { id: 'measurer-window-map', role: 'measurer', direction: 'all', minutes: 35, title: 'Чертеж окон, размеры и фотофиксация', outcome: 'Сделать замер так, чтобы монтажник не гадал на объекте.', checklist: ACADEMY_MEASURE_CHECKLIST.slice(0, 6) },
+  { id: 'measurer-window-map', role: 'measurer', direction: 'all', minutes: 35, title: 'Чертеж окон, размеры и фотофиксация', outcome: 'Сделать замер так, чтобы специалист по установке не гадал на объекте.', checklist: ACADEMY_MEASURE_CHECKLIST.slice(0, 6) },
   { id: 'measurer-glass-compatibility', role: 'measurer', direction: 'solar', minutes: 30, title: 'Типы стекла и подбор солнцезащитной пленки', outcome: 'Не ставить рискованный продукт на неправильное стекло.', checklist: ['Low-E проверяется отдельно', 'темные пленки не ставятся вслепую', 'клиенту показываются образцы'] },
   { id: 'measurer-smart-precheck', role: 'measurer', direction: 'smart', minutes: 25, title: 'Smart film: питание, края, контроллеры', outcome: 'Сразу видеть электрику и риски до КП.', checklist: ['питание рядом', 'влага исключена', 'место контроллера', 'схема подключения'] },
-  { id: 'installer-acceptance', role: 'installer', direction: 'all', minutes: 20, title: 'Прием заказа монтажником', outcome: 'Перед выездом понимать материал, задачу и риски.', checklist: ACADEMY_INSTALL_CHECKLIST.slice(0, 4) },
+  { id: 'installer-acceptance', role: 'installer', direction: 'all', minutes: 20, title: 'Прием заказа специалистом по установке', outcome: 'Перед выездом понимать материал, задачу и риски.', checklist: ACADEMY_INSTALL_CHECKLIST.slice(0, 4) },
   { id: 'installer-quality-act', role: 'installer', direction: 'all', minutes: 25, title: 'Сдача работы, акт и фотоотчет', outcome: 'Закрывать объект так, чтобы не терялись деньги и бонусы.', checklist: ACADEMY_INSTALL_CHECKLIST.slice(5) },
   { id: 'warehouse-reserve-writeoff', role: 'warehouse', direction: 'all', minutes: 22, title: 'Резерв и списание материалов по проекту', outcome: 'Видеть реальный остаток и себестоимость каждого заказа.', checklist: ['закупка с поставщиком', 'приход на склад', 'резерв', 'списание', 'возврат остатка'] },
   { id: 'protective-attachment', role: 'installer', direction: 'protective', minutes: 28, title: 'Защитка: крепление, толщина, ответственность', outcome: 'Монтаж защитных пленок без ложных обещаний и с правильным актом.', checklist: ['толщина', 'рама', 'bonding', 'фото витрины', 'гарантийные ограничения'] },
@@ -28436,7 +28583,7 @@ const ACADEMY_LESSONS = [
 const ACADEMY_KB = [
   { cat: 'Компания', title: 'Операционная модель RolanPRO', direction: 'all', role: 'owner', body: 'Компания работает как система направлений: защитные, солнцезащитные и smart пленки. У каждого направления должен быть ответственный за продукт, качество, обучение, склад и сложные решения.' },
   { cat: 'Продажи', title: 'Чем отличается клиент с рекламы от постоянного клиента', direction: 'all', role: 'manager', body: 'Рекламный лид нужно быстро квалифицировать и вести через follow-up. Постоянный клиент ведется как аккаунт: история, условия, PO, скорость реакции и повторные объекты важнее длинной продажи.' },
-  { cat: 'Замер', title: 'Что обязательно должен вернуть замерщик', direction: 'all', role: 'measurer', body: 'Размеры, количество окон, тип стекла, фото, доступ, риски, рекомендации по пленкам, комментарии клиента и понятная карта окон для монтажника.' },
+  { cat: 'Замер', title: 'Что обязательно должен вернуть замерщик', direction: 'all', role: 'measurer', body: 'Размеры, количество окон, тип стекла, фото, доступ, риски, рекомендации по пленкам, комментарии клиента и понятная карта окон для специалиста по установке.' },
   { cat: 'Стекло', title: 'Low-E стекло', direction: 'solar', role: 'measurer', body: 'Low-E нельзя считать обычным стеклом. Нужно понять где покрытие и выбрать совместимую пленку. При сомнении решение утверждает руководитель направления.' },
   { cat: 'Склад', title: 'Материал должен списываться на услугу', direction: 'all', role: 'warehouse', body: 'Если в заказе три услуги и три разные пленки, расход должен быть привязан к каждой услуге отдельно. Общие расходы проекта идут отдельной строкой: доставка, аренда, парковка, допматериалы.' },
   { cat: 'Монтаж', title: 'Когда начислять бонус и зарплату', direction: 'all', role: 'installer', body: 'Зарплата и бонусы начисляются по выполненной и принятой работе. Если объект в работе или нет исполнителя, начисление должно быть ожидающим, а не закрытым.' },
@@ -28843,7 +28990,7 @@ function academyRenderMeasurement(dir, q) {
   <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
     <div class="ops-card xl:col-span-1">
       <h3 class="font-black text-slate-900 mb-2">Чеклист замерщика</h3>
-      <p class="text-sm text-slate-600 mb-3">Замерщик не просто меряет окна. Он делает техническую карту проекта, чтобы менеджер правильно продал, склад подготовил материал, а монтажник не ошибся.</p>
+      <p class="text-sm text-slate-600 mb-3">Замерщик не просто меряет окна. Он делает техническую карту проекта, чтобы менеджер правильно продал, склад подготовил материал, а специалист по установке не ошибся.</p>
       ${academyBulletList(ACADEMY_MEASURE_CHECKLIST, 'space-y-2')}
     </div>
     <div class="ops-card xl:col-span-2">
@@ -28884,15 +29031,15 @@ function academyRenderInstall(dir, q) {
     <div class="space-y-4">
       <div class="ops-card">
         <h3 class="font-black text-slate-900 mb-2">Правило начисления зарплаты</h3>
-        <p class="text-sm text-slate-700">Начисление монтажнику появляется по услуге, когда услуга выполнена и принята. Если проект создан, но нет исполнителя или работа еще не завершена, это плановая работа, а не долг к выплате.</p>
+        <p class="text-sm text-slate-700">Начисление специалисту по установке появляется по услуге, когда услуга выполнена и принята. Если проект создан, но нет исполнителя или работа еще не завершена, это плановая работа, а не долг к выплате.</p>
       </div>
       <div class="ops-card">
         <h3 class="font-black text-slate-900 mb-2">Акт и доказательства качества</h3>
         ${academyBulletList(['фото до работ', 'фото после работ', 'подпись клиента или подтверждение', 'видео работы smart пленки', 'комментарий по уходу и гарантии'])}
       </div>
       <div class="ops-card">
-        <h3 class="font-black text-slate-900 mb-2">Старший монтажник</h3>
-        <p class="text-sm text-slate-700">Старший отвечает за прием объекта, качество сдачи, обучение второго монтажника и финальную коммуникацию на месте. Бонус старшего должен начисляться отдельно и быть виден в детализации зарплаты.</p>
+        <h3 class="font-black text-slate-900 mb-2">Руководитель отдела монтажа</h3>
+        <p class="text-sm text-slate-700">Старший отвечает за прием объекта, качество сдачи, обучение второго специалиста по установке и финальную коммуникацию на месте. Бонус старшего должен начисляться отдельно и быть виден в детализации зарплаты.</p>
       </div>
     </div>
   </div>`;
@@ -33342,7 +33489,7 @@ function calendarEventPeople(ev) {
   const o = ev.o;
   if (o._canonicalConsultationId) return o._canonicalConsultantName || o._canonicalManagerName || 'Ответственный не назначен';
   if (ev.kind === 'measure') return getUser(o.measurerId)?.name || 'Замерщик не назначен';
-  if (ev.kind === 'install') return (o.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', ') || 'Монтажники не назначены';
+  if (ev.kind === 'install') return (o.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', ') || 'Специалисты по установке не назначены';
   if (ev.kind === 'complaint') return getUser(o.complaintOwnerId || o.managerId)?.name || 'Ответственный не назначен';
   return getUser(o.managerId)?.name || 'Менеджер не назначен';
 }
@@ -33795,7 +33942,7 @@ function openUserPayConfig(userId) {
       <label>Тип оплаты</label>
       <select id="pc-type" onchange="document.querySelectorAll('.pc-section').forEach(s=>s.style.display='none'); document.getElementById('pc-'+this.value).style.display='block';">
         <option value="commission" ${pc.type==='commission'?'selected':''}>% от выручки заказов (продажник/менеджер)</option>
-        <option value="per_sqft" ${pc.type==='per_sqft'?'selected':''}>$/sqft за установку (монтажник)</option>
+        <option value="per_sqft" ${pc.type==='per_sqft'?'selected':''}>$/sqft за установку (специалист по установке)</option>
         <option value="fixed_per_job" ${pc.type==='fixed_per_job'?'selected':''}>Фикс за заказ (замерщик/хелпер)</option>
         <option value="salary" ${pc.type==='salary'?'selected':''}>Оклад в месяц</option>
         <option value="hourly" ${pc.type==='hourly'?'selected':''}>Почасовая ставка</option>
@@ -33811,7 +33958,7 @@ function openUserPayConfig(userId) {
       <div id="pc-per_sqft" class="pc-section mt-3" style="display:${pc.type==='per_sqft'?'block':'none'}">
         <label>Индивидуальная ставка $/sqft (необязательно)</label>
         <input id="pc-ratePerSqft" type="number" step="0.05" value="${pc.ratePerSqft ?? 0}">
-        <p class="text-xs text-gray-500 mt-1">0 = ставка монтажа из раздела «Услуги». Если несколько монтажников — начисление делится поровну.</p>
+        <p class="text-xs text-gray-500 mt-1">0 = ставка монтажа из раздела «Услуги». Если несколько специалистов по установке — начисление делится поровну.</p>
         <details class="mt-3">
           <summary class="text-sm font-medium cursor-pointer">⚙️ Ставки по категориям плёнок (override)</summary>
           <div class="grid grid-cols-2 gap-2 mt-2">

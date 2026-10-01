@@ -342,7 +342,7 @@ test("the Services reference owns installer pay while material stays in Warehous
   const renderer = source.slice(rendererStart, rendererEnd);
   assert.doesNotMatch(renderer, /cps-\$\{row\.service_type_id\}-material/);
   assert.match(renderer, /cps-\$\{row\.service_type_id\}-installer/);
-  assert.match(renderer, /Монтажнику \/ sqft, \$/);
+  assert.match(renderer, /Специалисту по установке \/ sqft, \$/);
   assert.doesNotMatch(renderer, /cpa-\$\{row\.service_addon_id\}-cost/);
   assert.match(renderer, /Стоимость плёнки берётся со склада\. Ставка монтажа из этой услуги автоматически начисляется/);
   assert.match(source, /patch\.installation_cost_per_sqft = canonicalPricingValue/);
@@ -468,7 +468,7 @@ test("kanban cannot bypass the client-to-measurement-to-proposal-to-installation
   assert.match(transition, /orderMeasurementCompletionIssues\(o\)/);
   assert.match(transition, /projectEstimateIsApproved\(o\)/);
   assert.match(transition, /publishedPremiumProposalForOrder\(o\.id\)/);
-  assert.match(transition, /назначьте монтажников/);
+  assert.match(transition, /назначьте специалистов по установке/);
   assert.match(changeStatus, /ensureOrderWorkflowTransition\(o, newStatus/);
   assert.match(kanbanMove, /return changeStatus\(orderId, targetStatus/);
   assert.doesNotMatch(kanbanMove, /changeStatus\(orderId, targetStatus[^\n]+\n\s*return true/);

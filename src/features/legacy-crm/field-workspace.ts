@@ -173,7 +173,7 @@ function safeUser(user: JsonObject, own: boolean, roles: readonly string[]) {
   return result;
 }
 
-function safeSettings(settings: JsonObject) {
+function safeSettings(settings: JsonObject, roles: readonly string[]) {
   const allowed = [
     "companyName",
     "currency",
@@ -185,6 +185,10 @@ function safeSettings(settings: JsonObject) {
     "defaultMapCenter",
     "officeAddress",
     "logoDataUrl",
+    // Installer work rates (service and additional-work rates the owner sets in
+    // «Услуги и цены») — the installer's own pay basis, not client prices.
+    // Without them the installer's earnings and analytics fell back to defaults.
+    ...(roles.includes(ROLE_CODES.INSTALLER) ? ["installerRates"] : []),
   ];
   return Object.fromEntries(
     allowed
@@ -239,7 +243,7 @@ export function createFieldWorkspace(
     .filter(isObject)
     .filter((client) => clientIds.has(String(client.id || "")))
     .map((client) => redactFinancialData(clone(client)));
-  const settings = isObject(payload.settings) ? safeSettings(payload.settings) : {};
+  const settings = isObject(payload.settings) ? safeSettings(payload.settings, roles) : {};
 
   return {
     _allowedLegacyUserIds: [...identityIds],
