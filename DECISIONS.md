@@ -452,3 +452,10 @@ Owner decision in chat on 2026-09-30 (chosen over waiting for the relational ins
 - Implemented for review on `codex/surveyor-mobile-v4`; deployment remains a separate owner-authorized action.
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
+
+## 2026-10-01 — Installation job titles (Owner)
+
+- The word «монтажник» is not used anywhere in the CRM, the installer app, client messages or documents: the Owner considers it low-status.
+- A regular installer is **«Специалист по установке»** (EN: Installer).
+- The senior role that distributes jobs within a group is **«Руководитель отдела монтажа»**; it replaces «Руководитель монтажной группы» and «Главный специалист по установке» used in earlier drafts (PR #275–#277).
+- Internal codes stay `INSTALLER` / `installer`; only user-visible text changes. New screens and PRs use these titles from the start.
