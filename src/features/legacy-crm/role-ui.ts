@@ -1,3 +1,5 @@
+import { BEFORE_PAINT_SCRIPT } from "./before-paint";
+
 const ROLE_UI_POLICY_PATCH = `
 <style id="rolanpro-role-ui-policy-style">
   [onclick*="installRolanProApp"] {
@@ -185,12 +187,13 @@ const ROLE_UI_POLICY_PATCH = `
       meta.append(name, role);
       pill.append(avatar, meta);
     };
+${BEFORE_PAINT_SCRIPT}
 
     let queued = false;
     const applyPolicy = () => {
       if (queued) return;
       queued = true;
-      window.requestAnimationFrame(() => {
+      beforePaint(() => {
         queued = false;
         installAccessGuard();
         const user = getUser();

@@ -1,5 +1,6 @@
 import { injectMobileWorkspaceAdapter } from "./mobile-workspace";
 import { injectMobileProposalsCards } from "./mobile-proposals";
+import { BEFORE_PAINT_SCRIPT } from "./before-paint";
 
 const APP_START = '<div id="app">';
 const SCRIPT_START = "\n<script>";
@@ -243,12 +244,13 @@ const MOBILE_ORDERS_PATCH = `
         });
       });
     };
+${BEFORE_PAINT_SCRIPT}
 
     let queued = false;
     const queueEnhancement = () => {
       if (queued) return;
       queued = true;
-      window.requestAnimationFrame(() => {
+      beforePaint(() => {
         queued = false;
         enhanceOrdersTable();
       });

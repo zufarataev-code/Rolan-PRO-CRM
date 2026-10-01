@@ -167,7 +167,7 @@ export function ProjectPhasesManager({ projectId, projectStatusLabel, crews, ins
       return;
     }
     if (!allChosenHaveInstaller) {
-      setMessage("Выберите услуги этапа и назначьте монтажника для каждой выбранной позиции.");
+      setMessage("Выберите услуги этапа и назначьте специалиста по установке для каждой выбранной позиции.");
       return;
     }
 
@@ -412,7 +412,7 @@ export function ProjectPhasesManager({ projectId, projectStatusLabel, crews, ins
                       onChange={(event) => setAssignments((current) => ({ ...current, [position.position_id]: event.target.value }))}
                       disabled={!chosen}
                     >
-                      <option value="">Выберите монтажника</option>
+                      <option value="">Выберите специалиста по установке</option>
                       {installers.map((installer) => (
                         <option key={installer.user_id} value={installer.user_id}>{installer.full_name}</option>
                       ))}

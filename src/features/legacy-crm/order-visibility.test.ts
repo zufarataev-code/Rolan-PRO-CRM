@@ -112,7 +112,7 @@ test("field-role calendar and proposal actions keep project totals hidden", () =
 test("installer order workspace exposes only the technical sheet", () => {
   assert.match(html, /function installerOrderPrimaryAction\(o\)/);
   assert.match(html, /function renderInstallerTechnicalWorkspace\(o, c, u\)/);
-  assert.match(html, /Монтажнику доступен только ТЗ-лист/);
+  assert.match(html, /Специалисту по установке доступен только ТЗ-лист/);
   assert.match(html, /function renderOrderDetails\(id\)[\s\S]*?if \(u\.role === 'installer'\) \{[\s\S]*?return renderInstallerTechnicalWorkspace\(o, c, u\);/);
   assert.match(html, /onclick="openOrder\('\$\{o\.id\}'\)\">Открыть ТЗ-лист/);
   assert.match(html, /onclick="printTechnicalSheet\('\$\{o\.id\}'\)\">🖨 ТЗ-лист/);

@@ -756,3 +756,19 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Production build: CI job «Test, typecheck, and build» (`npm run build`) runs on every push of PR #284 and is green.
 - Not done: WordPress form fields (site repo outside this project); B2B terms in КП and the partner cabinet (need Owner decisions and legal review).
 - Next action: Codex 👍 on the latest commit, Owner «да», merge after #268, deploy (pre-migration backup is automatic).
+
+## 2026-10-01 handoff — «Специалист по установке» and per-object analytics (PR #282)
+
+- Owner decision (DECISIONS.md «Installation job titles»): «монтажник» is not used anywhere; regular installer = «Специалист по установке», senior = «Руководитель отдела монтажа». Internal codes (`INSTALLER` / `installer`) unchanged.
+- Renamed in the legacy CRM, new screens, `ROLE_NAMES` (seeded into `roles.name_ru`), `data/legacy-crm-empty.json`, and stored SMS templates via data migration `20261001130000_installer_title_in_sms_templates` (idempotent, revision bump).
+- New installer view «Аналитика»: period filter; objects finished, own sq ft, own earnings, pending earnings; sq ft by film type; one card per object. Measured windows are shared by the order crew; quick lines count only for the installers assigned to each line (same rule as `orderQuickInstallerPayoutForUser`). No client price, cost or margin.
+- Verification: full unit suite and `tsc` green; `installer-analytics.test.ts` runs the calculation in a VM; migration checked twice on a scratch database.
+- Production build: CI job «Test, typecheck, and build» (`npm run build`) runs on every push of PR #282 and is green; the clean-database + E2E gate is green too.
+- Not done: the lead role «Руководитель отдела монтажа» lives in the #275–#277 stack and must adopt the new titles when that stack is rebuilt on top of Codex PR #281.
+- Next action: Codex 👍, Owner «да», merge, deploy (pre-migration backup is automatic).
+
+## 2026-10-01 handoff — CRM no longer jumps after every click (PR #285, deployed 03:56 UTC)
+
+- Cause: seven DOM patches injected by `/legacy-crm` waited for the next animation frame, so the unpatched page was painted first (menu items moved 52 px, the top bar resized).
+- Fix: `src/features/legacy-crm/before-paint.ts` (`beforePaint`: microtask before paint, runaway guard → next frame). All patches use it; new patches must too. Client list no longer crashes on a client without a source.
+- Verified locally with a `layout-shift` observer (0 shifts on menu clicks) and in production (deploy 06a58ab healthy).

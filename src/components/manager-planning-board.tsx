@@ -575,7 +575,7 @@ export function ManagerPlanningBoard({ data }: ManagerPlanningBoardProps) {
                     <div className="row-meta">
                       {selectedItem.installer_labels.length
                         ? selectedItem.installer_labels.join(", ")
-                        : "Монтажники назначены по проекту"}
+                        : "Специалисты по установке назначены по проекту"}
                     </div>
                   </div>
                 ) : null}
