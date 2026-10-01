@@ -724,6 +724,7 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Known limitation: client lookup scans all clients per create (fine at current volume); add normalized, indexed identity columns before tens of thousands of clients. Legacy-workspace clients and PostgreSQL clients are still two stores until the client collection migrates.
 - 2026-10-01 follow-up (Codex): the manual project screen offers every matching client card after a contact conflict and resubmits with the chosen `client_id`; the route forwards it, and a manager may choose only a client within `buildClientReuseWhere`.
 - 2026-10-01 follow-up (Codex): the same picker exists for lead → client conversion (deal panel; `PATCH /deals/:id` links only a client within `buildClientReuseWhere`) and for legacy proposal publishing (409 with candidates → «Для кого это КП?» → publish with the chosen, scope-checked `client_id`).
+- 2026-10-01 follow-up (Codex): legacy «Создать проект» from a lead asks «Для кого создать проект?» when the contact matches several cards. Production build: CI job «Test, typecheck, and build» (`npm run build`) runs on every push of this PR and is green.
 
 ## 2026-09-30 handoff — database backup before every production deploy (PR #274)
 
