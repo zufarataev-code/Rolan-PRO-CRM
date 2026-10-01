@@ -724,7 +724,7 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 
 ## 2026-09-30 handoff — one rate directory for sales and installer pay
 
-- Scope: the existing `Услуги и цены` workspace now presents one rate row per service with the customer guide price and the installer rate side by side. It also owns the installation-complexity multipliers used by project pricing, payroll, and profitability.
+- Scope: `Настройки → Справочник расценок на работу` presents one rate row per service with the customer guide price and the installer rate side by side. It is removed from the primary sidebar and owns the installation-complexity multipliers used by project pricing, payroll, and profitability.
 - Authority: service prices, installer rates, and complexity multipliers remain PostgreSQL reference data. The legacy workspace only mirrors canonical values for compatibility; it does not introduce a second browser-owned rate directory or calculate payroll independently.
 - Owner rules retained from PR #272: Smart `$5/sqft`, Safety `$3/sqft`, Solar and Decorative `$2.50/sqft`, Smart zone connection `$50/zone`; difficulty multipliers are `1.0 / 1.2 / 1.5 / 2.0`. Customer prices remain editable deal guidance rather than a fixed public price list. Decorative customer pricing starts empty so the seed does not invent a sales price.
 - Historical safety: completed/paid work keeps its stored rate snapshot. The existing owner-rate migrations may recalculate unpaid accruals and therefore require explicit Owner approval, the automatic production database backup, and migration review before release.

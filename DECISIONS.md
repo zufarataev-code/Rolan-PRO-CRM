@@ -444,7 +444,7 @@ Owner decision in chat on 2026-09-30 (chosen over waiting for the relational ins
 
 ## 2026-09-30 — One canonical rate directory
 
-- `Услуги и цены` is the only owner-facing directory for customer guide prices, installer rates, additional-work prices, and installation-complexity multipliers. A second rate editor under Employees or Payroll is not permitted.
+- `Настройки → Справочник расценок на работу` is the only owner-facing directory for customer guide prices, installer rates, additional-work prices, and installation-complexity multipliers. It is not a primary daily-work module in the sidebar. A second rate editor under Employees or Payroll is not permitted.
 - PostgreSQL `service_types`, `service_addons`, and `complexity_levels` are authoritative. Legacy settings may mirror these values only while the installation/payment migration is incomplete.
 - Customer price and installer rate are different fields shown together. The customer value is a deal guide and can be overridden in a Project; the installer value feeds server-owned payroll and profitability. Warehouse material cost continues to use the actual receipt cost and is not replaced by the installer rate.
 - Difficulty multiplies film-service customer labor and installer labor through the existing backend calculation. Per-employee pay overrides retain precedence where already supported; the directory supplies the default company rate.

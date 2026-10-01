@@ -9,11 +9,24 @@ const pricingRoute = readFileSync(path.join(root, "app/api/v1/settings/pricing/r
 const seed = readFileSync(path.join(root, "prisma/seed.ts"), "utf8");
 
 test("one service row shows the customer guide price and installer rate", () => {
-  assert.match(legacy, /Справочник расценок/);
+  assert.match(legacy, /Справочник расценок на работу/);
   assert.match(legacy, />Клиенту</);
   assert.match(legacy, />Монтажнику</);
   assert.match(legacy, /Ориентир клиенту, \$/);
   assert.match(legacy, /Ставка монтажника автоматически идёт в payroll и экономику проекта/);
+});
+
+test("the owner opens the work-rate directory from Settings, not the primary sidebar", () => {
+  assert.match(
+    legacy,
+    /key: 'service-pricing', icon: '💲', title: 'Справочник расценок на работу',[^\n]+destination: 'servicePricing'/,
+  );
+  assert.match(legacy, /← Все настройки<\/button>/);
+  const primaryNavigation = legacy.slice(
+    legacy.indexOf("const navItems ="),
+    legacy.indexOf("const mobileNavItems ="),
+  );
+  assert.doesNotMatch(primaryNavigation, /servicePricing|Услуги и цены/);
 });
 
 test("pricing API owns the shared difficulty coefficients", () => {

@@ -16981,7 +16981,6 @@ function renderAppShell() {
     ['coldcalls', 'Холодные звонки', '📞'],
     ['orders', T('orders'), '🏗'],
     ['proposals', 'КП', '📄'],
-    ['servicePricing', 'Услуги и цены', '💲'],
     ['calendar', T('calendar'), '📅'],
     ['installerOps', 'Монтажники сейчас', '📍'],
     ['tasks', 'Задачи', '✅'],
@@ -17136,7 +17135,7 @@ function headerTitle() {
     case 'orders': return T('orders');
     case 'canonicalProjects': return state.canonicalProjectId ? '📐 Конструктор замеров' : '📐 Проверенные замеры';
     case 'proposals': return '📄 Коммерческие предложения';
-    case 'servicePricing': return '💲 Услуги и цены';
+    case 'servicePricing': return '💲 Справочник расценок на работу';
     case 'installerOps': return '📍 Монтажники сейчас';
     case 'workday': return '⏱ Рабочий день';
     case 'calendar': return T('calendar');
@@ -17168,7 +17167,7 @@ function headerSubtitle() {
     case 'orders': return 'Один проект от первого обращения до замера, КП, монтажа и оплаты';
     case 'canonicalProjects': return 'Точные замеры и услуги внутри существующего проекта';
     case 'proposals': return 'Кому отправлено, кто посмотрел и к какому заказу относится КП';
-    case 'servicePricing': return 'Единый прайс, ставки монтажников и план продаж — внутри основной CRM';
+    case 'servicePricing': return 'Настройки стоимости работ для клиента и оплаты исполнителей';
     case 'installerOps': return 'Активные смены, объекты и последнее добровольно переданное местоположение';
     case 'workday': return 'Смена, часы, пробег и личные начисления в одной истории';
     case 'orderDetails': return 'Единая карточка проекта: объект, услуги, замер, КП, монтаж, оплата и история';
@@ -18000,13 +17999,14 @@ function renderCanonicalServicePricing() {
   </details>`).join('');
 
   return `<div class="space-y-5">
+    ${owner ? `<div class="settings-detail-header"><button type="button" class="settings-detail-back" onclick="selectAppView('settings')">← Все настройки</button><div class="settings-detail-title"><span class="settings-hub-icon" aria-hidden="true">💲</span><div><h2>Справочник расценок на работу</h2><p>Цена работ клиенту, ставка исполнителю и коэффициенты сложности.</p></div></div></div>` : ''}
     ${state.canonicalPricingNotice ? `<div class="card border border-emerald-200 bg-emerald-50 text-emerald-800" style="border-radius:4px">✅ ${academyEsc(state.canonicalPricingNotice)}</div>` : ''}
     <section class="card border border-slate-200 bg-white" style="border-radius:4px">
       <div class="flex flex-wrap justify-between gap-4"><div><h2 class="text-xl font-black">План продаж</h2><p class="text-sm text-slate-500">Один расчёт для всей компании. Это прогноз, а не движение денег.</p></div><span class="tag bg-blue-50 text-blue-800">${academyEsc(signal)}</span></div>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Безубыточность</div><b class="text-xl">${canonicalPricingMoney(planning.break_even?.revenue)}</b><div class="text-xs">${planning.break_even?.deals || 0} сделок / ${planning.break_even?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Цель с прибылью</div><b class="text-xl">${canonicalPricingMoney(planning.target?.revenue)}</b><div class="text-xs">${planning.target?.deals || 0} сделок / ${planning.target?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">КП за месяц</div><b class="text-xl">${canonicalPricingMoney(actual.proposal_revenue)}</b></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Прогресс</div><b class="text-xl">${Number(actual.progress_percent || 0).toFixed(0)}%</b></div></div>
       ${owner ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${canonicalPricingField('cp-plan-check', 'Средний чек, $', assumptions.average_deal_value)}${canonicalPricingField('cp-plan-conversion', 'Конверсия лид → сделка, %', assumptions.lead_to_deal_percent)}${canonicalPricingField('cp-plan-profit', 'Целевая прибыль / месяц, $', assumptions.target_profit_monthly)}</div><button class="btn-primary mt-4" onclick="saveCanonicalPlanning()">Сохранить план</button>` : '<p class="text-sm text-slate-500 mt-4">Менеджер видит цели по лидам и сделкам. Расходы и прибыль меняет владелец.</p>'}
     </section>
-    <section class="card border border-slate-200 bg-white" style="border-radius:12px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Справочник расценок</h2><p class="text-sm text-slate-500">В одной строке: ориентир клиенту и ставка исполнителю. Эти ставки использует расчёт проекта, payroll и рентабельность.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Ориентир клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Ставка монтажнику, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
+    <section class="card border border-slate-200 bg-white" style="border-radius:12px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Расценки на основные работы</h2><p class="text-sm text-slate-500">В одной строке: ориентир клиенту и ставка исполнителю. Эти ставки использует расчёт проекта, payroll и рентабельность.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Ориентир клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Ставка монтажнику, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
     <section class="card border border-slate-200 bg-white" style="border-radius:12px"><div><h2 class="text-xl font-black">Коэффициенты сложности</h2><p class="text-sm text-slate-500">Один коэффициент применяется к цене плёночных работ клиенту и к оплате монтажников. Старые завершённые проекты сохраняют зафиксированные ставки.</p></div><div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-4">${complexityCards || '<div class="text-slate-500">Коэффициенты не настроены</div>'}</div></section>
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between"><div><h2 class="text-xl font-black">Дополнительные работы</h2><p class="text-sm text-slate-500">Подключение зон, демонтаж, силикон и другие допродажи.</p></div><span class="tag">${addons.length}</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить допработу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Основная услуга</span><select id="cp-new-addon-service" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2">${services.map(s => `<option value="${s.service_type_id}">${academyEsc(s.name_ru)}</option>`).join('')}</select></label>${canonicalPricingField('cp-new-addon-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-addon-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-addon-unit', 'Единица', 'item', 'text')}${canonicalPricingField('cp-new-addon-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-addon-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalAddon()">Создать допработу</button></details><div class="space-y-3 mt-4">${addonCards || '<div class="text-slate-500">Дополнительных работ пока нет</div>'}</div></section>
   </div>`;
@@ -20638,7 +20638,7 @@ function settingsSections() {
     { key: 'complexity', icon: '🪜', title: `${T('complexity')} — ${T('coefficient')}`, description: 'Коэффициенты сложности и стоимость аренды' },
     { key: 'client-payments', icon: '💵', title: 'Как клиент платит', description: 'Доступные способы и приоритет оплаты' },
     { key: 'pricing', icon: '📊', title: T('pricingDefaults'), description: 'Проценты, топливо, расходники и помощники' },
-    { key: 'service-pricing', icon: '💲', title: 'Услуги, цены и план продаж', description: 'Единый прайс, ставки работ и точка безубыточности', destination: 'servicePricing' },
+    { key: 'service-pricing', icon: '💲', title: 'Справочник расценок на работу', description: 'Цена работ клиенту, ставка исполнителю и коэффициенты сложности', destination: 'servicePricing' },
     { key: 'units', icon: '📏', title: T('units'), description: 'Единицы измерения размеров стекла' },
     { key: 'office', icon: '📍', title: 'Офис и карта', description: 'Адрес компании, центр карты и Google Reviews' },
     { key: 'stripe', icon: '💳', title: 'Stripe', description: 'Приём платежей картой и платёжные ссылки' },
