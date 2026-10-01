@@ -20622,6 +20622,11 @@ async function convertLead(leadId) {
   // Клиент: всегда переиспользуем существующую карточку по телефону или email.
   let client = uniqueExistingClientByContact(l.phone, l.email);
   if (client === false) return;
+  // A PostgreSQL lead is claimed on the server BEFORE anything is written here:
+  // if the claim fails (network, or another manager took it) no client or order
+  // is created, so a retry or a second manager can never produce a duplicate.
+  const canonical = Boolean(canonicalLeadRow(leadId));
+  if (canonical && !(await setCanonicalLeadStatus(leadId, 'CONTACTED'))) return;
   if (!client) {
     const identity = clientIdentityFromLead(l);
     client = {
@@ -20651,7 +20656,7 @@ async function convertLead(leadId) {
   };
   db.orders.push(o);
   save();
-  await markLeadProcessed(leadId);
+  if (!canonical) await markLeadProcessed(leadId);
   openOrder(o.id);
 }
 async function dismissLead(leadId) {
@@ -26367,7 +26372,7 @@ function submitClientPortalRequest(clientId) {
   if (!notes) { alert('Напишите коротко, что нужно сделать. Так менеджер быстрее запустит заказ.'); return; }
   const managerId = orderManagerCandidates()[0]?.id || null;
   const accountType = clientAccountType(c);
-  const relationship = clientRelationshipType(c) === 'regular' || accountType === 'b2b' ? 'regular' : 'one_time';
+  const relationship = clientRelationshipType(c) === 'regular' ? 'regular' : 'one_time';
   const o = {
     id: 'o' + uid(),
     number: 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(db.orders.length + 1).padStart(3, '0'),
@@ -27328,7 +27333,8 @@ function createOrder(nextStep = 'measure') {
   if (requestedAddressId) state._newOrderAddressId = requestedAddressId;
   const preparedAddress = prepareExistingClientForOrder(c);
   accountTypeForOrder = normalizeAccountType(document.getElementById('no-client-account-type')?.value || clientAccountType(c));
-  relationshipForOrder = (document.getElementById('no-client-relationship')?.value || clientRelationshipType(c)) === 'regular' || accountTypeForOrder === 'b2b' ? 'regular' : 'one_time';
+  // «Постоянный партнёр» is an explicit choice; a company is not a partner by itself.
+  relationshipForOrder = (document.getElementById('no-client-relationship')?.value || clientRelationshipType(c)) === 'regular' ? 'regular' : 'one_time';
   c.accountType = accountTypeForOrder;
   c.type = legacyClientTypeFromAccount(accountTypeForOrder);
   c.relationshipType = relationshipForOrder;

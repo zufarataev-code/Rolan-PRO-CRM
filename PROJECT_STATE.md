@@ -739,3 +739,15 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Responsive verification: the four primary Surveyor screens were visually reviewed at 390×844. Tablet 1024×768 and desktop 1440×900 have no document-level horizontal overflow. The approved calm navy/blue field-app visual language was applied without changing desktop business logic or authorization.
 - Automated verification: 34 targeted tests passed for mobile parity, Surveyor v4, measurement, field workspace, and dispatch calendar/map; the legacy inline script compiles; `git diff --check` passes. The repository-wide test command remains unstable on the local Node 24 machine because its unbounded parallel `tsx/esbuild` launch stops shared transform services; CI on Node 20 is the release gate for the full suite, TypeScript, and production build.
 - Release branch: `codex/surveyor-mobile-v4-release`, rebased at the Git object level onto current `main` `acd2e60`. Production deployment proceeds only after the required PR CI succeeds and the PR is merged into `main`.
+
+## 2026-10-01 handoff — client card: B2C / B2B identity, website leads in «Новые лиды» (PR #284, stacked on #268)
+
+- Owner request (2026-10-01): separate first/last name; B2B company name, company type, representative first/last name and job title; «Постоянный партнёр» as an explicit status (basis for the partner cabinet).
+- Legacy CRM: shared identity block in the new-client modal, contact passport and new-project client overlay; `name` stays the display name. Client list shows company type and representative; search covers them. Lead, cold-call and backend conversions fill the same fields; the cold-call form has separate representative name, title and company type.
+- Website intake `/api/v1/integrations/website/leads` accepts `first_name`, `last_name`, `customer_type`, `company_name`, `company_type`, `contact_title`; keeps an email/phone only when it looks like one. Website leads are listed in «Новые лиды»; «Создать проект» first claims the lead on the server (`CONTACTED`), «Спам / отклонить» → `CLOSED_LOST`.
+- Managers see their own leads plus the unassigned queue (`buildLeadScopeWhere`); processing an unassigned lead assigns it to them.
+- Public lead values are HTML-escaped (leads view, `emailAnchor`, `addressAnchor`, client-list phone).
+- Migration `20261001120000_client_identity_fields` (additive nullable columns on `leads` and `clients`).
+- Verification: full unit suite and `tsc` green; `lead-identity`, `client-identity-fields`, access tests.
+- Not done: WordPress form fields (site repo outside this project); B2B terms in КП and the partner cabinet (need Owner decisions and legal review).
+- Next action: Codex 👍 on the latest commit, Owner «да», merge after #268, deploy (pre-migration backup is automatic).

@@ -116,3 +116,18 @@ test("cold-call companies keep the representative's title out of the last name",
   assert.deepEqual({ ...coldProspectIdentity({ companyName: "Acme", contactName: "John Smith", contactTitle: "Owner", companyType: "retail" }) },
     { companyName: "Acme", companyType: "retail", firstName: "John", lastName: "Smith", contactTitle: "Owner" });
 });
+
+test("a website lead is claimed on the server before the client and order are written", () => {
+  const convert = block("async function convertLead(leadId)", "async function dismissLead(");
+  const claim = convert.indexOf("setCanonicalLeadStatus(leadId, 'CONTACTED')");
+  assert.ok(claim > 0, "claim present");
+  assert.ok(claim < convert.indexOf("db.clients.push(client)"), "claim before the client is written");
+  assert.ok(claim < convert.indexOf("db.orders.push(o)"), "claim before the order is written");
+  assert.match(convert, /if \(canonical && !\(await setCanonicalLeadStatus\(leadId, 'CONTACTED'\)\)\) return;/);
+  assert.match(convert, /if \(!canonical\) await markLeadProcessed\(leadId\);/);
+});
+
+test("creating a project keeps «Разовый клиент» for a company", () => {
+  assert.doesNotMatch(html, /accountTypeForOrder === 'b2b' \? 'regular'/);
+  assert.doesNotMatch(html, /accountType === 'b2b' \? 'regular'/);
+});
