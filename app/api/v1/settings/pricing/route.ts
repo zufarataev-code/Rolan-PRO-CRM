@@ -33,6 +33,11 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+function positiveMultiplier(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 5 ? parsed : undefined;
+}
+
 function integerValue(value: unknown) {
   const parsed = numberValue(value);
   return parsed === undefined ? undefined : Math.trunc(parsed);
@@ -60,9 +65,21 @@ export async function GET(request: NextRequest) {
     return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Pricing access denied.");
   }
 
-  const [services, addons, planning] = await Promise.all([
+  const [services, addons, complexityLevels, planning] = await Promise.all([
     prisma.serviceType.findMany({ orderBy: [{ sort_order: "asc" }, { name_ru: "asc" }] }),
     prisma.serviceAddon.findMany({ orderBy: [{ sort_order: "asc" }, { name_ru: "asc" }] }),
+    prisma.complexityLevel.findMany({
+      where: { is_active: true },
+      orderBy: [{ sort_order: "asc" }, { numeric_rank: "asc" }],
+      select: {
+        complexity_level_id: true,
+        level_code: true,
+        name_ru: true,
+        name_en: true,
+        multiplier: true,
+        sort_order: true,
+      },
+    }),
     getBusinessPlanningSnapshot(),
   ]);
 
@@ -70,6 +87,7 @@ export async function GET(request: NextRequest) {
   return apiSuccess({
     services: services.map((service) => servicePricingForRole(service, owner)),
     addons: addons.map((addon) => addonPricingForRole(addon, owner)),
+    complexity_levels: complexityLevels,
     planning: owner ? planning : withoutInternalPlanningCosts(planning),
     can_view_costs: owner,
   });
@@ -161,6 +179,31 @@ export async function PATCH(request: NextRequest) {
     if (!isOwner(auth.session.roles)) return apiError(403, "forbidden", "План компании меняет только владелец.");
     await updateBusinessPlanningSettings(patch);
     return apiSuccess(await getBusinessPlanningSnapshot());
+  }
+
+
+  if (entity === "complexity_level") {
+    if (!isOwner(auth.session.roles)) {
+      return apiError(403, "forbidden", "Коэффициенты сложности меняет только владелец.");
+    }
+    if (!id) return apiError(400, "invalid_payload", "id is required.");
+    const multiplier = positiveMultiplier(patch.multiplier);
+    if (multiplier === undefined) {
+      return apiError(400, "invalid_multiplier", "Коэффициент должен быть от 1 до 5.");
+    }
+    const updated = await prisma.complexityLevel.update({
+      where: { complexity_level_id: id },
+      data: { multiplier },
+      select: {
+        complexity_level_id: true,
+        level_code: true,
+        name_ru: true,
+        name_en: true,
+        multiplier: true,
+        sort_order: true,
+      },
+    });
+    return apiSuccess(updated);
   }
 
   if (!id) return apiError(400, "invalid_payload", "id is required.");

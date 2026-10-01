@@ -18,8 +18,22 @@ function jsonNumber(value: Prisma.JsonValue | null | undefined, key: string) {
   return toNumber((value as Record<string, unknown>)[key] as number | string | null | undefined);
 }
 
-export function calculatePayrollAmount(quantitySqft: number, ratePerSqft: number, complexityMultiplier: number) {
-  return Number((Math.max(0, quantitySqft) * Math.max(0, ratePerSqft) * Math.max(1, complexityMultiplier)).toFixed(2));
+/** Owner pay rules (decided 2026-09-30) apply to work accrued from this date. */
+export const OWNER_PAY_RULES_FROM = new Date("2026-09-01T00:00:00Z");
+
+/**
+ * Installer pay = (film sq ft × rate + Smart zones × zone rate) × difficulty.
+ * The difficulty coefficient multiplies all installer labor on the deal.
+ */
+export function calculatePayrollAmount(
+  quantitySqft: number,
+  ratePerSqft: number,
+  complexityMultiplier: number,
+  zoneCount = 0,
+  zoneRate = 0,
+) {
+  const labor = Math.max(0, quantitySqft) * Math.max(0, ratePerSqft) + Math.max(0, zoneCount) * Math.max(0, zoneRate);
+  return Number((labor * Math.max(1, complexityMultiplier)).toFixed(2));
 }
 
 export async function recordInstallerPayrollAccrual(
@@ -48,7 +62,23 @@ export async function recordInstallerPayrollAccrual(
     jsonNumber(job.position.dynamic_fields, "manual_installation_cost_per_sqft") ||
     toNumber(job.position.service_type.installation_cost_per_sqft);
   const multiplier = toNumber(job.position.complexity_level?.multiplier) || 1;
-  const amount = calculatePayrollAmount(quantitySqft, ratePerSqft, multiplier);
+  // Smart zone connections pay the ZONE_CONNECTION installer rate (rate directory).
+  const ownerRules = accruedAt >= OWNER_PAY_RULES_FROM;
+  const zoneCount =
+    ownerRules && job.position.service_type.service_code === "SMART_FILM"
+      ? jsonNumber(job.position.dynamic_fields, "zones_qty")
+      : 0;
+  const zoneRate = zoneCount
+    ? toNumber(
+        (
+          await tx.serviceType.findUnique({
+            where: { service_code: "ZONE_CONNECTION" },
+            select: { installation_cost_per_sqft: true },
+          })
+        )?.installation_cost_per_sqft,
+      )
+    : 0;
+  const amount = calculatePayrollAmount(quantitySqft, ratePerSqft, multiplier, zoneCount, zoneRate);
 
   return tx.installerPayrollAccrual.upsert({
     where: { installer_job_id: installerJobId },

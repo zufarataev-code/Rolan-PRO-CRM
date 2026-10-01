@@ -35,7 +35,6 @@ test("owner shell keeps every primary operational section in one navigation", ()
     "Холодные звонки",
     "Проекты",
     "КП",
-    "Услуги и цены",
     "Календарь",
     "Монтажники сейчас",
     "Задачи",
@@ -53,4 +52,5 @@ test("owner shell keeps every primary operational section in one navigation", ()
   ];
 
   labels.forEach((label) => assert.ok(source.includes(label), `missing owner surface: ${label}`));
+  assert.ok(source.includes("Справочник расценок на работу"), "missing owner Settings rate directory");
 });

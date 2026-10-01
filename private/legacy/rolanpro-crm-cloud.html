@@ -8346,6 +8346,24 @@ function migrateSchema() {
   s.installerRates.workTypes = s.installerRates.workTypes || {
     washing: 0, removal: 0, silicone: 0, electric: 0, connect: 0, warranty: 0, custom: 0,
   };
+  // ---- OWNER RATE DIRECTORY (decided 2026-09-30, pay rules from 2026-09-01) ----
+  // Difficulty multiplies the whole deal: client price AND installer pay.
+  // Installer pay per sq ft by direction, plus $50 per Smart zone connection.
+  if (!db._ownerRateDirectory20260901) {
+    // Orders before 2026-09-01 keep the coefficients and rates they were
+    // priced and paid with (see ratesForOrder); only newer work uses the directory.
+    s.ratesBefore20260901 = JSON.parse(JSON.stringify({
+      complexityCoefs: s.complexityCoefs || {},
+      installerServiceTypes: s.installerRates?.serviceTypes || {},
+      installerDefaults: s.installerRates?._defaults || {},
+      installerWorkTypes: s.installerRates?.workTypes || {},
+    }));
+    s.complexityCoefs = { standard: 1.0, ladder: 1.2, tower: 1.5, alpinism: 2.0 };
+    s.installerRates._defaults = { ...(s.installerRates._defaults || {}), smart: 5, protective: 3, solar: 2.5, decorative: 2.5 };
+    s.installerRates.serviceTypes = { ...(s.installerRates.serviceTypes || {}), SMART_FILM: 5, SAFETY_FILM: 3, SOLAR_FILM: 2.5, DECORATIVE_FILM: 2.5 };
+    s.installerRates.serviceTypes.ZONE_CONNECTION = 50;
+    db._ownerRateDirectory20260901 = true;
+  }
   if (!s.projectProfitTax) {
     s.projectProfitTax = {
       entityType: 'C_CORP',
@@ -15009,18 +15027,19 @@ function filmCategory(filmTypeName) {
   if (n.includes('decor') || n.includes('frost') || n.includes('matte') || n.includes('декор') || n.includes('матов')) return 'decorative';
   return 'other';
 }
-function filmDefaultRate(filmTypeName) {
+function filmDefaultRate(filmTypeName, o = null) {
   const cat = filmCategory(filmTypeName);
-  return installerServiceRateByCategory(cat);
+  return installerServiceRateByCategory(cat, o);
 }
 function installerServiceCodeByCategory(category) {
   return ({ solar: 'SOLAR_FILM', smart: 'SMART_FILM', protective: 'SAFETY_FILM', decorative: 'DECORATIVE_FILM' })[category] || '';
 }
-function installerServiceRateByCategory(category) {
+function installerServiceRateByCategory(category, o = null) {
+  const rates = ratesForOrder(o);
   const serviceCode = installerServiceCodeByCategory(category);
-  const serviceRate = Number(db.settings.installerRates?.serviceTypes?.[serviceCode]);
+  const serviceRate = Number(rates.installerServiceTypes?.[serviceCode]);
   if (serviceRate > 0) return serviceRate;
-  return Number(db.settings.installerRates?._defaults?.[category]) || Number(db.settings.installerRates?._defaults?.other) || 2.5;
+  return Number(rates.installerDefaults?.[category]) || Number(rates.installerDefaults?.other) || 2.5;
 }
 function syncLegacyInstallerServiceRate(serviceCode, rate) {
   const normalizedRate = Math.max(0, Number(rate) || 0);
@@ -15032,10 +15051,10 @@ function syncLegacyInstallerServiceRate(serviceCode, rate) {
   if (category) db.settings.installerRates._defaults[category] = normalizedRate;
   return Math.abs(previousRate - normalizedRate) > 0.001;
 }
-function filmRate(filmTypeName) {
-  if (!filmTypeName) return db.settings.installerRates?._defaults?.other ?? 2.5;
+function filmRate(filmTypeName, o = null) {
+  if (!filmTypeName) return ratesForOrder(o).installerDefaults?.other ?? 2.5;
   const explicit = db.settings.installerRates?.types?.[filmTypeName];
-  return explicit != null ? explicit : filmDefaultRate(filmTypeName);
+  return explicit != null ? explicit : filmDefaultRate(filmTypeName, o);
 }
 // Window area helpers (sqft and m²)
 function windowAreaSqft(w) {
@@ -15181,7 +15200,19 @@ function windowCatalog(w) {
   }
   return null;
 }
-function windowRetailPrice(w, complexity, orderOverridePerSqft) {
+// Coefficients and installer rates that apply to an order: the rate directory
+// for work from 2026-09-01, the values frozen at the switch for older orders.
+function ratesForOrder(o) {
+  const before = db.settings.ratesBefore20260901;
+  const useOld = o && before && typeof orderUsesOwnerPayRules === 'function' && !orderUsesOwnerPayRules(o);
+  return {
+    complexityCoefs: useOld ? before.complexityCoefs : (db.settings.complexityCoefs || {}),
+    installerServiceTypes: useOld ? before.installerServiceTypes : (db.settings.installerRates?.serviceTypes || {}),
+    installerDefaults: useOld ? before.installerDefaults : (db.settings.installerRates?._defaults || {}),
+    installerWorkTypes: useOld ? before.installerWorkTypes : (db.settings.installerRates?.workTypes || {}),
+  };
+}
+function windowRetailPrice(w, complexity, orderOverridePerSqft, order = null) {
   const c = windowCatalog(w);
   // Priority: per-window override → order-level override → catalog price → default 10
   let perSqft;
@@ -15189,7 +15220,7 @@ function windowRetailPrice(w, complexity, orderOverridePerSqft) {
   else if (orderOverridePerSqft != null && orderOverridePerSqft !== '') perSqft = parseFloat(orderOverridePerSqft);
   else if (c) perSqft = c.retailPerSqft;
   else perSqft = 10;
-  const coef = (db.settings.complexityCoefs?.[complexity] ?? 1.0);
+  const coef = (ratesForOrder(order).complexityCoefs?.[complexity] ?? 1.0);
   return windowActualAreaSqft(w) * perSqft * coef;
 }
 function windowFilmCost(w) {
@@ -15200,12 +15231,12 @@ function windowFilmCost(w) {
   const withWaste = sqft * (1 + (c.wastePct || 0) / 100);
   return withWaste * c.costPerSqft;
 }
-function windowInstallerPayout(w) {
+function windowInstallerPayout(w, o = null) {
   const c = windowCatalog(w);
   const filmName = c ? `${c.brand} ${c.model}` : (w.filmType || '');
-  return windowActualAreaSqft(w) * filmRate(filmName);
+  return windowActualAreaSqft(w) * filmRate(filmName, o);
 }
-function installerRateForWindow(user, w) {
+function installerRateForWindow(user, w, o = null) {
   const pc = user?.payConfig || {};
   const catalog = windowCatalog(w);
   const category = catalog?.category || filmCategory(w?.filmType || '');
@@ -15213,9 +15244,9 @@ function installerRateForWindow(user, w) {
   if (categoryRate > 0) return categoryRate;
   const baseRate = Number(pc.ratePerSqft);
   if (baseRate > 0) return baseRate;
-  return installerServiceRateByCategory(category);
+  return installerServiceRateByCategory(category, o);
 }
-function installerRateForQuickLine(user, line) {
+function installerRateForQuickLine(user, line, o = null) {
   const pc = user?.payConfig || {};
   const catalog = getCatalogItem(line?.catalogId);
   const category = catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other';
@@ -15224,26 +15255,68 @@ function installerRateForQuickLine(user, line) {
   const baseRate = Number(pc.ratePerSqft);
   if (baseRate > 0) return baseRate;
   const serviceCode = canonicalServiceCodeForOrderService(line?.serviceType);
-  const serviceRate = Number(db.settings.installerRates?.serviceTypes?.[serviceCode]);
-  return serviceRate > 0 ? serviceRate : installerServiceRateByCategory(category);
+  const serviceRate = Number(ratesForOrder(o).installerServiceTypes?.[serviceCode]);
+  return serviceRate > 0 ? serviceRate : installerServiceRateByCategory(category, o);
 }
 function orderQuickInstallerPayoutForUser(o, user) {
   return projectQuickLines(o)
     .filter(line => line.unit === 'sqft' && (line.installerIds || []).includes(user?.id))
     .reduce((sum, line) => {
       const installerCount = Math.max(1, new Set(line.installerIds || []).size);
-      return sum + (Number(line.qty) || 0) * installerRateForQuickLine(user, line) / installerCount;
+      return sum + (Number(line.qty) || 0) * installerRateForQuickLine(user, line, o) / installerCount;
     }, 0);
 }
-function installerAdditionalWorkRate(user, type) {
+function installerAdditionalWorkRate(user, type, o = null) {
+  // From 2026-09-01 a manual zone row pays the same zone rate as automatic zones.
+  if (type === 'connect' && o && orderUsesOwnerPayRules(o)) return smartZoneRate(user);
   const employeeRate = Number(user?.payConfig?.ratesByWorkType?.[type]);
   if (employeeRate > 0) return employeeRate;
-  return Math.max(0, Number(db.settings.installerRates?.workTypes?.[type]) || 0);
+  return Math.max(0, Number(ratesForOrder(o).installerWorkTypes?.[type]) || 0);
 }
 function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
   return (o?.extraServices || []).filter(line => !line.quickProjectLine).reduce((sum, line) => {
-    return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type) / installerCount;
+    return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type, o) / installerCount;
   }, 0);
+}
+// Pay rules decided by the owner on 2026-09-30, applied to installations from
+// 2026-09-01: the deal's difficulty coefficient multiplies installer pay, and
+// every Smart zone connection pays the Smart zone rate. Earlier installations
+// keep the rules they were paid under.
+const OWNER_PAY_RULES_FROM = '2026-09-01';
+function orderUsesOwnerPayRules(o) {
+  // Only an actual installation date keeps an order on the old rules;
+  // unscheduled work (whenever it was created) is priced and paid by the directory.
+  const date = String(o?.installationDoneAt || o?.installationAt || '');
+  return !date || date.slice(0, 10) >= OWNER_PAY_RULES_FROM;
+}
+function orderPayComplexityCoef(o) {
+  if (!orderUsesOwnerPayRules(o)) return 1;
+  return Number(db.settings.complexityCoefs?.[o?.complexity || 'standard']) || 1;
+}
+function orderSmartZoneCount(o) {
+  return measureAllWindows(o)
+    .filter(({ win }) => (win.measureScope || orderMeasureScope(o)) === 'smart_film')
+    .reduce((sum, { win }) => {
+      const zones = (win.smart?.zones || []).length;
+      // Older imports have a smart block with a window quantity but no zone list.
+      return sum + (zones || (win.smart ? Math.max(1, parseInt(win.qty) || 1) : 0));
+    }, 0);
+}
+// One zone rate for automatic zones and manual «Подключение зоны» rows:
+// the employee's own connection rate, else the rate directory
+// (ZONE_CONNECTION, synced from «Расценки»).
+function smartZoneRate(user) {
+  const employeeRate = Number(user?.payConfig?.ratesByWorkType?.connect);
+  if (employeeRate > 0) return employeeRate;
+  return Math.max(0, Number(db.settings.installerRates?.serviceTypes?.ZONE_CONNECTION) || 0);
+}
+function orderSmartZonePayout(o, user, installerCount = 1) {
+  if (!orderUsesOwnerPayRules(o)) return 0;
+  // A manual "connect" work line already pays connections; never pay twice.
+  if ((o?.extraServices || []).some(line => line.type === 'connect' && !line.quickProjectLine)) return 0;
+  const zones = orderSmartZoneCount(o);
+  if (!zones) return 0;
+  return zones * smartZoneRate(user) / Math.max(1, installerCount);
 }
 function orderInstallerPayoutForUser(o, userId) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
@@ -15254,23 +15327,30 @@ function orderInstallerPayoutForUser(o, userId) {
   if (pc.type === 'commission') return orderRevenue(o) * Math.max(0, Number(pc.commissionPct) || 0) / 100 / installerIds.length;
   if (pc.type !== 'per_sqft') return 0;
   const filmPayout = !measureAllWindows(o).length ? orderQuickInstallerPayoutForUser(o, user) : measureAllWindows(o).reduce((sum, { win }) => {
-    return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / installerIds.length;
+    return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win, o) / installerIds.length;
   }, 0);
-  return filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length);
+  // The deal difficulty multiplies all installer labor: film, zones, add-ons.
+  return (filmPayout
+    + orderSmartZonePayout(o, user, installerIds.length)
+    + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * orderPayComplexityCoef(o);
 }
 function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.length) {
     const windows = measureAllWindows(o);
     const total = windows.length
-      ? windows.reduce((sum, { win }) => sum + windowInstallerPayout(win), 0)
+      ? windows.reduce((sum, { win }) => sum + windowInstallerPayout(win, o), 0)
       : projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => {
           const catalog = getCatalogItem(line.catalogId);
           const filmName = catalog ? `${catalog.brand} ${catalog.model}` : line.serviceType;
-          return sum + (Number(line.qty) || 0) * filmRate(filmName);
+          return sum + (Number(line.qty) || 0) * filmRate(filmName, o);
         }, 0);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
-    return { total: total + work, byInstaller: [], source: 'REFERENCE_DEFAULT' };
+    return {
+      total: (total + orderSmartZonePayout(o, null, 1) + work) * orderPayComplexityCoef(o),
+      byInstaller: [],
+      source: 'REFERENCE_DEFAULT',
+    };
   }
   const byInstaller = installerIds.map(userId => {
     const user = getUser(userId);
@@ -15284,7 +15364,7 @@ function orderFilmRevenue(o) {
   const cx = o.complexity || 'standard';
   const ov = o.priceOverridePerSqft;
   let s = 0;
-  (o.measurements?.rooms || []).forEach(r => (r.windows || []).forEach(w => { s += windowRetailPrice(w, cx, ov); }));
+  (o.measurements?.rooms || []).forEach(r => (r.windows || []).forEach(w => { s += windowRetailPrice(w, cx, ov, o); }));
   return s;
 }
 function orderExtraServicesRevenue(o) {
@@ -16901,7 +16981,6 @@ function renderAppShell() {
     ['coldcalls', 'Холодные звонки', '📞'],
     ['orders', T('orders'), '🏗'],
     ['proposals', 'КП', '📄'],
-    ['servicePricing', 'Услуги и цены', '💲'],
     ['calendar', T('calendar'), '📅'],
     ['installerOps', 'Монтажники сейчас', '📍'],
     ['tasks', 'Задачи', '✅'],
@@ -17056,7 +17135,7 @@ function headerTitle() {
     case 'orders': return T('orders');
     case 'canonicalProjects': return state.canonicalProjectId ? '📐 Конструктор замеров' : '📐 Проверенные замеры';
     case 'proposals': return '📄 Коммерческие предложения';
-    case 'servicePricing': return '💲 Услуги и цены';
+    case 'servicePricing': return '💲 Справочник расценок на работу';
     case 'installerOps': return '📍 Монтажники сейчас';
     case 'workday': return '⏱ Рабочий день';
     case 'calendar': return T('calendar');
@@ -17088,7 +17167,7 @@ function headerSubtitle() {
     case 'orders': return 'Один проект от первого обращения до замера, КП, монтажа и оплаты';
     case 'canonicalProjects': return 'Точные замеры и услуги внутри существующего проекта';
     case 'proposals': return 'Кому отправлено, кто посмотрел и к какому заказу относится КП';
-    case 'servicePricing': return 'Единый прайс, ставки монтажников и план продаж — внутри основной CRM';
+    case 'servicePricing': return 'Настройки стоимости работ для клиента и оплаты исполнителей';
     case 'installerOps': return 'Активные смены, объекты и последнее добровольно переданное местоположение';
     case 'workday': return 'Смена, часы, пробег и личные начисления в одной истории';
     case 'orderDetails': return 'Единая карточка проекта: объект, услуги, замер, КП, монтаж, оплата и история';
@@ -17540,6 +17619,16 @@ async function saveCanonicalOpening() {
 }
 
 // ---------- INSTALLER WORKDAY INSIDE THE ONE CRM ----------
+// Accrual formula as paid: (sq ft × rate + Smart zone connections) × difficulty.
+// The zone part is what the amount holds beyond sq ft × rate, so the shown equation always matches.
+function installerAccrualFormula(item) {
+  const sqft = Number(item.quantity_sqft || 0), rate = Number(item.rate_per_sqft || 0);
+  const mult = Number(item.complexity_multiplier || 1) || 1;
+  const zonePart = Math.round((Number(item.amount || 0) / mult - sqft * rate) * 100) / 100;
+  const base = `${sqft.toFixed(1)} sqft × ${installerWorkdayMoney(rate)}`;
+  const labor = zonePart > 0.009 ? `(${base} + подключение зон ${installerWorkdayMoney(zonePart)})` : base;
+  return mult !== 1 ? `${labor} × ${mult}` : labor;
+}
 function installerWorkdayMoney(value) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
 }
@@ -17692,13 +17781,17 @@ function renderCanonicalInstallerWorkday() {
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="card"><h3 class="font-semibold mb-3">История смен</h3>${history.length ? history.map(item => `<div class="border-t py-3 first:border-t-0"><div class="font-semibold">${academyEsc(item.installer_job?.position?.title || item.installer_job?.project?.title || 'Общая смена')}</div><div class="text-sm text-gray-600">${fmtDateTime(item.started_at)} · ${installerWorkdayHours(item.work_minutes)} · ${Number(item.miles_driven || 0).toFixed(1)} miles</div>${item.notes ? `<div class="text-xs text-gray-500 mt-1">${academyEsc(item.notes)}</div>` : ''}</div>`).join('') : '<div class="text-sm text-gray-500">Завершённые смены появятся здесь.</div>'}</div>
-      <div class="card"><h3 class="font-semibold mb-1">Моя зарплата</h3><p class="text-xs text-gray-500 mb-3">Только ваши начисления. Цена клиента и маржа компании скрыты.</p>${payroll.length ? payroll.map(item => `<div class="border-t py-3 first:border-t-0 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.service_name)}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${Number(item.quantity_sqft || 0).toFixed(1)} sqft × ${installerWorkdayMoney(item.rate_per_sqft)} × ${Number(item.complexity_multiplier || 1)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('') : '<div class="text-sm text-gray-500">Начислений пока нет.</div>'}</div>
+      <div class="card"><h3 class="font-semibold mb-1">Моя зарплата</h3><p class="text-xs text-gray-500 mb-3">Только ваши начисления. Цена клиента и маржа компании скрыты.</p>${payroll.length ? payroll.map(item => `<div class="border-t py-3 first:border-t-0 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.service_name)}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${installerAccrualFormula(item)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('') : '<div class="text-sm text-gray-500">Начислений пока нет.</div>'}</div>
     </div>`;
 }
 
 // ---------- CANONICAL SERVICE PRICING (ONE CRM UI) ----------
 function canonicalPricingMoney(value) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value || 0));
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(Number(value || 0));
+}
+
+function canonicalPricingUnitLabel(unit) {
+  return ({ sqft: 'sq ft', qty: 'шт.', item: 'шт.', fixed: 'работу', zone: 'зону' })[String(unit || '').toLowerCase()] || String(unit || 'ед.');
 }
 
 async function canonicalPricingRequest(method, body) {
@@ -17722,10 +17815,21 @@ async function loadCanonicalServicePricing(force = false) {
     const pricingData = await canonicalPricingRequest('GET');
     state.canonicalPricingData = pricingData;
     if (pricingData?.can_view_costs) {
+      db.settings = db.settings || {};
+      db.settings.complexityCoefs = db.settings.complexityCoefs || {};
       const ratesChanged = (pricingData.services || []).reduce((changed, service) => {
         return syncLegacyInstallerServiceRate(service.service_code, service.installation_cost_per_sqft) || changed;
       }, false);
-      if (ratesChanged) save();
+      const complexityKeys = { LOW: 'standard', STANDARD: 'ladder', HIGH: 'tower', EXPERT: 'alpinism' };
+      const complexityChanged = (pricingData.complexity_levels || []).reduce((changed, level) => {
+        const key = complexityKeys[level.level_code];
+        if (!key) return changed;
+        const multiplier = Number(level.multiplier) || 1;
+        const previous = Number(db.settings.complexityCoefs?.[key]) || 1;
+        db.settings.complexityCoefs[key] = multiplier;
+        return Math.abs(previous - multiplier) > 0.001 || changed;
+      }, false);
+      if (ratesChanged || complexityChanged) save();
     }
   } catch (error) {
     state.canonicalPricingError = error?.message || 'Не удалось загрузить прайс';
@@ -17777,6 +17881,14 @@ async function saveCanonicalService(id) {
     syncLegacyInstallerServiceRate(service.service_code, patch.installation_cost_per_sqft);
     save();
   }
+}
+
+function saveCanonicalComplexity(id) {
+  canonicalPricingSave({
+    entity: 'complexity_level',
+    id,
+    patch: { multiplier: canonicalPricingValue(`cpc-${id}-multiplier`, true) },
+  }, 'Коэффициент сложности сохранён');
 }
 
 function saveCanonicalAddon(id) {
@@ -17847,25 +17959,38 @@ function renderCanonicalServicePricing() {
 
   const services = Array.isArray(data.services) ? data.services : [];
   const addons = Array.isArray(data.addons) ? data.addons : [];
+  const complexityLevels = Array.isArray(data.complexity_levels) ? data.complexity_levels : [];
   const owner = !!data.can_view_costs;
   const planning = data.planning || {};
   const assumptions = planning.assumptions || {};
   const actual = planning.actual || {};
   const signal = actual.signal === 'on_track' ? 'План выполнен' : actual.signal === 'attention' ? 'Почти у цели' : 'Нужны продажи';
 
-  const serviceCards = services.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:4px">
-    <summary class="cursor-pointer list-none flex items-center justify-between gap-3"><div><div class="font-black text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.service_code)} · ${academyEsc(row.unit_type)}</div></div><div class="flex items-center gap-3"><span class="font-black text-blue-700">${canonicalPricingMoney(row.base_price)}</span><span class="text-slate-400">Открыть ↓</span></div></summary>
+  const serviceCards = services.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:12px">
+    <summary class="cursor-pointer list-none grid grid-cols-1 md:grid-cols-[minmax(180px,1fr)_minmax(120px,.55fr)_minmax(120px,.55fr)_auto] items-center gap-3">
+      <div><div class="font-black text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.service_code)} · за ${academyEsc(canonicalPricingUnitLabel(row.unit_type))}</div></div>
+      <div class="rounded-lg bg-blue-50 px-3 py-2"><div class="text-[11px] font-bold uppercase tracking-wide text-blue-600">Клиенту</div><div class="font-black text-blue-800">${canonicalPricingMoney(row.base_price)}</div></div>
+      ${owner ? `<div class="rounded-lg bg-emerald-50 px-3 py-2"><div class="text-[11px] font-bold uppercase tracking-wide text-emerald-700">Монтажнику</div><div class="font-black text-emerald-800">${canonicalPricingMoney(row.installation_cost_per_sqft)}</div></div>` : ''}
+      <span class="text-sm font-bold text-slate-500">Изменить ↓</span>
+    </summary>
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-5 pt-4 border-t border-slate-200">
       ${canonicalPricingField(`cps-${row.service_type_id}-name`, 'Название', row.name_ru, 'text')}
-      ${canonicalPricingField(`cps-${row.service_type_id}-unit`, 'Единица: sqft, zone, item', row.unit_type, 'text')}
-      ${canonicalPricingField(`cps-${row.service_type_id}-base`, 'Цена клиенту, $', row.base_price)}
+      ${canonicalPricingField(`cps-${row.service_type_id}-unit`, 'Единица: sqft, qty, fixed', row.unit_type, 'text')}
+      ${canonicalPricingField(`cps-${row.service_type_id}-base`, 'Ориентир клиенту, $', row.base_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-min`, 'Минимальная цена, $', row.min_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-block`, 'Блок клиенту, $', row.block_revenue_price)}
-      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-installer`, 'Монтажнику / sqft, $', row.installation_cost_per_sqft) : ''}
+      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-installer`, `Монтажнику / ${canonicalPricingUnitLabel(row.unit_type)}, $`, row.installation_cost_per_sqft) : ''}
     </div>
-    <p class="text-xs text-slate-500 mt-3">Стоимость плёнки берётся со склада. Ставка монтажа из этой услуги автоматически начисляется назначенным монтажникам; индивидуальная ставка сотрудника может её переопределить.</p>
+    <p class="text-xs text-slate-500 mt-3">Цена клиенту — ориентир для расчёта и может меняться в конкретном проекте. Ставка монтажника автоматически идёт в payroll и экономику проекта; материал берётся по фактической закупочной цене со склада.</p>
     <div class="mt-4 flex flex-wrap items-center gap-3"><label class="tag"><input id="cps-${row.service_type_id}-active" type="checkbox" ${row.is_active ? 'checked' : ''}> Активна</label><button class="btn-primary" onclick="saveCanonicalService('${row.service_type_id}')">Сохранить услугу</button></div>
   </details>`).join('');
+
+  const complexityCards = complexityLevels.map(level => `<div class="border border-slate-200 bg-slate-50 p-4" style="border-radius:12px">
+    <div class="text-xs font-bold uppercase tracking-wide text-slate-500">${academyEsc(level.level_code)}</div>
+    <div class="font-black text-slate-900 mt-1">${academyEsc(level.name_ru)}</div>
+    <div class="mt-3">${canonicalPricingField(`cpc-${level.complexity_level_id}-multiplier`, 'Коэффициент к цене и зарплате', level.multiplier, 'number', '0.05')}</div>
+    ${owner ? `<button class="btn-primary w-full mt-3" onclick="saveCanonicalComplexity('${level.complexity_level_id}')">Сохранить ×${Number(level.multiplier || 1).toFixed(2)}</button>` : ''}
+  </div>`).join('');
 
   const addonCards = addons.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:4px">
     <summary class="cursor-pointer list-none flex items-center justify-between"><div><div class="font-bold text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.addon_code)}</div></div><b class="text-blue-700">${canonicalPricingMoney(row.default_price)}</b></summary>
@@ -17874,13 +17999,15 @@ function renderCanonicalServicePricing() {
   </details>`).join('');
 
   return `<div class="space-y-5">
+    ${owner ? `<div class="settings-detail-header"><button type="button" class="settings-detail-back" onclick="selectAppView('settings')">← Все настройки</button><div class="settings-detail-title"><span class="settings-hub-icon" aria-hidden="true">💲</span><div><h2>Справочник расценок на работу</h2><p>Цена работ клиенту, ставка исполнителю и коэффициенты сложности.</p></div></div></div>` : ''}
     ${state.canonicalPricingNotice ? `<div class="card border border-emerald-200 bg-emerald-50 text-emerald-800" style="border-radius:4px">✅ ${academyEsc(state.canonicalPricingNotice)}</div>` : ''}
     <section class="card border border-slate-200 bg-white" style="border-radius:4px">
       <div class="flex flex-wrap justify-between gap-4"><div><h2 class="text-xl font-black">План продаж</h2><p class="text-sm text-slate-500">Один расчёт для всей компании. Это прогноз, а не движение денег.</p></div><span class="tag bg-blue-50 text-blue-800">${academyEsc(signal)}</span></div>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Безубыточность</div><b class="text-xl">${canonicalPricingMoney(planning.break_even?.revenue)}</b><div class="text-xs">${planning.break_even?.deals || 0} сделок / ${planning.break_even?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Цель с прибылью</div><b class="text-xl">${canonicalPricingMoney(planning.target?.revenue)}</b><div class="text-xs">${planning.target?.deals || 0} сделок / ${planning.target?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">КП за месяц</div><b class="text-xl">${canonicalPricingMoney(actual.proposal_revenue)}</b></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Прогресс</div><b class="text-xl">${Number(actual.progress_percent || 0).toFixed(0)}%</b></div></div>
       ${owner ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${canonicalPricingField('cp-plan-check', 'Средний чек, $', assumptions.average_deal_value)}${canonicalPricingField('cp-plan-conversion', 'Конверсия лид → сделка, %', assumptions.lead_to_deal_percent)}${canonicalPricingField('cp-plan-profit', 'Целевая прибыль / месяц, $', assumptions.target_profit_monthly)}</div><button class="btn-primary mt-4" onclick="saveCanonicalPlanning()">Сохранить план</button>` : '<p class="text-sm text-slate-500 mt-4">Менеджер видит цели по лидам и сделкам. Расходы и прибыль меняет владелец.</p>'}
     </section>
-    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Услуги</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту услугу, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Монтажнику / sqft, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
+    <section class="card border border-slate-200 bg-white" style="border-radius:12px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Расценки на основные работы</h2><p class="text-sm text-slate-500">В одной строке: ориентир клиенту и ставка исполнителю. Эти ставки использует расчёт проекта, payroll и рентабельность.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Ориентир клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Ставка монтажнику, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
+    <section class="card border border-slate-200 bg-white" style="border-radius:12px"><div><h2 class="text-xl font-black">Коэффициенты сложности</h2><p class="text-sm text-slate-500">Один коэффициент применяется к цене плёночных работ клиенту и к оплате монтажников. Старые завершённые проекты сохраняют зафиксированные ставки.</p></div><div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-4">${complexityCards || '<div class="text-slate-500">Коэффициенты не настроены</div>'}</div></section>
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between"><div><h2 class="text-xl font-black">Дополнительные работы</h2><p class="text-sm text-slate-500">Подключение зон, демонтаж, силикон и другие допродажи.</p></div><span class="tag">${addons.length}</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить допработу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Основная услуга</span><select id="cp-new-addon-service" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2">${services.map(s => `<option value="${s.service_type_id}">${academyEsc(s.name_ru)}</option>`).join('')}</select></label>${canonicalPricingField('cp-new-addon-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-addon-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-addon-unit', 'Единица', 'item', 'text')}${canonicalPricingField('cp-new-addon-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-addon-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalAddon()">Создать допработу</button></details><div class="space-y-3 mt-4">${addonCards || '<div class="text-slate-500">Дополнительных работ пока нет</div>'}</div></section>
   </div>`;
 }
@@ -18140,9 +18267,9 @@ function renderOwnerPanel() {
       const cat = windowCatalog(w);
       const key = cat?.category || 'other';
       if (!byCategory[key]) byCategory[key] = { revenue: 0, cost: 0, sqft: 0 };
-      const px = windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft);
+      const px = windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft, o);
       byCategory[key].revenue += px;
-      byCategory[key].cost += windowFilmCost(w) + windowInstallerPayout(w);
+      byCategory[key].cost += windowFilmCost(w) + windowInstallerPayout(w, o);
       byCategory[key].sqft += windowActualAreaSqft(w);
     }));
   });
@@ -20511,7 +20638,7 @@ function settingsSections() {
     { key: 'complexity', icon: '🪜', title: `${T('complexity')} — ${T('coefficient')}`, description: 'Коэффициенты сложности и стоимость аренды' },
     { key: 'client-payments', icon: '💵', title: 'Как клиент платит', description: 'Доступные способы и приоритет оплаты' },
     { key: 'pricing', icon: '📊', title: T('pricingDefaults'), description: 'Проценты, топливо, расходники и помощники' },
-    { key: 'service-pricing', icon: '💲', title: 'Услуги, цены и план продаж', description: 'Единый прайс, ставки работ и точка безубыточности', destination: 'servicePricing' },
+    { key: 'service-pricing', icon: '💲', title: 'Справочник расценок на работу', description: 'Цена работ клиенту, ставка исполнителю и коэффициенты сложности', destination: 'servicePricing' },
     { key: 'units', icon: '📏', title: T('units'), description: 'Единицы измерения размеров стекла' },
     { key: 'office', icon: '📍', title: 'Офис и карта', description: 'Адрес компании, центр карты и Google Reviews' },
     { key: 'stripe', icon: '💳', title: 'Stripe', description: 'Приём платежей картой и платёжные ссылки' },
@@ -22979,7 +23106,7 @@ function renderProjectEstimateWorkspace(o) {
       <td data-label="Материал">${academyEsc(cat ? `${cat.brand} ${cat.model}` : 'Плёнка не выбрана')}</td>
       <td data-label="Площадь, sqft" class="money">${area.toFixed(2)}</td>
       <td data-label="Цена / sqft"><input aria-label="Цена за sqft" type="number" min="0" step="0.5" value="${Number(defaultPrice || 0)}" onchange="projectEstimateUpdateWindowPrice('${o.id}','${room.id}','${win.id}',this.value)"></td>
-      <td data-label="Клиенту" class="money"><b>${fmtMoney(windowRetailPrice(win, o.complexity || 'standard', o.priceOverridePerSqft))}</b></td>
+      <td data-label="Клиенту" class="money"><b>${fmtMoney(windowRetailPrice(win, o.complexity || 'standard', o.priceOverridePerSqft, o))}</b></td>
       ${canSeeInternalEconomics ? `<td data-label="Себестоимость" class="money">${fmtMoney(windowFilmCost(win))}</td>` : ''}
     </tr>`;
   })).join('');
@@ -23495,7 +23622,7 @@ function renderOrderDetails(id) {
 	                    const cat = windowCatalog(w);
 	                    const wScopeKey = w.measureScope || measureScopeByCatalog(cat) || orderMeasureScope(o);
 	                    const effPrice = w.pricePerSqft ?? o.priceOverridePerSqft ?? cat?.retailPerSqft ?? '';
-	                    const sum = windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft);
+	                    const sum = windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft, o);
                     return `
                     <tr>
                       <td class="p-1"><input value="${w.name}" ${(canMeasure||canManage)?'':'readonly'} onchange="updateWin('${o.id}','${r.id}','${w.id}','name',this.value)"></td>
@@ -23570,7 +23697,7 @@ function renderOrderDetails(id) {
                     const planned = windowAreaSqft(w);
                     const actual = windowActualAreaSqft(w);
                     const rate = c?.installerRatePerSqft ?? 0.27;
-                    const payout = windowInstallerPayout(w);
+                    const payout = windowInstallerPayout(w, o);
                     const diff = actual - planned;
                     const inUnits = db.settings.inputUnits === 'inches';
                     const aw = w.actualWidth ?? w.width;
@@ -29276,9 +29403,9 @@ function premiumWindowPrice(prop, order, window) {
   }
   if (!perSqft) perSqft = selectedCat?.retailPerSqft || 10;
   const area = windowActualAreaSqft(window);
-  const coef = db.settings.complexityCoefs?.[order.complexity || 'standard'] ?? 1;
+  const coef = ratesForOrder(order).complexityCoefs?.[order.complexity || 'standard'] ?? 1;
   const price = area * perSqft * coef;
-  const original = windowRetailPrice(window, order.complexity || 'standard', order.priceOverridePerSqft);
+  const original = windowRetailPrice(window, order.complexity || 'standard', order.priceOverridePerSqft, order);
   return { area, price, perSqft, catalog: selectedCat || baseCat, original, delta: price - original };
 }
 function premiumServiceAmount(service, calc) {
@@ -35230,8 +35357,8 @@ function buildProductPnL() {
       const cat = windowCatalog(w);
       const id = cat?.id || 'unknown';
       if (!products[id]) products[id] = { catalog: cat, revenue: 0, cogs: 0, sqft: 0, orders: new Set() };
-      products[id].revenue += windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft);
-      products[id].cogs += windowFilmCost(w) + windowInstallerPayout(w);
+      products[id].revenue += windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft, o);
+      products[id].cogs += windowFilmCost(w) + windowInstallerPayout(w, o);
       products[id].sqft += windowActualAreaSqft(w);
       products[id].orders.add(o.id);
     }));
