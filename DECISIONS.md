@@ -449,7 +449,7 @@ Owner decision in chat on 2026-09-30 (chosen over waiting for the relational ins
 - Customer price and installer rate are different fields shown together. The customer value is a deal guide and can be overridden in a Project; the installer value feeds server-owned payroll and profitability. Warehouse material cost continues to use the actual receipt cost and is not replaced by the installer rate.
 - Difficulty multiplies film-service customer labor and installer labor through the existing backend calculation. Per-employee pay overrides retain precedence where already supported; the directory supplies the default company rate.
 - Signed Proposals, completed Projects, and paid payroll records retain their stored snapshots when directory values change. Any backfill of unpaid accruals is a production migration and requires explicit Owner approval and a database backup.
-- Implemented for review on `codex/unified-rate-directory`; the PR link is recorded in `PROJECT_STATE.md` after publication. This follows the urgent operational exception to the legacy freeze and does not authorize another legacy data source.
+- Implemented for review on `codex/unified-rate-directory` in PR #281. This follows the urgent operational exception to the legacy freeze and does not authorize another legacy data source.
 
 ## Changing a decision
 
