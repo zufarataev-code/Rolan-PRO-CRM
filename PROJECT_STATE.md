@@ -753,5 +753,6 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Public lead values are HTML-escaped (leads view, `emailAnchor`, `addressAnchor`, client-list phone).
 - Migration `20261001120000_client_identity_fields` (additive nullable columns on `leads` and `clients`).
 - Verification: full unit suite and `tsc` green; `lead-identity`, `client-identity-fields`, access tests.
+- Production build: CI job «Test, typecheck, and build» (`npm run build`) runs on every push of PR #284 and is green.
 - Not done: WordPress form fields (site repo outside this project); B2B terms in КП and the partner cabinet (need Owner decisions and legal review).
 - Next action: Codex 👍 on the latest commit, Owner «да», merge after #268, deploy (pre-migration backup is automatic).
