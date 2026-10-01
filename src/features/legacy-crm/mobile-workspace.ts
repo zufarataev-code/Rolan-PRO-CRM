@@ -554,7 +554,7 @@ const MOBILE_WORKSPACE_PATCH = `
 
     const isProtectedCalendarLayout = (element) => {
       if (!(element instanceof HTMLElement)) return false;
-      if (element.closest('.calendar-toolbar, .calendar-month-grid, .dispatch-workspace, [class*="calendar-"], [id*="calendar-"]')) {
+      if (element.closest('.calendar-toolbar, .calendar-month-grid, .dispatch-workspace, .dispatch-week-head, .dispatch-time-grid, .dispatch-day-grid, [class*="calendar-"], [id*="calendar-"]')) {
         return true;
       }
 
