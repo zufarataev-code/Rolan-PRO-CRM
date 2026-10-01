@@ -313,6 +313,36 @@ const MOBILE_WORKSPACE_PATCH = `
       max-width: 100% !important;
     }
 
+    /* Calendar grids are semantic layouts. The generic phone adapter must never
+       collapse them to one column or turn them into overflow blocks. */
+    .mobile-calendar-week-strip {
+      display: grid !important;
+      grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      gap: 4px !important;
+      overflow: hidden !important;
+    }
+
+    .mobile-calendar-week-strip > *,
+    .mobile-calendar-day-button {
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
+
+    .mobile-calendar-month-weekdays,
+    .mobile-calendar-month-grid,
+    .calendar-month-grid {
+      display: grid !important;
+      grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      gap: 0 !important;
+      overflow: visible !important;
+    }
+
     @media (max-width: 430px) {
       [data-rolanpro-mobile-action-row="1"] {
         grid-template-columns: minmax(0, 1fr) !important;
@@ -441,9 +471,41 @@ const MOBILE_WORKSPACE_PATCH = `
       });
     };
 
+    const isProtectedCalendarLayout = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      return Boolean(element.closest([
+        '.mobile-calendar-week-strip',
+        '.mobile-calendar-month-weekdays',
+        '.mobile-calendar-month-grid',
+        '.calendar-month-grid',
+        '.dispatch-workspace',
+        '.dispatch-week-head',
+        '.dispatch-time-grid',
+        '.dispatch-day-grid',
+        '[class*="calendar-"]',
+        '[id*="calendar-"]',
+      ].join(',')));
+    };
+
+    const protectCalendarLayouts = () => {
+      document.querySelectorAll([
+        '.mobile-calendar-week-strip',
+        '.mobile-calendar-month-weekdays',
+        '.mobile-calendar-month-grid',
+        '.calendar-month-grid',
+        '.dispatch-week-head',
+        '.dispatch-time-grid',
+        '.dispatch-day-grid',
+      ].join(',')).forEach((element) => {
+        if (!(element instanceof HTMLElement)) return;
+        element.removeAttribute('data-rolanpro-mobile-stack');
+        element.removeAttribute('data-rolanpro-mobile-scroll');
+      });
+    };
+
     const enhanceGrid = (element) => {
       if (!(element instanceof HTMLElement) || !isVisible(element)) return;
-      if (element.closest('table, .manager-measure-modal')) return;
+      if (element.closest('table, .manager-measure-modal') || isProtectedCalendarLayout(element)) return;
       const style = window.getComputedStyle(element);
       if (style.display !== 'grid') return;
       const columns = style.gridTemplateColumns.split(' ').filter(Boolean);
@@ -531,7 +593,12 @@ const MOBILE_WORKSPACE_PATCH = `
 
     const auditOverflow = () => {
       document.querySelectorAll('main *, section *, .modal-content *, .workspace-modal *').forEach((element) => {
-        if (!(element instanceof HTMLElement) || !isVisible(element) || element.closest('table, .manager-measure-modal')) return;
+        if (
+          !(element instanceof HTMLElement) ||
+          !isVisible(element) ||
+          element.closest('table, .manager-measure-modal') ||
+          isProtectedCalendarLayout(element)
+        ) return;
         if (element.scrollWidth > window.innerWidth + 4) {
           element.setAttribute('data-rolanpro-mobile-scroll', '1');
         }
@@ -544,8 +611,10 @@ const MOBILE_WORKSPACE_PATCH = `
         return;
       }
 
+      protectCalendarLayouts();
       document.querySelectorAll('table').forEach(enhanceGenericTable);
       document.querySelectorAll('form > div, main .grid, section .grid, .modal-content .grid, .workspace-modal .grid').forEach(enhanceGrid);
+      protectCalendarLayouts();
       document.querySelectorAll('form > div, main > div, section > div, .modal-content > div, .workspace-modal > div').forEach(enhanceToolbar);
       enhanceDialogs();
       enhanceNavigation();
