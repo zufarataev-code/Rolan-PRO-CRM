@@ -35591,16 +35591,15 @@ function resolveRejectedDuplicateClient(meta) {
     return 'merged';
   }
 
-  const contactChanged = id => {
-    const now = local(id);
-    const before = saved(id);
-    return String(now.phone || '') !== String(before.phone || '') || String(now.email || '') !== String(before.email || '');
-  };
+  // Only the contact the server reported as colliding goes back; a valid edit
+  // of the other contact in the same save stays.
+  const fields = meta.matched_by === 'phone' ? ['phone'] : meta.matched_by === 'email' ? ['email'] : ['phone', 'email'];
+  const contactChanged = id => fields.some(field => String(local(id)[field] || '') !== String(saved(id)[field] || ''));
   const edited = pair.filter(contactChanged);
   if (!edited.length) return '';
   edited.forEach(id => {
     const before = saved(id);
-    Object.assign(local(id), { phone: before.phone ?? '', email: before.email ?? '' });
+    fields.forEach(field => { local(id)[field] = before[field] ?? ''; });
   });
   localStorage.setItem('rolanpro_crm', JSON.stringify(db));
   return 'reverted';

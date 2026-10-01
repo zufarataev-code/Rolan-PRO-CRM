@@ -111,3 +111,21 @@ test("every historical card sharing the phone is returned, not only two", async 
   const match = await findExistingClientByIdentity(tx, { phone: "805-555-0100" });
   assert.deepEqual(match?.matches.map((client) => client.client_id), ["A", "B", "C"]);
 });
+
+test("moving two historical duplicates to a new shared phone is a new duplicate", async () => {
+  const { findIntroducedClientIdentityDuplicate } = await import("./client-identity");
+  const current = [
+    { id: "a", phone: "+18055550100" },
+    { id: "b", phone: "(805) 555-0100" },
+  ];
+  const next = [
+    { id: "a", phone: "+18055550199" },
+    { id: "b", phone: "805-555-0199" },
+  ];
+  assert.equal(findIntroducedClientIdentityDuplicate(current, current), null, "the historical pair alone is allowed");
+  assert.deepEqual(findIntroducedClientIdentityDuplicate(current, next), {
+    existingClientId: "a",
+    duplicateClientId: "b",
+    matchedBy: "phone",
+  });
+});
