@@ -33,7 +33,9 @@ test("legacy contact edits and lead conversions cannot introduce duplicate cards
   const convertLead = functionSource("convertLead", "dismissLead");
 
   assert.match(saveContact, /existingClientByContact\(phoneChanged \? phone : '', emailChanged \? email : '', clientId\)/);
-  assert.match(convertLead, /uniqueExistingClientByContact\(l\.phone, l\.email\)/);
+  // Reuses the matching card; several matches → the manager chooses one.
+  assert.match(convertLead, /clientsMatchingContact\(l\.phone, l\.email\)/);
+  assert.match(convertLead, /chooseLegacyClient\(matches,/);
 });
 
 test("canonical client APIs lock identity and reuse or reject matching clients", () => {

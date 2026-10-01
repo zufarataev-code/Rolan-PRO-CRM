@@ -16012,6 +16012,28 @@ function uniqueExistingClientByContact(phone, email) {
   alert('Телефон и почта совпадают с несколькими клиентами: ' + matches.map(c => c.name || c.id).join(', ') + '.\n\nВыберите нужного клиента вручную — CRM не будет угадывать.');
   return false;
 }
+/** Several preserved cards share the contact: the manager picks one (false = cancelled). */
+function chooseLegacyClient(matches, title) {
+  return new Promise(resolve => {
+    window.__resolveLegacyClient = (clientId) => {
+      window.__resolveLegacyClient = null;
+      closeModal();
+      resolve(matches.find(client => client.id === clientId) || false);
+    };
+    state.modal = `
+    <div class="modal-backdrop">
+      <div class="modal-content workspace-modal p-6">
+        <h3 class="font-semibold text-lg mb-1">${academyEsc(title)}</h3>
+        <p class="text-xs text-gray-500 mb-4">Телефон и почта совпадают с несколькими карточками клиентов. Выберите нужную.</p>
+        <div class="space-y-2">
+          ${matches.map(client => `<button type="button" class="btn-ghost w-full text-left" onclick="__resolveLegacyClient('${academyEsc(jsQuote(client.id))}')">${academyEsc(client.name || 'Без имени')} · ${academyEsc([client.phone, client.email].filter(Boolean).join(' · ') || 'без контактов')}</button>`).join('')}
+        </div>
+        <button type="button" class="btn-ghost w-full mt-4" onclick="__resolveLegacyClient('')">Отмена</button>
+      </div>
+    </div>`;
+    render();
+  });
+}
 function focusExistingClientCard(client) {
   if (!client) return;
   state.modal = null;
@@ -20668,7 +20690,10 @@ async function convertLeadOnce(leadId) {
   if (!l) return;
   const src = LEAD_SOURCES[l.source] || { crmSource: 'other' };
   // Клиент: всегда переиспользуем существующую карточку по телефону или email.
-  let client = uniqueExistingClientByContact(l.phone, l.email);
+  const matches = clientsMatchingContact(l.phone, l.email);
+  let client = matches.length > 1
+    ? await chooseLegacyClient(matches, 'Для кого создать проект?')
+    : (matches[0] || null);
   if (client === false) return;
   // A PostgreSQL lead is claimed on the server BEFORE anything is written here:
   // if the claim fails (network, or another manager took it) no client or order
