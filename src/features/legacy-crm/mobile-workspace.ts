@@ -1,3 +1,5 @@
+import { BEFORE_PAINT_SCRIPT } from "./before-paint";
+
 const MOBILE_WORKSPACE_PATCH = `
 <style id="rolanpro-mobile-workspace-style">
   @media (max-width: 520px), (max-width: 768px) and (pointer: coarse) {
@@ -551,12 +553,13 @@ const MOBILE_WORKSPACE_PATCH = `
       auditOverflow();
       document.documentElement.setAttribute('data-rolanpro-mobile-ready', '1');
     };
+${BEFORE_PAINT_SCRIPT}
 
     let queued = false;
     const queueEnhancement = () => {
       if (queued) return;
       queued = true;
-      window.requestAnimationFrame(() => {
+      beforePaint(() => {
         queued = false;
         enhanceMobileWorkspace();
       });
