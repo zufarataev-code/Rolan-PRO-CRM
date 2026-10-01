@@ -70,8 +70,20 @@ test("login email edits reach the server account and the access dialog shows its
   assert.match(route, /delete body\.roles;/);
   assert.doesNotMatch(route, /delete body\.email/);
   assert.match(route, /\['tm-edit-role'\]\.forEach/);
-  // The access dialog shows the PostgreSQL email and reports success only when the server saved it.
-  assert.match(route, /hydrateTeamAccessEmail\(legacyUserId, user\.email \|\| ''\)/);
+  // The access dialog opens only with the PostgreSQL email (no stale value to save
+  // back), keeps Save disabled without a server account, and reports success
+  // only when the server saved the new email.
+  assert.match(route, /const account = await loadTeamAccessAccount\(legacyUserId, user\.email \|\| ''\);/);
+  assert.match(route, /value="' \+ academyEsc\(serverEmail\) \+ '"/);
+  assert.match(route, /onclick="submitTeamMemberAccess\(\)"' \+ \(account\.member \? '' : ' disabled'\)/);
+  assert.doesNotMatch(route, /hydrateTeamAccessEmail/);
   assert.match(route, /const savedEmail = String\(updateResult\?\.data\?\.email \|\| ''\)/);
   assert.match(route, /if \(savedEmail !== email\)/);
+});
+
+test("card email edits are compared with the server login, not the stale card email", () => {
+  const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+  assert.match(html, /emailInput\.dataset\.serverEmail = String\(member\.email \|\| ''\)/);
+  assert.match(html, /const baselineEmail = String\(document\.getElementById\('tm-edit-email'\)\?\.dataset\.serverEmail \|\| currentEmail\);/);
+  assert.match(html, /const emailWasEdited = Boolean\(enteredEmail && enteredEmail !== baselineEmail\);/);
 });

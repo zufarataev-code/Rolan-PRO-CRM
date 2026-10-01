@@ -73,12 +73,38 @@ export async function GET(request: NextRequest) {
           }
         };
 
-        window.openTeamMemberAccess = function openTeamMemberAccess(legacyUserId) {
+        // The login email lives in PostgreSQL; the legacy card may hold an older
+        // value. The dialog opens only with the server account's email, so a
+        // quick Save (or a re-render) can never send the stale address back.
+        async function loadTeamAccessAccount(legacyUserId, cardEmail) {
+          try {
+            const response = await fetch('/api/v1/team', { cache: 'no-store' });
+            const list = await response.json();
+            if (!response.ok) return { error: apiMessage(list, 'Не удалось загрузить учётную запись сотрудника.') };
+            const members = Array.isArray(list?.data) ? list.data : [];
+            const knownEmail = String(cardEmail || '').trim().toLowerCase();
+            const member = members.find(
+              (item) => Array.isArray(item.legacyUserIds) && item.legacyUserIds.includes(legacyUserId),
+            ) || (knownEmail ? members.find(
+              (item) => String(item.email || '').trim().toLowerCase() === knownEmail,
+            ) : null);
+            if (!member?.email) return { error: 'Серверная учётная запись сотрудника не найдена. Создайте её в разделе «Сотрудники».' };
+            return { member };
+          } catch (error) {
+            console.error('[Team access] account lookup failed', error);
+            return { error: 'Сервер не ответил. Закройте окно и попробуйте ещё раз.' };
+          }
+        }
+
+        window.openTeamMemberAccess = async function openTeamMemberAccess(legacyUserId) {
           const user = getUser(legacyUserId);
           if (!user) return;
 
           window.__teamAccessLegacyUserId = legacyUserId;
-          window.__teamAccessCurrentEmail = user.email || '';
+          const account = await loadTeamAccessAccount(legacyUserId, user.email || '');
+          if (window.__teamAccessLegacyUserId !== legacyUserId) return;
+          const serverEmail = account.member?.email || '';
+          window.__teamAccessCurrentEmail = serverEmail;
 
           state.modal =
             '<div class="modal-backdrop" onclick="if(event.target===this) closeModal()">' +
@@ -87,7 +113,7 @@ export async function GET(request: NextRequest) {
                 '<p class="text-xs text-gray-500 mb-4">Измените почту для входа. Новый пароль задавайте только при необходимости — старый пароль система не показывает.</p>' +
 
                 '<label>Почта для входа</label>' +
-                '<input id="tm-email" type="email" autocomplete="email" value="' + academyEsc(user.email || '') + '" placeholder="name@rolan-pro.com">' +
+                '<input id="tm-email" type="email" autocomplete="email" value="' + academyEsc(serverEmail) + '" placeholder="name@rolan-pro.com"' + (account.member ? '' : ' disabled') + '>' +
 
                 '<label class="mt-3">Новый временный пароль</label>' +
                 '<div class="flex gap-2">' +
@@ -103,43 +129,16 @@ export async function GET(request: NextRequest) {
                   '<div class="text-xs text-gray-500 mt-2">Это обычный вход на сервер. Сотруднику не нужно скачивать HTML-файл или хранить CRM на телефоне.</div>' +
                 '</div>' +
 
-                '<div id="tm-error" class="text-sm text-red-600 mt-3 hidden"></div>' +
+                '<div id="tm-error" class="text-sm text-red-600 mt-3' + (account.error ? '' : ' hidden') + '">' + academyEsc(account.error || '') + '</div>' +
 
                 '<div class="flex gap-2 mt-5">' +
-                  '<button class="btn-primary flex-1" onclick="submitTeamMemberAccess()">Сохранить</button>' +
+                  '<button class="btn-primary flex-1" onclick="submitTeamMemberAccess()"' + (account.member ? '' : ' disabled') + '>Сохранить</button>' +
                   '<button class="btn-ghost" onclick="closeModal()">Отмена</button>' +
                 '</div>' +
               '</div>' +
             '</div>';
           render();
-          hydrateTeamAccessEmail(legacyUserId, user.email || '');
         };
-
-        // The login email lives in PostgreSQL. The legacy card may still hold
-        // an older value, so the dialog always shows the server account's email.
-        async function hydrateTeamAccessEmail(legacyUserId, cardEmail) {
-          try {
-            const response = await fetch('/api/v1/team', { cache: 'no-store' });
-            const list = await response.json();
-            if (!response.ok) return;
-            const members = Array.isArray(list?.data) ? list.data : [];
-            const knownEmail = String(cardEmail || '').trim().toLowerCase();
-            const member = members.find(
-              (item) => Array.isArray(item.legacyUserIds) && item.legacyUserIds.includes(legacyUserId),
-            ) || (knownEmail ? members.find(
-              (item) => String(item.email || '').trim().toLowerCase() === knownEmail,
-            ) : null);
-            if (!member?.email || window.__teamAccessLegacyUserId !== legacyUserId) return;
-
-            const input = document.getElementById('tm-email');
-            if (input && String(input.value || '').trim().toLowerCase() === knownEmail) {
-              input.value = member.email;
-            }
-            window.__teamAccessCurrentEmail = member.email;
-          } catch (error) {
-            console.error('[Team access] account hydration failed', error);
-          }
-        }
 
         window.generateTeamAccessPassword = function generateTeamAccessPassword() {
           const input = document.getElementById('tm-password');

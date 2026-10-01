@@ -19496,6 +19496,8 @@ async function hydrateTeamMemberAccount(userId) {
     if (emailInput && (!emailInput.value || emailInput.value.trim().toLowerCase() === currentEmail)) {
       emailInput.value = member.email || '';
     }
+    // Edits are compared with the server login, not the (possibly stale) card email.
+    if (emailInput) emailInput.dataset.serverEmail = String(member.email || '').trim().toLowerCase();
 
     const roleSelect = document.getElementById('tm-edit-role');
     const serverRole = teamLegacyRoleFromServer(member.roles);
@@ -19557,7 +19559,8 @@ async function submitTeamMemberEdit(userId) {
       if (!member) return fail('Серверная учётная запись сотрудника не найдена. Откройте «Изменить пароль и доступ» и проверьте привязку.');
 
       const canonicalEmail = String(member.email || '').trim().toLowerCase();
-      const emailWasEdited = Boolean(enteredEmail && enteredEmail !== currentEmail);
+      const baselineEmail = String(document.getElementById('tm-edit-email')?.dataset.serverEmail || currentEmail);
+      const emailWasEdited = Boolean(enteredEmail && enteredEmail !== baselineEmail);
       const email = emailWasEdited ? enteredEmail : (canonicalEmail || enteredEmail);
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return fail('Укажите корректную почту для входа.');
