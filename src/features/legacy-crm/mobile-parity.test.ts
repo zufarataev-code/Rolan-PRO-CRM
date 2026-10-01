@@ -52,7 +52,7 @@ test("the full sidebar still exposes every owner and manager function", () => {
 
 test("mobile shortcuts preserve role-specific consultant and installer work", () => {
   assert.match(legacy, /role === 'measurer'/);
-  assert.match(legacy, /\['canonicalProjects', 'Проекты'/);
+  assert.match(legacy, /\['tasks', 'Мои задачи'/);
   assert.match(legacy, /\['measurements', 'Замеры'/);
   assert.match(legacy, /role === 'installer'/);
   assert.match(legacy, /\['installations', 'Работы'/);
