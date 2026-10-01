@@ -86,3 +86,12 @@ test("legacy CRM implements a phone-specific month calendar with day drill-down"
   assert.match(source, /calendar-mobile-agenda/);
   assert.match(source, /selectedEvents\.map\(ev => renderCalendarEventCard/);
 });
+
+
+test("mobile workspace protects the seven-day dispatch week from generic stacking", () => {
+  const result = injectMobileWorkspaceAdapter("<!doctype html><body><main></main></body>");
+
+  assert.match(result, /\.dispatch-week-head/);
+  assert.match(result, /\.dispatch-time-grid/);
+  assert.match(result, /isProtectedCalendarLayout/);
+});
