@@ -156,7 +156,7 @@ function formatDispatchLabel(item: ManagerPlanningItem) {
     return installerPreview;
   }
 
-  return "Монтажники не назначены";
+  return "Специалисты по установке не назначены";
 }
 
 function buildDestinationRouteHref(address: string | null) {

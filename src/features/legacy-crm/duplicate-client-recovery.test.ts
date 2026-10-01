@@ -70,3 +70,10 @@ test("the save loop retries with the repaired snapshot and reloads only as a las
   assert.match(block, /snapshot = JSON\.parse\(JSON\.stringify\(db\)\);[\s\S]*continue;/);
   assert.match(block, /if \(!resolved\) \{[\s\S]*location\.reload\(\);/);
 });
+
+test("lead conversion asks which card to use when the contact matches several", () => {
+  const convert = html.slice(html.indexOf("async function convertLead(leadId)"), html.indexOf("async function dismissLead("));
+  assert.match(convert, /await chooseLegacyClient\(matches, 'Для кого создать проект\?'\)/);
+  assert.match(convert, /if \(client === false\) return;/);
+  assert.match(html, /function chooseLegacyClient\(matches, title\)/);
+});

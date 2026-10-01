@@ -133,3 +133,32 @@ test("cold-call companies keep the representative's title out of the last name",
   assert.deepEqual({ ...coldProspectIdentity({ companyName: "Acme", contactName: "John Smith", contactTitle: "Owner", companyType: "retail" }) },
     { companyName: "Acme", companyType: "retail", firstName: "John", lastName: "Smith", contactTitle: "Owner" });
 });
+
+test("a website lead is reserved, the project saved, and only then the lead is closed", () => {
+  const convert = block("async function convertLead(leadId)", "async function dismissLead(");
+  const claim = convert.indexOf("claimCanonicalLead(leadId, 'claim')");
+  const persisted = convert.indexOf("cloudPersistConfirmed()");
+  const complete = convert.indexOf("claimCanonicalLead(leadId, 'complete')");
+  assert.ok(claim > 0 && claim < convert.indexOf("db.clients.push(client)") && claim < convert.indexOf("db.orders.push(o)"), "reserve before writing");
+  assert.ok(persisted > 0 && persisted < complete, "close only after the confirmed save");
+  assert.match(convert, /if \(convertingLeadIds\.has\(leadId\)\) return;/);
+  assert.match(convert, /await claimCanonicalLead\(leadId, 'release'\);/);
+  assert.match(convert, /db\.orders = db\.orders\.filter\(order => order\.id !== o\.id\);/);
+  // A project already saved for the lead is never duplicated: the lead is only closed.
+  assert.match(convert, /const existingOrder = db\.orders\.find\(order => order\.canonicalLeadId === leadId\);/);
+  assert.match(convert, /\.\.\.\(canonical \? \{ canonicalLeadId: leadId \} : \{\}\)/);
+
+  const route = readFileSync("app/api/v1/leads/[leadId]/claim/route.ts", "utf8");
+  assert.match(route, /where = \{ AND: \[base, open, claimableBy\(userId, now\)\] \};/);
+  assert.match(route, /where = \{ AND: \[base, open, \{ claimed_by_user_id: userId \}\] \};/, "only the claimant closes");
+  assert.match(route, /where = \{ AND: \[base, \{ claimed_by_user_id: userId \}\] \};/, "only the claimant releases");
+  assert.match(readFileSync("src/features/sales/lead-claim.ts", "utf8"), /LEAD_CLAIM_TTL_MS = 10 \* 60 \* 1000/);
+  assert.match(readFileSync("prisma/migrations/20261001140000_lead_claims/migration.sql", "utf8"), /"claimed_by_user_id" UUID/);
+  // Dismissing respects another manager's active reservation.
+  assert.match(readFileSync("app/api/v1/leads/[leadId]/route.ts", "utf8"), /claimableBy\(auth\.session\.user\.user_id, new Date\(\)\)/);
+});
+
+test("creating a project keeps «Разовый клиент» for a company", () => {
+  assert.doesNotMatch(html, /accountTypeForOrder === 'b2b' \? 'regular'/);
+  assert.doesNotMatch(html, /accountType === 'b2b' \? 'regular'/);
+});

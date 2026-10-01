@@ -458,6 +458,14 @@ Owner decision in chat on 2026-09-30 (chosen over waiting for the relational ins
 - Each such feature keeps server-side authority where it already exists (roles, groups, rates and approvals live in PostgreSQL; the legacy payload only mirrors them) and is listed for migration in the installation/payment stage.
 - Everything else remains frozen as decided on 2026-09-29.
 
+## 2026-10-01 — Exception to the legacy freeze: installer analytics and client identity fields
+
+Owner decision in chat on 2026-10-01 (asked whether to wait for the relational stages, chose to build now). Amends item 1 of "2026-09-29 — CRM core consolidation", like the 2026-09-30 exception.
+
+- Allowed in the legacy HTML until their stages move to PostgreSQL: the installer «Аналитика по объектам» view (PR #282; it reads legacy orders, the only place installation data exists today) and the client identity fields — B2C first/last name; B2B company, company type, representative and job title; explicit «Постоянный партнёр» (PR #284; mirrored in the PostgreSQL `leads` / `clients` columns).
+- Migration: the analytics moves with the installation and payment stage (relational installer jobs and payroll accruals); client identity moves with the lead/client stage.
+- Everything else remains frozen as decided on 2026-09-29.
+
 ## Changing a decision
 
 ## 2026-09-30 — Surveyor mobile navigation is organized around field work
@@ -468,3 +476,11 @@ Owner decision in chat on 2026-09-30 (chosen over waiting for the relational ins
 - Implemented for review on `codex/surveyor-mobile-v4`; deployment remains a separate owner-authorized action.
 
 Do not silently overwrite an earlier decision. Add a new dated section that names the superseded decision, explains why it changed, and links the implementing PR.
+
+## 2026-10-01 — Installation job titles (Owner)
+
+- The word «монтажник» is not used anywhere in the CRM, the installer app, client messages or documents: the Owner considers it low-status.
+- A regular installer is **«Специалист по установке»** (EN: Installer).
+- The senior role that distributes jobs within a group is **«Руководитель отдела монтажа»**; it replaces «Руководитель монтажной группы» and «Главный специалист по установке» used in earlier drafts (PR #275–#277).
+- Internal codes stay `INSTALLER` / `installer`; only user-visible text changes. New screens and PRs use these titles from the start.
+- Scope: everything a person sees — CRM screens, the installer app and its demos, seed/provisioning data, client SMS/e-mail and documents. Historical internal engineering notes (`.agents/`, audit and prompt documents) are not rewritten.

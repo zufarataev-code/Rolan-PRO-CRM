@@ -1,3 +1,5 @@
+import { BEFORE_PAINT_SCRIPT } from "./before-paint";
+
 const MOBILE_PROPOSALS_PATCH = `
 <style id="rolanpro-mobile-proposals-cards-style">
   @media (max-width: 520px), (max-width: 768px) and (pointer: coarse) {
@@ -264,12 +266,13 @@ const MOBILE_PROPOSALS_PATCH = `
         });
       });
     };
+${BEFORE_PAINT_SCRIPT}
 
     let queued = false;
     const queueEnhancement = () => {
       if (queued) return;
       queued = true;
-      window.requestAnimationFrame(() => {
+      beforePaint(() => {
         queued = false;
         enhanceProposalsTable();
       });

@@ -37,7 +37,7 @@ test("owner shell keeps every primary operational section in one navigation", ()
     "КП",
     "Услуги и цены",
     "Календарь",
-    "Монтажники сейчас",
+    "Специалисты по установке сейчас",
     "Задачи",
     "Академия",
     "Клиенты",

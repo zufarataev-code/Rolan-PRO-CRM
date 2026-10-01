@@ -246,8 +246,12 @@ export class ClientNotAccessibleError extends Error {
 }
 
 export class ClientIdentityConflictError extends Error {
-  constructor(readonly emailClientId: string, readonly phoneClientId: string) {
+  /** Every matching card, so the manager can pick the right one. */
+  readonly candidateIds: string[];
+
+  constructor(readonly emailClientId: string, readonly phoneClientId: string, candidateIds?: string[]) {
     super("Телефон и почта принадлежат двум разным клиентам. Выберите клиента вручную.");
     this.name = "ClientIdentityConflictError";
+    this.candidateIds = [...new Set(candidateIds?.length ? candidateIds : [emailClientId, phoneClientId])];
   }
 }

@@ -55,3 +55,9 @@ test("B2C leads never store company fields", () => {
   assert.equal(lead.contact_title, null);
   assert.equal(lead.company_type, null);
 });
+
+test("a B2B lead is shown by the company even when an old-style name is sent", () => {
+  const lead = normalizeLeadIdentity({ name: "John Doe", company_name: "Acme LLC", first_name: "John" });
+  assert.ok(!("error" in lead));
+  assert.equal(lead.name, "Acme LLC");
+});

@@ -723,6 +723,10 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Bug found by the E2E gate and fixed: `lockClientIdentity` used `$queryRaw` on `pg_advisory_xact_lock`, which returns `void`; Prisma failed to deserialize it, so **every client create with a phone or email returned 500** (also in project and proposal creation paths). Now `$executeRaw`.
 - New `e2e/client-identity.e2e.ts`: `(805) 555-0142` and `+1 805-555-0142` resolve to one client; email match is case/space insensitive; a legacy save adding a second card for the same phone is rejected with `duplicate_client`. E2E files run serially (shared legacy workspace revision).
 - Known limitation: client lookup scans all clients per create (fine at current volume); add normalized, indexed identity columns before tens of thousands of clients. Legacy-workspace clients and PostgreSQL clients are still two stores until the client collection migrates.
+- 2026-10-01 follow-up (Codex): the manual project screen offers every matching client card after a contact conflict and resubmits with the chosen `client_id`; the route forwards it, and a manager may choose only a client within `buildClientReuseWhere`.
+- 2026-10-01 follow-up (Codex): the same picker exists for lead → client conversion (deal panel; `PATCH /deals/:id` links only a client within `buildClientReuseWhere`) and for legacy proposal publishing (409 with candidates → «Для кого это КП?» → publish with the chosen, scope-checked `client_id`).
+- 2026-10-01 follow-up (Codex): legacy «Создать проект» from a lead asks «Для кого создать проект?» when the contact matches several cards. Production build: CI job «Test, typecheck, and build» (`npm run build`) runs on every push of this PR and is green.
+
 ## 2026-09-30 handoff — database backup before every production deploy (PR #274)
 
 - Workflow dump: `.github/workflows/deploy-production.yml` runs `pg_dump --format=custom` on the server before the fast-forward, with credentials from `/home/runcloud/.rolanpro-crm.env.production.local`. The dump is written to a `.partial-` name, verified with `pg_restore --list`, then renamed to `/home/runcloud/backups/crm-db/rolanpro-<UTC>-<full commit SHA>.dump`; any failure removes the partial file and stops the deploy. The last 30 `rolanpro-*.dump` files are kept (only in `crm-db/`; the website snapshots in `/home/runcloud/backups/` are not touched).
@@ -740,3 +744,32 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Responsive verification: the four primary Surveyor screens were visually reviewed at 390×844. Tablet 1024×768 and desktop 1440×900 have no document-level horizontal overflow. The approved calm navy/blue field-app visual language was applied without changing desktop business logic or authorization.
 - Automated verification: 34 targeted tests passed for mobile parity, Surveyor v4, measurement, field workspace, and dispatch calendar/map; the legacy inline script compiles; `git diff --check` passes. The repository-wide test command remains unstable on the local Node 24 machine because its unbounded parallel `tsx/esbuild` launch stops shared transform services; CI on Node 20 is the release gate for the full suite, TypeScript, and production build.
 - Release branch: `codex/surveyor-mobile-v4-release`, rebased at the Git object level onto current `main` `acd2e60`. Production deployment proceeds only after the required PR CI succeeds and the PR is merged into `main`.
+
+## 2026-10-01 handoff — client card: B2C / B2B identity, website leads in «Новые лиды» (PR #284, stacked on #268)
+
+- Owner request (2026-10-01): separate first/last name; B2B company name, company type, representative first/last name and job title; «Постоянный партнёр» as an explicit status (basis for the partner cabinet).
+- Legacy CRM: shared identity block in the new-client modal, contact passport and new-project client overlay; `name` stays the display name. Client list shows company type and representative; search covers them. Lead, cold-call and backend conversions fill the same fields; the cold-call form has separate representative name, title and company type.
+- Website intake `/api/v1/integrations/website/leads` accepts `first_name`, `last_name`, `customer_type`, `company_name`, `company_type`, `contact_title`; keeps an email/phone only when it looks like one. Website leads are listed in «Новые лиды». «Создать проект» reserves the lead (`POST /api/v1/leads/:id/claim` — `claim`; the lead stays open, a reservation expires after 10 minutes), saves the project with server confirmation (the order keeps `canonicalLeadId`), then closes the lead (`complete` → `CONTACTED`, claimant only); on a failed save it rolls back and `release`s. A repeated click on a lead that already has a saved project only closes it. «Спам / отклонить» → `CLOSED_LOST` (compare-and-set, respects another manager's active reservation). Migration `20261001140000_lead_claims` adds `claimed_by_user_id` / `claimed_at`.
+- Managers see their own leads plus the unassigned queue (`buildLeadScopeWhere`); processing an unassigned lead assigns it to them.
+- Public lead values are HTML-escaped (leads view, `emailAnchor`, `addressAnchor`, client-list phone).
+- Migration `20261001120000_client_identity_fields` (additive nullable columns on `leads` and `clients`).
+- Verification: full unit suite and `tsc` green; `lead-identity`, `client-identity-fields`, access tests.
+- Production build: CI job «Test, typecheck, and build» (`npm run build`) runs on every push of PR #284 and is green.
+- Not done: WordPress form fields (site repo outside this project); B2B terms in КП and the partner cabinet (need Owner decisions and legal review).
+- Next action: Codex 👍 on the latest commit, Owner «да», merge after #268, deploy (pre-migration backup is automatic).
+
+## 2026-10-01 handoff — «Специалист по установке» and per-object analytics (PR #282)
+
+- Owner decision (DECISIONS.md «Installation job titles»): «монтажник» is not used anywhere; regular installer = «Специалист по установке», senior = «Руководитель отдела монтажа». Internal codes (`INSTALLER` / `installer`) unchanged.
+- Renamed in the legacy CRM, new screens, `ROLE_NAMES` (seeded into `roles.name_ru`), `data/legacy-crm-empty.json`, and stored SMS templates via data migration `20261001130000_installer_title_in_sms_templates` (idempotent, revision bump).
+- New installer view «Аналитика»: period filter; objects finished, own sq ft, own earnings, pending earnings; sq ft by film type; one card per object. Measured windows are shared by the order crew; quick lines count only for the installers assigned to each line (same rule as `orderQuickInstallerPayoutForUser`). No client price, cost or margin.
+- Verification: full unit suite and `tsc` green; `installer-analytics.test.ts` runs the calculation in a VM; migration checked twice on a scratch database.
+- Production build: CI job «Test, typecheck, and build» (`npm run build`) runs on every push of PR #282 and is green; the clean-database + E2E gate is green too.
+- Not done: the lead role «Руководитель отдела монтажа» lives in the #275–#277 stack and must adopt the new titles when that stack is rebuilt on top of Codex PR #281.
+- Next action: Codex 👍, Owner «да», merge, deploy (pre-migration backup is automatic).
+
+## 2026-10-01 handoff — CRM no longer jumps after every click (PR #285, deployed 03:56 UTC)
+
+- Cause: seven DOM patches injected by `/legacy-crm` waited for the next animation frame, so the unpatched page was painted first (menu items moved 52 px, the top bar resized).
+- Fix: `src/features/legacy-crm/before-paint.ts` (`beforePaint`: microtask before paint, runaway guard → next frame). All patches use it; new patches must too. Client list no longer crashes on a client without a source.
+- Verified locally with a `layout-shift` observer (0 shifts on menu clicks) and in production (deploy 06a58ab healthy).

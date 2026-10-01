@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES, getPipelineStatusId } from "@/features/sales/api";
+import { claimableBy } from "@/features/sales/lead-claim";
 import { buildLeadAccessWhere, getRecordManagerScope, isCrossManagerAssignment } from "@/features/sales/access";
 
 type RouteContext = {
@@ -31,6 +32,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         city_id?: string | null;
         assigned_manager_id?: string | null;
         pipeline_status_code?: string;
+        /**
+         * Compare-and-set: the update applies only while the lead is in one of
+         * these statuses. «Создать проект» claims an open lead this way, so a
+         * double click or a second manager cannot claim it twice.
+         */
+        expected_status_codes?: string[];
       }
     | null;
 
@@ -75,9 +82,24 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     data.pipeline_status_id = pipelineStatus.pipeline_status_id;
   }
 
+  const expectedStatusCodes = Array.isArray(body.expected_status_codes)
+    ? body.expected_status_codes.filter((code): code is string => typeof code === "string" && code.length > 0)
+    : [];
+
   const lead = await prisma.$transaction(async (tx) => {
     const result = await tx.lead.updateMany({
-      where: buildLeadAccessWhere(leadId, managerId),
+      where: {
+        AND: [
+          buildLeadAccessWhere(leadId, managerId),
+          ...(expectedStatusCodes.length
+            ? [
+                { pipeline_status: { status_code: { in: expectedStatusCodes } } },
+                // Another manager's active «Создать проект» reservation wins.
+                claimableBy(auth.session.user.user_id, new Date()),
+              ]
+            : []),
+        ],
+      },
       data,
     });
 
@@ -85,6 +107,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }).catch(() => null);
 
   if (!lead) {
+    if (expectedStatusCodes.length) {
+      const stillVisible = await prisma.lead.count({ where: buildLeadAccessWhere(leadId, managerId) });
+      if (stillVisible) {
+        return apiError(409, "lead_status_changed", "Заявку уже обработали — обновите список.");
+      }
+    }
     return apiError(404, "not_found", "Lead was not found.");
   }
 

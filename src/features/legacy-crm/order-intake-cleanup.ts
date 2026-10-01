@@ -1,3 +1,5 @@
+import { BEFORE_PAINT_SCRIPT } from "./before-paint";
+
 const ORDER_INTAKE_CLEANUP_PATCH = `
 <style id="rolanpro-order-intake-cleanup-style">
   [data-rolanpro-order-intake-sidebar="1"],
@@ -796,12 +798,13 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         }
       });
     };
+${BEFORE_PAINT_SCRIPT}
 
     let queued = false;
     const queueEnhancement = () => {
       if (queued) return;
       queued = true;
-      window.requestAnimationFrame(() => {
+      beforePaint(() => {
         queued = false;
         cleanupOrderIntake();
         installNewOrderWrappers();

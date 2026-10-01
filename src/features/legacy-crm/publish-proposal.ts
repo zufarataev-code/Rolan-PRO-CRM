@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
+import { buildClientReuseWhere, getRecordManagerScope } from "@/features/sales/access";
 import { getEnv } from "@/lib/env";
 import {
   ClientIdentityConflictError,
@@ -11,6 +12,7 @@ import {
 
 type SessionLike = {
   user: { user_id: string };
+  roles?: string[];
 };
 
 type LegacyProposalLine = {
@@ -39,6 +41,8 @@ export type LegacyProposalSnapshot = {
   title?: string;
   client?: {
     legacy_client_id?: string;
+    /** The PostgreSQL client chosen by the manager after an identity conflict. */
+    client_id?: string;
     name?: string;
     email?: string;
     phone?: string;
@@ -111,6 +115,7 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
     orderNumber: cleanText(input.order_number, 80),
     title: cleanText(input.title, 180) || `${cleanText(input.order_number, 80) || "ROLANPRO"} Proposal`,
     clientName,
+    chosenClientId: cleanText(input.client?.client_id, 60) || null,
     email,
     phone,
     address: cleanText(input.client?.address, 2_000),
@@ -153,11 +158,23 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
     if (!clientId || !dealId) {
       const contact = { email: snapshot.email, phone: snapshot.phone };
       await lockClientIdentity(tx, contact);
-      const match = await findExistingClientByIdentity(tx, contact);
+      const managerId = session.roles ? getRecordManagerScope({ user: session.user, roles: session.roles }) : undefined;
+      // A client the manager picked after a conflict wins; it must be visible to them.
+      const chosen = snapshot.chosenClientId
+        ? await tx.client.findFirst({ where: { client_id: snapshot.chosenClientId, ...buildClientReuseWhere(managerId) } })
+        : null;
+      if (snapshot.chosenClientId && !chosen) throw new Error("Выбранный клиент недоступен.");
+      const match = chosen ? null : await findExistingClientByIdentity(tx, contact);
       if (match?.conflictingClient) {
-        throw new ClientIdentityConflictError(match.client.client_id, match.conflictingClient.client_id);
+        throw new ClientIdentityConflictError(
+          match.client.client_id,
+          match.conflictingClient.client_id,
+          match.matches.map((item) => item.client_id),
+        );
       }
-      const client = match
+      const client = chosen
+        ? chosen
+        : match
         ? match.client
         : await tx.client.create({
         data: {

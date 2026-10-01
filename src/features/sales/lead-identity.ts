@@ -64,7 +64,11 @@ export function normalizeLeadIdentity(input: LeadIdentityInput): LeadIdentity | 
     : null;
 
   const person = [firstName, lastName].filter(Boolean).join(" ");
-  const name = clean(input.name, 160) ?? (customerType === "B2B" ? companyName : null) ?? (person || null);
+  // A company lead is shown by the company, even when an old-style `name`
+  // (often the representative) is sent too.
+  const name = customerType === "B2B"
+    ? companyName ?? clean(input.name, 160) ?? (person || null)
+    : clean(input.name, 160) ?? (person || null);
   if (!name) {
     return { error: "Lead name is required: send name, or first_name / company_name." };
   }

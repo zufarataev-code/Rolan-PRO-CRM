@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -128,4 +129,50 @@ test("moving two historical duplicates to a new shared phone is a new duplicate"
     duplicateClientId: "b",
     matchedBy: "phone",
   });
+});
+
+test("the manual project flow lets the manager pick a client after a contact conflict", () => {
+  const route = readFileSync("app/api/v1/projects/manual/route.ts", "utf8");
+  const service = readFileSync("src/features/projects/service.ts", "utf8");
+  const panel = readFileSync("src/components/project-manual-create-panel.tsx", "utf8");
+  assert.match(route, /client_id: body\.client_id \|\| null/);
+  assert.match(route, /where: \{ client_id: \{ in: error\.candidateIds \} \}/);
+  // A chosen client must be visible to the manager.
+  assert.match(service, /client_id: input\.client_id,\s*\.\.\.buildClientReuseWhere\(getRecordManagerScope\(session\)\)/);
+  assert.match(service, /reusableClient\.matches\.map\(\(client\) => client\.client_id\)/);
+  assert.match(panel, /client_id: chosenClientId\.current/);
+  assert.match(panel, /onClick=\{\(\) => chooseClient\(candidate\.client_id\)\}/);
+  // Editing the contact or resetting the form drops candidates found for the old contact.
+  for (const setter of ["setClientName", "setPhone", "setEmail"]) {
+    assert.match(panel, new RegExp(`onChange=\\{\\(event\\) => \\{ clearClientCandidates\\(\\); ${setter}\\(event\\.target\\.value\\); \\}\\}`));
+  }
+  assert.match(panel, /function resetForm\(\) \{\n    clearClientCandidates\(\);/);
+});
+
+test("an identity conflict carries every matching card", async () => {
+  const { ClientIdentityConflictError } = await import("./client-identity");
+  assert.deepEqual(new ClientIdentityConflictError("A", "B", ["A", "B", "C"]).candidateIds, ["A", "B", "C"]);
+  assert.deepEqual(new ClientIdentityConflictError("A", "B").candidateIds, ["A", "B"]);
+});
+
+test("lead conversion and proposal publishing let the manager pick a client after a contact conflict", () => {
+  const clientsRoute = readFileSync("app/api/v1/clients/route.ts", "utf8");
+  const dealRoute = readFileSync("app/api/v1/deals/[dealId]/route.ts", "utf8");
+  const dealPanel = readFileSync("src/components/deal-workflow-panel.tsx", "utf8");
+  const publish = readFileSync("src/features/legacy-crm/publish-proposal.ts", "utf8");
+  const publishRoute = readFileSync("app/api/v1/legacy-crm/proposals/publish/route.ts", "utf8");
+  const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+
+  // Lead → client: candidates in the 409, a picker in the deal panel, and a scope check on linking.
+  assert.match(clientsRoute, /candidates: result\.conflict\.candidates/);
+  assert.match(dealPanel, /setClientCandidates\(conflict\.meta\.candidates\)/);
+  assert.match(dealPanel, /linkExistingClient\(candidate\.client_id\)/);
+  assert.match(dealRoute, /where: \{ client_id: body\.client_id, \.\.\.buildClientReuseWhere\(managerId\) \}/);
+
+  // Legacy proposal publishing: candidates, a chooser, and a scope-checked chosen client.
+  assert.match(publishRoute, /return apiError\(409, "client_identity_conflict", error\.message, \{ candidates \}\)/);
+  assert.match(publish, /where: \{ client_id: snapshot\.chosenClientId, \.\.\.buildClientReuseWhere\(managerId\) \}/);
+  assert.match(publish, /match\.matches\.map\(\(item\) => item\.client_id\)/);
+  assert.match(html, /const choice = await chooseProposalClient\(candidates\);/);
+  assert.match(html, /return premiumPublishCanonicalProposal\(prop, choice\);/);
 });
