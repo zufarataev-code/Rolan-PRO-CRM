@@ -147,6 +147,10 @@ test("the installer title is «Специалист по установке» ev
   for (const file of ["data/legacy-crm-empty.json", "demo/installer-demo.html", "demo/crm-demo.html"]) {
     assert.doesNotMatch(readFileSync(file, "utf8"), /[Мм]онтажник/, file);
   }
+  // Superseded senior-role titles: the senior role is «Руководитель отдела монтажа».
+  for (const file of ["private/legacy/rolanpro-crm-cloud.html", "demo/installer-demo.html", "demo/crm-demo.html", "data/legacy-crm-empty.json"]) {
+    assert.doesNotMatch(readFileSync(file, "utf8"), /[Сс]тарш[а-яё]* специалист|[Гг]лавн[а-яё]* специалист[а-яё]* по установке|[Рр]уководител[а-яё]* монтажн[а-яё]* групп/, file);
+  }
   assert.match(
     readFileSync("prisma/migrations/20261001130000_installer_title_in_sms_templates/migration.sql", "utf8"),
     /'Монтажник', 'Специалист по установке'/,
