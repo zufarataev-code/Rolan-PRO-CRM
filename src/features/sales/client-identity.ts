@@ -66,9 +66,15 @@ function clientId(client: ClientIdentityCandidate, index: number) {
   return client.client_id ?? client.id ?? `index:${index}`;
 }
 
-export function findClientIdentityDuplicates(clients: ClientIdentityCandidate[]) {
+type ClientIdentityDuplicateWithValue = ClientIdentityDuplicate & { value: string };
+
+export function findClientIdentityDuplicates(clients: ClientIdentityCandidate[]): ClientIdentityDuplicate[] {
+  return findDuplicatesWithValues(clients).map(({ value: _value, ...duplicate }) => duplicate);
+}
+
+function findDuplicatesWithValues(clients: ClientIdentityCandidate[]) {
   const seen = new Map<string, string>();
-  const duplicates: ClientIdentityDuplicate[] = [];
+  const duplicates: ClientIdentityDuplicateWithValue[] = [];
 
   clients.forEach((client, index) => {
     const duplicateClientId = clientId(client, index);
@@ -82,7 +88,7 @@ export function findClientIdentityDuplicates(clients: ClientIdentityCandidate[])
       const key = `${matchedBy}:${value}`;
       const existingClientId = seen.get(key);
       if (existingClientId && existingClientId !== duplicateClientId) {
-        duplicates.push({ existingClientId, duplicateClientId, matchedBy });
+        duplicates.push({ existingClientId, duplicateClientId, matchedBy, value });
       } else {
         seen.set(key, duplicateClientId);
       }
@@ -92,8 +98,10 @@ export function findClientIdentityDuplicates(clients: ClientIdentityCandidate[])
   return duplicates;
 }
 
-function duplicateKey(duplicate: ClientIdentityDuplicate) {
-  return `${duplicate.matchedBy}:${[duplicate.existingClientId, duplicate.duplicateClientId].sort().join(":")}`;
+// The shared value is part of the key: two historical cards that already share
+// phone A and are both moved to phone B introduce a NEW shared identity.
+function duplicateKey(duplicate: ClientIdentityDuplicateWithValue) {
+  return `${duplicate.matchedBy}:${duplicate.value}:${[duplicate.existingClientId, duplicate.duplicateClientId].sort().join(":")}`;
 }
 
 /** Every pair of cards sharing an identity, so comparisons do not depend on list order. */
@@ -117,7 +125,7 @@ function allDuplicatePairKeys(clients: ClientIdentityCandidate[]) {
     const ids = [...members];
     for (let i = 0; i < ids.length; i += 1) {
       for (let j = i + 1; j < ids.length; j += 1) {
-        keys.add(duplicateKey({ existingClientId: ids[i], duplicateClientId: ids[j], matchedBy }));
+        keys.add(duplicateKey({ existingClientId: ids[i], duplicateClientId: ids[j], matchedBy, value: key.slice(key.indexOf(":") + 1) }));
       }
     }
   }
@@ -129,9 +137,12 @@ export function findIntroducedClientIdentityDuplicate(
   nextClients: ClientIdentityCandidate[],
 ) {
   const currentPairs = allDuplicatePairKeys(currentClients);
-  return findClientIdentityDuplicates(nextClients).find(
+  const introduced = findDuplicatesWithValues(nextClients).find(
     (duplicate) => !currentPairs.has(duplicateKey(duplicate)),
-  ) ?? null;
+  );
+  if (!introduced) return null;
+  const { value: _value, ...duplicate } = introduced;
+  return duplicate;
 }
 
 function identityLockKeys(contact: ContactInput) {

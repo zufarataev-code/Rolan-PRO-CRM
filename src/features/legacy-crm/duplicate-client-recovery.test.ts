@@ -51,6 +51,19 @@ test("an edited card gets its saved phone and email back instead of reloading th
   assert.equal(a.name, "Renamed", "the rest of the edit is kept");
 });
 
+test("only the colliding contact is reverted; a valid edit of the other one stays", () => {
+  const base = { clients: [{ id: "a", phone: "+18055550100", email: "a@x.com" }, { id: "b", phone: "+18055550199", email: "b@x.com" }] };
+  const db = {
+    clients: [{ id: "a", phone: "+18055550199", email: "new-a@x.com" }, { id: "b", phone: "+18055550199", email: "b@x.com" }],
+  };
+  const recovery = loadResolver(db, base);
+
+  assert.equal(recovery.resolve({ existing_client_id: "a", duplicate_client_id: "b", matched_by: "phone" }), "reverted");
+  const [a] = recovery.db.clients as Array<{ phone: string; email: string }>;
+  assert.equal(a.phone, "+18055550100");
+  assert.equal(a.email, "new-a@x.com");
+});
+
 test("the save loop retries with the repaired snapshot and reloads only as a last resort", () => {
   const block = html.slice(html.indexOf("code === 'duplicate_client'"), html.indexOf("if (response.status === 409) {"));
   assert.match(block, /resolveRejectedDuplicateClient\(result\?\.meta \|\| \{\}\)/);
