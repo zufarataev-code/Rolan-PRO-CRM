@@ -682,3 +682,12 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Server prerequisites verified (2026-10-01): `pg_dump`/`pg_restore`/`psql` 17.10 in `/home/runcloud/rolanpro-runtime/bin`; ~40 GB free on `/`.
 - Verification after merge: the "Advance production" step log shows `Database backup: …/crm-db/…` and `Watcher restarted: <pid>`; on the server, `ls -lt /home/runcloud/backups/crm-db/` and `tail /home/runcloud/logs/rolanpro-crm-supervisor.log`.
 - Next: merge first, then the TASK-009…011 stack and the pay-rule PRs, each preceded by these backups. Off-server copies (Cloudflare R2) are the next step.
+
+## 2026-09-30 handoff — surveyor mobile workspace v4
+
+- Scope: the canonical `/legacy-crm` now gives the Surveyor a field-first mobile workspace with five direct destinations: `Сегодня`, `Календарь`, `Мои задачи`, `Замеры`, and `Ещё`. No second CRM, store, or role API was added.
+- Today: assigned visits, the next visit, route context, personal-task count, monthly completion count, and the existing call, WhatsApp, accept, resume-measurement, project, and complete actions are presented as touch-friendly cards.
+- Calendar: the Surveyor uses the existing canonical Day/Week/Month dispatch data and filters, with a phone `Расписание / Карта` switch. My Tasks remains the existing shared task module with a compact personal task composer.
+- Responsive verification: the four primary Surveyor screens were visually reviewed at 390×844. Tablet 1024×768 and desktop 1440×900 have no document-level horizontal overflow. The approved calm navy/blue field-app visual language was applied without changing desktop business logic or authorization.
+- Automated verification: 34 targeted tests passed for mobile parity, Surveyor v4, measurement, field workspace, and dispatch calendar/map; the legacy inline script compiles; `git diff --check` passes. The repository-wide test command remains unstable on the local Node 24 machine because its unbounded parallel `tsx/esbuild` launch stops shared transform services; CI on Node 20 is the release gate for the full suite, TypeScript, and production build.
+- Release branch: `codex/surveyor-mobile-v4-release`, rebased at the Git object level onto current `main` `acd2e60`. Production deployment proceeds only after the required PR CI succeeds and the PR is merged into `main`.
