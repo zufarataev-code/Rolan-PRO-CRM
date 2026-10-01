@@ -8225,6 +8225,14 @@ function migrateSchema() {
     s.installerRates.serviceTypes.ZONE_CONNECTION = 50;
     db._ownerRateDirectory20260901 = true;
   }
+  // Completed orders get their team-lead snapshot once, so a later group move
+  // never transfers a recorded 10% to someone else.
+  if (!db._installerLeadSnapshotV1) {
+    (db.orders || []).forEach(o => {
+      if (o.installationDoneAt && !o.installerLeadAtCompletion && typeof snapshotInstallerLeads === 'function') snapshotInstallerLeads(o);
+    });
+    db._installerLeadSnapshotV1 = true;
+  }
   if (!s.projectProfitTax) {
     s.projectProfitTax = {
       entityType: 'C_CORP',
@@ -15196,6 +15204,35 @@ function orderInstallerPayoutForUser(o, userId) {
     + orderSmartZonePayout(o, user, installerIds.length)
     + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * orderPayComplexityCoef(o);
 }
+// Installation team lead (owner decision 2026-09-30): on top of their own
+// work, a lead earns 10% of the pay of each installer of their group on the
+// order, paid by the company (the installer keeps full pay). Group links come
+// from PostgreSQL via the employee directory (card.groupLeadId, installerLead).
+const INSTALLER_LEAD_OVERRIDE_PCT = 10;
+// Who led each installer on this order: frozen at completion, so moving an
+// installer to another group later never rewrites historical pay.
+function orderInstallerLeadOf(o, installerId) {
+  if (o?.installerLeadAtCompletion) return o.installerLeadAtCompletion[installerId] || null;
+  const leadId = getUser(installerId)?.groupLeadId || null;
+  return leadId && getUser(leadId)?.installerLead ? leadId : null;
+}
+function snapshotInstallerLeads(o) {
+  o.installerLeadAtCompletion = Object.fromEntries(
+    [...new Set((o?.installerIds || []).filter(Boolean))].map(id => {
+      const leadId = getUser(id)?.groupLeadId || null;
+      return [id, leadId && getUser(leadId)?.installerLead ? leadId : null];
+    }),
+  );
+}
+function orderLeadOverrideForUser(o, leadId) {
+  if (!orderUsesOwnerPayRules(o)) return 0;
+  return [...new Set((o?.installerIds || []).filter(Boolean))]
+    .filter(id => id !== leadId && orderInstallerLeadOf(o, id) === leadId)
+    .reduce((sum, id) => sum + orderInstallerPayoutForUser(o, id) * INSTALLER_LEAD_OVERRIDE_PCT / 100, 0);
+}
+function orderGroupLeadIds(o) {
+  return [...new Set((o?.installerIds || []).map(id => orderInstallerLeadOf(o, id)).filter(Boolean))];
+}
 function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.length) {
@@ -15217,6 +15254,11 @@ function orderInstallerPayoutBreakdown(o) {
   const byInstaller = installerIds.map(userId => {
     const user = getUser(userId);
     return { userId, name: user?.name || 'Исполнитель', amount: orderInstallerPayoutForUser(o, userId) };
+  });
+  // Team-lead 10% is a company cost of the project, shown as its own line.
+  orderGroupLeadIds(o).forEach(leadId => {
+    const amount = orderLeadOverrideForUser(o, leadId);
+    if (amount > 0) byInstaller.push({ userId: leadId, name: `${getUser(leadId)?.name || 'Руководитель'} · 10% с группы`, amount, leadOverride: true });
   });
   return { total: byInstaller.reduce((sum, row) => sum + row.amount, 0), byInstaller, source: 'EMPLOYEE_REFERENCE' };
 }
@@ -15953,6 +15995,7 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
     return true;
   }
   o.status = newStatus;
+  if (newStatus === 'installation_done' && !o.installerLeadAtCompletion) snapshotInstallerLeads(o);
   o.timeline = o.timeline || [];
   o.timeline.push({ at: new Date().toISOString(), key: newStatus, by: by || state.currentUserId });
   // milestone fields
@@ -17660,6 +17703,7 @@ function renderCanonicalInstallerWorkday() {
   const jobs = Array.isArray(data.jobs) ? data.jobs : [];
   const history = Array.isArray(data.history) ? data.history : [];
   const payroll = Array.isArray(data.payroll) ? data.payroll : [];
+  const leadPayroll = Array.isArray(data.lead_payroll) ? data.lead_payroll : [];
   const totals = data.totals || {};
   return `
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
@@ -17692,7 +17736,7 @@ function renderCanonicalInstallerWorkday() {
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="card"><h3 class="font-semibold mb-3">История смен</h3>${history.length ? history.map(item => `<div class="border-t py-3 first:border-t-0"><div class="font-semibold">${academyEsc(item.installer_job?.position?.title || item.installer_job?.project?.title || 'Общая смена')}</div><div class="text-sm text-gray-600">${fmtDateTime(item.started_at)} · ${installerWorkdayHours(item.work_minutes)} · ${Number(item.miles_driven || 0).toFixed(1)} miles</div>${item.notes ? `<div class="text-xs text-gray-500 mt-1">${academyEsc(item.notes)}</div>` : ''}</div>`).join('') : '<div class="text-sm text-gray-500">Завершённые смены появятся здесь.</div>'}</div>
-      <div class="card"><h3 class="font-semibold mb-1">Моя зарплата</h3><p class="text-xs text-gray-500 mb-3">Только ваши начисления. Цена клиента и маржа компании скрыты.</p>${payroll.length ? payroll.map(item => `<div class="border-t py-3 first:border-t-0 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.service_name)}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${Number(item.quantity_sqft || 0).toFixed(1)} sqft × ${installerWorkdayMoney(item.rate_per_sqft)} × ${Number(item.complexity_multiplier || 1)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('') : '<div class="text-sm text-gray-500">Начислений пока нет.</div>'}</div>
+      <div class="card"><h3 class="font-semibold mb-1">Моя зарплата</h3><p class="text-xs text-gray-500 mb-3">Только ваши начисления. Цена клиента и маржа компании скрыты.</p>${payroll.length ? payroll.map(item => `<div class="border-t py-3 first:border-t-0 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.service_name)}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${Number(item.quantity_sqft || 0).toFixed(1)} sqft × ${installerWorkdayMoney(item.rate_per_sqft)} × ${Number(item.complexity_multiplier || 1)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('') : '<div class="text-sm text-gray-500">Начислений пока нет.</div>'}${leadPayroll.length ? `<h4 class="font-semibold mt-4 mb-1">10% с моей группы</h4>${leadPayroll.map(item => `<div class="border-t py-3 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.installer_name || '')}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${academyEsc(item.service_name || '')} · 10%</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('')}` : ''}</div>
     </div>`;
 }
 
@@ -22779,6 +22823,7 @@ function closeQuickProjectAsCompleted(oid) {
   o.depositReceivedAt = o.depositReceivedAt || paidAt;
   o.installationAt = o.installationAt || startAt;
   o.installationDoneAt = o.installationDoneAt || endAt;
+  if (!o.installerLeadAtCompletion) snapshotInstallerLeads(o);
   o.actSignedAt = o.actSignedAt || endAt;
   o.paidAt = paidAt;
   o.status = 'completed';
@@ -33897,6 +33942,7 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
     const monthlySalary = Number(pc.monthlySalary) || Number(pc.weeklySalary || 0) * 4.33;
     total = monthlySalary * months;
     breakdown.push({ kind: 'salary', label: `Оклад × ${months.toFixed(2)} мес.`, amount: total });
+    total += addLeadOverrides(u, startDate, endDate, breakdown);
     return { total, breakdown };
   }
   // Commission / per-sqft / fixed-per-job — based on orders in period
@@ -33930,7 +33976,27 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
       total += amount;
     }
   });
+  total += addLeadOverrides(u, startDate, endDate, breakdown);
   return { total, breakdown };
+}
+
+// Team lead: 10% of each group installer's pay on orders completed in the
+// period (whatever the lead's own pay type is). Returns the added amount.
+function addLeadOverrides(u, startDate, endDate, breakdown) {
+  if (!u?.installerLead) return 0;
+  let added = 0;
+  db.orders.forEach(o => {
+    if (!o.installationDoneAt) return;
+    const dt = new Date(o.installationDoneAt);
+    if (dt < startDate || dt > endDate) return;
+    const amount = orderLeadOverrideForUser(o, u.id);
+    if (!(amount > 0)) return;
+    const names = (o.installerIds || []).filter(id => id !== u.id && orderInstallerLeadOf(o, id) === u.id).map(id => getUser(id)?.name || id);
+    const isPaid = (o.payouts || []).some(p => p.userId === u.id && (p.type === 'lead_override' || p.kind === 'lead_override') && p.paid);
+    breakdown.push({ kind: 'lead_override', orderId: o.id, orderNumber: o.number, label: `10% с группы: ${names.join(', ')}`, amount, date: o.installationDoneAt, paid: isPaid });
+    added += amount;
+  });
+  return added;
 }
 
 function payrollPaidForPeriod(userId, startDate, endDate) {
@@ -34035,13 +34101,45 @@ function renderPayroll() {
   `;
 }
 
-function markPayoutPaid(userId, startISO, endISO) {
+const payoutsInFlight = new Set();
+async function markPayoutPaid(userId, startISO, endISO) {
+  // One payout per employee and period at a time: a double click must not record it twice.
+  const flightKey = `${userId}|${startISO}|${endISO}`;
+  if (payoutsInFlight.has(flightKey)) return;
+  payoutsInFlight.add(flightKey);
+  try {
+    await markPayoutPaidOnce(userId, startISO, endISO);
+  } finally {
+    payoutsInFlight.delete(flightKey);
+  }
+}
+async function markPayoutPaidOnce(userId, startISO, endISO) {
   const u = getUser(userId);
   const start = new Date(startISO), end = new Date(endISO);
   const calc = calcUserPayoutForPeriod(userId, start, end);
   const amountDue = Math.max(0, calc.total - payrollPaidForPeriod(userId, start, end));
   if (amountDue <= 0) return alert('За выбранный период всё уже выплачено.');
   if (!confirm(`Подтвердить выплату ${fmtMoney(amountDue)} для ${u.name}?\n\nВ хронологию каждого заказа добавится запись.`)) return;
+  // The server records the payment first (accruals and lead overrides become
+  // paid); only then the CRM records it, so a failed request can be retried.
+  let res = null;
+  try {
+    res = await fetch('/api/v1/installer-operations/payroll-paid', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ legacyUserId: userId, periodStart: startISO, periodEnd: endISO }),
+    });
+  } catch (_) {}
+  // 404: a card without a server account has no server accruals to mark.
+  if (!res || (!res.ok && res.status !== 404)) {
+    return alert('Сервер не записал выплату — ничего не изменено. Проверьте связь и нажмите «Выплачено» ещё раз.');
+  }
+  // Another tab may have recorded this period while we waited: never pay twice.
+  if (Math.max(0, calcUserPayoutForPeriod(userId, start, end).total - payrollPaidForPeriod(userId, start, end)) < amountDue - 0.009) {
+    render();
+    return alert('Эта выплата уже записана.');
+  }
   const paymentBatchId = 'pay_' + uid();
   const paidAt = new Date().toISOString();
   db.payrollPayments = db.payrollPayments || [];

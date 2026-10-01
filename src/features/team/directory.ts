@@ -25,6 +25,8 @@ export type DirectoryMember = {
   roles: string[];
   isActive: boolean;
   legacyUserIds: string[];
+  /** PostgreSQL id of this installer's group lead, if any. */
+  installerLeadId?: string | null;
 };
 
 type LegacyCard = Record<string, unknown> & { id: string };
@@ -131,9 +133,27 @@ export function applyEmployeeDirectory<T extends Record<string, unknown>>(
     .map((card) => ({ ...card }));
   const index = new Map(cards.map((card, position) => [card.id, position]));
 
+  // Group links point at the lead's installer card (a lead may also hold a surveyor card).
+  const installerCardOf = new Map<string, string | null>();
+  for (const member of members) {
+    const roles = legacyRolesForServerRoles(member.roles);
+    const assigned = assignCardRoles(
+      member.legacyUserIds.map((legacyId) => {
+        const position = index.get(legacyId);
+        return position === undefined ? undefined : (cards[position].role as string | undefined);
+      }),
+      roles,
+    );
+    const installerIndex = assigned.indexOf("installer");
+    installerCardOf.set(member.userId, installerIndex >= 0 ? member.legacyUserIds[installerIndex] : null);
+  }
+
   for (const member of members) {
     const legacyRoles = legacyRolesForServerRoles(member.roles);
     if (!legacyRoles.length) continue;
+    // Installation groups for payroll and the lead's workspace (from PostgreSQL).
+    const installerLead = member.roles.includes(ROLE_CODES.INSTALLER_LEAD);
+    const groupLeadId = member.installerLeadId ? installerCardOf.get(member.installerLeadId) ?? null : null;
 
     const cardRoles = assignCardRoles(
       member.legacyUserIds.map((legacyId) => {
@@ -151,7 +171,7 @@ export function applyEmployeeDirectory<T extends Record<string, unknown>>(
       const position = index.get(legacyId);
       if (position === undefined) {
         index.set(legacyId, cards.length);
-        cards.push({ ...newCard(legacyId, member, role), active: cardActive });
+        cards.push({ ...newCard(legacyId, member, role), active: cardActive, installerLead, groupLeadId });
         continue;
       }
       const card = cards[position];
@@ -162,6 +182,8 @@ export function applyEmployeeDirectory<T extends Record<string, unknown>>(
         role,
         title: LEGACY_TITLES[role] ?? card.title ?? "Employee",
         active: cardActive,
+        installerLead,
+        groupLeadId,
       };
     }
   }
@@ -255,6 +277,7 @@ export async function loadDirectoryMembers(
       roles,
       isActive: user.is_active,
       legacyUserIds,
+      installerLeadId: user.installer_lead_id,
     });
   }
   return members;

@@ -111,6 +111,31 @@ test("an unlinked employee reuses their existing card by email, keeping assigned
   );
 });
 
+test("group links reach the legacy cards: lead flag and the lead's card id", () => {
+  const lead: DirectoryMember = {
+    userId: "33333333-3333-4333-8333-333333333333",
+    email: "lead@example.com",
+    fullName: "Lead",
+    roles: ["INSTALLER", "INSTALLER_LEAD"],
+    isActive: true,
+    legacyUserIds: ["u_lead"],
+  };
+  const installer: DirectoryMember = {
+    userId: "44444444-4444-4444-8444-444444444444",
+    email: "inst@example.com",
+    fullName: "Inst",
+    roles: ["INSTALLER"],
+    isActive: true,
+    legacyUserIds: ["u_inst"],
+    installerLeadId: lead.userId,
+  };
+  const result = applyEmployeeDirectory({ users: [] }, [lead, installer]);
+  const cards = Object.fromEntries((result.users as Array<Record<string, unknown>>).map((card) => [card.id, card]));
+  assert.equal(cards.u_lead.installerLead, true);
+  assert.equal(cards.u_inst.groupLeadId, "u_lead");
+  assert.equal(cards.u_inst.installerLead, false);
+});
+
 test("a new role card never reuses an id that already exists", () => {
   const ids = legacyIdsForRoles(alan.userId, ["u_z1"], ["measurer", "installer"], new Set(["u_z1_installer"]));
   assert.deepEqual(ids, ["u_z1", "u_z1_installer_2"]);

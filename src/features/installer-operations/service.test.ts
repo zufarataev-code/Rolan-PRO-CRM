@@ -19,3 +19,9 @@ test("Smart zone connections are paid and multiplied by difficulty with the film
   assert.equal(calculatePayrollAmount(100, 5, 1.5, 3, 50), 975);
   assert.equal(calculatePayrollAmount(100, 5, 1, 0, 50), 500);
 });
+
+test("team lead override is 10% of the installer's accrual", async () => {
+  const { INSTALLER_LEAD_OVERRIDE_PCT } = await import("./service");
+  assert.equal(INSTALLER_LEAD_OVERRIDE_PCT, 10);
+  assert.equal(Number((250 * INSTALLER_LEAD_OVERRIDE_PCT / 100).toFixed(2)), 25);
+});
