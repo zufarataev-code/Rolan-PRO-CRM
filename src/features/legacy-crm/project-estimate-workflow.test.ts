@@ -342,9 +342,9 @@ test("the Services reference owns installer pay while material stays in Warehous
   const renderer = source.slice(rendererStart, rendererEnd);
   assert.doesNotMatch(renderer, /cps-\$\{row\.service_type_id\}-material/);
   assert.match(renderer, /cps-\$\{row\.service_type_id\}-installer/);
-  assert.match(renderer, /Монтажнику \/ sqft, \$/);
+  assert.match(renderer, /Монтажнику \/ \$\{canonicalPricingUnitLabel\(row\.unit_type\)\}, \$/);
   assert.doesNotMatch(renderer, /cpa-\$\{row\.service_addon_id\}-cost/);
-  assert.match(renderer, /Стоимость плёнки берётся со склада\. Ставка монтажа из этой услуги автоматически начисляется/);
+  assert.match(renderer, /Ставка монтажника автоматически идёт в payroll и экономику проекта/);
   assert.match(source, /patch\.installation_cost_per_sqft = canonicalPricingValue/);
   assert.match(source, /syncLegacyInstallerServiceRate\(service\.service_code, patch\.installation_cost_per_sqft\)/);
   assert.match(source, /syncLegacyInstallerServiceRate\(service\.service_code, service\.installation_cost_per_sqft\)/);

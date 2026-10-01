@@ -17788,7 +17788,11 @@ function renderCanonicalInstallerWorkday() {
 
 // ---------- CANONICAL SERVICE PRICING (ONE CRM UI) ----------
 function canonicalPricingMoney(value) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value || 0));
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(Number(value || 0));
+}
+
+function canonicalPricingUnitLabel(unit) {
+  return ({ sqft: 'sq ft', qty: 'шт.', item: 'шт.', fixed: 'работу', zone: 'зону' })[String(unit || '').toLowerCase()] || String(unit || 'ед.');
 }
 
 async function canonicalPricingRequest(method, body) {
@@ -17812,10 +17816,21 @@ async function loadCanonicalServicePricing(force = false) {
     const pricingData = await canonicalPricingRequest('GET');
     state.canonicalPricingData = pricingData;
     if (pricingData?.can_view_costs) {
+      db.settings = db.settings || {};
+      db.settings.complexityCoefs = db.settings.complexityCoefs || {};
       const ratesChanged = (pricingData.services || []).reduce((changed, service) => {
         return syncLegacyInstallerServiceRate(service.service_code, service.installation_cost_per_sqft) || changed;
       }, false);
-      if (ratesChanged) save();
+      const complexityKeys = { LOW: 'standard', STANDARD: 'ladder', HIGH: 'tower', EXPERT: 'alpinism' };
+      const complexityChanged = (pricingData.complexity_levels || []).reduce((changed, level) => {
+        const key = complexityKeys[level.level_code];
+        if (!key) return changed;
+        const multiplier = Number(level.multiplier) || 1;
+        const previous = Number(db.settings.complexityCoefs?.[key]) || 1;
+        db.settings.complexityCoefs[key] = multiplier;
+        return Math.abs(previous - multiplier) > 0.001 || changed;
+      }, false);
+      if (ratesChanged || complexityChanged) save();
     }
   } catch (error) {
     state.canonicalPricingError = error?.message || 'Не удалось загрузить прайс';
@@ -17867,6 +17882,14 @@ async function saveCanonicalService(id) {
     syncLegacyInstallerServiceRate(service.service_code, patch.installation_cost_per_sqft);
     save();
   }
+}
+
+function saveCanonicalComplexity(id) {
+  canonicalPricingSave({
+    entity: 'complexity_level',
+    id,
+    patch: { multiplier: canonicalPricingValue(`cpc-${id}-multiplier`, true) },
+  }, 'Коэффициент сложности сохранён');
 }
 
 function saveCanonicalAddon(id) {
@@ -17937,25 +17960,38 @@ function renderCanonicalServicePricing() {
 
   const services = Array.isArray(data.services) ? data.services : [];
   const addons = Array.isArray(data.addons) ? data.addons : [];
+  const complexityLevels = Array.isArray(data.complexity_levels) ? data.complexity_levels : [];
   const owner = !!data.can_view_costs;
   const planning = data.planning || {};
   const assumptions = planning.assumptions || {};
   const actual = planning.actual || {};
   const signal = actual.signal === 'on_track' ? 'План выполнен' : actual.signal === 'attention' ? 'Почти у цели' : 'Нужны продажи';
 
-  const serviceCards = services.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:4px">
-    <summary class="cursor-pointer list-none flex items-center justify-between gap-3"><div><div class="font-black text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.service_code)} · ${academyEsc(row.unit_type)}</div></div><div class="flex items-center gap-3"><span class="font-black text-blue-700">${canonicalPricingMoney(row.base_price)}</span><span class="text-slate-400">Открыть ↓</span></div></summary>
+  const serviceCards = services.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:12px">
+    <summary class="cursor-pointer list-none grid grid-cols-1 md:grid-cols-[minmax(180px,1fr)_minmax(120px,.55fr)_minmax(120px,.55fr)_auto] items-center gap-3">
+      <div><div class="font-black text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.service_code)} · за ${academyEsc(canonicalPricingUnitLabel(row.unit_type))}</div></div>
+      <div class="rounded-lg bg-blue-50 px-3 py-2"><div class="text-[11px] font-bold uppercase tracking-wide text-blue-600">Клиенту</div><div class="font-black text-blue-800">${canonicalPricingMoney(row.base_price)}</div></div>
+      ${owner ? `<div class="rounded-lg bg-emerald-50 px-3 py-2"><div class="text-[11px] font-bold uppercase tracking-wide text-emerald-700">Монтажнику</div><div class="font-black text-emerald-800">${canonicalPricingMoney(row.installation_cost_per_sqft)}</div></div>` : ''}
+      <span class="text-sm font-bold text-slate-500">Изменить ↓</span>
+    </summary>
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-5 pt-4 border-t border-slate-200">
       ${canonicalPricingField(`cps-${row.service_type_id}-name`, 'Название', row.name_ru, 'text')}
-      ${canonicalPricingField(`cps-${row.service_type_id}-unit`, 'Единица: sqft, zone, item', row.unit_type, 'text')}
-      ${canonicalPricingField(`cps-${row.service_type_id}-base`, 'Цена клиенту, $', row.base_price)}
+      ${canonicalPricingField(`cps-${row.service_type_id}-unit`, 'Единица: sqft, qty, fixed', row.unit_type, 'text')}
+      ${canonicalPricingField(`cps-${row.service_type_id}-base`, 'Ориентир клиенту, $', row.base_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-min`, 'Минимальная цена, $', row.min_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-block`, 'Блок клиенту, $', row.block_revenue_price)}
-      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-installer`, 'Монтажнику / sqft, $', row.installation_cost_per_sqft) : ''}
+      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-installer`, `Монтажнику / ${canonicalPricingUnitLabel(row.unit_type)}, $`, row.installation_cost_per_sqft) : ''}
     </div>
-    <p class="text-xs text-slate-500 mt-3">Стоимость плёнки берётся со склада. Ставка монтажа из этой услуги автоматически начисляется назначенным монтажникам; индивидуальная ставка сотрудника может её переопределить.</p>
+    <p class="text-xs text-slate-500 mt-3">Цена клиенту — ориентир для расчёта и может меняться в конкретном проекте. Ставка монтажника автоматически идёт в payroll и экономику проекта; материал берётся по фактической закупочной цене со склада.</p>
     <div class="mt-4 flex flex-wrap items-center gap-3"><label class="tag"><input id="cps-${row.service_type_id}-active" type="checkbox" ${row.is_active ? 'checked' : ''}> Активна</label><button class="btn-primary" onclick="saveCanonicalService('${row.service_type_id}')">Сохранить услугу</button></div>
   </details>`).join('');
+
+  const complexityCards = complexityLevels.map(level => `<div class="border border-slate-200 bg-slate-50 p-4" style="border-radius:12px">
+    <div class="text-xs font-bold uppercase tracking-wide text-slate-500">${academyEsc(level.level_code)}</div>
+    <div class="font-black text-slate-900 mt-1">${academyEsc(level.name_ru)}</div>
+    <div class="mt-3">${canonicalPricingField(`cpc-${level.complexity_level_id}-multiplier`, 'Коэффициент к цене и зарплате', level.multiplier, 'number', '0.05')}</div>
+    ${owner ? `<button class="btn-primary w-full mt-3" onclick="saveCanonicalComplexity('${level.complexity_level_id}')">Сохранить ×${Number(level.multiplier || 1).toFixed(2)}</button>` : ''}
+  </div>`).join('');
 
   const addonCards = addons.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:4px">
     <summary class="cursor-pointer list-none flex items-center justify-between"><div><div class="font-bold text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.addon_code)}</div></div><b class="text-blue-700">${canonicalPricingMoney(row.default_price)}</b></summary>
@@ -17970,7 +18006,8 @@ function renderCanonicalServicePricing() {
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Безубыточность</div><b class="text-xl">${canonicalPricingMoney(planning.break_even?.revenue)}</b><div class="text-xs">${planning.break_even?.deals || 0} сделок / ${planning.break_even?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Цель с прибылью</div><b class="text-xl">${canonicalPricingMoney(planning.target?.revenue)}</b><div class="text-xs">${planning.target?.deals || 0} сделок / ${planning.target?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">КП за месяц</div><b class="text-xl">${canonicalPricingMoney(actual.proposal_revenue)}</b></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Прогресс</div><b class="text-xl">${Number(actual.progress_percent || 0).toFixed(0)}%</b></div></div>
       ${owner ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${canonicalPricingField('cp-plan-check', 'Средний чек, $', assumptions.average_deal_value)}${canonicalPricingField('cp-plan-conversion', 'Конверсия лид → сделка, %', assumptions.lead_to_deal_percent)}${canonicalPricingField('cp-plan-profit', 'Целевая прибыль / месяц, $', assumptions.target_profit_monthly)}</div><button class="btn-primary mt-4" onclick="saveCanonicalPlanning()">Сохранить план</button>` : '<p class="text-sm text-slate-500 mt-4">Менеджер видит цели по лидам и сделкам. Расходы и прибыль меняет владелец.</p>'}
     </section>
-    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Услуги</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту услугу, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Монтажнику / sqft, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
+    <section class="card border border-slate-200 bg-white" style="border-radius:12px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Справочник расценок</h2><p class="text-sm text-slate-500">В одной строке: ориентир клиенту и ставка исполнителю. Эти ставки использует расчёт проекта, payroll и рентабельность.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Ориентир клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Ставка монтажнику, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
+    <section class="card border border-slate-200 bg-white" style="border-radius:12px"><div><h2 class="text-xl font-black">Коэффициенты сложности</h2><p class="text-sm text-slate-500">Один коэффициент применяется к цене плёночных работ клиенту и к оплате монтажников. Старые завершённые проекты сохраняют зафиксированные ставки.</p></div><div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-4">${complexityCards || '<div class="text-slate-500">Коэффициенты не настроены</div>'}</div></section>
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between"><div><h2 class="text-xl font-black">Дополнительные работы</h2><p class="text-sm text-slate-500">Подключение зон, демонтаж, силикон и другие допродажи.</p></div><span class="tag">${addons.length}</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить допработу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Основная услуга</span><select id="cp-new-addon-service" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2">${services.map(s => `<option value="${s.service_type_id}">${academyEsc(s.name_ru)}</option>`).join('')}</select></label>${canonicalPricingField('cp-new-addon-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-addon-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-addon-unit', 'Единица', 'item', 'text')}${canonicalPricingField('cp-new-addon-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-addon-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalAddon()">Создать допработу</button></details><div class="space-y-3 mt-4">${addonCards || '<div class="text-slate-500">Дополнительных работ пока нет</div>'}</div></section>
   </div>`;
 }
