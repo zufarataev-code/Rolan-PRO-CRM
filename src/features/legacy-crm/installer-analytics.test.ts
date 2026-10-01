@@ -144,7 +144,9 @@ test("the installer reaches analytics from the menu and from «Сегодня»"
 test("the installer title is «Специалист по установке» everywhere", () => {
   assert.doesNotMatch(html, /[Мм]онтажник/);
   // The provisioning workspace and the stored SMS templates too.
-  assert.doesNotMatch(readFileSync("data/legacy-crm-empty.json", "utf8"), /[Мм]онтажник/);
+  for (const file of ["data/legacy-crm-empty.json", "demo/installer-demo.html", "demo/crm-demo.html"]) {
+    assert.doesNotMatch(readFileSync(file, "utf8"), /[Мм]онтажник/, file);
+  }
   assert.match(
     readFileSync("prisma/migrations/20261001130000_installer_title_in_sms_templates/migration.sql", "utf8"),
     /'Монтажник', 'Специалист по установке'/,
