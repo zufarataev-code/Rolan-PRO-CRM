@@ -235,6 +235,79 @@ test("installation groups: a team lead can be assigned; a non-lead cannot", asyn
   assert.equal((await prisma.user.findUniqueOrThrow({ where: { user_id: installerId } })).installer_lead_id, null);
 });
 
+test("a team lead sees group jobs without prices and distributes only within the group", async () => {
+  // Group: lead + installer; an outsider installer is not in the group.
+  const mk = async (tag: string, roles: string[]) => {
+    const created = await owner.call("POST", "/api/v1/team", {
+      email: `${tag}-${runTag}@example.com`, fullName: `${runTag} ${tag}`, roles, password: employeePassword,
+    });
+    assert.equal(created.status, 200, `create ${tag}: ${JSON.stringify(created.json)}`);
+    const userId = data<{ userId: string }>(created.json).userId;
+    await prisma.user.update({ where: { user_id: userId }, data: { must_change_password: false } });
+    return userId;
+  };
+  const leadId = await mk("glead", ["INSTALLER", "INSTALLER_LEAD"]);
+  const memberId = await mk("gmember", ["INSTALLER"]);
+  const outsiderId = await mk("gout", ["INSTALLER"]);
+  assert.equal((await owner.call("PATCH", `/api/v1/team/${leadId}`, { groupInstallerIds: [memberId] })).status, 200);
+
+  // Legacy card ids are assigned on first read of the workspace.
+  const ownerState = await owner.call("GET", "/api/v1/legacy-crm/state");
+  const legacyId = async (userId: string) => (await prisma.user.findUniqueOrThrow({ where: { user_id: userId } })).legacy_user_ids[0];
+  const [leadCard, memberCard, outsiderCard] = [await legacyId(leadId), await legacyId(memberId), await legacyId(outsiderId)];
+  const { payload, revision } = data<{ payload: { orders?: unknown[] }; revision: number }>(ownerState.json);
+  const orderId = `o_${runTag}`;
+  const order = { id: orderId, number: runTag, status: "installation_scheduled", installerIds: [memberCard], clientId: "", priceOverridePerSqft: 99, notes: "group job" };
+  const put = await owner.call("PUT", "/api/v1/legacy-crm/state", {
+    payload: { ...payload, orders: [...((payload.orders as unknown[]) || []), order] },
+    revision,
+  });
+  assert.equal(put.status, 200, `owner adds order: ${JSON.stringify(put.json)}`);
+
+  const lead = new Browser();
+  await lead.login(`glead-${runTag}@example.com`, employeePassword);
+  const leadState = await lead.call("GET", "/api/v1/legacy-crm/state");
+  const leadPayload = data<{ payload: { orders: Array<Record<string, unknown>>; users: Array<Record<string, unknown>> }; revision: number }>(leadState.json);
+  const seen = leadPayload.payload.orders.find((item) => item.id === orderId);
+  assert.ok(seen, "the lead sees a job assigned to a group member");
+  assert.equal(seen.priceOverridePerSqft, undefined, "prices are redacted for the lead");
+  assert.ok(leadPayload.payload.users.some((user) => user.id === leadCard && user.installerLead === true));
+
+  // Distribute inside the group: allowed.
+  const redistributed = { ...seen, installerIds: [leadCard, memberCard] };
+  const ok = await lead.call("PUT", "/api/v1/legacy-crm/state", {
+    payload: { ...leadPayload.payload, orders: leadPayload.payload.orders.map((item) => (item.id === orderId ? redistributed : item)) },
+    revision: leadPayload.revision,
+  });
+  assert.equal(ok.status, 200, `lead save: ${JSON.stringify(ok.json)}`);
+  const storedAfter = (await prisma.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } })).payload as { orders: Array<Record<string, unknown>> };
+  assert.deepEqual(storedAfter.orders.find((item) => item.id === orderId)?.installerIds, [leadCard, memberCard]);
+
+  // Put an outsider on the job: ignored by the server.
+  const again = data<{ payload: { orders: Array<Record<string, unknown>> }; revision: number }>((await lead.call("GET", "/api/v1/legacy-crm/state")).json);
+  await lead.call("PUT", "/api/v1/legacy-crm/state", {
+    payload: { ...again.payload, orders: again.payload.orders.map((item) => (item.id === orderId ? { ...item, installerIds: [outsiderCard] } : item)) },
+    revision: again.revision,
+  });
+  const storedFinal = (await prisma.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } })).payload as { orders: Array<Record<string, unknown>> };
+  assert.deepEqual(storedFinal.orders.find((item) => item.id === orderId)?.installerIds, [leadCard, memberCard], "outsider rejected");
+
+  // A manager adds an installer from another group; the lead's redistribution keeps them.
+  const ownerNow = data<{ payload: { orders: Array<Record<string, unknown>> }; revision: number }>((await owner.call("GET", "/api/v1/legacy-crm/state")).json);
+  await owner.call("PUT", "/api/v1/legacy-crm/state", {
+    payload: { ...ownerNow.payload, orders: ownerNow.payload.orders.map((item) => (item.id === orderId ? { ...item, installerIds: [leadCard, memberCard, outsiderCard] } : item)) },
+    revision: ownerNow.revision,
+  });
+  const leadNow = data<{ payload: { orders: Array<Record<string, unknown>> }; revision: number }>((await lead.call("GET", "/api/v1/legacy-crm/state")).json);
+  await lead.call("PUT", "/api/v1/legacy-crm/state", {
+    payload: { ...leadNow.payload, orders: leadNow.payload.orders.map((item) => (item.id === orderId ? { ...item, installerIds: [memberCard] } : item)) },
+    revision: leadNow.revision,
+  });
+  const mixed = (await prisma.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } })).payload as { orders: Array<Record<string, unknown>> };
+  assert.deepEqual(mixed.orders.find((item) => item.id === orderId)?.installerIds, [outsiderCard, memberCard], "other groups stay on the job");
+  assert.equal(storedFinal.orders.find((item) => item.id === orderId)?.priceOverridePerSqft, 99, "prices untouched by the lead's save");
+});
+
 test("a new employee is recognised by the CRM without the owner opening it first", async () => {
   // Employees used to see "Доступ не настроен" until the owner's browser
   // happened to synchronize the legacy card. The server now guarantees it.
