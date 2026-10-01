@@ -100,9 +100,14 @@ export async function GET(request: NextRequest) {
           const user = getUser(legacyUserId);
           if (!user) return;
 
+          // The dialog opens only if nothing else happened while the account
+          // loaded: a newer click or a modal the owner opened/closed meanwhile wins.
+          const request = (window.__teamAccessRequest || 0) + 1;
+          window.__teamAccessRequest = request;
+          const modalWhenClicked = state.modal;
           window.__teamAccessLegacyUserId = legacyUserId;
           const account = await loadTeamAccessAccount(legacyUserId, user.email || '');
-          if (window.__teamAccessLegacyUserId !== legacyUserId) return;
+          if (window.__teamAccessRequest !== request || state.modal !== modalWhenClicked) return;
           const serverEmail = account.member?.email || '';
           window.__teamAccessCurrentEmail = serverEmail;
 

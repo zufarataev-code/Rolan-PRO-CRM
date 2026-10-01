@@ -97,3 +97,9 @@ test("a new login email reaches every card linked to the account", () => {
   assert.match(route, /linkedIds\.forEach\(\(id\) => \{ const card = getUser\(id\); if \(card\) card\.email = savedEmail; \}\);/);
   assert.match(html, /\.forEach\(id => \{ const card = getUser\(id\); if \(card\) card\.email = email; \}\);/);
 });
+
+test("a slow account load never replaces a modal the owner opened or closed meanwhile", () => {
+  const route = readFileSync("app/legacy-crm/route.ts", "utf8");
+  assert.match(route, /const modalWhenClicked = state\.modal;/);
+  assert.match(route, /if \(window\.__teamAccessRequest !== request \|\| state\.modal !== modalWhenClicked\) return;/);
+});

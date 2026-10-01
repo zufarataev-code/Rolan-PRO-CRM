@@ -728,4 +728,5 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Causes: (1) two PostgreSQL accounts were linked to the same legacy cards (resolved on production 2026-10-01 by deactivating the extra accounts, Owner request); (2) the owner-only fetch guard in `/legacy-crm` stripped `email` from every team PATCH, so «Доступ» reported success while PostgreSQL kept the old address.
 - Fix: only `roles` is stripped; the «Доступ» dialog loads the PostgreSQL account before rendering (Save disabled without one) and reports success only when the server returns the new email; the card sends a new email only when the owner typed it.
 - Verification: full unit suite and `tsc` green; `team-email-edit.test.ts`.
+- Production build: CI job «Test, typecheck, and build» (`npm run build`) runs on every push of PR #280 and is green.
 - Next action: Codex 👍, Owner «да», merge, deploy (no migration).
