@@ -30,11 +30,15 @@ export type TeamMemberInput = {
 };
 
 /** A lead exists, is active, and has room for one more installer. */
-async function assertLeadCanTakeInstaller(leadId: string, installerId: string | null) {
+async function assertLeadCanTakeInstaller(
+  leadId: string,
+  installerId: string | null,
+  db: Prisma.TransactionClient = prisma,
+) {
   if (installerId && leadId === installerId) {
     throw new Error("Сотрудник не может быть руководителем сам себе.");
   }
-  const lead = await prisma.user.findFirst({
+  const lead = await db.user.findFirst({
     where: {
       user_id: leadId,
       is_active: true,
@@ -45,7 +49,7 @@ async function assertLeadCanTakeInstaller(leadId: string, installerId: string | 
   if (!lead) {
     throw new Error("Выбранный сотрудник не руководитель монтажной группы.");
   }
-  const groupSize = await prisma.user.count({
+  const groupSize = await db.user.count({
     where: { installer_lead_id: leadId, is_active: true, ...(installerId ? { user_id: { not: installerId } } : {}) },
   });
   if (groupSize >= MAX_GROUP_INSTALLERS) {
@@ -94,7 +98,7 @@ function assertValidRoles(roles: RoleCode[]) {
   }
 }
 
-function assertValidPassword(password: string) {
+export function assertValidPassword(password: string) {
   if (password.trim().length < MIN_PASSWORD_LENGTH) {
     throw new Error(`Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов.`);
   }
@@ -174,6 +178,8 @@ export async function createTeamMember(input: TeamMemberInput) {
 
   const user = await prisma.$transaction(async (tx) => {
     await lockInstallerGroups(tx);
+    // Re-checked under the lock: the lead may have been disabled meanwhile.
+    if (leadId) await assertLeadCanTakeInstaller(leadId, null, tx);
     const previousLeads = createsLead ? await currentLeadsOf(tx, groupIds) : [];
     const created = await tx.user.create({
       data: {
@@ -321,6 +327,8 @@ export async function updateTeamMember(
   // to leave an employee with no roles.
   const updated = await prisma.$transaction(async (tx) => {
     await lockInstallerGroups(tx);
+    // Re-checked under the lock: the destination lead may have been disabled or demoted meanwhile.
+    if (input.installerLeadId) await assertLeadCanTakeInstaller(input.installerLeadId, userId, tx);
     const before = await tx.user.findUnique({ where: { user_id: userId }, select: { installer_lead_id: true } });
     const affectedLeads = [
       userId,

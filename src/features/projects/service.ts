@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
 
+import { buildClientAccessWhere, getRecordManagerScope } from "@/features/sales/access";
+
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { INSTALLER_JOB_STATUSES } from "@/features/projects/api";
 import { PROPOSAL_STATUSES } from "@/features/proposals/api";
@@ -9,6 +11,7 @@ import { onInstallationAssigned, onJobStarted, onProjectCompleted, onProjectCrea
 import { recordInstallerPayrollAccrual } from "@/features/installer-operations/service";
 import {
   ClientIdentityConflictError,
+  ClientNotAccessibleError,
   findExistingClientByIdentity,
   lockClientIdentity,
   normalizeClientEmail,
@@ -464,9 +467,27 @@ export async function getZoneInstallerRateResolver(positionIds: string[]) {
   if (!ids.length) return () => defaultRate;
   const jobs = await prisma.installerJob.findMany({
     where: { project_position_id: { in: ids } },
-    select: { project_position_id: true, installer_id: true },
+    select: { installer_job_id: true, project_position_id: true, installer_id: true },
   });
   if (!jobs.length) return () => defaultRate;
+  // Completed jobs keep the zone rate they were accrued at: derive it from the
+  // immutable accrual, amount = (sq ft × rate + zones × zone rate) × multiplier.
+  const [accruals, positions] = await Promise.all([
+    prisma.installerPayrollAccrual.findMany({
+      where: { installer_job_id: { in: jobs.map((job) => job.installer_job_id) } },
+      select: { installer_job_id: true, amount: true, quantity_sqft: true, rate_per_sqft: true, complexity_multiplier: true },
+    }),
+    prisma.projectPosition.findMany({ where: { position_id: { in: ids } }, select: { position_id: true, dynamic_fields: true } }),
+  ]);
+  const zonesByPosition = new Map(positions.map((position) => [position.position_id, asNumber(asJsonRecord(position.dynamic_fields).zones_qty)]));
+  const accruedZoneRate = new Map<string, number>();
+  for (const accrual of accruals) {
+    const job = jobs.find((candidate) => candidate.installer_job_id === accrual.installer_job_id);
+    const zones = job?.project_position_id ? zonesByPosition.get(job.project_position_id) ?? 0 : 0;
+    const multiplier = toNumber(accrual.complexity_multiplier) || 1;
+    const zonePart = toNumber(accrual.amount) / multiplier - toNumber(accrual.quantity_sqft) * toNumber(accrual.rate_per_sqft);
+    accruedZoneRate.set(accrual.installer_job_id, zones > 0 ? Math.max(0, zonePart / zones) : 0);
+  }
   const [users, workspace] = await Promise.all([
     prisma.user.findMany({
       where: { user_id: { in: [...new Set(jobs.map((job) => job.installer_id))] } },
@@ -491,7 +512,11 @@ export async function getZoneInstallerRateResolver(positionIds: string[]) {
   for (const job of jobs) {
     if (!job.project_position_id) continue;
     const list = ratesByPosition.get(job.project_position_id) ?? [];
-    list.push(rateByInstaller.get(job.installer_id) ?? defaultRate);
+    list.push(
+      accruedZoneRate.has(job.installer_job_id)
+        ? accruedZoneRate.get(job.installer_job_id)!
+        : rateByInstaller.get(job.installer_id) ?? defaultRate,
+    );
     ratesByPosition.set(job.project_position_id, list);
   }
   return (positionId: string) => {
@@ -808,6 +833,15 @@ export async function createManualProject(
     // A client the manager explicitly selected always wins; identity matching
     // only decides when no client was chosen.
     const reusableClient = explicitClient ? null : await findExistingClientByIdentity(tx, contact);
+    if (reusableClient) {
+      // A manager may reuse (or be told about) only clients they can already see.
+      const managerId = getRecordManagerScope(session);
+      if (managerId) {
+        const ids = [reusableClient.client.client_id, reusableClient.conflictingClient?.client_id].filter(Boolean) as string[];
+        const visible = await tx.client.count({ where: { ...buildClientAccessWhere(undefined, managerId), client_id: { in: ids } } });
+        if (visible < ids.length) throw new ClientNotAccessibleError();
+      }
+    }
     if (reusableClient?.conflictingClient) {
       throw new ClientIdentityConflictError(
         reusableClient.client.client_id,
