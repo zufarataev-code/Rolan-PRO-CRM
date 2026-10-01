@@ -111,7 +111,34 @@ export async function GET(request: NextRequest) {
               '</div>' +
             '</div>';
           render();
+          hydrateTeamAccessEmail(legacyUserId, user.email || '');
         };
+
+        // The login email lives in PostgreSQL. The legacy card may still hold
+        // an older value, so the dialog always shows the server account's email.
+        async function hydrateTeamAccessEmail(legacyUserId, cardEmail) {
+          try {
+            const response = await fetch('/api/v1/team', { cache: 'no-store' });
+            const list = await response.json();
+            if (!response.ok) return;
+            const members = Array.isArray(list?.data) ? list.data : [];
+            const knownEmail = String(cardEmail || '').trim().toLowerCase();
+            const member = members.find(
+              (item) => Array.isArray(item.legacyUserIds) && item.legacyUserIds.includes(legacyUserId),
+            ) || (knownEmail ? members.find(
+              (item) => String(item.email || '').trim().toLowerCase() === knownEmail,
+            ) : null);
+            if (!member?.email || window.__teamAccessLegacyUserId !== legacyUserId) return;
+
+            const input = document.getElementById('tm-email');
+            if (input && String(input.value || '').trim().toLowerCase() === knownEmail) {
+              input.value = member.email;
+            }
+            window.__teamAccessCurrentEmail = member.email;
+          } catch (error) {
+            console.error('[Team access] account hydration failed', error);
+          }
+        }
 
         window.generateTeamAccessPassword = function generateTeamAccessPassword() {
           const input = document.getElementById('tm-password');
@@ -166,13 +193,17 @@ export async function GET(request: NextRequest) {
             if (!updateResponse.ok) {
               return showTeamError(apiMessage(updateResult, 'Не удалось обновить доступ сотрудника.'));
             }
+            const savedEmail = String(updateResult?.data?.email || '').trim().toLowerCase();
+            if (savedEmail !== email) {
+              return showTeamError('Сервер не сохранил новую почту. Обновите страницу и попробуйте ещё раз.');
+            }
 
             const legacyUser = getUser(legacyUserId);
             if (legacyUser) {
-              legacyUser.email = email;
+              legacyUser.email = savedEmail;
               save();
             }
-            window.__teamAccessCurrentEmail = email;
+            window.__teamAccessCurrentEmail = savedEmail;
 
             if (password) {
               return showTeamPasswordResult(
@@ -234,8 +265,10 @@ export async function GET(request: NextRequest) {
         });
 
         // The existing «Команда» section keeps phone, photo and pay settings.
-        // Roles, login email and access are edited only in the canonical
-        // directory: the old single-role editor would drop secondary roles.
+        // Roles are edited only in the canonical directory: the old
+        // single-role editor would drop secondary roles. The login email may be
+        // changed here too — it goes straight to the PostgreSQL account, so the
+        // card, the access dialog and the login all show the same address.
         const originalRenderTeam = window.renderTeam;
         if (typeof originalRenderTeam === 'function') {
           window.renderTeam = function renderTeamWithDirectory() {
@@ -255,14 +288,13 @@ export async function GET(request: NextRequest) {
             try {
               const body = JSON.parse(init.body);
               delete body.roles;
-              delete body.email;
               init = { ...init, body: JSON.stringify(body) };
             } catch (_) { /* not JSON: send as is */ }
           }
           return nativeTeamFetch(input, init);
         };
         new MutationObserver(() => {
-          ['tm-edit-role', 'tm-edit-email'].forEach((id) => {
+          ['tm-edit-role'].forEach((id) => {
             const field = document.getElementById(id);
             if (field && !field.disabled) {
               field.disabled = true;

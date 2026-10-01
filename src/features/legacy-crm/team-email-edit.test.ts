@@ -62,3 +62,16 @@ test("new employee is linked to the legacy card during creation", () => {
   assert.match(service, /legacy_user_ids: legacyUserId \? \[legacyUserId\] : \[\]/);
   assert.match(service, /legacy_user_ids: \{ has: legacyUserId \}/);
 });
+
+test("login email edits reach the server account and the access dialog shows its email", () => {
+  const route = readFileSync("app/legacy-crm/route.ts", "utf8");
+
+  // The owner's PATCH keeps the email; only roles stay with the canonical directory.
+  assert.match(route, /delete body\.roles;/);
+  assert.doesNotMatch(route, /delete body\.email/);
+  assert.match(route, /\['tm-edit-role'\]\.forEach/);
+  // The access dialog shows the PostgreSQL email and reports success only when the server saved it.
+  assert.match(route, /hydrateTeamAccessEmail\(legacyUserId, user\.email \|\| ''\)/);
+  assert.match(route, /const savedEmail = String\(updateResult\?\.data\?\.email \|\| ''\)/);
+  assert.match(route, /if \(savedEmail !== email\)/);
+});
