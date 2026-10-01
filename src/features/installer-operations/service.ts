@@ -18,8 +18,45 @@ function jsonNumber(value: Prisma.JsonValue | null | undefined, key: string) {
   return toNumber((value as Record<string, unknown>)[key] as number | string | null | undefined);
 }
 
-export function calculatePayrollAmount(quantitySqft: number, ratePerSqft: number, complexityMultiplier: number) {
-  return Number((Math.max(0, quantitySqft) * Math.max(0, ratePerSqft) * Math.max(1, complexityMultiplier)).toFixed(2));
+/** Owner pay rules (decided 2026-09-30) apply to work accrued from this date. */
+export const OWNER_PAY_RULES_FROM = new Date("2026-09-01T00:00:00Z");
+
+/**
+ * Installer pay = (film sq ft × rate + Smart zones × zone rate) × difficulty.
+ * The difficulty coefficient multiplies all installer labor on the deal.
+ */
+export function calculatePayrollAmount(
+  quantitySqft: number,
+  ratePerSqft: number,
+  complexityMultiplier: number,
+  zoneCount = 0,
+  zoneRate = 0,
+) {
+  const labor = Math.max(0, quantitySqft) * Math.max(0, ratePerSqft) + Math.max(0, zoneCount) * Math.max(0, zoneRate);
+  return Number((labor * Math.max(1, complexityMultiplier)).toFixed(2));
+}
+
+/**
+ * Installer pay per Smart zone: the employee's own connection rate (legacy
+ * card payConfig.ratesByWorkType.connect) if set, else the rate directory
+ * (ZONE_CONNECTION) — the same order the CRM uses for profitability.
+ */
+async function installerZoneRate(tx: Prisma.TransactionClient, installerId: string) {
+  const [user, workspace, service] = await Promise.all([
+    tx.user.findUnique({ where: { user_id: installerId }, select: { legacy_user_ids: true } }),
+    tx.legacyWorkspace.findUnique({ where: { workspace_id: "primary" }, select: { payload: true } }),
+    tx.serviceType.findUnique({ where: { service_code: "ZONE_CONNECTION" }, select: { installation_cost_per_sqft: true } }),
+  ]);
+  const cards = ((workspace?.payload as { users?: unknown } | null)?.users ?? []) as Array<Record<string, unknown>>;
+  const ownCards = Array.isArray(cards)
+    ? cards.filter((candidate) => (user?.legacy_user_ids ?? []).includes(String(candidate?.id ?? "")))
+    : [];
+  // Multi-role employees: the connection rate lives on the installer card.
+  const card = ownCards.find((candidate) => candidate?.role === "installer") ?? ownCards[0];
+  const own = Number(
+    ((card?.payConfig as { ratesByWorkType?: Record<string, unknown> } | undefined)?.ratesByWorkType ?? {}).connect,
+  );
+  return own > 0 ? own : toNumber(service?.installation_cost_per_sqft);
 }
 
 export async function recordInstallerPayrollAccrual(
@@ -47,8 +84,22 @@ export async function recordInstallerPayrollAccrual(
   const ratePerSqft =
     jsonNumber(job.position.dynamic_fields, "manual_installation_cost_per_sqft") ||
     toNumber(job.position.service_type.installation_cost_per_sqft);
-  const multiplier = toNumber(job.position.complexity_level?.multiplier) || 1;
-  const amount = calculatePayrollAmount(quantitySqft, ratePerSqft, multiplier);
+  // Positions installed before 2026-09-01 carry a snapshot (migration 20260930120000):
+  // their own coefficient and no automatic zone pay, even if closed later.
+  const multiplier =
+    jsonNumber(job.position.dynamic_fields, "complexity_multiplier") ||
+    toNumber(job.position.complexity_level?.multiplier) ||
+    1;
+  const legacyPosition =
+    (job.position.dynamic_fields as Record<string, unknown> | null)?.owner_pay_rules === false;
+  // Smart zone connections pay the ZONE_CONNECTION installer rate (rate directory).
+  const ownerRules = accruedAt >= OWNER_PAY_RULES_FROM && !legacyPosition;
+  const zoneCount =
+    ownerRules && job.position.service_type.service_code === "SMART_FILM"
+      ? jsonNumber(job.position.dynamic_fields, "zones_qty")
+      : 0;
+  const zoneRate = zoneCount ? await installerZoneRate(tx, job.installer_id) : 0;
+  const amount = calculatePayrollAmount(quantitySqft, ratePerSqft, multiplier, zoneCount, zoneRate);
 
   return tx.installerPayrollAccrual.upsert({
     where: { installer_job_id: installerJobId },

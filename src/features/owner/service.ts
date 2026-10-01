@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { calculatePositionFinance, listProjectsForSession } from "@/features/projects/service";
+import { calculatePositionFinance, getZoneInstallerRateResolver, listProjectsForSession } from "@/features/projects/service";
 import { calculateProratedCompanyOverhead, readCompanyOverheadConfig } from "@/lib/finance/company-overhead";
 import { getBusinessPlanningSnapshot } from "@/lib/finance/business-planning";
 
@@ -234,6 +234,7 @@ async function getServicePnlRows(input?: {
     ]),
   );
 
+  const zoneRateFor = await getZoneInstallerRateResolver(filteredPositions.map((position) => position.position_id));
   for (const position of filteredPositions) {
     const bucket = bucketMap.get(position.service_type.service_type_id);
 
@@ -251,7 +252,7 @@ async function getServicePnlRows(input?: {
       activityDateMax = activityDate;
     }
 
-    const finance = calculatePositionFinance(position);
+    const finance = calculatePositionFinance(position, { zoneInstallerRate: zoneRateFor(position.position_id) });
     const variableExpensesTotal =
       finance.material_cost_total +
       finance.installation_cost_total +

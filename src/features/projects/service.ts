@@ -447,6 +447,84 @@ async function upsertInstallerJobs(
   return savedJobs;
 }
 
+/** Installer pay per Smart zone connection (rate directory, ZONE_CONNECTION). */
+export async function getZoneInstallerRate() {
+  const service = await prisma.serviceType.findUnique({
+    where: { service_code: "ZONE_CONNECTION" },
+    select: { installation_cost_per_sqft: true },
+  });
+  return toNumber(service?.installation_cost_per_sqft);
+}
+
+/**
+ * Zone pay per position, as the payroll accrual computes it: each assigned
+ * installer's own connection rate (legacy card payConfig.ratesByWorkType.connect)
+ * or the directory rate. Several installers on one position → their average.
+ */
+export async function getZoneInstallerRateResolver(positionIds: string[]) {
+  const defaultRate = await getZoneInstallerRate();
+  const ids = [...new Set(positionIds)];
+  if (!ids.length) return () => defaultRate;
+  const jobs = await prisma.installerJob.findMany({
+    where: { project_position_id: { in: ids } },
+    select: { installer_job_id: true, project_position_id: true, installer_id: true },
+  });
+  if (!jobs.length) return () => defaultRate;
+  // Completed jobs keep the zone rate they were accrued at: derive it from the
+  // immutable accrual, amount = (sq ft × rate + zones × zone rate) × multiplier.
+  const [accruals, positions] = await Promise.all([
+    prisma.installerPayrollAccrual.findMany({
+      where: { installer_job_id: { in: jobs.map((job) => job.installer_job_id) } },
+      select: { installer_job_id: true, amount: true, quantity_sqft: true, rate_per_sqft: true, complexity_multiplier: true },
+    }),
+    prisma.projectPosition.findMany({ where: { position_id: { in: ids } }, select: { position_id: true, dynamic_fields: true } }),
+  ]);
+  const zonesByPosition = new Map(positions.map((position) => [position.position_id, asNumber(asJsonRecord(position.dynamic_fields).zones_qty)]));
+  const accruedZoneRate = new Map<string, number>();
+  for (const accrual of accruals) {
+    const job = jobs.find((candidate) => candidate.installer_job_id === accrual.installer_job_id);
+    const zones = job?.project_position_id ? zonesByPosition.get(job.project_position_id) ?? 0 : 0;
+    const multiplier = toNumber(accrual.complexity_multiplier) || 1;
+    const zonePart = toNumber(accrual.amount) / multiplier - toNumber(accrual.quantity_sqft) * toNumber(accrual.rate_per_sqft);
+    accruedZoneRate.set(accrual.installer_job_id, zones > 0 ? Math.max(0, zonePart / zones) : 0);
+  }
+  const [users, workspace] = await Promise.all([
+    prisma.user.findMany({
+      where: { user_id: { in: [...new Set(jobs.map((job) => job.installer_id))] } },
+      select: { user_id: true, legacy_user_ids: true },
+    }),
+    prisma.legacyWorkspace.findUnique({ where: { workspace_id: "primary" }, select: { payload: true } }),
+  ]);
+  const rawCards = (workspace?.payload as { users?: unknown } | null)?.users;
+  const cards = (Array.isArray(rawCards) ? rawCards : []) as Array<Record<string, unknown>>;
+  const rateByInstaller = new Map(
+    users.map((user) => {
+      const ownCards = cards.filter((candidate) => user.legacy_user_ids.includes(String(candidate?.id ?? "")));
+      // Multi-role employees: the connection rate lives on the installer card.
+      const card = ownCards.find((candidate) => candidate?.role === "installer") ?? ownCards[0];
+      const own = Number(
+        ((card?.payConfig as { ratesByWorkType?: Record<string, unknown> } | undefined)?.ratesByWorkType ?? {}).connect,
+      );
+      return [user.user_id, own > 0 ? own : defaultRate] as const;
+    }),
+  );
+  const ratesByPosition = new Map<string, number[]>();
+  for (const job of jobs) {
+    if (!job.project_position_id) continue;
+    const list = ratesByPosition.get(job.project_position_id) ?? [];
+    list.push(
+      accruedZoneRate.has(job.installer_job_id)
+        ? accruedZoneRate.get(job.installer_job_id)!
+        : rateByInstaller.get(job.installer_id) ?? defaultRate,
+    );
+    ratesByPosition.set(job.project_position_id, list);
+  }
+  return (positionId: string) => {
+    const rates = ratesByPosition.get(positionId);
+    return rates?.length ? rates.reduce((sum, rate) => sum + rate, 0) / rates.length : defaultRate;
+  };
+}
+
 export function calculatePositionFinance(
   position: {
     actual_price: Prisma.Decimal;
@@ -478,6 +556,8 @@ export function calculatePositionFinance(
       };
     }>;
   },
+  // Installer pay per Smart zone (ZONE_CONNECTION rate from the rate directory).
+  options: { zoneInstallerRate?: number } = {},
 ) {
   const dynamic = asJsonRecord(position.dynamic_fields);
   const isFilmService = FILM_SERVICE_CODES.has(position.service_type.service_code);
@@ -485,7 +565,10 @@ export function calculatePositionFinance(
   const actualFilmSqft = asNumber(dynamic.actual_film_sqft) || billableSqft;
   const blocksQty = asNumber(dynamic.blocks_qty);
   const extraCosts = asNumber(dynamic.extra_costs);
-  const complexityMultiplier = isFilmService ? toNumber(position.complexity_level?.multiplier) || 1 : 1;
+  // Positions installed before the 2026-09-01 directory keep the coefficient they were priced with.
+  const complexityMultiplier = isFilmService
+    ? asNumber(dynamic.complexity_multiplier) || toNumber(position.complexity_level?.multiplier) || 1
+    : 1;
   const serviceUnitPrice = toNumber(position.actual_price);
   const minPrice = toNumber(position.min_price);
   const installationCostPerSqft =
@@ -493,8 +576,9 @@ export function calculatePositionFinance(
   const blockUnitPrice =
     asNumber(dynamic.block_unit_price) || toNumber(position.service_type.block_revenue_price);
 
-  const filmRevenue = billableSqft * serviceUnitPrice * (isFilmService ? complexityMultiplier : 1);
-  const blockRevenue = blocksQty * blockUnitPrice;
+  // Difficulty multiplies the whole client price of the position (owner rule 2026-09-30).
+  const filmRevenue = billableSqft * serviceUnitPrice * complexityMultiplier;
+  const blockRevenue = blocksQty * blockUnitPrice * complexityMultiplier;
 
   const addonRows = position.position_addons.map((addon) => {
     const quantity = toNumber(addon.quantity);
@@ -515,11 +599,18 @@ export function calculatePositionFinance(
     };
   });
 
-  const addonsRevenue = addonRows.reduce((sum, addon) => sum + addon.total_price, 0);
+  const addonsRevenue = addonRows.reduce((sum, addon) => sum + addon.total_price, 0) * complexityMultiplier;
   const addonCostTotal = addonRows.reduce((sum, addon) => sum + addon.estimated_cost, 0);
   const materialCostTotal = actualFilmSqft * toNumber(position.service_type.material_cost_per_sqft);
+  // Smart zone connections are installer labor too, multiplied like the film.
+  // Automatic zone labor applies from 2026-09-01 (positions installed earlier are flagged by the migration).
+  const zoneCount =
+    position.service_type.service_code === "SMART_FILM" && dynamic.owner_pay_rules !== false
+      ? asNumber(dynamic.zones_qty)
+      : 0;
+  const zoneLabor = zoneCount * Math.max(0, options.zoneInstallerRate ?? 0);
   const installationCostTotal =
-    actualFilmSqft * installationCostPerSqft * (isFilmService ? complexityMultiplier : 1);
+    (actualFilmSqft * installationCostPerSqft + zoneLabor) * complexityMultiplier;
   const blockCostTotal = blocksQty * toNumber(position.service_type.block_cost_price);
   const estimatedCost = materialCostTotal + installationCostTotal + blockCostTotal + addonCostTotal + extraCosts;
   const revenueSubtotal = filmRevenue + blockRevenue + addonsRevenue;
@@ -2136,9 +2227,14 @@ async function fetchProjectsForSession(session: ProjectSession) {
 
 export async function listProjectsForSession(session: ProjectSession) {
   const projects = await fetchProjectsForSession(session);
+  const zoneRateFor = await getZoneInstallerRateResolver(
+    projects.flatMap((project) => project.project_positions.map((position) => position.position_id)),
+  );
 
   return projects.map((project) => {
-    const financeLines = project.project_positions.map(calculatePositionFinance);
+    const financeLines = project.project_positions.map((position) =>
+      calculatePositionFinance(position, { zoneInstallerRate: zoneRateFor(position.position_id) }),
+    );
     const revenueTotal = Number(financeLines.reduce((sum, line) => sum + line.revenue_subtotal, 0).toFixed(2));
     const estimatedCostTotal = Number(financeLines.reduce((sum, line) => sum + line.estimated_cost, 0).toFixed(2));
     const estimatedProfitTotal = Number(
@@ -2468,8 +2564,9 @@ export async function getProjectCardByIdForSession(session: ProjectSession, proj
     }),
   ]);
 
+  const zoneRateFor = await getZoneInstallerRateResolver(project.project_positions.map((position) => position.position_id));
   const positionCards = project.project_positions.map((position) => {
-    const finance = calculatePositionFinance(position);
+    const finance = calculatePositionFinance(position, { zoneInstallerRate: zoneRateFor(position.position_id) });
     const dynamic = asJsonRecord(position.dynamic_fields);
 
     return {

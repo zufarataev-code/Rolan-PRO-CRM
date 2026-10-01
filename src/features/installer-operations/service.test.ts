@@ -13,3 +13,9 @@ test("installer payroll never creates a negative accrual", () => {
   assert.equal(calculatePayrollAmount(-10, 5, 2), 0);
   assert.equal(calculatePayrollAmount(10, -5, 2), 0);
 });
+
+test("Smart zone connections are paid and multiplied by difficulty with the film", () => {
+  // 100 sq ft × $5 + 3 zones × $50 = $650, on a tower ×1.5 = $975.
+  assert.equal(calculatePayrollAmount(100, 5, 1.5, 3, 50), 975);
+  assert.equal(calculatePayrollAmount(100, 5, 1, 0, 50), 500);
+});

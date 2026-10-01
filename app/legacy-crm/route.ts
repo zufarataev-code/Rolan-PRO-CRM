@@ -418,8 +418,59 @@ export async function GET(request: NextRequest) {
     </script>
   `;
 
+  // Rate directory → legacy CRM. Installer rates per service, the Smart zone
+  // rate and difficulty coefficients come from PostgreSQL (edited in
+  // «Сотрудники → Расценки»), so price, payroll and profitability all use them.
+  const rateDirectorySync = `
+    <script id="rolanpro-rate-directory-sync">
+      (() => {
+        const LEVEL_TO_LEGACY = { LOW: 'standard', STANDARD: 'ladder', HIGH: 'tower', EXPERT: 'alpinism' };
+        async function syncRateDirectory() {
+          if (typeof db === 'undefined' || !db?.settings || typeof cloudReady === 'undefined' || !cloudReady) return false;
+          const [pricing, complexity] = await Promise.all([
+            fetch('/api/v1/settings/pricing', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch('/api/v1/settings/complexity', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null),
+          ]);
+          let changed = false;
+          const services = pricing?.data?.can_view_costs ? (pricing.data.services || []) : [];
+          services.forEach(service => {
+            if (service.service_code === 'ZONE_CONNECTION') {
+              const zoneRate = Math.max(0, Number(service.installation_cost_per_sqft) || 0);
+              db.settings.installerRates.workTypes = db.settings.installerRates.workTypes || {};
+              if (db.settings.installerRates.smartZone !== zoneRate || db.settings.installerRates.workTypes.connect !== zoneRate) {
+                db.settings.installerRates.smartZone = zoneRate;
+                db.settings.installerRates.workTypes.connect = zoneRate;
+                changed = true;
+              }
+            } else if (typeof syncLegacyInstallerServiceRate === 'function') {
+              changed = syncLegacyInstallerServiceRate(service.service_code, service.installation_cost_per_sqft) || changed;
+            }
+          });
+          (complexity?.data?.levels || []).forEach(level => {
+            const key = LEVEL_TO_LEGACY[level.level_code];
+            const value = Number(level.multiplier);
+            if (!key || !(value >= 1)) return;
+            db.settings.complexityCoefs = db.settings.complexityCoefs || {};
+            if (Math.abs((Number(db.settings.complexityCoefs[key]) || 0) - value) > 0.0001) {
+              db.settings.complexityCoefs[key] = value;
+              changed = true;
+            }
+          });
+          if (changed && typeof save === 'function') { save(); if (typeof render === 'function') render(); }
+          return true;
+        }
+        let attempts = 0;
+        const boot = async () => {
+          if (await syncRateDirectory()) return;
+          if (attempts++ < 60) window.setTimeout(boot, 500);
+        };
+        window.setTimeout(boot, 0);
+      })();
+    </script>
+  `;
+
   const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
-  const privilegedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
+  const privilegedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}${session.preview ? "" : rateDirectorySync}` : "";
   const injectedUi = `${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}${previewPatch}`;
   const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0

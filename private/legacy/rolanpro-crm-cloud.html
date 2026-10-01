@@ -8346,6 +8346,24 @@ function migrateSchema() {
   s.installerRates.workTypes = s.installerRates.workTypes || {
     washing: 0, removal: 0, silicone: 0, electric: 0, connect: 0, warranty: 0, custom: 0,
   };
+  // ---- OWNER RATE DIRECTORY (decided 2026-09-30, pay rules from 2026-09-01) ----
+  // Difficulty multiplies the whole deal: client price AND installer pay.
+  // Installer pay per sq ft by direction, plus $50 per Smart zone connection.
+  if (!db._ownerRateDirectory20260901) {
+    // Orders before 2026-09-01 keep the coefficients and rates they were
+    // priced and paid with (see ratesForOrder); only newer work uses the directory.
+    s.ratesBefore20260901 = JSON.parse(JSON.stringify({
+      complexityCoefs: s.complexityCoefs || {},
+      installerServiceTypes: s.installerRates?.serviceTypes || {},
+      installerDefaults: s.installerRates?._defaults || {},
+      installerWorkTypes: s.installerRates?.workTypes || {},
+    }));
+    s.complexityCoefs = { standard: 1.0, ladder: 1.2, tower: 1.5, alpinism: 2.0 };
+    s.installerRates._defaults = { ...(s.installerRates._defaults || {}), smart: 5, protective: 3, solar: 2.5, decorative: 2.5 };
+    s.installerRates.serviceTypes = { ...(s.installerRates.serviceTypes || {}), SMART_FILM: 5, SAFETY_FILM: 3, SOLAR_FILM: 2.5, DECORATIVE_FILM: 2.5 };
+    s.installerRates.serviceTypes.ZONE_CONNECTION = 50;
+    db._ownerRateDirectory20260901 = true;
+  }
   if (!s.projectProfitTax) {
     s.projectProfitTax = {
       entityType: 'C_CORP',
@@ -15016,11 +15034,12 @@ function filmDefaultRate(filmTypeName) {
 function installerServiceCodeByCategory(category) {
   return ({ solar: 'SOLAR_FILM', smart: 'SMART_FILM', protective: 'SAFETY_FILM', decorative: 'DECORATIVE_FILM' })[category] || '';
 }
-function installerServiceRateByCategory(category) {
+function installerServiceRateByCategory(category, o = null) {
+  const rates = ratesForOrder(o);
   const serviceCode = installerServiceCodeByCategory(category);
-  const serviceRate = Number(db.settings.installerRates?.serviceTypes?.[serviceCode]);
+  const serviceRate = Number(rates.installerServiceTypes?.[serviceCode]);
   if (serviceRate > 0) return serviceRate;
-  return Number(db.settings.installerRates?._defaults?.[category]) || Number(db.settings.installerRates?._defaults?.other) || 2.5;
+  return Number(rates.installerDefaults?.[category]) || Number(rates.installerDefaults?.other) || 2.5;
 }
 function syncLegacyInstallerServiceRate(serviceCode, rate) {
   const normalizedRate = Math.max(0, Number(rate) || 0);
@@ -15181,7 +15200,19 @@ function windowCatalog(w) {
   }
   return null;
 }
-function windowRetailPrice(w, complexity, orderOverridePerSqft) {
+// Coefficients and installer rates that apply to an order: the rate directory
+// for work from 2026-09-01, the values frozen at the switch for older orders.
+function ratesForOrder(o) {
+  const before = db.settings.ratesBefore20260901;
+  const useOld = o && before && typeof orderUsesOwnerPayRules === 'function' && !orderUsesOwnerPayRules(o);
+  return {
+    complexityCoefs: useOld ? before.complexityCoefs : (db.settings.complexityCoefs || {}),
+    installerServiceTypes: useOld ? before.installerServiceTypes : (db.settings.installerRates?.serviceTypes || {}),
+    installerDefaults: useOld ? before.installerDefaults : (db.settings.installerRates?._defaults || {}),
+    installerWorkTypes: useOld ? before.installerWorkTypes : (db.settings.installerRates?.workTypes || {}),
+  };
+}
+function windowRetailPrice(w, complexity, orderOverridePerSqft, order = null) {
   const c = windowCatalog(w);
   // Priority: per-window override → order-level override → catalog price → default 10
   let perSqft;
@@ -15189,7 +15220,7 @@ function windowRetailPrice(w, complexity, orderOverridePerSqft) {
   else if (orderOverridePerSqft != null && orderOverridePerSqft !== '') perSqft = parseFloat(orderOverridePerSqft);
   else if (c) perSqft = c.retailPerSqft;
   else perSqft = 10;
-  const coef = (db.settings.complexityCoefs?.[complexity] ?? 1.0);
+  const coef = (ratesForOrder(order).complexityCoefs?.[complexity] ?? 1.0);
   return windowActualAreaSqft(w) * perSqft * coef;
 }
 function windowFilmCost(w) {
@@ -15205,7 +15236,7 @@ function windowInstallerPayout(w) {
   const filmName = c ? `${c.brand} ${c.model}` : (w.filmType || '');
   return windowActualAreaSqft(w) * filmRate(filmName);
 }
-function installerRateForWindow(user, w) {
+function installerRateForWindow(user, w, o = null) {
   const pc = user?.payConfig || {};
   const catalog = windowCatalog(w);
   const category = catalog?.category || filmCategory(w?.filmType || '');
@@ -15213,9 +15244,9 @@ function installerRateForWindow(user, w) {
   if (categoryRate > 0) return categoryRate;
   const baseRate = Number(pc.ratePerSqft);
   if (baseRate > 0) return baseRate;
-  return installerServiceRateByCategory(category);
+  return installerServiceRateByCategory(category, o);
 }
-function installerRateForQuickLine(user, line) {
+function installerRateForQuickLine(user, line, o = null) {
   const pc = user?.payConfig || {};
   const catalog = getCatalogItem(line?.catalogId);
   const category = catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other';
@@ -15224,26 +15255,66 @@ function installerRateForQuickLine(user, line) {
   const baseRate = Number(pc.ratePerSqft);
   if (baseRate > 0) return baseRate;
   const serviceCode = canonicalServiceCodeForOrderService(line?.serviceType);
-  const serviceRate = Number(db.settings.installerRates?.serviceTypes?.[serviceCode]);
-  return serviceRate > 0 ? serviceRate : installerServiceRateByCategory(category);
+  const serviceRate = Number(ratesForOrder(o).installerServiceTypes?.[serviceCode]);
+  return serviceRate > 0 ? serviceRate : installerServiceRateByCategory(category, o);
 }
 function orderQuickInstallerPayoutForUser(o, user) {
   return projectQuickLines(o)
     .filter(line => line.unit === 'sqft' && (line.installerIds || []).includes(user?.id))
     .reduce((sum, line) => {
       const installerCount = Math.max(1, new Set(line.installerIds || []).size);
-      return sum + (Number(line.qty) || 0) * installerRateForQuickLine(user, line) / installerCount;
+      return sum + (Number(line.qty) || 0) * installerRateForQuickLine(user, line, o) / installerCount;
     }, 0);
 }
-function installerAdditionalWorkRate(user, type) {
+function installerAdditionalWorkRate(user, type, o = null) {
+  // From 2026-09-01 a manual zone row pays the same zone rate as automatic zones.
+  if (type === 'connect' && o && orderUsesOwnerPayRules(o)) return smartZoneRate(user);
   const employeeRate = Number(user?.payConfig?.ratesByWorkType?.[type]);
   if (employeeRate > 0) return employeeRate;
-  return Math.max(0, Number(db.settings.installerRates?.workTypes?.[type]) || 0);
+  return Math.max(0, Number(ratesForOrder(o).installerWorkTypes?.[type]) || 0);
 }
 function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
   return (o?.extraServices || []).filter(line => !line.quickProjectLine).reduce((sum, line) => {
-    return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type) / installerCount;
+    return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type, o) / installerCount;
   }, 0);
+}
+// Pay rules decided by the owner on 2026-09-30, applied to installations from
+// 2026-09-01: the deal's difficulty coefficient multiplies installer pay, and
+// every Smart zone connection pays the Smart zone rate. Earlier installations
+// keep the rules they were paid under.
+const OWNER_PAY_RULES_FROM = '2026-09-01';
+function orderUsesOwnerPayRules(o) {
+  const date = String(o?.installationDoneAt || o?.installationAt || o?.createdAt || '');
+  return !date || date.slice(0, 10) >= OWNER_PAY_RULES_FROM;
+}
+function orderPayComplexityCoef(o) {
+  if (!orderUsesOwnerPayRules(o)) return 1;
+  return Number(db.settings.complexityCoefs?.[o?.complexity || 'standard']) || 1;
+}
+function orderSmartZoneCount(o) {
+  return measureAllWindows(o)
+    .filter(({ win }) => (win.measureScope || orderMeasureScope(o)) === 'smart_film')
+    .reduce((sum, { win }) => {
+      const zones = (win.smart?.zones || []).length;
+      // Older imports have a smart block with a window quantity but no zone list.
+      return sum + (zones || (win.smart ? Math.max(1, parseInt(win.qty) || 1) : 0));
+    }, 0);
+}
+// One zone rate for automatic zones and manual «Подключение зоны» rows:
+// the employee's own connection rate, else the rate directory
+// (ZONE_CONNECTION, synced from «Расценки»).
+function smartZoneRate(user) {
+  const employeeRate = Number(user?.payConfig?.ratesByWorkType?.connect);
+  if (employeeRate > 0) return employeeRate;
+  return Math.max(0, Number(db.settings.installerRates?.serviceTypes?.ZONE_CONNECTION) || 0);
+}
+function orderSmartZonePayout(o, user, installerCount = 1) {
+  if (!orderUsesOwnerPayRules(o)) return 0;
+  // A manual "connect" work line already pays connections; never pay twice.
+  if ((o?.extraServices || []).some(line => line.type === 'connect' && !line.quickProjectLine)) return 0;
+  const zones = orderSmartZoneCount(o);
+  if (!zones) return 0;
+  return zones * smartZoneRate(user) / Math.max(1, installerCount);
 }
 function orderInstallerPayoutForUser(o, userId) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
@@ -15254,9 +15325,12 @@ function orderInstallerPayoutForUser(o, userId) {
   if (pc.type === 'commission') return orderRevenue(o) * Math.max(0, Number(pc.commissionPct) || 0) / 100 / installerIds.length;
   if (pc.type !== 'per_sqft') return 0;
   const filmPayout = !measureAllWindows(o).length ? orderQuickInstallerPayoutForUser(o, user) : measureAllWindows(o).reduce((sum, { win }) => {
-    return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / installerIds.length;
+    return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win, o) / installerIds.length;
   }, 0);
-  return filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length);
+  // The deal difficulty multiplies all installer labor: film, zones, add-ons.
+  return (filmPayout
+    + orderSmartZonePayout(o, user, installerIds.length)
+    + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * orderPayComplexityCoef(o);
 }
 function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
@@ -15270,7 +15344,11 @@ function orderInstallerPayoutBreakdown(o) {
           return sum + (Number(line.qty) || 0) * filmRate(filmName);
         }, 0);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
-    return { total: total + work, byInstaller: [], source: 'REFERENCE_DEFAULT' };
+    return {
+      total: (total + orderSmartZonePayout(o, null, 1) + work) * orderPayComplexityCoef(o),
+      byInstaller: [],
+      source: 'REFERENCE_DEFAULT',
+    };
   }
   const byInstaller = installerIds.map(userId => {
     const user = getUser(userId);
@@ -15284,14 +15362,17 @@ function orderFilmRevenue(o) {
   const cx = o.complexity || 'standard';
   const ov = o.priceOverridePerSqft;
   let s = 0;
-  (o.measurements?.rooms || []).forEach(r => (r.windows || []).forEach(w => { s += windowRetailPrice(w, cx, ov); }));
+  (o.measurements?.rooms || []).forEach(r => (r.windows || []).forEach(w => { s += windowRetailPrice(w, cx, ov, o); }));
   return s;
 }
 function orderExtraServicesRevenue(o) {
   const measuredProject = measureAllWindows(o).length > 0;
-  return (o.extraServices || [])
+  const base = (o.extraServices || [])
     .filter(line => !line.quickProjectLine || !measuredProject)
     .reduce((s, x) => s + (Number(x.price) || 0), 0);
+  // Owner rule: the difficulty coefficient multiplies the whole deal, add-ons
+  // included (film lines already carry it per window). Same date rule as pay.
+  return base * orderPayComplexityCoef(o);
 }
 function orderExtraServicesCost(o) {
   // Ordinary service rows contain the customer price only. Their labor cost is
@@ -18195,7 +18276,7 @@ function renderOwnerPanel() {
       const cat = windowCatalog(w);
       const key = cat?.category || 'other';
       if (!byCategory[key]) byCategory[key] = { revenue: 0, cost: 0, sqft: 0 };
-      const px = windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft);
+      const px = windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft, o);
       byCategory[key].revenue += px;
       byCategory[key].cost += windowFilmCost(w) + windowInstallerPayout(w);
       byCategory[key].sqft += windowActualAreaSqft(w);
@@ -21001,11 +21082,12 @@ function renderSettings() {
 
     <div ${settingsPanelAttrs('complexity')}>
       <h3 class="font-semibold mb-3">${T('complexity')} — ${T('coefficient')}</h3>
+      <p class="text-sm text-gray-500 mb-3">Коэффициенты задаются в едином справочнике: «Сотрудники → Расценки». Здесь — только просмотр.</p>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         ${['standard','ladder','tower','alpinism'].map(k => `
           <div>
             <label>${T('complexity'+k.charAt(0).toUpperCase()+k.slice(1))}</label>
-            <input type="number" step="0.05" value="${s.complexityCoefs[k]}" onchange="db.settings.complexityCoefs['${k}']=parseFloat(this.value)||1; save();">
+            <input type="number" step="0.05" value="${s.complexityCoefs[k]}" disabled title="Меняется в «Сотрудники → Расценки»">
           </div>
         `).join('')}
       </div>
@@ -23045,7 +23127,7 @@ function renderProjectEstimateWorkspace(o) {
       <td data-label="Материал">${academyEsc(cat ? `${cat.brand} ${cat.model}` : 'Плёнка не выбрана')}</td>
       <td data-label="Площадь, sqft" class="money">${area.toFixed(2)}</td>
       <td data-label="Цена / sqft"><input aria-label="Цена за sqft" type="number" min="0" step="0.5" value="${Number(defaultPrice || 0)}" onchange="projectEstimateUpdateWindowPrice('${o.id}','${room.id}','${win.id}',this.value)"></td>
-      <td data-label="Клиенту" class="money"><b>${fmtMoney(windowRetailPrice(win, o.complexity || 'standard', o.priceOverridePerSqft))}</b></td>
+      <td data-label="Клиенту" class="money"><b>${fmtMoney(windowRetailPrice(win, o.complexity || 'standard', o.priceOverridePerSqft, o))}</b></td>
       ${canSeeInternalEconomics ? `<td data-label="Себестоимость" class="money">${fmtMoney(windowFilmCost(win))}</td>` : ''}
     </tr>`;
   })).join('');
@@ -23561,7 +23643,7 @@ function renderOrderDetails(id) {
 	                    const cat = windowCatalog(w);
 	                    const wScopeKey = w.measureScope || measureScopeByCatalog(cat) || orderMeasureScope(o);
 	                    const effPrice = w.pricePerSqft ?? o.priceOverridePerSqft ?? cat?.retailPerSqft ?? '';
-	                    const sum = windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft);
+	                    const sum = windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft, o);
                     return `
                     <tr>
                       <td class="p-1"><input value="${w.name}" ${(canMeasure||canManage)?'':'readonly'} onchange="updateWin('${o.id}','${r.id}','${w.id}','name',this.value)"></td>
@@ -29387,7 +29469,7 @@ function premiumWindowPrice(prop, order, window) {
   const area = windowActualAreaSqft(window);
   const coef = db.settings.complexityCoefs?.[order.complexity || 'standard'] ?? 1;
   const price = area * perSqft * coef;
-  const original = windowRetailPrice(window, order.complexity || 'standard', order.priceOverridePerSqft);
+  const original = windowRetailPrice(window, order.complexity || 'standard', order.priceOverridePerSqft, order);
   return { area, price, perSqft, catalog: selectedCat || baseCat, original, delta: price - original };
 }
 function premiumServiceAmount(service, calc) {
@@ -35339,7 +35421,7 @@ function buildProductPnL() {
       const cat = windowCatalog(w);
       const id = cat?.id || 'unknown';
       if (!products[id]) products[id] = { catalog: cat, revenue: 0, cogs: 0, sqft: 0, orders: new Set() };
-      products[id].revenue += windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft);
+      products[id].revenue += windowRetailPrice(w, o.complexity || 'standard', o.priceOverridePerSqft, o);
       products[id].cogs += windowFilmCost(w) + windowInstallerPayout(w);
       products[id].sqft += windowActualAreaSqft(w);
       products[id].orders.add(o.id);
