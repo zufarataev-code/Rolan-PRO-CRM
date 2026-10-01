@@ -1,3 +1,5 @@
+import { BEFORE_PAINT_SCRIPT } from "./before-paint";
+
 const SURVEYOR_TASK_ACTIONS_PATCH = `
 <style id="rolanpro-surveyor-task-actions-style">
   [data-rolanpro-surveyor-actions="1"] {
@@ -128,12 +130,13 @@ const SURVEYOR_TASK_ACTIONS_PATCH = `
         });
       });
     };
+${BEFORE_PAINT_SCRIPT}
 
     let queued = false;
     const queueEnhancement = () => {
       if (queued) return;
       queued = true;
-      window.requestAnimationFrame(() => {
+      beforePaint(() => {
         queued = false;
         enhanceSurveyorTaskActions();
       });

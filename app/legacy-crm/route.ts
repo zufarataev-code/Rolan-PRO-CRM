@@ -7,6 +7,7 @@ import { getRequestSession } from "@/lib/auth/server";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { getEnv } from "@/lib/env";
 import { replaceLegacyBootstrapLogin } from "@/features/legacy-crm/html-shell";
+import { BEFORE_PAINT_SCRIPT } from "@/features/legacy-crm/before-paint";
 
 export const dynamic = "force-dynamic";
 
@@ -438,7 +439,8 @@ export async function GET(request: NextRequest) {
           else nav.appendChild(item);
         }
 
-        const observer = new MutationObserver(() => window.requestAnimationFrame(ensureCalculatorNav));
+${BEFORE_PAINT_SCRIPT}
+        const observer = new MutationObserver(() => beforePaint(ensureCalculatorNav));
         observer.observe(document.documentElement, { childList: true, subtree: true });
         window.requestAnimationFrame(ensureCalculatorNav);
 
