@@ -17736,7 +17736,7 @@ function renderCanonicalInstallerWorkday() {
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="card"><h3 class="font-semibold mb-3">История смен</h3>${history.length ? history.map(item => `<div class="border-t py-3 first:border-t-0"><div class="font-semibold">${academyEsc(item.installer_job?.position?.title || item.installer_job?.project?.title || 'Общая смена')}</div><div class="text-sm text-gray-600">${fmtDateTime(item.started_at)} · ${installerWorkdayHours(item.work_minutes)} · ${Number(item.miles_driven || 0).toFixed(1)} miles</div>${item.notes ? `<div class="text-xs text-gray-500 mt-1">${academyEsc(item.notes)}</div>` : ''}</div>`).join('') : '<div class="text-sm text-gray-500">Завершённые смены появятся здесь.</div>'}</div>
-      <div class="card"><h3 class="font-semibold mb-1">Моя зарплата</h3><p class="text-xs text-gray-500 mb-3">Только ваши начисления. Цена клиента и маржа компании скрыты.</p>${payroll.length ? payroll.map(item => `<div class="border-t py-3 first:border-t-0 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.service_name)}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${Number(item.quantity_sqft || 0).toFixed(1)} sqft × ${installerWorkdayMoney(item.rate_per_sqft)} × ${Number(item.complexity_multiplier || 1)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('') : '<div class="text-sm text-gray-500">Начислений пока нет.</div>'}${leadPayroll.length ? `<h4 class="font-semibold mt-4 mb-1">10% с моей группы</h4>${leadPayroll.map(item => `<div class="border-t py-3 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.installer_name || '')}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · 10% от ${installerWorkdayMoney(item.installer_amount)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('')}` : ''}</div>
+      <div class="card"><h3 class="font-semibold mb-1">Моя зарплата</h3><p class="text-xs text-gray-500 mb-3">Только ваши начисления. Цена клиента и маржа компании скрыты.</p>${payroll.length ? payroll.map(item => `<div class="border-t py-3 first:border-t-0 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.service_name)}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${Number(item.quantity_sqft || 0).toFixed(1)} sqft × ${installerWorkdayMoney(item.rate_per_sqft)} × ${Number(item.complexity_multiplier || 1)}</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('') : '<div class="text-sm text-gray-500">Начислений пока нет.</div>'}${leadPayroll.length ? `<h4 class="font-semibold mt-4 mb-1">10% с моей группы</h4>${leadPayroll.map(item => `<div class="border-t py-3 flex justify-between gap-3"><div><div class="font-semibold">${academyEsc(item.installer_name || '')}</div><div class="text-xs text-gray-500">${academyEsc(item.project?.project_code || item.project?.title || 'Проект')} · ${academyEsc(item.service_name || '')} · 10%</div></div><div class="text-right"><div class="font-bold text-emerald-700">${installerWorkdayMoney(item.amount)}</div><div class="text-xs text-gray-500">${item.status === 'paid' ? 'Выплачено' : 'К выплате'}</div></div></div>`).join('')}` : ''}</div>
     </div>`;
 }
 
@@ -34101,7 +34101,19 @@ function renderPayroll() {
   `;
 }
 
+const payoutsInFlight = new Set();
 async function markPayoutPaid(userId, startISO, endISO) {
+  // One payout per employee and period at a time: a double click must not record it twice.
+  const flightKey = `${userId}|${startISO}|${endISO}`;
+  if (payoutsInFlight.has(flightKey)) return;
+  payoutsInFlight.add(flightKey);
+  try {
+    await markPayoutPaidOnce(userId, startISO, endISO);
+  } finally {
+    payoutsInFlight.delete(flightKey);
+  }
+}
+async function markPayoutPaidOnce(userId, startISO, endISO) {
   const u = getUser(userId);
   const start = new Date(startISO), end = new Date(endISO);
   const calc = calcUserPayoutForPeriod(userId, start, end);
@@ -34122,6 +34134,11 @@ async function markPayoutPaid(userId, startISO, endISO) {
   // 404: a card without a server account has no server accruals to mark.
   if (!res || (!res.ok && res.status !== 404)) {
     return alert('Сервер не записал выплату — ничего не изменено. Проверьте связь и нажмите «Выплачено» ещё раз.');
+  }
+  // Another tab may have recorded this period while we waited: never pay twice.
+  if (Math.max(0, calcUserPayoutForPeriod(userId, start, end).total - payrollPaidForPeriod(userId, start, end)) < amountDue - 0.009) {
+    render();
+    return alert('Эта выплата уже записана.');
   }
   const paymentBatchId = 'pay_' + uid();
   const paidAt = new Date().toISOString();

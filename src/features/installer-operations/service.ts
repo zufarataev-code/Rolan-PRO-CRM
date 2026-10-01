@@ -290,7 +290,6 @@ export async function getInstallerOperationsDashboard(session: InstallerSession)
       project: item.project,
       installer_name: item.installer.full_name,
       service_name: item.service_name,
-      installer_amount: toNumber(item.amount),
       amount: toNumber(item.lead_override_amount),
       status: item.lead_override_status,
       accrued_at: item.accrued_at,
