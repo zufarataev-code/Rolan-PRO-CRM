@@ -2,6 +2,14 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-09-30 — Client identity, correspondence, objects, and portal access are separate concerns
+
+- A client card represents one person or company. B2C stores first/last name; B2B additionally stores company, company type, representative, and job title.
+- Legal and mailing/correspondence addresses belong to the account. Project/service addresses belong to the client's reusable address book; one account may have multiple objects and one primary object.
+- A company is not automatically a permanent partner. Partnership remains an explicit relationship choice.
+- A client or partner cabinet is optional. Owner or Manager must create access deliberately; the link carries a high-entropy per-client token and can be reissued or revoked. A client ID alone never grants cabinet access.
+- Cabinet chronology is a read-only projection of the existing Project/order timeline. It is not a second history store and must never expose internal material cost, payroll, profit, margin, or company accounting.
+
 ## 2026-08-24 — One cross-device source of truth
 
 - GitHub repository `zufarataev-code/Rolan-PRO-CRM` is the shared project source.

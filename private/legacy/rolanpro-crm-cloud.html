@@ -7073,6 +7073,7 @@ let state = {
   currentUserId: null,
   clientPortalOrderId: null,   // when non-null we're in public client portal mode
   clientAccountPortalClientId: null, // public account cabinet for regular/B2B clients
+  clientAccountPortalToken: null, // explicit per-client access token; an id alone never grants access
   premiumProposalToken: null,   // public interactive proposal route
   view: 'dashboard',
   search: '',
@@ -14698,7 +14699,25 @@ function clientIdentityFieldsHtml(prefix, c = {}) {
       <div><label for="${prefix}-first-name"><span data-b2c ${b2b ? 'class="hidden"' : ''}>Имя *</span><span data-b2b ${b2b ? '' : 'class="hidden"'}>Имя представителя *</span></label><input id="${prefix}-first-name" value="${value(first)}" autocomplete="given-name"></div>
       <div><label for="${prefix}-last-name"><span data-b2c ${b2b ? 'class="hidden"' : ''}>Фамилия</span><span data-b2b ${b2b ? '' : 'class="hidden"'}>Фамилия представителя</span></label><input id="${prefix}-last-name" value="${value(last)}" autocomplete="family-name"></div>
     </div>
-    <div id="${prefix}-title-block" class="${b2b ? '' : 'hidden'}"><label for="${prefix}-title">Должность представителя *</label><input id="${prefix}-title" value="${value(c.contactTitle)}" placeholder="Office manager, owner, project manager…" autocomplete="organization-title"></div>`;
+    <div id="${prefix}-title-block" class="${b2b ? '' : 'hidden'}"><label for="${prefix}-title">Должность представителя *</label><input id="${prefix}-title" value="${value(c.contactTitle)}" placeholder="Office manager, owner, project manager…" autocomplete="organization-title"></div>
+    <div id="${prefix}-legal-address-block" class="${b2b ? '' : 'hidden'}">
+      <label for="${prefix}-legal-address">Юридический адрес компании</label>
+      <textarea id="${prefix}-legal-address" rows="2" placeholder="Адрес регистрации компании для договоров и официальных документов" autocomplete="street-address">${value(c.legalAddress || c.legal_address)}</textarea>
+    </div>
+    <div>
+      <label for="${prefix}-mailing-address">Почтовый адрес для писем и документов</label>
+      <textarea id="${prefix}-mailing-address" rows="2" placeholder="Куда отправлять письма, чеки и оригиналы документов" autocomplete="street-address">${value(c.mailingAddress || c.mailing_address || c.billing_address)}</textarea>
+      <div class="text-xs text-gray-500 mt-1">Это адрес корреспонденции. Адреса объектов хранятся отдельно и их может быть несколько.</div>
+    </div>`;
+}
+
+function readClientCorrespondenceFields(prefix) {
+  const read = id => String(document.getElementById(`${prefix}-${id}`)?.value || '').trim();
+  const accountType = read('kind') === 'b2b' ? 'b2b' : 'b2c';
+  return {
+    legalAddress: accountType === 'b2b' ? read('legal-address') : '',
+    mailingAddress: read('mailing-address'),
+  };
 }
 /** Identity fields from a website/backend lead (snake_case or camelCase). */
 function clientIdentityFromLead(l = {}) {
@@ -14749,6 +14768,7 @@ function toggleClientIdentityFields(prefix) {
   const b2b = document.getElementById(`${prefix}-kind`)?.value === 'b2b';
   document.getElementById(`${prefix}-company-block`)?.classList.toggle('hidden', !b2b);
   document.getElementById(`${prefix}-title-block`)?.classList.toggle('hidden', !b2b);
+  document.getElementById(`${prefix}-legal-address-block`)?.classList.toggle('hidden', !b2b);
   document.querySelectorAll(`label[for="${prefix}-first-name"] [data-b2c], label[for="${prefix}-last-name"] [data-b2c]`).forEach(el => el.classList.toggle('hidden', b2b));
   document.querySelectorAll(`label[for="${prefix}-first-name"] [data-b2b], label[for="${prefix}-last-name"] [data-b2b]`).forEach(el => el.classList.toggle('hidden', !b2b));
 }
@@ -16768,11 +16788,53 @@ function renderClientPortalScheduleControl(o, c) {
   </div>`;
 }
 
+function newClientPortalToken() {
+  const bytes = new Uint8Array(24);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+  }
+  return `${uid()}${uid()}${uid()}`.replace(/[^a-z0-9]/gi, '');
+}
+function clientPortalAccess(c) {
+  const access = c?.portalAccess;
+  return access?.enabled && access?.token && !access?.revokedAt ? access : null;
+}
 function clientAccountPortalUrl(clientId) {
+  const c = getClient(clientId);
+  const access = clientPortalAccess(c);
+  if (!access) return '';
   const publicUrl = db.settings?.publicBaseUrl?.trim();
-  if (publicUrl) return publicUrl.replace(/\/+$/, '') + '#/account/' + clientId;
+  const path = '#/account/' + encodeURIComponent(clientId) + '/' + encodeURIComponent(access.token);
+  if (publicUrl) return publicUrl.replace(/\/+$/, '') + path;
   const base = location.href.split('#')[0];
-  return `${base}#/account/${clientId}`;
+  return `${base}${path}`;
+}
+function issueClientPortalAccess(clientId, rotate = false) {
+  const c = getClient(clientId);
+  const viewer = currentUser();
+  if (!c || !['owner','manager'].includes(viewer?.role)) return '';
+  const previous = clientPortalAccess(c);
+  c.portalAccess = {
+    enabled: true,
+    token: !rotate && previous?.token ? previous.token : newClientPortalToken(),
+    grantedAt: !rotate && previous?.grantedAt ? previous.grantedAt : new Date().toISOString(),
+    grantedBy: state.currentUserId,
+    revokedAt: null,
+  };
+  c.updatedAt = new Date().toISOString();
+  save();
+  return clientAccountPortalUrl(clientId);
+}
+function revokeClientPortalAccess(clientId) {
+  const c = getClient(clientId);
+  const viewer = currentUser();
+  if (!c || !['owner','manager'].includes(viewer?.role)) return;
+  c.portalAccess = { ...(c.portalAccess || {}), enabled: false, revokedAt: new Date().toISOString(), revokedBy: state.currentUserId };
+  c.updatedAt = new Date().toISOString();
+  save();
+  closeModal();
+  render();
 }
 
 function premiumProposalUrl(proposalOrToken) {
@@ -16793,9 +16855,14 @@ function parseHash() {
   const m = h.match(/^#\/(client)\/([^/]+)/);
   if (m) { state.clientPortalOrderId = m[2]; }
   else { state.clientPortalOrderId = null; }
-  const a = h.match(/^#\/account\/([^/]+)/);
-  if (a) { state.clientAccountPortalClientId = a[1]; }
-  else { state.clientAccountPortalClientId = null; }
+  const a = h.match(/^#\/account\/([^/]+)\/([^/?]+)/);
+  if (a) {
+    state.clientAccountPortalClientId = decodeURIComponent(a[1]);
+    state.clientAccountPortalToken = decodeURIComponent(a[2]);
+  } else {
+    state.clientAccountPortalClientId = null;
+    state.clientAccountPortalToken = null;
+  }
   const p = h.match(/^#\/proposal\/([^/]+)/);
   if (p) { state.premiumProposalToken = p[1]; }
   else { state.premiumProposalToken = null; }
@@ -19372,8 +19439,9 @@ function renderClients() {
           <button class="btn-ghost text-sm" onclick="event.stopPropagation(); smsClientFromCard('${c.id}')">📱 SMS</button>
           <button class="btn-ghost text-sm" onclick="startCall('${c.phone}','${c.id}')">📞</button>
           <button class="btn-ghost text-sm" onclick="event.stopPropagation(); verifyClientPhoneFlow('${c.id}')" title="${c.phoneVerified?'Телефон подтверждён':'Подтвердить телефон через SMS-код'}">${c.phoneVerified?'✅':'📲'}</button>
-          <button class="btn-ghost text-sm" onclick="event.stopPropagation(); location.hash='#/account/${c.id}'">Кабинет</button>
-          <button class="btn-ghost text-sm" onclick="event.stopPropagation(); copyClientAccountPortalLink('${c.id}')">Ссылка</button>
+          <button class="btn-ghost text-sm" onclick="event.stopPropagation(); openClientAddressOverlay('${c.id}')">📍 Адреса</button>
+          <button class="btn-ghost text-sm" onclick="event.stopPropagation(); openClientPortalAccess('${c.id}')">${clientPortalAccess(c) ? '🔐 Кабинет' : '+ Создать кабинет'}</button>
+          ${clientPortalAccess(c) ? `<button class="btn-ghost text-sm" onclick="event.stopPropagation(); copyClientAccountPortalLink('${c.id}')">Ссылка</button>` : ''}
         </div>
         ${callHistoryHtml(c.id)}
       </div>
@@ -20156,7 +20224,7 @@ function renderColdProspectCard(p) {
         ${!p.clientId ? `<button class="btn-ghost text-emerald-700" onclick="coldConvertToB2B('${p.id}',false)">Создать B2B-клиента</button>` : ''}
         ${p.clientId && !p.orderId ? `<button class="btn-primary" onclick="coldOpenOrderFlow('${p.id}')">Создать проект и КП</button>` : ''}
         ${order ? `<button class="btn-primary" onclick="openOrder('${order.id}')">Заказ ${academyEsc(order.number)}</button><button class="btn-ghost" onclick="openProfessionalKP('${order.id}')">Открыть КП</button>` : ''}
-        ${client ? `<button class="btn-ghost" onclick="location.hash='#/account/${client.id}'">B2B-карточка</button>` : ''}
+        ${client ? `<button class="btn-ghost" onclick="openClientPortalAccess('${client.id}')">Кабинет партнёра</button>` : ''}
       </div>
     </div>
   </div>`;
@@ -22713,6 +22781,7 @@ function saveClientContactProfile(clientId, orderId = '') {
     return;
   }
   Object.assign(c, identity.fields);
+  Object.assign(c, readClientCorrespondenceFields('client-contact'));
   c.phone = phone;
   c.email = email;
   c.whatsappPhone = document.getElementById('client-contact-whatsapp')?.value.trim() || '';
@@ -26238,6 +26307,7 @@ function copyPortalLink(oid) {
 function copyClientAccountPortalLink(clientId) {
   const c = getClient(clientId);
   const url = clientAccountPortalUrl(clientId);
+  if (!url) { openClientPortalAccess(clientId); return; }
   navigator.clipboard.writeText(url).then(() => {
     state.modal = `
     <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
@@ -26255,6 +26325,35 @@ function copyClientAccountPortalLink(clientId) {
     </div>`;
     render();
   });
+}
+
+function openClientPortalAccess(clientId) {
+  const c = getClient(clientId);
+  if (!c) return;
+  const access = clientPortalAccess(c);
+  const url = access ? clientAccountPortalUrl(clientId) : '';
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6" style="max-width:42rem">
+      <div class="flex items-start justify-between gap-3">
+        <div><div class="text-xs font-black text-blue-600 uppercase tracking-wide">Личный кабинет</div><h3 class="text-xl font-black mt-1">${academyEsc(c.name || '')}</h3></div>
+        <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
+      </div>
+      <div class="mt-5 p-4 rounded-lg border ${access ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}">
+        <div class="font-semibold">${access ? 'Доступ включён' : 'Доступ ещё не создан'}</div>
+        <div class="text-sm text-gray-600 mt-1">${access ? 'Клиент видит только свои объекты, статусы, суммы, оплаты и безопасную хронологию. Себестоимость, зарплаты и маржа не показываются.' : 'Создайте доступ только когда хотите передать кабинет этому клиенту или партнёру.'}</div>
+      </div>
+      ${access ? `<label class="mt-4">Персональная ссылка</label><input readonly value="${academyEsc(url)}"><div class="text-xs text-gray-500 mt-1">После перевыпуска старая ссылка перестанет работать.</div>` : ''}
+      <div class="flex gap-2 flex-wrap justify-end mt-5">
+        ${access ? `
+          <button class="btn-ghost" onclick="issueClientPortalAccess('${clientId}', true); openClientPortalAccess('${clientId}')">Перевыпустить ссылку</button>
+          <button class="btn-ghost text-red-600" onclick="revokeClientPortalAccess('${clientId}')">Отозвать доступ</button>
+          <button class="btn-primary" onclick="copyClientAccountPortalLink('${clientId}')">Скопировать и отправить</button>
+        ` : `<button class="btn-primary" onclick="issueClientPortalAccess('${clientId}'); openClientPortalAccess('${clientId}')">Создать доступ</button>`}
+      </div>
+    </div>
+  </div>`;
+  render();
 }
 
 function askForReview(oid) {
@@ -26463,11 +26562,31 @@ function printProposal(oid) {
   win.document.close();
 }
 
-// ---------- CLIENT PORTAL (public, no login) ----------
+// ---------- CLIENT PORTAL (explicit token access, no employee login) ----------
+function clientPortalHistory(orders = []) {
+  const labels = {
+    orderCreated: 'Создан проект', consultation_scheduled: 'Назначена консультация',
+    measurement_scheduled: 'Назначен замер', measurement_done: 'Замер выполнен',
+    proposal_sent: 'Коммерческое предложение отправлено', proposal_accepted: 'Коммерческое предложение принято',
+    payment_received: 'Оплата получена', installation_scheduled: 'Назначен монтаж',
+    installation_done: 'Монтаж выполнен', act_signed: 'Акт подписан', completed: 'Проект завершён',
+    review_received: 'Получен отзыв',
+  };
+  return orders.flatMap(order => (order.timeline || [])
+    .filter(item => labels[item.key])
+    .map(item => ({ at: item.at, key: item.key, title: labels[item.key], orderNo: order.number })))
+    .filter(item => item.at)
+    .sort((a,b) => String(b.at).localeCompare(String(a.at)))
+    .slice(0, 50);
+}
 function renderClientAccountPortal() {
   const clientId = state.clientAccountPortalClientId;
   const c = getClient(clientId);
   if (!c) return `<div class="min-h-screen flex items-center justify-center"><div class="card">${T('empty')}</div></div>`;
+  const access = clientPortalAccess(c);
+  if (!access || access.token !== state.clientAccountPortalToken) {
+    return `<div class="min-h-screen grid place-items-center bg-slate-100 p-5"><div class="card max-w-lg text-center"><div class="text-4xl mb-3">🔒</div><h1 class="text-2xl font-black">Доступ к кабинету закрыт</h1><p class="text-gray-500 mt-2">Ссылка недействительна или доступ был отозван. Попросите менеджера RolanPRO создать новую ссылку.</p></div></div>`;
+  }
   normalizeClientAddresses(c);
   const orders = db.orders.filter(o => o.clientId === c.id).sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
   const active = orders.filter(o => !['completed','review_received'].includes(o.status));
@@ -26477,6 +26596,7 @@ function renderClientAccountPortal() {
   const addresses = clientAddressBook(c);
   const accountType = clientAccountType(c);
   const relationship = clientRelationshipType(c);
+  const history = clientPortalHistory(orders);
   return `
   <div class="account-portal-shell">
     <header class="account-portal-hero">
@@ -26592,6 +26712,21 @@ function renderClientAccountPortal() {
               ${a.notes ? `<div class="text-xs text-gray-500 mt-2">${academyEsc(a.notes)}</div>` : ''}
             </div>
           `).join('')}
+        </div>
+      </section>
+
+      ${(c.legalAddress || c.mailingAddress) ? `<section>
+        <h2 class="text-xl font-black mb-3">Реквизиты для корреспонденции</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          ${c.legalAddress ? `<div class="account-stat"><div class="text-xs text-gray-500">Юридический адрес</div><div class="text-sm mt-1">${academyEsc(c.legalAddress)}</div></div>` : ''}
+          ${c.mailingAddress ? `<div class="account-stat"><div class="text-xs text-gray-500">Почтовый адрес</div><div class="text-sm mt-1">${academyEsc(c.mailingAddress)}</div></div>` : ''}
+        </div>
+      </section>` : ''}
+
+      <section>
+        <div class="flex items-center justify-between gap-3 mb-3"><h2 class="text-xl font-black">Хронология</h2><span class="text-sm text-gray-500">Последние ${history.length} событий</span></div>
+        <div class="account-stat">
+          ${history.length ? history.map(item => `<div class="flex items-start justify-between gap-3 border-t first:border-t-0 py-3"><div><div class="font-semibold">${academyEsc(item.title)}</div><div class="text-xs text-gray-500">${academyEsc(item.orderNo || '')}</div></div><time class="text-xs text-gray-500 text-right">${fmtDateTime(item.at)}</time></div>`).join('') : '<div class="text-sm text-gray-500">История появится после создания первого проекта.</div>'}
         </div>
       </section>
 
@@ -27218,7 +27353,7 @@ function renderOrderClientSelection(c) {
       ` : `<div class="text-xs text-red-600 mt-2">Добавьте адрес объекта, без него заказ не создастся.</div>`}
       ${isAccount ? `
         <div class="mt-3 flex gap-2 flex-wrap">
-          <button class="btn-ghost text-sm" onclick="location.hash='#/account/${c.id}'">Открыть кабинет клиента</button>
+          <button class="btn-ghost text-sm" onclick="openClientPortalAccess('${c.id}')">Управление кабинетом</button>
           <button class="btn-ghost text-sm" onclick="copyClientAccountPortalLink('${c.id}')">Скопировать ссылку кабинета</button>
         </div>
       ` : ''}
@@ -27290,6 +27425,7 @@ function closeClientAddressOverlay() {
 function openClientAddressOverlay(clientId) {
   const c = getClient(clientId);
   if (!c) return;
+  const addresses = clientAddressBook(c);
   closeClientAddressOverlay();
   document.body.insertAdjacentHTML('beforeend', `
     <div id="client-address-overlay" class="address-overlay" onclick="if(event.target===this) closeClientAddressOverlay()">
@@ -27302,6 +27438,14 @@ function openClientAddressOverlay(clientId) {
           <button class="btn-ghost" onclick="closeClientAddressOverlay()">Закрыть</button>
         </div>
         <div class="p-5 space-y-4">
+          <section>
+            <div class="font-black text-slate-900 mb-2">Сохранённые объекты — ${addresses.length}</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              ${addresses.length ? addresses.map(address => `<div class="rounded-lg border p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-semibold">${address.isPrimary ? '★ ' : ''}${academyEsc(address.label || 'Объект')}</div><div class="text-sm text-gray-600 mt-1">${academyEsc(address.address || '')}</div>${address.contactName ? `<div class="text-xs text-gray-500 mt-1">Контакт: ${academyEsc(address.contactName)} ${academyEsc(address.contactPhone || '')}</div>` : ''}</div>${address.isPrimary ? '<span class="tag bg-blue-100 text-blue-800">Основной</span>' : `<button class="btn-ghost text-xs" onclick="setClientPrimaryAddressFromOverlay('${clientId}','${address.id}')">Сделать основным</button>`}</div></div>`).join('') : '<div class="text-sm text-gray-500">Адресов объектов пока нет.</div>'}
+            </div>
+          </section>
+          <section class="border-t pt-4">
+            <div class="font-black text-slate-900 mb-2">Добавить объект</div>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div class="md:col-span-2">
               <label>Название адреса</label>
@@ -27363,11 +27507,18 @@ function openClientAddressOverlay(clientId) {
             <button class="btn-ghost" onclick="closeClientAddressOverlay()">Отмена</button>
             <button class="btn-primary" onclick="saveClientAddressOverlay('${clientId}')">Сохранить адрес</button>
           </div>
+          </section>
         </div>
       </div>
     </div>
   `);
   setTimeout(() => document.getElementById('addr-search')?.focus(), 50);
+}
+function setClientPrimaryAddressFromOverlay(clientId, addressId) {
+  const c = getClient(clientId);
+  if (!c || !setClientPrimaryAddress(c, addressId)) return;
+  save();
+  openClientAddressOverlay(clientId);
 }
 function saveClientAddressOverlay(clientId) {
   const c = getClient(clientId);
@@ -27528,6 +27679,7 @@ function createOrderClientFromOverlay() {
   db.clients.push({
     id,
     ...identity.fields,
+    ...readClientCorrespondenceFields('oc'),
     phone, email,
     whatsappPhone: value('oc-whatsapp') || phone,
     telegramUsername: clientSocialHandle(value('oc-telegram')),
@@ -27762,6 +27914,7 @@ function createClient() {
   db.clients.push({
     id: 'c'+uid(),
     ...identity.fields,
+    ...readClientCorrespondenceFields('nc'),
     phone,
     address,
     email,
