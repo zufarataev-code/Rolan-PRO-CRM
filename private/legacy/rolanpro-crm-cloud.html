@@ -14626,6 +14626,133 @@ function sourceDisplayLabel(value) {
   return labels[raw] || raw;
 }
 
+// ---------- CLIENT IDENTITY: B2C person / B2B company ----------
+// B2C: first and last name. B2B: company, its type, the representative's
+// first/last name and job title. `name` stays the display name every other
+// screen already uses: the person for B2C, the company for B2B.
+const CLIENT_COMPANY_TYPES = [
+  ['designer', 'Дизайнер интерьера'],
+  ['architect', 'Архитектор'],
+  ['contractor', 'Генподрядчик / строитель'],
+  ['developer', 'Застройщик / девелопер'],
+  ['property_management', 'Управляющая компания'],
+  ['commercial_property', 'Коммерческая недвижимость'],
+  ['office', 'Офис'],
+  ['retail', 'Магазин / ритейл'],
+  ['hospitality', 'Ресторан / гостиница'],
+  ['auto', 'Автосалон'],
+  ['medical', 'Медицина'],
+  ['education', 'Образование'],
+  ['government', 'Госучреждение'],
+  ['other', 'Другое'],
+];
+function clientCompanyTypeLabel(value) {
+  return (CLIENT_COMPANY_TYPES.find(([key]) => key === value) || [])[1] || '';
+}
+function clientPersonName(c) {
+  if (!c) return '';
+  const own = [c.firstName, c.lastName].map(v => String(v || '').trim()).filter(Boolean).join(' ');
+  if (own) return own;
+  if (clientAccountType(c) === 'b2b') return String(c.contactName || '').trim();
+  return String(c.name || '').trim();
+}
+function clientDisplayName(c) {
+  if (!c) return '';
+  if (clientAccountType(c) === 'b2b') return String(c.companyName || c.name || '').trim() || clientPersonName(c);
+  return clientPersonName(c) || String(c.name || '').trim();
+}
+/** «Имя Фамилия · Должность» of a company's representative; empty for B2C. */
+function clientRepresentativeLine(c) {
+  if (!c || clientAccountType(c) !== 'b2b') return '';
+  return [clientPersonName(c), String(c.contactTitle || '').trim()].filter(Boolean).join(' · ');
+}
+function clientIdentityFieldsHtml(prefix, c = {}) {
+  const b2b = clientAccountType(c) === 'b2b';
+  const relationship = c.relationshipType === 'regular' ? 'regular' : 'one_time';
+  const parsed = splitClientName(b2b ? '' : c.name);
+  const first = c.firstName || (b2b ? c.contactName : parsed.firstName) || '';
+  const last = c.lastName || (b2b ? '' : parsed.lastName) || '';
+  const value = v => academyEsc(v || '');
+  return `
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+      <div><label for="${prefix}-kind">Тип клиента</label>
+        <select id="${prefix}-kind" onchange="toggleClientIdentityFields('${prefix}')">
+          <option value="b2c" ${b2b ? '' : 'selected'}>B2C — частный клиент</option>
+          <option value="b2b" ${b2b ? 'selected' : ''}>B2B — компания</option>
+        </select></div>
+      <div><label for="${prefix}-relationship">Отношения</label>
+        <select id="${prefix}-relationship">
+          <option value="one_time" ${relationship === 'one_time' ? 'selected' : ''}>Разовый клиент</option>
+          <option value="regular" ${relationship === 'regular' ? 'selected' : ''}>Постоянный партнёр</option>
+        </select></div>
+    </div>
+    <div id="${prefix}-company-block" class="grid grid-cols-1 md:grid-cols-2 gap-2 ${b2b ? '' : 'hidden'}">
+      <div><label for="${prefix}-company">Название компании *</label><input id="${prefix}-company" value="${value(c.companyName || (b2b ? c.name : ''))}" placeholder="Rolan Design LLC"></div>
+      <div><label for="${prefix}-company-type">Тип компании</label>
+        <select id="${prefix}-company-type">
+          <option value="">Не выбран</option>
+          ${CLIENT_COMPANY_TYPES.map(([key, label]) => `<option value="${key}" ${c.companyType === key ? 'selected' : ''}>${label}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+      <div><label for="${prefix}-first-name"><span data-b2c ${b2b ? 'class="hidden"' : ''}>Имя *</span><span data-b2b ${b2b ? '' : 'class="hidden"'}>Имя представителя *</span></label><input id="${prefix}-first-name" value="${value(first)}" autocomplete="given-name"></div>
+      <div><label for="${prefix}-last-name"><span data-b2c ${b2b ? 'class="hidden"' : ''}>Фамилия</span><span data-b2b ${b2b ? '' : 'class="hidden"'}>Фамилия представителя</span></label><input id="${prefix}-last-name" value="${value(last)}" autocomplete="family-name"></div>
+    </div>
+    <div id="${prefix}-title-block" class="${b2b ? '' : 'hidden'}"><label for="${prefix}-title">Должность представителя *</label><input id="${prefix}-title" value="${value(c.contactTitle)}" placeholder="Office manager, owner, project manager…" autocomplete="organization-title"></div>`;
+}
+/** Identity fields from a website/backend lead (snake_case or camelCase). */
+function clientIdentityFromLead(l = {}) {
+  const pick = (...keys) => keys.map(key => String(l[key] || '').trim()).find(Boolean) || '';
+  const companyName = pick('companyName', 'company_name', 'company');
+  const accountType = normalizeAccountType(pick('customerType', 'customer_type', 'accountType') || (companyName ? 'b2b' : 'b2c'));
+  const parsed = splitClientName(pick('name'));
+  const fields = {
+    accountType,
+    type: legacyClientTypeFromAccount(accountType),
+    relationshipType: accountType === 'b2b' ? 'regular' : 'one_time',
+    firstName: pick('firstName', 'first_name') || (accountType === 'b2b' ? '' : parsed.firstName),
+    lastName: pick('lastName', 'last_name') || (accountType === 'b2b' ? '' : parsed.lastName),
+    companyName,
+    companyType: CLIENT_COMPANY_TYPES.some(([key]) => key === pick('companyType', 'company_type')) ? pick('companyType', 'company_type') : '',
+    contactTitle: pick('contactTitle', 'contact_title', 'jobTitle', 'job_title'),
+  };
+  fields.name = clientDisplayName(fields) || pick('name');
+  return fields;
+}
+function toggleClientIdentityFields(prefix) {
+  const b2b = document.getElementById(`${prefix}-kind`)?.value === 'b2b';
+  document.getElementById(`${prefix}-company-block`)?.classList.toggle('hidden', !b2b);
+  document.getElementById(`${prefix}-title-block`)?.classList.toggle('hidden', !b2b);
+  document.querySelectorAll(`label[for="${prefix}-first-name"] [data-b2c], label[for="${prefix}-last-name"] [data-b2c]`).forEach(el => el.classList.toggle('hidden', b2b));
+  document.querySelectorAll(`label[for="${prefix}-first-name"] [data-b2b], label[for="${prefix}-last-name"] [data-b2b]`).forEach(el => el.classList.toggle('hidden', !b2b));
+  if (b2b) document.getElementById(`${prefix}-relationship`).value = 'regular';
+}
+/** Reads the identity block; returns { error } or the fields to store on the client. */
+function readClientIdentityFields(prefix) {
+  const read = id => String(document.getElementById(`${prefix}-${id}`)?.value || '').trim();
+  const accountType = read('kind') === 'b2b' ? 'b2b' : 'b2c';
+  const firstName = read('first-name');
+  const lastName = read('last-name');
+  const companyName = accountType === 'b2b' ? read('company') : '';
+  const companyType = accountType === 'b2b' ? read('company-type') : '';
+  const contactTitle = accountType === 'b2b' ? read('title') : '';
+  if (accountType === 'b2b') {
+    if (!companyName) return { error: 'Укажите название компании.' };
+    if (!firstName) return { error: 'Укажите имя представителя компании.' };
+    if (!contactTitle) return { error: 'Укажите должность представителя — важно знать, с кем мы работаем.' };
+  } else if (!firstName) {
+    return { error: 'Укажите имя клиента.' };
+  }
+  const fields = {
+    accountType,
+    type: legacyClientTypeFromAccount(accountType),
+    relationshipType: read('relationship') === 'regular' || accountType === 'b2b' ? 'regular' : 'one_time',
+    firstName, lastName, companyName, companyType, contactTitle,
+  };
+  fields.name = clientDisplayName(fields);
+  return { fields };
+}
+
 function normalizeAccountType(value, fallbackType) {
   const raw = String(value || fallbackType || '').trim().toLowerCase();
   if (['b2b','business','commercial','company','enterprise','коммерческий','бизнес'].includes(raw)) return 'b2b';
@@ -14652,7 +14779,7 @@ function accountTypeLabel(cOrType) {
 }
 function relationshipLabel(cOrValue) {
   const v = typeof cOrValue === 'string' ? cOrValue : clientRelationshipType(cOrValue);
-  return v === 'regular' ? 'Постоянный клиент' : 'Разовый клиент';
+  return v === 'regular' ? 'Постоянный партнёр' : 'Разовый клиент';
 }
 function clientFlowLabel(cOrType, relationship) {
   const type = typeof cOrType === 'string' ? normalizeAccountType(cOrType) : clientAccountType(cOrType);
@@ -19123,6 +19250,7 @@ function renderClients() {
       const q = state.search.toLowerCase();
       const addressText = clientAddressBook(c).map(a => `${a.label} ${a.address} ${a.unit || ''}`).join(' ').toLowerCase();
       return (c.name || '').toLowerCase().includes(q) ||
+             [c.companyName, clientPersonName(c), c.contactTitle].some(v => String(v || '').toLowerCase().includes(q)) ||
              (c.phone || '').includes(state.search) ||
              (c.email || '').toLowerCase().includes(q) ||
              (c.address || '').toLowerCase().includes(q) ||
@@ -19141,7 +19269,7 @@ function renderClients() {
         <button class="px-3 py-1.5 ${segFilter==='all'?'bg-blue-600 text-white':'bg-white'}" onclick="state.clientSegmentFilter='all'; render();">${u?.role === 'owner' ? 'Все' : 'Мои'} (${clients.length})</button>
         <button class="px-3 py-1.5 ${segFilter==='b2c'?'bg-blue-600 text-white':'bg-white'}" onclick="state.clientSegmentFilter='b2c'; render();">🏠 B2C (${b2cCount})</button>
         <button class="px-3 py-1.5 ${segFilter==='b2b'?'bg-blue-600 text-white':'bg-white'}" onclick="state.clientSegmentFilter='b2b'; render();">🏢 B2B (${b2bCount})</button>
-        <button class="px-3 py-1.5 ${segFilter==='regular'?'bg-blue-600 text-white':'bg-white'}" onclick="state.clientSegmentFilter='regular'; render();">⭐ Постоянные (${regularCount})</button>
+        <button class="px-3 py-1.5 ${segFilter==='regular'?'bg-blue-600 text-white':'bg-white'}" onclick="state.clientSegmentFilter='regular'; render();">⭐ Партнёры (${regularCount})</button>
       </div>
       <button class="btn-primary" onclick="openClientModal()">+ ${T('newClient')}</button>
     </div>
@@ -19163,7 +19291,9 @@ function renderClients() {
       <div class="card">
         <div class="flex items-start justify-between">
           <div>
-            <div class="font-semibold text-slate-800">${c.name}</div>
+            <div class="font-semibold text-slate-800">${academyEsc(clientDisplayName(c) || c.name || '')}</div>
+            ${isB2B && clientCompanyTypeLabel(c.companyType) ? `<div class="text-xs text-blue-700">${clientCompanyTypeLabel(c.companyType)}</div>` : ''}
+            ${clientRepresentativeLine(c) ? `<div class="text-sm text-gray-700 mt-0.5">👤 ${academyEsc(clientRepresentativeLine(c))}</div>` : ''}
             <div class="text-sm text-gray-600 mt-0.5">${c.phone ? `<a class="text-blue-600 hover:underline cursor-pointer" onclick="event.stopPropagation(); startCall('${c.phone}','${c.id}')">📞 ${c.phone}</a>` : '—'}</div>
             ${c.email ? `<div class="text-sm text-gray-600">${emailAnchor(c.email)}</div>` : ''}
           </div>
@@ -20110,7 +20240,8 @@ function coldConvertToB2B(id, openOrderAfter = false) {
     else {
       const clientId = 'c'+uid();
       db.clients.push({
-        id:clientId, name:p.companyName, firstName:p.contactName||'', lastName:'', phone:p.phone||'', email:p.email||'',
+        id:clientId, name:p.companyName, companyName:p.companyName||'', contactTitle:p.contactTitle||'',
+        firstName:splitClientName(p.contactName).firstName||'', lastName:splitClientName(p.contactName).lastName||'', phone:p.phone||'', email:p.email||'',
         address:p.address||p.city||'', addressCity:p.city||'', type:'commercial', accountType:'b2b', relationshipType:'regular',
         source:'cold_call', preferredChannel:'phone', primaryAddressId:null, addresses:[], referralCode:(p.companyName||'B2B').substring(0,3).toUpperCase()+'-'+Math.floor(Math.random()*9000+1000),
         referredBy:null, createdAt:new Date().toISOString(), tags:['b2b','regular','cold-call'], coldProspectId:p.id,
@@ -20317,7 +20448,9 @@ const LEAD_SOURCES = {
 const CANONICAL_OPEN_LEAD_STATUSES = new Set(['NEW_LEAD', 'LEAD', 'CONSULTATION_SCHEDULED']);
 function canonicalMessengerLeadRows() {
   return canonicalLeads
-    .filter(lead => lead?.source === 'facebook_messenger' && CANONICAL_OPEN_LEAD_STATUSES.has(lead?.pipeline_status?.status_code))
+    // Website leads arrive in PostgreSQL (/api/v1/integrations/website/leads) and
+    // must be visible here next to Messenger leads.
+    .filter(lead => ['facebook_messenger', 'website'].includes(lead?.source) && CANONICAL_OPEN_LEAD_STATUSES.has(lead?.pipeline_status?.status_code))
     .map(lead => {
       const consultation = canonicalConsultations
         .filter(item => item?.lead?.lead_id === lead.lead_id && !['cancelled', 'canceled', 'deleted'].includes(item?.status))
@@ -20325,6 +20458,12 @@ function canonicalMessengerLeadRows() {
       return {
         id: lead.lead_id,
         name: lead.name,
+        firstName: lead.first_name || '',
+        lastName: lead.last_name || '',
+        customerType: lead.customer_type || '',
+        companyName: lead.company_name || '',
+        companyType: lead.company_type || '',
+        contactTitle: lead.contact_title || '',
         phone: lead.phone,
         email: lead.email,
         source: lead.source,
@@ -20385,12 +20524,17 @@ function renderLeadsView() {
                 ${l.phone ? `<a class="text-blue-600 hover:underline cursor-pointer" onclick="startCall('${l.phone}','${existing?existing.id:''}')">📞 ${l.phone}</a>` : ''}
                 ${l.email ? `<span class="text-gray-600">✉️ ${l.email}</span>` : ''}
               </div>
+              ${l.companyName ? `<div class="text-sm text-gray-700 mt-1">🏢 ${academyEsc([clientCompanyTypeLabel(l.companyType), [l.firstName, l.lastName].filter(Boolean).join(' '), l.contactTitle].filter(Boolean).join(' · '))}</div>` : ''}
               ${l.message ? `<div class="text-sm text-gray-600 mt-1 bg-gray-50 rounded p-2">${academyEsc(l.message)}</div>` : ''}
               ${l.consultation ? `<div class="text-xs text-gray-500 mt-2">📅 ${fmtDateTime(l.consultation.scheduled_start_at)} · ${academyEsc(l.consultation.assigned_consultant?.full_name || 'Не назначен')}</div>` : ''}
             </div>
             <div class="flex flex-col gap-2">
               ${l.canonical && l.consultation
                 ? `<button class="btn-primary text-sm" onclick="openCanonicalConsultationCard('${l.consultation.consultation_id}')">Открыть запись</button>`
+                : l.canonical && l.source === 'website'
+                  ? `<button class="btn-primary text-sm" onclick="convertLead('${l.id}')">➕ Создать проект</button>
+                     ${l.phone ? `<a class="btn-ghost text-sm text-center" href="tel:${academyEsc(l.phone)}">📞 Позвонить</a>` : ''}
+                     <button class="btn-ghost text-xs text-gray-400" onclick="dismissLead('${l.id}')">Спам / отклонить</button>`
                 : l.canonical
                   ? `<a class="btn-primary text-sm text-center" href="tel:${academyEsc(l.phone || '')}">📞 Позвонить</a>`
                   : `<button class="btn-primary text-sm" onclick="convertLead('${l.id}')">➕ Создать проект</button>
@@ -20413,7 +20557,28 @@ async function fetchLeads(force) {
   }
   if (state.view === 'leads') render();
 }
-async function markLeadProcessed(leadId) {
+function canonicalLeadRow(leadId) {
+  return canonicalMessengerLeadRows().find(row => row.id === leadId) || null;
+}
+/** A handled website lead leaves «Новые лиды»: CONTACTED after a project, CLOSED_LOST when dismissed. */
+async function setCanonicalLeadStatus(leadId, statusCode) {
+  try {
+    const response = await fetch('/api/v1/leads/' + encodeURIComponent(leadId), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipeline_status_code: statusCode }),
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    canonicalLeads = canonicalLeads.filter(lead => lead?.lead_id !== leadId);
+    return true;
+  } catch (error) {
+    console.warn('[Leads] status update failed', error);
+    alert('Не удалось обновить статус заявки на сервере. Обновите список и попробуйте ещё раз.');
+    return false;
+  }
+}
+async function markLeadProcessed(leadId, statusCode = 'CONTACTED') {
+  if (canonicalLeadRow(leadId)) return setCanonicalLeadStatus(leadId, statusCode);
   const i = db.settings.integrations || {};
   try {
     await fetch(i.leadBackendUrl + '/api/leads/' + leadId + '/processed', {
@@ -20423,18 +20588,20 @@ async function markLeadProcessed(leadId) {
   state.leadsCache = (state.leadsCache || []).filter(l => l.id !== leadId);
 }
 async function convertLead(leadId) {
-  const l = (state.leadsCache || []).find(x => x.id === leadId);
+  const l = (state.leadsCache || []).find(x => x.id === leadId) || canonicalLeadRow(leadId);
   if (!l) return;
   const src = LEAD_SOURCES[l.source] || { crmSource: 'other' };
   // Клиент: всегда переиспользуем существующую карточку по телефону или email.
   let client = uniqueExistingClientByContact(l.phone, l.email);
   if (client === false) return;
   if (!client) {
+    const identity = clientIdentityFromLead(l);
     client = {
       id: 'c' + uid(),
-      name: l.name || l.phone || l.email || 'Лид ' + fmtDate(l.receivedAt),
+      ...identity,
+      name: identity.name || l.phone || l.email || 'Лид ' + fmtDate(l.receivedAt),
       phone: l.phone || '', email: l.email || '', address: l.address || '',
-      type: 'residential', source: src.crmSource,
+      source: src.crmSource,
       referralCode: (l.name || 'LEAD').substring(0,3).toUpperCase() + '-' + Math.floor(Math.random()*9000+1000),
       referredBy: null, createdAt: new Date().toISOString(), tags: [],
     };
@@ -20461,7 +20628,7 @@ async function convertLead(leadId) {
 }
 async function dismissLead(leadId) {
   if (!confirm('Отклонить эту заявку (спам/нецелевая)?')) return;
-  await markLeadProcessed(leadId);
+  await markLeadProcessed(leadId, 'CLOSED_LOST');
   render();
 }
 
@@ -22207,7 +22374,7 @@ function openClientContactProfile(clientId, orderId = '') {
         <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
-        <div class="md:col-span-2"><label>Имя / компания</label><input id="client-contact-name" value="${academyEsc(c.name || '')}"></div>
+        <div class="md:col-span-2 space-y-2">${clientIdentityFieldsHtml('client-contact', c)}</div>
         <div><label>Телефон</label><input id="client-contact-phone" type="tel" value="${academyEsc(c.phone || '')}" placeholder="+1 818..."></div>
         <div><label>Email</label><input id="client-contact-email" type="email" value="${academyEsc(c.email || '')}" placeholder="client@email.com"></div>
         <div><label>WhatsApp</label><input id="client-contact-whatsapp" type="tel" value="${academyEsc(c.whatsappPhone || c.phone || '')}" placeholder="номер WhatsApp"></div>
@@ -22238,6 +22405,8 @@ function openClientContactProfile(clientId, orderId = '') {
 function saveClientContactProfile(clientId, orderId = '') {
   const c = getClient(clientId);
   if (!c) return;
+  const identity = readClientIdentityFields('client-contact');
+  if (identity.error) { alert(identity.error); return; }
   const email = document.getElementById('client-contact-email')?.value.trim().toLowerCase() || '';
   const phone = document.getElementById('client-contact-phone')?.value.trim() || '';
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Проверьте email клиента.'); return; }
@@ -22250,7 +22419,7 @@ function saveClientContactProfile(clientId, orderId = '') {
     alert(`Телефон или email уже принадлежат клиенту ${duplicate.name}. Объедините работу в существующей карточке.`);
     return;
   }
-  c.name = document.getElementById('client-contact-name')?.value.trim() || c.name;
+  Object.assign(c, identity.fields);
   c.phone = phone;
   c.email = email;
   c.whatsappPhone = document.getElementById('client-contact-whatsapp')?.value.trim() || '';
@@ -26967,13 +27136,11 @@ function openOrderClientOverlay() {
         <div class="p-5 space-y-4">
           <section>
             <div class="font-black text-slate-900 mb-2">Основные данные</div>
+            <div class="space-y-2 mb-3">${clientIdentityFieldsHtml('oc')}</div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div><label>Имя или название компании <span class="order-required">*</span></label><input id="oc-name" placeholder="Имя клиента или компания"></div>
               <div><label>Телефон <span class="order-required">*</span></label><input id="oc-phone" type="tel" placeholder="+1 818..."></div>
               <div><label>Email</label><input id="oc-email" type="email" placeholder="client@email.com"></div>
               <div><label>Источник</label><select id="oc-source"><option value="direct">${T('sourceDirect')}</option><option value="ad">${T('sourceAd')}</option><option value="google">${T('sourceGoogle')}</option><option value="facebook">${T('sourceFacebook')}</option><option value="instagram">${T('sourceInst')}</option><option value="referral">${T('sourceRef')}</option><option value="repeat">${T('sourceRepeat')}</option><option value="yelp">Yelp</option><option value="other">${T('sourceOther')}</option></select></div>
-              <div><label>Сегмент</label><select id="oc-type"><option value="residential">B2C — частный клиент</option><option value="commercial">B2B — бизнес / объект</option></select></div>
-              <div><label>Тип отношений</label><select id="oc-relationship"><option value="one_time">Разовый клиент</option><option value="regular">Постоянный клиент / аккаунт</option></select></div>
             </div>
           </section>
 
@@ -27018,12 +27185,14 @@ function openOrderClientOverlay() {
       </div>
     </div>
   `);
-  setTimeout(() => document.getElementById('oc-name')?.focus(), 50);
+  setTimeout(() => document.getElementById('oc-first-name')?.focus(), 50);
 }
 
 function createOrderClientFromOverlay() {
   const value = id => (document.getElementById(id)?.value || '').trim();
-  const name = value('oc-name');
+  const identity = readClientIdentityFields('oc');
+  if (identity.error) { alert(identity.error); return; }
+  const name = identity.fields.name;
   const phone = value('oc-phone');
   const email = value('oc-email').toLowerCase();
   const street = value('oc-street');
@@ -27031,7 +27200,7 @@ function createOrderClientFromOverlay() {
   const city = value('oc-city');
   const stateCode = value('oc-state');
   const zip = value('oc-zip');
-  const required = [[name, 'имя или название компании'], [phone, 'телефон'], [street, 'улица'], [city, 'город']]
+  const required = [[phone, 'телефон'], [street, 'улица'], [city, 'город']]
     .filter(([field]) => !field).map(([, label]) => label);
   if (required.length) { alert('Заполните обязательные поля: ' + required.join(', ')); return; }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Проверьте email клиента.'); return; }
@@ -27057,19 +27226,15 @@ function createOrderClientFromOverlay() {
     return;
   }
 
-  const type = value('oc-type') || 'residential';
-  const accountType = normalizeAccountType(type);
-  const relationshipType = value('oc-relationship') === 'regular' || accountType === 'b2b' ? 'regular' : 'one_time';
+  const { accountType, relationshipType } = identity.fields;
   const address = buildAddress(street, city, stateCode, zip, unit);
   const addressRecord = makeClientAddressRecord({
     label: value('oc-address-label') || 'Основной адрес', street, unit, city, state: stateCode, zip, address,
   }, true);
   const id = 'c' + uid();
-  const parsedName = splitClientName(name);
   db.clients.push({
-    id, name,
-    firstName: parsedName.firstName,
-    lastName: parsedName.lastName,
+    id,
+    ...identity.fields,
     phone, email,
     whatsappPhone: value('oc-whatsapp') || phone,
     telegramUsername: clientSocialHandle(value('oc-telegram')),
@@ -27080,8 +27245,6 @@ function createOrderClientFromOverlay() {
     smsConsent: Boolean(document.getElementById('oc-consent-sms')?.checked),
     emailConsent: Boolean(document.getElementById('oc-consent-email')?.checked),
     whatsappConsent: Boolean(document.getElementById('oc-consent-whatsapp')?.checked),
-    type: legacyClientTypeFromAccount(accountType),
-    accountType, relationshipType,
     source: value('oc-source') || 'direct',
     address,
     primaryAddressId: addressRecord.id,
@@ -27229,11 +27392,11 @@ function openClientModal() {
     <div class="modal-content workspace-modal p-6" style="max-width: 56rem;">
       <h3 class="font-semibold text-lg mb-3">${T('newClient')}</h3>
       <div class="space-y-3">
+        ${clientIdentityFieldsHtml('nc')}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <input id="nc-name" placeholder="${T('clientName')}">
-          <input id="nc-phone" placeholder="${T('phone')}">
+          <input id="nc-phone" placeholder="${T('phone')}" autocomplete="tel">
+          <input id="nc-email" type="email" placeholder="${T('email')}" autocomplete="email">
         </div>
-        <input id="nc-email" type="email" placeholder="${T('email')}">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
           <input id="nc-whatsapp" type="tel" placeholder="WhatsApp (если отличается от телефона)">
           <input id="nc-telegram" placeholder="Telegram @username">
@@ -27250,8 +27413,6 @@ function openClientModal() {
           <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="nc-consent-whatsapp" type="checkbox" style="width:18px;height:18px">Согласие WhatsApp</label>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-          <select id="nc-type"><option value="residential">B2C — ${T('residential')}</option><option value="commercial">B2B — ${T('commercial')}</option></select>
-          <select id="nc-relationship"><option value="one_time">Разовый клиент</option><option value="regular">Постоянный клиент / аккаунт</option></select>
           <select id="nc-source">
             <option value="direct">${T('sourceDirect')}</option>
             <option value="google">${T('sourceGoogle')}</option>
@@ -27285,11 +27446,9 @@ function openClientModal() {
   render();
 }
 function createClient() {
-  const name = document.getElementById('nc-name').value.trim();
-  if (!name) { alert(T('clientName')); return; }
-  const type = document.getElementById('nc-type').value;
-  const accountType = normalizeAccountType(type);
-  const relationshipType = (document.getElementById('nc-relationship').value === 'regular' || accountType === 'b2b') ? 'regular' : 'one_time';
+  const identity = readClientIdentityFields('nc');
+  if (identity.error) { alert(identity.error); return; }
+  const { name, accountType, relationshipType } = identity.fields;
   const street = document.getElementById('nc-street').value.trim();
   const unit = document.getElementById('nc-unit').value.trim();
   const city = document.getElementById('nc-city').value.trim();
@@ -27307,7 +27466,8 @@ function createClient() {
   if (existing === false) return;
   if (existing) { focusExistingClientCard(existing); return; }
   db.clients.push({
-    id: 'c'+uid(), name,
+    id: 'c'+uid(),
+    ...identity.fields,
     phone,
     address,
     email,
@@ -27320,9 +27480,6 @@ function createClient() {
     smsConsent: document.getElementById('nc-consent-sms').checked,
     emailConsent: document.getElementById('nc-consent-email').checked,
     whatsappConsent: document.getElementById('nc-consent-whatsapp').checked,
-    type: legacyClientTypeFromAccount(accountType),
-    accountType,
-    relationshipType,
     source: document.getElementById('nc-source').value,
     primaryAddressId: addressRecord?.id || null,
     addresses: addressRecord ? [addressRecord] : [],

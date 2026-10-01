@@ -7,7 +7,8 @@ const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 test("active CRM inbox reads canonical Messenger leads without copying them into legacy storage", () => {
   assert.match(source, /let canonicalLeads = \[\]/);
   assert.match(source, /fetch\('\/api\/v1\/leads', \{ cache: 'no-store' \}\)/);
-  assert.match(source, /lead\?\.source === 'facebook_messenger'/);
+  // Messenger and website leads both live in PostgreSQL and are read, never copied.
+  assert.match(source, /\['facebook_messenger', 'website'\]\.includes\(lead\?\.source\)/);
   assert.match(source, /CONSULTATION_SCHEDULED/);
   assert.match(source, /new Date\(right\.scheduled_start_at\).*new Date\(left\.scheduled_start_at\)/);
   assert.match(source, /!\['cancelled', 'canceled', 'deleted'\]\.includes\(item\?\.status\)/);

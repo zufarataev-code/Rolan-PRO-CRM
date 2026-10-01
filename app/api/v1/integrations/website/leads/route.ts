@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
 import { persistLeadAttribution } from "@/features/google-ads/attribution";
+import { normalizeLeadIdentity } from "@/features/sales/lead-identity";
 import type { AttributionCaptureInput, ConsentState } from "@/features/google-ads/types";
 import { prisma } from "@/lib/db";
 
@@ -15,6 +16,13 @@ const MAX_CLOCK_SKEW_SECONDS = 300;
 type WebsiteLeadPayload = {
   submission_id?: string;
   name?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  /** "B2C" (default) or "B2B". */
+  customer_type?: string | null;
+  company_name?: string | null;
+  company_type?: string | null;
+  contact_title?: string | null;
   phone?: string | null;
   email?: string | null;
   notes?: string | null;
@@ -126,13 +134,16 @@ export async function POST(request: NextRequest) {
   }
 
   const submissionId = body.submission_id?.trim();
-  const name = body.name?.trim();
 
   if (!submissionId || submissionId.length > 191) {
     return error(400, "invalid_submission_id", "submission_id is required and must be at most 191 characters.");
   }
-  if (!name || name.length > 160) {
-    return error(400, "invalid_name", "Lead name is required and must be at most 160 characters.");
+  if (typeof body.name === "string" && body.name.trim().length > 160) {
+    return error(400, "invalid_name", "Lead name must be at most 160 characters.");
+  }
+  const identity = normalizeLeadIdentity(body);
+  if ("error" in identity) {
+    return error(400, "invalid_name", identity.error);
   }
 
   const existing = await findExistingLead(submissionId);
@@ -154,7 +165,7 @@ export async function POST(request: NextRequest) {
     const lead = await prisma.$transaction(async (tx) => {
       const created = await tx.lead.create({
         data: {
-          name,
+          ...identity,
           phone: body.phone?.trim() || null,
           email: body.email?.trim().toLowerCase() || null,
           source: "website",
