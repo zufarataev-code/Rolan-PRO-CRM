@@ -49,6 +49,18 @@ type WebsiteLeadPayload = {
   } | null;
 };
 
+// Public form values: keep a contact only when it looks like one, so markup
+// sent as an "email" or "phone" never reaches the CRM screens.
+function cleanEmail(value: string | null | undefined) {
+  const email = value?.trim().toLowerCase() ?? "";
+  return /^[^\s@<>"'`]+@[^\s@<>"'`]+\.[^\s@<>"'`]+$/.test(email) && email.length <= 191 ? email : null;
+}
+
+function cleanPhone(value: string | null | undefined) {
+  const phone = value?.trim() ?? "";
+  return /^[0-9+().\s#xX-]{3,40}$/.test(phone) ? phone : null;
+}
+
 function error(status: number, code: string, message: string) {
   return NextResponse.json({ ok: false, error: { code, message } }, { status });
 }
@@ -166,8 +178,8 @@ export async function POST(request: NextRequest) {
       const created = await tx.lead.create({
         data: {
           ...identity,
-          phone: body.phone?.trim() || null,
-          email: body.email?.trim().toLowerCase() || null,
+          phone: cleanPhone(body.phone),
+          email: cleanEmail(body.email),
           source: "website",
           external_source: EXTERNAL_SOURCE,
           external_submission_id: submissionId,

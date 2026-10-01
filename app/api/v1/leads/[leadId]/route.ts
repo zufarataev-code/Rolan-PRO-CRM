@@ -62,6 +62,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (body.notes !== undefined) data.notes = body.notes?.trim() || null;
   if (body.city_id !== undefined) data.city_id = body.city_id;
   if (body.assigned_manager_id !== undefined) data.assigned_manager_id = body.assigned_manager_id;
+  // A manager who processes a lead from the shared queue takes it over.
+  else if (managerId) data.assigned_manager_id = managerId;
 
   if (body.pipeline_status_code) {
     const pipelineStatus = await getPipelineStatusId(body.pipeline_status_code);

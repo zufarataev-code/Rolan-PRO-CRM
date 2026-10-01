@@ -18,7 +18,8 @@ test("active CRM inbox reads canonical Messenger leads without copying them into
 
 test("booked Messenger leads open the canonical consultation instead of creating a duplicate project", () => {
   assert.match(source, /label: 'Messenger'/);
-  assert.match(source, /openCanonicalConsultationCard\('\$\{l\.consultation\.consultation_id\}'\)/);
+  // The id is JS-quoted and HTML-escaped: lead values come from public forms.
+  assert.match(source, /openCanonicalConsultationCard\('\$\{academyEsc\(jsQuote\(l\.consultation\.consultation_id\)\)\}'\)/);
   assert.match(source, /function openCanonicalConsultationCard\(consultationId\)/);
   assert.match(source, /l\.canonical && l\.consultation/);
 });

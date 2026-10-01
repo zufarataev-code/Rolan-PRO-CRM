@@ -13950,12 +13950,12 @@ function renderOrderCommunicationHub(o, c) {
 }
 function emailAnchor(email) {
   if (!email) return '—';
-  return `<a class="text-blue-600 hover:underline" href="${emailLink(email)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">✉️ ${email}</a>`;
+  return `<a class="text-blue-600 hover:underline" href="${academyEsc(emailLink(email))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">✉️ ${academyEsc(email)}</a>`;
 }
 function addressAnchor(address) {
   if (!address) return '—';
-  if (!intCfg().mapsEnabled) return address;
-  return `<a class="text-blue-600 hover:underline" href="${mapLink(address)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📍 ${address}</a>`;
+  if (!intCfg().mapsEnabled) return academyEsc(address);
+  return `<a class="text-blue-600 hover:underline" href="${academyEsc(mapLink(address))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📍 ${academyEsc(address)}</a>`;
 }
 function jsQuote(value) {
   return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
@@ -14709,7 +14709,7 @@ function clientIdentityFromLead(l = {}) {
   const fields = {
     accountType,
     type: legacyClientTypeFromAccount(accountType),
-    relationshipType: accountType === 'b2b' ? 'regular' : 'one_time',
+    relationshipType: 'one_time',
     firstName: pick('firstName', 'first_name') || (accountType === 'b2b' ? '' : parsed.firstName),
     lastName: pick('lastName', 'last_name') || (accountType === 'b2b' ? '' : parsed.lastName),
     companyName,
@@ -14719,13 +14719,38 @@ function clientIdentityFromLead(l = {}) {
   fields.name = clientDisplayName(fields) || pick('name');
   return fields;
 }
+/** Company type of a cold prospect: the stored key, or a guess from older free-text «Тип бизнеса». */
+function coldProspectCompanyType(p) {
+  if (p?.companyType && CLIENT_COMPANY_TYPES.some(([key]) => key === p.companyType)) return p.companyType;
+  const text = String(p?.businessType || '').toLowerCase();
+  if (!text) return '';
+  const guesses = [
+    [/дизайн|design/, 'designer'], [/архитект|architect/, 'architect'], [/застро|девелоп|develop/, 'developer'],
+    [/подряд|строит|contractor|construct/, 'contractor'], [/управля|property|hoa/, 'property_management'],
+    [/офис|office/, 'office'], [/магаз|ритейл|retail|store|shop/, 'retail'], [/ресторан|кафе|отел|гостин|restaurant|hotel|cafe/, 'hospitality'],
+    [/дилер|автосалон|dealer|auto/, 'auto'], [/клиник|медиц|стомат|dental|clinic|medical/, 'medical'],
+    [/школ|универс|колледж|school|college|university/, 'education'], [/гос|city of|county|government/, 'government'],
+  ];
+  return (guesses.find(([pattern]) => pattern.test(text)) || [null, 'other'])[1];
+}
+/** Client identity from a cold prospect. An older combined «имя и должность» stays whole in the first name. */
+function coldProspectIdentity(p) {
+  const title = String(p?.contactTitle || '').trim();
+  const parsed = title ? splitClientName(p?.contactName) : { firstName: String(p?.contactName || '').trim(), lastName: '' };
+  return {
+    companyName: p?.companyName || '',
+    companyType: coldProspectCompanyType(p),
+    firstName: parsed.firstName || '',
+    lastName: parsed.lastName || '',
+    contactTitle: title,
+  };
+}
 function toggleClientIdentityFields(prefix) {
   const b2b = document.getElementById(`${prefix}-kind`)?.value === 'b2b';
   document.getElementById(`${prefix}-company-block`)?.classList.toggle('hidden', !b2b);
   document.getElementById(`${prefix}-title-block`)?.classList.toggle('hidden', !b2b);
   document.querySelectorAll(`label[for="${prefix}-first-name"] [data-b2c], label[for="${prefix}-last-name"] [data-b2c]`).forEach(el => el.classList.toggle('hidden', b2b));
   document.querySelectorAll(`label[for="${prefix}-first-name"] [data-b2b], label[for="${prefix}-last-name"] [data-b2b]`).forEach(el => el.classList.toggle('hidden', !b2b));
-  if (b2b) document.getElementById(`${prefix}-relationship`).value = 'regular';
 }
 /** Reads the identity block; returns { error } or the fields to store on the client. */
 function readClientIdentityFields(prefix) {
@@ -14746,7 +14771,7 @@ function readClientIdentityFields(prefix) {
   const fields = {
     accountType,
     type: legacyClientTypeFromAccount(accountType),
-    relationshipType: read('relationship') === 'regular' || accountType === 'b2b' ? 'regular' : 'one_time',
+    relationshipType: read('relationship') === 'regular' ? 'regular' : 'one_time',
     firstName, lastName, companyName, companyType, contactTitle,
   };
   fields.name = clientDisplayName(fields);
@@ -14768,7 +14793,8 @@ function clientRelationshipType(c) {
   if (!c) return 'one_time';
   if (['regular','one_time'].includes(c.relationshipType)) return c.relationshipType;
   const orderCount = (db?.orders || []).filter(o => o.clientId === c.id).length;
-  return clientAccountType(c) === 'b2b' || c.source === 'repeat' || orderCount > 1 ? 'regular' : 'one_time';
+  // «Постоянный партнёр» is an explicit choice; a company alone is not a partner.
+  return c.source === 'repeat' || orderCount > 1 ? 'regular' : 'one_time';
 }
 function isRegularClient(c) {
   return !!c && (clientAccountType(c) === 'b2b' || clientRelationshipType(c) === 'regular');
@@ -19294,7 +19320,7 @@ function renderClients() {
             <div class="font-semibold text-slate-800">${academyEsc(clientDisplayName(c) || c.name || '')}</div>
             ${isB2B && clientCompanyTypeLabel(c.companyType) ? `<div class="text-xs text-blue-700">${clientCompanyTypeLabel(c.companyType)}</div>` : ''}
             ${clientRepresentativeLine(c) ? `<div class="text-sm text-gray-700 mt-0.5">👤 ${academyEsc(clientRepresentativeLine(c))}</div>` : ''}
-            <div class="text-sm text-gray-600 mt-0.5">${c.phone ? `<a class="text-blue-600 hover:underline cursor-pointer" onclick="event.stopPropagation(); startCall('${c.phone}','${c.id}')">📞 ${c.phone}</a>` : '—'}</div>
+            <div class="text-sm text-gray-600 mt-0.5">${c.phone ? `<a class="text-blue-600 hover:underline cursor-pointer" onclick="event.stopPropagation(); startCall('${academyEsc(jsQuote(c.phone))}','${academyEsc(jsQuote(c.id))}')">📞 ${academyEsc(c.phone)}</a>` : '—'}</div>
             ${c.email ? `<div class="text-sm text-gray-600">${emailAnchor(c.email)}</div>` : ''}
           </div>
           <span class="tag ${isB2B?'bg-blue-100 text-blue-800':'bg-emerald-100 text-emerald-800'}">${isB2B?'B2B':'B2C'}</span>
@@ -20118,12 +20144,13 @@ function openColdProspectModal(id = '') {
     <p class="text-sm text-gray-500 mb-4">Здесь хранится потенциальная компания. Реальным B2B-клиентом она станет после подтверждённого интереса.</p>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
       <div><label>Компания *</label><input id="cp-company" value="${academyEsc(p?.companyName||'')}" placeholder="Название компании"></div>
-      <div><label>Контактное лицо</label><input id="cp-contact" value="${academyEsc(p?.contactName||'')}" placeholder="Имя и должность"></div>
+      <div><label>Представитель: имя и фамилия</label><input id="cp-contact" value="${academyEsc(p?.contactName||'')}" placeholder="John Smith"></div>
+      <div><label>Должность представителя</label><input id="cp-contact-title" value="${academyEsc(p?.contactTitle||'')}" placeholder="Office manager, owner…"></div>
       <div><label>Телефон *</label><input id="cp-phone" value="${academyEsc(p?.phone||'')}" placeholder="+1 ..."></div>
       <div><label>Email</label><input id="cp-email" value="${academyEsc(p?.email||'')}" type="email"></div>
       <div><label>Сайт</label><input id="cp-website" value="${academyEsc(p?.website||'')}" placeholder="company.com"></div>
       <div><label>Город</label><input id="cp-city" value="${academyEsc(p?.city||'')}" placeholder="Los Angeles"></div>
-      <div><label>Тип бизнеса</label><input id="cp-type" value="${academyEsc(p?.businessType||'')}" placeholder="Офис, ресторан, школа, дилер..."></div>
+      <div><label>Тип компании</label><select id="cp-type"><option value="">Не выбран</option>${CLIENT_COMPANY_TYPES.map(([key, label]) => `<option value="${key}" ${coldProspectCompanyType(p) === key ? 'selected' : ''}>${label}</option>`).join('')}</select></div>
       <div><label>Интересующее направление</label><select id="cp-service">${Object.entries(COLD_SERVICE_META).map(([k,v])=>`<option value="${k}" ${(p?.serviceInterest||'unknown')===k?'selected':''}>${v}</option>`).join('')}</select></div>
       <div><label>Источник</label><select id="cp-source"><option value="manual" ${(p?.source||'manual')==='manual'?'selected':''}>Вручную</option><option value="google_maps" ${p?.source==='google_maps'?'selected':''}>Google Maps</option><option value="referral" ${p?.source==='referral'?'selected':''}>Рекомендация</option><option value="csv" ${p?.source==='csv'?'selected':''}>Импорт</option></select></div>
       <div><label>Ответственный</label><select id="cp-assignee">${coldManagers().map(u=>`<option value="${u.id}" ${managerDefault===u.id?'selected':''}>${academyEsc(u.name)}</option>`).join('')}</select></div>
@@ -20147,10 +20174,12 @@ function saveColdProspect(id = '') {
   Object.assign(p, {
     companyName, phone,
     contactName: (document.getElementById('cp-contact')?.value || '').trim(),
+    contactTitle: (document.getElementById('cp-contact-title')?.value || '').trim(),
     email: (document.getElementById('cp-email')?.value || '').trim().toLowerCase(),
     website: (document.getElementById('cp-website')?.value || '').trim(),
     city: (document.getElementById('cp-city')?.value || '').trim(),
-    businessType: (document.getElementById('cp-type')?.value || '').trim(),
+    companyType: document.getElementById('cp-type')?.value || '',
+    businessType: clientCompanyTypeLabel(document.getElementById('cp-type')?.value || '') || p.businessType || '',
     serviceInterest: document.getElementById('cp-service')?.value || 'unknown',
     source: document.getElementById('cp-source')?.value || 'manual',
     assignedTo: document.getElementById('cp-assignee')?.value || currentUser().id,
@@ -20240,9 +20269,8 @@ function coldConvertToB2B(id, openOrderAfter = false) {
     else {
       const clientId = 'c'+uid();
       db.clients.push({
-        id:clientId, name:p.companyName, companyName:p.companyName||'', contactTitle:p.contactTitle||'',
-        firstName:splitClientName(p.contactName).firstName||'', lastName:splitClientName(p.contactName).lastName||'', phone:p.phone||'', email:p.email||'',
-        address:p.address||p.city||'', addressCity:p.city||'', type:'commercial', accountType:'b2b', relationshipType:'regular',
+        id:clientId, name:p.companyName, ...coldProspectIdentity(p), phone:p.phone||'', email:p.email||'',
+        address:p.address||p.city||'', addressCity:p.city||'', type:'commercial', accountType:'b2b', relationshipType:'one_time',
         source:'cold_call', preferredChannel:'phone', primaryAddressId:null, addresses:[], referralCode:(p.companyName||'B2B').substring(0,3).toUpperCase()+'-'+Math.floor(Math.random()*9000+1000),
         referredBy:null, createdAt:new Date().toISOString(), tags:['b2b','regular','cold-call'], coldProspectId:p.id,
       });
@@ -20515,14 +20543,14 @@ function renderLeadsView() {
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="tag ${src.cls}">${src.icon} ${src.label}</span>
-                <span class="font-semibold">${l.name || 'Без имени'}</span>
-                ${existing ? `<span class="tag bg-amber-50 text-amber-700">↻ Уже есть в базе: ${existing.name}</span>` : ''}
+                <span class="tag ${src.cls}">${src.icon} ${academyEsc(src.label)}</span>
+                <span class="font-semibold">${academyEsc(l.name || 'Без имени')}</span>
+                ${existing ? `<span class="tag bg-amber-50 text-amber-700">↻ Уже есть в базе: ${academyEsc(existing.name)}</span>` : ''}
                 <span class="text-xs text-gray-400">${fmtDateTime(l.receivedAt)}</span>
               </div>
               <div class="flex items-center gap-3 mt-1 text-sm flex-wrap">
-                ${l.phone ? `<a class="text-blue-600 hover:underline cursor-pointer" onclick="startCall('${l.phone}','${existing?existing.id:''}')">📞 ${l.phone}</a>` : ''}
-                ${l.email ? `<span class="text-gray-600">✉️ ${l.email}</span>` : ''}
+                ${l.phone ? `<a class="text-blue-600 hover:underline cursor-pointer" onclick="startCall('${academyEsc(jsQuote(l.phone))}','${academyEsc(jsQuote(existing ? existing.id : ''))}')">📞 ${academyEsc(l.phone)}</a>` : ''}
+                ${l.email ? `<span class="text-gray-600">✉️ ${academyEsc(l.email)}</span>` : ''}
               </div>
               ${l.companyName ? `<div class="text-sm text-gray-700 mt-1">🏢 ${academyEsc([clientCompanyTypeLabel(l.companyType), [l.firstName, l.lastName].filter(Boolean).join(' '), l.contactTitle].filter(Boolean).join(' · '))}</div>` : ''}
               ${l.message ? `<div class="text-sm text-gray-600 mt-1 bg-gray-50 rounded p-2">${academyEsc(l.message)}</div>` : ''}
@@ -20530,15 +20558,15 @@ function renderLeadsView() {
             </div>
             <div class="flex flex-col gap-2">
               ${l.canonical && l.consultation
-                ? `<button class="btn-primary text-sm" onclick="openCanonicalConsultationCard('${l.consultation.consultation_id}')">Открыть запись</button>`
+                ? `<button class="btn-primary text-sm" onclick="openCanonicalConsultationCard('${academyEsc(jsQuote(l.consultation.consultation_id))}')">Открыть запись</button>`
                 : l.canonical && l.source === 'website'
-                  ? `<button class="btn-primary text-sm" onclick="convertLead('${l.id}')">➕ Создать проект</button>
+                  ? `<button class="btn-primary text-sm" onclick="convertLead('${academyEsc(jsQuote(l.id))}')">➕ Создать проект</button>
                      ${l.phone ? `<a class="btn-ghost text-sm text-center" href="tel:${academyEsc(l.phone)}">📞 Позвонить</a>` : ''}
-                     <button class="btn-ghost text-xs text-gray-400" onclick="dismissLead('${l.id}')">Спам / отклонить</button>`
+                     <button class="btn-ghost text-xs text-gray-400" onclick="dismissLead('${academyEsc(jsQuote(l.id))}')">Спам / отклонить</button>`
                 : l.canonical
                   ? `<a class="btn-primary text-sm text-center" href="tel:${academyEsc(l.phone || '')}">📞 Позвонить</a>`
-                  : `<button class="btn-primary text-sm" onclick="convertLead('${l.id}')">➕ Создать проект</button>
-                     <button class="btn-ghost text-xs text-gray-400" onclick="dismissLead('${l.id}')">Спам / отклонить</button>`}
+                  : `<button class="btn-primary text-sm" onclick="convertLead('${academyEsc(jsQuote(l.id))}')">➕ Создать проект</button>
+                     <button class="btn-ghost text-xs text-gray-400" onclick="dismissLead('${academyEsc(jsQuote(l.id))}')">Спам / отклонить</button>`}
             </div>
           </div>
         </div>`;

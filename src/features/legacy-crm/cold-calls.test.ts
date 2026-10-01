@@ -17,7 +17,7 @@ test("cold outreach is a first-class manager workspace", () => {
 test("cold companies remain separate from real clients until conversion", () => {
   assert.match(html, /if \(!Array\.isArray\(db\.coldProspects\)\) db\.coldProspects = \[\]/);
   assert.match(html, /function coldConvertToB2B\(id, openOrderAfter = false\)/);
-  assert.match(html, /accountType:'b2b', relationshipType:'regular'/);
+  assert.match(html, /accountType:'b2b', relationshipType:'one_time'/);
   assert.match(html, /source:'cold_call'/);
 });
 

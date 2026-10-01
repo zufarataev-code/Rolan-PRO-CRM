@@ -55,7 +55,7 @@ test("B2B needs the company, the representative and the representative's title",
   const { fields } = identity.readClientIdentityFields("nc");
   assert.equal(fields?.name, "Acme LLC");
   assert.equal(fields?.type, "commercial");
-  assert.equal(fields?.relationshipType, "regular", "a company is always an account");
+  assert.equal(fields?.relationshipType, "one_time", "a company is a partner only when chosen explicitly");
   assert.equal(identity.clientRepresentativeLine(fields as never), "John Doe · Project manager");
 });
 
@@ -88,4 +88,31 @@ test("an existing company card opens with its company fields visible", () => {
   assert.match(markup, /id="cc-company" value="Acme"/);
   assert.match(markup, /id="cc-title" value="Owner"/);
   assert.doesNotMatch(markup, /id="cc-company-block" class="[^"]*hidden/);
+});
+
+test("public lead values are escaped in «Новые лиды» and in shared contact renderers", () => {
+  const leads = block("function renderLeadsView", "async function fetchLeads(");
+  assert.match(leads, /academyEsc\(l\.name \|\| 'Без имени'\)/);
+  assert.match(leads, /✉️ \$\{academyEsc\(l\.email\)\}/);
+  assert.match(leads, /startCall\('\$\{academyEsc\(jsQuote\(l\.phone\)\)\}'/);
+  assert.doesNotMatch(leads, /\$\{l\.(name|email|phone)\b(?! \?)/);
+  assert.match(html, /✉️ \$\{academyEsc\(email\)\}<\/a>/);
+  assert.match(html, /📍 \$\{academyEsc\(address\)\}<\/a>/);
+});
+
+test("cold-call companies keep the representative's title out of the last name", () => {
+  const context = vm.createContext({});
+  vm.runInContext(
+    [
+      block("function splitClientName(fullName)", "function cleanAddressUnitValue"),
+      block("const CLIENT_COMPANY_TYPES = [", "function clientCompanyTypeLabel"),
+      block("function coldProspectCompanyType(p)", "function toggleClientIdentityFields(prefix)"),
+    ].join("\n") + "; Object.assign(this, { coldProspectIdentity });",
+    context,
+  );
+  const { coldProspectIdentity } = context as unknown as { coldProspectIdentity: (p: Record<string, string>) => Record<string, string> };
+  assert.deepEqual({ ...coldProspectIdentity({ companyName: "Acme", contactName: "John Smith office manager", businessType: "Офис" }) },
+    { companyName: "Acme", companyType: "office", firstName: "John Smith office manager", lastName: "", contactTitle: "" });
+  assert.deepEqual({ ...coldProspectIdentity({ companyName: "Acme", contactName: "John Smith", contactTitle: "Owner", companyType: "retail" }) },
+    { companyName: "Acme", companyType: "retail", firstName: "John", lastName: "Smith", contactTitle: "Owner" });
 });
