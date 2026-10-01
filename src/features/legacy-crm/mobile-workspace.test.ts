@@ -48,3 +48,21 @@ test("mobile workspace adapter is injected only once", () => {
   assert.equal((twice.match(/id="rolanpro-mobile-workspace-style"/g) || []).length, 1);
   assert.equal((twice.match(/id="rolanpro-mobile-workspace-script"/g) || []).length, 1);
 });
+
+
+test("mobile calendar keeps the live dispatch week horizontal", () => {
+  const result = injectMobileWorkspaceAdapter("<!doctype html><body><main></main></body>");
+
+  assert.match(
+    result,
+    /\.dispatch-week-head,[\s\S]*?\.dispatch-time-grid \{[\s\S]*?grid-template-columns: 44px repeat\(7, minmax\(0, 1fr\)\) !important/,
+  );
+  assert.match(result, /\.dispatch-week-head \+ \.dispatch-week-scroll \{[\s\S]*?overflow-x: hidden !important/);
+  assert.match(result, /\.dispatch-week-head \+ \.dispatch-week-scroll \.dispatch-event-meta \{[\s\S]*?display: none !important/);
+  assert.doesNotMatch(result, /\n    \.dispatch-week-scroll \{[\s\S]*?overflow-x: hidden !important/);
+  assert.match(result, /const isProtectedCalendarLayout/);
+  assert.match(result, /'\.dispatch-week-head'/);
+  assert.match(result, /'\.dispatch-time-grid'/);
+  assert.match(result, /protectCalendarLayouts\(\)/);
+  assert.match(result, /isProtectedCalendarLayout\(element\)/);
+});
