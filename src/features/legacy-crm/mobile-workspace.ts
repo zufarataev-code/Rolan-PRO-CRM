@@ -313,22 +313,60 @@ const MOBILE_WORKSPACE_PATCH = `
       max-width: 100% !important;
     }
 
-    /* Calendar grids are semantic layouts. The generic phone adapter must never
-       collapse them to one column or turn them into overflow blocks. */
-    .mobile-calendar-week-strip {
+    /* Calendar grids are semantic layouts. The live weekly calendar is
+       dispatch-week-head + dispatch-time-grid. Keep both on the exact same
+       eight tracks: time gutter + seven horizontal day columns. */
+    .dispatch-week-head,
+    .dispatch-time-grid {
       display: grid !important;
-      grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+      grid-template-columns: 44px repeat(7, minmax(0, 1fr)) !important;
       width: 100% !important;
       min-width: 0 !important;
       max-width: 100% !important;
-      gap: 4px !important;
+    }
+
+    .dispatch-week-head > div,
+    .dispatch-time-gutter,
+    .dispatch-day-column {
+      min-width: 0 !important;
+    }
+
+    .dispatch-week-head > div {
+      min-height: 50px !important;
+      padding: 4px 1px !important;
+      font-size: .61rem !important;
+      line-height: 1.05 !important;
       overflow: hidden !important;
     }
 
-    .mobile-calendar-week-strip > *,
-    .mobile-calendar-day-button {
-      min-width: 0 !important;
+    .dispatch-week-scroll {
+      width: 100% !important;
       max-width: 100% !important;
+      overflow-x: hidden !important;
+    }
+
+    .dispatch-time-gutter .dispatch-hour-label {
+      right: .2rem !important;
+      font-size: .56rem !important;
+    }
+
+    .dispatch-event {
+      padding: .16rem .14rem !important;
+      border-left-width: 3px !important;
+    }
+
+    .dispatch-event-time {
+      font-size: .55rem !important;
+      line-height: 1 !important;
+    }
+
+    .dispatch-event-title {
+      font-size: .57rem !important;
+      line-height: 1.04 !important;
+    }
+
+    .dispatch-event-meta {
+      display: none !important;
     }
 
     .mobile-calendar-month-weekdays,
@@ -474,7 +512,6 @@ const MOBILE_WORKSPACE_PATCH = `
     const isProtectedCalendarLayout = (element) => {
       if (!(element instanceof HTMLElement)) return false;
       return Boolean(element.closest([
-        '.mobile-calendar-week-strip',
         '.mobile-calendar-month-weekdays',
         '.mobile-calendar-month-grid',
         '.calendar-month-grid',
