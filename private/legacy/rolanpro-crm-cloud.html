@@ -22146,7 +22146,11 @@ function saveClientContactProfile(clientId, orderId = '') {
   const email = document.getElementById('client-contact-email')?.value.trim().toLowerCase() || '';
   const phone = document.getElementById('client-contact-phone')?.value.trim() || '';
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Проверьте email клиента.'); return; }
-  const duplicate = existingClientByContact(phone, email, clientId);
+  // Only contacts that actually change are checked: unchanged contacts of a
+  // preserved historical duplicate pair must not block editing the card.
+  const phoneChanged = clientIdentityPhoneKey(phone) !== clientIdentityPhoneKey(c.phone);
+  const emailChanged = clientIdentityEmailKey(email) !== clientIdentityEmailKey(c.email);
+  const duplicate = existingClientByContact(phoneChanged ? phone : '', emailChanged ? email : '', clientId);
   if (duplicate) {
     alert(`Телефон или email уже принадлежат клиенту ${duplicate.name}. Объедините работу в существующей карточке.`);
     return;

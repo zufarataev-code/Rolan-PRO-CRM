@@ -1,4 +1,4 @@
-import { ClientIdentityConflictError } from "@/features/sales/client-identity";
+import { ClientIdentityConflictError, ClientNotAccessibleError } from "@/features/sales/client-identity";
 import { NextRequest } from "next/server";
 
 import { PROJECT_ACCESS_ROLES } from "@/features/projects/api";
@@ -84,6 +84,9 @@ export async function POST(request: NextRequest) {
       position_notes: body.position_notes ?? null,
     });
   } catch (error) {
+    if (error instanceof ClientNotAccessibleError) {
+      return apiError(409, "client_owned_by_other_manager", error.message);
+    }
     if (error instanceof ClientIdentityConflictError) {
       return apiError(409, "client_identity_conflict", error.message, {
         email_client_id: error.emailClientId,

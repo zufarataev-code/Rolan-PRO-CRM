@@ -224,6 +224,14 @@ export async function findExistingClientByIdentity(
   return { client: primary, matchedBy, conflictingClient: conflicting };
 }
 
+/** The contact belongs to a client outside the caller's access scope: refuse without naming it. */
+export class ClientNotAccessibleError extends Error {
+  constructor() {
+    super("Клиент с таким телефоном или почтой уже есть в CRM у другого менеджера. Обратитесь к руководителю.");
+    this.name = "ClientNotAccessibleError";
+  }
+}
+
 export class ClientIdentityConflictError extends Error {
   constructor(readonly emailClientId: string, readonly phoneClientId: string) {
     super("Телефон и почта принадлежат двум разным клиентам. Выберите клиента вручную.");

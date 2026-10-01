@@ -167,6 +167,10 @@ export async function PATCH(request: NextRequest) {
 
   if (entity === "service_type") {
     const owner = isOwner(auth.session.roles);
+    const newInstallRate = owner ? numberValue(patch.installation_cost_per_sqft) : undefined;
+    const previous = newInstallRate === undefined
+      ? null
+      : await prisma.serviceType.findUnique({ where: { service_type_id: id }, select: { installation_cost_per_sqft: true } });
     const updated = await prisma.serviceType.update({
       where: { service_type_id: id },
       data: {
@@ -183,6 +187,25 @@ export async function PATCH(request: NextRequest) {
         sort_order: integerValue(patch.sort_order),
       },
     });
+    // Manual positions copied the default rate at creation. Work not yet done
+    // (not installed, no payroll accrual) follows the owner's new rate; real
+    // per-position overrides (any other value) and completed work keep theirs.
+    if (previous && newInstallRate !== undefined && Number(previous.installation_cost_per_sqft) !== newInstallRate) {
+      await prisma.$executeRaw`
+        UPDATE project_positions AS p
+        SET dynamic_fields = jsonb_set(p.dynamic_fields::jsonb, '{manual_installation_cost_per_sqft}', to_jsonb(${newInstallRate}::numeric)),
+            updated_at = NOW()
+        FROM projects AS pr
+        WHERE pr.project_id = p.project_id
+          AND p.service_type_id = ${id}::uuid
+          AND (pr.install_date IS NULL OR pr.install_date >= CURRENT_DATE)
+          AND jsonb_typeof(p.dynamic_fields::jsonb -> 'manual_installation_cost_per_sqft') = 'number'
+          AND (p.dynamic_fields::jsonb ->> 'manual_installation_cost_per_sqft')::numeric = ${Number(previous.installation_cost_per_sqft)}::numeric
+          AND NOT EXISTS (
+            SELECT 1 FROM installer_jobs j JOIN installer_payroll_accruals a ON a.installer_job_id = j.installer_job_id
+            WHERE j.project_position_id = p.position_id
+          )`;
+    }
     return apiSuccess(servicePricingForRole(updated, owner));
   }
 
