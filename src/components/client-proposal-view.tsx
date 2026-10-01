@@ -1,12 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+
+import { ProposalDrawing } from "@/components/proposal-drawing";
+import { PublicWarrantySummary } from "@/components/public-warranty-summary";
+import { SignaturePad } from "@/components/signature-pad";
 
 type ClientProposalViewProps = {
   initialProposal: any;
   language?: "en" | "ru";
   onAgreementSigned?: () => void;
+  /** RU/EN switch rendered inside the cover, not floating over it. */
+  languageSwitch?: ReactNode;
+  /** Payment block, placed right after the signed agreement. */
+  paymentSlot?: ReactNode;
+  /** Deposit due on signing (0 = pay on completion). */
+  depositAmount?: number;
 };
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -196,16 +210,24 @@ const SERVICE_INTROS_RU: typeof SERVICE_INTROS = {
   },
 };
 
-function serviceIntroFor(items: any[], language: "en" | "ru") {
+/** One intro per direction present in the proposal (smart + solar + safety → three cards). */
+function serviceIntrosFor(items: any[], language: "en" | "ru") {
   const intros = language === "ru" ? SERVICE_INTROS_RU : SERVICE_INTROS;
+  const found = new Map<string, (typeof intros)[string]>();
   for (const item of items || []) {
-    const raw = `${item?.film?.category_name ?? ""} ${item?.service_type?.name ?? ""}`.toLowerCase();
-    if (raw.includes("smart")) return intros.smart;
-    if (raw.includes("safety") || raw.includes("security") || raw.includes("protect")) return intros.protective;
-    if (raw.includes("decor")) return intros.decorative;
-    if (raw.includes("solar") || raw.includes("sun")) return intros.solar;
+    const raw = `${item?.film?.category_name ?? ""} ${item?.service_type?.name ?? ""} ${item?.service_type?.name_en ?? ""} ${item?.service_type?.service_code ?? ""}`.toLowerCase();
+    const key = raw.includes("smart")
+      ? "smart"
+      : raw.includes("safety") || raw.includes("security") || raw.includes("protect")
+        ? "protective"
+        : raw.includes("decor")
+          ? "decorative"
+          : raw.includes("solar") || raw.includes("sun")
+            ? "solar"
+            : null;
+    if (key && !found.has(key)) found.set(key, intros[key]);
   }
-  return null;
+  return [...found.values()];
 }
 
 /**
@@ -411,14 +433,13 @@ export function ClientProposalView({
   initialProposal,
   language = "en",
   onAgreementSigned,
+  languageSwitch,
+  paymentSlot,
+  depositAmount = 0,
 }: ClientProposalViewProps) {
   const ru = language === "ru";
   const [proposal, setProposal] = useState(initialProposal);
-  const [message, setMessage] = useState(
-    ru
-      ? "Проверьте услуги ниже и оставьте только то, что хотите согласовать."
-      : "Review the services below and keep only what you want to approve.",
-  );
+  const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [agreement, setAgreement] = useState({
     signer_name: proposal.agreement?.signer_name ?? "",
@@ -427,7 +448,11 @@ export function ClientProposalView({
     signature_text: proposal.agreement?.signer_name ?? "",
     client_notes: proposal.agreement?.client_notes ?? "",
     accepted_terms: Boolean(proposal.agreement?.accepted_terms),
+    signature_image: null as string | null,
   });
+  const canSign = Boolean(
+    agreement.signer_name.trim() && /.+@.+\..+/.test(agreement.signer_email) && agreement.signature_image && agreement.accepted_terms,
+  );
 
   const localSelectedTotal = proposal.items.reduce(
     (sum: number, item: any) => sum + (item.client_selected ? item.line_price : 0),
@@ -498,7 +523,47 @@ export function ClientProposalView({
   }
 
   const isLocked = proposal.status === "agreement_signed" || proposal.status === "approved";
-  const serviceIntro = serviceIntroFor(proposal.items, language);
+  const agreementTerms = (
+          <ol className="rp-terms">
+      <li>
+        <strong>{ru ? "Объём работ" : "Scope"}</strong>
+        <span>
+          {ru
+            ? `Позиции, выбранные выше (${selectedCount}), по рабочему чертежу — Приложение А.`
+            : `The ${selectedCount} line${selectedCount === 1 ? "" : "s"} selected above, per the working drawing — Appendix A.`}
+        </span>
+      </li>
+      <li>
+        <strong>{ru ? "Стоимость" : "Price"}</strong>
+        <span>{formatCurrency(localSelectedTotal)}</span>
+      </li>
+      <li>
+        <strong>{ru ? "Оплата" : "Payment"}</strong>
+        <span>
+          {depositAmount > 0
+            ? ru
+              ? `Аванс ${formatCurrency(depositAmount)} при подписании, остаток ${formatCurrency(Math.max(0, localSelectedTotal - depositAmount))} — после выполнения работ.`
+              : `Deposit ${formatCurrency(depositAmount)} on signing, balance ${formatCurrency(Math.max(0, localSelectedTotal - depositAmount))} on completion.`
+            : ru
+              ? "Оплата после выполнения работ."
+              : "Payment on completion of the work."}
+        </span>
+      </li>
+      <li>
+        <strong>{ru ? "Сроки" : "Schedule"}</strong>
+        <span>{ru ? "Дата монтажа согласуется с менеджером после подписания." : "The installation date is agreed with your manager after signing."}</span>
+      </li>
+      <li>
+        <strong>{ru ? "Гарантия" : "Warranty"}</strong>
+        <span>{ru ? "Как указано в разделе «Гарантия» выше." : "As stated in the Warranty section above."}</span>
+      </li>
+      <li>
+        <strong>{ru ? "Изменения" : "Changes"}</strong>
+        <span>{ru ? "Любое изменение объёма оформляется новой версией КП." : "Any change of scope is made as a new version of this proposal."}</span>
+      </li>
+    </ol>
+  );
+  const serviceIntros = serviceIntrosFor(proposal.items, language);
   const filmsWithSpecs = uniqueFilmsWithSpecs(proposal.items);
 
   return (
@@ -538,8 +603,8 @@ export function ClientProposalView({
           <div><span>{ru ? "Стоимость выбранных работ" : "Selected investment"}</span><strong>{formatCurrency(localSelectedTotal)}</strong></div>
         </section>
 
-        {serviceIntro ? (
-          <section className="proposal-print-solution">
+        {serviceIntros.map((serviceIntro) => (
+          <section key={serviceIntro.title} className="proposal-print-solution">
             <div>
               <span>{ru ? "Рекомендуемое решение" : "Recommended solution"}</span>
               <h2>{serviceIntro.title}</h2>
@@ -547,7 +612,7 @@ export function ClientProposalView({
             </div>
             <ul>{serviceIntro.points.map((point) => <li key={point}>{point}</li>)}</ul>
           </section>
-        ) : null}
+        ))}
 
         <section className="proposal-print-scope">
           <div className="proposal-print-section-heading">
@@ -614,8 +679,27 @@ export function ClientProposalView({
           </div>
         </section>
 
+        <ProposalDrawing
+          items={proposal.items}
+          language={language}
+          clientName={proposal.client?.name ?? proposal.title}
+          address={proposal.client?.service_address ?? ""}
+          proposalCode={proposal.proposal_code ?? ""}
+          ids="rpp"
+        />
+
+        <PublicWarrantySummary language={language} items={proposal.items} />
+
+        <section className="proposal-print-terms">
+          <h2>{ru ? "Договор на установку" : "Installation agreement"}</h2>
+          {agreementTerms}
+        </section>
+
         <section className="proposal-print-signatures">
           <div>
+            {proposal.agreement?.signature_image ? (
+              <img src={proposal.agreement.signature_image} alt="" style={{ maxHeight: 60 }} />
+            ) : null}
             <span>{proposal.agreement?.signer_name || (ru ? "Согласование клиента" : "Client approval")}</span>
             <small>{ru ? "Подпись / дата" : "Signature / date"}</small>
           </div>
@@ -634,329 +718,242 @@ export function ClientProposalView({
       <header className="client-proposal-hero">
         <div className="proposal-hero-nav">
           <img src="/landing/rolan-logo.webp" alt="Rolan PRO" className="proposal-hero-logo" />
-          <div className="proposal-hero-meta">
-            <strong>{proposal.proposal_code ?? (ru ? "Коммерческое предложение" : "Project proposal")}</strong>
-            <span>{ru ? "Действительно до" : "Valid through"} {formatDate(proposal.expires_at, language)}</span>
-          </div>
+          {languageSwitch}
         </div>
 
         <div className="proposal-hero-copy">
-          <div className="landing-kicker">{ru ? "КП на установку плёнки подготовлено для" : "Window film proposal prepared for"}</div>
+          <div className="landing-kicker">
+            {proposal.proposal_code ?? (ru ? "Коммерческое предложение" : "Project proposal")} · {ru ? "до" : "valid through"} {formatDate(proposal.expires_at, language)}
+          </div>
           <h1 className="client-proposal-title">{proposal.client?.name ?? proposal.title}</h1>
           <p className="client-proposal-address">{proposal.client?.service_address || (ru ? "Южная Калифорния" : "Southern California")}</p>
           <p className="landing-text">
             {ru
-              ? "Индивидуальное решение на основе замера: материалы, объём монтажа и стоимость собраны в одном понятном документе."
-              : "A measured, project-specific solution for your glass — materials, installation scope and investment presented in one clear document."}
+              ? "Решение по замеру вашего объекта: плёнки, чертёж проёмов, гарантия и договор — в одном документе."
+              : "A solution built on your site measurement: films, a drawing of every opening, warranty and agreement — in one document."}
           </p>
           <div className="proposal-hero-actions">
-            <a href="#project-scope" className="proposal-primary-link">{ru ? "Проверить состав проекта" : "Review project scope"}</a>
-            <a href="#proposal-payment" className="proposal-primary-link">{ru ? "Перейти к оплате" : "Go to payment"}</a>
-            <button type="button" className="proposal-print-trigger" onClick={() => window.print()}>
-              {ru ? "Скачать PDF" : "Download PDF"}
-            </button>
+            <a href="#project-scope" className="proposal-primary-link">{ru ? "Смотреть проект" : "Review the project"}</a>
+            <a href="#proposal-agreement" className="proposal-primary-link rp-ghost-link">{ru ? "Подписать" : "Sign"}</a>
           </div>
         </div>
 
         <div className="client-proposal-summary">
           <span>{ru ? "Стоимость выбранных работ" : "Your selected investment"}</span>
           <strong>{formatCurrency(localSelectedTotal)}</strong>
-          <small>{selectedCount} {ru ? "выбранных позиций" : `selected service ${selectedCount === 1 ? "line" : "lines"}`}</small>
+          <small>
+            {selectedCount} {ru ? "позиций" : selectedCount === 1 ? "line" : "lines"} · {projectSummary.area ? `${projectSummary.area.toFixed(0)} sq ft` : ""}
+          </small>
         </div>
       </header>
 
-      <section className="proposal-overview-strip" aria-label="Project summary">
-        <div><span>{ru ? "КП" : "Proposal"}</span><strong>{proposal.proposal_code ?? (ru ? "Подготовлено" : "Prepared")}</strong></div>
-        <div><span>{ru ? "Помещения / зоны" : "Project areas"}</span><strong>{projectSummary.rooms || "—"}</strong></div>
-        <div><span>{ru ? "Стеклянные элементы" : "Glass sections"}</span><strong>{projectSummary.windows || "—"}</strong></div>
-        <div><span>{ru ? "Измеренная площадь" : "Measured area"}</span><strong>{projectSummary.area ? `${projectSummary.area.toFixed(1)} sqft` : "—"}</strong></div>
-      </section>
+      <main className="rp-body">
+        {serviceIntros.length ? (
+          <section className="rp-section">
+            <div className="rp-kicker">01 / {ru ? "Решение" : "Solution"}</div>
+            <h2 className="rp-h2">{ru ? "Что мы установим" : "What we will install"}</h2>
+            <div className="rp-solution-grid">
+              {serviceIntros.map((intro) => (
+                <article key={intro.title} className="rp-solution-card">
+                  <strong>{intro.title}</strong>
+                  <p>{intro.body}</p>
+                  <ul className="rp-checklist">
+                    {intro.points.slice(0, 3).map((point) => <li key={point}>{point}</li>)}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
-      {serviceIntro ? (
-        <section className="proposal-solution-section">
-          <div className="proposal-section-label">01 / {ru ? "Рекомендуемое решение" : "Recommended solution"}</div>
-          <div className="proposal-solution-copy">
-            <h2>{serviceIntro.title}</h2>
-            <p>{serviceIntro.body}</p>
-          </div>
-          <div className="proposal-benefit-list">
-            {serviceIntro.points.map((point, index) => (
-              <div key={point}><span>{String(index + 1).padStart(2, "0")}</span><p>{point}</p></div>
-            ))}
+        <section className="rp-section" id="project-scope">
+          <div className="rp-kicker">02 / {ru ? "Объём по замеру" : "Measured scope"}</div>
+          <h2 className="rp-h2">{ru ? "Ваш проект по помещениям" : "Your project, room by room"}</h2>
+          <p className="rp-lead">
+            {ru ? "Можно убрать ненужную позицию — итог пересчитается сразу." : "Switch off anything you don't need — the total updates instantly."}
+          </p>
+
+          {roomGroups.map((group) => {
+            const roomTotal = group.items.reduce((sum: number, item: any) => sum + (item.client_selected ? item.line_price : 0), 0);
+            return (
+              <div key={group.room} className="rp-room">
+                <div className="rp-room-head">
+                  <h3 className="rp-h3">{localizeItemText(group.room, language)}</h3>
+                  <span>{formatCurrency(roomTotal)}</span>
+                </div>
+                {group.items.map((item: any) => {
+                  const facts = [...new Set([...getMeasurementSummary(item, language), ...getDynamicFieldSummary(item, language)])]
+                    .filter((fact) => !/^(Стекло|Glass|Монтаж|Install):/.test(fact));
+                  const addonSummary = getAddonSummary(item.addons_snapshot, language);
+                  const rawTitle = localizeItemText(ru ? item.title_ru || item.title : item.title_en || item.title, language);
+                  const title = rawTitle.replace(new RegExp(`^${escapeRegExp(String(item.room_name ?? ""))}\\s*·\\s*`), "");
+                  const filmName = item.film
+                    ? `${ru ? item.film.brand_name_ru || item.film.brand_name : item.film.brand_name_en || item.film.brand_name} ${ru ? item.film.model_name_ru || item.film.model_name : item.film.model_name_en || item.film.model_name}`
+                    : localizeItemText(ru ? item.description_ru || item.description : item.description_en || item.description, language);
+                  return (
+                    <article key={item.proposal_item_id} className={`rp-line${item.client_selected ? "" : " rp-line-off"}`}>
+                      <div className="rp-line-main">
+                        <strong>{title || (ru ? "Позиция" : "Line item")}</strong>
+                        {filmName && filmName !== title ? <span className="rp-line-film">{filmName}</span> : null}
+                        {facts.length ? <span className="rp-line-facts">{facts.join(" · ")}</span> : null}
+                        {filmSpecChips(item.film, language).length ? (
+                          <span className="rp-line-facts">{filmSpecChips(item.film, language).join(" · ")}</span>
+                        ) : null}
+                        {addonSummary.map((summary) => <span key={summary} className="rp-line-facts">+ {summary}</span>)}
+                      </div>
+                      <div className="rp-line-side">
+                        <span className="rp-line-price">{formatCurrency(item.line_price)}</span>
+                        <label className="rp-switch" title={ru ? "Включить в проект" : "Include in project"}>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(item.client_selected)}
+                            disabled={isLocked || saving}
+                            onChange={(event) =>
+                              setProposal((current: any) => ({
+                                ...current,
+                                items: current.items.map((candidate: any) =>
+                                  candidate.proposal_item_id === item.proposal_item_id
+                                    ? { ...candidate, client_selected: event.target.checked }
+                                    : candidate,
+                                ),
+                              }))
+                            }
+                          />
+                          <span aria-hidden="true" />
+                        </label>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            );
+          })}
+
+          <div className="rp-total-row">
+            <span>{ru ? "Итого" : "Total"}</span>
+            <strong>{formatCurrency(localSelectedTotal)}</strong>
           </div>
         </section>
-      ) : null}
 
-      <section className="client-proposal-grid">
-        <div className="client-proposal-band">
-          <section className="surface proposal-scope-section" id="project-scope">
-            <div className="proposal-section-label">02 / {ru ? "Объём по замеру" : "Measured scope"}</div>
-            <h2 className="surface-title">{ru ? "Проект по помещениям" : "Your project, room by room"}</h2>
-            <p className="surface-subtitle">
-              {ru ? "Каждая позиция привязана к измеренному стеклу. Дополнительные услуги можно включить или убрать до подписания." : "Every line is tied to the measured glass. Optional services can be included or removed before signing."}
-            </p>
+        <ProposalDrawing
+          items={proposal.items}
+          language={language}
+          clientName={proposal.client?.name ?? proposal.title}
+          address={proposal.client?.service_address ?? ""}
+          proposalCode={proposal.proposal_code ?? ""}
+        />
 
-            {roomGroups.map((group) => (
-              <div key={group.room} className="client-room-group">
-                <div className="client-room-head">
-                  <h3 className="client-room-title">{localizeItemText(group.room, language)}</h3>
-                  <span className="client-room-count">
-                    {group.items.length} {ru ? "поз." : (group.items.length === 1 ? "line" : "lines")}
-                  </span>
-                </div>
+        <PublicWarrantySummary language={language} items={proposal.items} />
 
-            <div className="client-item-list">
-              {group.items.map((item: any) => {
-                const fieldSummary = [...new Set([...getMeasurementSummary(item, language), ...getDynamicFieldSummary(item, language)])];
-                const addonSummary = getAddonSummary(item.addons_snapshot, language);
-                const itemTitle = localizeItemText(ru ? item.title_ru || item.title : item.title_en || item.title, language);
-                const itemDescription = localizeItemText(ru ? item.description_ru || item.description : item.description_en || item.description, language);
-                const serviceName = ru ? item.service_type?.name_ru || item.service_type?.name : item.service_type?.name_en || item.service_type?.name;
-                const filmName = item.film
-                  ? `${ru ? item.film.brand_name_ru || item.film.brand_name : item.film.brand_name_en || item.film.brand_name} ${ru ? item.film.model_name_ru || item.film.model_name : item.film.model_name_en || item.film.model_name} · ${ru ? item.film.category_name_ru || item.film.category_name : item.film.category_name_en || item.film.category_name}`
-                  : null;
+        <section className="rp-section">
+          <div className="rp-kicker">{ru ? "Порядок работ" : "How it works"}</div>
+          <h2 className="rp-h2">{ru ? "Что дальше" : "What happens next"}</h2>
+          <ol className="rp-steps">
+            <li><strong>{ru ? "Подпись и аванс" : "Sign & deposit"}</strong><span>{ru ? "Вы подписываете договор здесь и вносите аванс." : "You sign the agreement here and pay the deposit."}</span></li>
+            <li><strong>{ru ? "Дата монтажа" : "Scheduling"}</strong><span>{ru ? "Менеджер согласует с вами дату и подготовку объекта." : "Your manager agrees the installation date and site preparation with you."}</span></li>
+            <li><strong>{ru ? "Монтаж" : "Installation"}</strong><span>{ru ? "Бригада защищает рабочую зону, сверяет размеры с чертежом и устанавливает плёнку." : "The crew protects the work area, checks sizes against the drawing and installs the film."}</span></li>
+            <li><strong>{ru ? "Сдача" : "Handover"}</strong><span>{ru ? "Проверяем каждый проём вместе с вами, передаём гарантийный сертификат." : "We inspect every opening with you and hand over the warranty certificate."}</span></li>
+          </ol>
+        </section>
 
-                return (
-                  <article key={item.proposal_item_id} className="client-item-card">
-                    <div className="client-item-top">
-                      <div>
-                        <div className="row-title">{itemTitle}</div>
-                        <div className="row-meta">
-                          {localizeItemText(item.room_name ?? (ru ? "Общее" : "General"), language)} · {serviceName ?? (ru ? "Услуга" : "Service")}
-                        </div>
-                      </div>
-                      <div className="chip chip-accent">{formatCurrency(item.line_price)}</div>
-                    </div>
+        <section className="rp-section rp-agreement" id="proposal-agreement">
+          <div className="rp-kicker">{ru ? "Договор" : "Agreement"}</div>
+          <h2 className="rp-h2">{ru ? "Договор на установку" : "Installation agreement"}</h2>
+          {agreementTerms}
+          <button type="button" className="rp-link-button rp-pdf" onClick={() => window.print()}>
+            {ru ? "Скачать КП и договор в PDF" : "Download proposal & agreement (PDF)"}
+          </button>
+          <p className="rp-small">
+            {ru ? "Полные условия: " : "Full terms: "}
+            <a href="/terms" target="_blank" rel="noreferrer">{ru ? "условия обслуживания Rolan PRO" : "Rolan PRO terms of service"}</a>.
+          </p>
 
-                    <div className="row-meta">
-                      {(filmName ?? itemDescription) || (ru ? "Индивидуальная позиция" : "Custom line item")}
-                    </div>
-
-                    {filmSpecChips(item.film, language).length > 0 && (
-                      <div className="proposal-detail-chips">
-                        {filmSpecChips(item.film, language).map((spec) => (
-                          <span key={spec} className="chip chip-spec">
-                            {spec}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {fieldSummary.length > 0 && (
-                      <div className="proposal-detail-chips">
-                        {fieldSummary.map((summary) => (
-                          <span key={summary} className="chip">
-                            {summary}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {addonSummary.length > 0 && (
-                      <div className="proposal-detail-list">
-                        {addonSummary.map((summary) => (
-                          <div key={summary} className="row-meta">
-                            {summary}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Раньше здесь при отсутствии площади печаталось unit_label —
-                        служебное «window». Клиенту оно ничего не говорит, а в
-                        документе на десятки тысяч выглядит как недоделка. */}
-                    {item.measurement?.sqft ? (
-                      <div className="row-meta">{item.measurement.sqft} sqft</div>
-                    ) : null}
-
-                    <label className="client-item-toggle">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(item.client_selected)}
-                        disabled={isLocked || saving}
-                        onChange={(event) =>
-                          setProposal((current: any) => ({
-                            ...current,
-                            items: current.items.map((candidate: any) =>
-                              candidate.proposal_item_id === item.proposal_item_id
-                                ? { ...candidate, client_selected: event.target.checked }
-                                : candidate,
-                            ),
-                          }))
-                        }
-                      />
-                      <span>{item.is_optional ? (ru ? "Добавить дополнительную услугу" : "Select optional item") : (ru ? "Оставить эту услугу" : "Keep this service")}</span>
-                    </label>
-                  </article>
-                );
-              })}
+          {isLocked && proposal.agreement?.signed_at ? (
+            <div className="rp-signed">
+              <span>{ru ? "Подписано" : "Signed"}</span>
+              <strong>{proposal.agreement.signer_name}</strong>
+              <small>{formatDate(proposal.agreement.signed_at, language)}</small>
+              {proposal.agreement.signature_image ? (
+                <img src={proposal.agreement.signature_image} alt={ru ? "Подпись клиента" : "Client signature"} />
+              ) : null}
             </div>
-              </div>
-            ))}
-          </section>
-
-          {/* Технический блок: характеристики плёнок, встречающихся в
-              предложении. Одна плёнка на десять окон показывается один
-              раз, а не под каждой позицией. Плёнки без заполненных
-              характеристик сюда не попадают — пустой блок хуже, чем
-              его отсутствие. */}
-          {filmsWithSpecs.length > 0 && (
-            <section className="surface">
-              <h2 className="surface-title">{ru ? "Технические характеристики" : "Technical specification"}</h2>
-              <p className="surface-subtitle">
-                {ru ? "Измеренные характеристики плёнок, выбранных для проекта." : "Measured performance of the films selected for your project."}
-              </p>
-              <div className="client-item-list">
-                {filmsWithSpecs.map((film: any) => (
-                  <div key={film.film_id} className="client-item-card">
-                    <div className="row-title">
-                      {ru ? film.brand_name_ru || film.brand_name : film.brand_name_en || film.brand_name} {ru ? film.model_name_ru || film.model_name : film.model_name_en || film.model_name}
-                    </div>
-                    <div className="row-meta">{ru ? film.category_name_ru || film.category_name : film.category_name_en || film.category_name}</div>
-                    <div className="proposal-detail-chips">
-                      {filmSpecChips(film, language).map((spec) => (
-                        <span key={spec} className="chip">
-                          {spec}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="landing-text">
-                {ru
-                  ? "Светопропускание показывает, сколько дневного света проходит через стекло. Отражение тепла — какую долю солнечной энергии плёнка не пускает в помещение. Блокировка UV защищает полы, мебель и предметы интерьера от выцветания."
-                  : "Visible light is how much daylight passes through. Heat rejected is the share of solar energy kept out of the room. UV blocking protects floors, furniture and artwork from fading."}
-              </p>
-            </section>
-          )}
-
-          <section className="proposal-assurance-section">
-            <div className="proposal-section-label">03 / {ru ? "Порядок выполнения" : "Delivery standard"}</div>
-            <h2>{ru ? "Что происходит после согласования" : "What happens after approval"}</h2>
-            <div className="proposal-process-grid">
-              <div><span>01</span><strong>{ru ? "Итоговое подтверждение" : "Final confirmation"}</strong><p>{ru ? "Подтверждаем объём, выбранную плёнку и доступ для монтажа." : "We confirm the selected scope, film and installation access."}</p></div>
-              <div><span>02</span><strong>{ru ? "Планирование" : "Scheduling"}</strong><p>{ru ? "Менеджер согласует дату монтажа и подготовку объекта." : "Your manager coordinates the installation window and preparation."}</p></div>
-              <div><span>03</span><strong>{ru ? "Профессиональный монтаж" : "Professional install"}</strong><p>{ru ? "Бригада защищает рабочую зону, устанавливает плёнку и проверяет каждый элемент." : "The crew protects the work area, installs the film and checks every section."}</p></div>
-              <div><span>04</span><strong>{ru ? "Сдача проекта" : "Handover"}</strong><p>{ru ? "Вы получаете инструкции по уходу и применимые условия гарантии." : "You receive care guidance and the applicable product and workmanship terms."}</p></div>
-            </div>
-          </section>
-
-          <section className="surface proposal-notes-section">
-            <div className="proposal-section-label">04 / {ru ? "Вопросы" : "Questions"}</div>
-            <h2 className="surface-title">{ru ? "Примечания для менеджера проекта" : "Notes for your project manager"}</h2>
-            <label className="calculator-notes">
-              <span>{ru ? "Ваше сообщение" : "Your message"}</span>
-              <textarea
-                value={proposal.client_message ?? ""}
-                disabled={isLocked || saving}
-                onChange={(event) =>
-                  setProposal((current: any) => ({ ...current, client_message: event.target.value }))
-                }
-              />
-            </label>
-
-            <div className="proposal-builder-footer">
-              <button type="button" className="accent-button" onClick={saveSelection} disabled={isLocked || saving}>
-                {ru ? "Сохранить выбор" : "Update Selection"}
-              </button>
-              <div className="row-meta">{message}</div>
-            </div>
-          </section>
-        </div>
-
-        <aside className="client-proposal-side">
-          <section className="surface proposal-agreement-panel">
-            <div className="proposal-side-total">
-              <span>{ru ? "Итого по выбранным работам" : "Selected project total"}</span>
-              <strong>{formatCurrency(localSelectedTotal)}</strong>
-              <small>{ru ? `Включено ${selectedCount} из ${proposal.items.length} позиций` : `${selectedCount} of ${proposal.items.length} service lines included`}</small>
-            </div>
-            <div className="proposal-section-label">05 / {ru ? "Согласование" : "Approval"}</div>
-            <h2 className="surface-title">{ru ? "Согласовать коммерческое предложение" : "Approve your proposal"}</h2>
-            <p className="surface-subtitle">
-              {ru ? "Подпись подтверждает выбранные услуги и разрешает перейти к следующему этапу проекта." : "Signing confirms the selected services and authorizes the project to move forward."}
-            </p>
-
-            <div className="proposal-item-grid">
-              <label className="calculator-field">
-                <span>{ru ? "Полное имя" : "Full Name"}</span>
+          ) : (
+            <div className="rp-sign-form">
+              <label className="rp-field">
+                <span>{ru ? "Полное имя" : "Full name"}</span>
                 <input
                   value={agreement.signer_name}
                   disabled={isLocked || saving}
-                  onChange={(event) => setAgreement((current) => ({ ...current, signer_name: event.target.value }))}
+                  autoComplete="name"
+                  onChange={(event) =>
+                    setAgreement((current) => ({ ...current, signer_name: event.target.value, signature_text: event.target.value }))
+                  }
                 />
               </label>
-
-              <label className="calculator-field">
+              <label className="rp-field">
                 <span>Email</span>
                 <input
+                  type="email"
                   value={agreement.signer_email}
                   disabled={isLocked || saving}
+                  autoComplete="email"
                   onChange={(event) => setAgreement((current) => ({ ...current, signer_email: event.target.value }))}
                 />
               </label>
-
-              <label className="calculator-field">
-                <span>{ru ? "Должность" : "Title"}</span>
-                <input
-                  value={agreement.signer_title}
+              <SignaturePad
+                language={language}
+                disabled={isLocked || saving}
+                onChange={(image) => setAgreement((current) => ({ ...current, signature_image: image }))}
+              />
+              <label className="rp-field">
+                <span>{ru ? "Комментарий менеджеру (необязательно)" : "Note to your manager (optional)"}</span>
+                <textarea
+                  rows={2}
+                  value={agreement.client_notes}
                   disabled={isLocked || saving}
-                  onChange={(event) => setAgreement((current) => ({ ...current, signer_title: event.target.value }))}
+                  onChange={(event) => setAgreement((current) => ({ ...current, client_notes: event.target.value }))}
                 />
               </label>
-
-              <label className="calculator-field">
-                <span>{ru ? "Введите полное имя в качестве подписи" : "Type your full name as signature"}</span>
+              <label className="rp-consent">
                 <input
-                  value={agreement.signature_text}
+                  type="checkbox"
+                  checked={agreement.accepted_terms}
                   disabled={isLocked || saving}
-                  onChange={(event) => setAgreement((current) => ({ ...current, signature_text: event.target.value }))}
+                  onChange={(event) => setAgreement((current) => ({ ...current, accepted_terms: event.target.checked }))}
                 />
+                <span>
+                  {ru
+                    ? "Я согласен с договором, рабочим чертежом (Приложение А) и подписываю электронно."
+                    : "I agree to this agreement and the working drawing (Appendix A) and sign electronically."}
+                </span>
               </label>
-            </div>
-
-            <label className="calculator-notes">
-              <span>{ru ? "Примечания клиента" : "Client Notes"}</span>
-              {/* rows задан явно: без него браузер тянул поле вниз, и блок
-                  подтверждения согласия наезжал на него поверх. В остальных
-                  местах системы у этого класса rows тоже проставлен. */}
-              <textarea
-                rows={4}
-                value={agreement.client_notes}
-                disabled={isLocked || saving}
-                onChange={(event) => setAgreement((current) => ({ ...current, client_notes: event.target.value }))}
-              />
-            </label>
-
-            <label className="calculator-checkbox-field">
-              <input
-                type="checkbox"
-                checked={agreement.accepted_terms}
-                disabled={isLocked || saving}
-                onChange={(event) =>
-                  setAgreement((current) => ({ ...current, accepted_terms: event.target.checked }))
-                }
-              />
-              <span>{ru ? "Я подтверждаю выбранные услуги и согласен продолжить." : "I confirm the selected services and agree to proceed."}</span>
-            </label>
-
-            <div className="proposal-builder-footer">
-              <button type="button" className="accent-button" onClick={signAgreement} disabled={isLocked || saving}>
-                {isLocked ? (ru ? "Договор подписан" : "Agreement Signed") : (ru ? "Подписать КП" : "Sign Agreement")}
+              <button
+                type="button"
+                className="rp-primary-button"
+                onClick={signAgreement}
+                disabled={isLocked || saving || !canSign}
+              >
+                {saving ? (ru ? "Подписываем…" : "Signing…") : ru ? `Подписать · ${formatCurrency(localSelectedTotal)}` : `Sign · ${formatCurrency(localSelectedTotal)}`}
               </button>
+              {!canSign && !saving ? (
+                <p className="rp-small">
+                  {ru ? "Нужны имя, email, подпись и согласие." : "Name, email, signature and consent are required."}
+                </p>
+              ) : null}
             </div>
+          )}
+          <p className="rp-small" role="status">{message}</p>
+        </section>
 
-            <div className="proposal-trust-note">
-              <strong>Rolan PRO</strong>
-              <span>Westlake Village, California</span>
-              <a href="tel:+14243250512">(424) 325-0512</a>
-              <a href="https://rolan-pro.com" target="_blank" rel="noreferrer">rolan-pro.com</a>
-            </div>
-          </section>
+        {paymentSlot}
 
-        </aside>
-      </section>
+        <footer className="rp-footer">
+          <img src="/landing/rolan-logo.webp" alt="Rolan PRO" />
+          <span>Westlake Village, California</span>
+          <a href="tel:+14243250512">(424) 325-0512</a>
+          <a href="https://rolan-pro.com" target="_blank" rel="noreferrer">rolan-pro.com</a>
+        </footer>
+      </main>
     </div>
   );
 }

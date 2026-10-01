@@ -24,8 +24,10 @@ test("public proposal has a branded architectural cover and decision flow", () =
   assert.match(premiumStyles, /url\('\/landing\/hero-window-film\.jpg'\)/);
   assert.match(component, /Recommended solution/);
   assert.match(component, /Your project, room by room/);
-  assert.match(component, /What happens after approval/);
-  assert.match(component, /Approve your proposal/);
+  assert.match(component, /What happens next/);
+  assert.match(component, /Installation agreement/);
+  // Appendix A: the working drawing is part of the signed document.
+  assert.match(component, /<ProposalDrawing/);
 });
 
 test("public proposal exposes measured film performance without inventing missing values", () => {

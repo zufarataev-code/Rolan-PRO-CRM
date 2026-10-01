@@ -1895,6 +1895,10 @@ export async function signPublicAgreement(
     signature_text: string;
     client_notes?: string | null;
     accepted_terms: boolean;
+    /** PNG data URL drawn by the client; validated by the route. */
+    signature_image?: string | null;
+    signer_ip?: string | null;
+    signer_user_agent?: string | null;
   },
 ) {
   const proposal = await prisma.proposal.findUnique({
@@ -1934,6 +1938,9 @@ export async function signPublicAgreement(
         signer_email: input.signer_email.trim().toLowerCase(),
         signer_title: input.signer_title?.trim() || null,
         signature_text: input.signature_text.trim(),
+        signature_image: input.signature_image ?? null,
+        signer_ip: input.signer_ip?.slice(0, 64) || null,
+        signer_user_agent: input.signer_user_agent?.slice(0, 400) || null,
         client_notes: input.client_notes?.trim() || null,
         accepted_terms: true,
         signed_at: new Date(),
@@ -1945,6 +1952,9 @@ export async function signPublicAgreement(
         signer_email: input.signer_email.trim().toLowerCase(),
         signer_title: input.signer_title?.trim() || null,
         signature_text: input.signature_text.trim(),
+        signature_image: input.signature_image ?? null,
+        signer_ip: input.signer_ip?.slice(0, 64) || null,
+        signer_user_agent: input.signer_user_agent?.slice(0, 400) || null,
         client_notes: input.client_notes?.trim() || null,
         accepted_terms: true,
         signed_at: new Date(),

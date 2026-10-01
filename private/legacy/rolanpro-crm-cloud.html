@@ -30071,6 +30071,13 @@ function premiumCanonicalSnapshot(prop) {
           installation_side: windowItem.side || null,
           facade_orientation: windowItem.orientation || null,
           access_method: windowItem.access || null,
+          // Working drawing (Appendix A to the agreement): sash layout in mm and Smart zones.
+          qty: premiumNum(windowItem.actualQty != null ? windowItem.actualQty : (windowItem.qty || 1)) || 1,
+          panel_mode: winTypeInfo(windowItem.winType)?.panelMode || null,
+          grid_cols: winTypeInfo(windowItem.winType)?.panelMode === 'french_grid' ? measureDefaultFrenchCols(windowItem) : null,
+          grid_rows: winTypeInfo(windowItem.winType)?.panelMode === 'french_grid' ? measureDefaultFrenchRows(windowItem) : null,
+          panels: measureWindowPanels(windowItem).map(p => ({ width: premiumNum(p.width), height: premiumNum(p.height) })),
+          smart_zones: Array.isArray(windowItem.smart?.zones) ? windowItem.smart.zones.length : 0,
         },
         item_kind: 'film',
       });
