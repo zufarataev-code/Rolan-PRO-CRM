@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES } from "@/features/sales/api";
-import { buildClientAccessWhere, getRecordManagerScope } from "@/features/sales/access";
+import { buildClientAccessWhere, buildClientReuseWhere, getRecordManagerScope } from "@/features/sales/access";
 import {
   findExistingClientByIdentity,
   lockClientIdentityUpdate,
@@ -50,7 +50,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const duplicate = await findExistingClientByIdentity(tx, changed, clientId);
     if (duplicate) {
       // Name the other card only if this manager may see it.
-      const visible = await tx.client.count({ where: buildClientAccessWhere(duplicate.client.client_id, managerId) });
+      const visible = await tx.client.count({
+        where: { ...buildClientReuseWhere(managerId), client_id: duplicate.client.client_id },
+      });
       return { client: null, duplicate, visible: visible > 0 } as const;
     }
 

@@ -38,6 +38,22 @@ export function buildClientAccessWhere(clientId: string | undefined, managerId?:
   };
 }
 
+/**
+ * Clients a manager may reuse or be told about by contact match: their own
+ * (via deals/projects) or not yet owned by anyone (no deal, no project — e.g.
+ * a card the manager has just created). Another manager's client never.
+ */
+export function buildClientReuseWhere(managerId?: string): Prisma.ClientWhereInput {
+  if (!managerId) return {};
+  return {
+    OR: [
+      { deals: { some: { assigned_manager_id: managerId } } },
+      { projects: { some: { manager_id: managerId } } },
+      { AND: [{ deals: { none: {} } }, { projects: { none: {} } }] },
+    ],
+  };
+}
+
 export function buildTaskAccessWhere(taskId: string, managerId?: string): Prisma.TaskWhereInput {
   return {
     task_id: taskId,

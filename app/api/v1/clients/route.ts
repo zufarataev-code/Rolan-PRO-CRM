@@ -4,7 +4,7 @@ import { requireRequestSession } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
-import { buildClientAccessWhere, getRecordManagerScope } from "@/features/sales/access";
+import { buildClientReuseWhere, getRecordManagerScope } from "@/features/sales/access";
 import { MANAGER_ROLES, getManagerScope } from "@/features/sales/api";
 import {
   findExistingClientByIdentity,
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       const managerId = getRecordManagerScope(auth.session);
       const ids = [existing.client.client_id, existing.conflictingClient?.client_id].filter(Boolean) as string[];
       const visible = await tx.client.count({
-        where: { ...buildClientAccessWhere(undefined, managerId), client_id: { in: ids } },
+        where: { ...buildClientReuseWhere(managerId), client_id: { in: ids } },
       });
       if (visible < ids.length) return { hidden: true } as const;
     }

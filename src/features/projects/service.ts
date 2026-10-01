@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 
-import { buildClientAccessWhere, getRecordManagerScope } from "@/features/sales/access";
+import { buildClientReuseWhere, getRecordManagerScope } from "@/features/sales/access";
 
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { INSTALLER_JOB_STATUSES } from "@/features/projects/api";
@@ -747,7 +747,7 @@ export async function createManualProject(
       const managerId = getRecordManagerScope(session);
       if (managerId) {
         const ids = [reusableClient.client.client_id, reusableClient.conflictingClient?.client_id].filter(Boolean) as string[];
-        const visible = await tx.client.count({ where: { ...buildClientAccessWhere(undefined, managerId), client_id: { in: ids } } });
+        const visible = await tx.client.count({ where: { ...buildClientReuseWhere(managerId), client_id: { in: ids } } });
         if (visible < ids.length) throw new ClientNotAccessibleError();
       }
     }
