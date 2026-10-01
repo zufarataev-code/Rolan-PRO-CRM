@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -128,4 +129,23 @@ test("moving two historical duplicates to a new shared phone is a new duplicate"
     duplicateClientId: "b",
     matchedBy: "phone",
   });
+});
+
+test("the manual project flow lets the manager pick a client after a contact conflict", () => {
+  const route = readFileSync("app/api/v1/projects/manual/route.ts", "utf8");
+  const service = readFileSync("src/features/projects/service.ts", "utf8");
+  const panel = readFileSync("src/components/project-manual-create-panel.tsx", "utf8");
+  assert.match(route, /client_id: body\.client_id \|\| null/);
+  assert.match(route, /where: \{ client_id: \{ in: error\.candidateIds \} \}/);
+  // A chosen client must be visible to the manager.
+  assert.match(service, /client_id: input\.client_id,\s*\.\.\.buildClientReuseWhere\(getRecordManagerScope\(session\)\)/);
+  assert.match(service, /reusableClient\.matches\.map\(\(client\) => client\.client_id\)/);
+  assert.match(panel, /client_id: chosenClientId\.current/);
+  assert.match(panel, /onClick=\{\(\) => chooseClient\(candidate\.client_id\)\}/);
+});
+
+test("an identity conflict carries every matching card", async () => {
+  const { ClientIdentityConflictError } = await import("./client-identity");
+  assert.deepEqual(new ClientIdentityConflictError("A", "B", ["A", "B", "C"]).candidateIds, ["A", "B", "C"]);
+  assert.deepEqual(new ClientIdentityConflictError("A", "B").candidateIds, ["A", "B"]);
 });

@@ -661,9 +661,11 @@ export async function createManualProject(
         })
       : Promise.resolve(null),
     input.client_id
-      ? prisma.client.findUnique({
+      ? prisma.client.findFirst({
+          // A manager may choose only a client they can already see.
           where: {
             client_id: input.client_id,
+            ...buildClientReuseWhere(getRecordManagerScope(session)),
           },
           select: {
             client_id: true,
@@ -755,6 +757,7 @@ export async function createManualProject(
       throw new ClientIdentityConflictError(
         reusableClient.client.client_id,
         reusableClient.conflictingClient.client_id,
+        reusableClient.matches.map((client) => client.client_id),
       );
     }
 
