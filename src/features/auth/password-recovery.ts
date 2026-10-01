@@ -1,3 +1,4 @@
+import { PASSWORD_MIN_LENGTH } from "@/lib/auth/password-policy";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { primaryGmailConnection, sendPrimaryGmail } from "@/features/gmail/service";
@@ -6,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 
 export const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
-const MIN_PASSWORD_LENGTH = 10;
+const MIN_PASSWORD_LENGTH = PASSWORD_MIN_LENGTH;
 const REQUEST_COOLDOWN_MS = 60 * 1000;
 const lastResetRequestAt = new Map<string, number>();
 

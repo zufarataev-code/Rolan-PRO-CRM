@@ -10,6 +10,7 @@ import {
   validateLegacyPayload,
 } from "@/features/legacy-crm/sanitize";
 import { LEGACY_WORKSPACE_VIEW_ROLES } from "@/features/legacy-crm/api";
+import { applyEmployeeDirectory, loadDirectoryMembers } from "@/features/team/directory";
 import {
   createFieldWorkspace,
   hasFieldWorkspaceRole,
@@ -38,14 +39,18 @@ export async function GET(request: NextRequest) {
     return apiError(404, "workspace_not_initialized", "CRM workspace is not initialized.");
   }
 
-  const payload = workspace.payload as Record<string, unknown>;
+  // Employee cards always come from PostgreSQL (one employee directory).
+  // During "view as employee" this read must not write anything.
+  const members = await loadDirectoryMembers((workspace.payload as { users?: unknown }).users ?? [], {
+    persist: !auth.session.preview,
+  });
+  const payload = applyEmployeeDirectory(workspace.payload as Record<string, unknown>, members);
+  const legacyUserIds =
+    members.find((member) => member.userId === auth.session.user.user_id)?.legacyUserIds ??
+    auth.session.user.legacy_user_ids;
   const responsePayload = isPrivilegedLegacyWorkspaceRole(auth.session.roles)
     ? payload
-    : createFieldWorkspace(
-        payload,
-        auth.session.roles,
-        auth.session.user.legacy_user_ids,
-      );
+    : createFieldWorkspace(payload, auth.session.roles, legacyUserIds);
 
   return apiSuccess({
     payload: responsePayload,
@@ -116,7 +121,7 @@ export async function PUT(request: NextRequest) {
     });
   }
 
-  const nextPayload = isPrivileged
+  const mergedPayload = isPrivileged
     ? payload
     : sanitizeLegacyPayload(
         mergeFieldWorkspace(
@@ -126,6 +131,12 @@ export async function PUT(request: NextRequest) {
           auth.session.user.legacy_user_ids,
         ),
       );
+  // A browser can edit phone, photo or pay settings on a card, but never the
+  // employee's name, email, role or access — those are re-applied from PostgreSQL.
+  const nextPayload = applyEmployeeDirectory(
+    mergedPayload as Record<string, unknown>,
+    await loadDirectoryMembers((mergedPayload as { users?: unknown }).users ?? []),
+  ) as typeof mergedPayload;
 
   const updated = await prisma.legacyWorkspace.updateMany({
     where: {

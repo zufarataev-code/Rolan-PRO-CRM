@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getEnv } from "@/lib/env";
 import { canonicalRolePath } from "@/lib/auth/canonical-route";
+import { PREVIEW_COOKIE, isPreviewWriteAllowed } from "@/lib/auth/preview-edge";
 import { getRolesForPath, hasAnyRole } from "@/lib/auth/rbac";
 
 type EdgeSessionPayload = {
@@ -111,6 +112,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(canonicalUrl, 308);
   }
 
+  // "View as employee" is read-only everywhere, including public routes such
+  // as password recovery, so this runs before the public-path shortcut.
+  const previewCookie = request.cookies.get(PREVIEW_COOKIE)?.value;
+  if (previewCookie && pathname.startsWith("/api/v1") && !isPreviewWriteAllowed(request.method, pathname)) {
+    const token = request.cookies.get(getEnv().sessionCookieName)?.value;
+    const previewSession = token ? await verifyEdgeSession(token) : null;
+    if (previewSession?.roles.includes("OWNER")) {
+      return deny(request, 403, "preview_read_only", "Просмотр глазами сотрудника — только чтение.");
+    }
+  }
+
   if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
@@ -139,6 +151,16 @@ export async function middleware(request: NextRequest) {
 
     if (requiredRoles && !hasAnyRole(session.roles, requiredRoles)) {
       return deny(request, 403, "forbidden", "Insufficient role permissions.");
+    }
+
+    // "View as employee" is read-only. The server helpers enforce this too;
+    // stopping it here keeps a preview from reaching any write handler.
+    if (
+      request.cookies.get(PREVIEW_COOKIE)?.value &&
+      session.roles.includes("OWNER") &&
+      !isPreviewWriteAllowed(request.method, pathname)
+    ) {
+      return deny(request, 403, "preview_read_only", "Просмотр глазами сотрудника — только чтение.");
     }
   }
 
