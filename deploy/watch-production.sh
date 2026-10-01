@@ -110,13 +110,14 @@ backup_database() {
   # A failed migration is retried on the next poll. The first dump of this
   # commit is the clean pre-migration state: keep it, never replace it with a
   # dump of a half-migrated database (and never let retries rotate it out).
-  if ls "$backup_dir"/rolanpro-*-"${sha:0:7}"-premigrate.dump >/dev/null 2>&1; then
+  # Keyed by the full commit hash: short prefixes are not guaranteed unique.
+  if ls "$backup_dir"/rolanpro-*-"${sha}"-premigrate.dump >/dev/null 2>&1; then
     log "Pre-migration backup for ${sha:0:7} already exists; keeping the first one"
     return 0
   fi
   db_url="$(set -a; . "$ENV_BACKUP"; set +a; printf '%s' "${DATABASE_URL%%\?*}")"
   [ -n "$db_url" ] || return 1
-  name="rolanpro-$(date -u +%Y%m%dT%H%M%SZ)-${sha:0:7}-premigrate.dump"
+  name="rolanpro-$(date -u +%Y%m%dT%H%M%SZ)-${sha}-premigrate.dump"
   partial="$backup_dir/.partial-$name"
   # Only one watcher runs: any partial left by an interrupted dump is garbage.
   rm -f "$backup_dir"/.partial-*

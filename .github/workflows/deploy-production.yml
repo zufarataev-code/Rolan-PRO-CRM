@@ -68,7 +68,7 @@ jobs:
           . /home/runcloud/.rolanpro-crm.env.production.local
           set +a
           db_url="${DATABASE_URL%%\?*}"
-          backup_name="rolanpro-$(date -u +%Y%m%dT%H%M%SZ)-${EXPECTED_SHA:0:7}.dump"
+          backup_name="rolanpro-$(date -u +%Y%m%dT%H%M%SZ)-${EXPECTED_SHA}.dump"
           partial="$backup_dir/.partial-$backup_name"
           trap 'rm -f "$partial"' EXIT
           pg_dump --format=custom --no-owner --no-privileges --file="$partial" "$db_url"
@@ -81,7 +81,29 @@ jobs:
           echo "Database backup: $backup_dir/$backup_name ($(du -h "$backup_dir/$backup_name" | cut -f1))"
           ls -1t "$backup_dir"/rolanpro-*.dump | tail -n +31 | xargs -r rm -f
 
+          previous_sha="$(git rev-parse HEAD)"
           git merge --ff-only "$fetched_sha"
+
+          # A running bash process keeps the watcher code it started with. When
+          # this commit changes the watcher, stop it now (before it notices the
+          # new commit): supervisor (autorestart=true) starts the new script,
+          # which then builds this commit with the new steps — including the
+          # backup right before migrations. Brief restart of the current release.
+          if ! git diff --quiet "$previous_sha" "$fetched_sha" -- deploy/watch-production.sh; then
+            watcher_pids="$(pgrep -u runcloud -f "deploy/watch-production.sh" || true)"
+            if [ -n "$watcher_pids" ]; then
+              echo "Watcher script changed; restarting watcher ($watcher_pids) via supervisor"
+              kill -TERM $watcher_pids
+              for attempt in $(seq 1 30); do
+                sleep 2
+                new_pids="$(pgrep -u runcloud -f "deploy/watch-production.sh" || true)"
+                if [ -n "$new_pids" ] && [ "$new_pids" != "$watcher_pids" ]; then
+                  echo "Watcher restarted: $new_pids"
+                  break
+                fi
+              done
+            fi
+          fi
           REMOTE
 
       - name: Wait for server deployment
