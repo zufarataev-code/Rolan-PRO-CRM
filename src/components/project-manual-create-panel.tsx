@@ -145,7 +145,16 @@ export function ProjectManualCreatePanel({
   const estimatedProfit = revenue - estimatedCost;
   const estimatedMargin = revenue > 0 ? (estimatedProfit / revenue) * 100 : 0;
 
+  // Candidates belong to the contact they were found for: any change of the
+  // client's name, phone or email (or a reset) drops them, so a stale card can
+  // never be attached to a corrected contact.
+  function clearClientCandidates() {
+    setClientCandidates([]);
+    chosenClientId.current = null;
+  }
+
   function resetForm() {
+    clearClientCandidates();
     setClientName(initialValues?.client_name ?? "");
     setPhone(initialValues?.phone ?? "");
     setEmail(initialValues?.email ?? "");
@@ -267,17 +276,17 @@ export function ProjectManualCreatePanel({
         <div className="proposal-item-grid">
           <label className="calculator-field">
             <span>Клиент</span>
-            <input value={clientName} onChange={(event) => setClientName(event.target.value)} disabled={saving} />
+            <input value={clientName} onChange={(event) => { clearClientCandidates(); setClientName(event.target.value); }} disabled={saving} />
           </label>
 
           <label className="calculator-field">
             <span>Телефон</span>
-            <input value={phone} onChange={(event) => setPhone(event.target.value)} disabled={saving} />
+            <input value={phone} onChange={(event) => { clearClientCandidates(); setPhone(event.target.value); }} disabled={saving} />
           </label>
 
           <label className="calculator-field">
             <span>Email</span>
-            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} />
+            <input type="email" value={email} onChange={(event) => { clearClientCandidates(); setEmail(event.target.value); }} disabled={saving} />
           </label>
 
           <label className="calculator-field">

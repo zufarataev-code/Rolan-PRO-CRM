@@ -142,6 +142,11 @@ test("the manual project flow lets the manager pick a client after a contact con
   assert.match(service, /reusableClient\.matches\.map\(\(client\) => client\.client_id\)/);
   assert.match(panel, /client_id: chosenClientId\.current/);
   assert.match(panel, /onClick=\{\(\) => chooseClient\(candidate\.client_id\)\}/);
+  // Editing the contact or resetting the form drops candidates found for the old contact.
+  for (const setter of ["setClientName", "setPhone", "setEmail"]) {
+    assert.match(panel, new RegExp(`onChange=\\{\\(event\\) => \\{ clearClientCandidates\\(\\); ${setter}\\(event\\.target\\.value\\); \\}\\}`));
+  }
+  assert.match(panel, /function resetForm\(\) \{\n    clearClientCandidates\(\);/);
 });
 
 test("an identity conflict carries every matching card", async () => {
