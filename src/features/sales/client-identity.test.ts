@@ -97,3 +97,17 @@ test("an update locks the identities it gives up and checks only changed contact
   assert.ok(locked.some((key) => key.includes("old@example.com")), "the email being given up is locked");
   assert.ok(locked.some((key) => key.includes("new@example.com")));
 });
+
+test("every historical card sharing the phone is returned, not only two", async () => {
+  const { findExistingClientByIdentity } = await import("./client-identity");
+  const clients = [
+    { client_id: "A", email: null, phone: "+18055550100" },
+    { client_id: "B", email: null, phone: "(805) 555-0100" },
+    { client_id: "C", email: null, phone: "805.555.0100" },
+    { client_id: "D", email: null, phone: "+18055550111" },
+  ];
+  const tx = { client: { findMany: async () => clients } } as never;
+
+  const match = await findExistingClientByIdentity(tx, { phone: "805-555-0100" });
+  assert.deepEqual(match?.matches.map((client) => client.client_id), ["A", "B", "C"]);
+});

@@ -35562,6 +35562,50 @@ function mergeCloudWorkspaceSnapshots(base, local, remote) {
   return cloneCloudWorkspaceValue(local);
 }
 
+// The server rejected a save because two cards now share a phone/email. It
+// names the pair in list order, so the browser decides which card it changed
+// against the last saved snapshot: a NEW card is dropped and its records move
+// to the other client; an EDITED card gets its saved phone/email back. Every
+// other queued edit stays. Returns 'merged', 'reverted' or '' (cannot tell).
+function resolveRejectedDuplicateClient(meta) {
+  const pair = [String(meta.duplicate_client_id || ''), String(meta.existing_client_id || '')];
+  if (!pair[0] || !pair[1] || pair[0] === pair[1]) return '';
+  const clients = Array.isArray(db.clients) ? db.clients : [];
+  const baseClients = Array.isArray(cloudBaseSnapshot?.clients) ? cloudBaseSnapshot.clients : [];
+  const local = id => clients.find(client => client?.id === id);
+  const saved = id => baseClients.find(client => client?.id === id);
+  if (!local(pair[0]) || !local(pair[1])) return '';
+
+  const added = pair.find(id => !saved(id));
+  if (added) {
+    const keep = pair.find(id => id !== added);
+    db.clients = clients.filter(client => client?.id !== added);
+    Object.entries(db).forEach(([key, value]) => {
+      if (key === 'clients' || key === 'users' || !Array.isArray(value)) return;
+      value.forEach(item => {
+        if (item && typeof item === 'object' && item.clientId === added) item.clientId = keep;
+      });
+    });
+    if (state.selectedClientId === added) state.selectedClientId = keep;
+    localStorage.setItem('rolanpro_crm', JSON.stringify(db));
+    return 'merged';
+  }
+
+  const contactChanged = id => {
+    const now = local(id);
+    const before = saved(id);
+    return String(now.phone || '') !== String(before.phone || '') || String(now.email || '') !== String(before.email || '');
+  };
+  const edited = pair.filter(contactChanged);
+  if (!edited.length) return '';
+  edited.forEach(id => {
+    const before = saved(id);
+    Object.assign(local(id), { phone: before.phone ?? '', email: before.email ?? '' });
+  });
+  localStorage.setItem('rolanpro_crm', JSON.stringify(db));
+  return 'reverted';
+}
+
 async function cloudPersist(options = {}) {
   if (!cloudReady) return false;
   if (cloudSaveInFlight) {
@@ -35584,13 +35628,21 @@ async function cloudPersist(options = {}) {
         return false;
       }
       if (response.status === 409 && result?.errors?.[0]?.code === 'duplicate_client') {
-        // The server refuses a second card for an existing phone/email; reload
-        // so the manager continues in the existing client's card.
-        cloudReady = false;
+        // The server refuses a second card for an existing phone/email. Undo
+        // only that card and keep every other queued edit in this snapshot.
+        const resolved = resolveRejectedDuplicateClient(result?.meta || {});
         cloudStatus('Дубль клиента заблокирован', 'red');
-        alert('Клиент с таким телефоном или email уже существует. CRM загрузит существующую карточку и отменит создание дубля.');
-        location.reload();
-        return false;
+        alert(resolved === 'merged'
+          ? 'Клиент с таким телефоном или email уже существует. Новая карточка не создана — заказы привязаны к существующему клиенту.'
+          : 'Этот телефон или email уже принадлежит другому клиенту. Контакт в карточке возвращён к прежнему значению.');
+        if (!resolved) {
+          cloudReady = false;
+          location.reload();
+          return false;
+        }
+        snapshot = JSON.parse(JSON.stringify(db));
+        render();
+        continue;
       }
       if (response.status === 409) {
         cloudStatus('Объединяем изменения…');

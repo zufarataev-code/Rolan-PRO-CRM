@@ -746,7 +746,7 @@ export async function createManualProject(
       // A manager may reuse (or be told about) only clients they can already see.
       const managerId = getRecordManagerScope(session);
       if (managerId) {
-        const ids = [reusableClient.client.client_id, reusableClient.conflictingClient?.client_id].filter(Boolean) as string[];
+        const ids = reusableClient.matches.map((client) => client.client_id);
         const visible = await tx.client.count({ where: { ...buildClientReuseWhere(managerId), client_id: { in: ids } } });
         if (visible < ids.length) throw new ClientNotAccessibleError();
       }

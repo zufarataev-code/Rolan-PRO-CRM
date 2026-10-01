@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     if (existing) {
       // Another manager's customer: refuse without revealing who it is.
       const managerId = getRecordManagerScope(auth.session);
-      const ids = [existing.client.client_id, existing.conflictingClient?.client_id].filter(Boolean) as string[];
+      const ids = existing.matches.map((client) => client.client_id);
       const visible = await tx.client.count({
         where: { ...buildClientReuseWhere(managerId), client_id: { in: ids } },
       });

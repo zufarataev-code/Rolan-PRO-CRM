@@ -194,6 +194,8 @@ export type ExistingClientIdentity = {
    * to the wrong customer is worse than asking the manager.
    */
   conflictingClient?: Client;
+  /** Every distinct card matching the email or the phone, most recently updated first. */
+  matches: Client[];
 };
 
 export async function findExistingClientByIdentity(
@@ -221,7 +223,7 @@ export async function findExistingClientByIdentity(
   const matchedBy: ClientIdentityMatch =
     normalizedEmail && normalizeClientEmail(primary.email) === normalizedEmail ? "email" : "phone";
   const conflicting = matches.find((client) => client.client_id !== primary.client_id);
-  return { client: primary, matchedBy, conflictingClient: conflicting };
+  return { client: primary, matchedBy, conflictingClient: conflicting, matches };
 }
 
 /** The contact belongs to a client outside the caller's access scope: refuse without naming it. */

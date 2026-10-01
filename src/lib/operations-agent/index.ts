@@ -687,7 +687,8 @@ async function executeWrite(
       const existing = await findExistingClientByIdentity(tx, contact);
       if (existing) {
         return {
-          duplicates: [existing.client, ...(existing.conflictingClient ? [existing.conflictingClient] : [])],
+          // Every matching card, so the right historical one can be chosen.
+          duplicates: existing.matches,
         } as const;
       }
       const created = await tx.client.create({
