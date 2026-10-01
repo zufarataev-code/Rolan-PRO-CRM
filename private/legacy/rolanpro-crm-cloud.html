@@ -15812,6 +15812,83 @@ function seedDemo() {
 // ---------- DOMAIN HELPERS ----------
 function getUser(id) { return db.users.find(u => u.id === id); }
 function getClient(id) { return db.clients.find(c => c.id === id); }
+function clientIdentityEmailKey(value) {
+  const compact = String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+  const at = compact.lastIndexOf('@');
+  if (at <= 0 || at === compact.length - 1) return '';
+  let local = compact.slice(0, at);
+  const domain = compact.slice(at + 1);
+  if (domain === 'gmail.com' || domain === 'googlemail.com') local = local.split('+', 1)[0].replace(/\./g, '');
+  return local && domain.includes('.') ? `${local}@${domain}` : '';
+}
+function clientIdentityPhoneKey(value) {
+  const raw = String(value || '').trim();
+  let digits = raw.replace(/\D/g, '');
+  if (raw.startsWith('00') && digits.startsWith('00')) digits = digits.slice(2);
+  else if (!raw.startsWith('+') && digits.length === 10) digits = '1' + digits;
+  return digits.length >= 7 && digits.length <= 15 ? digits : '';
+}
+function existingClientByContact(phone, email, excludeClientId = '') {
+  const phoneKey = clientIdentityPhoneKey(phone);
+  const emailKey = clientIdentityEmailKey(email);
+  const clients = (db.clients || []).filter(client => client.id !== excludeClientId);
+  if (emailKey) {
+    const emailMatch = clients.find(client => clientIdentityEmailKey(client.email) === emailKey);
+    if (emailMatch) return emailMatch;
+  }
+  return phoneKey ? clients.find(client => clientIdentityPhoneKey(client.phone) === phoneKey) || null : null;
+}
+// All distinct clients matching the phone or the email. More than one means
+// the contact is ambiguous (email of one card, phone of another, or historical
+// duplicates): actions must not pick one silently.
+function clientsMatchingContact(phone, email, excludeClientId = '') {
+  const phoneKey = clientIdentityPhoneKey(phone);
+  const emailKey = clientIdentityEmailKey(email);
+  if (!phoneKey && !emailKey) return [];
+  return (db.clients || []).filter(client => client.id !== excludeClientId && (
+    (emailKey && clientIdentityEmailKey(client.email) === emailKey) ||
+    (phoneKey && clientIdentityPhoneKey(client.phone) === phoneKey)
+  ));
+}
+// For actions that attach a lead, order or address to a client. Returns the
+// single existing client, null when there is none, or false after telling the
+// manager that the contact matches several clients.
+function uniqueExistingClientByContact(phone, email) {
+  const matches = clientsMatchingContact(phone, email);
+  if (matches.length <= 1) return matches[0] || null;
+  alert('Телефон и почта совпадают с несколькими клиентами: ' + matches.map(c => c.name || c.id).join(', ') + '.\n\nВыберите нужного клиента вручную — CRM не будет угадывать.');
+  return false;
+}
+/** Several preserved cards share the contact: the manager picks one (false = cancelled). */
+function chooseLegacyClient(matches, title) {
+  return new Promise(resolve => {
+    window.__resolveLegacyClient = (clientId) => {
+      window.__resolveLegacyClient = null;
+      closeModal();
+      resolve(matches.find(client => client.id === clientId) || false);
+    };
+    state.modal = `
+    <div class="modal-backdrop">
+      <div class="modal-content workspace-modal p-6">
+        <h3 class="font-semibold text-lg mb-1">${academyEsc(title)}</h3>
+        <p class="text-xs text-gray-500 mb-4">Телефон и почта совпадают с несколькими карточками клиентов. Выберите нужную.</p>
+        <div class="space-y-2">
+          ${matches.map(client => `<button type="button" class="btn-ghost w-full text-left" onclick="__resolveLegacyClient('${academyEsc(jsQuote(client.id))}')">${academyEsc(client.name || 'Без имени')} · ${academyEsc([client.phone, client.email].filter(Boolean).join(' · ') || 'без контактов')}</button>`).join('')}
+        </div>
+        <button type="button" class="btn-ghost w-full mt-4" onclick="__resolveLegacyClient('')">Отмена</button>
+      </div>
+    </div>`;
+    render();
+  });
+}
+function focusExistingClientCard(client) {
+  if (!client) return;
+  state.modal = null;
+  state.view = 'clients';
+  state.search = client.phone || client.email || client.name || '';
+  render();
+  alert(`Клиент ${client.name || ''} уже есть в CRM. Открыта существующая карточка; новый дубль не создан.`);
+}
 function getOrder(id) { return db.orders.find(o => o.id === id); }
 function getOrderStatus(order) { return STATUSES.find(s => s.key === order.status) || STATUSES[0]; }
 function usersByRole(role) { return db.users.filter(u => u.role === role && u.active !== false); }
@@ -20053,8 +20130,8 @@ function openColdHistory(id) {
 function coldConvertToB2B(id, openOrderAfter = false) {
   const p = coldProspect(id); if (!p) return null;
   if (!p.clientId) {
-    const phoneKey = String(p.phone||'').replace(/\D/g,'').slice(-10);
-    const existing = db.clients.find(c => phoneKey && String(c.phone||'').replace(/\D/g,'').slice(-10) === phoneKey);
+    const existing = uniqueExistingClientByContact(p.phone, p.email);
+    if (existing === false) return null;
     if (existing) p.clientId = existing.id;
     else {
       const clientId = 'c'+uid();
@@ -20319,7 +20396,7 @@ function renderLeadsView() {
     : leads.length === 0 ? `<div class="card"><div class="empty-state"><div class="icon">🎉</div><div>Все заявки обработаны!</div><div class="text-sm text-gray-500 mt-1">Новые лиды с сайта, Facebook и ИИ-чата появятся здесь автоматически.</div></div></div>`
     : `<div class="space-y-3">${leads.map(l => {
         const src = LEAD_SOURCES[l.source] || { label: l.source, icon: '📩', cls: 'bg-gray-100 text-gray-600' };
-        const existing = l.phone ? db.clients.find(c => c.phone && c.phone.replace(/\D/g,'').slice(-10) === l.phone.replace(/\D/g,'').slice(-10)) : null;
+        const existing = existingClientByContact(l.phone, l.email);
         return `
         <div class="card">
           <div class="flex flex-wrap items-start justify-between gap-3">
@@ -20375,8 +20452,12 @@ async function convertLead(leadId) {
   const l = (state.leadsCache || []).find(x => x.id === leadId);
   if (!l) return;
   const src = LEAD_SOURCES[l.source] || { crmSource: 'other' };
-  // клиент: существующий по телефону или новый
-  let client = l.phone ? db.clients.find(c => c.phone && c.phone.replace(/\D/g,'').slice(-10) === l.phone.replace(/\D/g,'').slice(-10)) : null;
+  // Клиент: всегда переиспользуем существующую карточку по телефону или email.
+  const matches = clientsMatchingContact(l.phone, l.email);
+  let client = matches.length > 1
+    ? await chooseLegacyClient(matches, 'Для кого создать проект?')
+    : (matches[0] || null);
+  if (client === false) return;
   if (!client) {
     client = {
       id: 'c' + uid(),
@@ -22330,9 +22411,19 @@ function saveClientContactProfile(clientId, orderId = '') {
   const c = getClient(clientId);
   if (!c) return;
   const email = document.getElementById('client-contact-email')?.value.trim().toLowerCase() || '';
+  const phone = document.getElementById('client-contact-phone')?.value.trim() || '';
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Проверьте email клиента.'); return; }
+  // Only contacts that actually change are checked: unchanged contacts of a
+  // preserved historical duplicate pair must not block editing the card.
+  const phoneChanged = clientIdentityPhoneKey(phone) !== clientIdentityPhoneKey(c.phone);
+  const emailChanged = clientIdentityEmailKey(email) !== clientIdentityEmailKey(c.email);
+  const duplicate = existingClientByContact(phoneChanged ? phone : '', emailChanged ? email : '', clientId);
+  if (duplicate) {
+    alert(`Телефон или email уже принадлежат клиенту ${duplicate.name}. Объедините работу в существующей карточке.`);
+    return;
+  }
   c.name = document.getElementById('client-contact-name')?.value.trim() || c.name;
-  c.phone = document.getElementById('client-contact-phone')?.value.trim() || '';
+  c.phone = phone;
   c.email = email;
   c.whatsappPhone = document.getElementById('client-contact-whatsapp')?.value.trim() || '';
   c.telegramUsername = clientSocialHandle(document.getElementById('client-contact-telegram')?.value || '');
@@ -27116,6 +27207,27 @@ function createOrderClientFromOverlay() {
     .filter(([field]) => !field).map(([, label]) => label);
   if (required.length) { alert('Заполните обязательные поля: ' + required.join(', ')); return; }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Проверьте email клиента.'); return; }
+  const existing = uniqueExistingClientByContact(phone, email);
+  if (existing === false) return;
+  if (existing) {
+    // Repeat customer, possibly a new property: keep the address the manager
+    // just typed. Add it to the existing client's address book (if new) and
+    // select it for this project instead of an old address.
+    const enteredAddress = buildAddress(street, city, stateCode, zip, unit);
+    const addresses = normalizeClientAddresses(existing);
+    const sameAddress = addresses.find(a => String(a.address || '').trim().toLowerCase() === enteredAddress.trim().toLowerCase());
+    const addressRecord = sameAddress || makeClientAddressRecord({
+      label: value('oc-address-label') || 'Объект', street, unit, city, state: stateCode, zip, address: enteredAddress,
+    }, false);
+    if (!sameAddress) existing.addresses = [...addresses, addressRecord];
+    closeOrderClientOverlay();
+    selectOrderClient(existing.id);
+    state._newOrderAddressId = addressRecord.id;
+    refreshOrderClientSelection();
+    save();
+    alert(`Клиент ${existing.name} уже есть в CRM. Для проекта выбрана существующая карточка с введённым адресом; дубль не создан.`);
+    return;
+  }
 
   const type = value('oc-type') || 'residential';
   const accountType = normalizeAccountType(type);
@@ -27363,6 +27475,9 @@ function createClient() {
   const phone = document.getElementById('nc-phone').value.trim();
   const email = document.getElementById('nc-email').value.trim().toLowerCase();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Проверьте email клиента.'); return; }
+  const existing = uniqueExistingClientByContact(phone, email);
+  if (existing === false) return;
+  if (existing) { focusExistingClientCard(existing); return; }
   db.clients.push({
     id: 'c'+uid(), name,
     phone,
@@ -27865,12 +27980,25 @@ function importCsvAuto() {
 function importWizRows(rows) {
   if (!confirm(`Импортировать ${rows.length} ${rows.length===1?'запись':'записей'} из Wiz CSV?`)) return;
   let createdClients = 0, createdOrders = 0, skipped = 0;
+  const ambiguousRows = [];
 
   rows.forEach(r => {
     if (!r.po_number && !r.contact_name) { skipped++; return; }
     // Match or create client by contact_code (preferred) or by name+phone
     let client = null;
     if (r.contact_code) client = db.clients.find(c => c._wizContactCode === r.contact_code);
+    if (!client) {
+      // A contact matching several cards (email of one, phone of another, or
+      // historical duplicates) is not guessed: the row is skipped and listed
+      // for manual mapping instead of attaching the order to the wrong client.
+      const matches = clientsMatchingContact(r.contact_phone, r.contact_email);
+      if (matches.length > 1) {
+        ambiguousRows.push(`${r.po_number || r.code || '—'} · ${r.contact_name || ''}: ${matches.map(c => c.name || c.id).join(' / ')}`);
+        skipped++;
+        return;
+      }
+      client = matches[0] || null;
+    }
     if (!client && r.contact_name) {
       client = db.clients.find(c => c.name === r.contact_name && c.phone === r.contact_phone);
     }
@@ -27895,8 +28023,8 @@ function importWizRows(rows) {
       createdClients++;
     } else {
       // Update missing fields on existing client
-      if (!client.phone && r.contact_phone) client.phone = r.contact_phone;
-      if (!client.email && r.contact_email) client.email = r.contact_email;
+      if (!client.phone && r.contact_phone && !existingClientByContact(r.contact_phone, '', client.id)) client.phone = r.contact_phone;
+      if (!client.email && r.contact_email && !existingClientByContact('', r.contact_email, client.id)) client.email = r.contact_email;
       if (!client.address && (r.address || r.contact_address)) client.address = r.address || r.contact_address;
     }
 
@@ -27990,7 +28118,7 @@ function importWizRows(rows) {
   });
   normalizeClientAccountData();
   save();
-  alert(`Импорт Wiz CSV завершён:\n— Клиентов добавлено: ${createdClients}\n— Заказов добавлено: ${createdOrders}\n— Пропущено: ${skipped}`);
+  alert(`Импорт Wiz CSV завершён:\n— Клиентов добавлено: ${createdClients}\n— Заказов добавлено: ${createdOrders}\n— Пропущено: ${skipped}${ambiguousRows.length ? `\n\nНе импортированы — контакт совпадает с несколькими клиентами (сопоставьте вручную):\n• ${ambiguousRows.slice(0, 20).join('\n• ')}` : ''}`);
   state.view = 'orders'; render();
 }
 
@@ -28012,6 +28140,12 @@ function importWizRowsSilently(rows) {
   rows.forEach(r => {
     let client = null;
     if (r.contact_code) client = db.clients.find(c => c._wizContactCode === r.contact_code);
+    if (!client) {
+      // Same rule as the interactive import: never guess between several cards.
+      const matches = clientsMatchingContact(r.contact_phone, r.contact_email);
+      if (matches.length > 1) return;
+      client = matches[0] || null;
+    }
     if (!client && r.contact_name) {
       client = db.clients.find(c => c.name === r.contact_name && c.phone === r.contact_phone);
     }
@@ -30470,13 +30604,22 @@ function premiumCanonicalSnapshot(prop) {
     items,
   };
 }
-async function premiumPublishCanonicalProposal(prop) {
+async function premiumPublishCanonicalProposal(prop, chosenClientId = '') {
+  const snapshot = premiumCanonicalSnapshot(prop);
+  if (chosenClientId) snapshot.client = { ...(snapshot.client || {}), client_id: chosenClientId };
   const response = await fetch('/api/v1/legacy-crm/proposals/publish', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(premiumCanonicalSnapshot(prop)),
+    body: JSON.stringify(snapshot),
   });
   const payload = await response.json().catch(() => ({}));
+  const candidates = payload?.meta?.candidates;
+  if (!chosenClientId && payload?.errors?.[0]?.code === 'client_identity_conflict' && Array.isArray(candidates) && candidates.length) {
+    // Contacts shared by several preserved client cards: the manager picks one.
+    const choice = await chooseProposalClient(candidates);
+    if (!choice) throw new Error('Клиент для КП не выбран.');
+    return premiumPublishCanonicalProposal(prop, choice);
+  }
   if (!response.ok || !payload?.data?.proposal) {
     throw new Error(payload?.errors?.[0]?.message || 'The client proposal could not be published.');
   }
@@ -30485,6 +30628,23 @@ async function premiumPublishCanonicalProposal(prop) {
   prop.canonicalPublicUrl = payload.data.proposal.public_url;
   save();
   return payload.data.proposal;
+}
+function chooseProposalClient(candidates) {
+  return new Promise(resolve => {
+    window.__resolveProposalClient = (clientId) => { window.__resolveProposalClient = null; closeModal(); resolve(clientId || ''); };
+    state.modal = `
+    <div class="modal-backdrop">
+      <div class="modal-content workspace-modal p-6">
+        <h3 class="font-semibold text-lg mb-1">Для кого это КП?</h3>
+        <p class="text-xs text-gray-500 mb-4">Телефон и почта совпадают с несколькими карточками клиентов. Выберите нужную.</p>
+        <div class="space-y-2">
+          ${candidates.map(candidate => `<button type="button" class="btn-ghost w-full text-left" onclick="__resolveProposalClient('${academyEsc(jsQuote(candidate.client_id))}')">${academyEsc(candidate.name || 'Без имени')} · ${academyEsc([candidate.phone, candidate.email].filter(Boolean).join(' · ') || 'без контактов')}</button>`).join('')}
+        </div>
+        <button type="button" class="btn-ghost w-full mt-4" onclick="__resolveProposalClient('')">Отмена</button>
+      </div>
+    </div>`;
+    render();
+  });
 }
 async function generatePremiumProposal(orderId) {
   const order = getOrder(orderId);
@@ -35600,6 +35760,49 @@ function mergeCloudWorkspaceSnapshots(base, local, remote) {
   return cloneCloudWorkspaceValue(local);
 }
 
+// The server rejected a save because two cards now share a phone/email. It
+// names the pair in list order, so the browser decides which card it changed
+// against the last saved snapshot: a NEW card is dropped and its records move
+// to the other client; an EDITED card gets its saved phone/email back. Every
+// other queued edit stays. Returns 'merged', 'reverted' or '' (cannot tell).
+function resolveRejectedDuplicateClient(meta) {
+  const pair = [String(meta.duplicate_client_id || ''), String(meta.existing_client_id || '')];
+  if (!pair[0] || !pair[1] || pair[0] === pair[1]) return '';
+  const clients = Array.isArray(db.clients) ? db.clients : [];
+  const baseClients = Array.isArray(cloudBaseSnapshot?.clients) ? cloudBaseSnapshot.clients : [];
+  const local = id => clients.find(client => client?.id === id);
+  const saved = id => baseClients.find(client => client?.id === id);
+  if (!local(pair[0]) || !local(pair[1])) return '';
+
+  const added = pair.find(id => !saved(id));
+  if (added) {
+    const keep = pair.find(id => id !== added);
+    db.clients = clients.filter(client => client?.id !== added);
+    Object.entries(db).forEach(([key, value]) => {
+      if (key === 'clients' || key === 'users' || !Array.isArray(value)) return;
+      value.forEach(item => {
+        if (item && typeof item === 'object' && item.clientId === added) item.clientId = keep;
+      });
+    });
+    if (state.selectedClientId === added) state.selectedClientId = keep;
+    localStorage.setItem('rolanpro_crm', JSON.stringify(db));
+    return 'merged';
+  }
+
+  // Only the contact the server reported as colliding goes back; a valid edit
+  // of the other contact in the same save stays.
+  const fields = meta.matched_by === 'phone' ? ['phone'] : meta.matched_by === 'email' ? ['email'] : ['phone', 'email'];
+  const contactChanged = id => fields.some(field => String(local(id)[field] || '') !== String(saved(id)[field] || ''));
+  const edited = pair.filter(contactChanged);
+  if (!edited.length) return '';
+  edited.forEach(id => {
+    const before = saved(id);
+    fields.forEach(field => { local(id)[field] = before[field] ?? ''; });
+  });
+  localStorage.setItem('rolanpro_crm', JSON.stringify(db));
+  return 'reverted';
+}
+
 async function cloudPersist(options = {}) {
   if (!cloudReady) return false;
   if (cloudSaveInFlight) {
@@ -35620,6 +35823,23 @@ async function cloudPersist(options = {}) {
       if (response.status === 401) {
         location.assign('/login');
         return false;
+      }
+      if (response.status === 409 && result?.errors?.[0]?.code === 'duplicate_client') {
+        // The server refuses a second card for an existing phone/email. Undo
+        // only that card and keep every other queued edit in this snapshot.
+        const resolved = resolveRejectedDuplicateClient(result?.meta || {});
+        cloudStatus('Дубль клиента заблокирован', 'red');
+        alert(resolved === 'merged'
+          ? 'Клиент с таким телефоном или email уже существует. Новая карточка не создана — заказы привязаны к существующему клиенту.'
+          : 'Этот телефон или email уже принадлежит другому клиенту. Контакт в карточке возвращён к прежнему значению.');
+        if (!resolved) {
+          cloudReady = false;
+          location.reload();
+          return false;
+        }
+        snapshot = JSON.parse(JSON.stringify(db));
+        render();
+        continue;
       }
       if (response.status === 409) {
         cloudStatus('Объединяем изменения…');

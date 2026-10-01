@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { getAllowedFilmCategoryCodes } from "@/features/calculator/logic";
 import type { CalculatorFilm, CalculatorServiceType } from "@/features/calculator/types";
@@ -41,8 +41,19 @@ type ApiEnvelope = {
     project_id?: string;
   };
   errors?: Array<{
+    code?: string;
     message?: string;
   }>;
+  meta?: {
+    candidates?: ClientCandidate[];
+  };
+};
+
+type ClientCandidate = {
+  client_id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
 };
 
 function formatMoney(amount: number) {
@@ -109,6 +120,11 @@ export function ProjectManualCreatePanel({
   const [projectNotes, setProjectNotes] = useState(initialValues?.project_notes ?? "");
   const [positionNotes, setPositionNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  // The phone/email match several client cards: the manager picks one and the
+  // project is created for that client.
+  const [clientCandidates, setClientCandidates] = useState<ClientCandidate[]>([]);
+  const chosenClientId = useRef<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [message, setMessage] = useState("Заполните проект и сохраните его в operational CRM.");
 
   const selectedServiceType = findServiceType(serviceTypes, serviceTypeId);
@@ -129,7 +145,16 @@ export function ProjectManualCreatePanel({
   const estimatedProfit = revenue - estimatedCost;
   const estimatedMargin = revenue > 0 ? (estimatedProfit / revenue) * 100 : 0;
 
+  // Candidates belong to the contact they were found for: any change of the
+  // client's name, phone or email (or a reset) drops them, so a stale card can
+  // never be attached to a corrected contact.
+  function clearClientCandidates() {
+    setClientCandidates([]);
+    chosenClientId.current = null;
+  }
+
   function resetForm() {
+    clearClientCandidates();
     setClientName(initialValues?.client_name ?? "");
     setPhone(initialValues?.phone ?? "");
     setEmail(initialValues?.email ?? "");
@@ -182,6 +207,7 @@ export function ProjectManualCreatePanel({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          client_id: chosenClientId.current,
           client_name: clientName.trim(),
           phone: phone.trim() || null,
           email: email.trim() || null,
@@ -204,9 +230,17 @@ export function ProjectManualCreatePanel({
 
       const payload = (await response.json().catch(() => null)) as ApiEnvelope | null;
 
+      if (payload?.errors?.[0]?.code === "client_identity_conflict" && payload.meta?.candidates?.length) {
+        setClientCandidates(payload.meta.candidates);
+        setMessage("Телефон и почта совпадают с несколькими клиентами. Выберите, для кого этот проект.");
+        return;
+      }
+
       if (!response.ok || !payload?.data?.project?.project_id) {
         throw new Error(payload?.errors?.[0]?.message ?? "Не удалось создать проект.");
       }
+
+      setClientCandidates([]);
 
       setMessage("Проект создан. Открываю карточку проекта.");
       router.push(`/manager/projects/${payload.data.project.project_id}`);
@@ -214,12 +248,18 @@ export function ProjectManualCreatePanel({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось создать проект.");
     } finally {
+      chosenClientId.current = null;
       setSaving(false);
     }
   }
 
+  function chooseClient(clientId: string) {
+    chosenClientId.current = clientId;
+    formRef.current?.requestSubmit();
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="split-grid">
+    <form ref={formRef} onSubmit={handleSubmit} className="split-grid">
       <div className="surface">
         <div className="detail-hero">
           <div>
@@ -236,17 +276,17 @@ export function ProjectManualCreatePanel({
         <div className="proposal-item-grid">
           <label className="calculator-field">
             <span>Клиент</span>
-            <input value={clientName} onChange={(event) => setClientName(event.target.value)} disabled={saving} />
+            <input value={clientName} onChange={(event) => { clearClientCandidates(); setClientName(event.target.value); }} disabled={saving} />
           </label>
 
           <label className="calculator-field">
             <span>Телефон</span>
-            <input value={phone} onChange={(event) => setPhone(event.target.value)} disabled={saving} />
+            <input value={phone} onChange={(event) => { clearClientCandidates(); setPhone(event.target.value); }} disabled={saving} />
           </label>
 
           <label className="calculator-field">
             <span>Email</span>
-            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} />
+            <input type="email" value={email} onChange={(event) => { clearClientCandidates(); setEmail(event.target.value); }} disabled={saving} />
           </label>
 
           <label className="calculator-field">
@@ -462,6 +502,21 @@ export function ProjectManualCreatePanel({
           <div className="inspector-item">
             <div className="row-title">Статус</div>
             <div className="row-meta">{message}</div>
+            {clientCandidates.length ? (
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                {clientCandidates.map((candidate) => (
+                  <button
+                    key={candidate.client_id}
+                    type="button"
+                    className="soft-button"
+                    disabled={saving}
+                    onClick={() => chooseClient(candidate.client_id)}
+                  >
+                    {candidate.name} · {[candidate.phone, candidate.email].filter(Boolean).join(" · ") || "без контактов"}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
 

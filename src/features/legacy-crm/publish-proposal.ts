@@ -1,10 +1,18 @@
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
+import { buildClientReuseWhere, getRecordManagerScope } from "@/features/sales/access";
 import { getEnv } from "@/lib/env";
+import {
+  ClientIdentityConflictError,
+  findExistingClientByIdentity,
+  lockClientIdentity,
+  normalizeClientEmail,
+} from "@/features/sales/client-identity";
 
 type SessionLike = {
   user: { user_id: string };
+  roles?: string[];
 };
 
 type LegacyProposalLine = {
@@ -33,6 +41,8 @@ export type LegacyProposalSnapshot = {
   title?: string;
   client?: {
     legacy_client_id?: string;
+    /** The PostgreSQL client chosen by the manager after an identity conflict. */
+    client_id?: string;
     name?: string;
     email?: string;
     phone?: string;
@@ -60,7 +70,7 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
   const token = cleanText(input.token, 120);
   const legacyOrderId = cleanText(input.legacy_order_id, 120);
   const clientName = cleanText(input.client?.name, 160);
-  const email = cleanText(input.client?.email, 191).toLowerCase();
+  const email = normalizeClientEmail(cleanText(input.client?.email, 191)) || "";
   const phone = cleanText(input.client?.phone, 40);
   const siteType = cleanSiteType(input.site_type);
   const leadSource = cleanText(input.lead_source, 120) || null;
@@ -105,6 +115,7 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
     orderNumber: cleanText(input.order_number, 80),
     title: cleanText(input.title, 180) || `${cleanText(input.order_number, 80) || "ROLANPRO"} Proposal`,
     clientName,
+    chosenClientId: cleanText(input.client?.client_id, 60) || null,
     email,
     phone,
     address: cleanText(input.client?.address, 2_000),
@@ -145,27 +156,26 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
     let clientId = existing?.client_id;
     let dealId = existing?.deal_id;
     if (!clientId || !dealId) {
-      const match = snapshot.email || snapshot.phone
-        ? await tx.client.findFirst({
-            where: {
-              OR: [
-                ...(snapshot.email ? [{ email: { equals: snapshot.email, mode: "insensitive" as const } }] : []),
-                ...(snapshot.phone ? [{ phone: snapshot.phone }] : []),
-              ],
-            },
-            orderBy: { updated_at: "desc" },
-          })
+      const contact = { email: snapshot.email, phone: snapshot.phone };
+      await lockClientIdentity(tx, contact);
+      const managerId = session.roles ? getRecordManagerScope({ user: session.user, roles: session.roles }) : undefined;
+      // A client the manager picked after a conflict wins; it must be visible to them.
+      const chosen = snapshot.chosenClientId
+        ? await tx.client.findFirst({ where: { client_id: snapshot.chosenClientId, ...buildClientReuseWhere(managerId) } })
         : null;
-      const client = match
-        ? await tx.client.update({
-            where: { client_id: match.client_id },
-            data: {
-              name: snapshot.clientName,
-              email: snapshot.email || match.email,
-              phone: snapshot.phone || match.phone,
-              service_address: snapshot.address || match.service_address,
-            },
-          })
+      if (snapshot.chosenClientId && !chosen) throw new Error("Выбранный клиент недоступен.");
+      const match = chosen ? null : await findExistingClientByIdentity(tx, contact);
+      if (match?.conflictingClient) {
+        throw new ClientIdentityConflictError(
+          match.client.client_id,
+          match.conflictingClient.client_id,
+          match.matches.map((item) => item.client_id),
+        );
+      }
+      const client = chosen
+        ? chosen
+        : match
+        ? match.client
         : await tx.client.create({
         data: {
           client_code: `LEG-${crypto.randomUUID().slice(0, 8)}`,
@@ -192,15 +202,26 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
       dealId = deal.deal_id;
     }
 
-    await tx.client.update({
+    // Publishing a proposal never rewrites an existing client card: a repeat
+    // customer's new property is the job address of this proposal/project,
+    // not the client's account address or name. Only contact fields the card
+    // is missing are filled in, and only when no other client owns them.
+    const contact = { email: snapshot.email, phone: snapshot.phone };
+    await lockClientIdentity(tx, contact);
+    const identityConflict = await findExistingClientByIdentity(tx, contact, clientId!);
+    const current = await tx.client.findUnique({
       where: { client_id: clientId! },
-      data: {
-        name: snapshot.clientName,
-        email: snapshot.email || undefined,
-        phone: snapshot.phone || undefined,
-        service_address: snapshot.address || undefined,
-      },
+      select: { email: true, phone: true },
     });
+    if (!identityConflict && current) {
+      await tx.client.update({
+        where: { client_id: clientId! },
+        data: {
+          email: current.email ? undefined : snapshot.email || undefined,
+          phone: current.phone ? undefined : snapshot.phone || undefined,
+        },
+      });
+    }
 
     const total = snapshot.items.reduce((sum, item) => sum + item.linePrice, 0);
     const proposal = existing

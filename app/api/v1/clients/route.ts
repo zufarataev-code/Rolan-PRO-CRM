@@ -4,7 +4,13 @@ import { requireRequestSession } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
+import { buildClientReuseWhere, getRecordManagerScope } from "@/features/sales/access";
 import { MANAGER_ROLES, getManagerScope } from "@/features/sales/api";
+import {
+  findExistingClientByIdentity,
+  lockClientIdentity,
+  normalizeClientEmail,
+} from "@/features/sales/client-identity";
 import { listClients } from "@/features/sales/service";
 
 export async function GET(request: NextRequest) {
@@ -47,28 +53,93 @@ export async function POST(request: NextRequest) {
 
   const trimmedName = body.name.trim();
 
-  const client = await prisma.client.create({
-    data: {
-      name: trimmedName,
-      phone: body.phone?.trim() || null,
-      email: body.email?.trim().toLowerCase() || null,
-      billing_address: body.billing_address?.trim() || null,
-      service_address: body.service_address?.trim() || null,
-      city_id: body.city_id ?? null,
-      zip_code: body.zip_code?.trim() || null,
-      notes: body.notes?.trim() || null,
-    },
+  const contact = {
+    phone: body.phone?.trim() || null,
+    email: normalizeClientEmail(body.email) || null,
+  };
+  const result = await prisma.$transaction(async (tx) => {
+    await lockClientIdentity(tx, contact);
+    const existing = await findExistingClientByIdentity(tx, contact);
+    if (existing) {
+      // Another manager's customer: refuse without revealing who it is.
+      const managerId = getRecordManagerScope(auth.session);
+      const ids = existing.matches.map((client) => client.client_id);
+      const visible = await tx.client.count({
+        where: { ...buildClientReuseWhere(managerId), client_id: { in: ids } },
+      });
+      if (visible < ids.length) return { hidden: true } as const;
+    }
+    if (existing && existing.conflictingClient) {
+      return {
+        conflict: {
+          emailClientId: existing.client.client_id,
+          phoneClientId: existing.conflictingClient.client_id,
+          // Every matching card passed the visibility check above.
+          candidates: existing.matches.map((client) => ({
+            client_id: client.client_id,
+            name: client.name,
+            phone: client.phone,
+            email: client.email,
+          })),
+        },
+      } as const;
+    }
+    if (existing) {
+      return { client: existing.client, reused: true, matchedBy: existing.matchedBy } as const;
+    }
+
+    const client = await tx.client.create({
+      data: {
+        name: trimmedName,
+        phone: contact.phone,
+        email: contact.email,
+        billing_address: body.billing_address?.trim() || null,
+        service_address: body.service_address?.trim() || null,
+        city_id: body.city_id ?? null,
+        zip_code: body.zip_code?.trim() || null,
+        notes: body.notes?.trim() || null,
+      },
+    });
+    return { client, reused: false, matchedBy: null } as const;
   });
 
-  await logSalesActivity({
-    actorUserId: auth.session.user.user_id,
-    entityType: "client",
-    entityId: client.client_id,
-    actionKey: "client.created",
-    message: `Создан клиент ${client.name}.`,
-  });
+  if ("hidden" in result) {
+    return apiError(
+      409,
+      "client_owned_by_other_manager",
+      "Клиент с таким телефоном или почтой уже есть в CRM у другого менеджера. Обратитесь к руководителю.",
+    );
+  }
+
+  if (result.conflict) {
+    return apiError(
+      409,
+      "client_identity_conflict",
+      "Телефон и почта принадлежат двум разным клиентам. Выберите клиента вручную.",
+      {
+        email_client_id: result.conflict.emailClientId,
+        phone_client_id: result.conflict.phoneClientId,
+        candidates: result.conflict.candidates,
+      },
+    );
+  }
+
+  const { client } = result;
+
+  if (!result.reused) {
+    await logSalesActivity({
+      actorUserId: auth.session.user.user_id,
+      entityType: "client",
+      entityId: client.client_id,
+      actionKey: "client.created",
+      message: `Создан клиент ${client.name}.`,
+    });
+  }
 
   return apiSuccess({
     client_id: client.client_id,
+    client_name: client.name,
+    reused: result.reused,
+    matched_by: result.matchedBy,
   });
 }

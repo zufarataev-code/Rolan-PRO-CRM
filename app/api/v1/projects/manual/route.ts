@@ -1,7 +1,9 @@
+import { ClientIdentityConflictError, ClientNotAccessibleError } from "@/features/sales/client-identity";
 import { NextRequest } from "next/server";
 
 import { PROJECT_ACCESS_ROLES } from "@/features/projects/api";
 import { createManualProject } from "@/features/projects/service";
+import { prisma } from "@/lib/db";
 import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { ROLE_CODES } from "@/lib/auth/constants";
@@ -28,6 +30,8 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json().catch(() => null)) as
     | {
+        /** The client the manager picked after a contact conflict. */
+        client_id?: string | null;
         client_name?: string;
         phone?: string | null;
         email?: string | null;
@@ -59,27 +63,48 @@ export async function POST(request: NextRequest) {
   }
 
   const canManageInternalEconomics = auth.session.roles.includes(ROLE_CODES.OWNER);
-  const project = await createManualProject(auth.session, {
-    client_name: body.client_name,
-    phone: body.phone ?? null,
-    email: body.email ?? null,
-    city_id: body.city_id ?? null,
-    service_address: body.service_address ?? null,
-    zip_code: body.zip_code ?? null,
-    project_title: body.project_title,
-    service_type_id: body.service_type_id,
-    film_id: body.film_id,
-    billable_sqft: billableSqft,
-    actual_film_sqft: asNumber(body.actual_film_sqft) ?? null,
-    client_unit_price: asNumber(body.client_unit_price) ?? null,
-    installation_cost_per_sqft: canManageInternalEconomics
-      ? asNumber(body.installation_cost_per_sqft) ?? null
-      : null,
-    extra_costs: asNumber(body.extra_costs) ?? null,
-    installer_id: body.installer_id ?? null,
-    project_notes: body.project_notes ?? null,
-    position_notes: body.position_notes ?? null,
-  });
+  let project: Awaited<ReturnType<typeof createManualProject>>;
+  try {
+    project = await createManualProject(auth.session, {
+      client_id: body.client_id || null,
+      client_name: body.client_name,
+      phone: body.phone ?? null,
+      email: body.email ?? null,
+      city_id: body.city_id ?? null,
+      service_address: body.service_address ?? null,
+      zip_code: body.zip_code ?? null,
+      project_title: body.project_title,
+      service_type_id: body.service_type_id,
+      film_id: body.film_id,
+      billable_sqft: billableSqft,
+      actual_film_sqft: asNumber(body.actual_film_sqft) ?? null,
+      client_unit_price: asNumber(body.client_unit_price) ?? null,
+      installation_cost_per_sqft: canManageInternalEconomics
+        ? asNumber(body.installation_cost_per_sqft) ?? null
+        : null,
+      extra_costs: asNumber(body.extra_costs) ?? null,
+      installer_id: body.installer_id ?? null,
+      project_notes: body.project_notes ?? null,
+      position_notes: body.position_notes ?? null,
+    });
+  } catch (error) {
+    if (error instanceof ClientNotAccessibleError) {
+      return apiError(409, "client_owned_by_other_manager", error.message);
+    }
+    if (error instanceof ClientIdentityConflictError) {
+      // The candidates passed the manager's access check before the conflict was raised.
+      const candidates = await prisma.client.findMany({
+        where: { client_id: { in: error.candidateIds } },
+        select: { client_id: true, name: true, phone: true, email: true },
+      });
+      return apiError(409, "client_identity_conflict", error.message, {
+        email_client_id: error.emailClientId,
+        phone_client_id: error.phoneClientId,
+        candidates,
+      });
+    }
+    throw error;
+  }
 
   if (project === "invalid_payload") {
     return apiError(400, "invalid_payload", "Project payload is incomplete.");

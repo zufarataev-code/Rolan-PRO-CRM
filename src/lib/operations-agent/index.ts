@@ -1,3 +1,8 @@
+import {
+  findExistingClientByIdentity,
+  lockClientIdentity,
+  lockClientIdentityUpdate,
+} from "@/features/sales/client-identity";
 import { Prisma } from "@prisma/client";
 
 import { addMeasurementsBatch, createConsultation } from "@/features/consultations/service";
@@ -673,41 +678,50 @@ async function executeWrite(
 
     const email = optionalText(args.email, 191)?.toLowerCase() ?? null;
     const phone = optionalText(args.phone, 40);
+    const contact = { email, phone };
 
-    if (email || phone) {
-      const duplicates = await prisma.client.findMany({
-        where: {
-          OR: [
-            ...(email ? [{ email }] : []),
-            ...(phone ? [{ phone }] : []),
-          ],
+    // Same identity rule as every other client write: normalized phone/email,
+    // serialized by an advisory lock, reuse is never silent for the agent.
+    const outcome = await prisma.$transaction(async (tx) => {
+      await lockClientIdentity(tx, contact);
+      const existing = await findExistingClientByIdentity(tx, contact);
+      if (existing) {
+        return {
+          // Every matching card, so the right historical one can be chosen.
+          duplicates: existing.matches,
+        } as const;
+      }
+      const created = await tx.client.create({
+        data: {
+          name,
+          phone,
+          email,
+          billing_address: optionalText(args.billing_address, 1000),
+          service_address: optionalText(args.service_address, 1000),
+          city_id: optionalText(args.city_id, 80),
+          zip_code: optionalText(args.zip_code, 20),
+          notes: optionalText(args.notes, 4000),
         },
-        take: 6,
-        select: {
-          client_id: true,
-          client_code: true,
-          name: true,
-          phone: true,
-          email: true,
-          service_address: true,
-        },
+        select: { client_id: true, name: true },
       });
-      if (duplicates.length) return clarificationResult(action, "client", duplicates);
-    }
-
-    const client = await prisma.client.create({
-      data: {
-        name,
-        phone,
-        email,
-        billing_address: optionalText(args.billing_address, 1000),
-        service_address: optionalText(args.service_address, 1000),
-        city_id: optionalText(args.city_id, 80),
-        zip_code: optionalText(args.zip_code, 20),
-        notes: optionalText(args.notes, 4000),
-      },
-      select: { client_id: true, name: true },
+      return { created } as const;
     });
+
+    if (outcome.duplicates) {
+      return clarificationResult(
+        action,
+        "client",
+        outcome.duplicates.map((client) => ({
+          client_id: client.client_id,
+          client_code: client.client_code,
+          name: client.name,
+          phone: client.phone,
+          email: client.email,
+          service_address: client.service_address,
+        })),
+      );
+    }
+    const client = outcome.created!;
 
     return {
       ok: true,
@@ -729,14 +743,21 @@ async function executeWrite(
       return invalidResult(action, resolution.error ?? "Client was not found.", "not_found");
     }
 
-    const client = await prisma.client.update({
-      where: { client_id: resolution.client.client_id },
+    const nextPhone = args.phone !== undefined ? optionalText(args.phone, 40) : undefined;
+    const nextEmail =
+      args.email !== undefined ? optionalText(args.email, 191)?.toLowerCase() ?? null : undefined;
+    const targetId = resolution.client.client_id;
+
+    const client = await prisma.$transaction(async (tx) => {
+      const changed = await lockClientIdentityUpdate(tx, targetId, { phone: nextPhone, email: nextEmail });
+      // A contact that already belongs to another client is refused, not copied.
+      const collision = await findExistingClientByIdentity(tx, changed, targetId);
+      if (collision) return null;
+      return tx.client.update({
+      where: { client_id: targetId },
       data: {
-        phone: args.phone !== undefined ? optionalText(args.phone, 40) : undefined,
-        email:
-          args.email !== undefined
-            ? optionalText(args.email, 191)?.toLowerCase() ?? null
-            : undefined,
+        phone: nextPhone,
+        email: nextEmail,
         billing_address:
           args.billing_address !== undefined ? optionalText(args.billing_address, 1000) : undefined,
         service_address:
@@ -746,6 +767,10 @@ async function executeWrite(
       },
       select: { client_id: true, name: true },
     });
+    });
+    if (!client) {
+      return invalidResult(action, "This phone or email already belongs to another client.", "conflict");
+    }
 
     return {
       ok: true,

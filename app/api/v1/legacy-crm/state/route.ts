@@ -17,8 +17,33 @@ import {
   isPrivilegedLegacyWorkspaceRole,
   mergeFieldWorkspace,
 } from "@/features/legacy-crm/field-workspace";
+import {
+  findIntroducedClientIdentityDuplicate,
+} from "@/features/sales/client-identity";
 
 const WORKSPACE_ID = "primary";
+
+function workspaceClients(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+  const clients = (payload as Record<string, unknown>).clients;
+  if (!Array.isArray(clients)) return [];
+  return clients.filter(
+    (client): client is { id?: string; phone?: string | null; email?: string | null } =>
+      Boolean(client && typeof client === "object" && !Array.isArray(client)),
+  );
+}
+
+function duplicateClientError(duplicate: {
+  existingClientId: string;
+  duplicateClientId: string;
+  matchedBy: "email" | "phone";
+}) {
+  return apiError(409, "duplicate_client", "Клиент с таким телефоном или email уже существует.", {
+    existing_client_id: duplicate.existingClientId,
+    duplicate_client_id: duplicate.duplicateClientId,
+    matched_by: duplicate.matchedBy,
+  });
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireRequestSession(request, LEGACY_WORKSPACE_VIEW_ROLES);
@@ -91,6 +116,10 @@ export async function PUT(request: NextRequest) {
       return apiError(403, "forbidden", "Only the owner can initialize CRM data.");
     }
 
+    // The first snapshot is the baseline: historical duplicates it contains
+    // are preserved (restore/migration must not require merging customers).
+    // Only duplicates introduced by later saves are rejected.
+
     try {
       const workspace = await prisma.legacyWorkspace.create({
         data: {
@@ -137,6 +166,12 @@ export async function PUT(request: NextRequest) {
     mergedPayload as Record<string, unknown>,
     await loadDirectoryMembers((mergedPayload as { users?: unknown }).users ?? []),
   ) as typeof mergedPayload;
+
+  const introducedDuplicate = findIntroducedClientIdentityDuplicate(
+    workspaceClients(currentWorkspace.payload),
+    workspaceClients(nextPayload),
+  );
+  if (introducedDuplicate) return duplicateClientError(introducedDuplicate);
 
   const updated = await prisma.legacyWorkspace.updateMany({
     where: {

@@ -5,7 +5,12 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES } from "@/features/sales/api";
-import { buildClientAccessWhere, getRecordManagerScope } from "@/features/sales/access";
+import { buildClientAccessWhere, buildClientReuseWhere, getRecordManagerScope } from "@/features/sales/access";
+import {
+  findExistingClientByIdentity,
+  lockClientIdentityUpdate,
+  normalizeClientEmail,
+} from "@/features/sales/client-identity";
 
 type RouteContext = {
   params: Promise<{
@@ -28,13 +33,35 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   const managerId = getRecordManagerScope(auth.session);
-  const client = await prisma.$transaction(async (tx) => {
+  const contact = {
+    phone: body.phone?.trim() || null,
+    email: normalizeClientEmail(body.email) || null,
+  };
+  const result = await prisma.$transaction(async (tx) => {
+    // Authorize the target first: the duplicate answer names another client and
+    // must never be reachable for a card the caller cannot edit.
+    const target = await tx.client.findFirst({
+      where: buildClientAccessWhere(clientId, managerId),
+      select: { client_id: true },
+    });
+    if (!target) return { client: null, duplicate: null, visible: false } as const;
+
+    const changed = await lockClientIdentityUpdate(tx, clientId, contact);
+    const duplicate = await findExistingClientByIdentity(tx, changed, clientId);
+    if (duplicate) {
+      // Name the other card only if this manager may see it.
+      const visible = await tx.client.count({
+        where: { ...buildClientReuseWhere(managerId), client_id: duplicate.client.client_id },
+      });
+      return { client: null, duplicate, visible: visible > 0 } as const;
+    }
+
     const result = await tx.client.updateMany({
       where: buildClientAccessWhere(clientId, managerId),
       data: {
         name: body.name?.trim() || undefined,
-        phone: body.phone?.trim() || null,
-        email: body.email?.trim().toLowerCase() || null,
+        phone: contact.phone,
+        email: contact.email,
         billing_address: body.billing_address?.trim() || null,
         service_address: body.service_address?.trim() || null,
         city_id: body.city_id || null,
@@ -43,9 +70,28 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       },
     });
 
-    return result.count === 1 ? tx.client.findUnique({ where: { client_id: clientId } }) : null;
-  }).catch(() => null);
+    const client = result.count === 1
+      ? await tx.client.findUnique({ where: { client_id: clientId } })
+      : null;
+    return { client, duplicate: null, visible: false } as const;
+  });
 
+  if (result.duplicate) {
+    return apiError(
+      409,
+      "duplicate_client",
+      "Клиент с таким телефоном или email уже существует.",
+      result.visible
+        ? {
+            existing_client_id: result.duplicate.client.client_id,
+            existing_client_name: result.duplicate.client.name,
+            matched_by: result.duplicate.matchedBy,
+          }
+        : undefined,
+    );
+  }
+
+  const client = result.client;
   if (!client) {
     return apiError(404, "not_found", "Client was not found.");
   }
