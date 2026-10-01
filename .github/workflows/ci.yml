@@ -49,3 +49,84 @@ jobs:
 
       - name: Build production application
         run: npm run build
+
+  clean-build-e2e:
+    name: Clean database build and end-to-end gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rolanpro_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/rolanpro_ci
+      AUTH_SECRET: ci-only-auth-secret-that-is-longer-than-thirty-two-characters
+      ENABLE_DEMO_LOGIN: "false"
+      APP_URL: http://127.0.0.1:3000
+      E2E_BASE_URL: http://127.0.0.1:3000
+      # Disposable CI database only; the E2E guard refuses anything non-local.
+      E2E_ALLOW_WRITES: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      # An empty database must build from migrations alone. If this fails,
+      # a backup restore or a new server would fail the same way.
+      - name: Build empty database from migrations
+        run: node scripts/db-bootstrap-empty.mjs
+
+      # The database above was built from the migration history, so comparing
+      # it with schema.prisma proves the history and the schema agree.
+      - name: Migrations match schema.prisma (no drift)
+        run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
+      # Marks this database as disposable. The E2E gate refuses to write to any
+      # database without this marker, even a local one or one reached through
+      # a tunnel. Production never has it.
+      - name: Mark database as disposable test data
+        run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d rolanpro_ci -c "CREATE TABLE e2e_disposable_marker (created_at timestamptz NOT NULL DEFAULT now()); INSERT INTO e2e_disposable_marker DEFAULT VALUES;"
+
+      - name: Seed reference and demo data
+        run: npm run db:seed
+
+      - name: Build production application
+        run: npm run build
+
+      - name: Start application
+        run: |
+          nohup npx next start -H 127.0.0.1 -p 3000 > next.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://127.0.0.1:3000/login && exit 0
+            sleep 1
+          done
+          cat next.log
+          exit 1
+
+      - name: End-to-end lifecycle tests
+        run: npm run test:e2e
+
+      - name: Application log on failure
+        if: failure()
+        run: tail -200 next.log || true

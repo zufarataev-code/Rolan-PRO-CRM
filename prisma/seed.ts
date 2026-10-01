@@ -1,7 +1,9 @@
 import { PrismaClient } from "@prisma/client";
 import { randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import { provisionLegacyCrm } from "../scripts/provision-legacy-crm";
+import { sanitizeLegacyPayload, validateLegacyPayload } from "../src/features/legacy-crm/sanitize";
 import { ROLE_CODES, ROLE_NAMES } from "../src/lib/auth/constants";
 import { hashPassword } from "../src/lib/auth/password";
 
@@ -501,6 +503,8 @@ async function seedServiceReferences() {
         },
       },
       update: {
+        // Canonical Safety Film fields are always active (see repair migration).
+        is_active: true,
         field_label_ru,
         field_label_en,
         input_type,
@@ -513,7 +517,7 @@ async function seedServiceReferences() {
           : undefined,
       },
       create: {
-        service_type_id: serviceTypeMap.SMART_FILM,
+        service_type_id: serviceTypeMap.SAFETY_FILM,
         field_key,
         field_label_ru,
         field_label_en,
@@ -2674,6 +2678,29 @@ async function seedDevProjectData() {
   });
 }
 
+async function seedDevLegacyWorkspace() {
+  if (process.env.NODE_ENV === "production") {
+    return;
+  }
+
+  // Non-production databases (local, CI, restore rehearsals) get the same empty
+  // legacy workspace that production provisions, from the repository file, so
+  // /legacy-crm works without any file from a developer's machine.
+  const workspace = JSON.parse(await readFile("data/legacy-crm-empty.json", "utf8")) as unknown;
+  if (!validateLegacyPayload(workspace)) {
+    throw new Error("Invalid empty legacy workspace payload.");
+  }
+  await prisma.legacyWorkspace.upsert({
+    where: { workspace_id: "primary" },
+    update: {},
+    create: {
+      workspace_id: "primary",
+      payload: sanitizeLegacyPayload(workspace),
+      revision: 1,
+    },
+  });
+}
+
 async function main() {
   await seedRoles();
   if (process.env.NODE_ENV === "production") {
@@ -2686,6 +2713,7 @@ async function main() {
   await seedStatusesAndReferences();
   await seedServiceReferences();
   await seedDevUsers();
+  await seedDevLegacyWorkspace();
   await seedDevSalesData();
   await seedDevConsultationData();
   await seedDevProposalData();
