@@ -96,20 +96,37 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        // Every open, close or change of a dialog bumps a generation number, so a
+        // dialog whose data was still loading knows the owner has moved on — even
+        // when the screen is back to «no dialog» or shows identical markup.
+        function installModalGeneration(target) {
+          if (Object.getOwnPropertyDescriptor(target, 'modal')?.set) return;
+          let current = target.modal;
+          window.__modalGeneration = window.__modalGeneration || 0;
+          Object.defineProperty(target, 'modal', {
+            configurable: true,
+            enumerable: true,
+            get() { return current; },
+            set(value) {
+              if (value !== current) window.__modalGeneration += 1;
+              current = value;
+            },
+          });
+        }
+        installModalGeneration(state);
+
         window.openTeamMemberAccess = async function openTeamMemberAccess(legacyUserId) {
           const user = getUser(legacyUserId);
           if (!user) return;
 
           // The dialog opens only if nothing else happened while the account
-          // loaded: a newer click or a modal the owner opened/closed meanwhile wins.
-          // The modal on screen is compared as a DOM node: closing and reopening
-          // an editor (even with identical markup) creates a new node.
+          // loaded: a newer click or any dialog opened/closed meanwhile wins.
           const request = (window.__teamAccessRequest || 0) + 1;
           window.__teamAccessRequest = request;
-          const modalNodeWhenClicked = document.querySelector('#app .modal-backdrop');
+          const modalGenerationWhenClicked = window.__modalGeneration;
           window.__teamAccessLegacyUserId = legacyUserId;
           const account = await loadTeamAccessAccount(legacyUserId, user.email || '');
-          if (window.__teamAccessRequest !== request || document.querySelector('#app .modal-backdrop') !== modalNodeWhenClicked) return;
+          if (window.__teamAccessRequest !== request || window.__modalGeneration !== modalGenerationWhenClicked) return;
           const serverEmail = account.member?.email || '';
           window.__teamAccessCurrentEmail = serverEmail;
 

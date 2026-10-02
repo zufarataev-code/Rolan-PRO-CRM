@@ -100,6 +100,21 @@ test("a new login email reaches every card linked to the account", () => {
 
 test("a slow account load never replaces a modal the owner opened or closed meanwhile", () => {
   const route = readFileSync("app/legacy-crm/route.ts", "utf8");
-  assert.match(route, /const modalNodeWhenClicked = document\.querySelector\('#app \.modal-backdrop'\);/);
-  assert.match(route, /document\.querySelector\('#app \.modal-backdrop'\) !== modalNodeWhenClicked\) return;/);
+  assert.match(route, /const modalGenerationWhenClicked = window\.__modalGeneration;/);
+  assert.match(route, /window\.__modalGeneration !== modalGenerationWhenClicked\) return;/);
+
+  // Opening and closing another dialog from «no dialog» back to «no dialog» still counts.
+  const install = route.match(/function installModalGeneration\(target\) \{[\s\S]*?\n {8}\}\n/)?.[0];
+  assert.ok(install, "installModalGeneration not found");
+  const window: { __modalGeneration?: number } = {};
+  const state: { modal: string | null } = { modal: null };
+  new Function("window", "state", `${install}; installModalGeneration(state); installModalGeneration(state);`)(window, state);
+  const clicked = window.__modalGeneration;
+  state.modal = "<div>other</div>";
+  state.modal = null;
+  assert.equal(state.modal, null);
+  assert.notEqual(window.__modalGeneration, clicked);
+  const settled = window.__modalGeneration;
+  state.modal = null;
+  assert.equal(window.__modalGeneration, settled, "setting the same value is not a change");
 });
