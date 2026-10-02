@@ -773,3 +773,11 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Cause: seven DOM patches injected by `/legacy-crm` waited for the next animation frame, so the unpatched page was painted first (menu items moved 52 px, the top bar resized).
 - Fix: `src/features/legacy-crm/before-paint.ts` (`beforePaint`: microtask before paint, runaway guard → next frame). All patches use it; new patches must too. Client list no longer crashes on a client without a source.
 - Verified locally with a `layout-shift` observer (0 shifts on menu clicks) and in production (deploy 06a58ab healthy).
+
+## 2026-10-02 handoff — overhead by revenue, ad budget from last month's revenue
+
+- Owner request: «реклама — бюджет следующего месяца = 10% от выручки этого месяца»; fixed costs are covered from the projects' profit. Decision recorded in DECISIONS.md (2026-10-02).
+- Legacy block «НАКЛАДНЫЕ ПО ВЫРУЧКЕ» before `orderPSS`: `projectMonthRevenueMap` (revenue by project month, cached for the current task and reset in `save()`), `projectMonthAdBudget(date)` (marketingPct × previous month revenue; `basis: current` fallback when the previous month has none), `projectRevenueShare(o)`, `orderAdAllocation(o)`.
+- `orderPSS.marketing` = the project's share of the month's ad budget; `projectProfitability` splits fixed costs by revenue share and returns `revenueShare`, `monthRevenue`, `adBudget`, `adAllocation`.
+- Screens: project estimate shows «Реклама — доля бюджета месяца (X% от $budget)», the rule and the shares in «6. Чистая прибыль проекта», a «Бюджет рекламы месяца» card; order cost table says «Реклама (доля бюджета месяца)»; company cost model: «Бюджет рекламы, % от выручки прошлого месяца» with this month's budget and next month's budget from revenue so far.
+- Verification: full unit suite and `tsc` green; `overhead-by-revenue.test.ts` (budget from previous month, fallback, revenue shares cover the whole month, unpriced project, draft outside the list, cache reset). Local CRM: September $100 000, October $5 000 + $65 000 → the $5 000 project carries 7.1%: fixed $500 of $7 000 (was $3 500 with the equal split) and ads $714 of $10 000.
