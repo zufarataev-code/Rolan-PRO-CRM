@@ -22582,6 +22582,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   const filmChanged = previousCatalogId !== (line.catalogId || '');
   if (filmChanged && previousCatalogId) reconcileManualFilmPurchase(o, previousCatalogId, 'в проекте выбрана другая плёнка');
   if (line.catalogId && (filmChanged || field === 'qty')) reconcileManualFilmPurchase(o, line.catalogId, 'метраж в проекте обнулён');
+  if (field === 'startDate') refreshManualFilmNeededBy(o);
   projectEstimateMarkChanged(o, 'Изменена быстрая позиция проекта');
   save(); refreshQuickProjectEntry(oid);
 }
@@ -22791,6 +22792,17 @@ function manualFilmNeededBy(o, catalogId) {
   return projectQuickLines(o).filter(line => line.catalogId === catalogId).map(line => projectQuickDateValue(line.startDate)).filter(Boolean).sort()[0] || null;
 }
 
+/** Draft requests of the project follow the earliest start date of their film's lines. */
+function refreshManualFilmNeededBy(o) {
+  (db.purchaseRequests || []).forEach(request => {
+    if (request.orderId !== o?.id || request.source !== 'manual_project_film' || request.status !== 'draft') return;
+    const neededBy = manualFilmNeededBy(o, request.itemId);
+    if (!neededBy || neededBy === request.neededBy) return;
+    request.neededBy = neededBy;
+    request.updatedAt = new Date().toISOString();
+  });
+}
+
 function manualFilmRequestNote(o, sqft, note) {
   return `Плёнка вписана вручную в проект ${o.number || ''}: ${Number(sqft)} sqft.${note ? ' ' + note : ''}`;
 }
@@ -22902,7 +22914,8 @@ function saveManualProjectFilm(oid, lineId) {
   if (!(Number(line.qty) > 0)) return fail('Сначала укажите метраж в строке проекта — по нему считается заявка.');
 
   // The same film written in again is reused, never duplicated in the catalog.
-  const sameName = item => item.category === category && String(item.model || '').trim().toLowerCase() === name.toLowerCase();
+  // Archived films stay hidden, as in the film list (catalogCanBeSelected).
+  const sameName = item => item.category === category && catalogCanBeSelected(item, line.catalogId) && String(item.model || '').trim().toLowerCase() === name.toLowerCase();
   let catalog = (db.settings.catalog || []).find(sameName) || null;
   if (catalog && warehouseCatalogStockStats(catalog.id).availableSqft <= 0) {
     catalog.pendingPurchase = true;
@@ -25968,6 +25981,9 @@ function confirmScheduleInstallation(oid) {
   });
   closeModal();
   if (changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true })) {
+    // Scheduling fills empty line dates: the film purchase draft gets its deadline.
+    refreshManualFilmNeededBy(o);
+    save();
     notifyClientEventScheduled(oid, 'install');
     return;
   }
