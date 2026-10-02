@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { categorizeTransaction, rulePatternFor } from "./categories";
 import { decryptBankSecret, encryptBankSecret } from "./crypto";
+import { bankOAuthRedirectUri } from "./oauth";
 import { createPlaidClient, PlaidApiError, type PlaidClient } from "./plaid";
 import { bankNeedsRefresh } from "./refresh";
 
@@ -143,4 +144,31 @@ test("opening the screen refreshes when any bank is stale or never loaded", () =
   assert.equal(bankNeedsRefresh([fresh, { status: "active", lastSyncedAt: null }], now, 6 * hour), true, "a bank that never loaded");
   assert.equal(bankNeedsRefresh([fresh, { status: "error", lastSyncedAt: "2026-10-01T20:00:00Z" }], now, 6 * hour), true, "the oldest bank decides");
   assert.equal(bankNeedsRefresh([fresh, { status: "login_required", lastSyncedAt: null }], now, 6 * hour), false, "waits for a new login");
+});
+
+test("OAuth banks return to an HTTPS address in the CRM and Link resumes there", async () => {
+  assert.equal(bankOAuthRedirectUri("https://crm.rolan-pro.com"), "https://crm.rolan-pro.com/legacy-crm/bank/oauth");
+  assert.equal(bankOAuthRedirectUri("http://localhost:3000"), null, "Plaid accepts HTTPS only");
+
+  const bodies: Array<Record<string, unknown>> = [];
+  const client = createPlaidClient(
+    { clientId: "cid", secret: "sec", environment: "production" },
+    (async (_url: string, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ link_token: "link-production-1", expiration: "x" }), { status: 200 });
+    }) as unknown as typeof fetch,
+  );
+  await client.createLinkToken({ userId: "u1", redirectUri: "https://crm.rolan-pro.com/legacy-crm/bank/oauth" });
+  await client.createLinkToken({ userId: "u1" });
+  assert.equal(bodies[0].redirect_uri, "https://crm.rolan-pro.com/legacy-crm/bank/oauth");
+  assert.equal("redirect_uri" in bodies[1], false);
+
+  const service = readFileSync("src/features/bank/service.ts", "utf8");
+  assert.match(service, /\/redirect\/i\.test/, "an unregistered address falls back to Link without OAuth");
+  const page = readFileSync("app/legacy-crm/bank/oauth/page.tsx", "utf8");
+  assert.match(page, /<BankFeeds oauthReturn \/>/);
+  assert.match(page, /if \(session\.preview \|\| !session\.roles\.includes\(ROLE_CODES\.OWNER\)\) redirect\("\/legacy-crm"\);/);
+  const ui = readFileSync("components/bank-feeds.tsx", "utf8");
+  assert.match(ui, /rememberPendingLink\(\{ linkToken, connectionId: connectionId \?\? null, at: Date\.now\(\) \}\);/);
+  assert.match(ui, /startLink\(Plaid, pending\.linkToken, pending\.connectionId \?\? undefined, receivedRedirectUri\)/);
 });

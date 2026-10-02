@@ -32,6 +32,7 @@ type PlaidGlobal = {
     token: string;
     onSuccess: (publicToken: string, metadata: unknown) => void;
     onExit?: (error: { display_message?: string | null; error_message?: string } | null) => void;
+    receivedRedirectUri?: string;
   }) => PlaidHandler;
 };
 
@@ -67,6 +68,30 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(payload?.errors?.[0]?.message || "Не удалось выполнить запрос.");
   }
   return payload.data;
+}
+
+// An OAuth bank sends the owner to /legacy-crm/bank/oauth; Link resumes there with the same token.
+const OAUTH_STORAGE_KEY = "rolanpro-plaid-oauth";
+const OAUTH_MAX_AGE_MS = 30 * 60 * 1000;
+type PendingLink = { linkToken: string; connectionId: string | null; at: number };
+
+function rememberPendingLink(pending: PendingLink) {
+  try { window.localStorage.setItem(OAUTH_STORAGE_KEY, JSON.stringify(pending)); } catch { /* private mode: OAuth resume unavailable */ }
+}
+
+function forgetPendingLink() {
+  try { window.localStorage.removeItem(OAUTH_STORAGE_KEY); } catch { /* nothing stored */ }
+}
+
+function takePendingLink(): PendingLink | null {
+  try {
+    const raw = window.localStorage.getItem(OAUTH_STORAGE_KEY);
+    window.localStorage.removeItem(OAUTH_STORAGE_KEY);
+    const pending = raw ? (JSON.parse(raw) as PendingLink) : null;
+    return pending?.linkToken && Date.now() - pending.at < OAUTH_MAX_AGE_MS ? pending : null;
+  } catch {
+    return null;
+  }
 }
 
 function closePanel() {
@@ -132,7 +157,7 @@ function SettingsForm({ current, onSaved, onCancel }: {
   );
 }
 
-export function BankFeeds() {
+export function BankFeeds({ oauthReturn = false }: { oauthReturn?: boolean } = {}) {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -189,6 +214,23 @@ export function BankFeeds() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Back from an OAuth bank: resume the same Link session, then return to the normal address.
+  useEffect(() => {
+    if (!oauthReturn) return;
+    const receivedRedirectUri = window.location.href;
+    window.history.replaceState(null, "", "/legacy-crm/bank");
+    const pending = takePendingLink();
+    if (!pending) {
+      setNotice({ tone: "error", text: "Подключение устарело. Нажмите «Подключить банк или карту» ещё раз." });
+      return;
+    }
+    setBusy(pending.connectionId ? `relogin:${pending.connectionId}` : "connect");
+    loadPlaid()
+      .then((Plaid) => startLink(Plaid, pending.linkToken, pending.connectionId ?? undefined, receivedRedirectUri))
+      .catch((cause) => { setNotice({ tone: "error", text: cause instanceof Error ? cause.message : "Не удалось открыть Plaid." }); setBusy(""); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oauthReturn]);
+
   // Opening the screen refreshes operations when any bank never loaded or loaded more than six hours ago.
   useEffect(() => {
     if (!overview?.settings.configured || !overview.connections.length) return;
@@ -196,41 +238,50 @@ export function BankFeeds() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overview?.settings.configured, overview?.connections.length]);
 
+  function startLink(Plaid: PlaidGlobal, linkToken: string, connectionId?: string, receivedRedirectUri?: string) {
+    const handler = Plaid.create({
+      token: linkToken,
+      ...(receivedRedirectUri ? { receivedRedirectUri } : {}),
+      onSuccess: async (publicToken) => {
+        forgetPendingLink();
+        setBusy("connect");
+        try {
+          if (connectionId) {
+            await sync();
+          } else {
+            const result = await api<{ institutionName: string | null; added: number }>("/api/v1/finance/bank/connections", {
+              method: "POST",
+              body: JSON.stringify({ public_token: publicToken }),
+            });
+            setNotice({ tone: "ok", text: `${result.institutionName ?? "Банк"} подключён. Загружено операций: ${result.added}.` });
+            await load();
+          }
+        } catch (cause) {
+          setNotice({ tone: "error", text: cause instanceof Error ? cause.message : "Не удалось подключить банк." });
+        } finally {
+          setBusy("");
+        }
+      },
+      onExit: (error) => {
+        forgetPendingLink();
+        if (error) setNotice({ tone: "error", text: error.display_message || error.error_message || "Подключение прервано." });
+        setBusy("");
+      },
+    });
+    handler.open();
+  }
+
   async function openLink(connectionId?: string) {
     setBusy(connectionId ? `relogin:${connectionId}` : "connect");
     setNotice(null);
     try {
-      const [{ linkToken }, Plaid] = await Promise.all([
-        api<{ linkToken: string }>("/api/v1/finance/bank/link-token", { method: "POST", body: JSON.stringify({ connection_id: connectionId ?? null }) }),
+      const [{ linkToken, warning }, Plaid] = await Promise.all([
+        api<{ linkToken: string; warning: string | null }>("/api/v1/finance/bank/link-token", { method: "POST", body: JSON.stringify({ connection_id: connectionId ?? null }) }),
         loadPlaid(),
       ]);
-      const handler = Plaid.create({
-        token: linkToken,
-        onSuccess: async (publicToken) => {
-          setBusy("connect");
-          try {
-            if (connectionId) {
-              await sync();
-            } else {
-              const result = await api<{ institutionName: string | null; added: number }>("/api/v1/finance/bank/connections", {
-                method: "POST",
-                body: JSON.stringify({ public_token: publicToken }),
-              });
-              setNotice({ tone: "ok", text: `${result.institutionName ?? "Банк"} подключён. Загружено операций: ${result.added}.` });
-              await load();
-            }
-          } catch (cause) {
-            setNotice({ tone: "error", text: cause instanceof Error ? cause.message : "Не удалось подключить банк." });
-          } finally {
-            setBusy("");
-          }
-        },
-        onExit: (error) => {
-          if (error) setNotice({ tone: "error", text: error.display_message || error.error_message || "Подключение прервано." });
-          setBusy("");
-        },
-      });
-      handler.open();
+      if (warning) setNotice({ tone: "error", text: warning });
+      rememberPendingLink({ linkToken, connectionId: connectionId ?? null, at: Date.now() });
+      startLink(Plaid, linkToken, connectionId);
     } catch (cause) {
       setNotice({ tone: "error", text: cause instanceof Error ? cause.message : "Не удалось открыть Plaid." });
       setBusy("");

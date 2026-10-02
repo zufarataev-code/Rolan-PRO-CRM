@@ -79,12 +79,14 @@ export function createPlaidClient(config: PlaidConfig, fetchImpl: typeof fetch =
   }
 
   return {
-    createLinkToken(input: { userId: string; accessToken?: string }) {
+    createLinkToken(input: { userId: string; accessToken?: string; redirectUri?: string }) {
       return call<{ link_token: string; expiration: string }>("/link/token/create", {
         client_name: "Rolan PRO CRM",
         language: "en",
         country_codes: ["US"],
         user: { client_user_id: input.userId },
+        // OAuth banks (Chase, Bank of America, Wells Fargo…) send the owner back here.
+        ...(input.redirectUri ? { redirect_uri: input.redirectUri } : {}),
         // A token with an access token opens Link in update mode (re-login).
         ...(input.accessToken
           ? { access_token: input.accessToken }

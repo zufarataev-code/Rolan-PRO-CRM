@@ -10,6 +10,7 @@ import {
   type CategoryRule,
 } from "./categories";
 import { decryptBankSecret, encryptBankSecret } from "./crypto";
+import { BANK_OAUTH_NOT_REGISTERED } from "./oauth";
 import {
   createPlaidClient,
   PlaidApiError,
@@ -72,7 +73,7 @@ export async function plaidClientFromSettings(fetchImpl?: typeof fetch): Promise
 }
 
 /** Link token for a new bank, or for re-login of an existing connection (update mode). */
-export async function createBankLinkToken(userId: string, connectionId?: string | null) {
+export async function createBankLinkToken(userId: string, connectionId?: string | null, redirectUri?: string | null) {
   const { client, environment } = await plaidClientFromSettings();
   let accessToken: string | undefined;
   if (connectionId) {
@@ -81,8 +82,18 @@ export async function createBankLinkToken(userId: string, connectionId?: string 
     if (connection.environment !== environment) throw new Error("Это подключение создано в другом режиме Plaid.");
     accessToken = decryptBankSecret(connection.access_token_encrypted);
   }
+  if (redirectUri) {
+    try {
+      const result = await client.createLinkToken({ userId, accessToken, redirectUri });
+      return { linkToken: result.link_token, redirectUri, warning: null };
+    } catch (error) {
+      // The address is not registered in the Plaid Dashboard yet: banks without
+      // OAuth still connect; the owner sees what to add for the others.
+      if (!(error instanceof PlaidApiError && /redirect/i.test(`${error.code} ${error.message}`))) throw error;
+    }
+  }
   const result = await client.createLinkToken({ userId, accessToken });
-  return { linkToken: result.link_token };
+  return { linkToken: result.link_token, redirectUri: null, warning: redirectUri ? `${BANK_OAUTH_NOT_REGISTERED} Адрес: ${redirectUri}` : null };
 }
 
 async function loadRules(): Promise<CategoryRule[]> {
