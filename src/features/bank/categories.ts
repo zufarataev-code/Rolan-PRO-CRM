@@ -44,7 +44,13 @@ export type CategorizeInput = {
   plaid_category_detail?: string | null;
 };
 
-export type CategoryRule = { rule_id: string; pattern: string; category_code: string };
+export type MoneyDirection = "in" | "out";
+export type CategoryRule = { rule_id: string; pattern: string; direction: string; category_code: string };
+
+/** Plaid amounts: positive = money out, negative = money in. */
+export function moneyDirection(amount: number | string): MoneyDirection {
+  return Number(amount) < 0 ? "in" : "out";
+}
 
 export type CategorizeResult = {
   category_code: BankCategoryCode;
@@ -98,11 +104,12 @@ function fromPlaidCategory(primary: string, detailed: string, moneyIn: boolean):
 
 export function categorizeTransaction(input: CategorizeInput, rules: readonly CategoryRule[] = []): CategorizeResult {
   const text = categorizationText(input);
-  const moneyIn = input.amount < 0;
+  const direction = moneyDirection(input.amount);
+  const moneyIn = direction === "in";
 
-  // 1. The owner's remembered rules win.
+  // 1. The owner's remembered rules win — for the same direction of money only.
   const rule = rules
-    .filter((candidate) => candidate.pattern && text.includes(candidate.pattern.toLowerCase()))
+    .filter((candidate) => candidate.pattern && candidate.direction === direction && text.includes(candidate.pattern.toLowerCase()))
     .sort((a, b) => b.pattern.length - a.pattern.length)[0];
   if (rule && BANK_CATEGORY_CODES.has(rule.category_code)) {
     return { category_code: rule.category_code as BankCategoryCode, review_status: "auto", rule_id: rule.rule_id };

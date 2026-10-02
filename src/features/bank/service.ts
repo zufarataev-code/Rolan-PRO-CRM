@@ -5,6 +5,7 @@ import {
   BANK_CATEGORY_CODES,
   categorizationText,
   categorizeTransaction,
+  moneyDirection,
   rulePatternFor,
   type CategoryRule,
 } from "./categories";
@@ -85,7 +86,7 @@ export async function createBankLinkToken(userId: string, connectionId?: string 
 }
 
 async function loadRules(): Promise<CategoryRule[]> {
-  return prisma.bankCategoryRule.findMany({ select: { rule_id: true, pattern: true, category_code: true } });
+  return prisma.bankCategoryRule.findMany({ select: { rule_id: true, pattern: true, direction: true, category_code: true } });
 }
 
 /** Pulls every page of /transactions/sync; restarts from the original cursor if Plaid reports a mutation mid-pagination. */
@@ -250,7 +251,7 @@ export async function connectBank(publicToken: string, userId: string) {
   return { connectionId: connection.connection_id, institutionName, ...sync };
 }
 
-export async function bankOverview(options: { reviewOnly?: boolean; limit?: number } = {}) {
+export async function bankOverview(options: { reviewOnly?: boolean; limit?: number; offset?: number } = {}) {
   const settings = await getPlaidSettingsSummary();
   const connections = await prisma.bankConnection.findMany({
     where: { environment: settings.environment },
@@ -259,14 +260,18 @@ export async function bankOverview(options: { reviewOnly?: boolean; limit?: numb
   });
   const accountIds = connections.flatMap((connection) => connection.accounts.map((account) => account.account_id));
   const baseWhere = { account_id: { in: accountIds }, removed_at: null };
-  const [transactions, reviewCount] = await Promise.all([
+  // One page of operations; the «Разобрать» tab asks for unreviewed ones only, so none is out of reach.
+  const limit = Math.min(Math.max(Math.floor(options.limit ?? 200), 1), 1000);
+  const [page, reviewCount] = await Promise.all([
     prisma.bankTransaction.findMany({
       where: { ...baseWhere, ...(options.reviewOnly ? { review_status: "needs_review" } : {}) },
-      orderBy: [{ date: "desc" }, { created_at: "desc" }],
-      take: Math.min(Math.max(options.limit ?? 200, 1), 1000),
+      orderBy: [{ date: "desc" }, { created_at: "desc" }, { transaction_id: "asc" }],
+      skip: Math.max(Math.floor(options.offset ?? 0), 0),
+      take: limit + 1,
     }),
     prisma.bankTransaction.count({ where: { ...baseWhere, review_status: "needs_review" } }),
   ]);
+  const transactions = page.slice(0, limit);
 
   const accounts = connections.flatMap((connection) => connection.accounts.map((account) => ({
     accountId: account.account_id,
@@ -297,6 +302,7 @@ export async function bankOverview(options: { reviewOnly?: boolean; limit?: numb
     accounts,
     totals: { cash, cardDebt },
     reviewCount,
+    hasMore: page.length > limit,
     categories: BANK_CATEGORIES,
     transactions: transactions.map((tx) => ({
       transactionId: tx.transaction_id,
@@ -315,7 +321,8 @@ export async function bankOverview(options: { reviewOnly?: boolean; limit?: numb
 
 /**
  * The owner sets a category. With «Запомнить» the merchant/description becomes
- * a rule, and every other unreviewed operation with the same text follows it.
+ * a rule for that direction of money (in / out), and every other unreviewed
+ * operation with the same text and direction follows it.
  */
 export async function updateBankTransaction(
   transactionId: string,
@@ -331,15 +338,21 @@ export async function updateBankTransaction(
   let applied = 0;
   if (input.remember) {
     const pattern = rulePatternFor(tx);
+    const direction = moneyDirection(Number(tx.amount));
     if (pattern.length >= 3) {
       const rule = await prisma.bankCategoryRule.upsert({
-        where: { pattern },
-        create: { pattern, category_code: category, created_by: userId },
+        where: { pattern_direction: { pattern, direction } },
+        create: { pattern, direction, category_code: category, created_by: userId },
         update: { category_code: category },
       });
       ruleId = rule.rule_id;
       const candidates = await prisma.bankTransaction.findMany({
-        where: { review_status: "needs_review", removed_at: null, transaction_id: { not: transactionId } },
+        where: {
+          review_status: "needs_review",
+          removed_at: null,
+          transaction_id: { not: transactionId },
+          amount: direction === "in" ? { lt: 0 } : { gte: 0 },
+        },
         select: { transaction_id: true, name: true, merchant_name: true },
       });
       const matching = candidates.filter((candidate) => categorizationText(candidate).includes(pattern)).map((candidate) => candidate.transaction_id);

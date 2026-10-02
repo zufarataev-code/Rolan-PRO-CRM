@@ -80,9 +80,10 @@ CREATE INDEX IF NOT EXISTS "bank_transactions_review_status_idx" ON "bank_transa
 CREATE TABLE IF NOT EXISTS "bank_category_rules" (
   "rule_id" UUID NOT NULL DEFAULT gen_random_uuid(),
   "pattern" VARCHAR(200) NOT NULL,
+  "direction" VARCHAR(3) NOT NULL,
   "category_code" VARCHAR(40) NOT NULL,
   "created_by" UUID,
   "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "bank_category_rules_pkey" PRIMARY KEY ("rule_id")
 );
-CREATE UNIQUE INDEX IF NOT EXISTS "bank_category_rules_pattern_key" ON "bank_category_rules"("pattern");
+CREATE UNIQUE INDEX IF NOT EXISTS "bank_category_rules_pattern_direction_key" ON "bank_category_rules"("pattern", "direction");

@@ -5,6 +5,7 @@ import test from "node:test";
 import { categorizeTransaction, rulePatternFor } from "./categories";
 import { decryptBankSecret, encryptBankSecret } from "./crypto";
 import { createPlaidClient, PlaidApiError, type PlaidClient } from "./plaid";
+import { bankNeedsRefresh } from "./refresh";
 
 test("built-in rules sort the usual operations", () => {
   const ads = categorizeTransaction({ name: "GOOGLE *ADS1234567", merchant_name: "Google Ads", amount: 300 });
@@ -30,10 +31,14 @@ test("unknown operations wait in «Разобрать»; the owner's remembered 
   const income = categorizeTransaction({ name: "ZELLE FROM JOHN SMITH", amount: -950 });
   assert.equal(income.category_code, "OTHER_INCOME");
 
-  const rules = [{ rule_id: "r1", pattern: "acme signs llc", category_code: "MATERIALS" }];
+  const rules = [{ rule_id: "r1", pattern: "acme signs llc", direction: "out", category_code: "MATERIALS" }];
   assert.deepEqual(categorizeTransaction({ name: "ACME SIGNS LLC", amount: 180 }, rules), { category_code: "MATERIALS", review_status: "auto", rule_id: "r1" });
+  // A rule remembered for money out never classifies money in (a refund from the same vendor).
+  assert.equal(categorizeTransaction({ name: "ACME SIGNS LLC REFUND", amount: -180 }, rules).category_code, "OTHER_INCOME");
+  const stripeFees = [{ rule_id: "r3", pattern: "stripe", direction: "out", category_code: "BANK_FEES" }];
+  assert.equal(categorizeTransaction({ name: "STRIPE TRANSFER ST-X1Y2", amount: -4820.5 }, stripeFees).category_code, "STRIPE_PAYOUT");
   // A remembered rule even overrides a built-in keyword.
-  const override = [{ rule_id: "r2", pattern: "chevron", category_code: "VEHICLE" }];
+  const override = [{ rule_id: "r2", pattern: "chevron", direction: "out", category_code: "VEHICLE" }];
   assert.equal(categorizeTransaction({ name: "CHEVRON 0091234", amount: 50 }, override).category_code, "VEHICLE");
 });
 
@@ -128,4 +133,14 @@ test("Plaid errors reach the owner in plain Russian", async () => {
   assert.equal(payload.meta.plaid_error_code, "INVALID_API_KEYS");
   const relogin = (await bankError(new PlaidApiError("ITEM_LOGIN_REQUIRED", "login")).json()) as { errors: Array<{ message: string }> };
   assert.match(relogin.errors[0].message, /войти заново/);
+});
+
+test("opening the screen refreshes when any bank is stale or never loaded", () => {
+  const now = Date.parse("2026-10-02T12:00:00Z");
+  const hour = 60 * 60 * 1000;
+  const fresh = { status: "active", lastSyncedAt: "2026-10-02T11:00:00Z" };
+  assert.equal(bankNeedsRefresh([fresh], now, 6 * hour), false);
+  assert.equal(bankNeedsRefresh([fresh, { status: "active", lastSyncedAt: null }], now, 6 * hour), true, "a bank that never loaded");
+  assert.equal(bankNeedsRefresh([fresh, { status: "error", lastSyncedAt: "2026-10-01T20:00:00Z" }], now, 6 * hour), true, "the oldest bank decides");
+  assert.equal(bankNeedsRefresh([fresh, { status: "login_required", lastSyncedAt: null }], now, 6 * hour), false, "waits for a new login");
 });

@@ -1674,10 +1674,13 @@ model BankTransaction {
 /// «Запомнить»: a merchant/name pattern the owner assigned to a category once.
 model BankCategoryRule {
   rule_id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  pattern       String   @unique @db.VarChar(200)
+  pattern       String   @db.VarChar(200)
+  /// "in" (money in) or "out" (money out): Stripe fees and payouts share a name.
+  direction     String   @db.VarChar(3)
   category_code String   @db.VarChar(40)
   created_by    String?  @db.Uuid
   created_at    DateTime @default(now()) @db.Timestamptz(6)
 
+  @@unique([pattern, direction])
   @@map("bank_category_rules")
 }

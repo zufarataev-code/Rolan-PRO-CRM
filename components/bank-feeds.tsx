@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { bankNeedsRefresh } from "@/features/bank/refresh";
+
 import styles from "./bank-feeds.module.css";
 
 type Category = { code: string; label: string; kind: "expense" | "income" | "transfer" };
@@ -18,8 +20,11 @@ type Transaction = {
 type Overview = {
   settings: { configured: boolean; environment: "sandbox" | "production"; clientIdHint: string | null };
   connections: Connection[]; accounts: Account[]; totals: { cash: number; cardDebt: number };
-  reviewCount: number; categories: Category[]; transactions: Transaction[];
+  reviewCount: number; hasMore: boolean; categories: Category[]; transactions: Transaction[];
 };
+
+const PAGE_SIZE = 200;
+
 
 type PlaidHandler = { open: () => void; destroy?: () => void };
 type PlaidGlobal = {
@@ -136,15 +141,32 @@ export function BankFeeds() {
   const [remember, setRemember] = useState<Record<string, boolean>>({});
   const [editingKeys, setEditingKeys] = useState(false);
 
-  const load = useCallback(async () => {
+  // The «Разобрать» tab asks the server for unreviewed operations only, page by page,
+  // so every operation counted in «Разобрать» can be reached. `count` keeps the rows already shown.
+  const load = useCallback(async (count = PAGE_SIZE) => {
     try {
-      setOverview(await api<Overview>("/api/v1/finance/bank/overview?limit=500"));
+      const review = tab === "review" ? "1" : "0";
+      setOverview(await api<Overview>(`/api/v1/finance/bank/overview?review=${review}&limit=${Math.max(PAGE_SIZE, count)}`));
     } catch (cause) {
       setNotice({ tone: "error", text: cause instanceof Error ? cause.message : "Не удалось загрузить." });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tab]);
+
+  async function loadMore() {
+    if (!overview) return;
+    setBusy("more");
+    try {
+      const review = tab === "review" ? "1" : "0";
+      const next = await api<Overview>(`/api/v1/finance/bank/overview?review=${review}&limit=${PAGE_SIZE}&offset=${overview.transactions.length}`);
+      setOverview({ ...next, transactions: [...overview.transactions, ...next.transactions] });
+    } catch (cause) {
+      setNotice({ tone: "error", text: cause instanceof Error ? cause.message : "Не удалось загрузить." });
+    } finally {
+      setBusy("");
+    }
+  }
 
   const sync = useCallback(async (quiet = false) => {
     setBusy("sync");
@@ -167,11 +189,10 @@ export function BankFeeds() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // Opening the screen refreshes operations when the last download is older than six hours.
+  // Opening the screen refreshes operations when any bank never loaded or loaded more than six hours ago.
   useEffect(() => {
     if (!overview?.settings.configured || !overview.connections.length) return;
-    const latest = Math.max(...overview.connections.map((connection) => (connection.lastSyncedAt ? Date.parse(connection.lastSyncedAt) : 0)));
-    if (Date.now() - latest > AUTO_SYNC_AFTER_MS && !busy) void sync(true);
+    if (bankNeedsRefresh(overview.connections, Date.now(), AUTO_SYNC_AFTER_MS) && !busy) void sync(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overview?.settings.configured, overview?.connections.length]);
 
@@ -224,7 +245,7 @@ export function BankFeeds() {
         body: JSON.stringify({ category_code: categoryCode, remember: Boolean(remember[tx.transactionId]) }),
       });
       setNotice({ tone: "ok", text: result.appliedToOthers ? `Сохранено. Правило применено ещё к ${result.appliedToOthers} операциям.` : "Сохранено." });
-      await load();
+      await load(overview?.transactions.length);
     } catch (cause) {
       setNotice({ tone: "error", text: cause instanceof Error ? cause.message : "Не удалось сохранить." });
     } finally {
@@ -233,10 +254,7 @@ export function BankFeeds() {
   }
 
   const accountsById = useMemo(() => new Map((overview?.accounts ?? []).map((account) => [account.accountId, account])), [overview]);
-  const shown = useMemo(
-    () => (overview?.transactions ?? []).filter((tx) => tab === "all" || tx.reviewStatus === "needs_review"),
-    [overview, tab],
-  );
+  const shown = overview?.transactions ?? [];
   const grouped = useMemo(() => {
     const kinds: Array<[Category["kind"], string]> = [["expense", "Расходы"], ["income", "Доходы"], ["transfer", "Не расход и не доход"]];
     return kinds.map(([kind, label]) => ({ label, items: (overview?.categories ?? []).filter((category) => category.kind === kind) }));
@@ -350,6 +368,9 @@ export function BankFeeds() {
                 );
               })}
             </ul>
+            {overview.hasMore ? (
+              <button className={styles.secondary} onClick={() => void loadMore()} disabled={Boolean(busy)}>{busy === "more" ? "Загружаю…" : "Показать ещё"}</button>
+            ) : null}
           </section>
         </>
       ) : null}
