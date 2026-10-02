@@ -455,6 +455,7 @@ Owner decision in chat on 2026-10-01 (asked whether to wait for the relational s
 Owner request in chat on 2026-10-01: a manager must be able to write in a film that is not in the warehouse list; «это должно фиксироваться в рамках проекта обязательно, чтобы потом можно было закупить и сделать приход, чтобы проект правильно посчитался». Solar films have subtypes (зеркальная, керамическая, магнетронная, фотохромная, другая).
 
 - Allowed in the legacy HTML until the warehouse/purchasing stage moves to PostgreSQL: «Плёнки нет в списке → Вписать плёнку вручную и заказать» in the quick project editor (PR for this exception). It creates a catalog film «ожидает закупки» on the project line and a draft project purchase request; the existing receipt flow brings the real roll cost into the project.
+- Same exception (Owner request in chat, 2026-10-01): the «Принять рулон на склад» form has category, solar type, brand, model, vendor, lot, width, length, purchase price, date and location; a film missing from the list is typed in and added to the catalog; every roll gets a readable unique code (RP-YYMM-NNNN, also its QR code); the purchase price per sq ft is shown and stored, and the project material cost uses it.
 - Migration: moves with the warehouse/purchasing stage (relational catalog, purchase requests and receipts).
 
 ## Changing a decision
