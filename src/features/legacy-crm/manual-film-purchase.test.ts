@@ -40,11 +40,12 @@ function load(fields: Record<string, string>, role = "manager") {
     cloudStatus: () => undefined,
     alert: (message: string) => { throw new Error(message); },
     warehouseCatalogStockStats: () => ({ availableSqft: 0 }),
+    catalogCanBeSelected: (item: { archived?: boolean; id: string }, selectedId = "") => !item.archived || item.id === selectedId,
     getCatalogItem: (id: string) => db.settings.catalog.find((item) => item.id === id),
     uid: (() => { let n = 0; return () => `id${++n}`; })(),
   });
-  vm.runInContext(`${block()}; Object.assign(this, { manualFilmMetres, saveManualProjectFilm, reconcileManualFilmPurchase });`, context);
-  return { context: context as unknown as { manualFilmMetres: (sqft: number, width: number) => number; saveManualProjectFilm: (o: string, l: string) => void; reconcileManualFilmPurchase: (o: unknown, c: string, r: string) => unknown }, db, order, changes };
+  vm.runInContext(`${block()}; Object.assign(this, { manualFilmMetres, saveManualProjectFilm, reconcileManualFilmPurchase, refreshManualFilmNeededBy });`, context);
+  return { context: context as unknown as { manualFilmMetres: (sqft: number, width: number) => number; saveManualProjectFilm: (o: string, l: string) => void; reconcileManualFilmPurchase: (o: unknown, c: string, r: string) => unknown; refreshManualFilmNeededBy: (o: unknown) => void }, db, order, changes };
 }
 
 test("metres for the purchase follow the roll width with 10% waste, rounded up to 0.5 m", () => {
@@ -160,4 +161,25 @@ test("every quick line change and deletion reconciles the film purchase", () => 
   assert.match(html, /if \(filmChanged && previousCatalogId\) reconcileManualFilmPurchase\(o, previousCatalogId, 'в проекте выбрана другая плёнка'\);/);
   assert.match(html, /if \(line\.catalogId && \(filmChanged \|\| field === 'qty'\)\) reconcileManualFilmPurchase\(o, line\.catalogId, 'метраж в проекте обнулён'\);/);
   assert.match(html, /if \(removedCatalogId\) reconcileManualFilmPurchase\(o, removedCatalogId, 'позиция удалена из проекта'\);/);
+});
+
+test("the draft's deadline follows line dates, also when scheduling fills them", () => {
+  const { context, db, order } = load({ "mf-type": "Зеркальная", "mf-name": "Mirror 15", "mf-width": "1524" });
+  order.extraServices[0].startDate = "";
+  context.saveManualProjectFilm("o1", "l1");
+  assert.equal(db.purchaseRequests[0].neededBy, null, "no date yet");
+  order.extraServices[0].startDate = "2026-10-20";
+  context.refreshManualFilmNeededBy(order);
+  assert.equal(db.purchaseRequests[0].neededBy, "2026-10-20");
+  assert.match(html, /if \(field === 'startDate'\) refreshManualFilmNeededBy\(o\);/);
+  assert.match(html, /refreshManualFilmNeededBy\(o\);\n {4}save\(\);\n {4}notifyClientEventScheduled\(oid, 'install'\);/);
+});
+
+test("an archived film with the same name is not reused for a manual purchase", () => {
+  const { context, db, order } = load({ "mf-type": "Керамическая", "mf-name": "Ceramic 40", "mf-width": "1524" });
+  db.settings.catalog.push({ id: "film_archived", category: "solar", model: "Ceramic 40", brand: "X", archived: true });
+  context.saveManualProjectFilm("o1", "l1");
+  assert.notEqual(order.extraServices[0].catalogId, "film_archived");
+  assert.equal(db.settings.catalog[0].pendingPurchase, undefined, "the archived film is untouched");
+  assert.equal(db.settings.catalog.length, 2, "a new manual film is created");
 });
