@@ -39,10 +39,12 @@ function load(fields: Record<string, string>, role = "manager") {
     openQuickProjectEntry: () => undefined,
     cloudStatus: () => undefined,
     alert: (message: string) => { throw new Error(message); },
+    warehouseCatalogStockStats: () => ({ availableSqft: 0 }),
+    getCatalogItem: (id: string) => db.settings.catalog.find((item) => item.id === id),
     uid: (() => { let n = 0; return () => `id${++n}`; })(),
   });
-  vm.runInContext(`${block()}; Object.assign(this, { manualFilmMetres, saveManualProjectFilm, syncManualFilmPurchase });`, context);
-  return { context: context as unknown as { manualFilmMetres: (sqft: number, width: number) => number; saveManualProjectFilm: (o: string, l: string) => void; syncManualFilmPurchase: (o: unknown, l: unknown) => void }, db, order, changes };
+  vm.runInContext(`${block()}; Object.assign(this, { manualFilmMetres, saveManualProjectFilm, syncManualFilmPurchase, cancelManualFilmDraft });`, context);
+  return { context: context as unknown as { manualFilmMetres: (sqft: number, width: number) => number; saveManualProjectFilm: (o: string, l: string) => void; syncManualFilmPurchase: (o: unknown, l: unknown) => void; cancelManualFilmDraft: (o: unknown, c: string, r: string) => boolean }, db, order, changes };
 }
 
 test("metres for the purchase follow the roll width with 10% waste, rounded up to 0.5 m", () => {
@@ -102,4 +104,29 @@ test("the project film cell offers manual entry to managers and pending films ca
 test("a manually written film is labelled by its whole name, without a repeated model part", () => {
   assert.match(html, /if \(c\.addedManuallyAt\) return '';/);
   assert.match(html, /заявка \$\{academyEsc\(request\.number\)\} · \$\{academyEsc\(\(PURCHASE_STATUS\[request\.status\] \|\| \[request\.status\]\)\[0\]\)\}/);
+});
+
+test("a zero quantity cancels the draft and a new quantity orders again", () => {
+  const { context, db, order } = load({ "mf-type": "Зеркальная", "mf-name": "Mirror 15", "mf-width": "1524" });
+  context.saveManualProjectFilm("o1", "l1");
+  order.extraServices[0].qty = 0;
+  context.syncManualFilmPurchase(order, order.extraServices[0]);
+  assert.equal(db.purchaseRequests[0].status, "cancelled", "no request for zero metres");
+  order.extraServices[0].qty = 100;
+  context.syncManualFilmPurchase(order, order.extraServices[0]);
+  assert.equal(db.purchaseRequests.length, 2);
+  assert.equal(db.purchaseRequests[1].status, "draft");
+  assert.equal(db.purchaseRequests[1].qty, 7);
+});
+
+test("choosing another film cancels the old draft; a reused zero-stock film is marked pending", () => {
+  const { context, db, order } = load({ "mf-type": "Керамическая", "mf-name": "Ceramic 40", "mf-width": "1524" });
+  db.settings.catalog.push({ id: "film_old", category: "solar", model: "Ceramic 40", brand: "X" });
+  context.saveManualProjectFilm("o1", "l1");
+  assert.equal(order.extraServices[0].catalogId, "film_old", "the existing film is reused");
+  assert.equal(db.settings.catalog[0].pendingPurchase, true);
+  assert.equal(context.cancelManualFilmDraft(order, "film_old", "в проекте выбрана другая плёнка"), true);
+  assert.equal(db.purchaseRequests[0].status, "cancelled");
+  assert.match(String(db.purchaseRequests[0].note), /Отменено: в проекте выбрана другая плёнка/);
+  assert.match(html, /cancelManualFilmDraft\(o, previousCatalogId, 'в проекте выбрана другая плёнка'\);/);
 });

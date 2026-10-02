@@ -22536,6 +22536,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   const o = getOrder(oid);
   const line = projectQuickLines(o).find(item => item.id === lineId);
   if (!o || !line || !orderUserCanSeeMoney(o, currentUser())) return;
+  const previousCatalogId = line.catalogId || '';
   if (field === 'serviceType') {
     const service = ORDER_PRIMARY_SERVICES.find(item => item.id === value);
     if (!service) return;
@@ -22575,6 +22576,9 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     line[field] = normalized;
   } else if (field === 'label') {
     line.label = String(value || '').trim();
+  }
+  if (previousCatalogId && previousCatalogId !== (line.catalogId || '')) {
+    cancelManualFilmDraft(o, previousCatalogId, 'в проекте выбрана другая плёнка');
   }
   projectEstimateSyncQuickLine(line, field);
   projectEstimateSyncQuickServices(o);
@@ -22762,7 +22766,35 @@ function manualFilmMetres(sqft, widthMm) {
 }
 
 function manualFilmPurchaseRequest(orderId, catalogId) {
-  return (db.purchaseRequests || []).find(p => p.kind === 'film' && p.itemId === catalogId && p.orderId === orderId && p.source === 'manual_project_film' && p.status !== 'cancelled') || null;
+  return (db.purchaseRequests || []).find(p => p.kind === 'film' && p.itemId === catalogId && p.orderId === orderId && p.source === 'manual_project_film' && !['cancelled', 'received'].includes(p.status)) || null;
+}
+
+/** A draft for a film the project no longer needs is cancelled, never left for purchasing. */
+function cancelManualFilmDraft(o, catalogId, reason) {
+  const request = manualFilmPurchaseRequest(o?.id, catalogId);
+  if (!request || request.status !== 'draft') return false;
+  request.status = 'cancelled';
+  request.note = `${request.note || ''} Отменено: ${reason}.`.trim();
+  request.updatedAt = new Date().toISOString();
+  return true;
+}
+
+function createManualFilmDraft(o, line, catalog, { widthMm, vendorId, note } = {}) {
+  const now = new Date().toISOString();
+  const width = Number(widthMm) || Number(catalog.manualRollWidthMm) || 1524;
+  const metres = manualFilmMetres(line.qty, width);
+  const request = {
+    id: 'pr_' + uid(), number: purchaseRequestNumber(), kind: 'film', itemId: catalog.id,
+    itemNameSnapshot: catalogLabel(catalog), qty: metres, unit: 'м', orderId: o.id,
+    vendorId: vendorId || catalog.vendorId || null, responsibleId: null, neededBy: projectQuickDateValue(line.startDate) || null,
+    note: `Плёнка вписана вручную в проект ${o.number || ''}: ${Number(line.qty)} sqft.${note ? ' ' + note : ''}`,
+    requirements: [{ widthMm: width, requiredM: metres, availableM: 0, shortageM: metres }],
+    status: 'draft', source: 'manual_project_film', requestedBy: currentUser()?.id || null,
+    sqftSnapshot: Number(line.qty), widthMm: width, createdAt: now, updatedAt: now,
+  };
+  db.purchaseRequests = db.purchaseRequests || [];
+  db.purchaseRequests.push(request);
+  return request;
 }
 
 function manualFilmPurchaseStatusHtml(o, line) {
@@ -22822,6 +22854,11 @@ function saveManualProjectFilm(oid, lineId) {
   // The same film written in again is reused, never duplicated in the catalog.
   const sameName = item => item.category === category && String(item.model || '').trim().toLowerCase() === name.toLowerCase();
   let catalog = (db.settings.catalog || []).find(sameName) || null;
+  if (catalog && warehouseCatalogStockStats(catalog.id).availableSqft <= 0) {
+    catalog.pendingPurchase = true;
+    if (filmType && !catalog.filmCategory) catalog.filmCategory = filmType;
+    if (vendorId && !catalog.vendorId) catalog.vendorId = vendorId;
+  }
   if (!catalog) {
     const now = new Date().toISOString();
     catalog = {
@@ -22831,27 +22868,15 @@ function saveManualProjectFilm(oid, lineId) {
     };
     db.settings.catalog.push(catalog);
   }
+  catalog.manualRollWidthMm = widthMm;
+  const previousCatalogId = line.catalogId || '';
+  if (previousCatalogId && previousCatalogId !== catalog.id) cancelManualFilmDraft(o, previousCatalogId, 'в проекте выбрана другая плёнка');
   line.catalogId = catalog.id;
   line.manualFilmName = '';
   line.label = catalogLabel(catalog);
 
-  const metres = manualFilmMetres(line.qty, widthMm);
-  const existing = manualFilmPurchaseRequest(oid, catalog.id) || activeProjectFilmPurchaseRequest(oid, catalog.id);
-  let request = existing;
-  if (!request) {
-    const now = new Date().toISOString();
-    request = {
-      id: 'pr_' + uid(), number: purchaseRequestNumber(), kind: 'film', itemId: catalog.id,
-      itemNameSnapshot: catalogLabel(catalog), qty: metres, unit: 'м', orderId: oid,
-      vendorId: vendorId || catalog.vendorId || null, responsibleId: null, neededBy: projectQuickDateValue(line.startDate) || null,
-      note: `Плёнка вписана вручную в проект ${o.number || ''}: ${Number(line.qty)} sqft.${note ? ' ' + note : ''}`,
-      requirements: [{ widthMm, requiredM: metres, availableM: 0, shortageM: metres }],
-      status: 'draft', source: 'manual_project_film', requestedBy: currentUser()?.id || null,
-      sqftSnapshot: Number(line.qty), widthMm, createdAt: now, updatedAt: now,
-    };
-    db.purchaseRequests = db.purchaseRequests || [];
-    db.purchaseRequests.push(request);
-  }
+  const request = manualFilmPurchaseRequest(oid, catalog.id) || activeProjectFilmPurchaseRequest(oid, catalog.id)
+    || createManualFilmDraft(o, line, catalog, { widthMm, vendorId, note });
   projectEstimateMarkChanged(o, `Плёнка «${name}» вписана вручную, заявка на закупку ${request.number}`);
   save();
   openQuickProjectEntry(oid);
@@ -22860,8 +22885,19 @@ function saveManualProjectFilm(oid, lineId) {
 
 /** A changed project quantity updates the still-draft purchase request of a manually written film. */
 function syncManualFilmPurchase(o, line) {
-  const request = line?.catalogId ? manualFilmPurchaseRequest(o?.id, line.catalogId) : null;
-  if (!request || request.status !== 'draft') return;
+  if (!line?.catalogId) return;
+  const catalog = getCatalogItem(line.catalogId);
+  const request = manualFilmPurchaseRequest(o?.id, line.catalogId);
+  // No quantity, no purchase: a draft for zero metres is cancelled, never sent.
+  if (!(Number(line.qty) > 0)) {
+    cancelManualFilmDraft(o, line.catalogId, 'метраж в проекте обнулён');
+    return;
+  }
+  if (!request) {
+    if (catalog?.pendingPurchase && warehouseCatalogStockStats(catalog.id).availableSqft <= 0) createManualFilmDraft(o, line, catalog);
+    return;
+  }
+  if (request.status !== 'draft') return;
   const widthMm = Number(request.widthMm) || Number(request.requirements?.[0]?.widthMm) || 1524;
   const metres = manualFilmMetres(line.qty, widthMm);
   request.qty = metres;
