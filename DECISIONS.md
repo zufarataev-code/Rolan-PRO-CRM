@@ -332,6 +332,14 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Historical closure never sends automatic client messages. It is an owner-only accounting import action and is marked in the Project audit trail.
 - Implemented in PR #174. Production deployment remains separate until explicitly authorized.
 
+### 2026-10-01 — Assigned managers may import completed historical projects
+
+- This supersedes only the owner-only permission in the historical-import rule above. An assigned Manager may create and close a completed project from the former CRM; the normal live workflow still cannot bypass consultation, measurement, accepted Proposal, payment terms, production readiness, or installation gates.
+- Historical import is a separate, clearly labeled action. It requires the client/site, service, Warehouse-backed film and purchase cost, actual sqft and customer total, work dates, assigned installation specialists, full payment date/method, and explicit confirmation that consultation, measurement/scope, and Proposal acceptance occurred.
+- Closing the historical project records the confirmations and operator in the audit timeline, records the full payment, marks installation/act/completion milestones, and feeds the existing Warehouse-cost, payroll-rate, direct-expense, fixed-cost, California reserve, margin, and management-profit formulas. It does not send customer notifications or deduct today's Warehouse stock.
+- Managers may enter customer-facing facts and assigned staff but still do not receive internal company margin, purchase-cost, payroll, or profit views. Owner-only direct-expense and profitability controls remain owner-only.
+- Implemented locally on `codex/manager-historical-lifecycle`; production deployment requires separate Owner confirmation.
+
 ## 2026-09-23 — Managers may use a manual film label before warehouse mapping
 
 - Quick Project Entry may accept a manager-entered film name when the required film is not yet available in the Warehouse-backed catalog.
