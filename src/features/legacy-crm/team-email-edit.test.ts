@@ -100,8 +100,11 @@ test("a new login email reaches every card linked to the account", () => {
 
 test("a slow account load never replaces a modal the owner opened or closed meanwhile", () => {
   const route = readFileSync("app/legacy-crm/route.ts", "utf8");
-  assert.match(route, /const modalGenerationWhenClicked = window\.__modalGeneration;/);
-  assert.match(route, /window\.__modalGeneration !== modalGenerationWhenClicked\) return;/);
+  // A loading dialog opens first; its generation and the current section are remembered.
+  assert.match(route, /Загружаю учётную запись…[\s\S]{0,120}render\(\);\n\s*const modalGenerationWhenClicked = window\.__modalGeneration;\n\s*const viewWhenClicked = state\.view;/);
+  assert.match(route, /const loadingStillShown = window\.__modalGeneration === modalGenerationWhenClicked;/);
+  assert.match(route, /\|\| !loadingStillShown\n\s*\|\| state\.view !== viewWhenClicked\n\s*\) \{/);
+  assert.match(route, /if \(window\.__teamAccessRequest === request && loadingStillShown\) closeModal\(\);/);
 
   // Opening and closing another dialog from «no dialog» back to «no dialog» still counts.
   const install = route.match(/function installModalGeneration\(target\) \{[\s\S]*?\n {8}\}\n/)?.[0];

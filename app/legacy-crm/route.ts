@@ -119,14 +119,34 @@ export async function GET(request: NextRequest) {
           const user = getUser(legacyUserId);
           if (!user) return;
 
-          // The dialog opens only if nothing else happened while the account
-          // loaded: a newer click or any dialog opened/closed meanwhile wins.
+          // A «Загружаю…» dialog opens at once, so the screen behind it is not
+          // used meanwhile. The access dialog replaces it only if nothing else
+          // happened while the account loaded: a newer click, any dialog opened
+          // or closed, or another section opened wins.
           const request = (window.__teamAccessRequest || 0) + 1;
           window.__teamAccessRequest = request;
+          state.modal =
+            '<div class="modal-backdrop" onclick="if(event.target===this) closeModal()">' +
+              '<div class="modal-content workspace-modal p-6">' +
+                '<h3 class="font-semibold text-lg mb-1">Доступ: ' + academyEsc(user.name) + '</h3>' +
+                '<p class="text-sm text-gray-500">Загружаю учётную запись…</p>' +
+              '</div>' +
+            '</div>';
+          render();
           const modalGenerationWhenClicked = window.__modalGeneration;
+          const viewWhenClicked = state.view;
           window.__teamAccessLegacyUserId = legacyUserId;
           const account = await loadTeamAccessAccount(legacyUserId, user.email || '');
-          if (window.__teamAccessRequest !== request || window.__modalGeneration !== modalGenerationWhenClicked) return;
+          const loadingStillShown = window.__modalGeneration === modalGenerationWhenClicked;
+          if (
+            window.__teamAccessRequest !== request
+            || !loadingStillShown
+            || state.view !== viewWhenClicked
+          ) {
+            // Another section was opened under our «Загружаю…»: do not leave it hanging.
+            if (window.__teamAccessRequest === request && loadingStillShown) closeModal();
+            return;
+          }
           const serverEmail = account.member?.email || '';
           window.__teamAccessCurrentEmail = serverEmail;
 
