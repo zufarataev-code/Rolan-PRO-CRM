@@ -15223,6 +15223,9 @@ function installerRateForWindow(user, w) {
   return installerServiceRateByCategory(category);
 }
 function installerRateForQuickLine(user, line) {
+  // A service with its own rate pays that rate (Owner, 2026-10-02).
+  const offeringRate = serviceOfferingInstallerRate(line);
+  if (offeringRate > 0) return offeringRate;
   const pc = user?.payConfig || {};
   const catalog = getCatalogItem(line?.catalogId);
   const category = catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other';
@@ -15274,7 +15277,7 @@ function orderInstallerPayoutBreakdown(o) {
       : projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => {
           const catalog = getCatalogItem(line.catalogId);
           const filmName = catalog ? `${catalog.brand} ${catalog.model}` : line.serviceType;
-          return sum + (Number(line.qty) || 0) * filmRate(filmName);
+          return sum + (Number(line.qty) || 0) * (serviceOfferingInstallerRate(line) || filmRate(filmName));
         }, 0);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
     return { total: total + work, byInstaller: [], source: 'REFERENCE_DEFAULT' };
@@ -17891,6 +17894,7 @@ function renderCanonicalServicePricing() {
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Безубыточность</div><b class="text-xl">${canonicalPricingMoney(planning.break_even?.revenue)}</b><div class="text-xs">${planning.break_even?.deals || 0} сделок / ${planning.break_even?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Цель с прибылью</div><b class="text-xl">${canonicalPricingMoney(planning.target?.revenue)}</b><div class="text-xs">${planning.target?.deals || 0} сделок / ${planning.target?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">КП за месяц</div><b class="text-xl">${canonicalPricingMoney(actual.proposal_revenue)}</b></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Прогресс</div><b class="text-xl">${Number(actual.progress_percent || 0).toFixed(0)}%</b></div></div>
       ${owner ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${canonicalPricingField('cp-plan-check', 'Средний чек, $', assumptions.average_deal_value)}${canonicalPricingField('cp-plan-conversion', 'Конверсия лид → сделка, %', assumptions.lead_to_deal_percent)}${canonicalPricingField('cp-plan-profit', 'Целевая прибыль / месяц, $', assumptions.target_profit_monthly)}</div><button class="btn-primary mt-4" onclick="saveCanonicalPlanning()">Сохранить план</button>` : '<p class="text-sm text-slate-500 mt-4">Менеджер видит цели по лидам и сделкам. Расходы и прибыль меняет владелец.</p>'}
     </section>
+    ${renderServiceOfferingsSection()}
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Услуги</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту услугу, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Специалисту по установке / sqft, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between"><div><h2 class="text-xl font-black">Дополнительные работы</h2><p class="text-sm text-slate-500">Подключение зон, демонтаж, силикон и другие допродажи.</p></div><span class="tag">${addons.length}</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить допработу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Основная услуга</span><select id="cp-new-addon-service" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2">${services.map(s => `<option value="${s.service_type_id}">${academyEsc(s.name_ru)}</option>`).join('')}</select></label>${canonicalPricingField('cp-new-addon-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-addon-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-addon-unit', 'Единица', 'item', 'text')}${canonicalPricingField('cp-new-addon-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-addon-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalAddon()">Создать допработу</button></details><div class="space-y-3 mt-4">${addonCards || '<div class="text-slate-500">Дополнительных работ пока нет</div>'}</div></section>
   </div>`;
@@ -22476,6 +22480,140 @@ function projectQuickRequiredSupplies(o, lines = projectQuickLines(o)) {
   }, {});
 }
 
+// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ (Owner, 2026-10-02) ----------
+// Направление → услуга → плёнка. Услуга — то, что продаём клиенту: её название
+// идёт в КП, у неё цена клиенту за sq ft и ставка специалисту за sq ft. Плёнки
+// склада привязываются к услуге (одна плёнка — к одной услуге); материал проекта
+// по-прежнему считается по закупочной цене выбранной плёнки.
+const SERVICE_OFFERING_DIRECTIONS = ['smart', 'solar', 'protective', 'decorative'];
+// Starter services from the owner's examples; fixed ids so every browser adds the same records.
+const SERVICE_OFFERING_STARTERS = [
+  { id: 'svc_solar_magnetronic_05', direction: 'solar', name: 'Solar Control Magnetronic 05' },
+  { id: 'svc_solar_spectral_30', direction: 'solar', name: 'Spectral 30' },
+  { id: 'svc_protective_safety_14', direction: 'protective', name: 'Safety 14' },
+  { id: 'svc_protective_antigraffiti_30', direction: 'protective', name: 'Anti-graffiti 30' },
+];
+
+function serviceOfferingsAll() {
+  const settings = db.settings;
+  if (!Array.isArray(settings.serviceOfferings)) settings.serviceOfferings = [];
+  SERVICE_OFFERING_STARTERS.forEach((starter, index) => {
+    if (settings.serviceOfferings.some(item => item.id === starter.id)) return;
+    settings.serviceOfferings.push({ ...starter, pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort: index });
+  });
+  return settings.serviceOfferings;
+}
+
+function serviceOffering(id) {
+  return id ? serviceOfferingsAll().find(item => item.id === id) || null : null;
+}
+
+function serviceOfferingDirection(serviceType) {
+  return canonicalCatalogCategory(primaryServiceInfo(serviceType)?.catalogCategory);
+}
+
+function serviceOfferingsFor(direction, { includeId = '', includeInactive = false } = {}) {
+  return serviceOfferingsAll()
+    .filter(item => item.direction === direction && (includeInactive || item.active !== false || item.id === includeId))
+    .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0) || String(a.name).localeCompare(String(b.name)));
+}
+
+/** What the line is called for the client: the service, else the film, else the direction. */
+function projectQuickLineLabel(line, catalog) {
+  return serviceOffering(line?.offeringId)?.name || (catalog ? catalogLabel(catalog) : (primaryServiceInfo(line?.serviceType)?.title || 'Позиция'));
+}
+
+/** Films for a line: those linked to its service; all films of the direction while the service has none linked. */
+function projectQuickLineFilms(line) {
+  const films = projectQuickLineCatalog(line.serviceType, line.catalogId);
+  if (!line.offeringId) return films;
+  const serviceHasFilms = (db.settings.catalog || []).some(item => item.serviceOfferingId === line.offeringId && !item.archived);
+  return serviceHasFilms ? films.filter(item => item.serviceOfferingId === line.offeringId || item.id === line.catalogId) : films;
+}
+
+/** The installer rate of the line's service, 0 when the service has none (the direction rate applies). */
+function serviceOfferingInstallerRate(line) {
+  const rate = Number(serviceOffering(line?.offeringId)?.installerRatePerSqft);
+  return rate > 0 ? rate : 0;
+}
+
+function serviceOfferingCanEdit() {
+  if (currentUser()?.role === 'owner') return true;
+  alert('Услуги и цены меняет владелец.');
+  return false;
+}
+
+function addServiceOffering(direction) {
+  if (!serviceOfferingCanEdit() || !SERVICE_OFFERING_DIRECTIONS.includes(direction)) return;
+  const sort = serviceOfferingsFor(direction, { includeInactive: true }).length;
+  serviceOfferingsAll().push({ id: 'svc_' + uid(), direction, name: 'Новая услуга', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort });
+  save();
+  render();
+}
+
+function updateServiceOffering(id, field, value) {
+  if (!serviceOfferingCanEdit()) return;
+  const offering = serviceOffering(id);
+  if (!offering) return;
+  if (field === 'name') {
+    const name = String(value || '').trim().slice(0, 120);
+    if (!name) return alert('Название услуги не может быть пустым.');
+    offering.name = name;
+    // Project lines show the service name: keep them in step.
+    (db.orders || []).forEach(order => projectQuickLines(order).forEach(line => { if (line.offeringId === id) line.label = name; }));
+  } else if (field === 'pricePerSqft' || field === 'installerRatePerSqft') {
+    offering[field] = Math.max(0, Number(value) || 0);
+  } else if (field === 'active') {
+    offering.active = !!value;
+  } else return;
+  offering.updatedAt = new Date().toISOString();
+  save();
+  render();
+}
+
+function toggleServiceOfferingFilm(id, filmId, checked) {
+  if (!serviceOfferingCanEdit()) return;
+  const offering = serviceOffering(id);
+  const film = getCatalogItem(filmId);
+  if (!offering || !film) return;
+  if (checked) film.serviceOfferingId = offering.id;
+  else if (film.serviceOfferingId === offering.id) film.serviceOfferingId = null;
+  save();
+  render();
+}
+
+function renderServiceOfferingsSection() {
+  const owner = currentUser()?.role === 'owner';
+  const money = value => (Number(value) > 0 ? `$${Number(value).toFixed(2)}` : '—');
+  const groups = SERVICE_OFFERING_DIRECTIONS.map(direction => {
+    const info = ORDER_PRIMARY_SERVICES.find(item => canonicalCatalogCategory(item.catalogCategory) === direction);
+    const films = (db.settings.catalog || []).filter(item => !item.archived && canonicalCatalogCategory(item.category) === direction);
+    const rows = serviceOfferingsFor(direction, { includeInactive: owner }).map(offering => {
+      const linked = films.filter(item => item.serviceOfferingId === offering.id);
+      const filmList = films.length
+        ? `<details><summary class="cursor-pointer text-sm">Плёнки: ${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'не выбраны — подойдёт любая плёнка направления'}</summary><div class="mt-2 grid gap-1">${films.map(item => `<label class="text-sm"><input type="checkbox" ${item.serviceOfferingId === offering.id ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(сейчас: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label>`).join('')}</div></details>`
+        : '<div class="text-xs text-gray-500">На складе нет плёнок этого направления.</div>';
+      return owner ? `<div class="p-3 border border-slate-200 ${offering.active === false ? 'opacity-60' : ''}">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <div class="md:col-span-2"><label>Услуга (название в КП)</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value)"></div>
+          <div><label>Цена клиенту, $ / sq ft</label><input type="number" min="0" step="0.5" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value)"></div>
+          <div><label>Специалисту, $ / sq ft</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="ставка направления" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value)"></div>
+        </div>
+        <div class="mt-2 flex flex-wrap items-start justify-between gap-3"><div class="flex-1">${filmList}</div><label class="tag"><input type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked)"> Активна</label></div>
+      </div>` : `<div class="p-3 border border-slate-200"><div class="flex justify-between gap-3"><b>${academyEsc(offering.name)}</b><span>${money(offering.pricePerSqft)} / sq ft</span></div><div class="mt-1">${filmList}</div></div>`;
+    }).join('');
+    return `<div class="mt-4">
+      <div class="flex items-center justify-between gap-3"><h3 class="font-black">${academyEsc(info ? `${info.icon} ${info.title}` : direction)}</h3>${owner ? `<button class="btn-ghost text-sm" onclick="addServiceOffering('${direction}')">+ Добавить услугу</button>` : ''}</div>
+      <div class="grid gap-2 mt-2">${rows || '<div class="text-sm text-gray-500">Услуг пока нет.</div>'}</div>
+    </div>`;
+  }).join('');
+  return `<section class="card border border-slate-200 bg-white" style="border-radius:4px">
+    <h2 class="text-xl font-black">Услуги по направлениям</h2>
+    <p class="text-sm text-slate-500">В проекте выбор идёт так: направление → услуга → плёнка со склада. Название услуги клиент видит в КП, цена за sq ft подставляется в проект, ставка специалисту считается по услуге (пусто — действует ставка направления). В проекте у услуги показываются только отмеченные плёнки; пока не отмечено ни одной — все плёнки направления.</p>
+    ${groups}
+  </section>`;
+}
+
 function projectQuickLineCatalog(serviceType, selectedCatalogId = '') {
   const category = primaryServiceInfo(serviceType)?.catalogCategory;
   return (db.settings.catalog || []).filter(item => catalogCanBeSelected(item, selectedCatalogId) && catalogMatchesCategory(item, category) && (
@@ -22545,10 +22683,11 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     const service = ORDER_PRIMARY_SERVICES.find(item => item.id === value);
     if (!service) return;
     line.serviceType = service.id;
+    line.offeringId = '';
     const catalog = projectQuickLineCatalog(service.id)[0] || null;
     line.catalogId = catalog?.id || '';
     line.manualFilmName = '';
-    line.label = catalog ? catalogLabel(catalog) : service.title;
+    line.label = projectQuickLineLabel(line, catalog);
     if (Number(line.price) <= 0) line.unitPrice = Number(catalog?.retailPerSqft || 0);
   } else if (field === 'catalogId') {
     const catalog = getCatalogItem(value);
@@ -22557,9 +22696,23 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     line.catalogId = catalog?.id || '';
     if (catalog) {
       line.manualFilmName = '';
-      line.label = catalogLabel(catalog);
-      if (Number(line.price) <= 0) line.unitPrice = Number(catalog.retailPerSqft || 0);
+      // A film linked to a service brings its service when the line has none yet.
+      if (!line.offeringId && serviceOffering(catalog.serviceOfferingId)?.direction === serviceOfferingDirection(line.serviceType)) line.offeringId = catalog.serviceOfferingId;
+      line.label = projectQuickLineLabel(line, catalog);
+      if (Number(line.price) <= 0) line.unitPrice = Number(serviceOffering(line.offeringId)?.pricePerSqft || catalog.retailPerSqft || 0);
     }
+  } else if (field === 'offeringId') {
+    const offering = serviceOffering(value);
+    if (value && (!offering || offering.direction !== serviceOfferingDirection(line.serviceType))) return;
+    line.offeringId = offering?.id || '';
+    // A film of another service does not stay on the line.
+    const film = getCatalogItem(line.catalogId);
+    if (offering && film?.serviceOfferingId && film.serviceOfferingId !== offering.id) line.catalogId = '';
+    if (offering && Number(line.price) <= 0 && Number(offering.pricePerSqft) > 0) {
+      line.unitPrice = Number(offering.pricePerSqft);
+      line.pricingMode = 'unit';
+    }
+    line.label = projectQuickLineLabel(line, getCatalogItem(line.catalogId));
   } else if (field === 'manualFilmName') {
     const manualName = String(value || '').trim();
     line.manualFilmName = manualName;
@@ -22766,7 +22919,8 @@ async function saveQuickProjectFilm(oid, lineId, category) {
   const roll = addInventoryRoll({ catalogId: catalog.id, lotNumber, widthMm, originalLengthM: length, costTotal, dateReceived, location: 'Warehouse', rollCode });
   recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(catalog), direction: 'receipt', qty: length, unit: 'м', orderId: oid, reason: `Быстрый ввод проекта · рулон ${rollCode}` });
   projectLine.catalogId = catalog.id;
-  projectLine.label = catalogLabel(catalog);
+  if (projectLine.offeringId) catalog.serviceOfferingId = projectLine.offeringId;
+  projectLine.label = projectQuickLineLabel(projectLine, catalog);
   projectEstimateMarkChanged(project, 'Создана и выбрана новая плёнка');
   save(); openQuickProjectEntry(oid);
 }
@@ -22952,7 +23106,8 @@ function saveManualProjectFilm(oid, lineId) {
   const previousCatalogId = line.catalogId || '';
   line.catalogId = catalog.id;
   line.manualFilmName = '';
-  line.label = catalogLabel(catalog);
+  if (line.offeringId && !catalog.serviceOfferingId) catalog.serviceOfferingId = line.offeringId;
+  line.label = projectQuickLineLabel(line, catalog);
   if (previousCatalogId && previousCatalogId !== catalog.id) reconcileManualFilmPurchase(o, previousCatalogId, 'в проекте выбрана другая плёнка');
 
   const request = reconcileManualFilmPurchase(o, catalog.id, '', { widthMm, vendorId, note }) || activeProjectFilmPurchaseRequest(oid, catalog.id);
@@ -23209,11 +23364,13 @@ function renderQuickProjectEntry(o) {
   const availableInstallers = usersByRole('installer');
   const availableSupplies = ensureSupplies();
   const rows = quickLines.map(line => {
-    const catalog = projectQuickLineCatalog(line.serviceType, line.catalogId);
+    const catalog = projectQuickLineFilms(line);
     const selectedStock = line.catalogId ? warehouseCatalogStockStats(line.catalogId) : null;
+    const offerings = serviceOfferingsFor(serviceOfferingDirection(line.serviceType), { includeId: line.offeringId });
+    const offering = serviceOffering(line.offeringId);
     return `<tr>
-      <td data-label="Услуга"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select><button class="btn-ghost text-red-600 quick-commercial-remove" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить</button></td>
-      <td data-label="Плёнка"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}${projectQuickManualFilmName(line) ? '<div class="text-xs text-amber-700">Ручной ввод · не привязано к складу</div>' : ''}${manualFilmPurchaseStatusHtml(o, line)}<details class="quick-film-alternative" ${projectQuickManualFilmName(line) ? 'open' : ''}><summary>Плёнки нет в списке</summary><div class="quick-film-alternative-body"><button type="button" class="btn-ghost text-xs" onclick="openManualProjectFilmForm('${o.id}','${line.id}')">✍️ Вписать плёнку вручную и заказать</button>${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Добавить плёнку на склад</button>` : ''}</div></details></td>
+      <td data-label="Направление и услуга"><select aria-label="Направление" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select><select aria-label="Услуга" class="mt-1" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','offeringId',this.value)"><option value="">${offerings.length ? 'Выберите услугу' : 'Услуг нет — «Услуги и цены»'}</option>${offerings.map(item => `<option value="${item.id}" ${line.offeringId===item.id?'selected':''}>${academyEsc(item.name)}${Number(item.pricePerSqft) > 0 ? ` · $${Number(item.pricePerSqft).toFixed(2)}/sq ft` : ''}</option>`).join('')}</select>${offering && Number(offering.pricePerSqft) > 0 ? `<div class="text-xs text-gray-500">Цена услуги: ${fmtSqftPrice(offering.pricePerSqft)} / sq ft</div>` : ''}<button class="btn-ghost text-red-600 quick-commercial-remove" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить</button></td>
+      <td data-label="Плёнка"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : (line.offeringId ? 'Нет плёнки этой услуги на складе' : 'Нет плёнки этой категории на складе')}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}${projectQuickManualFilmName(line) ? '<div class="text-xs text-amber-700">Ручной ввод · не привязано к складу</div>' : ''}${manualFilmPurchaseStatusHtml(o, line)}<details class="quick-film-alternative" ${projectQuickManualFilmName(line) ? 'open' : ''}><summary>Плёнки нет в списке</summary><div class="quick-film-alternative-body"><button type="button" class="btn-ghost text-xs" onclick="openManualProjectFilmForm('${o.id}','${line.id}')">✍️ Вписать плёнку вручную и заказать</button>${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Добавить плёнку на склад</button>` : ''}</div></details></td>
       <td data-label="Метраж, sqft"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" placeholder="Например, 250" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
       <td data-label="Цена клиенту"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" placeholder="Общая сумма" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','price',this.value)"><div class="quick-commercial-price">${Number(line.qty) > 0 && Number(line.price) > 0 ? `${fmtMoney(line.unitPrice)} / sqft` : 'Цена / sqft появится автоматически'}</div></td>
     </tr>`;
@@ -23247,7 +23404,7 @@ function renderQuickProjectEntry(o) {
     </div>
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>Услуги проекта</h4><div class="text-xs text-gray-500">Без комнат и размеров окон: укажите общий метраж и цену проекта. Цена за sqft рассчитается автоматически. Можно добавить несколько услуг.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
-      <div class="project-estimate-table-wrap"><table class="project-estimate-table project-estimate-table--quick"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена клиенту</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
+      <div class="project-estimate-table-wrap"><table class="project-estimate-table project-estimate-table--quick"><thead><tr><th>Направление / услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена клиенту</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
     </section>
     <div class="order-clean-note mt-3" style="border-color:#bfdbfe;background:#eff6ff;color:#1e40af"><b>Монтаж позже.</b> Бригада и дата монтажа назначаются после принятия КП — в карточке проекта через действие «Монтаж».</div>
     ${proposalIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Чтобы сформировать КП:</b> ${academyEsc(proposalIssues.join(', '))}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Для КП данных достаточно.</b> Можно переходить к проверке расчёта.</div>`}
