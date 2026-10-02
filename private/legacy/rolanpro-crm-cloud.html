@@ -22571,7 +22571,6 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     }
   } else if (['qty','unitPrice','price'].includes(field)) {
     line[field] = Math.max(0, Number(value) || 0);
-    if (field === 'qty') syncManualFilmPurchase(o, line);
   } else if (['startDate','endDate'].includes(field)) {
     const normalized = projectQuickDateValue(value);
     const nextStart = field === 'startDate' ? normalized : projectQuickDateValue(line.startDate);
@@ -22581,11 +22580,12 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   } else if (field === 'label') {
     line.label = String(value || '').trim();
   }
-  if (previousCatalogId && previousCatalogId !== (line.catalogId || '')) {
-    cancelManualFilmDraft(o, previousCatalogId, 'в проекте выбрана другая плёнка');
-  }
   projectEstimateSyncQuickLine(line, field);
   projectEstimateSyncQuickServices(o);
+  // A film's purchase follows every project line that uses it (Owner, 2026-10-01).
+  const filmChanged = previousCatalogId !== (line.catalogId || '');
+  if (filmChanged && previousCatalogId) reconcileManualFilmPurchase(o, previousCatalogId, 'в проекте выбрана другая плёнка');
+  if (line.catalogId && (filmChanged || field === 'qty')) reconcileManualFilmPurchase(o, line.catalogId, 'метраж в проекте обнулён');
   projectEstimateMarkChanged(o, 'Изменена быстрая позиция проекта');
   save(); refreshQuickProjectEntry(oid);
 }
@@ -22593,7 +22593,9 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
 function projectEstimateDeleteQuickLine(oid, lineId) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const removedCatalogId = projectQuickLines(o).find(line => line.id === lineId)?.catalogId || '';
   o.extraServices = (o.extraServices || []).filter(line => line.id !== lineId);
+  if (removedCatalogId) reconcileManualFilmPurchase(o, removedCatalogId, 'позиция удалена из проекта');
   projectEstimateSyncQuickServices(o);
   projectEstimateMarkChanged(o, 'Удалена быстрая позиция проекта');
   save(); refreshQuickProjectEntry(oid);
@@ -22794,21 +22796,69 @@ function cancelManualFilmDraft(o, catalogId, reason) {
   return true;
 }
 
-function createManualFilmDraft(o, line, catalog, { widthMm, vendorId, note } = {}) {
+/** Square feet of this film over every quick line of the project. */
+function manualFilmProjectSqft(o, catalogId) {
+  return projectQuickLines(o).filter(line => line.catalogId === catalogId).reduce((sum, line) => sum + Math.max(0, Number(line.qty) || 0), 0);
+}
+
+/** The earliest start date of the project lines that use the film. */
+function manualFilmNeededBy(o, catalogId) {
+  return projectQuickLines(o).filter(line => line.catalogId === catalogId).map(line => projectQuickDateValue(line.startDate)).filter(Boolean).sort()[0] || null;
+}
+
+function manualFilmRequestNote(o, sqft, note) {
+  return `Плёнка вписана вручную в проект ${o.number || ''}: ${Number(sqft)} sqft.${note ? ' ' + note : ''}`;
+}
+
+function createManualFilmDraft(o, catalog, sqft, { widthMm, vendorId, note } = {}) {
   const now = new Date().toISOString();
   const width = Number(widthMm) || Number(catalog.manualRollWidthMm) || 1524;
-  const metres = manualFilmMetres(line.qty, width);
+  const metres = manualFilmMetres(sqft, width);
   const request = {
     id: 'pr_' + uid(), number: purchaseRequestNumber(), kind: 'film', itemId: catalog.id,
     itemNameSnapshot: catalogLabel(catalog), qty: metres, unit: 'м', orderId: o.id,
-    vendorId: vendorId || catalog.vendorId || null, responsibleId: null, neededBy: projectQuickDateValue(line.startDate) || null,
-    note: `Плёнка вписана вручную в проект ${o.number || ''}: ${Number(line.qty)} sqft.${note ? ' ' + note : ''}`,
+    vendorId: vendorId || catalog.vendorId || null, responsibleId: null, neededBy: manualFilmNeededBy(o, catalog.id),
+    note: manualFilmRequestNote(o, sqft, note), manualNote: note || '',
     requirements: [{ widthMm: width, requiredM: metres, availableM: 0, shortageM: metres }],
     status: 'draft', source: 'manual_project_film', requestedBy: currentUser()?.id || null,
-    sqftSnapshot: Number(line.qty), widthMm: width, createdAt: now, updatedAt: now,
+    sqftSnapshot: Number(sqft), widthMm: width, createdAt: now, updatedAt: now,
   };
   db.purchaseRequests = db.purchaseRequests || [];
   db.purchaseRequests.push(request);
+  return request;
+}
+
+/**
+ * One draft per project and film, sized by every quick line that uses the film.
+ * No square feet left → the draft is cancelled; demand for a film still waiting
+ * for purchase and without a request → a draft is created. A request already
+ * sent to the supplier is left to purchasing.
+ */
+function reconcileManualFilmPurchase(o, catalogId, reason, draft = {}) {
+  if (!o || !catalogId) return null;
+  const sqft = manualFilmProjectSqft(o, catalogId);
+  if (!(sqft > 0)) {
+    cancelManualFilmDraft(o, catalogId, reason || 'плёнка больше не нужна проекту');
+    return null;
+  }
+  const request = manualFilmPurchaseRequest(o.id, catalogId);
+  if (!request) {
+    const catalog = getCatalogItem(catalogId);
+    if (!catalog?.pendingPurchase || warehouseCatalogStockStats(catalogId).availableSqft > 0 || activeProjectFilmPurchaseRequest(o.id, catalogId)) return null;
+    return createManualFilmDraft(o, catalog, sqft, draft);
+  }
+  if (request.status !== 'draft') return request;
+  const widthMm = Number(draft.widthMm) || Number(request.widthMm) || Number(request.requirements?.[0]?.widthMm) || 1524;
+  const metres = manualFilmMetres(sqft, widthMm);
+  if (draft.note) request.manualNote = draft.note;
+  if (draft.vendorId && !request.vendorId) request.vendorId = draft.vendorId;
+  request.qty = metres;
+  request.widthMm = widthMm;
+  request.sqftSnapshot = sqft;
+  request.neededBy = manualFilmNeededBy(o, catalogId) || request.neededBy || null;
+  request.note = manualFilmRequestNote(o, sqft, request.manualNote);
+  request.requirements = [{ widthMm, requiredM: metres, availableM: 0, shortageM: metres }];
+  request.updatedAt = new Date().toISOString();
   return request;
 }
 
@@ -22885,40 +22935,16 @@ function saveManualProjectFilm(oid, lineId) {
   }
   catalog.manualRollWidthMm = widthMm;
   const previousCatalogId = line.catalogId || '';
-  if (previousCatalogId && previousCatalogId !== catalog.id) cancelManualFilmDraft(o, previousCatalogId, 'в проекте выбрана другая плёнка');
   line.catalogId = catalog.id;
   line.manualFilmName = '';
   line.label = catalogLabel(catalog);
+  if (previousCatalogId && previousCatalogId !== catalog.id) reconcileManualFilmPurchase(o, previousCatalogId, 'в проекте выбрана другая плёнка');
 
-  const request = manualFilmPurchaseRequest(oid, catalog.id) || activeProjectFilmPurchaseRequest(oid, catalog.id)
-    || createManualFilmDraft(o, line, catalog, { widthMm, vendorId, note });
-  projectEstimateMarkChanged(o, `Плёнка «${name}» вписана вручную, заявка на закупку ${request.number}`);
+  const request = reconcileManualFilmPurchase(o, catalog.id, '', { widthMm, vendorId, note }) || activeProjectFilmPurchaseRequest(oid, catalog.id);
+  projectEstimateMarkChanged(o, request ? `Плёнка «${name}» вписана вручную, заявка на закупку ${request.number}` : `Плёнка «${name}» выбрана — есть на складе`);
   save();
   openQuickProjectEntry(oid);
-  if (typeof cloudStatus === 'function') cloudStatus(`Заявка на закупку ${request.number} создана`, 'green');
-}
-
-/** A changed project quantity updates the still-draft purchase request of a manually written film. */
-function syncManualFilmPurchase(o, line) {
-  if (!line?.catalogId) return;
-  const catalog = getCatalogItem(line.catalogId);
-  const request = manualFilmPurchaseRequest(o?.id, line.catalogId);
-  // No quantity, no purchase: a draft for zero metres is cancelled, never sent.
-  if (!(Number(line.qty) > 0)) {
-    cancelManualFilmDraft(o, line.catalogId, 'метраж в проекте обнулён');
-    return;
-  }
-  if (!request) {
-    if (catalog?.pendingPurchase && warehouseCatalogStockStats(catalog.id).availableSqft <= 0) createManualFilmDraft(o, line, catalog);
-    return;
-  }
-  if (request.status !== 'draft') return;
-  const widthMm = Number(request.widthMm) || Number(request.requirements?.[0]?.widthMm) || 1524;
-  const metres = manualFilmMetres(line.qty, widthMm);
-  request.qty = metres;
-  request.sqftSnapshot = Number(line.qty) || 0;
-  request.requirements = [{ widthMm, requiredM: metres, availableM: 0, shortageM: metres }];
-  request.updatedAt = new Date().toISOString();
+  if (typeof cloudStatus === 'function') cloudStatus(request ? `Заявка на закупку ${request.number}: ${request.qty} м` : `«${name}» есть на складе — закупка не нужна`, 'green');
 }
 
 function projectEstimateMarkChanged(o, reason) {

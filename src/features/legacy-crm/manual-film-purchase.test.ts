@@ -13,7 +13,7 @@ function block() {
 }
 
 function load(fields: Record<string, string>, role = "manager") {
-  const order: { id: string; number: string; extraServices: Array<{ id: string; quickProjectLine: boolean; serviceType: string; qty: number; unit: string; startDate: string; catalogId?: string }> } = {
+  const order: { id: string; number: string; extraServices: Array<{ id: string; quickProjectLine: boolean; serviceType: string; qty: number; unit: string; startDate: string; catalogId?: string; manualFilmName?: string }> } = {
     id: "o1",
     number: "R-1",
     extraServices: [{ id: "l1", quickProjectLine: true, serviceType: "solar_film", qty: 300, unit: "sqft", startDate: "2026-10-10" }],
@@ -43,8 +43,8 @@ function load(fields: Record<string, string>, role = "manager") {
     getCatalogItem: (id: string) => db.settings.catalog.find((item) => item.id === id),
     uid: (() => { let n = 0; return () => `id${++n}`; })(),
   });
-  vm.runInContext(`${block()}; Object.assign(this, { manualFilmMetres, saveManualProjectFilm, syncManualFilmPurchase, cancelManualFilmDraft });`, context);
-  return { context: context as unknown as { manualFilmMetres: (sqft: number, width: number) => number; saveManualProjectFilm: (o: string, l: string) => void; syncManualFilmPurchase: (o: unknown, l: unknown) => void; cancelManualFilmDraft: (o: unknown, c: string, r: string) => boolean }, db, order, changes };
+  vm.runInContext(`${block()}; Object.assign(this, { manualFilmMetres, saveManualProjectFilm, reconcileManualFilmPurchase });`, context);
+  return { context: context as unknown as { manualFilmMetres: (sqft: number, width: number) => number; saveManualProjectFilm: (o: string, l: string) => void; reconcileManualFilmPurchase: (o: unknown, c: string, r: string) => unknown }, db, order, changes };
 }
 
 test("metres for the purchase follow the roll width with 10% waste, rounded up to 0.5 m", () => {
@@ -83,8 +83,9 @@ test("a manually written film is fixed in the project and ordered for it", () =>
 
   // A new quantity updates the draft request.
   order.extraServices[0].qty = 600;
-  context.syncManualFilmPurchase(order, order.extraServices[0]);
+  context.reconcileManualFilmPurchase(order, film.id as string, "метраж в проекте обнулён");
   assert.equal(db.purchaseRequests[0].qty, 40.5);
+  assert.match(String(db.purchaseRequests[0].note), /R-1: 600 sqft\. срочно/);
 });
 
 test("solar films need a type, and a quantity must be set first", () => {
@@ -97,7 +98,6 @@ test("solar films need a type, and a quantity must be set first", () => {
 test("the project film cell offers manual entry to managers and pending films can be selected", () => {
   assert.match(html, /onclick="openManualProjectFilmForm\('\$\{o\.id\}','\$\{line\.id\}'\)">✍️ Вписать плёнку вручную и заказать<\/button>/);
   assert.match(html, /warehouseCatalogStockStats\(catalog\.id\)\.availableSqft <= 0 && !catalog\.pendingPurchase/);
-  assert.match(html, /if \(field === 'qty'\) syncManualFilmPurchase\(o, line\);/);
   assert.match(html, /const SOLAR_FILM_SUBTYPES = \['Зеркальная', 'Керамическая', 'Магнетронная \(напылённая\)', 'Фотохромная', 'Другая'\];/);
 });
 
@@ -109,24 +109,55 @@ test("a manually written film is labelled by its whole name, without a repeated 
 test("a zero quantity cancels the draft and a new quantity orders again", () => {
   const { context, db, order } = load({ "mf-type": "Зеркальная", "mf-name": "Mirror 15", "mf-width": "1524" });
   context.saveManualProjectFilm("o1", "l1");
+  const filmId = order.extraServices[0].catalogId as string;
   order.extraServices[0].qty = 0;
-  context.syncManualFilmPurchase(order, order.extraServices[0]);
+  context.reconcileManualFilmPurchase(order, filmId, "метраж в проекте обнулён");
   assert.equal(db.purchaseRequests[0].status, "cancelled", "no request for zero metres");
   order.extraServices[0].qty = 100;
-  context.syncManualFilmPurchase(order, order.extraServices[0]);
+  context.reconcileManualFilmPurchase(order, filmId, "метраж в проекте обнулён");
   assert.equal(db.purchaseRequests.length, 2);
   assert.equal(db.purchaseRequests[1].status, "draft");
   assert.equal(db.purchaseRequests[1].qty, 7);
 });
 
-test("choosing another film cancels the old draft; a reused zero-stock film is marked pending", () => {
+test("one draft per project and film covers every line that uses it", () => {
+  const { context, db, order } = load({ "mf-type": "Керамическая", "mf-name": "Ceramic 40", "mf-width": "1524" });
+  order.extraServices.push({ id: "l2", quickProjectLine: true, serviceType: "solar_film", qty: 300, unit: "sqft", startDate: "2026-10-05" });
+  context.saveManualProjectFilm("o1", "l1");
+  context.saveManualProjectFilm("o1", "l2");
+  assert.equal(db.purchaseRequests.length, 1, "one shared draft");
+  assert.equal(db.purchaseRequests[0].sqftSnapshot, 600);
+  assert.equal(db.purchaseRequests[0].qty, 40.5, "600 sq ft, not the last line alone");
+  assert.equal(db.purchaseRequests[0].neededBy, "2026-10-05", "needed by the earliest line");
+
+  // The second line switches to another film: the draft shrinks to the first line, not cancelled.
+  order.extraServices[1].catalogId = "film_other";
+  context.reconcileManualFilmPurchase(order, order.extraServices[0].catalogId as string, "в проекте выбрана другая плёнка");
+  assert.equal(db.purchaseRequests[0].status, "draft");
+  assert.equal(db.purchaseRequests[0].qty, 20.5);
+
+  // The last line using the film is deleted: the draft is cancelled.
+  const filmId = order.extraServices[0].catalogId as string;
+  order.extraServices.splice(0, 1);
+  context.reconcileManualFilmPurchase(order, filmId, "позиция удалена из проекта");
+  assert.equal(db.purchaseRequests[0].status, "cancelled");
+  assert.match(String(db.purchaseRequests[0].note), /Отменено: позиция удалена из проекта/);
+});
+
+test("choosing another film keeps the old draft only while another line needs it; a reused zero-stock film is marked pending", () => {
   const { context, db, order } = load({ "mf-type": "Керамическая", "mf-name": "Ceramic 40", "mf-width": "1524" });
   db.settings.catalog.push({ id: "film_old", category: "solar", model: "Ceramic 40", brand: "X" });
   context.saveManualProjectFilm("o1", "l1");
   assert.equal(order.extraServices[0].catalogId, "film_old", "the existing film is reused");
   assert.equal(db.settings.catalog[0].pendingPurchase, true);
-  assert.equal(context.cancelManualFilmDraft(order, "film_old", "в проекте выбрана другая плёнка"), true);
+  order.extraServices[0].catalogId = "film_new";
+  context.reconcileManualFilmPurchase(order, "film_old", "в проекте выбрана другая плёнка");
   assert.equal(db.purchaseRequests[0].status, "cancelled");
   assert.match(String(db.purchaseRequests[0].note), /Отменено: в проекте выбрана другая плёнка/);
-  assert.match(html, /cancelManualFilmDraft\(o, previousCatalogId, 'в проекте выбрана другая плёнка'\);/);
+});
+
+test("every quick line change and deletion reconciles the film purchase", () => {
+  assert.match(html, /if \(filmChanged && previousCatalogId\) reconcileManualFilmPurchase\(o, previousCatalogId, 'в проекте выбрана другая плёнка'\);/);
+  assert.match(html, /if \(line\.catalogId && \(filmChanged \|\| field === 'qty'\)\) reconcileManualFilmPurchase\(o, line\.catalogId, 'метраж в проекте обнулён'\);/);
+  assert.match(html, /if \(removedCatalogId\) reconcileManualFilmPurchase\(o, removedCatalogId, 'позиция удалена из проекта'\);/);
 });
