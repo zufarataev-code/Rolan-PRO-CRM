@@ -71,7 +71,7 @@ function load(fields: Record<string, string>, { cloud = false, fetch }: { cloud?
   };
 }
 
-const RECEIPT = { "ar-category": "solar", "ar-type": "", "ar-width": "1524", "ar-len": "30", "ar-cost": "500", "ar-date": "2026-10-02", "ar-lot": "L1", "ar-loc": "Warehouse", "ar-vendor": "", "ar-request": "", "ar-preset": "" };
+const RECEIPT = { "ar-form": "form-1", "ar-category": "solar", "ar-type": "", "ar-width": "1524", "ar-len": "30", "ar-cost": "500", "ar-date": "2026-10-02", "ar-lot": "L1", "ar-loc": "Warehouse", "ar-vendor": "", "ar-request": "", "ar-preset": "" };
 const lastRoll = (db: { inventory: Array<Record<string, unknown>> }) => db.inventory.at(-1) as Record<string, unknown>;
 
 test("each roll gets the next readable code for its month", () => {
@@ -157,4 +157,20 @@ test("every way of receiving a roll reserves its code; the roll table shows code
   assert.match(html, /<th class="text-left p-2">Код<\/th><th class="text-left p-2">Lot #<\/th>/);
   assert.match(html, /<th class="text-left p-2">Закупка \/ sq ft<\/th>/);
   assert.match(html, /rollCode: data\.rollCode \|\| '',\n    qrCode: data\.rollCode \|\| \('RP-ROLL-' \+ uid\(\)\),/);
+});
+
+test("a form closed or reopened while the code is reserved receives nothing", async () => {
+  let release: () => void = () => undefined;
+  const fields: Record<string, string> = { ...RECEIPT, "ar-brand": "Rolan PRO", "ar-model": "Titan Prime™" };
+  const { context, db } = load(fields, {
+    cloud: true,
+    fetch: () => new Promise((resolve) => { release = () => resolve({ ok: true, status: 200, json: async () => ({ data: { code: "RP-2610-0008" } }) }); }),
+  });
+  const pending = context.confirmAddRoll();
+  fields["ar-form"] = "form-2"; // closed and opened again
+  release();
+  await pending;
+  assert.equal(db.inventory.length, 1, "no roll from the closed form");
+  assert.equal(db.purchaseRequests[0].status, "ordered");
+  assert.equal(html.match(/rollReceiptFormStillOpen\('(ar|qf|mrf)-form', formToken\)/g)?.length, 3, "all three receipt paths check their form");
 });

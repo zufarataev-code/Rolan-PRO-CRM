@@ -22728,6 +22728,7 @@ function openQuickProjectFilmForm(oid, lineId) {
       <div><label>Стоимость рулона, $</label><input id="qf-cost" type="number" min="0.01" step="1" placeholder="500"></div>
       <div><label>Lot / партия</label><input id="qf-lot" value="QUICK-${new Date().toISOString().slice(0,10)}"></div>
     </div>
+    <input id="qf-form" type="hidden" value="${uid()}">
     <div id="qf-error" class="text-sm text-red-600 mt-3 hidden"></div>
     <div class="flex gap-2 mt-5"><button class="btn-primary flex-1" onclick="saveQuickProjectFilm('${oid}','${lineId}','${category}')">Создать, принять и выбрать</button><button class="btn-ghost" onclick="openQuickProjectEntry('${oid}')">Отмена</button></div>
   </div></div>`;
@@ -22752,9 +22753,10 @@ async function saveQuickProjectFilm(oid, lineId, category) {
   const widthMm = Number(document.getElementById('qf-width')?.value) || 1524;
   const retailPerSqft = Math.max(0, Number(document.getElementById('qf-retail')?.value) || 0);
   const dateReceived = new Date().toISOString().slice(0,10);
+  const formToken = document.getElementById('qf-form')?.value || '';
   let rollCode = '';
   try { rollCode = await reserveRollCodeOnce(dateReceived); } catch (error) { return fail(`Не удалось получить код рулона: ${error.message}. Проверьте интернет и повторите.`); }
-  if (!rollCode) return;
+  if (!rollCode || !rollReceiptFormStillOpen('qf-form', formToken)) return;
   // The CRM may have reloaded while the code was reserved: work on the current project.
   const project = getOrder(oid);
   const projectLine = projectQuickLines(project).find(item => item.id === lineId);
@@ -25616,6 +25618,7 @@ function openManagerFilmReceiptForm(oid, rid) {
       <div><label>Стоимость рулона, $</label><input id="mrf-cost" type="number" min="0.01" step="1" placeholder="500"></div>
       <div><label>Lot / партия</label><input id="mrf-lot" value="MEASURE-${new Date().toISOString().slice(0,10)}"></div>
     </div>
+    <input id="mrf-form" type="hidden" value="${uid()}">
     <div id="mrf-error" class="text-sm text-red-600 mt-3 hidden"></div>
     <div class="flex gap-2 mt-5"><button class="btn-primary flex-1" onclick="saveManagerFilmReceipt('${oid}','${rid}','${serviceCategory}')">Создать, принять и выбрать</button><button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Отмена</button></div>
   </div></div>`;
@@ -25639,9 +25642,10 @@ async function saveManagerFilmReceipt(oid, rid, serviceCategory) {
   const widthMm = Number(document.getElementById('mrf-width')?.value) || 1524;
   const retailPerSqft = Math.max(0, Number(document.getElementById('mrf-retail')?.value) || 0);
   const dateReceived = new Date().toISOString().slice(0,10);
+  const formToken = document.getElementById('mrf-form')?.value || '';
   let rollCode = '';
   try { rollCode = await reserveRollCodeOnce(dateReceived); } catch (error) { return fail(`Не удалось получить код рулона: ${error.message}. Проверьте интернет и повторите.`); }
-  if (!rollCode) return;
+  if (!rollCode || !rollReceiptFormStillOpen('mrf-form', formToken)) return;
   if (!getOrder(oid)?.measurements?.rooms?.some(item => item.id === rid)) return fail('Замер изменился, пока получали код рулона. Откройте его заново.');
   const catalog = { id: 'film_' + uid(), brand, filmCategory, productName, modelCode, model: `${productName} ${modelCode}`, category: serviceCategory, retailPerSqft, costPerSqft: null, installerRatePerSqft: null, wastePct: serviceCategory === 'smart' ? 8 : 12, archived: false };
   db.settings.catalog.push(catalog);
@@ -35533,6 +35537,14 @@ async function reserveRollCode(dateReceived) {
   return payload.data.code;
 }
 
+/**
+ * The receipt form the user submitted is still on screen: closed or reopened
+ * while the code was reserved means the receipt is dropped, never completed.
+ */
+function rollReceiptFormStillOpen(inputId, token) {
+  return !!token && document.getElementById(inputId)?.value === token;
+}
+
 /** One receipt at a time: a double click while the code is reserved gets null and stops. */
 async function reserveRollCodeOnce(dateReceived) {
   if (state.rollReceiptSaving) return null;
@@ -35615,6 +35627,7 @@ function openAddRollModal(presetCatId, purchaseRequestId='') {
       </div>
       <input id="ar-request" type="hidden" value="${academyEsc(purchaseRequestId)}">
       <input id="ar-preset" type="hidden" value="${academyEsc(preset?.id || '')}">
+      <input id="ar-form" type="hidden" value="${uid()}">
       <div id="ar-error" class="text-sm text-red-600 mt-3 hidden"></div>
       <div class="flex gap-2 mt-4 justify-end">
         <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
@@ -35687,6 +35700,7 @@ async function confirmAddRoll() {
   if (!(costTotal > 0)) return fail('Укажите цену закупки рулона — без неё себестоимость проектов будет занижена.');
 
   const button = document.getElementById('ar-submit');
+  const formToken = document.getElementById('ar-form')?.value || '';
   if (button) button.disabled = true;
   let rollCode = '';
   try {
@@ -35696,7 +35710,7 @@ async function confirmAddRoll() {
   } finally {
     if (button) button.disabled = false;
   }
-  if (!rollCode) return;
+  if (!rollCode || !rollReceiptFormStillOpen('ar-form', formToken)) return;
 
   const film = { category, brand, model, filmType, vendorId };
   const catalog = rollReceiptPresetCatalog(getCatalogItem(presetId), film) || rollReceiptCatalog(category, brand, model, filmType, vendorId);
