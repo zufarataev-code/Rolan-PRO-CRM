@@ -205,6 +205,9 @@ export async function GET(request: NextRequest) {
       #rolanpro-team-overlay { position: fixed; inset: 0; z-index: 2147483000; background: rgba(15,23,42,.48); display: grid; place-items: center; padding: 14px; }
       #rolanpro-team-frame { width: min(980px, 100%); height: min(94dvh, 980px); border: 0; border-radius: 18px; background: #f1f5f9; box-shadow: 0 24px 80px rgba(15,23,42,.28); }
       @media (max-width: 640px) { #rolanpro-team-overlay { padding: 0; } #rolanpro-team-frame { height: 100dvh; border-radius: 0; } }
+      #rolanpro-bank-overlay { position: fixed; inset: 0; z-index: 2147483000; background: rgba(15,23,42,.48); display: grid; place-items: center; padding: 14px; }
+      #rolanpro-bank-frame { width: min(1000px, 100%); height: min(94dvh, 1000px); border: 0; border-radius: 18px; background: #f1f5f9; box-shadow: 0 24px 80px rgba(15,23,42,.28); }
+      @media (max-width: 640px) { #rolanpro-bank-overlay { padding: 0; } #rolanpro-bank-frame { height: 100dvh; border-radius: 0; } }
     </style>
     <script id="rolanpro-team-screen-link">
       (() => {
@@ -232,7 +235,31 @@ export async function GET(request: NextRequest) {
           if (event.origin !== window.location.origin) return;
           if (event.data?.type === 'rolanpro-team-changed') teamChanged = true;
           if (event.data?.type === 'rolanpro-team-close') window.closeRolanProTeam();
+          if (event.data?.type === 'rolanpro-bank-close') window.closeRolanProBank();
         });
+
+        // «Деньги → Счета и карты»: bank and card feeds through Plaid (owner only).
+        window.closeRolanProBank = function closeRolanProBank() {
+          document.getElementById('rolanpro-bank-overlay')?.remove();
+        };
+        window.openRolanProBank = function openRolanProBank() {
+          document.getElementById('rolanpro-bank-overlay')?.remove();
+          const overlay = document.createElement('div');
+          overlay.id = 'rolanpro-bank-overlay';
+          overlay.innerHTML = '<iframe id="rolanpro-bank-frame" title="Счета и карты" src="/legacy-crm/bank?embed=1"></iframe>';
+          overlay.addEventListener('click', (event) => { if (event.target === overlay) window.closeRolanProBank(); });
+          document.body.appendChild(overlay);
+        };
+        const originalRenderAccounting = window.renderAccounting;
+        if (typeof originalRenderAccounting === 'function') {
+          window.renderAccounting = function renderAccountingWithBank() {
+            return '<div class="card p-4 mb-4 flex items-center justify-between gap-3 flex-wrap">'
+              + '<div><div class="font-black">🏦 Счета и карты</div>'
+              + '<div class="text-sm text-gray-500">Балансы и операции из банков и карт — автоматически, с разнесением по категориям.</div></div>'
+              + '<button class="btn-primary" onclick="openRolanProBank()">Открыть счета и карты</button></div>'
+              + originalRenderAccounting.apply(this, arguments);
+          };
+        }
 
         // The existing «Команда» section keeps phone, photo and pay settings.
         // Roles, login email and access are edited only in the canonical
