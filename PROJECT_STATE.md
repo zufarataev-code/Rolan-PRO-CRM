@@ -773,3 +773,11 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Cause: seven DOM patches injected by `/legacy-crm` waited for the next animation frame, so the unpatched page was painted first (menu items moved 52 px, the top bar resized).
 - Fix: `src/features/legacy-crm/before-paint.ts` (`beforePaint`: microtask before paint, runaway guard → next frame). All patches use it; new patches must too. Client list no longer crashes on a client without a source.
 - Verified locally with a `layout-shift` observer (0 shifts on menu clicks) and in production (deploy 06a58ab healthy).
+
+## 2026-10-01 handoff — model-specific film sale prices
+
+- Scope: the Settings rate directory exposes the existing film catalog as `direction → service / line → brand → product → model / thickness → customer price per sq ft`. The direction-level customer price is explicitly labelled as a fallback only.
+- One catalog: adding a model from the rate directory writes the existing `db.settings.catalog` record used by Warehouse, Measurement, Project and Proposal. No second price catalog was added. Exact-model `retailPerSqft` remains the default Project price; Project overrides and Proposal snapshots keep their existing behavior.
+- Separation of facts: model `retailPerSqft` is the sale price. Purchase cost remains on Warehouse stock receipts and continues to feed cost/profit independently. Installer rates are unchanged.
+- Permissions: Owner can add models and maintain list prices; Manager sees the price directory and may negotiate only through the Project price override.
+- Implementation branch: `codex/model-specific-film-pricing-main`, based on current `main`. Production has not been changed or authorized.
