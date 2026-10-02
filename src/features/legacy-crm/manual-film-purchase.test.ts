@@ -31,6 +31,7 @@ function load(fields: Record<string, string>, role = "manager") {
     primaryServiceInfo: () => ({ catalogCategory: "solar" }),
     projectQuickManualFilmName: (line: { manualFilmName?: string }) => String(line.manualFilmName || ""),
     catalogLabel: (item: { filmCategory?: string; model?: string }) => [item.filmCategory, item.model].filter(Boolean).join(" · "),
+    projectQuickLineLabel: (_line: unknown, item: { filmCategory?: string; model?: string }) => [item.filmCategory, item.model].filter(Boolean).join(" · "),
     activeProjectFilmPurchaseRequest: () => null,
     purchaseRequestNumber: () => `PUR-2026-${String(db.purchaseRequests.length + 1).padStart(4, "0")}`,
     projectQuickDateValue: (value: string) => value || "",
