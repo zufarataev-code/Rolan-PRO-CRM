@@ -1574,3 +1574,11 @@ model ZadarmaCall {
   @@index([started_at])
   @@map("zadarma_calls")
 }
+
+/// Monthly sequence for readable roll codes (RP-YYMM-NNNN), reserved atomically on the server.
+model RollCodeCounter {
+  period     String @id @db.VarChar(4)
+  last_value Int
+
+  @@map("roll_code_counters")
+}
