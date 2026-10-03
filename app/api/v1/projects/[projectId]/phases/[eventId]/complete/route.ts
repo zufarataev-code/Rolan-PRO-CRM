@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 
 import { PROJECT_RUNTIME_MANAGER_ROLES } from "@/features/projects/api";
 import { completeProjectPhase } from "@/features/projects/phases";
+import { isProjectConstructorUuid } from "@/features/projects/constructor-request";
 import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 
@@ -16,6 +17,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const { projectId, eventId } = await context.params;
+  if (!isProjectConstructorUuid(projectId) || !isProjectConstructorUuid(eventId)) return apiError(400, "invalid_id", "A valid project and work order ID is required.");
   const result = await completeProjectPhase(auth.session, projectId, eventId);
 
   if (!result) return apiError(404, "not_found", "Installation phase was not found.");

@@ -34,6 +34,9 @@ export async function recordInstallerPayrollAccrual(
         include: {
           service_type: true,
           complexity_level: true,
+          measurements: {
+            select: { measurement_id: true, supersedes_measurement_id: true, sqft: true },
+          },
         },
       },
     },
@@ -41,9 +44,13 @@ export async function recordInstallerPayrollAccrual(
 
   if (!job?.position) return null;
 
-  const quantitySqft =
-    jsonNumber(job.position.dynamic_fields, "actual_film_sqft") ||
-    jsonNumber(job.position.dynamic_fields, "sqft");
+  // Measurements are append-only: include the effective revisions only.
+  const superseded = new Set(job.position.measurements.map(row => row.supersedes_measurement_id));
+  const activeMeasurements = job.position.measurements.filter(row => !superseded.has(row.measurement_id));
+  const quantitySqft = activeMeasurements.length
+    ? activeMeasurements.reduce((sum, row) => sum + toNumber(row.sqft), 0)
+    : jsonNumber(job.position.dynamic_fields, "actual_film_sqft") ||
+      jsonNumber(job.position.dynamic_fields, "sqft");
   const ratePerSqft =
     jsonNumber(job.position.dynamic_fields, "manual_installation_cost_per_sqft") ||
     toNumber(job.position.service_type.installation_cost_per_sqft);

@@ -358,8 +358,13 @@ export async function completeProjectPhase(session: SessionLike, projectId: stri
       },
     });
 
+    // Unscheduled services still belong to this project. Finishing its only
+    // scheduled phase must not silently close work that has not been assigned.
+    const unfinishedPositions = await tx.projectPosition.count({
+      where: { project_id: projectId, position_status: { status_code: { not: "COMPLETED" } } },
+    });
     let projectCompleted = false;
-    if (remaining === 0) {
+    if (remaining === 0 && unfinishedPositions === 0) {
       const completedProjectStatus = await tx.projectStatus.findUnique({ where: { status_code: "COMPLETED" } });
       if (!completedProjectStatus) throw new Error("COMPLETED project status is not configured.");
       await tx.project.update({

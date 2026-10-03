@@ -1577,6 +1577,7 @@ export async function getInstallerJobsForSession(session: ProjectSession) {
   const jobs = await prisma.installerJob.findMany({
     where: buildInstallerJobWhereForSession(session),
     include: {
+      calendar_event: { select: { calendar_event_id: true, starts_at: true, ends_at: true } },
       installer: {
         select: {
           user_id: true,
@@ -1643,6 +1644,7 @@ export async function getInstallerJobsForSession(session: ProjectSession) {
           name: job.crew.name,
         }
       : null,
+    service_schedule: job.calendar_event,
     schedule: job.schedule_assignment
       ? {
           schedule_assignment_id: job.schedule_assignment.schedule_assignment_id,
@@ -1840,6 +1842,7 @@ export async function updateInstallerJobStatus(
       installer_job_id: true,
       project_id: true,
       project_position_id: true,
+      calendar_event_id: true,
       status: true,
       project: {
         select: {
@@ -1869,6 +1872,9 @@ export async function updateInstallerJobStatus(
     ]);
 
   const updated = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw(Prisma.sql`SELECT project_id FROM projects WHERE project_id = ${job.project_id}::uuid FOR UPDATE`);
+    const current = await tx.installerJob.findUnique({ where: { installer_job_id: installerJobId }, select: { status: true } });
+    if (!current || !(INSTALLER_JOB_TRANSITIONS[current.status] ?? []).includes(status)) return "invalid_transition" as const;
     const timestamp = new Date();
     const statusData: Prisma.InstallerJobUpdateInput = {
       status,
@@ -1937,7 +1943,18 @@ export async function updateInstallerJobStatus(
         },
       });
 
-      if (remainingOpenJobs === 0) {
+      const unfinishedPositions = await tx.projectPosition.count({
+        where: { project_id: job.project_id, position_status: { status_code: { not: "COMPLETED" } } },
+      });
+      if (job.calendar_event_id) {
+        const remainingPhaseJobs = await tx.installerJob.count({
+          where: { calendar_event_id: job.calendar_event_id, status: { not: INSTALLER_JOB_STATUSES.COMPLETED } },
+        });
+        if (remainingPhaseJobs === 0) await tx.calendarEvent.update({
+          where: { calendar_event_id: job.calendar_event_id }, data: { status: "completed" },
+        });
+      }
+      if (remainingOpenJobs === 0 && unfinishedPositions === 0) {
         await tx.project.update({
           where: {
             project_id: job.project_id,

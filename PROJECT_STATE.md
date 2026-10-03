@@ -77,6 +77,9 @@ Target modules:
 
 ## Current task ownership
 
+- 2026-10-02: Codex owns service execution integration on `codex/project-service-execution`, based on `main` `4b5463c`. Reuses relational ProjectPosition, CalendarEvent, InstallerJob and payroll; open #295/#287/#291 are separate catalog/warehouse work and are not duplicated.
+
+
 | Task | Branch / PR | Owner | Status | Next action |
 | --- | --- | --- | --- | --- |
 | Extend the B2B client card with correspondence addresses, multi-object access, and an optional client/partner cabinet | `codex/client-addresses-portal-access` stacked on `claude/client-card-b2b` | Codex | Implemented locally: the shared B2C/B2B contact form stores legal and mailing addresses separately from the existing multi-object address book; every client card can open the address book and set the primary object; a cabinet is created only by an Owner/Manager action and uses a renewable/revocable per-client token; the client view adds customer-safe chronology and never renders internal cost, payroll, profit, or margin. 470/470 tests, TypeScript, 113-page production build, and diff check pass | Commit and open a stacked PR against `claude/client-card-b2b`; review/merge the dependency chain before any production deployment |
@@ -773,3 +776,16 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Cause: seven DOM patches injected by `/legacy-crm` waited for the next animation frame, so the unpatched page was painted first (menu items moved 52 px, the top bar resized).
 - Fix: `src/features/legacy-crm/before-paint.ts` (`beforePaint`: microtask before paint, runaway guard → next frame). All patches use it; new patches must too. Client list no longer crashes on a client without a source.
 - Verified locally with a `layout-shift` observer (0 shifts on menu clicks) and in production (deploy 06a58ab healthy).
+
+## 2026-10-02 handoff — relational service execution in the existing CRM
+
+- Branch: `codex/project-service-execution`, base `main` `4b5463c21130c702a41cdce5fcea49dde2e5fbd2`.
+- Reuses ProjectPosition → CalendarEvent phase → InstallerJob → immutable InstallerPayrollAccrual. No database migration, alternate project, or legacy payload field was introduced.
+- Existing canonical service cards now open scheduling (one service, date range, assigned specialist), completion and printable role-safe work orders inside the existing `/legacy-crm` document. Active Calendar loads relational service events; assignments map by canonical `legacy_user_ids`, never employee-name matching. Film pickers are category-scoped for Solar/Smart/Safety/Decorative.
+- New authenticated GET `/api/v1/projects/:projectId/execution` supplies existing phase and assignment options; `/api/v1/project-service-events` and `/:eventId` select operational fields only. Managers see their own projects; specialists see only assigned jobs/positions, without pricing, internal costs or unrestricted dynamic fields.
+- Completion through either manager phase or specialist job cannot close a project while any service remains unfinished (including services not yet scheduled). Specialist completion synchronizes its phase calendar status. Project row locks and a fresh job status check prevent stale concurrent transitions from reopening completed work.
+- Payroll takes effective measurement revisions for that service when available, otherwise the existing saved service sqft; one persisted accrual per job remains immutable and idempotent.
+- Verification: 491/491 unit tests (including inline-script compilation), TypeScript, production build and `git diff --check` pass. Added `e2e/project-services.e2e.ts` for scoped service work orders, distinct dates, unscheduled service protection and idempotent payouts. It has NOT been executed: no local PostgreSQL is available; the repository clean database/E2E CI gate must run before release. Authenticated mobile visual acceptance has NOT been performed.
+- Scope limitation: this integration operates on existing relational Project/ProjectPosition records. Legacy payload orders remain separate migration debt and are not silently mirrored or converted. Open PR #295/#287/#291 retain separate catalog/manual-film/warehouse work; they were not merged. Weekly summary delivery and multiple specialists on a single position are not implemented in this change.
+- Publication authorization: Owner explicitly approved publishing this branch to `zufarataev-code/Rolan-PRO-CRM` and opening a PR on 2026-10-02. The earlier automatic-review blocker is resolved by that approval. Git CLI has no HTTPS credentials, so publication uses the connected GitHub API. Release is not yet merged or deployed.
+- Next action: publish the prepared branch and open a PR, run clean-database E2E CI and authenticated phone/desktop review. Complete the legacy-to-relational project mapping before treating this as a release for all currently operating orders.
