@@ -211,7 +211,7 @@ test("quick service adds stock supplies and includes their purchase cost", () =>
   assert.match(consumables, /projectQuickSupplyCost\(o\)/);
 });
 
-test("owner can close a completed legacy project directly from quick entry", () => {
+test("owner or assigned manager can close a completed legacy project directly from quick entry", () => {
   const closer = source.match(/function closeQuickProjectAsCompleted\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
@@ -223,7 +223,11 @@ test("owner can close a completed legacy project directly from quick entry", () 
   assert.match(renderer, /Закрыть как выполненный и оплаченный/);
   assert.match(completionIssues, /ignoredHistoricalStockIssues/);
   assert.match(completionIssues, /warehouseCatalogCostPerSqft\(line\.catalogId\) <= 0/);
-  assert.match(closer, /currentUser\(\)\?\.role !== 'owner'/);
+  assert.match(source, /function orderUserCanImportHistoricalProject\(o, user = currentUser\(\)\)/);
+  assert.match(source, /user\.role === 'owner' \|\| \(user\.role === 'manager' && o\.managerId === user\.id\)/);
+  assert.match(closer, /!orderUserCanImportHistoricalProject\(o\)/);
+  assert.match(closer, /historicalStageConfirmations =/);
+  assert.match(closer, /historical_stages_confirmed/);
   assert.match(closer, /o\.status = 'completed'/);
   assert.match(closer, /o\.installationDoneAt = o\.installationDoneAt \|\| endAt/);
   assert.match(closer, /o\.paidAt = paidAt/);
@@ -231,6 +235,19 @@ test("owner can close a completed legacy project directly from quick entry", () 
   assert.match(closer, /o\.projectEstimateSnapshot =/);
   assert.match(closer, /quickProjectImportedCompleted = true/);
   assert.doesNotMatch(closer, /autoNotifyClient|notifyStatusChange|autoDeductInventoryForOrder/);
+});
+
+test("projects screen exposes a dedicated audited historical-project intake", () => {
+  assert.match(source, /openOrderModal\('historical'\)/);
+  assert.match(source, /Внести старый проект/);
+  assert.match(source, /state\._newOrderMode = historicalImport \? 'historical' : 'live'/);
+  assert.match(source, /createOrder\('historical'\)/);
+  assert.match(source, /o\.historicalImportDraft = true/);
+  assert.match(source, /projectEstimateAddQuickLine\(o\.id, service\.id\)/);
+  assert.match(source, /quick-close-stage-consultation/);
+  assert.match(source, /quick-close-stage-measurement/);
+  assert.match(source, /quick-close-stage-proposal/);
+  assert.match(source, /Клиенту ничего не отправляется/);
 });
 
 test("quick entry records direct project expenses before historical closure", () => {

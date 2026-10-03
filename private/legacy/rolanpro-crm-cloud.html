@@ -19615,6 +19615,7 @@ function renderOrders() {
         ${hasFilters ? `<button class="btn-ghost" onclick="clearOrderFilters()">✕ ${T('clearFilters')}</button>` : ''}
         ${ordersView === 'kanban' ? `<button class="btn-ghost" onclick="openOrdersKanbanFullscreen()">⛶ Весь экран</button>` : ''}
         <button class="btn-ghost" onclick="location.hash='#/projects'">📐 Проверенные замеры</button>
+        <button class="btn-ghost" onclick="openOrderModal('historical')">↩ Внести старый проект</button>
         <button class="btn-primary" onclick="openOrderModal()">+ ${T('newOrder')}</button>
       </div>
     </div>
@@ -23243,6 +23244,11 @@ function projectQuickLines(o) {
   return (o?.extraServices || []).filter(line => line.quickProjectLine === true);
 }
 
+function orderUserCanImportHistoricalProject(o, user = currentUser()) {
+  if (!o || !user) return false;
+  return user.role === 'owner' || (user.role === 'manager' && o.managerId === user.id);
+}
+
 function projectEstimateQuickLinesForBasis(o) {
   return o?.quickProjectImportedCompleted === true ? projectQuickLines(o) : [];
 }
@@ -23745,9 +23751,14 @@ function projectQuickCompletionIssues(o) {
 
 function closeQuickProjectAsCompleted(oid) {
   const o = getOrder(oid);
-  if (!o || currentUser()?.role !== 'owner') return;
+  if (!o || !orderUserCanImportHistoricalProject(o)) return;
   const issues = projectQuickCompletionIssues(o);
   if (issues.length) { alert('Нельзя закрыть проект: ' + issues.join(', ') + '.'); return; }
+  const stageChecks = ['consultation', 'measurement', 'proposal'];
+  if (stageChecks.some(key => !document.getElementById(`quick-close-stage-${key}`)?.checked)) {
+    alert('Подтвердите консультацию, замер/объём и принятое КП. Для старого проекта это обязательная запись в истории.');
+    return;
+  }
   const range = projectQuickDateRange(o);
   const paidDate = projectQuickDateValue(document.getElementById('quick-close-paid-date')?.value || range.endDate);
   const method = document.getElementById('quick-close-payment-method')?.value || 'zelle';
@@ -23778,8 +23789,16 @@ function closeQuickProjectAsCompleted(oid) {
   o.paidAt = paidAt;
   o.status = 'completed';
   o.quickProjectImportedCompleted = true;
+  o.historicalImportDraft = false;
   o.quickProjectImportedCompletedAt = recordedAt;
   o.quickProjectImportedCompletedBy = state.currentUserId;
+  o.historicalStageConfirmations = {
+    consultation: true,
+    measurement: true,
+    proposal: true,
+    confirmedAt: recordedAt,
+    confirmedBy: state.currentUserId,
+  };
   o.projectEstimateApprovedAt = recordedAt;
   o.projectEstimateApprovedBy = state.currentUserId;
   o.projectEstimateUpdatedAt = recordedAt;
@@ -23798,6 +23817,7 @@ function closeQuickProjectAsCompleted(oid) {
     managementNetProfit: projectProfitability(o).netProfit,
   };
   o.timeline = o.timeline || [];
+  o.timeline.push({ at: recordedAt, key: 'historical_stages_confirmed', by: state.currentUserId, note: 'При переносе подтверждены этапы: консультация, замер/объём, принятое КП' });
   o.timeline.push({ at: recordedAt, key: 'project_estimate_approved', by: state.currentUserId, note: `Импортированный расчёт подтверждён: ${fmtMoney(revenue)}` });
   o.timeline.push({ at: paidAt, key: 'payment_received', by: state.currentUserId, note: `Полная оплата ${fmtMoney(revenue)} · перенос из старой CRM` });
   o.timeline.push({ at: endAt, key: 'completed', by: state.currentUserId, note: 'Выполненный проект перенесён из старой CRM' });
@@ -23855,12 +23875,17 @@ function renderQuickProjectEntry(o) {
       <div class="project-estimate-section-head"><div><h4>Прямые расходы проекта</h4><div class="text-xs text-gray-500">Доставка, разовая закупка, помощник, субподрядчик и другие фактические расходы.</div></div><button class="btn-ghost text-sm" onclick="projectQuickAddExpense('${o.id}')">+ Добавить расход</button></div>
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead><tbody>${quickExpenseRows || '<tr><td colspan="4" class="text-gray-500">Прямых расходов нет.</td></tr>'}</tbody></table></div>
     </section>` : ''}
-    ${currentUser()?.role === 'owner' ? `<details class="quick-production-details">
+    ${orderUserCanImportHistoricalProject(o) ? `<details class="quick-production-details" ${o.historicalImportDraft ? 'open' : ''}>
       <summary>Только для переноса уже завершённого проекта из старой CRM</summary>
       <div class="quick-production-details-body">
         <div class="grid gap-2">${productionRows}</div>
         <section class="project-estimate-section">
           <div class="project-estimate-section-head"><div><h4>Закрытие проекта из старой CRM</h4><div class="text-xs text-gray-500">Фиксирует выполнение, полную оплату, зарплату, себестоимость и прибыль без ввода размеров окон.</div></div>${o.status === 'completed' ? '<span class="status-badge bg-emerald-100 text-emerald-800">Завершён</span>' : ''}</div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+            <label class="project-estimate-assignee"><input id="quick-close-stage-consultation" type="checkbox" ${o.historicalStageConfirmations?.consultation ? 'checked' : ''}>Консультация проведена</label>
+            <label class="project-estimate-assignee"><input id="quick-close-stage-measurement" type="checkbox" ${o.historicalStageConfirmations?.measurement ? 'checked' : ''}>Замер / объём подтверждён</label>
+            <label class="project-estimate-assignee"><input id="quick-close-stage-proposal" type="checkbox" ${o.historicalStageConfirmations?.proposal ? 'checked' : ''}>КП принято клиентом</label>
+          </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
             <div><label>Дата полной оплаты</label><input id="quick-close-paid-date" type="date" value="${projectQuickDateValue(o.paidAt?.slice?.(0,10)) || quickRange.endDate || new Date().toISOString().slice(0,10)}"></div>
             <div><label>Способ оплаты</label><select id="quick-close-payment-method">${PAYMENT_METHODS.map(item => `<option value="${item.id}">${item.label}</option>`).join('')}</select></div>
@@ -27459,7 +27484,9 @@ function searchClientsFuzzy(q) {
     .map(x => x.c);
 }
 
-function openOrderModal() {
+function openOrderModal(mode = 'live') {
+  const historicalImport = mode === 'historical';
+  state._newOrderMode = historicalImport ? 'historical' : 'live';
   state._newOrderClient = null;
   state._newOrderAddressId = null;
   state._newOrderTags = [];
@@ -27478,7 +27505,8 @@ function openOrderModal() {
       <div class="erp-intake-head">
         <div>
           <div class="erp-intake-kicker">ROLANPRO ERP · Project Intake</div>
-          <div class="erp-intake-title">Новый проект</div>
+          <div class="erp-intake-title">${historicalImport ? 'Старый выполненный проект' : 'Новый проект'}</div>
+          ${historicalImport ? '<div class="text-sm text-amber-700 mt-1">Перенос уже выполненной и оплаченной работы. Клиенту ничего не отправляется.</div>' : ''}
         </div>
         <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
       </div>
@@ -27566,8 +27594,9 @@ function openOrderModal() {
       <div class="erp-intake-footer" data-new-order-after-client style="display:none">
         <div class="flex gap-2 justify-end" style="margin-left:auto">
           <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
-          <button class="btn-ghost" onclick="createOrder('draft')">Сохранить черновик</button>
-          <button class="btn-primary" onclick="createOrder('measure')">Создать и перейти к замеру →</button>
+          ${historicalImport
+            ? `<button class="btn-primary" onclick="createOrder('historical')">Создать и внести факт работ →</button>`
+            : `<button class="btn-ghost" onclick="createOrder('draft')">Сохранить черновик</button><button class="btn-primary" onclick="createOrder('measure')">Создать и перейти к замеру →</button>`}
         </div>
       </div>
     </div>
@@ -28183,6 +28212,10 @@ function createOrder(nextStep = 'measure') {
     clientFlow: orderClientFlow(accountTypeForOrder, relationshipForOrder),
     priceOverridePerSqft: null,
   };
+  if (nextStep === 'historical') {
+    o.historicalImportDraft = true;
+    o.timeline[0].note = `Начат перенос выполненного проекта из старой CRM: ${service.title}`;
+  }
   stampOrderAddress(o, selectedAddress);
 
   db.orders.push(o);
@@ -28198,6 +28231,10 @@ function createOrder(nextStep = 'measure') {
   }
   save(); closeModal();
   openOrder(o.id);
+  if (nextStep === 'historical') {
+    projectEstimateAddQuickLine(o.id, service.id);
+    return;
+  }
   if (nextStep === 'measure') setTimeout(() => openManagerMeasureModal(o.id), 0);
 }
 
