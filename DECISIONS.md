@@ -466,6 +466,15 @@ Owner decision in chat on 2026-10-01 (asked whether to wait for the relational s
 - Migration: the analytics moves with the installation and payment stage (relational installer jobs and payroll accruals); client identity moves with the lead/client stage.
 - Everything else remains frozen as decided on 2026-09-29.
 
+## 2026-10-01 — Customer sale price belongs to the exact film model
+
+- `Справочник расценок на работу` presents two distinct levels: a direction-level fallback and the exact catalog-model sale price. The fallback is used only until a material is selected; it must not overwrite every model in that direction.
+- The customer pricing hierarchy is `direction → service / product line → brand → model / thickness → retailPerSqft`. Safety 4 mil and 8 mil, or Smart Vision 65, 85 and 95, are separate catalog products and may have different prices.
+- The existing catalog record is reused by Warehouse, Measurement, Project and Proposal; a second price-only film list is prohibited. While the legacy catalog remains active, this screen exposes its existing `retailPerSqft` field rather than adding another store.
+- Warehouse receipt cost and customer sale price remain different facts. Actual roll purchase cost feeds cost and margin; `retailPerSqft` supplies the default customer price. A manager may apply an authorized Project override, and an issued Proposal retains its price snapshot.
+- The Owner maintains model list prices. Managers may view the model price directory and change a deal price only inside the Project workflow.
+- This refines the existing service-price directory without changing installer pay. Relational migration of the film catalog is still required under the staged core consolidation decision.
+
 ## Changing a decision
 
 ## 2026-09-30 — Surveyor mobile navigation is organized around field work

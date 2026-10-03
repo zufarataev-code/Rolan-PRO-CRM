@@ -18356,6 +18356,78 @@ function saveCanonicalPlanning() {
   } }, 'План продаж пересчитан');
 }
 
+function canonicalCatalogDirectionLabel(category) {
+  return ({
+    smart: 'Смарт-плёнка',
+    solar: 'Солнцезащитная плёнка',
+    protective: 'Защитная плёнка',
+    safety: 'Защитная плёнка',
+    decorative: 'Декоративная плёнка',
+    privacy: 'Приватность / blackout',
+  })[String(category || '').toLowerCase()] || category || 'Другое направление';
+}
+
+function canonicalCatalogProductLabel(item) {
+  return [item?.productName, item?.modelCode || item?.thickness]
+    .filter(Boolean)
+    .join(' · ') || item?.model || 'Модель не указана';
+}
+
+function saveCanonicalCatalogRetailPrice(id, rawValue) {
+  const value = String(rawValue ?? '').trim();
+  const price = value === '' ? null : Number(value);
+  if (price != null && (!Number.isFinite(price) || price < 0)) return alert('Укажите цену 0 или больше');
+  state.canonicalPricingNotice = price == null
+    ? 'Цена модели очищена — в проекте потребуется указать её вручную'
+    : 'Цена конкретной модели сохранена';
+  updateCatalogItem(id, 'retailPerSqft', price);
+}
+
+function createCanonicalCatalogProduct() {
+  const category = canonicalPricingValue('cp-film-direction') || 'smart';
+  const filmCategory = canonicalPricingValue('cp-film-service');
+  const brand = canonicalPricingValue('cp-film-brand');
+  const productName = canonicalPricingValue('cp-film-product');
+  const modelCode = canonicalPricingValue('cp-film-model');
+  const retailRaw = canonicalPricingValue('cp-film-retail');
+  const retailPerSqft = retailRaw === '' ? null : Number(retailRaw);
+  if (!filmCategory || !brand || !modelCode) return alert('Укажите услугу / линейку, бренд и модель / толщину');
+  if (retailPerSqft != null && (!Number.isFinite(retailPerSqft) || retailPerSqft < 0)) return alert('Укажите цену 0 или больше');
+  db.settings = db.settings || {};
+  db.settings.catalog = Array.isArray(db.settings.catalog) ? db.settings.catalog : [];
+  db.settings.catalog.push({
+    id: 'film_' + uid(),
+    category,
+    filmCategory,
+    brand,
+    productName,
+    modelCode,
+    model: [productName, modelCode].filter(Boolean).join(' '),
+    retailPerSqft,
+    costPerSqft: null,
+    installerRatePerSqft: null,
+    wastePct: category === 'smart' ? 8 : 12,
+    archived: false,
+  });
+  state.canonicalPricingNotice = 'Новая модель добавлена в единый каталог и доступна в проектах';
+  save();
+  render();
+}
+
+function filterCanonicalCatalogPrices(value) {
+  const query = String(value || '').trim().toLowerCase();
+  document.querySelectorAll('[data-film-price-group]').forEach(group => {
+    let matches = 0;
+    group.querySelectorAll('[data-film-price-row]').forEach(row => {
+      const visible = !query || String(row.dataset.filmPriceRow || '').includes(query);
+      row.style.display = visible ? '' : 'none';
+      if (visible) matches += 1;
+    });
+    group.style.display = matches ? '' : 'none';
+    if (query && matches) group.open = true;
+  });
+}
+
 function renderCanonicalServicePricing() {
   const data = state.canonicalPricingData;
   if (!data && !state.canonicalPricingLoading && !state.canonicalPricingError) setTimeout(() => loadCanonicalServicePricing(), 0);
@@ -18369,18 +18441,28 @@ function renderCanonicalServicePricing() {
   const assumptions = planning.assumptions || {};
   const actual = planning.actual || {};
   const signal = actual.signal === 'on_track' ? 'План выполнен' : actual.signal === 'attention' ? 'Почти у цели' : 'Нужны продажи';
+  const catalogItems = (db.settings?.catalog || [])
+    .filter(item => item && !item.archived)
+    .sort((a, b) => [canonicalCatalogDirectionLabel(a.category), a.filmCategory, a.brand, canonicalCatalogProductLabel(a)].join('|').localeCompare(
+      [canonicalCatalogDirectionLabel(b.category), b.filmCategory, b.brand, canonicalCatalogProductLabel(b)].join('|'), 'ru'
+    ));
+  const catalogByDirection = catalogItems.reduce((groups, item) => {
+    const key = item.category || 'other';
+    (groups[key] ||= []).push(item);
+    return groups;
+  }, {});
 
   const serviceCards = services.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:4px">
     <summary class="cursor-pointer list-none flex items-center justify-between gap-3"><div><div class="font-black text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.service_code)} · ${academyEsc(row.unit_type)}</div></div><div class="flex items-center gap-3"><span class="font-black text-blue-700">${canonicalPricingMoney(row.base_price)}</span><span class="text-slate-400">Открыть ↓</span></div></summary>
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-5 pt-4 border-t border-slate-200">
       ${canonicalPricingField(`cps-${row.service_type_id}-name`, 'Название', row.name_ru, 'text')}
       ${canonicalPricingField(`cps-${row.service_type_id}-unit`, 'Единица: sqft, zone, item', row.unit_type, 'text')}
-      ${canonicalPricingField(`cps-${row.service_type_id}-base`, 'Цена клиенту, $', row.base_price)}
+      ${canonicalPricingField(`cps-${row.service_type_id}-base`, 'Резервная цена клиенту, $', row.base_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-min`, 'Минимальная цена, $', row.min_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-block`, 'Блок клиенту, $', row.block_revenue_price)}
       ${owner ? canonicalPricingField(`cps-${row.service_type_id}-installer`, 'Специалисту по установке / sqft, $', row.installation_cost_per_sqft) : ''}
     </div>
-    <p class="text-xs text-slate-500 mt-3">Стоимость плёнки берётся со склада. Ставка монтажа из этой услуги автоматически начисляется назначенным специалистам по установке; индивидуальная ставка сотрудника может её переопределить.</p>
+    <p class="text-xs text-slate-500 mt-3">После выбора материала цена клиенту берётся из конкретной модели каталога; эта ставка остаётся резервной. Закупочная стоимость рулона берётся со склада отдельно. Ставка монтажа автоматически начисляется назначенным специалистам по установке.</p>
     <div class="mt-4 flex flex-wrap items-center gap-3"><label class="tag"><input id="cps-${row.service_type_id}-active" type="checkbox" ${row.is_active ? 'checked' : ''}> Активна</label><button class="btn-primary" onclick="saveCanonicalService('${row.service_type_id}')">Сохранить услугу</button></div>
   </details>`).join('');
 
@@ -18390,6 +18472,31 @@ function renderCanonicalServicePricing() {
     <div class="mt-4 flex gap-3"><label class="tag"><input id="cpa-${row.service_addon_id}-active" type="checkbox" ${row.is_active ? 'checked' : ''}> Активна</label><button class="btn-primary" onclick="saveCanonicalAddon('${row.service_addon_id}')">Сохранить</button></div>
   </details>`).join('');
 
+  const modelPriceGroups = Object.entries(catalogByDirection).map(([category, items]) => {
+    const missing = items.filter(item => item.retailPerSqft == null).length;
+    return `<details data-film-price-group class="border border-slate-200 bg-white" style="border-radius:12px">
+      <summary class="cursor-pointer list-none flex items-center justify-between gap-3 p-4">
+        <div><div class="font-black text-slate-900">${academyEsc(canonicalCatalogDirectionLabel(category))}</div><div class="text-xs text-slate-500">${items.length} моделей${missing ? ` · без цены: ${missing}` : ''}</div></div>
+        <span class="text-sm font-bold text-blue-700">Открыть модели ↓</span>
+      </summary>
+      <div class="border-t border-slate-200">
+        <div class="hidden md:grid md:grid-cols-[1.15fr_.8fr_1fr_1fr_170px] gap-3 p-3 text-xs text-slate-500 bg-slate-50"><b>Услуга / линейка</b><b>Бренд</b><b>Продукт</b><b>Модель / толщина</b><b class="text-right">Цена клиенту / sq ft</b></div>
+        <div>${items.map(item => {
+          const search = [canonicalCatalogDirectionLabel(category), item.filmCategory, item.brand, item.productName, item.modelCode, item.thickness, item.model].filter(Boolean).join(' ').toLowerCase();
+          return `<div class="grid grid-cols-2 md:grid-cols-[1.15fr_.8fr_1fr_1fr_170px] gap-3 items-center border-t border-slate-100 p-3 text-sm" data-film-price-row="${academyEsc(search)}">
+            <div class="col-span-2 md:col-span-1"><span class="md:hidden block text-[11px] font-bold uppercase text-slate-400">Услуга / линейка</span><b>${academyEsc(item.filmCategory || 'Без категории')}</b></div>
+            <div><span class="md:hidden block text-[11px] font-bold uppercase text-slate-400">Бренд</span>${academyEsc(item.brand || 'Без бренда')}</div>
+            <div><span class="md:hidden block text-[11px] font-bold uppercase text-slate-400">Продукт</span>${academyEsc(item.productName || item.series || '—')}</div>
+            <div><span class="md:hidden block text-[11px] font-bold uppercase text-slate-400">Модель / толщина</span>${academyEsc(item.modelCode || item.thickness || item.model || '—')}</div>
+            <div class="col-span-2 md:col-span-1 md:text-right"><span class="md:hidden block text-[11px] font-bold uppercase text-slate-400 mb-1">Цена клиенту / sq ft</span>${owner
+              ? `<label class="inline-flex items-center gap-2"><span class="font-bold">$</span><input type="number" min="0" step="0.01" value="${academyEsc(item.retailPerSqft ?? '')}" placeholder="не задана" aria-label="Цена ${academyEsc(canonicalCatalogProductLabel(item))} за квадратный фут" class="border border-slate-300 bg-white px-3 py-2 text-right" style="width:130px;border-radius:3px" onchange="saveCanonicalCatalogRetailPrice('${academyEsc(item.id)}',this.value)"></label>`
+              : item.retailPerSqft == null ? '<span class="tag bg-amber-50 text-amber-800">Цена не задана</span>' : `<b class="text-blue-800">${canonicalPricingMoney(item.retailPerSqft)}</b>`}</div>
+          </div>`;
+        }).join('')}</div>
+      </div>
+    </details>`;
+  }).join('');
+
   return `<div class="space-y-5">
     ${state.canonicalPricingNotice ? `<div class="card border border-emerald-200 bg-emerald-50 text-emerald-800" style="border-radius:4px">✅ ${academyEsc(state.canonicalPricingNotice)}</div>` : ''}
     <section class="card border border-slate-200 bg-white" style="border-radius:4px">
@@ -18397,7 +18504,14 @@ function renderCanonicalServicePricing() {
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Безубыточность</div><b class="text-xl">${canonicalPricingMoney(planning.break_even?.revenue)}</b><div class="text-xs">${planning.break_even?.deals || 0} сделок / ${planning.break_even?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Цель с прибылью</div><b class="text-xl">${canonicalPricingMoney(planning.target?.revenue)}</b><div class="text-xs">${planning.target?.deals || 0} сделок / ${planning.target?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">КП за месяц</div><b class="text-xl">${canonicalPricingMoney(actual.proposal_revenue)}</b></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Прогресс</div><b class="text-xl">${Number(actual.progress_percent || 0).toFixed(0)}%</b></div></div>
       ${owner ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${canonicalPricingField('cp-plan-check', 'Средний чек, $', assumptions.average_deal_value)}${canonicalPricingField('cp-plan-conversion', 'Конверсия лид → сделка, %', assumptions.lead_to_deal_percent)}${canonicalPricingField('cp-plan-profit', 'Целевая прибыль / месяц, $', assumptions.target_profit_monthly)}</div><button class="btn-primary mt-4" onclick="saveCanonicalPlanning()">Сохранить план</button>` : '<p class="text-sm text-slate-500 mt-4">Менеджер видит цели по лидам и сделкам. Расходы и прибыль меняет владелец.</p>'}
     </section>
-    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Услуги</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту услугу, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Специалисту по установке / sqft, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
+    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Базовые ставки направлений</h2><p class="text-sm text-slate-500">Резервная ставка, пока конкретная модель плёнки ещё не выбрана. После выбора модели расчёт берёт её собственную цену.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить направление / работу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Резервная цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Специалисту по установке / sqft, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать направление / работу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Направлений пока нет</div>'}</div></section>
+    <section class="card border border-blue-200 bg-blue-50/30" style="border-radius:12px">
+      <div class="flex flex-wrap items-start justify-between gap-3"><div><h2 class="text-xl font-black">Цены конкретных продуктов и моделей</h2><p class="text-sm text-slate-600 mt-1">Главная цепочка расчёта: <b>направление → услуга / линейка → бренд → модель / толщина → цена клиенту</b>. Эта цена автоматически подставляется в замер, проект и КП.</p></div><span class="tag bg-blue-100 text-blue-800">${catalogItems.length} моделей</span></div>
+      <div class="mt-4"><input type="search" placeholder="Найти: Anti-Graffiti, Madico, 4 mil, Smart Vision 85…" oninput="filterCanonicalCatalogPrices(this.value)" aria-label="Поиск модели плёнки"></div>
+      ${owner ? `<details class="mt-4 border border-blue-200 bg-white p-4" style="border-radius:10px"><summary class="cursor-pointer font-bold text-blue-800">+ Добавить продукт / модель</summary><div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Направление</span><select id="cp-film-direction" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2"><option value="smart">Смарт-плёнка</option><option value="solar">Солнцезащитная</option><option value="protective">Защитная</option><option value="decorative">Декоративная</option></select></label>${canonicalPricingField('cp-film-service', 'Услуга / линейка', '', 'text')}${canonicalPricingField('cp-film-brand', 'Бренд', '', 'text')}${canonicalPricingField('cp-film-product', 'Название продукта', '', 'text')}${canonicalPricingField('cp-film-model', 'Модель / толщина', '', 'text')}${canonicalPricingField('cp-film-retail', 'Цена клиенту / sq ft, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalCatalogProduct()">Добавить в единый каталог</button></details>` : '<p class="text-xs text-slate-500 mt-3">Менеджер видит прайс моделей; менять справочник может владелец. В проекте менеджер может согласовать индивидуальную цену.</p>'}
+      <div class="space-y-3 mt-4">${modelPriceGroups || '<div class="p-4 border border-dashed border-slate-300 text-slate-500">Каталог моделей пока пуст.</div>'}</div>
+      <div class="mt-4 p-3 border border-emerald-200 bg-emerald-50 text-sm text-emerald-900"><b>Важно:</b> цена выше — это цена продажи клиенту. Закупочная стоимость конкретного рулона хранится в «Складе» и отдельно участвует в себестоимости и прибыли.</div>
+    </section>
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between"><div><h2 class="text-xl font-black">Дополнительные работы</h2><p class="text-sm text-slate-500">Подключение зон, демонтаж, силикон и другие допродажи.</p></div><span class="tag">${addons.length}</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить допработу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Основная услуга</span><select id="cp-new-addon-service" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2">${services.map(s => `<option value="${s.service_type_id}">${academyEsc(s.name_ru)}</option>`).join('')}</select></label>${canonicalPricingField('cp-new-addon-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-addon-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-addon-unit', 'Единица', 'item', 'text')}${canonicalPricingField('cp-new-addon-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-addon-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalAddon()">Создать допработу</button></details><div class="space-y-3 mt-4">${addonCards || '<div class="text-slate-500">Дополнительных работ пока нет</div>'}</div></section>
   </div>`;
 }
