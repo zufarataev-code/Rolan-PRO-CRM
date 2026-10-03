@@ -464,7 +464,10 @@
   body.rp-keep-view .kanban-fullscreen { animation: none !important; }
   @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   /* Dialogs sit above the mobile dock (60) and navigation drawer (70). */
-  .service-execution-dialog .btn-ghost { flex-shrink: 0; white-space: nowrap; }
+  .service-execution-dialog .btn-ghost { flex-shrink: 0; white-space: nowrap; min-height: 44px; }
+  .service-execution-dialog input:not([type="checkbox"]),
+  .service-execution-dialog select { width: 100%; min-height: 44px; padding: 10px 12px; font-size: 16px; }
+  .service-execution-dialog textarea { width: 100%; min-height: 96px; padding: 10px 12px; font-size: 16px; }
   .service-execution-dialog h3 { min-width: 0; overflow-wrap: anywhere; }
   .service-work-order { color: #10253f; overflow-wrap: anywhere; }
   .service-work-order .wo-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; border-bottom: 2px solid #29a7e1; padding-bottom: 16px; }

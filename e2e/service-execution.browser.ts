@@ -48,6 +48,10 @@ try {
       await page.getByRole("button", { name: "Дата, исполнитель и заказ-наряд" }).click();
       await page.getByRole("dialog", { name: "Выполнение услуги" }).waitFor();
       if (width === 390) {
+        for (const selector of ["#cs-title", "#cs-start", "#cs-end", "#cs-installer"]) {
+          const height = await page.locator(selector).evaluate((el: HTMLElement) => el.getBoundingClientRect().height);
+          assert.ok(height >= 44, `${selector} must be touch-sized, got ${height}px`);
+        }
         await page.locator("#cs-start").fill("2026-10-05T09:00");
         await page.locator("#cs-end").fill("2026-10-05T12:00");
         await page.locator("#cs-installer").selectOption(installer.user_id);
