@@ -484,3 +484,10 @@ Do not silently overwrite an earlier decision. Add a new dated section that name
 - The senior role that distributes jobs within a group is **«Руководитель отдела монтажа»**; it replaces «Руководитель монтажной группы» and «Главный специалист по установке» used in earlier drafts (PR #275–#277).
 - Internal codes stay `INSTALLER` / `installer`; only user-visible text changes. New screens and PRs use these titles from the start.
 - Scope: everything a person sees — CRM screens, the installer app and its demos, seed/provisioning data, client SMS/e-mail and documents. Historical internal engineering notes (`.agents/`, audit and prompt documents) are not rewritten.
+
+## 2026-10-02 — Service execution reuses relational work records
+
+- The Owner requested Project → Services → Work Orders, with independent service dates and specialists. ProjectPosition remains the service, CalendarEvent the dated phase, InstallerJob the assignment and InstallerPayrollAccrual the immutable earned-pay snapshot.
+- The existing CRM document may expose these relational operations as UI projections; this adds no legacy payload fields and does not relax the legacy data freeze.
+- A project's installation is complete only after every service is completed, including previously unscheduled services. Completing the only scheduled phase must not close unfinished services.
+- Legacy orders are not automatically duplicated into relational Projects. Their stable-ID migration remains required; the new UI does not claim that consolidation is complete.

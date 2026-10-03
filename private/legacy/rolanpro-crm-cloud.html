@@ -442,7 +442,7 @@
   .modal-backdrop {
     position: fixed; inset: 0;
     background: rgba(15,23,42,0.55); backdrop-filter: blur(8px);
-    display: flex; align-items: center; justify-content: center; z-index: 50;
+    display: flex; align-items: center; justify-content: center; z-index: 100;
     padding: 1rem;
     animation: fadeIn 0.2s ease;
   }
@@ -463,6 +463,20 @@
   body.rp-keep-view .kanban-card,
   body.rp-keep-view .kanban-fullscreen { animation: none !important; }
   @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  /* Dialogs sit above the mobile dock (60) and navigation drawer (70). */
+  .service-execution-dialog .btn-ghost { flex-shrink: 0; white-space: nowrap; min-height: 44px; }
+  .service-execution-dialog input:not([type="checkbox"]),
+  .service-execution-dialog select { width: 100%; min-height: 44px; padding: 10px 12px; font-size: 16px; }
+  .service-execution-dialog textarea { width: 100%; min-height: 96px; padding: 10px 12px; font-size: 16px; }
+  .service-execution-dialog h3 { min-width: 0; overflow-wrap: anywhere; }
+  .service-work-order { color: #10253f; overflow-wrap: anywhere; }
+  .service-work-order .wo-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; border-bottom: 2px solid #29a7e1; padding-bottom: 16px; }
+  .service-work-order .wo-label { font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+  .service-work-order .wo-number { font-size: 22px; font-weight: 800; }
+  .service-work-order .wo-block { padding: 16px 0; border-bottom: 1px solid #dbe3ec; line-height: 1.6; }
+  .service-work-order .wo-sign { display: flex; flex-wrap: wrap; gap: 32px; padding-top: 40px; }
+  .service-work-order .wo-sign > div { flex: 1 1 140px; }
+  .service-work-order .wo-sign-line { border-top: 1px solid #64748b; margin-bottom: 8px; }
   /* === Timeline === */
   .timeline-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand-blue); flex-shrink: 0; margin-top: 6px; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
   .timeline-dot.done { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.15); }
@@ -17703,14 +17717,116 @@ function canonicalOpeningCard(room, opening, position) {
   </article>`;
 }
 
+let canonicalServiceEvents = [];
+let canonicalExecution = null;
+let canonicalServiceSaving = false;
+
+async function refreshCanonicalServiceEvents() {
+  const response = await fetch('/api/v1/project-service-events', { cache: 'no-store' });
+  if (!response.ok) { canonicalServiceEvents = []; return; }
+  const payload = await response.json();
+  canonicalServiceEvents = payload.data?.items || [];
+}
+function canonicalServiceEventOrder(item) {
+  const jobs = item.installer_jobs || [];
+  const codes = { SOLAR_FILM: 'solar_film', SMART_FILM: 'smart_film', SAFETY_FILM: 'protective_film', DECORATIVE_FILM: 'decorative_film' };
+  return {
+    id: `service_event_${item.calendar_event_id}`, number: item.project?.project_code || item.project?.title || '',
+    serviceType: codes[jobs[0]?.position?.service_type?.service_code] || '',
+    installationAt: item.starts_at,
+    installationDurationMinutes: Math.max(1, (new Date(item.ends_at) - new Date(item.starts_at)) / 60000),
+    installerIds: jobs.flatMap(job => job.installer?.legacy_user_ids || []),
+    managerId: item.project?.manager?.legacy_user_ids?.[0] || null,
+    address: item.project?.address || '', _canonicalClient: item.project?.client,
+    _canonicalServiceEventId: item.calendar_event_id, _canonicalServiceTitle: item.title,
+    _canonicalInstallerNames: [...new Set(jobs.map(job => job.installer?.full_name).filter(Boolean))].join(', '),
+  };
+}
+
+async function openCanonicalServiceSchedule(positionId) {
+  try {
+    const projectId = state.canonicalProjectId;
+    const data = await canonicalProjectRequest(`/api/v1/projects/${projectId}/execution`);
+    canonicalExecution = { projectId, ...data };
+    const position = state.canonicalConstructor?.positions?.find(row => row.position_id === positionId);
+    if (!position) return;
+    const phases = data.phases.filter(phase => phase.installer_jobs.some(job => job.project_position_id === positionId));
+    const title = academyEsc(position.title || position.service_type.name_ru);
+    state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal service-execution-dialog p-5" role="dialog" aria-modal="true" aria-label="Выполнение услуги" style="max-width:40rem"><div class="flex justify-between gap-3"><h3 class="text-xl font-black">${title}</h3><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div>
+      ${phases.map(phase => `<div class="card mt-4"><b>${academyEsc(phase.title)}</b><div class="mt-2">${academyEsc(fmtDateTime(phase.starts_at))} → ${academyEsc(fmtDateTime(phase.ends_at))}</div><div class="mt-2">${academyEsc(phase.installer_jobs.map(job => job.installer.full_name).join(', '))}</div><div class="flex flex-wrap gap-2 mt-3"><button class="btn-ghost" onclick="openCanonicalServiceWorkOrder('${phase.calendar_event_id}')">Заказ-наряд</button>${phase.status === 'completed' ? '<span class="tag bg-emerald-100 text-emerald-800">Завершено</span>' : `<button class="btn-primary" onclick="completeCanonicalServicePhase('${projectId}','${phase.calendar_event_id}')">Завершить услугу</button>`}</div></div>`).join('')}
+      ${phases.length ? '' : `<form class="space-y-3 mt-4" onsubmit="event.preventDefault();saveCanonicalServiceSchedule('${projectId}','${positionId}')"><label class="block">Название задания<input id="cs-title" maxlength="160" required value="${title}"></label><div class="grid grid-cols-1 md:grid-cols-2 gap-3"><label>Начало<input type="datetime-local" id="cs-start" required></label><label>Окончание<input type="datetime-local" id="cs-end" required></label></div><label class="block">Специалист по установке<select id="cs-installer" required><option value="">Выберите исполнителя</option>${data.installers.map(user => `<option value="${user.user_id}">${academyEsc(user.full_name)}</option>`).join('')}</select></label><label class="block">Задача<textarea id="cs-notes" rows="3"></textarea></label><label class="flex gap-2"><input type="checkbox" id="cs-confirmed">Дата согласована с клиентом</label><button type="submit" class="btn-primary w-full" id="cs-save">Назначить услугу</button></form>`}
+    </div></div>`;
+    render();
+  } catch (error) { alert(error?.message || 'Не удалось загрузить выполнение услуги'); }
+}
+async function saveCanonicalServiceSchedule(projectId, positionId) {
+  if (canonicalServiceSaving) return;
+  const start = document.getElementById('cs-start')?.value;
+  const end = document.getElementById('cs-end')?.value;
+  const installer = document.getElementById('cs-installer')?.value;
+  if (!start || !end || !installer || new Date(end) <= new Date(start)) return alert('Укажите исполнителя и окончание позже начала.');
+  canonicalServiceSaving = true;
+  const button = document.getElementById('cs-save');
+  if (button) button.disabled = true;
+  try {
+    await canonicalProjectRequest(`/api/v1/projects/${projectId}/phases`, 'POST', {
+      title: document.getElementById('cs-title').value,
+      starts_at: new Date(start).toISOString(), ends_at: new Date(end).toISOString(),
+      client_confirmed: document.getElementById('cs-confirmed').checked,
+      notes: document.getElementById('cs-notes').value,
+      position_ids: [positionId], assignments: [{ project_position_id: positionId, installer_id: installer }],
+    });
+    await refreshCanonicalServiceEvents();
+    await openCanonicalServiceSchedule(positionId);
+  } catch (error) { alert(error?.message || 'Не удалось назначить услугу'); }
+  finally { canonicalServiceSaving = false; if (button) button.disabled = false; }
+}
+async function completeCanonicalServicePhase(projectId, eventId) {
+  if (canonicalServiceSaving) return;
+  if (!confirm('Подтвердить выполнение услуги? Система начислит оплату назначенному специалисту.')) return;
+  canonicalServiceSaving = true;
+  try {
+    const result = await canonicalProjectRequest(`/api/v1/projects/${projectId}/phases/${eventId}/complete`, 'POST');
+    await refreshCanonicalServiceEvents();
+    state.modal = null;
+    state.canonicalProjectNotice = result.project_completed ? 'Все услуги выполнены' : 'Услуга выполнена; остальные остаются в работе';
+    render();
+  } catch (error) { alert(error?.message || 'Не удалось завершить услугу'); }
+  finally { canonicalServiceSaving = false; }
+}
+function canonicalServiceWorkOrderHtml(item) {
+  const project = item.project || {};
+  return `<div class="work-order pdf-document service-work-order p-5"><div class="wo-head"><div><div class="wo-label">ЗАКАЗ-НАРЯД</div><h1 class="wo-number">${academyEsc(project.project_code || project.title || '')}</h1><div class="wo-service">${academyEsc(item.title)}</div></div><div>${academyEsc(fmtDateTime(item.starts_at))} → ${academyEsc(fmtDateTime(item.ends_at))}</div></div><div class="wo-block"><b>${academyEsc(project.address || '')}</b><div>${academyEsc(project.client?.name || '')} · ${academyEsc(project.client?.phone || '')}</div></div>
+    ${item.notes ? `<div class="wo-block">${academyEsc(item.notes)}</div>` : ''}
+    ${(item.installer_jobs || []).map(job => { const position = job.position || {}; return `<div class="wo-block"><b>${academyEsc(position.title || position.service_type?.name_ru || '')}</b><div>Исполнитель: ${academyEsc(job.installer?.full_name || '')}</div><div>Материал: ${academyEsc([position.film?.brand_name_ru, position.film?.model_name_ru, position.film?.model_code].filter(Boolean).join(' · ') || 'не указан')}</div>${position.notes ? `<div>${academyEsc(position.notes)}</div>` : ''}${(position.measurements || []).map(row => `<div class="wo-window">${academyEsc(row.room_name)} · ${academyEsc(row.window_id || '')} · ${academyEsc(String(row.width || '—'))} × ${academyEsc(String(row.height || '—'))} in · ${academyEsc(String(row.quantity))} шт. · ${academyEsc(String(row.sqft))} sqft</div>`).join('')}</div>`; }).join('')}
+    <div class="wo-sign"><div><div class="wo-sign-line"></div>Подпись клиента</div><div><div class="wo-sign-line"></div>Подпись специалиста</div></div></div>`;
+}
+async function openCanonicalServiceWorkOrder(eventId) {
+  try {
+    const data = await canonicalProjectRequest(`/api/v1/project-service-events/${eventId}`);
+    state.canonicalWorkOrder = data.item;
+    state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal service-execution-dialog" role="dialog" aria-modal="true" aria-label="Заказ-наряд услуги"><div class="measure-head flex flex-wrap justify-between gap-3 p-4"><b>Заказ-наряд услуги</b><div class="flex gap-2"><button class="btn-ghost" onclick="printCanonicalServiceWorkOrder()">Печать</button><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div></div><div>${canonicalServiceWorkOrderHtml(data.item)}</div></div></div>`;
+    render();
+  } catch (error) { alert(error?.message || 'Не удалось открыть заказ-наряд'); }
+}
+function printCanonicalServiceWorkOrder() {
+  if (!state.canonicalWorkOrder) return;
+  const popup = window.open('', '_blank');
+  if (!popup) return alert('Разрешите окно для печати');
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Заказ-наряд</title><style>${workOrderPrintCss()}</style></head><body>${canonicalServiceWorkOrderHtml(state.canonicalWorkOrder)}</body></html>`);
+  popup.document.close(); popup.focus(); popup.print();
+}
+
 function canonicalPositionCard(position, data) {
   const rooms = (data.rooms || []).filter(room => room.project_position_id === position.position_id);
   const spaceTerms = canonicalSpaceTerms(data.site_type);
   const isSolar = position.service_type.service_code === 'SOLAR_FILM';
+  const filmCategory = ({ SOLAR_FILM: 'SOLAR', SMART_FILM: 'SMART', SAFETY_FILM: 'SAFETY', DECORATIVE_FILM: 'DECORATIVE' })[position.service_type.service_code] || '';
   const canManage = ['owner','manager'].includes(currentUser()?.role);
   return `<section class="card border border-slate-200" style="border-radius:6px">
     <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs font-black text-blue-700">УСЛУГА</div><h3 class="text-lg font-black">${academyEsc(position.title || position.service_type.name_ru)}</h3></div>${isSolar ? `<button class="btn-primary" onclick="openCanonicalOpening('${position.position_id}')" ${data.site_type ? '' : 'disabled'}>+ Проём</button>` : ''}</div>
-    <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка по умолчанию</div>${canonicalFilmPickerHtml(`cp-position-${position.position_id}`, position.film_id || '', isSolar ? 'SOLAR' : '', { disabled: !canManage, modelChange: `setCanonicalPositionFilm('${position.position_id}',this.value)` })}</div>
+    <div class="mt-3"><div class="text-xs font-semibold text-slate-500 mb-1">Плёнка по умолчанию</div>${canonicalFilmPickerHtml(`cp-position-${position.position_id}`, position.film_id || '', filmCategory, { disabled: !canManage, modelChange: `setCanonicalPositionFilm('${position.position_id}',this.value)` })}</div>
+    ${canManage ? `<button class="btn-ghost mt-3" onclick="openCanonicalServiceSchedule('${position.position_id}')">Дата, исполнитель и заказ-наряд</button>` : ''}
     ${isSolar ? `<div class="space-y-3 mt-4"><div class="text-xs font-black text-slate-500 uppercase">${academyEsc(spaceTerms.plural)}</div>${rooms.map(room => `<div><div class="font-black mb-2">${academyEsc(room.room_name)}${room.room_number ? ` · ${academyEsc(room.room_number)}` : ''}</div><div class="space-y-2">${room.openings.map(opening => canonicalOpeningCard(room, opening, position)).join('')}</div></div>`).join('') || `<div class="border border-dashed border-slate-300 p-4 text-center text-sm text-gray-500">${academyEsc(spaceTerms.add)}</div>`}</div>` : ''}
   </section>`;
 }
@@ -32418,6 +32534,17 @@ function calItemsInRange(startDate, endDate) {
       if (ev.dt >= startDate && ev.dt <= endDate) out.push(ev);
     });
   });
+  canonicalServiceEvents.forEach(item => {
+    const o = canonicalServiceEventOrder(item);
+    const filter = calendarRoleFilterValue();
+    const assignee = calendarAssigneeFilterValue();
+    if (!['all','mine','installations'].includes(filter)) return;
+    if (filter === 'mine' && o.managerId !== currentUser()?.id && !(o.installerIds || []).includes(currentUser()?.id)) return;
+    if (assignee !== 'all' && ![o.managerId, ...o.installerIds].includes(assignee)) return;
+    calendarEventsForOrder(o, 'install').forEach(ev => {
+      if (ev.dt >= startDate && ev.dt <= endDate) out.push({ ...ev, note: item.title });
+    });
+  });
   const order = { complaint: 0, install: 1, measure: 2, consultation: 3 };
   return out.sort((a,b) => (a.dt - b.dt) || ((order[a.kind] ?? 9) - (order[b.kind] ?? 9)));
 }
@@ -34056,6 +34183,7 @@ function calendarClientForOrder(order) {
   return order?._canonicalClient || getClient(order?.clientId);
 }
 function calendarOpenAction(order) {
+  if (order?._canonicalServiceEventId) return `openCanonicalServiceWorkOrder('${order._canonicalServiceEventId}')`;
   return order?._canonicalConsultationId
     ? `openCanonicalConsultationCard('${order._canonicalConsultationId}')`
     : `openOrder('${order.id}')`;
@@ -34070,6 +34198,7 @@ function openCanonicalConsultationCard(consultationId) {
 }
 function calendarEventPeople(ev) {
   const o = ev.o;
+  if (o._canonicalServiceEventId) return o._canonicalInstallerNames || 'Специалист не назначен';
   if (o._canonicalConsultationId) return o._canonicalConsultantName || o._canonicalManagerName || 'Ответственный не назначен';
   if (ev.kind === 'measure') return getUser(o.measurerId)?.name || 'Замерщик не назначен';
   if (ev.kind === 'install') return (o.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', ') || 'Специалисты по установке не назначены';
@@ -34092,7 +34221,7 @@ function renderCalendarEventCard(ev, opts = {}) {
   const service = calendarServicePalette(o);
   const area = orderActualAreaSqft(o);
   const compact = !!opts.compact;
-  const showMoney = opts.showMoney !== false && currentUser()?.role !== 'measurer' && currentUser()?.role !== 'installer';
+  const showMoney = !o._canonicalServiceEventId && opts.showMoney !== false && currentUser()?.role !== 'measurer' && currentUser()?.role !== 'installer';
   const debt = orderDebt(o);
   return `
     <button class="calendar-event-card ${compact ? 'compact' : ''}" style="${calendarEventStyle(ev)}" onclick="${calendarOpenAction(o)}" title="${academyEsc(ev.info.title)} · ${academyEsc(o.number)}">
@@ -34101,6 +34230,7 @@ function renderCalendarEventCard(ev, opts = {}) {
         <span class="calendar-event-time">${calendarTimeLabel(ev.dt)}</span>
       </div>
       <div class="calendar-event-title">${academyEsc(o.number)} · ${academyEsc(c?.name || 'Без клиента')}</div>
+      ${o._canonicalServiceTitle ? `<div class="calendar-event-meta">${academyEsc(o._canonicalServiceTitle)}</div>` : ''}
       <div class="calendar-event-meta">${academyEsc(calendarEventPeople(ev))}</div>
       ${compact ? '' : `<div class="calendar-event-meta">${academyEsc(orderAddress(o, c) || 'адрес не указан')}</div>`}
       <div class="flex items-center gap-1 flex-wrap">
@@ -36356,6 +36486,7 @@ async function cloudBoot() {
     } else {
       canonicalLeads = [];
     }
+    await refreshCanonicalServiceEvents().catch(() => { canonicalServiceEvents = []; });
     cloudCurrentUser = meResult.data.user;
     cloudAllowedLegacyIds = Array.isArray(cloudCurrentUser.legacy_user_ids) ? cloudCurrentUser.legacy_user_ids : [];
     cloudRevision = stateResult.data.revision;

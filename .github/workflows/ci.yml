@@ -127,6 +127,28 @@ jobs:
       - name: End-to-end lifecycle tests
         run: npm run test:e2e
 
+      - name: Read-only legacy project migration inventory
+        run: node --import tsx scripts/audit-legacy-project-migration.ts > /tmp/legacy-project-inventory.json
+
+      - name: Install service UI browser tooling
+        run: |
+          npm install --prefix /tmp/rolanpro-browser --no-audit --no-fund playwright@1.56.1
+          node /tmp/rolanpro-browser/node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Service execution phone and desktop browser flow
+        env:
+          E2E_PLAYWRIGHT_MODULE: /tmp/rolanpro-browser/node_modules/playwright
+        run: node --import tsx e2e/service-execution.browser.ts
+
+      - name: Service execution screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-execution-screenshots
+          path: test-results/service-execution/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Application log on failure
         if: failure()
         run: tail -200 next.log || true

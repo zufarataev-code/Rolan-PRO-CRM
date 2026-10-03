@@ -213,7 +213,7 @@ export function ProjectPhasesManager({ projectId, projectStatusLabel, crews, ins
   }
 
   async function completePhase(phase: Phase) {
-    if (!window.confirm(`Завершить «${phase.title}»? Если это последний этап, весь проект будет закрыт.`)) {
+    if (!window.confirm(`Завершить «${phase.title}»? Проект завершится, когда выполнены все его услуги и этапы.`)) {
       return;
     }
 
@@ -245,7 +245,7 @@ export function ProjectPhasesManager({ projectId, projectStatusLabel, crews, ins
         <div>
           <h3 className="surface-title">Этапы монтажа</h3>
           <p className="surface-subtitle">
-            Один проект может иметь несколько выездов: разные услуги, даты, время и исполнители. Последний завершённый этап закрывает проект.
+            Один проект может иметь несколько выездов: разные услуги, даты, время и исполнители. Проект завершается после выполнения всех услуг.
           </p>
         </div>
         <button

@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 
 import { PROJECT_RUNTIME_MANAGER_ROLES } from "@/features/projects/api";
-import { createProjectPhase, listProjectPhases, type CreateProjectPhaseInput } from "@/features/projects/phases";
+import { createProjectPhase, listProjectPhases } from "@/features/projects/phases";
+import { isProjectConstructorUuid } from "@/features/projects/constructor-request";
+import { parseProjectPhaseInput } from "@/features/projects/phases-request";
 import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 
@@ -16,6 +18,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 
   const { projectId } = await context.params;
+  if (!isProjectConstructorUuid(projectId)) return apiError(400, "invalid_project", "A valid project ID is required.");
   const items = await listProjectPhases(auth.session, projectId);
   if (!items) return apiError(404, "not_found", "Project was not found.");
 
@@ -28,23 +31,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Project phase creation denied.");
   }
 
-  const body = (await request.json().catch(() => null)) as Partial<CreateProjectPhaseInput> | null;
-  if (!body?.title || !body.starts_at || !body.ends_at || !Array.isArray(body.position_ids)) {
-    return apiError(400, "invalid_payload", "title, starts_at, ends_at and position_ids are required.");
-  }
-
+  const input = parseProjectPhaseInput(await request.json().catch(() => null));
+  if (!input) return apiError(400, "invalid_payload", "Укажите услугу, исполнителя, начало и окончание работ.");
   const { projectId } = await context.params;
-  const result = await createProjectPhase(auth.session, projectId, {
-    title: body.title,
-    starts_at: body.starts_at,
-    ends_at: body.ends_at,
-    client_confirmed: Boolean(body.client_confirmed),
-    client_confirmation_note: body.client_confirmation_note ?? null,
-    crew_id: body.crew_id ?? null,
-    position_ids: body.position_ids,
-    assignments: Array.isArray(body.assignments) ? body.assignments : [],
-    notes: body.notes ?? null,
-  });
+  if (!isProjectConstructorUuid(projectId)) return apiError(400, "invalid_project", "A valid project ID is required.");
+  const result = await createProjectPhase(auth.session, projectId, input);
 
   if (!result) return apiError(404, "not_found", "Project was not found.");
 
