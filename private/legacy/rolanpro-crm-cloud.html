@@ -442,7 +442,7 @@
   .modal-backdrop {
     position: fixed; inset: 0;
     background: rgba(15,23,42,0.55); backdrop-filter: blur(8px);
-    display: flex; align-items: center; justify-content: center; z-index: 50;
+    display: flex; align-items: center; justify-content: center; z-index: 100;
     padding: 1rem;
     animation: fadeIn 0.2s ease;
   }
@@ -463,6 +463,17 @@
   body.rp-keep-view .kanban-card,
   body.rp-keep-view .kanban-fullscreen { animation: none !important; }
   @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  /* Dialogs sit above the mobile dock (60) and navigation drawer (70). */
+  .service-execution-dialog .btn-ghost { flex-shrink: 0; white-space: nowrap; }
+  .service-execution-dialog h3 { min-width: 0; overflow-wrap: anywhere; }
+  .service-work-order { color: #10253f; overflow-wrap: anywhere; }
+  .service-work-order .wo-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; border-bottom: 2px solid #29a7e1; padding-bottom: 16px; }
+  .service-work-order .wo-label { font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+  .service-work-order .wo-number { font-size: 22px; font-weight: 800; }
+  .service-work-order .wo-block { padding: 16px 0; border-bottom: 1px solid #dbe3ec; line-height: 1.6; }
+  .service-work-order .wo-sign { display: flex; flex-wrap: wrap; gap: 32px; padding-top: 40px; }
+  .service-work-order .wo-sign > div { flex: 1 1 140px; }
+  .service-work-order .wo-sign-line { border-top: 1px solid #64748b; margin-bottom: 8px; }
   /* === Timeline === */
   .timeline-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand-blue); flex-shrink: 0; margin-top: 6px; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
   .timeline-dot.done { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.15); }
@@ -17738,7 +17749,7 @@ async function openCanonicalServiceSchedule(positionId) {
     if (!position) return;
     const phases = data.phases.filter(phase => phase.installer_jobs.some(job => job.project_position_id === positionId));
     const title = academyEsc(position.title || position.service_type.name_ru);
-    state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-5" role="dialog" aria-modal="true" aria-label="Выполнение услуги" style="max-width:40rem"><div class="flex justify-between gap-3"><h3 class="text-xl font-black">${title}</h3><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div>
+    state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal service-execution-dialog p-5" role="dialog" aria-modal="true" aria-label="Выполнение услуги" style="max-width:40rem"><div class="flex justify-between gap-3"><h3 class="text-xl font-black">${title}</h3><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div>
       ${phases.map(phase => `<div class="card mt-4"><b>${academyEsc(phase.title)}</b><div class="mt-2">${academyEsc(fmtDateTime(phase.starts_at))} → ${academyEsc(fmtDateTime(phase.ends_at))}</div><div class="mt-2">${academyEsc(phase.installer_jobs.map(job => job.installer.full_name).join(', '))}</div><div class="flex flex-wrap gap-2 mt-3"><button class="btn-ghost" onclick="openCanonicalServiceWorkOrder('${phase.calendar_event_id}')">Заказ-наряд</button>${phase.status === 'completed' ? '<span class="tag bg-emerald-100 text-emerald-800">Завершено</span>' : `<button class="btn-primary" onclick="completeCanonicalServicePhase('${projectId}','${phase.calendar_event_id}')">Завершить услугу</button>`}</div></div>`).join('')}
       ${phases.length ? '' : `<form class="space-y-3 mt-4" onsubmit="event.preventDefault();saveCanonicalServiceSchedule('${projectId}','${positionId}')"><label class="block">Название задания<input id="cs-title" maxlength="160" required value="${title}"></label><div class="grid grid-cols-1 md:grid-cols-2 gap-3"><label>Начало<input type="datetime-local" id="cs-start" required></label><label>Окончание<input type="datetime-local" id="cs-end" required></label></div><label class="block">Специалист по установке<select id="cs-installer" required><option value="">Выберите исполнителя</option>${data.installers.map(user => `<option value="${user.user_id}">${academyEsc(user.full_name)}</option>`).join('')}</select></label><label class="block">Задача<textarea id="cs-notes" rows="3"></textarea></label><label class="flex gap-2"><input type="checkbox" id="cs-confirmed">Дата согласована с клиентом</label><button type="submit" class="btn-primary w-full" id="cs-save">Назначить услугу</button></form>`}
     </div></div>`;
@@ -17782,7 +17793,7 @@ async function completeCanonicalServicePhase(projectId, eventId) {
 }
 function canonicalServiceWorkOrderHtml(item) {
   const project = item.project || {};
-  return `<div class="work-order pdf-document p-5"><div class="wo-head"><div><div class="wo-label">ЗАКАЗ-НАРЯД</div><h1 class="wo-number">${academyEsc(project.project_code || project.title || '')}</h1><div class="wo-service">${academyEsc(item.title)}</div></div><div>${academyEsc(fmtDateTime(item.starts_at))} → ${academyEsc(fmtDateTime(item.ends_at))}</div></div><div class="wo-block"><b>${academyEsc(project.address || '')}</b><div>${academyEsc(project.client?.name || '')} · ${academyEsc(project.client?.phone || '')}</div></div>
+  return `<div class="work-order pdf-document service-work-order p-5"><div class="wo-head"><div><div class="wo-label">ЗАКАЗ-НАРЯД</div><h1 class="wo-number">${academyEsc(project.project_code || project.title || '')}</h1><div class="wo-service">${academyEsc(item.title)}</div></div><div>${academyEsc(fmtDateTime(item.starts_at))} → ${academyEsc(fmtDateTime(item.ends_at))}</div></div><div class="wo-block"><b>${academyEsc(project.address || '')}</b><div>${academyEsc(project.client?.name || '')} · ${academyEsc(project.client?.phone || '')}</div></div>
     ${item.notes ? `<div class="wo-block">${academyEsc(item.notes)}</div>` : ''}
     ${(item.installer_jobs || []).map(job => { const position = job.position || {}; return `<div class="wo-block"><b>${academyEsc(position.title || position.service_type?.name_ru || '')}</b><div>Исполнитель: ${academyEsc(job.installer?.full_name || '')}</div><div>Материал: ${academyEsc([position.film?.brand_name_ru, position.film?.model_name_ru, position.film?.model_code].filter(Boolean).join(' · ') || 'не указан')}</div>${position.notes ? `<div>${academyEsc(position.notes)}</div>` : ''}${(position.measurements || []).map(row => `<div class="wo-window">${academyEsc(row.room_name)} · ${academyEsc(row.window_id || '')} · ${academyEsc(String(row.width || '—'))} × ${academyEsc(String(row.height || '—'))} in · ${academyEsc(String(row.quantity))} шт. · ${academyEsc(String(row.sqft))} sqft</div>`).join('')}</div>`; }).join('')}
     <div class="wo-sign"><div><div class="wo-sign-line"></div>Подпись клиента</div><div><div class="wo-sign-line"></div>Подпись специалиста</div></div></div>`;
@@ -17791,7 +17802,7 @@ async function openCanonicalServiceWorkOrder(eventId) {
   try {
     const data = await canonicalProjectRequest(`/api/v1/project-service-events/${eventId}`);
     state.canonicalWorkOrder = data.item;
-    state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content measure-modal"><div class="measure-head flex justify-between gap-3 p-4"><b>Заказ-наряд услуги</b><div class="flex gap-2"><button class="btn-ghost" onclick="printCanonicalServiceWorkOrder()">Печать</button><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div></div><div style="overflow:auto;max-height:80vh">${canonicalServiceWorkOrderHtml(data.item)}</div></div></div>`;
+    state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal service-execution-dialog" role="dialog" aria-modal="true" aria-label="Заказ-наряд услуги"><div class="measure-head flex flex-wrap justify-between gap-3 p-4"><b>Заказ-наряд услуги</b><div class="flex gap-2"><button class="btn-ghost" onclick="printCanonicalServiceWorkOrder()">Печать</button><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div></div><div>${canonicalServiceWorkOrderHtml(data.item)}</div></div></div>`;
     render();
   } catch (error) { alert(error?.message || 'Не удалось открыть заказ-наряд'); }
 }

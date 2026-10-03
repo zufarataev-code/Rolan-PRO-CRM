@@ -127,6 +127,9 @@ jobs:
       - name: End-to-end lifecycle tests
         run: npm run test:e2e
 
+      - name: Read-only legacy project migration inventory
+        run: node --import tsx scripts/audit-legacy-project-migration.ts > /tmp/legacy-project-inventory.json
+
       - name: Install service UI browser tooling
         run: |
           npm install --prefix /tmp/rolanpro-browser --no-audit --no-fund playwright@1.56.1
