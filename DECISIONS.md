@@ -492,3 +492,12 @@ Do not silently overwrite an earlier decision. Add a new dated section that name
 - The senior role that distributes jobs within a group is **«Руководитель отдела монтажа»**; it replaces «Руководитель монтажной группы» and «Главный специалист по установке» used in earlier drafts (PR #275–#277).
 - Internal codes stay `INSTALLER` / `installer`; only user-visible text changes. New screens and PRs use these titles from the start.
 - Scope: everything a person sees — CRM screens, the installer app and its demos, seed/provisioning data, client SMS/e-mail and documents. Historical internal engineering notes (`.agents/`, audit and prompt documents) are not rewritten.
+
+## 2026-10-02 — Services inside directions: direction → service → film (Owner)
+
+Owner decision in chat on 2026-10-02: in a project the choice is direction → service → film, e.g. «Солнцезащитная → Solar Control Magnetronic 05 / Spectral 30 → плёнка», «Защитная → Safety 14 / Anti-graffiti 30 → плёнка». Amends item 1 of "2026-09-29 — CRM core consolidation" like the earlier exceptions: projects, films and the warehouse are in the legacy payload today.
+
+- A service belongs to one direction and carries the name the client sees in the proposal, a client price per sq ft and a specialist rate per sq ft (empty → the direction rate). Stored in `settings.serviceOfferings`; the owner edits them in «Услуги и цены → Услуги по направлениям», managers see them.
+- Warehouse films are linked to a service (`catalog.serviceOfferingId`, one service per film). A service with linked films offers only those films in a project; without linked films it offers all films of the direction.
+- Project service lines store `offeringId`: the line label (proposal) is the service name, the price per sq ft defaults from the service, the specialist rate comes from the service, material stays the purchase cost of the chosen film.
+- Migration: moves with the catalog/warehouse stage to PostgreSQL (service → film relation), next to `service_types`.

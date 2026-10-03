@@ -796,3 +796,10 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Verification: full unit suite and `tsc` green; `roll-receipt.test.ts` (code sequence, $/sq ft, reuse vs add, required fields); local CRM: $650 × 30 m × 1.52 m → $1.32 / sq ft, code RP-2610-0001, new film added, project cost $1.32 / sq ft, table shows code and price. Production build: CI job «Test, typecheck, and build».
 - Next action: Codex 👍, Owner «да»; merge after #287.
 
+
+## 2026-10-02 handoff — services inside directions (direction → service → film)
+
+- Owner request: «у нас есть направление солнцезащитная плёнка, и когда мы проваливаемся в продукт, мы уже выбираем саму услугу: Solar Control Magnetronic 05, Spectral 30 … защитная: Safety 14, Anti-graffiti 30 — плёнка такая-то». Decision recorded in DECISIONS.md (2026-10-02).
+- Legacy block «УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ» before `projectQuickLineCatalog`: `settings.serviceOfferings` with four starter services (fixed ids, prices empty), `serviceOfferingsFor`, `projectQuickLineFilms`, `projectQuickLineLabel`, `serviceOfferingInstallerRate`, owner-only `addServiceOffering` / `updateServiceOffering` / `toggleServiceOfferingFilm`, and `renderServiceOfferingsSection` in «Услуги и цены».
+- Project service lines: a «Услуга» select under the direction; choosing it sets the label (proposal), the price per sq ft when the line has no price, and narrows the films; a film linked to a service fills the service; a manual or new warehouse film written for the line is linked to its service. `installerRateForQuickLine` and the reference payout use the service rate first.
+- Verification: full unit suite and `tsc` green; `service-offerings.test.ts`. Local CRM: «Услуги по направлениям» shows the starters; Magnetronic 05 at $12 / $3 → a 500 sq ft line gets the service name, $6 000 and $1 500 to the specialist; the film list says «Нет плёнки этой услуги на складе» when the linked film has no stock.
