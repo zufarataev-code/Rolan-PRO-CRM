@@ -1587,3 +1587,100 @@ model ZadarmaCall {
   @@index([started_at])
   @@map("zadarma_calls")
 }
+
+/// Plaid API keys entered by the owner in the CRM. The secret is encrypted.
+model PlaidSettings {
+  settings_id      String   @id @default("primary") @db.VarChar(20)
+  client_id        String   @db.VarChar(120)
+  secret_encrypted String   @db.Text
+  environment      String   @default("sandbox") @db.VarChar(20)
+  updated_by       String?  @db.Uuid
+  updated_at       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("plaid_settings")
+}
+
+/// One bank login connected through Plaid (a Plaid "Item"); may hold several accounts.
+model BankConnection {
+  connection_id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  plaid_item_id          String        @unique @db.VarChar(120)
+  environment            String        @db.VarChar(20)
+  institution_id         String?       @db.VarChar(60)
+  institution_name       String?       @db.VarChar(160)
+  access_token_encrypted String        @db.Text
+  transactions_cursor    String?       @db.Text
+  status                 String        @default("active") @db.VarChar(30)
+  error_code             String?       @db.VarChar(80)
+  last_synced_at         DateTime?     @db.Timestamptz(6)
+  created_by             String?       @db.Uuid
+  created_at             DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime      @updatedAt @db.Timestamptz(6)
+  accounts               BankAccount[]
+
+  @@map("bank_connections")
+}
+
+/// A bank account or card inside a connection. Only the last digits are stored.
+model BankAccount {
+  account_id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connection_id      String            @db.Uuid
+  plaid_account_id   String            @unique @db.VarChar(120)
+  name               String            @db.VarChar(160)
+  official_name      String?           @db.VarChar(200)
+  mask               String?           @db.VarChar(10)
+  type               String            @db.VarChar(30)
+  subtype            String?           @db.VarChar(40)
+  current_balance    Decimal?          @db.Decimal(14, 2)
+  available_balance  Decimal?          @db.Decimal(14, 2)
+  credit_limit       Decimal?          @db.Decimal(14, 2)
+  iso_currency       String?           @db.VarChar(3)
+  balance_updated_at DateTime?         @db.Timestamptz(6)
+  created_at         DateTime          @default(now()) @db.Timestamptz(6)
+  connection         BankConnection    @relation(fields: [connection_id], references: [connection_id], onDelete: Cascade)
+  transactions       BankTransaction[]
+
+  @@index([connection_id])
+  @@map("bank_accounts")
+}
+
+/// A bank/card operation. Plaid sign: a positive amount is money going out.
+model BankTransaction {
+  transaction_id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  plaid_transaction_id  String      @unique @db.VarChar(120)
+  account_id            String      @db.Uuid
+  date                  DateTime    @db.Date
+  authorized_date       DateTime?   @db.Date
+  name                  String      @db.VarChar(300)
+  merchant_name         String?     @db.VarChar(200)
+  amount                Decimal     @db.Decimal(14, 2)
+  iso_currency          String?     @db.VarChar(3)
+  pending               Boolean     @default(false)
+  plaid_category        String?     @db.VarChar(80)
+  plaid_category_detail String?     @db.VarChar(120)
+  category_code         String?     @db.VarChar(40)
+  review_status         String      @default("needs_review") @db.VarChar(20)
+  rule_id               String?     @db.Uuid
+  note                  String?     @db.Text
+  removed_at            DateTime?   @db.Timestamptz(6)
+  created_at            DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime    @updatedAt @db.Timestamptz(6)
+  account               BankAccount @relation(fields: [account_id], references: [account_id], onDelete: Cascade)
+
+  @@index([account_id, date])
+  @@index([review_status])
+  @@map("bank_transactions")
+}
+
+/// «Запомнить»: a merchant/name pattern the owner assigned to a category once.
+model BankCategoryRule {
+  rule_id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pattern       String   @db.VarChar(200)
+  /// "in" (money in) or "out" (money out): Stripe fees and payouts share a name.
+  direction     String   @db.VarChar(3)
+  category_code String   @db.VarChar(40)
+  created_by    String?  @db.Uuid
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([pattern, direction])
+  @@map("bank_category_rules")
+}
