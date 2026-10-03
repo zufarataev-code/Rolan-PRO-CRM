@@ -48,3 +48,17 @@ test("an empty new order is preserved as draft; completed or imported history ca
   assert.equal(report.items[0].scope_basis, "empty_draft");
   assert.ok(report.items[1].blockers.includes("missing_service_scope"));
 });
+
+test("new orders with unrecognized quick scope cannot silently become empty drafts", () => {
+  const report = auditLegacyProjectMigration({ clients: [{ id: "client" }], orders: [{ id: "order", status: "new", clientId: "client", managerId: "manager", extraServices: [{ quickProjectLine: true, qty: 10 }] }] }, 1, { users: [{ user_id: "user", legacy_user_ids: ["manager"] }], proposals: [] });
+  assert.equal(report.items[0].disposition, "blocked");
+  assert.ok(report.items[0].blockers.includes("missing_service_scope"));
+});
+
+test("scheduled consultations without measurements retain their source lifecycle", () => {
+  const report = auditLegacyProjectMigration({ clients: [{ id: "client" }], orders: [{ id: "order", status: "consultation_scheduled", clientId: "client", managerId: "manager" }] }, 1, { users: [{ user_id: "user", legacy_user_ids: ["manager"] }], proposals: [] });
+  assert.equal(report.items[0].disposition, "preserve_pre_measurement");
+  assert.equal(report.items[0].source_status, "consultation_scheduled");
+  assert.equal(report.items[0].scope_basis, "awaiting_measurements");
+  assert.deepEqual(report.items[0].blockers, []);
+});
