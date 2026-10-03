@@ -11,9 +11,9 @@ const seed = readFileSync(path.join(root, "prisma/seed.ts"), "utf8");
 test("one service row shows the customer guide price and installer rate", () => {
   assert.match(legacy, /Справочник расценок на работу/);
   assert.match(legacy, />Клиенту</);
-  assert.match(legacy, />Монтажнику</);
-  assert.match(legacy, /Ориентир клиенту, \$/);
-  assert.match(legacy, /Ставка монтажника автоматически идёт в payroll и экономику проекта/);
+  assert.match(legacy, />Специалисту по установке</);
+  assert.match(legacy, /Резервная цена клиенту, \$/);
+  assert.match(legacy, /Ставка специалиста автоматически идёт в payroll и экономику проекта/);
 });
 
 test("the owner opens the work-rate directory from Settings, not the primary sidebar", () => {

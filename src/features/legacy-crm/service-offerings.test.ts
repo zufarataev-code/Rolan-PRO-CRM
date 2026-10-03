@@ -97,8 +97,8 @@ test("the project form, pay and «Услуги и цены» use the services", 
   assert.match(html, /\} else if \(field === 'offeringId'\) \{/);
   assert.match(html, /onchange="projectEstimateUpdateQuickLine\('\$\{o\.id\}','\$\{line\.id\}','offeringId',this\.value\)"/);
   assert.match(html, /const catalog = projectQuickLineFilms\(line\);/);
-  assert.match(html, /function installerRateForQuickLine\(user, line\) \{\n[^\n]*\n {2}const offeringRate = serviceOfferingInstallerRate\(line\);\n {2}if \(offeringRate > 0\) return offeringRate;/);
-  assert.match(html, /\(serviceOfferingInstallerRate\(line\) \|\| filmRate\(filmName\)\)/);
+  assert.match(html, /function installerRateForQuickLine\(user, line, o = null\) \{\n[^\n]*\n {2}const offeringRate = serviceOfferingInstallerRate\(line\);\n {2}if \(offeringRate > 0\) return offeringRate;/);
+  assert.match(html, /\(serviceOfferingInstallerRate\(line\) \|\| filmRate\(filmName, o\)\)/);
   assert.match(html, /\$\{renderServiceOfferingsSection\(\)\}/);
   assert.match(html, /title_en: line\.label \|\|/, "the proposal shows the line label = service name");
 });
