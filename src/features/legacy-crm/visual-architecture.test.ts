@@ -81,3 +81,14 @@ test("precision workbench remains usable on phone and tablet", () => {
   assert.match(source, /@media \(max-width: 640px\) \{[\s\S]*?\.pw-action-row \{ grid-template-columns: 4px minmax\(0, 1fr\)/);
   assert.match(source, /padding: \.72rem \.7rem calc\(5\.6rem \+ env\(safe-area-inset-bottom\)\)/);
 });
+
+test("precision workbench checks the correct assignee for measurement and installation", () => {
+  assert.match(
+    source,
+    /o\.status === 'measurement_scheduled' && !o\.measurerId/,
+  );
+  assert.match(
+    source,
+    /o\.status === 'installation_scheduled' && !\(o\.installerIds \|\| \[\]\)\.length/,
+  );
+});
