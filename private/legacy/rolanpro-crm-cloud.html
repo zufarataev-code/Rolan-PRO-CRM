@@ -386,6 +386,221 @@
     background:
       linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%);
   }
+  /* === Precision Workbench: approved operating shell === */
+  .app-shell {
+    grid-template-columns: 232px minmax(0, 1fr);
+    background: #f3f6fa;
+  }
+  .app-shell.sidebar-collapsed { grid-template-columns: 72px minmax(0, 1fr); }
+  .app-sidebar {
+    background: #111c31;
+    border-right-color: rgba(255,255,255,.07);
+    box-shadow: none;
+  }
+  .sidebar-brand { min-height: 68px; border-bottom-color: rgba(255,255,255,.08); }
+  .sidebar-logo-panel {
+    height: 40px;
+    border: 0;
+    border-radius: 9px;
+    box-shadow: none;
+  }
+  .app-sidebar .nav-item {
+    min-height: 40px;
+    margin: 1px 0;
+    border-radius: 8px;
+    color: #aebbd0;
+    font-size: .86rem;
+  }
+  .app-sidebar .nav-item:hover { background: rgba(255,255,255,.055); color: #f8fafc; }
+  .app-sidebar .nav-item.active {
+    background: #233b65;
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(109,164,255,.22);
+  }
+  .app-sidebar .nav-item.active::before {
+    left: -12px;
+    width: 3px;
+    height: 22px;
+    background: #68a2ff;
+  }
+  .nav-icon { font-size: 1rem; color: #c5d0e0; }
+  .app-topbar {
+    min-height: 68px;
+    padding: .72rem 1.25rem;
+    background: rgba(255,255,255,.97);
+    border-bottom-color: #dfe6ef;
+    box-shadow: none;
+  }
+  .topbar-title h1 { font-size: 1.16rem; letter-spacing: -.015em; }
+  .topbar-eyebrow { color: #7b8799; letter-spacing: .11em; }
+  .topbar-search input { min-height: 40px; border-radius: 9px; background: #f5f7fa; }
+  .app-content {
+    padding: 1.15rem 1.3rem 1.6rem;
+    background: #f3f6fa;
+  }
+  .pw-today { max-width: 1600px; margin: 0 auto; }
+  .pw-today-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: .85rem;
+  }
+  .pw-today-kicker {
+    color: #55719c;
+    font-size: .68rem;
+    font-weight: 900;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .pw-today-head h2 {
+    margin-top: .22rem;
+    color: #111c31;
+    font-size: clamp(1.35rem, 2vw, 1.85rem);
+    font-weight: 900;
+    letter-spacing: -.035em;
+  }
+  .pw-today-head p { margin-top: .15rem; color: #718096; font-size: .82rem; }
+  .pw-funnel {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(104px, 1fr));
+    overflow-x: auto;
+    margin-bottom: .9rem;
+    border: 1px solid #dfe6ef;
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15,23,42,.025);
+  }
+  .pw-funnel-step {
+    position: relative;
+    min-width: 104px;
+    padding: .72rem .75rem .66rem;
+    border-right: 1px solid #e6ebf2;
+    cursor: pointer;
+  }
+  .pw-funnel-step:last-child { border-right: 0; }
+  .pw-funnel-step::after {
+    content: '';
+    position: absolute;
+    left: .75rem;
+    right: .75rem;
+    bottom: 0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: var(--stage-color, #477ee8);
+    opacity: .75;
+  }
+  .pw-funnel-step span { display: block; color: #718096; font-size: .65rem; font-weight: 800; white-space: nowrap; }
+  .pw-funnel-step strong { display: block; margin-top: .1rem; color: #17233a; font-size: 1.05rem; }
+  .pw-workgrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+    gap: .9rem;
+    align-items: start;
+  }
+  .pw-panel {
+    min-width: 0;
+    border: 1px solid #dfe6ef;
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15,23,42,.025);
+    overflow: hidden;
+  }
+  .pw-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    min-height: 50px;
+    padding: .7rem .85rem;
+    border-bottom: 1px solid #e6ebf2;
+  }
+  .pw-panel-head h3 { color: #17233a; font-size: .88rem; font-weight: 900; }
+  .pw-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 .42rem;
+    border-radius: 999px;
+    background: #eef4ff;
+    color: #285fbf;
+    font-size: .7rem;
+    font-weight: 900;
+  }
+  .pw-action-list { display: grid; }
+  .pw-action-row {
+    display: grid;
+    grid-template-columns: 5px minmax(0, 1fr) auto;
+    gap: .75rem;
+    align-items: center;
+    min-height: 74px;
+    padding: .68rem .82rem .68rem 0;
+    border-bottom: 1px solid #edf1f6;
+    cursor: pointer;
+    transition: background .14s ease;
+  }
+  .pw-action-row:last-child { border-bottom: 0; }
+  .pw-action-row:hover { background: #f8faff; }
+  .pw-action-accent { align-self: stretch; border-radius: 0 3px 3px 0; background: var(--action-color, #477ee8); }
+  .pw-action-main { min-width: 0; }
+  .pw-action-top { display: flex; align-items: center; gap: .42rem; min-width: 0; }
+  .pw-action-top strong { color: #17233a; font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pw-action-number { color: #718096; font-size: .68rem; font-weight: 800; white-space: nowrap; }
+  .pw-action-reason { margin-top: .16rem; color: #36445b; font-size: .78rem; font-weight: 700; }
+  .pw-action-meta { margin-top: .14rem; color: #7b8799; font-size: .69rem; overflow-wrap: anywhere; }
+  .pw-action-next { min-width: 130px; text-align: right; }
+  .pw-action-next span { display: block; color: #8a96a8; font-size: .61rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+  .pw-action-next strong { display: block; margin-top: .12rem; color: #285fbf; font-size: .74rem; }
+  .pw-empty { padding: 2.5rem 1rem; color: #7b8799; font-size: .82rem; text-align: center; }
+  .pw-side-stack { display: grid; gap: .9rem; }
+  .pw-exception-list { padding: .2rem .78rem .45rem; }
+  .pw-exception {
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    gap: .55rem;
+    align-items: center;
+    padding: .62rem 0;
+    border-bottom: 1px solid #edf1f6;
+    cursor: pointer;
+  }
+  .pw-exception:last-child { border-bottom: 0; }
+  .pw-exception-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--exception-color, #ef4444); }
+  .pw-exception strong { display: block; color: #27364e; font-size: .75rem; }
+  .pw-exception span { display: block; margin-top: .08rem; color: #7b8799; font-size: .67rem; }
+  .pw-exception b { color: #17233a; font-size: .72rem; white-space: nowrap; }
+  .pw-live-list { padding: .25rem .78rem .55rem; }
+  .pw-live-item { padding: .6rem 0; border-bottom: 1px solid #edf1f6; cursor: pointer; }
+  .pw-live-item:last-child { border-bottom: 0; }
+  .pw-live-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+  .pw-live-top strong { color: #27364e; font-size: .75rem; }
+  .pw-live-top span { color: #55719c; font-size: .66rem; font-weight: 800; }
+  .pw-live-track { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin-top: .42rem; }
+  .pw-live-track i { height: 3px; border-radius: 3px; background: #dfe6ef; }
+  .pw-live-track i.done { background: #4381e6; }
+  .pw-live-meta { margin-top: .35rem; color: #7b8799; font-size: .66rem; }
+  @media (max-width: 1100px) {
+    .pw-workgrid { grid-template-columns: minmax(0, 1fr) 290px; }
+    .pw-action-next { min-width: 112px; }
+  }
+  @media (max-width: 840px) {
+    .pw-today-head { align-items: flex-start; }
+    .pw-workgrid { grid-template-columns: 1fr; }
+    .pw-side-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    .app-content { padding: .72rem .7rem calc(5.6rem + env(safe-area-inset-bottom)); }
+    .pw-today-head { display: grid; }
+    .pw-today-head .btn-primary { width: 100%; min-height: 44px; }
+    .pw-funnel { margin-left: -.7rem; margin-right: -.7rem; border-left: 0; border-right: 0; border-radius: 0; }
+    .pw-workgrid { gap: .7rem; }
+    .pw-side-stack { grid-template-columns: 1fr; gap: .7rem; }
+    .pw-action-row { grid-template-columns: 4px minmax(0, 1fr); padding-right: .72rem; }
+    .pw-action-next { grid-column: 2; min-width: 0; text-align: left; }
+    .pw-action-next span, .pw-action-next strong { display: inline; }
+    .pw-action-next span { margin-right: .25rem; }
+  }
   .text-safe,
   .card,
   .table-row td,
@@ -17251,7 +17466,7 @@ function renderAppShell() {
   const canSearch = role === 'manager' || role === 'owner';
 
   return `
-  <div class="app-shell role-${academyEsc(role)} view-${academyEsc(state.view)} ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'mobile-sidebar-open' : ''}">
+  <div class="app-shell role-${academyEsc(role)} view-${academyEsc(state.view)} ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'mobile-sidebar-open' : ''}" data-view="${academyEsc(state.view)}" data-role="${academyEsc(role)}">
     <button type="button" class="mobile-sidebar-scrim" onclick="closeMobileSidebar()" aria-label="Закрыть меню"></button>
     <!-- Sidebar -->
     <aside class="app-sidebar">
@@ -17307,6 +17522,7 @@ function renderAppShell() {
           <div id="global-search-results" class="absolute left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-80 overflow-y-auto z-30" style="display:none;"></div>
         </div>` : `<div></div>`}
         <div class="topbar-actions">
+          ${canSearch ? `<button class="btn-primary text-sm" onclick="openOrderModal()" title="Создать новый проект">+ Проект</button>` : ''}
           ${pwaInstallButtonHtml()}
           <div class="topbar-user-pill" title="${academyEsc(u.name)}">${academyEsc(u.name)} · ${T(u.role)}</div>
           <button class="btn-ghost text-sm" onclick="logout()">Сменить</button>
@@ -18613,7 +18829,7 @@ function renderOwnerPanel() {
   `;
 }
 
-function renderManagerDashboard() {
+function renderManagerDashboardLegacy() {
   const u = currentUser();
   const ownerPanel = u.role === 'owner' ? renderOwnerPanel() : '';
   const orders = visibleOrdersForUser(u);
@@ -18734,6 +18950,159 @@ function renderManagerDashboard() {
     </div>
   </div>
   `;
+}
+
+function precisionDateIsToday(value) {
+  if (!value) return false;
+  const date = new Date(value);
+  const today = new Date();
+  return date.getFullYear() === today.getFullYear()
+    && date.getMonth() === today.getMonth()
+    && date.getDate() === today.getDate();
+}
+
+function precisionManagerAction(o) {
+  const debt = orderDebt(o);
+  const map = {
+    new: { priority: 100, color: '#3b82f6', reason: 'Новый лид — требуется первый контакт', next: 'Квалифицировать лид', date: o.createdAt },
+    consultation_scheduled: { priority: 86, color: '#0e91a8', reason: o.consultationAt ? `Консультация: ${fmtDateTime(o.consultationAt)}` : 'Консультация без назначенного времени', next: 'Провести консультацию', date: o.consultationAt },
+    measurement_scheduled: { priority: 92, color: '#7c64d5', reason: o.measurementAt ? `Замер: ${fmtDateTime(o.measurementAt)}` : 'Замер без назначенного времени', next: 'Проверить назначение', date: o.measurementAt },
+    measurement_done: { priority: 88, color: '#7c64d5', reason: 'Замер завершён — КП ещё не отправлено', next: 'Подготовить КП', date: o.measurementDoneAt },
+    proposal_sent: { priority: 82, color: '#d88a25', reason: 'КП отправлено — ожидается решение клиента', next: 'Сделать follow-up', date: o.proposalSentAt },
+    proposal_accepted: { priority: 90, color: '#b87926', reason: o.productionReadyAt ? 'Материал готов — монтаж не назначен' : 'КП принято — нужна подготовка производства', next: o.productionReadyAt ? 'Назначить монтаж' : 'Подготовить производство', date: o.proposalAcceptedAt },
+    installation_scheduled: { priority: 94, color: '#168a68', reason: o.installationAt ? `Монтаж: ${fmtDateTime(o.installationAt)}` : 'Монтаж назначен без времени', next: 'Проверить бригаду', date: o.installationAt },
+    installation_accepted: { priority: 96, color: '#168a68', reason: 'Бригада приняла заказ', next: 'Контролировать выезд', date: o.installationAt },
+    installation_en_route: { priority: 98, color: '#168a68', reason: 'Бригада едет на объект', next: 'Следить за прибытием', date: o.installationAt },
+    installation_in_progress: { priority: 99, color: '#168a68', reason: 'Монтаж выполняется сейчас', next: 'Контролировать работу', date: o.installationAt },
+    installation_done: { priority: 91, color: '#168a68', reason: 'Монтаж завершён — нужен акт', next: 'Оформить акт', date: o.installationDoneAt || o.installationAt },
+    act_signed: { priority: debt > 0 ? 93 : 65, color: '#d85858', reason: debt > 0 ? `Акт подписан · долг ${fmtMoney(debt)}` : 'Акт подписан — закрыть проект', next: debt > 0 ? 'Получить оплату' : 'Закрыть проект', date: o.actSignedAt },
+    payment_received: { priority: 62, color: '#53627a', reason: 'Оплата получена — проект ещё не закрыт', next: 'Закрыть проект', date: o.paidAt },
+  };
+  const item = map[o.status];
+  if (item) return item;
+  if (debt > 0 && !['completed','review_received'].includes(o.status)) {
+    return { priority: 84, color: '#d85858', reason: `Остаток к оплате ${fmtMoney(debt)}`, next: 'Связаться по оплате', date: o.updatedAt || o.createdAt };
+  }
+  return null;
+}
+
+function renderPrecisionManagerDashboard() {
+  const user = currentUser();
+  const orders = visibleOrdersForUser(user);
+  const active = orders.filter(o => !['completed','review_received'].includes(o.status));
+  const actions = active
+    .map(order => ({ order, action: precisionManagerAction(order) }))
+    .filter(item => item.action)
+    .sort((a, b) => {
+      const aToday = precisionDateIsToday(a.action.date) ? 1 : 0;
+      const bToday = precisionDateIsToday(b.action.date) ? 1 : 0;
+      return (bToday - aToday) || (b.action.priority - a.action.priority)
+        || String(a.action.date || '9999').localeCompare(String(b.action.date || '9999'));
+    });
+
+  const stages = [
+    { label: 'Новые', color: '#3b82f6', test: o => o.status === 'new' },
+    { label: 'Консультация', color: '#0e91a8', test: o => o.status === 'consultation_scheduled' },
+    { label: 'Замер', color: '#7c64d5', test: o => ['measurement_scheduled','measurement_done'].includes(o.status) },
+    { label: 'КП', color: '#d88a25', test: o => o.status === 'proposal_sent' },
+    { label: 'Подготовка', color: '#b87926', test: o => o.status === 'proposal_accepted' },
+    { label: 'Монтаж', color: '#168a68', test: o => ['installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done'].includes(o.status) },
+    { label: 'Оплата', color: '#d85858', test: o => ['act_signed','payment_received'].includes(o.status) },
+    { label: 'Закрыто', color: '#53627a', test: o => ['completed','review_received'].includes(o.status) },
+  ];
+
+  const debtors = active
+    .map(order => ({ order, value: orderDebt(order) }))
+    .filter(item => item.value > 0)
+    .sort((a,b) => b.value - a.value)
+    .slice(0, 3);
+  const waitingInstall = active
+    .filter(o => o.status === 'proposal_accepted' && !o.installationAt)
+    .slice(0, 2);
+  const missingAssignment = active
+    .filter(o => ['measurement_scheduled','installation_scheduled'].includes(o.status)
+      && !(o.measurerId || (o.installerIds || []).length))
+    .slice(0, 2);
+  const exceptions = [
+    ...debtors.map(item => ({ order: item.order, color: '#dc5b5b', title: 'Остаток к оплате', detail: getClient(item.order.clientId)?.name || item.order.number, value: fmtMoney(item.value) })),
+    ...waitingInstall.map(order => ({ order, color: '#d88a25', title: 'Монтаж не назначен', detail: getClient(order.clientId)?.name || order.number, value: order.number })),
+    ...missingAssignment.map(order => ({ order, color: '#7c64d5', title: 'Нет исполнителя', detail: getClient(order.clientId)?.name || order.number, value: order.number })),
+  ].slice(0, 6);
+
+  const liveStatuses = ['installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'];
+  const live = active
+    .filter(o => liveStatuses.includes(o.status))
+    .sort((a,b) => String(a.installationAt || '9999').localeCompare(String(b.installationAt || '9999')))
+    .slice(0, 5);
+
+  const todayLabel = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+  return `<section class="pw-today">
+    <div class="pw-today-head">
+      <div>
+        <div class="pw-today-kicker">Операционный центр</div>
+        <h2>Что требует внимания сегодня</h2>
+        <p>${academyEsc(todayLabel)} · ${actions.length} действий · ${active.length} активных проектов</p>
+      </div>
+      <button class="btn-primary" onclick="openOrderModal()">+ Новый проект</button>
+    </div>
+
+    <div class="pw-funnel" aria-label="Воронка проектов">
+      ${stages.map(stage => `<div class="pw-funnel-step" style="--stage-color:${stage.color}" onclick="selectAppView('orders')">
+        <span>${academyEsc(stage.label)}</span><strong>${orders.filter(stage.test).length}</strong>
+      </div>`).join('')}
+    </div>
+
+    <div class="pw-workgrid">
+      <article class="pw-panel">
+        <div class="pw-panel-head"><h3>Очередь действий</h3><span class="pw-count">${actions.length}</span></div>
+        <div class="pw-action-list">
+          ${actions.length ? actions.slice(0, 12).map(({ order, action }) => {
+            const client = getClient(order.clientId);
+            const address = orderAddress(order, client) || 'Адрес объекта не указан';
+            return `<div class="pw-action-row" onclick="openOrder('${order.id}')" style="--action-color:${action.color}">
+              <div class="pw-action-accent"></div>
+              <div class="pw-action-main">
+                <div class="pw-action-top"><span class="pw-action-number">${academyEsc(order.number || order.id)}</span><strong>${academyEsc(client?.name || 'Клиент не указан')}</strong></div>
+                <div class="pw-action-reason">${academyEsc(action.reason)}</div>
+                <div class="pw-action-meta">${academyEsc(address)} · ${academyEsc(T(order.status))}</div>
+              </div>
+              <div class="pw-action-next"><span>Следующий шаг</span><strong>${academyEsc(action.next)} →</strong></div>
+            </div>`;
+          }).join('') : '<div class="pw-empty">На сегодня нет незавершённых действий.</div>'}
+        </div>
+      </article>
+
+      <aside class="pw-side-stack">
+        <section class="pw-panel">
+          <div class="pw-panel-head"><h3>Исключения</h3><span class="pw-count">${exceptions.length}</span></div>
+          <div class="pw-exception-list">
+            ${exceptions.length ? exceptions.map(item => `<div class="pw-exception" onclick="openOrder('${item.order.id}')" style="--exception-color:${item.color}">
+              <i class="pw-exception-dot"></i><div><strong>${academyEsc(item.title)}</strong><span>${academyEsc(item.detail)}</span></div><b>${academyEsc(item.value)}</b>
+            </div>`).join('') : '<div class="pw-empty">Критичных исключений нет.</div>'}
+          </div>
+        </section>
+
+        <section class="pw-panel">
+          <div class="pw-panel-head"><h3>Монтажи в работе</h3><span class="pw-count">${live.length}</span></div>
+          <div class="pw-live-list">
+            ${live.length ? live.map(order => {
+              const step = Math.max(0, liveStatuses.indexOf(order.status));
+              const crew = (order.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', ') || 'Бригада не назначена';
+              return `<div class="pw-live-item" onclick="openOrder('${order.id}')">
+                <div class="pw-live-top"><strong>${academyEsc(order.number || order.id)} · ${academyEsc(getClient(order.clientId)?.name || 'Клиент')}</strong><span>${academyEsc(T(order.status))}</span></div>
+                <div class="pw-live-track">${liveStatuses.map((status, index) => `<i class="${index <= step ? 'done' : ''}"></i>`).join('')}</div>
+                <div class="pw-live-meta">${academyEsc(crew)}${order.installationAt ? ` · ${academyEsc(fmtDateTime(order.installationAt))}` : ''}</div>
+              </div>`;
+            }).join('') : '<div class="pw-empty">Сейчас активных монтажей нет.</div>'}
+          </div>
+        </section>
+      </aside>
+    </div>
+  </section>`;
+}
+
+function renderManagerDashboard() {
+  return renderPrecisionManagerDashboard();
 }
 
 // ---------- MANAGER: ORDERS ----------

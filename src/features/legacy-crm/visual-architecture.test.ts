@@ -54,3 +54,30 @@ test("owner shell keeps every primary operational section in one navigation", ()
 
   labels.forEach((label) => assert.ok(source.includes(label), `missing owner surface: ${label}`));
 });
+
+test("manager home is an action workbench instead of a KPI card wall", () => {
+  assert.match(source, /function renderPrecisionManagerDashboard\(\)/);
+  assert.match(source, /Что требует внимания сегодня/);
+  assert.match(source, /Очередь действий/);
+  assert.match(source, /Следующий шаг/);
+  assert.match(source, /Исключения/);
+  assert.match(source, /Монтажи в работе/);
+  assert.match(source, /function renderManagerDashboard\(\) \{\s*return renderPrecisionManagerDashboard\(\);/);
+});
+
+test("manager workbench exposes the complete eight-stage operating funnel", () => {
+  const dashboard = source.match(
+    /function renderPrecisionManagerDashboard\(\) \{([\s\S]*?)\n\}\n\nfunction renderManagerDashboard/,
+  )?.[1];
+
+  assert.ok(dashboard);
+  ["Новые", "Консультация", "Замер", "КП", "Подготовка", "Монтаж", "Оплата", "Закрыто"]
+    .forEach((stage) => assert.ok(dashboard.includes(`label: '${stage}'`), `missing stage: ${stage}`));
+});
+
+test("precision workbench remains usable on phone and tablet", () => {
+  assert.match(source, /\.pw-workgrid \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) minmax\(280px, 340px\)/);
+  assert.match(source, /@media \(max-width: 840px\) \{[\s\S]*?\.pw-workgrid \{ grid-template-columns: 1fr; \}/);
+  assert.match(source, /@media \(max-width: 640px\) \{[\s\S]*?\.pw-action-row \{ grid-template-columns: 4px minmax\(0, 1fr\)/);
+  assert.match(source, /padding: \.72rem \.7rem calc\(5\.6rem \+ env\(safe-area-inset-bottom\)\)/);
+});
