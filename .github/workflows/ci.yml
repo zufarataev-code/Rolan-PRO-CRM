@@ -14,6 +14,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  production-project-inventory:
+    name: Read-only production project inventory
+    needs: [verify, clean-build-e2e]
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.repository == 'zufarataev-code/Rolan-PRO-CRM' &&
+      github.event.pull_request.number == 296 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/project-service-execution'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Bundle the read-only inventory
+        run: |
+          bash -n deploy/audit-production-projects.sh
+          node_modules/.bin/esbuild scripts/audit-legacy-project-migration.ts --bundle --platform=node --format=cjs --external:@prisma/client --outfile=/tmp/rolanpro-project-audit.cjs
+      - name: Read production project links without changing data
+        env:
+          PRODUCTION_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          PRODUCTION_SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: bash deploy/audit-production-projects.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-project-inventory
+          path: /tmp/rolanpro-project-inventory.json
+          retention-days: 3
+          if-no-files-found: error
+
   verify:
     name: Test, typecheck, and build
     runs-on: ubuntu-latest

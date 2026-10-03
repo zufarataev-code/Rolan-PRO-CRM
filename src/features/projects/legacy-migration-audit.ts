@@ -47,7 +47,8 @@ export function auditLegacyProjectMigration(payload: unknown, revision: number, 
     const quickLines = rows(order.extraServices).filter(line => line.quickProjectLine === true);
     const quickBasis = order.quickProjectImportedCompleted === true && windows.length === 0;
     const scope = quickBasis ? quickLines : windows;
-    if (!scope.length) blockers.push("missing_service_scope");
+    const emptyDraft = !scope.length && order.status === "new" && order.quickProjectImportedCompleted !== true;
+    if (!scope.length && !emptyDraft) blockers.push("missing_service_scope");
     const services = [...new Set(scope.map(item => text(item.measureScope) || text(item.serviceType) || text(order.serviceType)))];
     if (services.some(service => !serviceCodes[service])) blockers.push("unmapped_service_type");
     const installers = [...new Set([
@@ -66,11 +67,11 @@ export function auditLegacyProjectMigration(payload: unknown, revision: number, 
       candidate_project_ids: projectIds,
       candidate_proposal_ids: canonical.map(proposal => proposal.proposal_id),
       candidate_manager_ids: managerIds,
-      scope_basis: quickBasis ? "historical_quick_lines" : "measurements",
+      scope_basis: emptyDraft ? "empty_draft" : quickBasis ? "historical_quick_lines" : "measurements",
       measured_openings: windows.length, quick_lines: quickLines.length,
       service_codes: services.map(service => serviceCodes[service] ?? "UNKNOWN"),
       blockers, review,
-      disposition: blockers.length ? "blocked" : projectIds.length ? "reconcile_existing_project" : "needs_explicit_mapping",
+      disposition: blockers.length ? "blocked" : emptyDraft ? "preserve_draft" : projectIds.length ? "reconcile_existing_project" : "needs_explicit_mapping",
     };
   });
   // Two legacy records must never silently resolve into a single existing Project.
