@@ -811,3 +811,12 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Separation of facts: model `retailPerSqft` is the sale price. Purchase cost remains on Warehouse stock receipts and continues to feed cost/profit independently. Installer rates are unchanged.
 - Permissions: Owner can add models and maintain list prices; Manager sees the price directory and may negotiate only through the Project price override.
 - Implementation branch: `codex/model-specific-film-pricing-main`, based on current `main`. Production has not been changed or authorized.
+
+## 2026-09-30 handoff — one rate directory for sales and installer pay
+
+- Scope: `Настройки → Справочник расценок на работу` presents one rate row per service with the customer guide price and the installer rate side by side. It is removed from the primary sidebar and owns the installation-complexity multipliers used by project pricing, payroll, and profitability.
+- Authority: service prices, installer rates, and complexity multipliers remain PostgreSQL reference data. The legacy workspace only mirrors canonical values for compatibility; it does not introduce a second browser-owned rate directory or calculate payroll independently.
+- Owner rules retained from PR #272: Smart `$5/sqft`, Safety `$3/sqft`, Solar and Decorative `$2.50/sqft`, Smart zone connection `$50/zone`; difficulty multipliers are `1.0 / 1.2 / 1.5 / 2.0`. Customer prices remain editable deal guidance rather than a fixed public price list. Decorative customer pricing starts empty so the seed does not invent a sales price.
+- Historical safety: completed/paid work keeps its stored rate snapshot. The existing owner-rate migrations may recalculate unpaid accruals and therefore require explicit Owner approval, the automatic production database backup, and migration review before release.
+- Verification: 448 repository tests and 80 focused pricing/payroll/profitability tests pass; TypeScript and the 113-route production build pass. GitHub CI run #36806381986 passed both `Test, typecheck, and build` and the clean-database end-to-end gate on code head `5fa268e`.
+- Implementation branch: `codex/unified-rate-directory`, based on `main` and the clean PR #272 head. Review: PR #281 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/281`). The separate stacked rate UI from PR #273 is intentionally not reused. Production deployment has not been authorized.

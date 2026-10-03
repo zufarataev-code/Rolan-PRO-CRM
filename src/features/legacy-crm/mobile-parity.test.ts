@@ -29,7 +29,6 @@ test("the full sidebar still exposes every owner and manager function", () => {
     "coldcalls",
     "orders",
     "proposals",
-    "servicePricing",
     "calendar",
     "installerOps",
     "tasks",
@@ -47,6 +46,7 @@ test("the full sidebar still exposes every owner and manager function", () => {
   ]) {
     assert.match(legacy, new RegExp(`\\['${key}'`));
   }
+  assert.match(legacy, /key: 'service-pricing'[^\n]+destination: 'servicePricing'/);
   assert.match(legacy, /onclick="logout\(\)"/);
 });
 

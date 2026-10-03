@@ -483,6 +483,15 @@ Owner request in chat on 2026-10-01: a manager must be able to write in a film t
 - The Owner maintains model list prices. Managers may view the model price directory and change a deal price only inside the Project workflow.
 - This refines the existing service-price directory without changing installer pay. Relational migration of the film catalog is still required under the staged core consolidation decision.
 
+## 2026-09-30 — One canonical rate directory
+
+- `Настройки → Справочник расценок на работу` is the only owner-facing directory for customer guide prices, installer rates, additional-work prices, and installation-complexity multipliers. It is not a primary daily-work module in the sidebar. A second rate editor under Employees or Payroll is not permitted.
+- PostgreSQL `service_types`, `service_addons`, and `complexity_levels` are authoritative. Legacy settings may mirror these values only while the installation/payment migration is incomplete.
+- Customer price and installer rate are different fields shown together. The customer value is a deal guide and can be overridden in a Project; the installer value feeds server-owned payroll and profitability. Warehouse material cost continues to use the actual receipt cost and is not replaced by the installer rate.
+- Difficulty multiplies film-service customer labor and installer labor through the existing backend calculation. Per-employee pay overrides retain precedence where already supported; the directory supplies the default company rate.
+- Signed Proposals, completed Projects, and paid payroll records retain their stored snapshots when directory values change. Any backfill of unpaid accruals is a production migration and requires explicit Owner approval and a database backup.
+- Implemented for review on `codex/unified-rate-directory` in PR #281. This follows the urgent operational exception to the legacy freeze and does not authorize another legacy data source.
+
 ## Changing a decision
 
 ## 2026-09-30 — Surveyor mobile navigation is organized around field work

@@ -35,7 +35,6 @@ test("owner shell keeps every primary operational section in one navigation", ()
     "Холодные звонки",
     "Проекты",
     "КП",
-    "Услуги и цены",
     "Календарь",
     "Специалисты по установке сейчас",
     "Задачи",
@@ -53,6 +52,7 @@ test("owner shell keeps every primary operational section in one navigation", ()
   ];
 
   labels.forEach((label) => assert.ok(source.includes(label), `missing owner surface: ${label}`));
+  assert.ok(source.includes("Справочник расценок на работу"), "missing owner Settings rate directory");
 });
 
 test("manager home is an action workbench instead of a KPI card wall", () => {
