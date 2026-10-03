@@ -9082,18 +9082,22 @@ function openWindowTemplateModal(orderId) {
 
 // ---------- INVENTORY MANAGEMENT ----------
 function addInventoryRoll(data) {
+  const widthMm = data.widthMm || db.settings.filmRolls.defaultWidth;
   const roll = {
     id: 'inv_' + uid(),
     catalogId: data.catalogId,
     lotNumber: data.lotNumber || '',
-    widthMm: data.widthMm || db.settings.filmRolls.defaultWidth,
+    widthMm,
     originalLengthM: parseFloat(data.originalLengthM) || 0,
     remainingLengthM: parseFloat(data.originalLengthM) || 0,
     costTotal: parseFloat(data.costTotal) || 0,
     vendorId: data.vendorId || null,
     dateReceived: data.dateReceived || new Date().toISOString().slice(0,10),
     location: data.location || 'Warehouse',
-    qrCode: 'RP-ROLL-' + uid(),
+    rollCode: data.rollCode || '',
+    qrCode: data.rollCode || ('RP-ROLL-' + uid()),
+    // Every receipt path gets the same purchase price per sq ft (Owner, 2026-10-01).
+    costPerSqft: rollCostPerSqft(data.costTotal, data.originalLengthM, widthMm),
     status: 'available',
     _consumed: [],
   };
@@ -23543,13 +23547,14 @@ function openQuickProjectFilmForm(oid, lineId) {
       <div><label>Стоимость рулона, $</label><input id="qf-cost" type="number" min="0.01" step="1" placeholder="500"></div>
       <div><label>Lot / партия</label><input id="qf-lot" value="QUICK-${new Date().toISOString().slice(0,10)}"></div>
     </div>
+    <input id="qf-form" type="hidden" value="${uid()}">
     <div id="qf-error" class="text-sm text-red-600 mt-3 hidden"></div>
     <div class="flex gap-2 mt-5"><button class="btn-primary flex-1" onclick="saveQuickProjectFilm('${oid}','${lineId}','${category}')">Создать, принять и выбрать</button><button class="btn-ghost" onclick="openQuickProjectEntry('${oid}')">Отмена</button></div>
   </div></div>`;
   render();
 }
 
-function saveQuickProjectFilm(oid, lineId, category) {
+async function saveQuickProjectFilm(oid, lineId, category) {
   const o = getOrder(oid);
   const line = projectQuickLines(o).find(item => item.id === lineId);
   const brand = document.getElementById('qf-brand')?.value.trim() || '';
@@ -23563,13 +23568,25 @@ function saveQuickProjectFilm(oid, lineId, category) {
   if (length <= 0 || costTotal <= 0) return fail('Укажите длину и закупочную стоимость рулона.');
   const duplicate = (db.settings.catalog || []).some(item => item.category === category && String(item.brand || '').toLowerCase() === brand.toLowerCase() && String(item.productName || '').toLowerCase() === productName.toLowerCase() && String(item.modelCode || '').toLowerCase() === modelCode.toLowerCase());
   if (duplicate) return fail('Такая плёнка уже есть в каталоге. Выберите её из списка.');
-  const catalog = { id: 'film_' + uid(), brand, filmCategory, productName, modelCode, model: `${productName} ${modelCode}`, category, retailPerSqft: Math.max(0, Number(document.getElementById('qf-retail')?.value) || 0), costPerSqft: null, installerRatePerSqft: null, wastePct: category === 'smart' ? 8 : 12, archived: false };
+  const lotNumber = document.getElementById('qf-lot')?.value.trim() || '';
+  const widthMm = Number(document.getElementById('qf-width')?.value) || 1524;
+  const retailPerSqft = Math.max(0, Number(document.getElementById('qf-retail')?.value) || 0);
+  const dateReceived = new Date().toISOString().slice(0,10);
+  const formToken = document.getElementById('qf-form')?.value || '';
+  let rollCode = '';
+  try { rollCode = await reserveRollCodeOnce(dateReceived); } catch (error) { return fail(`Не удалось получить код рулона: ${error.message}. Проверьте интернет и повторите.`); }
+  if (!rollCode || !rollReceiptFormStillOpen('qf-form', formToken)) return;
+  // The CRM may have reloaded while the code was reserved: work on the current project.
+  const project = getOrder(oid);
+  const projectLine = projectQuickLines(project).find(item => item.id === lineId);
+  if (!project || !projectLine) return fail('Проект изменился, пока получали код рулона. Откройте его заново.');
+  const catalog = { id: 'film_' + uid(), brand, filmCategory, productName, modelCode, model: `${productName} ${modelCode}`, category, retailPerSqft, costPerSqft: null, installerRatePerSqft: null, wastePct: category === 'smart' ? 8 : 12, archived: false };
   db.settings.catalog.push(catalog);
-  const roll = addInventoryRoll({ catalogId: catalog.id, lotNumber: document.getElementById('qf-lot')?.value.trim() || '', widthMm: Number(document.getElementById('qf-width')?.value) || 1524, originalLengthM: length, costTotal, dateReceived: new Date().toISOString().slice(0,10), location: 'Warehouse' });
-  recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(catalog), direction: 'receipt', qty: length, unit: 'м', orderId: oid, reason: 'Быстрый ввод проекта' });
-  line.catalogId = catalog.id;
-  line.label = catalogLabel(catalog);
-  projectEstimateMarkChanged(o, 'Создана и выбрана новая плёнка');
+  const roll = addInventoryRoll({ catalogId: catalog.id, lotNumber, widthMm, originalLengthM: length, costTotal, dateReceived, location: 'Warehouse', rollCode });
+  recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(catalog), direction: 'receipt', qty: length, unit: 'м', orderId: oid, reason: `Быстрый ввод проекта · рулон ${rollCode}` });
+  projectLine.catalogId = catalog.id;
+  projectLine.label = catalogLabel(catalog);
+  projectEstimateMarkChanged(project, 'Создана и выбрана новая плёнка');
   save(); openQuickProjectEntry(oid);
 }
 
@@ -26420,12 +26437,13 @@ function openManagerFilmReceiptForm(oid, rid) {
       <div><label>Стоимость рулона, $</label><input id="mrf-cost" type="number" min="0.01" step="1" placeholder="500"></div>
       <div><label>Lot / партия</label><input id="mrf-lot" value="MEASURE-${new Date().toISOString().slice(0,10)}"></div>
     </div>
+    <input id="mrf-form" type="hidden" value="${uid()}">
     <div id="mrf-error" class="text-sm text-red-600 mt-3 hidden"></div>
     <div class="flex gap-2 mt-5"><button class="btn-primary flex-1" onclick="saveManagerFilmReceipt('${oid}','${rid}','${serviceCategory}')">Создать, принять и выбрать</button><button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Отмена</button></div>
   </div></div>`;
   render();
 }
-function saveManagerFilmReceipt(oid, rid, serviceCategory) {
+async function saveManagerFilmReceipt(oid, rid, serviceCategory) {
   const o = getOrder(oid);
   const room = o?.measurements?.rooms?.find(item => item.id === rid);
   const brand = document.getElementById('mrf-brand')?.value.trim() || '';
@@ -26439,10 +26457,19 @@ function saveManagerFilmReceipt(oid, rid, serviceCategory) {
   if (length <= 0 || costTotal <= 0) return fail('Укажите длину и закупочную стоимость рулона.');
   const duplicate = (db.settings.catalog || []).find(item => item.category === serviceCategory && String(item.brand || '').toLowerCase() === brand.toLowerCase() && String(catalogFilmName(item)).toLowerCase() === productName.toLowerCase() && String(catalogFilmModel(item)).toLowerCase() === modelCode.toLowerCase());
   if (duplicate) return fail('Такая модель уже есть в каталоге. Сделайте приход рулона через склад.');
-  const catalog = { id: 'film_' + uid(), brand, filmCategory, productName, modelCode, model: `${productName} ${modelCode}`, category: serviceCategory, retailPerSqft: Math.max(0, Number(document.getElementById('mrf-retail')?.value) || 0), costPerSqft: null, installerRatePerSqft: null, wastePct: serviceCategory === 'smart' ? 8 : 12, archived: false };
+  const lotNumber = document.getElementById('mrf-lot')?.value.trim() || '';
+  const widthMm = Number(document.getElementById('mrf-width')?.value) || 1524;
+  const retailPerSqft = Math.max(0, Number(document.getElementById('mrf-retail')?.value) || 0);
+  const dateReceived = new Date().toISOString().slice(0,10);
+  const formToken = document.getElementById('mrf-form')?.value || '';
+  let rollCode = '';
+  try { rollCode = await reserveRollCodeOnce(dateReceived); } catch (error) { return fail(`Не удалось получить код рулона: ${error.message}. Проверьте интернет и повторите.`); }
+  if (!rollCode || !rollReceiptFormStillOpen('mrf-form', formToken)) return;
+  if (!getOrder(oid)?.measurements?.rooms?.some(item => item.id === rid)) return fail('Замер изменился, пока получали код рулона. Откройте его заново.');
+  const catalog = { id: 'film_' + uid(), brand, filmCategory, productName, modelCode, model: `${productName} ${modelCode}`, category: serviceCategory, retailPerSqft, costPerSqft: null, installerRatePerSqft: null, wastePct: serviceCategory === 'smart' ? 8 : 12, archived: false };
   db.settings.catalog.push(catalog);
-  const roll = addInventoryRoll({ catalogId: catalog.id, lotNumber: document.getElementById('mrf-lot')?.value.trim() || '', widthMm: Number(document.getElementById('mrf-width')?.value) || 1524, originalLengthM: length, costTotal, dateReceived: new Date().toISOString().slice(0,10), location: 'Warehouse' });
-  recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(catalog), direction: 'receipt', qty: length, unit: 'м', orderId: oid, reason: 'Добавлено из замера проекта' });
+  const roll = addInventoryRoll({ catalogId: catalog.id, lotNumber, widthMm, originalLengthM: length, costTotal, dateReceived, location: 'Warehouse', rollCode });
+  recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(catalog), direction: 'receipt', qty: length, unit: 'м', orderId: oid, reason: `Добавлено из замера проекта · рулон ${rollCode}` });
   managerApplyFilmToRoom(oid, rid, catalog.id);
 }
 
@@ -35740,10 +35767,11 @@ function renderFilmModelStock(catalogId) {
     <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs text-gray-500">${academyEsc(catLabel(item.category))}</div><h3 class="font-black text-2xl">${academyEsc(item.brand)} — ${academyEsc(item.model)}</h3><div class="text-sm mt-1">${catalogSpecLabel(item)}</div></div><div class="flex gap-2 flex-wrap"><button class="btn-ghost text-sm" onclick="openCatalogSpecModal('${item.id}')">Характеристики</button><button class="btn-ghost text-sm" onclick="openPurchaseRequestModal('film','${item.id}')">В закупку</button><button class="btn-primary text-sm" onclick="openAddRollModal('${item.id}')">+ Принять рулон</button></div></div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4"><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Рулонов</div><b class="text-lg">${rolls.length}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Остаток</div><b class="text-lg">${stats.lengthM.toFixed(2)} м</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Стоимость</div><b class="text-lg text-emerald-700">${fmtMoney(stats.value)}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Поставщик</div><b>${academyEsc(vendor?.name || 'не назначен')}</b></div></div>
   </div>
-  <div class="card"><h3 class="font-semibold mb-3">Рулоны модели</h3>${rolls.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Lot #</th><th class="text-left p-2">Ширина</th><th class="text-left p-2">Принято</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Локация</th><th class="text-left p-2">Поставщик</th><th></th></tr></thead><tbody>${rolls.map(roll => {
+  <div class="card"><h3 class="font-semibold mb-3">Рулоны модели</h3>${rolls.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Код</th><th class="text-left p-2">Lot #</th><th class="text-left p-2">Ширина</th><th class="text-left p-2">Принято</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Локация</th><th class="text-left p-2">Поставщик</th><th class="text-left p-2">Закупка / sq ft</th><th></th></tr></thead><tbody>${rolls.map(roll => {
     const rollVendor = db.vendors.find(v => v.id === roll.vendorId);
     const low = Number(roll.remainingLengthM || 0) < Number(db.settings.inventoryAlerts?.reorderBelowM || 5);
-    return `<tr class="border-t ${low ? 'bg-amber-50' : ''}"><td class="p-2 font-mono">${academyEsc(roll.lotNumber || '—')}</td><td class="p-2">${(Number(roll.widthMm || 0)/1000).toFixed(2)} м</td><td class="p-2">${Number(roll.originalLengthM || 0).toFixed(1)} м</td><td class="p-2 font-bold ${low ? 'text-red-700' : 'text-emerald-700'}">${Number(roll.remainingLengthM || 0).toFixed(2)} м</td><td class="p-2">${academyEsc(roll.location || 'Warehouse')}</td><td class="p-2">${academyEsc(rollVendor?.name || '—')}</td><td class="p-2 whitespace-nowrap"><button class="btn-ghost text-xs" onclick="openFilmIssueModal('${roll.id}')">Списать</button><button class="btn-ghost text-xs" onclick="openWarehouseQr('film','${roll.id}')">QR</button></td></tr>`;
+    const perSqft = Number(roll.costPerSqft) || rollCostPerSqft(roll.costTotal, roll.originalLengthM, roll.widthMm);
+    return `<tr class="border-t ${low ? 'bg-amber-50' : ''}"><td class="p-2 font-mono">${academyEsc(roll.rollCode || '—')}</td><td class="p-2 font-mono">${academyEsc(roll.lotNumber || '—')}</td><td class="p-2">${(Number(roll.widthMm || 0)/1000).toFixed(2)} м</td><td class="p-2">${Number(roll.originalLengthM || 0).toFixed(1)} м</td><td class="p-2 font-bold ${low ? 'text-red-700' : 'text-emerald-700'}">${Number(roll.remainingLengthM || 0).toFixed(2)} м</td><td class="p-2">${academyEsc(roll.location || 'Warehouse')}</td><td class="p-2">${academyEsc(rollVendor?.name || '—')}</td><td class="p-2">${perSqft > 0 ? fmtSqftPrice(perSqft) : '<span class="text-red-700">нет цены</span>'}</td><td class="p-2 whitespace-nowrap"><button class="btn-ghost text-xs" onclick="openFilmIssueModal('${roll.id}')">Списать</button><button class="btn-ghost text-xs" onclick="openWarehouseQr('film','${roll.id}')">QR</button></td></tr>`;
   }).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="icon">📦</div><div>Этой модели на складе нет. Создайте заявку или примите рулон.</div></div>`}</div>`;
 }
 function renderFilmInventory() {
@@ -36435,61 +36463,230 @@ function renderCatalogBrowser() {
   return controls + rows;
 }
 
+// ---------- ПРИЁМ РУЛОНА НА СКЛАД (Owner, 2026-10-01) ----------
+// Category, brand, model, vendor, lot, width, length, purchase price, date,
+// location and a readable unique code per roll. A film missing from the list is
+// typed in and added to it. The purchase price per sq ft is shown while typing
+// and is what the project's material cost uses (warehouseCatalogCostPerSqft).
+const ROLL_CATEGORY_KEYS = ['smart', 'solar', 'protective', 'decorative'];
+
+/** Next roll code by the rolls this CRM already has: RP-YYMM-0001, RP-YYMM-0002, … */
+function nextRollCode(dateReceived) {
+  const day = /^\d{4}-\d{2}/.test(String(dateReceived || '')) ? String(dateReceived) : new Date().toISOString().slice(0, 10);
+  const prefix = `RP-${day.slice(2, 4)}${day.slice(5, 7)}-`;
+  const used = (db.inventory || []).map(roll => String(roll.rollCode || '')).filter(code => code.startsWith(prefix));
+  const last = used.reduce((max, code) => Math.max(max, Number(code.slice(prefix.length)) || 0), 0);
+  return prefix + String(last + 1).padStart(4, '0');
+}
+
+/**
+ * The roll code is reserved on the server, so two people receiving rolls at the
+ * same time never get the same code. The local number is only the floor (codes
+ * issued before the server counter) and the code of the offline file version.
+ */
+async function reserveRollCode(dateReceived) {
+  const local = nextRollCode(dateReceived);
+  if (!ROLANPRO_CLOUD) return local;
+  const response = await fetch('/api/v1/warehouse/roll-codes', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date: dateReceived, seen_max: (Number(local.split('-').pop()) || 1) - 1 }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.data?.code) throw new Error(payload?.errors?.[0]?.message || `HTTP ${response.status}`);
+  return payload.data.code;
+}
+
+/**
+ * The receipt form the user submitted is still on screen: closed or reopened
+ * while the code was reserved means the receipt is dropped, never completed.
+ */
+function rollReceiptFormStillOpen(inputId, token) {
+  return !!token && document.getElementById(inputId)?.value === token;
+}
+
+/** One receipt at a time: a double click while the code is reserved gets null and stops. */
+async function reserveRollCodeOnce(dateReceived) {
+  if (state.rollReceiptSaving) return null;
+  state.rollReceiptSaving = true;
+  try { return await reserveRollCode(dateReceived); } finally { state.rollReceiptSaving = false; }
+}
+
+/** Purchase price per sq ft of a roll: roll price / roll area. */
+function rollCostPerSqft(costTotal, lengthM, widthMm) {
+  const area = mm2_to_sqft((Number(widthMm) || 0) * (Number(lengthM) || 0) * 1000);
+  return area > 0 && Number(costTotal) > 0 ? Number(costTotal) / area : 0;
+}
+
+/** Price per sq ft with cents: whole-dollar rounding hides the real material cost. */
+function fmtSqftPrice(value) {
+  return '$' + (Number(value) || 0).toFixed(2);
+}
+
+function rollReceiptCategories() {
+  return [...new Set([...ROLL_CATEGORY_KEYS, ...Object.keys(catalogByCategory()).map(canonicalCatalogCategory)].filter(Boolean))];
+}
+
+/** Old catalog items may say «solar_film», «Солнцезащитная», … — one category for all of them. */
+function sameRollCategory(a, b) {
+  return canonicalCatalogCategory(a) === canonicalCatalogCategory(b);
+}
+
+function rollReceiptSuggestions(category) {
+  const items = (db.settings.catalog || []).filter(item => sameRollCategory(item.category, category) && !item.archived);
+  const brands = [...new Set(items.map(item => String(item.brand || '').trim()).filter(Boolean))];
+  const models = [...new Set(items.map(item => String(item.model || item.productName || '').trim()).filter(Boolean))];
+  return { brands, models };
+}
+
+function refreshRollReceiptForm() {
+  const category = document.getElementById('ar-category')?.value || 'solar';
+  const { brands, models } = rollReceiptSuggestions(category);
+  const brandList = document.getElementById('ar-brand-list');
+  const modelList = document.getElementById('ar-model-list');
+  if (brandList) brandList.innerHTML = brands.map(value => `<option value="${academyEsc(value)}">`).join('');
+  if (modelList) modelList.innerHTML = models.map(value => `<option value="${academyEsc(value)}">`).join('');
+  document.getElementById('ar-type-block')?.classList.toggle('hidden', category !== 'solar');
+  const length = Number(document.getElementById('ar-len')?.value) || 0;
+  const cost = Number(document.getElementById('ar-cost')?.value) || 0;
+  const width = Number(document.getElementById('ar-width')?.value) || 0;
+  const area = mm2_to_sqft(width * length * 1000);
+  const perSqft = rollCostPerSqft(cost, length, width);
+  const preview = document.getElementById('ar-cost-preview');
+  if (preview) preview.textContent = perSqft > 0 ? `${fmtSqftPrice(perSqft)} / sq ft · площадь рулона ${area.toFixed(0)} sq ft` : 'Укажите длину и цену закупки — цена за sq ft посчитается сама';
+  const code = document.getElementById('ar-code');
+  if (code) code.value = `${nextRollCode(document.getElementById('ar-date')?.value)} (предварительно)`;
+}
+
 function openAddRollModal(presetCatId, purchaseRequestId='') {
-  const request=(db.purchaseRequests||[]).find(x=>x.id===purchaseRequestId);
+  const request = (db.purchaseRequests || []).find(x => x.id === purchaseRequestId);
+  const preset = getCatalogItem(presetCatId || request?.itemId || '') || null;
+  const category = canonicalCatalogCategory(preset?.category) || 'solar';
+  const today = new Date().toISOString().slice(0, 10);
+  const widths = db.settings.filmRolls?.widths || [1524, 1829];
+  const presetWidth = Number(request?.widthMm || request?.requirements?.[0]?.widthMm) || 0;
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
-    <div class="modal-content workspace-modal p-6" style="max-width: 32rem;">
-      <h3 class="font-semibold text-lg mb-3">📦 Принять рулон на склад</h3>
+    <div class="modal-content workspace-modal p-6" style="max-width: 40rem;">
+      <h3 class="font-semibold text-lg mb-1">📦 Принять рулон на склад</h3>
+      <p class="text-xs text-gray-500 mb-3">Плёнки нет в подсказках — впишите бренд и модель вручную: она добавится в список.</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label>Плёнка из каталога</label>
-          <select id="ar-cat">
-            ${(() => {
-              const groups = catalogByCategory();
-              return Object.entries(groups).map(([cat, items]) => `<optgroup label="${catLabel(cat)}">${items.map(c => `<option value="${c.id}" ${presetCatId===c.id?'selected':''}>${c.brand} — ${c.model}</option>`).join('')}</optgroup>`).join('');
-            })()}
-          </select>
-        </div>
-        <div>
-          <label>Поставщик</label>
-          <select id="ar-vendor">${db.vendors.map(v => `<option value="${v.id}" ${request?.vendorId===v.id?'selected':''}>${v.name}</option>`).join('')}</select>
-        </div>
-        <div><label>Lot / партия</label><input id="ar-lot" placeholder="например 240315-A"></div>
-        <div><label>Ширина (мм)</label><select id="ar-width">${(db.settings.filmRolls?.widths||[1520,1820,910]).map(w => `<option value="${w}">${(w/1000).toFixed(2)} м</option>`).join('')}</select></div>
-        <div><label>Длина рулона (м)</label><input id="ar-len" type="number" step="1" value="30" placeholder="30"></div>
-        <div><label>Стоимость рулона ($)</label><input id="ar-cost" type="number" step="1" placeholder="500"></div>
-        <div><label>Дата получения</label><input id="ar-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div><label>Локация</label><input id="ar-loc" value="Warehouse"></div>
+        <div><label for="ar-category">Категория *</label><select id="ar-category" onchange="refreshRollReceiptForm()">${rollReceiptCategories().map(key => `<option value="${academyEsc(key)}" ${category === key ? 'selected' : ''}>${academyEsc(catLabel(key))}</option>`).join('')}</select></div>
+        <div id="ar-type-block" class="${category === 'solar' ? '' : 'hidden'}"><label for="ar-type">Тип солнцезащитной</label><select id="ar-type"><option value="">Не указан</option>${SOLAR_FILM_SUBTYPES.map(type => `<option value="${academyEsc(type)}" ${preset?.filmCategory === type ? 'selected' : ''}>${academyEsc(type)}</option>`).join('')}</select></div>
+        <div><label for="ar-brand">Бренд *</label><input id="ar-brand" list="ar-brand-list" value="${academyEsc(preset?.brand || '')}" placeholder="Rolan PRO, 3M, LLumar…"><datalist id="ar-brand-list"></datalist></div>
+        <div><label for="ar-model">Модель плёнки *</label><input id="ar-model" list="ar-model-list" value="${academyEsc(preset?.model || preset?.productName || '')}" placeholder="Titan Prime™"><datalist id="ar-model-list"></datalist></div>
+        <div><label for="ar-vendor">Поставщик</label><select id="ar-vendor"><option value="">Не выбран</option>${(db.vendors || []).filter(v => v.active !== false || v.id === request?.vendorId).map(v => `<option value="${academyEsc(v.id)}" ${(request?.vendorId || preset?.vendorId) === v.id ? 'selected' : ''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
+        <div><label for="ar-lot">Lot / партия</label><input id="ar-lot" placeholder="например 240315-A"></div>
+        <div><label for="ar-width">Ширина</label><select id="ar-width" onchange="refreshRollReceiptForm()">${widths.map(w => `<option value="${Number(w)}" ${presetWidth === Number(w) ? 'selected' : ''}>${(Number(w) / 1000).toFixed(2)} м · ${(Number(w) / 25.4).toFixed(0)}"</option>`).join('')}</select></div>
+        <div><label for="ar-len">Длина рулона (м) *</label><input id="ar-len" type="number" min="0.1" step="0.1" value="30" oninput="refreshRollReceiptForm()"></div>
+        <div><label for="ar-cost">Цена закупки рулона ($) *</label><input id="ar-cost" type="number" min="0.01" step="0.01" placeholder="500" oninput="refreshRollReceiptForm()"></div>
+        <div><label>Цена за sq ft</label><div id="ar-cost-preview" class="text-sm font-semibold text-emerald-700 py-2"></div></div>
+        <div><label for="ar-date">Дата получения</label><input id="ar-date" type="date" value="${today}" onchange="refreshRollReceiptForm()"></div>
+        <div><label for="ar-loc">Локация</label><input id="ar-loc" value="Warehouse"></div>
+        <div class="md:col-span-2"><label for="ar-code">Код рулона (окончательный присваивается при приёме)</label><input id="ar-code" class="font-mono" readonly></div>
       </div>
-      <input id="ar-request" type="hidden" value="${purchaseRequestId}">
+      <input id="ar-request" type="hidden" value="${academyEsc(purchaseRequestId)}">
+      <input id="ar-preset" type="hidden" value="${academyEsc(preset?.id || '')}">
+      <input id="ar-form" type="hidden" value="${uid()}">
+      <div id="ar-error" class="text-sm text-red-600 mt-3 hidden"></div>
       <div class="flex gap-2 mt-4 justify-end">
         <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
-        <button class="btn-primary" onclick="confirmAddRoll()">Принять</button>
+        <button id="ar-submit" class="btn-primary" onclick="confirmAddRoll()">Принять</button>
       </div>
     </div>
   </div>`;
   render();
+  requestAnimationFrame(refreshRollReceiptForm);
 }
-function confirmAddRoll() {
-  const roll=addInventoryRoll({
-    catalogId: document.getElementById('ar-cat').value,
-    vendorId: document.getElementById('ar-vendor').value,
-    lotNumber: document.getElementById('ar-lot').value,
-    widthMm: parseInt(document.getElementById('ar-width').value),
-    originalLengthM: parseFloat(document.getElementById('ar-len').value),
-    costTotal: parseFloat(document.getElementById('ar-cost').value),
-    dateReceived: document.getElementById('ar-date').value,
-    location: document.getElementById('ar-loc').value,
+
+/**
+ * The film the roll is received into when the form was opened from a film or a
+ * purchase request. A film written in by hand for a project («ожидает закупки»,
+ * no rolls yet) takes the real brand and model from the receipt, so the project
+ * that points to it gets the roll's cost instead of a duplicate film.
+ */
+function rollReceiptPresetCatalog(preset, { category, brand, model, filmType, vendorId }) {
+  if (!preset || !sameRollCategory(preset.category, category)) return null;
+  const same = value => String(value || '').trim().toLowerCase();
+  const placeholder = (preset.pendingPurchase || preset.addedManuallyAt) && !(db.inventory || []).some(roll => roll.catalogId === preset.id);
+  const sameFilm = (!preset.brand || same(preset.brand) === same(brand)) && [preset.model, preset.productName].some(value => same(value) === same(model));
+  if (!placeholder && !sameFilm) return null;
+  const renamed = placeholder && !sameFilm;
+  if (!preset.brand || renamed) preset.brand = brand;
+  if (renamed) { preset.model = model; preset.productName = model; }
+  if (filmType && (!preset.filmCategory || renamed)) preset.filmCategory = filmType;
+  if (vendorId && !preset.vendorId) preset.vendorId = vendorId;
+  if (renamed) (db.orders || []).forEach(order => projectQuickLines(order).forEach(line => { if (line.catalogId === preset.id) line.label = catalogLabel(preset); }));
+  return preset;
+}
+
+/** The catalog film for a category + brand + model; a film not in the list is added to it. */
+function rollReceiptCatalog(category, brand, model, filmType, vendorId) {
+  const same = value => String(value || '').trim().toLowerCase();
+  const existing = (db.settings.catalog || []).find(item => sameRollCategory(item.category, category)
+    && same(item.brand) === same(brand)
+    && [item.model, item.productName].some(value => same(value) === same(model)));
+  if (existing) {
+    if (filmType && !existing.filmCategory) existing.filmCategory = filmType;
+    return existing;
+  }
+  const catalog = {
+    id: 'film_' + uid(), brand, model, productName: model, modelCode: '', filmCategory: filmType, category,
+    retailPerSqft: 0, vendorId: vendorId || null,
+    addedManuallyBy: currentUser()?.id || null, addedManuallyAt: new Date().toISOString(),
+  };
+  db.settings.catalog.push(catalog);
+  return catalog;
+}
+
+async function confirmAddRoll() {
+  const read = id => String(document.getElementById(id)?.value || '').trim();
+  const fail = message => { const box = document.getElementById('ar-error'); if (box) { box.textContent = message; box.classList.remove('hidden'); } else alert(message); };
+  const category = canonicalCatalogCategory(read('ar-category')) || 'solar';
+  const filmType = category === 'solar' ? read('ar-type') : '';
+  const brand = read('ar-brand');
+  const model = read('ar-model');
+  const vendorId = read('ar-vendor');
+  const widthMm = parseInt(read('ar-width'), 10) || 0;
+  const lengthM = parseFloat(read('ar-len')) || 0;
+  const costTotal = parseFloat(read('ar-cost')) || 0;
+  const dateReceived = read('ar-date') || new Date().toISOString().slice(0, 10);
+  const lotNumber = read('ar-lot');
+  const location = read('ar-loc') || 'Warehouse';
+  const requestId = read('ar-request') || null;
+  const presetId = read('ar-preset');
+  if (!brand || !model) return fail('Укажите бренд и модель плёнки — выберите из подсказок или впишите вручную.');
+  if (!(lengthM > 0)) return fail('Укажите длину рулона.');
+  if (!(costTotal > 0)) return fail('Укажите цену закупки рулона — без неё себестоимость проектов будет занижена.');
+
+  const button = document.getElementById('ar-submit');
+  const formToken = document.getElementById('ar-form')?.value || '';
+  if (button) button.disabled = true;
+  let rollCode = '';
+  try {
+    rollCode = await reserveRollCodeOnce(dateReceived);
+  } catch (error) {
+    return fail(`Не удалось получить код рулона: ${error.message}. Проверьте интернет и повторите.`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+  if (!rollCode || !rollReceiptFormStillOpen('ar-form', formToken)) return;
+
+  const film = { category, brand, model, filmType, vendorId };
+  const catalog = rollReceiptPresetCatalog(getCatalogItem(presetId), film) || rollReceiptCatalog(category, brand, model, filmType, vendorId);
+  if (catalog.pendingPurchase) catalog.pendingPurchase = false;
+  const roll = addInventoryRoll({
+    catalogId: catalog.id, vendorId, lotNumber, widthMm, originalLengthM: lengthM, costTotal,
+    dateReceived, location, rollCode,
   });
-  const requestId=document.getElementById('ar-request')?.value||null;
-  const request=(db.purchaseRequests||[]).find(x=>x.id===requestId);
-  const cat=getCatalogItem(roll.catalogId);
-  recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(cat),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,responsibleId:request?.responsibleId||null,reason:request?`Приход по ${request.number}`:'Приход рулона'});
-  if(request){request.status='received';request.updatedAt=new Date().toISOString();}
+  const request = (db.purchaseRequests || []).find(x => x.id === requestId);
+  recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(catalog),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,reason:`Приход рулона ${rollCode}`});
+  if (request) { request.status = 'received'; request.updatedAt = new Date().toISOString(); }
   save();
   closeModal();
   render();
+  if (typeof cloudStatus === 'function') cloudStatus(`Рулон ${rollCode} принят · ${fmtSqftPrice(roll.costPerSqft)} / sq ft`, 'green');
 }
 
 function openFilmIssueModal(id){const r=db.inventory.find(x=>x.id===id);if(!r)return;const cat=getCatalogItem(r.catalogId);state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:34rem"><h3 class="font-semibold text-lg">Списание плёнки</h3><p class="text-sm text-gray-500 mb-4">${academyEsc(catalogLabel(cat))} · Lot ${academyEsc(r.lotNumber||'—')} · есть ${Number(r.remainingLengthM||0).toFixed(2)} м</p><div class="grid grid-cols-2 gap-3"><div><label>Длина, м</label><input id="fi-qty" type="number" min="0.01" step="0.01"></div><div><label>Проект / заказ</label><select id="fi-order"><option value="">Без проекта</option>${warehouseOrders().map(o=>`<option value="${o.id}">${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div><div class="col-span-2"><label>Причина</label><input id="fi-reason" placeholder="Образец, брак, ручное списание..."></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveFilmIssue('${id}')">Списать</button></div></div></div>`;render();}
