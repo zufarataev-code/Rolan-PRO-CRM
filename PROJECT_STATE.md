@@ -774,3 +774,12 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Cause: seven DOM patches injected by `/legacy-crm` waited for the next animation frame, so the unpatched page was painted first (menu items moved 52 px, the top bar resized).
 - Fix: `src/features/legacy-crm/before-paint.ts` (`beforePaint`: microtask before paint, runaway guard → next frame). All patches use it; new patches must too. Client list no longer crashes on a client without a source.
 - Verified locally with a `layout-shift` observer (0 shifts on menu clicks) and in production (deploy 06a58ab healthy).
+
+## 2026-10-01 handoff — one login email per employee (PR #280)
+
+- Owner report (three days): employee «Ринат» showed one email in the card and another in «Доступ».
+- Causes: (1) two PostgreSQL accounts were linked to the same legacy cards (resolved on production 2026-10-01 by deactivating the extra accounts, Owner request); (2) the owner-only fetch guard in `/legacy-crm` stripped `email` from every team PATCH, so «Доступ» reported success while PostgreSQL kept the old address.
+- Fix: only `roles` is stripped; the «Доступ» dialog loads the PostgreSQL account before rendering (Save disabled without one) and reports success only when the server returns the new email; the card sends a new email only when the owner typed it.
+- Verification: full unit suite and `tsc` green; `team-email-edit.test.ts`.
+- Production build: CI job «Test, typecheck, and build» (`npm run build`) runs on every push of PR #280 and is green.
+- Next action: Codex 👍, Owner «да», merge, deploy (no migration).

@@ -62,3 +62,62 @@ test("new employee is linked to the legacy card during creation", () => {
   assert.match(service, /legacy_user_ids: legacyUserId \? \[legacyUserId\] : \[\]/);
   assert.match(service, /legacy_user_ids: \{ has: legacyUserId \}/);
 });
+
+test("login email edits reach the server account and the access dialog shows its email", () => {
+  const route = readFileSync("app/legacy-crm/route.ts", "utf8");
+
+  // The owner's PATCH keeps the email; only roles stay with the canonical directory.
+  assert.match(route, /delete body\.roles;/);
+  assert.doesNotMatch(route, /delete body\.email/);
+  assert.match(route, /\['tm-edit-role'\]\.forEach/);
+  // The access dialog opens only with the PostgreSQL email (no stale value to save
+  // back), keeps Save disabled without a server account, and reports success
+  // only when the server saved the new email.
+  assert.match(route, /const account = await loadTeamAccessAccount\(legacyUserId, user\.email \|\| ''\);/);
+  assert.match(route, /value="' \+ academyEsc\(serverEmail\) \+ '"/);
+  assert.match(route, /onclick="submitTeamMemberAccess\(\)"' \+ \(account\.member \? '' : ' disabled'\)/);
+  assert.doesNotMatch(route, /hydrateTeamAccessEmail/);
+  assert.match(route, /const savedEmail = String\(updateResult\?\.data\?\.email \|\| ''\)/);
+  assert.match(route, /if \(savedEmail !== email\)/);
+});
+
+test("card email changes only when the owner typed a new address", () => {
+  const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+  assert.match(html, /emailInput\.dataset\.serverEmail = String\(member\.email \|\| ''\)/);
+  // Only a typed change is sent; an untouched field (even before hydration) keeps the server login.
+  assert.match(html, /id="tm-edit-email" type="email" value="\$\{academyEsc\(u\.email \|\| ''\)\}" oninput="this\.dataset\.touched = '1'"/);
+  assert.match(html, /const emailWasEdited = Boolean\(emailTouched && enteredEmail && enteredEmail !== canonicalEmail\);/);
+  // Hydration never overwrites a field the owner has typed in.
+  assert.match(html, /if \(emailInput && emailInput\.dataset\.touched !== '1' && /);
+});
+
+test("a new login email reaches every card linked to the account", () => {
+  const route = readFileSync("app/legacy-crm/route.ts", "utf8");
+  const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+  assert.match(route, /linkedIds\.forEach\(\(id\) => \{ const card = getUser\(id\); if \(card\) card\.email = savedEmail; \}\);/);
+  assert.match(html, /\.forEach\(id => \{ const card = getUser\(id\); if \(card\) card\.email = email; \}\);/);
+});
+
+test("a slow account load never replaces a modal the owner opened or closed meanwhile", () => {
+  const route = readFileSync("app/legacy-crm/route.ts", "utf8");
+  // A loading dialog opens first; its generation and the current section are remembered.
+  assert.match(route, /Загружаю учётную запись…[\s\S]{0,120}render\(\);\n\s*const modalGenerationWhenClicked = window\.__modalGeneration;\n\s*const viewWhenClicked = state\.view;/);
+  assert.match(route, /const loadingStillShown = window\.__modalGeneration === modalGenerationWhenClicked;/);
+  assert.match(route, /\|\| !loadingStillShown\n\s*\|\| state\.view !== viewWhenClicked\n\s*\) \{/);
+  assert.match(route, /if \(window\.__teamAccessRequest === request && loadingStillShown\) closeModal\(\);/);
+
+  // Opening and closing another dialog from «no dialog» back to «no dialog» still counts.
+  const install = route.match(/function installModalGeneration\(target\) \{[\s\S]*?\n {8}\}\n/)?.[0];
+  assert.ok(install, "installModalGeneration not found");
+  const window: { __modalGeneration?: number } = {};
+  const state: { modal: string | null } = { modal: null };
+  new Function("window", "state", `${install}; installModalGeneration(state); installModalGeneration(state);`)(window, state);
+  const clicked = window.__modalGeneration;
+  state.modal = "<div>other</div>";
+  state.modal = null;
+  assert.equal(state.modal, null);
+  assert.notEqual(window.__modalGeneration, clicked);
+  const settled = window.__modalGeneration;
+  state.modal = null;
+  assert.equal(window.__modalGeneration, settled, "setting the same value is not a change");
+});
