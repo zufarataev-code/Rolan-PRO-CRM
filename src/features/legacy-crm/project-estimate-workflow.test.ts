@@ -344,7 +344,9 @@ test("the Services reference owns installer pay while material stays in Warehous
   assert.match(renderer, /cps-\$\{row\.service_type_id\}-installer/);
   assert.match(renderer, /Специалисту по установке \/ sqft, \$/);
   assert.doesNotMatch(renderer, /cpa-\$\{row\.service_addon_id\}-cost/);
-  assert.match(renderer, /Стоимость плёнки берётся со склада\. Ставка монтажа из этой услуги автоматически начисляется/);
+  assert.match(renderer, /цена клиенту берётся из конкретной модели каталога/);
+  assert.match(renderer, /Закупочная стоимость рулона берётся со склада отдельно/);
+  assert.match(renderer, /Ставка монтажа автоматически начисляется/);
   assert.match(source, /patch\.installation_cost_per_sqft = canonicalPricingValue/);
   assert.match(source, /syncLegacyInstallerServiceRate\(service\.service_code, patch\.installation_cost_per_sqft\)/);
   assert.match(source, /syncLegacyInstallerServiceRate\(service\.service_code, service\.installation_cost_per_sqft\)/);

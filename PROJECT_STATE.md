@@ -803,3 +803,11 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Legacy block «УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ» before `projectQuickLineCatalog`: `settings.serviceOfferings` with four starter services (fixed ids, prices empty), `serviceOfferingsFor`, `projectQuickLineFilms`, `projectQuickLineLabel`, `serviceOfferingInstallerRate`, owner-only `addServiceOffering` / `updateServiceOffering` / `toggleServiceOfferingFilm`, and `renderServiceOfferingsSection` in «Услуги и цены».
 - Project service lines: a «Услуга» select under the direction; choosing it sets the label (proposal), the price per sq ft when the line has no price, and narrows the films; a film linked to a service fills the service; a manual or new warehouse film written for the line is linked to its service. `installerRateForQuickLine` and the reference payout use the service rate first.
 - Verification: full unit suite and `tsc` green; `service-offerings.test.ts`. Local CRM: «Услуги по направлениям» shows the starters; Magnetronic 05 at $12 / $3 → a 500 sq ft line gets the service name, $6 000 and $1 500 to the specialist; the film list says «Нет плёнки этой услуги на складе» when the linked film has no stock.
+
+## 2026-10-01 handoff — model-specific film sale prices
+
+- Scope: the Settings rate directory exposes the existing film catalog as `direction → service / line → brand → product → model / thickness → customer price per sq ft`. The direction-level customer price is explicitly labelled as a fallback only.
+- One catalog: adding a model from the rate directory writes the existing `db.settings.catalog` record used by Warehouse, Measurement, Project and Proposal. No second price catalog was added. Exact-model `retailPerSqft` remains the default Project price; Project overrides and Proposal snapshots keep their existing behavior.
+- Separation of facts: model `retailPerSqft` is the sale price. Purchase cost remains on Warehouse stock receipts and continues to feed cost/profit independently. Installer rates are unchanged.
+- Permissions: Owner can add models and maintain list prices; Manager sees the price directory and may negotiate only through the Project price override.
+- Implementation branch: `codex/model-specific-film-pricing-main`, based on current `main`. Production has not been changed or authorized.
