@@ -774,3 +774,12 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Cause: seven DOM patches injected by `/legacy-crm` waited for the next animation frame, so the unpatched page was painted first (menu items moved 52 px, the top bar resized).
 - Fix: `src/features/legacy-crm/before-paint.ts` (`beforePaint`: microtask before paint, runaway guard → next frame). All patches use it; new patches must too. Client list no longer crashes on a client without a source.
 - Verified locally with a `layout-shift` observer (0 shifts on menu clicks) and in production (deploy 06a58ab healthy).
+
+## 2026-10-02 handoff — project archive (owner only)
+
+- Owner request: delete projects only by the owner, into an archive, restorable. Decision recorded in DECISIONS.md (2026-10-02).
+- Legacy block «АРХИВ ПРОЕКТОВ» before `renderOrders`: `openArchiveProjectModal` (reason optional), `archiveProject` (moves to `db.archivedOrders`, cancels the project's draft purchase requests, timeline `project_archived`, closes the open card), `openProjectArchive` (list with «Восстановить»), `restoreProject` (moves back, reopens those drafts, timeline `project_restored`, opens the card), `projectNumberSequence` (numbers count archived projects).
+- Buttons (owner only): «🗑 Удалить в архив» in the project card top bar; «🗄 Архив (N)» in «Проекты». A link to an archived project shows «Проект в архиве — Восстановить» to the owner.
+- Server: `src/features/legacy-crm/project-archive.ts` `enforceProjectArchive(current, next, isOwner)` in `PUT /api/v1/legacy-crm/state` for privileged saves.
+- Also: the projects list no longer crashes on a project without `createdAt`.
+- Verification: full unit suite and `tsc` green; `project-archive.test.ts` (archive/restore with drafts, owner only, numbering, server rule for stale owner and manager saves). Local CRM: archive → stored on the server without the project in `orders` → «🗄 Архив (1)» → «Восстановить» → back in `orders` on the server, card opens, history shows both events.

@@ -484,3 +484,13 @@ Do not silently overwrite an earlier decision. Add a new dated section that name
 - The senior role that distributes jobs within a group is **«Руководитель отдела монтажа»**; it replaces «Руководитель монтажной группы» and «Главный специалист по установке» used in earlier drafts (PR #275–#277).
 - Internal codes stay `INSTALLER` / `installer`; only user-visible text changes. New screens and PRs use these titles from the start.
 - Scope: everything a person sees — CRM screens, the installer app and its demos, seed/provisioning data, client SMS/e-mail and documents. Historical internal engineering notes (`.agents/`, audit and prompt documents) are not rewritten.
+
+## 2026-10-02 — Projects are deleted into an archive, by the owner only (Owner)
+
+Owner decision in chat on 2026-10-02: «удаление проектов только у меня как у админа — удалять в архив, чтобы потом можно было восстановить». Amends item 1 of "2026-09-29 — CRM core consolidation" like the earlier exceptions: projects live in the legacy payload today.
+
+- Only the owner deletes and restores projects. A deleted project is never erased: it moves from `orders` to `archivedOrders` with all its data and `archive {at, by, reason, cancelledRequestIds}`.
+- In the archive a project takes no part in lists, calendar, money, warehouse or analytics (all read `orders`). Its draft purchase requests are cancelled and become drafts again on restore; requests already sent stay with purchasing.
+- The server enforces it on every owner/manager save (`enforceProjectArchive`): an archived project is never also in `orders`; a non-owner cannot change the archive or drop a project from `orders`. Field roles never receive the archive.
+- Project numbers count archived projects, so numbers are never reused.
+- Migration: moves with the project stage to PostgreSQL as a soft-delete column.
