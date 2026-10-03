@@ -484,3 +484,13 @@ Do not silently overwrite an earlier decision. Add a new dated section that name
 - The senior role that distributes jobs within a group is **«Руководитель отдела монтажа»**; it replaces «Руководитель монтажной группы» and «Главный специалист по установке» used in earlier drafts (PR #275–#277).
 - Internal codes stay `INSTALLER` / `installer`; only user-visible text changes. New screens and PRs use these titles from the start.
 - Scope: everything a person sees — CRM screens, the installer app and its demos, seed/provisioning data, client SMS/e-mail and documents. Historical internal engineering notes (`.agents/`, audit and prompt documents) are not rewritten.
+
+## 2026-10-02 — Project overhead by revenue; ad budget from last month's revenue (Owner)
+
+Owner decision in chat on 2026-10-02 («давай» to the proposed order). Amends item 1 of "2026-09-29 — CRM core consolidation", like the 2026-09-30 and 2026-10-01 exceptions: the change is in the legacy project economics because that is where project profit is calculated today.
+
+- The advertising budget of a month is `marketingPct` (10%) of the previous month's revenue: $100 000 in September → $10 000 for October. With no revenue in the previous month (the first month in the CRM), the budget is estimated from the month's own revenue and the screen says so.
+- The month's fixed costs and its advertising budget are shared between that month's projects in proportion to their revenue (not equally). A project without a price carries no share. The project month is `projectProfitDate` (installation date, then project dates, then proposal and creation dates).
+- The project's ad share stays in the direct costs (`orderPSS.marketing`), so every margin in the CRM keeps meaning "after advertising"; the fixed-cost share and the tax reserve stay in the net-profit block.
+- Supersedes: equal split of fixed costs (`fixedPool / projectCount`) and the flat «Рекламный резерв» of 10% of each project's revenue.
+- Migration: moves with the payment stage, together with the monthly money report and the bank feeds (real ad spend can then replace the budget).

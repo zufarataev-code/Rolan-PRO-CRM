@@ -27,7 +27,7 @@ test("installer labor uses employee reference rates and keeps a fallback reserve
 
 test("material, direct costs, fixed expenses and California reserve produce management net profit", () => {
   const calculation = source.match(/function projectProfitability\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.match(calculation, /fixedAllocation = fixedPool \/ projectCount/);
+  assert.match(calculation, /fixedAllocation = fixedPool \* revenueShare/);
   assert.match(calculation, /grossProfit = orderMargin\(o\)/);
   assert.match(calculation, /profitBeforeTax = grossProfit - fixedAllocation/);
   assert.match(calculation, /monthTaxReserve/);
@@ -69,16 +69,16 @@ test("company compensation model separates fixed salaries from revenue percentag
   assert.match(source, /s\.pricingDefaults\.measurerPct = 0/);
   assert.match(source, /Оклады входят в постоянные расходы месяца/);
   assert.match(source, /Комиссия менеджера от валовой выручки/);
-  assert.match(source, /Рекламный резерв от валовой выручки/);
+  assert.match(source, /Бюджет рекламы, % от выручки прошлого месяца/);
 });
 
-test("project PSS charges manager commission and advertising once from gross revenue", () => {
+test("project PSS charges manager commission from revenue and its share of the month's ad budget", () => {
   const pss = source.match(/function orderPSS\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(pss, /const mgr = rev \* managerPct \/ 100/);
-  assert.match(pss, /const marketing = rev \* Math\.max\(0, Number\(pd\.marketingPct\) \|\| 0\) \/ 100/);
+  assert.match(pss, /const marketing = orderAdAllocation\(o\)/);
   assert.match(source, /legacyAds\.active = false/);
   assert.match(source, /legacyAds\.costBehavior = 'variable'/);
-  assert.match(source, /Рекламный резерв \(\$\{Number\(db\.settings\.pricingDefaults\?\.marketingPct/);
+  assert.match(source, /Реклама — доля бюджета месяца/);
 });
 
 test("new project opens the measurement stage before calculation", () => {

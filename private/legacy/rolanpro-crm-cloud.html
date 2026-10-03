@@ -8803,6 +8803,18 @@ function companyFixedMonthlyBurn() {
     .filter(item => item.active !== false && item.scope !== 'personal' && item.costBehavior !== 'variable' && item.category !== 'tax')
     .reduce((sum, item) => sum + opexMonthly(item), 0);
 }
+/** «Сколько тратить на рекламу»: budget of this month and the one the current revenue gives for next month. */
+function companyAdBudgetHint() {
+  const now = new Date();
+  const current = projectMonthAdBudget(now);
+  const pct = Number(db.settings.pricingDefaults?.marketingPct) || 0;
+  const revenueNow = projectMonthRevenue(now);
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return `<div class="mt-3 p-3 rounded-lg bg-white border border-blue-100 text-sm text-blue-950">
+    <div>Бюджет рекламы, ${academyEsc(projectMonthLabel(now))}: <b>${fmtMoney(current.budget)}</b> = ${pct}% выручки за ${academyEsc(current.baseMonthLabel)} (${fmtMoney(current.baseRevenue)})${current.basis === 'current' ? ' — за прошлый месяц выручки нет, считаем от этого месяца' : ''}.</div>
+    <div class="mt-1">Бюджет рекламы, ${academyEsc(projectMonthLabel(next))}: <b>${fmtMoney(revenueNow * pct / 100)}</b> = ${pct}% выручки за ${academyEsc(projectMonthLabel(now))} на сегодня (${fmtMoney(revenueNow)}); растёт с каждым проектом месяца.</div>
+  </div>`;
+}
 function companyCostPlan(id, fallback = {}) {
   return (db.opex || []).find(item => item.id === id) || fallback;
 }
@@ -15727,6 +15739,67 @@ function orderManualExpensesTotal(o) {
     .reduce((s, e) => s + (Number(e.amount) || 0), 0);
 }
 // Production cost ПСС full
+// ---------- НАКЛАДНЫЕ ПО ВЫРУЧКЕ (Owner, 2026-10-02) ----------
+// Постоянные расходы месяца и бюджет рекламы делятся между проектами месяца
+// пропорционально выручке: большой проект несёт большую долю, маленький — меньшую.
+// Бюджет рекламы месяца = marketingPct от выручки прошлого месяца
+// (выручка $100 000 в сентябре → $10 000 на рекламу в октябре).
+let projectMonthRevenueCache = null;
+
+function projectMonthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Revenue by project month, counted once per screen (cleared after the current task and on save). */
+function projectMonthRevenueMap() {
+  if (projectMonthRevenueCache) return projectMonthRevenueCache;
+  const totals = {};
+  const ids = new Set();
+  (db.orders || []).forEach(order => {
+    ids.add(order.id);
+    const revenue = orderRevenue(order);
+    if (!(revenue > 0)) return;
+    const key = projectMonthKey(projectProfitDate(order));
+    totals[key] = (totals[key] || 0) + revenue;
+  });
+  projectMonthRevenueCache = { totals, ids };
+  queueMicrotask(() => { projectMonthRevenueCache = null; });
+  return projectMonthRevenueCache;
+}
+
+function projectMonthRevenue(date) {
+  return projectMonthRevenueMap().totals[projectMonthKey(date)] || 0;
+}
+
+function projectMonthLabel(date) {
+  return date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+}
+
+/** The advertising budget of a month: marketingPct of the previous month's revenue. */
+function projectMonthAdBudget(date) {
+  const pct = Math.max(0, Number(db.settings.pricingDefaults?.marketingPct) || 0);
+  const previous = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+  const previousRevenue = projectMonthRevenue(previous);
+  // No revenue last month (first month in the CRM): the rule cannot apply yet, so
+  // the budget is estimated from this month's revenue.
+  const basis = previousRevenue > 0 ? 'previous' : 'current';
+  const baseRevenue = basis === 'previous' ? previousRevenue : projectMonthRevenue(date);
+  return { budget: baseRevenue * pct / 100, pct, basis, baseRevenue, baseMonthLabel: projectMonthLabel(basis === 'previous' ? previous : date) };
+}
+
+/** The project's share of its month's revenue (0 for a project without a price yet). */
+function projectRevenueShare(o) {
+  const revenue = orderRevenue(o);
+  if (!(revenue > 0)) return 0;
+  const cache = projectMonthRevenueMap();
+  const monthTotal = projectMonthRevenue(projectProfitDate(o)) + (cache.ids.has(o?.id) ? 0 : revenue);
+  return monthTotal > 0 ? Math.min(1, revenue / monthTotal) : 0;
+}
+
+function orderAdAllocation(o) {
+  return projectMonthAdBudget(projectProfitDate(o)).budget * projectRevenueShare(o);
+}
+
 function orderPSS(o) {
   const rev = orderRevenue(o);
   const pd = db.settings.pricingDefaults || {};
@@ -15743,7 +15816,7 @@ function orderPSS(o) {
   const rent = orderRentExpense(o);
   const extraSvcCost = orderExtraServicesCost(o);
   const manualExp = orderManualExpensesTotal(o);
-  const marketing = rev * Math.max(0, Number(pd.marketingPct) || 0) / 100;
+  const marketing = orderAdAllocation(o);
   return {
     film, installers, gas, manager: mgr, measurer: meas,
     consumables: consum, rent, extraServicesCost: extraSvcCost, manual: manualExp,
@@ -15788,7 +15861,9 @@ function projectProfitability(o) {
   const monthOrders = projectProfitMonthOrders(o);
   const projectCount = Math.max(1, monthOrders.length);
   const fixedPool = projectMonthlyFixedExpensePool();
-  const fixedAllocation = fixedPool / projectCount;
+  const revenueShare = projectRevenueShare(o);
+  const fixedAllocation = fixedPool * revenueShare;
+  const adBudget = projectMonthAdBudget(projectProfitDate(o));
   const grossProfit = orderMargin(o);
   const profitBeforeTax = grossProfit - fixedAllocation;
   const monthGrossProfit = monthOrders.reduce((sum, order) => sum + orderMargin(order), 0);
@@ -15798,12 +15873,15 @@ function projectProfitability(o) {
   const minimumMonthlyReserve = Math.max(0, Number(profile.annualMinimum) || 0) / 12;
   const monthTaxReserve = monthOrders.length ? Math.max(Math.max(0, monthProfitBeforeTax) * rate, minimumMonthlyReserve) : 0;
   const monthRevenue = monthOrders.reduce((sum, order) => sum + orderRevenue(order), 0);
-  const revenueShare = monthRevenue > 0 ? orderRevenue(o) / monthRevenue : 1 / projectCount;
   const taxAllocation = monthTaxReserve * revenueShare;
   return {
     grossProfit,
     fixedPool,
     fixedAllocation,
+    revenueShare,
+    monthRevenue,
+    adBudget,
+    adAllocation: orderAdAllocation(o),
     profitBeforeTax,
     taxAllocation,
     netProfit: profitBeforeTax - taxAllocation,
@@ -16035,6 +16113,7 @@ function orderDebt(o) {
 }
 function save() {
   if (db?.purchaseRequests && db?.vendors && db?.settings?.catalog) ensureAutoDraftPurchaseRequests();
+  projectMonthRevenueCache = null;
   localStorage.setItem('rolanpro_crm', JSON.stringify(db));
   if (ROLANPRO_CLOUD && cloudReady) cloudScheduleSave();
 }
@@ -21449,9 +21528,10 @@ function renderCompanyFixedExpenseSettings() {
         <div><label>Оклад владельца / месяц, $</label><input id="company-owner-salary" type="number" min="0" step="100" value="${Number(ownerSalary.amount || 0)}"></div>
         <div><label>Оклад замерщика / месяц, $</label><input id="company-measurer-salary" type="number" min="0" step="100" value="${Number(measurerSalary.amount || 0)}"></div>
         <div><label>Комиссия менеджера от валовой выручки, %</label><input id="company-manager-pct" type="number" min="0" step="0.5" value="${Number(pricing.managerPct || 0)}"></div>
-        <div><label>Рекламный резерв от валовой выручки, %</label><input id="company-marketing-pct" type="number" min="0" step="0.5" value="${Number(pricing.marketingPct || 0)}"></div>
+        <div><label>Бюджет рекламы, % от выручки прошлого месяца</label><input id="company-marketing-pct" type="number" min="0" step="0.5" value="${Number(pricing.marketingPct || 0)}"></div>
       </div>
-      <div class="flex items-center justify-between gap-3 flex-wrap mt-3"><div class="text-xs text-blue-900">Оклады входят в постоянные расходы месяца. Комиссия и реклама рассчитываются автоматически в каждом проекте от его выручки.</div><button class="btn-primary" onclick="saveCompanyCostModel()">Сохранить модель расходов</button></div>
+      ${companyAdBudgetHint()}
+      <div class="flex items-center justify-between gap-3 flex-wrap mt-3"><div class="text-xs text-blue-900">Оклады входят в постоянные расходы месяца. Комиссия менеджера считается от выручки проекта. Постоянные расходы и бюджет рекламы делятся между проектами месяца по их выручке.</div><button class="btn-primary" onclick="saveCompanyCostModel()">Сохранить модель расходов</button></div>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
       <div class="p-3 rounded-xl bg-slate-50 border"><div class="text-xs text-gray-500">В месяц</div><div class="text-xl font-black">${fmtMoney(analysis.burn)}</div></div>
@@ -23966,7 +24046,7 @@ function renderProjectEstimateWorkspace(o) {
   const costLines = [
     ['Плёнка и отход', pss.film], ['Специалисты по установке', pss.installers], ['Транспорт', pss.gas],
     [`Менеджер (${Number(db.settings.pricingDefaults?.managerPct || 0)}% выручки)`, pss.manager],
-    [`Рекламный резерв (${Number(db.settings.pricingDefaults?.marketingPct || 0)}% выручки)`, pss.marketing],
+    [`Реклама — доля бюджета месяца (${(projectRevenueShare(o) * 100).toFixed(1)}% от ${fmtMoney(projectMonthAdBudget(projectProfitDate(o)).budget)})`, pss.marketing],
     ['Замерщик — оклад в постоянных расходах', pss.measurer], ['Расходники', pss.consumables],
     ['Аренда', pss.rent],
     ['Прямые расходы', pss.manual],
@@ -24030,7 +24110,7 @@ function renderProjectEstimateWorkspace(o) {
     </section>
 
     ${canSeeInternalEconomics ? `<section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>6. Чистая прибыль проекта</h4><div class="text-xs text-gray-500">Управленческий расчёт за ${academyEsc(profitability.monthLabel)}. Постоянные расходы делятся поровну между ${profitability.projectCount} проектами месяца.</div></div></div>
+      <div class="project-estimate-section-head"><div><h4>6. Чистая прибыль проекта</h4><div class="text-xs text-gray-500">Управленческий расчёт за ${academyEsc(profitability.monthLabel)} Постоянные расходы и реклама делятся между проектами месяца по выручке: этот проект — ${(profitability.revenueShare * 100).toFixed(1)}% выручки месяца (${fmtMoney(orderRevenue(o))} из ${fmtMoney(profitability.monthRevenue)}, проектов: ${profitability.projectCount}). Бюджет рекламы месяца ${fmtMoney(profitability.adBudget.budget)} = ${Number(profitability.adBudget.pct)}% выручки за ${academyEsc(profitability.adBudget.baseMonthLabel)} (${fmtMoney(profitability.adBudget.baseRevenue)})${profitability.adBudget.basis === 'current' ? ' — за прошлый месяц выручки нет, поэтому пока от выручки этого месяца' : ''}.</div></div></div>
       <div class="project-profit-flow">
         <div class="project-profit-card"><span>Сумма заказа</span><strong class="text-emerald-700">${fmtMoney(orderRevenue(o))}</strong></div>
         <div class="project-profit-card"><span>Прямые затраты</span><strong class="text-red-600">− ${fmtMoney(pss.total)}</strong></div>
@@ -24040,6 +24120,7 @@ function renderProjectEstimateWorkspace(o) {
         <div class="project-profit-card"><span>Резерв налога California</span><strong class="text-red-600">− ${fmtMoney(profitability.taxAllocation)}</strong></div>
         <div class="project-profit-card" style="border-color:${profitability.netProfit >= 0 ? '#86efac' : '#fca5a5'};background:${profitability.netProfit >= 0 ? '#f0fdf4' : '#fef2f2'}"><span>Расчётная чистая прибыль</span><strong class="${profitability.netProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(profitability.netProfit)}</strong></div>
         <div class="project-profit-card"><span>Постоянные расходы месяца</span><strong>${fmtMoney(profitability.fixedPool)}</strong></div>
+        <div class="project-profit-card"><span>Бюджет рекламы месяца</span><strong>${fmtMoney(profitability.adBudget.budget)}</strong></div>
         <div class="project-profit-card"><span>Резерв налога месяца</span><strong>${fmtMoney(profitability.monthTaxReserve)}</strong></div>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3">
@@ -24718,7 +24799,7 @@ function renderOrderDetails(id) {
             ['Аренда оборудования', p.rent],
             ['Себест-ть доп.услуг', p.extraServicesCost],
             ['Доп. расходы (вручную)', p.manual],
-            ['Маркетинг', p.marketing],
+            ['Реклама (доля бюджета месяца)', p.marketing],
           ];
           return `<table class="w-full text-sm"><tbody>
             ${lines.map(([n,v]) => `<tr class="border-t"><td class="p-1.5 text-gray-600">${n}</td><td class="p-1.5 text-right font-mono">${fmtMoney(v)}</td></tr>`).join('')}
