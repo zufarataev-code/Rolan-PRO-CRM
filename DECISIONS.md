@@ -466,6 +466,32 @@ Owner decision in chat on 2026-10-01 (asked whether to wait for the relational s
 - Migration: the analytics moves with the installation and payment stage (relational installer jobs and payroll accruals); client identity moves with the lead/client stage.
 - Everything else remains frozen as decided on 2026-09-29.
 
+## 2026-10-01 — Exception to the legacy freeze: a manually written film is fixed in the project and ordered
+
+Owner request in chat on 2026-10-01: a manager must be able to write in a film that is not in the warehouse list; «это должно фиксироваться в рамках проекта обязательно, чтобы потом можно было закупить и сделать приход, чтобы проект правильно посчитался». Solar films have subtypes (зеркальная, керамическая, магнетронная, фотохромная, другая).
+
+- Allowed in the legacy HTML until the warehouse/purchasing stage moves to PostgreSQL: «Плёнки нет в списке → Вписать плёнку вручную и заказать» in the quick project editor (PR for this exception). It creates a catalog film «ожидает закупки» on the project line and a draft project purchase request; the existing receipt flow brings the real roll cost into the project.
+- Same exception (Owner request in chat, 2026-10-01): the «Принять рулон на склад» form has category, solar type, brand, model, vendor, lot, width, length, purchase price, date and location; a film missing from the list is typed in and added to the catalog; every roll gets a readable unique code (RP-YYMM-NNNN, also its QR code); the purchase price per sq ft is shown and stored, and the project material cost uses it.
+- Migration: moves with the warehouse/purchasing stage (relational catalog, purchase requests and receipts).
+
+## 2026-10-01 — Customer sale price belongs to the exact film model
+
+- `Справочник расценок на работу` presents two distinct levels: a direction-level fallback and the exact catalog-model sale price. The fallback is used only until a material is selected; it must not overwrite every model in that direction.
+- The customer pricing hierarchy is `direction → service / product line → brand → model / thickness → retailPerSqft`. Safety 4 mil and 8 mil, or Smart Vision 65, 85 and 95, are separate catalog products and may have different prices.
+- The existing catalog record is reused by Warehouse, Measurement, Project and Proposal; a second price-only film list is prohibited. While the legacy catalog remains active, this screen exposes its existing `retailPerSqft` field rather than adding another store.
+- Warehouse receipt cost and customer sale price remain different facts. Actual roll purchase cost feeds cost and margin; `retailPerSqft` supplies the default customer price. A manager may apply an authorized Project override, and an issued Proposal retains its price snapshot.
+- The Owner maintains model list prices. Managers may view the model price directory and change a deal price only inside the Project workflow.
+- This refines the existing service-price directory without changing installer pay. Relational migration of the film catalog is still required under the staged core consolidation decision.
+
+## 2026-09-30 — One canonical rate directory
+
+- `Настройки → Справочник расценок на работу` is the only owner-facing directory for customer guide prices, installer rates, additional-work prices, and installation-complexity multipliers. It is not a primary daily-work module in the sidebar. A second rate editor under Employees or Payroll is not permitted.
+- PostgreSQL `service_types`, `service_addons`, and `complexity_levels` are authoritative. Legacy settings may mirror these values only while the installation/payment migration is incomplete.
+- Customer price and installer rate are different fields shown together. The customer value is a deal guide and can be overridden in a Project; the installer value feeds server-owned payroll and profitability. Warehouse material cost continues to use the actual receipt cost and is not replaced by the installer rate.
+- Difficulty multiplies film-service customer labor and installer labor through the existing backend calculation. Per-employee pay overrides retain precedence where already supported; the directory supplies the default company rate.
+- Signed Proposals, completed Projects, and paid payroll records retain their stored snapshots when directory values change. Any backfill of unpaid accruals is a production migration and requires explicit Owner approval and a database backup.
+- Implemented for review on `codex/unified-rate-directory` in PR #281. This follows the urgent operational exception to the legacy freeze and does not authorize another legacy data source.
+
 ## Changing a decision
 
 ## 2026-09-30 — Surveyor mobile navigation is organized around field work
@@ -484,3 +510,12 @@ Do not silently overwrite an earlier decision. Add a new dated section that name
 - The senior role that distributes jobs within a group is **«Руководитель отдела монтажа»**; it replaces «Руководитель монтажной группы» and «Главный специалист по установке» used in earlier drafts (PR #275–#277).
 - Internal codes stay `INSTALLER` / `installer`; only user-visible text changes. New screens and PRs use these titles from the start.
 - Scope: everything a person sees — CRM screens, the installer app and its demos, seed/provisioning data, client SMS/e-mail and documents. Historical internal engineering notes (`.agents/`, audit and prompt documents) are not rewritten.
+
+## 2026-10-02 — Services inside directions: direction → service → film (Owner)
+
+Owner decision in chat on 2026-10-02: in a project the choice is direction → service → film, e.g. «Солнцезащитная → Solar Control Magnetronic 05 / Spectral 30 → плёнка», «Защитная → Safety 14 / Anti-graffiti 30 → плёнка». Amends item 1 of "2026-09-29 — CRM core consolidation" like the earlier exceptions: projects, films and the warehouse are in the legacy payload today.
+
+- A service belongs to one direction and carries the name the client sees in the proposal, a client price per sq ft and a specialist rate per sq ft (empty → the direction rate). Stored in `settings.serviceOfferings`; the owner edits them in «Услуги и цены → Услуги по направлениям», managers see them.
+- Warehouse films are linked to a service (`catalog.serviceOfferingId`, one service per film). A service with linked films offers only those films in a project; without linked films it offers all films of the direction.
+- Project service lines store `offeringId`: the line label (proposal) is the service name, the price per sq ft defaults from the service, the specialist rate comes from the service, material stays the purchase cost of the chosen film.
+- Migration: moves with the catalog/warehouse stage to PostgreSQL (service → film relation), next to `service_types`.
