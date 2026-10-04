@@ -503,3 +503,12 @@ Owner clarified and authorized implementation in chat: choose the project direct
 - Service groups are projections of the current scope: measured windows grouped by solution, or existing quick lines when there are no measurements, plus additional-work lines. Assignments live in `order.serviceSchedules`, with project crew/date derived summaries. A service has its own date and crew; calendar events use that crew. No duplicate charge is created for a measured service.
 - Installation readiness, deposit/proposal and verified-measurement gates remain. This does not implement separate per-service completion, weekly payroll summaries, relational migration or automatic bank transfers.
 - Branch `codex/service-solutions-live`, based on current main `4b5463c`. Supersedes the one-film/one-solution and automatically seeded examples in the unmerged #295 proposal.
+## 2026-10-02 — Project overhead by revenue; ad budget from last month's revenue (Owner)
+
+Owner decision in chat on 2026-10-02 («давай» to the proposed order). Amends item 1 of "2026-09-29 — CRM core consolidation", like the 2026-09-30 and 2026-10-01 exceptions: the change is in the legacy project economics because that is where project profit is calculated today.
+
+- The advertising budget of a month is `marketingPct` (10%) of the previous month's revenue: $100 000 in September → $10 000 for October. With no revenue in the previous month (the first month in the CRM), the budget is estimated from the month's own revenue and the screen says so.
+- The month's fixed costs and its advertising budget are shared between that month's projects in proportion to their revenue (not equally). A project without a price carries no share. The project month is `projectProfitDate` (installation date, then project dates, then proposal and creation dates).
+- The project's ad share stays in the direct costs (`orderPSS.marketing`), so every margin in the CRM keeps meaning "after advertising"; the fixed-cost share and the tax reserve stay in the net-profit block.
+- Supersedes: equal split of fixed costs (`fixedPool / projectCount`) and the flat «Рекламный резерв» of 10% of each project's revenue.
+- Migration: moves with the payment stage, together with the monthly money report and the bank feeds (real ad spend can then replace the budget).
