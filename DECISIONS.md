@@ -540,5 +540,23 @@ Owner decision in chat on 2026-10-04, after step 1 of the first canvas: «я х�
 - One «+ Создать» for everything people create (`crm2CreateItems`; the phone «+» lists the same); no second «новый проект» button on any screen. «Сменить» and «Выйти» are the user menu (language, settings, exit).
 - Home (step 2): numbers only — money, the year net-profit goal, funnel, advertising, directions, works, expenses and «Требует внимания» counters that open their lists; no order lists. The company's money is the owner's.
 - Calculator and proposal (step 3): the same style as the CRM, inside «Расчёт и КП».
-- Office phone dock: Главная · Воронка · «+» · Календарь · Меню. Field roles keep their own short menus.
+- Phone: see «Phone = Пульс бизнеса, computer = CRM 2.0» below. Field roles keep their own short menus.
 - Migration: plain CSS plus a menu definition; both move to the relational screens unchanged.
+
+
+## 2026-10-04 — Selected mobile «Пульс бизнеса» presentation
+
+The owner selected mobile design variant 2 and explicitly requested implementation in the existing CRM. On `codex/pulse-business-mobile`, OWNER/MANAGER home becomes a period-based business overview with square controls, cyan chart, colored metric indicators and authentic ROLANPRO wordmark. Phone shortcuts are Обзор / Продажи / Задачи / Ещё; Продажи routes to the existing projects lifecycle. The complete role navigation and operating workbench remain available. Phone projects default to the existing card list, with optional kanban and collapsible advanced filters. Field-role presentation is preserved.
+
+The monetary tile is explicitly «Стоимость оплаченных проектов», aggregating existing `orderRevenue` for role-visible projects with `paidAt` in the selected period. It is not bank receipts or a replacement P&L. No synthetic growth, profit, conversion or plan figures are introduced. This presentation does not change financial formulas, record storage, permissions or APIs.
+
+Open PRs #305 (CRM 2.0 shell) and #306 (numbers home) overlap and must be reconciled before merge. This branch is a reviewable implementation of the chosen mobile reference, not authorization to deploy.
+
+## 2026-10-04 — Phone = «Пульс бизнеса», computer = CRM 2.0 (Owner)
+
+Owner decision in chat on 2026-10-04, when #307 («Пульс бизнеса», mobile variant 2) reached production while #305/#306 (CRM 2.0) were in review: «Телефон — Пульс, компьютер — CRM 2.0».
+
+- Phone (`(max-width: 520px), (max-width: 768px) and (pointer: coarse)`, the CRM's phone detection): the Pulse header with the ROLANPRO logo and «+» (`openCreateSheet`, the same list as «+ Создать»), the Pulse overview as the owner/manager home, the dock Обзор · Продажи · Задачи · Ещё, Pulse colours. The avatar keeps the user's menu (exit, language, settings).
+- Computer: the CRM 2.0 shell — 6-group menu, «+ Создать», user menu, square bordered style, and (step 2) the numbers-only home. The Pulse colours in `pulse-theme.ts` apply on phones only; its dashboard styles stay global.
+- Supersedes the CRM 2.0 phone dock (Главная · Воронка · «+» · Календарь · Меню) and, for phones, the CRM 2.0 phone home.
+

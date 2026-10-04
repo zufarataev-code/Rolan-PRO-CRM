@@ -14,9 +14,10 @@ test("phone and desktop use the same complete CRM document", () => {
 
 test("mobile navigation is a shortcut layer over the full role navigation", () => {
   assert.match(legacy, /const mobileNavItems =/);
-  // CRM 2.0 office dock: Главная · Воронка · «+» · Календарь · Меню.
-  assert.match(legacy, /const mobileNavItems = office \? \[\n\s+\['dashboard', 'Главная'[\s\S]*?\['orders', 'Воронка'[\s\S]*?\['create', 'Создать'[\s\S]*?\['calendar', 'Календарь'/);
+  // Phone = «Пульс бизнеса» (owner's mobile variant 2): Обзор · Продажи · Задачи · Ещё.
+  assert.match(legacy, /const mobileNavItems = office \? \[\n\s+\['dashboard', 'Обзор'[\s\S]*?\['orders', 'Продажи'[\s\S]*?\['tasks', 'Задачи'/);
   assert.match(legacy, /\['dashboard', 'Сегодня'/, "field roles keep «Сегодня»");
+  assert.match(legacy, /\['calendar', 'Календарь'/);
   assert.match(legacy, /onclick="selectAppView\('\$\{key\}'\)"/);
   assert.match(legacy, /onclick="toggleSidebar\(\)" aria-label="Открыть все разделы"/);
 });
