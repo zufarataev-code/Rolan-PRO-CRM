@@ -521,3 +521,11 @@ Owner decision in chat on 2026-10-02: «удаление проектов тол
 - The server enforces it on every owner/manager save (`enforceProjectArchive`): an archived project is never also in `orders`; a non-owner cannot change the archive or drop a project from `orders`. Field roles never receive the archive.
 - Project numbers count archived projects, so numbers are never reused.
 - Migration: moves with the project stage to PostgreSQL as a soft-delete column.
+
+## 2026-10-04 — The owner's design canvas becomes the CRM look (Owner)
+
+Owner decision in chat on 2026-10-04: «сделай дизайн для нашей CRM и мобильной версии… да, переноси дизайн в CRM нашу», after reviewing the canvas «CRM RolanPRO — экраны» (Claude Design, 21 screens). Amends item 1 of "2026-09-29 — CRM core consolidation" like the earlier exceptions: the screens people use are the legacy CRM today.
+
+- Step 1 (this change): one visual layer for every screen and role — `src/features/legacy-crm/design-theme.ts`, injected by `/legacy-crm` after the legacy and Tailwind styles: Montserrat / Manrope / IBM Plex Mono, the navy gradient sidebar with the blue gradient active item, the light blue-grey ground, white 8 px cards with a soft shadow, gradient primary buttons, calm inputs, 4 px chips, softer dialogs. Stroke icons replace emoji in the menu and the phone dock. The owner/manager phone dock is «Сегодня · Лиды · [+] · Проекты · Календарь»; «+» opens «Создать» (project, client, leads, task, roll receipt, purchase request); all sections stay behind ☰.
+- Layout is unchanged in this step; the canvas screens (Сегодня, Воронка, Карточка заказа, Календарь, Склад, Деньги, phone screens) follow one by one, each on top of the current structure (including the Precision Workbench «Сегодня»).
+- Migration: the theme module is plain CSS and moves with the UI to the relational screens unchanged.

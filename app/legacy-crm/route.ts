@@ -8,6 +8,7 @@ import { ROLE_CODES } from "@/lib/auth/constants";
 import { getEnv } from "@/lib/env";
 import { replaceLegacyBootstrapLogin } from "@/features/legacy-crm/html-shell";
 import { BEFORE_PAINT_SCRIPT } from "@/features/legacy-crm/before-paint";
+import { DESIGN_THEME_HTML } from "@/features/legacy-crm/design-theme";
 
 export const dynamic = "force-dynamic";
 
@@ -500,7 +501,7 @@ export async function GET(request: NextRequest) {
           item.className = 'nav-item rolanpro-calculator-nav';
           item.setAttribute('data-rolanpro-calculator-nav', '1');
           item.title = 'Быстрый калькулятор';
-          item.innerHTML = '<span class="nav-icon">🧮</span><span class="nav-label">Калькулятор</span>';
+          item.innerHTML = '<span class="nav-icon"><svg class="rp-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 7h8M8 11h2M12 11h2M16 11v6M8 15h2M12 15h2M8 18h6"></path></svg></span><span class="nav-label">Калькулятор</span>';
           item.addEventListener('click', () => window.openRolanProCalculator());
 
           const proposalItem = Array.from(nav.querySelectorAll('.nav-item')).find((candidate) =>
@@ -525,7 +526,8 @@ ${BEFORE_PAINT_SCRIPT}
 
   const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
   const privilegedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
-  const injectedUi = `${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}${previewPatch}`;
+  // The owner's design canvas as one visual layer for every role (2026-10-04).
+  const injectedUi = `${DESIGN_THEME_HTML}${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}${previewPatch}`;
   const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0
     ? `${cloudHtml.slice(0, closingBodyIndex)}${injectedUi}${cloudHtml.slice(closingBodyIndex)}`

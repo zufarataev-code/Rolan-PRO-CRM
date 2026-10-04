@@ -848,3 +848,11 @@ Code head `ecd973bad1ef023e9dd2247799c7da3e6d38bd29`, CI #824 / run 37177592497:
 - Server: `src/features/legacy-crm/project-archive.ts` `enforceProjectArchive(current, next, isOwner)` in `PUT /api/v1/legacy-crm/state` for privileged saves.
 - Also: the projects list no longer crashes on a project without `createdAt`.
 - Verification: full unit suite and `tsc` green; `project-archive.test.ts` (archive/restore with drafts, owner only, numbering, server rule for stale owner and manager saves). Local CRM: archive → stored on the server without the project in `orders` → «🗄 Архив (1)» → «Восстановить» → back in `orders` on the server, card opens, history shows both events.
+
+## 2026-10-04 handoff — design canvas, step 1: the CRM look for every screen
+
+- Owner request: transfer the canvas «CRM RolanPRO — экраны» (https://claude.ai/artifact/3DmLAsiUJwrsVj6oJzSyPb) to the CRM, desktop and phone. Decision recorded in DECISIONS.md (2026-10-04).
+- `src/features/legacy-crm/design-theme.ts` (`DESIGN_THEME_HTML`): fonts and one CSS layer (variables, sidebar, top bar, cards incl. Precision Workbench panels, buttons, inputs, chips, dialogs, phone dock, «Создать» sheet); injected first in `injectedUi` in `app/legacy-crm/route.ts`. Layout untouched; on phones the top-bar «+ Проект» is hidden because the dock's «+» creates.
+- Legacy: «ДИЗАЙН CRM: ИКОНКИ И «СОЗДАТЬ»» block (`NAV_ICON_PATHS`, `navIconSvg`, `openCreateSheet`), menu and dock icons, owner/manager dock with «+»; the injected calculator menu item has a stroke icon. Also: the projects list no longer crashes on a project without `createdAt` (same one-line fix as #294).
+- Verification: full unit suite and `tsc` green; `design-theme.test.ts`. Local CRM at 1440 px and 375 px: sidebar, top bar, «Сегодня», «Проекты», dock and «Создать» checked with screenshots; no horizontal scroll on the phone.
+- Next: the canvas screens one by one — «Сегодня» (desktop mosaic + phone), «Воронка», «Карточка заказа», «Календарь», «Склад», «Деньги», phone order/measure/installer screens.
