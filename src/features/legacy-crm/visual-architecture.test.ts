@@ -55,8 +55,6 @@ test("owner shell keeps every primary operational section in one navigation", ()
   labels.forEach((label) => assert.ok(source.includes(label), `missing owner surface: ${label}`));
 });
 
-// Owner, 2026-10-04: «Телефон — Пульс, компьютер — CRM 2.0». The workbench stays
-// reachable below the Pulse overview; the computer home is crm2-home.test.ts.
 test("business home keeps the action workbench accessible", () => {
   assert.match(source, /function renderPrecisionManagerDashboard\(\)/);
   assert.match(source, /Что требует внимания сегодня/);
@@ -64,7 +62,7 @@ test("business home keeps the action workbench accessible", () => {
   assert.match(source, /Следующий шаг/);
   assert.match(source, /Исключения/);
   assert.match(source, /Монтажи в работе/);
-  assert.match(source, /function renderManagerDashboard\(\) \{\s*return crm2IsPhone\(\) \? renderPulseBusinessDashboard\(\) : renderCrm2Home\(\);/);
+  assert.match(source, /function renderManagerDashboard\(\) \{\s*return renderPulseBusinessDashboard\(\);/);
 });
 
 test("manager workbench exposes the complete eight-stage operating funnel", () => {

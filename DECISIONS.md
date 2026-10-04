@@ -529,19 +529,6 @@ Owner decision in chat on 2026-10-04: «сделай дизайн для наш�
 - Step 1 (this change): one visual layer for every screen and role — `src/features/legacy-crm/design-theme.ts`, injected by `/legacy-crm` after the legacy and Tailwind styles: Montserrat / Manrope / IBM Plex Mono, the navy gradient sidebar with the blue gradient active item, the light blue-grey ground, white 8 px cards with a soft shadow, gradient primary buttons, calm inputs, 4 px chips, softer dialogs. Stroke icons replace emoji in the menu and the phone dock. The owner/manager phone dock is «Сегодня · Лиды · [+] · Проекты · Календарь»; «+» opens «Создать» (project, client, leads, task, roll receipt, purchase request); all sections stay behind ☰.
 - Layout is unchanged in this step; the canvas screens (Сегодня, Воронка, Карточка заказа, Календарь, Склад, Деньги, phone screens) follow one by one, each on top of the current structure (including the Precision Workbench «Сегодня»).
 - Migration: the theme module is plain CSS and moves with the UI to the relational screens unchanged.
-- Superseded on 2026-10-04 for style, menu, phone dock and home by «CRM 2.0 replaces the first canvas look» below.
-
-## 2026-10-04 — CRM 2.0 replaces the first canvas look (Owner)
-
-Owner decision in chat on 2026-10-04, after step 1 of the first canvas: «я хочу изменить логику главной страницы, я не должен там видеть заказы, мне нужны цифры. Две кнопки «Проект» — это перебор… дизайн калькулятора КП — из другого мира. Все кнопки должны быть квадратные. Также нужно добавить границы дивов» and «оставь кнопки динамичные»; then «давай» on the canvas «CRM RolanPRO 2.0 — архитектура и экраны» (https://claude.ai/artifact/BENhnbUS6EQruA7c42cb7A). Supersedes the visual part of "2026-10-04 — The owner's design canvas becomes the CRM look": no gradient sidebar, rounded cards, card shadows or the «Сегодня · Лиды · + · Проекты · Календарь» dock.
-
-- Style (`src/features/legacy-crm/design-theme.ts`): everything square (radius 0, also over the phone layer), a 1 px `#D3DAE3` border on every block, shadows only for menus and dialogs, flat navy menu `#121C2A`, one blue `#2E5FA8`, colour only for a status or a type of object; Montserrat / Manrope / IBM Plex Mono. Buttons stay alive: lift with a soft shadow on hover, sink on press; no movement with reduced motion.
-- Architecture: the office menu is 6 groups (`CRM2_NAV_GROUPS`): Главная; Продажи — Лиды, Воронка, Расчёт и КП, Клиенты; Работы — Календарь, Замеры, Монтажи, Задачи; Склад — Рулоны и материалы, Закупки; Деньги — Счета и операции, Оплаты клиентов, Зарплата, Отчёты; Компания — Услуги и цены, Сотрудники, Академия. Settings: the gear in the top bar and the user menu. Owner-only items stay owner-only. Screens joined under one item get a tab strip (`CRM2_SECTION_TABS`): Лиды = Входящие + Холодные звонки; Клиенты = Клиенты + Рекомендации + Отзывы; Расчёт и КП = КП + Быстрый калькулятор (the calculator is no longer a menu item).
-- One «+ Создать» for everything people create (`crm2CreateItems`; the phone «+» lists the same); no second «новый проект» button on any screen. «Сменить» and «Выйти» are the user menu (language, settings, exit).
-- Home (step 2): numbers only — money, the year net-profit goal, funnel, advertising, directions, works, expenses and «Требует внимания» counters that open their lists; no order lists. The company's money is the owner's.
-- Calculator and proposal (step 3): the same style as the CRM, inside «Расчёт и КП».
-- Phone: see «Phone = Пульс бизнеса, computer = CRM 2.0» below. Field roles keep their own short menus.
-- Migration: plain CSS plus a menu definition; both move to the relational screens unchanged.
 
 
 ## 2026-10-04 — Selected mobile «Пульс бизнеса» presentation
@@ -549,16 +536,6 @@ Owner decision in chat on 2026-10-04, after step 1 of the first canvas: «я х�
 The owner selected mobile design variant 2 and explicitly requested implementation in the existing CRM. On `codex/pulse-business-mobile`, OWNER/MANAGER home becomes a period-based business overview with square controls, cyan chart, colored metric indicators and authentic ROLANPRO wordmark. Phone shortcuts are Обзор / Продажи / Задачи / Ещё; Продажи routes to the existing projects lifecycle. The complete role navigation and operating workbench remain available. Phone projects default to the existing card list, with optional kanban and collapsible advanced filters. Field-role presentation is preserved.
 
 The monetary tile is explicitly «Стоимость оплаченных проектов», aggregating existing `orderRevenue` for role-visible projects with `paidAt` in the selected period. It is not bank receipts or a replacement P&L. No synthetic growth, profit, conversion or plan figures are introduced. This presentation does not change financial formulas, record storage, permissions or APIs.
-
-Open PRs #305 (CRM 2.0 shell) and #306 (numbers home) overlap and must be reconciled before merge. This branch is a reviewable implementation of the chosen mobile reference, not authorization to deploy.
-
-## 2026-10-04 — Phone = «Пульс бизнеса», computer = CRM 2.0 (Owner)
-
-Owner decision in chat on 2026-10-04, when #307 («Пульс бизнеса», mobile variant 2) reached production while #305/#306 (CRM 2.0) were in review: «Телефон — Пульс, компьютер — CRM 2.0».
-
-- Phone (`(max-width: 520px), (max-width: 768px) and (pointer: coarse)`, the CRM's phone detection): the Pulse header with the ROLANPRO logo and «+» (`openCreateSheet`, the same list as «+ Создать»), the Pulse overview as the owner/manager home, the dock Обзор · Продажи · Задачи · Ещё, Pulse colours. The avatar keeps the user's menu (exit, language, settings).
-- Computer: the CRM 2.0 shell — 6-group menu, «+ Создать», user menu, square bordered style, and (step 2) the numbers-only home. The Pulse colours in `pulse-theme.ts` apply on phones only; its dashboard styles stay global.
-- Supersedes the CRM 2.0 phone dock (Главная · Воронка · «+» · Календарь · Меню) and, for phones, the CRM 2.0 phone home.
 
 Release review: #305 (CRM 2.0 shell) and #306 (numbers home) are unmerged alternative canvas designs, not dependencies of the selected mobile variant. The owner instructed continuation after reviewing #307. Release only #307; keep those alternative PRs open for later reconciliation against the new main. #307 merged as eff1c4f4da5138f04f71290bb9233462f9f56b63 on 2026-10-04.
 
