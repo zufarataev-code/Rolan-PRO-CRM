@@ -361,9 +361,17 @@ html body .crm2-create-list,
 html body .crm2-create-list[data-rolanpro-mobile-action-row] { display: flex !important; flex-direction: column !important; gap: 0 !important; max-height: 72dvh; overflow-y: auto; }
 html body .crm2-create-sheet .crm2-create-row { min-height: 56px; }
 
-/* Phones: the dock's «+» creates and settings live in the user's menu, so the top bar keeps room for the title. */
+/* Wherever the phone dock is shown (the legacy layout up to 840 px, except a
+   narrow desktop window, where the phone layer hides the dock), its «+» is the
+   one create button. */
+@media (max-width: 840px) {
+  html body .crm2-create-wrap { display: none; }
+}
+@media (min-width: 521px) and (max-width: 840px) and (pointer: fine) {
+  html body .crm2-create-wrap { display: inline-flex; }
+}
+/* Phones: settings live in the user's menu, so the top bar keeps room for the title. */
 @media (max-width: 760px) {
-  html body .crm2-create-wrap,
   html body .app-topbar .topbar-icon-btn[aria-label="Настройки"] { display: none; }
   html body .crm2-menu { position: fixed; top: 60px; left: 12px; right: 12px; min-width: 0; }
 }
