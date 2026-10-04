@@ -147,8 +147,10 @@ export async function launchProjectFromClosedSale(
     return "agreement_not_signed" as const;
   }
 
-  const depositPaid = proposal.deposit?.status === "paid" && Boolean(proposal.deposit.paid_at);
-  if (!depositPaid) {
+  const depositPaid = proposal.deposit?.status === "paid" && Boolean(proposal.deposit?.paid_at);
+  // "after_completion" authorizes the launch without cash; it is not a paid deposit.
+  const payAfterCompletion = proposal.payment_terms === "after_completion" && !depositPaid;
+  if (!depositPaid && !payAfterCompletion) {
     return "deposit_not_paid" as const;
   }
 
@@ -174,7 +176,9 @@ export async function launchProjectFromClosedSale(
 
   const [projectStatus, paymentStatus, positionStatus, leadIntentServiceType] = await Promise.all([
     prisma.projectStatus.findUnique({ where: { status_code: "NEW" } }),
-    prisma.paymentStatus.findUnique({ where: { status_code: "DEPOSIT_PAID" } }),
+    prisma.paymentStatus.findUnique({
+      where: { status_code: payAfterCompletion ? "FINAL_PAYMENT_PENDING" : "DEPOSIT_PAID" },
+    }),
     prisma.positionStatus.findUnique({ where: { status_code: "READY" } }),
     leadAttribution.serviceCode
       ? prisma.serviceType.findUnique({ where: { service_code: leadAttribution.serviceCode }, select: { service_type_id: true } })
