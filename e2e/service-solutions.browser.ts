@@ -32,7 +32,7 @@ async function main() {
       state=(await response.json()).data;
       const installers=state.payload.users.filter((u:any)=>u.role==='installer');
       assert.ok(installers.length);
-      const order={id:'e2e-solutions',serviceType:'solar_film',installerIds:[],measurements:{rooms:[{id:'room',windows:[{id:'w1',measureScope:'solar_film',offeringId:'solution-a',offeringName:'Solar One',catalogId:'film-a',width:254,height:254,qty:1,pricePerSqft:12},{id:'w2',measureScope:'solar_film',offeringId:'solution-b',offeringName:'Solar Two',catalogId:'film-a',width:254,height:254,qty:1,pricePerSqft:20}]}]},extraServices:[]};
+      const order={id:'e2e-solutions',serviceType:'solar_film',serviceSchedules:[],installerIds:[],measurements:{rooms:[{id:'room',windows:[{id:'w1',measureScope:'solar_film',offeringId:'solution-a',offeringName:'Solar One',catalogId:'film-a',width:254,height:254,qty:1,pricePerSqft:12},{id:'w2',measureScope:'solar_film',offeringId:'solution-b',offeringName:'Solar Two',catalogId:'film-a',width:254,height:254,qty:1,pricePerSqft:20}]}]},extraServices:[]};
       state.payload.settings.catalog=[...(state.payload.settings.catalog||[]).filter((f:any)=>f.id!=='film-a'),{id:'film-a',category:'solar',brand:'QA',model:'Model'}];
       state.payload.settings.serviceOfferings=[{id:'solution-a',name:'Solar One',direction:'solar',pricePerSqft:12,installerRatePerSqft:3,filmIds:['film-a'],active:true},{id:'solution-b',name:'Solar Two',direction:'solar',pricePerSqft:20,installerRatePerSqft:4,filmIds:['film-a'],active:true}];
       state.payload.orders=state.payload.orders.filter((o:any)=>o.id!==order.id).concat(order);
