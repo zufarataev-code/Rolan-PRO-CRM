@@ -466,6 +466,14 @@ Owner decision in chat on 2026-10-01 (asked whether to wait for the relational s
 - Migration: the analytics moves with the installation and payment stage (relational installer jobs and payroll accruals); client identity moves with the lead/client stage.
 - Everything else remains frozen as decided on 2026-09-29.
 
+## 2026-10-01 — Exception to the legacy freeze: a manually written film is fixed in the project and ordered
+
+Owner request in chat on 2026-10-01: a manager must be able to write in a film that is not in the warehouse list; «это должно фиксироваться в рамках проекта обязательно, чтобы потом можно было закупить и сделать приход, чтобы проект правильно посчитался». Solar films have subtypes (зеркальная, керамическая, магнетронная, фотохромная, другая).
+
+- Allowed in the legacy HTML until the warehouse/purchasing stage moves to PostgreSQL: «Плёнки нет в списке → Вписать плёнку вручную и заказать» in the quick project editor (PR for this exception). It creates a catalog film «ожидает закупки» on the project line and a draft project purchase request; the existing receipt flow brings the real roll cost into the project.
+- Same exception (Owner request in chat, 2026-10-01): the «Принять рулон на склад» form has category, solar type, brand, model, vendor, lot, width, length, purchase price, date and location; a film missing from the list is typed in and added to the catalog; every roll gets a readable unique code (RP-YYMM-NNNN, also its QR code); the purchase price per sq ft is shown and stored, and the project material cost uses it.
+- Migration: moves with the warehouse/purchasing stage (relational catalog, purchase requests and receipts).
+
 ## Changing a decision
 
 ## 2026-09-30 — Surveyor mobile navigation is organized around field work
@@ -495,3 +503,29 @@ Owner clarified and authorized implementation in chat: choose the project direct
 - Service groups are projections of the current scope: measured windows grouped by solution, or existing quick lines when there are no measurements, plus additional-work lines. Assignments live in `order.serviceSchedules`, with project crew/date derived summaries. A service has its own date and crew; calendar events use that crew. No duplicate charge is created for a measured service.
 - Installation readiness, deposit/proposal and verified-measurement gates remain. This does not implement separate per-service completion, weekly payroll summaries, relational migration or automatic bank transfers.
 - Branch `codex/service-solutions-live`, based on current main `4b5463c`. Supersedes the one-film/one-solution and automatically seeded examples in the unmerged #295 proposal.
+## 2026-10-02 — Project overhead by revenue; ad budget from last month's revenue (Owner)
+
+Owner decision in chat on 2026-10-02 («давай» to the proposed order). Amends item 1 of "2026-09-29 — CRM core consolidation", like the 2026-09-30 and 2026-10-01 exceptions: the change is in the legacy project economics because that is where project profit is calculated today.
+
+- The advertising budget of a month is `marketingPct` (10%) of the previous month's revenue: $100 000 in September → $10 000 for October. With no revenue in the previous month (the first month in the CRM), the budget is estimated from the month's own revenue and the screen says so.
+- The month's fixed costs and its advertising budget are shared between that month's projects in proportion to their revenue (not equally). A project without a price carries no share. The project month is `projectProfitDate` (installation date, then project dates, then proposal and creation dates).
+- The project's ad share stays in the direct costs (`orderPSS.marketing`), so every margin in the CRM keeps meaning "after advertising"; the fixed-cost share and the tax reserve stay in the net-profit block.
+- Supersedes: equal split of fixed costs (`fixedPool / projectCount`) and the flat «Рекламный резерв» of 10% of each project's revenue.
+- Migration: moves with the payment stage, together with the monthly money report and the bank feeds (real ad spend can then replace the budget).
+## 2026-10-02 — Projects are deleted into an archive, by the owner only (Owner)
+
+Owner decision in chat on 2026-10-02: «удаление проектов только у меня как у админа — удалять в архив, чтобы потом можно было восстановить». Amends item 1 of "2026-09-29 — CRM core consolidation" like the earlier exceptions: projects live in the legacy payload today.
+
+- Only the owner deletes and restores projects. A deleted project is never erased: it moves from `orders` to `archivedOrders` with all its data and `archive {at, by, reason, cancelledRequestIds}`.
+- In the archive a project takes no part in lists, calendar, money, warehouse or analytics (all read `orders`). Its draft purchase requests are cancelled and become drafts again on restore; requests already sent stay with purchasing.
+- The server enforces it on every owner/manager save (`enforceProjectArchive`): an archived project is never also in `orders`; a non-owner cannot change the archive or drop a project from `orders`. Field roles never receive the archive.
+- Project numbers count archived projects, so numbers are never reused.
+- Migration: moves with the project stage to PostgreSQL as a soft-delete column.
+
+## 2026-10-04 — The owner's design canvas becomes the CRM look (Owner)
+
+Owner decision in chat on 2026-10-04: «сделай дизайн для нашей CRM и мобильной версии… да, переноси дизайн в CRM нашу», after reviewing the canvas «CRM RolanPRO — экраны» (Claude Design, 21 screens). Amends item 1 of "2026-09-29 — CRM core consolidation" like the earlier exceptions: the screens people use are the legacy CRM today.
+
+- Step 1 (this change): one visual layer for every screen and role — `src/features/legacy-crm/design-theme.ts`, injected by `/legacy-crm` after the legacy and Tailwind styles: Montserrat / Manrope / IBM Plex Mono, the navy gradient sidebar with the blue gradient active item, the light blue-grey ground, white 8 px cards with a soft shadow, gradient primary buttons, calm inputs, 4 px chips, softer dialogs. Stroke icons replace emoji in the menu and the phone dock. The owner/manager phone dock is «Сегодня · Лиды · [+] · Проекты · Календарь»; «+» opens «Создать» (project, client, leads, task, roll receipt, purchase request); all sections stay behind ☰.
+- Layout is unchanged in this step; the canvas screens (Сегодня, Воронка, Карточка заказа, Календарь, Склад, Деньги, phone screens) follow one by one, each on top of the current structure (including the Precision Workbench «Сегодня»).
+- Migration: the theme module is plain CSS and moves with the UI to the relational screens unchanged.

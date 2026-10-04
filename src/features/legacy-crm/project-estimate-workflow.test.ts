@@ -193,7 +193,7 @@ test("quick service can create warehouse film with category, name and model", ()
   assert.match(saver, /db\.settings\.catalog\.push\(catalog\)/);
   assert.match(saver, /addInventoryRoll\(/);
   assert.match(saver, /recordInventoryMovement\(/);
-  assert.match(saver, /line\.catalogId = catalog\.id/);
+  assert.match(saver, /projectLine\.catalogId = catalog\.id/);
 });
 
 test("quick service adds stock supplies and includes their purchase cost", () => {
