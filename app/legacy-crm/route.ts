@@ -7,7 +7,6 @@ import { getRequestSession } from "@/lib/auth/server";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { getEnv } from "@/lib/env";
 import { replaceLegacyBootstrapLogin } from "@/features/legacy-crm/html-shell";
-import { BEFORE_PAINT_SCRIPT } from "@/features/legacy-crm/before-paint";
 import { DESIGN_THEME_HTML } from "@/features/legacy-crm/design-theme";
 
 export const dynamic = "force-dynamic";
@@ -459,7 +458,6 @@ export async function GET(request: NextRequest) {
         cursor: pointer;
       }
       #rolanpro-calculator-frame { width: 100%; height: 100%; border: 0; background: #f8fafc; }
-      .rolanpro-calculator-nav { cursor: pointer; }
       @media (max-width: 640px) {
         #rolanpro-calculator-overlay { padding: 0; }
         #rolanpro-calculator-panel { width: 100%; height: 100dvh; border-radius: 0; }
@@ -490,32 +488,8 @@ export async function GET(request: NextRequest) {
           document.getElementById('rolanpro-calculator-close')?.addEventListener('click', window.closeRolanProCalculator);
         };
 
-        function ensureCalculatorNav() {
-          const navs = Array.from(document.querySelectorAll('nav'));
-          const nav = navs.find((candidate) =>
-            Array.from(candidate.querySelectorAll('.nav-item')).some((item) => String(item.textContent || '').trim().includes('КП')),
-          );
-          if (!nav || nav.querySelector('[data-rolanpro-calculator-nav="1"]')) return;
-
-          const item = document.createElement('div');
-          item.className = 'nav-item rolanpro-calculator-nav';
-          item.setAttribute('data-rolanpro-calculator-nav', '1');
-          item.title = 'Быстрый калькулятор';
-          item.innerHTML = '<span class="nav-icon"><svg class="rp-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 7h8M8 11h2M12 11h2M16 11v6M8 15h2M12 15h2M8 18h6"></path></svg></span><span class="nav-label">Калькулятор</span>';
-          item.addEventListener('click', () => window.openRolanProCalculator());
-
-          const proposalItem = Array.from(nav.querySelectorAll('.nav-item')).find((candidate) =>
-            String(candidate.textContent || '').trim().includes('КП'),
-          );
-          if (proposalItem?.nextSibling) nav.insertBefore(item, proposalItem.nextSibling);
-          else nav.appendChild(item);
-        }
-
-${BEFORE_PAINT_SCRIPT}
-        const observer = new MutationObserver(() => beforePaint(ensureCalculatorNav));
-        observer.observe(document.documentElement, { childList: true, subtree: true });
-        window.requestAnimationFrame(ensureCalculatorNav);
-
+        // The calculator has no menu item of its own: it opens from «+ Создать» and
+        // from the «Расчёт и КП» tabs (CRM 2.0).
         window.addEventListener('message', (event) => {
           if (event.origin !== window.location.origin || event.data?.type !== 'rolanpro-calculator-saved') return;
           if (typeof cloudStatus === 'function') cloudStatus('Расчёт сохранён в сделку', 'green');

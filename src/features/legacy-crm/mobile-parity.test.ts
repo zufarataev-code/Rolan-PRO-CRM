@@ -14,10 +14,9 @@ test("phone and desktop use the same complete CRM document", () => {
 
 test("mobile navigation is a shortcut layer over the full role navigation", () => {
   assert.match(legacy, /const mobileNavItems =/);
-  assert.match(legacy, /\['dashboard', 'Сегодня'/);
-  assert.match(legacy, /\['leads', 'Лиды'/);
-  assert.match(legacy, /\['orders', 'Проекты'/);
-  assert.match(legacy, /\['calendar', 'Календарь'/);
+  // CRM 2.0 office dock: Главная · Воронка · «+» · Календарь · Меню.
+  assert.match(legacy, /const mobileNavItems = office \? \[\n\s+\['dashboard', 'Главная'[\s\S]*?\['orders', 'Воронка'[\s\S]*?\['create', 'Создать'[\s\S]*?\['calendar', 'Календарь'/);
+  assert.match(legacy, /\['dashboard', 'Сегодня'/, "field roles keep «Сегодня»");
   assert.match(legacy, /onclick="selectAppView\('\$\{key\}'\)"/);
   assert.match(legacy, /onclick="toggleSidebar\(\)" aria-label="Открыть все разделы"/);
 });
@@ -45,7 +44,7 @@ test("the full sidebar still exposes every owner and manager function", () => {
     "reviews",
     "settings",
   ]) {
-    assert.match(legacy, new RegExp(`\\['${key}'`));
+    assert.match(legacy, key === "settings" ? /selectAppView\('settings'\)/ : new RegExp(`\\['${key}'`), key);
   }
   assert.match(legacy, /onclick="logout\(\)"/);
 });

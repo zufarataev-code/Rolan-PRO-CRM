@@ -17544,6 +17544,13 @@ const NAV_ICON_PATHS = {
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   logout: 'M15 4h4v16h-4M10 17l5-5-5-5M15 12H3',
   plus: 'M12 5v14M5 12h14',
+  purchases: 'M3 4h2l2.4 11h11.2L21 7H6.2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM18 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
+  calc: 'M5 3h14v18H5zM8 7h8M8 11h2M12 11h2M16 11v6M8 15h2M12 15h2M8 18h6',
+  bell: 'M6 16v-5a6 6 0 1 1 12 0v5l2 2H4zM10 21h4',
+  chat: 'M4 4h16v12H9l-5 4z',
+  search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
+  menu: 'M4 7h16M4 12h16M4 17h16',
+  chevron: 'm6 9 6 6 6-6',
 };
 
 function navIconSvg(key, fallback = '') {
@@ -17551,23 +17558,185 @@ function navIconSvg(key, fallback = '') {
   return path ? `<svg class="rp-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"></path></svg>` : fallback;
 }
 
-/** The phone dock's «+»: the things people create most, as on the design canvas. */
-function openCreateSheet() {
+// ---------- CRM 2.0: МЕНЮ ПО ГРУППАМ И ОДНА «+ СОЗДАТЬ» (Owner, 2026-10-04) ----------
+// The owner's «CRM 2.0» canvas: the office menu is 6 groups instead of 22 items in
+// a row; one «+ Создать» replaces the five «новый проект» buttons; «Сменить» and
+// «Выйти» become the user's own menu; where two screens became one menu item,
+// a tab strip on top switches between them.
+const CRM2_NAV_GROUPS = [
+  ['', [['dashboard', 'Главная']]],
+  ['Продажи', [
+    ['leads', 'Лиды', ['leads', 'coldcalls']],
+    ['orders', 'Воронка', ['orders', 'orderDetails']],
+    ['proposals', 'Расчёт и КП'],
+    ['clients', 'Клиенты', ['clients', 'referrals', 'reviews']],
+  ]],
+  ['Работы', [
+    ['calendar', 'Календарь'],
+    ['canonicalProjects', 'Замеры'],
+    ['installerOps', 'Монтажи'],
+    ['tasks', 'Задачи'],
+  ]],
+  ['Склад', [
+    ['inventory', 'Рулоны и материалы'],
+    ['purchases', 'Закупки'],
+  ]],
+  ['Деньги', [
+    ['accounting', 'Счета и операции', ['accounting'], 'owner'],
+    ['paymentsdue', 'Оплаты клиентов', ['paymentsdue'], 'owner'],
+    ['payroll', 'Зарплата', ['payroll'], 'owner'],
+    ['reports', 'Отчёты'],
+  ]],
+  ['Компания', [
+    ['servicePricing', 'Услуги и цены'],
+    ['team', 'Сотрудники', ['team'], 'owner'],
+    ['academy', 'Академия'],
+  ]],
+];
+
+/** Tabs for the menu items that hold two or three former screens. */
+const CRM2_SECTION_TABS = [
+  [['leads', 'Входящие'], ['coldcalls', 'Холодные звонки']],
+  [['clients', 'Клиенты'], ['referrals', 'Рекомендации'], ['reviews', 'Отзывы']],
+  [['proposals', 'Коммерческие предложения'], ['calculator', 'Быстрый калькулятор']],
+];
+
+function crm2IsOffice() {
+  return ['owner', 'manager'].includes(currentUser()?.role);
+}
+
+/** The office menu for the current role: owner-only items are left out for managers. */
+function crm2NavGroups() {
   const role = currentUser()?.role;
-  if (!['owner', 'manager'].includes(role)) return;
-  const tile = (title, sub, gradient, shadow, icon, action) => `<button type="button" class="rp-create-tile" style="background:${gradient};box-shadow:0 14px 26px -14px ${shadow}" onclick="closeModal(); ${action}"><span class="rp-create-tile-icon">${navIconSvg(icon)}</span><span><b>${title}</b><small>${sub}</small></span></button>`;
+  return CRM2_NAV_GROUPS
+    .map(([title, items]) => [title, items.filter((item) => !item[3] || item[3] === role)])
+    .filter(([, items]) => items.length);
+}
+
+function crm2NavIsActive(item) {
+  const [key, , views] = item;
+  if (key === 'purchases') return state.view === 'inventory' && state.inventoryTab === 'purchases';
+  if (key === 'inventory') return state.view === 'inventory' && state.inventoryTab !== 'purchases';
+  return (views || [key]).includes(state.view);
+}
+
+function crm2ActiveNav() {
+  for (const [title, items] of crm2NavGroups()) {
+    const item = items.find(crm2NavIsActive);
+    if (item) return { group: title || 'Главная', item };
+  }
+  return null;
+}
+
+function crm2Go(key) {
+  crm2CloseMenus();
+  if (key === 'purchases') {
+    state.inventoryTab = 'purchases';
+    selectAppView('inventory');
+    return;
+  }
+  if (key === 'inventory' && state.inventoryTab === 'purchases') state.inventoryTab = 'overview';
+  selectAppView(key);
+}
+
+/** The page title without the old emoji; office screens are named as in the menu. */
+function crm2HeaderTitle() {
+  const plain = String(headerTitle() || '').replace(/^[\p{Extended_Pictographic}‍️\s]+/u, '');
+  if (!crm2IsOffice()) return plain;
+  const own = state.view === 'dashboard' || state.view === 'orderDetails' || state.view === 'notifications'
+    || (state.view === 'canonicalProjects' && state.canonicalProjectId);
+  if (own) return plain;
+  if (state.view === 'settings') return 'Настройки';
+  return crm2ActiveNav()?.item[1] || plain;
+}
+
+function crm2Eyebrow() {
+  const user = currentUser();
+  if (!crm2IsOffice()) return `${T(user.role)} · ROLANPRO`;
+  if (state.view === 'settings') return 'Компания';
+  return crm2ActiveNav()?.group || 'Rolan PRO';
+}
+
+function crm2SectionTabs() {
+  if (!crm2IsOffice()) return '';
+  const set = CRM2_SECTION_TABS.find((tabs) => tabs.some(([view]) => view === state.view));
+  if (!set) return '';
+  return `<div class="crm2-tabs" role="tablist">${set.map(([view, label]) => view === 'calculator'
+    ? `<button type="button" role="tab" aria-selected="false" onclick="if (typeof openRolanProCalculator === 'function') openRolanProCalculator()">${label}</button>`
+    : `<button type="button" role="tab" aria-selected="${state.view === view}" class="${state.view === view ? 'on' : ''}" onclick="selectAppView('${view}')">${label}</button>`).join('')}</div>`;
+}
+
+/** Everything a person in the office creates, for «+ Создать» and the phone's «+». */
+function crm2CreateItems() {
+  const role = currentUser()?.role;
+  if (!['owner', 'manager'].includes(role)) return [];
+  const items = [
+    { label: 'Лид / проект', sub: 'клиент → объект → замер', color: '#1F8A4C', icon: 'orders', action: 'openOrderModal()' },
+    { label: 'Холодный контакт', sub: 'компания для обзвона', color: '#E07A1F', icon: 'coldcalls', action: 'openColdProspectModal()' },
+    { label: 'Клиент', sub: 'карточка B2C или B2B', color: '#B3541E', icon: 'clients', action: 'openClientModal()' },
+    { label: 'Быстрый расчёт', sub: 'калькулятор КП', color: '#C2417A', icon: 'calc', action: "if (typeof openRolanProCalculator === 'function') openRolanProCalculator()" },
+    { label: 'Задача', sub: 'себе или команде', color: '#5D6B7E', icon: 'tasks', action: 'crm2NewTask()' },
+    { label: 'Приход рулона', sub: 'плёнка на склад', color: '#6E56CF', icon: 'inventory', action: "openAddRollModal('')" },
+    { label: 'Заявка на закупку', sub: 'поставщику', color: '#6E56CF', icon: 'purchases', action: 'openPurchaseRequestModal()' },
+  ];
+  if (role === 'owner') items.push({ label: 'Операция / чек', sub: 'приход или расход денег', color: '#2E5FA8', icon: 'accounting', action: 'crm2NewMoneyOperation()' });
+  return items;
+}
+
+function crm2CreateRow(item, before) {
+  return `<button type="button" class="crm2-create-row" role="menuitem" onclick="${before}${item.action}"><span class="crm2-swatch" style="background:${item.color}"></span><span class="crm2-create-text"><b>${item.label}</b><small>${item.sub}</small></span>${navIconSvg(item.icon)}</button>`;
+}
+
+function crm2NewTask() {
+  selectAppView('tasks');
+  let tries = 0;
+  const focusTitle = () => {
+    const title = document.getElementById('nt-title');
+    if (!title) { if (++tries < 20) requestAnimationFrame(focusTitle); return; }
+    title.closest('details')?.setAttribute('open', '');
+    title.focus();
+  };
+  requestAnimationFrame(focusTitle);
+}
+
+function crm2NewMoneyOperation() {
+  if (currentUser()?.role !== 'owner') return;
+  if (state.view !== 'accounting') selectAppView('accounting');
+  financeOpenTransactionModal();
+}
+
+function crm2CloseMenus() {
+  document.querySelectorAll('[data-crm2-menu]').forEach((menu) => {
+    menu.hidden = true;
+    menu.previousElementSibling?.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function crm2ToggleMenu(name, event) {
+  event?.stopPropagation();
+  document.querySelectorAll('[data-crm2-menu]').forEach((menu) => {
+    const open = menu.dataset.crm2Menu === name && menu.hidden;
+    menu.hidden = !open;
+    menu.previousElementSibling?.setAttribute('aria-expanded', String(open));
+  });
+}
+
+document.addEventListener('click', (event) => {
+  if (!event.target?.closest?.('.crm2-menu-wrap')) crm2CloseMenus();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') crm2CloseMenus();
+});
+
+/** The phone dock's «+»: the same list as «+ Создать» on a computer. */
+function openCreateSheet() {
+  const items = crm2CreateItems();
+  if (!items.length) return;
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
-    <div class="modal-content workspace-modal p-5" style="max-width: 30rem;">
-      <div class="flex items-center justify-between"><h3 class="font-semibold text-lg">Создать</h3><button class="btn-ghost" aria-label="Закрыть" onclick="closeModal()">✕</button></div>
-      <div class="rp-create-sheet">
-        ${tile('Новый проект', 'клиент, объект, адрес', 'linear-gradient(135deg,#3D7BD8,#22488F)', 'rgba(34,72,143,.9)', 'plus', 'openOrderModal()')}
-        ${tile('Клиент', 'карточка B2C или B2B', 'linear-gradient(135deg,#EF6A4C,#C2402A)', 'rgba(194,64,42,.9)', 'clients', 'openClientModal()')}
-        ${tile('Лиды', 'заявки и звонки', 'linear-gradient(135deg,#E9A92A,#B97500)', 'rgba(185,117,0,.9)', 'leads', "selectAppView('leads')")}
-        ${tile('Задача', 'себе или команде', 'linear-gradient(135deg,#8B6FD6,#5A3FA0)', 'rgba(90,63,160,.9)', 'tasks', "selectAppView('tasks')")}
-        ${tile('Приход рулона', 'плёнка на склад', 'linear-gradient(135deg,#34B573,#1C7A48)', 'rgba(28,122,72,.9)', 'inventory', "openAddRollModal('')")}
-        ${tile('Закупка', 'заявка поставщику', 'linear-gradient(135deg,#3CC2B5,#128A80)', 'rgba(18,138,128,.9)', 'payroll', 'openPurchaseRequestModal()')}
-      </div>
+    <div class="modal-content workspace-modal crm2-create-sheet" style="max-width: 30rem;">
+      <div class="crm2-sheet-head"><h3>Создать</h3><button class="btn-ghost" aria-label="Закрыть" onclick="closeModal()">✕</button></div>
+      <div class="crm2-create-list" role="menu">${items.map((item) => crm2CreateRow(item, 'closeModal(); ')).join('')}</div>
     </div>
   </div>`;
   render();
@@ -17576,28 +17745,8 @@ function openCreateSheet() {
 function renderAppShell() {
   const u = currentUser();
   const role = u.role;
-  const navItems = (role === 'manager' || role === 'owner') ? [
-    ['dashboard', T('dashboard'), '📊'],
-    ['leads', 'Новые лиды', '📥'],
-    ['coldcalls', 'Холодные звонки', '📞'],
-    ['orders', T('orders'), '🏗'],
-    ['proposals', 'КП', '📄'],
-    ['servicePricing', 'Услуги и цены', '💲'],
-    ['calendar', T('calendar'), '📅'],
-    ['installerOps', 'Специалисты по установке сейчас', '📍'],
-    ['tasks', 'Задачи', '✅'],
-    ['academy', 'Академия', '🧭'],
-    ['clients', T('clients'), '👥'],
-    ['inventory', 'Склад', '🎞'],
-    ['payroll', 'Зарплата', '💰'],
-    ...(role === 'owner' ? [['paymentsdue', 'Ожидают оплаты', '💵']] : []),
-    ...(role === 'owner' ? [['accounting', 'Деньги', '💵']] : []),
-    ['reports', T('reports'), '📈'],
-    ['team', T('team'), '🧑‍🔧'],
-    ['referrals', T('referralProgram'), '🎁'],
-    ['reviews', T('reviews'), '⭐'],
-    ...(role === 'owner' ? [['settings', T('settings'), '⚙️']] : []),
-  ] : (role === 'measurer') ? [
+  const office = role === 'manager' || role === 'owner';
+  const navItems = (role === 'measurer') ? [
     ['dashboard', T('dashboard'), '📊'],
     ['canonicalProjects', 'Замеры проектов', '🏗'],
     ['measurements', T('myTasks'), '📐'],
@@ -17612,11 +17761,10 @@ function renderAppShell() {
     ['tasks', 'Задачи', '✅'],
   ] : [];
 
-  const mobileNavItems = (role === 'manager' || role === 'owner') ? [
-    ['dashboard', 'Сегодня', '⌂'],
-    ['leads', 'Лиды', '◎'],
+  const mobileNavItems = office ? [
+    ['dashboard', 'Главная', '⌂'],
+    ['orders', 'Воронка', '▣'],
     ['create', 'Создать', '+'],
-    ['orders', 'Проекты', '▣'],
     ['calendar', 'Календарь', '□'],
   ] : (role === 'measurer') ? [
     ['dashboard', 'Сегодня', '⌂'],
@@ -17633,7 +17781,8 @@ function renderAppShell() {
   const compactViewport = isCompactViewport();
   const mobileOpen = compactViewport && !!state.mobileSidebarOpen;
   const collapsed = compactViewport ? !mobileOpen : !!state.sidebarCollapsed;
-  const canSearch = role === 'manager' || role === 'owner';
+  const canSearch = office;
+  const unreadMessages = unreadInboundClientMessages().length;
 
   return `
   <div class="app-shell role-${academyEsc(role)} view-${academyEsc(state.view)} ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'mobile-sidebar-open' : ''}" data-view="${academyEsc(state.view)}" data-role="${academyEsc(role)}">
@@ -17648,15 +17797,25 @@ function renderAppShell() {
         </div>
         <button class="sidebar-toggle-btn ml-auto" onclick="toggleSidebar()" title="${collapsed ? 'Открыть меню' : 'Скрыть меню'}">${collapsed ? '☰' : '‹'}</button>
       </div>
-      <nav class="flex-1 p-3 space-y-1" style="overflow-y:auto;min-height:0;">
-        ${navItems.map(([key, label, icon]) => `
+      <nav class="flex-1 p-3 space-y-1" style="overflow-y:auto;min-height:0;" aria-label="Основное меню">
+        ${office ? crm2NavGroups().map(([title, items]) => `
+          <div class="crm2-nav-group">
+            ${title ? `<div class="crm2-nav-group-title">${title}</div>` : ''}
+            ${items.map((item) => `
+              <div class="nav-item ${crm2NavIsActive(item) ? 'active' : ''}" title="${academyEsc(item[1])}" onclick="crm2Go('${item[0]}')">
+                <span class="nav-icon">${navIconSvg(item[0], '•')}</span>
+                <span class="nav-label">${item[1]}</span>
+              </div>
+            `).join('')}
+          </div>
+        `).join('') : navItems.map(([key, label, icon]) => `
           <div class="nav-item ${state.view===key?'active':''}" title="${academyEsc(label)}" onclick="selectAppView('${key}')">
             <span class="nav-icon">${navIconSvg(key, icon)}</span>
             <span class="nav-label">${label}</span>
           </div>
         `).join('')}
       </nav>
-      <div class="p-3 border-t border-slate-700">
+      ${office ? '' : `<div class="p-3 border-t border-slate-700">
         <div class="sidebar-user">
           <div class="sidebar-avatar">${u.photo
             ? `<img src="${u.photo}" alt="" style="width:100%;height:100%;border-radius:inherit;object-fit:cover;display:block;">`
@@ -17669,16 +17828,16 @@ function renderAppShell() {
         <button class="nav-item w-full mt-1" onclick="logout()">
           <span class="nav-icon">${navIconSvg('logout', '🚪')}</span><span class="sidebar-logout-label">${T('logout')}</span>
         </button>
-      </div>
+      </div>`}
     </aside>
 
     <!-- Main -->
     <main class="app-main" data-scroll-key="app-main">
       <header class="app-topbar">
-        <button class="topbar-icon-btn" onclick="toggleSidebar()" title="${collapsed ? 'Открыть меню' : 'Скрыть меню'}">☰</button>
+        <button class="topbar-icon-btn" onclick="toggleSidebar()" title="${collapsed ? 'Открыть меню' : 'Скрыть меню'}" aria-label="Меню">${navIconSvg('menu', '☰')}</button>
         <div class="topbar-title">
-          <div class="topbar-eyebrow">${T(u.role)} · ROLANPRO</div>
-          <h1>${headerTitle()}</h1>
+          <div class="topbar-eyebrow">${academyEsc(crm2Eyebrow())}</div>
+          <h1>${crm2HeaderTitle()}</h1>
           <div class="topbar-subtitle">${headerSubtitle()}</div>
         </div>
         ${canSearch ? `
@@ -17688,27 +17847,39 @@ function renderAppShell() {
             onfocus="renderGlobalSearch();"
             onblur="setTimeout(()=>{var d=document.getElementById('global-search-results'); if(d) d.style.display='none';},200);"
             class="text-sm">
-          <span class="topbar-search-icon">🔎</span>
+          <span class="topbar-search-icon">${navIconSvg('search', '🔎')}</span>
           <div id="global-search-results" class="absolute left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-80 overflow-y-auto z-30" style="display:none;"></div>
         </div>` : `<div></div>`}
         <div class="topbar-actions">
-          ${canSearch ? `<button class="btn-primary text-sm" onclick="openOrderModal()" title="Создать новый проект">+ Проект</button>` : ''}
+          ${office ? `
+          <div class="crm2-menu-wrap crm2-create-wrap">
+            <button type="button" class="btn-primary crm2-create-btn" onclick="crm2ToggleMenu('create', event)" aria-haspopup="menu" aria-expanded="false">${navIconSvg('plus', '+')}<span>Создать</span>${navIconSvg('chevron', '▾')}</button>
+            <div class="crm2-menu crm2-menu-create" data-crm2-menu="create" role="menu" hidden>
+              ${crm2CreateItems().map((item) => crm2CreateRow(item, 'crm2CloseMenus(); ')).join('')}
+            </div>
+          </div>` : ''}
           ${pwaInstallButtonHtml()}
-          <div class="topbar-user-pill" title="${academyEsc(u.name)}">${academyEsc(u.name)} · ${T(u.role)}</div>
-          <button class="btn-ghost text-sm" onclick="logout()">Сменить</button>
-          <button class="topbar-icon-btn relative ${unreadInboundClientMessages().length ? 'bg-rose-50 text-rose-700 border border-rose-200' : ''}" onclick="openInboundMessagesInbox()" title="Открыть входящие SMS и WhatsApp" aria-label="Входящие сообщения${unreadInboundClientMessages().length ? ': ' + unreadInboundClientMessages().length + ' новых' : ''}">💬${unreadInboundClientMessages().length ? `<span class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full min-w-5 h-5 px-1 flex items-center justify-center font-black">${unreadInboundClientMessages().length}</span>` : ''}</button>
-          <button class="topbar-icon-btn relative" onclick="state.view='notifications'; markAllRead();">
-            🔔 ${unreadCount() > 0 ? `<span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">${unreadCount()}</span>` : ''}
+          <button class="topbar-icon-btn relative ${unreadMessages ? 'has-alert' : ''}" onclick="openInboundMessagesInbox()" title="Открыть входящие SMS и WhatsApp" aria-label="Входящие сообщения${unreadMessages ? ': ' + unreadMessages + ' новых' : ''}">${navIconSvg('chat', '💬')}${unreadMessages ? `<span class="crm2-count">${unreadMessages}</span>` : ''}</button>
+          <button class="topbar-icon-btn relative" onclick="state.view='notifications'; markAllRead();" aria-label="Уведомления">
+            ${navIconSvg('bell', '🔔')}${unreadCount() > 0 ? `<span class="crm2-count">${unreadCount()}</span>` : ''}
           </button>
-          <select onchange="state.lang=this.value; save(); render();" class="w-auto text-sm">
-            <option value="ru" ${state.lang==='ru'?'selected':''}>RU</option>
-            <option value="en" ${state.lang==='en'?'selected':''}>EN</option>
-          </select>
+          ${role === 'owner' ? `<button class="topbar-icon-btn ${state.view === 'settings' ? 'active' : ''}" onclick="selectAppView('settings')" title="Настройки" aria-label="Настройки">${navIconSvg('settings', '⚙️')}</button>` : ''}
+          <div class="crm2-menu-wrap crm2-user-wrap">
+            <button type="button" class="topbar-user-pill" title="${academyEsc(u.name)}" onclick="crm2ToggleMenu('user', event)" aria-haspopup="menu" aria-expanded="false">${academyEsc(u.name)} · ${T(u.role)}</button>
+            <div class="crm2-menu crm2-menu-user" data-crm2-menu="user" role="menu" hidden>
+              <div class="crm2-menu-head"><b>${academyEsc(u.name)}</b><small>${T(u.role)}</small></div>
+              <div class="crm2-menu-lang"><span>Язык</span><span class="crm2-seg">
+                <button type="button" class="${state.lang === 'ru' ? 'on' : ''}" onclick="state.lang='ru'; save(); render();">RU</button><button type="button" class="${state.lang === 'en' ? 'on' : ''}" onclick="state.lang='en'; save(); render();">EN</button>
+              </span></div>
+              ${role === 'owner' ? `<button type="button" class="crm2-menu-item" role="menuitem" onclick="crm2CloseMenus(); selectAppView('settings')">${navIconSvg('settings', '')}<span>Настройки</span></button>` : ''}
+              <button type="button" class="crm2-menu-item danger" role="menuitem" onclick="logout()">${navIconSvg('logout', '')}<span>Выйти</span></button>
+            </div>
+          </div>
         </div>
       </header>
 
       <div class="app-content">
-        ${renderView()}
+        ${crm2SectionTabs()}${renderView()}
       </div>
     </main>
     <nav class="mobile-primary-nav" aria-label="Основная мобильная навигация">
@@ -17723,8 +17894,8 @@ function renderAppShell() {
         </button>
       `).join('')}
       ${mobileNavItems.length < 5 ? `<button type="button" class="${mobileOpen?'active':''}" onclick="toggleSidebar()" aria-label="Открыть все разделы">
-        <span class="mobile-primary-nav-icon">${navIconSvg('more', '•••')}</span>
-        <span>Ещё</span>
+        <span class="mobile-primary-nav-icon">${navIconSvg('menu', '•••')}</span>
+        <span>Меню</span>
       </button>` : ''}
     </nav>
   </div>
@@ -19218,7 +19389,6 @@ function renderPrecisionManagerDashboard() {
         <h2>Что требует внимания сегодня</h2>
         <p>${academyEsc(todayLabel)} · ${actions.length} действий · ${active.length} активных проектов</p>
       </div>
-      <button class="btn-primary" onclick="openOrderModal()">+ Новый проект</button>
     </div>
 
     <div class="pw-funnel" aria-label="Воронка проектов">
@@ -19904,7 +20074,6 @@ function renderOrders() {
   <div class="orders-command-panel mb-4">
     <div class="orders-command-head">
       <div class="min-w-0">
-        <div class="orders-command-title">Проекты</div>
         <div class="orders-command-subtitle">Одна карточка ведёт клиента от обращения до замера, КП, монтажа и оплаты.</div>
       </div>
       <div class="orders-primary-actions">
@@ -19912,7 +20081,6 @@ function renderOrders() {
         ${ordersView === 'kanban' ? `<button class="btn-ghost" onclick="openOrdersKanbanFullscreen()">⛶ Весь экран</button>` : ''}
         <button class="btn-ghost" onclick="location.hash='#/projects'">📐 Проверенные замеры</button>
         ${currentUser()?.role === 'owner' ? `<button class="btn-ghost" onclick="openProjectArchive()">🗄 Архив${(db.archivedOrders || []).length ? ` (${db.archivedOrders.length})` : ''}</button>` : ''}
-        <button class="btn-primary" onclick="openOrderModal()">+ ${T('newOrder')}</button>
       </div>
     </div>
 

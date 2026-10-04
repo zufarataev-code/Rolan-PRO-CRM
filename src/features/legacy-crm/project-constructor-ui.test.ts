@@ -9,7 +9,7 @@ const legacyCrm = fs.readFileSync(
 );
 
 test("canonical project constructor stays inside the one legacy CRM shell", () => {
-  assert.match(legacyCrm, /\['orders', T\('orders'\), '🏗'\]/);
+  assert.match(legacyCrm, /\['orders', 'Воронка', \['orders', 'orderDetails'\]\]/);
   assert.doesNotMatch(legacyCrm, /\['canonicalProjects', 'Проекты', '🏗'\]/);
   assert.match(legacyCrm, /📐 Проверенные замеры/);
   assert.ok(legacyCrm.includes("const canonicalProject = h.match(/^#\\/projects\\/([^/]+)$/)"));

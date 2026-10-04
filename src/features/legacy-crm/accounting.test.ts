@@ -18,7 +18,7 @@ test("duplicate embedded Money Tracker is removed from the CRM shell", () => {
 test("accounting is an owner-only CRM module", () => {
   assert.match(
     html,
-    /\.\.\.\(role === 'owner' \? \[\['accounting', 'Деньги', '💵'\]\] : \[\]\)/,
+    /\['accounting', 'Счета и операции', \['accounting'\], 'owner'\]/,
   );
   assert.match(
     html,
