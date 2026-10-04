@@ -461,11 +461,12 @@ html body .crm2-alert.is-zero .crm2-alert-count { color: #9AA6B5; }
 @media (max-width: 840px) {
 /* Phones show «Пульс бизнеса» (Owner, 2026-10-04): its header «+» is the one
    create button there, so the top-bar «+ Создать» hides on the same widths;
-   the user's menu (exit, language, settings) stays reachable from the avatar. */
+   the user's menu (exit, language, settings) stays reachable from the avatar
+   at every width — the legacy compact layout would hide it up to 840 px. */
 @media (max-width: 520px), (max-width: 768px) and (pointer: coarse) {
   html body .crm2-create-wrap { display: none; }
-  html body .app-shell .crm2-user-wrap .topbar-user-pill { display: inline-flex !important; }
 }
+html body .app-shell .crm2-user-wrap .topbar-user-pill { display: inline-flex !important; }
 /* Phones: settings live in the user's menu, so the top bar keeps room for the title. */
 @media (max-width: 760px) {
   html body .app-topbar .topbar-icon-btn[aria-label="Настройки"] { display: none; }
