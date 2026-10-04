@@ -361,6 +361,100 @@ html body .crm2-create-list,
 html body .crm2-create-list[data-rolanpro-mobile-action-row] { display: flex !important; flex-direction: column !important; gap: 0 !important; max-height: 72dvh; overflow-y: auto; }
 html body .crm2-create-sheet .crm2-create-row { min-height: 56px; }
 
+/* Home: numbers only (CRM 2.0) */
+html body .crm2-home { display: flex; flex-direction: column; gap: 16px; max-width: 1400px; }
+html body .crm2-home-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; }
+html body .crm2-home-period { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+html body .crm2-kl { font-size: 11.5px; font-weight: 800; color: var(--rp-muted); text-transform: uppercase; letter-spacing: .6px; }
+html body .crm2-muted { color: var(--rp-muted); font-size: 12.5px; font-weight: 700; }
+html body .crm2-num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-weight: 600; }
+html body .crm2-link { border: 0; background: none; padding: 0; font: 800 12.5px Manrope, sans-serif; color: var(--rp-blue); cursor: pointer; }
+html body .crm2-link:hover { color: var(--rp-blue-dark); text-decoration: underline; }
+html body .crm2-period,
+html body .crm2-period[data-rolanpro-mobile-action-row] { display: inline-flex !important; gap: 0 !important; width: auto !important; border: 1px solid var(--rp-field-line); background: #fff; }
+html body .crm2-period button { width: auto !important; height: 34px; padding: 0 14px; border: 0; border-right: 1px solid var(--rp-field-line); background: #fff; font: 700 13px Manrope, sans-serif; color: #3B4A5C; cursor: pointer; transition: background-color .15s ease, color .15s ease; }
+html body .crm2-period button:last-child { border-right: 0; }
+html body .crm2-period button:hover { background: #EEF4FC; color: var(--rp-ink); }
+html body .crm2-period button.on { background: var(--rp-navy); color: #fff; }
+html body .crm2-kpis,
+html body .crm2-kpis[data-rolanpro-mobile-action-row] { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)) !important; gap: 0 !important; background: #fff; border: 1px solid var(--rp-line); }
+html body .crm2-kpi,
+html body .crm2-cell,
+html body .crm2-alert { text-align: left; border: 0; background: #fff; color: var(--rp-ink); font: inherit; cursor: pointer; transition: background-color .15s ease, box-shadow .15s ease; }
+html body .crm2-kpi { display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-right: 1px solid var(--rp-line); border-bottom: 1px solid var(--rp-line); margin: 0 -1px -1px 0; }
+html body .crm2-kpi:hover,
+html body button.crm2-cell:hover,
+html body .crm2-alert:hover { background: #F4F8FD; box-shadow: inset 0 -3px 0 var(--rp-blue); }
+html body .crm2-kpi:active,
+html body button.crm2-cell:active,
+html body .crm2-alert:active { background: #EAF1FB; }
+html body .crm2-kpi-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+html body .crm2-kpi-value { font: 600 28px/1.15 'IBM Plex Mono', ui-monospace, monospace; }
+html body .crm2-kpi-note { font-size: 12.5px; font-weight: 600; color: var(--rp-muted); }
+html body .crm2-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; font-size: 12px; font-weight: 700; white-space: nowrap; background: #EEF1F5; color: #4A5568; }
+html body .crm2-chip.up { background: #E3F3EA; color: #17663E; }
+html body .crm2-chip.down { background: #FBE6E1; color: #A3321B; }
+html body .crm2-blk { background: #fff; border: 1px solid var(--rp-line); min-width: 0; }
+html body .crm2-bh { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--rp-line); flex-wrap: wrap; }
+html body .crm2-bh h2 { font: 800 15px Montserrat, Manrope, sans-serif; margin: 0; }
+html body .crm2-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; }
+html body .crm2-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+html body .crm2-goal { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+html body .crm2-goal-line { display: flex; align-items: baseline; gap: 8px 16px; flex-wrap: wrap; }
+html body .crm2-goal-value { font: 600 26px 'IBM Plex Mono', ui-monospace, monospace; }
+html body .crm2-goal-need { margin-left: auto; font-weight: 800; color: #8A5A00; }
+html body .crm2-goal-bar { position: relative; height: 18px; background: #EEF1F5; border: 1px solid var(--rp-line); }
+html body .crm2-goal-bar span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--rp-blue); }
+html body .crm2-goal-bar i { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--rp-ink); }
+html body .crm2-months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); font-size: 11px; font-weight: 700; color: var(--rp-muted); }
+html body .crm2-months .now { color: var(--rp-ink); white-space: nowrap; }
+html body .crm2-funnel { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+html body .crm2-funnel-row { display: grid; grid-template-columns: 100px minmax(0, 1fr) 56px 48px; align-items: center; gap: 12px; }
+html body .crm2-funnel-label { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700; }
+html body .crm2-funnel-label i,
+html body .crm2-alert-label i { width: 10px; height: 10px; flex: 0 0 10px; }
+html body .crm2-funnel-row .crm2-num { text-align: right; }
+html body .crm2-bar { position: relative; height: 22px; background: #EEF1F5; }
+html body .crm2-bar span { position: absolute; left: 0; top: 0; bottom: 0; }
+html body .crm2-cells,
+html body .crm2-cells[data-rolanpro-mobile-action-row] { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 0 !important; }
+html body .crm2-cell { display: block; width: 100%; padding: 14px 16px; border-right: 1px solid #E3E8EE; border-bottom: 1px solid #E3E8EE; }
+html body .crm2-cell-value { margin-top: 4px; font: 600 21px 'IBM Plex Mono', ui-monospace, monospace; }
+html body .crm2-cell-note { margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--rp-muted); }
+html body .crm2-dirs { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
+html body .crm2-dir-line { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 700; }
+html body .crm2-dir-bar { height: 8px; margin-top: 6px; background: #EEF1F5; }
+html body .crm2-dir-bar span { display: block; height: 8px; }
+html body .crm2-rows { display: flex; flex-direction: column; padding: 6px 16px 12px; }
+html body .crm2-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rp-line-soft); font-size: 13.5px; font-weight: 600; }
+html body .crm2-row:last-child { border-bottom: 0; }
+html body .crm2-alerts,
+html body .crm2-alerts[data-rolanpro-mobile-action-row] { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(min(50%, 170px), 1fr)) !important; gap: 0 !important; }
+html body .crm2-alert { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 14px 16px; border-right: 1px solid #E3E8EE; border-bottom: 1px solid #E3E8EE; }
+html body .crm2-alert-label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: #3B4A5C; }
+html body .crm2-alert-count { font: 600 24px 'IBM Plex Mono', ui-monospace, monospace; }
+html body .crm2-alert-note { font: 500 12px 'IBM Plex Mono', ui-monospace, monospace; color: var(--rp-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body .crm2-alert.is-zero .crm2-alert-count { color: #9AA6B5; }
+@media (max-width: 760px) {
+  html body .crm2-home { gap: 12px; }
+  html body .crm2-home-period { width: 100%; }
+  html body .crm2-period,
+  html body .crm2-period[data-rolanpro-mobile-action-row] { display: flex !important; width: 100% !important; }
+  html body .crm2-period button { flex: 1 1 0; min-width: 0; padding: 0 4px; font-size: 12.5px; }
+  html body .crm2-kpis,
+  html body .crm2-kpis[data-rolanpro-mobile-action-row] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  html body .crm2-kpi { padding: 12px; gap: 4px; }
+  html body .crm2-kpi-top { flex-direction: column; align-items: flex-start; gap: 4px; }
+  html body .crm2-kpi-value { font-size: 20px; }
+  html body .crm2-kpi-note { font-size: 11.5px; }
+  html body .crm2-goal-need { margin-left: 0; }
+  html body .crm2-months { font-size: 9.5px; }
+  html body .crm2-months b { display: none; }
+  html body .crm2-funnel-row { grid-template-columns: 76px minmax(0, 1fr) 36px 40px; gap: 8px; }
+  html body .crm2-cell { padding: 12px; }
+  html body .crm2-cell-value { font-size: 18px; }
+}
+
 /* Phones: the dock's «+» creates and settings live in the user's menu, so the top bar keeps room for the title. */
 @media (max-width: 760px) {
   html body .crm2-create-wrap,

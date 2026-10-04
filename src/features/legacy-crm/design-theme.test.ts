@@ -104,8 +104,10 @@ test("merged screens keep one menu item and a tab strip; «Закупки» open
   crm.crm2Go("inventory");
   assert.equal(state.inventoryTab, "overview");
 
-  state.view = "dashboard";
+  state.view = "orderDetails";
   assert.equal(crm.crm2HeaderTitle(), "Коммерческие предложения", "own titles lose the old emoji");
+  state.view = "dashboard";
+  assert.equal(crm.crm2HeaderTitle(), "Цифры компании");
 });
 
 test("one «+ Создать»: the top bar menu and the phone's «+» list the same things", () => {

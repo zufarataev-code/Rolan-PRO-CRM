@@ -55,14 +55,16 @@ test("owner shell keeps every primary operational section in one navigation", ()
   labels.forEach((label) => assert.ok(source.includes(label), `missing owner surface: ${label}`));
 });
 
-test("manager home is an action workbench instead of a KPI card wall", () => {
+// 04.10.2026 the owner chose a numbers-only home (CRM 2.0, crm2-home.test.ts);
+// the workbench stays in the code for the action queue.
+test("the action workbench is kept; the home itself is the CRM 2.0 numbers screen", () => {
   assert.match(source, /function renderPrecisionManagerDashboard\(\)/);
   assert.match(source, /Что требует внимания сегодня/);
   assert.match(source, /Очередь действий/);
   assert.match(source, /Следующий шаг/);
   assert.match(source, /Исключения/);
   assert.match(source, /Монтажи в работе/);
-  assert.match(source, /function renderManagerDashboard\(\) \{\s*return renderPrecisionManagerDashboard\(\);/);
+  assert.match(source, /function renderManagerDashboard\(\) \{\s*return renderCrm2Home\(\);/);
 });
 
 test("manager workbench exposes the complete eight-stage operating funnel", () => {
