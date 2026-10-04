@@ -69,7 +69,7 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
     windowAreaSqft: () => 0,
   });
   vm.runInContext(
-    `${html.slice(start, end)}; Object.assign(this, { crm2HomeRange, crm2HomeSales, crm2HomeDebts, crm2HomeGoal, crm2HomeFunnel, crm2HomeAttention, crm2HomeExpenses, crm2HomeAds, crm2HomeDirections, crm2HomeWorks, crm2HomeOpenStatus, crm2HomeOpenOverdue, crm2OrderDirection, crm2Plural, crm2Pct, crm2Money, renderCrm2Home });`,
+    `${html.slice(start, end)}; Object.assign(this, { crm2HomeRange, crm2HomeSales, crm2HomeDebts, crm2HomeGoal, crm2HomeFunnel, crm2HomeAttention, crm2HomeExpenses, crm2HomeAds, crm2HomeDirections, crm2HomeWorks, crm2HomeOpenStatus, crm2HomeOpenOverdue, crm2HomeOpenInstalls, crm2OrderDirection, crm2Plural, crm2Pct, crm2Money, renderCrm2Home });`,
     context,
   );
   return Object.assign(context as unknown as Home, { state });
@@ -411,9 +411,20 @@ test("a quick-entry project dated the 1st belongs to that month, not the evening
   assert.equal(stamped.toISOString(), "2026-10-03T17:00:00.000Z", "full timestamps are unchanged");
 });
 
-test("«Монтажей» opens the Calendar, where the counted visits are", () => {
-  const page = loadHome("owner", ORDERS).renderCrm2Home();
-  assert.match(page, /onclick="crm2Go\('calendar'\)"><div class="crm2-kl">Монтажей<\/div>/);
+test("«Монтажей» opens the Calendar on the same period, installations only", () => {
+  const home = loadHome("owner", ORDERS) as Home & { state: Record<string, unknown>; crm2HomeOpenInstalls: (now: Date) => void };
+  const page = home.renderCrm2Home();
+  assert.match(page, /onclick="crm2HomeOpenInstalls\(\)"><div class="crm2-kl">Монтажей<\/div>/);
   assert.doesNotMatch(page, /crm2Go\('installerOps'\)/);
+  const open = (period: string) => {
+    home.state.homePeriod = period;
+    home.crm2HomeOpenInstalls(NOW);
+    const anchor = new Date(String(home.state.calendarAnchor));
+    return [home.state.calendarMode, anchor.getMonth(), anchor.getDate(), home.state.calendarRoleFilter];
+  };
+  assert.deepEqual(open("today"), ["day", 9, 14, "installations"]);
+  assert.deepEqual(open("week"), ["week", 9, 12, "installations"], "from Monday");
+  assert.deepEqual(open("month"), ["month", 9, 1, "installations"]);
+  assert.deepEqual(open("year"), ["month", 9, 1, "installations"], "the current month inside the year");
 });
 

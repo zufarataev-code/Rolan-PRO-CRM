@@ -19894,6 +19894,22 @@ function crm2HomeOpenStatus(status, overdueOnly = false) {
   crm2Go('orders');
 }
 
+/**
+ * «Монтажей» opens the Calendar on the home's period with only installations:
+ * the day, the week (from Monday) or the month. The Calendar has no quarter or
+ * year view, so those open the current month inside the range.
+ */
+function crm2HomeOpenInstalls(now = new Date()) {
+  const range = crm2HomeRange(state.homePeriod || 'month', now);
+  const mode = range.period === 'today' ? 'day' : range.period === 'week' ? 'week' : 'month';
+  const anchor = mode === 'month' && now >= range.from && now < range.to ? new Date(now.getFullYear(), now.getMonth(), 1) : range.from;
+  state.calendarMode = mode;
+  state.calendarAnchor = anchor.toISOString();
+  state.calendarRoleFilter = 'installations';
+  state.calendarAssigneeFilter = 'all';
+  crm2Go('calendar');
+}
+
 /** The projects behind «Просрочены оплаты», for a role that has no payments screen. */
 function crm2HomeOpenOverdue() {
   crm2HomeOpenStatus('', true);
@@ -20049,7 +20065,7 @@ function renderCrm2Home() {
   const worksBlock = `<section class="crm2-blk">
     <div class="crm2-bh"><h2>Работы</h2><span class="crm2-muted">за период</span></div>
     <div class="crm2-cells">
-      <button type="button" class="crm2-cell" onclick="crm2Go('calendar')"><div class="crm2-kl">Монтажей</div><div class="crm2-cell-value">${works.done + works.ahead + works.pending}</div><div class="crm2-cell-note">${works.done} сделано · ${works.ahead} впереди${works.pending ? ` · ${works.pending} не закрыто` : ''}</div></button>
+      <button type="button" class="crm2-cell" onclick="crm2HomeOpenInstalls()"><div class="crm2-kl">Монтажей</div><div class="crm2-cell-value">${works.done + works.ahead + works.pending}</div><div class="crm2-cell-note">${works.done} сделано · ${works.ahead} впереди${works.pending ? ` · ${works.pending} не закрыто` : ''}</div></button>
       <button type="button" class="crm2-cell" onclick="crm2Go('calendar')"><div class="crm2-kl">Установлено</div><div class="crm2-cell-value">${Math.round(works.sqft).toLocaleString('ru-RU')} sq ft</div><div class="crm2-cell-note">по сделанным монтажам</div></button>
       <button type="button" class="crm2-cell" onclick="crm2HomeOpenStatus('')"><div class="crm2-kl">Средний чек</div><div class="crm2-cell-value">${crm2Money(sales.average)}</div><div class="crm2-cell-note">${projects(sales.count)}</div></button>
       <button type="button" class="crm2-cell" onclick="crm2Go('inventory')"><div class="crm2-kl">Склад</div><div class="crm2-cell-value">${owner ? crm2Money(financeStockValue()) : works.low.length}</div><div class="crm2-cell-note">${works.low.length ? `заканчивается: ${crm2Plural(works.low.length, ['позиция', 'позиции', 'позиций'])}` : 'всё в норме'}</div></button>
