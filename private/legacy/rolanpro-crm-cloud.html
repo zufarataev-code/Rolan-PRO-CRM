@@ -15862,7 +15862,11 @@ function projectProfitTaxProfile() {
 function projectProfitDate(o) {
   const quickRange = projectQuickDateRange(o);
   const value = o?.installationDoneAt || o?.installationAt || quickRange.endDate || quickRange.startDate || o?.proposalAcceptedAt || o?.proposalSentAt || o?.createdAt;
-  const date = value ? new Date(value) : new Date();
+  // Quick-entry dates are «YYYY-MM-DD» calendar days. new Date() reads them as UTC
+  // midnight, which in California is the evening before — a project dated the 1st
+  // fell into the previous month. Read them as the local day.
+  const day = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : value ? new Date(value) : new Date();
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 function projectProfitMonthOrders(o) {
@@ -16064,9 +16068,11 @@ function confirmPayment(orderId) {
  */
 function renderPaymentsDue() {
   const canRecord = currentUser()?.role === 'owner';
+  // Only agreed projects owe money, and what they owe is orderDebt(): the same
+  // rule as «Клиенты должны» on the home screen and in «Деньги» (CRM 2.0).
   const orders = db.orders
-    .filter(o => !['cancelled'].includes(o.status))
-    .map(o => ({ o, revenue: orderRevenue(o), paid: orderPaidTotal(o) }))
+    .filter(o => CRM2_CONTRACTED_STATUSES.includes(o.status))
+    .map(o => { const revenue = orderRevenue(o); return { o, revenue, paid: revenue - orderDebt(o) }; })
     .filter(x => x.revenue > 0 && x.paid < x.revenue - 0.01)
     .sort((a, b) => (b.revenue - b.paid) - (a.revenue - a.paid));
 
@@ -17545,6 +17551,13 @@ const NAV_ICON_PATHS = {
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   logout: 'M15 4h4v16h-4M10 17l5-5-5-5M15 12H3',
   plus: 'M12 5v14M5 12h14',
+  purchases: 'M3 4h2l2.4 11h11.2L21 7H6.2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM18 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
+  calc: 'M5 3h14v18H5zM8 7h8M8 11h2M12 11h2M16 11v6M8 15h2M12 15h2M8 18h6',
+  bell: 'M6 16v-5a6 6 0 1 1 12 0v5l2 2H4zM10 21h4',
+  chat: 'M4 4h16v12H9l-5 4z',
+  search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
+  menu: 'M4 7h16M4 12h16M4 17h16',
+  chevron: 'm6 9 6 6 6-6',
 };
 
 function navIconSvg(key, fallback = '') {
@@ -17552,23 +17565,217 @@ function navIconSvg(key, fallback = '') {
   return path ? `<svg class="rp-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"></path></svg>` : fallback;
 }
 
-/** The phone dock's «+»: the things people create most, as on the design canvas. */
-function openCreateSheet() {
+// ---------- CRM 2.0: МЕНЮ ПО ГРУППАМ И ОДНА «+ СОЗДАТЬ» (Owner, 2026-10-04) ----------
+// The owner's «CRM 2.0» canvas: the office menu is 6 groups instead of 22 items in
+// a row; one «+ Создать» replaces the five «новый проект» buttons; «Сменить» and
+// «Выйти» become the user's own menu; where two screens became one menu item,
+// a tab strip on top switches between them.
+const CRM2_NAV_GROUPS = [
+  ['', [['dashboard', 'Главная']]],
+  ['Продажи', [
+    ['leads', 'Лиды', ['leads', 'coldcalls']],
+    ['orders', 'Воронка', ['orders', 'orderDetails']],
+    ['proposals', 'Расчёт и КП'],
+    ['clients', 'Клиенты', ['clients', 'referrals', 'reviews']],
+  ]],
+  ['Работы', [
+    ['calendar', 'Календарь'],
+    ['canonicalProjects', 'Замеры'],
+    ['installerOps', 'Монтажи'],
+    ['tasks', 'Задачи'],
+  ]],
+  ['Склад', [
+    ['inventory', 'Рулоны и материалы'],
+    ['purchases', 'Закупки'],
+  ]],
+  ['Деньги', [
+    ['accounting', 'Счета и операции', ['accounting'], 'owner'],
+    ['paymentsdue', 'Оплаты клиентов', ['paymentsdue'], 'owner'],
+    ['payroll', 'Зарплата', ['payroll'], 'owner'],
+    ['reports', 'Отчёты'],
+  ]],
+  ['Компания', [
+    ['servicePricing', 'Услуги и цены'],
+    ['team', 'Сотрудники', ['team'], 'owner'],
+    ['academy', 'Академия'],
+  ]],
+];
+
+/** Tabs for the menu items that hold two or three former screens. */
+const CRM2_SECTION_TABS = [
+  [['leads', 'Входящие'], ['coldcalls', 'Холодные звонки']],
+  [['clients', 'Клиенты'], ['referrals', 'Рекомендации'], ['reviews', 'Отзывы']],
+  [['proposals', 'Коммерческие предложения'], ['calculator', 'Быстрый калькулятор']],
+];
+
+/** The new menu speaks English when the RU/EN switch says so. */
+const CRM2_EN = {
+  'Главная': 'Home', 'Продажи': 'Sales', 'Лиды': 'Leads', 'Воронка': 'Pipeline', 'Расчёт и КП': 'Quotes',
+  'Клиенты': 'Clients', 'Работы': 'Work', 'Календарь': 'Calendar', 'Замеры': 'Measurements', 'Монтажи': 'Installations',
+  'Задачи': 'Tasks', 'Склад': 'Warehouse', 'Рулоны и материалы': 'Rolls and materials', 'Закупки': 'Purchasing',
+  'Деньги': 'Money', 'Счета и операции': 'Accounts', 'Оплаты клиентов': 'Client payments', 'Зарплата': 'Payroll',
+  'Отчёты': 'Reports', 'Компания': 'Company', 'Услуги и цены': 'Services and prices', 'Сотрудники': 'Team',
+  'Академия': 'Academy', 'Настройки': 'Settings', 'Входящие': 'Inbound', 'Холодные звонки': 'Cold calls',
+  'Рекомендации': 'Referrals', 'Отзывы': 'Reviews', 'Коммерческие предложения': 'Proposals',
+  'Быстрый калькулятор': 'Quick calculator', 'Создать': 'Create', 'Выйти': 'Log out', 'Язык': 'Language',
+  'Меню': 'Menu', 'Ещё': 'More', 'Обзор': 'Overview', 'Пульс бизнеса': 'Business pulse', 'Сегодня': 'Today', 'Мои задачи': 'My tasks', 'Рабочий день': 'Workday', 'Цифры компании': 'Company numbers',
+  'Лид / проект': 'Lead / project', 'клиент → объект → замер': 'client → site → measurement',
+  'Холодный контакт': 'Cold prospect', 'компания для обзвона': 'company to call', 'Клиент': 'Client',
+  'карточка B2C или B2B': 'B2C or B2B card', 'Быстрый расчёт': 'Quick estimate', 'калькулятор КП': 'proposal calculator',
+  'Задача': 'Task', 'себе или команде': 'for you or the team', 'Приход рулона': 'Roll receipt', 'плёнка на склад': 'film into stock',
+  'Заявка на закупку': 'Purchase request', 'поставщику': 'to a supplier', 'Операция / чек': 'Transaction / receipt',
+  'приход или расход денег': 'money in or out',
+};
+
+function crm2T(text) {
+  return state.lang === 'en' ? (CRM2_EN[text] || text) : text;
+}
+
+function crm2IsOffice() {
+  return ['owner', 'manager'].includes(currentUser()?.role);
+}
+
+/** The office menu for the current role: owner-only items are left out for managers. */
+function crm2NavGroups() {
   const role = currentUser()?.role;
-  if (!['owner', 'manager'].includes(role)) return;
-  const tile = (title, sub, gradient, shadow, icon, action) => `<button type="button" class="rp-create-tile" style="background:${gradient};box-shadow:0 14px 26px -14px ${shadow}" onclick="closeModal(); ${action}"><span class="rp-create-tile-icon">${navIconSvg(icon)}</span><span><b>${title}</b><small>${sub}</small></span></button>`;
+  return CRM2_NAV_GROUPS
+    .map(([title, items]) => [title, items.filter((item) => !item[3] || item[3] === role)])
+    .filter(([, items]) => items.length);
+}
+
+function crm2NavIsActive(item) {
+  const [key, , views] = item;
+  if (key === 'purchases') return state.view === 'inventory' && state.inventoryTab === 'purchases';
+  if (key === 'inventory') return state.view === 'inventory' && state.inventoryTab !== 'purchases';
+  return (views || [key]).includes(state.view);
+}
+
+function crm2ActiveNav() {
+  for (const [title, items] of crm2NavGroups()) {
+    const item = items.find(crm2NavIsActive);
+    if (item) return { group: title || 'Главная', item };
+  }
+  return null;
+}
+
+function crm2Go(key) {
+  crm2CloseMenus();
+  // selectAppView() returns early for hash-routed screens (Замеры, Монтажи, Услуги
+  // и цены) before it closes the phone menu, so close it here for every item.
+  if (isCompactViewport()) state.mobileSidebarOpen = false;
+  if (key === 'purchases') {
+    state.inventoryTab = 'purchases';
+    selectAppView('inventory');
+    return;
+  }
+  if (key === 'inventory' && state.inventoryTab === 'purchases') state.inventoryTab = 'overview';
+  selectAppView(key);
+}
+
+/** The page title without the old emoji; office screens are named as in the menu. */
+function crm2HeaderTitle() {
+  const plain = String(headerTitle() || '').replace(/^[\p{Extended_Pictographic}‍️\s]+/u, '');
+  if (!crm2IsOffice()) return plain;
+  if (state.view === 'dashboard') return crm2IsPhone() ? plain : crm2T('Цифры компании');
+  const own = state.view === 'orderDetails' || state.view === 'notifications'
+    || (state.view === 'canonicalProjects' && state.canonicalProjectId);
+  if (own) return plain;
+  if (state.view === 'settings') return crm2T('Настройки');
+  return crm2T(crm2ActiveNav()?.item[1] || '') || plain;
+}
+
+function crm2HeaderSubtitle() {
+  if (crm2IsOffice() && state.view === 'dashboard' && !crm2IsPhone()) return 'Деньги, воронка, реклама и работы за период';
+  return headerSubtitle();
+}
+
+function crm2Eyebrow() {
+  const user = currentUser();
+  if (!crm2IsOffice()) return `${T(user.role)} · ROLANPRO`;
+  if (state.view === 'settings') return crm2T('Компания');
+  return crm2T(crm2ActiveNav()?.group || '') || 'Rolan PRO';
+}
+
+function crm2SectionTabs() {
+  if (!crm2IsOffice()) return '';
+  const set = CRM2_SECTION_TABS.find((tabs) => tabs.some(([view]) => view === state.view));
+  if (!set) return '';
+  return `<div class="crm2-tabs" role="tablist">${set.map(([view, ruLabel]) => [view, crm2T(ruLabel)]).map(([view, label]) => view === 'calculator'
+    ? `<button type="button" role="tab" aria-selected="false" onclick="if (typeof openRolanProCalculator === 'function') openRolanProCalculator()">${label}</button>`
+    : `<button type="button" role="tab" aria-selected="${state.view === view}" class="${state.view === view ? 'on' : ''}" onclick="selectAppView('${view}')">${label}</button>`).join('')}</div>`;
+}
+
+/** Everything a person in the office creates, for «+ Создать» and the phone's «+». */
+function crm2CreateItems() {
+  const role = currentUser()?.role;
+  if (!['owner', 'manager'].includes(role)) return [];
+  const items = [
+    { label: 'Лид / проект', sub: 'клиент → объект → замер', color: '#1F8A4C', icon: 'orders', action: 'openOrderModal()' },
+    { label: 'Холодный контакт', sub: 'компания для обзвона', color: '#E07A1F', icon: 'coldcalls', action: 'openColdProspectModal()' },
+    { label: 'Клиент', sub: 'карточка B2C или B2B', color: '#B3541E', icon: 'clients', action: 'openClientModal()' },
+    { label: 'Быстрый расчёт', sub: 'калькулятор КП', color: '#C2417A', icon: 'calc', action: "if (typeof openRolanProCalculator === 'function') openRolanProCalculator()" },
+    { label: 'Задача', sub: 'себе или команде', color: '#5D6B7E', icon: 'tasks', action: 'crm2NewTask()' },
+    { label: 'Приход рулона', sub: 'плёнка на склад', color: '#6E56CF', icon: 'inventory', action: "openAddRollModal('')" },
+    { label: 'Заявка на закупку', sub: 'поставщику', color: '#6E56CF', icon: 'purchases', action: 'openPurchaseRequestModal()' },
+  ];
+  if (role === 'owner') items.push({ label: 'Операция / чек', sub: 'приход или расход денег', color: '#2E5FA8', icon: 'accounting', action: 'crm2NewMoneyOperation()' });
+  return items;
+}
+
+function crm2CreateRow(item, before) {
+  return `<button type="button" class="crm2-create-row" role="menuitem" onclick="${before}${item.action}"><span class="crm2-swatch" style="background:${item.color}"></span><span class="crm2-create-text"><b>${crm2T(item.label)}</b><small>${crm2T(item.sub)}</small></span>${navIconSvg(item.icon)}</button>`;
+}
+
+function crm2NewTask() {
+  selectAppView('tasks');
+  let tries = 0;
+  const focusTitle = () => {
+    const title = document.getElementById('nt-title');
+    if (!title) { if (++tries < 20) requestAnimationFrame(focusTitle); return; }
+    title.closest('details')?.setAttribute('open', '');
+    title.focus();
+  };
+  requestAnimationFrame(focusTitle);
+}
+
+function crm2NewMoneyOperation() {
+  if (currentUser()?.role !== 'owner') return;
+  if (state.view !== 'accounting') selectAppView('accounting');
+  financeOpenTransactionModal();
+}
+
+function crm2CloseMenus() {
+  document.querySelectorAll('[data-crm2-menu]').forEach((menu) => {
+    menu.hidden = true;
+    menu.previousElementSibling?.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function crm2ToggleMenu(name, event) {
+  event?.stopPropagation();
+  document.querySelectorAll('[data-crm2-menu]').forEach((menu) => {
+    const open = menu.dataset.crm2Menu === name && menu.hidden;
+    menu.hidden = !open;
+    menu.previousElementSibling?.setAttribute('aria-expanded', String(open));
+  });
+}
+
+document.addEventListener('click', (event) => {
+  if (!event.target?.closest?.('.crm2-menu-wrap')) crm2CloseMenus();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') crm2CloseMenus();
+});
+
+/** The phone dock's «+»: the same list as «+ Создать» on a computer. */
+function openCreateSheet() {
+  const items = crm2CreateItems();
+  if (!items.length) return;
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
-    <div class="modal-content workspace-modal p-5" style="max-width: 30rem;">
-      <div class="flex items-center justify-between"><h3 class="font-semibold text-lg">Создать</h3><button class="btn-ghost" aria-label="Закрыть" onclick="closeModal()">✕</button></div>
-      <div class="rp-create-sheet">
-        ${tile('Новый проект', 'клиент, объект, адрес', 'linear-gradient(135deg,#3D7BD8,#22488F)', 'rgba(34,72,143,.9)', 'plus', 'openOrderModal()')}
-        ${tile('Клиент', 'карточка B2C или B2B', 'linear-gradient(135deg,#EF6A4C,#C2402A)', 'rgba(194,64,42,.9)', 'clients', 'openClientModal()')}
-        ${tile('Лиды', 'заявки и звонки', 'linear-gradient(135deg,#E9A92A,#B97500)', 'rgba(185,117,0,.9)', 'leads', "selectAppView('leads')")}
-        ${tile('Задача', 'себе или команде', 'linear-gradient(135deg,#8B6FD6,#5A3FA0)', 'rgba(90,63,160,.9)', 'tasks', "selectAppView('tasks')")}
-        ${tile('Приход рулона', 'плёнка на склад', 'linear-gradient(135deg,#34B573,#1C7A48)', 'rgba(28,122,72,.9)', 'inventory', "openAddRollModal('')")}
-        ${tile('Закупка', 'заявка поставщику', 'linear-gradient(135deg,#3CC2B5,#128A80)', 'rgba(18,138,128,.9)', 'payroll', 'openPurchaseRequestModal()')}
-      </div>
+    <div class="modal-content workspace-modal crm2-create-sheet" style="max-width: 30rem;">
+      <div class="crm2-sheet-head"><h3>${crm2T('Создать')}</h3><button class="btn-ghost" aria-label="Закрыть" onclick="closeModal()">✕</button></div>
+      <div class="crm2-create-list" role="menu">${items.map((item) => crm2CreateRow(item, 'closeModal(); ')).join('')}</div>
     </div>
   </div>`;
   render();
@@ -17577,28 +17784,8 @@ function openCreateSheet() {
 function renderAppShell() {
   const u = currentUser();
   const role = u.role;
-  const navItems = (role === 'manager' || role === 'owner') ? [
-    ['dashboard', 'Пульс бизнеса', '📊'],
-    ['leads', 'Новые лиды', '📥'],
-    ['coldcalls', 'Холодные звонки', '📞'],
-    ['orders', T('orders'), '🏗'],
-    ['proposals', 'КП', '📄'],
-    ['servicePricing', 'Услуги и цены', '💲'],
-    ['calendar', T('calendar'), '📅'],
-    ['installerOps', 'Специалисты по установке сейчас', '📍'],
-    ['tasks', 'Задачи', '✅'],
-    ['academy', 'Академия', '🧭'],
-    ['clients', T('clients'), '👥'],
-    ['inventory', 'Склад', '🎞'],
-    ['payroll', 'Зарплата', '💰'],
-    ...(role === 'owner' ? [['paymentsdue', 'Ожидают оплаты', '💵']] : []),
-    ...(role === 'owner' ? [['accounting', 'Деньги', '💵']] : []),
-    ['reports', T('reports'), '📈'],
-    ['team', T('team'), '🧑‍🔧'],
-    ['referrals', T('referralProgram'), '🎁'],
-    ['reviews', T('reviews'), '⭐'],
-    ...(role === 'owner' ? [['settings', T('settings'), '⚙️']] : []),
-  ] : (role === 'measurer') ? [
+  const office = role === 'manager' || role === 'owner';
+  const navItems = (role === 'measurer') ? [
     ['dashboard', T('dashboard'), '📊'],
     ['canonicalProjects', 'Замеры проектов', '🏗'],
     ['measurements', T('myTasks'), '📐'],
@@ -17613,7 +17800,7 @@ function renderAppShell() {
     ['tasks', 'Задачи', '✅'],
   ] : [];
 
-  const mobileNavItems = (role === 'manager' || role === 'owner') ? [
+  const mobileNavItems = office ? [
     ['dashboard', 'Обзор', '⌂'],
     ['orders', 'Продажи', '▣'],
     ['tasks', 'Задачи', '✓'],
@@ -17632,7 +17819,8 @@ function renderAppShell() {
   const compactViewport = isCompactViewport();
   const mobileOpen = compactViewport && !!state.mobileSidebarOpen;
   const collapsed = compactViewport ? !mobileOpen : !!state.sidebarCollapsed;
-  const canSearch = role === 'manager' || role === 'owner';
+  const canSearch = office;
+  const unreadMessages = unreadInboundClientMessages().length;
 
   return `
   <div class="app-shell role-${academyEsc(role)} view-${academyEsc(state.view)} ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'mobile-sidebar-open' : ''}" data-view="${academyEsc(state.view)}" data-role="${academyEsc(role)}">
@@ -17647,15 +17835,25 @@ function renderAppShell() {
         </div>
         <button class="sidebar-toggle-btn ml-auto" onclick="toggleSidebar()" title="${collapsed ? 'Открыть меню' : 'Скрыть меню'}">${collapsed ? '☰' : '‹'}</button>
       </div>
-      <nav class="flex-1 p-3 space-y-1" style="overflow-y:auto;min-height:0;">
-        ${navItems.map(([key, label, icon]) => `
+      <nav class="flex-1 p-3 space-y-1" style="overflow-y:auto;min-height:0;" aria-label="Основное меню">
+        ${office ? crm2NavGroups().map(([title, items]) => `
+          <div class="crm2-nav-group">
+            ${title ? `<div class="crm2-nav-group-title">${crm2T(title)}</div>` : ''}
+            ${items.map((item) => `
+              <div class="nav-item ${crm2NavIsActive(item) ? 'active' : ''}" title="${academyEsc(crm2T(item[1]))}" onclick="crm2Go('${item[0]}')">
+                <span class="nav-icon">${navIconSvg(item[0], '•')}</span>
+                <span class="nav-label">${crm2T(item[1])}</span>
+              </div>
+            `).join('')}
+          </div>
+        `).join('') : navItems.map(([key, label, icon]) => `
           <div class="nav-item ${state.view===key?'active':''}" title="${academyEsc(label)}" onclick="selectAppView('${key}')">
             <span class="nav-icon">${navIconSvg(key, icon)}</span>
             <span class="nav-label">${label}</span>
           </div>
         `).join('')}
       </nav>
-      <div class="p-3 border-t border-slate-700">
+      ${office ? '' : `<div class="p-3 border-t border-slate-700">
         <div class="sidebar-user">
           <div class="sidebar-avatar">${u.photo
             ? `<img src="${u.photo}" alt="" style="width:100%;height:100%;border-radius:inherit;object-fit:cover;display:block;">`
@@ -17668,18 +17866,18 @@ function renderAppShell() {
         <button class="nav-item w-full mt-1" onclick="logout()">
           <span class="nav-icon">${navIconSvg('logout', '🚪')}</span><span class="sidebar-logout-label">${T('logout')}</span>
         </button>
-      </div>
+      </div>`}
     </aside>
 
     <!-- Main -->
     <main class="app-main" data-scroll-key="app-main">
       ${canSearch ? `<div class="pulse-mobile-header"><img src="/landing/rolanpro-mobile-logo.png" alt="ROLANPRO" class="pulse-logo"><button type="button" onclick="openCreateSheet()" aria-label="Создать">${navIconSvg('plus', '+')}</button></div>` : ''}
       <header class="app-topbar">
-        <button class="topbar-icon-btn" onclick="toggleSidebar()" title="${collapsed ? 'Открыть меню' : 'Скрыть меню'}">☰</button>
+        <button class="topbar-icon-btn" onclick="toggleSidebar()" title="${collapsed ? 'Открыть меню' : 'Скрыть меню'}" aria-label="Меню">${navIconSvg('menu', '☰')}</button>
         <div class="topbar-title">
-          <div class="topbar-eyebrow">${T(u.role)} · ROLANPRO</div>
-          <h1>${headerTitle()}</h1>
-          <div class="topbar-subtitle">${headerSubtitle()}</div>
+          <div class="topbar-eyebrow">${academyEsc(crm2Eyebrow())}</div>
+          <h1>${crm2HeaderTitle()}</h1>
+          <div class="topbar-subtitle">${crm2HeaderSubtitle()}</div>
         </div>
         ${canSearch ? `
         <div class="topbar-search">
@@ -17688,27 +17886,39 @@ function renderAppShell() {
             onfocus="renderGlobalSearch();"
             onblur="setTimeout(()=>{var d=document.getElementById('global-search-results'); if(d) d.style.display='none';},200);"
             class="text-sm">
-          <span class="topbar-search-icon">🔎</span>
+          <span class="topbar-search-icon">${navIconSvg('search', '🔎')}</span>
           <div id="global-search-results" class="absolute left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-80 overflow-y-auto z-30" style="display:none;"></div>
         </div>` : `<div></div>`}
         <div class="topbar-actions">
-          ${canSearch ? `<button class="btn-primary text-sm" onclick="openOrderModal()" title="Создать новый проект">+ Проект</button>` : ''}
+          ${office ? `
+          <div class="crm2-menu-wrap crm2-create-wrap">
+            <button type="button" class="btn-primary crm2-create-btn" onclick="crm2ToggleMenu('create', event)" aria-haspopup="menu" aria-expanded="false">${navIconSvg('plus', '+')}<span>${crm2T('Создать')}</span>${navIconSvg('chevron', '▾')}</button>
+            <div class="crm2-menu crm2-menu-create" data-crm2-menu="create" role="menu" hidden>
+              ${crm2CreateItems().map((item) => crm2CreateRow(item, 'crm2CloseMenus(); ')).join('')}
+            </div>
+          </div>` : ''}
           ${pwaInstallButtonHtml()}
-          <div class="topbar-user-pill" title="${academyEsc(u.name)}">${academyEsc(u.name)} · ${T(u.role)}</div>
-          <button class="btn-ghost text-sm" onclick="logout()">Сменить</button>
-          <button class="topbar-icon-btn relative ${unreadInboundClientMessages().length ? 'bg-rose-50 text-rose-700 border border-rose-200' : ''}" onclick="openInboundMessagesInbox()" title="Открыть входящие SMS и WhatsApp" aria-label="Входящие сообщения${unreadInboundClientMessages().length ? ': ' + unreadInboundClientMessages().length + ' новых' : ''}">💬${unreadInboundClientMessages().length ? `<span class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full min-w-5 h-5 px-1 flex items-center justify-center font-black">${unreadInboundClientMessages().length}</span>` : ''}</button>
-          <button class="topbar-icon-btn relative" onclick="state.view='notifications'; markAllRead();">
-            🔔 ${unreadCount() > 0 ? `<span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">${unreadCount()}</span>` : ''}
+          <button class="topbar-icon-btn relative ${unreadMessages ? 'has-alert' : ''}" onclick="openInboundMessagesInbox()" title="Открыть входящие SMS и WhatsApp" aria-label="Входящие сообщения${unreadMessages ? ': ' + unreadMessages + ' новых' : ''}">${navIconSvg('chat', '💬')}${unreadMessages ? `<span class="crm2-count">${unreadMessages}</span>` : ''}</button>
+          <button class="topbar-icon-btn relative" onclick="state.view='notifications'; markAllRead();" aria-label="Уведомления">
+            ${navIconSvg('bell', '🔔')}${unreadCount() > 0 ? `<span class="crm2-count">${unreadCount()}</span>` : ''}
           </button>
-          <select onchange="state.lang=this.value; save(); render();" class="w-auto text-sm">
-            <option value="ru" ${state.lang==='ru'?'selected':''}>RU</option>
-            <option value="en" ${state.lang==='en'?'selected':''}>EN</option>
-          </select>
+          ${role === 'owner' ? `<button class="topbar-icon-btn ${state.view === 'settings' ? 'active' : ''}" onclick="selectAppView('settings')" title="Настройки" aria-label="Настройки">${navIconSvg('settings', '⚙️')}</button>` : ''}
+          <div class="crm2-menu-wrap crm2-user-wrap">
+            <button type="button" class="topbar-user-pill" title="${academyEsc(u.name)}" onclick="crm2ToggleMenu('user', event)" aria-haspopup="menu" aria-expanded="false">${academyEsc(u.name)} · ${T(u.role)}</button>
+            <div class="crm2-menu crm2-menu-user" data-crm2-menu="user" role="menu" hidden>
+              <div class="crm2-menu-head"><b>${academyEsc(u.name)}</b><small>${T(u.role)}</small></div>
+              <div class="crm2-menu-lang"><span>${crm2T('Язык')}</span><span class="crm2-seg">
+                <button type="button" class="${state.lang === 'ru' ? 'on' : ''}" onclick="state.lang='ru'; save(); render();">RU</button><button type="button" class="${state.lang === 'en' ? 'on' : ''}" onclick="state.lang='en'; save(); render();">EN</button>
+              </span></div>
+              ${role === 'owner' ? `<button type="button" class="crm2-menu-item" role="menuitem" onclick="crm2CloseMenus(); selectAppView('settings')">${navIconSvg('settings', '')}<span>${crm2T('Настройки')}</span></button>` : ''}
+              <button type="button" class="crm2-menu-item danger" role="menuitem" onclick="logout()">${navIconSvg('logout', '')}<span>${crm2T('Выйти')}</span></button>
+            </div>
+          </div>
         </div>
       </header>
 
       <div class="app-content">
-        ${renderView()}
+        ${crm2SectionTabs()}${renderView()}
       </div>
     </main>
     <nav class="mobile-primary-nav" aria-label="Основная мобильная навигация">
@@ -17719,12 +17929,12 @@ function renderAppShell() {
       ` : `
         <button type="button" class="${state.view===key?'active':''}" onclick="selectAppView('${key}')" aria-label="${academyEsc(label)}">
           <span class="mobile-primary-nav-icon">${navIconSvg(key, icon)}</span>
-          <span>${academyEsc(label)}</span>
+          <span>${academyEsc(crm2T(label))}</span>
         </button>
       `).join('')}
       ${mobileNavItems.length < 5 ? `<button type="button" class="${mobileOpen?'active':''}" onclick="toggleSidebar()" aria-label="Открыть все разделы">
-        <span class="mobile-primary-nav-icon">${navIconSvg('more', '•••')}</span>
-        <span>Ещё</span>
+        <span class="mobile-primary-nav-icon">${navIconSvg('menu', '•••')}</span>
+        <span>${crm2T('Ещё')}</span>
       </button>` : ''}
     </nav>
   </div>
@@ -19218,7 +19428,6 @@ function renderPrecisionManagerDashboard() {
         <h2>Что требует внимания сегодня</h2>
         <p>${academyEsc(todayLabel)} · ${actions.length} действий · ${active.length} активных проектов</p>
       </div>
-      <button class="btn-primary" onclick="openOrderModal()">+ Новый проект</button>
     </div>
 
     <div class="pw-funnel" aria-label="Воронка проектов">
@@ -19341,9 +19550,563 @@ function renderPulseBusinessDashboard() {
   </section>`;
 }
 
-function renderManagerDashboard() {
-  return renderPulseBusinessDashboard();
+// Owner, 2026-10-04: «Телефон — Пульс, компьютер — CRM 2.0». The phone test is
+// the one the Pulse styles use, so the overview and its styles switch together.
+const CRM2_PHONE_QUERY = '(max-width: 520px), (max-width: 768px) and (pointer: coarse)';
+
+function crm2IsPhone() {
+  try { return typeof window.matchMedia === 'function' && window.matchMedia(CRM2_PHONE_QUERY).matches; } catch (_) { return false; }
 }
+
+(() => {
+  try {
+    const query = window.matchMedia(CRM2_PHONE_QUERY);
+    const redraw = () => { if (state.view === 'dashboard') render(); };
+    if (query.addEventListener) query.addEventListener('change', redraw);
+    else query.addListener(redraw);
+  } catch (_) { /* no matchMedia: the computer home stays */ }
+})();
+
+function renderManagerDashboard() {
+  return crm2IsPhone() ? renderPulseBusinessDashboard() : renderCrm2Home();
+}
+
+// ---------- CRM 2.0: ГЛАВНАЯ — ТОЛЬКО ЦИФРЫ (Owner, 2026-10-04) ----------
+// The owner's canvas «Главная — цифры»: no order lists, only numbers for the
+// chosen period against the previous one. Every number opens its own screen;
+// «Требует внимания» shows counters that open the list. The company's money
+// (net profit, money on accounts, expenses, advertising, the year goal) is the
+// owner's; a manager sees sales, works and what needs attention.
+// Revenue follows the finance rule used everywhere in the CRM: orderRevenue()
+// of agreed projects, dated by projectProfitDate().
+const CRM2_CONTRACTED_STATUSES = ['proposal_accepted', 'installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress', 'installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'];
+const CRM2_HOME_PERIODS = [['today', 'Сегодня'], ['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал'], ['year', 'Год']];
+const CRM2_DIRECTIONS = [['smart_film', 'Smart-плёнка', '#2E5FA8'], ['solar_film', 'Солнцезащитная', '#1F8AB8'], ['protective_film', 'Защитная', '#6E56CF'], ['decorative_film', 'Декоративная', '#C2417A']];
+const CRM2_MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+const CRM2_MONTHS_WITH = ['январём', 'февралём', 'мартом', 'апрелем', 'маем', 'июнем', 'июлем', 'августом', 'сентябрём', 'октябрём', 'ноябрём', 'декабрём'];
+const CRM2_DEFAULT_YEAR_GOAL = 50000;
+// The server (LEAD_CLAIM_TTL_MS) and the inbox treat a claim older than 10
+// minutes as abandoned: such a lead is open again.
+const CRM2_LEAD_CLAIM_TTL_MS = 10 * 60 * 1000;
+
+/** The chosen period and the previous one of the same kind. */
+function crm2HomeRange(period = 'month', now = new Date()) {
+  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+  if (period === 'today') return { period, from: new Date(y, m, d), to: new Date(y, m, d + 1), prevFrom: new Date(y, m, d - 1), prevTo: new Date(y, m, d), compare: 'со вчера' };
+  if (period === 'week') {
+    const monday = d - ((now.getDay() + 6) % 7);
+    return { period, from: new Date(y, m, monday), to: new Date(y, m, monday + 7), prevFrom: new Date(y, m, monday - 7), prevTo: new Date(y, m, monday), compare: 'с прошлой неделей' };
+  }
+  if (period === 'quarter') {
+    const q = Math.floor(m / 3) * 3;
+    return { period, from: new Date(y, q, 1), to: new Date(y, q + 3, 1), prevFrom: new Date(y, q - 3, 1), prevTo: new Date(y, q, 1), compare: 'с прошлым кварталом' };
+  }
+  if (period === 'year') return { period, from: new Date(y, 0, 1), to: new Date(y + 1, 0, 1), prevFrom: new Date(y - 1, 0, 1), prevTo: new Date(y, 0, 1), compare: `с ${y - 1} годом` };
+  return { period: 'month', from: new Date(y, m, 1), to: new Date(y, m + 1, 1), prevFrom: new Date(y, m - 1, 1), prevTo: new Date(y, m, 1), compare: `с ${CRM2_MONTHS_WITH[(m + 11) % 12]}` };
+}
+
+function crm2In(value, from, to) {
+  if (!value) return false;
+  const date = value instanceof Date ? value : new Date(value);
+  return !Number.isNaN(date.getTime()) && date >= from && date < to;
+}
+
+/** A finance date: «YYYY-MM-DD» is a calendar day here, not UTC midnight (which is the day before in California). */
+function crm2FinanceDay(value) {
+  const day = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : financeDate(value);
+}
+
+function crm2Delta(current, previous) {
+  return previous > 0 ? Math.round((current - previous) / previous * 100) : null;
+}
+
+function crm2Deals(orders, from, to) {
+  return orders.filter((o) => CRM2_CONTRACTED_STATUSES.includes(o.status) && orderRevenue(o) > 0 && crm2In(projectProfitDate(o), from, to));
+}
+
+/** The first month the CRM has projects for: earlier months have costs but no sales on record. */
+function crm2BooksStart() {
+  const times = (db.orders || []).map((o) => new Date(o.createdAt).getTime()).filter(Number.isFinite);
+  if (!times.length) return null;
+  const first = new Date(Math.min(...times));
+  return new Date(first.getFullYear(), first.getMonth(), 1);
+}
+
+/**
+ * The company's net profit for a period, month by month: the margin of agreed
+ * projects before advertising, minus the month's whole ad budget, the whole
+ * monthly fixed costs and the tax reserve
+ * (the same pool, rate and annual minimum projectProfitability() uses), so a
+ * month without deals counts its costs too. Part of a month counts its share of
+ * the costs; months before the CRM has projects are left out.
+ */
+function crm2HomeNetProfit(orders, from, to) {
+  const books = crm2BooksStart();
+  if (!books) return 0;
+  const start = books > from ? books : from;
+  const profile = projectProfitTaxProfile();
+  const rate = Math.max(0, Number(profile.ratePct) || 0) / 100;
+  const minimumMonthly = Math.max(0, Number(profile.annualMinimum) || 0) / 12;
+  const fixedMonthly = Math.max(0, Number(projectMonthlyFixedExpensePool()) || 0);
+  let total = 0;
+  for (let month = new Date(start.getFullYear(), start.getMonth(), 1); month < to; month = new Date(month.getFullYear(), month.getMonth() + 1, 1)) {
+    const next = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+    const pieceFrom = start > month ? start : month;
+    const pieceTo = to < next ? to : next;
+    if (pieceTo <= pieceFrom) continue;
+    const share = (pieceTo - pieceFrom) / (next - month);
+    // orderMargin() already takes each deal's share of the month's ad budget;
+    // the company pays the whole budget, including the shares of unagreed proposals.
+    const deals = crm2Deals(orders, pieceFrom, pieceTo);
+    const beforeAds = deals.reduce((sum, o) => sum + orderMargin(o) + (Number(orderAdAllocation(o)) || 0), 0);
+    const plan = projectMonthAdBudget(month);
+    const ads = (Number(plan && typeof plan === 'object' ? plan.budget : plan) || 0) * share;
+    const gross = beforeAds - ads;
+    const fixed = fixedMonthly * share;
+    const tax = Math.max(Math.max(0, gross - fixed) * rate, minimumMonthly * share);
+    total += gross - fixed - tax;
+  }
+  return total;
+}
+
+/** Agreed projects dated in the period: revenue, margin, net profit (owner) and the average check. */
+function crm2HomeSales(orders, from, to, withProfit = false) {
+  const deals = crm2Deals(orders, from, to);
+  const revenue = deals.reduce((sum, o) => sum + orderRevenue(o), 0);
+  const margin = deals.reduce((sum, o) => sum + orderMargin(o), 0);
+  const netProfit = withProfit ? crm2HomeNetProfit(orders, from, to) : 0;
+  return { deals, count: deals.length, revenue, margin, netProfit, average: deals.length ? revenue / deals.length : 0 };
+}
+
+/** An agreed project still owes money a week after the work was done. */
+function crm2OrderOverdue(o, now = new Date()) {
+  if (!CRM2_CONTRACTED_STATUSES.includes(o.status) || !(orderDebt(o) > 0.01)) return false;
+  const done = new Date(o.installationDoneAt || o.actSignedAt || 0).getTime();
+  return done > 0 && now.getTime() - done > 7 * 24 * 3600 * 1000;
+}
+
+/** What agreed clients still owe; overdue = the work was done more than 7 days ago. */
+function crm2HomeDebts(orders, now = new Date()) {
+  const owing = orders.filter((o) => CRM2_CONTRACTED_STATUSES.includes(o.status)).map((o) => ({ o, debt: orderDebt(o) })).filter((row) => row.debt > 0.01);
+  const overdue = owing.filter(({ o }) => crm2OrderOverdue(o, now));
+  return {
+    total: owing.reduce((sum, row) => sum + row.debt, 0),
+    count: owing.length,
+    overdueCount: overdue.length,
+    overdueTotal: overdue.reduce((sum, row) => sum + row.debt, 0),
+  };
+}
+
+function crm2HomeMoney() {
+  const accounts = financeData().accounts.filter((account) => account.active !== false && account.id !== 'fin_unallocated');
+  return { total: accounts.reduce((sum, account) => sum + (Number(financeAccountBalance(account.id)) || 0), 0), accounts: accounts.length };
+}
+
+/** Net profit since 1 January against the year goal, and what each remaining month needs. */
+function crm2HomeGoal(orders, now = new Date()) {
+  const goal = Number(db.settings?.yearProfitGoal) || CRM2_DEFAULT_YEAR_GOAL;
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+  const yearEnd = new Date(now.getFullYear() + 1, 0, 1);
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const earned = crm2HomeSales(orders, yearStart, tomorrow, true).netProfit;
+  const monthsLeft = 12 - now.getMonth();
+  return {
+    goal,
+    earned,
+    pct: goal > 0 ? Math.max(0, Math.min(100, earned / goal * 100)) : 0,
+    pace: (now - yearStart) / (yearEnd - yearStart) * 100,
+    perMonth: Math.max(0, goal - earned) / monthsLeft,
+    monthsLeft,
+  };
+}
+
+/** Open website and Messenger leads nobody is taking right now. */
+function crm2HomeLeadRows(now = new Date()) {
+  let rows = [];
+  try { rows = typeof canonicalMessengerLeadRows === 'function' ? canonicalMessengerLeadRows() : []; } catch (_) { rows = []; }
+  return rows.filter((lead) => !lead.claimedAt || now.getTime() - new Date(lead.claimedAt).getTime() > CRM2_LEAD_CLAIM_TTL_MS);
+}
+
+/** Every website and Messenger lead the CRM loaded, whatever its status now. */
+function crm2HomeAllCanonicalLeads() {
+  try {
+    return typeof canonicalLeads !== 'undefined' && Array.isArray(canonicalLeads)
+      ? canonicalLeads.filter((lead) => ['facebook_messenger', 'website'].includes(lead?.source))
+      : [];
+  } catch (_) { return []; }
+}
+
+/**
+ * Leads → measurements → proposals → deals that happened in the period. Leads are
+ * the projects created plus the website / Messenger leads received that did not
+ * become a project — also those closed since, so past months do not shrink.
+ */
+function crm2HomeFunnel(orders, from, to) {
+  const canonical = crm2HomeAllCanonicalLeads();
+  const received = new Map(canonical.map((lead) => [lead.lead_id, lead.created_at]));
+  const converted = new Set((db.orders || []).map((o) => o.canonicalLeadId).filter(Boolean));
+  const inbox = canonical.filter((lead) => !converted.has(lead.lead_id) && crm2In(lead.created_at, from, to)).length;
+  // A project made from an inbox lead counts when the lead came in, not when it was converted.
+  const projects = orders.filter((o) => crm2In(received.get(o.canonicalLeadId) || o.createdAt, from, to)).length;
+  return [
+    ['Лиды', projects + inbox, '#E07A1F'],
+    ['Замеры', orders.filter((o) => crm2In(o.measurementDoneAt, from, to)).length, '#6E56CF'],
+    ['КП', orders.filter((o) => crm2In(o.proposalSentAt, from, to)).length, '#C2417A'],
+    ['Сделки', orders.filter((o) => crm2In(o.proposalAcceptedAt, from, to)).length, '#1F8A4C'],
+  ];
+}
+
+/** Advertising: the month's budget is 10% of last month's revenue; spend comes from «Деньги». */
+function crm2HomeAds(rows, from, to, funnel, now = new Date()) {
+  const plan = projectMonthAdBudget(now);
+  const budget = Number(plan && typeof plan === 'object' ? plan.budget : plan) || 0;
+  const pct = plan && typeof plan === 'object' ? Number(plan.pct) || 0 : 10;
+  // With no revenue last month the CRM estimates the budget from this month's revenue.
+  const estimate = Boolean(plan && typeof plan === 'object' && plan.basis === 'current');
+  const spent = rows.filter((row) => row.type === 'expense' && row.category === 'marketing' && row.scope !== 'personal' && crm2In(crm2FinanceDay(row.date), from, to)).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+  const leads = funnel[0][1];
+  const deals = funnel[3][1];
+  return { budget, pct, estimate, spent, perLead: leads ? spent / leads : null, perDeal: deals ? spent / deals : null };
+}
+
+function crm2DirectionKey(value) {
+  const raw = String(value || '').toLowerCase();
+  if (raw.includes('smart')) return 'smart_film';
+  if (raw.includes('solar') || raw.includes('sun')) return 'solar_film';
+  if (raw.includes('protect') || raw.includes('safety') || raw.includes('security')) return 'protective_film';
+  if (raw.includes('decor')) return 'decorative_film';
+  return 'other';
+}
+
+function crm2OrderDirection(o) {
+  return crm2DirectionKey(o.serviceType || (Array.isArray(o.serviceTypes) ? o.serviceTypes[0] : '') || o.serviceCategory);
+}
+
+/**
+ * One project's revenue by direction, the way orderRevenue() adds it up: each
+ * measured window by its own service, each service line by its own; anything
+ * without a service of its own goes to the project's direction.
+ */
+function crm2OrderDirectionShares(o) {
+  const fallback = crm2OrderDirection(o);
+  const keyOf = (value) => { const key = value ? crm2DirectionKey(value) : 'other'; return key === 'other' ? fallback : key; };
+  const shares = {};
+  const add = (key, amount) => { if (amount > 0) shares[key] = (shares[key] || 0) + amount; };
+  const complexity = o.complexity || 'standard';
+  (o.measurements?.rooms || []).forEach((room) => (room.windows || []).forEach((win) => add(keyOf(win.measureScope), Number(windowRetailPrice(win, complexity, o.priceOverridePerSqft)) || 0)));
+  const measured = measureAllWindows(o).length > 0;
+  (o.extraServices || []).filter((line) => !line.quickProjectLine || !measured).forEach((line) => {
+    add(keyOf(line.serviceType || serviceOffering(line.offeringId)?.direction), Number(line.price) || 0);
+  });
+  const rest = orderRevenue(o) - Object.values(shares).reduce((sum, amount) => sum + amount, 0);
+  if (rest > 0.01) add(fallback, rest);
+  return shares;
+}
+
+/** Revenue by direction; a mixed project's margin is split in proportion to its revenue. */
+function crm2HomeDirections(deals) {
+  const totals = {};
+  deals.forEach((o) => {
+    const revenue = orderRevenue(o);
+    const marginRate = revenue > 0 ? orderMargin(o) / revenue : 0;
+    Object.entries(crm2OrderDirectionShares(o)).forEach(([key, amount]) => {
+      totals[key] = totals[key] || { revenue: 0, margin: 0 };
+      totals[key].revenue += amount;
+      totals[key].margin += amount * marginRate;
+    });
+  });
+  const rows = [...CRM2_DIRECTIONS, ['other', 'Другое', '#5D6B7E']].map(([id, label, color]) => {
+    const { revenue = 0, margin = 0 } = totals[id] || {};
+    return { id, label, color, revenue, marginPct: revenue > 0 ? Math.round(margin / revenue * 100) : null };
+  }).filter((row) => row.id !== 'other' || row.revenue > 0);
+  const max = Math.max(1, ...rows.map((row) => row.revenue));
+  return rows.map((row) => ({ ...row, width: Math.round(row.revenue / max * 100) }));
+}
+
+function crm2ProjectSqft(o) {
+  return Number(orderActualAreaSqft(o)) || Number(orderPlannedAreaSqft(o)) || (typeof projectQuickSqft === 'function' ? Number(projectQuickSqft(o)) : 0) || 0;
+}
+
+/**
+ * A project's install visits with their area, as the Calendar shows them: one
+ * per scheduled service (its windows and sq ft lines), else one visit for the
+ * whole project on its install date.
+ */
+function crm2InstallVisits(o) {
+  try {
+    if (o.serviceSchedules?.length && typeof projectServiceGroups === 'function') {
+      const visits = projectServiceGroups(o).map((group) => {
+        const at = new Date(projectServiceAssignment(o, group)?.installationAt || '');
+        const windows = (group.windows || []).reduce((sum, win) => sum + (Number(windowActualAreaSqft(win)) || Number(windowAreaSqft(win)) || 0), 0);
+        // Film footage only: quick-entry film lines (there are no measured windows then),
+        // not additional work priced per sq ft such as removing old film.
+        const lines = (group.lines || []).filter((line) => line.quickProjectLine && line.unit === 'sqft').reduce((sum, line) => sum + (Number(line.qty) || 0), 0);
+        return { at, sqft: windows + lines };
+      }).filter((visit) => !Number.isNaN(visit.at.getTime()));
+      if (visits.length) return visits;
+    }
+  } catch (_) { /* one visit for the project */ }
+  const at = new Date(o.installationDoneAt || o.installationAt || '');
+  return Number.isNaN(at.getTime()) ? [] : [{ at, sqft: crm2ProjectSqft(o) }];
+}
+
+/** Works of the period: visits done, still ahead, or past but not closed; area of the visits done. */
+function crm2HomeWorks(orders, from, to, now = new Date()) {
+  let done = 0;
+  let ahead = 0;
+  let pending = 0;
+  let sqft = 0;
+  orders.forEach((o) => {
+    const visits = crm2InstallVisits(o).filter((visit) => crm2In(visit.at, from, to));
+    if (o.installationDoneAt) {
+      done += visits.length;
+      sqft += visits.reduce((sum, visit) => sum + visit.sqft, 0);
+    } else {
+      visits.forEach((visit) => { if (visit.at >= now) ahead += 1; else pending += 1; });
+    }
+  });
+  return {
+    done,
+    ahead,
+    pending,
+    sqft,
+    low: warehouseNeedItems(),
+  };
+}
+
+function crm2HomeExpenses(rows, from, to) {
+  const labels = Object.fromEntries(FINANCE_CATEGORY_OPTIONS);
+  const totals = {};
+  rows.filter((row) => row.type === 'expense' && row.scope !== 'personal' && row.category !== 'owner_draw' && crm2In(crm2FinanceDay(row.date), from, to))
+    .forEach((row) => { const key = row.category || 'other'; totals[key] = (totals[key] || 0) + (Number(row.amount) || 0); });
+  const list = Object.entries(totals).sort((a, b) => b[1] - a[1]).map(([key, amount]) => [labels[key] || 'Прочее', amount]);
+  return { list: list.slice(0, 6), total: list.reduce((sum, [, amount]) => sum + amount, 0) };
+}
+
+/** Opens the funnel with only this status: filters left from earlier would hide the projects. */
+function crm2HomeOpenStatus(status, overdueOnly = false) {
+  state.search = ''; state.managerFilter = '';
+  state.dateFrom = ''; state.dateTo = '';
+  state.ordersPeriod = 'all';
+  state.statusFilter = status;
+  state.ordersOverdueOnly = overdueOnly;
+  crm2Go('orders');
+}
+
+/**
+ * «Монтажей» opens the Calendar on the home's period with only installations:
+ * the day, the week (from Monday) or the month. The Calendar has no quarter or
+ * year view, so those open the current month inside the range.
+ */
+function crm2HomeOpenInstalls(now = new Date()) {
+  const range = crm2HomeRange(state.homePeriod || 'month', now);
+  const mode = range.period === 'today' ? 'day' : range.period === 'week' ? 'week' : 'month';
+  const anchor = mode === 'month' && now >= range.from && now < range.to ? new Date(now.getFullYear(), now.getMonth(), 1) : range.from;
+  state.calendarMode = mode;
+  state.calendarAnchor = anchor.toISOString();
+  state.calendarRoleFilter = 'installations';
+  state.calendarAssigneeFilter = 'all';
+  crm2Go('calendar');
+}
+
+/** The projects behind «Просрочены оплаты», for a role that has no payments screen. */
+function crm2HomeOpenOverdue() {
+  crm2HomeOpenStatus('', true);
+}
+
+/** Only counters: each opens the list where the work is. */
+function crm2HomeAttention(orders, owner, now = new Date()) {
+  const hour = 3600000;
+  const age = (value) => now.getTime() - new Date(value || 0).getTime();
+  const estimate = (list) => list.reduce((sum, o) => sum + orderRevenue(o), 0);
+  const openLeads = crm2HomeLeadRows(now).filter((lead) => age(lead.receivedAt) > hour);
+  const freshOrders = orders.filter((o) => o.status === 'new' && age(o.createdAt) > hour);
+  const oldest = (times) => {
+    const ages = times.map(age).filter(Number.isFinite);
+    return ages.length ? `самый давний — ${Math.floor(Math.max(...ages) / hour)} ч` : 'все в работе';
+  };
+  const measured = orders.filter((o) => o.status === 'measurement_done');
+  const waiting = orders.filter((o) => o.status === 'proposal_sent' && age(o.proposalSentAt || o.updatedAt) > 72 * hour);
+  const noDate = orders.filter((o) => o.status === 'proposal_accepted' && !o.installationAt);
+  const noAct = orders.filter((o) => o.status === 'installation_done' && !o.actSignedAt);
+  const debts = crm2HomeDebts(orders, now);
+  const low = warehouseNeedItems();
+  return [
+    { label: 'Лиды без ответа > 1 часа', count: openLeads.length, note: oldest(openLeads.map((lead) => lead.receivedAt)), color: '#E07A1F', go: "crm2Go('leads')" },
+    { label: 'Новые проекты дольше часа', count: freshOrders.length, note: oldest(freshOrders.map((o) => o.createdAt)), color: '#B3541E', go: "crm2HomeOpenStatus('new')" },
+    { label: 'Замер без КП', count: measured.length, note: measured.length ? `≈ ${crm2Money(estimate(measured))}` : '—', color: '#6E56CF', go: "crm2HomeOpenStatus('measurement_done')" },
+    { label: 'КП без ответа 3+ дня', count: waiting.length, note: waiting.length ? crm2Money(estimate(waiting)) : '—', color: '#C2417A', go: "crm2HomeOpenStatus('proposal_sent')" },
+    { label: 'Принято, нет даты монтажа', count: noDate.length, note: noDate.length ? crm2Money(estimate(noDate)) : '—', color: '#1F8A4C', go: "crm2HomeOpenStatus('proposal_accepted')" },
+    { label: 'Сделано, нет акта', count: noAct.length, note: noAct.length ? crm2Money(estimate(noAct)) : '—', color: '#2E5FA8', go: "crm2HomeOpenStatus('installation_done')" },
+    { label: 'Просрочены оплаты', count: debts.overdueCount, note: debts.overdueCount ? crm2Money(debts.overdueTotal) : '—', color: '#D2452B', go: owner ? "crm2Go('paymentsdue')" : 'crm2HomeOpenOverdue()' },
+    { label: 'Заканчивается на складе', count: low.length, note: low.length ? String(low[0].name || '') : 'всё в норме', color: '#5D6B7E', go: "crm2Go('inventory')" },
+  ];
+}
+
+function crm2EditYearGoal() {
+  if (currentUser()?.role !== 'owner') return;
+  const current = Number(db.settings?.yearProfitGoal) || CRM2_DEFAULT_YEAR_GOAL;
+  const answer = window.prompt('Цель чистой прибыли на год, $', String(current));
+  if (answer == null) return;
+  const value = Math.round(Number(String(answer).replace(/[^\d.]/g, '')));
+  if (!(value > 0)) return;
+  db.settings = db.settings || {};
+  db.settings.yearProfitGoal = value;
+  save();
+  render();
+}
+
+/** fmtMoney with a plain space: ru-RU's narrow no-break space is drawn double-wide in IBM Plex Mono. */
+function crm2Money(value) {
+  const number = Number(value) || 0;
+  const text = String(fmtMoney(Math.abs(number))).replace(/[\u202f\u00a0]/g, ' ');
+  return number < -0.5 ? `−${text}` : text;
+}
+
+function crm2Chip(delta, positiveIsGood = true) {
+  if (delta == null) return '<span class="crm2-chip">—</span>';
+  const good = positiveIsGood ? delta >= 0 : delta <= 0;
+  return `<span class="crm2-chip ${good ? 'up' : 'down'}">${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}%</span>`;
+}
+
+/** 1 проект, 2 проекта, 5 проектов. */
+function crm2Plural(count, forms) {
+  const n = Math.abs(Number(count) || 0) % 100;
+  const last = n % 10;
+  const form = n > 10 && n < 20 ? forms[2] : last === 1 ? forms[0] : last >= 2 && last <= 4 ? forms[1] : forms[2];
+  return `${count} ${form}`;
+}
+
+/** A step-to-step rate; counts are events of the period, so a rate above 100% is not shown. */
+function crm2Pct(part, whole) {
+  return whole > 0 && part <= whole ? `${Math.round(part / whole * 100)}%` : '';
+}
+
+function renderCrm2Home() {
+  const user = currentUser();
+  const owner = user?.role === 'owner';
+  const now = new Date();
+  const range = crm2HomeRange(state.homePeriod || 'month', now);
+  const orders = visibleOrdersForUser(user);
+  const sales = crm2HomeSales(orders, range.from, range.to, owner);
+  const before = crm2HomeSales(orders, range.prevFrom, range.prevTo, owner);
+  const debts = crm2HomeDebts(orders, now);
+  const funnel = crm2HomeFunnel(orders, range.from, range.to);
+  const works = crm2HomeWorks(orders, range.from, range.to, now);
+  const rows = owner ? financeAllRows() : [];
+  const dateLabel = `${now.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })} ${now.getFullYear()}`;
+  const projects = (count) => crm2Plural(count, ['проект', 'проекта', 'проектов']);
+
+  const kpi = (label, value, chip, note, go) => `<button type="button" class="crm2-kpi" onclick="${go}"><span class="crm2-kpi-top"><span class="crm2-kl">${label}</span>${chip}</span><span class="crm2-kpi-value">${value}</span><span class="crm2-kpi-note">${note}</span></button>`;
+  const debtChip = `<span class="crm2-chip ${debts.overdueCount ? 'down' : ''}">${projects(debts.count)}</span>`;
+  const debtNote = debts.overdueCount ? `просрочено ${debts.overdueCount} — ${crm2Money(debts.overdueTotal)}` : 'просрочек нет';
+  const kpis = owner ? [
+    kpi('Выручка', crm2Money(sales.revenue), crm2Chip(crm2Delta(sales.revenue, before.revenue)), `${projects(sales.count)} · средний чек ${crm2Money(sales.average)}`, "crm2HomeOpenStatus('')"),
+    kpi('Чистая прибыль', crm2Money(sales.netProfit), crm2Chip(crm2Delta(sales.netProfit, before.netProfit)), `${sales.revenue > 0 ? `${Math.round(sales.netProfit / sales.revenue * 100)}% · ` : ''}после плёнки, работ, рекламы, постоянных и налога`, "crm2Go('accounting')"),
+    (() => { const money = crm2HomeMoney(); return kpi('Деньги на счетах', crm2Money(money.total), '<span class="crm2-chip">сейчас</span>', `${crm2Plural(money.accounts, ['счёт', 'счёта', 'счетов'])} · из «Деньги»`, "crm2Go('accounting')"); })(),
+    kpi('Клиенты должны', crm2Money(debts.total), debtChip, debtNote, "crm2Go('paymentsdue')"),
+  ] : [
+    kpi('Выручка', crm2Money(sales.revenue), crm2Chip(crm2Delta(sales.revenue, before.revenue)), 'принятые КП и работы в периоде', "crm2HomeOpenStatus('')"),
+    kpi('Сделки', String(sales.count), crm2Chip(crm2Delta(sales.count, before.count)), `было ${before.count}`, "crm2HomeOpenStatus('')"),
+    kpi('Средний чек', crm2Money(sales.average), crm2Chip(crm2Delta(sales.average, before.average)), `было ${crm2Money(before.average)}`, "crm2HomeOpenStatus('')"),
+    kpi('Клиенты должны', crm2Money(debts.total), debtChip, debtNote, "crm2HomeOpenStatus('')"),
+  ];
+
+  const goalBlock = (() => {
+    if (!owner) return '';
+    const goal = crm2HomeGoal(orders, now);
+    return `<section class="crm2-blk">
+      <div class="crm2-bh"><h2>Цель ${now.getFullYear()} — ${crm2Money(goal.goal)} чистой прибыли</h2><button type="button" class="crm2-link" onclick="crm2EditYearGoal()">Изменить цель</button></div>
+      <div class="crm2-goal">
+        <div class="crm2-goal-line"><span class="crm2-goal-value">${crm2Money(goal.earned)}</span><span class="crm2-muted">из ${crm2Money(goal.goal)} · ${Math.round(goal.pct)}%</span>
+          <span class="crm2-goal-need">${goal.earned >= goal.goal ? 'цель достигнута' : `нужно ${crm2Money(goal.perMonth)} чистыми в месяц до декабря`}</span></div>
+        <div class="crm2-goal-bar"><span style="width:${goal.pct.toFixed(1)}%"></span><i style="left:${goal.pace.toFixed(1)}%" title="Где нужно быть сегодня"></i></div>
+        <div class="crm2-months">${CRM2_MONTHS.map((month, index) => `<span class="${index === now.getMonth() ? 'now' : ''}">${month}${index === now.getMonth() ? '<b> ▲ темп</b>' : ''}</span>`).join('')}</div>
+      </div>
+    </section>`;
+  })();
+
+  const leads = funnel[0][1];
+  const funnelMax = Math.max(1, ...funnel.map(([, value]) => value));
+  const funnelBlock = `<section class="crm2-blk">
+    <div class="crm2-bh"><h2>Воронка</h2><span class="crm2-muted">лид → сделка ${crm2Pct(funnel[3][1], leads) || '—'}</span></div>
+    <div class="crm2-funnel">${funnel.map(([label, value, color], index) => `<div class="crm2-funnel-row">
+      <span class="crm2-funnel-label"><i style="background:${color}"></i>${label}</span>
+      <span class="crm2-bar"><span style="width:${Math.round(value / funnelMax * 100)}%;background:${color}"></span></span>
+      <span class="crm2-num">${value}</span>
+      <span class="crm2-num crm2-muted">${index ? crm2Pct(value, funnel[index - 1][1]) : ''}</span>
+    </div>`).join('')}</div>
+  </section>`;
+
+  const adsBlock = (() => {
+    if (!owner) return '';
+    const ads = crm2HomeAds(rows, range.from, range.to, funnel, now);
+    return `<section class="crm2-blk">
+      <div class="crm2-bh"><h2>Реклама</h2><span class="crm2-muted">${ads.estimate ? `оценка: ${ads.pct}% выручки этого месяца — в прошлом выручки не было` : `бюджет = ${ads.pct}% выручки прошлого месяца`}</span></div>
+      <div class="crm2-cells">
+        <div class="crm2-cell"><div class="crm2-kl">Бюджет месяца</div><div class="crm2-cell-value">${crm2Money(ads.budget)}</div><div class="crm2-cell-note">${ads.estimate ? 'оценка по этому месяцу' : `по правилу ${ads.pct}%`}</div></div>
+        <div class="crm2-cell"><div class="crm2-kl">Потрачено</div><div class="crm2-cell-value">${crm2Money(ads.spent)}</div><div class="crm2-cell-note">${ads.budget > 0 ? `${Math.round(ads.spent / ads.budget * 100)}% бюджета` : 'категория «Реклама»'}</div></div>
+        <div class="crm2-cell"><div class="crm2-kl">Цена лида</div><div class="crm2-cell-value">${ads.perLead == null ? '—' : crm2Money(ads.perLead)}</div><div class="crm2-cell-note">${crm2Plural(leads, ['лид', 'лида', 'лидов'])}</div></div>
+        <div class="crm2-cell"><div class="crm2-kl">Цена сделки</div><div class="crm2-cell-value">${ads.perDeal == null ? '—' : crm2Money(ads.perDeal)}</div><div class="crm2-cell-note">${crm2Plural(funnel[3][1], ['сделка', 'сделки', 'сделок'])}</div></div>
+      </div>
+    </section>`;
+  })();
+
+  const directions = crm2HomeDirections(sales.deals);
+  const directionsBlock = `<section class="crm2-blk">
+    <div class="crm2-bh"><h2>По направлениям</h2><span class="crm2-muted">${owner ? 'выручка · маржа' : 'выручка'}</span></div>
+    <div class="crm2-dirs">${directions.map((row) => `<div>
+      <div class="crm2-dir-line"><span>${row.label}</span><span class="crm2-num">${crm2Money(row.revenue)}${owner && row.marginPct != null ? ` · ${row.marginPct}%` : ''}</span></div>
+      <div class="crm2-dir-bar"><span style="width:${row.width}%;background:${row.color}"></span></div>
+    </div>`).join('')}</div>
+  </section>`;
+
+  const worksBlock = `<section class="crm2-blk">
+    <div class="crm2-bh"><h2>Работы</h2><span class="crm2-muted">за период</span></div>
+    <div class="crm2-cells">
+      <button type="button" class="crm2-cell" onclick="crm2HomeOpenInstalls()"><div class="crm2-kl">Монтажей</div><div class="crm2-cell-value">${works.done + works.ahead + works.pending}</div><div class="crm2-cell-note">${works.done} сделано · ${works.ahead} впереди${works.pending ? ` · ${works.pending} не закрыто` : ''}</div></button>
+      <button type="button" class="crm2-cell" onclick="crm2Go('calendar')"><div class="crm2-kl">Установлено</div><div class="crm2-cell-value">${Math.round(works.sqft).toLocaleString('ru-RU')} sq ft</div><div class="crm2-cell-note">по сделанным монтажам</div></button>
+      <button type="button" class="crm2-cell" onclick="crm2HomeOpenStatus('')"><div class="crm2-kl">Средний чек</div><div class="crm2-cell-value">${crm2Money(sales.average)}</div><div class="crm2-cell-note">${projects(sales.count)}</div></button>
+      <button type="button" class="crm2-cell" onclick="crm2Go('inventory')"><div class="crm2-kl">Склад</div><div class="crm2-cell-value">${owner ? crm2Money(financeStockValue()) : works.low.length}</div><div class="crm2-cell-note">${works.low.length ? `заканчивается: ${crm2Plural(works.low.length, ['позиция', 'позиции', 'позиций'])}` : 'всё в норме'}</div></button>
+    </div>
+  </section>`;
+
+  const expensesBlock = (() => {
+    if (!owner) return '';
+    const expenses = crm2HomeExpenses(rows, range.from, range.to);
+    return `<section class="crm2-blk">
+      <div class="crm2-bh"><h2>Расходы</h2><span class="crm2-muted crm2-num">${crm2Money(expenses.total)}</span></div>
+      <div class="crm2-rows">${expenses.list.length ? expenses.list.map(([label, amount]) => `<div class="crm2-row"><span>${academyEsc(label)}</span><span class="crm2-num">${crm2Money(amount)}</span></div>`).join('') : '<div class="crm2-row crm2-muted">Расходов за период нет</div>'}</div>
+    </section>`;
+  })();
+
+  const alerts = crm2HomeAttention(orders, owner, now);
+  const attentionBlock = `<section class="crm2-blk">
+    <div class="crm2-bh"><h2>Требует внимания</h2><span class="crm2-muted">только счёт — нажмите, чтобы открыть список</span></div>
+    <div class="crm2-alerts">${alerts.map((alert) => `<button type="button" class="crm2-alert ${alert.count ? '' : 'is-zero'}" onclick="${alert.go}">
+      <span class="crm2-alert-label"><i style="background:${alert.color}"></i>${alert.label}</span>
+      <span class="crm2-alert-count">${alert.count}</span>
+      <span class="crm2-alert-note">${academyEsc(alert.note)}</span>
+    </button>`).join('')}</div>
+  </section>`;
+
+  return `<div class="crm2-home">
+    <div class="crm2-home-head">
+      <div class="crm2-kl">${academyEsc(dateLabel)}</div>
+      <div class="crm2-home-period">
+        <div class="crm2-period" role="group" aria-label="Период">${CRM2_HOME_PERIODS.map(([id, label]) => `<button type="button" class="${range.period === id ? 'on' : ''}" onclick="state.homePeriod='${id}'; render();">${label}</button>`).join('')}</div>
+        <span class="crm2-muted">сравнение ${range.compare}</span>
+      </div>
+    </div>
+    <div class="crm2-kpis">${kpis.join('')}</div>
+    ${goalBlock}
+    <div class="crm2-grid-2">${funnelBlock}${owner ? adsBlock : worksBlock}</div>
+    <div class="crm2-grid-3">${directionsBlock}${owner ? worksBlock + expensesBlock : ''}</div>
+    ${attentionBlock}
+  </div>`;
+}
+
 
 // ---------- MANAGER: ORDERS ----------
 const ORDER_KANBAN_FUNNEL = [
@@ -19944,6 +20707,7 @@ function renderOrders() {
   const filtered = visibleOrdersForUser(u)
     .filter(o => {
       if (state.statusFilter && o.status !== state.statusFilter) return false;
+      if (state.ordersOverdueOnly && !crm2OrderOverdue(o)) return false;
       if (u?.role === 'owner' && state.managerFilter && o.managerId !== state.managerFilter) return false;
       if (state.dateFrom && o.createdAt < new Date(state.dateFrom).toISOString()) return false;
       if (state.dateTo) {
@@ -19962,22 +20726,21 @@ function renderOrders() {
   const ordersView = state.ordersView || (isCompactViewport() ? 'list' : 'kanban');
   const totalArea = filtered.reduce((s,o)=>s+(orderActualAreaSqft(o) || orderPlannedAreaSqft(o)),0);
   const totalSum  = filtered.reduce((s,o)=>s+orderKanbanRevenue(o),0);
-  const hasFilters = state.search || state.statusFilter || (u?.role === 'owner' && state.managerFilter) || state.dateFrom || state.dateTo;
+  const hasFilters = state.search || state.statusFilter || state.ordersOverdueOnly || (u?.role === 'owner' && state.managerFilter) || state.dateFrom || state.dateTo;
   const periodLabel = ordersPeriodLabel();
 
   return `
   <div class="orders-command-panel mb-4">
     <div class="orders-command-head">
       <div class="min-w-0">
-        <div class="orders-command-title">Проекты</div>
         <div class="orders-command-subtitle">Одна карточка ведёт клиента от обращения до замера, КП, монтажа и оплаты.</div>
       </div>
       <div class="orders-primary-actions">
+        ${state.ordersOverdueOnly ? `<button class="btn-ghost" onclick="state.ordersOverdueOnly=false; render();" title="Показать все проекты">Просроченные оплаты ✕</button>` : ''}
         ${hasFilters ? `<button class="btn-ghost" onclick="clearOrderFilters()">✕ ${T('clearFilters')}</button>` : ''}
         ${ordersView === 'kanban' ? `<button class="btn-ghost" onclick="openOrdersKanbanFullscreen()">⛶ Весь экран</button>` : ''}
         <button class="btn-ghost" onclick="location.hash='#/projects'">📐 Проверенные замеры</button>
         ${currentUser()?.role === 'owner' ? `<button class="btn-ghost" onclick="openProjectArchive()">🗄 Архив${(db.archivedOrders || []).length ? ` (${db.archivedOrders.length})` : ''}</button>` : ''}
-        <button class="btn-primary" onclick="openOrderModal()">+ ${T('newOrder')}</button>
       </div>
     </div>
 
@@ -29455,6 +30218,7 @@ function copyPlannedToActual(oid) {
 // ---------- FILTERS ----------
 function clearOrderFilters() {
   state.search = ''; state.statusFilter = ''; state.managerFilter = '';
+  state.ordersOverdueOnly = false;
   state.dateFrom = ''; state.dateTo = '';
   state.ordersPeriod = 'all';
   render();

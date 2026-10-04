@@ -19,6 +19,9 @@ function harness(role = "owner") {
     visibleClientsForUser: () => [], orderRevenue: (o: { revenue: number }) => o.revenue,
     academyEsc: (value: unknown) => String(value), fmtMoney: (n: number) => `$${n}`,
     navIconSvg: () => "<svg></svg>", renderPrecisionManagerDashboard: () => "operations",
+    // A phone: the owner chose «Телефон — Пульс, компьютер — CRM 2.0» (2026-10-04).
+    window: { matchMedia: () => ({ matches: true, addEventListener: () => undefined }) },
+    render: () => undefined,
   });
   vm.runInContext(source.slice(source.indexOf("function pulsePeriodRange("), source.indexOf("// ---------- MANAGER: ORDERS ----------")), context);
   return context;
@@ -52,7 +55,7 @@ test("manager chart and totals only aggregate the role-scoped projects", () => {
   assert.doesNotMatch(html, /Прибыль|Маржа|Конверсия|18%/);
 });
 
-test("owner dashboard replaces the main screen and retains the operating center", () => {
+test("on the phone the owner home is «Пульс бизнеса» and retains the operating center", () => {
   const c = harness();
   const html = vm.runInContext("renderManagerDashboard()", c);
   assert.match(html, /Пульс бизнеса/);

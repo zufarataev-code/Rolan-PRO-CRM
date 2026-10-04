@@ -24,7 +24,7 @@ test("legacy proposal email is sent by the authenticated Gmail API route", () =>
 });
 
 test("owner and manager have a proposal registry with real client views and order navigation", () => {
-  assert.match(legacyCrm, /\['proposals', 'КП', '📄'\]/);
+  assert.match(legacyCrm, /\['proposals', 'Расчёт и КП'\]/);
   assert.match(legacyCrm, /case 'proposals': return renderProposalsRegistry\(\)/);
   assert.match(legacyCrm, /fetch\('\/api\/v1\/proposals'/);
   assert.match(legacyCrm, /server\?\.client_viewed_at/);
