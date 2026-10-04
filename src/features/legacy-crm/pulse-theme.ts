@@ -18,7 +18,7 @@ html body:has(.app-shell:is(.role-owner,.role-manager)) :is(.modal-content,.moda
 .pulse-mobile-header { display: none; }
 .pulse-order-filters, .pulse-order-filter-grid { display: contents; }
 .pulse-order-filters > summary { display: none; }
-html body .app-shell:is(.role-owner,.role-manager) :is([class*="toggle"] button,table[data-rolanpro-mobile-generic="1"] tbody > tr) { border-radius: 0 !important; }
+html body .app-shell:is(.role-owner,.role-manager) :is([class*="toggle"] button,table[data-rolanpro-mobile-generic="1"] tbody > tr,table[data-rolanpro-mobile-orders="1"] tbody > tr) { border-radius: 0 !important; }
 html body .pulse-dashboard { max-width: 1220px; margin: auto; color: #10253F; }
 .pulse-heading > span { font-size: 11px; font-weight: 800; letter-spacing: .12em; color: #64748B; text-transform: uppercase; }
 html body .pulse-heading h2 { font-size: 32px; font-weight: 800; margin: 8px 0; }

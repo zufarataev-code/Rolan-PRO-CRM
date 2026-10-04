@@ -537,4 +537,13 @@ The owner selected mobile design variant 2 and explicitly requested implementati
 
 The monetary tile is explicitly «Стоимость оплаченных проектов», aggregating existing `orderRevenue` for role-visible projects with `paidAt` in the selected period. It is not bank receipts or a replacement P&L. No synthetic growth, profit, conversion or plan figures are introduced. This presentation does not change financial formulas, record storage, permissions or APIs.
 
-Open PRs #305 (CRM 2.0 shell) and #306 (numbers home) overlap and must be reconciled before merge. This branch is a reviewable implementation of the chosen mobile reference, not authorization to deploy.
+Release review: #305 (CRM 2.0 shell) and #306 (numbers home) are unmerged alternative canvas designs, not dependencies of the selected mobile variant. The owner instructed continuation after reviewing #307. Release only #307; keep those alternative PRs open for later reconciliation against the new main. #307 merged as eff1c4f4da5138f04f71290bb9233462f9f56b63 on 2026-10-04.
+
+
+## 2026-10-04 — Project intake: direction → service → building → measurement → proposal
+
+Owner explicitly restated the hierarchy. The existing primary-service ids represent directions; concrete services come from `settings.serviceOfferings` within a direction. New project intake starts with no preselected direction, selects an active concrete offering, then building type, then required contact/management details, and opens the existing measurement workflow. Changing direction clears the selected offering and building; inactive or foreign-direction offerings cannot be saved. No starter services are invented when a direction has none.
+
+The chosen offering id/name is stored with the new project and passed into new measurement windows through the same `applyWindowOffering` assignment used by the existing solution picker. Proposal projections already consume window offering id/name. Existing projects and their measurements are not rewritten; later project additions remain available.
+
+Owner sidebar labels the dashboard «Пульс бизнеса»; `#/overview` explicitly opens it. Shared HTML mobile project rows also receive square styling. The owner reported not seeing the new design, but no authenticated production session or user URL was supplied. Isolated cloud-boot rendering with mocked owner APIs confirmed the actual HTML transformation shows the pulse dashboard; the report's root cause remains unconfirmed.
