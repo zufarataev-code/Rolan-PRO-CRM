@@ -16064,9 +16064,11 @@ function confirmPayment(orderId) {
  */
 function renderPaymentsDue() {
   const canRecord = currentUser()?.role === 'owner';
+  // Only agreed projects owe money, and what they owe is orderDebt(): the same
+  // rule as «Клиенты должны» on the home screen and in «Деньги» (CRM 2.0).
   const orders = db.orders
-    .filter(o => !['cancelled'].includes(o.status))
-    .map(o => ({ o, revenue: orderRevenue(o), paid: orderPaidTotal(o) }))
+    .filter(o => CRM2_CONTRACTED_STATUSES.includes(o.status))
+    .map(o => { const revenue = orderRevenue(o); return { o, revenue, paid: revenue - orderDebt(o) }; })
     .filter(x => x.revenue > 0 && x.paid < x.revenue - 0.01)
     .sort((a, b) => (b.revenue - b.paid) - (a.revenue - a.paid));
 

@@ -393,3 +393,9 @@ test("installed area is film: per-sq-ft extra work such as old-film removal is n
   assert.equal(home.crm2HomeWorks([project], from, to, NOW).sqft, 100 + 60);
 });
 
+test("«Оплаты клиентов» lists what «Клиенты должны» counts: agreed projects and orderDebt", () => {
+  const due = html.slice(html.indexOf("function renderPaymentsDue() {"), html.indexOf("const totalDue", html.indexOf("function renderPaymentsDue() {")));
+  assert.match(due, /\.filter\(o => CRM2_CONTRACTED_STATUSES\.includes\(o\.status\)\)/);
+  assert.match(due, /paid: revenue - orderDebt\(o\)/);
+});
+
