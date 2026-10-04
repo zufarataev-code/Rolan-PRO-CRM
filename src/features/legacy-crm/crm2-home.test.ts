@@ -16,7 +16,7 @@ type Home = {
   crm2HomeExpenses: (rows: unknown[], from: Date, to: Date) => { list: Array<[string, number]>; total: number };
   crm2HomeAds: (rows: unknown[], from: Date, to: Date, funnel: Array<[string, number, string]>, now: Date) => { budget: number; pct: number; estimate: boolean; spent: number; perLead: number | null };
   crm2HomeDirections: (deals: Order[]) => Array<{ id: string; revenue: number; marginPct: number | null }>;
-  crm2HomeWorks: (orders: Order[], from: Date, to: Date) => { done: number; ahead: number };
+  crm2HomeWorks: (orders: Order[], from: Date, to: Date, now?: Date) => { done: number; ahead: number; pending: number; sqft: number };
   crm2HomeOpenStatus: (status: string) => void;
   crm2HomeOpenOverdue: () => void;
   crm2OrderDirection: (order: Partial<Order>) => string;
@@ -62,10 +62,13 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
     academyEsc: (value: string) => String(value),
     crm2Go: () => { state.opened = `orders:${state.statusFilter}:${state.ordersOverdueOnly}`; },
     projectQuickSqft: (o: Order) => Number(o.quickSqft) || 0,
-    calendarEventsForOrder: (o: Order) => ((o.visits as string[] | undefined) || (o.installationAt ? [String(o.installationAt)] : [])).map((at) => ({ dt: new Date(at) })),
+    projectServiceGroups: (o: Order) => ((o.services as Array<{ at: string; sqft: number }> | undefined) || []).map((service, index) => ({ id: `g${index}`, windows: [{ sqft: service.sqft }], lines: [], at: service.at })),
+    projectServiceAssignment: (_o: Order, group: { at: string }) => ({ installationAt: group.at }),
+    windowActualAreaSqft: (win: { sqft: number }) => win.sqft,
+    windowAreaSqft: () => 0,
   });
   vm.runInContext(
-    `${html.slice(start, end)}; Object.assign(this, { crm2HomeRange, crm2HomeSales, crm2HomeDebts, crm2HomeGoal, crm2HomeFunnel, crm2HomeAttention, crm2HomeExpenses, crm2HomeAds, crm2HomeDirections, crm2HomeWorks, crm2HomeOpenStatus, crm2HomeOpenOverdue, crm2OrderDirection, crm2Plural, crm2Pct, renderCrm2Home });`,
+    `${html.slice(start, end)}; Object.assign(this, { crm2HomeRange, crm2HomeSales, crm2HomeDebts, crm2HomeGoal, crm2HomeFunnel, crm2HomeAttention, crm2HomeExpenses, crm2HomeAds, crm2HomeDirections, crm2HomeWorks, crm2HomeOpenStatus, crm2HomeOpenOverdue, crm2OrderDirection, crm2Plural, crm2Pct, crm2Money, renderCrm2Home });`,
     context,
   );
   return Object.assign(context as unknown as Home, { state });
@@ -257,12 +260,15 @@ test("a counter opens the funnel with only its status, without filters left from
 });
 
 test("installs count each scheduled service in its own period, as the Calendar does", () => {
-  const split: Order = { id: "s", status: "installation_scheduled", rev: 5000, mar: 2000, installationAt: at(9, 20), visits: [at(9, 20), at(10, 5)] };
+  const split: Order = { id: "s", status: "installation_scheduled", rev: 5000, mar: 2000, installationAt: at(9, 20), serviceSchedules: [{}], services: [{ at: at(9, 20), sqft: 80 }, { at: at(10, 5), sqft: 120 }] };
   const home = loadHome("owner", [split]);
   const october = home.crm2HomeRange("month", NOW);
   const november = home.crm2HomeRange("month", new Date(2026, 10, 10));
-  assert.equal(home.crm2HomeWorks([split], october.from, october.to).ahead, 1);
-  assert.equal(home.crm2HomeWorks([split], november.from, november.to).ahead, 1, "the November service counts in November");
+  assert.equal(home.crm2HomeWorks([split], october.from, october.to, NOW).ahead, 1);
+  assert.equal(home.crm2HomeWorks([split], november.from, november.to, NOW).ahead, 1, "the November service counts in November");
+  // After 20 October without closing, the October visit is not «ahead» any more.
+  const late = home.crm2HomeWorks([split], october.from, october.to, new Date(2026, 9, 25));
+  assert.deepEqual([late.ahead, late.pending], [0, 1]);
 });
 
 test("the funnel keeps leads received in a past month even after they were closed; converted ones count once", () => {
@@ -296,7 +302,7 @@ test("«Установлено» counts the area of quick-entry projects", () =>
   const quick: Order = { id: "q", status: "installation_done", rev: 2000, mar: 800, installationDoneAt: at(9, 6), quickSqft: 140 };
   const home = loadHome("owner", [quick]);
   const { from, to } = home.crm2HomeRange("month", NOW);
-  assert.equal((home.crm2HomeWorks([quick], from, to) as unknown as { sqft: number }).sqft, 140);
+  assert.equal(home.crm2HomeWorks([quick], from, to, NOW).sqft, 140);
 });
 
 test("date-only finance rows belong to their calendar day; a converted lead stays in the month it came in", () => {
@@ -326,13 +332,14 @@ test("a budget estimated from this month says so", () => {
 });
 
 test("a closed project keeps each service visit in its own month", () => {
-  const closed: Order = { id: "z", status: "act_signed", rev: 6000, mar: 2400, installationAt: at(9, 20), installationDoneAt: at(10, 6), visits: [at(9, 20), at(10, 5)] };
+  const closed: Order = { id: "z", status: "act_signed", rev: 6000, mar: 2400, installationAt: at(9, 20), installationDoneAt: at(10, 6), serviceSchedules: [{}], services: [{ at: at(9, 20), sqft: 80 }, { at: at(10, 5), sqft: 120 }] };
   const home = loadHome("owner", [closed]);
   const october = home.crm2HomeRange("month", NOW);
   const november = home.crm2HomeRange("month", new Date(2026, 10, 10));
-  assert.equal(home.crm2HomeWorks([closed], october.from, october.to).done, 1);
-  assert.equal(home.crm2HomeWorks([closed], november.from, november.to).done, 1);
-  assert.equal(home.crm2HomeWorks([closed], november.from, november.to).ahead, 0);
+  const oct = home.crm2HomeWorks([closed], october.from, october.to, NOW);
+  const nov = home.crm2HomeWorks([closed], november.from, november.to, NOW);
+  assert.deepEqual([oct.done, oct.sqft], [1, 80], "October's service and its area stay in October");
+  assert.deepEqual([nov.done, nov.sqft, nov.ahead], [1, 120, 0]);
 });
 
 test("every number on the home opens the funnel without filters left from earlier", () => {
@@ -352,5 +359,12 @@ test("net profit counts a month's fixed costs even when it had no deals", () => 
   // A quarter adds up its months: Oct–Dec = October's profit + two empty months.
   const quarter = home.crm2HomeRange("quarter", NOW);
   assert.equal(home.crm2HomeSales(ORDERS, quarter.from, quarter.to, true).netProfit, (7450 - 1000 - 645) - 2 * 1100);
+});
+
+test("a loss is written as −$1100, not $-1100", () => {
+  const home = loadHome("owner", ORDERS) as unknown as { crm2Money: (value: number) => string };
+  assert.equal(home.crm2Money(-1100), "−$1100");
+  assert.equal(home.crm2Money(1100), "$1100");
+  assert.equal(home.crm2Money(0), "$0");
 });
 

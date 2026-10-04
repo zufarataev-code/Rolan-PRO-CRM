@@ -19810,35 +19810,51 @@ function crm2HomeDirections(deals) {
   return rows.map((row) => ({ ...row, width: Math.round(row.revenue / max * 100) }));
 }
 
-/** Install visits as the Calendar shows them: one per scheduled service, else the project's date. */
-function crm2InstallVisits(o) {
-  try {
-    if (typeof calendarEventsForOrder === 'function') return calendarEventsForOrder(o, 'install').map((event) => event.dt);
-  } catch (_) { /* fall back to the project's date */ }
-  return o.installationAt ? [new Date(o.installationAt)] : [];
+function crm2ProjectSqft(o) {
+  return Number(orderActualAreaSqft(o)) || Number(orderPlannedAreaSqft(o)) || (typeof projectQuickSqft === 'function' ? Number(projectQuickSqft(o)) : 0) || 0;
 }
 
-function crm2HomeWorks(orders, from, to) {
-  // Each install visit counts in its own period: a closed project with services
-  // in October and November keeps one visit in each month.
+/**
+ * A project's install visits with their area, as the Calendar shows them: one
+ * per scheduled service (its windows and sq ft lines), else one visit for the
+ * whole project on its install date.
+ */
+function crm2InstallVisits(o) {
+  try {
+    if (o.serviceSchedules?.length && typeof projectServiceGroups === 'function') {
+      const visits = projectServiceGroups(o).map((group) => {
+        const at = new Date(projectServiceAssignment(o, group)?.installationAt || '');
+        const windows = (group.windows || []).reduce((sum, win) => sum + (Number(windowActualAreaSqft(win)) || Number(windowAreaSqft(win)) || 0), 0);
+        const lines = (group.lines || []).filter((line) => line.unit === 'sqft').reduce((sum, line) => sum + (Number(line.qty) || 0), 0);
+        return { at, sqft: windows + lines };
+      }).filter((visit) => !Number.isNaN(visit.at.getTime()));
+      if (visits.length) return visits;
+    }
+  } catch (_) { /* one visit for the project */ }
+  const at = new Date(o.installationDoneAt || o.installationAt || '');
+  return Number.isNaN(at.getTime()) ? [] : [{ at, sqft: crm2ProjectSqft(o) }];
+}
+
+/** Works of the period: visits done, still ahead, or past but not closed; area of the visits done. */
+function crm2HomeWorks(orders, from, to, now = new Date()) {
   let done = 0;
   let ahead = 0;
-  const finished = [];
+  let pending = 0;
+  let sqft = 0;
   orders.forEach((o) => {
-    const visits = crm2InstallVisits(o);
+    const visits = crm2InstallVisits(o).filter((visit) => crm2In(visit.at, from, to));
     if (o.installationDoneAt) {
-      const dates = visits.length > 1 ? visits : [new Date(o.installationDoneAt)];
-      done += dates.filter((date) => crm2In(date, from, to)).length;
-      if (crm2In(o.installationDoneAt, from, to)) finished.push(o);
+      done += visits.length;
+      sqft += visits.reduce((sum, visit) => sum + visit.sqft, 0);
     } else {
-      ahead += visits.filter((date) => crm2In(date, from, to)).length;
+      visits.forEach((visit) => { if (visit.at >= now) ahead += 1; else pending += 1; });
     }
   });
   return {
     done,
     ahead,
-    // Quick Project Entry keeps its area in the service lines, not in measured windows.
-    sqft: finished.reduce((sum, o) => sum + (Number(orderActualAreaSqft(o)) || Number(orderPlannedAreaSqft(o)) || (typeof projectQuickSqft === 'function' ? Number(projectQuickSqft(o)) : 0) || 0), 0),
+    pending,
+    sqft,
     low: warehouseNeedItems(),
   };
 }
@@ -19911,7 +19927,9 @@ function crm2EditYearGoal() {
 
 /** fmtMoney with a plain space: ru-RU's narrow no-break space is drawn double-wide in IBM Plex Mono. */
 function crm2Money(value) {
-  return String(fmtMoney(value)).replace(/[\u202f\u00a0]/g, ' ');
+  const number = Number(value) || 0;
+  const text = String(fmtMoney(Math.abs(number))).replace(/[\u202f\u00a0]/g, ' ');
+  return number < -0.5 ? `−${text}` : text;
 }
 
 function crm2Chip(delta, positiveIsGood = true) {
@@ -19943,7 +19961,7 @@ function renderCrm2Home() {
   const before = crm2HomeSales(orders, range.prevFrom, range.prevTo, owner);
   const debts = crm2HomeDebts(orders, now);
   const funnel = crm2HomeFunnel(orders, range.from, range.to);
-  const works = crm2HomeWorks(orders, range.from, range.to);
+  const works = crm2HomeWorks(orders, range.from, range.to, now);
   const rows = owner ? financeAllRows() : [];
   const dateLabel = `${now.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })} ${now.getFullYear()}`;
   const projects = (count) => crm2Plural(count, ['проект', 'проекта', 'проектов']);
@@ -20015,7 +20033,7 @@ function renderCrm2Home() {
   const worksBlock = `<section class="crm2-blk">
     <div class="crm2-bh"><h2>Работы</h2><span class="crm2-muted">за период</span></div>
     <div class="crm2-cells">
-      <button type="button" class="crm2-cell" onclick="crm2Go('installerOps')"><div class="crm2-kl">Монтажей</div><div class="crm2-cell-value">${works.done + works.ahead}</div><div class="crm2-cell-note">${works.done} сделано · ${works.ahead} впереди</div></button>
+      <button type="button" class="crm2-cell" onclick="crm2Go('installerOps')"><div class="crm2-kl">Монтажей</div><div class="crm2-cell-value">${works.done + works.ahead + works.pending}</div><div class="crm2-cell-note">${works.done} сделано · ${works.ahead} впереди${works.pending ? ` · ${works.pending} не закрыто` : ''}</div></button>
       <button type="button" class="crm2-cell" onclick="crm2Go('calendar')"><div class="crm2-kl">Установлено</div><div class="crm2-cell-value">${Math.round(works.sqft).toLocaleString('ru-RU')} sq ft</div><div class="crm2-cell-note">по сделанным монтажам</div></button>
       <button type="button" class="crm2-cell" onclick="crm2HomeOpenStatus('')"><div class="crm2-kl">Средний чек</div><div class="crm2-cell-value">${crm2Money(sales.average)}</div><div class="crm2-cell-note">${projects(sales.count)}</div></button>
       <button type="button" class="crm2-cell" onclick="crm2Go('inventory')"><div class="crm2-kl">Склад</div><div class="crm2-cell-value">${owner ? crm2Money(financeStockValue()) : works.low.length}</div><div class="crm2-cell-note">${works.low.length ? `заканчивается: ${crm2Plural(works.low.length, ['позиция', 'позиции', 'позиций'])}` : 'всё в норме'}</div></button>
