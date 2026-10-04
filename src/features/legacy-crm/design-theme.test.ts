@@ -37,6 +37,7 @@ function loadShell(role: string) {
     render: () => undefined,
     selectAppView: (key: string) => { opened.push(key); state.view = key; },
     headerTitle: () => "📄 Коммерческие предложения",
+    crm2IsPhone: () => false,
     T: (key: string) => key,
   });
   vm.runInContext(
@@ -146,21 +147,28 @@ test("menu and dock use stroke icons; the calculator lives in «Расчёт и 
   for (const key of ["workday", "installations", "measurements", "bell", "chat", "search", "menu", "chevron", "settings"]) assert.ok(crm.NAV_ICON_PATHS[key], `icon for ${key}`);
 
   assert.match(html, /<span class="nav-icon">\$\{navIconSvg\(key, icon\)\}<\/span>/);
-  assert.match(html, /\['create', 'Создать', '\+'\],/);
+  assert.match(html, /class="pulse-mobile-header"[\s\S]*?onclick="openCreateSheet\(\)"/);
   assert.match(html, /<button type="button" class="mobile-fab-slot" onclick="openCreateSheet\(\)" aria-label="Создать">/);
   assert.match(html, /\$\{mobileNavItems\.length < 5 \? `<button type="button"/, "«Меню» closes every 4-item dock");
   assert.doesNotMatch(route, /ensureCalculatorNav|data-rolanpro-calculator-nav/);
   assert.match(route, /window\.openRolanProCalculator = function openRolanProCalculator\(dealId\)/);
 });
 
-test("one create control at every width: the dock's «+» wherever the dock is shown", () => {
-  // The legacy layout shows the dock up to 840 px; the phone layer hides it in a
-  // narrow desktop window (521–840 px, fine pointer), where the top-bar button stays.
-  assert.match(DESIGN_THEME_CSS, /@media \(max-width: 840px\) \{\n {2}html body \.crm2-create-wrap \{ display: none; \}\n\}/);
-  assert.match(DESIGN_THEME_CSS, /@media \(min-width: 521px\) and \(max-width: 840px\) and \(pointer: fine\) \{\n {2}html body \.crm2-create-wrap \{ display: inline-flex; \}\n\}/);
+test("phone = «Пульс бизнеса», computer = CRM 2.0: one create control and a reachable user menu", () => {
+  // Owner, 2026-10-04: «Телефон — Пульс, компьютер — CRM 2.0».
+  const phone = "@media (max-width: 520px), (max-width: 768px) and (pointer: coarse) {";
+  assert.match(DESIGN_THEME_CSS, new RegExp(`${phone.replace(/[()]/g, "\\$&")}\\n {2}html body \\.crm2-create-wrap \\{ display: none; \\}\\n {2}html body \\.app-shell \\.crm2-user-wrap \\.topbar-user-pill \\{ display: inline-flex !important; \\}`));
+  assert.match(html, /<div class="pulse-mobile-header">[\s\S]*?onclick="openCreateSheet\(\)" aria-label="Создать"/, "the Pulse header «+» creates on phones");
   assert.match(DESIGN_THEME_CSS, /@media \(max-width: 760px\) \{\n {2}html body \.app-topbar \.topbar-icon-btn\[aria-label="Настройки"\] \{ display: none; \}/);
-  const phoneLayer = readFileSync("src/features/legacy-crm/mobile-workspace.ts", "utf8");
-  assert.match(phoneLayer, /@media \(min-width: 521px\) and \(max-width: 840px\) and \(pointer: fine\) \{[\s\S]*?\.mobile-primary-nav,\n\s+\.mobile-sidebar-scrim \{ display: none !important; \}/);
+
+  // Pulse colours only on phones; on the computer the CRM 2.0 navy, blue and borders win.
+  const pulse = readFileSync("src/features/legacy-crm/pulse-theme.ts", "utf8");
+  const phoneStart = pulse.indexOf(phone);
+  assert.ok(phoneStart > 0);
+  for (const rule of [".app-sidebar { background: #10253F; }", ".btn-primary { background: #1686B0; box-shadow: none; }", ".card { box-shadow: none; border-color: #E0E7EE; }", "--rp-gradient: #1686B0;"]) {
+    const at = pulse.indexOf(rule);
+    assert.ok(at > phoneStart, `${rule} is phone-only`);
+  }
 });
 
 test("the RU/EN switch also translates the new menu, tabs and titles", () => {

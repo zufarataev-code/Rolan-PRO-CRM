@@ -459,10 +459,12 @@ html body .crm2-alert.is-zero .crm2-alert-count { color: #9AA6B5; }
    narrow desktop window, where the phone layer hides the dock), its «+» is the
    one create button. */
 @media (max-width: 840px) {
+/* Phones show «Пульс бизнеса» (Owner, 2026-10-04): its header «+» is the one
+   create button there, so the top-bar «+ Создать» hides on the same widths;
+   the user's menu (exit, language, settings) stays reachable from the avatar. */
+@media (max-width: 520px), (max-width: 768px) and (pointer: coarse) {
   html body .crm2-create-wrap { display: none; }
-}
-@media (min-width: 521px) and (max-width: 840px) and (pointer: fine) {
-  html body .crm2-create-wrap { display: inline-flex; }
+  html body .app-shell .crm2-user-wrap .topbar-user-pill { display: inline-flex !important; }
 }
 /* Phones: settings live in the user's menu, so the top bar keeps room for the title. */
 @media (max-width: 760px) {

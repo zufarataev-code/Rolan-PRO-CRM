@@ -174,7 +174,10 @@ test("the owner sees the company's money; a manager sees sales, works and attent
 test("the home screen has no order lists and replaces the old dashboard", () => {
   const owner = loadHome("owner", ORDERS).renderCrm2Home();
   assert.doesNotMatch(owner, /Очередь действий|Монтажи в работе|openOrder\(/);
-  assert.match(html, /function renderManagerDashboard\(\) \{\n {2}return renderCrm2Home\(\);\n\}/);
+  // Owner, 2026-10-04: phone = «Пульс бизнеса», computer = this numbers home.
+  assert.match(html, /function renderManagerDashboard\(\) \{\n {2}return crm2IsPhone\(\) \? renderPulseBusinessDashboard\(\) : renderCrm2Home\(\);\n\}/);
+  assert.match(html, /const CRM2_PHONE_QUERY = '\(max-width: 520px\), \(max-width: 768px\) and \(pointer: coarse\)';/);
+  assert.match(readFileSync("src/features/legacy-crm/pulse-theme.ts", "utf8"), /@media \(max-width: 520px\), \(max-width: 768px\) and \(pointer: coarse\) \{/, "the same phone test as the Pulse styles");
   const home = loadHome("owner", ORDERS);
   assert.equal(home.crm2OrderDirection({ serviceType: "smart_film" }), "smart_film");
   assert.equal(home.crm2OrderDirection({ serviceCategory: "Security / safety" }), "protective_film");
