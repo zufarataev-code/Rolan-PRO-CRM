@@ -16,6 +16,8 @@ type Home = {
   crm2HomeExpenses: (rows: unknown[], from: Date, to: Date) => { list: Array<[string, number]>; total: number };
   crm2HomeAds: (rows: unknown[], from: Date, to: Date, funnel: Array<[string, number, string]>, now: Date) => { budget: number; pct: number; spent: number; perLead: number | null };
   crm2HomeDirections: (deals: Order[]) => Array<{ id: string; revenue: number; marginPct: number | null }>;
+  crm2HomeWorks: (orders: Order[], from: Date, to: Date) => { done: number; ahead: number };
+  crm2HomeOpenStatus: (status: string) => void;
   crm2OrderDirection: (order: Partial<Order>) => string;
   crm2Plural: (count: number, forms: string[]) => string;
   crm2Pct: (part: number, whole: number) => string;
@@ -26,7 +28,7 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
   const start = html.indexOf("// ---------- CRM 2.0: ГЛАВНАЯ — ТОЛЬКО ЦИФРЫ");
   const end = html.indexOf("// ---------- MANAGER: ORDERS ----------", start);
   assert.ok(start > 0 && end > start);
-  const state: Record<string, unknown> = { homePeriod: "month" };
+  const state: Record<string, unknown> = { homePeriod: "month", search: "Ortiz", managerFilter: "u2", dateFrom: "2026-01-01", dateTo: "2026-02-01", ordersPeriod: "week" };
   const context = vm.createContext({
     state,
     db: { settings, orders },
@@ -54,13 +56,14 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
     FINANCE_CATEGORY_OPTIONS: [["marketing", "Реклама"], ["payroll", "Выплата зарплаты"], ["owner_draw", "Личное изъятие владельца"]],
     fmtMoney: (n: number) => `$${Math.round(n)}`,
     academyEsc: (value: string) => String(value),
-    crm2Go: () => undefined,
+    crm2Go: () => { state.opened = "orders"; },
+    calendarEventsForOrder: (o: Order) => ((o.visits as string[] | undefined) || (o.installationAt ? [String(o.installationAt)] : [])).map((at) => ({ dt: new Date(at) })),
   });
   vm.runInContext(
-    `${html.slice(start, end)}; Object.assign(this, { crm2HomeRange, crm2HomeSales, crm2HomeDebts, crm2HomeGoal, crm2HomeFunnel, crm2HomeAttention, crm2HomeExpenses, crm2HomeAds, crm2HomeDirections, crm2OrderDirection, crm2Plural, crm2Pct, renderCrm2Home });`,
+    `${html.slice(start, end)}; Object.assign(this, { crm2HomeRange, crm2HomeSales, crm2HomeDebts, crm2HomeGoal, crm2HomeFunnel, crm2HomeAttention, crm2HomeExpenses, crm2HomeAds, crm2HomeDirections, crm2HomeWorks, crm2HomeOpenStatus, crm2OrderDirection, crm2Plural, crm2Pct, renderCrm2Home });`,
     context,
   );
-  return context as unknown as Home;
+  return Object.assign(context as unknown as Home, { state });
 }
 
 const NOW = new Date(2026, 9, 14, 12);
@@ -133,8 +136,11 @@ test("funnel counts what happened in the period; a rate above 100% is not shown"
 test("«Требует внимания» is counters only, each opening its list", () => {
   const home = loadHome("owner", ORDERS);
   const alerts = Object.fromEntries(home.crm2HomeAttention(ORDERS, true, NOW).map((alert) => [alert.label, alert]));
-  assert.equal(alerts["Лиды без ответа > 1 часа"].count, 0, "f came in less than an hour ago");
-  assert.equal(home.crm2HomeAttention(ORDERS, true, new Date(2026, 9, 14, 13)).find((a) => a.label.startsWith("Лиды"))?.count, 1);
+  assert.equal(alerts["Лиды без ответа > 1 часа"].count, 0);
+  assert.equal(alerts["Новые проекты без звонка"].count, 0, "f came in less than an hour ago");
+  const later = Object.fromEntries(home.crm2HomeAttention(ORDERS, true, new Date(2026, 9, 14, 13)).map((a) => [a.label, a]));
+  assert.equal(later["Новые проекты без звонка"].count, 1);
+  assert.equal(later["Новые проекты без звонка"].go, "crm2HomeOpenStatus('new')", "the inbox does not list projects in «new»");
   assert.equal(alerts["Замер без КП"].count, 1);
   assert.equal(alerts["Замер без КП"].go, "crm2HomeOpenStatus('measurement_done')");
   assert.equal(alerts["КП без ответа 3+ дня"].count, 1);
@@ -198,21 +204,20 @@ test("advertising reads the budget from the monthly-budget object", () => {
   assert.match(home.renderCrm2Home(), /бюджет = 10% выручки прошлого месяца/);
 });
 
-test("a lead claimed more than 10 minutes ago is open again; new projects open the funnel list", () => {
+test("a lead claimed more than 10 minutes ago is open again; leads and new projects are separate counters", () => {
   const leads = [
     { id: "l1", receivedAt: new Date(2026, 9, 14, 9).toISOString(), claimedAt: "" },
     { id: "l2", receivedAt: new Date(2026, 9, 14, 9).toISOString(), claimedAt: new Date(2026, 9, 14, 11, 30).toISOString() },
     { id: "l3", receivedAt: new Date(2026, 9, 14, 9).toISOString(), claimedAt: new Date(2026, 9, 14, 11, 55).toISOString() },
   ];
   const home = loadHome("owner", ORDERS, {}, leads);
-  const alert = home.crm2HomeAttention(ORDERS, true, NOW).find((a) => a.label.startsWith("Лиды"));
-  assert.equal(alert?.count, 2, "l1 and the abandoned l2; l3 is being converted");
-  assert.equal(alert?.go, "crm2Go('leads')");
+  const alerts = Object.fromEntries(home.crm2HomeAttention(ORDERS, true, NOW).map((a) => [a.label, a]));
+  assert.equal(alerts["Лиды без ответа > 1 часа"].count, 2, "l1 and the abandoned l2; l3 is being converted");
+  assert.equal(alerts["Лиды без ответа > 1 часа"].go, "crm2Go('leads')");
+  const later = Object.fromEntries(home.crm2HomeAttention(ORDERS, true, new Date(2026, 9, 14, 13)).map((a) => [a.label, a]));
+  assert.equal(later["Новые проекты без звонка"].count, 1, "counted apart: they open a different list");
   const { from, to } = home.crm2HomeRange("month", NOW);
   assert.equal(home.crm2HomeFunnel(ORDERS, from, to, NOW)[0][1], 5 + 2);
-
-  const onlyProjects = loadHome("owner", ORDERS).crm2HomeAttention(ORDERS, true, new Date(2026, 9, 14, 13)).find((a) => a.label.startsWith("Лиды"));
-  assert.equal(onlyProjects?.go, "crm2HomeOpenStatus('new')", "the inbox does not list projects in «new»");
 });
 
 test("a mixed project's revenue goes to each of its directions, margin in proportion", () => {
@@ -228,5 +233,23 @@ test("a mixed project's revenue goes to each of its directions, margin in propor
   assert.equal(by.smart_film.revenue, 0, "a quick line is not counted once windows are measured");
   assert.equal(by.solar_film.marginPct, 40);
   assert.equal(by.decorative_film.marginPct, 40);
+});
+
+test("a counter opens the funnel with only its status, without filters left from earlier", () => {
+  const home = loadHome("owner", ORDERS) as Home & { state: Record<string, unknown> };
+  home.crm2HomeOpenStatus("measurement_done");
+  assert.deepEqual(
+    [home.state.statusFilter, home.state.search, home.state.managerFilter, home.state.dateFrom, home.state.dateTo, home.state.ordersPeriod, home.state.opened],
+    ["measurement_done", "", "", "", "", "all", "orders"],
+  );
+});
+
+test("installs count each scheduled service in its own period, as the Calendar does", () => {
+  const split: Order = { id: "s", status: "installation_scheduled", rev: 5000, mar: 2000, installationAt: at(9, 20), visits: [at(9, 20), at(10, 5)] };
+  const home = loadHome("owner", [split]);
+  const october = home.crm2HomeRange("month", NOW);
+  const november = home.crm2HomeRange("month", new Date(2026, 10, 10));
+  assert.equal(home.crm2HomeWorks([split], october.from, october.to).ahead, 1);
+  assert.equal(home.crm2HomeWorks([split], november.from, november.to).ahead, 1, "the November service counts in November");
 });
 

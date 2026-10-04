@@ -17653,6 +17653,9 @@ function crm2ActiveNav() {
 
 function crm2Go(key) {
   crm2CloseMenus();
+  // selectAppView() returns early for hash-routed screens (Замеры, Монтажи, Услуги
+  // и цены) before it closes the phone menu, so close it here for every item.
+  if (isCompactViewport()) state.mobileSidebarOpen = false;
   if (key === 'purchases') {
     state.inventoryTab = 'purchases';
     selectAppView('inventory');
@@ -19736,12 +19739,21 @@ function crm2HomeDirections(deals) {
   return rows.map((row) => ({ ...row, width: Math.round(row.revenue / max * 100) }));
 }
 
+/** Install visits as the Calendar shows them: one per scheduled service, else the project's date. */
+function crm2InstallVisits(o) {
+  try {
+    if (typeof calendarEventsForOrder === 'function') return calendarEventsForOrder(o, 'install').map((event) => event.dt);
+  } catch (_) { /* fall back to the project's date */ }
+  return o.installationAt ? [new Date(o.installationAt)] : [];
+}
+
 function crm2HomeWorks(orders, from, to) {
   const done = orders.filter((o) => crm2In(o.installationDoneAt, from, to));
-  const ahead = orders.filter((o) => !o.installationDoneAt && crm2In(o.installationAt, from, to));
+  const ahead = orders.filter((o) => !o.installationDoneAt)
+    .reduce((count, o) => count + crm2InstallVisits(o).filter((date) => crm2In(date, from, to)).length, 0);
   return {
     done: done.length,
-    ahead: ahead.length,
+    ahead,
     sqft: done.reduce((sum, o) => sum + (Number(orderActualAreaSqft(o)) || Number(orderPlannedAreaSqft(o)) || 0), 0),
     low: warehouseNeedItems(),
   };
@@ -19756,7 +19768,11 @@ function crm2HomeExpenses(rows, from, to) {
   return { list: list.slice(0, 6), total: list.reduce((sum, [, amount]) => sum + amount, 0) };
 }
 
+/** Opens the funnel with only this status: filters left from earlier would hide the projects. */
 function crm2HomeOpenStatus(status) {
+  state.search = ''; state.managerFilter = '';
+  state.dateFrom = ''; state.dateTo = '';
+  state.ordersPeriod = 'all';
   state.statusFilter = status;
   crm2Go('orders');
 }
@@ -19768,7 +19784,10 @@ function crm2HomeAttention(orders, owner, now = new Date()) {
   const estimate = (list) => list.reduce((sum, o) => sum + orderRevenue(o), 0);
   const openLeads = crm2HomeLeadRows(now).filter((lead) => age(lead.receivedAt) > hour);
   const freshOrders = orders.filter((o) => o.status === 'new' && age(o.createdAt) > hour);
-  const leadAges = [...openLeads.map((lead) => lead.receivedAt), ...freshOrders.map((o) => o.createdAt)].map(age).filter(Number.isFinite);
+  const oldest = (times) => {
+    const ages = times.map(age).filter(Number.isFinite);
+    return ages.length ? `самый давний — ${Math.floor(Math.max(...ages) / hour)} ч` : 'все в работе';
+  };
   const measured = orders.filter((o) => o.status === 'measurement_done');
   const waiting = orders.filter((o) => o.status === 'proposal_sent' && age(o.proposalSentAt || o.updatedAt) > 72 * hour);
   const noDate = orders.filter((o) => o.status === 'proposal_accepted' && !o.installationAt);
@@ -19776,7 +19795,8 @@ function crm2HomeAttention(orders, owner, now = new Date()) {
   const debts = crm2HomeDebts(orders, now);
   const low = warehouseNeedItems();
   return [
-    { label: 'Лиды без ответа > 1 часа', count: openLeads.length + freshOrders.length, note: leadAges.length ? `самый давний — ${Math.floor(Math.max(...leadAges) / hour)} ч` : 'все в работе', color: '#E07A1F', go: openLeads.length || !freshOrders.length ? "crm2Go('leads')" : "crm2HomeOpenStatus('new')" },
+    { label: 'Лиды без ответа > 1 часа', count: openLeads.length, note: oldest(openLeads.map((lead) => lead.receivedAt)), color: '#E07A1F', go: "crm2Go('leads')" },
+    { label: 'Новые проекты без звонка', count: freshOrders.length, note: oldest(freshOrders.map((o) => o.createdAt)), color: '#B3541E', go: "crm2HomeOpenStatus('new')" },
     { label: 'Замер без КП', count: measured.length, note: measured.length ? `≈ ${crm2Money(estimate(measured))}` : '—', color: '#6E56CF', go: "crm2HomeOpenStatus('measurement_done')" },
     { label: 'КП без ответа 3+ дня', count: waiting.length, note: waiting.length ? crm2Money(estimate(waiting)) : '—', color: '#C2417A', go: "crm2HomeOpenStatus('proposal_sent')" },
     { label: 'Принято, нет даты монтажа', count: noDate.length, note: noDate.length ? crm2Money(estimate(noDate)) : '—', color: '#1F8A4C', go: "crm2HomeOpenStatus('proposal_accepted')" },
