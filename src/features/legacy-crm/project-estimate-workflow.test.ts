@@ -118,12 +118,14 @@ test("manager can quote from customer dimensions but installation requires verif
   assert.match(source, /if \(!ensureVerifiedMeasurementsForStatus\(o, newStatus/);
 });
 
-test("new projects follow measurement before estimate and expose no quick-entry button", () => {
-  const creator = source.match(/function createOrder\(nextStep = 'measure'\) \{[\s\S]*?\n\}/)?.[0] || "";
+test("new projects choose services before measurement while estimates still require measurements", () => {
+  const creator = source.match(/function createOrder\(nextStep = 'services'\) \{[\s\S]*?\n\}/)?.[0] || "";
   const passport = source.match(/function orderPassportActions\(o, ctx\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.match(source, /createOrder\('measure'\)/);
-  assert.match(source, /Создать и перейти к замеру →/);
-  assert.match(creator, /nextStep === 'measure'\) setTimeout\(\(\) => openManagerMeasureModal\(o\.id\)/);
+  assert.match(source, /createOrder\('services'\)/);
+  assert.match(source, /Создать проект →/);
+  assert.match(creator, /readNewOrderOfferings\(service\.id/);
+  assert.match(creator, /openProjectChosenServices\(o\.id\)/);
+  assert.doesNotMatch(creator, /openManagerMeasureModal/);
   assert.doesNotMatch(creator, /quickProjectLine: true/);
   assert.doesNotMatch(source, /title: 'Быстрый ввод проекта'[\s\S]*?onclick: `openQuickProjectEntry/);
   assert.match(passport, /const stage = !done\.measure[\s\S]*?!done\.estimate/);

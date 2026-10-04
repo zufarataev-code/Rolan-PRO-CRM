@@ -81,12 +81,13 @@ test("project PSS charges manager commission from revenue and its share of the m
   assert.match(source, /Реклама — доля бюджета месяца/);
 });
 
-test("new project opens the measurement stage before calculation", () => {
+test("new project selects concrete services before measurement and calculation", () => {
   assert.match(source, /createOrder\('draft'\)/);
-  assert.match(source, /createOrder\('measure'\)/);
-  assert.match(source, /Создать и перейти к замеру →/);
-  assert.match(source, /function createOrder\(nextStep = 'measure'\)/);
-  assert.match(source, /nextStep === 'measure'[\s\S]*?openManagerMeasureModal\(o\.id\)/);
-  const creator = source.match(/function createOrder\(nextStep = 'measure'\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(source, /createOrder\('services'\)/);
+  assert.match(source, /Создать проект →/);
+  assert.match(source, /function createOrder\(nextStep = 'services'\)/);
+  const creator = source.match(/function createOrder\(nextStep = 'services'\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(creator, /openProjectChosenServices\(o\.id\)/);
+  assert.doesNotMatch(creator, /openManagerMeasureModal/);
   assert.doesNotMatch(creator, /quickProjectLine: true/);
 });

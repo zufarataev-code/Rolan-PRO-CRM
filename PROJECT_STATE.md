@@ -856,3 +856,24 @@ Code head `ecd973bad1ef023e9dd2247799c7da3e6d38bd29`, CI #824 / run 37177592497:
 - Legacy: «ДИЗАЙН CRM: ИКОНКИ И «СОЗДАТЬ»» block (`NAV_ICON_PATHS`, `navIconSvg`, `openCreateSheet`), menu and dock icons, owner/manager dock with «+»; the injected calculator menu item has a stroke icon. Also: the projects list no longer crashes on a project without `createdAt` (same one-line fix as #294).
 - Verification: full unit suite and `tsc` green; `design-theme.test.ts`. Local CRM at 1440 px and 375 px: sidebar, top bar, «Сегодня», «Проекты», dock and «Создать» checked with screenshots; no horizontal scroll on the phone.
 - Next: the canvas screens one by one — «Сегодня» (desktop mosaic + phone), «Воронка», «Карточка заказа», «Календарь», «Склад», «Деньги», phone order/measure/installer screens.
+
+
+## 2026-10-04 — project intake selects concrete services before dimensions
+
+- Owner reported that #299 still left New Project selecting one direction and immediately opening measurements. Codex owns the correction on `codex/project-intake-service-selection`, based on main `75bfc8e`.
+- New Project exposes the selected direction's owner-defined services with independent prices and explicitly linked materials, supports several services, saves their snapshots into existing zero-quantity quick lines, then opens a service summary. Measurements are a separate action. New openings inherit the chosen service's material/customer price and server-owned saved pay basis. The service picker remains available inside an existing project. Unmeasured selected services remain visible and block measurement completion; measured scope does not double count selection lines. Existing quantified quick lines preserve their historical scheduling keys.
+- Local verification: 26 focused service/policy/measurement tests and inline-script compilation passed. Full CI/TypeScript/production build and authenticated browser intake/save/reopen/window flows at 390/1440px are pending. Added those flows to the existing disposable-database browser gate. Production is unchanged.
+- Next: inspect CI and phone/desktop screenshots, resolve any failures, merge only after passing gates, then deploy through existing protected main workflow and verify the active release. No production customer records were modified.
+
+### Service intake verification update — PR #303
+
+- Synchronized with release main `d5ca6e7`; no warehouse, email, finance or design work was overwritten. Dedicated release correction is [#303](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/303).
+- Clean PostgreSQL migrations/drift, production build, HTTP lifecycle and authenticated browser creation/save/reopen at 390/1440px passed on code `2494e2e`, CI run `37226005347`. Inspected real intake/service-summary screenshots; shortened phone action labels and prevented Close from wrapping on code `47a799f`. The existing unit assertions requiring immediate measurement were updated to the Owner's corrected sequence while preserving estimate/lead-attribution gates. Full final CI remains the release gate.
+- The intake selections reuse existing zero-quantity solution lines; existing quantified quick scope remains outside this selection. The server preserves the saved service pay rate when a new measured opening is added. No production customer data or real service definitions were created by verification.
+
+
+### Release-ready correction blocked by automatic approval review — 2026-10-04
+
+- PR [#303](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/303), implementation head `4033ffdad52a3ae0283766cb78f8a36f769b4693`, is ready for review. Full CI run `37226583297` passed both test/typecheck/build and clean-database/lifecycle/browser gates. Final intake and service-summary screenshots at 390px and 1440px were inspected; phone action labels and Close are readable. No production data was changed.
+- Attempted squash merge through the connected GitHub merge operation was rejected by automatic approval review: merging #303 may trigger the production deployment workflow, and the reviewer requires explicit permission for this exact merge-and-release action. No alternate release path was attempted. Production remains on its prior release.
+- Next: obtain Owner's explicit authorization to merge PR #303 into main and install the correction; recheck the current PR head/checks and main, merge through the normal protected path, wait for main CI and deployment, then verify active SHA/HTTP. The next commit only records this handoff; tested implementation remains `4033ffd`.

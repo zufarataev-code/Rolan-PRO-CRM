@@ -529,3 +529,14 @@ Owner decision in chat on 2026-10-04: «сделай дизайн для наш�
 - Step 1 (this change): one visual layer for every screen and role — `src/features/legacy-crm/design-theme.ts`, injected by `/legacy-crm` after the legacy and Tailwind styles: Montserrat / Manrope / IBM Plex Mono, the navy gradient sidebar with the blue gradient active item, the light blue-grey ground, white 8 px cards with a soft shadow, gradient primary buttons, calm inputs, 4 px chips, softer dialogs. Stroke icons replace emoji in the menu and the phone dock. The owner/manager phone dock is «Сегодня · Лиды · [+] · Проекты · Календарь»; «+» opens «Создать» (project, client, leads, task, roll receipt, purchase request); all sections stay behind ☰.
 - Layout is unchanged in this step; the canvas screens (Сегодня, Воронка, Карточка заказа, Календарь, Склад, Деньги, phone screens) follow one by one, each on top of the current structure (including the Precision Workbench «Сегодня»).
 - Migration: the theme module is plain CSS and moves with the UI to the relational screens unchanged.
+
+
+## 2026-10-04 — concrete services precede project measurements
+
+Owner corrected the remaining New Project behavior: choosing a direction must not immediately open dimensions. This completes the 2026-10-03 service workflow exception.
+
+- A direction contains many owner-defined services. Select one or several concrete services, each with its material and customer price, before adding openings. Save the project and display its service summary; enter measurements only by an explicit next action.
+- Reuse existing `extraServices` zero-quantity solution lines as selections and existing measured windows as priced scope. Selections must not charge twice when windows exist. Each opening inherits its selected service snapshot; changes to the directory do not rewrite the chosen rate.
+- Do not invent A1/A2 classifications, brands, materials, products or prices. The Owner defines the actual catalog. Projects may be saved as drafts before scope is known.
+- Independent service scheduling from #299 remains; relational migration and separate completion/weekly payroll remain tracked separately.
+- Implementation: `codex/project-intake-service-selection`.

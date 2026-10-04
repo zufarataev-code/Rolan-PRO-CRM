@@ -41,3 +41,13 @@ test('installer receives the saved rate only for their own assigned service',()=
   assert.equal(result.settings.serviceOfferings[0].installerRatePerSqft,undefined);
   assert.equal(serviceSolutionsForViewer(payload,false).orders[0].measurements.rooms[0].windows[0].offeringInstallerRate,undefined);
 });
+
+test('measuring a selected service keeps its saved server rate after a catalog price change',()=>{
+  const old:any=structuredClone(current);
+  old.orders[0].extraServices=[{id:'selection',quickProjectLine:true,qty:0,serviceType:'solar_film',offeringId:'solution',catalogId:'film',offeringInstallerRate:2}];
+  old.settings.serviceOfferings[0].installerRatePerSqft=8;
+  const next:any=serviceSolutionsForViewer(old,false);
+  next.orders[0].measurements={rooms:[{windows:[{id:'new-window',measureScope:'solar_film',offeringId:'solution',catalogId:'film',offeringInstallerRate:999}]}]};
+  assert.equal(prepareServiceSolutions(old,next,false),null);
+  assert.equal(next.orders[0].measurements.rooms[0].windows[0].offeringInstallerRate,2);
+});

@@ -57,6 +57,53 @@ async function main() {
       assert.ok(solution,JSON.stringify({revision:catalogState.revision,solutions:catalogState.payload.settings.serviceOfferings.map((x:any)=>({id:x.id,name:x.name}))}));
       assert.equal(solution.pricePerSqft,18); assert.deepEqual(solution.filmIds,['film-a']);
       await page.screenshot({path:`test-results/service-solutions/catalog-${width}.png`});
+      // Real project creation must select several concrete services before measurements.
+      const intakeState=(await (await context.request.get(base+'/api/v1/legacy-crm/state')).json()).data;
+      intakeState.payload.settings.catalog=intakeState.payload.settings.catalog.filter((film:any)=>film.id!=='qa-safety-film');
+      intakeState.payload.settings.serviceOfferings=intakeState.payload.settings.serviceOfferings.filter((item:any)=>!['qa-safety-a','qa-safety-b'].includes(item.id));
+      intakeState.payload.settings.catalog.push({id:'qa-safety-film',category:'protective',brand:'QA',model:'Safety'});
+      intakeState.payload.settings.serviceOfferings.push(
+        {id:'qa-safety-a',direction:'protective',name:'QA Safety A',filmIds:['qa-safety-film'],pricePerSqft:12,installerRatePerSqft:3,active:true},
+        {id:'qa-safety-b',direction:'protective',name:'QA Safety B',filmIds:['qa-safety-film'],pricePerSqft:20,installerRatePerSqft:4,active:true});
+      intakeState.payload.clients=intakeState.payload.clients.filter((client:any)=>client.id!=='qa-intake-client').concat({id:'qa-intake-client',name:'QA Intake Client',firstName:'QA Intake',lastName:'Client',phone:'+18055550191',email:'qa-intake@example.test',source:'direct',accountType:'b2c',type:'b2c',relationshipType:'one_time',address:'100 QA Street, Los Angeles, CA 90001',addressStreet:'100 QA Street',addressCity:'Los Angeles',addressState:'CA',addressZip:'90001'});
+      const intakeSetup=await context.request.put(base+'/api/v1/legacy-crm/state',{data:intakeState}); assert.equal(intakeSetup.status(),200,await intakeSetup.text());
+      await page.reload({waitUntil:'networkidle'});
+      await page.evaluate(()=> (window as any).openOrderModal());
+      await page.locator('#no-client-search').fill('QA Intake');
+      await page.locator('#no-client-results').getByText('QA Intake Client',{exact:true}).click();
+      await page.locator('[data-site-type="RESIDENTIAL"]').click();
+      await page.locator('[data-svc="protective_film"]').click();
+      for (const id of ['qa-safety-a','qa-safety-b']) {
+        await page.locator(`[data-intake-offering="${id}"] input[type=checkbox]`).check();
+        await page.locator(`[data-intake-offering="${id}"] select`).selectOption('qa-safety-film');
+      }
+      assert.equal(await page.locator('[aria-label="Замер объекта"]').count(),0);
+      await page.screenshot({path:`test-results/service-solutions/intake-${width}.png`});
+      await page.getByRole('button',{name:'Создать проект →',exact:true}).click();
+      await page.getByRole('dialog',{name:'Услуги проекта',exact:true}).waitFor();
+      assert.equal(await page.getByRole('dialog',{name:'Замер объекта',exact:true}).count(),0);
+      assert.equal(await page.evaluate(()=> (window as any).cloudPersistConfirmed()),true);
+      const afterIntake=(await (await context.request.get(base+'/api/v1/legacy-crm/state')).json()).data;
+      const created=afterIntake.payload.orders.filter((item:any)=>item.clientId==='qa-intake-client').at(-1);
+      assert.ok(created); assert.equal(created.measurements.rooms.length,0);
+      assert.deepEqual(created.extraServices.map((line:any)=>[line.offeringId,line.catalogId,line.unitPrice,line.qty]),[['qa-safety-a','qa-safety-film',12,0],['qa-safety-b','qa-safety-film',20,0]]);
+      await page.screenshot({path:`test-results/service-solutions/created-services-${width}.png`});
+      await page.getByRole('button',{name:'Перейти к замерам выбранных услуг →',exact:true}).click();
+      await page.locator('[onclick^="managerAddRoomFromForm("]').click();
+      await page.locator('[onclick^="managerAddWindow("]').click();
+      await page.locator('[data-measure-offering="qa-safety-b"]').click();
+      await page.locator('[onclick^="managerAddWindow("]').click();
+      assert.equal(await page.evaluate(()=> (window as any).cloudPersistConfirmed()),true);
+      const afterWindows=(await (await context.request.get(base+'/api/v1/legacy-crm/state')).json()).data;
+      const measured=afterWindows.payload.orders.find((item:any)=>item.id===created.id);
+      assert.deepEqual(measured.measurements.rooms[0].windows.map((win:any)=>[win.offeringId,win.catalogId,win.pricePerSqft]),[['qa-safety-a','qa-safety-film',12],['qa-safety-b','qa-safety-film',20]]);
+      await page.reload({waitUntil:'networkidle'});
+      await page.evaluate((id:string)=> (window as any).openProjectChosenServices(id),created.id);
+      await page.getByRole('dialog',{name:'Услуги проекта',exact:true}).getByText('QA Safety A',{exact:true}).waitFor();
+      await page.getByRole('dialog',{name:'Услуги проекта',exact:true}).getByText('QA Safety B',{exact:true}).waitFor();
+      const phoneDialog=await page.getByRole('dialog',{name:'Услуги проекта',exact:true}).evaluate((el:HTMLElement)=>({width:el.clientWidth,scroll:el.scrollWidth}));
+      assert.ok(phoneDialog.scroll<=phoneDialog.width+1,JSON.stringify(phoneDialog));
+      await page.evaluate(()=> (window as any).closeModal());
       // Exercise real component functions in the authenticated CRM shell.
       await page.evaluate(({order,installers}:any)=>{
         (window as any).__qaOrder=order;
