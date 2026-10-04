@@ -411,3 +411,9 @@ test("a quick-entry project dated the 1st belongs to that month, not the evening
   assert.equal(stamped.toISOString(), "2026-10-03T17:00:00.000Z", "full timestamps are unchanged");
 });
 
+test("«Монтажей» opens the Calendar, where the counted visits are", () => {
+  const page = loadHome("owner", ORDERS).renderCrm2Home();
+  assert.match(page, /onclick="crm2Go\('calendar'\)"><div class="crm2-kl">Монтажей<\/div>/);
+  assert.doesNotMatch(page, /crm2Go\('installerOps'\)/);
+});
+
