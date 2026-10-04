@@ -80,7 +80,8 @@ export async function GET(request: NextRequest) {
     : createFieldWorkspace(payload, auth.session.roles, legacyUserIds);
 
   return apiSuccess({
-    payload: serviceSolutionsForViewer(responsePayload, auth.session.roles.includes(ROLE_CODES.OWNER)),
+    payload: serviceSolutionsForViewer(responsePayload, auth.session.roles.includes(ROLE_CODES.OWNER),
+      auth.session.roles.includes(ROLE_CODES.INSTALLER) ? legacyUserIds : []),
     revision: workspace.revision,
     updated_at: workspace.updated_at,
   });

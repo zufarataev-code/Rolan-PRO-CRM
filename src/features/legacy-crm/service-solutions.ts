@@ -4,11 +4,23 @@ const rows = (x: unknown): Row[] => Array.isArray(x) ? x.map(object) : [];
 const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))];
 
 /** Managers receive customer prices; the owner alone maintains solution definitions. */
-export function serviceSolutionsForViewer(payload: Row, owner: boolean): Row {
+export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInstallerIds: readonly string[] = []): Row {
   if (owner) return payload;
   const copy = structuredClone(payload);
   for (const offering of rows(object(copy.settings).serviceOfferings)) delete offering.installerRatePerSqft;
-  for (const order of rows(copy.orders)) for (const item of scope(order)) delete item.offeringInstallerRate;
+  for (const order of rows(copy.orders)) {
+    const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows));
+    for (const item of scope(order)) {
+      const id = windows.includes(item)
+        ? item.offeringId ? `offering:${item.offeringId}` : `direction:${item.measureScope || order.serviceType || 'solar_film'}`
+        : `line:${item.id}`;
+      const schedules = rows(order.serviceSchedules);
+      const crew = schedules.length ? rows(order.serviceSchedules).find(plan => plan.id === id)?.installerIds
+        : item.installerIds?.length ? item.installerIds : order.installerIds;
+      // An installer needs the saved rate for their own service earnings only.
+      if (!Array.isArray(crew) || !crew.some(id => ownInstallerIds.includes(id))) delete item.offeringInstallerRate;
+    }
+  }
   return copy;
 }
 

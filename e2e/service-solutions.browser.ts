@@ -18,6 +18,9 @@ async function main() {
       const context=await browser.newContext({viewport:{width,height:900},timezoneId:'America/Los_Angeles'});
       const login=await context.request.post(base+'/api/v1/auth/login',{data:{email:'owner@rolanpro.local',password:process.env.E2E_SEED_PASSWORD || 'ChangeMe123!'}});
       assert.equal(login.status(),200);
+      // Production builds issue Secure cookies; this disposable CI server is HTTP.
+      // Keep the real login/session, relaxing transport only in this test context.
+      await context.addCookies((await context.cookies()).map((cookie:any)=>({...cookie,secure:false})));
       let response=await context.request.get(base+'/api/v1/legacy-crm/state');
       let state:any;
       if(response.status()===404) {
@@ -25,6 +28,7 @@ async function main() {
         assert.equal(init.status(),200);
         response=await context.request.get(base+'/api/v1/legacy-crm/state');
       }
+      assert.equal(response.status(),200,await response.text());
       state=(await response.json()).data;
       const installers=state.payload.users.filter((u:any)=>u.role==='installer');
       assert.ok(installers.length);

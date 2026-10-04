@@ -28,3 +28,16 @@ test('old saved rate survives later changes to the solution; assignments validat
   assert.equal(prepareServiceSolutions(old,next,false),null);
   next.orders[0].serviceSchedules[0].installerIds=['unknown']; assert.ok(prepareServiceSolutions(old,next,false));
 });
+
+test('installer receives the saved rate only for their own assigned service',()=>{
+  const payload:any=structuredClone(current);
+  payload.orders[0].installerIds=['installer','other'];
+  payload.orders[0].measurements={rooms:[{windows:[{id:'a',offeringId:'one',offeringInstallerRate:3},{id:'b',offeringId:'two',offeringInstallerRate:8}]}]};
+  payload.orders[0].serviceSchedules=[{id:'offering:one',installerIds:['installer']},{id:'offering:two',installerIds:['other']}];
+  const result=serviceSolutionsForViewer(payload,false,['installer']);
+  const windows=result.orders[0].measurements.rooms[0].windows;
+  assert.equal(windows[0].offeringInstallerRate,3);
+  assert.equal(windows[1].offeringInstallerRate,undefined);
+  assert.equal(result.settings.serviceOfferings[0].installerRatePerSqft,undefined);
+  assert.equal(serviceSolutionsForViewer(payload,false).orders[0].measurements.rooms[0].windows[0].offeringInstallerRate,undefined);
+});
