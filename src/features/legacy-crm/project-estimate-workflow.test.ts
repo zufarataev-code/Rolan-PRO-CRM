@@ -122,7 +122,7 @@ test("new projects choose services before measurement while estimates still requ
   const creator = source.match(/function createOrder\(nextStep = 'services'\) \{[\s\S]*?\n\}/)?.[0] || "";
   const passport = source.match(/function orderPassportActions\(o, ctx\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(source, /createOrder\('services'\)/);
-  assert.match(source, /Создать проект с выбранными услугами →/);
+  assert.match(source, /Создать проект →/);
   assert.match(creator, /readNewOrderOfferings\(service\.id/);
   assert.match(creator, /openProjectChosenServices\(o\.id\)/);
   assert.doesNotMatch(creator, /openManagerMeasureModal/);

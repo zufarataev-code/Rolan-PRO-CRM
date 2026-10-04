@@ -79,7 +79,7 @@ async function main() {
       }
       assert.equal(await page.locator('[aria-label="Замер объекта"]').count(),0);
       await page.screenshot({path:`test-results/service-solutions/intake-${width}.png`});
-      await page.getByRole('button',{name:'Создать проект с выбранными услугами →',exact:true}).click();
+      await page.getByRole('button',{name:'Создать проект →',exact:true}).click();
       await page.getByRole('dialog',{name:'Услуги проекта',exact:true}).waitFor();
       assert.equal(await page.getByRole('dialog',{name:'Замер объекта',exact:true}).count(),0);
       assert.equal(await page.evaluate(()=> (window as any).cloudPersistConfirmed()),true);
