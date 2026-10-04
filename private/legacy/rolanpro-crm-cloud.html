@@ -6620,6 +6620,8 @@ const I18N = {
     enRouteJob: 'Выехали к клиенту',
     reviewReceived: 'Отзыв получен',
     orderCreated: 'Заказ создан',
+    project_archived: 'Проект удалён в архив',
+    project_restored: 'Проект восстановлен из архива',
     orderNo: 'Проект №',
     search: 'Поиск…',
     empty: 'Нет данных',
@@ -7040,6 +7042,8 @@ const I18N = {
     enRouteJob: 'On my way',
     reviewReceived: 'Review received',
     orderCreated: 'Order created',
+    project_archived: 'Project moved to archive',
+    project_restored: 'Project restored from archive',
     orderNo: 'Project #',
     search: 'Search…',
     empty: 'No data',
@@ -8803,6 +8807,18 @@ function companyFixedMonthlyBurn() {
     .filter(item => item.active !== false && item.scope !== 'personal' && item.costBehavior !== 'variable' && item.category !== 'tax')
     .reduce((sum, item) => sum + opexMonthly(item), 0);
 }
+/** «Сколько тратить на рекламу»: budget of this month and the one the current revenue gives for next month. */
+function companyAdBudgetHint() {
+  const now = new Date();
+  const current = projectMonthAdBudget(now);
+  const pct = Number(db.settings.pricingDefaults?.marketingPct) || 0;
+  const revenueNow = projectMonthRevenue(now);
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return `<div class="mt-3 p-3 rounded-lg bg-white border border-blue-100 text-sm text-blue-950">
+    <div>Бюджет рекламы, ${academyEsc(projectMonthLabel(now))}: <b>${fmtMoney(current.budget)}</b> = ${pct}% выручки за ${academyEsc(current.baseMonthLabel)} (${fmtMoney(current.baseRevenue)})${current.basis === 'current' ? ' — за прошлый месяц выручки нет, считаем от этого месяца' : ''}.</div>
+    <div class="mt-1">Бюджет рекламы, ${academyEsc(projectMonthLabel(next))}: <b>${fmtMoney(revenueNow * pct / 100)}</b> = ${pct}% выручки за ${academyEsc(projectMonthLabel(now))} на сегодня (${fmtMoney(revenueNow)}); растёт с каждым проектом месяца.</div>
+  </div>`;
+}
 function companyCostPlan(id, fallback = {}) {
   return (db.opex || []).find(item => item.id === id) || fallback;
 }
@@ -9082,18 +9098,22 @@ function openWindowTemplateModal(orderId) {
 
 // ---------- INVENTORY MANAGEMENT ----------
 function addInventoryRoll(data) {
+  const widthMm = data.widthMm || db.settings.filmRolls.defaultWidth;
   const roll = {
     id: 'inv_' + uid(),
     catalogId: data.catalogId,
     lotNumber: data.lotNumber || '',
-    widthMm: data.widthMm || db.settings.filmRolls.defaultWidth,
+    widthMm,
     originalLengthM: parseFloat(data.originalLengthM) || 0,
     remainingLengthM: parseFloat(data.originalLengthM) || 0,
     costTotal: parseFloat(data.costTotal) || 0,
     vendorId: data.vendorId || null,
     dateReceived: data.dateReceived || new Date().toISOString().slice(0,10),
     location: data.location || 'Warehouse',
-    qrCode: 'RP-ROLL-' + uid(),
+    rollCode: data.rollCode || '',
+    qrCode: data.rollCode || ('RP-ROLL-' + uid()),
+    // Every receipt path gets the same purchase price per sq ft (Owner, 2026-10-01).
+    costPerSqft: rollCostPerSqft(data.costTotal, data.originalLengthM, widthMm),
     status: 'available',
     _consumed: [],
   };
@@ -15340,6 +15360,9 @@ function catalogFilmName(c) {
 }
 function catalogFilmModel(c) {
   if (!c) return '';
+  // A film written in by hand is labelled by its whole name; the model code the
+  // catalog normaliser derives from that name would only repeat part of it.
+  if (c.addedManuallyAt) return '';
   return String(c.modelCode || c.sku || c.code || catalogLegacyProductParts(c.model).model || '').trim();
 }
 function catalogLabel(c) {
@@ -15737,6 +15760,67 @@ function orderManualExpensesTotal(o) {
     .reduce((s, e) => s + (Number(e.amount) || 0), 0);
 }
 // Production cost ПСС full
+// ---------- НАКЛАДНЫЕ ПО ВЫРУЧКЕ (Owner, 2026-10-02) ----------
+// Постоянные расходы месяца и бюджет рекламы делятся между проектами месяца
+// пропорционально выручке: большой проект несёт большую долю, маленький — меньшую.
+// Бюджет рекламы месяца = marketingPct от выручки прошлого месяца
+// (выручка $100 000 в сентябре → $10 000 на рекламу в октябре).
+let projectMonthRevenueCache = null;
+
+function projectMonthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Revenue by project month, counted once per screen (cleared after the current task and on save). */
+function projectMonthRevenueMap() {
+  if (projectMonthRevenueCache) return projectMonthRevenueCache;
+  const totals = {};
+  const ids = new Set();
+  (db.orders || []).forEach(order => {
+    ids.add(order.id);
+    const revenue = orderRevenue(order);
+    if (!(revenue > 0)) return;
+    const key = projectMonthKey(projectProfitDate(order));
+    totals[key] = (totals[key] || 0) + revenue;
+  });
+  projectMonthRevenueCache = { totals, ids };
+  queueMicrotask(() => { projectMonthRevenueCache = null; });
+  return projectMonthRevenueCache;
+}
+
+function projectMonthRevenue(date) {
+  return projectMonthRevenueMap().totals[projectMonthKey(date)] || 0;
+}
+
+function projectMonthLabel(date) {
+  return date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+}
+
+/** The advertising budget of a month: marketingPct of the previous month's revenue. */
+function projectMonthAdBudget(date) {
+  const pct = Math.max(0, Number(db.settings.pricingDefaults?.marketingPct) || 0);
+  const previous = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+  const previousRevenue = projectMonthRevenue(previous);
+  // No revenue last month (first month in the CRM): the rule cannot apply yet, so
+  // the budget is estimated from this month's revenue.
+  const basis = previousRevenue > 0 ? 'previous' : 'current';
+  const baseRevenue = basis === 'previous' ? previousRevenue : projectMonthRevenue(date);
+  return { budget: baseRevenue * pct / 100, pct, basis, baseRevenue, baseMonthLabel: projectMonthLabel(basis === 'previous' ? previous : date) };
+}
+
+/** The project's share of its month's revenue (0 for a project without a price yet). */
+function projectRevenueShare(o) {
+  const revenue = orderRevenue(o);
+  if (!(revenue > 0)) return 0;
+  const cache = projectMonthRevenueMap();
+  const monthTotal = projectMonthRevenue(projectProfitDate(o)) + (cache.ids.has(o?.id) ? 0 : revenue);
+  return monthTotal > 0 ? Math.min(1, revenue / monthTotal) : 0;
+}
+
+function orderAdAllocation(o) {
+  return projectMonthAdBudget(projectProfitDate(o)).budget * projectRevenueShare(o);
+}
+
 function orderPSS(o) {
   const rev = orderRevenue(o);
   const pd = db.settings.pricingDefaults || {};
@@ -15753,7 +15837,7 @@ function orderPSS(o) {
   const rent = orderRentExpense(o);
   const extraSvcCost = orderExtraServicesCost(o);
   const manualExp = orderManualExpensesTotal(o);
-  const marketing = rev * Math.max(0, Number(pd.marketingPct) || 0) / 100;
+  const marketing = orderAdAllocation(o);
   return {
     film, installers, gas, manager: mgr, measurer: meas,
     consumables: consum, rent, extraServicesCost: extraSvcCost, manual: manualExp,
@@ -15798,7 +15882,9 @@ function projectProfitability(o) {
   const monthOrders = projectProfitMonthOrders(o);
   const projectCount = Math.max(1, monthOrders.length);
   const fixedPool = projectMonthlyFixedExpensePool();
-  const fixedAllocation = fixedPool / projectCount;
+  const revenueShare = projectRevenueShare(o);
+  const fixedAllocation = fixedPool * revenueShare;
+  const adBudget = projectMonthAdBudget(projectProfitDate(o));
   const grossProfit = orderMargin(o);
   const profitBeforeTax = grossProfit - fixedAllocation;
   const monthGrossProfit = monthOrders.reduce((sum, order) => sum + orderMargin(order), 0);
@@ -15808,12 +15894,15 @@ function projectProfitability(o) {
   const minimumMonthlyReserve = Math.max(0, Number(profile.annualMinimum) || 0) / 12;
   const monthTaxReserve = monthOrders.length ? Math.max(Math.max(0, monthProfitBeforeTax) * rate, minimumMonthlyReserve) : 0;
   const monthRevenue = monthOrders.reduce((sum, order) => sum + orderRevenue(order), 0);
-  const revenueShare = monthRevenue > 0 ? orderRevenue(o) / monthRevenue : 1 / projectCount;
   const taxAllocation = monthTaxReserve * revenueShare;
   return {
     grossProfit,
     fixedPool,
     fixedAllocation,
+    revenueShare,
+    monthRevenue,
+    adBudget,
+    adAllocation: orderAdAllocation(o),
     profitBeforeTax,
     taxAllocation,
     netProfit: profitBeforeTax - taxAllocation,
@@ -16045,6 +16134,7 @@ function orderDebt(o) {
 }
 function save() {
   if (db?.purchaseRequests && db?.vendors && db?.settings?.catalog) ensureAutoDraftPurchaseRequests();
+  projectMonthRevenueCache = null;
   localStorage.setItem('rolanpro_crm', JSON.stringify(db));
   if (ROLANPRO_CLOUD && cloudReady) cloudScheduleSave();
 }
@@ -17425,6 +17515,67 @@ function selectAppView(key) {
   render();
 }
 
+// ---------- ДИЗАЙН CRM: ИКОНКИ И «СОЗДАТЬ» (Owner, 2026-10-04) ----------
+// Stroke icons from the owner's design canvas «CRM RolanPRO — экраны» instead of
+// emoji in the menu and the phone dock; the phone dock's «+» opens «Создать».
+const NAV_ICON_PATHS = {
+  dashboard: 'M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z',
+  leads: 'M4 4h16v12H8l-4 4zM8 9h8M8 12h5',
+  coldcalls: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2',
+  orders: 'M3 4h5v16H3zM10 4h5v10h-5zM17 4h4v13h-4z',
+  proposals: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5',
+  servicePricing: 'M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+  calendar: 'M3 5h18v16H3zM3 10h18M8 3v4M16 3v4',
+  installerOps: 'M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  tasks: 'M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9',
+  academy: 'M2 9l10-5 10 5-10 5zM6 11v5c3 2.5 9 2.5 12 0v-5',
+  clients: 'M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5',
+  inventory: 'M3 7.5 12 3l9 4.5v9L12 21l-9-4.5zM3 7.5l9 4.5 9-4.5M12 12v9',
+  payroll: 'M3 6h18v12H3zM3 10h18M7 15h3',
+  paymentsdue: 'M12 8v4l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
+  accounting: 'M3 21h18M5 21V10l7-5 7 5v11M9 21v-6h6v6',
+  reports: 'M4 20V10M10 20V4M16 20v-8M22 20H2',
+  team: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6',
+  referrals: 'M20 12v9H4v-9M2 7h20v5H2zM12 21V7M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z',
+  reviews: 'M12 3l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 18l-5.9 3 1.2-6.5L2.5 9.9 9.1 9z',
+  settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+  canonicalProjects: 'M3 4h5v16H3zM10 4h5v10h-5zM17 4h4v13h-4z',
+  measurements: 'M3 7h18v10H3zM7 7v4M11 7v6M15 7v4M19 7v6',
+  workday: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+  installations: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z',
+  analytics: 'M4 20V10M10 20V4M16 20v-8M22 20H2',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  logout: 'M15 4h4v16h-4M10 17l5-5-5-5M15 12H3',
+  plus: 'M12 5v14M5 12h14',
+};
+
+function navIconSvg(key, fallback = '') {
+  const path = NAV_ICON_PATHS[key];
+  return path ? `<svg class="rp-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"></path></svg>` : fallback;
+}
+
+/** The phone dock's «+»: the things people create most, as on the design canvas. */
+function openCreateSheet() {
+  const role = currentUser()?.role;
+  if (!['owner', 'manager'].includes(role)) return;
+  const tile = (title, sub, gradient, shadow, icon, action) => `<button type="button" class="rp-create-tile" style="background:${gradient};box-shadow:0 14px 26px -14px ${shadow}" onclick="closeModal(); ${action}"><span class="rp-create-tile-icon">${navIconSvg(icon)}</span><span><b>${title}</b><small>${sub}</small></span></button>`;
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-5" style="max-width: 30rem;">
+      <div class="flex items-center justify-between"><h3 class="font-semibold text-lg">Создать</h3><button class="btn-ghost" aria-label="Закрыть" onclick="closeModal()">✕</button></div>
+      <div class="rp-create-sheet">
+        ${tile('Новый проект', 'клиент, объект, адрес', 'linear-gradient(135deg,#3D7BD8,#22488F)', 'rgba(34,72,143,.9)', 'plus', 'openOrderModal()')}
+        ${tile('Клиент', 'карточка B2C или B2B', 'linear-gradient(135deg,#EF6A4C,#C2402A)', 'rgba(194,64,42,.9)', 'clients', 'openClientModal()')}
+        ${tile('Лиды', 'заявки и звонки', 'linear-gradient(135deg,#E9A92A,#B97500)', 'rgba(185,117,0,.9)', 'leads', "selectAppView('leads')")}
+        ${tile('Задача', 'себе или команде', 'linear-gradient(135deg,#8B6FD6,#5A3FA0)', 'rgba(90,63,160,.9)', 'tasks', "selectAppView('tasks')")}
+        ${tile('Приход рулона', 'плёнка на склад', 'linear-gradient(135deg,#34B573,#1C7A48)', 'rgba(28,122,72,.9)', 'inventory', "openAddRollModal('')")}
+        ${tile('Закупка', 'заявка поставщику', 'linear-gradient(135deg,#3CC2B5,#128A80)', 'rgba(18,138,128,.9)', 'payroll', 'openPurchaseRequestModal()')}
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
 function renderAppShell() {
   const u = currentUser();
   const role = u.role;
@@ -17467,6 +17618,7 @@ function renderAppShell() {
   const mobileNavItems = (role === 'manager' || role === 'owner') ? [
     ['dashboard', 'Сегодня', '⌂'],
     ['leads', 'Лиды', '◎'],
+    ['create', 'Создать', '+'],
     ['orders', 'Проекты', '▣'],
     ['calendar', 'Календарь', '□'],
   ] : (role === 'measurer') ? [
@@ -17502,7 +17654,7 @@ function renderAppShell() {
       <nav class="flex-1 p-3 space-y-1" style="overflow-y:auto;min-height:0;">
         ${navItems.map(([key, label, icon]) => `
           <div class="nav-item ${state.view===key?'active':''}" title="${academyEsc(label)}" onclick="selectAppView('${key}')">
-            <span class="nav-icon">${icon}</span>
+            <span class="nav-icon">${navIconSvg(key, icon)}</span>
             <span class="nav-label">${label}</span>
           </div>
         `).join('')}
@@ -17518,7 +17670,7 @@ function renderAppShell() {
           </div>
         </div>
         <button class="nav-item w-full mt-1" onclick="logout()">
-          <span class="nav-icon">🚪</span><span class="sidebar-logout-label">${T('logout')}</span>
+          <span class="nav-icon">${navIconSvg('logout', '🚪')}</span><span class="sidebar-logout-label">${T('logout')}</span>
         </button>
       </div>
     </aside>
@@ -17563,16 +17715,20 @@ function renderAppShell() {
       </div>
     </main>
     <nav class="mobile-primary-nav" aria-label="Основная мобильная навигация">
-      ${mobileNavItems.map(([key, label, icon]) => `
+      ${mobileNavItems.map(([key, label, icon]) => key === 'create' ? `
+        <button type="button" class="mobile-fab-slot" onclick="openCreateSheet()" aria-label="Создать">
+          <span class="mobile-fab">${navIconSvg('plus', '+')}</span>
+        </button>
+      ` : `
         <button type="button" class="${state.view===key?'active':''}" onclick="selectAppView('${key}')" aria-label="${academyEsc(label)}">
-          <span class="mobile-primary-nav-icon">${icon}</span>
+          <span class="mobile-primary-nav-icon">${navIconSvg(key, icon)}</span>
           <span>${academyEsc(label)}</span>
         </button>
       `).join('')}
-      <button type="button" class="${mobileOpen?'active':''}" onclick="toggleSidebar()" aria-label="Открыть все разделы">
-        <span class="mobile-primary-nav-icon">•••</span>
+      ${mobileNavItems.length < 5 ? `<button type="button" class="${mobileOpen?'active':''}" onclick="toggleSidebar()" aria-label="Открыть все разделы">
+        <span class="mobile-primary-nav-icon">${navIconSvg('more', '•••')}</span>
         <span>Ещё</span>
-      </button>
+      </button>` : ''}
     </nav>
   </div>
   ${state.modal || ''}
@@ -19600,6 +19756,127 @@ function renderOrderKanbanCard(o) {
   `;
 }
 
+// ---------- АРХИВ ПРОЕКТОВ (Owner, 2026-10-02) ----------
+// Удалить проект может только владелец, и проект не стирается: он уходит в
+// db.archivedOrders со всеми данными и восстанавливается одной кнопкой. В архиве
+// проект не участвует в списках, календаре, деньгах, складе и аналитике — всё
+// это читает db.orders. Черновики закупок проекта отменяются и при
+// восстановлении снова становятся черновиками.
+const PROJECT_ARCHIVE_NOTE = 'Отменено: проект удалён в архив.';
+
+function archivedOrders() {
+  if (!Array.isArray(db.archivedOrders)) db.archivedOrders = [];
+  return db.archivedOrders;
+}
+
+/** Next project number: archived projects keep their numbers, so they count too. */
+function projectNumberSequence() {
+  return (db.orders || []).length + (Array.isArray(db.archivedOrders) ? db.archivedOrders.length : 0) + 1;
+}
+
+function projectArchiveOwnerOnly() {
+  if (currentUser()?.role === 'owner') return true;
+  alert('Удалять и восстанавливать проекты может только владелец.');
+  return false;
+}
+
+function openArchiveProjectModal(oid) {
+  if (!projectArchiveOwnerOnly()) return;
+  const o = getOrder(oid);
+  if (!o) return;
+  const client = getClient(o.clientId);
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6" style="max-width: 32rem;">
+      <h3 class="font-semibold text-lg mb-1">🗑 Удалить проект в архив</h3>
+      <p class="text-sm text-gray-600 mb-3"><b>${academyEsc(o.number || '')}</b> · ${academyEsc(client?.name || 'клиент')} · ${fmtMoney(orderRevenue(o))}. Проект исчезнет из списков, календаря, денег и аналитики. Все данные сохранятся — его можно восстановить: «Проекты → 🗄 Архив».</p>
+      <label for="arch-reason">Причина (необязательно)</label>
+      <input id="arch-reason" placeholder="дубль, тест, клиент отказался…">
+      <div class="flex gap-2 mt-4 justify-end">
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+        <button class="btn-primary" style="background:#dc2626;border-color:#dc2626" onclick="archiveProject('${o.id}')">Удалить в архив</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
+function archiveProject(oid) {
+  if (!projectArchiveOwnerOnly()) return;
+  const o = getOrder(oid);
+  if (!o) return;
+  const now = new Date().toISOString();
+  const reason = String(document.getElementById('arch-reason')?.value || '').trim().slice(0, 300);
+  // A deleted project's draft purchases must not be sent; restoring reopens them.
+  const cancelledRequestIds = [];
+  (db.purchaseRequests || []).forEach(request => {
+    if (request.orderId !== o.id || request.status !== 'draft') return;
+    request.status = 'cancelled';
+    request.note = `${request.note || ''} ${PROJECT_ARCHIVE_NOTE}`.trim();
+    request.updatedAt = now;
+    cancelledRequestIds.push(request.id);
+  });
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: now, key: 'project_archived', by: state.currentUserId, note: reason ? `Удалён в архив: ${reason}` : 'Удалён в архив' });
+  o.archive = { at: now, by: state.currentUserId, reason, cancelledRequestIds };
+  db.orders = db.orders.filter(order => order.id !== o.id);
+  archivedOrders().unshift(o);
+  state.modal = null;
+  if (state.openOrderId === o.id) { state.view = 'orders'; state.openOrderId = null; location.hash = ''; }
+  save();
+  render();
+  if (typeof cloudStatus === 'function') cloudStatus(`Проект ${o.number || ''} удалён в архив`, 'green');
+}
+
+function restoreProject(oid) {
+  if (!projectArchiveOwnerOnly()) return;
+  const o = archivedOrders().find(order => order.id === oid);
+  if (!o) return;
+  const now = new Date().toISOString();
+  (o.archive?.cancelledRequestIds || []).forEach(id => {
+    const request = (db.purchaseRequests || []).find(item => item.id === id);
+    if (!request || request.status !== 'cancelled') return;
+    request.status = 'draft';
+    request.note = String(request.note || '').replace(PROJECT_ARCHIVE_NOTE, '').trim();
+    request.updatedAt = now;
+  });
+  delete o.archive;
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: now, key: 'project_restored', by: state.currentUserId, note: 'Восстановлен из архива' });
+  db.archivedOrders = archivedOrders().filter(order => order.id !== oid);
+  if (!db.orders.some(order => order.id === oid)) db.orders.push(o);
+  state.modal = null;
+  save();
+  openOrder(o.id);
+  if (typeof cloudStatus === 'function') cloudStatus(`Проект ${o.number || ''} восстановлен`, 'green');
+}
+
+function openProjectArchive() {
+  if (!projectArchiveOwnerOnly()) return;
+  const rows = archivedOrders().map(o => {
+    const client = getClient(o.clientId);
+    const by = getUser(o.archive?.by)?.name || '';
+    return `<tr class="border-t">
+      <td class="p-2 font-semibold">${academyEsc(o.number || '')}</td>
+      <td class="p-2">${academyEsc(client?.name || '—')}</td>
+      <td class="p-2 text-right">${fmtMoney(orderRevenue(o))}</td>
+      <td class="p-2">${o.archive?.at ? fmtDateTime(o.archive.at) : '—'}${by ? `<div class="text-xs text-gray-500">${academyEsc(by)}</div>` : ''}</td>
+      <td class="p-2 text-sm">${academyEsc(o.archive?.reason || '')}</td>
+      <td class="p-2 text-right"><button class="btn-primary text-sm" onclick="restoreProject('${o.id}')">Восстановить</button></td>
+    </tr>`;
+  }).join('');
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6" style="max-width: 56rem;">
+      <h3 class="font-semibold text-lg mb-1">🗄 Архив проектов</h3>
+      <p class="text-sm text-gray-500 mb-3">Удалённые проекты со всеми данными. «Восстановить» возвращает проект в работу.</p>
+      ${rows ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500"><th class="text-left p-2">Проект</th><th class="text-left p-2">Клиент</th><th class="text-right p-2">Сумма</th><th class="text-left p-2">Удалён</th><th class="text-left p-2">Причина</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="text-sm text-gray-500">Архив пуст.</div>'}
+      <div class="flex justify-end mt-4"><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div>
+    </div>
+  </div>`;
+  render();
+}
+
 function renderOrders() {
   const u = currentUser();
   const filtered = visibleOrdersForUser(u)
@@ -19618,7 +19895,7 @@ function renderOrders() {
         || c?.name.toLowerCase().includes(q)
         || (c?.phone || '').toLowerCase().includes(q);
     })
-    .sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
   const ordersView = state.ordersView || 'kanban';
   const totalArea = filtered.reduce((s,o)=>s+(orderActualAreaSqft(o) || orderPlannedAreaSqft(o)),0);
@@ -19637,6 +19914,7 @@ function renderOrders() {
         ${hasFilters ? `<button class="btn-ghost" onclick="clearOrderFilters()">✕ ${T('clearFilters')}</button>` : ''}
         ${ordersView === 'kanban' ? `<button class="btn-ghost" onclick="openOrdersKanbanFullscreen()">⛶ Весь экран</button>` : ''}
         <button class="btn-ghost" onclick="location.hash='#/projects'">📐 Проверенные замеры</button>
+        ${currentUser()?.role === 'owner' ? `<button class="btn-ghost" onclick="openProjectArchive()">🗄 Архив${(db.archivedOrders || []).length ? ` (${db.archivedOrders.length})` : ''}</button>` : ''}
         <button class="btn-primary" onclick="openOrderModal()">+ ${T('newOrder')}</button>
       </div>
     </div>
@@ -20144,7 +20422,7 @@ function openTeamMemberEdit(userId) {
       <input id="tm-edit-phone" value="${academyEsc(u.phone || '')}" placeholder="+1 818...">
 
       <label class="mt-3">Почта для входа</label>
-      <input id="tm-edit-email" type="email" value="${academyEsc(u.email || '')}"
+      <input id="tm-edit-email" type="email" value="${academyEsc(u.email || '')}" oninput="this.dataset.touched = '1'"
              placeholder="name@rolan-pro.com"
              ${isOwner ? '' : 'disabled style="opacity:.6;cursor:not-allowed;"'}>
       <div class="text-xs text-gray-400 mt-1">После сохранения новая почта сразу станет логином сотрудника.</div>
@@ -20189,9 +20467,12 @@ async function hydrateTeamMemberAccount(userId) {
     if (!member) return;
 
     const emailInput = document.getElementById('tm-edit-email');
-    if (emailInput && (!emailInput.value || emailInput.value.trim().toLowerCase() === currentEmail)) {
+    // Never overwrite what the owner has already typed.
+    if (emailInput && emailInput.dataset.touched !== '1' && (!emailInput.value || emailInput.value.trim().toLowerCase() === currentEmail)) {
       emailInput.value = member.email || '';
     }
+    // Edits are compared with the server login, not the (possibly stale) card email.
+    if (emailInput) emailInput.dataset.serverEmail = String(member.email || '').trim().toLowerCase();
 
     const roleSelect = document.getElementById('tm-edit-role');
     const serverRole = teamLegacyRoleFromServer(member.roles);
@@ -20253,7 +20534,11 @@ async function submitTeamMemberEdit(userId) {
       if (!member) return fail('Серверная учётная запись сотрудника не найдена. Откройте «Изменить пароль и доступ» и проверьте привязку.');
 
       const canonicalEmail = String(member.email || '').trim().toLowerCase();
-      const emailWasEdited = Boolean(enteredEmail && enteredEmail !== currentEmail);
+      // The login changes only when the owner typed in the field. Until then the
+      // server email is sent back unchanged — also when Save is pressed before the
+      // card has loaded the server email, so a stale card value never wins.
+      const emailTouched = document.getElementById('tm-edit-email')?.dataset.touched === '1';
+      const emailWasEdited = Boolean(emailTouched && enteredEmail && enteredEmail !== canonicalEmail);
       const email = emailWasEdited ? enteredEmail : (canonicalEmail || enteredEmail);
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return fail('Укажите корректную почту для входа.');
@@ -20266,7 +20551,9 @@ async function submitTeamMemberEdit(userId) {
       });
       const update = await updateResponse.json();
       if (!updateResponse.ok) return fail(apiMessage(update, 'Не удалось изменить данные и роль сотрудника.'));
-      u.email = email;
+      // Every card linked to this account (one per field role) gets the new login.
+      new Set([userId, ...(Array.isArray(member.legacyUserIds) ? member.legacyUserIds : [])])
+        .forEach(id => { const card = getUser(id); if (card) card.email = email; });
       u.role = requestedRole;
     } catch (error) {
       console.error('[Team card] employee update failed', error);
@@ -21193,7 +21480,7 @@ async function convertLeadOnce(leadId) {
     };
     db.clients.push(client);
   }
-  const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(db.orders.length + 1).padStart(3, '0');
+  const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(projectNumberSequence()).padStart(3, '0');
   const o = {
     id: 'o' + uid(), number: num, clientId: client.id,
     ...(canonical ? { canonicalLeadId: leadId } : {}),
@@ -21471,9 +21758,10 @@ function renderCompanyFixedExpenseSettings() {
         <div><label>Оклад владельца / месяц, $</label><input id="company-owner-salary" type="number" min="0" step="100" value="${Number(ownerSalary.amount || 0)}"></div>
         <div><label>Оклад замерщика / месяц, $</label><input id="company-measurer-salary" type="number" min="0" step="100" value="${Number(measurerSalary.amount || 0)}"></div>
         <div><label>Комиссия менеджера от валовой выручки, %</label><input id="company-manager-pct" type="number" min="0" step="0.5" value="${Number(pricing.managerPct || 0)}"></div>
-        <div><label>Рекламный резерв от валовой выручки, %</label><input id="company-marketing-pct" type="number" min="0" step="0.5" value="${Number(pricing.marketingPct || 0)}"></div>
+        <div><label>Бюджет рекламы, % от выручки прошлого месяца</label><input id="company-marketing-pct" type="number" min="0" step="0.5" value="${Number(pricing.marketingPct || 0)}"></div>
       </div>
-      <div class="flex items-center justify-between gap-3 flex-wrap mt-3"><div class="text-xs text-blue-900">Оклады входят в постоянные расходы месяца. Комиссия и реклама рассчитываются автоматически в каждом проекте от его выручки.</div><button class="btn-primary" onclick="saveCompanyCostModel()">Сохранить модель расходов</button></div>
+      ${companyAdBudgetHint()}
+      <div class="flex items-center justify-between gap-3 flex-wrap mt-3"><div class="text-xs text-blue-900">Оклады входят в постоянные расходы месяца. Комиссия менеджера считается от выручки проекта. Постоянные расходы и бюджет рекламы делятся между проектами месяца по их выручке.</div><button class="btn-primary" onclick="saveCompanyCostModel()">Сохранить модель расходов</button></div>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
       <div class="p-3 rounded-xl bg-slate-50 border"><div class="text-xs text-gray-500">В месяц</div><div class="text-xl font-black">${fmtMoney(analysis.burn)}</div></div>
@@ -23669,6 +23957,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   const o = getOrder(oid);
   const line = projectQuickLines(o).find(item => item.id === lineId);
   if (!o || !line || !orderUserCanSeeMoney(o, currentUser())) return;
+  const previousCatalogId = line.catalogId || '';
   if (field === 'serviceType') {
     const service = ORDER_PRIMARY_SERVICES.find(item => item.id === value);
     if (!service) return;
@@ -23683,7 +23972,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   } else if (field === 'catalogId') {
     const catalog = getCatalogItem(value);
     const requiredCategory = primaryServiceInfo(line.serviceType)?.catalogCategory;
-    if (catalog && (!catalogCanBeSelected(catalog, line.catalogId) || !catalogMatchesCategory(catalog, requiredCategory) || warehouseCatalogStockStats(catalog.id).availableSqft <= 0)) return;
+    if (catalog && (!catalogCanBeSelected(catalog, line.catalogId) || !catalogMatchesCategory(catalog, requiredCategory) || (warehouseCatalogStockStats(catalog.id).availableSqft <= 0 && !catalog.pendingPurchase))) return;
     if (catalog && line.offeringId && !serviceOfferingFilmIds(serviceOffering(line.offeringId)).includes(catalog.id)) return alert('Эта плёнка не привязана к выбранной услуге.');
     line.catalogId = catalog?.id || '';
     if (catalog) {
@@ -23724,6 +24013,11 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   }
   projectEstimateSyncQuickLine(line, field);
   projectEstimateSyncQuickServices(o);
+  // A film's purchase follows every project line that uses it (Owner, 2026-10-01).
+  const filmChanged = previousCatalogId !== (line.catalogId || '');
+  if (filmChanged && previousCatalogId) reconcileManualFilmPurchase(o, previousCatalogId, 'в проекте выбрана другая плёнка');
+  if (line.catalogId && (filmChanged || field === 'qty')) reconcileManualFilmPurchase(o, line.catalogId, 'метраж в проекте обнулён');
+  if (field === 'startDate') refreshManualFilmNeededBy(o);
   projectEstimateMarkChanged(o, 'Изменена быстрая позиция проекта');
   save(); refreshQuickProjectEntry(oid);
 }
@@ -23731,7 +24025,9 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
 function projectEstimateDeleteQuickLine(oid, lineId) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const removedCatalogId = projectQuickLines(o).find(line => line.id === lineId)?.catalogId || '';
   o.extraServices = (o.extraServices || []).filter(line => line.id !== lineId);
+  if (removedCatalogId) reconcileManualFilmPurchase(o, removedCatalogId, 'позиция удалена из проекта');
   projectEstimateSyncQuickServices(o);
   projectEstimateMarkChanged(o, 'Удалена быстрая позиция проекта');
   save(); refreshQuickProjectEntry(oid);
@@ -23854,7 +24150,7 @@ function openQuickProjectFilmForm(oid, lineId) {
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
       <div><label>Направление услуги</label><input value="${academyEsc(catLabel(category))}" disabled></div>
       <div><label>Бренд</label><input id="qf-brand" value="Rolan PRO"></div>
-      <div><label>Категория плёнки</label><input id="qf-category" placeholder="Зеркальная"></div>
+      <div><label>Категория плёнки</label><input id="qf-category" placeholder="Зеркальная" list="qf-category-options"><datalist id="qf-category-options">${(category === 'solar' ? SOLAR_FILM_SUBTYPES : []).map(type => `<option value="${academyEsc(type)}">`).join('')}</datalist></div>
       <div><label>Название</label><input id="qf-name" placeholder="Prime"></div>
       <div><label>Модель</label><input id="qf-model" placeholder="NE2"></div>
       <div><label>Продажа / sqft, $</label><input id="qf-retail" type="number" min="0" step="0.5" value="0"></div>
@@ -23863,13 +24159,14 @@ function openQuickProjectFilmForm(oid, lineId) {
       <div><label>Стоимость рулона, $</label><input id="qf-cost" type="number" min="0.01" step="1" placeholder="500"></div>
       <div><label>Lot / партия</label><input id="qf-lot" value="QUICK-${new Date().toISOString().slice(0,10)}"></div>
     </div>
+    <input id="qf-form" type="hidden" value="${uid()}">
     <div id="qf-error" class="text-sm text-red-600 mt-3 hidden"></div>
     <div class="flex gap-2 mt-5"><button class="btn-primary flex-1" onclick="saveQuickProjectFilm('${oid}','${lineId}','${category}')">Создать, принять и выбрать</button><button class="btn-ghost" onclick="openQuickProjectEntry('${oid}')">Отмена</button></div>
   </div></div>`;
   render();
 }
 
-function saveQuickProjectFilm(oid, lineId, category) {
+async function saveQuickProjectFilm(oid, lineId, category) {
   const o = getOrder(oid);
   const line = projectQuickLines(o).find(item => item.id === lineId);
   const brand = document.getElementById('qf-brand')?.value.trim() || '';
@@ -23883,16 +24180,222 @@ function saveQuickProjectFilm(oid, lineId, category) {
   if (length <= 0 || costTotal <= 0) return fail('Укажите длину и закупочную стоимость рулона.');
   const duplicate = (db.settings.catalog || []).some(item => item.category === category && String(item.brand || '').toLowerCase() === brand.toLowerCase() && String(item.productName || '').toLowerCase() === productName.toLowerCase() && String(item.modelCode || '').toLowerCase() === modelCode.toLowerCase());
   if (duplicate) return fail('Такая плёнка уже есть в каталоге. Выберите её из списка.');
-  const catalog = { id: 'film_' + uid(), brand, filmCategory, productName, modelCode, model: `${productName} ${modelCode}`, category, retailPerSqft: Math.max(0, Number(document.getElementById('qf-retail')?.value) || 0), costPerSqft: null, installerRatePerSqft: null, wastePct: category === 'smart' ? 8 : 12, archived: false };
+  const lotNumber = document.getElementById('qf-lot')?.value.trim() || '';
+  const widthMm = Number(document.getElementById('qf-width')?.value) || 1524;
+  const retailPerSqft = Math.max(0, Number(document.getElementById('qf-retail')?.value) || 0);
+  const dateReceived = new Date().toISOString().slice(0,10);
+  const formToken = document.getElementById('qf-form')?.value || '';
+  let rollCode = '';
+  try { rollCode = await reserveRollCodeOnce(dateReceived); } catch (error) { return fail(`Не удалось получить код рулона: ${error.message}. Проверьте интернет и повторите.`); }
+  if (!rollCode || !rollReceiptFormStillOpen('qf-form', formToken)) return;
+  // The CRM may have reloaded while the code was reserved: work on the current project.
+  const project = getOrder(oid);
+  const projectLine = projectQuickLines(project).find(item => item.id === lineId);
+  if (!project || !projectLine) return fail('Проект изменился, пока получали код рулона. Откройте его заново.');
+  const catalog = { id: 'film_' + uid(), brand, filmCategory, productName, modelCode, model: `${productName} ${modelCode}`, category, retailPerSqft, costPerSqft: null, installerRatePerSqft: null, wastePct: category === 'smart' ? 8 : 12, archived: false };
   db.settings.catalog.push(catalog);
-  const roll = addInventoryRoll({ catalogId: catalog.id, lotNumber: document.getElementById('qf-lot')?.value.trim() || '', widthMm: Number(document.getElementById('qf-width')?.value) || 1524, originalLengthM: length, costTotal, dateReceived: new Date().toISOString().slice(0,10), location: 'Warehouse' });
-  recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(catalog), direction: 'receipt', qty: length, unit: 'м', orderId: oid, reason: 'Быстрый ввод проекта' });
-  line.catalogId = catalog.id;
-  const offering = serviceOffering(line.offeringId);
+  const roll = addInventoryRoll({ catalogId: catalog.id, lotNumber, widthMm, originalLengthM: length, costTotal, dateReceived, location: 'Warehouse', rollCode });
+  recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(catalog), direction: 'receipt', qty: length, unit: 'м', orderId: oid, reason: `Быстрый ввод проекта · рулон ${rollCode}` });
+  projectLine.catalogId = catalog.id;
+  const offering = serviceOffering(projectLine.offeringId);
   if (offering) offering.filmIds = [...new Set([...serviceOfferingFilmIds(offering), catalog.id])];
-  line.label = projectQuickLineLabel(line, catalog);
-  projectEstimateMarkChanged(o, 'Создана и выбрана новая плёнка');
+  projectLine.label = projectQuickLineLabel(projectLine, catalog);
+  projectEstimateMarkChanged(project, 'Создана и выбрана новая плёнка');
   save(); openQuickProjectEntry(oid);
+}
+
+// ---------- ПЛЁНКА, ВПИСАННАЯ ВРУЧНУЮ (Owner, 2026-10-01) ----------
+// The manager writes in a film that is not in the warehouse list. It is fixed
+// in the project (a catalog film «ожидает закупки» on this line) and a draft
+// purchase request for this project is created at once. Receiving the roll
+// (existing «Закупки» flow) brings the real cost into the project.
+const SOLAR_FILM_SUBTYPES = ['Зеркальная', 'Керамическая', 'Магнетронная (напылённая)', 'Фотохромная', 'Другая'];
+
+/** Metres of roll for a square-foot quantity at the roll width, with 10% waste, rounded up to 0.5 m. */
+function manualFilmMetres(sqft, widthMm) {
+  const width = Number(widthMm) || 1524;
+  const metres = (Number(sqft) || 0) * 92.903 / width * 1.1;
+  return Math.ceil(metres * 2) / 2;
+}
+
+function manualFilmPurchaseRequest(orderId, catalogId) {
+  return (db.purchaseRequests || []).find(p => p.kind === 'film' && p.itemId === catalogId && p.orderId === orderId && p.source === 'manual_project_film' && !['cancelled', 'received'].includes(p.status)) || null;
+}
+
+/** A draft for a film the project no longer needs is cancelled, never left for purchasing. */
+function cancelManualFilmDraft(o, catalogId, reason) {
+  const request = manualFilmPurchaseRequest(o?.id, catalogId);
+  if (!request || request.status !== 'draft') return false;
+  request.status = 'cancelled';
+  request.note = `${request.note || ''} Отменено: ${reason}.`.trim();
+  request.updatedAt = new Date().toISOString();
+  return true;
+}
+
+/** Square feet of this film over every quick line of the project. */
+function manualFilmProjectSqft(o, catalogId) {
+  return projectQuickLines(o).filter(line => line.catalogId === catalogId).reduce((sum, line) => sum + Math.max(0, Number(line.qty) || 0), 0);
+}
+
+/** The earliest start date of the project lines that use the film. */
+function manualFilmNeededBy(o, catalogId) {
+  return projectQuickLines(o).filter(line => line.catalogId === catalogId).map(line => projectQuickDateValue(line.startDate)).filter(Boolean).sort()[0] || null;
+}
+
+/** Draft requests of the project follow the earliest start date of their film's lines. */
+function refreshManualFilmNeededBy(o) {
+  (db.purchaseRequests || []).forEach(request => {
+    if (request.orderId !== o?.id || request.source !== 'manual_project_film' || request.status !== 'draft') return;
+    const neededBy = manualFilmNeededBy(o, request.itemId);
+    if (!neededBy || neededBy === request.neededBy) return;
+    request.neededBy = neededBy;
+    request.updatedAt = new Date().toISOString();
+  });
+}
+
+function manualFilmRequestNote(o, sqft, note) {
+  return `Плёнка вписана вручную в проект ${o.number || ''}: ${Number(sqft)} sqft.${note ? ' ' + note : ''}`;
+}
+
+function createManualFilmDraft(o, catalog, sqft, { widthMm, vendorId, note } = {}) {
+  const now = new Date().toISOString();
+  const width = Number(widthMm) || Number(catalog.manualRollWidthMm) || 1524;
+  const metres = manualFilmMetres(sqft, width);
+  const request = {
+    id: 'pr_' + uid(), number: purchaseRequestNumber(), kind: 'film', itemId: catalog.id,
+    itemNameSnapshot: catalogLabel(catalog), qty: metres, unit: 'м', orderId: o.id,
+    vendorId: vendorId || catalog.vendorId || null, responsibleId: null, neededBy: manualFilmNeededBy(o, catalog.id),
+    note: manualFilmRequestNote(o, sqft, note), manualNote: note || '',
+    requirements: [{ widthMm: width, requiredM: metres, availableM: 0, shortageM: metres }],
+    status: 'draft', source: 'manual_project_film', requestedBy: currentUser()?.id || null,
+    sqftSnapshot: Number(sqft), widthMm: width, createdAt: now, updatedAt: now,
+  };
+  db.purchaseRequests = db.purchaseRequests || [];
+  db.purchaseRequests.push(request);
+  return request;
+}
+
+/**
+ * One draft per project and film, sized by every quick line that uses the film.
+ * No square feet left → the draft is cancelled; demand for a film still waiting
+ * for purchase and without a request → a draft is created. A request already
+ * sent to the supplier is left to purchasing.
+ */
+function reconcileManualFilmPurchase(o, catalogId, reason, draft = {}) {
+  if (!o || !catalogId) return null;
+  const sqft = manualFilmProjectSqft(o, catalogId);
+  if (!(sqft > 0)) {
+    cancelManualFilmDraft(o, catalogId, reason || 'плёнка больше не нужна проекту');
+    return null;
+  }
+  const request = manualFilmPurchaseRequest(o.id, catalogId);
+  if (!request) {
+    const catalog = getCatalogItem(catalogId);
+    if (!catalog?.pendingPurchase || warehouseCatalogStockStats(catalogId).availableSqft > 0 || activeProjectFilmPurchaseRequest(o.id, catalogId)) return null;
+    return createManualFilmDraft(o, catalog, sqft, draft);
+  }
+  if (request.status !== 'draft') return request;
+  const widthMm = Number(draft.widthMm) || Number(request.widthMm) || Number(request.requirements?.[0]?.widthMm) || 1524;
+  const metres = manualFilmMetres(sqft, widthMm);
+  if (draft.note) request.manualNote = draft.note;
+  if (draft.vendorId && !request.vendorId) request.vendorId = draft.vendorId;
+  request.qty = metres;
+  request.widthMm = widthMm;
+  request.sqftSnapshot = sqft;
+  request.neededBy = manualFilmNeededBy(o, catalogId) || request.neededBy || null;
+  request.note = manualFilmRequestNote(o, sqft, request.manualNote);
+  request.requirements = [{ widthMm, requiredM: metres, availableM: 0, shortageM: metres }];
+  request.updatedAt = new Date().toISOString();
+  return request;
+}
+
+function manualFilmPurchaseStatusHtml(o, line) {
+  const catalog = line.catalogId ? getCatalogItem(line.catalogId) : null;
+  if (catalog?.pendingPurchase && warehouseCatalogStockStats(catalog.id).availableSqft <= 0) {
+    const request = manualFilmPurchaseRequest(o.id, catalog.id);
+    return `<div class="text-xs text-amber-700">Вписана вручную · ожидает закупки${request ? ` · заявка ${academyEsc(request.number)} · ${academyEsc((PURCHASE_STATUS[request.status] || [request.status])[0])}` : ''} <button type="button" class="btn-ghost text-xs" onclick="openProjectPurchaseRequests()">Закупки →</button></div>`;
+  }
+  if (projectQuickManualFilmName(line)) {
+    return `<div class="text-xs text-amber-700">Название вписано без закупки · <button type="button" class="btn-ghost text-xs" onclick="openManualProjectFilmForm('${o.id}','${line.id}')">Оформить закупку</button></div>`;
+  }
+  return '';
+}
+
+function openManualProjectFilmForm(oid, lineId) {
+  const o = getOrder(oid);
+  const line = projectQuickLines(o).find(item => item.id === lineId);
+  if (!o || !line || !['owner', 'manager'].includes(currentUser()?.role) || !orderUserCanSeeMoney(o, currentUser())) return;
+  const category = primaryServiceInfo(line.serviceType)?.catalogCategory || 'solar';
+  const widths = db.settings.filmRolls?.widths || [1524, 1829];
+  const vendors = (db.vendors || []).filter(vendor => vendor.active !== false);
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) openQuickProjectEntry('${oid}')"><div class="modal-content workspace-modal p-6" style="max-width:40rem">
+    <h3 class="font-semibold text-lg">Плёнки нет в списке</h3>
+    <p class="text-xs text-gray-500 mb-4">Плёнка запишется в этот проект со статусом «ожидает закупки», и сразу создастся заявка на закупку под проект. Когда рулон придёт и будет оприходован, его стоимость попадёт в себестоимость проекта.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div><label>Направление</label><input value="${academyEsc(catLabel(category))}" disabled></div>
+      <div><label>Тип плёнки${category === 'solar' ? ' *' : ''}</label>${category === 'solar'
+        ? `<select id="mf-type"><option value="">Выберите тип</option>${SOLAR_FILM_SUBTYPES.map(type => `<option value="${academyEsc(type)}">${academyEsc(type)}</option>`).join('')}</select>`
+        : `<input id="mf-type" placeholder="Например: прозрачная 8 mil">`}</div>
+      <div class="md:col-span-2"><label>Название плёнки *</label><input id="mf-name" value="${academyEsc(projectQuickManualFilmName(line))}" placeholder="Бренд и модель, как у поставщика"></div>
+      <div><label>Поставщик</label><select id="mf-vendor"><option value="">Не выбран</option>${vendors.map(vendor => `<option value="${academyEsc(vendor.id)}">${academyEsc(vendor.name)}</option>`).join('')}</select></div>
+      <div><label>Ширина рулона</label><select id="mf-width">${widths.map(width => `<option value="${Number(width)}">${(Number(width) / 25.4).toFixed(0)}" · ${Number(width)} мм</option>`).join('')}</select></div>
+      <div class="md:col-span-2"><label>Комментарий для закупки</label><input id="mf-note" placeholder="Цвет, плотность, сроки — что важно поставщику"></div>
+    </div>
+    <div class="text-xs text-gray-500 mt-3">Метраж по проекту: ${Number(line.qty || 0)} sqft. В заявку пойдёт длина рулона с запасом 10%.</div>
+    <div id="mf-error" class="text-sm text-red-600 mt-3 hidden"></div>
+    <div class="flex gap-2 mt-5"><button class="btn-primary flex-1" onclick="saveManualProjectFilm('${oid}','${lineId}')">Записать в проект и создать заявку</button><button class="btn-ghost" onclick="openQuickProjectEntry('${oid}')">Отмена</button></div>
+  </div></div>`;
+  render();
+}
+
+function saveManualProjectFilm(oid, lineId) {
+  const o = getOrder(oid);
+  const line = projectQuickLines(o).find(item => item.id === lineId);
+  if (!o || !line || !['owner', 'manager'].includes(currentUser()?.role) || !orderUserCanSeeMoney(o, currentUser())) return;
+  const fail = message => { const box = document.getElementById('mf-error'); if (box) { box.textContent = message; box.classList.remove('hidden'); } else alert(message); };
+  const category = primaryServiceInfo(line.serviceType)?.catalogCategory || 'solar';
+  const filmType = String(document.getElementById('mf-type')?.value || '').trim();
+  const name = String(document.getElementById('mf-name')?.value || '').trim();
+  const vendorId = String(document.getElementById('mf-vendor')?.value || '');
+  const widthMm = Number(document.getElementById('mf-width')?.value) || 1524;
+  const note = String(document.getElementById('mf-note')?.value || '').trim();
+  if (!name) return fail('Впишите название плёнки.');
+  if (category === 'solar' && !filmType) return fail('Выберите тип солнцезащитной плёнки.');
+  if (!(Number(line.qty) > 0)) return fail('Сначала укажите метраж в строке проекта — по нему считается заявка.');
+
+  // The same film written in again is reused, never duplicated in the catalog.
+  // Archived films stay hidden, as in the film list (catalogCanBeSelected).
+  const sameName = item => item.category === category && catalogCanBeSelected(item, line.catalogId) && String(item.model || '').trim().toLowerCase() === name.toLowerCase();
+  let catalog = (db.settings.catalog || []).find(sameName) || null;
+  if (catalog && warehouseCatalogStockStats(catalog.id).availableSqft <= 0) {
+    catalog.pendingPurchase = true;
+    if (filmType && !catalog.filmCategory) catalog.filmCategory = filmType;
+    if (vendorId && !catalog.vendorId) catalog.vendorId = vendorId;
+  }
+  if (!catalog) {
+    const now = new Date().toISOString();
+    catalog = {
+      id: 'film_' + uid(), brand: '', filmCategory: filmType, productName: name, modelCode: '', model: name,
+      category, retailPerSqft: 0, vendorId: vendorId || null,
+      pendingPurchase: true, addedManuallyBy: currentUser()?.id || null, addedManuallyAt: now,
+    };
+    db.settings.catalog.push(catalog);
+  }
+  catalog.manualRollWidthMm = widthMm;
+  const previousCatalogId = line.catalogId || '';
+  line.catalogId = catalog.id;
+  line.manualFilmName = '';
+  // A film written in for a line with a service is one of that service's films.
+  const lineOffering = serviceOffering(line.offeringId);
+  if (lineOffering) lineOffering.filmIds = [...new Set([...serviceOfferingFilmIds(lineOffering), catalog.id])];
+  line.label = projectQuickLineLabel(line, catalog);
+  if (previousCatalogId && previousCatalogId !== catalog.id) reconcileManualFilmPurchase(o, previousCatalogId, 'в проекте выбрана другая плёнка');
+
+  const request = reconcileManualFilmPurchase(o, catalog.id, '', { widthMm, vendorId, note }) || activeProjectFilmPurchaseRequest(oid, catalog.id);
+  projectEstimateMarkChanged(o, request ? `Плёнка «${name}» вписана вручную, заявка на закупку ${request.number}` : `Плёнка «${name}» выбрана — есть на складе`);
+  save();
+  openQuickProjectEntry(oid);
+  if (typeof cloudStatus === 'function') cloudStatus(request ? `Заявка на закупку ${request.number}: ${request.qty} м` : `«${name}» есть на складе — закупка не нужна`, 'green');
 }
 
 function projectEstimateMarkChanged(o, reason) {
@@ -24148,7 +24651,7 @@ function renderQuickProjectEntry(o) {
     const selectedStock = line.catalogId ? warehouseCatalogStockStats(line.catalogId) : null;
     return `<tr>
       <td data-label="Направление и услуга"><select aria-label="Направление" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select><select aria-label="Услуга" class="mt-1" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','offeringId',this.value)"><option value="">${offerings.length ? 'Выберите услугу' : 'Услуг нет — «Услуги и цены»'}</option>${offerings.map(item => `<option value="${item.id}" ${line.offeringId===item.id?'selected':''}>${academyEsc(item.name)}${Number(item.pricePerSqft) > 0 ? ` · $${Number(item.pricePerSqft).toFixed(2)}/sq ft` : ''}</option>`).join('')}</select>${offering && Number(offering.pricePerSqft) > 0 ? `<div class="text-xs text-gray-500">Цена услуги: ${fmtSqftPrice(offering.pricePerSqft)} / sq ft</div>` : ''}<button class="btn-ghost text-red-600 quick-commercial-remove" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить</button></td>
-      <td data-label="Плёнка"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}${projectQuickManualFilmName(line) ? '<div class="text-xs text-amber-700">Ручной ввод · не привязано к складу</div>' : ''}<details class="quick-film-alternative" ${projectQuickManualFilmName(line) ? 'open' : ''}><summary>Плёнки нет в списке</summary><div class="quick-film-alternative-body"><input aria-label="Ручное название плёнки" placeholder="Впишите название вручную" value="${academyEsc(projectQuickManualFilmName(line))}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','manualFilmName',this.value)">${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Добавить плёнку на склад</button>` : ''}</div></details></td>
+      <td data-label="Плёнка"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}${projectQuickManualFilmName(line) ? '<div class="text-xs text-amber-700">Ручной ввод · не привязано к складу</div>' : ''}${manualFilmPurchaseStatusHtml(o, line)}<details class="quick-film-alternative" ${projectQuickManualFilmName(line) ? 'open' : ''}><summary>Плёнки нет в списке</summary><div class="quick-film-alternative-body"><button type="button" class="btn-ghost text-xs" onclick="openManualProjectFilmForm('${o.id}','${line.id}')">✍️ Вписать плёнку вручную и заказать</button>${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Добавить плёнку на склад</button>` : ''}</div></details></td>
       <td data-label="Метраж, sqft"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" placeholder="Например, 250" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
       <td data-label="Цена клиенту"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" placeholder="Общая сумма" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','price',this.value)"><div class="quick-commercial-price">${Number(line.qty) > 0 && Number(line.price) > 0 ? `${fmtMoney(line.unitPrice)} / sqft` : 'Цена / sqft появится автоматически'}</div></td>
     </tr>`;
@@ -24301,7 +24804,7 @@ function renderProjectEstimateWorkspace(o) {
   const costLines = [
     ['Плёнка и отход', pss.film], ['Специалисты по установке', pss.installers], ['Транспорт', pss.gas],
     [`Менеджер (${Number(db.settings.pricingDefaults?.managerPct || 0)}% выручки)`, pss.manager],
-    [`Рекламный резерв (${Number(db.settings.pricingDefaults?.marketingPct || 0)}% выручки)`, pss.marketing],
+    [`Реклама — доля бюджета месяца (${(projectRevenueShare(o) * 100).toFixed(1)}% от ${fmtMoney(projectMonthAdBudget(projectProfitDate(o)).budget)})`, pss.marketing],
     ['Замерщик — оклад в постоянных расходах', pss.measurer], ['Расходники', pss.consumables],
     ['Аренда', pss.rent],
     ['Прямые расходы', pss.manual],
@@ -24365,7 +24868,7 @@ function renderProjectEstimateWorkspace(o) {
     </section>
 
     ${canSeeInternalEconomics ? `<section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>6. Чистая прибыль проекта</h4><div class="text-xs text-gray-500">Управленческий расчёт за ${academyEsc(profitability.monthLabel)}. Постоянные расходы делятся поровну между ${profitability.projectCount} проектами месяца.</div></div></div>
+      <div class="project-estimate-section-head"><div><h4>6. Чистая прибыль проекта</h4><div class="text-xs text-gray-500">Управленческий расчёт за ${academyEsc(profitability.monthLabel)} Постоянные расходы и реклама делятся между проектами месяца по выручке: этот проект — ${(profitability.revenueShare * 100).toFixed(1)}% выручки месяца (${fmtMoney(orderRevenue(o))} из ${fmtMoney(profitability.monthRevenue)}, проектов: ${profitability.projectCount}). Бюджет рекламы месяца ${fmtMoney(profitability.adBudget.budget)} = ${Number(profitability.adBudget.pct)}% выручки за ${academyEsc(profitability.adBudget.baseMonthLabel)} (${fmtMoney(profitability.adBudget.baseRevenue)})${profitability.adBudget.basis === 'current' ? ' — за прошлый месяц выручки нет, поэтому пока от выручки этого месяца' : ''}.</div></div></div>
       <div class="project-profit-flow">
         <div class="project-profit-card"><span>Сумма заказа</span><strong class="text-emerald-700">${fmtMoney(orderRevenue(o))}</strong></div>
         <div class="project-profit-card"><span>Прямые затраты</span><strong class="text-red-600">− ${fmtMoney(pss.total)}</strong></div>
@@ -24375,6 +24878,7 @@ function renderProjectEstimateWorkspace(o) {
         <div class="project-profit-card"><span>Резерв налога California</span><strong class="text-red-600">− ${fmtMoney(profitability.taxAllocation)}</strong></div>
         <div class="project-profit-card" style="border-color:${profitability.netProfit >= 0 ? '#86efac' : '#fca5a5'};background:${profitability.netProfit >= 0 ? '#f0fdf4' : '#fef2f2'}"><span>Расчётная чистая прибыль</span><strong class="${profitability.netProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(profitability.netProfit)}</strong></div>
         <div class="project-profit-card"><span>Постоянные расходы месяца</span><strong>${fmtMoney(profitability.fixedPool)}</strong></div>
+        <div class="project-profit-card"><span>Бюджет рекламы месяца</span><strong>${fmtMoney(profitability.adBudget.budget)}</strong></div>
         <div class="project-profit-card"><span>Резерв налога месяца</span><strong>${fmtMoney(profitability.monthTaxReserve)}</strong></div>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3">
@@ -24575,6 +25079,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   return `
     <div class="order-clean-topbar">
       <button class="btn-ghost" onclick="state.view='${isInstaller ? 'installations' : 'orders'}'; location.hash=''; render();">← ${isInstaller ? 'Мои задачи' : T('orders')}</button>
+      ${u?.role === 'owner' ? `<button class="btn-ghost text-sm text-red-600" onclick="openArchiveProjectModal('${o.id}')" title="Проект уйдёт в архив; его можно восстановить">🗑 Удалить в архив</button>` : ''}
       ${u?.role === 'owner' ? `<button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();" title="Открыть старую полную форму, если нужны все поля сразу">Расширенный режим</button>` : ''}
     </div>
     <div class="order-clean-shell">
@@ -24637,7 +25142,12 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
 
 function renderOrderDetails(id) {
   const o = getOrder(id);
-  if (!o) return `<div class="card">${T('empty')}</div>`;
+  if (!o) {
+    const archived = currentUser()?.role === 'owner' ? (db.archivedOrders || []).find(order => order.id === id) : null;
+    return archived
+      ? `<div class="card"><div class="text-lg font-bold mb-1">Проект ${academyEsc(archived.number || '')} в архиве</div><div class="text-sm text-gray-500 mb-3">${archived.archive?.reason ? academyEsc(archived.archive.reason) : 'Удалён владельцем'}</div><button class="btn-primary" onclick="restoreProject('${archived.id}')">Восстановить</button></div>`
+      : `<div class="card">${T('empty')}</div>`;
+  }
   const c = getClient(o.clientId);
   const projectAddress = orderAddress(o, c);
   const u = currentUser();
@@ -25053,7 +25563,7 @@ function renderOrderDetails(id) {
             ['Аренда оборудования', p.rent],
             ['Себест-ть доп.услуг', p.extraServicesCost],
             ['Доп. расходы (вручную)', p.manual],
-            ['Маркетинг', p.marketing],
+            ['Реклама (доля бюджета месяца)', p.marketing],
           ];
           return `<table class="w-full text-sm"><tbody>
             ${lines.map(([n,v]) => `<tr class="border-t"><td class="p-1.5 text-gray-600">${n}</td><td class="p-1.5 text-right font-mono">${fmtMoney(v)}</td></tr>`).join('')}
@@ -26563,12 +27073,13 @@ function openManagerFilmReceiptForm(oid, rid) {
       <div><label>Стоимость рулона, $</label><input id="mrf-cost" type="number" min="0.01" step="1" placeholder="500"></div>
       <div><label>Lot / партия</label><input id="mrf-lot" value="MEASURE-${new Date().toISOString().slice(0,10)}"></div>
     </div>
+    <input id="mrf-form" type="hidden" value="${uid()}">
     <div id="mrf-error" class="text-sm text-red-600 mt-3 hidden"></div>
     <div class="flex gap-2 mt-5"><button class="btn-primary flex-1" onclick="saveManagerFilmReceipt('${oid}','${rid}','${serviceCategory}')">Создать, принять и выбрать</button><button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Отмена</button></div>
   </div></div>`;
   render();
 }
-function saveManagerFilmReceipt(oid, rid, serviceCategory) {
+async function saveManagerFilmReceipt(oid, rid, serviceCategory) {
   const o = getOrder(oid);
   const room = o?.measurements?.rooms?.find(item => item.id === rid);
   const brand = document.getElementById('mrf-brand')?.value.trim() || '';
@@ -26582,10 +27093,19 @@ function saveManagerFilmReceipt(oid, rid, serviceCategory) {
   if (length <= 0 || costTotal <= 0) return fail('Укажите длину и закупочную стоимость рулона.');
   const duplicate = (db.settings.catalog || []).find(item => item.category === serviceCategory && String(item.brand || '').toLowerCase() === brand.toLowerCase() && String(catalogFilmName(item)).toLowerCase() === productName.toLowerCase() && String(catalogFilmModel(item)).toLowerCase() === modelCode.toLowerCase());
   if (duplicate) return fail('Такая модель уже есть в каталоге. Сделайте приход рулона через склад.');
-  const catalog = { id: 'film_' + uid(), brand, filmCategory, productName, modelCode, model: `${productName} ${modelCode}`, category: serviceCategory, retailPerSqft: Math.max(0, Number(document.getElementById('mrf-retail')?.value) || 0), costPerSqft: null, installerRatePerSqft: null, wastePct: serviceCategory === 'smart' ? 8 : 12, archived: false };
+  const lotNumber = document.getElementById('mrf-lot')?.value.trim() || '';
+  const widthMm = Number(document.getElementById('mrf-width')?.value) || 1524;
+  const retailPerSqft = Math.max(0, Number(document.getElementById('mrf-retail')?.value) || 0);
+  const dateReceived = new Date().toISOString().slice(0,10);
+  const formToken = document.getElementById('mrf-form')?.value || '';
+  let rollCode = '';
+  try { rollCode = await reserveRollCodeOnce(dateReceived); } catch (error) { return fail(`Не удалось получить код рулона: ${error.message}. Проверьте интернет и повторите.`); }
+  if (!rollCode || !rollReceiptFormStillOpen('mrf-form', formToken)) return;
+  if (!getOrder(oid)?.measurements?.rooms?.some(item => item.id === rid)) return fail('Замер изменился, пока получали код рулона. Откройте его заново.');
+  const catalog = { id: 'film_' + uid(), brand, filmCategory, productName, modelCode, model: `${productName} ${modelCode}`, category: serviceCategory, retailPerSqft, costPerSqft: null, installerRatePerSqft: null, wastePct: serviceCategory === 'smart' ? 8 : 12, archived: false };
   db.settings.catalog.push(catalog);
-  const roll = addInventoryRoll({ catalogId: catalog.id, lotNumber: document.getElementById('mrf-lot')?.value.trim() || '', widthMm: Number(document.getElementById('mrf-width')?.value) || 1524, originalLengthM: length, costTotal, dateReceived: new Date().toISOString().slice(0,10), location: 'Warehouse' });
-  recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(catalog), direction: 'receipt', qty: length, unit: 'м', orderId: oid, reason: 'Добавлено из замера проекта' });
+  const roll = addInventoryRoll({ catalogId: catalog.id, lotNumber, widthMm, originalLengthM: length, costTotal, dateReceived, location: 'Warehouse', rollCode });
+  recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(catalog), direction: 'receipt', qty: length, unit: 'м', orderId: oid, reason: `Добавлено из замера проекта · рулон ${rollCode}` });
   managerApplyFilmToRoom(oid, rid, catalog.id);
 }
 
@@ -26942,6 +27462,9 @@ function confirmScheduleInstallation(oid) {
   });
   closeModal();
   if (changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true })) {
+    // Scheduling fills empty line dates: the film purchase draft gets its deadline.
+    refreshManualFilmNeededBy(o);
+    save();
     notifyClientEventScheduled(oid, 'install');
     return;
   }
@@ -28480,7 +29003,7 @@ function createOrder(nextStep = 'services') {
     alert('У выбранного клиента не хватает данных для заказа: ' + missing.join(', ') + '. Добавьте эти данные в карточку клиента или создайте новый адрес объекта.');
     return;
   }
-  const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(db.orders.length + 1).padStart(3, '0');
+  const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(projectNumberSequence()).padStart(3, '0');
   const tags = Array.from(new Set([...selectedServices.map(item => item.tag), accountTypeForOrder, relationshipForOrder === 'regular' ? 'regular' : 'one_time', ...(executionVariant.tags || []), ...pickedTags].filter(Boolean)));
 
   const o = {
@@ -35890,10 +36413,11 @@ function renderFilmModelStock(catalogId) {
     <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs text-gray-500">${academyEsc(catLabel(item.category))}</div><h3 class="font-black text-2xl">${academyEsc(item.brand)} — ${academyEsc(item.model)}</h3><div class="text-sm mt-1">${catalogSpecLabel(item)}</div></div><div class="flex gap-2 flex-wrap"><button class="btn-ghost text-sm" onclick="openCatalogSpecModal('${item.id}')">Характеристики</button><button class="btn-ghost text-sm" onclick="openPurchaseRequestModal('film','${item.id}')">В закупку</button><button class="btn-primary text-sm" onclick="openAddRollModal('${item.id}')">+ Принять рулон</button></div></div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4"><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Рулонов</div><b class="text-lg">${rolls.length}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Остаток</div><b class="text-lg">${stats.lengthM.toFixed(2)} м</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Стоимость</div><b class="text-lg text-emerald-700">${fmtMoney(stats.value)}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Поставщик</div><b>${academyEsc(vendor?.name || 'не назначен')}</b></div></div>
   </div>
-  <div class="card"><h3 class="font-semibold mb-3">Рулоны модели</h3>${rolls.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Lot #</th><th class="text-left p-2">Ширина</th><th class="text-left p-2">Принято</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Локация</th><th class="text-left p-2">Поставщик</th><th></th></tr></thead><tbody>${rolls.map(roll => {
+  <div class="card"><h3 class="font-semibold mb-3">Рулоны модели</h3>${rolls.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Код</th><th class="text-left p-2">Lot #</th><th class="text-left p-2">Ширина</th><th class="text-left p-2">Принято</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Локация</th><th class="text-left p-2">Поставщик</th><th class="text-left p-2">Закупка / sq ft</th><th></th></tr></thead><tbody>${rolls.map(roll => {
     const rollVendor = db.vendors.find(v => v.id === roll.vendorId);
     const low = Number(roll.remainingLengthM || 0) < Number(db.settings.inventoryAlerts?.reorderBelowM || 5);
-    return `<tr class="border-t ${low ? 'bg-amber-50' : ''}"><td class="p-2 font-mono">${academyEsc(roll.lotNumber || '—')}</td><td class="p-2">${(Number(roll.widthMm || 0)/1000).toFixed(2)} м</td><td class="p-2">${Number(roll.originalLengthM || 0).toFixed(1)} м</td><td class="p-2 font-bold ${low ? 'text-red-700' : 'text-emerald-700'}">${Number(roll.remainingLengthM || 0).toFixed(2)} м</td><td class="p-2">${academyEsc(roll.location || 'Warehouse')}</td><td class="p-2">${academyEsc(rollVendor?.name || '—')}</td><td class="p-2 whitespace-nowrap"><button class="btn-ghost text-xs" onclick="openFilmIssueModal('${roll.id}')">Списать</button><button class="btn-ghost text-xs" onclick="openWarehouseQr('film','${roll.id}')">QR</button></td></tr>`;
+    const perSqft = Number(roll.costPerSqft) || rollCostPerSqft(roll.costTotal, roll.originalLengthM, roll.widthMm);
+    return `<tr class="border-t ${low ? 'bg-amber-50' : ''}"><td class="p-2 font-mono">${academyEsc(roll.rollCode || '—')}</td><td class="p-2 font-mono">${academyEsc(roll.lotNumber || '—')}</td><td class="p-2">${(Number(roll.widthMm || 0)/1000).toFixed(2)} м</td><td class="p-2">${Number(roll.originalLengthM || 0).toFixed(1)} м</td><td class="p-2 font-bold ${low ? 'text-red-700' : 'text-emerald-700'}">${Number(roll.remainingLengthM || 0).toFixed(2)} м</td><td class="p-2">${academyEsc(roll.location || 'Warehouse')}</td><td class="p-2">${academyEsc(rollVendor?.name || '—')}</td><td class="p-2">${perSqft > 0 ? fmtSqftPrice(perSqft) : '<span class="text-red-700">нет цены</span>'}</td><td class="p-2 whitespace-nowrap"><button class="btn-ghost text-xs" onclick="openFilmIssueModal('${roll.id}')">Списать</button><button class="btn-ghost text-xs" onclick="openWarehouseQr('film','${roll.id}')">QR</button></td></tr>`;
   }).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="icon">📦</div><div>Этой модели на складе нет. Создайте заявку или примите рулон.</div></div>`}</div>`;
 }
 function renderFilmInventory() {
@@ -36585,61 +37109,230 @@ function renderCatalogBrowser() {
   return controls + rows;
 }
 
+// ---------- ПРИЁМ РУЛОНА НА СКЛАД (Owner, 2026-10-01) ----------
+// Category, brand, model, vendor, lot, width, length, purchase price, date,
+// location and a readable unique code per roll. A film missing from the list is
+// typed in and added to it. The purchase price per sq ft is shown while typing
+// and is what the project's material cost uses (warehouseCatalogCostPerSqft).
+const ROLL_CATEGORY_KEYS = ['smart', 'solar', 'protective', 'decorative'];
+
+/** Next roll code by the rolls this CRM already has: RP-YYMM-0001, RP-YYMM-0002, … */
+function nextRollCode(dateReceived) {
+  const day = /^\d{4}-\d{2}/.test(String(dateReceived || '')) ? String(dateReceived) : new Date().toISOString().slice(0, 10);
+  const prefix = `RP-${day.slice(2, 4)}${day.slice(5, 7)}-`;
+  const used = (db.inventory || []).map(roll => String(roll.rollCode || '')).filter(code => code.startsWith(prefix));
+  const last = used.reduce((max, code) => Math.max(max, Number(code.slice(prefix.length)) || 0), 0);
+  return prefix + String(last + 1).padStart(4, '0');
+}
+
+/**
+ * The roll code is reserved on the server, so two people receiving rolls at the
+ * same time never get the same code. The local number is only the floor (codes
+ * issued before the server counter) and the code of the offline file version.
+ */
+async function reserveRollCode(dateReceived) {
+  const local = nextRollCode(dateReceived);
+  if (!ROLANPRO_CLOUD) return local;
+  const response = await fetch('/api/v1/warehouse/roll-codes', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date: dateReceived, seen_max: (Number(local.split('-').pop()) || 1) - 1 }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.data?.code) throw new Error(payload?.errors?.[0]?.message || `HTTP ${response.status}`);
+  return payload.data.code;
+}
+
+/**
+ * The receipt form the user submitted is still on screen: closed or reopened
+ * while the code was reserved means the receipt is dropped, never completed.
+ */
+function rollReceiptFormStillOpen(inputId, token) {
+  return !!token && document.getElementById(inputId)?.value === token;
+}
+
+/** One receipt at a time: a double click while the code is reserved gets null and stops. */
+async function reserveRollCodeOnce(dateReceived) {
+  if (state.rollReceiptSaving) return null;
+  state.rollReceiptSaving = true;
+  try { return await reserveRollCode(dateReceived); } finally { state.rollReceiptSaving = false; }
+}
+
+/** Purchase price per sq ft of a roll: roll price / roll area. */
+function rollCostPerSqft(costTotal, lengthM, widthMm) {
+  const area = mm2_to_sqft((Number(widthMm) || 0) * (Number(lengthM) || 0) * 1000);
+  return area > 0 && Number(costTotal) > 0 ? Number(costTotal) / area : 0;
+}
+
+/** Price per sq ft with cents: whole-dollar rounding hides the real material cost. */
+function fmtSqftPrice(value) {
+  return '$' + (Number(value) || 0).toFixed(2);
+}
+
+function rollReceiptCategories() {
+  return [...new Set([...ROLL_CATEGORY_KEYS, ...Object.keys(catalogByCategory()).map(canonicalCatalogCategory)].filter(Boolean))];
+}
+
+/** Old catalog items may say «solar_film», «Солнцезащитная», … — one category for all of them. */
+function sameRollCategory(a, b) {
+  return canonicalCatalogCategory(a) === canonicalCatalogCategory(b);
+}
+
+function rollReceiptSuggestions(category) {
+  const items = (db.settings.catalog || []).filter(item => sameRollCategory(item.category, category) && !item.archived);
+  const brands = [...new Set(items.map(item => String(item.brand || '').trim()).filter(Boolean))];
+  const models = [...new Set(items.map(item => String(item.model || item.productName || '').trim()).filter(Boolean))];
+  return { brands, models };
+}
+
+function refreshRollReceiptForm() {
+  const category = document.getElementById('ar-category')?.value || 'solar';
+  const { brands, models } = rollReceiptSuggestions(category);
+  const brandList = document.getElementById('ar-brand-list');
+  const modelList = document.getElementById('ar-model-list');
+  if (brandList) brandList.innerHTML = brands.map(value => `<option value="${academyEsc(value)}">`).join('');
+  if (modelList) modelList.innerHTML = models.map(value => `<option value="${academyEsc(value)}">`).join('');
+  document.getElementById('ar-type-block')?.classList.toggle('hidden', category !== 'solar');
+  const length = Number(document.getElementById('ar-len')?.value) || 0;
+  const cost = Number(document.getElementById('ar-cost')?.value) || 0;
+  const width = Number(document.getElementById('ar-width')?.value) || 0;
+  const area = mm2_to_sqft(width * length * 1000);
+  const perSqft = rollCostPerSqft(cost, length, width);
+  const preview = document.getElementById('ar-cost-preview');
+  if (preview) preview.textContent = perSqft > 0 ? `${fmtSqftPrice(perSqft)} / sq ft · площадь рулона ${area.toFixed(0)} sq ft` : 'Укажите длину и цену закупки — цена за sq ft посчитается сама';
+  const code = document.getElementById('ar-code');
+  if (code) code.value = `${nextRollCode(document.getElementById('ar-date')?.value)} (предварительно)`;
+}
+
 function openAddRollModal(presetCatId, purchaseRequestId='') {
-  const request=(db.purchaseRequests||[]).find(x=>x.id===purchaseRequestId);
+  const request = (db.purchaseRequests || []).find(x => x.id === purchaseRequestId);
+  const preset = getCatalogItem(presetCatId || request?.itemId || '') || null;
+  const category = canonicalCatalogCategory(preset?.category) || 'solar';
+  const today = new Date().toISOString().slice(0, 10);
+  const widths = db.settings.filmRolls?.widths || [1524, 1829];
+  const presetWidth = Number(request?.widthMm || request?.requirements?.[0]?.widthMm) || 0;
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
-    <div class="modal-content workspace-modal p-6" style="max-width: 32rem;">
-      <h3 class="font-semibold text-lg mb-3">📦 Принять рулон на склад</h3>
+    <div class="modal-content workspace-modal p-6" style="max-width: 40rem;">
+      <h3 class="font-semibold text-lg mb-1">📦 Принять рулон на склад</h3>
+      <p class="text-xs text-gray-500 mb-3">Плёнки нет в подсказках — впишите бренд и модель вручную: она добавится в список.</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label>Плёнка из каталога</label>
-          <select id="ar-cat">
-            ${(() => {
-              const groups = catalogByCategory();
-              return Object.entries(groups).map(([cat, items]) => `<optgroup label="${catLabel(cat)}">${items.map(c => `<option value="${c.id}" ${presetCatId===c.id?'selected':''}>${c.brand} — ${c.model}</option>`).join('')}</optgroup>`).join('');
-            })()}
-          </select>
-        </div>
-        <div>
-          <label>Поставщик</label>
-          <select id="ar-vendor">${db.vendors.map(v => `<option value="${v.id}" ${request?.vendorId===v.id?'selected':''}>${v.name}</option>`).join('')}</select>
-        </div>
-        <div><label>Lot / партия</label><input id="ar-lot" placeholder="например 240315-A"></div>
-        <div><label>Ширина (мм)</label><select id="ar-width">${(db.settings.filmRolls?.widths||[1520,1820,910]).map(w => `<option value="${w}">${(w/1000).toFixed(2)} м</option>`).join('')}</select></div>
-        <div><label>Длина рулона (м)</label><input id="ar-len" type="number" step="1" value="30" placeholder="30"></div>
-        <div><label>Стоимость рулона ($)</label><input id="ar-cost" type="number" step="1" placeholder="500"></div>
-        <div><label>Дата получения</label><input id="ar-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div><label>Локация</label><input id="ar-loc" value="Warehouse"></div>
+        <div><label for="ar-category">Категория *</label><select id="ar-category" onchange="refreshRollReceiptForm()">${rollReceiptCategories().map(key => `<option value="${academyEsc(key)}" ${category === key ? 'selected' : ''}>${academyEsc(catLabel(key))}</option>`).join('')}</select></div>
+        <div id="ar-type-block" class="${category === 'solar' ? '' : 'hidden'}"><label for="ar-type">Тип солнцезащитной</label><select id="ar-type"><option value="">Не указан</option>${SOLAR_FILM_SUBTYPES.map(type => `<option value="${academyEsc(type)}" ${preset?.filmCategory === type ? 'selected' : ''}>${academyEsc(type)}</option>`).join('')}</select></div>
+        <div><label for="ar-brand">Бренд *</label><input id="ar-brand" list="ar-brand-list" value="${academyEsc(preset?.brand || '')}" placeholder="Rolan PRO, 3M, LLumar…"><datalist id="ar-brand-list"></datalist></div>
+        <div><label for="ar-model">Модель плёнки *</label><input id="ar-model" list="ar-model-list" value="${academyEsc(preset?.model || preset?.productName || '')}" placeholder="Titan Prime™"><datalist id="ar-model-list"></datalist></div>
+        <div><label for="ar-vendor">Поставщик</label><select id="ar-vendor"><option value="">Не выбран</option>${(db.vendors || []).filter(v => v.active !== false || v.id === request?.vendorId).map(v => `<option value="${academyEsc(v.id)}" ${(request?.vendorId || preset?.vendorId) === v.id ? 'selected' : ''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
+        <div><label for="ar-lot">Lot / партия</label><input id="ar-lot" placeholder="например 240315-A"></div>
+        <div><label for="ar-width">Ширина</label><select id="ar-width" onchange="refreshRollReceiptForm()">${widths.map(w => `<option value="${Number(w)}" ${presetWidth === Number(w) ? 'selected' : ''}>${(Number(w) / 1000).toFixed(2)} м · ${(Number(w) / 25.4).toFixed(0)}"</option>`).join('')}</select></div>
+        <div><label for="ar-len">Длина рулона (м) *</label><input id="ar-len" type="number" min="0.1" step="0.1" value="30" oninput="refreshRollReceiptForm()"></div>
+        <div><label for="ar-cost">Цена закупки рулона ($) *</label><input id="ar-cost" type="number" min="0.01" step="0.01" placeholder="500" oninput="refreshRollReceiptForm()"></div>
+        <div><label>Цена за sq ft</label><div id="ar-cost-preview" class="text-sm font-semibold text-emerald-700 py-2"></div></div>
+        <div><label for="ar-date">Дата получения</label><input id="ar-date" type="date" value="${today}" onchange="refreshRollReceiptForm()"></div>
+        <div><label for="ar-loc">Локация</label><input id="ar-loc" value="Warehouse"></div>
+        <div class="md:col-span-2"><label for="ar-code">Код рулона (окончательный присваивается при приёме)</label><input id="ar-code" class="font-mono" readonly></div>
       </div>
-      <input id="ar-request" type="hidden" value="${purchaseRequestId}">
+      <input id="ar-request" type="hidden" value="${academyEsc(purchaseRequestId)}">
+      <input id="ar-preset" type="hidden" value="${academyEsc(preset?.id || '')}">
+      <input id="ar-form" type="hidden" value="${uid()}">
+      <div id="ar-error" class="text-sm text-red-600 mt-3 hidden"></div>
       <div class="flex gap-2 mt-4 justify-end">
         <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
-        <button class="btn-primary" onclick="confirmAddRoll()">Принять</button>
+        <button id="ar-submit" class="btn-primary" onclick="confirmAddRoll()">Принять</button>
       </div>
     </div>
   </div>`;
   render();
+  requestAnimationFrame(refreshRollReceiptForm);
 }
-function confirmAddRoll() {
-  const roll=addInventoryRoll({
-    catalogId: document.getElementById('ar-cat').value,
-    vendorId: document.getElementById('ar-vendor').value,
-    lotNumber: document.getElementById('ar-lot').value,
-    widthMm: parseInt(document.getElementById('ar-width').value),
-    originalLengthM: parseFloat(document.getElementById('ar-len').value),
-    costTotal: parseFloat(document.getElementById('ar-cost').value),
-    dateReceived: document.getElementById('ar-date').value,
-    location: document.getElementById('ar-loc').value,
+
+/**
+ * The film the roll is received into when the form was opened from a film or a
+ * purchase request. A film written in by hand for a project («ожидает закупки»,
+ * no rolls yet) takes the real brand and model from the receipt, so the project
+ * that points to it gets the roll's cost instead of a duplicate film.
+ */
+function rollReceiptPresetCatalog(preset, { category, brand, model, filmType, vendorId }) {
+  if (!preset || !sameRollCategory(preset.category, category)) return null;
+  const same = value => String(value || '').trim().toLowerCase();
+  const placeholder = (preset.pendingPurchase || preset.addedManuallyAt) && !(db.inventory || []).some(roll => roll.catalogId === preset.id);
+  const sameFilm = (!preset.brand || same(preset.brand) === same(brand)) && [preset.model, preset.productName].some(value => same(value) === same(model));
+  if (!placeholder && !sameFilm) return null;
+  const renamed = placeholder && !sameFilm;
+  if (!preset.brand || renamed) preset.brand = brand;
+  if (renamed) { preset.model = model; preset.productName = model; }
+  if (filmType && (!preset.filmCategory || renamed)) preset.filmCategory = filmType;
+  if (vendorId && !preset.vendorId) preset.vendorId = vendorId;
+  if (renamed) (db.orders || []).forEach(order => projectQuickLines(order).forEach(line => { if (line.catalogId === preset.id) line.label = catalogLabel(preset); }));
+  return preset;
+}
+
+/** The catalog film for a category + brand + model; a film not in the list is added to it. */
+function rollReceiptCatalog(category, brand, model, filmType, vendorId) {
+  const same = value => String(value || '').trim().toLowerCase();
+  const existing = (db.settings.catalog || []).find(item => sameRollCategory(item.category, category)
+    && same(item.brand) === same(brand)
+    && [item.model, item.productName].some(value => same(value) === same(model)));
+  if (existing) {
+    if (filmType && !existing.filmCategory) existing.filmCategory = filmType;
+    return existing;
+  }
+  const catalog = {
+    id: 'film_' + uid(), brand, model, productName: model, modelCode: '', filmCategory: filmType, category,
+    retailPerSqft: 0, vendorId: vendorId || null,
+    addedManuallyBy: currentUser()?.id || null, addedManuallyAt: new Date().toISOString(),
+  };
+  db.settings.catalog.push(catalog);
+  return catalog;
+}
+
+async function confirmAddRoll() {
+  const read = id => String(document.getElementById(id)?.value || '').trim();
+  const fail = message => { const box = document.getElementById('ar-error'); if (box) { box.textContent = message; box.classList.remove('hidden'); } else alert(message); };
+  const category = canonicalCatalogCategory(read('ar-category')) || 'solar';
+  const filmType = category === 'solar' ? read('ar-type') : '';
+  const brand = read('ar-brand');
+  const model = read('ar-model');
+  const vendorId = read('ar-vendor');
+  const widthMm = parseInt(read('ar-width'), 10) || 0;
+  const lengthM = parseFloat(read('ar-len')) || 0;
+  const costTotal = parseFloat(read('ar-cost')) || 0;
+  const dateReceived = read('ar-date') || new Date().toISOString().slice(0, 10);
+  const lotNumber = read('ar-lot');
+  const location = read('ar-loc') || 'Warehouse';
+  const requestId = read('ar-request') || null;
+  const presetId = read('ar-preset');
+  if (!brand || !model) return fail('Укажите бренд и модель плёнки — выберите из подсказок или впишите вручную.');
+  if (!(lengthM > 0)) return fail('Укажите длину рулона.');
+  if (!(costTotal > 0)) return fail('Укажите цену закупки рулона — без неё себестоимость проектов будет занижена.');
+
+  const button = document.getElementById('ar-submit');
+  const formToken = document.getElementById('ar-form')?.value || '';
+  if (button) button.disabled = true;
+  let rollCode = '';
+  try {
+    rollCode = await reserveRollCodeOnce(dateReceived);
+  } catch (error) {
+    return fail(`Не удалось получить код рулона: ${error.message}. Проверьте интернет и повторите.`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+  if (!rollCode || !rollReceiptFormStillOpen('ar-form', formToken)) return;
+
+  const film = { category, brand, model, filmType, vendorId };
+  const catalog = rollReceiptPresetCatalog(getCatalogItem(presetId), film) || rollReceiptCatalog(category, brand, model, filmType, vendorId);
+  if (catalog.pendingPurchase) catalog.pendingPurchase = false;
+  const roll = addInventoryRoll({
+    catalogId: catalog.id, vendorId, lotNumber, widthMm, originalLengthM: lengthM, costTotal,
+    dateReceived, location, rollCode,
   });
-  const requestId=document.getElementById('ar-request')?.value||null;
-  const request=(db.purchaseRequests||[]).find(x=>x.id===requestId);
-  const cat=getCatalogItem(roll.catalogId);
-  recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(cat),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,responsibleId:request?.responsibleId||null,reason:request?`Приход по ${request.number}`:'Приход рулона'});
-  if(request){request.status='received';request.updatedAt=new Date().toISOString();}
+  const request = (db.purchaseRequests || []).find(x => x.id === requestId);
+  recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(catalog),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,reason:`Приход рулона ${rollCode}`});
+  if (request) { request.status = 'received'; request.updatedAt = new Date().toISOString(); }
   save();
   closeModal();
   render();
+  if (typeof cloudStatus === 'function') cloudStatus(`Рулон ${rollCode} принят · ${fmtSqftPrice(roll.costPerSqft)} / sq ft`, 'green');
 }
 
 function openFilmIssueModal(id){const r=db.inventory.find(x=>x.id===id);if(!r)return;const cat=getCatalogItem(r.catalogId);state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:34rem"><h3 class="font-semibold text-lg">Списание плёнки</h3><p class="text-sm text-gray-500 mb-4">${academyEsc(catalogLabel(cat))} · Lot ${academyEsc(r.lotNumber||'—')} · есть ${Number(r.remainingLengthM||0).toFixed(2)} м</p><div class="grid grid-cols-2 gap-3"><div><label>Длина, м</label><input id="fi-qty" type="number" min="0.01" step="0.01"></div><div><label>Проект / заказ</label><select id="fi-order"><option value="">Без проекта</option>${warehouseOrders().map(o=>`<option value="${o.id}">${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div><div class="col-span-2"><label>Причина</label><input id="fi-reason" placeholder="Образец, брак, ручное списание..."></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveFilmIssue('${id}')">Списать</button></div></div></div>`;render();}
