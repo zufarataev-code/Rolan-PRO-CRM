@@ -866,3 +866,11 @@ Code head `ecd973bad1ef023e9dd2247799c7da3e6d38bd29`, CI #824 / run 37177592497:
 - Verification: full unit suite and `tsc` green (`design-theme.test.ts` and the menu assertions in accounting, cold-calls, project-constructor-ui, proposal-publishing, mobile-parity). Local CRM at 1440 px and 375 px as owner: every menu item opens its screen with the right title and active item; «+ Создать» → «Задача» focuses the new-task form; user menu and phone «+» work; the manager menu has no owner-only items; installer view unchanged apart from the style.
 - Next: step 2 — numbers-only home (PR #306, stacked on #305); step 3 — «Расчёт и КП» and the calculator in the same style.
 
+## 2026-10-04 handoff — CRM 2.0, step 2: the home screen is numbers only
+
+- Owner request: «на главной я не должен видеть заказы, мне нужны цифры». Decision: DECISIONS.md (2026-10-04, «CRM 2.0 replaces the first canvas look»). Branch `claude/crm2-home`, PR #306 stacked on #305 — open, not deployed.
+- Legacy «CRM 2.0: ГЛАВНАЯ — ТОЛЬКО ЦИФРЫ» block after `renderManagerDashboard` (which now returns `renderCrm2Home()`): `crm2HomeRange` (Сегодня / Неделя / Месяц / Квартал / Год vs the previous period), `crm2HomeSales` (agreed projects: `orderRevenue`, `orderMargin`, `projectProfitability().netProfit`, dated by `projectProfitDate`), `crm2HomeDebts` (overdue = work done > 7 days ago), `crm2HomeMoney` (active accounts without `fin_unallocated`), `crm2HomeGoal` (`db.settings.yearProfitGoal`, default $50 000, «Изменить цель»), `crm2HomeFunnel`, `crm2HomeAds` (`projectMonthAdBudget`, «Реклама» spend), `crm2HomeDirections`, `crm2HomeWorks`, `crm2HomeExpenses` (no owner draw / personal), `crm2HomeAttention` (counters that open filtered lists via `crm2HomeOpenStatus`). Owner sees the company's money; a manager sees Выручка, Сделки, Средний чек, Клиенты должны, Воронка, Работы, По направлениям (revenue only), Требует внимания.
+- The Precision Workbench stays in the code; `visual-architecture.test.ts` now pins the new home.
+- Verification: `crm2-home.test.ts`; full unit suite and `tsc` green. Local CRM at 1440 px and 375 px with temporary in-browser sample projects (not saved): canvas layout, no horizontal scroll on the phone; manager without company money.
+- Next: step 3 — «Расчёт и КП» and the calculator in the CRM 2.0 style.
+
