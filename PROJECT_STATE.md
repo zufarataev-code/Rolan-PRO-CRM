@@ -790,3 +790,11 @@ Rebased `codex/service-solutions-live` onto main `199b0df` (Precision Workbench 
 ### 2026-10-04 UTC — PR #299 verified for release
 
 Code head `ecd973bad1ef023e9dd2247799c7da3e6d38bd29`, CI #824 / run 37177592497: 502 tests, TypeScript, production build, clean database migrations/drift and HTTP lifecycle checks passed. Chromium 390/1440 passed real pricing-screen solution creation, material/price persistence, distinct service crews/dates, workspace reload assertions, no JS errors and no schedule overflow. Screenshots artifact 11294070485 reviewed. The fixture uses a real authenticated session on disposable localhost, explicit resets between widths and acknowledged cloud saves; early browser-gate failures were resolved. Installer reads preserve only their assigned service pay snapshot; manager and other-service rates remain hidden. No schema migration or historical order import is included. Latest change after that code head is documentation only. Next: release PR #299 through main CI and protected production workflow, then verify active build. Do not independently merge overlapping #295/#298 unchanged.
+## 2026-10-01 handoff — one login email per employee (PR #280)
+
+- Owner report (three days): employee «Ринат» showed one email in the card and another in «Доступ».
+- Causes: (1) two PostgreSQL accounts were linked to the same legacy cards (resolved on production 2026-10-01 by deactivating the extra accounts, Owner request); (2) the owner-only fetch guard in `/legacy-crm` stripped `email` from every team PATCH, so «Доступ» reported success while PostgreSQL kept the old address.
+- Fix: only `roles` is stripped; the «Доступ» dialog loads the PostgreSQL account before rendering (Save disabled without one) and reports success only when the server returns the new email; the card sends a new email only when the owner typed it.
+- Verification: full unit suite and `tsc` green; `team-email-edit.test.ts`.
+- Production build: CI job «Test, typecheck, and build» (`npm run build`) runs on every push of PR #280 and is green.
+- Next action: Codex 👍, Owner «да», merge, deploy (no migration).

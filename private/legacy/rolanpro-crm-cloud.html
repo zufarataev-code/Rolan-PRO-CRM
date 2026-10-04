@@ -20141,7 +20141,7 @@ function openTeamMemberEdit(userId) {
       <input id="tm-edit-phone" value="${academyEsc(u.phone || '')}" placeholder="+1 818...">
 
       <label class="mt-3">Почта для входа</label>
-      <input id="tm-edit-email" type="email" value="${academyEsc(u.email || '')}"
+      <input id="tm-edit-email" type="email" value="${academyEsc(u.email || '')}" oninput="this.dataset.touched = '1'"
              placeholder="name@rolan-pro.com"
              ${isOwner ? '' : 'disabled style="opacity:.6;cursor:not-allowed;"'}>
       <div class="text-xs text-gray-400 mt-1">После сохранения новая почта сразу станет логином сотрудника.</div>
@@ -20186,9 +20186,12 @@ async function hydrateTeamMemberAccount(userId) {
     if (!member) return;
 
     const emailInput = document.getElementById('tm-edit-email');
-    if (emailInput && (!emailInput.value || emailInput.value.trim().toLowerCase() === currentEmail)) {
+    // Never overwrite what the owner has already typed.
+    if (emailInput && emailInput.dataset.touched !== '1' && (!emailInput.value || emailInput.value.trim().toLowerCase() === currentEmail)) {
       emailInput.value = member.email || '';
     }
+    // Edits are compared with the server login, not the (possibly stale) card email.
+    if (emailInput) emailInput.dataset.serverEmail = String(member.email || '').trim().toLowerCase();
 
     const roleSelect = document.getElementById('tm-edit-role');
     const serverRole = teamLegacyRoleFromServer(member.roles);
@@ -20250,7 +20253,11 @@ async function submitTeamMemberEdit(userId) {
       if (!member) return fail('Серверная учётная запись сотрудника не найдена. Откройте «Изменить пароль и доступ» и проверьте привязку.');
 
       const canonicalEmail = String(member.email || '').trim().toLowerCase();
-      const emailWasEdited = Boolean(enteredEmail && enteredEmail !== currentEmail);
+      // The login changes only when the owner typed in the field. Until then the
+      // server email is sent back unchanged — also when Save is pressed before the
+      // card has loaded the server email, so a stale card value never wins.
+      const emailTouched = document.getElementById('tm-edit-email')?.dataset.touched === '1';
+      const emailWasEdited = Boolean(emailTouched && enteredEmail && enteredEmail !== canonicalEmail);
       const email = emailWasEdited ? enteredEmail : (canonicalEmail || enteredEmail);
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return fail('Укажите корректную почту для входа.');
@@ -20263,7 +20270,9 @@ async function submitTeamMemberEdit(userId) {
       });
       const update = await updateResponse.json();
       if (!updateResponse.ok) return fail(apiMessage(update, 'Не удалось изменить данные и роль сотрудника.'));
-      u.email = email;
+      // Every card linked to this account (one per field role) gets the new login.
+      new Set([userId, ...(Array.isArray(member.legacyUserIds) ? member.legacyUserIds : [])])
+        .forEach(id => { const card = getUser(id); if (card) card.email = email; });
       u.role = requestedRole;
     } catch (error) {
       console.error('[Team card] employee update failed', error);

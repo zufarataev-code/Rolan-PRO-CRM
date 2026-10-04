@@ -73,12 +73,82 @@ export async function GET(request: NextRequest) {
           }
         };
 
-        window.openTeamMemberAccess = function openTeamMemberAccess(legacyUserId) {
+        // The login email lives in PostgreSQL; the legacy card may hold an older
+        // value. The dialog opens only with the server account's email, so a
+        // quick Save (or a re-render) can never send the stale address back.
+        async function loadTeamAccessAccount(legacyUserId, cardEmail) {
+          try {
+            const response = await fetch('/api/v1/team', { cache: 'no-store' });
+            const list = await response.json();
+            if (!response.ok) return { error: apiMessage(list, 'Не удалось загрузить учётную запись сотрудника.') };
+            const members = Array.isArray(list?.data) ? list.data : [];
+            const knownEmail = String(cardEmail || '').trim().toLowerCase();
+            const member = members.find(
+              (item) => Array.isArray(item.legacyUserIds) && item.legacyUserIds.includes(legacyUserId),
+            ) || (knownEmail ? members.find(
+              (item) => String(item.email || '').trim().toLowerCase() === knownEmail,
+            ) : null);
+            if (!member?.email) return { error: 'Серверная учётная запись сотрудника не найдена. Создайте её в разделе «Сотрудники».' };
+            return { member };
+          } catch (error) {
+            console.error('[Team access] account lookup failed', error);
+            return { error: 'Сервер не ответил. Закройте окно и попробуйте ещё раз.' };
+          }
+        }
+
+        // Every open, close or change of a dialog bumps a generation number, so a
+        // dialog whose data was still loading knows the owner has moved on — even
+        // when the screen is back to «no dialog» or shows identical markup.
+        function installModalGeneration(target) {
+          if (Object.getOwnPropertyDescriptor(target, 'modal')?.set) return;
+          let current = target.modal;
+          window.__modalGeneration = window.__modalGeneration || 0;
+          Object.defineProperty(target, 'modal', {
+            configurable: true,
+            enumerable: true,
+            get() { return current; },
+            set(value) {
+              if (value !== current) window.__modalGeneration += 1;
+              current = value;
+            },
+          });
+        }
+        installModalGeneration(state);
+
+        window.openTeamMemberAccess = async function openTeamMemberAccess(legacyUserId) {
           const user = getUser(legacyUserId);
           if (!user) return;
 
+          // A «Загружаю…» dialog opens at once, so the screen behind it is not
+          // used meanwhile. The access dialog replaces it only if nothing else
+          // happened while the account loaded: a newer click, any dialog opened
+          // or closed, or another section opened wins.
+          const request = (window.__teamAccessRequest || 0) + 1;
+          window.__teamAccessRequest = request;
+          state.modal =
+            '<div class="modal-backdrop" onclick="if(event.target===this) closeModal()">' +
+              '<div class="modal-content workspace-modal p-6">' +
+                '<h3 class="font-semibold text-lg mb-1">Доступ: ' + academyEsc(user.name) + '</h3>' +
+                '<p class="text-sm text-gray-500">Загружаю учётную запись…</p>' +
+              '</div>' +
+            '</div>';
+          render();
+          const modalGenerationWhenClicked = window.__modalGeneration;
+          const viewWhenClicked = state.view;
           window.__teamAccessLegacyUserId = legacyUserId;
-          window.__teamAccessCurrentEmail = user.email || '';
+          const account = await loadTeamAccessAccount(legacyUserId, user.email || '');
+          const loadingStillShown = window.__modalGeneration === modalGenerationWhenClicked;
+          if (
+            window.__teamAccessRequest !== request
+            || !loadingStillShown
+            || state.view !== viewWhenClicked
+          ) {
+            // Another section was opened under our «Загружаю…»: do not leave it hanging.
+            if (window.__teamAccessRequest === request && loadingStillShown) closeModal();
+            return;
+          }
+          const serverEmail = account.member?.email || '';
+          window.__teamAccessCurrentEmail = serverEmail;
 
           state.modal =
             '<div class="modal-backdrop" onclick="if(event.target===this) closeModal()">' +
@@ -87,7 +157,7 @@ export async function GET(request: NextRequest) {
                 '<p class="text-xs text-gray-500 mb-4">Измените почту для входа. Новый пароль задавайте только при необходимости — старый пароль система не показывает.</p>' +
 
                 '<label>Почта для входа</label>' +
-                '<input id="tm-email" type="email" autocomplete="email" value="' + academyEsc(user.email || '') + '" placeholder="name@rolan-pro.com">' +
+                '<input id="tm-email" type="email" autocomplete="email" value="' + academyEsc(serverEmail) + '" placeholder="name@rolan-pro.com"' + (account.member ? '' : ' disabled') + '>' +
 
                 '<label class="mt-3">Новый временный пароль</label>' +
                 '<div class="flex gap-2">' +
@@ -103,10 +173,10 @@ export async function GET(request: NextRequest) {
                   '<div class="text-xs text-gray-500 mt-2">Это обычный вход на сервер. Сотруднику не нужно скачивать HTML-файл или хранить CRM на телефоне.</div>' +
                 '</div>' +
 
-                '<div id="tm-error" class="text-sm text-red-600 mt-3 hidden"></div>' +
+                '<div id="tm-error" class="text-sm text-red-600 mt-3' + (account.error ? '' : ' hidden') + '">' + academyEsc(account.error || '') + '</div>' +
 
                 '<div class="flex gap-2 mt-5">' +
-                  '<button class="btn-primary flex-1" onclick="submitTeamMemberAccess()">Сохранить</button>' +
+                  '<button class="btn-primary flex-1" onclick="submitTeamMemberAccess()"' + (account.member ? '' : ' disabled') + '>Сохранить</button>' +
                   '<button class="btn-ghost" onclick="closeModal()">Отмена</button>' +
                 '</div>' +
               '</div>' +
@@ -167,13 +237,18 @@ export async function GET(request: NextRequest) {
             if (!updateResponse.ok) {
               return showTeamError(apiMessage(updateResult, 'Не удалось обновить доступ сотрудника.'));
             }
-
-            const legacyUser = getUser(legacyUserId);
-            if (legacyUser) {
-              legacyUser.email = email;
-              save();
+            const savedEmail = String(updateResult?.data?.email || '').trim().toLowerCase();
+            if (savedEmail !== email) {
+              return showTeamError('Сервер не сохранил новую почту. Обновите страницу и попробуйте ещё раз.');
             }
-            window.__teamAccessCurrentEmail = email;
+
+            // An employee with several field roles has one card per role: every
+            // linked card shows the new login, not only the one that was opened.
+            const linkedIds = new Set([legacyUserId, ...(Array.isArray(member.legacyUserIds) ? member.legacyUserIds : [])]);
+            linkedIds.forEach((id) => { const card = getUser(id); if (card) card.email = savedEmail; });
+            const legacyUser = getUser(legacyUserId);
+            save();
+            window.__teamAccessCurrentEmail = savedEmail;
 
             if (password) {
               return showTeamPasswordResult(
@@ -235,8 +310,10 @@ export async function GET(request: NextRequest) {
         });
 
         // The existing «Команда» section keeps phone, photo and pay settings.
-        // Roles, login email and access are edited only in the canonical
-        // directory: the old single-role editor would drop secondary roles.
+        // Roles are edited only in the canonical directory: the old
+        // single-role editor would drop secondary roles. The login email may be
+        // changed here too — it goes straight to the PostgreSQL account, so the
+        // card, the access dialog and the login all show the same address.
         const originalRenderTeam = window.renderTeam;
         if (typeof originalRenderTeam === 'function') {
           window.renderTeam = function renderTeamWithDirectory() {
@@ -256,14 +333,13 @@ export async function GET(request: NextRequest) {
             try {
               const body = JSON.parse(init.body);
               delete body.roles;
-              delete body.email;
               init = { ...init, body: JSON.stringify(body) };
             } catch (_) { /* not JSON: send as is */ }
           }
           return nativeTeamFetch(input, init);
         };
         new MutationObserver(() => {
-          ['tm-edit-role', 'tm-edit-email'].forEach((id) => {
+          ['tm-edit-role'].forEach((id) => {
             const field = document.getElementById(id);
             if (field && !field.disabled) {
               field.disabled = true;
