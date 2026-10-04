@@ -37,7 +37,7 @@ test("menu and dock use stroke icons; the dock's «+» opens «Создать»"
   for (const title of ["Новый проект", "Клиент", "Лиды", "Задача", "Приход рулона", "Закупка"]) assert.match(String(state.modal), new RegExp(title));
 
   assert.match(html, /<span class="nav-icon">\$\{navIconSvg\(key, icon\)\}<\/span>/);
-  assert.match(html, /\['create', 'Создать', '\+'\],/);
+  assert.match(html, /class="pulse-mobile-header"[\s\S]*?onclick="openCreateSheet\(\)"/);
   assert.match(html, /<button type="button" class="mobile-fab-slot" onclick="openCreateSheet\(\)" aria-label="Создать">/);
   assert.match(html, /\$\{mobileNavItems\.length < 5 \? `<button type="button"/, "«Ещё» stays for the field roles' 4-item dock");
   assert.match(DESIGN_THEME_CSS, /html body \.rp-create-sheet\[data-rolanpro-mobile-action-row\] \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\) !important;/);

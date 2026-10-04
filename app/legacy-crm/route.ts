@@ -8,6 +8,7 @@ import { ROLE_CODES } from "@/lib/auth/constants";
 import { getEnv } from "@/lib/env";
 import { replaceLegacyBootstrapLogin } from "@/features/legacy-crm/html-shell";
 import { BEFORE_PAINT_SCRIPT } from "@/features/legacy-crm/before-paint";
+import { PULSE_THEME_HTML } from "@/features/legacy-crm/pulse-theme";
 import { DESIGN_THEME_HTML } from "@/features/legacy-crm/design-theme";
 
 export const dynamic = "force-dynamic";
@@ -527,7 +528,7 @@ ${BEFORE_PAINT_SCRIPT}
   const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
   const privilegedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
   // The owner's design canvas as one visual layer for every role (2026-10-04).
-  const injectedUi = `${DESIGN_THEME_HTML}${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}${previewPatch}`;
+  const injectedUi = `${DESIGN_THEME_HTML}${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}${previewPatch}${PULSE_THEME_HTML}`;
   const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0
     ? `${cloudHtml.slice(0, closingBodyIndex)}${injectedUi}${cloudHtml.slice(closingBodyIndex)}`

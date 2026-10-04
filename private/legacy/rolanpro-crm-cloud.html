@@ -7300,7 +7300,7 @@ let state = {
   sidebarCollapsed: false,
   mobileSidebarOpen: false,
   settingsSection: null,
-  ordersView: 'kanban',
+  ordersView: null, // Phone defaults to cards; desktop to the existing kanban.
   ordersPeriod: 'all',
   ordersKanbanFullscreen: false,
   proposalsRegistry: null,
@@ -17613,11 +17613,9 @@ function renderAppShell() {
   ] : [];
 
   const mobileNavItems = (role === 'manager' || role === 'owner') ? [
-    ['dashboard', 'Сегодня', '⌂'],
-    ['leads', 'Лиды', '◎'],
-    ['create', 'Создать', '+'],
-    ['orders', 'Проекты', '▣'],
-    ['calendar', 'Календарь', '□'],
+    ['dashboard', 'Обзор', '⌂'],
+    ['orders', 'Продажи', '▣'],
+    ['tasks', 'Задачи', '✓'],
   ] : (role === 'measurer') ? [
     ['dashboard', 'Сегодня', '⌂'],
     ['calendar', 'Календарь', '□'],
@@ -17674,6 +17672,7 @@ function renderAppShell() {
 
     <!-- Main -->
     <main class="app-main" data-scroll-key="app-main">
+      ${canSearch ? `<div class="pulse-mobile-header"><img src="/landing/rolanpro-mobile-logo.png" alt="ROLANPRO" class="pulse-logo"><button type="button" onclick="openCreateSheet()" aria-label="Создать">${navIconSvg('plus', '+')}</button></div>` : ''}
       <header class="app-topbar">
         <button class="topbar-icon-btn" onclick="toggleSidebar()" title="${collapsed ? 'Открыть меню' : 'Скрыть меню'}">☰</button>
         <div class="topbar-title">
@@ -17737,8 +17736,7 @@ function headerTitle() {
   const u = currentUser();
   switch (state.view) {
     case 'dashboard':
-      if (u.role === 'owner') return T('welcomeOwner');
-      if (u.role === 'manager') return T('welcomeManager');
+      if (u.role === 'owner' || u.role === 'manager') return 'Пульс бизнеса';
       if (u.role === 'measurer') return T('welcomeMeasurer');
       return T('welcomeInstaller');
     case 'orders': return T('orders');
@@ -19277,8 +19275,73 @@ function renderPrecisionManagerDashboard() {
   </section>`;
 }
 
+function pulsePeriodRange(period, now = new Date()) {
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  let start;
+  if (period === 'day') start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  else if (period === 'week') {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  } else start = new Date(now.getFullYear(), now.getMonth(), 1);
+  return { start, end };
+}
+
+// Presentation aggregates only: monetary values reuse the existing orderRevenue
+// calculation. This is the value of paid projects, not a bank cash-flow report.
+function pulseBusinessSnapshot(user, period, now = new Date()) {
+  const orders = visibleOrdersForUser(user);
+  const { start, end } = pulsePeriodRange(period, now);
+  const within = value => {
+    if (!value) return false;
+    const date = new Date(value);
+    return date >= start && date < end;
+  };
+  const paid = orders.filter(order => within(order.paidAt));
+  const created = orders.filter(order => within(order.createdAt));
+  const dayCount = Math.round((end - start) / 86400000);
+  const bucketDays = period === 'month' ? 7 : 1;
+  const bars = [];
+  for (let offset = 0; offset < dayCount; offset += bucketDays) {
+    const from = new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset);
+    const to = new Date(start.getFullYear(), start.getMonth(), start.getDate() + Math.min(offset + bucketDays, dayCount));
+    bars.push({ label: from.toLocaleDateString(state.lang === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'short' }),
+      value: paid.filter(order => new Date(order.paidAt) >= from && new Date(order.paidAt) < to)
+        .reduce((sum, order) => sum + orderRevenue(order), 0) });
+  }
+  return { start, end, bars, paid: paid.length, created: created.length,
+    revenue: paid.reduce((sum, order) => sum + orderRevenue(order), 0),
+    active: orders.filter(order => !['completed', 'review_received'].includes(order.status)).length,
+    clients: visibleClientsForUser(user).length };
+}
+
+function renderPulseBusinessDashboard() {
+  const user = currentUser();
+  const period = ['month', 'week', 'day'].includes(state.pulsePeriod) ? state.pulsePeriod : 'month';
+  const data = pulseBusinessSnapshot(user, period);
+  const max = Math.max(1, ...data.bars.map(bar => bar.value));
+  const money = value => academyEsc(fmtMoney(value));
+  const rangeLabel = data.start.toLocaleDateString(state.lang === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'long' })
+    + ' — ' + new Date(data.end - 1).toLocaleDateString(state.lang === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  const rows = [
+    { icon: 'orders', color: 'violet', label: 'Новые проекты', value: data.created, note: 'За выбранный период', view: 'orders' },
+    { icon: 'accounting', color: 'green', label: 'Оплаченные проекты', value: data.paid, note: 'За выбранный период', view: 'orders' },
+    { icon: 'clients', color: 'amber', label: user.role === 'owner' ? 'Клиенты' : 'Мои клиенты', value: data.clients, note: 'Всего в CRM', view: 'clients' },
+    { icon: 'orders', color: 'cyan', label: 'Активные проекты', value: data.active, note: 'На текущий момент', view: 'orders' },
+  ];
+  return `<section class="pulse-dashboard" aria-label="Пульс бизнеса">
+    <div class="pulse-heading"><span>ROLANPRO · ${user.role === 'owner' ? 'Бизнес' : 'Мои показатели'}</span><h2>Пульс бизнеса</h2><p>${academyEsc(rangeLabel)}</p></div>
+    <div class="pulse-period" role="group" aria-label="Период показателей">${[['month','Месяц'],['week','Неделя'],['day','День']].map(([key,label]) => `<button type="button" aria-pressed="${period === key}" class="${period === key ? 'active' : ''}" onclick="state.pulsePeriod='${key}'; render();">${label}</button>`).join('')}</div>
+    <div class="pulse-layout"><article class="pulse-revenue"><div class="pulse-caption">Стоимость оплаченных проектов</div><strong class="pulse-total">${money(data.revenue)}</strong><p class="pulse-scope">${user.role === 'owner' ? 'По всем доступным проектам' : 'По вашим проектам'} · ${data.paid} оплачено</p>
+      <div class="pulse-chart ${data.paid ? '' : 'is-empty'}" role="img" aria-label="Стоимость оплаченных проектов по датам: ${academyEsc(data.bars.map(bar => bar.label + ': ' + fmtMoney(bar.value)).join('; '))}">${data.bars.map((bar, index) => `<div class="pulse-bar-col"><span>${money(bar.value)}</span><div class="pulse-bar-track"><i style="height:${Math.max(0, bar.value / max * 100)}%;--bar-color:${index === data.bars.length - 1 ? '#168BAE' : '#29A7E1'}"></i></div><small>${academyEsc(bar.label)}</small></div>`).join('')}</div>
+      ${data.paid ? '' : '<div class="pulse-empty">За этот период оплаченных проектов нет.</div>'}
+      <div class="pulse-footnote">Стоимость проектов с датой оплаты. Поступления и расходы — в финансовых отчётах.</div>
+    </article><div class="pulse-metrics">${rows.map(row => `<button type="button" class="pulse-metric" onclick="selectAppView('${row.view}')"><span class="pulse-metric-icon ${row.color}">${navIconSvg(row.icon)}</span><span class="pulse-metric-copy"><b>${row.label}</b><small>${row.note}</small></span><strong>${row.value}</strong><span class="pulse-arrow">›</span></button>`).join('')}
+      <button type="button" class="pulse-report-link" onclick="selectAppView('reports')">Разобрать показатели ${navIconSvg('reports')}</button></div></div>
+    <details class="pulse-operations"><summary>Операционный центр · действия и монтажи</summary>${renderPrecisionManagerDashboard()}</details>
+  </section>`;
+}
+
 function renderManagerDashboard() {
-  return renderPrecisionManagerDashboard();
+  return renderPulseBusinessDashboard();
 }
 
 // ---------- MANAGER: ORDERS ----------
@@ -19895,7 +19958,7 @@ function renderOrders() {
     })
     .sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
-  const ordersView = state.ordersView || 'kanban';
+  const ordersView = state.ordersView || (isCompactViewport() ? 'list' : 'kanban');
   const totalArea = filtered.reduce((s,o)=>s+(orderActualAreaSqft(o) || orderPlannedAreaSqft(o)),0);
   const totalSum  = filtered.reduce((s,o)=>s+orderKanbanRevenue(o),0);
   const hasFilters = state.search || state.statusFilter || (u?.role === 'owner' && state.managerFilter) || state.dateFrom || state.dateTo;
@@ -19929,6 +19992,7 @@ function renderOrders() {
           <button class="${ordersView==='list'?'active':''}" onclick="state.ordersView='list'; render();">Список</button>
         </div>
       </div>
+      <details class="pulse-order-filters" ${isCompactViewport() ? '' : 'open'}><summary>Период и фильтры${hasFilters ? ' · активны' : ''}</summary><div class="pulse-order-filter-grid">
       <div class="orders-filter-field compact">
         <label>Период</label>
         ${renderOrdersPeriodToggle()}
@@ -19955,6 +20019,7 @@ function renderOrders() {
         <label>${T('dateTo')}</label>
         <input type="date" value="${state.dateTo}" onchange="setOrdersDateTo(this.value)">
       </div>
+      </div></details>
     </div>
 
     <div class="orders-summary-line">
