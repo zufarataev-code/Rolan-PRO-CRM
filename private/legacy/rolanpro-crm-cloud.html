@@ -19276,8 +19276,279 @@ function renderPrecisionManagerDashboard() {
   </section>`;
 }
 
+// ---------- ДИЗАЙН: СЕГОДНЯ (Owner, 2026-10-04) ----------
+// The «Сегодня» screen from the owner's design canvas, on live CRM data: a day
+// hero with the greeting, the main thing to do and the week's revenue; crews
+// now; four tiles (leads without an answer, proposals waiting, installs today,
+// money to collect); today's visits with routes; the action queue (the same
+// order and next steps as the Precision Workbench); revenue and margin by
+// week; progress to the month's break-even. Money blocks are the owner's.
+const TODAY_LIVE_STATUSES = ['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'];
+const TODAY_CONTRACTED_STATUSES = ['proposal_accepted', ...TODAY_LIVE_STATUSES, 'installation_done', 'act_signed', 'payment_received'];
+const TODAY_TILE_GRADIENTS = {
+  red: ['linear-gradient(135deg,#EF6A4C,#C2402A)', 'rgba(194,64,42,.9)'],
+  amber: ['linear-gradient(135deg,#F0962B,#C25A0C)', 'rgba(194,90,12,.9)'],
+  green: ['linear-gradient(135deg,#34B573,#1C7A48)', 'rgba(28,122,72,.9)'],
+  blue: ['linear-gradient(135deg,#3D7BD8,#22488F)', 'rgba(34,72,143,.9)'],
+};
+let todayLeadsFetchedAt = 0;
+
+function todayInitials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || parts[0]?.[1] || '')).toUpperCase() || '•';
+}
+
+function todayGreeting(now = new Date()) {
+  const hour = now.getHours();
+  return hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
+}
+
+function todayDayKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/** Money received between two dates (payments are dated YYYY-MM-DD). */
+function todayPaymentsBetween(orders, from, to) {
+  const start = todayDayKey(from);
+  const end = todayDayKey(to);
+  return orders.reduce((sum, order) => sum + orderPayments(order)
+    .filter(payment => { const day = String(payment.date || '').slice(0, 10); return day >= start && day < end; })
+    .reduce((acc, payment) => acc + (Number(payment.amount) || 0), 0), 0);
+}
+
+function todayWeekRevenue(orders, now = new Date()) {
+  const day = 24 * 60 * 60 * 1000;
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const current = todayPaymentsBetween(orders, new Date(tomorrow - 7 * day), tomorrow);
+  const previous = todayPaymentsBetween(orders, new Date(tomorrow - 14 * day), new Date(tomorrow - 7 * day));
+  return { current, previous, deltaPct: previous > 0 ? Math.round((current - previous) / previous * 100) : null };
+}
+
+/** Website and Messenger leads nobody has taken yet, plus new projects without a first contact. */
+function todayOpenLeads(orders, now = new Date()) {
+  const canonical = typeof canonicalMessengerLeadRows === 'function' ? canonicalMessengerLeadRows().filter(lead => !lead.claimedAt) : [];
+  const fresh = orders.filter(order => order.status === 'new');
+  const times = [...canonical.map(lead => lead.receivedAt), ...fresh.map(order => order.createdAt)]
+    .map(value => new Date(value).getTime()).filter(Number.isFinite);
+  const oldestHours = times.length ? Math.max(0, Math.floor((now.getTime() - Math.min(...times)) / 3600000)) : 0;
+  return { count: canonical.length + fresh.length, oldestHours };
+}
+
+/** Each install in progress today, with its crew and how far along it is. */
+function todayCrews(active) {
+  return active
+    .filter(order => TODAY_LIVE_STATUSES.includes(order.status))
+    .sort((a, b) => String(a.installationAt || '9999').localeCompare(String(b.installationAt || '9999')))
+    .slice(0, 4)
+    .map(order => {
+      const names = (order.installerIds || []).map(id => getUser(id)?.name).filter(Boolean);
+      const step = Math.max(0, TODAY_LIVE_STATUSES.indexOf(order.status));
+      const colors = ['#B97500', '#C24E12', '#2E5FA8', '#1C8A52'];
+      return {
+        order,
+        crew: names.join(' + ') || 'Бригада не назначена',
+        initials: todayInitials(names[0] || getClient(order.clientId)?.name),
+        status: `${getClient(order.clientId)?.name || order.number} · ${T(order.status)}`,
+        progress: Math.round((step + 1) / TODAY_LIVE_STATUSES.length * 100),
+        color: colors[step],
+      };
+    });
+}
+
+/** This month's weeks: money received and the margin of projects dated in that week. */
+function todayRevenueWeeks(orders, now = new Date()) {
+  const weeks = [];
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  for (let start = new Date(monthStart); start < monthEnd; start = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7)) {
+    const end = new Date(Math.min(monthEnd.getTime(), new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7).getTime()));
+    const projects = orders.filter(order => { const date = projectProfitDate(order); return date >= start && date < end && orderRevenue(order) > 0; });
+    const revenue = projects.reduce((sum, order) => sum + orderRevenue(order), 0);
+    const margin = projects.reduce((sum, order) => sum + orderMargin(order), 0);
+    weeks.push({ label: `${start.getDate()}–${new Date(end - 1).getDate()}`, received: todayPaymentsBetween(orders, start, end), revenue, marginPct: revenue > 0 ? Math.round(margin / revenue * 100) : null, future: start > now });
+  }
+  return weeks;
+}
+
+/** The month's revenue against the break-even: fixed costs / the month's margin rate. */
+function todayMonthPlan(orders, now = new Date()) {
+  const monthOrders = orders.filter(order => { const date = projectProfitDate(order); return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && orderRevenue(order) > 0; });
+  const revenue = monthOrders.reduce((sum, order) => sum + orderRevenue(order), 0);
+  const margin = monthOrders.reduce((sum, order) => sum + orderMargin(order), 0);
+  const marginRate = revenue > 0 ? margin / revenue : 0;
+  const fixed = projectMonthlyFixedExpensePool();
+  const breakEven = marginRate > 0 ? fixed / marginRate : 0;
+  return {
+    revenue,
+    marginPct: revenue > 0 ? Math.round(marginRate * 100) : null,
+    averageCheck: monthOrders.length ? revenue / monthOrders.length : 0,
+    breakEven,
+    pct: breakEven > 0 ? Math.min(999, Math.round(revenue / breakEven * 100)) : 0,
+    daysLeft: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate(),
+  };
+}
+
+function todayAsk(text) {
+  const question = String(text || document.getElementById('rp-today-ask')?.value || '').trim();
+  if (!question) return;
+  state.aiSidebarOpen = true;
+  aiAsk(question);
+}
+
+function todayRevenueChartSvg(weeks) {
+  const width = 700, height = 190, top = 20, bottom = 170;
+  const max = Math.max(1, ...weeks.map(week => Math.max(week.revenue, week.received)));
+  const x = index => weeks.length > 1 ? 20 + index * (width - 40) / (weeks.length - 1) : width / 2;
+  const y = value => bottom - (bottom - top) * value / max;
+  // Weeks still ahead are not drawn as zero: the lines stop at the current week.
+  const shown = Math.max(1, weeks.filter(week => !week.future).length);
+  const line = key => weeks.slice(0, shown).map((week, index) => `${index ? 'L' : 'M'}${x(index).toFixed(1)} ${y(week[key]).toFixed(1)}`).join(' ');
+  const area = `${line('revenue')} L${x(shown - 1).toFixed(1)} ${bottom} L${x(0).toFixed(1)} ${bottom} Z`;
+  return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" class="rp-today-chart-svg" role="img" aria-label="Выручка и маржа по неделям">
+    <defs><linearGradient id="rpTodayArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3DB5D9" stop-opacity=".45"></stop><stop offset="1" stop-color="#3DB5D9" stop-opacity="0"></stop></linearGradient><linearGradient id="rpTodayLine" x1="0" x2="1"><stop offset="0" stop-color="#3DB5D9"></stop><stop offset="1" stop-color="#2E5FA8"></stop></linearGradient></defs>
+    <g stroke="#E6ECF4" stroke-width="1">${[top, (top + bottom) / 2, bottom].map(value => `<line x1="0" y1="${value}" x2="${width}" y2="${value}"></line>`).join('')}</g>
+    <path d="${area}" fill="url(#rpTodayArea)"></path>
+    <path d="${line('revenue')}" fill="none" stroke="url(#rpTodayLine)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="${line('received')}" fill="none" stroke="#F0962B" stroke-width="2.5" stroke-dasharray="7 6" stroke-linecap="round"></path>
+    ${weeks.slice(0, shown).map((week, index) => `<circle cx="${x(index).toFixed(1)}" cy="${y(week.revenue).toFixed(1)}" r="5" fill="#fff" stroke="#2E5FA8" stroke-width="3"></circle>`).join('')}
+  </svg>`;
+}
+
+function renderCanvasTodayDashboard() {
+  const user = currentUser();
+  const owner = user?.role === 'owner';
+  const now = new Date();
+  const orders = visibleOrdersForUser(user);
+  const active = orders.filter(order => !['completed', 'review_received'].includes(order.status));
+  if (Date.now() - todayLeadsFetchedAt > 60000 && typeof fetchCanonicalLeads === 'function') {
+    todayLeadsFetchedAt = Date.now();
+    fetchCanonicalLeads().then(() => { if (state.view === 'dashboard') render(); });
+  }
+  const actions = active
+    .map(order => ({ order, action: precisionManagerAction(order) }))
+    .filter(item => item.action)
+    .sort((a, b) => ((precisionDateIsToday(b.action.date) ? 1 : 0) - (precisionDateIsToday(a.action.date) ? 1 : 0))
+      || (b.action.priority - a.action.priority)
+      || String(a.action.date || '9999').localeCompare(String(b.action.date || '9999')));
+  // The calendar's own role rules decide which visits this person sees.
+  const visits = calendarEventsOnDayFull(now).sort((a, b) => a.dt - b.dt);
+  const leads = todayOpenLeads(orders, now);
+  const proposals = active.filter(order => order.status === 'proposal_sent');
+  const installsToday = active.filter(order => TODAY_LIVE_STATUSES.includes(order.status) && (!order.installationAt || precisionDateIsToday(order.installationAt)));
+  // Money to collect: projects the client has agreed to (proposal accepted and later).
+  const debts = active
+    .filter(order => TODAY_CONTRACTED_STATUSES.includes(order.status))
+    .map(order => ({ order, debt: orderDebt(order) }))
+    .filter(item => item.debt > 0);
+  const crews = todayCrews(active);
+  const week = todayWeekRevenue(orders, now);
+  const top = actions[0];
+  const topClient = top ? (getClient(top.order.clientId)?.name || top.order.number) : '';
+  const firstName = String(user?.name || '').split(/\s+/)[0] || '';
+  const dateLabel = now.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+  const tile = (gradient, label, value, sub, note, onclick, pulse = false) => `<button type="button" class="rp-today-tile" style="background:${TODAY_TILE_GRADIENTS[gradient][0]};box-shadow:0 14px 26px -14px ${TODAY_TILE_GRADIENTS[gradient][1]}" onclick="${onclick}">
+      <span class="rp-today-tile-label"><i class="${pulse ? 'rp-pulse' : ''}"></i>${label}</span>
+      <span class="rp-today-tile-value"><b>${value}</b>${sub ? `<em>${sub}</em>` : ''}</span>
+      <span class="rp-today-tile-note">${note}</span>
+    </button>`;
+  const asks = ['Кто не заплатил?', 'Кого поставить на завтра?', 'Маржа за месяц', 'Какие КП ждут ответа?'];
+  const weeks = owner ? todayRevenueWeeks(orders, now) : [];
+  const plan = owner ? todayMonthPlan(orders, now) : null;
+  const ring = 2 * Math.PI * 70;
+
+  return `<section class="rp-today">
+    <section class="rp-today-hero">
+      <div class="rp-today-hero-top">
+        <div class="rp-today-hero-text">
+          <div class="rp-today-kicker">${academyEsc(dateLabel)}</div>
+          <h2>${todayGreeting(now)}${firstName ? `, ${academyEsc(firstName)}` : ''}</h2>
+          <p>Сегодня ${visits.length} ${visits.length === 1 ? 'выезд' : visits.length >= 2 && visits.length <= 4 ? 'выезда' : 'выездов'} и ${actions.length} дел ждут решения.${top ? ` Главное — <b>${academyEsc(topClient)}: ${academyEsc(top.action.reason)}</b>.` : ' Срочного нет.'}</p>
+        </div>
+        ${owner ? `<div class="rp-today-week">
+          <span>Получено за 7 дней</span>
+          <b>${fmtMoney(week.current)}</b>
+          ${week.deltaPct === null ? '' : `<em class="${week.deltaPct >= 0 ? 'up' : 'down'}">${week.deltaPct >= 0 ? '▲' : '▼'} ${Math.abs(week.deltaPct)}% к прошлой неделе</em>`}
+        </div>` : ''}
+      </div>
+      <label class="rp-today-ask">
+        <span class="rp-today-ask-icon">${navIconSvg('reviews')}</span>
+        <input id="rp-today-ask" aria-label="Спросить ассистента" placeholder="Спросите RolanPRO: кто не заплатил? кого поставить на завтра?" onkeydown="if(event.key==='Enter'){event.preventDefault();todayAsk();}">
+        <button type="button" onclick="todayAsk()">Спросить</button>
+      </label>
+      <div class="rp-today-asks-wrap"><div class="rp-today-asks">${asks.map(question => `<button type="button" onclick="todayAsk('${question}')">${question}</button>`).join('')}</div></div>
+    </section>
+
+    <section class="rp-today-card rp-today-crews">
+      <div class="rp-today-card-head"><h3>Бригады сейчас</h3><span class="rp-today-live"><i></i>Live</span></div>
+      ${crews.length ? crews.map(item => `<button type="button" class="rp-today-crew" onclick="openOrder('${item.order.id}')">
+        <span class="rp-today-avatar" style="background:${item.color}">${academyEsc(item.initials)}</span>
+        <span class="rp-today-crew-text"><b>${academyEsc(item.crew)}</b><small style="color:${item.color}">${academyEsc(item.status)}</small></span>
+        <svg width="42" height="42" viewBox="0 0 42 42" aria-label="Готово ${item.progress}%"><circle cx="21" cy="21" r="16" fill="none" stroke="#E6ECF4" stroke-width="4"></circle><circle cx="21" cy="21" r="16" fill="none" stroke="${item.color}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${(2 * Math.PI * 16 * item.progress / 100).toFixed(1)} ${(2 * Math.PI * 16).toFixed(1)}" transform="rotate(-90 21 21)"></circle></svg>
+      </button>`).join('') : '<div class="rp-today-empty">Сейчас монтажей нет.</div>'}
+    </section>
+
+    <div class="rp-today-tiles">
+      ${tile('red', 'Лиды без ответа', leads.count, '', leads.count ? `ждёт ${leads.oldestHours} ч · ответить за 5 мин` : 'все лиды разобраны', "selectAppView('leads')", leads.count > 0)}
+      ${tile('amber', 'КП ждут', proposals.length, fmtMoney(proposals.reduce((sum, order) => sum + orderRevenue(order), 0)), proposals.length ? 'ждут решения клиента' : 'нет отправленных КП', "selectAppView('proposals')")}
+      ${tile('green', 'Монтажей', installsToday.length, crews.length ? `${new Set(crews.flatMap(item => item.order.installerIds || [])).size} чел.` : '', installsToday.length ? 'сегодня и в работе' : 'сегодня монтажей нет', "selectAppView('calendar')")}
+      ${tile('blue', 'К сбору', debts.length, fmtMoney(debts.reduce((sum, item) => sum + item.debt, 0)), debts.length ? 'остаток по проектам' : 'долгов нет', "selectAppView('paymentsdue')")}
+    </div>
+
+    <section class="rp-today-card rp-today-visits">
+      <div class="rp-today-card-head"><div><h3>Выезды сегодня</h3><small>Консультации, замеры и монтажи · с маршрутом</small></div><button type="button" class="btn-ghost text-sm" onclick="selectAppView('calendar')">Календарь →</button></div>
+      ${visits.length ? visits.map(event => {
+        const order = getOrder(event.o?.id) || event.o;
+        const known = !!getOrder(event.o?.id);
+        const client = getClient(order?.clientId);
+        const address = orderAddress(order, client);
+        const palette = { consultation: '#E9A92A', measure: '#7C64D5', install: '#1C8A52', complaint: '#D14A2E' }[event.kind] || '#2E5FA8';
+        return `<div class="rp-today-visit">
+          <span class="rp-today-visit-time">${event.dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+          <span class="rp-today-visit-kind" style="background:${palette}">${academyEsc(event.info?.short || '')}</span>
+          <button type="button" class="rp-today-visit-main" onclick="${known ? `openOrder('${order.id}')` : `selectAppView('calendar')`}"><b>${academyEsc(client?.name || order?.number || 'Проект')}</b><small>${academyEsc(address || 'Адрес не указан')}${event.note ? ` · ${academyEsc(event.note)}` : ''}</small></button>
+          ${address ? `<a class="btn-ghost text-sm" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}" target="_blank" rel="noopener">Маршрут</a>` : ''}
+        </div>`;
+      }).join('') : '<div class="rp-today-empty">На сегодня выездов нет.</div>'}
+    </section>
+
+    <section class="rp-today-card rp-today-actions">
+      <div class="rp-today-card-head"><h3>Требует действия</h3><button type="button" class="btn-ghost text-sm" onclick="selectAppView('orders')">Все ${actions.length} →</button></div>
+      ${actions.length ? actions.slice(0, 6).map(({ order, action }) => {
+        const client = getClient(order.clientId);
+        return `<div class="rp-today-action">
+          <span class="rp-today-avatar" style="background:${action.color}">${academyEsc(todayInitials(client?.name || order.number))}</span>
+          <span class="rp-today-action-text"><b>${academyEsc(client?.name || order.number || 'Проект')}</b><small>${academyEsc(action.reason)}</small></span>
+          <button type="button" class="btn-primary text-sm" onclick="openOrder('${order.id}')">${academyEsc(action.next)}</button>
+        </div>`;
+      }).join('') : '<div class="rp-today-empty">Всё сделано — новых дел нет.</div>'}
+    </section>
+
+    ${owner ? `<section class="rp-today-card rp-today-revenue">
+      <div class="rp-today-card-head"><div><h3>Выручка и маржа</h3><small>${academyEsc(now.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }))}, по неделям</small></div><div class="rp-today-legend"><span><i class="rev"></i>Проекты</span><span><i class="got"></i>Получено</span></div></div>
+      ${weeks.some(item => item.revenue > 0 || item.received > 0) ? todayRevenueChartSvg(weeks) : '<div class="rp-today-empty">В этом месяце ещё нет проектов с суммой.</div>'}
+      <div class="rp-today-weeks">${weeks.map(item => `<span><b>${academyEsc(item.label)}</b>${fmtMoney(item.revenue)}${item.marginPct === null ? '' : ` · маржа ${item.marginPct}%`}</span>`).join('')}</div>
+    </section>
+
+    <section class="rp-today-plan">
+      <div class="rp-today-card-head"><h3>План месяца</h3><small>осталось ${plan.daysLeft} дн.</small></div>
+      <svg width="170" height="170" viewBox="0 0 170 170" role="img" aria-label="Безубыточность выполнена на ${plan.pct}%">
+        <defs><linearGradient id="rpTodayRing" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#BFE7F3"></stop><stop offset=".5" stop-color="#3DB5D9"></stop><stop offset="1" stop-color="#2E5FA8"></stop></linearGradient></defs>
+        <circle cx="85" cy="85" r="70" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="14"></circle>
+        <circle cx="85" cy="85" r="70" fill="none" stroke="url(#rpTodayRing)" stroke-width="14" stroke-linecap="round" stroke-dasharray="${(ring * Math.min(100, plan.pct) / 100).toFixed(1)} ${ring.toFixed(1)}" transform="rotate(-90 85 85)"></circle>
+        <text x="85" y="84" text-anchor="middle" class="rp-today-ring-value">${plan.pct}%</text>
+        <text x="85" y="106" text-anchor="middle" class="rp-today-ring-sub">${plan.breakEven > 0 ? `${fmtMoney(plan.revenue)} из ${fmtMoney(plan.breakEven)}` : 'нет маржи месяца'}</text>
+      </svg>
+      <div class="rp-today-plan-note">Цель — безубыточность: постоянные расходы ÷ маржа месяца.</div>
+      <div class="rp-today-plan-grid"><div><span>Маржа</span><b>${plan.marginPct === null ? '—' : plan.marginPct + '%'}</b></div><div><span>Средний чек</span><b>${fmtMoney(plan.averageCheck)}</b></div></div>
+    </section>` : ''}
+  </section>`;
+}
+
 function renderManagerDashboard() {
-  return renderPrecisionManagerDashboard();
+  // Owner, 2026-10-04: «Сегодня» from the design canvas; the Precision Workbench
+  // queue logic (precisionManagerAction) drives its «Требует действия».
+  return renderCanvasTodayDashboard();
 }
 
 // ---------- MANAGER: ORDERS ----------

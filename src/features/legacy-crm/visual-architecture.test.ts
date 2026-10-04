@@ -62,7 +62,9 @@ test("manager home is an action workbench instead of a KPI card wall", () => {
   assert.match(source, /Следующий шаг/);
   assert.match(source, /Исключения/);
   assert.match(source, /Монтажи в работе/);
-  assert.match(source, /function renderManagerDashboard\(\) \{\s*return renderPrecisionManagerDashboard\(\);/);
+  // Owner, 2026-10-04: the screen is the design canvas «Сегодня»; the workbench queue logic drives its actions.
+  assert.match(source, /function renderManagerDashboard\(\) \{[\s\S]*?return renderCanvasTodayDashboard\(\);/);
+  assert.match(source, /function renderCanvasTodayDashboard\(\) \{[\s\S]*?\.map\(order => \(\{ order, action: precisionManagerAction\(order\) \}\)\)/);
 });
 
 test("manager workbench exposes the complete eight-stage operating funnel", () => {
