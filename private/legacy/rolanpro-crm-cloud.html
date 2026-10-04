@@ -17189,6 +17189,7 @@ function parseHash() {
   const p = h.match(/^#\/proposal\/([^/]+)/);
   if (p) { state.premiumProposalToken = p[1]; }
   else { state.premiumProposalToken = null; }
+  if (/^#\/overview\/?$/.test(h)) { state.view = 'dashboard'; state.openOrderId = null; }
   const o = h.match(/^#\/order\/([^/]+)/);
   if (o) { state.view = 'orderDetails'; state.openOrderId = o[1]; }
   const canonicalProject = h.match(/^#\/projects\/([^/]+)$/);
@@ -17577,7 +17578,7 @@ function renderAppShell() {
   const u = currentUser();
   const role = u.role;
   const navItems = (role === 'manager' || role === 'owner') ? [
-    ['dashboard', T('dashboard'), '📊'],
+    ['dashboard', 'Пульс бизнеса', '📊'],
     ['leads', 'Новые лиды', '📥'],
     ['coldcalls', 'Холодные звонки', '📞'],
     ['orders', T('orders'), '🏗'],
@@ -23795,13 +23796,7 @@ function projectWindowSolutionHtml(o, room, win, inMeasurement = false) {
   const films = (db.settings.catalog || []).filter(film => !film.archived && serviceOfferingFilmIds(serviceOffering(win.offeringId)).includes(film.id));
   return `<div class="grid gap-2" style="min-width:0"><label>Услуга / решение<select aria-label="Услуга окна" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','offeringId',this.value,${inMeasurement})"><option value="">Выберите услугу</option>${offerings.map(item => `<option value="${academyEsc(item.id)}" ${win.offeringId === item.id ? 'selected' : ''}>${academyEsc(item.name)}</option>`).join('')}</select></label>${win.offeringId ? `<label>Материал услуги<select aria-label="Материал услуги" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','catalogId',this.value,${inMeasurement})"><option value="">Выберите плёнку</option>${films.map(film => `<option value="${academyEsc(film.id)}" ${win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogLabel(film))}</option>`).join('')}</select></label>` : ''}</div>`;
 }
-function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = false) {
-  const o = getOrder(oid);
-  const win = o?.measurements?.rooms?.find(room => room.id === rid)?.windows?.find(item => item.id === wid);
-  if (!win || !orderUserCanSeeMoney(o, currentUser())) return;
-  if (field === 'offeringId') {
-    const offering = serviceOffering(value);
-    if (value && (!offering || offering.active === false || offering.direction !== serviceOfferingDirection(win.measureScope || o.serviceType))) return;
+function applyWindowOffering(win, offering) {
     win.offeringId = offering?.id || '';
     win.offeringName = offering?.name || '';
     if (currentUser()?.role === 'owner') win.offeringInstallerRate = Number(offering?.installerRatePerSqft) || 0;
@@ -23809,6 +23804,16 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
     if (offering && !serviceOfferingFilmIds(offering).includes(win.catalogId)) {
       win.catalogId = ''; win.filmType = '';
     }
+  return win;
+}
+function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = false) {
+  const o = getOrder(oid);
+  const win = o?.measurements?.rooms?.find(room => room.id === rid)?.windows?.find(item => item.id === wid);
+  if (!win || !orderUserCanSeeMoney(o, currentUser())) return;
+  if (field === 'offeringId') {
+    const offering = serviceOffering(value);
+    if (value && (!offering || offering.active === false || offering.direction !== serviceOfferingDirection(win.measureScope || o.serviceType))) return;
+    applyWindowOffering(win, offering);
   } else if (field === 'catalogId') {
     const film = getCatalogItem(value);
     if (!film || film.archived || !serviceOfferingFilmIds(serviceOffering(win.offeringId)).includes(film.id)) return;
@@ -26213,6 +26218,8 @@ function managerWindowDefaults(o, room, opts = {}) {
     measurement_source: 'CUSTOMER',
     verificationStatus: 'UNVERIFIED',
   };
+  const offering = serviceOffering(o.offeringId || o.orderBuilder?.offeringId);
+  if (offering && offering.active !== false && offering.direction === serviceOfferingDirection(scopeKey)) applyWindowOffering(win, offering);
   syncWindowPanelsForType(win, scopeKey);
   return syncSmartWindowPlan(win, room?.name || '');
 }
@@ -28293,8 +28300,9 @@ function openOrderModal() {
   state._newOrderAddressId = null;
   state._newOrderTags = [];
   state._newOrderSiteType = '';
-  state._newOrderService = 'smart_film';
-  state._newOrderServices = ['smart_film'];
+  state._newOrderService = '';
+  state._newOrderOfferingId = '';
+  state._newOrderServices = [];
   state._newOrderMaterialsByService = {};
   state._newOrderExecution = 'standard_project';
   const viewer = currentUser();
@@ -28306,7 +28314,7 @@ function openOrderModal() {
     <div class="modal-content workspace-modal erp-intake-modal">
       <div class="erp-intake-head">
         <div>
-          <div class="erp-intake-kicker">ROLANPRO ERP · Project Intake</div>
+          <div class="erp-intake-kicker">ROLANPRO · Новый проект</div>
           <div class="erp-intake-title">Новый проект</div>
         </div>
         <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
@@ -28318,30 +28326,7 @@ function openOrderModal() {
             <section class="erp-intake-card">
               <div class="erp-intake-card-head">
                 <div>
-                  <div class="erp-intake-card-title"><span class="erp-intake-step">1</span> Выберите контакт <span class="order-required">*</span></div>
-                  <div class="text-sm text-gray-500 mt-1">Найдите существующего клиента или добавьте нового.</div>
-                </div>
-                <button id="no-client-new-btn" class="btn-primary text-sm" onclick="openOrderClientOverlay()">+ Добавить контакт</button>
-              </div>
-              <div class="relative">
-                <input id="no-client-search" placeholder="Поиск по имени, телефону или адресу" oninput="renderClientSearch(this.value)" autocomplete="off">
-                <div id="no-client-results" class="mt-1 bg-white border rounded-lg max-h-60 overflow-y-auto" style="display:none;"></div>
-              </div>
-              <div id="no-client-selected" class="mt-2"></div>
-              <div class="mt-3" data-new-order-after-client style="display:none">
-                <label class="text-xs">Тип объекта <span class="order-required">*</span></label>
-                <div class="grid grid-cols-2 gap-2 mt-1" id="no-site-type-buttons">
-                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="RESIDENTIAL" onclick="selectOrderSiteType('RESIDENTIAL')"><div class="font-semibold text-sm">🏠 Residential · жилой</div><div class="text-xs text-gray-500">Комнаты дома</div></button>
-                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="COMMERCIAL" onclick="selectOrderSiteType('COMMERCIAL')"><div class="font-semibold text-sm">🏢 Commercial · коммерческий</div><div class="text-xs text-gray-500">Офисы и зоны</div></button>
-                </div>
-                <input type="hidden" id="no-site-type" value="">
-              </div>
-            </section>
-
-            <section class="erp-intake-card" data-new-order-after-client style="display:none">
-              <div class="erp-intake-card-head">
-                <div>
-                  <div class="erp-intake-card-title"><span class="erp-intake-step">2</span> По какой услуге пришёл лид <span class="order-required">*</span></div>
+                  <div class="erp-intake-card-title"><span class="erp-intake-step">1</span> Направление <span class="order-required">*</span></div>
                 </div>
               </div>
               <div class="order-intake-grid" id="no-svc-buttons">
@@ -28352,13 +28337,44 @@ function openOrderModal() {
                   </button>
                 `).join('')}
               </div>
-              <input type="hidden" id="no-svc" value="smart_film">
+              <input type="hidden" id="no-svc" value="">
+            </section>
+            <section class="erp-intake-card" data-intake-offering style="display:none">
+              <div class="erp-intake-card-title"><span class="erp-intake-step">2</span> Услуга <span class="order-required">*</span></div>
+              <label for="no-offering" class="text-xs">Услуга в выбранном направлении</label>
+              <select id="no-offering" onchange="selectOrderOffering(this.value)"><option value="">Выберите направление</option></select>
+              <div id="no-offering-empty" class="text-sm text-amber-700 mt-2" style="display:none">В направлении нет активных услуг. Добавьте их в разделе «Услуги и цены».</div>
+            </section>
+            <section class="erp-intake-card" data-intake-site style="display:none">
+              <div class="erp-intake-card-title"><span class="erp-intake-step">3</span> Тип здания <span class="order-required">*</span></div>
+              <div class="mt-3" >
+                <label class="text-xs">Тип объекта <span class="order-required">*</span></label>
+                <div class="grid grid-cols-2 gap-2 mt-1" id="no-site-type-buttons">
+                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="RESIDENTIAL" onclick="selectOrderSiteType('RESIDENTIAL')"><div class="font-semibold text-sm">🏠 Residential · жилой</div><div class="text-xs text-gray-500">Комнаты дома</div></button>
+                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="COMMERCIAL" onclick="selectOrderSiteType('COMMERCIAL')"><div class="font-semibold text-sm">🏢 Commercial · коммерческий</div><div class="text-xs text-gray-500">Офисы и зоны</div></button>
+                </div>
+                <input type="hidden" id="no-site-type" value="">
+              </div>
+            </section>
+            <section class="erp-intake-card" data-intake-client style="display:none">
+              <div class="erp-intake-card-head">
+                <div>
+                  <div class="erp-intake-card-title"><span class="erp-intake-step">4</span> Выберите контакт <span class="order-required">*</span></div>
+                  <div class="text-sm text-gray-500 mt-1">Найдите существующего клиента или добавьте нового.</div>
+                </div>
+                <button id="no-client-new-btn" class="btn-primary text-sm" onclick="openOrderClientOverlay()">+ Добавить контакт</button>
+              </div>
+              <div class="relative">
+                <input id="no-client-search" placeholder="Поиск по имени, телефону или адресу" oninput="renderClientSearch(this.value)" autocomplete="off">
+                <div id="no-client-results" class="mt-1 bg-white border rounded-lg max-h-60 overflow-y-auto" style="display:none;"></div>
+              </div>
+              <div id="no-client-selected" class="mt-2"></div>
             </section>
 
             <section class="erp-intake-card" data-new-order-after-client style="display:none">
               <div class="erp-intake-card-head">
                 <div>
-                  <div class="erp-intake-card-title"><span class="erp-intake-step">3</span> Управление заказом <span class="order-required">*</span></div>
+                  <div class="erp-intake-card-title"><span class="erp-intake-step">5</span> Управление заказом <span class="order-required">*</span></div>
                 </div>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -28402,27 +28418,58 @@ function openOrderModal() {
     </div>
   </div>`;
   render();
-  setTimeout(() => { selectOrderService('smart_film', true); selectOrderExecution('standard_project'); }, 50);
+  setTimeout(() => { selectOrderExecution('standard_project'); refreshOrderIntakeGates(); }, 50);
 }
 
+function refreshOrderIntakeGates() {
+  const direction = ORDER_PRIMARY_SERVICES.find(item => item.id === state._newOrderService);
+  const offering = serviceOffering(state._newOrderOfferingId);
+  const validOffering = !!(direction && offering && offering.active !== false && offering.direction === serviceOfferingDirection(direction.id));
+  document.querySelectorAll('[data-intake-offering]').forEach(node => { node.style.display = direction ? '' : 'none'; });
+  document.querySelectorAll('[data-intake-site]').forEach(node => { node.style.display = validOffering ? '' : 'none'; });
+  document.querySelectorAll('[data-intake-client]').forEach(node => { node.style.display = validOffering && state._newOrderSiteType ? '' : 'none'; });
+  document.querySelectorAll('[data-new-order-after-client]').forEach(node => { node.style.display = validOffering && state._newOrderSiteType && state._newOrderClient ? '' : 'none'; });
+}
 function selectOrderService(v, force = false) {
+  if (!ORDER_PRIMARY_SERVICES.some(item => item.id === v)) return;
+  const changed = state._newOrderService !== v;
   const selected = new Set([v]);
   state._newOrderServices = [v];
   state._newOrderService = v;
-  document.getElementById('no-svc').value = state._newOrderService;
-  document.querySelectorAll('#no-svc-buttons [data-svc]').forEach(b => {
-    b.classList.toggle('active', selected.has(b.dataset.svc));
-  });
+  document.getElementById('no-svc').value = v;
+  if (changed) {
+    state._newOrderOfferingId = '';
+    selectOrderSiteType('');
+  }
+  const offerings = serviceOfferingsFor(serviceOfferingDirection(v));
+  const select = document.getElementById('no-offering');
+  if (select) {
+    select.innerHTML = '<option value="">Выберите услугу</option>' + offerings.map(item => `<option value="${academyEsc(item.id)}">${academyEsc(item.name)}</option>`).join('');
+    select.value = state._newOrderOfferingId || '';
+    select.disabled = !offerings.length;
+  }
+  const empty = document.getElementById('no-offering-empty');
+  if (empty) empty.style.display = offerings.length ? 'none' : '';
+  document.querySelectorAll('#no-svc-buttons [data-svc]').forEach(b => { b.classList.toggle('active', selected.has(b.dataset.svc)); });
+  refreshOrderIntakeGates();
   refreshOrderBuilderPreview();
 }
+function selectOrderOffering(id) {
+  const offering = serviceOffering(id);
+  if (id && (!offering || offering.active === false || offering.direction !== serviceOfferingDirection(state._newOrderService))) return;
+  state._newOrderOfferingId = offering?.id || '';
+  selectOrderSiteType('');
+  refreshOrderIntakeGates();
+}
 function selectOrderSiteType(value) {
-  const siteType = normalizeOrderSiteType(value);
+  const siteType = value ? normalizeOrderSiteType(value) : '';
   state._newOrderSiteType = siteType;
   const hidden = document.getElementById('no-site-type');
   if (hidden) hidden.value = siteType;
   document.querySelectorAll('#no-site-type-buttons [data-site-type]').forEach(button => {
     button.classList.toggle('active', button.dataset.siteType === siteType);
   });
+  refreshOrderIntakeGates();
 }
 function selectOrderExecution(v) {
   const variant = orderExecutionVariantInfo(v);
@@ -28559,9 +28606,7 @@ function renderOrderClientSelection(c) {
   `;
 }
 function setNewOrderClientGate(hasClient) {
-  document.querySelectorAll('[data-new-order-after-client]').forEach(element => {
-    element.style.display = hasClient ? '' : 'none';
-  });
+  refreshOrderIntakeGates();
 }
 function resetNewOrderClientSelection() {
   state._newOrderClient = null;
@@ -28906,7 +28951,7 @@ function createOrderClientFromOverlay() {
 function createOrder(nextStep = 'measure') {
   let clientId = state._newOrderClient;
   const serviceIds = Array.from(new Set((state._newOrderServices || []).filter(id => ORDER_PRIMARY_SERVICES.some(service => service.id === id))));
-  const serviceId = serviceIds[0] || document.getElementById('no-svc')?.value || state._newOrderService || 'smart_film';
+  const serviceId = serviceIds[0] || document.getElementById('no-svc')?.value || state._newOrderService;
   const service = primaryServiceInfo(serviceId);
   const selectedServices = serviceIds.length ? serviceIds.map(id => primaryServiceInfo(id)) : [service];
   const executionVariantId = document.getElementById('no-execution')?.value || state._newOrderExecution || 'standard_project';
@@ -28918,8 +28963,13 @@ function createOrder(nextStep = 'measure') {
   const siteType = normalizeOrderSiteType(document.getElementById('no-site-type')?.value || state._newOrderSiteType);
   const pickedTags = Array.from(document.getElementById('no-tags')?.selectedOptions || []).map(o => o.value);
 
-  if (!service || !ORDER_PRIMARY_SERVICES.some(s => s.id === service.id)) {
-    alert('Выберите основную услугу');
+  if (!service || !ORDER_PRIMARY_SERVICES.some(s => s.id === serviceId)) {
+    alert('Выберите направление');
+    return;
+  }
+  const offering = serviceOffering(state._newOrderOfferingId);
+  if (!offering || offering.active === false || offering.direction !== serviceOfferingDirection(service.id)) {
+    alert('Выберите активную услугу в выбранном направлении');
     return;
   }
   if (!managerId) {
@@ -28980,6 +29030,8 @@ function createOrder(nextStep = 'measure') {
       note: `Входящий запрос: ${service.title} · ${executionVariant.title}`,
     }],
     notes: document.getElementById('no-notes').value,
+    offeringId: offering.id,
+    offeringName: offering.name,
     serviceType: service.id,
     serviceTypes: selectedServices.map(item => item.id),
     serviceCategory: service.catalogCategory,
@@ -28993,6 +29045,8 @@ function createOrder(nextStep = 'measure') {
     executionVariantLabel: executionVariant.title,
     executionRoute: [...(executionVariant.route || [])],
     orderBuilder: {
+      offeringId: offering.id,
+      offeringName: offering.name,
       serviceId: service.id,
       serviceTitle: service.title,
       serviceIds: selectedServices.map(item => item.id),

@@ -12,7 +12,8 @@ const publisher = readFileSync("src/features/legacy-crm/publish-proposal.ts", "u
 const launcher = readFileSync("src/features/projects/launch.ts", "utf8");
 
 test("new order captures one immutable incoming service separately from project services", () => {
-  assert.match(legacyCrm, /По какой услуге пришёл лид/);
+  assert.match(legacyCrm, /erp-intake-step">1<\/span> Направление/);
+  assert.match(legacyCrm, /id="no-offering"/);
   assert.match(legacyCrm, /state\._newOrderServices = \[v\]/);
   assert.match(legacyCrm, /leadIntentServiceType: service\.id/);
   assert.match(legacyCrm, /leadSource: c\.source \|\| 'direct'/);
