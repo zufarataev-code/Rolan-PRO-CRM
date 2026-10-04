@@ -140,10 +140,10 @@ test("«Требует внимания» is counters only, each opening its lis
   const home = loadHome("owner", ORDERS);
   const alerts = Object.fromEntries(home.crm2HomeAttention(ORDERS, true, NOW).map((alert) => [alert.label, alert]));
   assert.equal(alerts["Лиды без ответа > 1 часа"].count, 0);
-  assert.equal(alerts["Новые проекты без звонка"].count, 0, "f came in less than an hour ago");
+  assert.equal(alerts["Новые проекты дольше часа"].count, 0, "f came in less than an hour ago");
   const later = Object.fromEntries(home.crm2HomeAttention(ORDERS, true, new Date(2026, 9, 14, 13)).map((a) => [a.label, a]));
-  assert.equal(later["Новые проекты без звонка"].count, 1);
-  assert.equal(later["Новые проекты без звонка"].go, "crm2HomeOpenStatus('new')", "the inbox does not list projects in «new»");
+  assert.equal(later["Новые проекты дольше часа"].count, 1);
+  assert.equal(later["Новые проекты дольше часа"].go, "crm2HomeOpenStatus('new')", "the inbox does not list projects in «new»");
   assert.equal(alerts["Замер без КП"].count, 1);
   assert.equal(alerts["Замер без КП"].go, "crm2HomeOpenStatus('measurement_done')");
   assert.equal(alerts["КП без ответа 3+ дня"].count, 1);
@@ -221,7 +221,7 @@ test("a lead claimed more than 10 minutes ago is open again; leads and new proje
   assert.equal(alerts["Лиды без ответа > 1 часа"].count, 2, "l1 and the abandoned l2; l3 is being converted");
   assert.equal(alerts["Лиды без ответа > 1 часа"].go, "crm2Go('leads')");
   const later = Object.fromEntries(home.crm2HomeAttention(ORDERS, true, new Date(2026, 9, 14, 13)).map((a) => [a.label, a]));
-  assert.equal(later["Новые проекты без звонка"].count, 1, "counted apart: they open a different list");
+  assert.equal(later["Новые проекты дольше часа"].count, 1, "counted apart: they open a different list");
 });
 
 test("a mixed project's revenue goes to each of its directions, margin in proportion", () => {

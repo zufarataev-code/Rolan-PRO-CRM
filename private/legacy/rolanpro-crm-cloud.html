@@ -19832,7 +19832,7 @@ function crm2HomeAttention(orders, owner, now = new Date()) {
   const low = warehouseNeedItems();
   return [
     { label: 'Лиды без ответа > 1 часа', count: openLeads.length, note: oldest(openLeads.map((lead) => lead.receivedAt)), color: '#E07A1F', go: "crm2Go('leads')" },
-    { label: 'Новые проекты без звонка', count: freshOrders.length, note: oldest(freshOrders.map((o) => o.createdAt)), color: '#B3541E', go: "crm2HomeOpenStatus('new')" },
+    { label: 'Новые проекты дольше часа', count: freshOrders.length, note: oldest(freshOrders.map((o) => o.createdAt)), color: '#B3541E', go: "crm2HomeOpenStatus('new')" },
     { label: 'Замер без КП', count: measured.length, note: measured.length ? `≈ ${crm2Money(estimate(measured))}` : '—', color: '#6E56CF', go: "crm2HomeOpenStatus('measurement_done')" },
     { label: 'КП без ответа 3+ дня', count: waiting.length, note: waiting.length ? crm2Money(estimate(waiting)) : '—', color: '#C2417A', go: "crm2HomeOpenStatus('proposal_sent')" },
     { label: 'Принято, нет даты монтажа', count: noDate.length, note: noDate.length ? crm2Money(estimate(noDate)) : '—', color: '#1F8A4C', go: "crm2HomeOpenStatus('proposal_accepted')" },
