@@ -41,9 +41,10 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
     orderDebt: (o: Order) => o.debt || 0,
     projectProfitability: (o: Order) => ({ netProfit: o.net ?? 0 }),
     projectMonthlyFixedExpensePool: () => 1000,
+    orderAdAllocation: (o: Order) => Number(o.ad) || 0,
     projectProfitTaxProfile: () => ({ ratePct: 10, annualMinimum: 1200 }),
     projectProfitDate: (o: Order) => new Date(String(o.installationDoneAt || o.installationAt || o.proposalAcceptedAt || o.createdAt)),
-    projectMonthAdBudget: () => ({ budget: 9000, pct: 10, basis: "previous" }),
+    projectMonthAdBudget: (date: Date) => ({ budget: (settings.adBudgetByMonth as Record<number, number> | undefined)?.[date.getMonth()] ?? (settings.adBudgetByMonth ? 0 : 9000), pct: 10, basis: "previous" }),
     financeData: () => ({ accounts: [{ id: "chase" }, { id: "fin_unallocated" }, { id: "old", active: false }] }),
     financeAccountBalance: (id: string) => ({ chase: 48040, fin_unallocated: 999, old: 5 } as Record<string, number>)[id] || 0,
     financeAllRows: () => [],
@@ -62,7 +63,7 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
     academyEsc: (value: string) => String(value),
     crm2Go: () => { state.opened = `orders:${state.statusFilter}:${state.ordersOverdueOnly}`; },
     projectQuickSqft: (o: Order) => Number(o.quickSqft) || 0,
-    projectServiceGroups: (o: Order) => ((o.services as Array<{ at: string; sqft: number }> | undefined) || []).map((service, index) => ({ id: `g${index}`, windows: [{ sqft: service.sqft }], lines: [], at: service.at })),
+    projectServiceGroups: (o: Order) => ((o.services as Array<{ at: string; sqft: number; lines?: unknown[] }> | undefined) || []).map((service, index) => ({ id: `g${index}`, windows: service.sqft ? [{ sqft: service.sqft }] : [], lines: service.lines || [], at: service.at })),
     projectServiceAssignment: (_o: Order, group: { at: string }) => ({ installationAt: group.at }),
     windowActualAreaSqft: (win: { sqft: number }) => win.sqft,
     windowAreaSqft: () => 0,
@@ -102,7 +103,7 @@ test("periods: calendar month against the previous month, weeks start on Monday"
 });
 
 test("revenue and net profit count only agreed projects dated in the period", () => {
-  const home = loadHome("owner", ORDERS);
+  const home = loadHome("owner", ORDERS, { adBudgetByMonth: {} });
   const { from, to, prevFrom, prevTo } = home.crm2HomeRange("month", NOW);
   const october = home.crm2HomeSales(ORDERS, from, to, true);
   assert.equal(october.count, 3, "a, b, g — not the proposal or the measurement");
@@ -125,7 +126,7 @@ test("clients owe: agreed projects only; overdue when the work was done more tha
 });
 
 test("the year goal is $50 000 unless the owner set another, and shows what each month needs", () => {
-  const goal = loadHome("owner", ORDERS).crm2HomeGoal(ORDERS, NOW);
+  const goal = loadHome("owner", ORDERS, { adBudgetByMonth: {} }).crm2HomeGoal(ORDERS, NOW);
   assert.equal(goal.goal, 50000);
   // The CRM has projects from September: September (margin 1200 − 1000, tax 100)
   // + 1–14 October (margin 7450 − 14/31 of 1000, tax 10%). January–August are not counted.
@@ -352,7 +353,7 @@ test("every number on the home opens the funnel without filters left from earlie
 });
 
 test("net profit counts a month's fixed costs even when it had no deals", () => {
-  const home = loadHome("owner", ORDERS);
+  const home = loadHome("owner", ORDERS, { adBudgetByMonth: {} });
   // November has no deals: it loses its fixed costs and the minimum tax.
   const november = home.crm2HomeRange("month", new Date(2026, 10, 10));
   assert.equal(home.crm2HomeSales(ORDERS, november.from, november.to, true).netProfit, -1000 - 100);
@@ -366,5 +367,29 @@ test("a loss is written as −$1100, not $-1100", () => {
   assert.equal(home.crm2Money(-1100), "−$1100");
   assert.equal(home.crm2Money(1100), "$1100");
   assert.equal(home.crm2Money(0), "$0");
+});
+
+test("net profit pays the whole month's ad budget, also the shares of unagreed proposals", () => {
+  // October: budget 900; the agreed projects already carry 300 of it in their margin.
+  const orders: Order[] = [
+    { id: "a", status: "payment_received", rev: 9800, mar: 4700, ad: 200, installationDoneAt: at(9, 3), createdAt: at(9, 1) },
+    { id: "g", status: "proposal_accepted", rev: 2400, mar: 1050, ad: 100, proposalAcceptedAt: at(9, 12), createdAt: at(9, 2) },
+    { id: "d", status: "proposal_sent", rev: 3348, mar: 1300, ad: 600, proposalSentAt: at(9, 8), createdAt: at(9, 5) },
+  ];
+  const home = loadHome("owner", orders, { adBudgetByMonth: { 9: 900 } });
+  const { from, to } = home.crm2HomeRange("month", NOW);
+  const beforeAds = (4700 + 200) + (1050 + 100);
+  const gross = beforeAds - 900;
+  const tax = Math.max((gross - 1000) * 0.1, 100);
+  assert.ok(Math.abs(home.crm2HomeSales(orders, from, to, true).netProfit - (gross - 1000 - tax)) < 0.01);
+});
+
+test("installed area is film: per-sq-ft extra work such as old-film removal is not added", () => {
+  const removal = { unit: "sqft", qty: 100, label: "Снятие старой плёнки" };
+  const film = { unit: "sqft", qty: 60, quickProjectLine: true };
+  const project: Order = { id: "r", status: "act_signed", rev: 3000, mar: 1200, installationDoneAt: at(9, 6), serviceSchedules: [{}], services: [{ at: at(9, 6), sqft: 100 }, { at: at(9, 6), sqft: 0, lines: [removal] }, { at: at(9, 7), sqft: 0, lines: [film] }] };
+  const home = loadHome("owner", [project]);
+  const { from, to } = home.crm2HomeRange("month", NOW);
+  assert.equal(home.crm2HomeWorks([project], from, to, NOW).sqft, 100 + 60);
 });
 

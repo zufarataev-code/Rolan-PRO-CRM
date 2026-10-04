@@ -19628,7 +19628,8 @@ function crm2BooksStart() {
 
 /**
  * The company's net profit for a period, month by month: the margin of agreed
- * projects (orderMargin) minus the whole monthly fixed costs and the tax reserve
+ * projects before advertising, minus the month's whole ad budget, the whole
+ * monthly fixed costs and the tax reserve
  * (the same pool, rate and annual minimum projectProfitability() uses), so a
  * month without deals counts its costs too. Part of a month counts its share of
  * the costs; months before the CRM has projects are left out.
@@ -19648,7 +19649,13 @@ function crm2HomeNetProfit(orders, from, to) {
     const pieceTo = to < next ? to : next;
     if (pieceTo <= pieceFrom) continue;
     const share = (pieceTo - pieceFrom) / (next - month);
-    const gross = crm2Deals(orders, pieceFrom, pieceTo).reduce((sum, o) => sum + orderMargin(o), 0);
+    // orderMargin() already takes each deal's share of the month's ad budget;
+    // the company pays the whole budget, including the shares of unagreed proposals.
+    const deals = crm2Deals(orders, pieceFrom, pieceTo);
+    const beforeAds = deals.reduce((sum, o) => sum + orderMargin(o) + (Number(orderAdAllocation(o)) || 0), 0);
+    const plan = projectMonthAdBudget(month);
+    const ads = (Number(plan && typeof plan === 'object' ? plan.budget : plan) || 0) * share;
+    const gross = beforeAds - ads;
     const fixed = fixedMonthly * share;
     const tax = Math.max(Math.max(0, gross - fixed) * rate, minimumMonthly * share);
     total += gross - fixed - tax;
@@ -19825,7 +19832,9 @@ function crm2InstallVisits(o) {
       const visits = projectServiceGroups(o).map((group) => {
         const at = new Date(projectServiceAssignment(o, group)?.installationAt || '');
         const windows = (group.windows || []).reduce((sum, win) => sum + (Number(windowActualAreaSqft(win)) || Number(windowAreaSqft(win)) || 0), 0);
-        const lines = (group.lines || []).filter((line) => line.unit === 'sqft').reduce((sum, line) => sum + (Number(line.qty) || 0), 0);
+        // Film footage only: quick-entry film lines (there are no measured windows then),
+        // not additional work priced per sq ft such as removing old film.
+        const lines = (group.lines || []).filter((line) => line.quickProjectLine && line.unit === 'sqft').reduce((sum, line) => sum + (Number(line.qty) || 0), 0);
         return { at, sqft: windows + lines };
       }).filter((visit) => !Number.isNaN(visit.at.getTime()));
       if (visits.length) return visits;
