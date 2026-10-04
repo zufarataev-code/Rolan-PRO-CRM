@@ -317,3 +317,22 @@ test("a budget estimated from this month says so", () => {
   assert.match(html, /оценка: \$\{ads\.pct\}% выручки этого месяца — в прошлом выручки не было/);
 });
 
+test("a closed project keeps each service visit in its own month", () => {
+  const closed: Order = { id: "z", status: "act_signed", rev: 6000, mar: 2400, installationAt: at(9, 20), installationDoneAt: at(10, 6), visits: [at(9, 20), at(10, 5)] };
+  const home = loadHome("owner", [closed]);
+  const october = home.crm2HomeRange("month", NOW);
+  const november = home.crm2HomeRange("month", new Date(2026, 10, 10));
+  assert.equal(home.crm2HomeWorks([closed], october.from, october.to).done, 1);
+  assert.equal(home.crm2HomeWorks([closed], november.from, november.to).done, 1);
+  assert.equal(home.crm2HomeWorks([closed], november.from, november.to).ahead, 0);
+});
+
+test("every number on the home opens the funnel without filters left from earlier", () => {
+  const owner = loadHome("owner", ORDERS).renderCrm2Home();
+  const manager = loadHome("manager", ORDERS).renderCrm2Home();
+  for (const page of [owner, manager]) {
+    assert.doesNotMatch(page, /onclick="crm2Go\('orders'\)"/);
+    assert.match(page, /onclick="crm2HomeOpenStatus\(''\)"/);
+  }
+});
+

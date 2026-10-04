@@ -19777,14 +19777,26 @@ function crm2InstallVisits(o) {
 }
 
 function crm2HomeWorks(orders, from, to) {
-  const done = orders.filter((o) => crm2In(o.installationDoneAt, from, to));
-  const ahead = orders.filter((o) => !o.installationDoneAt)
-    .reduce((count, o) => count + crm2InstallVisits(o).filter((date) => crm2In(date, from, to)).length, 0);
+  // Each install visit counts in its own period: a closed project with services
+  // in October and November keeps one visit in each month.
+  let done = 0;
+  let ahead = 0;
+  const finished = [];
+  orders.forEach((o) => {
+    const visits = crm2InstallVisits(o);
+    if (o.installationDoneAt) {
+      const dates = visits.length > 1 ? visits : [new Date(o.installationDoneAt)];
+      done += dates.filter((date) => crm2In(date, from, to)).length;
+      if (crm2In(o.installationDoneAt, from, to)) finished.push(o);
+    } else {
+      ahead += visits.filter((date) => crm2In(date, from, to)).length;
+    }
+  });
   return {
-    done: done.length,
+    done,
     ahead,
     // Quick Project Entry keeps its area in the service lines, not in measured windows.
-    sqft: done.reduce((sum, o) => sum + (Number(orderActualAreaSqft(o)) || Number(orderPlannedAreaSqft(o)) || (typeof projectQuickSqft === 'function' ? Number(projectQuickSqft(o)) : 0) || 0), 0),
+    sqft: finished.reduce((sum, o) => sum + (Number(orderActualAreaSqft(o)) || Number(orderPlannedAreaSqft(o)) || (typeof projectQuickSqft === 'function' ? Number(projectQuickSqft(o)) : 0) || 0), 0),
     low: warehouseNeedItems(),
   };
 }
@@ -19898,15 +19910,15 @@ function renderCrm2Home() {
   const debtChip = `<span class="crm2-chip ${debts.overdueCount ? 'down' : ''}">${projects(debts.count)}</span>`;
   const debtNote = debts.overdueCount ? `просрочено ${debts.overdueCount} — ${crm2Money(debts.overdueTotal)}` : 'просрочек нет';
   const kpis = owner ? [
-    kpi('Выручка', crm2Money(sales.revenue), crm2Chip(crm2Delta(sales.revenue, before.revenue)), `${projects(sales.count)} · средний чек ${crm2Money(sales.average)}`, "crm2Go('orders')"),
+    kpi('Выручка', crm2Money(sales.revenue), crm2Chip(crm2Delta(sales.revenue, before.revenue)), `${projects(sales.count)} · средний чек ${crm2Money(sales.average)}`, "crm2HomeOpenStatus('')"),
     kpi('Чистая прибыль', crm2Money(sales.netProfit), crm2Chip(crm2Delta(sales.netProfit, before.netProfit)), `${sales.revenue > 0 ? `${Math.round(sales.netProfit / sales.revenue * 100)}% · ` : ''}после плёнки, работ, рекламы, постоянных и налога`, "crm2Go('accounting')"),
     (() => { const money = crm2HomeMoney(); return kpi('Деньги на счетах', crm2Money(money.total), '<span class="crm2-chip">сейчас</span>', `${crm2Plural(money.accounts, ['счёт', 'счёта', 'счетов'])} · из «Деньги»`, "crm2Go('accounting')"); })(),
     kpi('Клиенты должны', crm2Money(debts.total), debtChip, debtNote, "crm2Go('paymentsdue')"),
   ] : [
-    kpi('Выручка', crm2Money(sales.revenue), crm2Chip(crm2Delta(sales.revenue, before.revenue)), 'принятые КП и работы в периоде', "crm2Go('orders')"),
-    kpi('Сделки', String(sales.count), crm2Chip(crm2Delta(sales.count, before.count)), `было ${before.count}`, "crm2Go('orders')"),
-    kpi('Средний чек', crm2Money(sales.average), crm2Chip(crm2Delta(sales.average, before.average)), `было ${crm2Money(before.average)}`, "crm2Go('orders')"),
-    kpi('Клиенты должны', crm2Money(debts.total), debtChip, debtNote, "crm2Go('orders')"),
+    kpi('Выручка', crm2Money(sales.revenue), crm2Chip(crm2Delta(sales.revenue, before.revenue)), 'принятые КП и работы в периоде', "crm2HomeOpenStatus('')"),
+    kpi('Сделки', String(sales.count), crm2Chip(crm2Delta(sales.count, before.count)), `было ${before.count}`, "crm2HomeOpenStatus('')"),
+    kpi('Средний чек', crm2Money(sales.average), crm2Chip(crm2Delta(sales.average, before.average)), `было ${crm2Money(before.average)}`, "crm2HomeOpenStatus('')"),
+    kpi('Клиенты должны', crm2Money(debts.total), debtChip, debtNote, "crm2HomeOpenStatus('')"),
   ];
 
   const goalBlock = (() => {
@@ -19963,7 +19975,7 @@ function renderCrm2Home() {
     <div class="crm2-cells">
       <button type="button" class="crm2-cell" onclick="crm2Go('installerOps')"><div class="crm2-kl">Монтажей</div><div class="crm2-cell-value">${works.done + works.ahead}</div><div class="crm2-cell-note">${works.done} сделано · ${works.ahead} впереди</div></button>
       <button type="button" class="crm2-cell" onclick="crm2Go('calendar')"><div class="crm2-kl">Установлено</div><div class="crm2-cell-value">${Math.round(works.sqft).toLocaleString('ru-RU')} sq ft</div><div class="crm2-cell-note">по сделанным монтажам</div></button>
-      <button type="button" class="crm2-cell" onclick="crm2Go('orders')"><div class="crm2-kl">Средний чек</div><div class="crm2-cell-value">${crm2Money(sales.average)}</div><div class="crm2-cell-note">${projects(sales.count)}</div></button>
+      <button type="button" class="crm2-cell" onclick="crm2HomeOpenStatus('')"><div class="crm2-kl">Средний чек</div><div class="crm2-cell-value">${crm2Money(sales.average)}</div><div class="crm2-cell-note">${projects(sales.count)}</div></button>
       <button type="button" class="crm2-cell" onclick="crm2Go('inventory')"><div class="crm2-kl">Склад</div><div class="crm2-cell-value">${owner ? crm2Money(financeStockValue()) : works.low.length}</div><div class="crm2-cell-note">${works.low.length ? `заканчивается: ${crm2Plural(works.low.length, ['позиция', 'позиции', 'позиций'])}` : 'всё в норме'}</div></button>
     </div>
   </section>`;
