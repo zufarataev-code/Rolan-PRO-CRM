@@ -13,7 +13,7 @@ export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInsta
     for (const item of scope(order)) {
       const id = windows.includes(item)
         ? item.offeringId ? `offering:${item.offeringId}` : `direction:${item.measureScope || order.serviceType || 'solar_film'}`
-        : `line:${item.id}`;
+        : item.quickProjectLine && item.offeringId && Number(item.qty) === 0 ? `offering:${item.offeringId}` : `line:${item.id}`;
       const schedules = rows(order.serviceSchedules);
       const crew = schedules.length ? rows(order.serviceSchedules).find(plan => plan.id === id)?.installerIds
         : item.installerIds?.length ? item.installerIds : order.installerIds;
@@ -58,7 +58,12 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       const offering = offerings.find(value=>value.id===item.offeringId);
       if (!owner || item.offeringId !== old?.offeringId) {
         if (item.offeringId && item.offeringId === old?.offeringId && old && 'offeringInstallerRate' in old) item.offeringInstallerRate = old.offeringInstallerRate;
-        else if (offering) item.offeringInstallerRate = offering.installerRatePerSqft;
+        else if (offering) {
+          // A newly measured opening inherits the already selected project service,
+          // whose rate is a server-owned historical snapshot, not the current catalog.
+          const selected = oldItems.find(value => value.quickProjectLine && value.offeringId === item.offeringId);
+          item.offeringInstallerRate = selected && 'offeringInstallerRate' in selected ? selected.offeringInstallerRate : offering.installerRatePerSqft;
+        }
         else delete item.offeringInstallerRate;
       }
       // Old signed/history selections survive archival or changed material lists.

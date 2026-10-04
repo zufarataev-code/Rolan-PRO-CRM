@@ -495,3 +495,14 @@ Owner clarified and authorized implementation in chat: choose the project direct
 - Service groups are projections of the current scope: measured windows grouped by solution, or existing quick lines when there are no measurements, plus additional-work lines. Assignments live in `order.serviceSchedules`, with project crew/date derived summaries. A service has its own date and crew; calendar events use that crew. No duplicate charge is created for a measured service.
 - Installation readiness, deposit/proposal and verified-measurement gates remain. This does not implement separate per-service completion, weekly payroll summaries, relational migration or automatic bank transfers.
 - Branch `codex/service-solutions-live`, based on current main `4b5463c`. Supersedes the one-film/one-solution and automatically seeded examples in the unmerged #295 proposal.
+
+
+## 2026-10-04 — concrete services precede project measurements
+
+Owner corrected the remaining New Project behavior: choosing a direction must not immediately open dimensions. This completes the 2026-10-03 service workflow exception.
+
+- A direction contains many owner-defined services. Select one or several concrete services, each with its material and customer price, before adding openings. Save the project and display its service summary; enter measurements only by an explicit next action.
+- Reuse existing `extraServices` zero-quantity solution lines as selections and existing measured windows as priced scope. Selections must not charge twice when windows exist. Each opening inherits its selected service snapshot; changes to the directory do not rewrite the chosen rate.
+- Do not invent A1/A2 classifications, brands, materials, products or prices. The Owner defines the actual catalog. Projects may be saved as drafts before scope is known.
+- Independent service scheduling from #299 remains; relational migration and separate completion/weekly payroll remain tracked separately.
+- Implementation: `codex/project-intake-service-selection`.

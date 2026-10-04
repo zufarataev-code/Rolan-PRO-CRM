@@ -49,3 +49,42 @@ test('schedule validation is all-or-nothing; each service requires its own date 
   assert.deepEqual(Array.from(plans,(p:any)=>Array.from(p.installerIds)),[['a'],['b']]);
 });
 test('all inline CRM scripts compile',()=>{for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)){if(match[1].trim()) new vm.Script(match[1]);}});
+
+test('project intake snapshots several services in one direction before dimensions and rejects unrelated materials',()=>{
+  const {c,db}=load();
+  c.addServiceOffering('solar'); c.addServiceOffering('solar');
+  c.updateServiceOffering('svc_id1','pricePerSqft',12); c.updateServiceOffering('svc_id2','pricePerSqft',20);
+  c.toggleServiceOfferingFilm('svc_id1','film',true); c.toggleServiceOfferingFilm('svc_id2','film',true);
+  c.state={_newOrderOfferings:['svc_id1','svc_id2'],_newOrderMaterialsByService:{svc_id1:'film',svc_id2:'film'}};
+  const lines=c.readNewOrderOfferings('solar_film');
+  assert.equal(lines.length,2); assert.deepEqual(Array.from(lines,(line:any)=>line.unitPrice),[12,20]);
+  assert.ok(lines.every((line:any)=>line.qty===0&&line.price===0&&line.catalogId==='film'));
+  c.updateServiceOffering('svc_id1','pricePerSqft',99); assert.equal(lines[0].unitPrice,12);
+  c.state._newOrderMaterialsByService.svc_id2='other'; assert.equal(c.readNewOrderOfferings('solar_film'),null);
+  c.state._newOrderOfferings=[]; assert.equal(c.readNewOrderOfferings('solar_film'),null);
+  assert.equal(c.readNewOrderOfferings('solar_film',true).length,0);
+});
+
+test('unmeasured service remains in scope after another service is measured without duplicate charges or schedule keys',()=>{
+  const {c}=load();
+  const a={offeringId:'one',offeringName:'First'};
+  const o={measurements:{rooms:[{windows:[a]}]},extraServices:[{id:'p1',quickProjectLine:true,qty:0,offeringId:'one',offeringName:'First'},{id:'p2',quickProjectLine:true,qty:0,offeringId:'two',offeringName:'Second'}]};
+  const groups=c.projectServiceGroups(o);
+  assert.deepEqual(Array.from(groups,(group:any)=>group.id),['offering:one','offering:two']);
+  assert.equal(groups[0].lines.length,0); assert.equal(groups[1].lines.length,1);
+});
+
+test('new openings inherit the chosen service snapshot, material and price instead of a room default',()=>{
+  const {c}=load();
+  c.state={_managerOfferingByOrder:{o:'two'}};
+  c.managerActiveMeasureScope=()=> 'solar_film';
+  c.managerRoomCatalogId=()=> 'other'; c.managerRoomAddKindValue=()=> 'window'; c.managerRoomAddTypeValue=()=> 'fixed';
+  c.managerObjectKindInfo=()=>({baseName:'Window'}); c.managerObjectKindForWindow=()=> 'window';
+  c.inches_to_mm=(n:number)=>n*25.4; c.measureScopeByCatalog=()=> 'solar_film';
+  c.syncWindowPanelsForType=()=>{}; c.syncSmartWindowPlan=(win:any)=>win;
+  const start=html.indexOf('function managerWindowDefaults(');
+  vm.runInContext(html.slice(start,html.indexOf('function syncWindowPanelsForType(',start)),c);
+  const o={id:'o',extraServices:[{id:'one',quickProjectLine:true,serviceType:'solar_film',offeringId:'one',catalogId:'film',unitPrice:12},{id:'two',quickProjectLine:true,serviceType:'solar_film',offeringId:'two',offeringName:'Second',catalogId:'film',unitPrice:20,offeringInstallerRate:4}]};
+  const win=c.managerWindowDefaults(o,{id:'r',windows:[],defaultCatalogByScope:{solar_film:'other'}});
+  assert.equal(win.offeringId,'two'); assert.equal(win.offeringName,'Second'); assert.equal(win.catalogId,'film'); assert.equal(win.pricePerSqft,20); assert.equal(win.offeringInstallerRate,4);
+});
