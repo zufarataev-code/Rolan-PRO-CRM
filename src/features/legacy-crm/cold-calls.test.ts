@@ -9,7 +9,7 @@ const html = readFileSync(
 );
 
 test("cold outreach is a first-class manager workspace", () => {
-  assert.match(html, /\['coldcalls', 'Холодные звонки'\]/);
+  assert.match(html, /\['coldcalls', 'Холодные звонки', '📞'\]/);
   assert.match(html, /case 'coldcalls': return renderColdCallsView\(\)/);
   assert.match(html, /function renderColdCallsView\(\)/);
 });

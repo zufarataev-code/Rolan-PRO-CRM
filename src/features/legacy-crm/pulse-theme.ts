@@ -1,11 +1,22 @@
-/**
- * Selected «Пульс бизнеса» direction: the phone presentation for owner and
- * manager. The owner chose «телефон — Пульс, компьютер — CRM 2.0» (2026-10-04),
- * so its colours apply on phones only; the dashboard styles stay global because
- * the Pulse overview is rendered wherever it is shown.
- */
+/** Selected «Пульс бизнеса» direction. Same role-aware CRM; phone presentation. */
 export const PULSE_THEME_CSS = `
+html body .app-shell:is(.role-owner,.role-manager) {
+  --radius: 0px; --radius-sm: 0px; --radius-lg: 0px;
+  --rp-ground: #F7F9FB; --rp-input: #F5F7FA;
+  --rp-gradient: #1686B0; --rp-line: #E0E7EE;
+}
+html body .app-shell:is(.role-owner,.role-manager) :is(.card,.btn-primary,.btn-ghost,.tag,.status-badge,input,select,textarea,.nav-item,.orders-command-panel,.orders-kpi-card,.orders-view-toggle,.orders-period-toggle,.kanban-column,.kanban-card,.pw-panel,.pw-count) {
+  border-radius: 0 !important;
+}
+html body .app-shell:is(.role-owner,.role-manager) .card { box-shadow: none; border-color: #E0E7EE; }
+html body .app-shell:is(.role-owner,.role-manager) .app-sidebar { background: #10253F; }
+html body .app-shell:is(.role-owner,.role-manager) .app-sidebar::before { display: none; }
+html body .app-shell:is(.role-owner,.role-manager) .app-topbar { background: #FFF; backdrop-filter: none; }
+html body .app-shell:is(.role-owner,.role-manager) .btn-primary { background: #1686B0; box-shadow: none; }
+html body .app-shell:is(.role-owner,.role-manager) :is(button,input,select,textarea):focus-visible { outline: 3px solid #29A7E1; outline-offset: 3px; }
+html body:has(.app-shell:is(.role-owner,.role-manager)) :is(.modal-content,.modal-content input,.modal-content select,.modal-content textarea,.modal-content button) { border-radius: 0 !important; }
 html body:has(.app-shell:is(.role-owner,.role-manager)) :is(.erp-intake-card,.order-service-card,.erp-intake-disclosure,.erp-intake-footer,.order-client-panel) { border-radius: 0 !important; }
+html body:has(.app-shell:is(.role-owner,.role-manager)) .modal-content .btn-primary { background: #1686B0 !important; box-shadow: none; }
 .pulse-mobile-header { display: none; }
 .pulse-order-filters, .pulse-order-filter-grid { display: contents; }
 .pulse-order-filters > summary { display: none; }
@@ -52,23 +63,6 @@ html body .pulse-operations { margin-top: 32px; border-top: 1px solid #DFE7EE; }
 @media (max-width: 840px) { html body .pulse-layout { grid-template-columns: 1fr; gap: 8px; } }
 /* Match the CRM's phone detection: narrow phone, or touch tablet. */
 @media (max-width: 520px), (max-width: 768px) and (pointer: coarse) {
-  /* Phone colours of «Пульс бизнеса»; the computer keeps the CRM 2.0 look (Owner, 2026-10-04). */
-  html body:has(.app-shell:is(.role-owner,.role-manager)) .modal-content .btn-primary { background: #1686B0 !important; box-shadow: none; }
-  html body .app-shell:is(.role-owner,.role-manager) {
-    --radius: 0px; --radius-sm: 0px; --radius-lg: 0px;
-    --rp-ground: #F7F9FB; --rp-input: #F5F7FA;
-    --rp-gradient: #1686B0; --rp-line: #E0E7EE;
-  }
-  html body .app-shell:is(.role-owner,.role-manager) :is(.card,.btn-primary,.btn-ghost,.tag,.status-badge,input,select,textarea,.nav-item,.orders-command-panel,.orders-kpi-card,.orders-view-toggle,.orders-period-toggle,.kanban-column,.kanban-card,.pw-panel,.pw-count) {
-    border-radius: 0 !important;
-  }
-  html body .app-shell:is(.role-owner,.role-manager) .card { box-shadow: none; border-color: #E0E7EE; }
-  html body .app-shell:is(.role-owner,.role-manager) .app-sidebar { background: #10253F; }
-  html body .app-shell:is(.role-owner,.role-manager) .app-sidebar::before { display: none; }
-  html body .app-shell:is(.role-owner,.role-manager) .app-topbar { background: #FFF; backdrop-filter: none; }
-  html body .app-shell:is(.role-owner,.role-manager) .btn-primary { background: #1686B0; box-shadow: none; }
-  html body .app-shell:is(.role-owner,.role-manager) :is(button,input,select,textarea):focus-visible { outline: 3px solid #29A7E1; outline-offset: 3px; }
-  html body:has(.app-shell:is(.role-owner,.role-manager)) :is(.modal-content,.modal-content input,.modal-content select,.modal-content textarea,.modal-content button) { border-radius: 0 !important; }
   html body .app-shell:is(.role-owner,.role-manager) .pulse-mobile-header { display: flex; align-items: center; justify-content: space-between; min-height: 68px; padding: 12px 20px; background: #10253F; color: white; }
   html body .pulse-mobile-header .pulse-logo { display: block; height: 36px; width: auto; max-width: 160px; object-fit: contain; }
   html body .pulse-mobile-header button { display: grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid #4A617B; }

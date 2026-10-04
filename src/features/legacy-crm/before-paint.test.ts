@@ -12,6 +12,7 @@ const PATCH_SOURCES = [
   "src/features/legacy-crm/mobile-workspace.ts",
   "src/features/legacy-crm/html-shell.ts",
   "src/features/legacy-crm/role-ui.ts",
+  "app/legacy-crm/route.ts",
 ];
 
 function loadScheduler() {
