@@ -49,7 +49,7 @@ async function main() {
       const price=card.locator('input[type=number]').first();
       await price.fill('18'); await price.press('Tab');
       await card.locator('summary').click();
-      await card.getByLabel('Model',{exact:false}).check();
+      await card.locator(`input[type=checkbox][onchange*="'film-a'"]`).check();
       await page.waitForFunction(async ()=>{
         const response=await fetch('/api/v1/legacy-crm/state');
         const saved=(await response.json()).data?.payload?.settings?.serviceOfferings?.find((x:any)=>x.name==='QA custom solution');
