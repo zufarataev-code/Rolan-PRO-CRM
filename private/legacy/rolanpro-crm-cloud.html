@@ -6620,6 +6620,8 @@ const I18N = {
     enRouteJob: 'Выехали к клиенту',
     reviewReceived: 'Отзыв получен',
     orderCreated: 'Заказ создан',
+    project_archived: 'Проект удалён в архив',
+    project_restored: 'Проект восстановлен из архива',
     orderNo: 'Проект №',
     search: 'Поиск…',
     empty: 'Нет данных',
@@ -7040,6 +7042,8 @@ const I18N = {
     enRouteJob: 'On my way',
     reviewReceived: 'Review received',
     orderCreated: 'Order created',
+    project_archived: 'Project moved to archive',
+    project_restored: 'Project restored from archive',
     orderNo: 'Project #',
     search: 'Search…',
     empty: 'No data',
@@ -19683,6 +19687,127 @@ function renderOrderKanbanCard(o) {
   `;
 }
 
+// ---------- АРХИВ ПРОЕКТОВ (Owner, 2026-10-02) ----------
+// Удалить проект может только владелец, и проект не стирается: он уходит в
+// db.archivedOrders со всеми данными и восстанавливается одной кнопкой. В архиве
+// проект не участвует в списках, календаре, деньгах, складе и аналитике — всё
+// это читает db.orders. Черновики закупок проекта отменяются и при
+// восстановлении снова становятся черновиками.
+const PROJECT_ARCHIVE_NOTE = 'Отменено: проект удалён в архив.';
+
+function archivedOrders() {
+  if (!Array.isArray(db.archivedOrders)) db.archivedOrders = [];
+  return db.archivedOrders;
+}
+
+/** Next project number: archived projects keep their numbers, so they count too. */
+function projectNumberSequence() {
+  return (db.orders || []).length + (Array.isArray(db.archivedOrders) ? db.archivedOrders.length : 0) + 1;
+}
+
+function projectArchiveOwnerOnly() {
+  if (currentUser()?.role === 'owner') return true;
+  alert('Удалять и восстанавливать проекты может только владелец.');
+  return false;
+}
+
+function openArchiveProjectModal(oid) {
+  if (!projectArchiveOwnerOnly()) return;
+  const o = getOrder(oid);
+  if (!o) return;
+  const client = getClient(o.clientId);
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6" style="max-width: 32rem;">
+      <h3 class="font-semibold text-lg mb-1">🗑 Удалить проект в архив</h3>
+      <p class="text-sm text-gray-600 mb-3"><b>${academyEsc(o.number || '')}</b> · ${academyEsc(client?.name || 'клиент')} · ${fmtMoney(orderRevenue(o))}. Проект исчезнет из списков, календаря, денег и аналитики. Все данные сохранятся — его можно восстановить: «Проекты → 🗄 Архив».</p>
+      <label for="arch-reason">Причина (необязательно)</label>
+      <input id="arch-reason" placeholder="дубль, тест, клиент отказался…">
+      <div class="flex gap-2 mt-4 justify-end">
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+        <button class="btn-primary" style="background:#dc2626;border-color:#dc2626" onclick="archiveProject('${o.id}')">Удалить в архив</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
+function archiveProject(oid) {
+  if (!projectArchiveOwnerOnly()) return;
+  const o = getOrder(oid);
+  if (!o) return;
+  const now = new Date().toISOString();
+  const reason = String(document.getElementById('arch-reason')?.value || '').trim().slice(0, 300);
+  // A deleted project's draft purchases must not be sent; restoring reopens them.
+  const cancelledRequestIds = [];
+  (db.purchaseRequests || []).forEach(request => {
+    if (request.orderId !== o.id || request.status !== 'draft') return;
+    request.status = 'cancelled';
+    request.note = `${request.note || ''} ${PROJECT_ARCHIVE_NOTE}`.trim();
+    request.updatedAt = now;
+    cancelledRequestIds.push(request.id);
+  });
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: now, key: 'project_archived', by: state.currentUserId, note: reason ? `Удалён в архив: ${reason}` : 'Удалён в архив' });
+  o.archive = { at: now, by: state.currentUserId, reason, cancelledRequestIds };
+  db.orders = db.orders.filter(order => order.id !== o.id);
+  archivedOrders().unshift(o);
+  state.modal = null;
+  if (state.openOrderId === o.id) { state.view = 'orders'; state.openOrderId = null; location.hash = ''; }
+  save();
+  render();
+  if (typeof cloudStatus === 'function') cloudStatus(`Проект ${o.number || ''} удалён в архив`, 'green');
+}
+
+function restoreProject(oid) {
+  if (!projectArchiveOwnerOnly()) return;
+  const o = archivedOrders().find(order => order.id === oid);
+  if (!o) return;
+  const now = new Date().toISOString();
+  (o.archive?.cancelledRequestIds || []).forEach(id => {
+    const request = (db.purchaseRequests || []).find(item => item.id === id);
+    if (!request || request.status !== 'cancelled') return;
+    request.status = 'draft';
+    request.note = String(request.note || '').replace(PROJECT_ARCHIVE_NOTE, '').trim();
+    request.updatedAt = now;
+  });
+  delete o.archive;
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: now, key: 'project_restored', by: state.currentUserId, note: 'Восстановлен из архива' });
+  db.archivedOrders = archivedOrders().filter(order => order.id !== oid);
+  if (!db.orders.some(order => order.id === oid)) db.orders.push(o);
+  state.modal = null;
+  save();
+  openOrder(o.id);
+  if (typeof cloudStatus === 'function') cloudStatus(`Проект ${o.number || ''} восстановлен`, 'green');
+}
+
+function openProjectArchive() {
+  if (!projectArchiveOwnerOnly()) return;
+  const rows = archivedOrders().map(o => {
+    const client = getClient(o.clientId);
+    const by = getUser(o.archive?.by)?.name || '';
+    return `<tr class="border-t">
+      <td class="p-2 font-semibold">${academyEsc(o.number || '')}</td>
+      <td class="p-2">${academyEsc(client?.name || '—')}</td>
+      <td class="p-2 text-right">${fmtMoney(orderRevenue(o))}</td>
+      <td class="p-2">${o.archive?.at ? fmtDateTime(o.archive.at) : '—'}${by ? `<div class="text-xs text-gray-500">${academyEsc(by)}</div>` : ''}</td>
+      <td class="p-2 text-sm">${academyEsc(o.archive?.reason || '')}</td>
+      <td class="p-2 text-right"><button class="btn-primary text-sm" onclick="restoreProject('${o.id}')">Восстановить</button></td>
+    </tr>`;
+  }).join('');
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6" style="max-width: 56rem;">
+      <h3 class="font-semibold text-lg mb-1">🗄 Архив проектов</h3>
+      <p class="text-sm text-gray-500 mb-3">Удалённые проекты со всеми данными. «Восстановить» возвращает проект в работу.</p>
+      ${rows ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500"><th class="text-left p-2">Проект</th><th class="text-left p-2">Клиент</th><th class="text-right p-2">Сумма</th><th class="text-left p-2">Удалён</th><th class="text-left p-2">Причина</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="text-sm text-gray-500">Архив пуст.</div>'}
+      <div class="flex justify-end mt-4"><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div>
+    </div>
+  </div>`;
+  render();
+}
+
 function renderOrders() {
   const u = currentUser();
   const filtered = visibleOrdersForUser(u)
@@ -19701,7 +19826,7 @@ function renderOrders() {
         || c?.name.toLowerCase().includes(q)
         || (c?.phone || '').toLowerCase().includes(q);
     })
-    .sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
   const ordersView = state.ordersView || 'kanban';
   const totalArea = filtered.reduce((s,o)=>s+(orderActualAreaSqft(o) || orderPlannedAreaSqft(o)),0);
@@ -19720,6 +19845,7 @@ function renderOrders() {
         ${hasFilters ? `<button class="btn-ghost" onclick="clearOrderFilters()">✕ ${T('clearFilters')}</button>` : ''}
         ${ordersView === 'kanban' ? `<button class="btn-ghost" onclick="openOrdersKanbanFullscreen()">⛶ Весь экран</button>` : ''}
         <button class="btn-ghost" onclick="location.hash='#/projects'">📐 Проверенные замеры</button>
+        ${currentUser()?.role === 'owner' ? `<button class="btn-ghost" onclick="openProjectArchive()">🗄 Архив${(db.archivedOrders || []).length ? ` (${db.archivedOrders.length})` : ''}</button>` : ''}
         <button class="btn-primary" onclick="openOrderModal()">+ ${T('newOrder')}</button>
       </div>
     </div>
@@ -21285,7 +21411,7 @@ async function convertLeadOnce(leadId) {
     };
     db.clients.push(client);
   }
-  const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(db.orders.length + 1).padStart(3, '0');
+  const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(projectNumberSequence()).padStart(3, '0');
   const o = {
     id: 'o' + uid(), number: num, clientId: client.id,
     ...(canonical ? { canonicalLeadId: leadId } : {}),
@@ -24791,6 +24917,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   return `
     <div class="order-clean-topbar">
       <button class="btn-ghost" onclick="state.view='${isInstaller ? 'installations' : 'orders'}'; location.hash=''; render();">← ${isInstaller ? 'Мои задачи' : T('orders')}</button>
+      ${u?.role === 'owner' ? `<button class="btn-ghost text-sm text-red-600" onclick="openArchiveProjectModal('${o.id}')" title="Проект уйдёт в архив; его можно восстановить">🗑 Удалить в архив</button>` : ''}
       ${u?.role === 'owner' ? `<button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();" title="Открыть старую полную форму, если нужны все поля сразу">Расширенный режим</button>` : ''}
     </div>
     <div class="order-clean-shell">
@@ -24853,7 +24980,12 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
 
 function renderOrderDetails(id) {
   const o = getOrder(id);
-  if (!o) return `<div class="card">${T('empty')}</div>`;
+  if (!o) {
+    const archived = currentUser()?.role === 'owner' ? (db.archivedOrders || []).find(order => order.id === id) : null;
+    return archived
+      ? `<div class="card"><div class="text-lg font-bold mb-1">Проект ${academyEsc(archived.number || '')} в архиве</div><div class="text-sm text-gray-500 mb-3">${archived.archive?.reason ? academyEsc(archived.archive.reason) : 'Удалён владельцем'}</div><button class="btn-primary" onclick="restoreProject('${archived.id}')">Восстановить</button></div>`
+      : `<div class="card">${T('empty')}</div>`;
+  }
   const c = getClient(o.clientId);
   const projectAddress = orderAddress(o, c);
   const u = currentUser();
@@ -28694,7 +28826,7 @@ function createOrder(nextStep = 'measure') {
     alert('У выбранного клиента не хватает данных для заказа: ' + missing.join(', ') + '. Добавьте эти данные в карточку клиента или создайте новый адрес объекта.');
     return;
   }
-  const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(db.orders.length + 1).padStart(3, '0');
+  const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(projectNumberSequence()).padStart(3, '0');
   const tags = Array.from(new Set([...selectedServices.map(item => item.tag), accountTypeForOrder, relationshipForOrder === 'regular' ? 'regular' : 'one_time', ...(executionVariant.tags || []), ...pickedTags].filter(Boolean)));
 
   const o = {

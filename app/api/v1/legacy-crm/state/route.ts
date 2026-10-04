@@ -10,6 +10,7 @@ import {
   validateLegacyPayload,
 } from "@/features/legacy-crm/sanitize";
 import { LEGACY_WORKSPACE_VIEW_ROLES } from "@/features/legacy-crm/api";
+import { enforceProjectArchive } from "@/features/legacy-crm/project-archive";
 import { applyEmployeeDirectory, loadDirectoryMembers } from "@/features/team/directory";
 import {
   createFieldWorkspace,
@@ -154,7 +155,11 @@ export async function PUT(request: NextRequest) {
   }
 
   const mergedPayload = isPrivileged
-    ? payload
+    ? enforceProjectArchive(
+        currentWorkspace.payload as Record<string, unknown>,
+        payload as Record<string, unknown>,
+        auth.session.roles.includes(ROLE_CODES.OWNER),
+      ) as Prisma.InputJsonValue
     : sanitizeLegacyPayload(
         mergeFieldWorkspace(
           currentWorkspace.payload as Record<string, unknown>,

@@ -512,3 +512,12 @@ Owner decision in chat on 2026-10-02 («давай» to the proposed order). Ame
 - The project's ad share stays in the direct costs (`orderPSS.marketing`), so every margin in the CRM keeps meaning "after advertising"; the fixed-cost share and the tax reserve stay in the net-profit block.
 - Supersedes: equal split of fixed costs (`fixedPool / projectCount`) and the flat «Рекламный резерв» of 10% of each project's revenue.
 - Migration: moves with the payment stage, together with the monthly money report and the bank feeds (real ad spend can then replace the budget).
+## 2026-10-02 — Projects are deleted into an archive, by the owner only (Owner)
+
+Owner decision in chat on 2026-10-02: «удаление проектов только у меня как у админа — удалять в архив, чтобы потом можно было восстановить». Amends item 1 of "2026-09-29 — CRM core consolidation" like the earlier exceptions: projects live in the legacy payload today.
+
+- Only the owner deletes and restores projects. A deleted project is never erased: it moves from `orders` to `archivedOrders` with all its data and `archive {at, by, reason, cancelledRequestIds}`.
+- In the archive a project takes no part in lists, calendar, money, warehouse or analytics (all read `orders`). Its draft purchase requests are cancelled and become drafts again on restore; requests already sent stay with purchasing.
+- The server enforces it on every owner/manager save (`enforceProjectArchive`): an archived project is never also in `orders`; a non-owner cannot change the archive or drop a project from `orders`. Field roles never receive the archive.
+- Project numbers count archived projects, so numbers are never reused.
+- Migration: moves with the project stage to PostgreSQL as a soft-delete column.
