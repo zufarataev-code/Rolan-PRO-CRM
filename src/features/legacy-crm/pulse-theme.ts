@@ -15,6 +15,8 @@ html body .app-shell:is(.role-owner,.role-manager) .app-topbar { background: #FF
 html body .app-shell:is(.role-owner,.role-manager) .btn-primary { background: #1686B0; box-shadow: none; }
 html body .app-shell:is(.role-owner,.role-manager) :is(button,input,select,textarea):focus-visible { outline: 3px solid #29A7E1; outline-offset: 3px; }
 html body:has(.app-shell:is(.role-owner,.role-manager)) :is(.modal-content,.modal-content input,.modal-content select,.modal-content textarea,.modal-content button) { border-radius: 0 !important; }
+html body:has(.app-shell:is(.role-owner,.role-manager)) :is(.erp-intake-card,.order-service-card,.erp-intake-disclosure,.erp-intake-footer,.order-client-panel) { border-radius: 0 !important; }
+html body:has(.app-shell:is(.role-owner,.role-manager)) .modal-content .btn-primary { background: #1686B0 !important; box-shadow: none; }
 .pulse-mobile-header { display: none; }
 .pulse-order-filters, .pulse-order-filter-grid { display: contents; }
 .pulse-order-filters > summary { display: none; }
@@ -76,6 +78,12 @@ html body .pulse-operations { margin-top: 32px; border-top: 1px solid #DFE7EE; }
   html body .pulse-revenue { border: 0; padding: 0; }
   html body .pulse-total { font-size: 42px; }
   html body .pulse-chart { gap: 8px; margin-top: 24px; }
+  html body:has(.app-shell:is(.role-owner,.role-manager)) #no-svc-buttons { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 8px !important; }
+  html body:has(.app-shell:is(.role-owner,.role-manager)) #no-svc-buttons .order-service-card { min-height: 94px !important; padding: 10px !important; min-width: 0; }
+  html body:has(.app-shell:is(.role-owner,.role-manager)) #no-svc-buttons .order-service-card .text-sm { font-size: 12px; line-height: 1.4; }
+  html body:has(.app-shell:is(.role-owner,.role-manager)) .erp-intake-card { padding: 12px; }
+  html body:has(.app-shell:is(.role-owner,.role-manager)) .erp-intake-footer > .flex { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 8px; width: 100%; }
+  html body:has(.app-shell:is(.role-owner,.role-manager)) .erp-intake-footer .btn-primary { grid-column: 1 / -1; min-height: 48px; }
   html body .pulse-metric { gap: 12px; }
   html body .pulse-order-filters { display: block; width: 100%; min-width: 0; border-top: 1px solid #DFE7EE; }
   html body .pulse-order-filters > summary { display: list-item; padding: 14px 0; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 44px; }
