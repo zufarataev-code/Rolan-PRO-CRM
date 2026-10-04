@@ -58,7 +58,8 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
     FINANCE_CATEGORY_OPTIONS: [["marketing", "Реклама"], ["payroll", "Выплата зарплаты"], ["owner_draw", "Личное изъятие владельца"]],
     fmtMoney: (n: number) => `$${Math.round(n)}`,
     academyEsc: (value: string) => String(value),
-    crm2Go: () => { state.opened = "orders"; },
+    crm2Go: () => { state.opened = `orders:${state.statusFilter}:${state.ordersOverdueOnly}`; },
+    projectQuickSqft: (o: Order) => Number(o.quickSqft) || 0,
     calendarEventsForOrder: (o: Order) => ((o.visits as string[] | undefined) || (o.installationAt ? [String(o.installationAt)] : [])).map((at) => ({ dt: new Date(at) })),
   });
   vm.runInContext(
@@ -197,7 +198,10 @@ test("the home screen has no order lists and replaces the old dashboard", () => 
 test("advertising reads the budget from the monthly-budget object", () => {
   const home = loadHome("owner", ORDERS);
   const { from, to } = home.crm2HomeRange("month", NOW);
-  const rows = [{ type: "expense", category: "marketing", amount: 5850, date: at(9, 3) }];
+  const rows = [
+    { type: "expense", category: "marketing", amount: 5850, date: at(9, 3) },
+    { type: "expense", category: "marketing", amount: 700, date: at(9, 4), scope: "personal" },
+  ];
   const ads = home.crm2HomeAds(rows, from, to, [["Лиды", 90, ""], ["Замеры", 0, ""], ["КП", 0, ""], ["Сделки", 30, ""]], NOW);
   assert.equal(ads.budget, 9000);
   assert.equal(ads.pct, 10);
@@ -240,7 +244,7 @@ test("a counter opens the funnel with only its status, without filters left from
   home.crm2HomeOpenStatus("measurement_done");
   assert.deepEqual(
     [home.state.statusFilter, home.state.search, home.state.managerFilter, home.state.dateFrom, home.state.dateTo, home.state.ordersPeriod, home.state.opened],
-    ["measurement_done", "", "", "", "", "all", "orders"],
+    ["measurement_done", "", "", "", "", "all", "orders:measurement_done:false"],
   );
 });
 
@@ -270,6 +274,7 @@ test("the funnel keeps leads received in a past month even after they were close
 test("a manager's overdue counter opens the funnel with only overdue projects", () => {
   const home = loadHome("manager", ORDERS) as Home & { state: Record<string, unknown> };
   home.crm2HomeOpenOverdue();
+  assert.equal(home.state.opened, "orders::true", "the filter is on before the funnel opens");
   assert.equal(home.state.ordersOverdueOnly, true);
   assert.equal(home.state.statusFilter, "");
   assert.equal(home.state.search, "");
@@ -277,5 +282,12 @@ test("a manager's overdue counter opens the funnel with only overdue projects", 
   assert.match(orders, /if \(state\.ordersOverdueOnly && !crm2OrderOverdue\(o\)\) return false;/);
   assert.match(html, /function clearOrderFilters\(\) \{\n {2}state\.search = ''; state\.statusFilter = ''; state\.managerFilter = '';\n {2}state\.ordersOverdueOnly = false;/);
   assert.match(html, /onclick="state\.ordersOverdueOnly=false; render\(\);"[^>]*>Просроченные оплаты ✕/);
+});
+
+test("«Установлено» counts the area of quick-entry projects", () => {
+  const quick: Order = { id: "q", status: "installation_done", rev: 2000, mar: 800, installationDoneAt: at(9, 6), quickSqft: 140 };
+  const home = loadHome("owner", [quick]);
+  const { from, to } = home.crm2HomeRange("month", NOW);
+  assert.equal((home.crm2HomeWorks([quick], from, to) as unknown as { sqft: number }).sqft, 140);
 });
 

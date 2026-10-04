@@ -19696,7 +19696,7 @@ function crm2HomeAds(rows, from, to, funnel, now = new Date()) {
   const plan = projectMonthAdBudget(now);
   const budget = Number(plan && typeof plan === 'object' ? plan.budget : plan) || 0;
   const pct = plan && typeof plan === 'object' ? Number(plan.pct) || 0 : 10;
-  const spent = rows.filter((row) => row.type === 'expense' && row.category === 'marketing' && crm2In(financeDate(row.date), from, to)).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+  const spent = rows.filter((row) => row.type === 'expense' && row.category === 'marketing' && row.scope !== 'personal' && crm2In(financeDate(row.date), from, to)).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
   const leads = funnel[0][1];
   const deals = funnel[3][1];
   return { budget, pct, spent, perLead: leads ? spent / leads : null, perDeal: deals ? spent / deals : null };
@@ -19771,7 +19771,8 @@ function crm2HomeWorks(orders, from, to) {
   return {
     done: done.length,
     ahead,
-    sqft: done.reduce((sum, o) => sum + (Number(orderActualAreaSqft(o)) || Number(orderPlannedAreaSqft(o)) || 0), 0),
+    // Quick Project Entry keeps its area in the service lines, not in measured windows.
+    sqft: done.reduce((sum, o) => sum + (Number(orderActualAreaSqft(o)) || Number(orderPlannedAreaSqft(o)) || (typeof projectQuickSqft === 'function' ? Number(projectQuickSqft(o)) : 0) || 0), 0),
     low: warehouseNeedItems(),
   };
 }
@@ -19786,19 +19787,18 @@ function crm2HomeExpenses(rows, from, to) {
 }
 
 /** Opens the funnel with only this status: filters left from earlier would hide the projects. */
-function crm2HomeOpenStatus(status) {
+function crm2HomeOpenStatus(status, overdueOnly = false) {
   state.search = ''; state.managerFilter = '';
   state.dateFrom = ''; state.dateTo = '';
   state.ordersPeriod = 'all';
-  state.ordersOverdueOnly = false;
   state.statusFilter = status;
+  state.ordersOverdueOnly = overdueOnly;
   crm2Go('orders');
 }
 
 /** The projects behind «Просрочены оплаты», for a role that has no payments screen. */
 function crm2HomeOpenOverdue() {
-  crm2HomeOpenStatus('');
-  state.ordersOverdueOnly = true;
+  crm2HomeOpenStatus('', true);
 }
 
 /** Only counters: each opens the list where the work is. */
