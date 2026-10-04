@@ -84,7 +84,7 @@ test('new openings inherit the chosen service snapshot, material and price inste
   c.syncWindowPanelsForType=()=>{}; c.syncSmartWindowPlan=(win:any)=>win;
   const start=html.indexOf('function managerWindowDefaults(');
   vm.runInContext(html.slice(start,html.indexOf('function syncWindowPanelsForType(',start)),c);
-  const o={id:'o',extraServices:[{id:'one',quickProjectLine:true,serviceType:'solar_film',offeringId:'one',catalogId:'film',unitPrice:12},{id:'two',quickProjectLine:true,serviceType:'solar_film',offeringId:'two',offeringName:'Second',catalogId:'film',unitPrice:20,offeringInstallerRate:4}]};
+  const o={id:'o',extraServices:[{id:'one',quickProjectLine:true,qty:0,serviceType:'solar_film',offeringId:'one',catalogId:'film',unitPrice:12},{id:'two',quickProjectLine:true,qty:0,serviceType:'solar_film',offeringId:'two',offeringName:'Second',catalogId:'film',unitPrice:20,offeringInstallerRate:4}]};
   const win=c.managerWindowDefaults(o,{id:'r',windows:[],defaultCatalogByScope:{solar_film:'other'}});
   assert.equal(win.offeringId,'two'); assert.equal(win.offeringName,'Second'); assert.equal(win.catalogId,'film'); assert.equal(win.pricePerSqft,20); assert.equal(win.offeringInstallerRate,4);
 });

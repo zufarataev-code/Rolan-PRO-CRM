@@ -23763,7 +23763,7 @@ function readNewOrderOfferings(serviceType, allowEmpty = false) {
   return lines;
 }
 function projectChosenOfferings(o, scopeKey = '') {
-  return projectQuickLines(o).filter(line => line.offeringId && (!scopeKey || line.serviceType === scopeKey));
+  return projectQuickLines(o).filter(line => line.offeringId && Number(line.qty) === 0 && (!scopeKey || line.serviceType === scopeKey));
 }
 function managerActiveOffering(o) {
   const lines = projectChosenOfferings(o, managerActiveMeasureScope(o));

@@ -61,7 +61,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         else if (offering) {
           // A newly measured opening inherits the already selected project service,
           // whose rate is a server-owned historical snapshot, not the current catalog.
-          const selected = oldItems.find(value => value.quickProjectLine && value.offeringId === item.offeringId);
+          const selected = oldItems.find(value => value.quickProjectLine && Number(value.qty) === 0 && value.offeringId === item.offeringId);
           item.offeringInstallerRate = selected && 'offeringInstallerRate' in selected ? selected.offeringInstallerRate : offering.installerRatePerSqft;
         }
         else delete item.offeringInstallerRate;
