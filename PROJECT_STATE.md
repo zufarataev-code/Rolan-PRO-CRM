@@ -774,3 +774,19 @@ Local edits, screenshots, chat messages, and unpushed commits do not count as sh
 - Cause: seven DOM patches injected by `/legacy-crm` waited for the next animation frame, so the unpatched page was painted first (menu items moved 52 px, the top bar resized).
 - Fix: `src/features/legacy-crm/before-paint.ts` (`beforePaint`: microtask before paint, runaway guard → next frame). All patches use it; new patches must too. Client list no longer crashes on a client without a source.
 - Verified locally with a `layout-shift` observer (0 shifts on menu clicks) and in production (deploy 06a58ab healthy).
+
+## 2026-10-03 — actual service solutions in operating projects
+
+Owner clarified: project direction → owner-created solution → linked material and own price; each service has its own specialist and date. Work owned on `codex/service-solutions-live` from main `4b5463c`, separate from #296 migration/execution work. Reuses/adapts the core of unmerged #295 rather than importing its older warehouse branches.
+
+Implemented: owner-defined solution directory without starter products; many-to-many solution/film links; solution selectors in measured windows, estimate and quick rows; name/customer-price/pay-rate snapshots; server-only catalogue permissions and manager rate redaction; per-service scheduling; calendar events and piece-rate crews scoped to the service. Project summary crew/date is derived on the server. Old workflows without service assignments retain their prior fallback. Measurement/proposal/deposit gates remain.
+
+Verification: local 98 test files passed (including 8 new behavior/security tests), TypeScript/build and disposable DB/API/browser CI results to be recorded after completion. Browser gate covers actual scheduling components in the authenticated CRM at 390/1440px and persistence through the real workspace API, not a complete consultation-to-payment journey. No production writes, migration or deploy have been made. Next action: review CI and screenshots, resolve findings, then release through main with owner authorization. #295 overlaps this implementation and must not be independently merged unchanged; #296 remains separate.
+
+### 2026-10-03 continuation — service solutions release candidate
+
+Rebased `codex/service-solutions-live` onto main `199b0df` (Precision Workbench retained). Local full suite: 501 passed; TypeScript passed. Browser CI now also exercises the real service-pricing page: owner creates a solution, edits price and links material, then verifies the server-saved record. Independent schedule component and API persistence checked at 390/1440 px. CI build, database and browser results pending publication. PR #298 overlaps catalogue/pay/warehouse work; do not merge both unchanged. This change is scoped to the owner-requested solutions and independent assignments, without warehouse schema or historical-order migration.
+
+### 2026-10-04 UTC — PR #299 verified for release
+
+Code head `ecd973bad1ef023e9dd2247799c7da3e6d38bd29`, CI #824 / run 37177592497: 502 tests, TypeScript, production build, clean database migrations/drift and HTTP lifecycle checks passed. Chromium 390/1440 passed real pricing-screen solution creation, material/price persistence, distinct service crews/dates, workspace reload assertions, no JS errors and no schedule overflow. Screenshots artifact 11294070485 reviewed. The fixture uses a real authenticated session on disposable localhost, explicit resets between widths and acknowledged cloud saves; early browser-gate failures were resolved. Installer reads preserve only their assigned service pay snapshot; manager and other-service rates remain hidden. No schema migration or historical order import is included. Latest change after that code head is documentation only. Next: release PR #299 through main CI and protected production workflow, then verify active build. Do not independently merge overlapping #295/#298 unchanged.

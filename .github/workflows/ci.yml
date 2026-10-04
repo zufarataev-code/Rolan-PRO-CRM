@@ -127,6 +127,25 @@ jobs:
       - name: End-to-end lifecycle tests
         run: npm run test:e2e
 
+      - name: Install solution browser tooling
+        run: |
+          npm install --prefix /tmp/rolanpro-browser --no-audit --no-fund playwright@1.56.1
+          node /tmp/rolanpro-browser/node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Service solutions phone and desktop
+        env:
+          E2E_PLAYWRIGHT_MODULE: /tmp/rolanpro-browser/node_modules/playwright
+        run: node --import tsx e2e/service-solutions.browser.ts
+
+      - name: Solution scheduling screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-solutions-screenshots
+          path: test-results/service-solutions/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Application log on failure
         if: failure()
         run: tail -200 next.log || true

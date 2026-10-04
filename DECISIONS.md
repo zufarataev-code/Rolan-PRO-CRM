@@ -484,3 +484,14 @@ Do not silently overwrite an earlier decision. Add a new dated section that name
 - The senior role that distributes jobs within a group is **«Руководитель отдела монтажа»**; it replaces «Руководитель монтажной группы» and «Главный специалист по установке» used in earlier drafts (PR #275–#277).
 - Internal codes stay `INSTALLER` / `installer`; only user-visible text changes. New screens and PRs use these titles from the start.
 - Scope: everything a person sees — CRM screens, the installer app and its demos, seed/provisioning data, client SMS/e-mail and documents. Historical internal engineering notes (`.agents/`, audit and prompt documents) are not rewritten.
+
+## 2026-10-03 — Owner-defined solutions inside directions, with service scheduling
+
+Owner clarified and authorized implementation in chat: choose the project direction, then add its concrete solutions/services, each with linked materials, its own customer price, specialist and date. The owner will create actual solutions; do not seed invented commercial products or prices.
+
+- Apply to the operating legacy project and its existing measured/quick scope now. This is an explicit narrow exception to the 2026-09-29 legacy freeze for this requested workflow; the relational migration remains separate and must not hold the usable service UI hostage.
+- Reuse the catalogue work from #295, adapted onto current main without importing its older warehouse/dependency chain. Solutions belong to a direction; their `filmIds` permit one film in several solutions. Owner edits the definitions, manager selects them. Server protects definitions and internal rates.
+- Measured windows and existing quick lines snapshot their selected solution name, customer price and installation rate. Changing the catalogue must not rewrite old estimates. Materials for a solution are explicit; an empty material selection is not permission to use arbitrary film.
+- Service groups are projections of the current scope: measured windows grouped by solution, or existing quick lines when there are no measurements, plus additional-work lines. Assignments live in `order.serviceSchedules`, with project crew/date derived summaries. A service has its own date and crew; calendar events use that crew. No duplicate charge is created for a measured service.
+- Installation readiness, deposit/proposal and verified-measurement gates remain. This does not implement separate per-service completion, weekly payroll summaries, relational migration or automatic bank transfers.
+- Branch `codex/service-solutions-live`, based on current main `4b5463c`. Supersedes the one-film/one-solution and automatically seeded examples in the unmerged #295 proposal.

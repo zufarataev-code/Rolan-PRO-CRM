@@ -21,6 +21,8 @@ import {
   findIntroducedClientIdentityDuplicate,
 } from "@/features/sales/client-identity";
 
+import { prepareServiceSolutions, serviceSolutionsForViewer } from "@/features/legacy-crm/service-solutions";
+
 const WORKSPACE_ID = "primary";
 
 function workspaceClients(payload: unknown) {
@@ -78,7 +80,8 @@ export async function GET(request: NextRequest) {
     : createFieldWorkspace(payload, auth.session.roles, legacyUserIds);
 
   return apiSuccess({
-    payload: responsePayload,
+    payload: serviceSolutionsForViewer(responsePayload, auth.session.roles.includes(ROLE_CODES.OWNER),
+      auth.session.roles.includes(ROLE_CODES.INSTALLER) ? legacyUserIds : []),
     revision: workspace.revision,
     updated_at: workspace.updated_at,
   });
@@ -166,6 +169,13 @@ export async function PUT(request: NextRequest) {
     mergedPayload as Record<string, unknown>,
     await loadDirectoryMembers((mergedPayload as { users?: unknown }).users ?? []),
   ) as typeof mergedPayload;
+
+  const solutionError = prepareServiceSolutions(
+    currentWorkspace.payload as Record<string, unknown>,
+    nextPayload as Record<string, unknown>,
+    auth.session.roles.includes(ROLE_CODES.OWNER),
+  );
+  if (solutionError) return apiError(400, "invalid_service_solution", solutionError);
 
   const introducedDuplicate = findIntroducedClientIdentityDuplicate(
     workspaceClients(currentWorkspace.payload),
