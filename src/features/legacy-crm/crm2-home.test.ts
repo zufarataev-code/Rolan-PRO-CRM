@@ -40,6 +40,8 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
     orderMargin: (o: Order) => o.mar,
     orderDebt: (o: Order) => o.debt || 0,
     projectProfitability: (o: Order) => ({ netProfit: o.net ?? 0 }),
+    projectMonthlyFixedExpensePool: () => 1000,
+    projectProfitTaxProfile: () => ({ ratePct: 10, annualMinimum: 1200 }),
     projectProfitDate: (o: Order) => new Date(String(o.installationDoneAt || o.installationAt || o.proposalAcceptedAt || o.createdAt)),
     projectMonthAdBudget: () => ({ budget: 9000, pct: 10, basis: "previous" }),
     financeData: () => ({ accounts: [{ id: "chase" }, { id: "fin_unallocated" }, { id: "old", active: false }] }),
@@ -102,7 +104,9 @@ test("revenue and net profit count only agreed projects dated in the period", ()
   const october = home.crm2HomeSales(ORDERS, from, to, true);
   assert.equal(october.count, 3, "a, b, g — not the proposal or the measurement");
   assert.equal(october.revenue, 9800 + 4200 + 2400);
-  assert.equal(october.netProfit, 2600 + 900 + 400);
+  // Company profit for October: margin 4700 + 1700 + 1050 = 7450, fixed costs 1000,
+  // tax max(10% × 6450, 1200 / 12) = 645.
+  assert.equal(october.netProfit, 7450 - 1000 - 645);
   assert.equal(october.average, (9800 + 4200 + 2400) / 3);
   assert.equal(home.crm2HomeSales(ORDERS, prevFrom, prevTo, true).revenue, 3000);
   assert.equal(home.crm2HomeSales(ORDERS, from, to, false).netProfit, 0, "no profit without the owner");
@@ -120,9 +124,13 @@ test("clients owe: agreed projects only; overdue when the work was done more tha
 test("the year goal is $50 000 unless the owner set another, and shows what each month needs", () => {
   const goal = loadHome("owner", ORDERS).crm2HomeGoal(ORDERS, NOW);
   assert.equal(goal.goal, 50000);
-  assert.equal(goal.earned, 2600 + 900 + 500 + 400);
+  // The CRM has projects from September: September (margin 1200 − 1000, tax 100)
+  // + 1–14 October (margin 7450 − 14/31 of 1000, tax 10%). January–August are not counted.
+  const octoberFixed = 1000 * 14 / 31;
+  const expected = (1200 - 1000 - 100) + (7450 - octoberFixed - (7450 - octoberFixed) * 0.1);
+  assert.ok(Math.abs(goal.earned - expected) < 0.01, `${goal.earned} vs ${expected}`);
   assert.equal(goal.monthsLeft, 3);
-  assert.equal(Math.round(goal.perMonth), Math.round((50000 - 4400) / 3));
+  assert.ok(Math.abs(goal.perMonth - (50000 - expected) / 3) < 0.01);
   assert.equal(loadHome("owner", ORDERS, { yearProfitGoal: 80000 }).crm2HomeGoal(ORDERS, NOW).goal, 80000);
 });
 
@@ -334,5 +342,15 @@ test("every number on the home opens the funnel without filters left from earlie
     assert.doesNotMatch(page, /onclick="crm2Go\('orders'\)"/);
     assert.match(page, /onclick="crm2HomeOpenStatus\(''\)"/);
   }
+});
+
+test("net profit counts a month's fixed costs even when it had no deals", () => {
+  const home = loadHome("owner", ORDERS);
+  // November has no deals: it loses its fixed costs and the minimum tax.
+  const november = home.crm2HomeRange("month", new Date(2026, 10, 10));
+  assert.equal(home.crm2HomeSales(ORDERS, november.from, november.to, true).netProfit, -1000 - 100);
+  // A quarter adds up its months: Oct–Dec = October's profit + two empty months.
+  const quarter = home.crm2HomeRange("quarter", NOW);
+  assert.equal(home.crm2HomeSales(ORDERS, quarter.from, quarter.to, true).netProfit, (7450 - 1000 - 645) - 2 * 1100);
 });
 

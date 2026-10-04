@@ -19614,12 +19614,54 @@ function crm2Delta(current, previous) {
   return previous > 0 ? Math.round((current - previous) / previous * 100) : null;
 }
 
+function crm2Deals(orders, from, to) {
+  return orders.filter((o) => CRM2_CONTRACTED_STATUSES.includes(o.status) && orderRevenue(o) > 0 && crm2In(projectProfitDate(o), from, to));
+}
+
+/** The first month the CRM has projects for: earlier months have costs but no sales on record. */
+function crm2BooksStart() {
+  const times = (db.orders || []).map((o) => new Date(o.createdAt).getTime()).filter(Number.isFinite);
+  if (!times.length) return null;
+  const first = new Date(Math.min(...times));
+  return new Date(first.getFullYear(), first.getMonth(), 1);
+}
+
+/**
+ * The company's net profit for a period, month by month: the margin of agreed
+ * projects (orderMargin) minus the whole monthly fixed costs and the tax reserve
+ * (the same pool, rate and annual minimum projectProfitability() uses), so a
+ * month without deals counts its costs too. Part of a month counts its share of
+ * the costs; months before the CRM has projects are left out.
+ */
+function crm2HomeNetProfit(orders, from, to) {
+  const books = crm2BooksStart();
+  if (!books) return 0;
+  const start = books > from ? books : from;
+  const profile = projectProfitTaxProfile();
+  const rate = Math.max(0, Number(profile.ratePct) || 0) / 100;
+  const minimumMonthly = Math.max(0, Number(profile.annualMinimum) || 0) / 12;
+  const fixedMonthly = Math.max(0, Number(projectMonthlyFixedExpensePool()) || 0);
+  let total = 0;
+  for (let month = new Date(start.getFullYear(), start.getMonth(), 1); month < to; month = new Date(month.getFullYear(), month.getMonth() + 1, 1)) {
+    const next = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+    const pieceFrom = start > month ? start : month;
+    const pieceTo = to < next ? to : next;
+    if (pieceTo <= pieceFrom) continue;
+    const share = (pieceTo - pieceFrom) / (next - month);
+    const gross = crm2Deals(orders, pieceFrom, pieceTo).reduce((sum, o) => sum + orderMargin(o), 0);
+    const fixed = fixedMonthly * share;
+    const tax = Math.max(Math.max(0, gross - fixed) * rate, minimumMonthly * share);
+    total += gross - fixed - tax;
+  }
+  return total;
+}
+
 /** Agreed projects dated in the period: revenue, margin, net profit (owner) and the average check. */
 function crm2HomeSales(orders, from, to, withProfit = false) {
-  const deals = orders.filter((o) => CRM2_CONTRACTED_STATUSES.includes(o.status) && orderRevenue(o) > 0 && crm2In(projectProfitDate(o), from, to));
+  const deals = crm2Deals(orders, from, to);
   const revenue = deals.reduce((sum, o) => sum + orderRevenue(o), 0);
   const margin = deals.reduce((sum, o) => sum + orderMargin(o), 0);
-  const netProfit = withProfit ? deals.reduce((sum, o) => sum + (Number(projectProfitability(o).netProfit) || 0), 0) : 0;
+  const netProfit = withProfit ? crm2HomeNetProfit(orders, from, to) : 0;
   return { deals, count: deals.length, revenue, margin, netProfit, average: deals.length ? revenue / deals.length : 0 };
 }
 
