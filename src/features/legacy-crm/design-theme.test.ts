@@ -153,8 +153,14 @@ test("menu and dock use stroke icons; the calculator lives in «Расчёт и 
   assert.match(route, /window\.openRolanProCalculator = function openRolanProCalculator\(dealId\)/);
 });
 
-test("phones keep the title: the dock's «+» replaces the top-bar create button", () => {
-  assert.match(DESIGN_THEME_CSS, /@media \(max-width: 760px\) \{\n {2}html body \.crm2-create-wrap,\n {2}html body \.app-topbar \.topbar-icon-btn\[aria-label="Настройки"\] \{ display: none; \}/);
+test("one create control at every width: the dock's «+» wherever the dock is shown", () => {
+  // The legacy layout shows the dock up to 840 px; the phone layer hides it in a
+  // narrow desktop window (521–840 px, fine pointer), where the top-bar button stays.
+  assert.match(DESIGN_THEME_CSS, /@media \(max-width: 840px\) \{\n {2}html body \.crm2-create-wrap \{ display: none; \}\n\}/);
+  assert.match(DESIGN_THEME_CSS, /@media \(min-width: 521px\) and \(max-width: 840px\) and \(pointer: fine\) \{\n {2}html body \.crm2-create-wrap \{ display: inline-flex; \}\n\}/);
+  assert.match(DESIGN_THEME_CSS, /@media \(max-width: 760px\) \{\n {2}html body \.app-topbar \.topbar-icon-btn\[aria-label="Настройки"\] \{ display: none; \}/);
+  const phoneLayer = readFileSync("src/features/legacy-crm/mobile-workspace.ts", "utf8");
+  assert.match(phoneLayer, /@media \(min-width: 521px\) and \(max-width: 840px\) and \(pointer: fine\) \{[\s\S]*?\.mobile-primary-nav,\n\s+\.mobile-sidebar-scrim \{ display: none !important; \}/);
 });
 
 test("the RU/EN switch also translates the new menu, tabs and titles", () => {

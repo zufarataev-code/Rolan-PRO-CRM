@@ -11,16 +11,18 @@ type Home = {
   crm2HomeSales: (orders: Order[], from: Date, to: Date, withProfit?: boolean) => { count: number; revenue: number; netProfit: number; average: number };
   crm2HomeDebts: (orders: Order[], now: Date) => { total: number; count: number; overdueCount: number; overdueTotal: number };
   crm2HomeGoal: (orders: Order[], now: Date) => { goal: number; earned: number; pct: number; perMonth: number; monthsLeft: number };
-  crm2HomeFunnel: (orders: Order[], from: Date, to: Date) => Array<[string, number, string]>;
+  crm2HomeFunnel: (orders: Order[], from: Date, to: Date, now?: Date) => Array<[string, number, string]>;
   crm2HomeAttention: (orders: Order[], owner: boolean, now: Date) => Array<{ label: string; count: number; go: string }>;
   crm2HomeExpenses: (rows: unknown[], from: Date, to: Date) => { list: Array<[string, number]>; total: number };
+  crm2HomeAds: (rows: unknown[], from: Date, to: Date, funnel: Array<[string, number, string]>, now: Date) => { budget: number; pct: number; spent: number; perLead: number | null };
+  crm2HomeDirections: (deals: Order[]) => Array<{ id: string; revenue: number; marginPct: number | null }>;
   crm2OrderDirection: (order: Partial<Order>) => string;
   crm2Plural: (count: number, forms: string[]) => string;
   crm2Pct: (part: number, whole: number) => string;
   renderCrm2Home: () => string;
 };
 
-function loadHome(role: string, orders: Order[], settings: Record<string, unknown> = {}) {
+function loadHome(role: string, orders: Order[], settings: Record<string, unknown> = {}, leads: unknown[] = []) {
   const start = html.indexOf("// ---------- CRM 2.0: ГЛАВНАЯ — ТОЛЬКО ЦИФРЫ");
   const end = html.indexOf("// ---------- MANAGER: ORDERS ----------", start);
   assert.ok(start > 0 && end > start);
@@ -36,14 +38,17 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
     orderDebt: (o: Order) => o.debt || 0,
     projectProfitability: (o: Order) => ({ netProfit: o.net ?? 0 }),
     projectProfitDate: (o: Order) => new Date(String(o.installationDoneAt || o.installationAt || o.proposalAcceptedAt || o.createdAt)),
-    projectMonthAdBudget: () => 9000,
+    projectMonthAdBudget: () => ({ budget: 9000, pct: 10, basis: "previous" }),
     financeData: () => ({ accounts: [{ id: "chase" }, { id: "fin_unallocated" }, { id: "old", active: false }] }),
     financeAccountBalance: (id: string) => ({ chase: 48040, fin_unallocated: 999, old: 5 } as Record<string, number>)[id] || 0,
     financeAllRows: () => [],
     financeDate: (value: string) => new Date(value),
     financeStockValue: () => 21600,
     warehouseNeedItems: () => [{ name: "Керамика 60″" }],
-    canonicalMessengerLeadRows: () => [],
+    canonicalMessengerLeadRows: () => leads,
+    windowRetailPrice: (win: { price: number }) => win.price,
+    measureAllWindows: (o: Order) => ((o.measurements as { rooms?: Array<{ windows?: unknown[] }> } | undefined)?.rooms || []).flatMap((room) => room.windows || []),
+    serviceOffering: (id: string) => (id === "decor-frost" ? { direction: "decorative" } : null),
     orderActualAreaSqft: () => 0,
     orderPlannedAreaSqft: () => 0,
     FINANCE_CATEGORY_OPTIONS: [["marketing", "Реклама"], ["payroll", "Выплата зарплаты"], ["owner_draw", "Личное изъятие владельца"]],
@@ -52,7 +57,7 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
     crm2Go: () => undefined,
   });
   vm.runInContext(
-    `${html.slice(start, end)}; Object.assign(this, { crm2HomeRange, crm2HomeSales, crm2HomeDebts, crm2HomeGoal, crm2HomeFunnel, crm2HomeAttention, crm2HomeExpenses, crm2OrderDirection, crm2Plural, crm2Pct, renderCrm2Home });`,
+    `${html.slice(start, end)}; Object.assign(this, { crm2HomeRange, crm2HomeSales, crm2HomeDebts, crm2HomeGoal, crm2HomeFunnel, crm2HomeAttention, crm2HomeExpenses, crm2HomeAds, crm2HomeDirections, crm2OrderDirection, crm2Plural, crm2Pct, renderCrm2Home });`,
     context,
   );
   return context as unknown as Home;
@@ -177,3 +182,48 @@ test("the home screen has no order lists and replaces the old dashboard", () => 
   assert.equal(home.crm2Plural(11, ["проект", "проекта", "проектов"]), "11 проектов");
   assert.equal(home.crm2Plural(21, ["счёт", "счёта", "счетов"]), "21 счёт");
 });
+
+test("advertising reads the budget from the monthly-budget object", () => {
+  const home = loadHome("owner", ORDERS);
+  const { from, to } = home.crm2HomeRange("month", NOW);
+  const rows = [{ type: "expense", category: "marketing", amount: 5850, date: at(9, 3) }];
+  const ads = home.crm2HomeAds(rows, from, to, [["Лиды", 90, ""], ["Замеры", 0, ""], ["КП", 0, ""], ["Сделки", 30, ""]], NOW);
+  assert.equal(ads.budget, 9000);
+  assert.equal(ads.pct, 10);
+  assert.equal(ads.spent, 5850);
+  assert.equal(ads.perLead, 65);
+  assert.match(home.renderCrm2Home(), /бюджет = 10% выручки прошлого месяца/);
+});
+
+test("a lead claimed more than 10 minutes ago is open again; new projects open the funnel list", () => {
+  const leads = [
+    { id: "l1", receivedAt: new Date(2026, 9, 14, 9).toISOString(), claimedAt: "" },
+    { id: "l2", receivedAt: new Date(2026, 9, 14, 9).toISOString(), claimedAt: new Date(2026, 9, 14, 11, 30).toISOString() },
+    { id: "l3", receivedAt: new Date(2026, 9, 14, 9).toISOString(), claimedAt: new Date(2026, 9, 14, 11, 55).toISOString() },
+  ];
+  const home = loadHome("owner", ORDERS, {}, leads);
+  const alert = home.crm2HomeAttention(ORDERS, true, NOW).find((a) => a.label.startsWith("Лиды"));
+  assert.equal(alert?.count, 2, "l1 and the abandoned l2; l3 is being converted");
+  assert.equal(alert?.go, "crm2Go('leads')");
+  const { from, to } = home.crm2HomeRange("month", NOW);
+  assert.equal(home.crm2HomeFunnel(ORDERS, from, to, NOW)[0][1], 5 + 2);
+
+  const onlyProjects = loadHome("owner", ORDERS).crm2HomeAttention(ORDERS, true, new Date(2026, 9, 14, 13)).find((a) => a.label.startsWith("Лиды"));
+  assert.equal(onlyProjects?.go, "crm2HomeOpenStatus('new')", "the inbox does not list projects in «new»");
+});
+
+test("a mixed project's revenue goes to each of its directions, margin in proportion", () => {
+  const mixed: Order = {
+    id: "m", status: "installation_done", serviceType: "solar_film", rev: 3000, mar: 1200, installationDoneAt: at(9, 3),
+    measurements: { rooms: [{ windows: [{ price: 2000, measureScope: "solar_film" }, { price: 500, measureScope: "decorative_film" }] }] },
+    extraServices: [{ price: 500, offeringId: "decor-frost" }, { price: 999, quickProjectLine: true, serviceType: "smart_film" }],
+  };
+  const rows = loadHome("owner", [mixed]).crm2HomeDirections([mixed]);
+  const by = Object.fromEntries(rows.map((row) => [row.id, row]));
+  assert.equal(by.solar_film.revenue, 2000);
+  assert.equal(by.decorative_film.revenue, 1000, "a window and a service line of the decorative direction");
+  assert.equal(by.smart_film.revenue, 0, "a quick line is not counted once windows are measured");
+  assert.equal(by.solar_film.marginPct, 40);
+  assert.equal(by.decorative_film.marginPct, 40);
+});
+
