@@ -17422,6 +17422,67 @@ function selectAppView(key) {
   render();
 }
 
+// ---------- ДИЗАЙН CRM: ИКОНКИ И «СОЗДАТЬ» (Owner, 2026-10-04) ----------
+// Stroke icons from the owner's design canvas «CRM RolanPRO — экраны» instead of
+// emoji in the menu and the phone dock; the phone dock's «+» opens «Создать».
+const NAV_ICON_PATHS = {
+  dashboard: 'M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z',
+  leads: 'M4 4h16v12H8l-4 4zM8 9h8M8 12h5',
+  coldcalls: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2',
+  orders: 'M3 4h5v16H3zM10 4h5v10h-5zM17 4h4v13h-4z',
+  proposals: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5',
+  servicePricing: 'M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+  calendar: 'M3 5h18v16H3zM3 10h18M8 3v4M16 3v4',
+  installerOps: 'M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  tasks: 'M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9',
+  academy: 'M2 9l10-5 10 5-10 5zM6 11v5c3 2.5 9 2.5 12 0v-5',
+  clients: 'M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5',
+  inventory: 'M3 7.5 12 3l9 4.5v9L12 21l-9-4.5zM3 7.5l9 4.5 9-4.5M12 12v9',
+  payroll: 'M3 6h18v12H3zM3 10h18M7 15h3',
+  paymentsdue: 'M12 8v4l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
+  accounting: 'M3 21h18M5 21V10l7-5 7 5v11M9 21v-6h6v6',
+  reports: 'M4 20V10M10 20V4M16 20v-8M22 20H2',
+  team: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6',
+  referrals: 'M20 12v9H4v-9M2 7h20v5H2zM12 21V7M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z',
+  reviews: 'M12 3l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 18l-5.9 3 1.2-6.5L2.5 9.9 9.1 9z',
+  settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+  canonicalProjects: 'M3 4h5v16H3zM10 4h5v10h-5zM17 4h4v13h-4z',
+  measurements: 'M3 7h18v10H3zM7 7v4M11 7v6M15 7v4M19 7v6',
+  workday: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+  installations: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z',
+  analytics: 'M4 20V10M10 20V4M16 20v-8M22 20H2',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  logout: 'M15 4h4v16h-4M10 17l5-5-5-5M15 12H3',
+  plus: 'M12 5v14M5 12h14',
+};
+
+function navIconSvg(key, fallback = '') {
+  const path = NAV_ICON_PATHS[key];
+  return path ? `<svg class="rp-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"></path></svg>` : fallback;
+}
+
+/** The phone dock's «+»: the things people create most, as on the design canvas. */
+function openCreateSheet() {
+  const role = currentUser()?.role;
+  if (!['owner', 'manager'].includes(role)) return;
+  const tile = (title, sub, gradient, shadow, icon, action) => `<button type="button" class="rp-create-tile" style="background:${gradient};box-shadow:0 14px 26px -14px ${shadow}" onclick="closeModal(); ${action}"><span class="rp-create-tile-icon">${navIconSvg(icon)}</span><span><b>${title}</b><small>${sub}</small></span></button>`;
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-5" style="max-width: 30rem;">
+      <div class="flex items-center justify-between"><h3 class="font-semibold text-lg">Создать</h3><button class="btn-ghost" aria-label="Закрыть" onclick="closeModal()">✕</button></div>
+      <div class="rp-create-sheet">
+        ${tile('Новый проект', 'клиент, объект, адрес', 'linear-gradient(135deg,#3D7BD8,#22488F)', 'rgba(34,72,143,.9)', 'plus', 'openOrderModal()')}
+        ${tile('Клиент', 'карточка B2C или B2B', 'linear-gradient(135deg,#EF6A4C,#C2402A)', 'rgba(194,64,42,.9)', 'clients', 'openClientModal()')}
+        ${tile('Лиды', 'заявки и звонки', 'linear-gradient(135deg,#E9A92A,#B97500)', 'rgba(185,117,0,.9)', 'leads', "selectAppView('leads')")}
+        ${tile('Задача', 'себе или команде', 'linear-gradient(135deg,#8B6FD6,#5A3FA0)', 'rgba(90,63,160,.9)', 'tasks', "selectAppView('tasks')")}
+        ${tile('Приход рулона', 'плёнка на склад', 'linear-gradient(135deg,#34B573,#1C7A48)', 'rgba(28,122,72,.9)', 'inventory', "openAddRollModal('')")}
+        ${tile('Закупка', 'заявка поставщику', 'linear-gradient(135deg,#3CC2B5,#128A80)', 'rgba(18,138,128,.9)', 'payroll', 'openPurchaseRequestModal()')}
+      </div>
+    </div>
+  </div>`;
+  render();
+}
+
 function renderAppShell() {
   const u = currentUser();
   const role = u.role;
@@ -17464,6 +17525,7 @@ function renderAppShell() {
   const mobileNavItems = (role === 'manager' || role === 'owner') ? [
     ['dashboard', 'Сегодня', '⌂'],
     ['leads', 'Лиды', '◎'],
+    ['create', 'Создать', '+'],
     ['orders', 'Проекты', '▣'],
     ['calendar', 'Календарь', '□'],
   ] : (role === 'measurer') ? [
@@ -17499,7 +17561,7 @@ function renderAppShell() {
       <nav class="flex-1 p-3 space-y-1" style="overflow-y:auto;min-height:0;">
         ${navItems.map(([key, label, icon]) => `
           <div class="nav-item ${state.view===key?'active':''}" title="${academyEsc(label)}" onclick="selectAppView('${key}')">
-            <span class="nav-icon">${icon}</span>
+            <span class="nav-icon">${navIconSvg(key, icon)}</span>
             <span class="nav-label">${label}</span>
           </div>
         `).join('')}
@@ -17515,7 +17577,7 @@ function renderAppShell() {
           </div>
         </div>
         <button class="nav-item w-full mt-1" onclick="logout()">
-          <span class="nav-icon">🚪</span><span class="sidebar-logout-label">${T('logout')}</span>
+          <span class="nav-icon">${navIconSvg('logout', '🚪')}</span><span class="sidebar-logout-label">${T('logout')}</span>
         </button>
       </div>
     </aside>
@@ -17560,16 +17622,20 @@ function renderAppShell() {
       </div>
     </main>
     <nav class="mobile-primary-nav" aria-label="Основная мобильная навигация">
-      ${mobileNavItems.map(([key, label, icon]) => `
+      ${mobileNavItems.map(([key, label, icon]) => key === 'create' ? `
+        <button type="button" class="mobile-fab-slot" onclick="openCreateSheet()" aria-label="Создать">
+          <span class="mobile-fab">${navIconSvg('plus', '+')}</span>
+        </button>
+      ` : `
         <button type="button" class="${state.view===key?'active':''}" onclick="selectAppView('${key}')" aria-label="${academyEsc(label)}">
-          <span class="mobile-primary-nav-icon">${icon}</span>
+          <span class="mobile-primary-nav-icon">${navIconSvg(key, icon)}</span>
           <span>${academyEsc(label)}</span>
         </button>
       `).join('')}
-      <button type="button" class="${mobileOpen?'active':''}" onclick="toggleSidebar()" aria-label="Открыть все разделы">
-        <span class="mobile-primary-nav-icon">•••</span>
+      ${mobileNavItems.length < 5 ? `<button type="button" class="${mobileOpen?'active':''}" onclick="toggleSidebar()" aria-label="Открыть все разделы">
+        <span class="mobile-primary-nav-icon">${navIconSvg('more', '•••')}</span>
         <span>Ещё</span>
-      </button>
+      </button>` : ''}
     </nav>
   </div>
   ${state.modal || ''}
@@ -19615,7 +19681,7 @@ function renderOrders() {
         || c?.name.toLowerCase().includes(q)
         || (c?.phone || '').toLowerCase().includes(q);
     })
-    .sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
   const ordersView = state.ordersView || 'kanban';
   const totalArea = filtered.reduce((s,o)=>s+(orderActualAreaSqft(o) || orderPlannedAreaSqft(o)),0);

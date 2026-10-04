@@ -495,3 +495,11 @@ Owner clarified and authorized implementation in chat: choose the project direct
 - Service groups are projections of the current scope: measured windows grouped by solution, or existing quick lines when there are no measurements, plus additional-work lines. Assignments live in `order.serviceSchedules`, with project crew/date derived summaries. A service has its own date and crew; calendar events use that crew. No duplicate charge is created for a measured service.
 - Installation readiness, deposit/proposal and verified-measurement gates remain. This does not implement separate per-service completion, weekly payroll summaries, relational migration or automatic bank transfers.
 - Branch `codex/service-solutions-live`, based on current main `4b5463c`. Supersedes the one-film/one-solution and automatically seeded examples in the unmerged #295 proposal.
+
+## 2026-10-04 — The owner's design canvas becomes the CRM look (Owner)
+
+Owner decision in chat on 2026-10-04: «сделай дизайн для нашей CRM и мобильной версии… да, переноси дизайн в CRM нашу», after reviewing the canvas «CRM RolanPRO — экраны» (Claude Design, 21 screens). Amends item 1 of "2026-09-29 — CRM core consolidation" like the earlier exceptions: the screens people use are the legacy CRM today.
+
+- Step 1 (this change): one visual layer for every screen and role — `src/features/legacy-crm/design-theme.ts`, injected by `/legacy-crm` after the legacy and Tailwind styles: Montserrat / Manrope / IBM Plex Mono, the navy gradient sidebar with the blue gradient active item, the light blue-grey ground, white 8 px cards with a soft shadow, gradient primary buttons, calm inputs, 4 px chips, softer dialogs. Stroke icons replace emoji in the menu and the phone dock. The owner/manager phone dock is «Сегодня · Лиды · [+] · Проекты · Календарь»; «+» opens «Создать» (project, client, leads, task, roll receipt, purchase request); all sections stay behind ☰.
+- Layout is unchanged in this step; the canvas screens (Сегодня, Воронка, Карточка заказа, Календарь, Склад, Деньги, phone screens) follow one by one, each on top of the current structure (including the Precision Workbench «Сегодня»).
+- Migration: the theme module is plain CSS and moves with the UI to the relational screens unchanged.
