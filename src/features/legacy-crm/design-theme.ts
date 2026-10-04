@@ -223,6 +223,130 @@ html body .mobile-fab svg { width: 26px; height: 26px; fill: none; stroke: curre
   html body .topbar-title h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 
+/* «Сегодня» from the canvas: a 12-column mosaic on desktop, one column on phones. */
+.rp-today { max-width: 1600px; margin: 0 auto; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.rp-today h2, .rp-today h3 { font-family: Montserrat, Manrope, sans-serif; letter-spacing: -.02em; margin: 0; }
+.rp-today small { display: block; color: #5F6E82; font-size: 12.5px; font-weight: 600; }
+.rp-today-hero {
+  grid-column: span 8; position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 16px;
+  padding: 26px 28px; border-radius: 8px; color: #fff; background: var(--rp-hero);
+  box-shadow: 0 26px 50px -24px rgba(20,31,45,.95);
+}
+.rp-today-hero::before, .rp-today-hero::after { content: ''; position: absolute; top: -40px; height: 340px; transform: skewX(-30deg); pointer-events: none; }
+.rp-today-hero::before { right: 120px; width: 70px; background: linear-gradient(180deg, rgba(255,255,255,.13), rgba(255,255,255,0)); }
+.rp-today-hero::after { right: 40px; width: 30px; background: linear-gradient(180deg, rgba(191,231,243,.3), rgba(191,231,243,0)); }
+.rp-today-hero > * { position: relative; z-index: 1; }
+.rp-today-hero-top { display: flex; align-items: flex-start; gap: 20px; }
+.rp-today-hero-text { flex: 1; min-width: 0; }
+.rp-today-kicker { font-size: 13px; font-weight: 700; color: #9DB7CF; text-transform: uppercase; letter-spacing: 1.2px; }
+.rp-today-hero h2 { margin-top: 8px; font-size: 32px; font-weight: 800; color: #fff; }
+.rp-today-hero p { margin-top: 8px; font-size: 15px; font-weight: 600; color: #C6D4E2; line-height: 1.5; }
+.rp-today-hero p b { color: #fff; }
+.rp-today-week { text-align: right; flex-shrink: 0; }
+.rp-today-week span { display: block; font-size: 12px; font-weight: 700; color: #9DB7CF; }
+.rp-today-week b { display: block; margin-top: 2px; font: 600 30px 'IBM Plex Mono', monospace; }
+.rp-today-week em { display: inline-flex; margin-top: 6px; padding: 4px 10px; border-radius: 4px; font-style: normal; font-size: 12px; font-weight: 800; }
+.rp-today-week em.up { color: #7FE3D0; background: rgba(127,227,208,.12); }
+.rp-today-week em.down { color: #FFB4A3; background: rgba(239,106,76,.16); }
+.rp-today-ask { display: flex; align-items: center; gap: 12px; height: 54px; padding: 0 8px 0 14px; border-radius: 8px; background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.18); backdrop-filter: blur(10px); }
+.rp-today-ask-icon { width: 30px; height: 30px; border-radius: 6px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: #12304A; background: linear-gradient(135deg, #BFE7F3, #3DB5D9); }
+html body .rp-today-ask input { flex: 1; min-width: 0; height: 100%; border: 0 !important; background: transparent !important; box-shadow: none !important; color: #fff; font: 600 15px Manrope, sans-serif; outline: none; }
+html body .rp-today-ask input::placeholder { color: rgba(220,232,242,.75); }
+.rp-today-ask button { height: 40px; padding: 0 16px; border: 0; border-radius: 6px; background: #fff; color: #16212F; font: 700 14px Manrope, sans-serif; cursor: pointer; }
+.rp-today-asks { display: flex; flex-wrap: wrap; gap: 8px; }
+.rp-today-asks button { height: 32px; padding: 0 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #DCE8F2; font: 700 12.5px Manrope, sans-serif; cursor: pointer; }
+.rp-today-card { background: #fff; border: 1px solid rgba(230,236,244,.85); border-radius: 8px; box-shadow: var(--rp-card-shadow); padding: 20px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.rp-today-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.rp-today-card-head h3 { font-size: 17px; font-weight: 800; color: #16212F; }
+.rp-today-crews { grid-column: span 4; }
+.rp-today-live { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 4px; background: rgba(52,181,115,.14); color: #1C8A52; font-size: 12px; font-weight: 700; }
+.rp-today-live i { width: 7px; height: 7px; border-radius: 50%; background: #34B573; box-shadow: 0 0 0 3px rgba(52,181,115,.25); }
+.rp-today-crew, .rp-today-action, .rp-today-visit { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 0; border-radius: 8px; background: #F6F9FD; text-align: left; width: 100%; }
+.rp-today-crew { cursor: pointer; }
+.rp-today-avatar { width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 800; }
+.rp-today-crew-text, .rp-today-action-text { flex: 1; min-width: 0; }
+.rp-today-crew-text b, .rp-today-action-text b { display: block; font-size: 14px; font-weight: 800; color: #16212F; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-today-crew-text small, .rp-today-action-text small { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-today-tiles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.rp-today-tile { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 8px; padding: 18px 20px 16px; border: 0; border-radius: 8px; color: #fff; text-align: left; cursor: pointer; transition: transform .2s; }
+.rp-today-tile:hover { transform: translateY(-3px); }
+.rp-today-tile::before { content: ''; position: absolute; right: 16px; top: -30px; width: 44px; height: 180px; background: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,0)); transform: skewX(-30deg); }
+.rp-today-tile > * { position: relative; }
+.rp-today-tile-label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; color: rgba(255,255,255,.92); }
+.rp-today-tile-label i { width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+.rp-today-tile-label i.rp-pulse { animation: rpPulse 1.8s infinite; }
+@keyframes rpPulse { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.7); } 70% { box-shadow: 0 0 0 9px rgba(255,255,255,0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
+.rp-today-tile-value { display: flex; align-items: baseline; gap: 10px; }
+.rp-today-tile-value b { font: 800 40px Montserrat, sans-serif; letter-spacing: -1px; }
+.rp-today-tile-value em { font: 600 14px 'IBM Plex Mono', monospace; font-style: normal; color: rgba(255,255,255,.9); }
+.rp-today-tile-note { font-size: 13px; font-weight: 700; background: rgba(255,255,255,.16); border-radius: 6px; padding: 7px 10px; }
+.rp-today-visits { grid-column: span 7; }
+.rp-today-actions { grid-column: span 5; }
+.rp-today-visit-time { font: 600 13px 'IBM Plex Mono', monospace; color: #16212F; min-width: 46px; }
+.rp-today-visit-kind { flex-shrink: 0; height: 24px; padding: 0 8px; border-radius: 4px; color: #fff; font-size: 11.5px; font-weight: 800; display: inline-flex; align-items: center; }
+.rp-today-visit-main { flex: 1; min-width: 0; border: 0; background: transparent; text-align: left; cursor: pointer; padding: 0; }
+.rp-today-visit-main b { display: block; font-size: 14px; font-weight: 800; color: #16212F; }
+.rp-today-visit-main small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-today-action .btn-primary { flex-shrink: 0; height: 34px; padding: 0 12px; white-space: nowrap; }
+.rp-today-revenue { grid-column: span 8; }
+.rp-today-chart-svg { width: 100%; height: 200px; display: block; }
+.rp-today-legend { display: flex; gap: 16px; font-size: 12px; font-weight: 700; color: #3A4A5E; }
+.rp-today-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.rp-today-legend i { width: 14px; height: 4px; border-radius: 4px; }
+.rp-today-legend i.rev { background: linear-gradient(90deg, #3DB5D9, #2E5FA8); }
+.rp-today-legend i.got { background: #F0962B; }
+.rp-today-weeks { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; font: 600 12px 'IBM Plex Mono', monospace; color: #3A4A5E; }
+.rp-today-weeks b { display: block; font-family: Manrope, sans-serif; font-size: 11.5px; color: #5F6E82; }
+.rp-today-plan { grid-column: span 4; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 22px; border-radius: 8px; color: #fff; background: var(--rp-hero); box-shadow: 0 22px 44px -22px rgba(20,31,45,.9); }
+.rp-today-plan .rp-today-card-head { align-self: stretch; }
+.rp-today-plan h3 { color: #fff; font-size: 16px; }
+.rp-today-plan small { color: #9DB7CF; }
+.rp-today-ring-value { font: 800 34px Montserrat, sans-serif; fill: #fff; }
+.rp-today-ring-sub { font: 700 12px Manrope, sans-serif; fill: #9DB7CF; }
+.rp-today-plan-note { font-size: 12px; font-weight: 600; color: #9DB7CF; text-align: center; }
+.rp-today-plan-grid { align-self: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rp-today-plan-grid div { background: rgba(255,255,255,.08); border-radius: 6px; padding: 10px 12px; }
+.rp-today-plan-grid span { display: block; font-size: 11px; font-weight: 700; color: #9DB7CF; }
+.rp-today-plan-grid b { font: 600 18px 'IBM Plex Mono', monospace; }
+.rp-today-empty { padding: 14px; border-radius: 8px; background: #F6F9FD; color: #5F6E82; font-size: 13px; font-weight: 600; text-align: center; }
+@media (max-width: 1180px) {
+  .rp-today-hero, .rp-today-crews, .rp-today-visits, .rp-today-actions, .rp-today-revenue, .rp-today-plan { grid-column: 1 / -1; }
+  .rp-today-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .rp-today { gap: 12px; }
+  .rp-today-hero { padding: 18px 16px; }
+  .rp-today-hero-top { flex-direction: column; gap: 10px; }
+  .rp-today-week { text-align: left; }
+  .rp-today-hero h2 { font-size: 26px; }
+  .rp-today-hero p { font-size: 14px; }
+  .rp-today-ask { height: 50px; }
+  .rp-today-ask button { padding: 0 12px; }
+  .rp-today-asks { flex-wrap: nowrap; overflow-x: auto; }
+  .rp-today-asks button { flex-shrink: 0; }
+  .rp-today-tiles { gap: 10px; }
+  .rp-today-tile { padding: 14px; }
+  .rp-today-tile-value b { font-size: 32px; }
+  .rp-today-tile-note { font-size: 11.5px; padding: 5px 8px; }
+  .rp-today-card { padding: 14px; }
+  .rp-today-visit { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "time main route" "kind main route"; column-gap: 10px; row-gap: 4px; align-items: center; }
+  .rp-today-visit-time { grid-area: time; }
+  .rp-today-visit-kind { grid-area: kind; justify-self: start; }
+  .rp-today-visit-main { grid-area: main; }
+  .rp-today-visit > a { grid-area: route; }
+}
+.rp-today-card-head .btn-ghost, .rp-today-visit > a { white-space: nowrap; }
+.rp-today-asks { display: flex !important; scrollbar-width: none; }
+.rp-today-asks::-webkit-scrollbar { display: none; }
+html body .rp-today-hero, html body .rp-today-plan { overflow: hidden !important; }
+html body .rp-today-crew-text b, html body .rp-today-action-text b, html body .rp-today-visit-main b,
+html body .rp-today-crew-text small, html body .rp-today-action-text small, html body .rp-today-visit-main small { overflow: hidden !important; text-overflow: ellipsis; white-space: nowrap; }
+/* The phone layer would turn these rows into stacked buttons; they stay rows. */
+@media (max-width: 768px) {
+  html body .rp-today [data-rolanpro-mobile-action-row] { display: flex !important; grid-template-columns: none !important; }
+  html body .rp-today .rp-today-tiles[data-rolanpro-mobile-action-row] { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
 /* «Создать» sheet */
 .rp-create-sheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 /* The phone layer turns rows of 3+ buttons into one column; the tiles stay two across, as on the canvas. */
