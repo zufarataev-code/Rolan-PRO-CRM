@@ -399,3 +399,15 @@ test("«Оплаты клиентов» lists what «Клиенты должны
   assert.match(due, /paid: revenue - orderDebt\(o\)/);
 });
 
+test("a quick-entry project dated the 1st belongs to that month, not the evening before", () => {
+  const start = html.indexOf("function projectProfitDate(o) {");
+  const end = html.indexOf("function projectProfitMonthOrders(o) {", start);
+  const context = vm.createContext({ projectQuickDateRange: (o: { quick?: string }) => ({ endDate: o.quick || "" }) });
+  vm.runInContext(`${html.slice(start, end)}; this.projectProfitDate = projectProfitDate;`, context);
+  const projectProfitDate = (context as unknown as { projectProfitDate: (o: unknown) => Date }).projectProfitDate;
+  const first = projectProfitDate({ quick: "2026-10-01" });
+  assert.deepEqual([first.getFullYear(), first.getMonth(), first.getDate()], [2026, 9, 1]);
+  const stamped = projectProfitDate({ installationDoneAt: "2026-10-03T17:00:00.000Z" });
+  assert.equal(stamped.toISOString(), "2026-10-03T17:00:00.000Z", "full timestamps are unchanged");
+});
+

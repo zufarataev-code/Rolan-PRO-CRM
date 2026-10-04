@@ -15862,7 +15862,11 @@ function projectProfitTaxProfile() {
 function projectProfitDate(o) {
   const quickRange = projectQuickDateRange(o);
   const value = o?.installationDoneAt || o?.installationAt || quickRange.endDate || quickRange.startDate || o?.proposalAcceptedAt || o?.proposalSentAt || o?.createdAt;
-  const date = value ? new Date(value) : new Date();
+  // Quick-entry dates are «YYYY-MM-DD» calendar days. new Date() reads them as UTC
+  // midnight, which in California is the evening before — a project dated the 1st
+  // fell into the previous month. Read them as the local day.
+  const day = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : value ? new Date(value) : new Date();
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 function projectProfitMonthOrders(o) {
