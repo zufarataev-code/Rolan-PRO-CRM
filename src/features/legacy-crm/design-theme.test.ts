@@ -37,6 +37,7 @@ function loadShell(role: string) {
     render: () => undefined,
     selectAppView: (key: string) => { opened.push(key); state.view = key; },
     headerTitle: () => "📄 Коммерческие предложения",
+    isCompactViewport: () => Boolean(state.compact),
     T: (key: string) => key,
   });
   vm.runInContext(
@@ -182,5 +183,13 @@ test("the RU/EN switch also translates the new menu, tabs and titles", () => {
   const shell = html.slice(html.indexOf("function renderAppShell() {"), html.indexOf("function headerTitle() {"));
   assert.match(shell, /<span class="nav-label">\$\{crm2T\(item\[1\]\)\}<\/span>/);
   assert.match(shell, /<div class="crm2-nav-group-title">\$\{crm2T\(title\)\}<\/div>/);
+});
+
+test("a phone menu item that switches the address closes the menu first", () => {
+  const { crm, state } = loadShell("owner");
+  state.compact = true;
+  state.mobileSidebarOpen = true;
+  crm.crm2Go("canonicalProjects");
+  assert.equal(state.mobileSidebarOpen, false);
 });
 

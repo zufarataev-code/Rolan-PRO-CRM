@@ -17653,6 +17653,9 @@ function crm2ActiveNav() {
 
 function crm2Go(key) {
   crm2CloseMenus();
+  // selectAppView() returns early for hash-routed screens (Замеры, Монтажи, Услуги
+  // и цены) before it closes the phone menu, so close it here for every item.
+  if (isCompactViewport()) state.mobileSidebarOpen = false;
   if (key === 'purchases') {
     state.inventoryTab = 'purchases';
     selectAppView('inventory');
