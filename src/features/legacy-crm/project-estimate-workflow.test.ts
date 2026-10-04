@@ -158,8 +158,8 @@ test("quick project entry derives sqft price and defers installers to Montage", 
   assert.doesNotMatch(renderer, /\+ Новый сотрудник/);
   assert.match(renderer, /Монтаж позже/);
   assert.match(renderer, /Только для переноса уже завершённого проекта из старой CRM/);
-  assert.match(schedule, /line\.installerIds = \[\.\.\.o\.installerIds\]/);
-  assert.match(schedule, /line\.startDate = dt\.slice\(0, 10\)/);
+  assert.match(schedule, /line\.installerIds = \[\.\.\.assignment\.installerIds\]/);
+  assert.match(schedule, /line\.startDate = projectQuickDateValue\(datetimeLocalValue\(assignment\.installationAt\)/);
   assert.match(source, /filter\(line => line\.unit === 'sqft' && \(line\.installerIds \|\| \[\]\)\.includes\(user\?\.id\)\)/);
   assert.match(source, /new Set\(line\.installerIds \|\| \[\]\)\.size/);
 });
@@ -287,7 +287,7 @@ test("quick services keep legacy dates collapsed while normal scheduling sets th
   assert.doesNotMatch(renderer, /data-label="Окончание"/);
   assert.match(renderer, /<label>Начало работ<\/label><input type="date"/);
   assert.match(renderer, /Только для переноса уже завершённого проекта из старой CRM/);
-  assert.match(source, /if \(dt && !projectQuickDateValue\(line\.startDate\)\) line\.startDate = dt\.slice\(0, 10\)/);
+  assert.match(source, /line\.startDate = projectQuickDateValue\(datetimeLocalValue\(assignment\.installationAt\)/);
   assert.match(source, /quickRange\.endDate \|\| quickRange\.startDate/);
   assert.match(source, /Service period: \$\{servicePeriod\}/);
 });
@@ -498,7 +498,7 @@ test("a manager can price from customer dimensions; technical survey details gat
 
   // A refused installation schedule must not leave installers or dates on the order.
   const schedule = source.match(/function confirmScheduleInstallation\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.ok(schedule.indexOf("orderTechnicalMeasurementIssues(o)") < schedule.indexOf("o.installerIds = Array.from"));
+  assert.ok(schedule.indexOf("orderTechnicalMeasurementIssues(o)") < schedule.indexOf("o.serviceSchedules = schedules"));
   assert.match(schedule, /o\.installerIds = previous\.installerIds/);
 });
 

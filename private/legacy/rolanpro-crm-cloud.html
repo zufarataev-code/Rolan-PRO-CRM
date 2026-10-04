@@ -657,7 +657,7 @@
   .modal-backdrop {
     position: fixed; inset: 0;
     background: rgba(15,23,42,0.55); backdrop-filter: blur(8px);
-    display: flex; align-items: center; justify-content: center; z-index: 50;
+    display: flex; align-items: center; justify-content: center; z-index: 100;
     padding: 1rem;
     animation: fadeIn 0.2s ease;
   }
@@ -15591,9 +15591,11 @@ function windowFilmCost(w) {
 function windowInstallerPayout(w) {
   const c = windowCatalog(w);
   const filmName = c ? `${c.brand} ${c.model}` : (w.filmType || '');
-  return windowActualAreaSqft(w) * filmRate(filmName);
+  return windowActualAreaSqft(w) * (serviceOfferingInstallerRate(w) || filmRate(filmName));
 }
 function installerRateForWindow(user, w) {
+  const offeringRate = serviceOfferingInstallerRate(w);
+  if (offeringRate > 0) return offeringRate;
   const pc = user?.payConfig || {};
   const catalog = windowCatalog(w);
   const category = catalog?.category || filmCategory(w?.filmType || '');
@@ -15604,6 +15606,9 @@ function installerRateForWindow(user, w) {
   return installerServiceRateByCategory(category);
 }
 function installerRateForQuickLine(user, line) {
+  // A service with its own rate pays that rate (Owner, 2026-10-02).
+  const offeringRate = serviceOfferingInstallerRate(line);
+  if (offeringRate > 0) return offeringRate;
   const pc = user?.payConfig || {};
   const catalog = getCatalogItem(line?.catalogId);
   const category = catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other';
@@ -15630,7 +15635,9 @@ function installerAdditionalWorkRate(user, type) {
 }
 function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
   return (o?.extraServices || []).filter(line => !line.quickProjectLine).reduce((sum, line) => {
-    return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type) / installerCount;
+    const crew = projectServiceCrew(o, line);
+    if (user && !crew.includes(user.id)) return sum;
+    return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type) / (user ? Math.max(1, crew.length) : installerCount);
   }, 0);
 }
 function orderInstallerPayoutForUser(o, userId) {
@@ -15642,7 +15649,9 @@ function orderInstallerPayoutForUser(o, userId) {
   if (pc.type === 'commission') return orderRevenue(o) * Math.max(0, Number(pc.commissionPct) || 0) / 100 / installerIds.length;
   if (pc.type !== 'per_sqft') return 0;
   const filmPayout = !measureAllWindows(o).length ? orderQuickInstallerPayoutForUser(o, user) : measureAllWindows(o).reduce((sum, { win }) => {
-    return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / installerIds.length;
+    const crew = projectServiceCrew(o, win);
+    if (!crew.includes(userId)) return sum;
+    return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / Math.max(1, crew.length);
   }, 0);
   return filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length);
 }
@@ -15655,7 +15664,7 @@ function orderInstallerPayoutBreakdown(o) {
       : projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => {
           const catalog = getCatalogItem(line.catalogId);
           const filmName = catalog ? `${catalog.brand} ${catalog.model}` : line.serviceType;
-          return sum + (Number(line.qty) || 0) * filmRate(filmName);
+          return sum + (Number(line.qty) || 0) * (serviceOfferingInstallerRate(line) || filmRate(filmName));
         }, 0);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
     return { total: total + work, byInstaller: [], source: 'REFERENCE_DEFAULT' };
@@ -16672,6 +16681,15 @@ function calendarEventDatesForOrder(o, type) {
 }
 function calendarEventsForOrder(o, type) {
   const info = orderEventInfo(type);
+  if (type === 'install' && o.serviceSchedules?.length) {
+    return projectServiceGroups(o).flatMap(group => {
+      const assignment = projectServiceAssignment(o, group);
+      const dt = new Date(assignment.installationAt);
+      if (!assignment.installationAt || Number.isNaN(dt.getTime())) return [];
+      const scoped = { ...o, installerIds: assignment.installerIds || [], installationAt: assignment.installationAt };
+      return [{ id: `${o.id}_service_${group.id}`, o: scoped, kind: type, dt, info, note: group.name }];
+    });
+  }
   return calendarEventDatesForOrder(o, type).map((x, idx) => ({
     id: `${o.id}_${type}_${x.source || idx}`,
     o,
@@ -18397,6 +18415,7 @@ function renderCanonicalServicePricing() {
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Безубыточность</div><b class="text-xl">${canonicalPricingMoney(planning.break_even?.revenue)}</b><div class="text-xs">${planning.break_even?.deals || 0} сделок / ${planning.break_even?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Цель с прибылью</div><b class="text-xl">${canonicalPricingMoney(planning.target?.revenue)}</b><div class="text-xs">${planning.target?.deals || 0} сделок / ${planning.target?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">КП за месяц</div><b class="text-xl">${canonicalPricingMoney(actual.proposal_revenue)}</b></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Прогресс</div><b class="text-xl">${Number(actual.progress_percent || 0).toFixed(0)}%</b></div></div>
       ${owner ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${canonicalPricingField('cp-plan-check', 'Средний чек, $', assumptions.average_deal_value)}${canonicalPricingField('cp-plan-conversion', 'Конверсия лид → сделка, %', assumptions.lead_to_deal_percent)}${canonicalPricingField('cp-plan-profit', 'Целевая прибыль / месяц, $', assumptions.target_profit_monthly)}</div><button class="btn-primary mt-4" onclick="saveCanonicalPlanning()">Сохранить план</button>` : '<p class="text-sm text-slate-500 mt-4">Менеджер видит цели по лидам и сделкам. Расходы и прибыль меняет владелец.</p>'}
     </section>
+    ${renderServiceOfferingsSection()}
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Услуги</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту услугу, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Специалисту по установке / sqft, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between"><div><h2 class="text-xl font-black">Дополнительные работы</h2><p class="text-sm text-slate-500">Подключение зон, демонтаж, силикон и другие допродажи.</p></div><span class="tag">${addons.length}</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить допработу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Основная услуга</span><select id="cp-new-addon-service" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2">${services.map(s => `<option value="${s.service_type_id}">${academyEsc(s.name_ru)}</option>`).join('')}</select></label>${canonicalPricingField('cp-new-addon-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-addon-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-addon-unit', 'Единица', 'item', 'text')}${canonicalPricingField('cp-new-addon-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-addon-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalAddon()">Создать допработу</button></details><div class="space-y-3 mt-4">${addonCards || '<div class="text-slate-500">Дополнительных работ пока нет</div>'}</div></section>
   </div>`;
@@ -23231,6 +23250,7 @@ function projectEstimateReadiness(o) {
   const issues = [];
   const windows = measureAllWindows(o);
   if (!windows.length) issues.push('не внесены помещения и размеры');
+  if (windows.some(({ win }) => win.offeringId && !(Number(win.pricePerSqft) > 0))) issues.push('не указана цена выбранной услуги');
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
   if ((o.extraServices || []).filter(s => !s.quickProjectLine).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
@@ -23288,6 +23308,207 @@ function projectQuickRequiredSupplies(o, lines = projectQuickLines(o)) {
   }, {});
 }
 
+// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ (Owner, 2026-10-02) ----------
+// Направление → услуга → плёнка. Услуга — то, что продаём клиенту: её название
+// идёт в КП, у неё цена клиенту за sq ft и ставка специалисту за sq ft. Плёнки
+// склада привязываются к услугам (одна плёнка может подходить нескольким); материал проекта
+// по-прежнему считается по закупочной цене выбранной плёнки.
+const SERVICE_OFFERING_DIRECTIONS = ['smart', 'solar', 'protective', 'decorative'];
+// The owner creates the real solutions; no invented starter products or prices.
+function serviceOfferingsAll() {
+  return Array.isArray(db.settings.serviceOfferings) ? db.settings.serviceOfferings : [];
+}
+
+function serviceOffering(id) {
+  return id ? serviceOfferingsAll().find(item => item.id === id) || null : null;
+}
+
+function serviceOfferingDirection(serviceType) {
+  return canonicalCatalogCategory(primaryServiceInfo(serviceType)?.catalogCategory);
+}
+
+function serviceOfferingsFor(direction, { includeId = '', includeInactive = false } = {}) {
+  return serviceOfferingsAll()
+    .filter(item => item.direction === direction && (includeInactive || item.active !== false || item.id === includeId))
+    .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0) || String(a.name).localeCompare(String(b.name)));
+}
+
+/** What the line is called for the client: the service, else the film, else the direction. */
+function projectQuickLineLabel(line, catalog) {
+  return line?.offeringName || serviceOffering(line?.offeringId)?.name || (catalog ? catalogLabel(catalog) : (primaryServiceInfo(line?.serviceType)?.title || 'Позиция'));
+}
+
+/** Films are explicitly linked to the solution; an empty link list permits none. */
+function serviceOfferingFilmIds(offering) {
+  return Array.isArray(offering?.filmIds) ? offering.filmIds : [];
+}
+function projectQuickLineFilms(line) {
+  const films = projectQuickLineCatalog(line.serviceType, line.catalogId);
+  if (!line.offeringId) return films;
+  const allowed = serviceOfferingFilmIds(serviceOffering(line.offeringId));
+  return films.filter(item => allowed.includes(item.id) || item.id === line.catalogId);
+}
+
+/** The installer rate of the line's service, 0 when the service has none (the direction rate applies). */
+function serviceOfferingInstallerRate(line) {
+  const rate = Number(line?.offeringInstallerRate ?? serviceOffering(line?.offeringId)?.installerRatePerSqft);
+  return rate > 0 ? rate : 0;
+}
+
+function serviceOfferingCanEdit() {
+  if (currentUser()?.role === 'owner') return true;
+  alert('Услуги и цены меняет владелец.');
+  return false;
+}
+
+function addServiceOffering(direction) {
+  if (!serviceOfferingCanEdit() || !SERVICE_OFFERING_DIRECTIONS.includes(direction)) return;
+  const sort = serviceOfferingsFor(direction, { includeInactive: true }).length;
+  db.settings.serviceOfferings = serviceOfferingsAll();
+  db.settings.serviceOfferings.push({ id: 'svc_' + uid(), direction, name: 'Новая услуга', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort });
+  save();
+  render();
+}
+
+function updateServiceOffering(id, field, value) {
+  if (!serviceOfferingCanEdit()) return;
+  const offering = serviceOffering(id);
+  if (!offering) return;
+  if (field === 'name') {
+    const name = String(value || '').trim().slice(0, 120);
+    if (!name) return alert('Название услуги не может быть пустым.');
+    offering.name = name;
+    // Existing estimates retain the name and price chosen for that project.
+  } else if (field === 'pricePerSqft' || field === 'installerRatePerSqft') {
+    offering[field] = Math.max(0, Number(value) || 0);
+  } else if (field === 'active') {
+    offering.active = !!value;
+  } else return;
+  offering.updatedAt = new Date().toISOString();
+  save();
+  render();
+}
+
+function toggleServiceOfferingFilm(id, filmId, checked) {
+  if (!serviceOfferingCanEdit()) return;
+  const offering = serviceOffering(id);
+  const film = getCatalogItem(filmId);
+  if (!offering || !film) return;
+  if (canonicalCatalogCategory(film.category) !== offering.direction) return;
+  const ids = new Set(serviceOfferingFilmIds(offering));
+  if (checked) ids.add(filmId); else ids.delete(filmId);
+  offering.filmIds = [...ids];
+  save();
+  render();
+}
+
+function renderServiceOfferingsSection() {
+  const owner = currentUser()?.role === 'owner';
+  const money = value => (Number(value) > 0 ? `$${Number(value).toFixed(2)}` : '—');
+  const groups = SERVICE_OFFERING_DIRECTIONS.map(direction => {
+    const info = ORDER_PRIMARY_SERVICES.find(item => canonicalCatalogCategory(item.catalogCategory) === direction);
+    const films = (db.settings.catalog || []).filter(item => !item.archived && canonicalCatalogCategory(item.category) === direction);
+    const rows = serviceOfferingsFor(direction, { includeInactive: owner }).map(offering => {
+      const linked = films.filter(item => serviceOfferingFilmIds(offering).includes(item.id));
+      const filmList = films.length
+        ? `<details><summary class="cursor-pointer text-sm">Плёнки: ${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'выберите материалы услуги'}</summary><div class="mt-2 grid gap-1">${films.map(item => `<label class="text-sm"><input type="checkbox" ${serviceOfferingFilmIds(offering).includes(item.id) ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(сейчас: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label>`).join('')}</div></details>`
+        : '<div class="text-xs text-gray-500">На складе нет плёнок этого направления.</div>';
+      return owner ? `<div class="p-3 border border-slate-200 ${offering.active === false ? 'opacity-60' : ''}">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <div class="md:col-span-2"><label>Услуга (название в КП)</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value)"></div>
+          <div><label>Цена клиенту, $ / sq ft</label><input type="number" min="0" step="0.5" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value)"></div>
+          <div><label>Специалисту, $ / sq ft</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="ставка направления" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value)"></div>
+        </div>
+        <div class="mt-2 flex flex-wrap items-start justify-between gap-3"><div class="flex-1">${filmList}</div><label class="tag" style="display:inline-flex;white-space:nowrap;gap:6px"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked)"> Активна</label></div>
+      </div>` : `<div class="p-3 border border-slate-200"><div class="flex justify-between gap-3"><b>${academyEsc(offering.name)}</b><span>${money(offering.pricePerSqft)} / sq ft</span></div><div class="mt-1">${filmList}</div></div>`;
+    }).join('');
+    return `<div class="mt-4">
+      <div class="flex items-center justify-between gap-3"><h3 class="font-black">${academyEsc(info ? `${info.icon} ${info.title}` : direction)}</h3>${owner ? `<button class="btn-ghost text-sm" onclick="addServiceOffering('${direction}')">+ Добавить услугу</button>` : ''}</div>
+      <div class="grid gap-2 mt-2">${rows || '<div class="text-sm text-gray-500">Услуг пока нет.</div>'}</div>
+    </div>`;
+  }).join('');
+  return `<section class="card border border-slate-200 bg-white" style="border-radius:4px">
+    <h2 class="text-xl font-black">Услуги по направлениям</h2>
+    <p class="text-sm text-slate-500">В проекте выбор идёт так: направление → услуга → плёнка со склада. Название услуги клиент видит в КП, цена за sq ft подставляется в проект, ставка специалисту считается по услуге (пусто — действует ставка направления). К каждой услуге привяжите подходящие материалы. Одну плёнку можно использовать в нескольких услугах.</p>
+    ${groups}
+  </section>`;
+}
+
+function projectWindowSolutionHtml(o, room, win, inMeasurement = false) {
+  if (!orderUserCanSeeMoney(o, currentUser())) return '';
+  const direction = serviceOfferingDirection(win.measureScope || o.serviceType);
+  const offerings = serviceOfferingsFor(direction, { includeId: win.offeringId });
+  const films = (db.settings.catalog || []).filter(film => !film.archived && serviceOfferingFilmIds(serviceOffering(win.offeringId)).includes(film.id));
+  return `<div class="grid gap-2" style="min-width:0"><label>Услуга / решение<select aria-label="Услуга окна" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','offeringId',this.value,${inMeasurement})"><option value="">Выберите услугу</option>${offerings.map(item => `<option value="${academyEsc(item.id)}" ${win.offeringId === item.id ? 'selected' : ''}>${academyEsc(item.name)}</option>`).join('')}</select></label>${win.offeringId ? `<label>Материал услуги<select aria-label="Материал услуги" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','catalogId',this.value,${inMeasurement})"><option value="">Выберите плёнку</option>${films.map(film => `<option value="${academyEsc(film.id)}" ${win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogLabel(film))}</option>`).join('')}</select></label>` : ''}</div>`;
+}
+function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = false) {
+  const o = getOrder(oid);
+  const win = o?.measurements?.rooms?.find(room => room.id === rid)?.windows?.find(item => item.id === wid);
+  if (!win || !orderUserCanSeeMoney(o, currentUser())) return;
+  if (field === 'offeringId') {
+    const offering = serviceOffering(value);
+    if (value && (!offering || offering.active === false || offering.direction !== serviceOfferingDirection(win.measureScope || o.serviceType))) return;
+    win.offeringId = offering?.id || '';
+    win.offeringName = offering?.name || '';
+    if (currentUser()?.role === 'owner') win.offeringInstallerRate = Number(offering?.installerRatePerSqft) || 0;
+    win.pricePerSqft = offering ? Number(offering.pricePerSqft) || 0 : null;
+    if (offering && !serviceOfferingFilmIds(offering).includes(win.catalogId)) {
+      win.catalogId = ''; win.filmType = '';
+    }
+  } else if (field === 'catalogId') {
+    const film = getCatalogItem(value);
+    if (!film || film.archived || !serviceOfferingFilmIds(serviceOffering(win.offeringId)).includes(film.id)) return;
+    win.catalogId = film.id; win.filmType = catalogLabel(film);
+  } else return;
+  invalidateProjectEstimate(o, 'Изменена услуга или материал');
+  save();
+  if (inMeasurement) refreshManagerMeasureModal(oid); else refreshProjectEstimateWorkspace(oid);
+}
+// Services are projections of the existing commercial scope, never a second estimate.
+function projectServiceGroups(o) {
+  const groups = new Map();
+  const windows = measureAllWindows(o);
+  windows.forEach(({ win }) => {
+    const direction = win.measureScope || o.serviceType || 'solar_film';
+    const id = win.offeringId ? `offering:${win.offeringId}` : `direction:${direction}`;
+    if (!groups.has(id)) groups.set(id, { id, name: win.offeringName || serviceOffering(win.offeringId)?.name || primaryServiceInfo(direction)?.title || 'Услуга', windows: [], lines: [] });
+    groups.get(id).windows.push(win);
+  });
+  (o.extraServices || []).filter(line => !line.quickProjectLine || !windows.length).forEach(line => {
+    const id = `line:${line.id}`;
+    groups.set(id, { id, name: line.offeringName || line.label || 'Услуга', windows: [], lines: [line] });
+  });
+  return [...groups.values()];
+}
+function projectServiceAssignment(o, group) {
+  const saved = (o.serviceSchedules || []).find(item => item.id === group.id);
+  if (saved) return saved;
+  const line = group.lines[0];
+  // Once independent scheduling exists, new services remain unassigned.
+  if (o.serviceSchedules?.length) return { id: group.id, installerIds: [], installationAt: '' };
+  return { id: group.id, installerIds: line?.installerIds?.length ? line.installerIds : (o.installerIds || []), installationAt: line?.startDate ? `${line.startDate}T09:00:00` : o.installationAt || '' };
+}
+function projectServiceCrew(o, item) {
+  const group = projectServiceGroups(o).find(group => group.windows.includes(item) || group.lines.includes(item));
+  return group ? projectServiceAssignment(o, group).installerIds || [] : o.installerIds || [];
+}
+function projectServiceScheduleHtml(o) {
+  const installers = usersByRole('installer');
+  return projectServiceGroups(o).map((group, index) => {
+    const assignment = projectServiceAssignment(o, group);
+    return `<section class="card mt-3" data-service-schedule="${academyEsc(group.id)}"><h4 class="font-bold">${academyEsc(group.name)}</h4><label class="mt-2">Дата и время услуги<input style="min-height:44px" type="datetime-local" id="service-date-${index}" value="${datetimeLocalValue(assignment.installationAt)}"></label><div class="work-people mt-2">${installers.map(user => `<label class="work-person"><input type="checkbox" class="service-installer-${index}" value="${academyEsc(user.id)}" ${(assignment.installerIds || []).includes(user.id) ? 'checked' : ''}><span>${academyEsc(user.name)}</span></label>`).join('') || '<p>Добавьте специалиста в разделе «Сотрудники».</p>'}</div></section>`;
+  }).join('');
+}
+function readProjectServiceSchedule(o) {
+  const activeIds = new Set(usersByRole('installer').map(user => user.id));
+  return projectServiceGroups(o).map((group, index) => {
+    const value = document.getElementById(`service-date-${index}`)?.value || '';
+    const installerIds = [...new Set(Array.from(document.querySelectorAll(`.service-installer-${index}:checked`)).map(input => input.value))];
+    if (!value || Number.isNaN(new Date(value).getTime()) || !installerIds.length || installerIds.some(id => !activeIds.has(id))) throw new Error(`Укажите дату и исполнителя: ${group.name}`);
+    return { id: group.id, installationAt: new Date(value).toISOString(), installerIds };
+  });
+}
+
 function projectQuickLineCatalog(serviceType, selectedCatalogId = '') {
   const category = primaryServiceInfo(serviceType)?.catalogCategory;
   return (db.settings.catalog || []).filter(item => catalogCanBeSelected(item, selectedCatalogId) && catalogMatchesCategory(item, category) && (
@@ -23334,7 +23555,7 @@ function projectEstimateAddQuickLine(oid, requestedServiceType = '') {
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   const requestedService = ORDER_PRIMARY_SERVICES.find(service => service.id === requestedServiceType);
   const serviceType = requestedService?.id || o.serviceTypes?.[0] || o.serviceType || 'smart_film';
-  const catalog = projectQuickLineCatalog(serviceType)[0] || null;
+  const catalog = null;
   const line = {
     id: uid(), quickProjectLine: true, serviceType,
     catalogId: catalog?.id || '', label: catalog ? catalogLabel(catalog) : primaryServiceInfo(serviceType)?.title || 'Позиция',
@@ -23356,21 +23577,35 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     const service = ORDER_PRIMARY_SERVICES.find(item => item.id === value);
     if (!service) return;
     line.serviceType = service.id;
+    line.offeringId = '';
+    line.offeringName = '';
     const catalog = projectQuickLineCatalog(service.id)[0] || null;
     line.catalogId = catalog?.id || '';
     line.manualFilmName = '';
-    line.label = catalog ? catalogLabel(catalog) : service.title;
+    line.label = projectQuickLineLabel(line, catalog);
     if (Number(line.price) <= 0) line.unitPrice = Number(catalog?.retailPerSqft || 0);
   } else if (field === 'catalogId') {
     const catalog = getCatalogItem(value);
     const requiredCategory = primaryServiceInfo(line.serviceType)?.catalogCategory;
     if (catalog && (!catalogCanBeSelected(catalog, line.catalogId) || !catalogMatchesCategory(catalog, requiredCategory) || warehouseCatalogStockStats(catalog.id).availableSqft <= 0)) return;
+    if (catalog && line.offeringId && !serviceOfferingFilmIds(serviceOffering(line.offeringId)).includes(catalog.id)) return alert('Эта плёнка не привязана к выбранной услуге.');
     line.catalogId = catalog?.id || '';
     if (catalog) {
       line.manualFilmName = '';
-      line.label = catalogLabel(catalog);
-      if (Number(line.price) <= 0) line.unitPrice = Number(catalog.retailPerSqft || 0);
+      line.label = projectQuickLineLabel(line, catalog);
+      if (Number(line.price) <= 0) line.unitPrice = Number(serviceOffering(line.offeringId)?.pricePerSqft || catalog.retailPerSqft || 0);
     }
+  } else if (field === 'offeringId') {
+    const offering = serviceOffering(value);
+    if (value && (!offering || offering.active === false || offering.direction !== serviceOfferingDirection(line.serviceType))) return;
+    line.offeringId = offering?.id || '';
+    line.offeringName = offering?.name || '';
+    if (currentUser()?.role === 'owner') line.offeringInstallerRate = Number(offering?.installerRatePerSqft) || 0;
+    if (offering && !serviceOfferingFilmIds(offering).includes(line.catalogId)) line.catalogId = '';
+    line.manualFilmName = '';
+    line.unitPrice = Number(offering?.pricePerSqft) || 0;
+    line.pricingMode = 'unit';
+    line.label = projectQuickLineLabel(line, getCatalogItem(line.catalogId));
   } else if (field === 'manualFilmName') {
     const manualName = String(value || '').trim();
     line.manualFilmName = manualName;
@@ -23557,7 +23792,9 @@ function saveQuickProjectFilm(oid, lineId, category) {
   const roll = addInventoryRoll({ catalogId: catalog.id, lotNumber: document.getElementById('qf-lot')?.value.trim() || '', widthMm: Number(document.getElementById('qf-width')?.value) || 1524, originalLengthM: length, costTotal, dateReceived: new Date().toISOString().slice(0,10), location: 'Warehouse' });
   recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(catalog), direction: 'receipt', qty: length, unit: 'м', orderId: oid, reason: 'Быстрый ввод проекта' });
   line.catalogId = catalog.id;
-  line.label = catalogLabel(catalog);
+  const offering = serviceOffering(line.offeringId);
+  if (offering) offering.filmIds = [...new Set([...serviceOfferingFilmIds(offering), catalog.id])];
+  line.label = projectQuickLineLabel(line, catalog);
   projectEstimateMarkChanged(o, 'Создана и выбрана новая плёнка');
   save(); openQuickProjectEntry(oid);
 }
@@ -23809,10 +24046,12 @@ function renderQuickProjectEntry(o) {
   const availableInstallers = usersByRole('installer');
   const availableSupplies = ensureSupplies();
   const rows = quickLines.map(line => {
-    const catalog = projectQuickLineCatalog(line.serviceType, line.catalogId);
+    const catalog = projectQuickLineFilms(line);
+    const offerings = serviceOfferingsFor(serviceOfferingDirection(line.serviceType), { includeId: line.offeringId });
+    const offering = serviceOffering(line.offeringId);
     const selectedStock = line.catalogId ? warehouseCatalogStockStats(line.catalogId) : null;
     return `<tr>
-      <td data-label="Услуга"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select><button class="btn-ghost text-red-600 quick-commercial-remove" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить</button></td>
+      <td data-label="Направление и услуга"><select aria-label="Направление" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select><select aria-label="Услуга" class="mt-1" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','offeringId',this.value)"><option value="">${offerings.length ? 'Выберите услугу' : 'Услуг нет — «Услуги и цены»'}</option>${offerings.map(item => `<option value="${item.id}" ${line.offeringId===item.id?'selected':''}>${academyEsc(item.name)}${Number(item.pricePerSqft) > 0 ? ` · $${Number(item.pricePerSqft).toFixed(2)}/sq ft` : ''}</option>`).join('')}</select>${offering && Number(offering.pricePerSqft) > 0 ? `<div class="text-xs text-gray-500">Цена услуги: ${fmtSqftPrice(offering.pricePerSqft)} / sq ft</div>` : ''}<button class="btn-ghost text-red-600 quick-commercial-remove" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить</button></td>
       <td data-label="Плёнка"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}${projectQuickManualFilmName(line) ? '<div class="text-xs text-amber-700">Ручной ввод · не привязано к складу</div>' : ''}<details class="quick-film-alternative" ${projectQuickManualFilmName(line) ? 'open' : ''}><summary>Плёнки нет в списке</summary><div class="quick-film-alternative-body"><input aria-label="Ручное название плёнки" placeholder="Впишите название вручную" value="${academyEsc(projectQuickManualFilmName(line))}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','manualFilmName',this.value)">${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Добавить плёнку на склад</button>` : ''}</div></details></td>
       <td data-label="Метраж, sqft"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" placeholder="Например, 250" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
       <td data-label="Цена клиенту"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" placeholder="Общая сумма" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','price',this.value)"><div class="quick-commercial-price">${Number(line.qty) > 0 && Number(line.price) > 0 ? `${fmtMoney(line.unitPrice)} / sqft` : 'Цена / sqft появится автоматически'}</div></td>
@@ -23847,7 +24086,7 @@ function renderQuickProjectEntry(o) {
     </div>
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>Услуги проекта</h4><div class="text-xs text-gray-500">Без комнат и размеров окон: укажите общий метраж и цену проекта. Цена за sqft рассчитается автоматически. Можно добавить несколько услуг.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
-      <div class="project-estimate-table-wrap"><table class="project-estimate-table project-estimate-table--quick"><thead><tr><th>Услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена клиенту</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
+      <div class="project-estimate-table-wrap"><table class="project-estimate-table project-estimate-table--quick"><thead><tr><th>Направление / услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена клиенту</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
     </section>
     <div class="order-clean-note mt-3" style="border-color:#bfdbfe;background:#eff6ff;color:#1e40af"><b>Монтаж позже.</b> Бригада и дата монтажа назначаются после принятия КП — в карточке проекта через действие «Монтаж».</div>
     ${proposalIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Чтобы сформировать КП:</b> ${academyEsc(proposalIssues.join(', '))}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Для КП данных достаточно.</b> Можно переходить к проверке расчёта.</div>`}
@@ -23942,7 +24181,7 @@ function renderProjectEstimateWorkspace(o) {
     const defaultPrice = win.pricePerSqft ?? o.priceOverridePerSqft ?? cat?.retailPerSqft ?? 0;
     return `<tr>
       <td data-label="Помещение / окно"><div><b>${academyEsc(room.name || 'Комната')}</b><br><span class="text-gray-500">${academyEsc(win.name || 'Окно')}</span><br><span class="text-xs ${windowMeasurementIsVerified(win) ? 'text-emerald-700' : 'text-amber-700'}">${windowMeasurementIsVerified(win) ? '✓ точный замер' : 'размер клиента · предварительно'}</span></div></td>
-      <td data-label="Материал">${academyEsc(cat ? `${cat.brand} ${cat.model}` : 'Плёнка не выбрана')}</td>
+      <td data-label="Услуга / материал">${projectWindowSolutionHtml(o, room, win)}<div class="text-xs mt-1">${academyEsc(cat ? `${cat.brand} ${cat.model}` : 'Плёнка не выбрана')}</div></td>
       <td data-label="Площадь, sqft" class="money">${area.toFixed(2)}</td>
       <td data-label="Цена / sqft"><input aria-label="Цена за sqft" type="number" min="0" step="0.5" value="${Number(defaultPrice || 0)}" onchange="projectEstimateUpdateWindowPrice('${o.id}','${room.id}','${win.id}',this.value)"></td>
       <td data-label="Клиенту" class="money"><b>${fmtMoney(windowRetailPrice(win, o.complexity || 'standard', o.priceOverridePerSqft))}</b></td>
@@ -25842,6 +26081,7 @@ function renderManagerMeasureModal(oid) {
                         <button class="btn-ghost text-red-600 text-xs" aria-label="Удалить элемент" onclick="managerDeleteWin('${oid}','${r.id}','${w.id}')">Удалить окно</button>
                       </div>
                       <div class="manager-window-card-body">
+                        ${projectWindowSolutionHtml(o, r, w, true)}
                         <div>${managerWindowTypeCompactHtml(oid, r.id, w, scopeKey)}</div>
                         <div class="manager-window-fields">
                           <div class="manager-window-field"><label>Направление плёнки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','filmDirection',this.value)">${managerFilmDirectionOptionsHtml(w.filmDirection || '')}</select></div>
@@ -26544,6 +26784,7 @@ function confirmProjectProductionReady(oid) {
 
 function scheduleInstallationPrompt(oid) {
   const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
   if (!ensureProductionReadyForInstallation(o)) return;
   const installers = usersByRole('installer');
@@ -26551,17 +26792,8 @@ function scheduleInstallationPrompt(oid) {
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6">
       <h3 class="font-semibold text-lg mb-3">${T('scheduleInstallation')}</h3>
-      <label>${T('installers')}</label>
-      <div class="work-people">
-        ${installers.map(m => `
-          <label class="work-person">
-            <input type="checkbox" class="isch-installer" value="${m.id}" ${(o?.installerIds||[]).includes(m.id)?'checked':''}>
-            <span>${academyEsc(m.name)}</span>
-          </label>`).join('') || '<div class="text-xs text-gray-400">Специалисты по установке не заведены</div>'}
-      </div>
-      <label class="mt-3">${T('date')} / ${T('time')}</label>
-      <input type="datetime-local" id="isch-dt" value="${datetimeLocalValue(o?.installationAt)}">
-      <p class="text-xs text-gray-500 mt-2">Монтаж попадёт в календарь бригады и карту дня. Клиент получит уведомление с временем.</p>
+      ${projectServiceScheduleHtml(o)}
+      <p class="text-xs text-gray-500 mt-2">У каждой услуги своя дата и свои специалисты. Назначения появятся в календаре.</p>
       <div class="p-3 mt-3 rounded-lg bg-slate-50 border border-slate-200">
         <div class="text-xs text-slate-600">Объект идёт в несколько заходов — электрика, плёнка, силикон?</div>
         <button class="btn-ghost text-sm mt-1" onclick="openWorkPlanner('${oid}')">Открыть план работ</button>
@@ -26576,6 +26808,7 @@ function scheduleInstallationPrompt(oid) {
 }
 function confirmScheduleInstallation(oid) {
   const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
   // Check the surveyor's technical details before touching the order, so a
   // refused schedule never leaves installers or dates behind.
@@ -26585,16 +26818,22 @@ function confirmScheduleInstallation(oid) {
     return;
   }
   const previous = {
+    serviceSchedules: o.serviceSchedules,
     installerIds: o.installerIds,
     installationAt: o.installationAt,
     lines: projectQuickLines(o).map(line => ({ line, installerIds: line.installerIds, startDate: line.startDate })),
   };
-  o.installerIds = Array.from(document.querySelectorAll('.isch-installer:checked')).map(x => x.value);
-  const dt = document.getElementById('isch-dt').value;
-  if (dt) o.installationAt = new Date(dt).toISOString();
+  let schedules;
+  try { schedules = readProjectServiceSchedule(o); } catch (error) { alert(error.message); return; }
+  if (!schedules.length) return alert('Сначала добавьте услуги проекта.');
+  o.serviceSchedules = schedules;
+  o.installerIds = [...new Set(schedules.flatMap(item => item.installerIds))];
+  o.installationAt = schedules.map(item => item.installationAt).sort()[0];
   projectQuickLines(o).forEach(line => {
-    line.installerIds = [...o.installerIds];
-    if (dt && !projectQuickDateValue(line.startDate)) line.startDate = dt.slice(0, 10);
+    const assignment = schedules.find(item => item.id === `line:${line.id}`);
+    if (!assignment) return;
+    line.installerIds = [...assignment.installerIds];
+    line.startDate = projectQuickDateValue(datetimeLocalValue(assignment.installationAt).slice(0, 10));
   });
   closeModal();
   if (changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true })) {
@@ -26602,6 +26841,7 @@ function confirmScheduleInstallation(oid) {
     return;
   }
   // Any other refused guard: restore the order exactly as it was.
+  o.serviceSchedules = previous.serviceSchedules;
   o.installerIds = previous.installerIds;
   o.installationAt = previous.installationAt;
   previous.lines.forEach(({ line, installerIds, startDate }) => {
@@ -30775,6 +31015,7 @@ function premiumRenderWindow(prop, order, room, window, idx, calc) {
             <div class="font-black text-lg">${premiumEsc(window.name || ('Window ' + (idx + 1)))}</div>
             <div class="text-xs text-slate-400 mt-1">${window.width || 0} × ${window.height || 0} mm · qty ${qty} · ${priced.area.toFixed(2)} sqft · ${premiumEsc(premiumWindowShapeLabel(window))}</div>
             <div class="text-xs text-slate-400">Glass: ${premiumEsc(window.glassType || 'To be confirmed')} · Façade: ${premiumEsc(window.orientation || 'TBD')} · Install: ${window.side === 'out' ? 'exterior' : window.side === 'in' ? 'interior' : 'TBD'} · Access: ${premiumEsc(managerSolarAccessLabel(window))}</div>
+            ${window.offeringName ? `<div class="text-sm text-blue-200">${premiumEsc(window.offeringName)}</div>` : ''}
             ${premiumWindowEngineeringBlock(window)}
           </div>
           <button class="pp-btn ghost" onclick="premiumToggleWindow('${prop.token}','${room.id}','${window.id}')" ${locked || !premiumRoomIncluded(prop, room.id) ? 'disabled' : ''}>${included ? 'Remove' : 'Include'}</button>
@@ -30782,7 +31023,7 @@ function premiumRenderWindow(prop, order, room, window, idx, calc) {
         <div class="grid md:grid-cols-[1fr_150px] gap-3 mt-3">
           <div>
             <label>Product</label>
-            <select onchange="premiumSetWindowProduct('${prop.token}','${window.id}',this.value)" ${locked || !included ? 'disabled' : ''}>
+            <select onchange="premiumSetWindowProduct('${prop.token}','${window.id}',this.value)" ${locked || !included || window.offeringId ? 'disabled' : ''}>
               ${premiumProductOptions(selectedId)}
             </select>
             <div class="text-xs text-slate-400 mt-1">${premiumEsc(cat ? `${cat.brand} ${cat.model}` : (window.filmType || 'Custom film'))} · ${premiumSpecLine(spec)}</div>
@@ -31060,6 +31301,9 @@ function premiumToggleWindow(token, roomId, windowId) {
 }
 function premiumSetWindowProduct(token, windowId, catalogId) {
   premiumTouchProposal(token, prop => {
+    const order = getOrder(prop.orderId);
+    const win = measureAllWindows(order).find(item => item.win.id === windowId)?.win;
+    if (win?.offeringId) return;
     prop.selections.products[windowId] = catalogId || '';
   });
 }
@@ -31067,7 +31311,7 @@ function premiumSetRoomProduct(token, roomId, catalogId) {
   premiumTouchProposal(token, prop => {
     const order = getOrder(prop.orderId);
     const room = (order.measurements?.rooms || []).find(r => r.id === roomId);
-    (room?.windows || []).forEach(w => { prop.selections.products[w.id] = catalogId || ''; });
+    (room?.windows || []).forEach(w => { if (!w.offeringId) prop.selections.products[w.id] = catalogId || ''; });
   });
 }
 function premiumToggleService(token, serviceId) {
@@ -32772,7 +33016,7 @@ function calItemsInRange(startDate, endDate) {
     ['consultation', 'measure', 'install', 'complaint'].forEach(type => {
       if (!orderMatchesCalendarRole(o, type)) return;
       calendarEventsForOrder(o, type).forEach(ev => {
-        if (ev.dt >= startDate && ev.dt <= endDate) out.push(ev);
+        if (ev.dt >= startDate && ev.dt <= endDate && orderMatchesCalendarRole(ev.o, type)) out.push(ev);
       });
     });
   });
