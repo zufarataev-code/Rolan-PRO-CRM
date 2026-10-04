@@ -49,8 +49,12 @@ async function main() {
       const price=card.locator('input[type=number]').first();
       await price.fill('18'); await price.press('Tab');
       await card.locator('summary').click();
-      await card.getByLabel('QA Model',{exact:false}).check();
-      await page.waitForResponse(async (response:any)=>response.url().endsWith('/api/v1/legacy-crm/state') && response.request().method()==='PUT' && response.status()===200);
+      await card.getByLabel('Model',{exact:false}).check();
+      await page.waitForFunction(async ()=>{
+        const response=await fetch('/api/v1/legacy-crm/state');
+        const saved=(await response.json()).data?.payload?.settings?.serviceOfferings?.find((x:any)=>x.name==='QA custom solution');
+        return saved?.pricePerSqft===18 && saved?.filmIds?.includes('film-a');
+      });
       const catalogState=(await (await context.request.get(base+'/api/v1/legacy-crm/state')).json()).data;
       const solution=catalogState.payload.settings.serviceOfferings.find((x:any)=>x.name==='QA custom solution');
       assert.equal(solution.pricePerSqft,18); assert.deepEqual(solution.filmIds,['film-a']);
@@ -82,6 +86,11 @@ async function main() {
       assert.deepEqual(errors,[]);
       await context.close();console.log(`Solution scheduling components and persisted API: ${width}px passed`);
     }
+  } catch(error) {
+    if(browser) for(const context of browser.contexts()) for(const page of context.pages()) {
+      await page.screenshot({path:'test-results/service-solutions/failure.png'}).catch(()=>{});
+    }
+    throw error;
   } finally {
     await browser?.close();
     if(original) await prisma.legacyWorkspace.update({where:{workspace_id:'primary'},data:{payload:original.payload as any,revision:original.revision}});
