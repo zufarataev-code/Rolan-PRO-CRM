@@ -537,4 +537,4 @@ The owner selected mobile design variant 2 and explicitly requested implementati
 
 The monetary tile is explicitly «Стоимость оплаченных проектов», aggregating existing `orderRevenue` for role-visible projects with `paidAt` in the selected period. It is not bank receipts or a replacement P&L. No synthetic growth, profit, conversion or plan figures are introduced. This presentation does not change financial formulas, record storage, permissions or APIs.
 
-Open PRs #305 (CRM 2.0 shell) and #306 (numbers home) overlap and must be reconciled before merge. This branch is a reviewable implementation of the chosen mobile reference, not authorization to deploy.
+Release review: #305 (CRM 2.0 shell) and #306 (numbers home) are unmerged alternative canvas designs, not dependencies of the selected mobile variant. The owner instructed continuation after reviewing #307. Release only #307; keep those alternative PRs open for later reconciliation against the new main. #307 merged as eff1c4f4da5138f04f71290bb9233462f9f56b63 on 2026-10-04.
