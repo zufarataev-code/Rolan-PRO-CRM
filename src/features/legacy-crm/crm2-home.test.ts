@@ -18,13 +18,14 @@ type Home = {
   crm2HomeDirections: (deals: Order[]) => Array<{ id: string; revenue: number; marginPct: number | null }>;
   crm2HomeWorks: (orders: Order[], from: Date, to: Date) => { done: number; ahead: number };
   crm2HomeOpenStatus: (status: string) => void;
+  crm2HomeOpenOverdue: () => void;
   crm2OrderDirection: (order: Partial<Order>) => string;
   crm2Plural: (count: number, forms: string[]) => string;
   crm2Pct: (part: number, whole: number) => string;
   renderCrm2Home: () => string;
 };
 
-function loadHome(role: string, orders: Order[], settings: Record<string, unknown> = {}, leads: unknown[] = []) {
+function loadHome(role: string, orders: Order[], settings: Record<string, unknown> = {}, leads: unknown[] = [], allLeads?: unknown[]) {
   const start = html.indexOf("// ---------- CRM 2.0: ГЛАВНАЯ — ТОЛЬКО ЦИФРЫ");
   const end = html.indexOf("// ---------- MANAGER: ORDERS ----------", start);
   assert.ok(start > 0 && end > start);
@@ -48,6 +49,7 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
     financeStockValue: () => 21600,
     warehouseNeedItems: () => [{ name: "Керамика 60″" }],
     canonicalMessengerLeadRows: () => leads,
+    ...(allLeads ? { canonicalLeads: allLeads } : {}),
     windowRetailPrice: (win: { price: number }) => win.price,
     measureAllWindows: (o: Order) => ((o.measurements as { rooms?: Array<{ windows?: unknown[] }> } | undefined)?.rooms || []).flatMap((room) => room.windows || []),
     serviceOffering: (id: string) => (id === "decor-frost" ? { direction: "decorative" } : null),
@@ -60,7 +62,7 @@ function loadHome(role: string, orders: Order[], settings: Record<string, unknow
     calendarEventsForOrder: (o: Order) => ((o.visits as string[] | undefined) || (o.installationAt ? [String(o.installationAt)] : [])).map((at) => ({ dt: new Date(at) })),
   });
   vm.runInContext(
-    `${html.slice(start, end)}; Object.assign(this, { crm2HomeRange, crm2HomeSales, crm2HomeDebts, crm2HomeGoal, crm2HomeFunnel, crm2HomeAttention, crm2HomeExpenses, crm2HomeAds, crm2HomeDirections, crm2HomeWorks, crm2HomeOpenStatus, crm2OrderDirection, crm2Plural, crm2Pct, renderCrm2Home });`,
+    `${html.slice(start, end)}; Object.assign(this, { crm2HomeRange, crm2HomeSales, crm2HomeDebts, crm2HomeGoal, crm2HomeFunnel, crm2HomeAttention, crm2HomeExpenses, crm2HomeAds, crm2HomeDirections, crm2HomeWorks, crm2HomeOpenStatus, crm2HomeOpenOverdue, crm2OrderDirection, crm2Plural, crm2Pct, renderCrm2Home });`,
     context,
   );
   return Object.assign(context as unknown as Home, { state });
@@ -147,7 +149,7 @@ test("«Требует внимания» is counters only, each opening its lis
   assert.equal(alerts["Принято, нет даты монтажа"].count, 1);
   assert.equal(alerts["Сделано, нет акта"].count, 1);
   assert.equal(alerts["Просрочены оплаты"].go, "crm2Go('paymentsdue')");
-  assert.equal(home.crm2HomeAttention(ORDERS, false, NOW).find((a) => a.label === "Просрочены оплаты")?.go, "crm2Go('orders')");
+  assert.equal(home.crm2HomeAttention(ORDERS, false, NOW).find((a) => a.label === "Просрочены оплаты")?.go, "crm2HomeOpenOverdue()", "a manager has no payments screen");
   assert.equal(alerts["Заканчивается на складе"].count, 1);
 });
 
@@ -216,8 +218,6 @@ test("a lead claimed more than 10 minutes ago is open again; leads and new proje
   assert.equal(alerts["Лиды без ответа > 1 часа"].go, "crm2Go('leads')");
   const later = Object.fromEntries(home.crm2HomeAttention(ORDERS, true, new Date(2026, 9, 14, 13)).map((a) => [a.label, a]));
   assert.equal(later["Новые проекты без звонка"].count, 1, "counted apart: they open a different list");
-  const { from, to } = home.crm2HomeRange("month", NOW);
-  assert.equal(home.crm2HomeFunnel(ORDERS, from, to, NOW)[0][1], 5 + 2);
 });
 
 test("a mixed project's revenue goes to each of its directions, margin in proportion", () => {
@@ -251,5 +251,31 @@ test("installs count each scheduled service in its own period, as the Calendar d
   const november = home.crm2HomeRange("month", new Date(2026, 10, 10));
   assert.equal(home.crm2HomeWorks([split], october.from, october.to).ahead, 1);
   assert.equal(home.crm2HomeWorks([split], november.from, november.to).ahead, 1, "the November service counts in November");
+});
+
+test("the funnel keeps leads received in a past month even after they were closed; converted ones count once", () => {
+  const all = [
+    { lead_id: "w1", source: "website", created_at: at(8, 5), pipeline_status: { status_code: "CLOSED_LOST" } },
+    { lead_id: "w2", source: "facebook_messenger", created_at: at(8, 6), pipeline_status: { status_code: "NEW_LEAD" } },
+    { lead_id: "w3", source: "website", created_at: at(8, 7), pipeline_status: { status_code: "WON" } },
+    { lead_id: "x", source: "phone", created_at: at(8, 8) },
+  ];
+  const orders: Order[] = [...ORDERS, { id: "h", status: "new", rev: 0, mar: 0, createdAt: at(8, 7), canonicalLeadId: "w3" }];
+  const home = loadHome("owner", orders, {}, [], all);
+  const september = home.crm2HomeRange("month", new Date(2026, 8, 20));
+  // September projects: a (20 Sep), c (1 Sep), h (from w3) — plus w1 (closed) and w2; w3 is h; «phone» is not an inbox source.
+  assert.equal(home.crm2HomeFunnel(orders, september.from, september.to)[0][1], 3 + 2);
+});
+
+test("a manager's overdue counter opens the funnel with only overdue projects", () => {
+  const home = loadHome("manager", ORDERS) as Home & { state: Record<string, unknown> };
+  home.crm2HomeOpenOverdue();
+  assert.equal(home.state.ordersOverdueOnly, true);
+  assert.equal(home.state.statusFilter, "");
+  assert.equal(home.state.search, "");
+  const orders = html.slice(html.indexOf("function renderOrders() {"), html.indexOf("const ordersView =", html.indexOf("function renderOrders() {")));
+  assert.match(orders, /if \(state\.ordersOverdueOnly && !crm2OrderOverdue\(o\)\) return false;/);
+  assert.match(html, /function clearOrderFilters\(\) \{\n {2}state\.search = ''; state\.statusFilter = ''; state\.managerFilter = '';\n {2}state\.ordersOverdueOnly = false;/);
+  assert.match(html, /onclick="state\.ordersOverdueOnly=false; render\(\);"[^>]*>Просроченные оплаты ✕/);
 });
 

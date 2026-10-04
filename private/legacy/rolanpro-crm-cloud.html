@@ -19617,14 +19617,17 @@ function crm2HomeSales(orders, from, to, withProfit = false) {
   return { deals, count: deals.length, revenue, margin, netProfit, average: deals.length ? revenue / deals.length : 0 };
 }
 
+/** An agreed project still owes money a week after the work was done. */
+function crm2OrderOverdue(o, now = new Date()) {
+  if (!CRM2_CONTRACTED_STATUSES.includes(o.status) || !(orderDebt(o) > 0.01)) return false;
+  const done = new Date(o.installationDoneAt || o.actSignedAt || 0).getTime();
+  return done > 0 && now.getTime() - done > 7 * 24 * 3600 * 1000;
+}
+
 /** What agreed clients still owe; overdue = the work was done more than 7 days ago. */
 function crm2HomeDebts(orders, now = new Date()) {
-  const week = 7 * 24 * 3600 * 1000;
   const owing = orders.filter((o) => CRM2_CONTRACTED_STATUSES.includes(o.status)).map((o) => ({ o, debt: orderDebt(o) })).filter((row) => row.debt > 0.01);
-  const overdue = owing.filter(({ o }) => {
-    const done = new Date(o.installationDoneAt || o.actSignedAt || 0).getTime();
-    return done > 0 && now.getTime() - done > week;
-  });
+  const overdue = owing.filter(({ o }) => crm2OrderOverdue(o, now));
   return {
     total: owing.reduce((sum, row) => sum + row.debt, 0),
     count: owing.length,
@@ -19663,11 +19666,25 @@ function crm2HomeLeadRows(now = new Date()) {
   return rows.filter((lead) => !lead.claimedAt || now.getTime() - new Date(lead.claimedAt).getTime() > CRM2_LEAD_CLAIM_TTL_MS);
 }
 
-/** Leads → measurements → proposals → deals that happened in the period. */
-function crm2HomeFunnel(orders, from, to, now = new Date()) {
-  const open = crm2HomeLeadRows(now).filter((lead) => crm2In(lead.receivedAt, from, to)).length;
+/** Every website and Messenger lead the CRM loaded, whatever its status now. */
+function crm2HomeAllCanonicalLeads() {
+  try {
+    return typeof canonicalLeads !== 'undefined' && Array.isArray(canonicalLeads)
+      ? canonicalLeads.filter((lead) => ['facebook_messenger', 'website'].includes(lead?.source))
+      : [];
+  } catch (_) { return []; }
+}
+
+/**
+ * Leads → measurements → proposals → deals that happened in the period. Leads are
+ * the projects created plus the website / Messenger leads received that did not
+ * become a project — also those closed since, so past months do not shrink.
+ */
+function crm2HomeFunnel(orders, from, to) {
+  const converted = new Set((db.orders || []).map((o) => o.canonicalLeadId).filter(Boolean));
+  const inbox = crm2HomeAllCanonicalLeads().filter((lead) => !converted.has(lead.lead_id) && crm2In(lead.created_at, from, to)).length;
   return [
-    ['Лиды', orders.filter((o) => crm2In(o.createdAt, from, to)).length + open, '#E07A1F'],
+    ['Лиды', orders.filter((o) => crm2In(o.createdAt, from, to)).length + inbox, '#E07A1F'],
     ['Замеры', orders.filter((o) => crm2In(o.measurementDoneAt, from, to)).length, '#6E56CF'],
     ['КП', orders.filter((o) => crm2In(o.proposalSentAt, from, to)).length, '#C2417A'],
     ['Сделки', orders.filter((o) => crm2In(o.proposalAcceptedAt, from, to)).length, '#1F8A4C'],
@@ -19773,8 +19790,15 @@ function crm2HomeOpenStatus(status) {
   state.search = ''; state.managerFilter = '';
   state.dateFrom = ''; state.dateTo = '';
   state.ordersPeriod = 'all';
+  state.ordersOverdueOnly = false;
   state.statusFilter = status;
   crm2Go('orders');
+}
+
+/** The projects behind «Просрочены оплаты», for a role that has no payments screen. */
+function crm2HomeOpenOverdue() {
+  crm2HomeOpenStatus('');
+  state.ordersOverdueOnly = true;
 }
 
 /** Only counters: each opens the list where the work is. */
@@ -19801,7 +19825,7 @@ function crm2HomeAttention(orders, owner, now = new Date()) {
     { label: 'КП без ответа 3+ дня', count: waiting.length, note: waiting.length ? crm2Money(estimate(waiting)) : '—', color: '#C2417A', go: "crm2HomeOpenStatus('proposal_sent')" },
     { label: 'Принято, нет даты монтажа', count: noDate.length, note: noDate.length ? crm2Money(estimate(noDate)) : '—', color: '#1F8A4C', go: "crm2HomeOpenStatus('proposal_accepted')" },
     { label: 'Сделано, нет акта', count: noAct.length, note: noAct.length ? crm2Money(estimate(noAct)) : '—', color: '#2E5FA8', go: "crm2HomeOpenStatus('installation_done')" },
-    { label: 'Просрочены оплаты', count: debts.overdueCount, note: debts.overdueCount ? crm2Money(debts.overdueTotal) : '—', color: '#D2452B', go: owner ? "crm2Go('paymentsdue')" : "crm2Go('orders')" },
+    { label: 'Просрочены оплаты', count: debts.overdueCount, note: debts.overdueCount ? crm2Money(debts.overdueTotal) : '—', color: '#D2452B', go: owner ? "crm2Go('paymentsdue')" : 'crm2HomeOpenOverdue()' },
     { label: 'Заканчивается на складе', count: low.length, note: low.length ? String(low[0].name || '') : 'всё в норме', color: '#5D6B7E', go: "crm2Go('inventory')" },
   ];
 }
@@ -19852,7 +19876,7 @@ function renderCrm2Home() {
   const sales = crm2HomeSales(orders, range.from, range.to, owner);
   const before = crm2HomeSales(orders, range.prevFrom, range.prevTo, owner);
   const debts = crm2HomeDebts(orders, now);
-  const funnel = crm2HomeFunnel(orders, range.from, range.to, now);
+  const funnel = crm2HomeFunnel(orders, range.from, range.to);
   const works = crm2HomeWorks(orders, range.from, range.to);
   const rows = owner ? financeAllRows() : [];
   const dateLabel = `${now.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })} ${now.getFullYear()}`;
@@ -20567,6 +20591,7 @@ function renderOrders() {
   const filtered = visibleOrdersForUser(u)
     .filter(o => {
       if (state.statusFilter && o.status !== state.statusFilter) return false;
+      if (state.ordersOverdueOnly && !crm2OrderOverdue(o)) return false;
       if (u?.role === 'owner' && state.managerFilter && o.managerId !== state.managerFilter) return false;
       if (state.dateFrom && o.createdAt < new Date(state.dateFrom).toISOString()) return false;
       if (state.dateTo) {
@@ -20585,7 +20610,7 @@ function renderOrders() {
   const ordersView = state.ordersView || (isCompactViewport() ? 'list' : 'kanban');
   const totalArea = filtered.reduce((s,o)=>s+(orderActualAreaSqft(o) || orderPlannedAreaSqft(o)),0);
   const totalSum  = filtered.reduce((s,o)=>s+orderKanbanRevenue(o),0);
-  const hasFilters = state.search || state.statusFilter || (u?.role === 'owner' && state.managerFilter) || state.dateFrom || state.dateTo;
+  const hasFilters = state.search || state.statusFilter || state.ordersOverdueOnly || (u?.role === 'owner' && state.managerFilter) || state.dateFrom || state.dateTo;
   const periodLabel = ordersPeriodLabel();
 
   return `
@@ -20595,6 +20620,7 @@ function renderOrders() {
         <div class="orders-command-subtitle">Одна карточка ведёт клиента от обращения до замера, КП, монтажа и оплаты.</div>
       </div>
       <div class="orders-primary-actions">
+        ${state.ordersOverdueOnly ? `<button class="btn-ghost" onclick="state.ordersOverdueOnly=false; render();" title="Показать все проекты">Просроченные оплаты ✕</button>` : ''}
         ${hasFilters ? `<button class="btn-ghost" onclick="clearOrderFilters()">✕ ${T('clearFilters')}</button>` : ''}
         ${ordersView === 'kanban' ? `<button class="btn-ghost" onclick="openOrdersKanbanFullscreen()">⛶ Весь экран</button>` : ''}
         <button class="btn-ghost" onclick="location.hash='#/projects'">📐 Проверенные замеры</button>
@@ -30023,6 +30049,7 @@ function copyPlannedToActual(oid) {
 // ---------- FILTERS ----------
 function clearOrderFilters() {
   state.search = ''; state.statusFilter = ''; state.managerFilter = '';
+  state.ordersOverdueOnly = false;
   state.dateFrom = ''; state.dateTo = '';
   state.ordersPeriod = 'all';
   render();
