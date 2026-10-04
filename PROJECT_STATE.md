@@ -856,3 +856,14 @@ Code head `ecd973bad1ef023e9dd2247799c7da3e6d38bd29`, CI #824 / run 37177592497:
 - Legacy: «ДИЗАЙН CRM: ИКОНКИ И «СОЗДАТЬ»» block (`NAV_ICON_PATHS`, `navIconSvg`, `openCreateSheet`), menu and dock icons, owner/manager dock with «+»; the injected calculator menu item has a stroke icon. Also: the projects list no longer crashes on a project without `createdAt` (same one-line fix as #294).
 - Verification: full unit suite and `tsc` green; `design-theme.test.ts`. Local CRM at 1440 px and 375 px: sidebar, top bar, «Сегодня», «Проекты», dock and «Создать» checked with screenshots; no horizontal scroll on the phone.
 - Next: the canvas screens one by one — «Сегодня» (desktop mosaic + phone), «Воронка», «Карточка заказа», «Календарь», «Склад», «Деньги», phone order/measure/installer screens.
+
+
+## 2026-10-04 — Mobile variant 2 implementation (Codex)
+
+Task: implement the owner's selected «Пульс бизнеса» mobile design in `/legacy-crm`. Branch: `codex/pulse-business-mobile`, based on main `df112ca10ad6adc5f81c22b36b094092374d6d87`.
+
+Implemented OWNER/MANAGER numbers-first home, month/week/day periods, paid-project-value chart using existing `orderRevenue`, counts scoped by existing visibility helpers, colored square metric rows, report navigation and expandable operating center. Added real white ROLANPRO logo asset and role-scoped square styling. Phone dock opens overview, existing projects (Продажи), tasks, or the full menu. Phone projects default to card list; advanced period/status/manager/date filters collapse without dropping functionality. Other role shells, persistence and API permissions are unchanged.
+
+Validation: test suite 107 file-level test entries passed; TypeScript passed; production build passed with disposable local DATABASE_URL. Isolated Chromium rendering harness checked dashboard/projects/clients/tasks/reports/settings at 320,390,768,1440 widths; 24 screen/viewport cases, no JS errors or phone horizontal overflow. Week switching and full-menu opening passed. Harness uses disposable local fixture data, blocked external requests, existing mobile adapter/theme and actual renderer; authenticated production end-to-end and real customer data were not exercised. Desktop kanban retains its intentional horizontal scrolling. Screenshots and harness remain in `/tmp/rolanpro-browser`, outside source control. Legacy HTML backup: `/tmp/rolanpro-before-pulse.html`.
+
+Blocker for merge: open #305/#306 overlap this shell/home work; reconcile the selected mobile direction with those changes. Next action: review the dedicated draft PR and coordinate overlapping changes before merge/deployment. No migration, production write, external message or deployment performed.

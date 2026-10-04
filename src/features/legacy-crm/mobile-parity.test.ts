@@ -15,8 +15,8 @@ test("phone and desktop use the same complete CRM document", () => {
 test("mobile navigation is a shortcut layer over the full role navigation", () => {
   assert.match(legacy, /const mobileNavItems =/);
   assert.match(legacy, /\['dashboard', 'Сегодня'/);
-  assert.match(legacy, /\['leads', 'Лиды'/);
-  assert.match(legacy, /\['orders', 'Проекты'/);
+  assert.match(legacy, /\['dashboard', 'Обзор'/);
+  assert.match(legacy, /\['orders', 'Продажи'/);
   assert.match(legacy, /\['calendar', 'Календарь'/);
   assert.match(legacy, /onclick="selectAppView\('\$\{key\}'\)"/);
   assert.match(legacy, /onclick="toggleSidebar\(\)" aria-label="Открыть все разделы"/);

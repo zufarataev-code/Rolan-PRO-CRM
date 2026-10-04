@@ -55,19 +55,19 @@ test("owner shell keeps every primary operational section in one navigation", ()
   labels.forEach((label) => assert.ok(source.includes(label), `missing owner surface: ${label}`));
 });
 
-test("manager home is an action workbench instead of a KPI card wall", () => {
+test("business home keeps the action workbench accessible", () => {
   assert.match(source, /function renderPrecisionManagerDashboard\(\)/);
   assert.match(source, /Что требует внимания сегодня/);
   assert.match(source, /Очередь действий/);
   assert.match(source, /Следующий шаг/);
   assert.match(source, /Исключения/);
   assert.match(source, /Монтажи в работе/);
-  assert.match(source, /function renderManagerDashboard\(\) \{\s*return renderPrecisionManagerDashboard\(\);/);
+  assert.match(source, /function renderManagerDashboard\(\) \{\s*return renderPulseBusinessDashboard\(\);/);
 });
 
 test("manager workbench exposes the complete eight-stage operating funnel", () => {
   const dashboard = source.match(
-    /function renderPrecisionManagerDashboard\(\) \{([\s\S]*?)\n\}\n\nfunction renderManagerDashboard/,
+    /function renderPrecisionManagerDashboard\(\) \{([\s\S]*?)\n\}\n\nfunction pulsePeriodRange/,
   )?.[1];
 
   assert.ok(dashboard);
