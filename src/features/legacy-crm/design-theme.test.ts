@@ -20,6 +20,7 @@ type Crm = {
   crm2HeaderTitle: () => string;
   crm2Eyebrow: () => string;
   crm2Go: (key: string) => void;
+  crm2T: (text: string) => string;
 };
 
 function loadShell(role: string) {
@@ -39,7 +40,7 @@ function loadShell(role: string) {
     T: (key: string) => key,
   });
   vm.runInContext(
-    `${html.slice(start, end)}; Object.assign(this, { navIconSvg, openCreateSheet, NAV_ICON_PATHS, crm2NavGroups, crm2NavIsActive, crm2CreateItems, crm2SectionTabs, crm2HeaderTitle, crm2Eyebrow, crm2Go });`,
+    `${html.slice(start, end)}; Object.assign(this, { navIconSvg, openCreateSheet, NAV_ICON_PATHS, crm2NavGroups, crm2NavIsActive, crm2CreateItems, crm2SectionTabs, crm2HeaderTitle, crm2Eyebrow, crm2Go, crm2T });`,
     context,
   );
   return { crm: context as unknown as Crm, state, opened };
@@ -155,3 +156,20 @@ test("menu and dock use stroke icons; the calculator lives in «Расчёт и 
 test("phones keep the title: the dock's «+» replaces the top-bar create button", () => {
   assert.match(DESIGN_THEME_CSS, /@media \(max-width: 760px\) \{\n {2}html body \.crm2-create-wrap,\n {2}html body \.app-topbar \.topbar-icon-btn\[aria-label="Настройки"\] \{ display: none; \}/);
 });
+
+test("the RU/EN switch also translates the new menu, tabs and titles", () => {
+  const { crm, state } = loadShell("owner");
+  state.lang = "en";
+  assert.equal(crm.crm2T("Воронка"), "Pipeline");
+  assert.equal(crm.crm2T("Деньги"), "Money");
+  state.view = "coldcalls";
+  assert.equal(crm.crm2HeaderTitle(), "Leads");
+  assert.equal(crm.crm2Eyebrow(), "Sales");
+  assert.match(crm.crm2SectionTabs(), />Inbound<[\s\S]*>Cold calls</);
+  state.lang = "ru";
+  assert.equal(crm.crm2HeaderTitle(), "Лиды");
+  const shell = html.slice(html.indexOf("function renderAppShell() {"), html.indexOf("function headerTitle() {"));
+  assert.match(shell, /<span class="nav-label">\$\{crm2T\(item\[1\]\)\}<\/span>/);
+  assert.match(shell, /<div class="crm2-nav-group-title">\$\{crm2T\(title\)\}<\/div>/);
+});
+
