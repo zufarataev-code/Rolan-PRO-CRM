@@ -14,7 +14,7 @@ type Home = {
   crm2HomeFunnel: (orders: Order[], from: Date, to: Date, now?: Date) => Array<[string, number, string]>;
   crm2HomeAttention: (orders: Order[], owner: boolean, now: Date) => Array<{ label: string; count: number; go: string }>;
   crm2HomeExpenses: (rows: unknown[], from: Date, to: Date) => { list: Array<[string, number]>; total: number };
-  crm2HomeAds: (rows: unknown[], from: Date, to: Date, funnel: Array<[string, number, string]>, now: Date) => { budget: number; pct: number; spent: number; perLead: number | null };
+  crm2HomeAds: (rows: unknown[], from: Date, to: Date, funnel: Array<[string, number, string]>, now: Date) => { budget: number; pct: number; estimate: boolean; spent: number; perLead: number | null };
   crm2HomeDirections: (deals: Order[]) => Array<{ id: string; revenue: number; marginPct: number | null }>;
   crm2HomeWorks: (orders: Order[], from: Date, to: Date) => { done: number; ahead: number };
   crm2HomeOpenStatus: (status: string) => void;
@@ -289,5 +289,31 @@ test("«Установлено» counts the area of quick-entry projects", () =>
   const home = loadHome("owner", [quick]);
   const { from, to } = home.crm2HomeRange("month", NOW);
   assert.equal((home.crm2HomeWorks([quick], from, to) as unknown as { sqft: number }).sqft, 140);
+});
+
+test("date-only finance rows belong to their calendar day; a converted lead stays in the month it came in", () => {
+  const home = loadHome("owner", ORDERS);
+  const october = home.crm2HomeRange("month", NOW);
+  const rows = [
+    { type: "expense", category: "marketing", amount: 100, date: "2026-10-01" },
+    { type: "expense", category: "marketing", amount: 900, date: "2026-11-01" },
+  ];
+  assert.equal(home.crm2HomeExpenses(rows, october.from, october.to).total, 100, "1 Oct is October, 1 Nov is not");
+
+  const leads = [{ lead_id: "w9", source: "website", created_at: new Date(2026, 8, 30, 18).toISOString() }];
+  const orders: Order[] = [{ id: "p", status: "new", rev: 0, mar: 0, createdAt: new Date(2026, 9, 1, 9).toISOString(), canonicalLeadId: "w9" }];
+  const withLead = loadHome("owner", orders, {}, [], leads);
+  const september = withLead.crm2HomeRange("month", new Date(2026, 8, 20));
+  assert.equal(withLead.crm2HomeFunnel(orders, september.from, september.to)[0][1], 1);
+  assert.equal(withLead.crm2HomeFunnel(orders, october.from, october.to)[0][1], 0);
+});
+
+test("a budget estimated from this month says so", () => {
+  const home = loadHome("owner", ORDERS);
+  const { from, to } = home.crm2HomeRange("month", NOW);
+  const funnel: Array<[string, number, string]> = [["Лиды", 1, ""], ["Замеры", 0, ""], ["КП", 0, ""], ["Сделки", 0, ""]];
+  assert.equal(home.crm2HomeAds([], from, to, funnel, NOW).estimate, false);
+  const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+  assert.match(html, /оценка: \$\{ads\.pct\}% выручки этого месяца — в прошлом выручки не было/);
 });
 

@@ -19604,6 +19604,12 @@ function crm2In(value, from, to) {
   return !Number.isNaN(date.getTime()) && date >= from && date < to;
 }
 
+/** A finance date: «YYYY-MM-DD» is a calendar day here, not UTC midnight (which is the day before in California). */
+function crm2FinanceDay(value) {
+  const day = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : financeDate(value);
+}
+
 function crm2Delta(current, previous) {
   return previous > 0 ? Math.round((current - previous) / previous * 100) : null;
 }
@@ -19681,10 +19687,14 @@ function crm2HomeAllCanonicalLeads() {
  * become a project — also those closed since, so past months do not shrink.
  */
 function crm2HomeFunnel(orders, from, to) {
+  const canonical = crm2HomeAllCanonicalLeads();
+  const received = new Map(canonical.map((lead) => [lead.lead_id, lead.created_at]));
   const converted = new Set((db.orders || []).map((o) => o.canonicalLeadId).filter(Boolean));
-  const inbox = crm2HomeAllCanonicalLeads().filter((lead) => !converted.has(lead.lead_id) && crm2In(lead.created_at, from, to)).length;
+  const inbox = canonical.filter((lead) => !converted.has(lead.lead_id) && crm2In(lead.created_at, from, to)).length;
+  // A project made from an inbox lead counts when the lead came in, not when it was converted.
+  const projects = orders.filter((o) => crm2In(received.get(o.canonicalLeadId) || o.createdAt, from, to)).length;
   return [
-    ['Лиды', orders.filter((o) => crm2In(o.createdAt, from, to)).length + inbox, '#E07A1F'],
+    ['Лиды', projects + inbox, '#E07A1F'],
     ['Замеры', orders.filter((o) => crm2In(o.measurementDoneAt, from, to)).length, '#6E56CF'],
     ['КП', orders.filter((o) => crm2In(o.proposalSentAt, from, to)).length, '#C2417A'],
     ['Сделки', orders.filter((o) => crm2In(o.proposalAcceptedAt, from, to)).length, '#1F8A4C'],
@@ -19696,10 +19706,12 @@ function crm2HomeAds(rows, from, to, funnel, now = new Date()) {
   const plan = projectMonthAdBudget(now);
   const budget = Number(plan && typeof plan === 'object' ? plan.budget : plan) || 0;
   const pct = plan && typeof plan === 'object' ? Number(plan.pct) || 0 : 10;
-  const spent = rows.filter((row) => row.type === 'expense' && row.category === 'marketing' && row.scope !== 'personal' && crm2In(financeDate(row.date), from, to)).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+  // With no revenue last month the CRM estimates the budget from this month's revenue.
+  const estimate = Boolean(plan && typeof plan === 'object' && plan.basis === 'current');
+  const spent = rows.filter((row) => row.type === 'expense' && row.category === 'marketing' && row.scope !== 'personal' && crm2In(crm2FinanceDay(row.date), from, to)).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
   const leads = funnel[0][1];
   const deals = funnel[3][1];
-  return { budget, pct, spent, perLead: leads ? spent / leads : null, perDeal: deals ? spent / deals : null };
+  return { budget, pct, estimate, spent, perLead: leads ? spent / leads : null, perDeal: deals ? spent / deals : null };
 }
 
 function crm2DirectionKey(value) {
@@ -19780,7 +19792,7 @@ function crm2HomeWorks(orders, from, to) {
 function crm2HomeExpenses(rows, from, to) {
   const labels = Object.fromEntries(FINANCE_CATEGORY_OPTIONS);
   const totals = {};
-  rows.filter((row) => row.type === 'expense' && row.scope !== 'personal' && row.category !== 'owner_draw' && crm2In(financeDate(row.date), from, to))
+  rows.filter((row) => row.type === 'expense' && row.scope !== 'personal' && row.category !== 'owner_draw' && crm2In(crm2FinanceDay(row.date), from, to))
     .forEach((row) => { const key = row.category || 'other'; totals[key] = (totals[key] || 0) + (Number(row.amount) || 0); });
   const list = Object.entries(totals).sort((a, b) => b[1] - a[1]).map(([key, amount]) => [labels[key] || 'Прочее', amount]);
   return { list: list.slice(0, 6), total: list.reduce((sum, [, amount]) => sum + amount, 0) };
@@ -19927,9 +19939,9 @@ function renderCrm2Home() {
     if (!owner) return '';
     const ads = crm2HomeAds(rows, range.from, range.to, funnel, now);
     return `<section class="crm2-blk">
-      <div class="crm2-bh"><h2>Реклама</h2><span class="crm2-muted">бюджет = ${ads.pct}% выручки прошлого месяца</span></div>
+      <div class="crm2-bh"><h2>Реклама</h2><span class="crm2-muted">${ads.estimate ? `оценка: ${ads.pct}% выручки этого месяца — в прошлом выручки не было` : `бюджет = ${ads.pct}% выручки прошлого месяца`}</span></div>
       <div class="crm2-cells">
-        <div class="crm2-cell"><div class="crm2-kl">Бюджет месяца</div><div class="crm2-cell-value">${crm2Money(ads.budget)}</div><div class="crm2-cell-note">по правилу ${ads.pct}%</div></div>
+        <div class="crm2-cell"><div class="crm2-kl">Бюджет месяца</div><div class="crm2-cell-value">${crm2Money(ads.budget)}</div><div class="crm2-cell-note">${ads.estimate ? 'оценка по этому месяцу' : `по правилу ${ads.pct}%`}</div></div>
         <div class="crm2-cell"><div class="crm2-kl">Потрачено</div><div class="crm2-cell-value">${crm2Money(ads.spent)}</div><div class="crm2-cell-note">${ads.budget > 0 ? `${Math.round(ads.spent / ads.budget * 100)}% бюджета` : 'категория «Реклама»'}</div></div>
         <div class="crm2-cell"><div class="crm2-kl">Цена лида</div><div class="crm2-cell-value">${ads.perLead == null ? '—' : crm2Money(ads.perLead)}</div><div class="crm2-cell-note">${crm2Plural(leads, ['лид', 'лида', 'лидов'])}</div></div>
         <div class="crm2-cell"><div class="crm2-kl">Цена сделки</div><div class="crm2-cell-value">${ads.perDeal == null ? '—' : crm2Money(ads.perDeal)}</div><div class="crm2-cell-note">${crm2Plural(funnel[3][1], ['сделка', 'сделки', 'сделок'])}</div></div>
