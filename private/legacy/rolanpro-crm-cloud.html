@@ -17601,6 +17601,29 @@ const CRM2_SECTION_TABS = [
   [['proposals', 'Коммерческие предложения'], ['calculator', 'Быстрый калькулятор']],
 ];
 
+/** The new menu speaks English when the RU/EN switch says so. */
+const CRM2_EN = {
+  'Главная': 'Home', 'Продажи': 'Sales', 'Лиды': 'Leads', 'Воронка': 'Pipeline', 'Расчёт и КП': 'Quotes',
+  'Клиенты': 'Clients', 'Работы': 'Work', 'Календарь': 'Calendar', 'Замеры': 'Measurements', 'Монтажи': 'Installations',
+  'Задачи': 'Tasks', 'Склад': 'Warehouse', 'Рулоны и материалы': 'Rolls and materials', 'Закупки': 'Purchasing',
+  'Деньги': 'Money', 'Счета и операции': 'Accounts', 'Оплаты клиентов': 'Client payments', 'Зарплата': 'Payroll',
+  'Отчёты': 'Reports', 'Компания': 'Company', 'Услуги и цены': 'Services and prices', 'Сотрудники': 'Team',
+  'Академия': 'Academy', 'Настройки': 'Settings', 'Входящие': 'Inbound', 'Холодные звонки': 'Cold calls',
+  'Рекомендации': 'Referrals', 'Отзывы': 'Reviews', 'Коммерческие предложения': 'Proposals',
+  'Быстрый калькулятор': 'Quick calculator', 'Создать': 'Create', 'Выйти': 'Log out', 'Язык': 'Language',
+  'Меню': 'Menu', 'Сегодня': 'Today', 'Мои задачи': 'My tasks', 'Рабочий день': 'Workday', 'Цифры компании': 'Company numbers',
+  'Лид / проект': 'Lead / project', 'клиент → объект → замер': 'client → site → measurement',
+  'Холодный контакт': 'Cold prospect', 'компания для обзвона': 'company to call', 'Клиент': 'Client',
+  'карточка B2C или B2B': 'B2C or B2B card', 'Быстрый расчёт': 'Quick estimate', 'калькулятор КП': 'proposal calculator',
+  'Задача': 'Task', 'себе или команде': 'for you or the team', 'Приход рулона': 'Roll receipt', 'плёнка на склад': 'film into stock',
+  'Заявка на закупку': 'Purchase request', 'поставщику': 'to a supplier', 'Операция / чек': 'Transaction / receipt',
+  'приход или расход денег': 'money in or out',
+};
+
+function crm2T(text) {
+  return state.lang === 'en' ? (CRM2_EN[text] || text) : text;
+}
+
 function crm2IsOffice() {
   return ['owner', 'manager'].includes(currentUser()?.role);
 }
@@ -17646,22 +17669,22 @@ function crm2HeaderTitle() {
   const own = state.view === 'dashboard' || state.view === 'orderDetails' || state.view === 'notifications'
     || (state.view === 'canonicalProjects' && state.canonicalProjectId);
   if (own) return plain;
-  if (state.view === 'settings') return 'Настройки';
-  return crm2ActiveNav()?.item[1] || plain;
+  if (state.view === 'settings') return crm2T('Настройки');
+  return crm2T(crm2ActiveNav()?.item[1] || '') || plain;
 }
 
 function crm2Eyebrow() {
   const user = currentUser();
   if (!crm2IsOffice()) return `${T(user.role)} · ROLANPRO`;
-  if (state.view === 'settings') return 'Компания';
-  return crm2ActiveNav()?.group || 'Rolan PRO';
+  if (state.view === 'settings') return crm2T('Компания');
+  return crm2T(crm2ActiveNav()?.group || '') || 'Rolan PRO';
 }
 
 function crm2SectionTabs() {
   if (!crm2IsOffice()) return '';
   const set = CRM2_SECTION_TABS.find((tabs) => tabs.some(([view]) => view === state.view));
   if (!set) return '';
-  return `<div class="crm2-tabs" role="tablist">${set.map(([view, label]) => view === 'calculator'
+  return `<div class="crm2-tabs" role="tablist">${set.map(([view, ruLabel]) => [view, crm2T(ruLabel)]).map(([view, label]) => view === 'calculator'
     ? `<button type="button" role="tab" aria-selected="false" onclick="if (typeof openRolanProCalculator === 'function') openRolanProCalculator()">${label}</button>`
     : `<button type="button" role="tab" aria-selected="${state.view === view}" class="${state.view === view ? 'on' : ''}" onclick="selectAppView('${view}')">${label}</button>`).join('')}</div>`;
 }
@@ -17684,7 +17707,7 @@ function crm2CreateItems() {
 }
 
 function crm2CreateRow(item, before) {
-  return `<button type="button" class="crm2-create-row" role="menuitem" onclick="${before}${item.action}"><span class="crm2-swatch" style="background:${item.color}"></span><span class="crm2-create-text"><b>${item.label}</b><small>${item.sub}</small></span>${navIconSvg(item.icon)}</button>`;
+  return `<button type="button" class="crm2-create-row" role="menuitem" onclick="${before}${item.action}"><span class="crm2-swatch" style="background:${item.color}"></span><span class="crm2-create-text"><b>${crm2T(item.label)}</b><small>${crm2T(item.sub)}</small></span>${navIconSvg(item.icon)}</button>`;
 }
 
 function crm2NewTask() {
@@ -17735,7 +17758,7 @@ function openCreateSheet() {
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal crm2-create-sheet" style="max-width: 30rem;">
-      <div class="crm2-sheet-head"><h3>Создать</h3><button class="btn-ghost" aria-label="Закрыть" onclick="closeModal()">✕</button></div>
+      <div class="crm2-sheet-head"><h3>${crm2T('Создать')}</h3><button class="btn-ghost" aria-label="Закрыть" onclick="closeModal()">✕</button></div>
       <div class="crm2-create-list" role="menu">${items.map((item) => crm2CreateRow(item, 'closeModal(); ')).join('')}</div>
     </div>
   </div>`;
@@ -17800,11 +17823,11 @@ function renderAppShell() {
       <nav class="flex-1 p-3 space-y-1" style="overflow-y:auto;min-height:0;" aria-label="Основное меню">
         ${office ? crm2NavGroups().map(([title, items]) => `
           <div class="crm2-nav-group">
-            ${title ? `<div class="crm2-nav-group-title">${title}</div>` : ''}
+            ${title ? `<div class="crm2-nav-group-title">${crm2T(title)}</div>` : ''}
             ${items.map((item) => `
-              <div class="nav-item ${crm2NavIsActive(item) ? 'active' : ''}" title="${academyEsc(item[1])}" onclick="crm2Go('${item[0]}')">
+              <div class="nav-item ${crm2NavIsActive(item) ? 'active' : ''}" title="${academyEsc(crm2T(item[1]))}" onclick="crm2Go('${item[0]}')">
                 <span class="nav-icon">${navIconSvg(item[0], '•')}</span>
-                <span class="nav-label">${item[1]}</span>
+                <span class="nav-label">${crm2T(item[1])}</span>
               </div>
             `).join('')}
           </div>
@@ -17853,7 +17876,7 @@ function renderAppShell() {
         <div class="topbar-actions">
           ${office ? `
           <div class="crm2-menu-wrap crm2-create-wrap">
-            <button type="button" class="btn-primary crm2-create-btn" onclick="crm2ToggleMenu('create', event)" aria-haspopup="menu" aria-expanded="false">${navIconSvg('plus', '+')}<span>Создать</span>${navIconSvg('chevron', '▾')}</button>
+            <button type="button" class="btn-primary crm2-create-btn" onclick="crm2ToggleMenu('create', event)" aria-haspopup="menu" aria-expanded="false">${navIconSvg('plus', '+')}<span>${crm2T('Создать')}</span>${navIconSvg('chevron', '▾')}</button>
             <div class="crm2-menu crm2-menu-create" data-crm2-menu="create" role="menu" hidden>
               ${crm2CreateItems().map((item) => crm2CreateRow(item, 'crm2CloseMenus(); ')).join('')}
             </div>
@@ -17868,11 +17891,11 @@ function renderAppShell() {
             <button type="button" class="topbar-user-pill" title="${academyEsc(u.name)}" onclick="crm2ToggleMenu('user', event)" aria-haspopup="menu" aria-expanded="false">${academyEsc(u.name)} · ${T(u.role)}</button>
             <div class="crm2-menu crm2-menu-user" data-crm2-menu="user" role="menu" hidden>
               <div class="crm2-menu-head"><b>${academyEsc(u.name)}</b><small>${T(u.role)}</small></div>
-              <div class="crm2-menu-lang"><span>Язык</span><span class="crm2-seg">
+              <div class="crm2-menu-lang"><span>${crm2T('Язык')}</span><span class="crm2-seg">
                 <button type="button" class="${state.lang === 'ru' ? 'on' : ''}" onclick="state.lang='ru'; save(); render();">RU</button><button type="button" class="${state.lang === 'en' ? 'on' : ''}" onclick="state.lang='en'; save(); render();">EN</button>
               </span></div>
-              ${role === 'owner' ? `<button type="button" class="crm2-menu-item" role="menuitem" onclick="crm2CloseMenus(); selectAppView('settings')">${navIconSvg('settings', '')}<span>Настройки</span></button>` : ''}
-              <button type="button" class="crm2-menu-item danger" role="menuitem" onclick="logout()">${navIconSvg('logout', '')}<span>Выйти</span></button>
+              ${role === 'owner' ? `<button type="button" class="crm2-menu-item" role="menuitem" onclick="crm2CloseMenus(); selectAppView('settings')">${navIconSvg('settings', '')}<span>${crm2T('Настройки')}</span></button>` : ''}
+              <button type="button" class="crm2-menu-item danger" role="menuitem" onclick="logout()">${navIconSvg('logout', '')}<span>${crm2T('Выйти')}</span></button>
             </div>
           </div>
         </div>
@@ -17890,12 +17913,12 @@ function renderAppShell() {
       ` : `
         <button type="button" class="${state.view===key?'active':''}" onclick="selectAppView('${key}')" aria-label="${academyEsc(label)}">
           <span class="mobile-primary-nav-icon">${navIconSvg(key, icon)}</span>
-          <span>${academyEsc(label)}</span>
+          <span>${academyEsc(crm2T(label))}</span>
         </button>
       `).join('')}
       ${mobileNavItems.length < 5 ? `<button type="button" class="${mobileOpen?'active':''}" onclick="toggleSidebar()" aria-label="Открыть все разделы">
         <span class="mobile-primary-nav-icon">${navIconSvg('menu', '•••')}</span>
-        <span>Меню</span>
+        <span>${crm2T('Меню')}</span>
       </button>` : ''}
     </nav>
   </div>
