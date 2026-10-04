@@ -155,7 +155,9 @@ test("menu and dock use stroke icons; the calculator lives in «Расчёт и 
 test("phone = «Пульс бизнеса», computer = CRM 2.0: one create control and a reachable user menu", () => {
   // Owner, 2026-10-04: «Телефон — Пульс, компьютер — CRM 2.0».
   const phone = "@media (max-width: 520px), (max-width: 768px) and (pointer: coarse) {";
-  assert.match(DESIGN_THEME_CSS, new RegExp(`${phone.replace(/[()]/g, "\\$&")}\\n {2}html body \\.crm2-create-wrap \\{ display: none; \\}\\n {2}html body \\.app-shell \\.crm2-user-wrap \\.topbar-user-pill \\{ display: inline-flex !important; \\}`));
+  assert.match(DESIGN_THEME_CSS, new RegExp(`${phone.replace(/[()]/g, "\\$&")}\\n {2}html body \\.crm2-create-wrap \\{ display: none; \\}\\n\\}`));
+  // The avatar (exit, language, settings) shows at every width, outside any media query.
+  assert.match(DESIGN_THEME_CSS, /\n\}\nhtml body \.app-shell \.crm2-user-wrap \.topbar-user-pill \{ display: inline-flex !important; \}/);
   assert.match(html, /<div class="pulse-mobile-header">[\s\S]*?onclick="openCreateSheet\(\)" aria-label="Создать"/, "the Pulse header «+» creates on phones");
   assert.match(DESIGN_THEME_CSS, /@media \(max-width: 760px\) \{\n {2}html body \.app-topbar \.topbar-icon-btn\[aria-label="Настройки"\] \{ display: none; \}/);
 
