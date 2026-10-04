@@ -50,13 +50,11 @@ async function main() {
       await price.fill('18'); await price.press('Tab');
       await card.locator('summary').click();
       await card.locator(`input[type=checkbox][onchange*="'film-a'"]`).check();
-      await page.waitForFunction(async ()=>{
-        const response=await fetch('/api/v1/legacy-crm/state');
-        const saved=(await response.json()).data?.payload?.settings?.serviceOfferings?.find((x:any)=>x.name==='QA custom solution');
-        return saved?.pricePerSqft===18 && saved?.filmIds?.includes('film-a');
-      });
+      const confirmed=await page.evaluate(()=> (window as any).cloudPersistConfirmed());
+      assert.equal(confirmed,true,'Solution edits must be acknowledged by the workspace API');
       const catalogState=(await (await context.request.get(base+'/api/v1/legacy-crm/state')).json()).data;
       const solution=catalogState.payload.settings.serviceOfferings.find((x:any)=>x.name==='QA custom solution');
+      assert.ok(solution,JSON.stringify({revision:catalogState.revision,solutions:catalogState.payload.settings.serviceOfferings.map((x:any)=>({id:x.id,name:x.name}))}));
       assert.equal(solution.pricePerSqft,18); assert.deepEqual(solution.filmIds,['film-a']);
       await page.screenshot({path:`test-results/service-solutions/catalog-${width}.png`});
       // Exercise real component functions in the authenticated CRM shell.
