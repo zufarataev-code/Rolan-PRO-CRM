@@ -313,6 +313,16 @@ const MOBILE_WORKSPACE_PATCH = `
       max-width: 100% !important;
     }
 
+    .calendar-month-head, .calendar-month-grid {
+      display: grid !important;
+      grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+      min-width: 0 !important;
+      width: 100% !important;
+    }
+    .calendar-month-head > div { padding: 8px 1px !important; min-width: 0; font-size: 10px; }
+    .calendar-month-cell { min-width: 0; padding: 4px 2px; min-height: 86px; }
+    .calendar-month-cell .calendar-event { max-width: 100%; min-width: 0; overflow-wrap: anywhere; }
+
     /* Calendar grids are semantic layouts. The live weekly calendar is
        dispatch-week-head + dispatch-time-grid. Keep both on the exact same
        eight tracks: time gutter + seven horizontal day columns. */
@@ -500,6 +510,9 @@ const MOBILE_WORKSPACE_PATCH = `
     const isProtectedCalendarLayout = (element) => {
       if (!(element instanceof HTMLElement)) return false;
       return Boolean(element.closest([
+        '.calendar-month-workspace',
+        '.calendar-month-head',
+        '.calendar-month-grid',
         '.dispatch-workspace',
         '.dispatch-week-head',
         '.dispatch-time-grid',
@@ -510,6 +523,8 @@ const MOBILE_WORKSPACE_PATCH = `
 
     const protectCalendarLayouts = () => {
       document.querySelectorAll([
+        '.calendar-month-head',
+        '.calendar-month-grid',
         '.dispatch-week-head',
         '.dispatch-time-grid',
         '.dispatch-day-grid',
@@ -518,6 +533,8 @@ const MOBILE_WORKSPACE_PATCH = `
         if (!(element instanceof HTMLElement)) return;
         element.removeAttribute('data-rolanpro-mobile-stack');
         element.removeAttribute('data-rolanpro-mobile-scroll');
+        element.removeAttribute('data-rolanpro-mobile-toolbar');
+        element.removeAttribute('data-rolanpro-mobile-action-row');
       });
     };
 

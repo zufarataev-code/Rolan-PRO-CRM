@@ -18,8 +18,14 @@ html body:has(.app-shell:is(.role-owner,.role-manager)) :is(.modal-content,.moda
 html body:has(.app-shell:is(.role-owner,.role-manager)) :is(.erp-intake-card,.order-service-card,.erp-intake-disclosure,.erp-intake-footer,.order-client-panel) { border-radius: 0 !important; }
 html body:has(.app-shell:is(.role-owner,.role-manager)) .modal-content .btn-primary { background: #1686B0 !important; box-shadow: none; }
 .pulse-mobile-header { display: none; }
-.pulse-order-filters, .pulse-order-filter-grid { display: contents; }
+.pulse-order-filters { display: block; grid-column: 1 / -1; }
+.pulse-order-filter-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.pulse-order-filter-grid > .orders-filter-field { flex: 1 1 128px; }
+.pulse-order-filter-grid > .orders-filter-field.compact { flex: 1.7 1 280px; }
 .pulse-order-filters > summary { display: none; }
+@media (min-width: 769px) {
+  html body .orders-control-grid { grid-template-columns: minmax(220px,1fr) auto; }
+}
 html body .app-shell:is(.role-owner,.role-manager) :is([class*="toggle"] button,table[data-rolanpro-mobile-generic="1"] tbody > tr,table[data-rolanpro-mobile-orders="1"] tbody > tr) { border-radius: 0 !important; }
 html body .pulse-dashboard { max-width: 1220px; margin: auto; color: #10253F; }
 .pulse-heading > span { font-size: 11px; font-weight: 800; letter-spacing: .12em; color: #64748B; text-transform: uppercase; }

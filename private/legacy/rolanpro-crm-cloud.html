@@ -3712,6 +3712,7 @@
     background: #f9fafb;
   }
 
+  .calendar-month-head,
   .calendar-month-grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -3943,10 +3944,10 @@
   }
   @media (max-width: 760px) {
     .calendar-month-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
     }
     .calendar-month-cell {
-      min-height: auto;
+      min-height: 86px;
       border-right: 0;
     }
     .calendar-mode-switch {
@@ -17493,6 +17494,7 @@ function closeMobileSidebar() {
 
 function selectAppView(key) {
   const user = currentUser();
+  if (key === 'roleTesting' && user?.role === 'owner') { window.openRoleTesting?.(); return; }
   if (key === 'installerOps' && (user?.role === 'owner' || user?.role === 'manager')) {
     location.hash = '#/installer-operations';
     return;
@@ -17597,7 +17599,7 @@ function renderAppShell() {
     ['team', T('team'), '🧑‍🔧'],
     ['referrals', T('referralProgram'), '🎁'],
     ['reviews', T('reviews'), '⭐'],
-    ...(role === 'owner' ? [['settings', T('settings'), '⚙️']] : []),
+    ...(role === 'owner' ? [['roleTesting', 'Проверка ролей', '👁'], ['settings', T('settings'), '⚙️']] : []),
   ] : (role === 'measurer') ? [
     ['dashboard', T('dashboard'), '📊'],
     ['canonicalProjects', 'Замеры проектов', '🏗'],
@@ -17692,6 +17694,7 @@ function renderAppShell() {
           <div id="global-search-results" class="absolute left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-80 overflow-y-auto z-30" style="display:none;"></div>
         </div>` : `<div></div>`}
         <div class="topbar-actions">
+          ${role === 'owner' ? `<button class="btn-ghost text-sm" onclick="openRoleTesting()">Проверка ролей</button>` : ''}
           ${canSearch ? `<button class="btn-primary text-sm" onclick="openOrderModal()" title="Создать новый проект">+ Проект</button>` : ''}
           ${pwaInstallButtonHtml()}
           <div class="topbar-user-pill" title="${academyEsc(u.name)}">${academyEsc(u.name)} · ${T(u.role)}</div>
@@ -23816,7 +23819,7 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
     applyWindowOffering(win, offering);
   } else if (field === 'catalogId') {
     const film = getCatalogItem(value);
-    if (!film || film.archived || !serviceOfferingFilmIds(serviceOffering(win.offeringId)).includes(film.id)) return;
+    if (!film || film.archived || !catalogMatchesCategory(film, primaryServiceInfo(win.measureScope || o.serviceType)?.catalogCategory) || !serviceOfferingFilmIds(serviceOffering(win.offeringId)).includes(film.id)) return;
     win.catalogId = film.id; win.filmType = catalogLabel(film);
   } else return;
   invalidateProjectEstimate(o, 'Изменена услуга или материал');
@@ -26190,8 +26193,9 @@ function managerSolarFieldsHtml(oid, rid, w) {
 function managerWindowDefaults(o, room, opts = {}) {
   const requestedScope = opts.scopeKey || managerActiveMeasureScope(o);
   const catalogId = opts.catalogId || room?.defaultCatalogByScope?.[requestedScope] || managerRoomCatalogId(room, requestedScope) || '';
-  const cat = getCatalogItem(catalogId);
-  const scopeKey = cat ? measureScopeByCatalog(cat) : requestedScope;
+  const candidate = getCatalogItem(catalogId);
+  const cat = candidate && catalogMatchesCategory(candidate, primaryServiceInfo(requestedScope)?.catalogCategory) ? candidate : null;
+  const scopeKey = requestedScope;
   const objectKind = opts.objectKind || managerRoomAddKindValue(room?.id || '') || 'window';
   const winType = opts.winType || managerRoomAddTypeValue(room?.id || '', objectKind, scopeKey);
   const kindInfo = managerObjectKindInfo(objectKind);
@@ -26218,7 +26222,7 @@ function managerWindowDefaults(o, room, opts = {}) {
     measurement_source: 'CUSTOMER',
     verificationStatus: 'UNVERIFIED',
   };
-  const offering = serviceOffering(o.offeringId || o.orderBuilder?.offeringId);
+  const offering = [o.offeringId || o.orderBuilder?.offeringId, ...(o.offeringIds || o.orderBuilder?.offeringIds || [])].map(serviceOffering).find(item => item && item.direction === serviceOfferingDirection(scopeKey));
   if (offering && offering.active !== false && offering.direction === serviceOfferingDirection(scopeKey)) applyWindowOffering(win, offering);
   syncWindowPanelsForType(win, scopeKey);
   return syncSmartWindowPlan(win, room?.name || '');
@@ -28302,6 +28306,7 @@ function openOrderModal() {
   state._newOrderSiteType = '';
   state._newOrderService = '';
   state._newOrderOfferingId = '';
+  state._newOrderExtraOfferingIds = [];
   state._newOrderServices = [];
   state._newOrderMaterialsByService = {};
   state._newOrderExecution = 'standard_project';
@@ -28343,6 +28348,7 @@ function openOrderModal() {
               <div class="erp-intake-card-title"><span class="erp-intake-step">2</span> Услуга <span class="order-required">*</span></div>
               <label for="no-offering" class="text-xs">Услуга в выбранном направлении</label>
               <select id="no-offering" onchange="selectOrderOffering(this.value)"><option value="">Выберите направление</option></select>
+              <details class="mt-3"><summary>Добавить услуги в этот проект</summary><div id="no-extra-offerings" class="mt-2"></div></details>
               <div id="no-offering-empty" class="text-sm text-amber-700 mt-2" style="display:none">В направлении нет активных услуг. Добавьте их в разделе «Услуги и цены».</div>
             </section>
             <section class="erp-intake-card" data-intake-site style="display:none">
@@ -28421,6 +28427,30 @@ function openOrderModal() {
   setTimeout(() => { selectOrderExecution('standard_project'); refreshOrderIntakeGates(); }, 50);
 }
 
+function offeringServiceType(offering) {
+  return ORDER_PRIMARY_SERVICES.find(item => serviceOfferingDirection(item.id) === offering?.direction)?.id || '';
+}
+function newOrderSelectedOfferings() {
+  const ids = [state._newOrderOfferingId, ...(state._newOrderExtraOfferingIds || [])];
+  return [...new Set(ids.filter(Boolean))].map(id => serviceOffering(id)).filter(item => item && item.active !== false && offeringServiceType(item));
+}
+function renderNewOrderExtraOfferings() {
+  const node = document.getElementById('no-extra-offerings');
+  if (!node) return;
+  const selected = new Set(state._newOrderExtraOfferingIds || []);
+  node.innerHTML = ORDER_PRIMARY_SERVICES.map(direction => {
+    const offerings = serviceOfferingsFor(serviceOfferingDirection(direction.id)).filter(item => item.id !== state._newOrderOfferingId);
+    return offerings.length ? `<fieldset class="mb-3"><legend class="font-semibold text-sm mb-2">${academyEsc(direction.title)}</legend>${offerings.map(item => `<label class="flex items-center gap-2 p-2 border mb-1"><input type="checkbox" ${selected.has(item.id) ? 'checked' : ''} onchange="toggleNewOrderExtraOffering('${academyEsc(item.id)}',this.checked)"><span>${academyEsc(item.name)}</span></label>`).join('')}</fieldset>` : '';
+  }).join('');
+}
+function toggleNewOrderExtraOffering(id, checked) {
+  const offering = serviceOffering(id);
+  if (!offering || offering.active === false || !offeringServiceType(offering) || id === state._newOrderOfferingId) return;
+  const ids = new Set(state._newOrderExtraOfferingIds || []);
+  if (checked) ids.add(id); else ids.delete(id);
+  state._newOrderExtraOfferingIds = [...ids];
+  refreshOrderIntakeGates();
+}
 function refreshOrderIntakeGates() {
   const direction = ORDER_PRIMARY_SERVICES.find(item => item.id === state._newOrderService);
   const offering = serviceOffering(state._newOrderOfferingId);
@@ -28439,6 +28469,7 @@ function selectOrderService(v, force = false) {
   document.getElementById('no-svc').value = v;
   if (changed) {
     state._newOrderOfferingId = '';
+    state._newOrderExtraOfferingIds = [];
     selectOrderSiteType('');
   }
   const offerings = serviceOfferingsFor(serviceOfferingDirection(v));
@@ -28451,6 +28482,7 @@ function selectOrderService(v, force = false) {
   const empty = document.getElementById('no-offering-empty');
   if (empty) empty.style.display = offerings.length ? 'none' : '';
   document.querySelectorAll('#no-svc-buttons [data-svc]').forEach(b => { b.classList.toggle('active', selected.has(b.dataset.svc)); });
+  renderNewOrderExtraOfferings();
   refreshOrderIntakeGates();
   refreshOrderBuilderPreview();
 }
@@ -28458,6 +28490,8 @@ function selectOrderOffering(id) {
   const offering = serviceOffering(id);
   if (id && (!offering || offering.active === false || offering.direction !== serviceOfferingDirection(state._newOrderService))) return;
   state._newOrderOfferingId = offering?.id || '';
+  state._newOrderExtraOfferingIds = (state._newOrderExtraOfferingIds || []).filter(value => value !== state._newOrderOfferingId);
+  renderNewOrderExtraOfferings();
   selectOrderSiteType('');
   refreshOrderIntakeGates();
 }
@@ -28953,7 +28987,8 @@ function createOrder(nextStep = 'measure') {
   const serviceIds = Array.from(new Set((state._newOrderServices || []).filter(id => ORDER_PRIMARY_SERVICES.some(service => service.id === id))));
   const serviceId = serviceIds[0] || document.getElementById('no-svc')?.value || state._newOrderService;
   const service = primaryServiceInfo(serviceId);
-  const selectedServices = serviceIds.length ? serviceIds.map(id => primaryServiceInfo(id)) : [service];
+  const selectedOfferings = newOrderSelectedOfferings();
+  const selectedServices = [...new Set([serviceId, ...selectedOfferings.map(offeringServiceType)])].filter(Boolean).map(id => primaryServiceInfo(id));
   const executionVariantId = document.getElementById('no-execution')?.value || state._newOrderExecution || 'standard_project';
   const executionVariant = orderExecutionVariantInfo(executionVariantId);
   const viewer = currentUser();
@@ -29030,6 +29065,7 @@ function createOrder(nextStep = 'measure') {
       note: `Входящий запрос: ${service.title} · ${executionVariant.title}`,
     }],
     notes: document.getElementById('no-notes').value,
+    offeringIds: selectedOfferings.map(item => item.id),
     offeringId: offering.id,
     offeringName: offering.name,
     serviceType: service.id,
@@ -29045,6 +29081,7 @@ function createOrder(nextStep = 'measure') {
     executionVariantLabel: executionVariant.title,
     executionRoute: [...(executionVariant.route || [])],
     orderBuilder: {
+      offeringIds: selectedOfferings.map(item => item.id),
       offeringId: offering.id,
       offeringName: offering.name,
       serviceId: service.id,
@@ -35740,10 +35777,10 @@ function renderCalendar() {
   const monNames = ['monthMon','monthTue','monthWed','monthThu','monthFri','monthSat','monthSun'];
 
   return toolbar + `
-  <div class="card p-0" style="max-height:75vh;overflow-y:auto;">
+  <div class="card p-0 calendar-month-workspace" style="max-height:75vh;overflow-y:auto;">
     <!-- Шапка месяца — не таблица, а сетка, поэтому закрепляется сама,
          а не через calendar-sticky-head. -->
-    <div class="grid grid-cols-7 border-b bg-gray-50" style="position:sticky;top:0;z-index:2;">
+    <div class="calendar-month-head grid grid-cols-7 border-b bg-gray-50" style="position:sticky;top:0;z-index:2;">
       ${monNames.map(k => `<div class="px-3 py-2 text-xs uppercase text-gray-500 text-center font-medium border-r">${T(k)}</div>`).join('')}
     </div>
     <div class="calendar-month-grid">
