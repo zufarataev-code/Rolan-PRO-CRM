@@ -56,7 +56,7 @@ test('privacy is the fifth direction with its own measurement scope, colour, cod
   assert.match(aliases, /privacy: 'privacy', privacy_film: 'privacy', приватная: 'privacy'/);
   assert.match(aliases, /frost: 'decorative'/);
   assert.doesNotMatch(aliases, /privacy: 'decorative'/);
-  assert.match(html, /if \(type === 'privacy_film' \|\| tags\.includes\('privacy'\)\) return 'privacy_film';/);
+  assert.match(html, /if \(type === 'privacy_film'\) return 'privacy_film';\n {2}if \(type === 'decorative_film'\) return 'decorative_film';\n {2}if \(tags\.includes\('privacy'\)\) return 'privacy_film';/);
   assert.match(html, /if \(cat === 'privacy'\) return 'privacy_film';/);
   assert.equal(canonicalFilmCategory('privacy_film'), 'privacy');
   assert.equal(canonicalFilmCategory('Приватная'), 'privacy');
@@ -195,5 +195,47 @@ test('an estimate approved by someone without internal economics records no inte
   assert.match(approve, /productionCost: canSeeInternalEconomics \? orderPSS\(o\)\.total : null,/);
   assert.match(approve, /margin: canSeeInternalEconomics \? orderMargin\(o\) : null,/);
   assert.match(approve, /projectOfferingLines\(o\)\.length \? 'SERVICE_QUANTITIES' : 'QUICK_LINE_ITEMS'/);
+});
+
+function loadScopes(offerings: Row[]) {
+  const context: any = vm.createContext({
+    serviceOffering: (id: string) => offerings.find(item => item.id === id) || null,
+    serviceOfferingNeedsSizes: (item: Row) => !item.unit || item.unit === 'sqft',
+    offeringServiceType: (item: Row) => item.serviceType,
+  });
+  const start = html.indexOf('const MEASURE_SCOPES = [');
+  vm.runInContext(html.slice(start, html.indexOf('function managerActiveMeasureScope(', start)), context);
+  return context;
+}
+
+test('a project saved as decorative with a «privacy» tag stays one decorative scope', () => {
+  const c = loadScopes([]);
+  const legacy = { serviceType: 'decorative_film', serviceTypes: ['decorative_film'], tags: ['decorative', 'privacy'] };
+  assert.equal(c.orderMeasureScope(legacy), 'decorative_film');
+  assert.deepEqual([...c.orderMeasureScopes(legacy)], ['decorative_film']);
+  assert.equal(c.orderMeasureScope({ tags: ['privacy'] }), 'privacy_film');
+});
+
+test('measurement requires windows only for directions with a per-sq-ft service', () => {
+  const offerings = [
+    { id: 'solar', unit: 'sqft', serviceType: 'solar_film' },
+    { id: 'zones', unit: 'zone', serviceType: 'smart_film' },
+  ];
+  const c = loadScopes(offerings);
+  const mixed = { serviceType: 'solar_film', serviceTypes: ['solar_film', 'smart_film'], offeringIds: ['solar', 'zones'], measurements: { rooms: [] } };
+  assert.deepEqual([...c.orderMeasureScopes(mixed)], ['solar_film'], 'Smart zones need no windows');
+  const zonesOnly = { serviceType: 'smart_film', serviceTypes: ['smart_film'], offeringIds: ['zones'], measurements: { rooms: [] } };
+  assert.deepEqual([...c.orderMeasureScopes(zonesOnly)], []);
+  const withWindow = { ...zonesOnly, measurements: { rooms: [{ windows: [{ measureScope: 'smart_film' }] }] } };
+  assert.deepEqual([...c.orderMeasureScopes(withWindow)], ['smart_film'], 'a measured window keeps its scope');
+  const completion = html.slice(html.indexOf('function orderMeasurementCompletionIssues(o) {'), html.indexOf('function orderTechnicalMeasurementIssues('));
+  assert.match(completion, /if \(!windows\.length\) return orderNeedsMeasurements\(o\) \? \['добавьте хотя бы одно окно или панель'\] : \[\];/, 'a proposal of services without sizes can be sent');
+});
+
+test('privacy films pay the privacy rate; the material of services without sizes is listed in the cost', () => {
+  assert.match(html, /if \(n\.includes\('privacy'\) \|\| n\.includes\('приват'\)\) return 'privacy';/);
+  assert.match(html, /const category = catalog\?\.category \? canonicalCatalogCategory\(catalog\.category\) : filmCategory\(w\?\.filmType \|\| ''\);/);
+  assert.match(html, /const directionRate = explicit != null \? explicit : c \? installerServiceRateByCategory\(canonicalCatalogCategory\(c\.category\)\) : filmRate\(filmName\);/);
+  assert.match(html, /\.\.\.\(pss\.extraServicesCost > 0 \? \[\['Материал услуг без размеров', pss\.extraServicesCost\]\] : \[\]\)/);
 });
 

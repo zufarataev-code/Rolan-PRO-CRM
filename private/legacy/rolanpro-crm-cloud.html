@@ -10082,15 +10082,26 @@ function orderMeasureScope(order) {
   const tags = order?.tags || [];
   if (type === 'smart_film' || tags.includes('smart')) return 'smart_film';
   if (type === 'protective_film' || tags.includes('safety') || tags.includes('security')) return 'protective_film';
-  if (type === 'privacy_film' || tags.includes('privacy')) return 'privacy_film';
-  if (type === 'decorative_film' || tags.includes('decorative')) return 'decorative_film';
+  // A project saved as decorative with a «privacy» tag (before 2026-10-05) stays decorative.
+  if (type === 'privacy_film') return 'privacy_film';
+  if (type === 'decorative_film') return 'decorative_film';
+  if (tags.includes('privacy')) return 'privacy_film';
+  if (tags.includes('decorative')) return 'decorative_film';
   return 'solar_film';
 }
 function orderMeasureScopes(order) {
   const valid = new Set(MEASURE_SCOPES.map(scope => scope.key));
-  const fromOrder = Array.isArray(order?.serviceTypes) ? order.serviceTypes : [];
+  // A direction whose services in this project are all without sizes needs no
+  // windows (Owner, 2026-10-05); directions that already have windows stay.
+  const offerings = [...new Set([order?.offeringId, ...(Array.isArray(order?.offeringIds) ? order.offeringIds : [])].filter(Boolean))]
+    .map(id => serviceOffering(id)).filter(Boolean);
+  const sized = new Set(offerings.filter(serviceOfferingNeedsSizes).map(offeringServiceType));
+  const sizeFree = new Set(offerings.filter(item => !serviceOfferingNeedsSizes(item)).map(offeringServiceType));
+  const needsWindows = scope => !(sizeFree.has(scope) && !sized.has(scope));
+  const fromOrder = (Array.isArray(order?.serviceTypes) ? order.serviceTypes : []).filter(needsWindows);
   const fromWindows = (order?.measurements?.rooms || []).flatMap(room => room.windows || []).map(win => win.measureScope).filter(Boolean);
-  const scopes = [orderMeasureScope(order), ...fromOrder, ...fromWindows]
+  const primary = needsWindows(orderMeasureScope(order)) ? [orderMeasureScope(order)] : [];
+  const scopes = [...primary, ...fromOrder, ...fromWindows]
     .map(value => measureScopeInfo(value).key)
     .filter(value => valid.has(value));
   return Array.from(new Set(scopes));
@@ -15508,6 +15519,7 @@ function filmCategory(filmTypeName) {
   if (n.includes('security') || n.includes('защит')) return 'protective';
   if (n.includes('smart') || n.includes('pdlc') || n.includes('умн')) return 'smart';
   if (n.includes('solar') || n.includes('automotive') || n.includes('tint') || n.includes('солнц') || n.includes('тониров')) return 'solar';
+  if (n.includes('privacy') || n.includes('приват')) return 'privacy';
   if (n.includes('decor') || n.includes('frost') || n.includes('matte') || n.includes('декор') || n.includes('матов')) return 'decorative';
   return 'other';
 }
@@ -15705,14 +15717,18 @@ function windowFilmCost(w) {
 function windowInstallerPayout(w) {
   const c = windowCatalog(w);
   const filmName = c ? `${c.brand} ${c.model}` : (w.filmType || '');
-  return windowActualAreaSqft(w) * (serviceOfferingInstallerRate(w) || filmRate(filmName));
+  // A warehouse film knows its direction: its rate is the direction's (privacy,
+  // smart…), not a guess from the brand and model text.
+  const explicit = db.settings.installerRates?.types?.[filmName];
+  const directionRate = explicit != null ? explicit : c ? installerServiceRateByCategory(canonicalCatalogCategory(c.category)) : filmRate(filmName);
+  return windowActualAreaSqft(w) * (serviceOfferingInstallerRate(w) || directionRate);
 }
 function installerRateForWindow(user, w) {
   const offeringRate = serviceOfferingInstallerRate(w);
   if (offeringRate > 0) return offeringRate;
   const pc = user?.payConfig || {};
   const catalog = windowCatalog(w);
-  const category = catalog?.category || filmCategory(w?.filmType || '');
+  const category = catalog?.category ? canonicalCatalogCategory(catalog.category) : filmCategory(w?.filmType || '');
   const categoryRate = Number(pc.ratesByCategory?.[category]);
   if (categoryRate > 0) return categoryRate;
   const baseRate = Number(pc.ratePerSqft);
@@ -15725,7 +15741,7 @@ function installerRateForQuickLine(user, line) {
   if (offeringRate > 0) return offeringRate;
   const pc = user?.payConfig || {};
   const catalog = getCatalogItem(line?.catalogId);
-  const category = catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other';
+  const category = canonicalCatalogCategory(catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other');
   const categoryRate = Number(pc.ratesByCategory?.[category]);
   if (categoryRate > 0) return categoryRate;
   const baseRate = Number(pc.ratePerSqft);
@@ -16528,7 +16544,7 @@ function orderPrice(o) { return orderArea(o) * (o.pricePerM2 || db.settings.pric
 function orderMeasurementCompletionIssues(o) {
   const issues = [];
   const windows = measureAllWindows(o);
-  if (!windows.length) return ['добавьте хотя бы одно окно или панель'];
+  if (!windows.length) return orderNeedsMeasurements(o) ? ['добавьте хотя бы одно окно или панель'] : [];
   const missingScopes = orderMeasureScopes(o).filter(scopeKey => !windows.some(({ win }) => (
     (win.measureScope || orderMeasureScope(o)) === scopeKey
     && Number(win.width) > 0
@@ -25008,7 +25024,7 @@ function renderProjectEstimateWorkspace(o) {
   </tr>`).join('');
   const installerRows = installerPay.byInstaller.map(row => `<div class="order-clean-list-row"><span>${academyEsc(row.name)}</span><b>${fmtMoney(row.amount)}</b></div>`).join('');
   const costLines = [
-    ['Плёнка и отход', pss.film], ['Специалисты по установке', pss.installers], ['Транспорт', pss.gas],
+    ['Плёнка и отход', pss.film], ...(pss.extraServicesCost > 0 ? [['Материал услуг без размеров', pss.extraServicesCost]] : []), ['Специалисты по установке', pss.installers], ['Транспорт', pss.gas],
     [`Менеджер (${Number(db.settings.pricingDefaults?.managerPct || 0)}% выручки)`, pss.manager],
     [`Реклама — доля бюджета месяца (${(projectRevenueShare(o) * 100).toFixed(1)}% от ${fmtMoney(projectMonthAdBudget(projectProfitDate(o)).budget)})`, pss.marketing],
     ['Замерщик — оклад в постоянных расходах', pss.measurer], ['Расходники', pss.consumables],
