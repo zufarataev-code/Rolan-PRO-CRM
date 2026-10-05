@@ -899,6 +899,12 @@ Validation: full suite 109 test-file entries, TypeScript and production build pa
 
 Status: implementation and local checks complete; GitHub PR/CI/release pending. No blocker. Next: publish the dedicated branch/PR, pass required checks, merge and confirm production deployment. Previous task #310 is already released: main CI 37261459889 and deployment 37261634376 succeeded for e6d79e2a4d0720d12080e4613e0469f3ec0c471c; release handoff is on `codex/month-services-roles-release-handoff`.
 
+## 2026-10-05 handoff — a release no longer resets the owner's prices and rates (Claude)
+
+- Found while mapping directions and services: `deploy/watch-production.sh` runs `prisma/seed.ts` on every release, and `seedServiceReferences` upserted with `update:` = the seed values. Every release therefore reset the owner's «Услуги и цены» cards (Smart/Solar/Safety base prices 85/19/24, installer cost 14/4.25/5.60 $/sq ft, add-on prices), complexity multipliers and city fields; `#/service-pricing` then copied those installer costs into the legacy `installerRates.serviceTypes`.
+- Fix (branch `claude/seed-keep-owner-settings`): `serviceType` and `serviceAddon` are created once (`update: {}`); `complexityLevel` refreshes only `name_en`/`color_token`; `city` only `name_en`; `filmCatalog` refreshes the technical specification but not the owner-edited names, thickness, unit and order. Test: `src/features/core/seed-owner-settings.test.ts`.
+- Note: values already reset by earlier releases are not restored by this change; the owner re-enters them once in «Услуги и цены».
+
 ## 2026-10-05 handoff — five directions and services without sizes (Claude)
 
 - Owner request and answers: DECISIONS.md (2026-10-05, «Five directions; services priced per sq ft or without sizes»). Branch `claude/service-directions`.
