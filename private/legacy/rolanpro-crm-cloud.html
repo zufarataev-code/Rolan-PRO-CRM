@@ -10367,6 +10367,10 @@ const MEASURE_FRAME_TYPES = ['Vinyl', 'Aluminum', 'Wood', 'Steel', 'Storefront',
 const MEASURE_SOLAR_GOALS = ['Heat reduction', 'Glare reduction', 'UV protection', 'Daytime privacy', 'Fade protection', 'Energy savings'];
 const MEASURE_SECURITY_GOALS = ['Safety shards', 'Break-in delay', 'Anti-graffiti', 'Blast / impact', 'Storefront protection', 'School / public area'];
 const MEASURE_DECOR_GOALS = ['Privacy frost', 'Decorative pattern', 'Logo / branding', 'Gradient', 'Whiteboard / writable', 'Obscure view'];
+// Privacy direction (2026-10-05): when the view must be closed and what makes a film work.
+const MEASURE_PRIVACY_WHEN = ['Днём', 'Ночью', 'Круглосуточно'];
+const MEASURE_PRIVACY_LIGHT = ['Снаружи светлее', 'Внутри светлее', 'Примерно одинаково'];
+const MEASURE_PRIVACY_LOOK = ['Зеркальная', 'Матовая / frost', 'Тонированная', 'Односторонняя', 'Подобрать на месте'];
 const MEASURE_ORIENTATIONS = [
   { value: 'N', label: 'N / север', deg: 0 },
   { value: 'NE', label: 'NE / северо-восток', deg: 45 },
@@ -11332,6 +11336,7 @@ function measureStudioScopeSpecificHtml(scopeKey, win = {}) {
   const solar = win.solar || {};
   const security = win.security || {};
   const decor = win.decor || {};
+  const privacy = win.privacy || {};
   const goalOptions = (items, selected) => items.map(x => `<option value="${x}" ${selected === x ? 'selected' : ''}>${x}</option>`).join('');
   let body = '';
   if (scope.key === 'solar_film') {
@@ -11375,6 +11380,18 @@ function measureStudioScopeSpecificHtml(scopeKey, win = {}) {
       <label class="flex items-center gap-2 text-sm mt-2"><input id="ms-logo" type="checkbox" ${decor.logoNeeded ? 'checked' : ''} style="width:auto;"> Нужен логотип / макет перед резкой</label>
       <label class="mt-2">Decor notes</label>
       <textarea id="ms-decor-notes" rows="2" placeholder="Стыки, направление рисунка, видимость снаружи/внутри">${academyEsc(decor.notes || '')}</textarea>`;
+  } else if (scope.key === 'privacy_film') {
+    body = `
+      <div class="grid grid-cols-2 gap-2">
+        <div><label>Когда нужна приватность</label><select id="ms-privacy-when">${goalOptions(MEASURE_PRIVACY_WHEN, privacy.when || '')}</select></div>
+        <div><label>Освещение</label><select id="ms-privacy-light">${goalOptions(MEASURE_PRIVACY_LIGHT, privacy.lighting || '')}</select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 mt-2">
+        <div><label>Вид плёнки</label><select id="ms-privacy-look">${goalOptions(MEASURE_PRIVACY_LOOK, privacy.look || '')}</select></div>
+        <div><label>Закрыть</label><input id="ms-privacy-coverage" value="${academyEsc(privacy.coverage || '')}" placeholder="Всё стекло / полоса 30–60″ / низ"></div>
+      </div>
+      <label class="mt-2">Заметки по приватности</label>
+      <textarea id="ms-privacy-notes" rows="2" placeholder="От кого закрываемся, вид изнутри, соседи, улица">${academyEsc(privacy.notes || '')}</textarea>`;
   } else {
     body = `<div class="text-sm text-slate-600">Smart данные заполняются ниже в блоке электрики. Главное: размер чистого стекла, зазор 2-3 мм, зоны, питание и busbar.</div>`;
   }
@@ -11916,6 +11933,13 @@ function measureStudioFormWindow() {
     logoNeeded: !!document.getElementById('ms-logo')?.checked,
     notes: (document.getElementById('ms-decor-notes')?.value || '').trim(),
   };
+  const privacy = {
+    when: document.getElementById('ms-privacy-when')?.value || '',
+    lighting: document.getElementById('ms-privacy-light')?.value || '',
+    look: document.getElementById('ms-privacy-look')?.value || '',
+    coverage: (document.getElementById('ms-privacy-coverage')?.value || '').trim(),
+    notes: (document.getElementById('ms-privacy-notes')?.value || '').trim(),
+  };
   return {
     name: (document.getElementById('ms-name')?.value || '').trim(),
     width,
@@ -11943,6 +11967,7 @@ function measureStudioFormWindow() {
     solar,
     security,
     decor,
+    privacy,
     smart: scopeKey === 'smart_film' ? smartBase : null,
   };
 }
@@ -12262,6 +12287,10 @@ function renderTechScopeDetails(win) {
   if (scope.key === 'protective_film') {
     const s = win.security || {};
     return `<div class="mt-2 p-2 rounded-lg bg-red-50 text-sm"><b>Security:</b> ${academyEsc(s.goal || '—')} · ${academyEsc(s.mil || 'TBD')} · ${academyEsc(s.attachment || 'TBD')} · frame ${academyEsc(s.frame || '—')} · gap ${s.edgeGapMm || '—'} mm${s.publicRisk ? ' · public/storefront' : ''}${s.notes ? `<div class="text-xs mt-1">${academyEsc(s.notes)}</div>` : ''}</div>`;
+  }
+  if (scope.key === 'privacy_film') {
+    const p = win.privacy || {};
+    return `<div class="mt-2 p-2 rounded-lg bg-violet-50 text-sm"><b>Privacy:</b> ${academyEsc(p.when || '—')} · ${academyEsc(p.lighting || '—')} · ${academyEsc(p.look || '—')}${p.coverage ? ` · ${academyEsc(p.coverage)}` : ''}${p.notes ? `<div class="text-xs text-gray-600 mt-1">${academyEsc(p.notes)}</div>` : ''}</div>`;
   }
   if (scope.key === 'decorative_film') {
     const d = win.decor || {};
@@ -24687,13 +24716,15 @@ function approveProjectEstimateAndOpenProposal(oid) {
   o.projectEstimateSnapshot = {
     approvedAt,
     revenue: orderRevenue(o),
-    productionCost: orderPSS(o).total,
-    margin: orderMargin(o),
-    marginPct: orderMarginPct(o),
+    // A manager's browser has no installer rates or material costs of services:
+    // internal costs are recorded only by someone who sees them.
+    productionCost: canSeeInternalEconomics ? orderPSS(o).total : null,
+    margin: canSeeInternalEconomics ? orderMargin(o) : null,
+    marginPct: canSeeInternalEconomics ? orderMarginPct(o) : null,
     areaSqft: orderActualAreaSqft(o),
     serviceCount: (o.extraServices || []).length,
     expenseCount: (o.extraExpenses || []).length,
-    measurementBasis: !measureAllWindows(o).length ? 'QUICK_LINE_ITEMS' : orderMeasurementVerificationIssues(o).length ? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED',
+    measurementBasis: measureAllWindows(o).length ? (orderMeasurementVerificationIssues(o).length ? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED') : projectOfferingLines(o).length ? 'SERVICE_QUANTITIES' : 'QUICK_LINE_ITEMS',
     fixedExpenseAllocation: canSeeInternalEconomics ? projectProfitability(o).fixedAllocation : null,
     californiaTaxAllocation: canSeeInternalEconomics ? projectProfitability(o).taxAllocation : null,
     managementNetProfit: canSeeInternalEconomics ? projectProfitability(o).netProfit : null,

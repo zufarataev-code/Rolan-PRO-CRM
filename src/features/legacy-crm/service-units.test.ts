@@ -179,3 +179,21 @@ test('managers do not see a service\'s installer rate or material cost; the serv
   const back = serviceSolutionsForViewer(view, false);
   assert.equal(back.orders[0].extraServices[0].offeringMaterialCost, undefined);
 });
+
+test('the privacy scope has its own measurement fields, saved on the window and shown in the tech sheet', () => {
+  const studio = html.slice(html.indexOf('function measureStudioScopeSpecificHtml('), html.indexOf('function openEngineeringMeasureStudio('));
+  assert.match(studio, /\} else if \(scope\.key === 'privacy_film'\) \{[\s\S]*?id="ms-privacy-when"[\s\S]*?id="ms-privacy-light"[\s\S]*?id="ms-privacy-look"[\s\S]*?id="ms-privacy-coverage"[\s\S]*?id="ms-privacy-notes"/);
+  const formStart = html.indexOf('function measureStudioFormWindow() {');
+  const form = html.slice(formStart, html.indexOf('\nfunction ', formStart + 10));
+  assert.match(form, /const privacy = \{\n {4}when: document\.getElementById\('ms-privacy-when'\)/);
+  assert.match(form, /decor,\n {4}privacy,/);
+  assert.match(html, /if \(scope\.key === 'privacy_film'\) \{\n {4}const p = win\.privacy \|\| \{\};/);
+});
+
+test('an estimate approved by someone without internal economics records no internal cost', () => {
+  const approve = html.slice(html.indexOf('function approveProjectEstimateAndOpenProposal(oid) {'), html.indexOf('function approveProjectEstimateAndOpenProposal(oid) {') + 3000);
+  assert.match(approve, /productionCost: canSeeInternalEconomics \? orderPSS\(o\)\.total : null,/);
+  assert.match(approve, /margin: canSeeInternalEconomics \? orderMargin\(o\) : null,/);
+  assert.match(approve, /projectOfferingLines\(o\)\.length \? 'SERVICE_QUANTITIES' : 'QUICK_LINE_ITEMS'/);
+});
+
