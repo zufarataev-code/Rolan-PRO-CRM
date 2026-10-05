@@ -136,7 +136,7 @@ test('a project of services without sizes skips measurement; the proposal lists 
   assert.match(readiness, /не указано количество: /);
   assert.match(readiness, /не указана цена услуги: /);
   assert.match(html, /projectOfferingLines\(order\)\.filter\(line => premiumNum\(line\.price\) > 0\)\.forEach\(line => \{\n {4}items\.push\(\{\n {6}service_code: canonicalServiceCodeForOrderService\(line\.serviceType\) \|\| 'SOLAR_FILM',/);
-  assert.match(html, /!line\.quickProjectLine && !line\.offeringId\)\.reduce/, 'directory services are not counted twice in «Additional project services»');
+  assert.match(html, /const offeringLines = projectOfferingLines\(order\);\n  const regularLegacyServices = \(order\.extraServices \|\| \[\]\)\.filter\(line => !line\.quickProjectLine && !offeringLines\.includes\(line\)\)\.reduce/, 'directory services are not counted twice in «Additional project services»');
   // Windows only take per-sq-ft services.
   assert.match(html, /serviceOfferingsFor\(direction, \{ includeId: win\.offeringId \}\)\.filter\(item => serviceOfferingNeedsSizes\(item\) \|\| item\.id === win\.offeringId\)/);
 });
@@ -303,6 +303,10 @@ test('the server classifies service lines itself: submitted flags cannot unlock 
   const quick: Row = structuredClone(saved);
   quick.orders[0].extraServices.push({ id: 'q', quickProjectLine: true, offeringId: 'zone', serviceType: 'smart_film', unit: 'sqft', qty: 10 });
   assert.match(prepareServiceSolutions(saved, quick, false)!, /кв\. футам/);
+  // A new ordinary row cannot carry a per-sq-ft service under another type.
+  const disguised: Row = structuredClone(saved);
+  disguised.orders[0].extraServices.push({ id: 'w', type: 'washing', offeringId: 'one-way', serviceType: 'privacy_film', qty: 1, price: 999 });
+  assert.match(prepareServiceSolutions(saved, disguised, false)!, /по замеру окон/);
 });
 
 test('installers see services without sizes in the work order and tech sheet, without prices', () => {

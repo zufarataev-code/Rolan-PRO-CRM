@@ -32593,7 +32593,8 @@ function premiumCanonicalSnapshot(prop) {
       item_kind: 'service',
     });
   });
-  const regularLegacyServices = (order.extraServices || []).filter(line => !line.quickProjectLine && !line.offeringId).reduce((sum, line) => sum + premiumNum(line.price), 0);
+  const offeringLines = projectOfferingLines(order);
+  const regularLegacyServices = (order.extraServices || []).filter(line => !line.quickProjectLine && !offeringLines.includes(line)).reduce((sum, line) => sum + premiumNum(line.price), 0);
   if (regularLegacyServices > 0) {
     items.push({ service_code: 'SOLAR_FILM', title_en: 'Additional project services', quantity: 1, unit_label: 'project', line_price: regularLegacyServices, item_kind: 'service' });
   }

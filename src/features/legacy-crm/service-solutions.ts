@@ -99,7 +99,8 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       // the submitted flags: an extra-service row with a directory service is a
       // quantity line unless it already was a quick-entry line (those are per
       // sq ft). Only a service that is not per sq ft can be a quantity line; the
-      // server keeps its unit and unit price and derives the line price.
+      // server keeps its unit and unit price and derives the line price. Only a
+      // saved row that keeps its service is left as it was (older data).
       if (item.offeringId && extras.includes(item)) {
         const quick = old ? old.quickProjectLine === true : item.quickProjectLine === true;
         if (old) {
@@ -108,9 +109,10 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         }
         const sizeFreeOffering = !!offering && !!offering.unit && offering.unit !== 'sqft';
         const wasQuantityLine = !!old && old.type === 'offering' && !!old.unit && old.unit !== 'sqft' && old.quickProjectLine !== true;
+        const newService = !old || old.offeringId !== item.offeringId;
         if (quick) {
-          if ((!old || old.offeringId !== item.offeringId) && sizeFreeOffering) return 'Быстрая строка проекта считается по кв. футам.';
-        } else if (sizeFreeOffering || wasQuantityLine || item.type === 'offering') {
+          if (newService && sizeFreeOffering) return 'Быстрая строка проекта считается по кв. футам.';
+        } else if (newService || sizeFreeOffering || wasQuantityLine || item.type === 'offering') {
           item.type = 'offering';
           const sameService = wasQuantityLine && old.offeringId === item.offeringId;
           if (!sameService) {
