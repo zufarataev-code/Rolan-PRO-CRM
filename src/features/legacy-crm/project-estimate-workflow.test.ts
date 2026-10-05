@@ -560,3 +560,46 @@ test("residential premium proposal applies the California home-improvement depos
   assert.match(calculator, /Math\.min\(result\.total \* 0\.10, 1000\)/);
   assert.match(source, /Legal Deposit \(max 10% \/ \$1,000\)/);
 });
+
+test("manager confirms a KP on the client's behalf: server first, ledger deposit, locked KP", () => {
+  const open = source.match(/function openManagerConfirmProposal\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const confirm = source.match(/async function confirmProposalByManagerOnce\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const guard = source.match(/async function confirmProposalByManager\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const server = source.match(/async function managerConfirmProposalOnServer\([^)]*\) \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(open, /orderWorkflowTransitionIssues\(o, 'proposal_accepted'\)/);
+  assert.match(confirm, /orderWorkflowTransitionIssues\(o, 'proposal_accepted'\)/);
+  // Server approval and a paid Deposit happen before anything is finalized locally.
+  // One server step records approval and the payment choice together.
+  assert.match(server, /\/manager-confirm'/);
+  assert.match(server, /JSON\.stringify\(\{ payment, amount: payment === 'deposit' \? depositAmount : undefined, channel, note \}\)/);
+  // A KP without a server copy is refused, never confirmed only locally.
+  assert.match(confirm, /if \(!proposal\?\.canonicalProposalId\) \{/);
+  // The locked KP carries the received deposit.
+  assert.match(confirm, /proposal\.selections\.customDeposit = deposit;/);
+  // A double click cannot record the deposit twice.
+  assert.match(guard, /if \(managerProposalConfirmInFlight\) return;/);
+  assert.match(confirm, /if \(o\.proposalConfirmedByManager\) \{ closeModal\(\); return; \}/);
+  assert.ok(confirm.indexOf("managerConfirmProposalOnServer(") < confirm.indexOf("proposal.lockedSnapshot"), "server before local lock");
+  assert.match(confirm, /В CRM ничего не изменено — попробуйте ещё раз/);
+  // The agreed payment mode is applied before the KP is locked.
+  assert.ok(confirm.indexOf("proposal.selections.paymentMode = 'after_completion'") < confirm.indexOf("premiumBuildSignedSnapshot(proposal, calc)"));
+  assert.match(confirm, /proposal\.acceptedVia = 'manager'/);
+  assert.match(confirm, /o\.proposalConfirmedByManager = \{ by: state\.currentUserId, at, channel, channelLabel, note \}/);
+  // Deposit goes through the payments ledger, not only the o.paid scalar.
+  assert.match(confirm, /orderPayments\(o\)\.push\(/);
+  assert.match(confirm, /syncOrderPaid\(o\)/);
+  assert.doesNotMatch(confirm, /o\.paid = \(o\.paid \|\| 0\) \+ deposit/);
+  assert.match(confirm, /o\.paymentTerms = 'after_completion'/);
+  assert.match(source, /title: 'Подтвердить КП'[^\n]*openManagerConfirmProposal/);
+});
+
+test("a deposit recorded later goes through the server and the payments ledger, within limits", () => {
+  const later = source.match(/async function markDepositReceived\(orderId\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(later, /managerConfirmProposalOnServer\(proposal\.canonicalProposalId, 'deposit', advance/);
+  assert.match(later, /orderPayments\(o\)\.push\(/);
+  assert.doesNotMatch(later, /o\.paid = \(o\.paid \|\| 0\) \+ advance/);
+  const confirm = source.match(/async function confirmProposalByManagerOnce\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(confirm, /deposit > calc\.balanceDue \+ 0\.009/);
+  assert.match(confirm, /orderSiteType\(o\) === 'RESIDENTIAL' && deposit > calc\.deposit50/);
+});
