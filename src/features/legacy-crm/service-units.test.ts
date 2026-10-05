@@ -128,7 +128,7 @@ test('the money of a service without sizes: revenue, material, installer pay per
 test('a project of services without sizes skips measurement; the proposal lists them line by line', () => {
   const creation = html.slice(html.indexOf('function createOrder(nextStep'), html.indexOf('function openClientModal()'));
   assert.match(creation, /extraServices: selectedOfferings\.filter\(item => !serviceOfferingNeedsSizes\(item\)\)\.map\(item => projectOfferingLine\(item, 1\)\)/);
-  assert.match(creation, /if \(nextStep === 'measure' && orderNeedsMeasurements\(o\)\) setTimeout/);
+  assert.match(creation, /setTimeout\(\(\) => \(orderNeedsMeasurements\(o\) \? openManagerMeasureModal\(o\.id\) : openProjectEstimateWorkspace\(o\.id\)\), 0\);/);
   assert.match(html, /createButton\.textContent = !validOffering \|\| newOrderSelectedOfferings\(\)\.some\(serviceOfferingNeedsSizes\) \? 'Создать и перейти к замеру →' : 'Создать проект →'/);
   const verification = html.slice(html.indexOf('function orderMeasurementVerificationIssues(o) {'), html.indexOf('function orderPaymentReadyForProduction('));
   assert.match(verification, /if \(!windows\.length\) return orderNeedsMeasurements\(o\) \? \['нет окон с размерами'\] : \[\];/);
@@ -256,5 +256,34 @@ test('the need for windows follows how the project priced its services, not late
   const quick: Row = { id: 'q', offeringIds: [film.id], extraServices: [{ id: 'l', quickProjectLine: true }], measurements: { rooms: [] } };
   assert.equal(c.orderNeedsMeasurements(quick), true, 'a per-sq-ft service needs windows even next to old quick lines');
   assert.equal(c.orderNeedsMeasurements({ extraServices: [{ id: 'l', quickProjectLine: true }] }), false, 'a quick-entry-only project does not');
+});
+
+test('the server accepts only services without sizes as lines and prices them itself', () => {
+  const view: Row = serviceSolutionsForViewer(base, false);
+  view.orders[0].extraServices = [{ id: 'bad', type: 'offering', offeringId: 'one-way', serviceType: 'privacy_film', qty: 2, unitPrice: 1, price: 2 }];
+  assert.match(prepareServiceSolutions(base, view, false)!, /по замеру окон/);
+  view.orders[0].extraServices = [{ id: 'zones', type: 'offering', offeringId: 'zone', serviceType: 'smart_film', qty: 3, unitPrice: 1, price: 3, unit: 'sqft' }];
+  assert.equal(prepareServiceSolutions(base, view, false), null);
+  const line = view.orders[0].extraServices[0];
+  assert.deepEqual([line.unit, line.unitPrice, line.price], ['zone', 100, 300], 'unit and price come from the directory');
+  // Later the manager may change only the quantity; the saved unit price stays.
+  const saved: Row = structuredClone(view);
+  saved.settings.serviceOfferings[1].pricePerSqft = 100;
+  const next: Row = structuredClone(saved);
+  next.orders[0].extraServices[0].qty = 5;
+  next.orders[0].extraServices[0].unitPrice = 1;
+  assert.equal(prepareServiceSolutions(saved, next, false), null);
+  assert.deepEqual([next.orders[0].extraServices[0].unitPrice, next.orders[0].extraServices[0].price], [100, 500]);
+  next.orders[0].extraServices[0].qty = -1;
+  assert.match(prepareServiceSolutions(saved, next, false)!, /Количество/);
+});
+
+test('a project of services without sizes opens its estimate and shows them to the client', () => {
+  const card = html.slice(html.indexOf('function renderOrderCleanDetails'), html.indexOf('\nfunction ', html.indexOf('function renderOrderCleanDetails') + 20));
+  assert.match(card, /const estimateReady = hasMeasurements \|\| !orderNeedsMeasurements\(o\);/);
+  assert.match(card, /disabled: !canManage \|\| !estimateReady/);
+  assert.match(card, /onclick: estimateReady \? `openProjectEstimateWorkspace\('\$\{o\.id\}'\)` : `openManagerMeasureModal\('\$\{o\.id\}'\)`/);
+  assert.match(html, /setTimeout\(\(\) => \(orderNeedsMeasurements\(o\) \? openManagerMeasureModal\(o\.id\) : openProjectEstimateWorkspace\(o\.id\)\), 0\);/);
+  assert.match(html, /projectOfferingLines\(order\)\.length \? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PROJECT SERVICES<\/div>/);
 });
 

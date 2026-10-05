@@ -93,6 +93,27 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         else if (offering && typeof offering.materialCostPerUnit === 'number') item.offeringMaterialCost = offering.materialCostPerUnit;
         else delete item.offeringMaterialCost;
       }
+      // A service without sizes is «quantity × price» (Owner, 2026-10-05): only a
+      // directory service that is not per sq ft can be a line, and the server
+      // keeps its unit and unit price and derives the line price.
+      if (item.type === 'offering' && item.offeringId && !item.quickProjectLine) {
+        const sameService = old && old.offeringId === item.offeringId && old.type === 'offering';
+        if (!sameService) {
+          if (!offering || offering.active === false) return 'Услуга не найдена в справочнике.';
+          if (!offering.unit || offering.unit === 'sqft') return 'Услуга за кв. фут считается по замеру окон, а не количеством.';
+          item.unit = offering.unit;
+          item.unitLabel = offering.unit === 'custom' && typeof offering.unitLabel === 'string' ? offering.unitLabel : '';
+          item.unitPrice = typeof offering.pricePerSqft === 'number' ? offering.pricePerSqft : 0;
+        } else {
+          item.unit = old.unit;
+          item.unitLabel = old.unitLabel;
+          item.unitPrice = old.unitPrice;
+        }
+        const qty = Number(item.qty);
+        if (!Number.isFinite(qty) || qty < 0) return 'Количество услуги должно быть неотрицательным числом.';
+        item.qty = qty;
+        item.price = Math.round((Number(item.unitPrice) || 0) * qty * 100) / 100;
+      }
       // Old signed/history selections survive archival or changed material lists.
       if (item.offeringId && (item.offeringId !== old?.offeringId || item.catalogId !== old?.catalogId)) {
         const direction = DIRECTION_BY_SERVICE_TYPE[item.measureScope || item.serviceType || order.serviceType];

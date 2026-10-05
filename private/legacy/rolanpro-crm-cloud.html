@@ -23401,7 +23401,8 @@ function orderPassportActions(o, ctx) {
   }
 
   const done = {
-    measure: ctx.hasMeasurements,
+    // A project of services without sizes has nothing to measure.
+    measure: ctx.hasMeasurements || !orderNeedsMeasurements(o),
     estimate: ctx.estimateApproved,
     proposal: ['proposal_accepted','installation_scheduled','installation_accepted',
                'installation_en_route','installation_in_progress','installation_done',
@@ -23423,8 +23424,8 @@ function orderPassportActions(o, ctx) {
       sub: ctx.measureSub, onclick: ctx.measureAction },
 
     { key: 'estimate', icon: '🧮', title: 'Расчёт проекта',
-      sub: ctx.estimateApproved ? 'проверен и подтверждён' : 'по помещениям, размерам и выбранной плёнке',
-      onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !ctx.canManage || !ctx.hasMeasurements },
+      sub: ctx.estimateApproved ? 'проверен и подтверждён' : ctx.hasMeasurements || orderNeedsMeasurements(o) ? 'по помещениям, размерам и выбранной плёнке' : 'услуги без размеров: количество и цена',
+      onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !ctx.canManage || !(ctx.hasMeasurements || !orderNeedsMeasurements(o)) },
 
     { key: 'proposal', icon: '📄', title: 'КП',
       sub: ctx.estimateApproved ? 'единый стандарт ROLANPRO' : 'проверить расчёт и сформировать',
@@ -25157,6 +25158,9 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const events = orderScheduledEvents(o);
   const pendingRequests = pendingClientRequests(o);
   const hasMeasurements = windows.length > 0;
+  // A project of services without sizes is calculated without a measurement.
+  const estimateReady = hasMeasurements || !orderNeedsMeasurements(o);
+  const sizeFreeSummary = `${projectOfferingLines(o).length} усл. без размеров · ${fmtMoney(orderRevenue(o))}`;
   const unverifiedMeasurements = orderMeasurementVerificationIssues(o);
   const estimateApproved = projectEstimateIsApproved(o);
   const quickLines = projectQuickLines(o);
@@ -25243,7 +25247,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     </div>
     ${proposalStripeUrl ? `<div class="order-clean-note mt-3">Stripe checkout: <a class="text-blue-700 underline break-all" href="${proposalStripeUrl}" target="_blank">${proposalStripeUrl}</a></div>` : ''}
     <div class="order-clean-actions mt-3">
-      ${renderOrderActionCard({ icon: '🧮', title: estimateApproved ? 'Расчёт проекта подтверждён' : 'Расчёт проекта', sub: hasMeasurements ? (canSeeInternalEconomics ? `цена, расходы и маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `цена клиенту ${fmtMoney(orderRevenue(o))}`) : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !canManage || !hasMeasurements, variant: !estimateApproved && hasMeasurements ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🧮', title: estimateApproved ? 'Расчёт проекта подтверждён' : 'Расчёт проекта', sub: estimateReady ? (canSeeInternalEconomics ? `цена, расходы и маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `цена клиенту ${fmtMoney(orderRevenue(o))}`) : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !canManage || !estimateReady, variant: !estimateApproved && estimateReady ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '📄', title: 'Единое КП', sub: estimateApproved ? 'позиции проекта и оплата' : 'сначала подтвердите расчёт по замеру', onclick: `openProfessionalKP('${o.id}')`, disabled: !canManage || !estimateApproved, variant: estimateApproved ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '🔗', title: 'Ссылка клиенту', sub: clientPortalUrl(o.id) ? 'скопировать портал' : 'public URL не настроен', onclick: `copyPortalLink('${o.id}')`, disabled: !clientPortalUrl(o.id) })}
       ${renderOrderActionCard({ icon: '✅', title: 'КП принято', sub: 'перевести этап', onclick: `changeStatus('${o.id}','proposal_accepted')`, disabled: !canManage || !['proposal_sent','proposal_accepted'].includes(o.status) || o.status === 'proposal_accepted' })}
@@ -25280,7 +25284,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     </div>
     <div class="order-clean-actions mt-3">
       ${renderOrderActionCard({ icon: '💰', title: o.depositReceived ? 'Аванс получен' : 'Отметить аванс', sub: o.depositReceived ? fmtDateTime(o.depositReceivedAt) : `ожидаемый ${fmtMoney(orderRevenue(o) * (db.settings.advancePct || 30) / 100)}`, onclick: o.depositReceived ? `openOrder('${o.id}')` : `markDepositReceived('${o.id}')`, variant: o.depositReceived ? 'success' : 'warning' })}
-      ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: hasMeasurements ? (canSeeInternalEconomics ? 'замер, цена, расходы и маржа' : 'замер, услуги и цена клиенту') : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !hasMeasurements, variant: !estimateApproved && hasMeasurements ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: estimateReady ? (!hasMeasurements ? 'услуги без размеров и цена клиенту' : canSeeInternalEconomics ? 'замер, цена, расходы и маржа' : 'замер, услуги и цена клиенту') : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !estimateReady, variant: !estimateApproved && estimateReady ? 'primary' : 'soft' })}
     </div>` : `<div class="order-clean-note">Финансы скрыты для роли ${academyEsc(u?.role || '')}. В рабочем режиме видны только клиент, адрес, замер, техлист и задача.</div>`;
 
   const routeBody = `
@@ -25328,8 +25332,8 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       <div class="order-workspace-grid">
         ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'client', icon: '👤', title: 'Клиент и связь', summary: c?.name || 'Данные и все каналы связи', badge: c?.phone || c?.email ? 'контакт' : 'заполнить', body: clientBody, color: '#2563eb', soft: '#eff6ff' })}
-        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'measurement', icon: '📐', title: 'Замер', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : 'Размеры ещё не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : 'нужно', body: measurementBody, color: '#7c3aed', soft: '#f5f3ff' })}
-        ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '🧮', title: 'Расчёт по замеру', summary: hasMeasurements ? `${windows.length} окон · ${orderActualAreaSqft(o).toFixed(0)} sqft · ${fmtMoney(orderRevenue(o))}` : 'Сначала внесите помещения, окна и размеры', badge: estimateApproved ? 'подтверждён' : hasMeasurements ? 'рассчитать' : 'нужен замер', onclick: hasMeasurements ? `openProjectEstimateWorkspace('${o.id}')` : `openManagerMeasureModal('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
+        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'measurement', icon: '📐', title: 'Замер', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : estimateReady ? 'Замер не нужен: услуги без размеров' : 'Размеры ещё не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : estimateReady ? 'не нужен' : 'нужно', body: measurementBody, color: '#7c3aed', soft: '#f5f3ff' })}
+        ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '🧮', title: estimateReady && !hasMeasurements ? 'Расчёт проекта' : 'Расчёт по замеру', summary: hasMeasurements ? `${windows.length} окон · ${orderActualAreaSqft(o).toFixed(0)} sqft · ${fmtMoney(orderRevenue(o))}` : estimateReady ? sizeFreeSummary : 'Сначала внесите помещения, окна и размеры', badge: estimateApproved ? 'подтверждён' : estimateReady ? 'рассчитать' : 'нужен замер', onclick: estimateReady ? `openProjectEstimateWorkspace('${o.id}')` : `openManagerMeasureModal('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'documents', icon: workDocsOnly ? '🧰' : '📄', title: workDocsOnly ? 'Рабочие документы' : 'КП и документы', summary: workDocsOnly ? 'Без коммерческих сумм' : (proposal ? 'КП создано' : estimateApproved ? 'Расчёт готов — можно формировать КП' : 'Откройте расчёт и проверьте итог'), badge: workDocsOnly ? 'документы' : estimateApproved ? 'КП' : 'проверить', body: docsBody, color: '#d97706', soft: '#fff7ed' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'schedule', icon: '📅', title: isInstaller ? 'Задача и выезд' : 'Календарь и команда', summary: events.length ? `${events.length} события` : 'События не назначены', badge: isInstaller ? T(o.status) : (installers.length ? `${installers.length}` : 'команда'), body: scheduleBody, color: '#0891b2', soft: '#ecfeff' })}
         ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'payment', icon: '💵', title: 'Оплата', summary: canSeeMoney ? (orderDebt(o) > 0 ? `Долг ${fmtMoney(orderDebt(o))}` : 'Оплачено полностью') : 'Скрыто по роли', badge: canSeeMoney ? (canSeeInternalEconomics ? `${(orderMarginPct(o)*100).toFixed(0)}%` : (orderDebt(o) > 0 ? 'долг' : 'оплачено')) : 'скрыто', body: financeBody, color: '#059669', soft: '#ecfdf5' })}
@@ -29386,7 +29390,10 @@ function createOrder(nextStep = 'measure') {
   }
   save(); closeModal();
   openOrder(o.id);
-  if (nextStep === 'measure' && orderNeedsMeasurements(o)) setTimeout(() => openManagerMeasureModal(o.id), 0);
+  if (nextStep === 'measure') {
+    // Services without sizes go straight to the project estimate.
+    setTimeout(() => (orderNeedsMeasurements(o) ? openManagerMeasureModal(o.id) : openProjectEstimateWorkspace(o.id)), 0);
+  }
 }
 
 function openClientModal() {
@@ -32201,7 +32208,7 @@ function renderPremiumProposalPortal(token) {
                 <div class="pp-product"><div class="text-slate-400">Access complexity</div><div class="text-xl font-black">×${Number(db.settings.complexityCoefs?.[order.complexity || 'standard'] || 1).toFixed(2)}</div></div>
               </div>
             </div>
-            ${(order.measurements?.rooms || []).length ? (order.measurements.rooms || []).map((r, i) => premiumRenderRoom(prop, order, r, i, calc)).join('') : projectQuickLines(order).length ? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PRELIMINARY PROJECT ITEMS</div><h3 class="text-xl font-black mt-1">Scope without measurements</h3><p class="text-slate-400 mt-2">Final room and window dimensions will be verified before installation.</p><div class="mt-4">${projectQuickLines(order).map(line => `<div class="pp-total-line"><span><b>${premiumEsc(primaryServiceInfo(line.serviceType)?.title || 'Service')}</b><br><small>${premiumEsc(line.label || 'Project item')} · ${premiumNum(line.qty)} ${premiumEsc(line.unit || 'unit')} × ${fmtMoney(line.unitPrice)}</small></span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}</div></div>` : `<div class="pp-panel"><h3 class="text-xl font-black">Project scope is not filled yet</h3><p class="text-slate-400 mt-2">Add project items or rooms in CRM, then regenerate this proposal.</p></div>`}
+            ${(order.measurements?.rooms || []).length ? (order.measurements.rooms || []).map((r, i) => premiumRenderRoom(prop, order, r, i, calc)).join('') : projectQuickLines(order).length ? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PRELIMINARY PROJECT ITEMS</div><h3 class="text-xl font-black mt-1">Scope without measurements</h3><p class="text-slate-400 mt-2">Final room and window dimensions will be verified before installation.</p><div class="mt-4">${projectQuickLines(order).map(line => `<div class="pp-total-line"><span><b>${premiumEsc(primaryServiceInfo(line.serviceType)?.title || 'Service')}</b><br><small>${premiumEsc(line.label || 'Project item')} · ${premiumNum(line.qty)} ${premiumEsc(line.unit || 'unit')} × ${fmtMoney(line.unitPrice)}</small></span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}</div></div>` : projectOfferingLines(order).length ? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PROJECT SERVICES</div><h3 class="text-xl font-black mt-1">Services</h3><div class="mt-4">${projectOfferingLines(order).map(line => `<div class="pp-total-line"><span><b>${premiumEsc(line.label || line.offeringName || 'Service')}</b><br><small>${premiumEsc(primaryServiceInfo(line.serviceType)?.title || '')} · ${premiumNum(line.qty)} ${premiumEsc(serviceOfferingUnitShort(line))} × ${fmtMoney(line.unitPrice)}</small></span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}</div></div>` : `<div class="pp-panel"><h3 class="text-xl font-black">Project scope is not filled yet</h3><p class="text-slate-400 mt-2">Add project items or rooms in CRM, then regenerate this proposal.</p></div>`}
             <div class="pp-panel">
               <div class="text-xs text-blue-200 font-bold">PRODUCTS</div>
               <h2 class="pp-section-title mt-1">Product intelligence</h2>

@@ -124,11 +124,11 @@ test("new projects follow measurement before estimate and expose no quick-entry 
   assert.match(source, /createOrder\('measure'\)/);
   assert.match(source, /Создать и перейти к замеру →/);
   // Measurement opens unless every chosen service is priced without sizes.
-  assert.match(creator, /nextStep === 'measure' && orderNeedsMeasurements\(o\)\) setTimeout\(\(\) => openManagerMeasureModal\(o\.id\)/);
+  assert.match(creator, /setTimeout\(\(\) => \(orderNeedsMeasurements\(o\) \? openManagerMeasureModal\(o\.id\) : openProjectEstimateWorkspace\(o\.id\)\), 0\);/);
   assert.doesNotMatch(creator, /quickProjectLine: true/);
   assert.doesNotMatch(source, /title: 'Быстрый ввод проекта'[\s\S]*?onclick: `openQuickProjectEntry/);
   assert.match(passport, /const stage = !done\.measure[\s\S]*?!done\.estimate/);
-  assert.match(passport, /disabled: !ctx\.canManage \|\| !ctx\.hasMeasurements/);
+  assert.match(passport, /disabled: !ctx\.canManage \|\| !\(ctx\.hasMeasurements \|\| !orderNeedsMeasurements\(o\)\)/);
 });
 
 test("accepted proposal must pass production preparation before installation", () => {
