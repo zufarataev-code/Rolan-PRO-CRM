@@ -8573,6 +8573,10 @@ function migrateSchema() {
     SAFETY_FILM: Number(s.installerRates._defaults?.protective) || 3,
     DECORATIVE_FILM: Number(s.installerRates._defaults?.decorative) || 2.5,
   };
+  // The privacy direction (2026-10-05) gets its own rate in settings saved before it existed.
+  if (s.installerRates.serviceTypes.PRIVACY_FILM == null) {
+    s.installerRates.serviceTypes.PRIVACY_FILM = Number(s.installerRates._defaults?.privacy) || 2.5;
+  }
   s.installerRates.workTypes = s.installerRates.workTypes || {
     washing: 0, removal: 0, silicone: 0, electric: 0, connect: 0, warranty: 0, custom: 0,
   };
@@ -10042,6 +10046,22 @@ const MEASURE_SCOPES = [
       'Для брендирования нужна зона печати и подтверждение макета до резки.',
     ],
   },
+  {
+    key: 'privacy_film',
+    icon: '🔒',
+    title: 'Замер приватной пленки',
+    short: 'Privacy',
+    catalogCategory: 'privacy',
+    accent: '#7c3aed',
+    brief: 'От кого закрываемся, днём или ночью, освещение, зеркальность и матовость.',
+    standards: [
+      'Фиксируем, от кого и когда нужна приватность: днём, ночью или круглосуточно.',
+      'Записываем освещение внутри и снаружи — зеркальная плёнка работает только при более ярком свете снаружи.',
+      'Проверяем тип стекла и сторону света: тёмные и зеркальные плёнки на рискованном стекле — только с подтверждением.',
+      'Отмечаем, какие стёкла закрыть полностью, а какие частично (полоса, высота).',
+      'Фото каждого стекла снаружи и изнутри.',
+    ],
+  },
 ];
 function measureScopeInfo(key) {
   return MEASURE_SCOPES.find(s => s.key === key) || MEASURE_SCOPES[0];
@@ -10051,7 +10071,8 @@ function measureScopeCardDesc(key) {
     solar_film: 'Жара, блики, UV, Low-E риск',
     smart_film: 'Зоны, питание, busbar, блоки',
     protective_film: 'Mil, рама, силикон, безопасность',
-    decorative_film: 'Privacy, frost, рисунок, стыки',
+    decorative_film: 'Frost, рисунок, логотип, стыки',
+    privacy_film: 'Зеркальность, матовость, день и ночь',
   };
   return map[key] || '';
 }
@@ -10061,14 +10082,26 @@ function orderMeasureScope(order) {
   const tags = order?.tags || [];
   if (type === 'smart_film' || tags.includes('smart')) return 'smart_film';
   if (type === 'protective_film' || tags.includes('safety') || tags.includes('security')) return 'protective_film';
-  if (type === 'decorative_film' || tags.includes('decorative') || tags.includes('privacy')) return 'decorative_film';
+  // A project saved as decorative with a «privacy» tag (before 2026-10-05) stays decorative.
+  if (type === 'privacy_film') return 'privacy_film';
+  if (type === 'decorative_film') return 'decorative_film';
+  if (tags.includes('privacy')) return 'privacy_film';
+  if (tags.includes('decorative')) return 'decorative_film';
   return 'solar_film';
 }
 function orderMeasureScopes(order) {
   const valid = new Set(MEASURE_SCOPES.map(scope => scope.key));
-  const fromOrder = Array.isArray(order?.serviceTypes) ? order.serviceTypes : [];
+  // A direction whose services in this project are all without sizes needs no
+  // windows (Owner, 2026-10-05); directions that already have windows stay.
+  const offerings = [...new Set([order?.offeringId, ...(Array.isArray(order?.offeringIds) ? order.offeringIds : [])].filter(Boolean))]
+    .map(id => serviceOffering(id)).filter(Boolean);
+  const sized = new Set(offerings.filter(item => orderOfferingNeedsSizes(order, item.id)).map(offeringServiceType));
+  const sizeFree = new Set(offerings.filter(item => !orderOfferingNeedsSizes(order, item.id)).map(offeringServiceType));
+  const needsWindows = scope => !(sizeFree.has(scope) && !sized.has(scope));
+  const fromOrder = (Array.isArray(order?.serviceTypes) ? order.serviceTypes : []).filter(needsWindows);
   const fromWindows = (order?.measurements?.rooms || []).flatMap(room => room.windows || []).map(win => win.measureScope).filter(Boolean);
-  const scopes = [orderMeasureScope(order), ...fromOrder, ...fromWindows]
+  const primary = needsWindows(orderMeasureScope(order)) ? [orderMeasureScope(order)] : [];
+  const scopes = [...primary, ...fromOrder, ...fromWindows]
     .map(value => measureScopeInfo(value).key)
     .filter(value => valid.has(value));
   return Array.from(new Set(scopes));
@@ -10139,9 +10172,10 @@ function canonicalCatalogCategory(value) {
     protective: 'protective', protective_film: 'protective', safety: 'protective', safety_film: 'protective',
     security: 'protective', security_film: 'protective', anti_graffiti: 'protective', antigraffiti: 'protective',
     защитная: 'protective', защитная_пленка: 'protective',
-    decorative: 'decorative', decorative_film: 'decorative', privacy: 'decorative', privacy_film: 'decorative',
+    decorative: 'decorative', decorative_film: 'decorative',
     frost: 'decorative', frosted: 'decorative', frosted_film: 'decorative',
     декоративная: 'decorative', декоративная_пленка: 'decorative',
+    privacy: 'privacy', privacy_film: 'privacy', приватная: 'privacy', приватная_пленка: 'privacy',
   };
   return aliases[normalized] || normalized;
 }
@@ -10162,6 +10196,7 @@ function measureScopeByCatalog(catalog) {
   if (cat === 'smart') return 'smart_film';
   if (cat === 'protective') return 'protective_film';
   if (cat === 'decorative') return 'decorative_film';
+  if (cat === 'privacy') return 'privacy_film';
   return 'solar_film';
 }
 function measureDefaultPanelCount(win) {
@@ -10343,6 +10378,10 @@ const MEASURE_FRAME_TYPES = ['Vinyl', 'Aluminum', 'Wood', 'Steel', 'Storefront',
 const MEASURE_SOLAR_GOALS = ['Heat reduction', 'Glare reduction', 'UV protection', 'Daytime privacy', 'Fade protection', 'Energy savings'];
 const MEASURE_SECURITY_GOALS = ['Safety shards', 'Break-in delay', 'Anti-graffiti', 'Blast / impact', 'Storefront protection', 'School / public area'];
 const MEASURE_DECOR_GOALS = ['Privacy frost', 'Decorative pattern', 'Logo / branding', 'Gradient', 'Whiteboard / writable', 'Obscure view'];
+// Privacy direction (2026-10-05): when the view must be closed and what makes a film work.
+const MEASURE_PRIVACY_WHEN = ['Днём', 'Ночью', 'Круглосуточно'];
+const MEASURE_PRIVACY_LIGHT = ['Снаружи светлее', 'Внутри светлее', 'Примерно одинаково'];
+const MEASURE_PRIVACY_LOOK = ['Зеркальная', 'Матовая / frost', 'Тонированная', 'Односторонняя', 'Подобрать на месте'];
 const MEASURE_ORIENTATIONS = [
   { value: 'N', label: 'N / север', deg: 0 },
   { value: 'NE', label: 'NE / северо-восток', deg: 45 },
@@ -10567,7 +10606,8 @@ function measurerV25ScopeFromFilm(film = '', order = null) {
   if (f === 'smart') return 'smart_film';
   if (f === 'protect' || f === 'security' || f === 'safety') return 'protective_film';
   if (f === 'solar') return 'solar_film';
-  if (f === 'decor' || f === 'decorative' || f === 'privacy') return 'decorative_film';
+  if (f === 'privacy') return 'privacy_film';
+  if (f === 'decor' || f === 'decorative') return 'decorative_film';
   return orderMeasureScope(order);
 }
 function measurerV25CatalogForFilm(film = '', order = null) {
@@ -11163,8 +11203,15 @@ function measureRecommendationForWindow(win = {}) {
     rec.items.push('Сначала выбирается mil плёнки, затем attachment: edge seal, wet glaze / DOWSIL 995 или профиль.');
     rec.items.push('Фото рамы, gasket/channel, углов и зоны удара обязательны для решения по силикону.');
     if (win.security?.publicRisk) rec.items.push('Публичная зона/storefront: перед КП нужен сценарий риска и подтверждение системы крепления.');
+  } else if (scope.key === 'privacy_film') {
+    rec.title = '🔒 Privacy: от кого и когда закрываемся';
+    rec.tone = 'blue';
+    rec.items.push('Зеркальная плёнка скрывает только при более ярком свете снаружи: вечером со светом в комнате вид открывается. Уточните сценарий день/ночь.');
+    rec.items.push('Для круглосуточной приватности — матовая или светорассеивающая плёнка; для частичной — полоса на нужной высоте.');
+    if (riskyGlass || (hotSide && bigGlass)) rec.items.push('Тёмную или зеркальную плёнку на этом стекле — только после проверки термонапряжения.');
+    rec.items.push(cat ? `Текущий материал: ${cat.brand} — ${cat.model}.` : 'Выберите приватную плёнку из каталога, чтобы КП и склад посчитались.');
   } else {
-    rec.title = '🎨 Decor/Privacy: макет, ориентация и стыки';
+    rec.title = '🎨 Decor: макет, ориентация и стыки';
     rec.tone = 'pink';
     rec.items.push('Выберите уровень privacy и проверьте видимость с обеих сторон в дневном и вечернем сценарии.');
     rec.items.push('Для pattern/logo фиксируйте направление рисунка, repeat, масштаб, край и места возможных стыков.');
@@ -11300,6 +11347,7 @@ function measureStudioScopeSpecificHtml(scopeKey, win = {}) {
   const solar = win.solar || {};
   const security = win.security || {};
   const decor = win.decor || {};
+  const privacy = win.privacy || {};
   const goalOptions = (items, selected) => items.map(x => `<option value="${x}" ${selected === x ? 'selected' : ''}>${x}</option>`).join('');
   let body = '';
   if (scope.key === 'solar_film') {
@@ -11343,6 +11391,18 @@ function measureStudioScopeSpecificHtml(scopeKey, win = {}) {
       <label class="flex items-center gap-2 text-sm mt-2"><input id="ms-logo" type="checkbox" ${decor.logoNeeded ? 'checked' : ''} style="width:auto;"> Нужен логотип / макет перед резкой</label>
       <label class="mt-2">Decor notes</label>
       <textarea id="ms-decor-notes" rows="2" placeholder="Стыки, направление рисунка, видимость снаружи/внутри">${academyEsc(decor.notes || '')}</textarea>`;
+  } else if (scope.key === 'privacy_film') {
+    body = `
+      <div class="grid grid-cols-2 gap-2">
+        <div><label>Когда нужна приватность</label><select id="ms-privacy-when">${goalOptions(MEASURE_PRIVACY_WHEN, privacy.when || '')}</select></div>
+        <div><label>Освещение</label><select id="ms-privacy-light">${goalOptions(MEASURE_PRIVACY_LIGHT, privacy.lighting || '')}</select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 mt-2">
+        <div><label>Вид плёнки</label><select id="ms-privacy-look">${goalOptions(MEASURE_PRIVACY_LOOK, privacy.look || '')}</select></div>
+        <div><label>Закрыть</label><input id="ms-privacy-coverage" value="${academyEsc(privacy.coverage || '')}" placeholder="Всё стекло / полоса 30–60″ / низ"></div>
+      </div>
+      <label class="mt-2">Заметки по приватности</label>
+      <textarea id="ms-privacy-notes" rows="2" placeholder="От кого закрываемся, вид изнутри, соседи, улица">${academyEsc(privacy.notes || '')}</textarea>`;
   } else {
     body = `<div class="text-sm text-slate-600">Smart данные заполняются ниже в блоке электрики. Главное: размер чистого стекла, зазор 2-3 мм, зоны, питание и busbar.</div>`;
   }
@@ -11884,6 +11944,13 @@ function measureStudioFormWindow() {
     logoNeeded: !!document.getElementById('ms-logo')?.checked,
     notes: (document.getElementById('ms-decor-notes')?.value || '').trim(),
   };
+  const privacy = {
+    when: document.getElementById('ms-privacy-when')?.value || '',
+    lighting: document.getElementById('ms-privacy-light')?.value || '',
+    look: document.getElementById('ms-privacy-look')?.value || '',
+    coverage: (document.getElementById('ms-privacy-coverage')?.value || '').trim(),
+    notes: (document.getElementById('ms-privacy-notes')?.value || '').trim(),
+  };
   return {
     name: (document.getElementById('ms-name')?.value || '').trim(),
     width,
@@ -11911,6 +11978,7 @@ function measureStudioFormWindow() {
     solar,
     security,
     decor,
+    privacy,
     smart: scopeKey === 'smart_film' ? smartBase : null,
   };
 }
@@ -12231,6 +12299,10 @@ function renderTechScopeDetails(win) {
     const s = win.security || {};
     return `<div class="mt-2 p-2 rounded-lg bg-red-50 text-sm"><b>Security:</b> ${academyEsc(s.goal || '—')} · ${academyEsc(s.mil || 'TBD')} · ${academyEsc(s.attachment || 'TBD')} · frame ${academyEsc(s.frame || '—')} · gap ${s.edgeGapMm || '—'} mm${s.publicRisk ? ' · public/storefront' : ''}${s.notes ? `<div class="text-xs mt-1">${academyEsc(s.notes)}</div>` : ''}</div>`;
   }
+  if (scope.key === 'privacy_film') {
+    const p = win.privacy || {};
+    return `<div class="mt-2 p-2 rounded-lg bg-violet-50 text-sm"><b>Privacy:</b> ${academyEsc(p.when || '—')} · ${academyEsc(p.lighting || '—')} · ${academyEsc(p.look || '—')}${p.coverage ? ` · ${academyEsc(p.coverage)}` : ''}${p.notes ? `<div class="text-xs text-gray-600 mt-1">${academyEsc(p.notes)}</div>` : ''}</div>`;
+  }
   if (scope.key === 'decorative_film') {
     const d = win.decor || {};
     return `<div class="mt-2 p-2 rounded-lg bg-pink-50 text-sm"><b>Decor:</b> ${academyEsc(d.goal || '—')} · privacy ${academyEsc(d.opacity || '—')} · ${academyEsc(d.pattern || 'pattern TBD')} · repeat ${academyEsc(d.repeat || '—')}${d.logoNeeded ? ' · logo/mockup required' : ''}${d.notes ? `<div class="text-xs mt-1">${academyEsc(d.notes)}</div>` : ''}</div>`;
@@ -12382,6 +12454,11 @@ function orderWorkPlanRows(order) {
   }).join('');
 }
 
+/** Services without sizes for the field: name, direction, quantity and unit — no prices. */
+function projectOfferingScopeRows(order) {
+  return projectOfferingLines(order).map(line => `<div class="p-3 rounded-lg bg-slate-50 border flex items-start justify-between gap-3"><span><b>${academyEsc(line.label || line.offeringName || 'Услуга')}</b><span class="block text-xs text-gray-500">${academyEsc(primaryServiceInfo(line.serviceType)?.title || '')}</span></span><span class="font-black whitespace-nowrap">${Number(line.qty) || 0} ${academyEsc(serviceOfferingUnitShort(line))}</span></div>`).join('');
+}
+
 function renderWorkOrderHtml(order, printMode = false) {
   const client = getClient(order.clientId) || {};
   const rows = measureAllWindows(order);
@@ -12415,6 +12492,12 @@ function renderWorkOrderHtml(order, printMode = false) {
           ${client.phone ? ' · ' + academyEsc(client.phone) : ''}
         </div>
       </div>
+
+      ${projectOfferingLines(order).length ? `
+      <div class="wo-block">
+        <div class="wo-block-title">Услуги без размеров</div>
+        <div class="grid gap-2">${projectOfferingScopeRows(order)}</div>
+      </div>` : ''}
 
       ${workPlan ? `
       <div class="wo-block">
@@ -12612,6 +12695,7 @@ function renderTechnicalSheetHtml(order, printMode = false) {
         <div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Smart блоки</div><div class="font-black text-lg">${smart.blocks || '—'}</div></div>
         ${smart.windows ? `<div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Repeater zones</div><div class="font-black text-lg">${smart.repeaters || '—'}</div></div>` : ''}
       </div>
+      ${projectOfferingLines(order).length ? `<div class="mb-5"><h3 class="font-black mb-2">Услуги без размеров</h3><div class="grid gap-2">${projectOfferingScopeRows(order)}</div></div>` : ''}
       ${renderSmartRoomInstallationPlans(order)}
       ${rows.length ? rows.map(({ room, win }, idx) => {
         const cat = windowCatalog(win);
@@ -12642,7 +12726,7 @@ function renderTechnicalSheetHtml(order, printMode = false) {
             </div>
           </div>
         `;
-      }).join('') : `<div class="p-5 rounded-lg bg-slate-50 border text-center text-gray-500">Замеры ещё не добавлены.</div>`}
+      }).join('') : projectOfferingLines(order).length ? '' : `<div class="p-5 rounded-lg bg-slate-50 border text-center text-gray-500">Замеры ещё не добавлены.</div>`}
       ${renderCutSheetHtml(order, printMode, true)}
       <footer class="pdf-footer">ROLANPRO · ${academyEsc(order.number)} · Технический лист сформирован ${academyEsc(new Date().toLocaleDateString('ru-RU'))}</footer>
     </div>
@@ -14628,15 +14712,33 @@ const ORDER_PRIMARY_SERVICES = [
     icon: '🎨',
     title: 'Декоративная плёнка',
     short: 'Decor',
-    desc: 'Матовые, брендированные и дизайнерские решения для приватности.',
+    desc: 'Матовые, брендированные и дизайнерские решения: рисунок, логотип, frost.',
     tag: 'decorative',
     catalogCategory: 'decorative',
     workflow: [
-      'Бриф: приватность, дизайн, бренд, зоны нанесения',
+      'Бриф: дизайн, бренд, зоны нанесения',
       'Замер: стекло, ориентация рисунка, стыки',
       'Макет: согласование рисунка, цвета, масштаба',
       'Монтаж: подготовка, позиционирование, подрезка',
       'Сдача: фото, уход, акт',
+    ],
+  },
+  {
+    // The owner's fifth direction (2026-10-05): privacy films are their own
+    // direction with their own services, prices and materials, not decorative.
+    id: 'privacy_film',
+    icon: '🔒',
+    title: 'Приватная плёнка',
+    short: 'Privacy',
+    desc: 'Приватность: зеркальные, матовые и односторонние плёнки, вид днём и ночью.',
+    tag: 'privacy',
+    catalogCategory: 'privacy',
+    workflow: [
+      'Консультация: от кого закрываемся, днём или ночью, вид изнутри',
+      'Замер: стекло, сторона света, освещение внутри и снаружи',
+      'Подбор: зеркальность, матовость, светопропускание, образцы',
+      'Монтаж: подготовка стекла, установка, подрезка',
+      'Сдача: проверка приватности, уход, акт',
     ],
   },
 ];
@@ -14646,6 +14748,7 @@ const ORDER_SERVICE_PALETTE = {
   solar_film: { color: '#d97706', bg: '#fffbeb' },
   protective_film: { color: '#059669', bg: '#ecfdf5' },
   decorative_film: { color: '#db2777', bg: '#fdf2f8' },
+  privacy_film: { color: '#7c3aed', bg: '#f5f3ff' },
 };
 function orderServicePalette(serviceId) {
   return ORDER_SERVICE_PALETTE[serviceId] || { color: '#2563eb', bg: '#eff6ff' };
@@ -14751,6 +14854,7 @@ function canonicalServiceCodeForOrderService(serviceId) {
     smart_film: 'SMART_FILM',
     protective_film: 'SAFETY_FILM',
     decorative_film: 'DECORATIVE_FILM',
+    privacy_film: 'PRIVACY_FILM',
   })[serviceId] || '';
 }
 function orderServiceWorkflow(type) {
@@ -15427,6 +15531,7 @@ function filmCategory(filmTypeName) {
   if (n.includes('security') || n.includes('защит')) return 'protective';
   if (n.includes('smart') || n.includes('pdlc') || n.includes('умн')) return 'smart';
   if (n.includes('solar') || n.includes('automotive') || n.includes('tint') || n.includes('солнц') || n.includes('тониров')) return 'solar';
+  if (n.includes('privacy') || n.includes('приват')) return 'privacy';
   if (n.includes('decor') || n.includes('frost') || n.includes('matte') || n.includes('декор') || n.includes('матов')) return 'decorative';
   return 'other';
 }
@@ -15435,7 +15540,7 @@ function filmDefaultRate(filmTypeName) {
   return installerServiceRateByCategory(cat);
 }
 function installerServiceCodeByCategory(category) {
-  return ({ solar: 'SOLAR_FILM', smart: 'SMART_FILM', protective: 'SAFETY_FILM', decorative: 'DECORATIVE_FILM' })[category] || '';
+  return ({ solar: 'SOLAR_FILM', smart: 'SMART_FILM', protective: 'SAFETY_FILM', decorative: 'DECORATIVE_FILM', privacy: 'PRIVACY_FILM' })[category] || '';
 }
 function installerServiceRateByCategory(category) {
   const serviceCode = installerServiceCodeByCategory(category);
@@ -15449,7 +15554,7 @@ function syncLegacyInstallerServiceRate(serviceCode, rate) {
   db.settings.installerRates.serviceTypes = db.settings.installerRates.serviceTypes || {};
   const previousRate = Number(db.settings.installerRates.serviceTypes[serviceCode]) || 0;
   db.settings.installerRates.serviceTypes[serviceCode] = normalizedRate;
-  const category = ({ SOLAR_FILM: 'solar', SMART_FILM: 'smart', SAFETY_FILM: 'protective', DECORATIVE_FILM: 'decorative' })[serviceCode];
+  const category = ({ SOLAR_FILM: 'solar', SMART_FILM: 'smart', SAFETY_FILM: 'protective', DECORATIVE_FILM: 'decorative', PRIVACY_FILM: 'privacy' })[serviceCode];
   if (category) db.settings.installerRates._defaults[category] = normalizedRate;
   return Math.abs(previousRate - normalizedRate) > 0.001;
 }
@@ -15504,7 +15609,7 @@ function markWindowMeasurementVerified(w, by = state.currentUserId) {
 }
 function orderMeasurementVerificationIssues(o) {
   const windows = measureAllWindows(o);
-  if (!windows.length) return ['нет окон с размерами'];
+  if (!windows.length) return orderNeedsMeasurements(o) ? ['нет окон с размерами'] : [];
   return windows
     .filter(({ win }) => !windowMeasurementIsVerified(win))
     .map(({ room, win }) => `${room.name || 'Помещение'} · ${win.name || 'Окно'}`);
@@ -15624,14 +15729,18 @@ function windowFilmCost(w) {
 function windowInstallerPayout(w) {
   const c = windowCatalog(w);
   const filmName = c ? `${c.brand} ${c.model}` : (w.filmType || '');
-  return windowActualAreaSqft(w) * (serviceOfferingInstallerRate(w) || filmRate(filmName));
+  // A warehouse film knows its direction: its rate is the direction's (privacy,
+  // smart…), not a guess from the brand and model text.
+  const explicit = db.settings.installerRates?.types?.[filmName];
+  const directionRate = explicit != null ? explicit : c ? installerServiceRateByCategory(canonicalCatalogCategory(c.category)) : filmRate(filmName);
+  return windowActualAreaSqft(w) * (serviceOfferingInstallerRate(w) || directionRate);
 }
 function installerRateForWindow(user, w) {
   const offeringRate = serviceOfferingInstallerRate(w);
   if (offeringRate > 0) return offeringRate;
   const pc = user?.payConfig || {};
   const catalog = windowCatalog(w);
-  const category = catalog?.category || filmCategory(w?.filmType || '');
+  const category = catalog?.category ? canonicalCatalogCategory(catalog.category) : filmCategory(w?.filmType || '');
   const categoryRate = Number(pc.ratesByCategory?.[category]);
   if (categoryRate > 0) return categoryRate;
   const baseRate = Number(pc.ratePerSqft);
@@ -15644,7 +15753,7 @@ function installerRateForQuickLine(user, line) {
   if (offeringRate > 0) return offeringRate;
   const pc = user?.payConfig || {};
   const catalog = getCatalogItem(line?.catalogId);
-  const category = catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other';
+  const category = canonicalCatalogCategory(catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other');
   const categoryRate = Number(pc.ratesByCategory?.[category]);
   if (categoryRate > 0) return categoryRate;
   const baseRate = Number(pc.ratePerSqft);
@@ -15670,7 +15779,9 @@ function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
   return (o?.extraServices || []).filter(line => !line.quickProjectLine).reduce((sum, line) => {
     const crew = projectServiceCrew(o, line);
     if (user && !crew.includes(user.id)) return sum;
-    return sum + (Number(line.qty) || 0) * installerAdditionalWorkRate(user, line.type) / (user ? Math.max(1, crew.length) : installerCount);
+    // A service from the directory pays its own rate per unit; other rows the work-type rate.
+    const rate = line.offeringId ? serviceOfferingInstallerRate(line) : installerAdditionalWorkRate(user, line.type);
+    return sum + (Number(line.qty) || 0) * rate / (user ? Math.max(1, crew.length) : installerCount);
   }, 0);
 }
 function orderInstallerPayoutForUser(o, userId) {
@@ -15726,7 +15837,8 @@ function orderExtraServicesRevenue(o) {
 function orderExtraServicesCost(o) {
   // Ordinary service rows contain the customer price only. Their labor cost is
   // calculated through employee work rates in orderInstallerPayoutBreakdown().
-  return 0;
+  // A service without sizes carries its own material cost per unit.
+  return projectOfferingLines(o).reduce((sum, line) => sum + (Number(line.qty) || 0) * serviceOfferingMaterialCost(line), 0);
 }
 function orderRevenue(o) {
   return orderFilmRevenue(o) + orderExtraServicesRevenue(o);
@@ -16444,7 +16556,7 @@ function orderPrice(o) { return orderArea(o) * (o.pricePerM2 || db.settings.pric
 function orderMeasurementCompletionIssues(o) {
   const issues = [];
   const windows = measureAllWindows(o);
-  if (!windows.length) return ['добавьте хотя бы одно окно или панель'];
+  if (!windows.length) return orderNeedsMeasurements(o) ? ['добавьте хотя бы одно окно или панель'] : [];
   const missingScopes = orderMeasureScopes(o).filter(scopeKey => !windows.some(({ win }) => (
     (win.measureScope || orderMeasureScope(o)) === scopeKey
     && Number(win.width) > 0
@@ -16755,6 +16867,7 @@ function calendarServicePalette(o = {}) {
     solar_film: { color: '#d97706', bg: '#fffbeb', icon: '☀️', short: 'Solar' },
     protective_film: { color: '#059669', bg: '#ecfdf5', icon: '🛡', short: 'Security' },
     decorative_film: { color: '#db2777', bg: '#fdf2f8', icon: '🎨', short: 'Decor' },
+    privacy_film: { color: '#7c3aed', bg: '#f5f3ff', icon: '🔒', short: 'Privacy' },
   };
   const meta = map[o.serviceType] || map[ORDER_PRIMARY_SERVICES.find(s => (o.tags || []).includes(s.tag))?.id] || { color: '#64748b', bg: '#f8fafc', icon: svc?.icon || '🎞', short: svc?.short || 'Film' };
   return { ...meta, title: svc?.title || orderServiceTypeLabel(o.serviceType) };
@@ -23288,11 +23401,11 @@ function orderPassportActions(o, ctx) {
   if (ctx.isInstaller) {
     return [
       { icon: '📋', title: 'Заказ-наряд',
-        sub: ctx.hasMeasurements ? 'задача, размеры, адрес и фото' : 'ожидает замера',
-        onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements, primary: true },
+        sub: ctx.hasMeasurements ? 'задача, размеры, адрес и фото' : projectOfferingLines(o).length ? 'услуги, количество, адрес' : 'ожидает замера',
+        onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements && !projectOfferingLines(o).length, primary: true },
       { icon: '🧰', title: 'Технический лист',
-        sub: ctx.hasMeasurements ? 'схема и материалы без цен' : 'ожидает замера',
-        onclick: `openTechnicalSheet('${o.id}')`, disabled: !ctx.hasMeasurements },
+        sub: ctx.hasMeasurements ? 'схема и материалы без цен' : projectOfferingLines(o).length ? 'услуги без размеров' : 'ожидает замера',
+        onclick: `openTechnicalSheet('${o.id}')`, disabled: !ctx.hasMeasurements && !projectOfferingLines(o).length },
       { icon: '🧭', title: 'Маршрут',
         sub: ctx.address ? 'Google Maps' : 'адрес не указан',
         href: ctx.routeHref, disabled: !ctx.address },
@@ -23300,7 +23413,8 @@ function orderPassportActions(o, ctx) {
   }
 
   const done = {
-    measure: ctx.hasMeasurements,
+    // A project of services without sizes has nothing to measure.
+    measure: ctx.hasMeasurements || !orderNeedsMeasurements(o),
     estimate: ctx.estimateApproved,
     proposal: ['proposal_accepted','installation_scheduled','installation_accepted',
                'installation_en_route','installation_in_progress','installation_done',
@@ -23322,8 +23436,8 @@ function orderPassportActions(o, ctx) {
       sub: ctx.measureSub, onclick: ctx.measureAction },
 
     { key: 'estimate', icon: '🧮', title: 'Расчёт проекта',
-      sub: ctx.estimateApproved ? 'проверен и подтверждён' : 'по помещениям, размерам и выбранной плёнке',
-      onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !ctx.canManage || !ctx.hasMeasurements },
+      sub: ctx.estimateApproved ? 'проверен и подтверждён' : ctx.hasMeasurements || orderNeedsMeasurements(o) ? 'по помещениям, размерам и выбранной плёнке' : 'услуги без размеров: количество и цена',
+      onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !ctx.canManage || !(ctx.hasMeasurements || !orderNeedsMeasurements(o)) },
 
     { key: 'proposal', icon: '📄', title: 'КП',
       sub: ctx.estimateApproved ? 'единый стандарт ROLANPRO' : 'проверить расчёт и сформировать',
@@ -23338,8 +23452,8 @@ function orderPassportActions(o, ctx) {
       onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.production },
 
     { key: 'workorder', icon: '📋', title: 'Заказ-наряд',
-      sub: ctx.hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера',
-      onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements },
+      sub: ctx.hasMeasurements ? 'размеры, раскрой, адрес, фото' : projectOfferingLines(o).length ? 'услуги, количество, адрес' : 'после замера',
+      onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements && !projectOfferingLines(o).length },
 
     { key: 'route', icon: '🧭', title: 'Маршрут',
       sub: ctx.address ? 'Google Maps' : 'адрес не указан',
@@ -23616,7 +23730,11 @@ function projectEstimateUpdateTaxProfile(oid, field, value) {
 function projectEstimateReadiness(o) {
   const issues = [];
   const windows = measureAllWindows(o);
-  if (!windows.length) issues.push('не внесены помещения и размеры');
+  if (!windows.length && orderNeedsMeasurements(o)) issues.push('не внесены помещения и размеры');
+  projectOfferingLines(o).forEach(line => {
+    if (!(Number(line.qty) > 0)) issues.push(`не указано количество: ${line.label || 'услуга'}`);
+    if (!(Number(line.unitPrice) > 0)) issues.push(`не указана цена услуги: ${line.label || 'услуга'}`);
+  });
   if (windows.some(({ win }) => win.offeringId && !(Number(win.pricePerSqft) > 0))) issues.push('не указана цена выбранной услуги');
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
@@ -23680,7 +23798,7 @@ function projectQuickRequiredSupplies(o, lines = projectQuickLines(o)) {
 // идёт в КП, у неё цена клиенту за sq ft и ставка специалисту за sq ft. Плёнки
 // склада привязываются к услугам (одна плёнка может подходить нескольким); материал проекта
 // по-прежнему считается по закупочной цене выбранной плёнки.
-const SERVICE_OFFERING_DIRECTIONS = ['smart', 'solar', 'protective', 'decorative'];
+const SERVICE_OFFERING_DIRECTIONS = ['smart', 'solar', 'protective', 'decorative', 'privacy'];
 // The owner creates the real solutions; no invented starter products or prices.
 function serviceOfferingsAll() {
   return Array.isArray(db.settings.serviceOfferings) ? db.settings.serviceOfferings : [];
@@ -23709,6 +23827,122 @@ function projectQuickLineLabel(line, catalog) {
 function serviceOfferingFilmIds(offering) {
   return Array.isArray(offering?.filmIds) ? offering.filmIds : [];
 }
+
+// How a service is priced (Owner, 2026-10-05). Per sq ft it needs measured
+// windows (sizes are required); per piece, per zone, a fixed sum or the
+// owner's own unit it is a quantity in the project, without sizes. The price,
+// the installer pay and the material cost are per that unit. pricePerSqft and
+// installerRatePerSqft keep their names and hold the per-unit values; services
+// saved before units existed are per sq ft.
+const SERVICE_OFFERING_UNITS = [
+  { id: 'sqft', label: 'за кв. фут — нужен замер', short: 'sq ft' },
+  { id: 'piece', label: 'за штуку — без размеров', short: 'шт.' },
+  { id: 'zone', label: 'за зону — без размеров', short: 'зона' },
+  { id: 'fixed', label: 'фиксированная сумма — без размеров', short: 'услуга' },
+  { id: 'custom', label: 'своя единица — без размеров', short: '' },
+];
+
+function serviceOfferingUnit(offering) {
+  return SERVICE_OFFERING_UNITS.some(unit => unit.id === offering?.unit) ? offering.unit : 'sqft';
+}
+
+function serviceOfferingNeedsSizes(offering) {
+  return serviceOfferingUnit(offering) === 'sqft';
+}
+
+/** «sq ft», «шт.», «зона», «услуга» or the owner's own unit name. */
+function serviceOfferingUnitShort(offeringOrLine) {
+  const unit = serviceOfferingUnit(offeringOrLine);
+  if (unit === 'custom') return String(offeringOrLine?.unitLabel || '').trim() || 'ед.';
+  return SERVICE_OFFERING_UNITS.find(item => item.id === unit).short;
+}
+
+/** Material cost per unit of a service without sizes (its films are the material of a per-sq-ft service). */
+function serviceOfferingMaterialCost(line) {
+  const cost = Number(line?.offeringMaterialCost ?? serviceOffering(line?.offeringId)?.materialCostPerUnit);
+  return cost > 0 ? cost : 0;
+}
+
+/** The project's services that are a quantity, not measured windows (their unit is not sq ft). */
+function projectOfferingLines(o) {
+  return (o?.extraServices || []).filter(line => line.offeringId && !line.quickProjectLine && line.unit && line.unit !== 'sqft');
+}
+
+/** A project line for a service without sizes, priced from the service directory. */
+function projectOfferingLine(offering, qty = 1) {
+  const unitPrice = Math.max(0, Number(offering?.pricePerSqft) || 0);
+  const amount = Math.max(0, Number(qty) || 0);
+  const line = {
+    id: uid(),
+    type: 'offering',
+    offeringId: offering.id,
+    offeringName: offering.name,
+    label: offering.name,
+    serviceType: offeringServiceType(offering),
+    unit: serviceOfferingUnit(offering),
+    unitLabel: serviceOfferingUnit(offering) === 'custom' ? String(offering.unitLabel || '').trim() : '',
+    unitPrice,
+    qty: amount,
+    price: Math.round(unitPrice * amount * 100) / 100,
+  };
+  // The server snapshots these for managers; the owner's own save carries them.
+  if (currentUser()?.role === 'owner') {
+    line.offeringInstallerRate = Number(offering.installerRatePerSqft) || 0;
+    line.offeringMaterialCost = Number(offering.materialCostPerUnit) || 0;
+  }
+  return line;
+}
+
+/**
+ * Whether the project needs measured windows: yes when it has windows, when one
+ * of its services is per sq ft, and for projects made before services existed.
+ */
+function orderNeedsMeasurements(o) {
+  if (measureAllWindows(o).length) return true;
+  const ids = [...new Set([o?.offeringId, ...(Array.isArray(o?.offeringIds) ? o.offeringIds : [])].filter(Boolean))];
+  if (ids.length) return ids.some(id => orderOfferingNeedsSizes(o, id));
+  // A historical quick-entry project without services from the directory.
+  if (projectQuickLines(o).length) return false;
+  return true;
+}
+
+/**
+ * Whether this project's service needs windows: a service the project priced
+ * as a quantity keeps that, even if the owner later makes it per sq ft; any
+ * other service keeps the unit saved when it was chosen.
+ */
+function orderOfferingNeedsSizes(o, offeringId) {
+  if (projectOfferingLines(o).some(line => line.offeringId === offeringId)) return false;
+  // The unit the service had when the project chose it (offeringUnits), so a
+  // later change in the directory does not reclassify the project. Services
+  // chosen before units existed (no saved unit) were per sq ft.
+  const saved = o?.offeringUnits?.[offeringId];
+  return saved ? saved === 'sqft' : true;
+}
+
+/** «+ Услуга без размеров»: the directory's services priced per piece, zone, fixed sum or own unit. */
+function projectOfferingPickerHtml(o) {
+  const groups = ORDER_PRIMARY_SERVICES.map(direction => {
+    const items = serviceOfferingsFor(serviceOfferingDirection(direction.id)).filter(item => !serviceOfferingNeedsSizes(item));
+    return items.length ? `<optgroup label="${academyEsc(direction.title)}">${items.map(item => `<option value="${academyEsc(item.id)}">${academyEsc(item.name)} · ${fmtMoney(Number(item.pricePerSqft) || 0)} / ${academyEsc(serviceOfferingUnitShort(item))}</option>`).join('')}</optgroup>` : '';
+  }).join('');
+  if (!groups) return '';
+  return `<select class="text-sm" style="width:auto" aria-label="Добавить услугу без размеров" onchange="if (this.value) projectAddOfferingLine('${o.id}', this.value)"><option value="">+ Услуга без размеров</option>${groups}</select>`;
+}
+
+function projectAddOfferingLine(oid, offeringId) {
+  const o = getOrder(oid);
+  const offering = serviceOffering(offeringId);
+  if (!o || !offering || offering.active === false || serviceOfferingNeedsSizes(offering) || !orderUserCanSeeMoney(o, currentUser())) return;
+  o.extraServices = o.extraServices || [];
+  o.extraServices.push(projectOfferingLine(offering, 1));
+  const direction = offeringServiceType(offering);
+  if (direction && !(o.serviceTypes || []).includes(direction)) o.serviceTypes = [...(o.serviceTypes || [o.serviceType].filter(Boolean)), direction];
+  o.offeringIds = [...new Set([...(o.offeringIds || []), offering.id])];
+  o.offeringUnits = { ...(o.offeringUnits || {}), [offering.id]: serviceOfferingUnit(offering) };
+  projectEstimateMarkChanged(o, `Добавлена услуга «${offering.name}»`);
+  save(); refreshProjectEstimateWorkspace(oid);
+}
 function projectQuickLineFilms(line) {
   const films = projectQuickLineCatalog(line.serviceType, line.catalogId);
   if (!line.offeringId) return films;
@@ -23732,7 +23966,7 @@ function addServiceOffering(direction) {
   if (!serviceOfferingCanEdit() || !SERVICE_OFFERING_DIRECTIONS.includes(direction)) return;
   const sort = serviceOfferingsFor(direction, { includeInactive: true }).length;
   db.settings.serviceOfferings = serviceOfferingsAll();
-  db.settings.serviceOfferings.push({ id: 'svc_' + uid(), direction, name: 'Новая услуга', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort });
+  db.settings.serviceOfferings.push({ id: 'svc_' + uid(), direction, name: 'Новая услуга', unit: 'sqft', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort });
   save();
   render();
 }
@@ -23746,8 +23980,13 @@ function updateServiceOffering(id, field, value) {
     if (!name) return alert('Название услуги не может быть пустым.');
     offering.name = name;
     // Existing estimates retain the name and price chosen for that project.
-  } else if (field === 'pricePerSqft' || field === 'installerRatePerSqft') {
+  } else if (field === 'pricePerSqft' || field === 'installerRatePerSqft' || field === 'materialCostPerUnit') {
     offering[field] = Math.max(0, Number(value) || 0);
+  } else if (field === 'unit') {
+    if (!SERVICE_OFFERING_UNITS.some(unit => unit.id === value)) return;
+    offering.unit = value;
+  } else if (field === 'unitLabel') {
+    offering.unitLabel = String(value || '').trim().slice(0, 30);
   } else if (field === 'active') {
     offering.active = !!value;
   } else return;
@@ -23780,14 +24019,23 @@ function renderServiceOfferingsSection() {
       const filmList = films.length
         ? `<details><summary class="cursor-pointer text-sm">Плёнки: ${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'выберите материалы услуги'}</summary><div class="mt-2 grid gap-1">${films.map(item => `<label class="text-sm"><input type="checkbox" ${serviceOfferingFilmIds(offering).includes(item.id) ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(сейчас: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label>`).join('')}</div></details>`
         : '<div class="text-xs text-gray-500">На складе нет плёнок этого направления.</div>';
+      const unit = serviceOfferingUnit(offering);
+      const per = serviceOfferingUnitShort(offering);
+      const sized = serviceOfferingNeedsSizes(offering);
+      const material = sized
+        ? filmList
+        : `<label class="block" style="max-width:16rem">Материал, $ / ${academyEsc(per)}<input type="number" min="0" step="0.5" value="${Number(offering.materialCostPerUnit) || ''}" placeholder="нет материала" onchange="updateServiceOffering('${offering.id}','materialCostPerUnit',this.value)"></label>`;
       return owner ? `<div class="p-3 border border-slate-200 ${offering.active === false ? 'opacity-60' : ''}">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
           <div class="md:col-span-2"><label>Услуга (название в КП)</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value)"></div>
-          <div><label>Цена клиенту, $ / sq ft</label><input type="number" min="0" step="0.5" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value)"></div>
-          <div><label>Специалисту, $ / sq ft</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="ставка направления" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value)"></div>
+          <div class="md:col-span-2"><label>Как считается</label><select onchange="updateServiceOffering('${offering.id}','unit',this.value)">${SERVICE_OFFERING_UNITS.map(item => `<option value="${item.id}" ${unit === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
+          ${unit === 'custom' ? `<div class="md:col-span-2"><label>Единица (например, час или выезд)</label><input value="${academyEsc(offering.unitLabel || '')}" maxlength="30" placeholder="ед." onchange="updateServiceOffering('${offering.id}','unitLabel',this.value)"></div>` : ''}
+          <div><label>Цена клиенту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value)"></div>
+          <div><label>Специалисту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="${sized ? 'ставка направления' : 'не платится'}" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value)"></div>
         </div>
-        <div class="mt-2 flex flex-wrap items-start justify-between gap-3"><div class="flex-1">${filmList}</div><label class="tag" style="display:inline-flex;white-space:nowrap;gap:6px"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked)"> Активна</label></div>
-      </div>` : `<div class="p-3 border border-slate-200"><div class="flex justify-between gap-3"><b>${academyEsc(offering.name)}</b><span>${money(offering.pricePerSqft)} / sq ft</span></div><div class="mt-1">${filmList}</div></div>`;
+        <div class="text-xs mt-2 ${sized ? 'text-blue-700' : 'text-emerald-700'}">${sized ? 'Нужен замер: цена и материал считаются по площади окон.' : 'Без размеров: в проекте указывается количество, замер для этой услуги не нужен.'}</div>
+        <div class="mt-2 flex flex-wrap items-start justify-between gap-3"><div class="flex-1">${material}</div><label class="tag" style="display:inline-flex;white-space:nowrap;gap:6px"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked)"> Активна</label></div>
+      </div>` : `<div class="p-3 border border-slate-200"><div class="flex justify-between gap-3"><b>${academyEsc(offering.name)}</b><span>${money(offering.pricePerSqft)} / ${academyEsc(per)}</span></div>${sized ? `<div class="mt-1">${filmList}</div>` : '<div class="text-xs text-gray-500 mt-1">Без размеров — количество в проекте</div>'}</div>`;
     }).join('');
     return `<div class="mt-4">
       <div class="flex items-center justify-between gap-3"><h3 class="font-black">${academyEsc(info ? `${info.icon} ${info.title}` : direction)}</h3>${owner ? `<button class="btn-ghost text-sm" onclick="addServiceOffering('${direction}')">+ Добавить услугу</button>` : ''}</div>
@@ -23796,7 +24044,7 @@ function renderServiceOfferingsSection() {
   }).join('');
   return `<section class="card border border-slate-200 bg-white" style="border-radius:4px">
     <h2 class="text-xl font-black">Услуги по направлениям</h2>
-    <p class="text-sm text-slate-500">В проекте выбор идёт так: направление → услуга → плёнка со склада. Название услуги клиент видит в КП, цена за sq ft подставляется в проект, ставка специалисту считается по услуге (пусто — действует ставка направления). К каждой услуге привяжите подходящие материалы. Одну плёнку можно использовать в нескольких услугах.</p>
+    <p class="text-sm text-slate-500">В проекте выбор идёт так: направление → услуга. Название услуги клиент видит в КП. Услуга за кв. фут считается по замеру окон, её материал — плёнки со склада (одну плёнку можно привязать к нескольким услугам). Услуга за штуку, зону, фиксированную сумму или свою единицу замера не требует: в проекте указывается количество, а цена, оплата специалисту и материал считаются за единицу. Исполнителя каждой услуги выбирают в проекте при назначении монтажа.</p>
     ${groups}
   </section>`;
 }
@@ -23804,7 +24052,7 @@ function renderServiceOfferingsSection() {
 function projectWindowSolutionHtml(o, room, win, inMeasurement = false) {
   if (!orderUserCanSeeMoney(o, currentUser())) return '';
   const direction = serviceOfferingDirection(win.measureScope || o.serviceType);
-  const offerings = serviceOfferingsFor(direction, { includeId: win.offeringId });
+  const offerings = serviceOfferingsFor(direction, { includeId: win.offeringId }).filter(item => serviceOfferingNeedsSizes(item) || item.id === win.offeringId);
   const films = (db.settings.catalog || []).filter(film => !film.archived && serviceOfferingFilmIds(serviceOffering(win.offeringId)).includes(film.id));
   return `<div class="grid gap-2" style="min-width:0"><label>Услуга / решение<select aria-label="Услуга окна" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','offeringId',this.value,${inMeasurement})"><option value="">Выберите услугу</option>${offerings.map(item => `<option value="${academyEsc(item.id)}" ${win.offeringId === item.id ? 'selected' : ''}>${academyEsc(item.name)}</option>`).join('')}</select></label>${win.offeringId ? `<label>Материал услуги<select aria-label="Материал услуги" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','catalogId',this.value,${inMeasurement})"><option value="">Выберите плёнку</option>${films.map(film => `<option value="${academyEsc(film.id)}" ${win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogLabel(film))}</option>`).join('')}</select></label>` : ''}</div>`;
 }
@@ -23824,7 +24072,7 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
   if (!win || !orderUserCanSeeMoney(o, currentUser())) return;
   if (field === 'offeringId') {
     const offering = serviceOffering(value);
-    if (value && (!offering || offering.active === false || offering.direction !== serviceOfferingDirection(win.measureScope || o.serviceType))) return;
+    if (value && (!offering || offering.active === false || !serviceOfferingNeedsSizes(offering) || offering.direction !== serviceOfferingDirection(win.measureScope || o.serviceType))) return;
     applyWindowOffering(win, offering);
   } else if (field === 'catalogId') {
     const film = getCatalogItem(value);
@@ -24447,7 +24695,12 @@ function projectEstimateUpdateService(oid, sid, field, value) {
   const o = getOrder(oid);
   const line = (o?.extraServices || []).find(s => s.id === sid);
   if (!o || !line) return;
-  if (['qty','price'].includes(field)) line[field] = Math.max(0, parseFloat(value) || 0);
+  if (line.offeringId) {
+    // A service from the directory: only the quantity changes; its price follows.
+    if (field !== 'qty') return;
+    line.qty = Math.max(0, parseFloat(value) || 0);
+    line.price = Math.round((Number(line.unitPrice) || 0) * line.qty * 100) / 100;
+  } else if (['qty','price'].includes(field)) line[field] = Math.max(0, parseFloat(value) || 0);
   else line[field] = value;
   if (field === 'type') line.label = projectEstimateServiceLabel(value);
   projectEstimateMarkChanged(o, 'Изменена дополнительная услуга');
@@ -24505,13 +24758,15 @@ function approveProjectEstimateAndOpenProposal(oid) {
   o.projectEstimateSnapshot = {
     approvedAt,
     revenue: orderRevenue(o),
-    productionCost: orderPSS(o).total,
-    margin: orderMargin(o),
-    marginPct: orderMarginPct(o),
+    // A manager's browser has no installer rates or material costs of services:
+    // internal costs are recorded only by someone who sees them.
+    productionCost: canSeeInternalEconomics ? orderPSS(o).total : null,
+    margin: canSeeInternalEconomics ? orderMargin(o) : null,
+    marginPct: canSeeInternalEconomics ? orderMarginPct(o) : null,
     areaSqft: orderActualAreaSqft(o),
     serviceCount: (o.extraServices || []).length,
     expenseCount: (o.extraExpenses || []).length,
-    measurementBasis: !measureAllWindows(o).length ? 'QUICK_LINE_ITEMS' : orderMeasurementVerificationIssues(o).length ? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED',
+    measurementBasis: measureAllWindows(o).length ? (orderMeasurementVerificationIssues(o).length ? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED') : projectOfferingLines(o).length ? 'SERVICE_QUANTITIES' : 'QUICK_LINE_ITEMS',
     fixedExpenseAllocation: canSeeInternalEconomics ? projectProfitability(o).fixedAllocation : null,
     californiaTaxAllocation: canSeeInternalEconomics ? projectProfitability(o).taxAllocation : null,
     managementNetProfit: canSeeInternalEconomics ? projectProfitability(o).netProfit : null,
@@ -24774,7 +25029,13 @@ function renderProjectEstimateWorkspace(o) {
       ${canSeeInternalEconomics ? `<td data-label="Себестоимость" class="money">${fmtMoney(windowFilmCost(win))}</td>` : ''}
     </tr>`;
   })).join('');
-  const serviceRows = (o.extraServices || []).filter(line => !line.quickProjectLine).map(line => `<tr>
+  const serviceRows = (o.extraServices || []).filter(line => !line.quickProjectLine).map(line => line.offeringId ? `<tr>
+    <td data-label="Услуга"><b>${academyEsc(line.label || line.offeringName || 'Услуга')}</b><div class="text-xs text-gray-500">${academyEsc(primaryServiceInfo(line.serviceType)?.title || '')} · без размеров</div></td>
+    <td data-label="Цена за единицу">${fmtMoney(Number(line.unitPrice) || 0)} / ${academyEsc(serviceOfferingUnitShort(line))}</td>
+    <td data-label="Количество"><input type="number" min="0" step="1" value="${Number(line.qty) || 0}" aria-label="Количество: ${academyEsc(line.label || '')}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','qty',this.value)"> <span class="text-xs text-gray-500">${academyEsc(serviceOfferingUnitShort(line))}</span></td>
+    <td data-label="Цена клиенту"><b>${fmtMoney(Number(line.price) || 0)}</b></td>
+    <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteService('${o.id}','${line.id}')">Удалить услугу</button></td>
+  </tr>` : `<tr>
     <td data-label="Тип"><select onchange="projectEstimateUpdateService('${o.id}','${line.id}','type',this.value)">${serviceTypes.map(type => `<option value="${type}" ${line.type===type?'selected':''}>${projectEstimateServiceLabel(type)}</option>`).join('')}</select></td>
     <td data-label="Описание"><input value="${academyEsc(line.label || '')}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','label',this.value)"></td>
     <td data-label="Количество"><input type="number" min="0" step="1" value="${Number(line.qty || 1)}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','qty',this.value)"></td>
@@ -24789,7 +25050,7 @@ function renderProjectEstimateWorkspace(o) {
   </tr>`).join('');
   const installerRows = installerPay.byInstaller.map(row => `<div class="order-clean-list-row"><span>${academyEsc(row.name)}</span><b>${fmtMoney(row.amount)}</b></div>`).join('');
   const costLines = [
-    ['Плёнка и отход', pss.film], ['Специалисты по установке', pss.installers], ['Транспорт', pss.gas],
+    ['Плёнка и отход', pss.film], ...(pss.extraServicesCost > 0 ? [['Материал услуг без размеров', pss.extraServicesCost]] : []), ['Специалисты по установке', pss.installers], ['Транспорт', pss.gas],
     [`Менеджер (${Number(db.settings.pricingDefaults?.managerPct || 0)}% выручки)`, pss.manager],
     [`Реклама — доля бюджета месяца (${(projectRevenueShare(o) * 100).toFixed(1)}% от ${fmtMoney(projectMonthAdBudget(projectProfitDate(o)).budget)})`, pss.marketing],
     ['Замерщик — оклад в постоянных расходах', pss.measurer], ['Расходники', pss.consumables],
@@ -24804,7 +25065,7 @@ function renderProjectEstimateWorkspace(o) {
       ${canSeeInternalEconomics ? `<div class="project-estimate-kpi"><span>Себестоимость</span><strong class="text-red-600">${fmtMoney(pss.total)}</strong></div><div class="project-estimate-kpi"><span>Прибыль / маржа</span><strong class="${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(margin)} · ${marginPct.toFixed(1)}%</strong></div>` : ''}
     </div>
     <div class="project-estimate-quick">
-      <div class="project-estimate-section-head"><div><h4>Итог по замеру</h4><div class="text-xs text-gray-500">Расчёт строится по помещениям, размерам, выбранной плёнке, складу и справочнику сотрудников.</div></div>${measuredArea ? '<span class="tag bg-blue-50 text-blue-700">Источник: замер</span>' : `<button class="btn-primary text-sm" onclick="openManagerMeasureModal('${o.id}')">Перейти к замеру</button>`}</div>
+      <div class="project-estimate-section-head"><div><h4>Итог по замеру</h4><div class="text-xs text-gray-500">${orderNeedsMeasurements(o) ? 'Расчёт строится по помещениям, размерам, выбранной плёнке, складу и справочнику сотрудников.' : 'Замер не нужен: в проекте только услуги без размеров — количество, цена, материал и оплата специалисту за единицу.'}</div></div>${measuredArea ? '<span class="tag bg-blue-50 text-blue-700">Источник: замер</span>' : orderNeedsMeasurements(o) ? `<button class="btn-primary text-sm" onclick="openManagerMeasureModal('${o.id}')">Перейти к замеру</button>` : '<span class="tag bg-emerald-50 text-emerald-700">Без замера</span>'}</div>
       <div class="project-estimate-quick-grid">
         <div class="project-estimate-quick-card"><span>Услуги проекта</span><strong>${academyEsc(orderServiceSummaryLabel(o))}</strong></div>
         <div class="project-estimate-quick-card"><span>Плёнка</span><strong>${selectedFilms.length ? selectedFilms.map(academyEsc).join(', ') : 'не выбрана'}</strong></div>
@@ -24824,11 +25085,11 @@ function renderProjectEstimateWorkspace(o) {
 
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>1. Замер и материалы</h4><div class="text-xs text-gray-500">Обязательная основа расчёта и КП: помещения, окна, размеры и выбранная плёнка.</div></div></div>
-      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Помещение / окно</th><th>Материал</th><th class="money">sqft</th><th>Цена продажи / sqft</th><th class="money">Клиенту</th>${canSeeInternalEconomics ? '<th class="money">Себестоимость материала</th>' : ''}</tr></thead><tbody>${materialRows || `<tr><td colspan="${canSeeInternalEconomics ? 6 : 5}" class="text-gray-500">Сначала завершите замер.</td></tr>`}</tbody></table></div>
+      <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Помещение / окно</th><th>Материал</th><th class="money">sqft</th><th>Цена продажи / sqft</th><th class="money">Клиенту</th>${canSeeInternalEconomics ? '<th class="money">Себестоимость материала</th>' : ''}</tr></thead><tbody>${materialRows || `<tr><td colspan="${canSeeInternalEconomics ? 6 : 5}" class="text-gray-500">${orderNeedsMeasurements(o) ? 'Сначала завершите замер.' : 'Окон нет — услуги этого проекта не требуют размеров (раздел «2. Услуги»).'}</td></tr>`}</tbody></table></div>
     </section>
 
     <section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>2. Услуги</h4><div class="text-xs text-gray-500">Здесь указываются только количество и цена клиенту. Оплата работника автоматически берётся из раздела «Зарплата».</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddService('${o.id}','washing')">+ Добавить услугу</button></div>
+      <div class="project-estimate-section-head"><div><h4>2. Услуги</h4><div class="text-xs text-gray-500">У услуг из справочника цена, оплата специалисту и материал берутся из «Услуг и цен» — указывается только количество. У остальных — количество и цена клиенту, оплата работника из раздела «Зарплата».</div></div><div class="flex flex-wrap gap-2">${projectOfferingPickerHtml(o)}<button class="btn-primary text-sm" onclick="projectEstimateAddService('${o.id}','washing')">+ Добавить услугу</button></div></div>
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Тип</th><th>Описание</th><th>Кол-во</th><th>Цена клиенту, всего</th><th></th></tr></thead><tbody>${serviceRows || '<tr><td colspan="5" class="text-gray-500">Дополнительных услуг нет.</td></tr>'}</tbody></table></div>
     </section>
 
@@ -24913,6 +25174,12 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const events = orderScheduledEvents(o);
   const pendingRequests = pendingClientRequests(o);
   const hasMeasurements = windows.length > 0;
+  // A project of services without sizes is calculated without a measurement.
+  const estimateReady = hasMeasurements || !orderNeedsMeasurements(o);
+  // Work documents open once the crew has something to do: measured windows
+  // or services counted without sizes.
+  const hasWorkScope = hasMeasurements || projectOfferingLines(o).length > 0;
+  const sizeFreeSummary = `${projectOfferingLines(o).length} усл. без размеров · ${fmtMoney(orderRevenue(o))}`;
   const unverifiedMeasurements = orderMeasurementVerificationIssues(o);
   const estimateApproved = projectEstimateIsApproved(o);
   const quickLines = projectQuickLines(o);
@@ -24972,14 +25239,14 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     ${filmRows.length ? `<div class="mt-3">${renderOrderCleanRows(filmRows.slice(0, 6))}</div>` : `<div class="order-clean-note mt-3">Пленка еще не выбрана по окнам. Откройте замеры и назначьте материал из каталога.</div>`}
     <div class="order-clean-actions mt-3">
       ${isInstaller ? `
-      ${renderOrderActionCard({ icon: '🧰', title: 'Открыть технический лист', sub: hasMeasurements ? 'схема, размеры и материалы' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasMeasurements, variant: 'primary' })}
-      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'задача, адрес, размеры и фото' : 'ожидает замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ${renderOrderActionCard({ icon: '🧰', title: 'Открыть технический лист', sub: hasMeasurements ? 'схема, размеры и материалы' : hasWorkScope ? 'услуги без размеров' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasWorkScope, variant: 'primary' })}
+      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'задача, адрес, размеры и фото' : hasWorkScope ? 'услуги, количество, адрес' : 'ожидает замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasWorkScope })}
       ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.pieces.length} деталей` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
-      ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать наряд', sub: 'рабочий лист и подписи', onclick: `printWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать наряд', sub: 'рабочий лист и подписи', onclick: `printWorkOrder('${o.id}')`, disabled: !hasWorkScope })}
       ` : `
       ${renderOrderActionCard({ icon: '📐', title: measureActionTitle, sub: hasMeasurements ? `${rooms.length} комн. · ${windows.length} окон` : 'добавить комнаты и окна', onclick: measureAction, variant: 'primary' })}
       ${renderOrderActionCard({ icon: '🧭', title: 'Полевой замер', sub: 'телефон и планшет: комнаты, окна, компас и фото', onclick: `openMeasurerV25ForOrder('${o.id}')`, variant: canMeasure ? 'primary' : 'soft' })}
-      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, раскрой, адрес, фото' : hasWorkScope ? 'услуги, количество, адрес' : 'после замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasWorkScope })}
       ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.consumedSqft.toFixed(1)} sqft расход` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
       ${renderOrderActionCard({ icon: '🖨', title: 'Печать наряда', sub: 'рабочий лист', onclick: `printWorkOrder('${o.id}')` })}
       `}
@@ -24988,18 +25255,18 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const docsBody = workDocsOnly ? `
     <div class="order-clean-note">Коммерческие суммы, КП и оплаты скрыты. Здесь находятся только рабочие документы бригады.</div>
     <div class="order-clean-actions mt-3">
-      ${renderOrderActionCard({ icon: '🧰', title: 'Технический лист', sub: hasMeasurements ? 'готов к работе' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasMeasurements, variant: 'primary' })}
-      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: 'размеры, материалы и фото без цен', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ${renderOrderActionCard({ icon: '🧰', title: 'Технический лист', sub: hasWorkScope ? 'готов к работе' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasWorkScope, variant: 'primary' })}
+      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, материалы и фото без цен' : 'услуги и количество без цен', onclick: `openWorkOrder('${o.id}')`, disabled: !hasWorkScope })}
       ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.pieces.length} деталей` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
     </div>` : `
     <div class="order-clean-mini-grid">
       ${renderOrderCleanMini('КП', proposal ? 'создано' : 'нет')}
       ${renderOrderCleanMini('Оплата', proposal?.paymentClaim?.status === 'pending_review' ? 'проверить Chase' : (proposalStripeUrl ? (proposal?.stripe?.paid || o.stripe?.paid ? 'оплачено' : 'карта готова') : 'Zelle / ACH / карта'))}
-      ${renderOrderCleanMini('Техлист', hasMeasurements ? 'готов' : 'нужен замер')}
+      ${renderOrderCleanMini('Техлист', hasWorkScope ? 'готов' : 'нужен замер')}
     </div>
     ${proposalStripeUrl ? `<div class="order-clean-note mt-3">Stripe checkout: <a class="text-blue-700 underline break-all" href="${proposalStripeUrl}" target="_blank">${proposalStripeUrl}</a></div>` : ''}
     <div class="order-clean-actions mt-3">
-      ${renderOrderActionCard({ icon: '🧮', title: estimateApproved ? 'Расчёт проекта подтверждён' : 'Расчёт проекта', sub: hasMeasurements ? (canSeeInternalEconomics ? `цена, расходы и маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `цена клиенту ${fmtMoney(orderRevenue(o))}`) : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !canManage || !hasMeasurements, variant: !estimateApproved && hasMeasurements ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🧮', title: estimateApproved ? 'Расчёт проекта подтверждён' : 'Расчёт проекта', sub: estimateReady ? (canSeeInternalEconomics ? `цена, расходы и маржа ${(orderMarginPct(o)*100).toFixed(1)}%` : `цена клиенту ${fmtMoney(orderRevenue(o))}`) : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !canManage || !estimateReady, variant: !estimateApproved && estimateReady ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '📄', title: 'Единое КП', sub: estimateApproved ? 'позиции проекта и оплата' : 'сначала подтвердите расчёт по замеру', onclick: `openProfessionalKP('${o.id}')`, disabled: !canManage || !estimateApproved, variant: estimateApproved ? 'primary' : 'soft' })}
       ${renderOrderActionCard({ icon: '🔗', title: 'Ссылка клиенту', sub: clientPortalUrl(o.id) ? 'скопировать портал' : 'public URL не настроен', onclick: `copyPortalLink('${o.id}')`, disabled: !clientPortalUrl(o.id) })}
       ${renderOrderActionCard({ icon: '✅', title: 'КП принято', sub: 'перевести этап', onclick: `changeStatus('${o.id}','proposal_accepted')`, disabled: !canManage || !['proposal_sent','proposal_accepted'].includes(o.status) || o.status === 'proposal_accepted' })}
@@ -25036,7 +25303,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     </div>
     <div class="order-clean-actions mt-3">
       ${renderOrderActionCard({ icon: '💰', title: o.depositReceived ? 'Аванс получен' : 'Отметить аванс', sub: o.depositReceived ? fmtDateTime(o.depositReceivedAt) : `ожидаемый ${fmtMoney(orderRevenue(o) * (db.settings.advancePct || 30) / 100)}`, onclick: o.depositReceived ? `openOrder('${o.id}')` : `markDepositReceived('${o.id}')`, variant: o.depositReceived ? 'success' : 'warning' })}
-      ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: hasMeasurements ? (canSeeInternalEconomics ? 'замер, цена, расходы и маржа' : 'замер, услуги и цена клиенту') : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !hasMeasurements, variant: !estimateApproved && hasMeasurements ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: estimateReady ? (!hasMeasurements ? 'услуги без размеров и цена клиенту' : canSeeInternalEconomics ? 'замер, цена, расходы и маржа' : 'замер, услуги и цена клиенту') : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !estimateReady, variant: !estimateApproved && estimateReady ? 'primary' : 'soft' })}
     </div>` : `<div class="order-clean-note">Финансы скрыты для роли ${academyEsc(u?.role || '')}. В рабочем режиме видны только клиент, адрес, замер, техлист и задача.</div>`;
 
   const routeBody = `
@@ -25084,8 +25351,8 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       <div class="order-workspace-grid">
         ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'client', icon: '👤', title: 'Клиент и связь', summary: c?.name || 'Данные и все каналы связи', badge: c?.phone || c?.email ? 'контакт' : 'заполнить', body: clientBody, color: '#2563eb', soft: '#eff6ff' })}
-        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'measurement', icon: '📐', title: 'Замер', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : 'Размеры ещё не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : 'нужно', body: measurementBody, color: '#7c3aed', soft: '#f5f3ff' })}
-        ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '🧮', title: 'Расчёт по замеру', summary: hasMeasurements ? `${windows.length} окон · ${orderActualAreaSqft(o).toFixed(0)} sqft · ${fmtMoney(orderRevenue(o))}` : 'Сначала внесите помещения, окна и размеры', badge: estimateApproved ? 'подтверждён' : hasMeasurements ? 'рассчитать' : 'нужен замер', onclick: hasMeasurements ? `openProjectEstimateWorkspace('${o.id}')` : `openManagerMeasureModal('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
+        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'measurement', icon: '📐', title: 'Замер', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : estimateReady ? 'Замер не нужен: услуги без размеров' : 'Размеры ещё не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : estimateReady ? 'не нужен' : 'нужно', body: measurementBody, color: '#7c3aed', soft: '#f5f3ff' })}
+        ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '🧮', title: estimateReady && !hasMeasurements ? 'Расчёт проекта' : 'Расчёт по замеру', summary: hasMeasurements ? `${windows.length} окон · ${orderActualAreaSqft(o).toFixed(0)} sqft · ${fmtMoney(orderRevenue(o))}` : estimateReady ? sizeFreeSummary : 'Сначала внесите помещения, окна и размеры', badge: estimateApproved ? 'подтверждён' : estimateReady ? 'рассчитать' : 'нужен замер', onclick: estimateReady ? `openProjectEstimateWorkspace('${o.id}')` : `openManagerMeasureModal('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'documents', icon: workDocsOnly ? '🧰' : '📄', title: workDocsOnly ? 'Рабочие документы' : 'КП и документы', summary: workDocsOnly ? 'Без коммерческих сумм' : (proposal ? 'КП создано' : estimateApproved ? 'Расчёт готов — можно формировать КП' : 'Откройте расчёт и проверьте итог'), badge: workDocsOnly ? 'документы' : estimateApproved ? 'КП' : 'проверить', body: docsBody, color: '#d97706', soft: '#fff7ed' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'schedule', icon: '📅', title: isInstaller ? 'Задача и выезд' : 'Календарь и команда', summary: events.length ? `${events.length} события` : 'События не назначены', badge: isInstaller ? T(o.status) : (installers.length ? `${installers.length}` : 'команда'), body: scheduleBody, color: '#0891b2', soft: '#ecfeff' })}
         ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'payment', icon: '💵', title: 'Оплата', summary: canSeeMoney ? (orderDebt(o) > 0 ? `Долг ${fmtMoney(orderDebt(o))}` : 'Оплачено полностью') : 'Скрыто по роли', badge: canSeeMoney ? (canSeeInternalEconomics ? `${(orderMarginPct(o)*100).toFixed(0)}%` : (orderDebt(o) > 0 ? 'долг' : 'оплачено')) : 'скрыто', body: financeBody, color: '#059669', soft: '#ecfdf5' })}
@@ -25116,7 +25383,7 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
         </div>
         <div class="order-clean-actions mt-3">
           ${renderOrderActionCard(primary)}
-          ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать ТЗ', sub: 'размеры, схема и раскрой', onclick: `printTechnicalSheet('${o.id}')`, disabled: !hasMeasurements })}
+          ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать ТЗ', sub: hasMeasurements ? 'размеры, схема и раскрой' : 'услуги и количество', onclick: `printTechnicalSheet('${o.id}')`, disabled: !hasMeasurements && !projectOfferingLines(o).length })}
           ${projectAddress ? renderOrderActionCard({ icon: '🧭', title: 'Маршрут', sub: projectAddress, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(projectAddress)}` }) : ''}
           ${renderOrderActionCard({ icon: '📷', title: 'Добавить фото', sub: 'до или после монтажа', onclick: `addOrderPhoto('${o.id}')` })}
         </div>
@@ -26231,7 +26498,7 @@ function managerWindowDefaults(o, room, opts = {}) {
     measurement_source: 'CUSTOMER',
     verificationStatus: 'UNVERIFIED',
   };
-  const offering = [o.offeringId || o.orderBuilder?.offeringId, ...(o.offeringIds || o.orderBuilder?.offeringIds || [])].map(serviceOffering).find(item => item && item.direction === serviceOfferingDirection(scopeKey));
+  const offering = [o.offeringId || o.orderBuilder?.offeringId, ...(o.offeringIds || o.orderBuilder?.offeringIds || [])].map(serviceOffering).find(item => item && serviceOfferingNeedsSizes(item) && item.direction === serviceOfferingDirection(scopeKey));
   if (offering && offering.active !== false && offering.direction === serviceOfferingDirection(scopeKey)) applyWindowOffering(win, offering);
   syncWindowPanelsForType(win, scopeKey);
   return syncSmartWindowPlan(win, room?.name || '');
@@ -27189,7 +27456,7 @@ function orderWorkItems(o) {
 /** Работы, которые обычно нужны по этому направлению. */
 function suggestedWorkTypeIds(serviceType) {
   if (serviceType === 'smart_film') return ['electrical', 'film', 'commissioning'];
-  if (serviceType === 'safety_film') return ['film', 'silicone'];
+  if (serviceType === 'protective_film') return ['film', 'silicone'];
   return ['film'];
 }
 
@@ -27357,12 +27624,13 @@ function openProjectProductionWorkspace(oid) {
         </header>
         <div class="order-workspace-modal-body">
           <div class="order-clean-note"><b>Этап перед монтажом.</b> Здесь проверяются принятое КП, аванс, точные размеры, раскрой и наличие материала.</div>
-          ${materialRows ? `<div class="order-clean-list mt-3">${materialRows}</div>` : '<div class="order-clean-note mt-3">Сначала внесите помещения, окна, размеры и материал.</div>'}
+          ${materialRows ? `<div class="order-clean-list mt-3">${materialRows}</div>` : projectOfferingLines(o).length ? '' : '<div class="order-clean-note mt-3">Сначала внесите помещения, окна, размеры и материал.</div>'}
+          ${projectOfferingLines(o).length ? `<div class="mt-3"><div class="text-xs font-black uppercase text-gray-500 mb-2">Услуги без размеров</div><div class="space-y-2">${projectOfferingScopeRows(o)}</div></div>` : ''}
           ${blockingIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Не готово:</b> ${blockingIssues.map(academyEsc).join(', ')}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Проверка пройдена.</b> Можно подтвердить готовность производства.</div>`}
           <div class="order-clean-actions mt-3">
             ${renderOrderActionCard({ icon: '📐', title: 'Проверить точные размеры', sub: `${measureAllWindows(o).length} окон`, onclick: `openManagerMeasureModal('${o.id}')` })}
             ${renderOrderActionCard({ icon: '🎞', title: 'Открыть лист раскроя', sub: `${plan.pieces?.length || 0} деталей`, onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
-            ${renderOrderActionCard({ icon: '📋', title: 'Открыть заказ-наряд', sub: 'материалы и задача бригады', onclick: `openWorkOrder('${o.id}')`, disabled: !measureAllWindows(o).length })}
+            ${renderOrderActionCard({ icon: '📋', title: 'Открыть заказ-наряд', sub: 'материалы и задача бригады', onclick: `openWorkOrder('${o.id}')`, disabled: !measureAllWindows(o).length && !projectOfferingLines(o).length })}
           </div>
           <div class="project-estimate-footer">
             <div class="text-xs text-gray-500">После подтверждения CRM разрешит назначить монтаж.</div>
@@ -28427,7 +28695,7 @@ function openOrderModal() {
         <div class="flex gap-2 justify-end" style="margin-left:auto">
           <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
           <button class="btn-ghost" onclick="createOrder('draft')">Сохранить черновик</button>
-          <button class="btn-primary" onclick="createOrder('measure')">Создать и перейти к замеру →</button>
+          <button class="btn-primary" id="no-create-btn" onclick="createOrder('measure')">Создать и перейти к замеру →</button>
         </div>
       </div>
     </div>
@@ -28449,7 +28717,7 @@ function renderNewOrderExtraOfferings() {
   const selected = new Set(state._newOrderExtraOfferingIds || []);
   node.innerHTML = ORDER_PRIMARY_SERVICES.map(direction => {
     const offerings = serviceOfferingsFor(serviceOfferingDirection(direction.id)).filter(item => item.id !== state._newOrderOfferingId);
-    return offerings.length ? `<fieldset class="mb-3"><legend class="font-semibold text-sm mb-2">${academyEsc(direction.title)}</legend>${offerings.map(item => `<label class="flex items-center gap-2 p-2 border mb-1"><input type="checkbox" ${selected.has(item.id) ? 'checked' : ''} onchange="toggleNewOrderExtraOffering('${academyEsc(item.id)}',this.checked)"><span>${academyEsc(item.name)}</span></label>`).join('')}</fieldset>` : '';
+    return offerings.length ? `<fieldset class="mb-3"><legend class="font-semibold text-sm mb-2">${academyEsc(direction.title)}</legend>${offerings.map(item => `<label class="flex items-center gap-2 p-2 border mb-1"><input type="checkbox" ${selected.has(item.id) ? 'checked' : ''} onchange="toggleNewOrderExtraOffering('${academyEsc(item.id)}',this.checked)"><span>${academyEsc(item.name)} <span class="text-xs text-gray-500">· ${serviceOfferingNeedsSizes(item) ? 'по замеру' : `за ${academyEsc(serviceOfferingUnitShort(item))}, без размеров`}</span></span></label>`).join('')}</fieldset>` : '';
   }).join('');
 }
 function toggleNewOrderExtraOffering(id, checked) {
@@ -28468,6 +28736,9 @@ function refreshOrderIntakeGates() {
   document.querySelectorAll('[data-intake-site]').forEach(node => { node.style.display = validOffering ? '' : 'none'; });
   document.querySelectorAll('[data-intake-client]').forEach(node => { node.style.display = validOffering && state._newOrderSiteType ? '' : 'none'; });
   document.querySelectorAll('[data-new-order-after-client]').forEach(node => { node.style.display = validOffering && state._newOrderSiteType && state._newOrderClient ? '' : 'none'; });
+  // Services without sizes go straight to the project: no measurement step.
+  const createButton = document.getElementById('no-create-btn');
+  if (createButton) createButton.textContent = !validOffering || newOrderSelectedOfferings().some(serviceOfferingNeedsSizes) ? 'Создать и перейти к замеру →' : 'Создать проект →';
 }
 function selectOrderService(v, force = false) {
   if (!ORDER_PRIMARY_SERVICES.some(item => item.id === v)) return;
@@ -28484,7 +28755,7 @@ function selectOrderService(v, force = false) {
   const offerings = serviceOfferingsFor(serviceOfferingDirection(v));
   const select = document.getElementById('no-offering');
   if (select) {
-    select.innerHTML = '<option value="">Выберите услугу</option>' + offerings.map(item => `<option value="${academyEsc(item.id)}">${academyEsc(item.name)}</option>`).join('');
+    select.innerHTML = '<option value="">Выберите услугу</option>' + offerings.map(item => `<option value="${academyEsc(item.id)}">${academyEsc(item.name)}${serviceOfferingNeedsSizes(item) ? '' : ` · за ${academyEsc(serviceOfferingUnitShort(item))}`}</option>`).join('');
     select.value = state._newOrderOfferingId || '';
     select.disabled = !offerings.length;
   }
@@ -29076,7 +29347,8 @@ function createOrder(nextStep = 'measure') {
     paymentTerms: 'deposit_before_work', paymentTermsConfirmedAt: null, paymentTermsConfirmedBy: null,
     measurements: { rooms: [] },
     siteType,
-    extraServices: [],
+    // Services without sizes are a quantity in the project from the start.
+    extraServices: selectedOfferings.filter(item => !serviceOfferingNeedsSizes(item)).map(item => projectOfferingLine(item, 1)),
     extraExpenses: [],
     timeline: [{
       at: new Date().toISOString(),
@@ -29086,6 +29358,8 @@ function createOrder(nextStep = 'measure') {
     }],
     notes: document.getElementById('no-notes').value,
     offeringIds: selectedOfferings.map(item => item.id),
+    // How each chosen service was priced when the project was created.
+    offeringUnits: Object.fromEntries(selectedOfferings.map(item => [item.id, serviceOfferingUnit(item)])),
     offeringId: offering.id,
     offeringName: offering.name,
     serviceType: service.id,
@@ -29138,7 +29412,10 @@ function createOrder(nextStep = 'measure') {
   }
   save(); closeModal();
   openOrder(o.id);
-  if (nextStep === 'measure') setTimeout(() => openManagerMeasureModal(o.id), 0);
+  if (nextStep === 'measure') {
+    // Services without sizes go straight to the project estimate.
+    setTimeout(() => (orderNeedsMeasurements(o) ? openManagerMeasureModal(o.id) : openProjectEstimateWorkspace(o.id)), 0);
+  }
 }
 
 function openClientModal() {
@@ -31613,6 +31890,7 @@ function premiumRenderSummary(prop, calc) {
       </div>
       <div class="pp-total-line"><span>Products</span><strong>${fmtMoney(calc.productSubtotal)}</strong></div>
       <div class="pp-total-line"><span>CRM services</span><strong>${fmtMoney(calc.legacyServices)}</strong></div>
+      ${projectOfferingLines(calc.order).filter(line => Number(line.price) > 0).map(line => `<div class="pp-total-line" style="font-size:.85em;opacity:.8"><span>· ${academyEsc(line.label || line.offeringName || 'Service')} — ${premiumNum(line.qty)} ${academyEsc(serviceOfferingUnitShort(line))}</span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}
       <div class="pp-total-line"><span>Additional services</span><strong>${fmtMoney(calc.premiumServices)}</strong></div>
       <div class="pp-total-line"><span>Discount</span><strong>-${fmtMoney(calc.discount)}</strong></div>
       <div class="pp-total-line"><span>Tax</span><strong>${fmtMoney(calc.tax)}</strong></div>
@@ -31952,7 +32230,7 @@ function renderPremiumProposalPortal(token) {
                 <div class="pp-product"><div class="text-slate-400">Access complexity</div><div class="text-xl font-black">×${Number(db.settings.complexityCoefs?.[order.complexity || 'standard'] || 1).toFixed(2)}</div></div>
               </div>
             </div>
-            ${(order.measurements?.rooms || []).length ? (order.measurements.rooms || []).map((r, i) => premiumRenderRoom(prop, order, r, i, calc)).join('') : projectQuickLines(order).length ? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PRELIMINARY PROJECT ITEMS</div><h3 class="text-xl font-black mt-1">Scope without measurements</h3><p class="text-slate-400 mt-2">Final room and window dimensions will be verified before installation.</p><div class="mt-4">${projectQuickLines(order).map(line => `<div class="pp-total-line"><span><b>${premiumEsc(primaryServiceInfo(line.serviceType)?.title || 'Service')}</b><br><small>${premiumEsc(line.label || 'Project item')} · ${premiumNum(line.qty)} ${premiumEsc(line.unit || 'unit')} × ${fmtMoney(line.unitPrice)}</small></span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}</div></div>` : `<div class="pp-panel"><h3 class="text-xl font-black">Project scope is not filled yet</h3><p class="text-slate-400 mt-2">Add project items or rooms in CRM, then regenerate this proposal.</p></div>`}
+            ${(order.measurements?.rooms || []).length ? (order.measurements.rooms || []).map((r, i) => premiumRenderRoom(prop, order, r, i, calc)).join('') : projectQuickLines(order).length ? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PRELIMINARY PROJECT ITEMS</div><h3 class="text-xl font-black mt-1">Scope without measurements</h3><p class="text-slate-400 mt-2">Final room and window dimensions will be verified before installation.</p><div class="mt-4">${projectQuickLines(order).map(line => `<div class="pp-total-line"><span><b>${premiumEsc(primaryServiceInfo(line.serviceType)?.title || 'Service')}</b><br><small>${premiumEsc(line.label || 'Project item')} · ${premiumNum(line.qty)} ${premiumEsc(line.unit || 'unit')} × ${fmtMoney(line.unitPrice)}</small></span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}</div></div>` : projectOfferingLines(order).length ? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PROJECT SERVICES</div><h3 class="text-xl font-black mt-1">Services</h3><div class="mt-4">${projectOfferingLines(order).map(line => `<div class="pp-total-line"><span><b>${premiumEsc(line.label || line.offeringName || 'Service')}</b><br><small>${premiumEsc(primaryServiceInfo(line.serviceType)?.title || '')} · ${premiumNum(line.qty)} ${premiumEsc(serviceOfferingUnitShort(line))} × ${fmtMoney(line.unitPrice)}</small></span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}</div></div>` : `<div class="pp-panel"><h3 class="text-xl font-black">Project scope is not filled yet</h3><p class="text-slate-400 mt-2">Add project items or rooms in CRM, then regenerate this proposal.</p></div>`}
             <div class="pp-panel">
               <div class="text-xs text-blue-200 font-bold">PRODUCTS</div>
               <h2 class="pp-section-title mt-1">Product intelligence</h2>
@@ -32270,7 +32548,7 @@ function premiumCanonicalSnapshot(prop) {
       const catalog = priced.catalog || {};
       const productName = [catalog.brand, catalog.model].filter(Boolean).join(' ') || windowItem.filmType || 'Window film';
       items.push({
-        service_code: catalog.category === 'smart' ? 'SMART_FILM' : catalog.category === 'protective' ? 'SAFETY_FILM' : 'SOLAR_FILM',
+        service_code: installerServiceCodeByCategory(canonicalCatalogCategory(catalog.category)) || 'SOLAR_FILM',
         room_name: room.name || 'Project area',
         window_id: windowItem.id,
         title_en: `${windowItem.name || 'Window'} — ${productName}`,
@@ -32304,7 +32582,19 @@ function premiumCanonicalSnapshot(prop) {
       item_kind: line.catalogId || projectQuickManualFilmName(line) ? 'film' : 'service',
     });
   });
-  const regularLegacyServices = (order.extraServices || []).filter(line => !line.quickProjectLine).reduce((sum, line) => sum + premiumNum(line.price), 0);
+  // Services from the directory without sizes are their own proposal lines.
+  projectOfferingLines(order).filter(line => premiumNum(line.price) > 0).forEach(line => {
+    items.push({
+      service_code: canonicalServiceCodeForOrderService(line.serviceType) || 'SOLAR_FILM',
+      title_en: line.label || line.offeringName || 'Project service',
+      quantity: premiumNum(line.qty) || 1,
+      unit_label: serviceOfferingUnitShort(line),
+      line_price: premiumNum(line.price),
+      item_kind: 'service',
+    });
+  });
+  const offeringLines = projectOfferingLines(order);
+  const regularLegacyServices = (order.extraServices || []).filter(line => !line.quickProjectLine && !offeringLines.includes(line)).reduce((sum, line) => sum + premiumNum(line.price), 0);
   if (regularLegacyServices > 0) {
     items.push({ service_code: 'SOLAR_FILM', title_en: 'Additional project services', quantity: 1, unit_label: 'project', line_price: regularLegacyServices, item_kind: 'service' });
   }
@@ -35336,6 +35626,7 @@ function canonicalConsultationServiceType(item) {
   if (/safety|security|защит/i.test(service)) return 'protective_film';
   if (/smart|pdlc|смарт/i.test(service)) return 'smart_film';
   if (/solar|sun|солнц/i.test(service)) return 'solar_film';
+  if (/privacy|приват/i.test(service)) return 'privacy_film';
   if (/decor|декор/i.test(service)) return 'decorative_film';
   return '';
 }
@@ -37180,7 +37471,7 @@ function renderCatalogBrowser() {
 // location and a readable unique code per roll. A film missing from the list is
 // typed in and added to it. The purchase price per sq ft is shown while typing
 // and is what the project's material cost uses (warehouseCatalogCostPerSqft).
-const ROLL_CATEGORY_KEYS = ['smart', 'solar', 'protective', 'decorative'];
+const ROLL_CATEGORY_KEYS = ['smart', 'solar', 'protective', 'decorative', 'privacy'];
 
 /** Next roll code by the rolls this CRM already has: RP-YYMM-0001, RP-YYMM-0002, … */
 function nextRollCode(dateReceived) {

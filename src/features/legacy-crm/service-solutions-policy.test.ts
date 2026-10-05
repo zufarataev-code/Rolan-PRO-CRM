@@ -12,7 +12,7 @@ test('manager sees customer prices and cannot change solution definitions throug
 });
 test('server owns the saved pay basis; unknown materials and directions are rejected',()=>{
   const next:any=serviceSolutionsForViewer(current,false);
-  next.orders[0].extraServices=[{id:'line',serviceType:'solar_film',offeringId:'solution',catalogId:'film',offeringInstallerRate:999}];
+  next.orders[0].extraServices=[{id:'line',quickProjectLine:true,serviceType:'solar_film',offeringId:'solution',catalogId:'film',offeringInstallerRate:999}];
   assert.equal(prepareServiceSolutions(current,next,false),null);
   assert.equal(next.orders[0].extraServices[0].offeringInstallerRate,3);
   next.orders[0].extraServices[0].catalogId='other';

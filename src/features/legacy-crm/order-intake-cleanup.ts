@@ -354,7 +354,8 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
         smart_film: 'smart', pdlc: 'smart', смарт: 'smart', смарт_пленка: 'smart',
         solar_film: 'solar', солнцезащитная: 'solar', солнцезащитная_пленка: 'solar',
         protective_film: 'protective', safety: 'protective', security: 'protective', защитная: 'protective', защитная_пленка: 'protective',
-        decorative_film: 'decorative', privacy: 'decorative', декоративная: 'decorative', декоративная_пленка: 'decorative',
+        decorative_film: 'decorative', декоративная: 'decorative', декоративная_пленка: 'decorative',
+        privacy_film: 'privacy', приватная: 'privacy', приватная_пленка: 'privacy',
       };
       return aliases[raw] || raw;
     };
@@ -364,7 +365,8 @@ const ORDER_INTAKE_CLEANUP_PATCH = `
       if (key === 'smart') return 'Smart / PDLC';
       if (key === 'solar') return 'Солнцезащитная';
       if (key === 'protective') return 'Защитная / Safety';
-      if (key === 'decorative') return 'Декоративная / Privacy';
+      if (key === 'decorative') return 'Декоративная';
+      if (key === 'privacy') return 'Приватная';
       return materialCategory(item) || 'Без серии';
     };
 

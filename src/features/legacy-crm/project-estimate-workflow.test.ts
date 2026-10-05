@@ -111,7 +111,7 @@ test("each room exposes a service-scoped film selector and shows its selected fi
 test("manager can quote from customer dimensions but installation requires verified dimensions", () => {
   const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.doesNotMatch(readiness, /orderMeasurementVerificationIssues|windowMeasurementIsVerified/);
-  assert.match(source, /measurementBasis: !measureAllWindows\(o\)\.length \? 'QUICK_LINE_ITEMS'/);
+  assert.match(source, /measurementBasis: measureAllWindows\(o\)\.length \? \(orderMeasurementVerificationIssues\(o\)\.length \? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED'\) : projectOfferingLines\(o\)\.length \? 'SERVICE_QUANTITIES' : 'QUICK_LINE_ITEMS'/);
   assert.match(source, /По ним разрешено рассчитать проект и выпустить КП/);
   assert.match(source, /function orderStatusRequiresVerifiedMeasurements\(status\)/);
   assert.match(source, /'installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'/);
@@ -123,11 +123,12 @@ test("new projects follow measurement before estimate and expose no quick-entry 
   const passport = source.match(/function orderPassportActions\(o, ctx\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(source, /createOrder\('measure'\)/);
   assert.match(source, /Создать и перейти к замеру →/);
-  assert.match(creator, /nextStep === 'measure'\) setTimeout\(\(\) => openManagerMeasureModal\(o\.id\)/);
+  // Measurement opens unless every chosen service is priced without sizes.
+  assert.match(creator, /setTimeout\(\(\) => \(orderNeedsMeasurements\(o\) \? openManagerMeasureModal\(o\.id\) : openProjectEstimateWorkspace\(o\.id\)\), 0\);/);
   assert.doesNotMatch(creator, /quickProjectLine: true/);
   assert.doesNotMatch(source, /title: 'Быстрый ввод проекта'[\s\S]*?onclick: `openQuickProjectEntry/);
   assert.match(passport, /const stage = !done\.measure[\s\S]*?!done\.estimate/);
-  assert.match(passport, /disabled: !ctx\.canManage \|\| !ctx\.hasMeasurements/);
+  assert.match(passport, /disabled: !ctx\.canManage \|\| !\(ctx\.hasMeasurements \|\| !orderNeedsMeasurements\(o\)\)/);
 });
 
 test("accepted proposal must pass production preparation before installation", () => {
@@ -420,7 +421,7 @@ test("quick-entry records are calculation input only for completed historical im
   assert.match(source, /function projectEstimateQuickLinesForBasis\(o\)/);
   assert.match(source, /return o\?\.quickProjectImportedCompleted === true \? projectQuickLines\(o\) : \[\]/);
   assert.doesNotMatch(readiness, /projectEstimateQuickLinesForBasis/);
-  assert.match(readiness, /if \(!windows\.length\)/);
+  assert.match(readiness, /if \(!windows\.length && orderNeedsMeasurements\(o\)\)/);
   assert.match(revenue, /filter\(line => !line\.quickProjectLine \|\| !measuredProject\)/);
   assert.match(snapshot, /projectEstimateQuickLinesForBasis\(order\)\.forEach/);
   assert.match(source, /Расчёт идёт по замеру/);
