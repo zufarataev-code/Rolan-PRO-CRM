@@ -696,17 +696,18 @@
     border: 1px solid #e2e8f0;
   }
   /* === New order intake === */
-  .modal-content.erp-intake-modal {
+  .modal-content.workspace-modal.erp-intake-modal {
     width: min(92vw, 64rem);
     max-width: 64rem;
-    height: auto;
-    max-height: 86svh;
+    height: min(92dvh, 960px);
+    max-height: calc(100dvh - 2rem);
     padding: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
   }
   .erp-intake-head {
+    flex-shrink: 0;
     position: sticky;
     top: 0;
     z-index: 2;
@@ -744,8 +745,15 @@
     min-height: 0;
     max-height: none;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     padding: 1rem 1.15rem;
     background: #f8fafc;
+  }
+  .erp-intake-modal #no-client-results {
+    max-height: min(15rem, 38dvh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .erp-intake-card {
     border: 1px solid #dbe4ef;
@@ -851,6 +859,7 @@
     content: 'Скрыть';
   }
   .erp-intake-footer {
+    flex-shrink: 0;
     position: sticky;
     bottom: 0;
     z-index: 2;
@@ -28504,6 +28513,16 @@ function selectOrderSiteType(value) {
     button.classList.toggle('active', button.dataset.siteType === siteType);
   });
   refreshOrderIntakeGates();
+  if (siteType) scrollOrderIntakeTo('[data-intake-client]');
+}
+function scrollOrderIntakeTo(selector) {
+  const body = document.querySelector('.erp-intake-body');
+  const target = body?.querySelector(selector);
+  if (!body || !target) return;
+  requestAnimationFrame(() => {
+    if (!body.isConnected || target.getClientRects().length === 0) return;
+    body.scrollTo({ top: Math.max(0, body.scrollTop + target.getBoundingClientRect().top - body.getBoundingClientRect().top - 12), behavior: 'auto' });
+  });
 }
 function selectOrderExecution(v) {
   const variant = orderExecutionVariantInfo(v);
@@ -28547,6 +28566,7 @@ function renderClientSearch(q) {
     `}).join('');
   }
   dropdown.style.display = 'block';
+  scrollOrderIntakeTo('#no-client-search');
 }
 
 function renderOrderAddressOptions(c) {

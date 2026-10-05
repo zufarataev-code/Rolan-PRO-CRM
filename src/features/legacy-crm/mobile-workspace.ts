@@ -136,6 +136,17 @@ const MOBILE_WORKSPACE_PATCH = `
       border-radius: 16px !important;
     }
 
+    /* Intake owns one scrolling body; keep its header and actions in view. */
+    .modal-content.workspace-modal.erp-intake-modal {
+      height: calc(100dvh - 24px) !important;
+      overflow: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
+      flex-wrap: nowrap !important;
+    }
+    .erp-intake-modal > .erp-intake-body { flex: 1 1 0 !important; min-height: 0 !important; overflow-y: auto !important; }
+    .erp-intake-modal > :is(.erp-intake-head,.erp-intake-footer) { flex-shrink: 0 !important; }
+
     /* This editor owns its mobile layout; generic modal sizing must not constrain it. */
     .modal-backdrop.manager-measure-backdrop {
       padding: 0 !important;
