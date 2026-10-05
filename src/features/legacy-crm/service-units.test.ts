@@ -341,3 +341,12 @@ test('a project keeps the unit each service had when it was chosen', () => {
   assert.deepEqual({ ...dropped.orders[0].offeringUnits }, { zone: 'zone' }, 'a saved unit cannot be dropped either');
 });
 
+test('services chosen before units existed stay per sq ft, whatever the directory says now', () => {
+  const { c, db } = loadServices();
+  c.addServiceOffering('smart');
+  const service = db.settings.serviceOfferings[0];
+  service.unit = 'zone';
+  const old: Row = { id: 'old', offeringIds: [service.id], extraServices: [], measurements: { rooms: [] } };
+  assert.equal(c.orderNeedsMeasurements(old), true);
+});
+

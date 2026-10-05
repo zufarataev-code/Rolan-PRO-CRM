@@ -23909,16 +23909,15 @@ function orderNeedsMeasurements(o) {
 /**
  * Whether this project's service needs windows: a service the project priced
  * as a quantity keeps that, even if the owner later makes it per sq ft; any
- * other service follows the directory (an unknown one is treated as measured).
+ * other service keeps the unit saved when it was chosen.
  */
 function orderOfferingNeedsSizes(o, offeringId) {
   if (projectOfferingLines(o).some(line => line.offeringId === offeringId)) return false;
   // The unit the service had when the project chose it (offeringUnits), so a
-  // later change in the directory does not reclassify the project.
+  // later change in the directory does not reclassify the project. Services
+  // chosen before units existed (no saved unit) were per sq ft.
   const saved = o?.offeringUnits?.[offeringId];
-  if (saved) return saved === 'sqft';
-  const offering = serviceOffering(offeringId);
-  return !offering || serviceOfferingNeedsSizes(offering);
+  return saved ? saved === 'sqft' : true;
 }
 
 /** «+ Услуга без размеров»: the directory's services priced per piece, zone, fixed sum or own unit. */
