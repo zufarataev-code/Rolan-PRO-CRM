@@ -20,7 +20,7 @@ test('changing direction clears the previous solution and building; inactive and
  const gates=new Map(blocks.map(name=>[`[${name}]`,[{style:{display:''}}]]));
  const offerings=[{id:'solar',name:'Solar solution',direction:'solar'},{id:'smart',name:'Smart solution',direction:'smart'},{id:'inactive',direction:'smart',active:false}];
  const c:any=vm.createContext({state,Set,ORDER_PRIMARY_SERVICES:[{id:'solar_film'},{id:'smart_film'}],
- document:{getElementById:(id:string)=>nodes.get(id),querySelectorAll:(key:string)=>gates.get(key)||[]},
+ document:{querySelector:()=>null,getElementById:(id:string)=>nodes.get(id),querySelectorAll:(key:string)=>gates.get(key)||[]},
  serviceOffering:(id:string)=>offerings.find(o=>o.id===id),serviceOfferingDirection:(id:string)=>id.split('_')[0],
  serviceOfferingsFor:(direction:string)=>offerings.filter(o=>o.direction===direction&&o.active!==false),
  normalizeOrderSiteType:(value:string)=>['COMMERCIAL','RESIDENTIAL'].includes(value)?value:'',academyEsc:(s:string)=>s,refreshOrderBuilderPreview:()=>{}});
