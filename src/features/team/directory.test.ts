@@ -123,3 +123,15 @@ test("a new employee never takes over an unrelated historical card with the same
   const id = resolveLegacyIdForUser(user, [{ id: base, email: "someone-else@example.com" }], new Set());
   assert.notEqual(id, base);
 });
+
+test("isolated role preview derives a field card from a manager identity without changing source data", () => {
+  const payload = {users:[{id:"manager-card",role:"manager",name:"Manager"}]};
+  const member: DirectoryMember = {...alan, roles:["MANAGER","CONSULTANT"], legacyUserIds:["manager-card"]};
+  const normal = applyEmployeeDirectory(payload,[member]);
+  assert.equal(normal.users[0].role,"manager");
+  const preview = applyEmployeeDirectory(payload,[{...member,roles:["CONSULTANT"]}]);
+  assert.equal(preview.users[0].role,"measurer");
+  assert.equal(preview.users[0].id,"manager-card");
+  assert.equal(payload.users[0].role,"manager");
+  assert.deepEqual(member.roles,["MANAGER","CONSULTANT"]);
+});

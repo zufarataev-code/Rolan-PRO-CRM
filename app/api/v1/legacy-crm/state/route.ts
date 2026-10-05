@@ -72,7 +72,12 @@ export async function GET(request: NextRequest) {
   const members = await loadDirectoryMembers((workspace.payload as { users?: unknown }).users ?? [], {
     persist: !auth.session.preview,
   });
-  const payload = applyEmployeeDirectory(workspace.payload as Record<string, unknown>, members);
+  // A manager may also have a field role but normally has one manager card.
+  // In a role preview, derive this employee's cards from the isolated session
+  // roles, in memory only; the directory and production assignments stay intact.
+  const viewerMembers = auth.session.preview ? members.map(member => member.userId === auth.session.user.user_id
+    ? { ...member, roles: auth.session.roles } : member) : members;
+  const payload = applyEmployeeDirectory(workspace.payload as Record<string, unknown>, viewerMembers);
   const legacyUserIds =
     members.find((member) => member.userId === auth.session.user.user_id)?.legacyUserIds ??
     auth.session.user.legacy_user_ids;
