@@ -318,3 +318,26 @@ test('installers see services without sizes in the work order and tech sheet, wi
   assert.match(field, /const FINANCIAL_KEY = \/\(\?:price\|[^/]*cost[^/]*\)\/i;/);
 });
 
+test('a project keeps the unit each service had when it was chosen', () => {
+  const { c, db } = loadServices();
+  c.addServiceOffering('smart');
+  const film = db.settings.serviceOfferings[0];
+  const order: Row = { id: 'm', offeringIds: [film.id], offeringUnits: { [film.id]: 'sqft' }, extraServices: [], measurements: { rooms: [] } };
+  film.unit = 'zone';
+  assert.equal(c.orderNeedsMeasurements(order), true, 'chosen per sq ft: still needs windows');
+  assert.match(html, /offeringUnits: Object\.fromEntries\(selectedOfferings\.map\(item => \[item\.id, serviceOfferingUnit\(item\)\]\)\),/);
+
+  const next: Row = structuredClone(base);
+  next.orders[0].offeringUnits = { zone: 'sqft' };
+  assert.match(prepareServiceSolutions(base, next, false)!, /не совпадает/);
+  next.orders[0].offeringUnits = { zone: 'zone' };
+  assert.equal(prepareServiceSolutions(base, next, false), null);
+  const later: Row = structuredClone(next);
+  later.orders[0].offeringUnits = { zone: 'sqft' };
+  assert.match(prepareServiceSolutions(next, later, false)!, /нельзя изменить/);
+  const dropped: Row = structuredClone(next);
+  delete dropped.orders[0].offeringUnits;
+  assert.equal(prepareServiceSolutions(next, dropped, false), null);
+  assert.deepEqual({ ...dropped.orders[0].offeringUnits }, { zone: 'zone' }, 'a saved unit cannot be dropped either');
+});
+

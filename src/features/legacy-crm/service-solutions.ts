@@ -137,6 +137,20 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         if (item.catalogId && !offering.filmIds?.includes(item.catalogId)) return 'Плёнка не привязана к выбранной услуге.';
       }
     }
+    // The unit each chosen service had when the project chose it: a new entry
+    // must match the directory; saved entries cannot be rewritten.
+    const units = object(order.offeringUnits);
+    const oldUnits = object(oldOrder.offeringUnits);
+    for (const [id, unit] of Object.entries(units)) {
+      if (id in oldUnits) {
+        if (oldUnits[id] !== unit) return 'Единицу услуги проекта нельзя изменить.';
+        continue;
+      }
+      const offering = offerings.find(value => value.id === id);
+      if (!offering || unit !== (offering.unit || 'sqft')) return 'Единица услуги не совпадает со справочником.';
+    }
+    for (const id of Object.keys(oldUnits)) if (!(id in units)) units[id] = oldUnits[id];
+    if (Object.keys(units).length) order.offeringUnits = units;
     if (JSON.stringify(order.serviceSchedules) !== JSON.stringify(oldOrder.serviceSchedules)) {
       if (!Array.isArray(order.serviceSchedules)) return 'Некорректные назначения услуг.';
       const seen = new Set();

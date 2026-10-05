@@ -23913,6 +23913,10 @@ function orderNeedsMeasurements(o) {
  */
 function orderOfferingNeedsSizes(o, offeringId) {
   if (projectOfferingLines(o).some(line => line.offeringId === offeringId)) return false;
+  // The unit the service had when the project chose it (offeringUnits), so a
+  // later change in the directory does not reclassify the project.
+  const saved = o?.offeringUnits?.[offeringId];
+  if (saved) return saved === 'sqft';
   const offering = serviceOffering(offeringId);
   return !offering || serviceOfferingNeedsSizes(offering);
 }
@@ -23936,6 +23940,7 @@ function projectAddOfferingLine(oid, offeringId) {
   const direction = offeringServiceType(offering);
   if (direction && !(o.serviceTypes || []).includes(direction)) o.serviceTypes = [...(o.serviceTypes || [o.serviceType].filter(Boolean)), direction];
   o.offeringIds = [...new Set([...(o.offeringIds || []), offering.id])];
+  o.offeringUnits = { ...(o.offeringUnits || {}), [offering.id]: serviceOfferingUnit(offering) };
   projectEstimateMarkChanged(o, `Добавлена услуга «${offering.name}»`);
   save(); refreshProjectEstimateWorkspace(oid);
 }
@@ -29350,6 +29355,8 @@ function createOrder(nextStep = 'measure') {
     }],
     notes: document.getElementById('no-notes').value,
     offeringIds: selectedOfferings.map(item => item.id),
+    // How each chosen service was priced when the project was created.
+    offeringUnits: Object.fromEntries(selectedOfferings.map(item => [item.id, serviceOfferingUnit(item)])),
     offeringId: offering.id,
     offeringName: offering.name,
     serviceType: service.id,
