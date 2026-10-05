@@ -123,7 +123,8 @@ test("new projects follow measurement before estimate and expose no quick-entry 
   const passport = source.match(/function orderPassportActions\(o, ctx\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(source, /createOrder\('measure'\)/);
   assert.match(source, /Создать и перейти к замеру →/);
-  assert.match(creator, /nextStep === 'measure'\) setTimeout\(\(\) => openManagerMeasureModal\(o\.id\)/);
+  // Measurement opens unless every chosen service is priced without sizes.
+  assert.match(creator, /nextStep === 'measure' && orderNeedsMeasurements\(o\)\) setTimeout\(\(\) => openManagerMeasureModal\(o\.id\)/);
   assert.doesNotMatch(creator, /quickProjectLine: true/);
   assert.doesNotMatch(source, /title: 'Быстрый ввод проекта'[\s\S]*?onclick: `openQuickProjectEntry/);
   assert.match(passport, /const stage = !done\.measure[\s\S]*?!done\.estimate/);
@@ -420,7 +421,7 @@ test("quick-entry records are calculation input only for completed historical im
   assert.match(source, /function projectEstimateQuickLinesForBasis\(o\)/);
   assert.match(source, /return o\?\.quickProjectImportedCompleted === true \? projectQuickLines\(o\) : \[\]/);
   assert.doesNotMatch(readiness, /projectEstimateQuickLinesForBasis/);
-  assert.match(readiness, /if \(!windows\.length\)/);
+  assert.match(readiness, /if \(!windows\.length && orderNeedsMeasurements\(o\)\)/);
   assert.match(revenue, /filter\(line => !line\.quickProjectLine \|\| !measuredProject\)/);
   assert.match(snapshot, /projectEstimateQuickLinesForBasis\(order\)\.forEach/);
   assert.match(source, /Расчёт идёт по замеру/);

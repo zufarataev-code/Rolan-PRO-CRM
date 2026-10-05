@@ -225,6 +225,9 @@ async function seedServiceReferences() {
     ["BLOCK_INSTALLATION", "Установка блоков", "Block Installation", "qty", "420.00", "380.00", "0.00", "0.00", "0.00", "0.00", 8],
     ["ZONE_CONNECTION", "Подключение зон", "Zone Connection", "qty", "95.00", "80.00", "0.00", "0.00", "0.00", "0.00", 9],
     ["WARRANTY_SERVICE", "Сервис / гарантия", "Warranty / Service", "fixed", "250.00", "200.00", "0.00", "0.00", "0.00", "0.00", 10],
+    // Directions the legacy CRM publishes proposals for; prices are the owner's (0 = not set).
+    ["DECORATIVE_FILM", "Декоративная плёнка", "Decorative Film", "sqft", "0.00", "0.00", "0.00", "2.50", "0.00", "0.00", 11],
+    ["PRIVACY_FILM", "Приватная плёнка", "Privacy Film", "sqft", "0.00", "0.00", "0.00", "2.50", "0.00", "0.00", 12],
   ] as const;
 
   for (const [

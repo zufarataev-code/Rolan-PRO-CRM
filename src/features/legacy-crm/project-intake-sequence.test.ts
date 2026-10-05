@@ -23,7 +23,8 @@ test('changing direction clears the previous solution and building; inactive and
  document:{querySelector:()=>null,getElementById:(id:string)=>nodes.get(id),querySelectorAll:(key:string)=>gates.get(key)||[]},
  serviceOffering:(id:string)=>offerings.find(o=>o.id===id),serviceOfferingDirection:(id:string)=>id.split('_')[0],
  serviceOfferingsFor:(direction:string)=>offerings.filter(o=>o.direction===direction&&o.active!==false),
- normalizeOrderSiteType:(value:string)=>['COMMERCIAL','RESIDENTIAL'].includes(value)?value:'',academyEsc:(s:string)=>s,refreshOrderBuilderPreview:()=>{}});
+ normalizeOrderSiteType:(value:string)=>['COMMERCIAL','RESIDENTIAL'].includes(value)?value:'',academyEsc:(s:string)=>s,refreshOrderBuilderPreview:()=>{},
+ serviceOfferingNeedsSizes:(o:any)=>!o?.unit||o.unit==='sqft',serviceOfferingUnitShort:(o:any)=>o?.unit||'sq ft'});
  vm.runInContext(html.slice(html.indexOf('function offeringServiceType('),html.indexOf('function selectOrderExecution(')),c);
  c.selectOrderService('smart_film');
  assert.equal(state._newOrderOfferingId,'');assert.equal(state._newOrderSiteType,'');

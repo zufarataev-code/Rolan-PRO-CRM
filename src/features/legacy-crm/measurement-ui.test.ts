@@ -29,7 +29,8 @@ test("measurement workspace keeps costing and cutting out of the primary input v
 test("measurement material picker is scoped to the selected service category", () => {
   assert.match(legacyCrm, /function canonicalCatalogCategory\(value\)/);
   assert.match(legacyCrm, /safety_film: 'protective'/);
-  assert.match(legacyCrm, /privacy_film: 'decorative'/);
+  // Privacy is its own direction since 2026-10-05.
+  assert.match(legacyCrm, /privacy: 'privacy', privacy_film: 'privacy'/);
   assert.match(legacyCrm, /function catalogMatchesCategory\(catalog, category\)/);
   assert.match(legacyCrm, /function managerWarehouseFilmItems/);
   assert.match(legacyCrm, /function managerRoomFilmPickerHtml/);
