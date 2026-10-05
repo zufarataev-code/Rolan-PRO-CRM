@@ -350,3 +350,16 @@ test('services chosen before units existed stay per sq ft, whatever the director
   assert.equal(c.orderNeedsMeasurements(old), true);
 });
 
+
+test('managers open the work order of a size-free project from the passport, the order card and production prep', () => {
+  const card = html.slice(html.indexOf('const hasWorkScope = hasMeasurements || projectOfferingLines(o).length > 0;'), html.indexOf('function openProjectProductionWorkspace('));
+  assert.ok(card.length > 0);
+  assert.doesNotMatch(card, /openWorkOrder\('\$\{o\.id\}'\)`, disabled: !hasMeasurements/);
+  assert.doesNotMatch(card, /openTechnicalSheet\('\$\{o\.id\}'\)`, disabled: !hasMeasurements/);
+  assert.equal((html.match(/openWorkOrder\('\$\{o\.id\}'\)`, disabled: !hasWorkScope/g) || []).length, 3);
+  const passportWorkOrder = html.slice(html.indexOf("{ key: 'workorder', icon: '📋', title: 'Заказ-наряд',"), html.indexOf("{ key: 'route', icon: '🧭'"));
+  assert.match(passportWorkOrder, /disabled: !ctx\.hasMeasurements && !projectOfferingLines\(o\)\.length/);
+  const production = html.slice(html.indexOf('function openProjectProductionWorkspace('), html.indexOf('function openProjectProductionWorkspace(') + 6000);
+  assert.match(production, /disabled: !measureAllWindows\(o\)\.length && !projectOfferingLines\(o\)\.length/);
+  assert.match(production, /projectOfferingScopeRows\(o\)/);
+});

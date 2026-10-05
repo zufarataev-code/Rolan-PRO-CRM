@@ -23452,8 +23452,8 @@ function orderPassportActions(o, ctx) {
       onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.production },
 
     { key: 'workorder', icon: '📋', title: 'Заказ-наряд',
-      sub: ctx.hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера',
-      onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements },
+      sub: ctx.hasMeasurements ? 'размеры, раскрой, адрес, фото' : projectOfferingLines(o).length ? 'услуги, количество, адрес' : 'после замера',
+      onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements && !projectOfferingLines(o).length },
 
     { key: 'route', icon: '🧭', title: 'Маршрут',
       sub: ctx.address ? 'Google Maps' : 'адрес не указан',
@@ -25176,6 +25176,9 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const hasMeasurements = windows.length > 0;
   // A project of services without sizes is calculated without a measurement.
   const estimateReady = hasMeasurements || !orderNeedsMeasurements(o);
+  // Work documents open once the crew has something to do: measured windows
+  // or services counted without sizes.
+  const hasWorkScope = hasMeasurements || projectOfferingLines(o).length > 0;
   const sizeFreeSummary = `${projectOfferingLines(o).length} усл. без размеров · ${fmtMoney(orderRevenue(o))}`;
   const unverifiedMeasurements = orderMeasurementVerificationIssues(o);
   const estimateApproved = projectEstimateIsApproved(o);
@@ -25236,14 +25239,14 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     ${filmRows.length ? `<div class="mt-3">${renderOrderCleanRows(filmRows.slice(0, 6))}</div>` : `<div class="order-clean-note mt-3">Пленка еще не выбрана по окнам. Откройте замеры и назначьте материал из каталога.</div>`}
     <div class="order-clean-actions mt-3">
       ${isInstaller ? `
-      ${renderOrderActionCard({ icon: '🧰', title: 'Открыть технический лист', sub: hasMeasurements ? 'схема, размеры и материалы' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasMeasurements, variant: 'primary' })}
-      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'задача, адрес, размеры и фото' : 'ожидает замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ${renderOrderActionCard({ icon: '🧰', title: 'Открыть технический лист', sub: hasMeasurements ? 'схема, размеры и материалы' : hasWorkScope ? 'услуги без размеров' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasWorkScope, variant: 'primary' })}
+      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'задача, адрес, размеры и фото' : hasWorkScope ? 'услуги, количество, адрес' : 'ожидает замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasWorkScope })}
       ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.pieces.length} деталей` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
-      ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать наряд', sub: 'рабочий лист и подписи', onclick: `printWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать наряд', sub: 'рабочий лист и подписи', onclick: `printWorkOrder('${o.id}')`, disabled: !hasWorkScope })}
       ` : `
       ${renderOrderActionCard({ icon: '📐', title: measureActionTitle, sub: hasMeasurements ? `${rooms.length} комн. · ${windows.length} окон` : 'добавить комнаты и окна', onclick: measureAction, variant: 'primary' })}
       ${renderOrderActionCard({ icon: '🧭', title: 'Полевой замер', sub: 'телефон и планшет: комнаты, окна, компас и фото', onclick: `openMeasurerV25ForOrder('${o.id}')`, variant: canMeasure ? 'primary' : 'soft' })}
-      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, раскрой, адрес, фото' : 'после замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, раскрой, адрес, фото' : hasWorkScope ? 'услуги, количество, адрес' : 'после замера', onclick: `openWorkOrder('${o.id}')`, disabled: !hasWorkScope })}
       ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.consumedSqft.toFixed(1)} sqft расход` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
       ${renderOrderActionCard({ icon: '🖨', title: 'Печать наряда', sub: 'рабочий лист', onclick: `printWorkOrder('${o.id}')` })}
       `}
@@ -25252,14 +25255,14 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const docsBody = workDocsOnly ? `
     <div class="order-clean-note">Коммерческие суммы, КП и оплаты скрыты. Здесь находятся только рабочие документы бригады.</div>
     <div class="order-clean-actions mt-3">
-      ${renderOrderActionCard({ icon: '🧰', title: 'Технический лист', sub: hasMeasurements ? 'готов к работе' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasMeasurements, variant: 'primary' })}
-      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: 'размеры, материалы и фото без цен', onclick: `openWorkOrder('${o.id}')`, disabled: !hasMeasurements })}
+      ${renderOrderActionCard({ icon: '🧰', title: 'Технический лист', sub: hasWorkScope ? 'готов к работе' : 'ожидает замера', onclick: `openTechnicalSheet('${o.id}')`, disabled: !hasWorkScope, variant: 'primary' })}
+      ${renderOrderActionCard({ icon: '📋', title: 'Заказ-наряд', sub: hasMeasurements ? 'размеры, материалы и фото без цен' : 'услуги и количество без цен', onclick: `openWorkOrder('${o.id}')`, disabled: !hasWorkScope })}
       ${renderOrderActionCard({ icon: '🎞', title: 'Лист раскроя', sub: plan.pieces?.length ? `${plan.pieces.length} деталей` : 'нужны ширина и высота каждого стекла', onclick: `openCutSheet('${o.id}')` })}
     </div>` : `
     <div class="order-clean-mini-grid">
       ${renderOrderCleanMini('КП', proposal ? 'создано' : 'нет')}
       ${renderOrderCleanMini('Оплата', proposal?.paymentClaim?.status === 'pending_review' ? 'проверить Chase' : (proposalStripeUrl ? (proposal?.stripe?.paid || o.stripe?.paid ? 'оплачено' : 'карта готова') : 'Zelle / ACH / карта'))}
-      ${renderOrderCleanMini('Техлист', hasMeasurements ? 'готов' : 'нужен замер')}
+      ${renderOrderCleanMini('Техлист', hasWorkScope ? 'готов' : 'нужен замер')}
     </div>
     ${proposalStripeUrl ? `<div class="order-clean-note mt-3">Stripe checkout: <a class="text-blue-700 underline break-all" href="${proposalStripeUrl}" target="_blank">${proposalStripeUrl}</a></div>` : ''}
     <div class="order-clean-actions mt-3">
@@ -27621,12 +27624,13 @@ function openProjectProductionWorkspace(oid) {
         </header>
         <div class="order-workspace-modal-body">
           <div class="order-clean-note"><b>Этап перед монтажом.</b> Здесь проверяются принятое КП, аванс, точные размеры, раскрой и наличие материала.</div>
-          ${materialRows ? `<div class="order-clean-list mt-3">${materialRows}</div>` : '<div class="order-clean-note mt-3">Сначала внесите помещения, окна, размеры и материал.</div>'}
+          ${materialRows ? `<div class="order-clean-list mt-3">${materialRows}</div>` : projectOfferingLines(o).length ? '' : '<div class="order-clean-note mt-3">Сначала внесите помещения, окна, размеры и материал.</div>'}
+          ${projectOfferingLines(o).length ? `<div class="mt-3"><div class="text-xs font-black uppercase text-gray-500 mb-2">Услуги без размеров</div><div class="space-y-2">${projectOfferingScopeRows(o)}</div></div>` : ''}
           ${blockingIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Не готово:</b> ${blockingIssues.map(academyEsc).join(', ')}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Проверка пройдена.</b> Можно подтвердить готовность производства.</div>`}
           <div class="order-clean-actions mt-3">
             ${renderOrderActionCard({ icon: '📐', title: 'Проверить точные размеры', sub: `${measureAllWindows(o).length} окон`, onclick: `openManagerMeasureModal('${o.id}')` })}
             ${renderOrderActionCard({ icon: '🎞', title: 'Открыть лист раскроя', sub: `${plan.pieces?.length || 0} деталей`, onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
-            ${renderOrderActionCard({ icon: '📋', title: 'Открыть заказ-наряд', sub: 'материалы и задача бригады', onclick: `openWorkOrder('${o.id}')`, disabled: !measureAllWindows(o).length })}
+            ${renderOrderActionCard({ icon: '📋', title: 'Открыть заказ-наряд', sub: 'материалы и задача бригады', onclick: `openWorkOrder('${o.id}')`, disabled: !measureAllWindows(o).length && !projectOfferingLines(o).length })}
           </div>
           <div class="project-estimate-footer">
             <div class="text-xs text-gray-500">После подтверждения CRM разрешит назначить монтаж.</div>
