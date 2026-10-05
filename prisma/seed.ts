@@ -143,9 +143,11 @@ async function seedStatusesAndReferences() {
   ] as const;
 
   for (const [level_code, name_ru, name_en, numeric_rank, multiplier, color_token, sort_order] of complexityLevels) {
+    // The owner edits the name, rank, multiplier and order in Settings: a
+    // release must not reset them, so only the untouched fields are refreshed.
     await prisma.complexityLevel.upsert({
       where: { level_code },
-      update: { name_ru, name_en, numeric_rank, multiplier, color_token, sort_order },
+      update: { name_en, color_token },
       create: { level_code, name_ru, name_en, numeric_rank, multiplier, color_token, sort_order },
     });
   }
@@ -157,9 +159,10 @@ async function seedStatusesAndReferences() {
   ] as const;
 
   for (const [city_code, name_ru, name_en, state_code, default_zip_code, sort_order] of cities) {
+    // The owner edits the name, state, ZIP and order in Settings.
     await prisma.city.upsert({
       where: { city_code },
-      update: { name_ru, name_en, state_code, default_zip_code, sort_order },
+      update: { name_en },
       create: { city_code, name_ru, name_en, state_code, default_zip_code, sort_order },
     });
   }
@@ -240,20 +243,12 @@ async function seedServiceReferences() {
     block_cost_price,
     sort_order,
   ] of serviceTypes) {
+    // Owner-edited prices, costs, installer rates, names and order live in
+    // «Услуги и цены»; the seed runs on every release and only creates a
+    // missing service type, it never resets an existing one.
     await prisma.serviceType.upsert({
       where: { service_code },
-      update: {
-        name_ru,
-        name_en,
-        unit_type,
-        base_price,
-        min_price,
-        material_cost_per_sqft,
-        installation_cost_per_sqft,
-        block_revenue_price,
-        block_cost_price,
-        sort_order,
-      },
+      update: {},
       create: {
         service_code,
         name_ru,
@@ -571,7 +566,8 @@ async function seedServiceReferences() {
           addon_code,
         },
       },
-      update: { name_ru, name_en, unit_type, default_price, min_price, cost_price, sort_order },
+      // Owner-edited in «Услуги и цены»: created once, never reset by a release.
+      update: {},
       create: {
         service_type_id: serviceTypeMap[serviceCode],
         addon_code,
@@ -717,9 +713,20 @@ async function seedServiceReferences() {
           : ["SECURITY", "SHATTER_RETENTION"],
     };
 
+    // The owner edits the names, thickness, unit and order of a film in
+    // Settings; a release refreshes only the technical specification.
+    const {
+      category_name_ru: _categoryNameRu,
+      brand_name_ru: _brandNameRu,
+      model_name_ru: _modelNameRu,
+      thickness: _thickness,
+      unit: _unit,
+      sort_order: _sortOrder,
+      ...technicalSpecs
+    } = specs;
     await prisma.filmCatalog.upsert({
       where: { model_code },
-      update: specs,
+      update: technicalSpecs,
       create: { model_code, ...specs },
     });
   }
