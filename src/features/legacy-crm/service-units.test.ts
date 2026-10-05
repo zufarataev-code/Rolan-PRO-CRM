@@ -287,3 +287,34 @@ test('a project of services without sizes opens its estimate and shows them to t
   assert.match(html, /projectOfferingLines\(order\)\.length \? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PROJECT SERVICES<\/div>/);
 });
 
+test('the server classifies service lines itself: submitted flags cannot unlock a price or skip the size rule', () => {
+  const view: Row = serviceSolutionsForViewer(base, false);
+  // A line with a directory service but no «offering» type is still a priced quantity line.
+  view.orders[0].extraServices = [{ id: 'z', offeringId: 'zone', serviceType: 'smart_film', qty: 2, unitPrice: 1, price: 2 }];
+  assert.equal(prepareServiceSolutions(base, view, false), null);
+  assert.deepEqual([view.orders[0].extraServices[0].type, view.orders[0].extraServices[0].price], ['offering', 200]);
+  // Turning a saved quantity line into a «quick» line keeps it a quantity line.
+  const saved: Row = structuredClone(view);
+  const next: Row = structuredClone(saved);
+  Object.assign(next.orders[0].extraServices[0], { quickProjectLine: true, type: 'custom', unitPrice: 1, price: 1 });
+  assert.equal(prepareServiceSolutions(saved, next, false), null);
+  assert.deepEqual([next.orders[0].extraServices[0].quickProjectLine, next.orders[0].extraServices[0].type, next.orders[0].extraServices[0].price], [undefined, 'offering', 200]);
+  // A new quick line may use only a per-sq-ft service.
+  const quick: Row = structuredClone(saved);
+  quick.orders[0].extraServices.push({ id: 'q', quickProjectLine: true, offeringId: 'zone', serviceType: 'smart_film', unit: 'sqft', qty: 10 });
+  assert.match(prepareServiceSolutions(saved, quick, false)!, /кв\. футам/);
+});
+
+test('installers see services without sizes in the work order and tech sheet, without prices', () => {
+  const rows = html.slice(html.indexOf('function projectOfferingScopeRows(order) {'), html.indexOf('function renderWorkOrderHtml('));
+  assert.match(rows, /serviceOfferingUnitShort\(line\)/);
+  assert.doesNotMatch(rows, /price|fmtMoney/i);
+  assert.match(html, /<div class="wo-block-title">Услуги без размеров<\/div>/);
+  assert.match(html, /\$\{projectOfferingLines\(order\)\.length \? `<div class="mb-5"><h3 class="font-black mb-2">Услуги без размеров<\/h3>/);
+  assert.match(html, /onclick: `openWorkOrder\('\$\{o\.id\}'\)`, disabled: !ctx\.hasMeasurements && !projectOfferingLines\(o\)\.length, primary: true/);
+  assert.match(html, /onclick: `printTechnicalSheet\('\$\{o\.id\}'\)`, disabled: !hasMeasurements && !projectOfferingLines\(o\)\.length/);
+  // The field payload drops every money key of these lines (price, unitPrice, material cost).
+  const field = readFileSync('src/features/legacy-crm/field-workspace.ts', 'utf8');
+  assert.match(field, /const FINANCIAL_KEY = \/\(\?:price\|[^/]*cost[^/]*\)\/i;/);
+});
+

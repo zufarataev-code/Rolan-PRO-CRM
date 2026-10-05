@@ -12454,6 +12454,11 @@ function orderWorkPlanRows(order) {
   }).join('');
 }
 
+/** Services without sizes for the field: name, direction, quantity and unit — no prices. */
+function projectOfferingScopeRows(order) {
+  return projectOfferingLines(order).map(line => `<div class="p-3 rounded-lg bg-slate-50 border flex items-start justify-between gap-3"><span><b>${academyEsc(line.label || line.offeringName || 'Услуга')}</b><span class="block text-xs text-gray-500">${academyEsc(primaryServiceInfo(line.serviceType)?.title || '')}</span></span><span class="font-black whitespace-nowrap">${Number(line.qty) || 0} ${academyEsc(serviceOfferingUnitShort(line))}</span></div>`).join('');
+}
+
 function renderWorkOrderHtml(order, printMode = false) {
   const client = getClient(order.clientId) || {};
   const rows = measureAllWindows(order);
@@ -12487,6 +12492,12 @@ function renderWorkOrderHtml(order, printMode = false) {
           ${client.phone ? ' · ' + academyEsc(client.phone) : ''}
         </div>
       </div>
+
+      ${projectOfferingLines(order).length ? `
+      <div class="wo-block">
+        <div class="wo-block-title">Услуги без размеров</div>
+        <div class="grid gap-2">${projectOfferingScopeRows(order)}</div>
+      </div>` : ''}
 
       ${workPlan ? `
       <div class="wo-block">
@@ -12684,6 +12695,7 @@ function renderTechnicalSheetHtml(order, printMode = false) {
         <div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Smart блоки</div><div class="font-black text-lg">${smart.blocks || '—'}</div></div>
         ${smart.windows ? `<div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Repeater zones</div><div class="font-black text-lg">${smart.repeaters || '—'}</div></div>` : ''}
       </div>
+      ${projectOfferingLines(order).length ? `<div class="mb-5"><h3 class="font-black mb-2">Услуги без размеров</h3><div class="grid gap-2">${projectOfferingScopeRows(order)}</div></div>` : ''}
       ${renderSmartRoomInstallationPlans(order)}
       ${rows.length ? rows.map(({ room, win }, idx) => {
         const cat = windowCatalog(win);
@@ -12714,7 +12726,7 @@ function renderTechnicalSheetHtml(order, printMode = false) {
             </div>
           </div>
         `;
-      }).join('') : `<div class="p-5 rounded-lg bg-slate-50 border text-center text-gray-500">Замеры ещё не добавлены.</div>`}
+      }).join('') : projectOfferingLines(order).length ? '' : `<div class="p-5 rounded-lg bg-slate-50 border text-center text-gray-500">Замеры ещё не добавлены.</div>`}
       ${renderCutSheetHtml(order, printMode, true)}
       <footer class="pdf-footer">ROLANPRO · ${academyEsc(order.number)} · Технический лист сформирован ${academyEsc(new Date().toLocaleDateString('ru-RU'))}</footer>
     </div>
@@ -23389,11 +23401,11 @@ function orderPassportActions(o, ctx) {
   if (ctx.isInstaller) {
     return [
       { icon: '📋', title: 'Заказ-наряд',
-        sub: ctx.hasMeasurements ? 'задача, размеры, адрес и фото' : 'ожидает замера',
-        onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements, primary: true },
+        sub: ctx.hasMeasurements ? 'задача, размеры, адрес и фото' : projectOfferingLines(o).length ? 'услуги, количество, адрес' : 'ожидает замера',
+        onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements && !projectOfferingLines(o).length, primary: true },
       { icon: '🧰', title: 'Технический лист',
-        sub: ctx.hasMeasurements ? 'схема и материалы без цен' : 'ожидает замера',
-        onclick: `openTechnicalSheet('${o.id}')`, disabled: !ctx.hasMeasurements },
+        sub: ctx.hasMeasurements ? 'схема и материалы без цен' : projectOfferingLines(o).length ? 'услуги без размеров' : 'ожидает замера',
+        onclick: `openTechnicalSheet('${o.id}')`, disabled: !ctx.hasMeasurements && !projectOfferingLines(o).length },
       { icon: '🧭', title: 'Маршрут',
         sub: ctx.address ? 'Google Maps' : 'адрес не указан',
         href: ctx.routeHref, disabled: !ctx.address },
@@ -23851,9 +23863,9 @@ function serviceOfferingMaterialCost(line) {
   return cost > 0 ? cost : 0;
 }
 
-/** The project's services that are a quantity, not measured windows. */
+/** The project's services that are a quantity, not measured windows (their unit is not sq ft). */
 function projectOfferingLines(o) {
-  return (o?.extraServices || []).filter(line => line.offeringId && !line.quickProjectLine);
+  return (o?.extraServices || []).filter(line => line.offeringId && !line.quickProjectLine && line.unit && line.unit !== 'sqft');
 }
 
 /** A project line for a service without sizes, priced from the service directory. */
@@ -25364,7 +25376,7 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
         </div>
         <div class="order-clean-actions mt-3">
           ${renderOrderActionCard(primary)}
-          ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать ТЗ', sub: 'размеры, схема и раскрой', onclick: `printTechnicalSheet('${o.id}')`, disabled: !hasMeasurements })}
+          ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать ТЗ', sub: hasMeasurements ? 'размеры, схема и раскрой' : 'услуги и количество', onclick: `printTechnicalSheet('${o.id}')`, disabled: !hasMeasurements && !projectOfferingLines(o).length })}
           ${projectAddress ? renderOrderActionCard({ icon: '🧭', title: 'Маршрут', sub: projectAddress, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(projectAddress)}` }) : ''}
           ${renderOrderActionCard({ icon: '📷', title: 'Добавить фото', sub: 'до или после монтажа', onclick: `addOrderPhoto('${o.id}')` })}
         </div>

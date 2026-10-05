@@ -82,6 +82,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
   for (const order of rows(next.orders)) {
     const oldOrder = rows(current.orders).find(item=>item.id===order.id) || {};
     const oldItems = scope(oldOrder);
+    const extras = rows(order.extraServices);
     for (const item of scope(order)) {
       const old = oldItems.find(value=>value.id===item.id);
       const offering = offerings.find(value=>value.id===item.offeringId);
@@ -93,26 +94,41 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         else if (offering && typeof offering.materialCostPerUnit === 'number') item.offeringMaterialCost = offering.materialCostPerUnit;
         else delete item.offeringMaterialCost;
       }
-      // A service without sizes is «quantity × price» (Owner, 2026-10-05): only a
-      // directory service that is not per sq ft can be a line, and the server
-      // keeps its unit and unit price and derives the line price.
-      if (item.type === 'offering' && item.offeringId && !item.quickProjectLine) {
-        const sameService = old && old.offeringId === item.offeringId && old.type === 'offering';
-        if (!sameService) {
-          if (!offering || offering.active === false) return 'Услуга не найдена в справочнике.';
-          if (!offering.unit || offering.unit === 'sqft') return 'Услуга за кв. фут считается по замеру окон, а не количеством.';
-          item.unit = offering.unit;
-          item.unitLabel = offering.unit === 'custom' && typeof offering.unitLabel === 'string' ? offering.unitLabel : '';
-          item.unitPrice = typeof offering.pricePerSqft === 'number' ? offering.pricePerSqft : 0;
-        } else {
-          item.unit = old.unit;
-          item.unitLabel = old.unitLabel;
-          item.unitPrice = old.unitPrice;
+      // A service without sizes is «quantity × price» (Owner, 2026-10-05). The
+      // server decides what a row is from where it is and what it was, not from
+      // the submitted flags: an extra-service row with a directory service is a
+      // quantity line unless it already was a quick-entry line (those are per
+      // sq ft). Only a service that is not per sq ft can be a quantity line; the
+      // server keeps its unit and unit price and derives the line price.
+      if (item.offeringId && extras.includes(item)) {
+        const quick = old ? old.quickProjectLine === true : item.quickProjectLine === true;
+        if (old) {
+          if (old.quickProjectLine === true) item.quickProjectLine = true;
+          else delete item.quickProjectLine;
         }
-        const qty = Number(item.qty);
-        if (!Number.isFinite(qty) || qty < 0) return 'Количество услуги должно быть неотрицательным числом.';
-        item.qty = qty;
-        item.price = Math.round((Number(item.unitPrice) || 0) * qty * 100) / 100;
+        const sizeFreeOffering = !!offering && !!offering.unit && offering.unit !== 'sqft';
+        const wasQuantityLine = !!old && old.type === 'offering' && !!old.unit && old.unit !== 'sqft' && old.quickProjectLine !== true;
+        if (quick) {
+          if ((!old || old.offeringId !== item.offeringId) && sizeFreeOffering) return 'Быстрая строка проекта считается по кв. футам.';
+        } else if (sizeFreeOffering || wasQuantityLine || item.type === 'offering') {
+          item.type = 'offering';
+          const sameService = wasQuantityLine && old.offeringId === item.offeringId;
+          if (!sameService) {
+            if (!offering || offering.active === false) return 'Услуга не найдена в справочнике.';
+            if (!offering.unit || offering.unit === 'sqft') return 'Услуга за кв. фут считается по замеру окон, а не количеством.';
+            item.unit = offering.unit;
+            item.unitLabel = offering.unit === 'custom' && typeof offering.unitLabel === 'string' ? offering.unitLabel : '';
+            item.unitPrice = typeof offering.pricePerSqft === 'number' ? offering.pricePerSqft : 0;
+          } else {
+            item.unit = old.unit;
+            item.unitLabel = old.unitLabel;
+            item.unitPrice = old.unitPrice;
+          }
+          const qty = Number(item.qty);
+          if (!Number.isFinite(qty) || qty < 0) return 'Количество услуги должно быть неотрицательным числом.';
+          item.qty = qty;
+          item.price = Math.round((Number(item.unitPrice) || 0) * qty * 100) / 100;
+        }
       }
       // Old signed/history selections survive archival or changed material lists.
       if (item.offeringId && (item.offeringId !== old?.offeringId || item.catalogId !== old?.catalogId)) {
