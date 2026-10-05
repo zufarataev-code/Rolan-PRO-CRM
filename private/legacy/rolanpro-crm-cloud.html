@@ -10095,8 +10095,8 @@ function orderMeasureScopes(order) {
   // windows (Owner, 2026-10-05); directions that already have windows stay.
   const offerings = [...new Set([order?.offeringId, ...(Array.isArray(order?.offeringIds) ? order.offeringIds : [])].filter(Boolean))]
     .map(id => serviceOffering(id)).filter(Boolean);
-  const sized = new Set(offerings.filter(serviceOfferingNeedsSizes).map(offeringServiceType));
-  const sizeFree = new Set(offerings.filter(item => !serviceOfferingNeedsSizes(item)).map(offeringServiceType));
+  const sized = new Set(offerings.filter(item => orderOfferingNeedsSizes(order, item.id)).map(offeringServiceType));
+  const sizeFree = new Set(offerings.filter(item => !orderOfferingNeedsSizes(order, item.id)).map(offeringServiceType));
   const needsWindows = scope => !(sizeFree.has(scope) && !sized.has(scope));
   const fromOrder = (Array.isArray(order?.serviceTypes) ? order.serviceTypes : []).filter(needsWindows);
   const fromWindows = (order?.measurements?.rooms || []).flatMap(room => room.windows || []).map(win => win.measureScope).filter(Boolean);
@@ -23886,13 +23886,22 @@ function projectOfferingLine(offering, qty = 1) {
  */
 function orderNeedsMeasurements(o) {
   if (measureAllWindows(o).length) return true;
-  if (projectQuickLines(o).length) return false;
   const ids = [...new Set([o?.offeringId, ...(Array.isArray(o?.offeringIds) ? o.offeringIds : [])].filter(Boolean))];
-  if (!ids.length) return true;
-  return ids.some(id => {
-    const offering = serviceOffering(id);
-    return !offering || serviceOfferingNeedsSizes(offering);
-  });
+  if (ids.length) return ids.some(id => orderOfferingNeedsSizes(o, id));
+  // A historical quick-entry project without services from the directory.
+  if (projectQuickLines(o).length) return false;
+  return true;
+}
+
+/**
+ * Whether this project's service needs windows: a service the project priced
+ * as a quantity keeps that, even if the owner later makes it per sq ft; any
+ * other service follows the directory (an unknown one is treated as measured).
+ */
+function orderOfferingNeedsSizes(o, offeringId) {
+  if (projectOfferingLines(o).some(line => line.offeringId === offeringId)) return false;
+  const offering = serviceOffering(offeringId);
+  return !offering || serviceOfferingNeedsSizes(offering);
 }
 
 /** «+ Услуга без размеров»: the directory's services priced per piece, zone, fixed sum or own unit. */

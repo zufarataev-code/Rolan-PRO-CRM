@@ -202,6 +202,7 @@ function loadScopes(offerings: Row[]) {
     serviceOffering: (id: string) => offerings.find(item => item.id === id) || null,
     serviceOfferingNeedsSizes: (item: Row) => !item.unit || item.unit === 'sqft',
     offeringServiceType: (item: Row) => item.serviceType,
+    orderOfferingNeedsSizes: (_order: Row, id: string) => { const item = offerings.find(entry => entry.id === id); return !item || !item.unit || item.unit === 'sqft'; },
   });
   const start = html.indexOf('const MEASURE_SCOPES = [');
   vm.runInContext(html.slice(start, html.indexOf('function managerActiveMeasureScope(', start)), context);
@@ -237,5 +238,23 @@ test('privacy films pay the privacy rate; the material of services without sizes
   assert.match(html, /const category = catalog\?\.category \? canonicalCatalogCategory\(catalog\.category\) : filmCategory\(w\?\.filmType \|\| ''\);/);
   assert.match(html, /const directionRate = explicit != null \? explicit : c \? installerServiceRateByCategory\(canonicalCatalogCategory\(c\.category\)\) : filmRate\(filmName\);/);
   assert.match(html, /\.\.\.\(pss\.extraServicesCost > 0 \? \[\['Материал услуг без размеров', pss\.extraServicesCost\]\] : \[\]\)/);
+});
+
+test('the need for windows follows how the project priced its services, not later directory edits', () => {
+  const { c, db } = loadServices();
+  c.addServiceOffering('smart');
+  const zone = db.settings.serviceOfferings[0];
+  Object.assign(zone, { name: 'Зона', unit: 'zone', pricePerSqft: 100 });
+  const order: Row = { id: 'p', offeringIds: [zone.id], extraServices: [c.projectOfferingLine(zone, 2)], measurements: { rooms: [] } };
+  db.orders.push(order);
+  assert.equal(c.orderNeedsMeasurements(order), false);
+  zone.unit = 'sqft';
+  assert.equal(c.orderNeedsMeasurements(order), false, 'the project keeps its quantity-priced service');
+
+  c.addServiceOffering('smart');
+  const film = db.settings.serviceOfferings[1];
+  const quick: Row = { id: 'q', offeringIds: [film.id], extraServices: [{ id: 'l', quickProjectLine: true }], measurements: { rooms: [] } };
+  assert.equal(c.orderNeedsMeasurements(quick), true, 'a per-sq-ft service needs windows even next to old quick lines');
+  assert.equal(c.orderNeedsMeasurements({ extraServices: [{ id: 'l', quickProjectLine: true }] }), false, 'a quick-entry-only project does not');
 });
 
