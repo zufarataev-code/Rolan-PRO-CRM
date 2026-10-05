@@ -50,9 +50,9 @@ export async function resolvePreviewSession<P>(
   realSession: { user: NonNullable<SessionUser>; roles: string[]; payload: P },
   previewCookieValue: string | undefined,
 ) {
-  // Cookie format: "<subjectUserId>.<actorUserId>" — only the owner who
+  // Cookie: "<subjectUserId>.<actorUserId>[.<assignedRole>]" — only the owner who
   // started the preview is served as the employee.
-  const [previewUserId, actorUserId] = String(previewCookieValue || "").split(".");
+  const [previewUserId, actorUserId, roleCode] = String(previewCookieValue || "").split(".");
   if (!realSession.roles.includes(ROLE_CODES.OWNER) || !isValidPreviewTarget(previewUserId)) {
     return null;
   }
@@ -61,13 +61,16 @@ export async function resolvePreviewSession<P>(
   }
 
   const subject = await loadSessionUser(previewUserId);
-  if (!subject || subject.user_accesses.some((access) => access.role.code === ROLE_CODES.OWNER)) {
+  if (!subject || !subject.is_active || subject.user_accesses.some((access) => access.role.code === ROLE_CODES.OWNER)) {
     return null;
   }
 
+  const accesses = roleCode ? subject.user_accesses.filter(access => access.role.code === roleCode) : subject.user_accesses;
+  if (!accesses.length) return null;
+
   return {
-    user: subject,
-    roles: subject.user_accesses.map((access) => access.role.code),
+    user: { ...subject, user_accesses: accesses },
+    roles: accesses.map((access) => access.role.code),
     payload: realSession.payload,
     preview: {
       actorUserId: realSession.user.user_id,

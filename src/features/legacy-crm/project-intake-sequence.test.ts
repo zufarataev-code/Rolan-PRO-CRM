@@ -24,7 +24,7 @@ test('changing direction clears the previous solution and building; inactive and
  serviceOffering:(id:string)=>offerings.find(o=>o.id===id),serviceOfferingDirection:(id:string)=>id.split('_')[0],
  serviceOfferingsFor:(direction:string)=>offerings.filter(o=>o.direction===direction&&o.active!==false),
  normalizeOrderSiteType:(value:string)=>['COMMERCIAL','RESIDENTIAL'].includes(value)?value:'',academyEsc:(s:string)=>s,refreshOrderBuilderPreview:()=>{}});
- vm.runInContext(html.slice(html.indexOf('function refreshOrderIntakeGates()'),html.indexOf('function selectOrderExecution(')),c);
+ vm.runInContext(html.slice(html.indexOf('function offeringServiceType('),html.indexOf('function selectOrderExecution(')),c);
  c.selectOrderService('smart_film');
  assert.equal(state._newOrderOfferingId,'');assert.equal(state._newOrderSiteType,'');
  assert.equal(gates.get('[data-intake-client]')![0].style.display,'none');
@@ -40,6 +40,16 @@ test('saved project and measurement defaults preserve the chosen solution for th
  assert.match(creation,/offering\.direction !== serviceOfferingDirection\(service\.id\)/);
  assert.match(creation,/openManagerMeasureModal\(o\.id\)/);
  const defaults=html.slice(html.indexOf('function managerWindowDefaults('),html.indexOf('function syncWindowPanelsForType('));
- assert.match(defaults,/serviceOffering\(o\.offeringId \|\| o\.orderBuilder\?\.offeringId\)/);
+ assert.match(defaults,/o\.offeringIds \|\| o\.orderBuilder\?\.offeringIds/);
+ assert.match(defaults,/\.map\(serviceOffering\)\.find/);
  assert.match(defaults,/applyWindowOffering\(win, offering\)/);
+});
+
+test('multiple concrete services are deduplicated and inactive or unknown directions cannot enter intake',()=>{
+ const offerings=[{id:'a',direction:'solar'},{id:'b',direction:'solar'},{id:'c',direction:'smart'},{id:'off',direction:'smart',active:false},{id:'unknown',direction:'unknown'}];
+ const state:any={_newOrderOfferingId:'a',_newOrderExtraOfferingIds:['a','b','c','c','off','unknown']};
+ const c:any=vm.createContext({state,Set,ORDER_PRIMARY_SERVICES:[{id:'solar_film'},{id:'smart_film'}],serviceOffering:(id:string)=>offerings.find(o=>o.id===id),serviceOfferingDirection:(id:string)=>id.split('_')[0]});
+ vm.runInContext(html.slice(html.indexOf('function offeringServiceType('),html.indexOf('function renderNewOrderExtraOfferings(')),c);
+ assert.deepEqual(Array.from(c.newOrderSelectedOfferings(),(o:any)=>o.id),['a','b','c']);
+ assert.deepEqual(Array.from(c.newOrderSelectedOfferings(),(o:any)=>c.offeringServiceType(o)),['solar_film','solar_film','smart_film']);
 });
