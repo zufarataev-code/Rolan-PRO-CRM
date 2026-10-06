@@ -561,3 +561,33 @@ test("residential premium proposal applies the California home-improvement depos
   assert.match(calculator, /Math\.min\(result\.total \* 0\.10, 1000\)/);
   assert.match(source, /Legal Deposit \(max 10% \/ \$1,000\)/);
 });
+
+
+test("accepted proposal can proceed to production and scheduling without deposit as a hard gate", () => {
+  const paymentGate = source.match(/function orderPaymentReadyForProduction\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const production = source.match(/function projectProductionReadiness\(o, \{ requireReady = true \} = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(paymentGate, /proposalAcceptedAt|proposal_accepted/);
+  assert.doesNotMatch(paymentGate, /depositReceived/);
+  assert.doesNotMatch(production, /аванс ещё не получен/);
+  assert.match(source, /после принятия КП; оплата контролируется отдельно/);
+});
+
+test("project card stores operational site access and parking details and work order exposes them", () => {
+  assert.match(source, /function projectSiteInfo\(o, c = null\)/);
+  assert.match(source, /function updateProjectSiteInfo\(oid, field, value\)/);
+  assert.match(source, /'gateCode','parkingAvailable','customerParking','parkingInstructions','accessRestrictions','loadingInstructions','contactName','contactPhone','notes'/);
+  assert.match(source, /title: 'Объект'/);
+  assert.match(source, /Код ворот \/ доступа/);
+  assert.match(source, /Парковка \/ где встать/);
+  assert.match(source, /Охрана \/ HOA \/ разрешения/);
+  assert.match(source, /Лифт \/ loading \/ service entrance/);
+  assert.match(source, /projectSiteSummary\(order, client\)/);
+});
+
+test("owner service directory exposes manager min and max price corridor", () => {
+  assert.match(source, /minPricePerUnit/);
+  assert.match(source, /maxPricePerUnit/);
+  assert.match(source, /Минимум менеджеру/);
+  assert.match(source, /Максимум менеджеру/);
+  assert.match(source, /Цена из справочника — ориентир/);
+});
