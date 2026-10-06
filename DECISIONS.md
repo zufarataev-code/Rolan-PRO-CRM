@@ -566,3 +566,14 @@ Owner request in chat on 2026-10-05: «у нас есть 5 направлени
 - A project whose services are all without sizes skips measurement: intake says «Создать проект», and «нет окон с размерами» / «не внесены помещения и размеры» apply only when `orderNeedsMeasurements` (a per-sq-ft service, windows, or a project from before services).
 - The executor of each service is chosen in the project when scheduling (already per service via `serviceSchedules`).
 - Postgres `service_types` gets DECORATIVE_FILM and PRIVACY_FILM so published proposal lines keep their direction.
+
+
+## 2026-10-05 — Project is a multi-service container; site operations persist; accepted proposal may schedule before payment (Owner)
+
+Owner confirmed in chat that a Project is the container for the whole customer job, not one service. It may contain services from several directions; each service keeps its own material, customer price, specialist and installation date. The service directory supplies the default customer price plus an owner-defined manager corridor (minimum/maximum); a manager may override the project price only inside that corridor. Historical project snapshots are not rewritten by later directory edits.
+
+Operational object details are first-class project data: gate/access code, parking availability, customer-provided parking, parking instructions, HOA/security/permit restrictions, loading/elevator/service entrance, on-site contact/phone and special notes. They are visible in the Project card and flow into the Work Order / installer instructions.
+
+This decision refines the 2026-09-04 sales-close gate for current operations: after the Proposal is accepted and the estimate/technical requirements are satisfied, payment/deposit remains tracked but is not a hard blocker for production preparation or installation scheduling. Projects intentionally sold as post-pay must continue operationally. Proposal acceptance remains required. Payment status stays auditable and final closeout/payment rules remain separate.
+
+Solar measurement must continue to collect glass type and façade/orientation for recommendation/compatibility. Smart control packages will not be invented until the owner confirms the actual components and wiring standards.
