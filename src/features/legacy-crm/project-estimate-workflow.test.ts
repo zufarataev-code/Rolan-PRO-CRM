@@ -131,12 +131,12 @@ test("new projects follow measurement before estimate and expose no quick-entry 
   assert.match(passport, /disabled: !ctx\.canManage \|\| !\(ctx\.hasMeasurements \|\| !orderNeedsMeasurements\(o\)\)/);
 });
 
-test("accepted proposal must pass production preparation before installation", () => {
+test("accepted proposal must pass production preparation before installation without a deposit gate", () => {
   const nextAction = source.match(/function orderPrimaryNextAction\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const scheduler = source.match(/function scheduleInstallationPrompt\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(source, /function projectProductionReadiness\(o, \{ requireReady = true \} = \{\}\)/);
   assert.match(source, /КП ещё не принято клиентом/);
-  assert.match(source, /аванс ещё не получен/);
+  assert.doesNotMatch(source, /аванс ещё не получен/);
   assert.match(source, /недостаточно материала/);
   assert.match(nextAction, /title: 'Подготовить производство'/);
   assert.match(source, /function confirmProjectProductionReady\(oid\)/);

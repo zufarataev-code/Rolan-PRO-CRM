@@ -12461,6 +12461,8 @@ function projectOfferingScopeRows(order) {
 
 function renderWorkOrderHtml(order, printMode = false) {
   const client = getClient(order.clientId) || {};
+  const site = projectSiteInfo(order, client);
+  const siteSummary = projectSiteSummary(order, client);
   const rows = measureAllWindows(order);
   const photos = Array.isArray(order.photos) ? order.photos : [];
   const notes = order.notes || '';
@@ -12492,6 +12494,13 @@ function renderWorkOrderHtml(order, printMode = false) {
           ${client.phone ? ' · ' + academyEsc(client.phone) : ''}
         </div>
       </div>
+
+      ${(siteSummary || site.contactName || site.contactPhone) ? `
+      <div class="wo-block wo-notes">
+        <div class="wo-block-title">Доступ и работа на объекте</div>
+        ${siteSummary ? `<div>${academyEsc(siteSummary)}</div>` : ''}
+        ${(site.contactName || site.contactPhone) ? `<div class="wo-contact mt-2">Контакт на объекте: ${academyEsc(site.contactName || 'не указан')}${site.contactPhone ? ' · ' + academyEsc(site.contactPhone) : ''}</div>` : ''}
+      </div>` : ''}
 
       ${projectOfferingLines(order).length ? `
       <div class="wo-block">

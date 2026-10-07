@@ -136,21 +136,26 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         } else if (newService || sizeFreeOffering || wasQuantityLine || item.type === 'offering') {
           item.type = 'offering';
           const sameService = wasQuantityLine && old.offeringId === item.offeringId;
+          const min = Number(offering?.minPricePerUnit) || 0;
+          const max = Number(offering?.maxPricePerUnit) || 0;
+          const corridorAllowsOverride = min > 0 || max > 0;
+          const submittedUnitPrice = Number(item.unitPrice);
           if (!sameService) {
             if (!offering || offering.active === false) return 'Услуга не найдена в справочнике.';
             if (!offering.unit || offering.unit === 'sqft') return 'Услуга за кв. фут считается по замеру окон, а не количеством.';
             item.unit = offering.unit;
             item.unitLabel = offering.unit === 'custom' && typeof offering.unitLabel === 'string' ? offering.unitLabel : '';
-            item.unitPrice = typeof offering.pricePerSqft === 'number' ? offering.pricePerSqft : 0;
+            item.unitPrice = corridorAllowsOverride && Number.isFinite(submittedUnitPrice) && submittedUnitPrice >= 0
+              ? submittedUnitPrice
+              : typeof offering.pricePerSqft === 'number' ? offering.pricePerSqft : 0;
           } else {
             item.unit = old.unit;
             item.unitLabel = old.unitLabel;
-            const submittedUnitPrice = Number(item.unitPrice);
-            item.unitPrice = Number.isFinite(submittedUnitPrice) && submittedUnitPrice >= 0 ? submittedUnitPrice : old.unitPrice;
+            item.unitPrice = corridorAllowsOverride && Number.isFinite(submittedUnitPrice) && submittedUnitPrice >= 0
+              ? submittedUnitPrice
+              : old.unitPrice;
           }
           const unitPrice = Number(item.unitPrice) || 0;
-          const min = Number(offering?.minPricePerUnit) || 0;
-          const max = Number(offering?.maxPricePerUnit) || 0;
           if (min > 0 && unitPrice < min) return `Цена «${offering?.name || 'услуги'}» ниже разрешённого минимума ${min.toFixed(2)}.`;
           if (max > 0 && unitPrice > max) return `Цена «${offering?.name || 'услуги'}» выше разрешённого максимума ${max.toFixed(2)}.`;
           const qty = Number(item.qty);
