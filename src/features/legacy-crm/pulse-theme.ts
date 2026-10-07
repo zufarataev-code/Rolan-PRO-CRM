@@ -84,9 +84,9 @@ html body .pulse-operations { margin-top: 32px; border-top: 1px solid #DFE7EE; }
   html body .pulse-revenue { border: 0; padding: 0; }
   html body .pulse-total { font-size: 42px; }
   html body .pulse-chart { gap: 8px; margin-top: 24px; }
-  html body:has(.app-shell:is(.role-owner,.role-manager)) #no-svc-buttons { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 8px !important; }
-  html body:has(.app-shell:is(.role-owner,.role-manager)) #no-svc-buttons .order-service-card { min-height: 94px !important; padding: 10px !important; min-width: 0; }
-  html body:has(.app-shell:is(.role-owner,.role-manager)) #no-svc-buttons .order-service-card .text-sm { font-size: 12px; line-height: 1.4; }
+  html body:has(.app-shell:is(.role-owner,.role-manager)) #no-offerings fieldset { margin-bottom: 14px !important; }
+  html body:has(.app-shell:is(.role-owner,.role-manager)) #no-offerings label { min-height: 48px; padding: 10px !important; border-radius: 6px; background: #fff; }
+  html body:has(.app-shell:is(.role-owner,.role-manager)) #no-offerings label span { min-width: 0; line-height: 1.35; }
   html body:has(.app-shell:is(.role-owner,.role-manager)) .erp-intake-card { padding: 12px; }
   html body:has(.app-shell:is(.role-owner,.role-manager)) .erp-intake-footer > .flex { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 8px; width: 100%; }
   html body:has(.app-shell:is(.role-owner,.role-manager)) .erp-intake-footer .btn-primary { grid-column: 1 / -1; min-height: 48px; }

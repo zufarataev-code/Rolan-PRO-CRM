@@ -128,8 +128,9 @@ test('the money of a service without sizes: revenue, material, installer pay per
 test('a project of services without sizes skips measurement; the proposal lists them line by line', () => {
   const creation = html.slice(html.indexOf('function createOrder(nextStep'), html.indexOf('function openClientModal()'));
   assert.match(creation, /extraServices: selectedOfferings\.filter\(item => !serviceOfferingNeedsSizes\(item\)\)\.map\(item => projectOfferingLine\(item, 1\)\)/);
-  assert.match(creation, /setTimeout\(\(\) => \(orderNeedsMeasurements\(o\) \? openManagerMeasureModal\(o\.id\) : openProjectEstimateWorkspace\(o\.id\)\), 0\);/);
-  assert.match(html, /createButton\.textContent = !validOffering \|\| newOrderSelectedOfferings\(\)\.some\(serviceOfferingNeedsSizes\) \? 'Создать и перейти к замеру →' : 'Создать проект →'/);
+  assert.doesNotMatch(creation, /openManagerMeasureModal/);
+  assert.match(creation, /syncProjectIncludedServices\(o\);/);
+  assert.match(html, /id="no-create-btn" onclick="createOrder\('project'\)">Создать проект →/);
   const verification = html.slice(html.indexOf('function orderMeasurementVerificationIssues(o) {'), html.indexOf('function orderPaymentReadyForProduction('));
   assert.match(verification, /if \(!windows\.length\) return orderNeedsMeasurements\(o\) \? \['нет окон с размерами'\] : \[\];/);
   const readiness = html.slice(html.indexOf('function projectEstimateReadiness(o) {'), html.indexOf('function projectQuickLines(o) {'));
@@ -283,7 +284,6 @@ test('a project of services without sizes opens its estimate and shows them to t
   assert.match(card, /const estimateReady = hasMeasurements \|\| !orderNeedsMeasurements\(o\);/);
   assert.match(card, /disabled: !canManage \|\| !estimateReady/);
   assert.match(card, /onclick: estimateReady \? `openProjectEstimateWorkspace\('\$\{o\.id\}'\)` : `openManagerMeasureModal\('\$\{o\.id\}'\)`/);
-  assert.match(html, /setTimeout\(\(\) => \(orderNeedsMeasurements\(o\) \? openManagerMeasureModal\(o\.id\) : openProjectEstimateWorkspace\(o\.id\)\), 0\);/);
   assert.match(html, /projectOfferingLines\(order\)\.length \? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PROJECT SERVICES<\/div>/);
 });
 

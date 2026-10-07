@@ -23774,12 +23774,12 @@ function projectEstimateReadiness(o) {
   if (!windows.length && orderNeedsMeasurements(o)) issues.push('не внесены помещения и размеры');
   projectOfferingLines(o).forEach(line => {
     if (!(Number(line.qty) > 0)) issues.push(`не указано количество: ${line.label || 'услуга'}`);
-    if (!(Number(line.unitPrice) > 0)) issues.push(`не указана цена услуги: ${line.label || 'услуга'}`);
+    if (!line.includedBy && !(Number(line.unitPrice) > 0)) issues.push(`не указана цена услуги: ${line.label || 'услуга'}`);
   });
   if (windows.some(({ win }) => win.offeringId && !(Number(win.pricePerSqft) > 0))) issues.push('не указана цена выбранной услуги');
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
-  if ((o.extraServices || []).filter(s => !s.quickProjectLine).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
+  if ((o.extraServices || []).filter(s => !s.quickProjectLine && !s.includedBy).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
   if (o.paymentTerms === 'after_completion' && !o.paymentTermsConfirmedAt) issues.push('менеджер не подтвердил ответственность за оплату после выполнения');
   if (orderRevenue(o) <= 0) issues.push('сумма проекта равна нулю');
   return issues;
@@ -23877,6 +23877,7 @@ function serviceOfferingFilmIds(offering) {
 // saved before units existed are per sq ft.
 const SERVICE_OFFERING_UNITS = [
   { id: 'sqft', label: 'за кв. фут — нужен замер', short: 'sq ft' },
+  { id: 'lft', label: 'за погонный фут — по периметру окон', short: 'lin ft' },
   { id: 'piece', label: 'за штуку — без размеров', short: 'шт.' },
   { id: 'zone', label: 'за зону — без размеров', short: 'зона' },
   { id: 'fixed', label: 'фиксированная сумма — без размеров', short: 'услуга' },
@@ -23934,6 +23935,119 @@ function projectOfferingLine(offering, qty = 1) {
   return line;
 }
 
+// A Project is a container of services. A service may include another service
+// at no customer charge (for example, protective film with silicone). The
+// included service remains an independent operational line with its own
+// quantity, crew, date, material and installer pay.
+
+/** Glass edge in linear feet: each pane perimeter multiplied by its quantity. */
+function windowPerimeterLinearFt(win) {
+  const explicitPanels = [win?.actualPanels, win?.panels, win?.cells, win?.fragments]
+    .find(items => Array.isArray(items) && items.some(panel => Number(panel?.actualWidth ?? panel?.width ?? panel?.w) > 0 && Number(panel?.actualHeight ?? panel?.height ?? panel?.h) > 0));
+  const panels = Array.isArray(explicitPanels)
+    ? explicitPanels.map(panel => ({
+        width: Number(panel?.actualWidth ?? panel?.width ?? panel?.w) || 0,
+        height: Number(panel?.actualHeight ?? panel?.height ?? panel?.h) || 0,
+      })).filter(panel => panel.width > 0 && panel.height > 0)
+    : [];
+  const width = Number(win?.actualWidth) > 0 ? Number(win.actualWidth) : Number(win?.width) || 0;
+  const height = Number(win?.actualHeight) > 0 ? Number(win.actualHeight) : Number(win?.height) || 0;
+  const qty = Number(win?.actualQty) > 0 ? Number(win.actualQty) : Number(win?.qty) || 1;
+  const edgeMm = panels.length
+    ? panels.reduce((sum, panel) => sum + 2 * ((Number(panel.width) || 0) + (Number(panel.height) || 0)), 0)
+    : 2 * (width + height);
+  return Math.round(edgeMm / 304.8 * qty * 100) / 100;
+}
+
+/** Valid, size-free services included in a directory service. */
+function serviceOfferingIncludes(offering) {
+  const ids = Array.isArray(offering?.includes) ? offering.includes : [];
+  return [...new Set(ids)].map(id => serviceOffering(id)).filter(item => item && item.id !== offering.id && !serviceOfferingNeedsSizes(item));
+}
+
+function projectOfferingWindows(o, offeringId) {
+  return (o?.measurements?.rooms || []).flatMap(room => room.windows || []).filter(win => win.offeringId === offeringId);
+}
+
+/** Services that currently exist in project scope and can own package lines. */
+function projectParentOfferingIds(o) {
+  const ids = (o?.measurements?.rooms || []).flatMap(room => room.windows || []).map(win => win.offeringId);
+  (o?.extraServices || []).forEach(line => { if (line.offeringId && !line.includedBy && !line.quickProjectLine) ids.push(line.offeringId); });
+  return [...new Set(ids.filter(Boolean))];
+}
+
+function projectIncludedQty(o, parentId, child) {
+  const unit = serviceOfferingUnit(child);
+  const windows = projectOfferingWindows(o, parentId);
+  const parentLine = (o?.extraServices || []).find(line => line.offeringId === parentId && !line.includedBy && !line.quickProjectLine);
+  if (unit === 'lft') return Math.round(windows.reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100;
+  if (unit === 'piece') return windows.length ? windows.reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0) : Number(parentLine?.qty) || 1;
+  return 1;
+}
+
+/**
+ * Synchronize saved package lines with the services currently in the project.
+ * A directory change never removes a component from an existing project while
+ * its parent remains there; removing the parent removes its package lines.
+ */
+function syncProjectIncludedServices(o) {
+  if (!o) return false;
+  let changed = false;
+  const parents = projectParentOfferingIds(o);
+  const lines = Array.isArray(o.extraServices) ? o.extraServices : [];
+  const removed = lines.filter(line => line.includedBy && !parents.includes(line.includedBy));
+  const kept = lines.filter(line => !line.includedBy || parents.includes(line.includedBy));
+  if (kept.length !== lines.length) changed = true;
+  o.extraServices = kept;
+  if (removed.length) {
+    const removedLineIds = new Set(removed.map(line => `line:${line.id}`));
+    if (Array.isArray(o.serviceSchedules)) o.serviceSchedules = o.serviceSchedules.filter(plan => !removedLineIds.has(plan.id));
+    const scopedOfferingIds = new Set([
+      ...(o.measurements?.rooms || []).flatMap(room => room.windows || []).map(win => win.offeringId),
+      ...o.extraServices.map(line => line.offeringId),
+    ].filter(Boolean));
+    const removedOfferingIds = new Set(removed.map(line => line.offeringId).filter(Boolean));
+    o.offeringIds = (o.offeringIds || []).filter(id => !removedOfferingIds.has(id) || scopedOfferingIds.has(id) || id === o.offeringId);
+    if (o.offeringUnits && typeof o.offeringUnits === 'object') {
+      removedOfferingIds.forEach(id => { if (!scopedOfferingIds.has(id) && id !== o.offeringId) delete o.offeringUnits[id]; });
+    }
+  }
+  parents.forEach(parentId => {
+    serviceOfferingIncludes(serviceOffering(parentId)).forEach(child => {
+      if (o.extraServices.some(line => line.includedBy === parentId && line.offeringId === child.id)) return;
+      const line = projectOfferingLine(child, projectIncludedQty(o, parentId, child));
+      line.includedBy = parentId;
+      line.unitPrice = 0;
+      line.price = 0;
+      o.extraServices.push(line);
+      o.offeringIds = [...new Set([...(o.offeringIds || []), child.id])];
+      o.offeringUnits = { ...(o.offeringUnits || {}), [child.id]: o.offeringUnits?.[child.id] || serviceOfferingUnit(child) };
+      const direction = offeringServiceType(child);
+      if (direction && !(o.serviceTypes || []).includes(direction)) o.serviceTypes = [...(o.serviceTypes || [o.serviceType].filter(Boolean)), direction];
+      changed = true;
+    });
+  });
+  const allWindows = (o.measurements?.rooms || []).flatMap(room => room.windows || []);
+  o.extraServices.forEach(line => {
+    if (!line.offeringId || line.quickProjectLine || line.qtyManual) return;
+    let qty = null;
+    if (line.includedBy) {
+      const child = serviceOffering(line.offeringId) || { id: line.offeringId, unit: line.unit };
+      qty = projectIncludedQty(o, line.includedBy, child);
+    } else if (line.unit === 'lft' && allWindows.length) {
+      qty = Math.round(allWindows.reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100;
+    }
+    if (qty === null) return;
+    const price = line.includedBy ? 0 : Math.round((Number(line.unitPrice) || 0) * qty * 100) / 100;
+    if (Number(line.qty) !== qty || Number(line.price) !== price) {
+      line.qty = qty;
+      line.price = price;
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 /**
  * Whether the project needs measured windows: yes when it has windows, when one
  * of its services is per sq ft, and for projects made before services existed.
@@ -23961,26 +24075,34 @@ function orderOfferingNeedsSizes(o, offeringId) {
   return saved ? saved === 'sqft' : true;
 }
 
-/** «+ Услуга без размеров»: the directory's services priced per piece, zone, fixed sum or own unit. */
+/** «+ Услуга»: any active service of any direction. */
 function projectOfferingPickerHtml(o) {
   const groups = ORDER_PRIMARY_SERVICES.map(direction => {
-    const items = serviceOfferingsFor(serviceOfferingDirection(direction.id)).filter(item => !serviceOfferingNeedsSizes(item));
-    return items.length ? `<optgroup label="${academyEsc(direction.title)}">${items.map(item => `<option value="${academyEsc(item.id)}">${academyEsc(item.name)} · ${fmtMoney(Number(item.pricePerSqft) || 0)} / ${academyEsc(serviceOfferingUnitShort(item))}</option>`).join('')}</optgroup>` : '';
+    const items = serviceOfferingsFor(serviceOfferingDirection(direction.id));
+    return items.length ? `<optgroup label="${academyEsc(direction.title)}">${items.map(item => `<option value="${academyEsc(item.id)}">${academyEsc(item.name)} · ${fmtMoney(Number(item.pricePerSqft) || 0)} / ${academyEsc(serviceOfferingUnitShort(item))}${serviceOfferingIncludes(item).length ? ` · входит: ${academyEsc(serviceOfferingIncludes(item).map(child => child.name).join(', '))}` : ''}</option>`).join('')}</optgroup>` : '';
   }).join('');
   if (!groups) return '';
-  return `<select class="text-sm" style="width:auto" aria-label="Добавить услугу без размеров" onchange="if (this.value) projectAddOfferingLine('${o.id}', this.value)"><option value="">+ Услуга без размеров</option>${groups}</select>`;
+  return `<select class="text-sm" style="width:auto" aria-label="Добавить услугу в проект" onchange="if (this.value) projectAddOfferingLine('${o.id}', this.value)"><option value="">+ Услуга в проект</option>${groups}</select>`;
 }
 
 function projectAddOfferingLine(oid, offeringId) {
   const o = getOrder(oid);
   const offering = serviceOffering(offeringId);
-  if (!o || !offering || offering.active === false || serviceOfferingNeedsSizes(offering) || !orderUserCanSeeMoney(o, currentUser())) return;
-  o.extraServices = o.extraServices || [];
-  o.extraServices.push(projectOfferingLine(offering, 1));
+  if (!o || !offering || offering.active === false || !orderUserCanSeeMoney(o, currentUser())) return;
   const direction = offeringServiceType(offering);
-  if (direction && !(o.serviceTypes || []).includes(direction)) o.serviceTypes = [...(o.serviceTypes || [o.serviceType].filter(Boolean)), direction];
+  if (!direction) return;
+  if (serviceOfferingNeedsSizes(offering)) {
+    (o.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => {
+      if (!win.offeringId && (win.measureScope || o.serviceType) === direction) applyWindowOffering(win, offering);
+    }));
+  } else {
+    o.extraServices = o.extraServices || [];
+    o.extraServices.push(projectOfferingLine(offering, 1));
+  }
+  if (!(o.serviceTypes || []).includes(direction)) o.serviceTypes = [...(o.serviceTypes || [o.serviceType].filter(Boolean)), direction];
   o.offeringIds = [...new Set([...(o.offeringIds || []), offering.id])];
-  o.offeringUnits = { ...(o.offeringUnits || {}), [offering.id]: serviceOfferingUnit(offering) };
+  o.offeringUnits = { ...(o.offeringUnits || {}), [offering.id]: o.offeringUnits?.[offering.id] || serviceOfferingUnit(offering) };
+  syncProjectIncludedServices(o);
   projectEstimateMarkChanged(o, `Добавлена услуга «${offering.name}»`);
   save(); refreshProjectEstimateWorkspace(oid);
 }
@@ -24074,6 +24196,49 @@ function toggleServiceOfferingFilm(id, filmId, checked) {
   refreshServiceOfferingFilmSummary(id);
 }
 
+function refreshServiceOfferingIncludesSummary(id) {
+  const offering = serviceOffering(id);
+  if (!offering || typeof document === 'undefined') return;
+  const included = serviceOfferingIncludes(offering);
+  document.querySelectorAll('[data-service-offering-includes-summary]').forEach(node => {
+    if (node.getAttribute('data-service-offering-includes-summary') === id) {
+      node.textContent = included.length ? included.map(item => item.name).join(', ') : 'ничего';
+    }
+  });
+}
+
+/** A one-level package may contain only services that do not require sizes. */
+function toggleServiceOfferingInclude(id, childId, checked, control = null) {
+  if (!serviceOfferingCanEdit()) return;
+  const offering = serviceOffering(id);
+  const child = serviceOffering(childId);
+  if (!offering || !child || child.id === offering.id) return;
+  const reject = message => {
+    if (control) control.checked = !checked;
+    alert(message);
+  };
+  const ids = new Set(Array.isArray(offering.includes) ? offering.includes : []);
+  if (checked) {
+    if (serviceOfferingNeedsSizes(child)) return reject('В пакет входят только услуги без размеров: за штуку, за погонный фут, фиксированные.');
+    if (serviceOfferingIncludes(child).length) return reject('Услуга, в которую сама что-то входит, не может входить в другую.');
+    if (serviceOfferingsAll().some(item => item.id !== offering.id && (item.includes || []).includes(offering.id))) return reject('Эта услуга уже входит в другую — пакет внутри пакета не поддерживается.');
+    ids.add(child.id);
+  } else ids.delete(child.id);
+  offering.includes = [...ids];
+  offering.updatedAt = new Date().toISOString();
+  save();
+  // Keep the open package editor and the user's scroll position stable.
+  refreshServiceOfferingIncludesSummary(id);
+}
+
+function serviceOfferingIncludesEditorHtml(offering) {
+  const candidates = serviceOfferingsAll().filter(item => item.id !== offering.id && item.active !== false && !serviceOfferingNeedsSizes(item) && !serviceOfferingIncludes(item).length);
+  const included = serviceOfferingIncludes(offering);
+  if (!candidates.length && !included.length) return '<div class="text-xs text-gray-500 mt-2">Входит в услугу: сначала создайте услугу без размеров (например, «Силикон» за погонный фут).</div>';
+  const options = [...new Map([...included, ...candidates].map(item => [item.id, item])).values()];
+  return `<details class="mt-2"><summary class="cursor-pointer text-sm">Входит в услугу бесплатно: <span data-service-offering-includes-summary="${offering.id}">${included.length ? included.map(item => academyEsc(item.name)).join(', ') : 'ничего'}</span></summary><div class="mt-2 grid gap-1">${options.map(item => `<label class="text-sm"><input type="checkbox" style="width:auto" ${included.some(child => child.id === item.id) ? 'checked' : ''} onchange="toggleServiceOfferingInclude('${offering.id}','${item.id}',this.checked,this)"> ${academyEsc(item.name)} <span class="text-xs text-gray-500">· ${academyEsc(serviceOfferingUnitShort(item))}</span></label>`).join('')}<div class="text-xs text-gray-500">В проекте отдельной строкой за $0: своё количество, специалист, дата и оплата специалисту.</div></div></details>`;
+}
+
 function renderServiceOfferingsSection() {
   const owner = currentUser()?.role === 'owner';
   const money = value => (Number(value) > 0 ? `$${Number(value).toFixed(2)}` : '—');
@@ -24101,7 +24266,8 @@ function renderServiceOfferingsSection() {
           <div><label>Максимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.maxPricePerUnit) || ''}" placeholder="без максимума" onchange="updateServiceOffering('${offering.id}','maxPricePerUnit',this.value,this)"></div>
           <div><label>Специалисту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="${sized ? 'ставка направления' : 'не платится'}" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value,this)"></div>
         </div>
-        <div class="text-xs mt-2 ${sized ? 'text-blue-700' : 'text-emerald-700'}">${sized ? 'Нужен замер: цена и материал считаются по площади окон.' : 'Без размеров: в проекте указывается количество, замер для этой услуги не нужен.'}</div>
+        <div class="text-xs mt-2 ${sized ? 'text-blue-700' : 'text-emerald-700'}">${sized ? 'Нужен замер: цена и материал считаются по площади окон.' : unit === 'lft' ? 'По периметру окон: количество считается по замеру, его можно поправить вручную.' : 'Без размеров: в проекте указывается количество, замер для этой услуги не нужен.'}</div>
+        ${serviceOfferingIncludesEditorHtml(offering)}
         <div class="mt-2 flex flex-wrap items-start justify-between gap-3"><div class="flex-1">${material}</div><label class="tag" style="display:inline-flex;white-space:nowrap;gap:6px"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked,this)"> Активна</label></div>
       </div>` : `<div class="p-3 border border-slate-200"><div class="flex justify-between gap-3"><b>${academyEsc(offering.name)}</b><span>${money(offering.pricePerSqft)} / ${academyEsc(per)}</span></div>${sized ? `<div class="mt-1">${filmList}</div>` : '<div class="text-xs text-gray-500 mt-1">Без размеров — количество в проекте</div>'}</div>`;
     }).join('');
@@ -24112,7 +24278,7 @@ function renderServiceOfferingsSection() {
   }).join('');
   return `<section class="card border border-slate-200 bg-white" style="border-radius:4px">
     <h2 class="text-xl font-black">Услуги по направлениям</h2>
-    <p class="text-sm text-slate-500">В проекте выбор идёт так: направление → услуга. Название услуги клиент видит в КП. Цена из справочника — ориентир: менеджер может изменить её в проекте внутри заданного владельцем диапазона. Услуга за кв. фут считается по замеру окон, её материал — плёнки со склада (одну плёнку можно привязать к нескольким услугам). Услуга за штуку, зону, фиксированную сумму или свою единицу замера не требует: в проекте указывается количество, а цена, оплата специалисту и материал считаются за единицу. Исполнителя каждой услуги выбирают в проекте при назначении монтажа.</p>
+    <p class="text-sm text-slate-500">Проект — контейнер: в него добавляются услуги любых направлений, у каждой свой специалист и дата. Услуга за погонный фут (силикон, герметик) берёт количество из периметра окон. В услугу можно включить другие услуги бесплатно — например, защитную плёнку с силиконом: силикон встанет в проект отдельной строкой за $0 со своим выездом. Название услуги клиент видит в КП. Цена из справочника — ориентир: менеджер может изменить её в проекте внутри заданного владельцем диапазона. Услуга за кв. фут считается по замеру окон, её материал — плёнки со склада. Исполнителя каждой услуги выбирают в проекте при назначении монтажа.</p>
     ${groups}
   </section>`;
 }
@@ -24142,6 +24308,11 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
     const offering = serviceOffering(value);
     if (value && (!offering || offering.active === false || !serviceOfferingNeedsSizes(offering) || offering.direction !== serviceOfferingDirection(win.measureScope || o.serviceType))) return;
     applyWindowOffering(win, offering);
+    if (offering) {
+      o.offeringIds = [...new Set([...(o.offeringIds || []), offering.id])];
+      o.offeringUnits = { ...(o.offeringUnits || {}), [offering.id]: o.offeringUnits?.[offering.id] || serviceOfferingUnit(offering) };
+    }
+    syncProjectIncludedServices(o);
   } else if (field === 'catalogId') {
     const film = getCatalogItem(value);
     if (!film || film.archived || !catalogMatchesCategory(film, primaryServiceInfo(win.measureScope || o.serviceType)?.catalogCategory) || !serviceOfferingFilmIds(serviceOffering(win.offeringId)).includes(film.id)) return;
@@ -24768,6 +24939,7 @@ function projectEstimateUpdateService(oid, sid, field, value) {
     if (field !== 'qty') return;
     line.qty = Math.max(0, parseFloat(value) || 0);
     line.price = Math.round((Number(line.unitPrice) || 0) * line.qty * 100) / 100;
+    if (line.includedBy || line.unit === 'lft') line.qtyManual = true;
   } else if (['qty','price'].includes(field)) line[field] = Math.max(0, parseFloat(value) || 0);
   else line[field] = value;
   if (field === 'type') line.label = projectEstimateServiceLabel(value);
@@ -24778,8 +24950,20 @@ function projectEstimateUpdateService(oid, sid, field, value) {
 function projectEstimateDeleteService(oid, sid) {
   const o = getOrder(oid);
   if (!o) return;
+  if ((o.extraServices || []).some(s => s.id === sid && s.includedBy)) return;
   o.extraServices = (o.extraServices || []).filter(s => s.id !== sid);
+  syncProjectIncludedServices(o);
   projectEstimateMarkChanged(o, 'Удалена дополнительная услуга');
+  save(); refreshProjectEstimateWorkspace(oid);
+}
+
+function projectEstimateServiceQtyFromWindows(oid, sid) {
+  const o = getOrder(oid);
+  const line = (o?.extraServices || []).find(s => s.id === sid);
+  if (!o || !line || !orderUserCanSeeMoney(o, currentUser())) return;
+  delete line.qtyManual;
+  syncProjectIncludedServices(o);
+  projectEstimateMarkChanged(o, 'Количество услуги взято по окнам');
   save(); refreshProjectEstimateWorkspace(oid);
 }
 
@@ -25044,6 +25228,7 @@ function refreshQuickProjectEntry(oid) {
 }
 
 function refreshProjectEstimateWorkspace(oid) {
+  projectSyncServicesFromWindows(oid);
   refreshProjectWorkspaceBody(oid, 'project-estimate', renderProjectEstimateWorkspace, openProjectEstimateWorkspace);
 }
 
@@ -25098,11 +25283,11 @@ function renderProjectEstimateWorkspace(o) {
     </tr>`;
   })).join('');
   const serviceRows = (o.extraServices || []).filter(line => !line.quickProjectLine).map(line => line.offeringId ? `<tr>
-    <td data-label="Услуга"><b>${academyEsc(line.label || line.offeringName || 'Услуга')}</b><div class="text-xs text-gray-500">${academyEsc(primaryServiceInfo(line.serviceType)?.title || '')} · без размеров</div></td>
-    <td data-label="Цена за единицу">${fmtMoney(Number(line.unitPrice) || 0)} / ${academyEsc(serviceOfferingUnitShort(line))}</td>
-    <td data-label="Количество"><input type="number" min="0" step="1" value="${Number(line.qty) || 0}" aria-label="Количество: ${academyEsc(line.label || '')}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','qty',this.value)"> <span class="text-xs text-gray-500">${academyEsc(serviceOfferingUnitShort(line))}</span></td>
-    <td data-label="Цена клиенту"><b>${fmtMoney(Number(line.price) || 0)}</b></td>
-    <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectEstimateDeleteService('${o.id}','${line.id}')">Удалить услугу</button></td>
+    <td data-label="Услуга"><b>${academyEsc(line.label || line.offeringName || 'Услуга')}</b><div class="text-xs text-gray-500">${academyEsc(primaryServiceInfo(line.serviceType)?.title || '')} · ${line.includedBy ? `входит в «${academyEsc(serviceOffering(line.includedBy)?.name || 'услугу')}»` : line.unit === 'lft' ? 'по периметру окон' : 'без размеров'}</div></td>
+    <td data-label="Цена за единицу">${line.includedBy ? '<span class="tag bg-emerald-50 text-emerald-700">включено</span>' : `${fmtMoney(Number(line.unitPrice) || 0)} / ${academyEsc(serviceOfferingUnitShort(line))}`}</td>
+    <td data-label="Количество"><input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" value="${Number(line.qty) || 0}" aria-label="Количество: ${academyEsc(line.label || '')}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','qty',this.value)"> <span class="text-xs text-gray-500">${academyEsc(serviceOfferingUnitShort(line))}</span>${(line.includedBy || line.unit === 'lft') && measureAllWindows(o).length ? (line.qtyManual ? ` <button class="btn-ghost text-xs" onclick="projectEstimateServiceQtyFromWindows('${o.id}','${line.id}')">↺ по окнам</button>` : ' <span class="text-xs text-gray-500">по окнам</span>') : ''}</td>
+    <td data-label="Цена клиенту"><b>${line.includedBy ? 'в пакете · $0' : fmtMoney(Number(line.price) || 0)}</b></td>
+    <td class="project-estimate-action">${line.includedBy ? '<span class="text-xs text-gray-500">уберётся вместе с основной услугой</span>' : `<button class="btn-ghost text-red-600" onclick="projectEstimateDeleteService('${o.id}','${line.id}')">Удалить услугу</button>`}</td>
   </tr>` : `<tr>
     <td data-label="Тип"><select onchange="projectEstimateUpdateService('${o.id}','${line.id}','type',this.value)">${serviceTypes.map(type => `<option value="${type}" ${line.type===type?'selected':''}>${projectEstimateServiceLabel(type)}</option>`).join('')}</select></td>
     <td data-label="Описание"><input value="${academyEsc(line.label || '')}" onchange="projectEstimateUpdateService('${o.id}','${line.id}','label',this.value)"></td>
@@ -25215,6 +25400,7 @@ function openProjectEstimateWorkspace(oid) {
   const o = getOrder(oid);
   if (!o) return;
   if (!orderUserCanSeeMoney(o, currentUser())) { alert('Расчёт проекта доступен только владельцу и назначенному менеджеру.'); return; }
+  projectSyncServicesFromWindows(oid);
   state.modal = `
     <div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
       <div class="modal-content workspace-modal order-workspace-modal order-workspace-modal-wide" style="--workspace-color:#0f766e" onclick="event.stopPropagation()">
@@ -27132,7 +27318,12 @@ function completeManagerMeasurement(oid) {
   }
   changeStatus(oid, 'measurement_done');
 }
+function projectSyncServicesFromWindows(oid) {
+  const o = getOrder(oid);
+  if (o && orderUserCanSeeMoney(o, currentUser()) && syncProjectIncludedServices(o)) save();
+}
 function refreshManagerMeasureModal(oid) {
+  projectSyncServicesFromWindows(oid);
   preservePositionForNextRender();
   state.modal = renderManagerMeasureModal(oid);
   render();
@@ -28695,31 +28886,19 @@ function openOrderModal() {
       <div class="erp-intake-body">
         <div class="erp-intake-main-grid" style="grid-template-columns:minmax(0,1fr)">
           <div>
-            <section class="erp-intake-card">
+            <section class="erp-intake-card" data-intake-offering>
               <div class="erp-intake-card-head">
                 <div>
-                  <div class="erp-intake-card-title"><span class="erp-intake-step">1</span> Направление <span class="order-required">*</span></div>
+                  <div class="erp-intake-card-title"><span class="erp-intake-step">1</span> Услуги проекта <span class="order-required">*</span></div>
+                  <div class="text-sm text-gray-500 mt-1">Проект — контейнер: отметьте любые услуги из любых направлений. Первая отмеченная — направление входящего запроса.</div>
                 </div>
               </div>
-              <div class="order-intake-grid" id="no-svc-buttons">
-                ${ORDER_PRIMARY_SERVICES.map(s => `
-                  <button type="button" class="order-service-card" style="${orderServiceCardStyle(s.id)}" data-svc="${s.id}" onclick="selectOrderService('${s.id}')">
-                    <div class="order-service-icon">${s.icon}</div>
-                    <div class="font-semibold text-sm">${academyEsc(s.title)}</div>
-                  </button>
-                `).join('')}
-              </div>
+              <div id="no-offerings" class="mt-2"></div>
+              <div id="no-offering-empty" class="text-sm text-amber-700 mt-2" style="display:none">В справочнике нет активных услуг. Добавьте их в разделе «Услуги и цены».</div>
               <input type="hidden" id="no-svc" value="">
             </section>
-            <section class="erp-intake-card" data-intake-offering style="display:none">
-              <div class="erp-intake-card-title"><span class="erp-intake-step">2</span> Услуга <span class="order-required">*</span></div>
-              <label for="no-offering" class="text-xs">Услуга в выбранном направлении</label>
-              <select id="no-offering" onchange="selectOrderOffering(this.value)"><option value="">Выберите направление</option></select>
-              <details class="mt-3"><summary>Добавить услуги в этот проект</summary><div id="no-extra-offerings" class="mt-2"></div></details>
-              <div id="no-offering-empty" class="text-sm text-amber-700 mt-2" style="display:none">В направлении нет активных услуг. Добавьте их в разделе «Услуги и цены».</div>
-            </section>
             <section class="erp-intake-card" data-intake-site style="display:none">
-              <div class="erp-intake-card-title"><span class="erp-intake-step">3</span> Тип здания <span class="order-required">*</span></div>
+              <div class="erp-intake-card-title"><span class="erp-intake-step">2</span> Тип здания <span class="order-required">*</span></div>
               <div class="mt-3" >
                 <label class="text-xs">Тип объекта <span class="order-required">*</span></label>
                 <div class="grid grid-cols-2 gap-2 mt-1" id="no-site-type-buttons">
@@ -28732,7 +28911,7 @@ function openOrderModal() {
             <section class="erp-intake-card" data-intake-client style="display:none">
               <div class="erp-intake-card-head">
                 <div>
-                  <div class="erp-intake-card-title"><span class="erp-intake-step">4</span> Выберите контакт <span class="order-required">*</span></div>
+                  <div class="erp-intake-card-title"><span class="erp-intake-step">3</span> Выберите контакт <span class="order-required">*</span></div>
                   <div class="text-sm text-gray-500 mt-1">Найдите существующего клиента или добавьте нового.</div>
                 </div>
                 <button id="no-client-new-btn" class="btn-primary text-sm" onclick="openOrderClientOverlay()">+ Добавить контакт</button>
@@ -28747,7 +28926,7 @@ function openOrderModal() {
             <section class="erp-intake-card" data-new-order-after-client style="display:none">
               <div class="erp-intake-card-head">
                 <div>
-                  <div class="erp-intake-card-title"><span class="erp-intake-step">5</span> Управление заказом <span class="order-required">*</span></div>
+                  <div class="erp-intake-card-title"><span class="erp-intake-step">4</span> Управление заказом <span class="order-required">*</span></div>
                 </div>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -28785,13 +28964,13 @@ function openOrderModal() {
         <div class="flex gap-2 justify-end" style="margin-left:auto">
           <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
           <button class="btn-ghost" onclick="createOrder('draft')">Сохранить черновик</button>
-          <button class="btn-primary" id="no-create-btn" onclick="createOrder('measure')">Создать и перейти к замеру →</button>
+          <button class="btn-primary" id="no-create-btn" onclick="createOrder('project')">Создать проект →</button>
         </div>
       </div>
     </div>
   </div>`;
   render();
-  setTimeout(() => { selectOrderExecution('standard_project'); refreshOrderIntakeGates(); }, 50);
+  setTimeout(() => { selectOrderExecution('standard_project'); renderNewOrderOfferings(); refreshOrderIntakeGates(); }, 50);
 }
 
 function offeringServiceType(offering) {
@@ -28801,69 +28980,44 @@ function newOrderSelectedOfferings() {
   const ids = [state._newOrderOfferingId, ...(state._newOrderExtraOfferingIds || [])];
   return [...new Set(ids.filter(Boolean))].map(id => serviceOffering(id)).filter(item => item && item.active !== false && offeringServiceType(item));
 }
-function renderNewOrderExtraOfferings() {
-  const node = document.getElementById('no-extra-offerings');
+function renderNewOrderOfferings() {
+  const node = document.getElementById('no-offerings');
   if (!node) return;
-  const selected = new Set(state._newOrderExtraOfferingIds || []);
+  const selected = new Set(newOrderSelectedOfferings().map(item => item.id));
+  let total = 0;
   node.innerHTML = ORDER_PRIMARY_SERVICES.map(direction => {
-    const offerings = serviceOfferingsFor(serviceOfferingDirection(direction.id)).filter(item => item.id !== state._newOrderOfferingId);
-    return offerings.length ? `<fieldset class="mb-3"><legend class="font-semibold text-sm mb-2">${academyEsc(direction.title)}</legend>${offerings.map(item => `<label class="flex items-center gap-2 p-2 border mb-1"><input type="checkbox" ${selected.has(item.id) ? 'checked' : ''} onchange="toggleNewOrderExtraOffering('${academyEsc(item.id)}',this.checked)"><span>${academyEsc(item.name)} <span class="text-xs text-gray-500">· ${serviceOfferingNeedsSizes(item) ? 'по замеру' : `за ${academyEsc(serviceOfferingUnitShort(item))}, без размеров`}</span></span></label>`).join('')}</fieldset>` : '';
+    const offerings = serviceOfferingsFor(serviceOfferingDirection(direction.id));
+    total += offerings.length;
+    return offerings.length ? `<fieldset class="mb-3"><legend class="font-semibold text-sm mb-2">${direction.icon || ''} ${academyEsc(direction.title)}</legend>${offerings.map(item => `<label class="flex items-center gap-2 p-2 border mb-1"><input type="checkbox" style="width:auto" data-offering="${academyEsc(item.id)}" ${selected.has(item.id) ? 'checked' : ''} onchange="toggleNewOrderOffering('${academyEsc(item.id)}',this.checked)"><span>${academyEsc(item.name)} <span class="text-xs text-gray-500">· ${serviceOfferingNeedsSizes(item) ? 'по замеру' : `за ${academyEsc(serviceOfferingUnitShort(item))}`}${serviceOfferingIncludes(item).length ? ` · входит: ${academyEsc(serviceOfferingIncludes(item).map(child => child.name).join(', '))}` : ''}${item.id === state._newOrderOfferingId ? ' · входящий запрос' : ''}</span></span></label>`).join('')}</fieldset>` : '';
   }).join('');
+  const empty = document.getElementById('no-offering-empty');
+  if (empty) empty.style.display = total ? 'none' : '';
 }
-function toggleNewOrderExtraOffering(id, checked) {
+function toggleNewOrderOffering(id, checked) {
   const offering = serviceOffering(id);
-  if (!offering || offering.active === false || !offeringServiceType(offering) || id === state._newOrderOfferingId) return;
-  const ids = new Set(state._newOrderExtraOfferingIds || []);
-  if (checked) ids.add(id); else ids.delete(id);
-  state._newOrderExtraOfferingIds = [...ids];
+  if (checked && (!offering || offering.active === false || !offeringServiceType(offering))) return;
+  const ids = [state._newOrderOfferingId, ...(state._newOrderExtraOfferingIds || [])].filter(Boolean).filter(value => value !== id);
+  if (checked) ids.push(id);
+  const valid = [...new Set(ids)].filter(value => {
+    const item = serviceOffering(value);
+    return item && item.active !== false && offeringServiceType(item);
+  });
+  state._newOrderOfferingId = valid[0] || '';
+  state._newOrderExtraOfferingIds = valid.slice(1);
+  const direction = offeringServiceType(serviceOffering(state._newOrderOfferingId));
+  state._newOrderService = direction;
+  state._newOrderServices = direction ? [direction] : [];
+  const hidden = document.getElementById('no-svc');
+  if (hidden) hidden.value = direction;
+  renderNewOrderOfferings();
   refreshOrderIntakeGates();
+  if (typeof refreshOrderBuilderPreview === 'function') refreshOrderBuilderPreview();
 }
 function refreshOrderIntakeGates() {
-  const direction = ORDER_PRIMARY_SERVICES.find(item => item.id === state._newOrderService);
-  const offering = serviceOffering(state._newOrderOfferingId);
-  const validOffering = !!(direction && offering && offering.active !== false && offering.direction === serviceOfferingDirection(direction.id));
-  document.querySelectorAll('[data-intake-offering]').forEach(node => { node.style.display = direction ? '' : 'none'; });
+  const validOffering = newOrderSelectedOfferings().length > 0;
   document.querySelectorAll('[data-intake-site]').forEach(node => { node.style.display = validOffering ? '' : 'none'; });
   document.querySelectorAll('[data-intake-client]').forEach(node => { node.style.display = validOffering && state._newOrderSiteType ? '' : 'none'; });
   document.querySelectorAll('[data-new-order-after-client]').forEach(node => { node.style.display = validOffering && state._newOrderSiteType && state._newOrderClient ? '' : 'none'; });
-  // Services without sizes go straight to the project: no measurement step.
-  const createButton = document.getElementById('no-create-btn');
-  if (createButton) createButton.textContent = !validOffering || newOrderSelectedOfferings().some(serviceOfferingNeedsSizes) ? 'Создать и перейти к замеру →' : 'Создать проект →';
-}
-function selectOrderService(v, force = false) {
-  if (!ORDER_PRIMARY_SERVICES.some(item => item.id === v)) return;
-  const changed = state._newOrderService !== v;
-  const selected = new Set([v]);
-  state._newOrderServices = [v];
-  state._newOrderService = v;
-  document.getElementById('no-svc').value = v;
-  if (changed) {
-    state._newOrderOfferingId = '';
-    state._newOrderExtraOfferingIds = [];
-    selectOrderSiteType('');
-  }
-  const offerings = serviceOfferingsFor(serviceOfferingDirection(v));
-  const select = document.getElementById('no-offering');
-  if (select) {
-    select.innerHTML = '<option value="">Выберите услугу</option>' + offerings.map(item => `<option value="${academyEsc(item.id)}">${academyEsc(item.name)}${serviceOfferingNeedsSizes(item) ? '' : ` · за ${academyEsc(serviceOfferingUnitShort(item))}`}</option>`).join('');
-    select.value = state._newOrderOfferingId || '';
-    select.disabled = !offerings.length;
-  }
-  const empty = document.getElementById('no-offering-empty');
-  if (empty) empty.style.display = offerings.length ? 'none' : '';
-  document.querySelectorAll('#no-svc-buttons [data-svc]').forEach(b => { b.classList.toggle('active', selected.has(b.dataset.svc)); });
-  renderNewOrderExtraOfferings();
-  refreshOrderIntakeGates();
-  refreshOrderBuilderPreview();
-}
-function selectOrderOffering(id) {
-  const offering = serviceOffering(id);
-  if (id && (!offering || offering.active === false || offering.direction !== serviceOfferingDirection(state._newOrderService))) return;
-  state._newOrderOfferingId = offering?.id || '';
-  state._newOrderExtraOfferingIds = (state._newOrderExtraOfferingIds || []).filter(value => value !== state._newOrderOfferingId);
-  renderNewOrderExtraOfferings();
-  selectOrderSiteType('');
-  refreshOrderIntakeGates();
 }
 function selectOrderSiteType(value) {
   const siteType = value ? normalizeOrderSiteType(value) : '';
@@ -29363,12 +29517,11 @@ function createOrderClientFromOverlay() {
   selectOrderClient(id);
 }
 
-function createOrder(nextStep = 'measure') {
+function createOrder(nextStep = 'project') {
   let clientId = state._newOrderClient;
-  const serviceIds = Array.from(new Set((state._newOrderServices || []).filter(id => ORDER_PRIMARY_SERVICES.some(service => service.id === id))));
-  const serviceId = serviceIds[0] || document.getElementById('no-svc')?.value || state._newOrderService;
-  const service = primaryServiceInfo(serviceId);
   const selectedOfferings = newOrderSelectedOfferings();
+  const serviceId = offeringServiceType(selectedOfferings[0]);
+  const service = primaryServiceInfo(serviceId);
   const selectedServices = [...new Set([serviceId, ...selectedOfferings.map(offeringServiceType)])].filter(Boolean).map(id => primaryServiceInfo(id));
   const executionVariantId = document.getElementById('no-execution')?.value || state._newOrderExecution || 'standard_project';
   const executionVariant = orderExecutionVariantInfo(executionVariantId);
@@ -29379,13 +29532,9 @@ function createOrder(nextStep = 'measure') {
   const siteType = normalizeOrderSiteType(document.getElementById('no-site-type')?.value || state._newOrderSiteType);
   const pickedTags = Array.from(document.getElementById('no-tags')?.selectedOptions || []).map(o => o.value);
 
-  if (!service || !ORDER_PRIMARY_SERVICES.some(s => s.id === serviceId)) {
-    alert('Выберите направление');
-    return;
-  }
-  const offering = serviceOffering(state._newOrderOfferingId);
-  if (!offering || offering.active === false || offering.direction !== serviceOfferingDirection(service.id)) {
-    alert('Выберите активную услугу в выбранном направлении');
+  const offering = selectedOfferings[0];
+  if (!offering || !service || !ORDER_PRIMARY_SERVICES.some(s => s.id === serviceId) || offering.direction !== serviceOfferingDirection(service.id)) {
+    alert('Отметьте хотя бы одну активную услугу проекта');
     return;
   }
   if (!managerId) {
@@ -29488,6 +29637,7 @@ function createOrder(nextStep = 'measure') {
     priceOverridePerSqft: null,
   };
   stampOrderAddress(o, selectedAddress);
+  syncProjectIncludedServices(o);
 
   db.orders.push(o);
   if (state.pendingColdProspectId) {
@@ -29502,10 +29652,6 @@ function createOrder(nextStep = 'measure') {
   }
   save(); closeModal();
   openOrder(o.id);
-  if (nextStep === 'measure') {
-    // Services without sizes go straight to the project estimate.
-    setTimeout(() => (orderNeedsMeasurements(o) ? openManagerMeasureModal(o.id) : openProjectEstimateWorkspace(o.id)), 0);
-  }
 }
 
 function openClientModal() {

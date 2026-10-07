@@ -2,55 +2,110 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
-const html = readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8');
-test('project intake starts with direction, then solution, building, and contact',()=>{
- const start=html.indexOf('function openOrderModal()');
- const modal=html.slice(start,html.indexOf('function refreshOrderIntakeGates()',start));
- const anchors=['id="no-svc-buttons"','id="no-offering"','id="no-site-type-buttons"','id="no-client-search"'];
- let previous=-1;
- for(const anchor of anchors){ const next=modal.indexOf(anchor);assert.ok(next>previous,anchor);previous=next; }
- assert.match(modal,/state\._newOrderService = ''/);
- assert.match(modal,/state\._newOrderOfferingId = ''/);
-});
-test('changing direction clears the previous solution and building; inactive and foreign solutions are rejected',()=>{
- const state:any={_newOrderService:'solar_film',_newOrderOfferingId:'solar',_newOrderSiteType:'COMMERCIAL',_newOrderClient:'client'};
- const nodes=new Map<string,any>();
- for(const id of ['no-svc','no-offering','no-offering-empty','no-site-type'])nodes.set(id,{value:'',style:{},disabled:false});
- const blocks=['data-intake-offering','data-intake-site','data-intake-client','data-new-order-after-client'];
- const gates=new Map(blocks.map(name=>[`[${name}]`,[{style:{display:''}}]]));
- const offerings=[{id:'solar',name:'Solar solution',direction:'solar'},{id:'smart',name:'Smart solution',direction:'smart'},{id:'inactive',direction:'smart',active:false}];
- const c:any=vm.createContext({state,Set,ORDER_PRIMARY_SERVICES:[{id:'solar_film'},{id:'smart_film'}],
- document:{querySelector:()=>null,getElementById:(id:string)=>nodes.get(id),querySelectorAll:(key:string)=>gates.get(key)||[]},
- serviceOffering:(id:string)=>offerings.find(o=>o.id===id),serviceOfferingDirection:(id:string)=>id.split('_')[0],
- serviceOfferingsFor:(direction:string)=>offerings.filter(o=>o.direction===direction&&o.active!==false),
- normalizeOrderSiteType:(value:string)=>['COMMERCIAL','RESIDENTIAL'].includes(value)?value:'',academyEsc:(s:string)=>s,refreshOrderBuilderPreview:()=>{},
- serviceOfferingNeedsSizes:(o:any)=>!o?.unit||o.unit==='sqft',serviceOfferingUnitShort:(o:any)=>o?.unit||'sq ft'});
- vm.runInContext(html.slice(html.indexOf('function offeringServiceType('),html.indexOf('function selectOrderExecution(')),c);
- c.selectOrderService('smart_film');
- assert.equal(state._newOrderOfferingId,'');assert.equal(state._newOrderSiteType,'');
- assert.equal(gates.get('[data-intake-client]')![0].style.display,'none');
- assert.match(nodes.get('no-offering').innerHTML,/Smart solution/);assert.doesNotMatch(nodes.get('no-offering').innerHTML,/Solar solution/);
- c.selectOrderOffering('solar');assert.equal(state._newOrderOfferingId,'');
- c.selectOrderOffering('inactive');assert.equal(state._newOrderOfferingId,'');
- c.selectOrderOffering('smart');assert.equal(state._newOrderOfferingId,'smart');
- c.selectOrderSiteType('RESIDENTIAL');assert.equal(gates.get('[data-intake-client]')![0].style.display,'');
-});
-test('saved project and measurement defaults preserve the chosen solution for the estimate and proposal',()=>{
- const creation=html.slice(html.indexOf('function createOrder(nextStep'),html.indexOf('function openClientModal()'));
- assert.match(creation,/offeringId: offering\.id/);
- assert.match(creation,/offering\.direction !== serviceOfferingDirection\(service\.id\)/);
- assert.match(creation,/openManagerMeasureModal\(o\.id\)/);
- const defaults=html.slice(html.indexOf('function managerWindowDefaults('),html.indexOf('function syncWindowPanelsForType('));
- assert.match(defaults,/o\.offeringIds \|\| o\.orderBuilder\?\.offeringIds/);
- assert.match(defaults,/\.map\(serviceOffering\)\.find/);
- assert.match(defaults,/applyWindowOffering\(win, offering\)/);
+
+const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
+
+test('project intake starts with services of every direction, then building and contact', () => {
+  const start = html.indexOf('function openOrderModal()');
+  const modal = html.slice(start, html.indexOf('function refreshOrderIntakeGates()', start));
+  const anchors = ['id="no-offerings"', 'id="no-site-type-buttons"', 'id="no-client-search"'];
+  let previous = -1;
+  for (const anchor of anchors) {
+    const next = modal.indexOf(anchor);
+    assert.ok(next > previous, anchor);
+    previous = next;
+  }
+  assert.doesNotMatch(modal, /id="no-svc-buttons"/);
+  assert.match(modal, /<input type="hidden" id="no-svc" value="">/);
+  assert.match(modal, /state\._newOrderService = ''/);
+  assert.match(modal, /state\._newOrderOfferingId = ''/);
+  assert.match(modal, /renderNewOrderOfferings\(\); refreshOrderIntakeGates\(\);/);
 });
 
-test('multiple concrete services are deduplicated and inactive or unknown directions cannot enter intake',()=>{
- const offerings=[{id:'a',direction:'solar'},{id:'b',direction:'solar'},{id:'c',direction:'smart'},{id:'off',direction:'smart',active:false},{id:'unknown',direction:'unknown'}];
- const state:any={_newOrderOfferingId:'a',_newOrderExtraOfferingIds:['a','b','c','c','off','unknown']};
- const c:any=vm.createContext({state,Set,ORDER_PRIMARY_SERVICES:[{id:'solar_film'},{id:'smart_film'}],serviceOffering:(id:string)=>offerings.find(o=>o.id===id),serviceOfferingDirection:(id:string)=>id.split('_')[0]});
- vm.runInContext(html.slice(html.indexOf('function offeringServiceType('),html.indexOf('function renderNewOrderExtraOfferings(')),c);
- assert.deepEqual(Array.from(c.newOrderSelectedOfferings(),(o:any)=>o.id),['a','b','c']);
- assert.deepEqual(Array.from(c.newOrderSelectedOfferings(),(o:any)=>c.offeringServiceType(o)),['solar_film','solar_film','smart_film']);
+function loadIntake(offerings: any[]) {
+  const state: any = { _newOrderOfferingId: '', _newOrderExtraOfferingIds: [], _newOrderSiteType: '', _newOrderClient: 'client' };
+  const nodes = new Map<string, any>();
+  for (const id of ['no-svc', 'no-offerings', 'no-offering-empty', 'no-site-type']) nodes.set(id, { value: '', style: {}, innerHTML: '' });
+  const blocks = ['data-intake-site', 'data-intake-client', 'data-new-order-after-client'];
+  const gates = new Map(blocks.map(name => [`[${name}]`, [{ style: { display: '' } }]]));
+  const directions = [{ id: 'solar_film', title: 'Solar' }, { id: 'smart_film', title: 'Smart' }];
+  const context: any = vm.createContext({
+    state,
+    Set,
+    ORDER_PRIMARY_SERVICES: directions,
+    document: {
+      querySelector: () => null,
+      getElementById: (id: string) => nodes.get(id),
+      querySelectorAll: (key: string) => gates.get(key) || [],
+    },
+    serviceOffering: (id: string) => offerings.find(offering => offering.id === id),
+    serviceOfferingDirection: (id: string) => id.split('_')[0],
+    serviceOfferingsFor: (direction: string) => offerings.filter(offering => offering.direction === direction && offering.active !== false),
+    serviceOfferingIncludes: () => [],
+    normalizeOrderSiteType: (value: string) => ['COMMERCIAL', 'RESIDENTIAL'].includes(value) ? value : '',
+    academyEsc: (value: string) => value,
+    refreshOrderBuilderPreview: () => undefined,
+    requestAnimationFrame: () => undefined,
+    serviceOfferingNeedsSizes: (offering: any) => !offering?.unit || offering.unit === 'sqft',
+    serviceOfferingUnitShort: (offering: any) => offering?.unit || 'sq ft',
+  });
+  vm.runInContext(html.slice(html.indexOf('function offeringServiceType('), html.indexOf('function selectOrderExecution(')), context);
+  return { context, state, nodes, gates };
+}
+
+test('services of several directions are ticked; the first is the incoming request; inactive ones are refused', () => {
+  const offerings = [
+    { id: 'solar', name: 'Solar solution', direction: 'solar' },
+    { id: 'smart', name: 'Smart solution', direction: 'smart', unit: 'piece' },
+    { id: 'inactive', name: 'Old', direction: 'smart', active: false },
+  ];
+  const { context, state, nodes, gates } = loadIntake(offerings);
+  context.renderNewOrderOfferings();
+  assert.match(nodes.get('no-offerings').innerHTML, /Solar solution/);
+  assert.match(nodes.get('no-offerings').innerHTML, /Smart solution/);
+  assert.doesNotMatch(nodes.get('no-offerings').innerHTML, /Old/);
+  context.refreshOrderIntakeGates();
+  assert.equal(gates.get('[data-intake-site]')![0].style.display, 'none');
+
+  context.toggleNewOrderOffering('smart', true);
+  context.toggleNewOrderOffering('solar', true);
+  assert.equal(state._newOrderOfferingId, 'smart');
+  assert.deepEqual([...state._newOrderExtraOfferingIds], ['solar']);
+  assert.equal(state._newOrderService, 'smart_film');
+  assert.equal(nodes.get('no-svc').value, 'smart_film');
+  assert.equal(gates.get('[data-intake-site]')![0].style.display, '');
+
+  context.toggleNewOrderOffering('inactive', true);
+  assert.deepEqual([state._newOrderOfferingId, ...state._newOrderExtraOfferingIds], ['smart', 'solar']);
+
+  context.toggleNewOrderOffering('smart', false);
+  assert.equal(state._newOrderOfferingId, 'solar');
+  assert.equal(state._newOrderService, 'solar_film');
+
+  context.selectOrderSiteType('RESIDENTIAL');
+  assert.equal(gates.get('[data-intake-client]')![0].style.display, '');
+  context.toggleNewOrderOffering('solar', false);
+  assert.equal(state._newOrderOfferingId, '');
+  assert.equal(gates.get('[data-intake-client]')![0].style.display, 'none');
+});
+
+test('saved project keeps the chosen services for measurement, estimate and proposal', () => {
+  const creation = html.slice(html.indexOf('function createOrder(nextStep'), html.indexOf('function openClientModal()'));
+  assert.match(creation, /const serviceId = offeringServiceType\(selectedOfferings\[0\]\);/);
+  assert.match(creation, /offeringId: offering\.id/);
+  assert.match(creation, /offering\.direction !== serviceOfferingDirection\(service\.id\)/);
+  assert.doesNotMatch(creation, /openManagerMeasureModal/);
+  const defaults = html.slice(html.indexOf('function managerWindowDefaults('), html.indexOf('function syncWindowPanelsForType('));
+  assert.match(defaults, /o\.offeringIds \|\| o\.orderBuilder\?\.offeringIds/);
+  assert.match(defaults, /\.map\(serviceOffering\)\.find/);
+  assert.match(defaults, /applyWindowOffering\(win, offering\)/);
+});
+
+test('multiple concrete services are deduplicated and inactive or unknown directions cannot enter intake', () => {
+  const offerings = [{ id: 'a', direction: 'solar' }, { id: 'b', direction: 'solar' }, { id: 'c', direction: 'smart' }, { id: 'off', direction: 'smart', active: false }, { id: 'unknown', direction: 'unknown' }];
+  const state: any = { _newOrderOfferingId: 'a', _newOrderExtraOfferingIds: ['a', 'b', 'c', 'c', 'off', 'unknown'] };
+  const context: any = vm.createContext({ state, Set, ORDER_PRIMARY_SERVICES: [{ id: 'solar_film' }, { id: 'smart_film' }], serviceOffering: (id: string) => offerings.find(offering => offering.id === id), serviceOfferingDirection: (id: string) => id.split('_')[0] });
+  vm.runInContext(html.slice(html.indexOf('function offeringServiceType('), html.indexOf('function renderNewOrderOfferings(')), context);
+  assert.deepEqual(Array.from(context.newOrderSelectedOfferings(), (offering: any) => offering.id), ['a', 'b', 'c']);
+  assert.deepEqual(Array.from(context.newOrderSelectedOfferings(), (offering: any) => context.offeringServiceType(offering)), ['solar_film', 'solar_film', 'smart_film']);
 });

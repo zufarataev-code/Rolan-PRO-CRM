@@ -577,3 +577,14 @@ Operational object details are first-class project data: gate/access code, parki
 This decision refines the 2026-09-04 sales-close gate for current operations: after the Proposal is accepted and the estimate/technical requirements are satisfied, payment/deposit remains tracked but is not a hard blocker for production preparation or installation scheduling. Projects intentionally sold as post-pay must continue operationally. Proposal acceptance remains required. Payment status stays auditable and final closeout/payment rules remain separate.
 
 Solar measurement must continue to collect glass type and façade/orientation for recommendation/compatibility. Smart control packages will not be invented until the owner confirms the actual components and wiring standards.
+
+## 2026-10-07 — Project intake starts from services; package components; per-linear-foot work (Owner)
+
+Owner clarified that creating a Project must not begin with a direction or force the measurement screen. The intake lists active services from every direction together; the first selected service remains the immutable incoming-request attribution, while all selected services belong to the same Project. Creating it opens the Project card. Measurement stays an available Project action and is required only by services that need measured windows.
+
+- A service may include size-free services from the directory at no customer charge, one level deep. An included component is stored as its own operational line with quantity, material, installer pay, crew and date, but customer price `$0`. It follows its parent into and out of the Project and cannot be removed independently. Removing a component from the directory package later does not rewrite an existing Project.
+- Unit `lft` means linear foot. Its default quantity is the sum of the measured pane perimeters multiplied by pane quantity. A manager may enter a manual quantity and can return it to the calculated window perimeter.
+- The Project estimate can add any active service. A per-square-foot service is assigned to unassigned measured windows of its direction; other units become quantity lines.
+- Included `$0` lines do not block estimate readiness and do not appear as separate chargeable Proposal lines. Server validation enforces valid components, one-level packages, corridor pricing and the parent/component relationship.
+- The service directory remains owner-created. This change does not seed A1/A2/A3, silicone or any Smart hardware package. Smart components and wiring packages remain out of scope until confirmed by the owner.
+- Editing a package updates its summary in place and preserves the reference-directory scroll position. The calendar continues using the unified CRM design released in PR #316.
