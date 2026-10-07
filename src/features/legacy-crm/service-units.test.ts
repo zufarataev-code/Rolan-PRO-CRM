@@ -367,3 +367,24 @@ test('managers open the work order of a size-free project from the passport, the
   assert.match(production, /disabled: !measureAllWindows\(o\)\.length && !projectOfferingLines\(o\)\.length/);
   assert.match(production, /projectOfferingScopeRows\(o\)/);
 });
+
+
+test('owner price corridor lets a manager override the project price only inside the allowed range', () => {
+  const current: Row = {
+    settings: { serviceOfferings: [{ id: 'svc', direction: 'smart', name: 'Zone', unit: 'zone', pricePerSqft: 100, installerRatePerSqft: 50, materialCostPerUnit: 12, minPricePerUnit: 80, maxPricePerUnit: 130, active: true }], catalog: [] },
+    users: [{ id: 'i1', role: 'installer' }],
+    orders: [{ id: 'o', extraServices: [{ id: 'l', type: 'offering', offeringId: 'svc', serviceType: 'smart_film', unit: 'zone', unitPrice: 100, qty: 2, price: 200 }], measurements: { rooms: [] }, offeringUnits: { svc: 'zone' } }],
+  };
+  const inside = structuredClone(current);
+  inside.orders[0].extraServices[0].unitPrice = 120;
+  assert.equal(prepareServiceSolutions(current, inside, true), null);
+  assert.equal(inside.orders[0].extraServices[0].price, 240);
+
+  const below = structuredClone(current);
+  below.orders[0].extraServices[0].unitPrice = 70;
+  assert.match(prepareServiceSolutions(current, below, true) || '', /ниже разрешённого минимума/);
+
+  const above = structuredClone(current);
+  above.orders[0].extraServices[0].unitPrice = 140;
+  assert.match(prepareServiceSolutions(current, above, true) || '', /выше разрешённого максимума/);
+});

@@ -72,7 +72,12 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     if (typeof offering.id !== 'string' || !/^[\w-]{1,120}$/.test(offering.id) || ids.has(offering.id)) return 'Некорректный или повторный ID услуги.';
     ids.add(offering.id);
     if (!(SERVICE_DIRECTIONS as readonly string[]).includes(offering.direction) || typeof offering.name !== 'string' || !offering.name.trim() || offering.name.length > 120) return 'Укажите направление и название услуги.';
-    for (const field of ['pricePerSqft','installerRatePerSqft']) if (typeof offering[field] !== 'number' || !Number.isFinite(offering[field]) || offering[field] < 0) return 'Цена и ставка услуги должны быть неотрицательными числами.';
+    for (const field of ['pricePerSqft','installerRatePerSqft','minPricePerUnit','maxPricePerUnit']) {
+      if (offering[field] !== undefined && (typeof offering[field] !== 'number' || !Number.isFinite(offering[field]) || offering[field] < 0)) return 'Цена, диапазон и ставка услуги должны быть неотрицательными числами.';
+    }
+    const minPrice = Number(offering.minPricePerUnit) || 0;
+    const maxPrice = Number(offering.maxPricePerUnit) || 0;
+    if (minPrice > 0 && maxPrice > 0 && minPrice > maxPrice) return 'Минимальная цена услуги не может быть выше максимальной.';
     if (offering.unit !== undefined && !(SERVICE_UNITS as readonly string[]).includes(offering.unit)) return 'Неизвестная единица услуги.';
     if (offering.unitLabel !== undefined && (typeof offering.unitLabel !== 'string' || offering.unitLabel.length > 30)) return 'Название единицы — до 30 символов.';
     if (offering.materialCostPerUnit !== undefined && (typeof offering.materialCostPerUnit !== 'number' || !Number.isFinite(offering.materialCostPerUnit) || offering.materialCostPerUnit < 0)) return 'Стоимость материала услуги должна быть неотрицательным числом.';
@@ -93,6 +98,22 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         if (item.offeringId && item.offeringId === old?.offeringId && old && 'offeringMaterialCost' in old) item.offeringMaterialCost = old.offeringMaterialCost;
         else if (offering && typeof offering.materialCostPerUnit === 'number') item.offeringMaterialCost = offering.materialCostPerUnit;
         else delete item.offeringMaterialCost;
+      }
+      // Customer price comes from the directory as a default, but a manager may
+      // override it inside the owner-defined corridor. Historical unchanged
+      // prices stay valid so a later catalog edit never rewrites a signed job.
+      if (offering && item.offeringId) {
+        const priceField = extras.includes(item) && item.type === 'offering' ? 'unitPrice' : 'pricePerSqft';
+        const submittedPrice = item[priceField];
+        const oldPrice = old?.[priceField];
+        if (submittedPrice !== undefined && submittedPrice !== null && submittedPrice !== '' && submittedPrice !== oldPrice) {
+          const price = Number(submittedPrice);
+          if (!Number.isFinite(price) || price < 0) return 'Цена услуги должна быть неотрицательным числом.';
+          const min = Number(offering.minPricePerUnit) || 0;
+          const max = Number(offering.maxPricePerUnit) || 0;
+          if (min > 0 && price < min) return `Цена «${offering.name}» ниже разрешённого минимума ${min.toFixed(2)}.`;
+          if (max > 0 && price > max) return `Цена «${offering.name}» выше разрешённого максимума ${max.toFixed(2)}.`;
+        }
       }
       // A service without sizes is «quantity × price» (Owner, 2026-10-05). The
       // server decides what a row is from where it is and what it was, not from
@@ -115,17 +136,28 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         } else if (newService || sizeFreeOffering || wasQuantityLine || item.type === 'offering') {
           item.type = 'offering';
           const sameService = wasQuantityLine && old.offeringId === item.offeringId;
+          const min = Number(offering?.minPricePerUnit) || 0;
+          const max = Number(offering?.maxPricePerUnit) || 0;
+          const corridorAllowsOverride = min > 0 || max > 0;
+          const submittedUnitPrice = Number(item.unitPrice);
           if (!sameService) {
             if (!offering || offering.active === false) return 'Услуга не найдена в справочнике.';
             if (!offering.unit || offering.unit === 'sqft') return 'Услуга за кв. фут считается по замеру окон, а не количеством.';
             item.unit = offering.unit;
             item.unitLabel = offering.unit === 'custom' && typeof offering.unitLabel === 'string' ? offering.unitLabel : '';
-            item.unitPrice = typeof offering.pricePerSqft === 'number' ? offering.pricePerSqft : 0;
+            item.unitPrice = corridorAllowsOverride && Number.isFinite(submittedUnitPrice) && submittedUnitPrice >= 0
+              ? submittedUnitPrice
+              : typeof offering.pricePerSqft === 'number' ? offering.pricePerSqft : 0;
           } else {
             item.unit = old.unit;
             item.unitLabel = old.unitLabel;
-            item.unitPrice = old.unitPrice;
+            item.unitPrice = corridorAllowsOverride && Number.isFinite(submittedUnitPrice) && submittedUnitPrice >= 0
+              ? submittedUnitPrice
+              : old.unitPrice;
           }
+          const unitPrice = Number(item.unitPrice) || 0;
+          if (min > 0 && unitPrice < min) return `Цена «${offering?.name || 'услуги'}» ниже разрешённого минимума ${min.toFixed(2)}.`;
+          if (max > 0 && unitPrice > max) return `Цена «${offering?.name || 'услуги'}» выше разрешённого максимума ${max.toFixed(2)}.`;
           const qty = Number(item.qty);
           if (!Number.isFinite(qty) || qty < 0) return 'Количество услуги должно быть неотрицательным числом.';
           item.qty = qty;

@@ -12461,6 +12461,8 @@ function projectOfferingScopeRows(order) {
 
 function renderWorkOrderHtml(order, printMode = false) {
   const client = getClient(order.clientId) || {};
+  const site = projectSiteInfo(order, client);
+  const siteSummary = projectSiteSummary(order, client);
   const rows = measureAllWindows(order);
   const photos = Array.isArray(order.photos) ? order.photos : [];
   const notes = order.notes || '';
@@ -12492,6 +12494,13 @@ function renderWorkOrderHtml(order, printMode = false) {
           ${client.phone ? ' · ' + academyEsc(client.phone) : ''}
         </div>
       </div>
+
+      ${(siteSummary || site.contactName || site.contactPhone) ? `
+      <div class="wo-block wo-notes">
+        <div class="wo-block-title">Доступ и работа на объекте</div>
+        ${siteSummary ? `<div>${academyEsc(siteSummary)}</div>` : ''}
+        ${(site.contactName || site.contactPhone) ? `<div class="wo-contact mt-2">Контакт на объекте: ${academyEsc(site.contactName || 'не указан')}${site.contactPhone ? ' · ' + academyEsc(site.contactPhone) : ''}</div>` : ''}
+      </div>` : ''}
 
       ${projectOfferingLines(order).length ? `
       <div class="wo-block">
@@ -15615,7 +15624,10 @@ function orderMeasurementVerificationIssues(o) {
     .map(({ room, win }) => `${room.name || 'Помещение'} · ${win.name || 'Окно'}`);
 }
 function orderPaymentReadyForProduction(o) {
-  return !!o?.depositReceived || (o?.paymentTerms === 'after_completion' && !!o?.paymentTermsConfirmedAt);
+  // Payment remains visible and auditable, but it does not block operational
+  // preparation after the customer has accepted the proposal. Some projects
+  // are intentionally post-pay; managers must still be able to schedule work.
+  return !!o?.proposalAcceptedAt || ['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done','act_signed','payment_received','completed','review_received'].includes(o?.status);
 }
 function projectProductionReadiness(o, { requireReady = true } = {}) {
   const issues = [];
@@ -15624,7 +15636,7 @@ function projectProductionReadiness(o, { requireReady = true } = {}) {
     'installation_in_progress','installation_done','act_signed','payment_received','completed','review_received',
   ];
   if (!acceptedStatuses.includes(o?.status)) issues.push('КП ещё не принято клиентом');
-  if (!orderPaymentReadyForProduction(o)) issues.push('аванс ещё не получен или не подтверждена оплата после выполнения');
+  if (!orderPaymentReadyForProduction(o)) issues.push('КП ещё не принято клиентом');
   if (!projectEstimateIsApproved(o)) issues.push('расчёт проекта не подтверждён');
   issues.push(...orderMeasurementVerificationIssues(o));
 
@@ -23301,6 +23313,35 @@ function renderInstallerList(tasks) {
   `;
 }
 
+
+function projectSiteInfo(o, c = null) {
+  const saved = o?.siteInfo && typeof o.siteInfo === 'object' ? o.siteInfo : {};
+  const client = c || getClient(o?.clientId);
+  const address = orderAddress(o, client) || '';
+  return { address, ...saved };
+}
+function projectSiteSummary(o, c = null) {
+  const site = projectSiteInfo(o, c);
+  return [
+    site.gateCode ? 'код доступа: ' + site.gateCode : '',
+    site.parkingAvailable === true ? 'парковка есть' : site.parkingAvailable === false ? 'парковки нет' : '',
+    site.customerParking === true ? 'место даёт клиент' : '',
+    site.parkingInstructions || '', site.accessRestrictions || '', site.loadingInstructions || '', site.notes || '',
+  ].filter(Boolean).join(' · ');
+}
+function updateProjectSiteInfo(oid, field, value) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanManage(currentUser())) return;
+  const allowed = ['gateCode','parkingAvailable','customerParking','parkingInstructions','accessRestrictions','loadingInstructions','contactName','contactPhone','notes'];
+  if (!allowed.includes(field)) return;
+  o.siteInfo = o.siteInfo && typeof o.siteInfo === 'object' ? o.siteInfo : {};
+  if (field === 'parkingAvailable' || field === 'customerParking') o.siteInfo[field] = value === '' ? null : value === 'yes';
+  else o.siteInfo[field] = String(value || '').trim().slice(0, 1000);
+  o.siteInfo.updatedAt = new Date().toISOString();
+  o.siteInfo.updatedBy = state.currentUserId || null;
+  save(); render();
+}
+
 // ---------- ORDER DETAILS (shared by manager/measurer/installer) ----------
 function openOrder(id) {
   state.ordersKanbanFullscreen = false;
@@ -23444,7 +23485,7 @@ function orderPassportActions(o, ctx) {
       onclick: `openProfessionalKP('${o.id}')`, disabled: ctx.proposalDisabled },
 
     { key: 'production', icon: '🏭', title: 'Производство',
-      sub: done.production ? 'раскрой и материалы подготовлены' : 'после принятия КП и аванса',
+      sub: done.production ? 'раскрой и материалы подготовлены' : 'после принятия КП; оплата контролируется отдельно',
       onclick: `openProjectProductionWorkspace('${o.id}')`, disabled: !done.proposal },
 
     { key: 'install', icon: '▣', title: 'Монтаж',
@@ -23980,8 +24021,10 @@ function updateServiceOffering(id, field, value) {
     if (!name) return alert('Название услуги не может быть пустым.');
     offering.name = name;
     // Existing estimates retain the name and price chosen for that project.
-  } else if (field === 'pricePerSqft' || field === 'installerRatePerSqft' || field === 'materialCostPerUnit') {
+  } else if (['pricePerSqft','installerRatePerSqft','materialCostPerUnit','minPricePerUnit','maxPricePerUnit'].includes(field)) {
     offering[field] = Math.max(0, Number(value) || 0);
+    if (field === 'minPricePerUnit' && Number(offering.maxPricePerUnit) > 0 && offering[field] > offering.maxPricePerUnit) return alert('Минимальная цена не может быть выше максимальной.');
+    if (field === 'maxPricePerUnit' && Number(offering.minPricePerUnit) > 0 && offering[field] < offering.minPricePerUnit) return alert('Максимальная цена не может быть ниже минимальной.');
   } else if (field === 'unit') {
     if (!SERVICE_OFFERING_UNITS.some(unit => unit.id === value)) return;
     offering.unit = value;
@@ -24031,6 +24074,8 @@ function renderServiceOfferingsSection() {
           <div class="md:col-span-2"><label>Как считается</label><select onchange="updateServiceOffering('${offering.id}','unit',this.value)">${SERVICE_OFFERING_UNITS.map(item => `<option value="${item.id}" ${unit === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
           ${unit === 'custom' ? `<div class="md:col-span-2"><label>Единица (например, час или выезд)</label><input value="${academyEsc(offering.unitLabel || '')}" maxlength="30" placeholder="ед." onchange="updateServiceOffering('${offering.id}','unitLabel',this.value)"></div>` : ''}
           <div><label>Цена клиенту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value)"></div>
+          <div><label>Минимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.minPricePerUnit) || ''}" placeholder="без минимума" onchange="updateServiceOffering('${offering.id}','minPricePerUnit',this.value)"></div>
+          <div><label>Максимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.maxPricePerUnit) || ''}" placeholder="без максимума" onchange="updateServiceOffering('${offering.id}','maxPricePerUnit',this.value)"></div>
           <div><label>Специалисту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="${sized ? 'ставка направления' : 'не платится'}" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value)"></div>
         </div>
         <div class="text-xs mt-2 ${sized ? 'text-blue-700' : 'text-emerald-700'}">${sized ? 'Нужен замер: цена и материал считаются по площади окон.' : 'Без размеров: в проекте указывается количество, замер для этой услуги не нужен.'}</div>
@@ -24044,7 +24089,7 @@ function renderServiceOfferingsSection() {
   }).join('');
   return `<section class="card border border-slate-200 bg-white" style="border-radius:4px">
     <h2 class="text-xl font-black">Услуги по направлениям</h2>
-    <p class="text-sm text-slate-500">В проекте выбор идёт так: направление → услуга. Название услуги клиент видит в КП. Услуга за кв. фут считается по замеру окон, её материал — плёнки со склада (одну плёнку можно привязать к нескольким услугам). Услуга за штуку, зону, фиксированную сумму или свою единицу замера не требует: в проекте указывается количество, а цена, оплата специалисту и материал считаются за единицу. Исполнителя каждой услуги выбирают в проекте при назначении монтажа.</p>
+    <p class="text-sm text-slate-500">В проекте выбор идёт так: направление → услуга. Название услуги клиент видит в КП. Цена из справочника — ориентир: менеджер может изменить её в проекте внутри заданного владельцем диапазона. Услуга за кв. фут считается по замеру окон, её материал — плёнки со склада (одну плёнку можно привязать к нескольким услугам). Услуга за штуку, зону, фиксированную сумму или свою единицу замера не требует: в проекте указывается количество, а цена, оплата специалисту и материал считаются за единицу. Исполнителя каждой услуги выбирают в проекте при назначении монтажа.</p>
     ${groups}
   </section>`;
 }
@@ -25169,6 +25214,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const workDocsOnly = isInstaller || !canSeeMoney;
   const visibleTimeline = opts.visibleTimeline || [];
   const projectAddress = orderAddress(o, c);
+  const site = projectSiteInfo(o, c);
   const rooms = o.measurements?.rooms || [];
   const windows = measureAllWindows(o);
   const events = orderScheduledEvents(o);
@@ -25227,6 +25273,26 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       </div>
       ${renderClientChannelDock(o, c, canManage)}
     </div>`;
+
+  const siteBody = `
+    <div class="order-clean-mini-grid">
+      ${renderOrderCleanMini('Адрес', site.address || 'не заполнен')}
+      ${renderOrderCleanMini('Парковка', site.parkingAvailable === true ? 'есть' : site.parkingAvailable === false ? 'нет / уточнить' : 'не указана')}
+      ${renderOrderCleanMini('Место от клиента', site.customerParking === true ? 'да' : site.customerParking === false ? 'нет' : 'не указано')}
+      ${renderOrderCleanMini('Контакт на объекте', site.contactName || 'не указан')}
+    </div>
+    ${canManage ? `<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+      <label>Код ворот / доступа<input value="${academyEsc(site.gateCode || '')}" onchange="updateProjectSiteInfo('${o.id}','gateCode',this.value)"></label>
+      <label>Контакт на объекте<input value="${academyEsc(site.contactName || '')}" onchange="updateProjectSiteInfo('${o.id}','contactName',this.value)"></label>
+      <label>Телефон на объекте<input value="${academyEsc(site.contactPhone || '')}" onchange="updateProjectSiteInfo('${o.id}','contactPhone',this.value)"></label>
+      <label>Парковка<select onchange="updateProjectSiteInfo('${o.id}','parkingAvailable',this.value)"><option value="" ${site.parkingAvailable == null ? 'selected' : ''}>Не указано</option><option value="yes" ${site.parkingAvailable === true ? 'selected' : ''}>Есть</option><option value="no" ${site.parkingAvailable === false ? 'selected' : ''}>Нет</option></select></label>
+      <label>Клиент предоставляет место<select onchange="updateProjectSiteInfo('${o.id}','customerParking',this.value)"><option value="" ${site.customerParking == null ? 'selected' : ''}>Не указано</option><option value="yes" ${site.customerParking === true ? 'selected' : ''}>Да</option><option value="no" ${site.customerParking === false ? 'selected' : ''}>Нет</option></select></label>
+      <label>Парковка / где встать<input value="${academyEsc(site.parkingInstructions || '')}" onchange="updateProjectSiteInfo('${o.id}','parkingInstructions',this.value)"></label>
+      <label>Охрана / HOA / разрешения<input value="${academyEsc(site.accessRestrictions || '')}" onchange="updateProjectSiteInfo('${o.id}','accessRestrictions',this.value)"></label>
+      <label>Лифт / loading / service entrance<input value="${academyEsc(site.loadingInstructions || '')}" onchange="updateProjectSiteInfo('${o.id}','loadingInstructions',this.value)"></label>
+      <label class="md:col-span-2">Особые инструкции<textarea rows="3" onchange="updateProjectSiteInfo('${o.id}','notes',this.value)">${academyEsc(site.notes || '')}</textarea></label>
+    </div>` : `<div class="order-clean-note mt-3">${academyEsc(projectSiteSummary(o, c) || 'Инструкции по объекту не заполнены.')}</div>`}
+  `;
 
   const measurementBody = `
     <div class="order-clean-mini-grid">
@@ -25351,6 +25417,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       <div class="order-workspace-grid">
         ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'client', icon: '👤', title: 'Клиент и связь', summary: c?.name || 'Данные и все каналы связи', badge: c?.phone || c?.email ? 'контакт' : 'заполнить', body: clientBody, color: '#2563eb', soft: '#eff6ff' })}
+        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'site', icon: '📍', title: 'Объект', summary: projectSiteSummary(o, c) || projectAddress || 'Доступ и парковка не заполнены', badge: site.gateCode || site.parkingAvailable != null ? 'инструкции' : 'заполнить', body: siteBody, color: '#0369a1', soft: '#f0f9ff' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'measurement', icon: '📐', title: 'Замер', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : estimateReady ? 'Замер не нужен: услуги без размеров' : 'Размеры ещё не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : estimateReady ? 'не нужен' : 'нужно', body: measurementBody, color: '#7c3aed', soft: '#f5f3ff' })}
         ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '🧮', title: estimateReady && !hasMeasurements ? 'Расчёт проекта' : 'Расчёт по замеру', summary: hasMeasurements ? `${windows.length} окон · ${orderActualAreaSqft(o).toFixed(0)} sqft · ${fmtMoney(orderRevenue(o))}` : estimateReady ? sizeFreeSummary : 'Сначала внесите помещения, окна и размеры', badge: estimateApproved ? 'подтверждён' : estimateReady ? 'рассчитать' : 'нужен замер', onclick: estimateReady ? `openProjectEstimateWorkspace('${o.id}')` : `openManagerMeasureModal('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'documents', icon: workDocsOnly ? '🧰' : '📄', title: workDocsOnly ? 'Рабочие документы' : 'КП и документы', summary: workDocsOnly ? 'Без коммерческих сумм' : (proposal ? 'КП создано' : estimateApproved ? 'Расчёт готов — можно формировать КП' : 'Откройте расчёт и проверьте итог'), badge: workDocsOnly ? 'документы' : estimateApproved ? 'КП' : 'проверить', body: docsBody, color: '#d97706', soft: '#fff7ed' })}
