@@ -192,6 +192,108 @@ html body .chip { border-radius: 4px; font-weight: 700; }
 html body .modal-backdrop { background: rgba(13,22,33,.45); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
 html body .modal-content { border-radius: 10px; box-shadow: 0 30px 80px -30px rgba(13,22,33,.65); }
 
+/* Calendar: one Rolan PRO work surface, using the same shell, controls and
+   restrained navy/cyan hierarchy as the rest of the CRM. */
+html body .calendar-board { gap: 12px; }
+html body .calendar-toolbar,
+html body .dispatch-workspace,
+html body .calendar-month-workspace {
+  border: 1px solid var(--rp-line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--rp-card-shadow);
+}
+html body .calendar-toolbar { padding: 12px 14px; }
+html body .calendar-toolbar-secondary { border-top-color: var(--rp-line); }
+html body .calendar-period-title {
+  font-family: Montserrat, Manrope, sans-serif;
+  color: var(--text);
+  font-weight: 800;
+  letter-spacing: -.02em;
+}
+html body .calendar-period-count { color: var(--text-muted); font-weight: 700; }
+html body .calendar-nav-button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--rp-line);
+  border-radius: 6px;
+  background: var(--rp-input);
+  color: var(--rp-blue);
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+html body .calendar-nav-button:hover,
+html body .calendar-nav-button:focus-visible {
+  border-color: rgba(46,95,168,.28);
+  background: #EAF3FB;
+  color: var(--brand-blue-dark);
+  outline: none;
+}
+html body .calendar-mode-switch {
+  padding: 3px;
+  border: 1px solid var(--rp-line);
+  border-radius: 8px;
+  background: var(--rp-input);
+}
+html body .calendar-mode-switch button {
+  min-height: 34px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+html body .calendar-mode-switch button.active {
+  background: var(--rp-gradient);
+  color: #fff;
+  box-shadow: 0 8px 18px -12px rgba(46,95,168,.9);
+}
+html body .dispatch-workspace { overflow: hidden; box-shadow: var(--rp-card-shadow); }
+html body .dispatch-calendar-pane { border-right-color: var(--rp-line); }
+html body .dispatch-week-head,
+html body .dispatch-day-head,
+html body .dispatch-map-toolbar,
+html body .calendar-month-head {
+  border-color: var(--rp-line);
+  background: var(--rp-input);
+}
+html body .dispatch-week-head > div,
+html body .dispatch-day-head > div { border-left-color: var(--rp-line); color: var(--text-muted); }
+html body .dispatch-week-head .today,
+html body .calendar-month-cell.today {
+  background: rgba(61,181,217,.11);
+  color: var(--rp-blue);
+}
+html body .calendar-month-cell.today { box-shadow: inset 0 0 0 2px rgba(61,181,217,.55); }
+html body .calendar-month-cell,
+html body .dispatch-day-column { border-color: var(--rp-line); }
+html body .dispatch-day-column.today { background-color: rgba(61,181,217,.05); }
+html body .calendar-event-card {
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+html body .calendar-event-card.compact { border-radius: 6px; }
+html body .calendar-event-card:hover,
+html body .calendar-event-card:focus-visible {
+  transform: none;
+  box-shadow: 0 8px 20px -16px rgba(23,32,74,.55);
+}
+html body .calendar-event-card::after { height: 3px; border-bottom-left-radius: 4px; }
+html body .dispatch-event {
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(23,32,74,.08);
+}
+html body .dispatch-event:hover,
+html body .dispatch-event:focus-visible { box-shadow: 0 8px 18px -12px rgba(23,32,74,.55); }
+html body .dispatch-map-time-label { border-radius: 4px; box-shadow: 0 2px 6px rgba(23,32,74,.12); }
+html body .field-calendar-toggle {
+  border-color: var(--rp-line);
+  border-radius: 8px;
+  background: var(--rp-input);
+}
+html body .field-calendar-toggle button { border-radius: 5px; color: var(--text-muted); }
+html body .field-calendar-toggle button.active { background: var(--rp-gradient); color: #fff; }
+
 /* Phone dock */
 html body .mobile-primary-nav {
   background: rgba(255,255,255,.88);

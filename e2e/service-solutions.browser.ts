@@ -44,8 +44,8 @@ async function main() {
       await page.getByRole('heading',{name:'Услуги по направлениям',exact:true}).waitFor();
       await page.locator(`[onclick="addServiceOffering('solar')"]`).click();
       const newName=page.locator('input[value="Новая услуга"]');
+      const card=newName.locator('xpath=ancestor::div[@data-service-offering-row][1]');
       await newName.fill('QA custom solution'); await newName.press('Tab');
-      const card=page.locator('div.p-3.border').filter({has:page.locator('input[value="QA custom solution"]')});
       const price=card.locator('input[type=number]').first();
       await price.fill('18'); await price.press('Tab');
       await card.locator('summary').click();

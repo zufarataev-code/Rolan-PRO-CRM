@@ -22233,25 +22233,25 @@ function renderSettings() {
           <tbody>
             ${(s.catalog||[]).map(c => `
               <tr class="border-t">
-                <td class="px-2 py-1"><input value="${c.brand}" onchange="updateCatalogItem('${c.id}','brand',this.value)"></td>
-                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmCategory(c))}" placeholder="Зеркальная" onchange="updateCatalogItem('${c.id}','filmCategory',this.value)"></td>
-                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmName(c))}" placeholder="Prime" onchange="updateCatalogItem('${c.id}','productName',this.value)"></td>
-                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmModel(c))}" placeholder="NE2" onchange="updateCatalogItem('${c.id}','modelCode',this.value)"></td>
+                <td class="px-2 py-1"><input value="${c.brand}" onchange="updateCatalogItem('${c.id}','brand',this.value,this)"></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmCategory(c))}" placeholder="Зеркальная" onchange="updateCatalogItem('${c.id}','filmCategory',this.value,this)"></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmName(c))}" placeholder="Prime" onchange="updateCatalogItem('${c.id}','productName',this.value,this)"></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmModel(c))}" placeholder="NE2" onchange="updateCatalogItem('${c.id}','modelCode',this.value,this)"></td>
                 <td class="px-2 py-1">
-                  <select onchange="updateCatalogItem('${c.id}','category',this.value)" style="background:${catColor(c.category).bg};color:${catColor(c.category).text};border:none;font-weight:600;">
+                  <select onchange="updateCatalogItem('${c.id}','category',this.value,this)" style="background:${catColor(c.category).bg};color:${catColor(c.category).text};border:none;font-weight:600;">
                     ${['solar','protective','smart','privacy','decorative','removal','washing'].map(k => `<option value="${k}" ${c.category===k?'selected':''}>${T('cat'+k.charAt(0).toUpperCase()+k.slice(1))}</option>`).join('')}
                   </select>
                 </td>
                 <td class="px-2 py-1">
-                  <select onchange="updateCatalogItem('${c.id}','vendorId',this.value||null)">
+                  <select onchange="updateCatalogItem('${c.id}','vendorId',this.value||null,this)">
                     <option value="">— любой —</option>
                     ${db.vendors.map(v => `<option value="${v.id}" ${c.vendorId===v.id?'selected':''}>${v.name}</option>`).join('')}
                   </select>
                 </td>
-                <td class="px-2 py-1"><input type="number" step="0.5" value="${c.retailPerSqft}" onchange="updateCatalogItem('${c.id}','retailPerSqft',parseFloat(this.value)||0)"></td>
-                <td class="px-2 py-1"><input type="number" step="0.1" value="${c.costPerSqft}" onchange="updateCatalogItem('${c.id}','costPerSqft',parseFloat(this.value)||0)"></td>
-                <td class="px-2 py-1"><input type="number" step="0.05" value="${c.installerRatePerSqft}" onchange="updateCatalogItem('${c.id}','installerRatePerSqft',parseFloat(this.value)||0)"></td>
-                <td class="px-2 py-1"><input type="number" step="1" value="${c.wastePct}" onchange="updateCatalogItem('${c.id}','wastePct',parseFloat(this.value)||0)"></td>
+                <td class="px-2 py-1"><input type="number" step="0.5" value="${c.retailPerSqft}" onchange="updateCatalogItem('${c.id}','retailPerSqft',parseFloat(this.value)||0,this)"></td>
+                <td class="px-2 py-1"><input type="number" step="0.1" value="${c.costPerSqft}" onchange="updateCatalogItem('${c.id}','costPerSqft',parseFloat(this.value)||0,this)"></td>
+                <td class="px-2 py-1"><input type="number" step="0.05" value="${c.installerRatePerSqft}" onchange="updateCatalogItem('${c.id}','installerRatePerSqft',parseFloat(this.value)||0,this)"></td>
+                <td class="px-2 py-1"><input type="number" step="1" value="${c.wastePct}" onchange="updateCatalogItem('${c.id}','wastePct',parseFloat(this.value)||0,this)"></td>
                 <td class="px-2 py-1"><button class="btn-ghost text-red-600 text-xs" onclick="deleteCatalogItem('${c.id}')">✕</button></td>
               </tr>
             `).join('')}
@@ -24003,16 +24003,21 @@ function serviceOfferingCanEdit() {
   return false;
 }
 
+function renderServiceOfferingDirectory() {
+  if (typeof preservePositionForNextRender === 'function') preservePositionForNextRender();
+  render();
+}
+
 function addServiceOffering(direction) {
   if (!serviceOfferingCanEdit() || !SERVICE_OFFERING_DIRECTIONS.includes(direction)) return;
   const sort = serviceOfferingsFor(direction, { includeInactive: true }).length;
   db.settings.serviceOfferings = serviceOfferingsAll();
   db.settings.serviceOfferings.push({ id: 'svc_' + uid(), direction, name: 'Новая услуга', unit: 'sqft', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort });
   save();
-  render();
+  renderServiceOfferingDirectory();
 }
 
-function updateServiceOffering(id, field, value) {
+function updateServiceOffering(id, field, value, control = null) {
   if (!serviceOfferingCanEdit()) return;
   const offering = serviceOffering(id);
   if (!offering) return;
@@ -24022,9 +24027,10 @@ function updateServiceOffering(id, field, value) {
     offering.name = name;
     // Existing estimates retain the name and price chosen for that project.
   } else if (['pricePerSqft','installerRatePerSqft','materialCostPerUnit','minPricePerUnit','maxPricePerUnit'].includes(field)) {
-    offering[field] = Math.max(0, Number(value) || 0);
-    if (field === 'minPricePerUnit' && Number(offering.maxPricePerUnit) > 0 && offering[field] > offering.maxPricePerUnit) return alert('Минимальная цена не может быть выше максимальной.');
-    if (field === 'maxPricePerUnit' && Number(offering.minPricePerUnit) > 0 && offering[field] < offering.minPricePerUnit) return alert('Максимальная цена не может быть ниже минимальной.');
+    const nextValue = Math.max(0, Number(value) || 0);
+    if (field === 'minPricePerUnit' && Number(offering.maxPricePerUnit) > 0 && nextValue > offering.maxPricePerUnit) return alert('Минимальная цена не может быть выше максимальной.');
+    if (field === 'maxPricePerUnit' && Number(offering.minPricePerUnit) > 0 && nextValue < offering.minPricePerUnit) return alert('Максимальная цена не может быть ниже минимальной.');
+    offering[field] = nextValue;
   } else if (field === 'unit') {
     if (!SERVICE_OFFERING_UNITS.some(unit => unit.id === value)) return;
     offering.unit = value;
@@ -24032,10 +24038,27 @@ function updateServiceOffering(id, field, value) {
     offering.unitLabel = String(value || '').trim().slice(0, 30);
   } else if (field === 'active') {
     offering.active = !!value;
+    control?.closest('[data-service-offering-row]')?.classList.toggle('opacity-60', !offering.active);
   } else return;
   offering.updatedAt = new Date().toISOString();
   save();
-  render();
+  // The control already contains the saved value. Rebuilding the entire CRM
+  // here made the directory jump after every edit. Only changing the unit
+  // changes the fields that must be displayed.
+  if (field === 'unit') {
+    renderServiceOfferingDirectory();
+  }
+}
+
+function refreshServiceOfferingFilmSummary(id) {
+  const offering = serviceOffering(id);
+  if (!offering) return;
+  if (typeof document === 'undefined') return;
+  const linked = (db.settings.catalog || []).filter(item => !item.archived && serviceOfferingFilmIds(offering).includes(item.id));
+  const text = linked.length ? linked.map(item => catalogLabel(item)).join(', ') : 'выберите материалы услуги';
+  document.querySelectorAll('[data-service-offering-film-summary]').forEach(node => {
+    if (node.getAttribute('data-service-offering-film-summary') === id) node.textContent = text;
+  });
 }
 
 function toggleServiceOfferingFilm(id, filmId, checked) {
@@ -24048,7 +24071,7 @@ function toggleServiceOfferingFilm(id, filmId, checked) {
   if (checked) ids.add(filmId); else ids.delete(filmId);
   offering.filmIds = [...ids];
   save();
-  render();
+  refreshServiceOfferingFilmSummary(id);
 }
 
 function renderServiceOfferingsSection() {
@@ -24060,26 +24083,26 @@ function renderServiceOfferingsSection() {
     const rows = serviceOfferingsFor(direction, { includeInactive: owner }).map(offering => {
       const linked = films.filter(item => serviceOfferingFilmIds(offering).includes(item.id));
       const filmList = films.length
-        ? `<details><summary class="cursor-pointer text-sm">Плёнки: ${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'выберите материалы услуги'}</summary><div class="mt-2 grid gap-1">${films.map(item => `<label class="text-sm"><input type="checkbox" ${serviceOfferingFilmIds(offering).includes(item.id) ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(сейчас: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label>`).join('')}</div></details>`
+        ? `<details><summary class="cursor-pointer text-sm">Плёнки: <span data-service-offering-film-summary="${offering.id}">${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'выберите материалы услуги'}</span></summary><div class="mt-2 grid gap-1">${films.map(item => `<label class="text-sm"><input type="checkbox" ${serviceOfferingFilmIds(offering).includes(item.id) ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(сейчас: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label>`).join('')}</div></details>`
         : '<div class="text-xs text-gray-500">На складе нет плёнок этого направления.</div>';
       const unit = serviceOfferingUnit(offering);
       const per = serviceOfferingUnitShort(offering);
       const sized = serviceOfferingNeedsSizes(offering);
       const material = sized
         ? filmList
-        : `<label class="block" style="max-width:16rem">Материал, $ / ${academyEsc(per)}<input type="number" min="0" step="0.5" value="${Number(offering.materialCostPerUnit) || ''}" placeholder="нет материала" onchange="updateServiceOffering('${offering.id}','materialCostPerUnit',this.value)"></label>`;
-      return owner ? `<div class="p-3 border border-slate-200 ${offering.active === false ? 'opacity-60' : ''}">
+        : `<label class="block" style="max-width:16rem">Материал, $ / ${academyEsc(per)}<input type="number" min="0" step="0.5" value="${Number(offering.materialCostPerUnit) || ''}" placeholder="нет материала" onchange="updateServiceOffering('${offering.id}','materialCostPerUnit',this.value,this)"></label>`;
+      return owner ? `<div data-service-offering-row="${offering.id}" class="p-3 border border-slate-200 ${offering.active === false ? 'opacity-60' : ''}">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-          <div class="md:col-span-2"><label>Услуга (название в КП)</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value)"></div>
-          <div class="md:col-span-2"><label>Как считается</label><select onchange="updateServiceOffering('${offering.id}','unit',this.value)">${SERVICE_OFFERING_UNITS.map(item => `<option value="${item.id}" ${unit === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
-          ${unit === 'custom' ? `<div class="md:col-span-2"><label>Единица (например, час или выезд)</label><input value="${academyEsc(offering.unitLabel || '')}" maxlength="30" placeholder="ед." onchange="updateServiceOffering('${offering.id}','unitLabel',this.value)"></div>` : ''}
-          <div><label>Цена клиенту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value)"></div>
-          <div><label>Минимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.minPricePerUnit) || ''}" placeholder="без минимума" onchange="updateServiceOffering('${offering.id}','minPricePerUnit',this.value)"></div>
-          <div><label>Максимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.maxPricePerUnit) || ''}" placeholder="без максимума" onchange="updateServiceOffering('${offering.id}','maxPricePerUnit',this.value)"></div>
-          <div><label>Специалисту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="${sized ? 'ставка направления' : 'не платится'}" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value)"></div>
+          <div class="md:col-span-2"><label>Услуга (название в КП)</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value,this)"></div>
+          <div class="md:col-span-2"><label>Как считается</label><select onchange="updateServiceOffering('${offering.id}','unit',this.value,this)">${SERVICE_OFFERING_UNITS.map(item => `<option value="${item.id}" ${unit === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
+          ${unit === 'custom' ? `<div class="md:col-span-2"><label>Единица (например, час или выезд)</label><input value="${academyEsc(offering.unitLabel || '')}" maxlength="30" placeholder="ед." onchange="updateServiceOffering('${offering.id}','unitLabel',this.value,this)"></div>` : ''}
+          <div><label>Цена клиенту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value,this)"></div>
+          <div><label>Минимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.minPricePerUnit) || ''}" placeholder="без минимума" onchange="updateServiceOffering('${offering.id}','minPricePerUnit',this.value,this)"></div>
+          <div><label>Максимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.maxPricePerUnit) || ''}" placeholder="без максимума" onchange="updateServiceOffering('${offering.id}','maxPricePerUnit',this.value,this)"></div>
+          <div><label>Специалисту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="${sized ? 'ставка направления' : 'не платится'}" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value,this)"></div>
         </div>
         <div class="text-xs mt-2 ${sized ? 'text-blue-700' : 'text-emerald-700'}">${sized ? 'Нужен замер: цена и материал считаются по площади окон.' : 'Без размеров: в проекте указывается количество, замер для этой услуги не нужен.'}</div>
-        <div class="mt-2 flex flex-wrap items-start justify-between gap-3"><div class="flex-1">${material}</div><label class="tag" style="display:inline-flex;white-space:nowrap;gap:6px"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked)"> Активна</label></div>
+        <div class="mt-2 flex flex-wrap items-start justify-between gap-3"><div class="flex-1">${material}</div><label class="tag" style="display:inline-flex;white-space:nowrap;gap:6px"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked,this)"> Активна</label></div>
       </div>` : `<div class="p-3 border border-slate-200"><div class="flex justify-between gap-3"><b>${academyEsc(offering.name)}</b><span>${money(offering.pricePerSqft)} / ${academyEsc(per)}</span></div>${sized ? `<div class="mt-1">${filmList}</div>` : '<div class="text-xs text-gray-500 mt-1">Без размеров — количество в проекте</div>'}</div>`;
     }).join('');
     return `<div class="mt-4">
@@ -29626,13 +29649,20 @@ function addNewFilmType() {
 }
 
 // ---------- CATALOG MGMT ----------
-function updateCatalogItem(id, field, val) {
+function updateCatalogItem(id, field, val, control = null) {
   const c = getCatalogItem(id); if (!c) return;
   c[field] = val;
   if (field === 'productName' || field === 'modelCode') {
     c.model = [c.productName, c.modelCode].filter(Boolean).join(' ').trim();
   }
-  save(); render();
+  save();
+  // The edited cell already reflects the saved value. Rebuilding the entire
+  // table here caused the reference directory to jump after every field.
+  if (field === 'category' && control) {
+    const palette = catColor(val);
+    control.style.background = palette.bg;
+    control.style.color = palette.text;
+  }
 }
 function addCatalogItem(presetVendorId, presetCategory = 'solar') {
   db.settings.catalog.push({

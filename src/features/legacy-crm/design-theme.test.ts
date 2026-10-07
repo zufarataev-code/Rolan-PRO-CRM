@@ -46,3 +46,11 @@ test("menu and dock use stroke icons; the dock's «+» opens «Создать»"
 test("phones keep the title: the dock's «+» replaces the top-bar create button", () => {
   assert.match(DESIGN_THEME_CSS, /@media \(max-width: 760px\) \{\n {2}html body \.app-topbar button\[onclick="openOrderModal\(\)"\] \{ display: none; \}/);
 });
+
+test("calendar uses the shared Rolan PRO surface and control language", () => {
+  assert.match(DESIGN_THEME_CSS, /html body \.calendar-toolbar,[\s\S]*?border-radius: 8px;[\s\S]*?box-shadow: var\(--rp-card-shadow\)/);
+  assert.match(DESIGN_THEME_CSS, /html body \.calendar-mode-switch button\.active \{[\s\S]*?background: var\(--rp-gradient\)/);
+  assert.match(DESIGN_THEME_CSS, /html body \.calendar-event-card \{[\s\S]*?border-radius: 6px;[\s\S]*?background: #fff;/);
+  assert.match(DESIGN_THEME_CSS, /html body \.calendar-event-card:hover,[\s\S]*?transform: none;/);
+  assert.match(DESIGN_THEME_CSS, /html body \.field-calendar-toggle button\.active \{ background: var\(--rp-gradient\); color: #fff; \}/);
+});
