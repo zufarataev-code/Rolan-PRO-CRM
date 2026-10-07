@@ -6,7 +6,7 @@ const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 
 test("new client from order opens in its own workspace", () => {
   const start = html.indexOf("function openOrderModal");
-  const end = html.indexOf("function selectOrderService", start);
+  const end = html.indexOf("function offeringServiceType", start);
   const orderModal = html.slice(start, end);
 
   assert.match(orderModal, /onclick="openOrderClientOverlay\(\)"/);

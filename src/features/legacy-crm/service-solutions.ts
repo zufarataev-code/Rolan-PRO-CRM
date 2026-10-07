@@ -4,7 +4,7 @@ const rows = (x: unknown): Row[] => Array.isArray(x) ? x.map(object) : [];
 const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))];
 
 export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'privacy'] as const;
-export const SERVICE_UNITS = ['sqft', 'piece', 'zone', 'fixed', 'custom'] as const;
+export const SERVICE_UNITS = ['sqft', 'lft', 'piece', 'zone', 'fixed', 'custom'] as const;
 /** Owner-only economics of a service: the installer rate and the material cost per unit. */
 const OWNER_OFFERING_FIELDS = ['installerRatePerSqft', 'materialCostPerUnit'] as const;
 
@@ -81,16 +81,57 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     if (offering.unit !== undefined && !(SERVICE_UNITS as readonly string[]).includes(offering.unit)) return 'Неизвестная единица услуги.';
     if (offering.unitLabel !== undefined && (typeof offering.unitLabel !== 'string' || offering.unitLabel.length > 30)) return 'Название единицы — до 30 символов.';
     if (offering.materialCostPerUnit !== undefined && (typeof offering.materialCostPerUnit !== 'number' || !Number.isFinite(offering.materialCostPerUnit) || offering.materialCostPerUnit < 0)) return 'Стоимость материала услуги должна быть неотрицательным числом.';
+    if (offering.includes !== undefined && (!Array.isArray(offering.includes) || offering.includes.length > 20 || offering.includes.some((id: unknown) => typeof id !== 'string'))) return 'Некорректный состав услуги.';
     // Film categories are compared as the CRM reads them («privacy_film», «Солнцезащитная»…).
     if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id && canonicalFilmCategory(film.category) === offering.direction)))) return 'Материалы должны принадлежать направлению услуги.';
+  }
+  for (const offering of offerings) {
+    for (const id of Array.isArray(offering.includes) ? offering.includes : []) {
+      const child = offerings.find(item => item.id === id);
+      if (!child || child.id === offering.id) return 'В состав услуги входят только другие услуги из справочника.';
+      if (!child.unit || child.unit === 'sqft') return 'В состав услуги входят только услуги без размеров.';
+      if (Array.isArray(child.includes) && child.includes.length) return 'Пакет внутри пакета не поддерживается.';
+    }
   }
   for (const order of rows(next.orders)) {
     const oldOrder = rows(current.orders).find(item=>item.id===order.id) || {};
     const oldItems = scope(oldOrder);
-    const extras = rows(order.extraServices);
+    const extraValues = Array.isArray(order.extraServices) ? order.extraServices : [];
+    const extras = rows(extraValues);
+    const parentIds = new Set([
+      ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows)).map(win => win.offeringId),
+      ...extras.filter(line => line.offeringId && !line.includedBy && line.quickProjectLine !== true).map(line => line.offeringId),
+    ].filter((id): id is string => typeof id === 'string' && !!id));
+    // An included component cannot be removed or repointed independently while
+    // its parent service remains in the project. Restore it from the saved
+    // record; removing the parent still removes the component normally.
+    for (const oldLine of rows(oldOrder.extraServices).filter(line => typeof line.includedBy === 'string' && parentIds.has(line.includedBy))) {
+      let submitted = extras.find(line => line.id === oldLine.id);
+      if (!submitted) {
+        submitted = structuredClone(oldLine);
+        extraValues.push(submitted);
+        extras.push(submitted);
+      }
+      submitted.includedBy = oldLine.includedBy;
+      submitted.offeringId = oldLine.offeringId;
+      submitted.type = oldLine.type;
+      submitted.unit = oldLine.unit;
+      submitted.unitLabel = oldLine.unitLabel;
+      submitted.unitPrice = 0;
+      submitted.price = 0;
+    }
+    if (!Array.isArray(order.extraServices) && extras.length) order.extraServices = extraValues;
     for (const item of scope(order)) {
       const old = oldItems.find(value=>value.id===item.id);
       const offering = offerings.find(value=>value.id===item.offeringId);
+      let included = false;
+      if (extras.includes(item) && item.includedBy !== undefined) {
+        const parent = offerings.find(value => value.id === item.includedBy);
+        const wasIncluded = !!old && old.includedBy === item.includedBy && old.offeringId === item.offeringId;
+        included = typeof item.includedBy === 'string' && parentIds.has(item.includedBy) && !!item.offeringId
+          && (wasIncluded || (Array.isArray(parent?.includes) && parent.includes.includes(item.offeringId)));
+        if (!included) delete item.includedBy;
+      }
       if (!owner || item.offeringId !== old?.offeringId) {
         if (item.offeringId && item.offeringId === old?.offeringId && old && 'offeringInstallerRate' in old) item.offeringInstallerRate = old.offeringInstallerRate;
         else if (offering) item.offeringInstallerRate = offering.installerRatePerSqft;
@@ -102,7 +143,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       // Customer price comes from the directory as a default, but a manager may
       // override it inside the owner-defined corridor. Historical unchanged
       // prices stay valid so a later catalog edit never rewrites a signed job.
-      if (offering && item.offeringId) {
+      if (offering && item.offeringId && !included) {
         const priceField = extras.includes(item) && item.type === 'offering' ? 'unitPrice' : 'pricePerSqft';
         const submittedPrice = item[priceField];
         const oldPrice = old?.[priceField];
@@ -129,13 +170,14 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
           else delete item.quickProjectLine;
         }
         const sizeFreeOffering = !!offering && !!offering.unit && offering.unit !== 'sqft';
+        const packageDetached = !!old?.includedBy && !parentIds.has(old.includedBy);
         const wasQuantityLine = !!old && old.type === 'offering' && !!old.unit && old.unit !== 'sqft' && old.quickProjectLine !== true;
-        const newService = !old || old.offeringId !== item.offeringId;
+        const newService = !old || old.offeringId !== item.offeringId || packageDetached;
         if (quick) {
           if (newService && sizeFreeOffering) return 'Быстрая строка проекта считается по кв. футам.';
         } else if (newService || sizeFreeOffering || wasQuantityLine || item.type === 'offering') {
           item.type = 'offering';
-          const sameService = wasQuantityLine && old.offeringId === item.offeringId;
+          const sameService = !packageDetached && wasQuantityLine && old.offeringId === item.offeringId;
           const min = Number(offering?.minPricePerUnit) || 0;
           const max = Number(offering?.maxPricePerUnit) || 0;
           const corridorAllowsOverride = min > 0 || max > 0;
@@ -155,9 +197,10 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
               ? submittedUnitPrice
               : old.unitPrice;
           }
+          if (included) item.unitPrice = 0;
           const unitPrice = Number(item.unitPrice) || 0;
-          if (min > 0 && unitPrice < min) return `Цена «${offering?.name || 'услуги'}» ниже разрешённого минимума ${min.toFixed(2)}.`;
-          if (max > 0 && unitPrice > max) return `Цена «${offering?.name || 'услуги'}» выше разрешённого максимума ${max.toFixed(2)}.`;
+          if (!included && min > 0 && unitPrice < min) return `Цена «${offering?.name || 'услуги'}» ниже разрешённого минимума ${min.toFixed(2)}.`;
+          if (!included && max > 0 && unitPrice > max) return `Цена «${offering?.name || 'услуги'}» выше разрешённого максимума ${max.toFixed(2)}.`;
           const qty = Number(item.qty);
           if (!Number.isFinite(qty) || qty < 0) return 'Количество услуги должно быть неотрицательным числом.';
           item.qty = qty;
