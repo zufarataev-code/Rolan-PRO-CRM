@@ -25,10 +25,10 @@ Before doing any work:
 
 ## Current task update — 2026-10-07
 
-- Branch: `codex/reference-scroll-calendar-cohesion` from `origin/main` at `42fe16d`.
+- Branch / PR: `codex/reference-scroll-calendar-cohesion` / #316, from `origin/main` at `42fe16d`; implementation head `7ffc2ae` passed all three required GitHub checks, including the clean database and phone/desktop browser gate.
 - Reference-directory jitter is fixed without changing the data model: ordinary service, price, film-link, and catalog-cell edits save in place instead of rebuilding the complete CRM; the only structural service edit (unit type) captures the scroll position before rendering its changed fields.
 - Calendar day, week, month, dispatch-map, event, navigation, filter, and field-role controls keep their existing behavior and now use the shared Rolan PRO design theme: the same 8 px surfaces, 6 px controls, navy-to-cyan active state, borders, typography, and restrained shadows as the rest of the CRM.
-- Verification completed locally: 591/591 tests, TypeScript, 119-page production build, inline-script validation, and diff check pass. Production remains unchanged until PR CI is green and the normal `main` deployment completes.
+- Verification completed locally: 591/591 tests, TypeScript, 119-page production build, inline-script validation, and diff check pass. Release completion remains the normal protected path: final PR CI, merge to `main`, production deploy, then authenticated calendar and reference-directory smoke tests.
 
 ## Active pull requests
 
