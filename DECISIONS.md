@@ -617,3 +617,12 @@ Owner reviewed the «проект — контейнер» scheme in chat on 202
 - Historical browser-stored AI keys are removed during legacy payload normalization and server sanitization. This supersedes the former direct-browser Anthropic integration and its `anthropic-dangerous-direct-browser-access` header.
 - Creating a key does not activate production. Funding the provider account, configuring the production secret, merging, deploying from `main`, and running an authenticated smoke test remain separate owner-authorized release actions.
 - Implemented for review on `codex/secure-anthropic-crm-agent` in PR #322; production deployment remains a separate owner-authorized action.
+
+## 2026-10-09 — Live CRM voice uses WebRTC and ephemeral browser credentials (Owner)
+
+The Owner asked for a real spoken conversation with the Rolan PRO agent, not speech-to-text in the message box. The phone browser therefore connects to OpenAI Realtime over WebRTC after an explicit user tap grants microphone access.
+
+- `OPENAI_API_KEY` remains a server-only production secret. The browser receives only a short-lived Realtime client secret minted by an authenticated same-origin route.
+- The initial voice release is available to Owner and Manager. It receives the same bounded, role-aware CRM context used for explanations and cannot silently execute writes, payments, customer sends or destructive actions.
+- The UI must work as a full-screen phone conversation, remain above the mobile dock, respect iOS safe areas, show connection/microphone state, allow mute/end, expose a transcript and release microphone resources when closed.
+- A future tool-enabled voice agent must reuse protected application actions and explicit confirmation gates; it must not receive direct database credentials or an unrestricted write channel.

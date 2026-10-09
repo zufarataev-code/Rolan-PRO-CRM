@@ -927,6 +927,14 @@ Status: implementation and local checks complete; GitHub PR/CI/release pending. 
 - Server: `service-solutions.ts` — five directions, units, `materialCostPerUnit` (owner-only, snapshotted as `offeringMaterialCost`), film categories compared canonically (`canonicalFilmCategory`); `order-intake-cleanup.ts` privacy labels; seed adds DECORATIVE_FILM and PRIVACY_FILM service types.
 - Verification: `service-units.test.ts` plus updated intake/estimate/measurement tests; full suite 567/567, `tsc` clean. Local CRM: five direction cards in «Новый проект»; a Smart «Подключение зоны» at $100/zone, $50 installer, $12 material; a project with only that service opens without measurement, 3 zones → $300 to the client, $36 material, $150 installer pay, no blockers for the proposal.
 
+## 2026-10-09 — Mobile Rolan PRO agent and live voice (Codex)
+
+Branch `fix/mobile-ai-agent-visibility`, based on `main` `a9bf667` after PR #322. The agent launcher now sits above the phone dock and its dialog uses the full phone viewport with iOS safe-area spacing; desktop layout is preserved. Owner and Manager receive a third agent tab, «Голос», with a live WebRTC conversation, microphone mute/end controls and a readable transcript. Closing the agent ends the voice session and releases the microphone.
+
+The browser never receives the standard OpenAI API key. Authenticated Owner/Manager sessions request a short-lived Realtime client secret from `/api/v1/ai/realtime`; the server keeps `OPENAI_API_KEY`, restricts the model, hashes the internal user id as the safety identifier and supplies a bounded role-aware CRM context. The first voice release can explain and recommend, but cannot claim that it changed CRM records; business writes still require explicit confirmation and an existing protected application action.
+
+Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScript and the 121-page production build passed; all inline legacy scripts compile. Production release and authenticated iPhone smoke test are pending PR/CI/merge. Voice additionally requires a funded OpenAI account and `OPENAI_API_KEY` in the protected production environment; absence is reported without exposing a key.
+
 
 ## 2026-10-05 handoff — multi-service price corridor, persistent object card, scheduling after accepted Proposal (ChatGPT)
 

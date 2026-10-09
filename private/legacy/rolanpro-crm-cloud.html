@@ -5458,6 +5458,42 @@
   .mobile-primary-nav {
     display: none;
   }
+  .ai-agent-launcher {
+    position: fixed;
+    right: 1.5rem;
+    bottom: 1.5rem;
+    z-index: 64;
+    width: 4rem;
+    height: 4rem;
+  }
+  .ai-agent-panel {
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 80;
+    width: 24rem;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .ai-voice-orb {
+    width: 8rem;
+    height: 8rem;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    margin: 1rem auto;
+    color: #fff;
+    font-size: 2.5rem;
+    background: linear-gradient(135deg,#10253F,#29A7E1);
+    box-shadow: 0 18px 45px rgba(41,167,225,.3);
+  }
+  .ai-voice-orb.is-live {
+    animation: aiVoicePulse 1.6s ease-in-out infinite;
+  }
+  @keyframes aiVoicePulse {
+    0%,100% { transform: scale(1); box-shadow: 0 18px 45px rgba(41,167,225,.28); }
+    50% { transform: scale(1.05); box-shadow: 0 22px 58px rgba(41,167,225,.48); }
+  }
   @media (pointer: coarse) {
     .btn-primary,
     .btn-ghost,
@@ -5641,6 +5677,35 @@
     .mobile-primary-nav button.active {
       background: #eaf7fd;
       color: #147dac;
+    }
+    .ai-agent-launcher {
+      right: .75rem;
+      bottom: calc(82px + env(safe-area-inset-bottom));
+      width: 3.5rem;
+      height: 3.5rem;
+      z-index: 64;
+    }
+    .ai-agent-launcher img {
+      width: 50px !important;
+      height: 50px !important;
+    }
+    .ai-agent-panel {
+      inset: 0;
+      width: 100vw;
+      max-width: none;
+      height: 100dvh;
+      max-height: 100dvh;
+      border-left: 0 !important;
+    }
+    .ai-agent-header {
+      padding-top: calc(.75rem + env(safe-area-inset-top));
+    }
+    .ai-agent-close {
+      min-width: 44px;
+      min-height: 44px;
+    }
+    .ai-agent-input-bar {
+      padding-bottom: calc(.75rem + env(safe-area-inset-bottom));
     }
     .orders-command-head,
     .orders-primary-actions,
@@ -35230,6 +35295,7 @@ function renderAgentPulse() {
   </div>`;
 }
 function toggleAiSidebar() {
+  if (state.aiSidebarOpen && _aiVoicePeer) aiStopVoice();
   state.aiSidebarOpen = !state.aiSidebarOpen;
   if (state.aiSidebarOpen && !state.aiSidebarTab) state.aiSidebarTab = 'pulse';
   render();
@@ -35239,15 +35305,137 @@ window.addEventListener('rolanpro-bank-closed', () => {
   agentBankReviewCount = null;
   if (state.aiSidebarOpen && currentUser()?.role === 'owner') refreshAgentBankPulse();
 });
+let _aiVoicePeer = null;
+let _aiVoiceChannel = null;
+let _aiVoiceStream = null;
+let _aiVoiceAudio = null;
+let _aiVoiceStatus = 'idle';
+let _aiVoiceMuted = false;
+let _aiVoiceTranscript = [];
+let _aiVoiceAssistantDraft = '';
+function aiVoiceCrmContext() {
+  const user = currentUser();
+  const canSeeMoney = ['owner','manager'].includes(user?.role);
+  return JSON.stringify({
+    today: localDateKey(new Date()),
+    employee: { name:user?.name || '', role:user?.role || '' },
+    company: db.settings.companyName || 'Rolan PRO',
+    orders: visibleOrdersForUser(user).slice(0,120).map(o => ({
+      number:o.number, status:o.status, client:getClient(o.clientId)?.name || '',
+      address:orderAddress(o,getClient(o.clientId)) || '', installationAt:o.installationAt || null,
+      ...(canSeeMoney ? { revenue:orderRevenue(o), paid:o.paid || 0 } : {}),
+    })),
+    tasks:(db.tasks || []).filter(t => !t.doneAt).slice(0,80).map(t => ({title:t.title,dueAt:t.dueAt,status:t.status})),
+  }).slice(0,30000);
+}
+function aiVoiceStatusText() {
+  return ({idle:'Готов к разговору',connecting:'Подключаю голос…',live:'Слушаю вас',speaking:'Агент отвечает',error:'Не удалось подключить голос'})[_aiVoiceStatus] || 'Готов к разговору';
+}
+function aiUpdateVoiceUi() {
+  const status = document.getElementById('ai-voice-status');
+  if (status) status.textContent = aiVoiceStatusText();
+  const orb = document.getElementById('ai-voice-orb');
+  if (orb) orb.classList.toggle('is-live', ['connecting','live','speaking'].includes(_aiVoiceStatus));
+  const start = document.getElementById('ai-voice-start');
+  if (start) start.style.display = _aiVoicePeer ? 'none' : '';
+  const controls = document.getElementById('ai-voice-controls');
+  if (controls) controls.style.display = _aiVoicePeer ? 'flex' : 'none';
+  const mute = document.getElementById('ai-voice-mute');
+  if (mute) mute.textContent = _aiVoiceMuted ? 'Включить микрофон' : 'Выключить микрофон';
+  const transcript = document.getElementById('ai-voice-transcript');
+  if (transcript) transcript.innerHTML = _aiVoiceTranscript.length
+    ? _aiVoiceTranscript.map(item => `<div class="${item.role==='user'?'text-right':''}"><span class="inline-block max-w-[90%] rounded-2xl px-3 py-2 ${item.role==='user'?'bg-blue-600 text-white':'bg-white border text-slate-800'}">${academyEsc(item.text)}</span></div>`).join('')
+    : '<div class="text-center text-slate-400 text-xs py-4">Здесь появится расшифровка разговора.</div>';
+}
+function aiVoicePush(role, text) {
+  const clean = String(text || '').trim();
+  if (!clean) return;
+  _aiVoiceTranscript.push({role,text:clean});
+  _aiVoiceTranscript = _aiVoiceTranscript.slice(-30);
+  aiUpdateVoiceUi();
+}
+function aiHandleVoiceEvent(event) {
+  if (!event || typeof event.type !== 'string') return;
+  if (event.type === 'session.created' || event.type === 'session.updated') _aiVoiceStatus = 'live';
+  if (event.type === 'input_audio_buffer.speech_started') _aiVoiceStatus = 'live';
+  if (event.type === 'response.output_audio.started') _aiVoiceStatus = 'speaking';
+  if (event.type === 'response.done') _aiVoiceStatus = 'live';
+  if (event.type === 'conversation.item.input_audio_transcription.completed') aiVoicePush('user', event.transcript);
+  if (event.type === 'response.output_audio_transcript.delta' || event.type === 'response.audio_transcript.delta') _aiVoiceAssistantDraft += event.delta || '';
+  if (event.type === 'response.output_audio_transcript.done' || event.type === 'response.audio_transcript.done') {
+    aiVoicePush('assistant', event.transcript || _aiVoiceAssistantDraft);
+    _aiVoiceAssistantDraft = '';
+  }
+  if (event.type === 'error') {
+    _aiVoiceStatus = 'error';
+    aiVoicePush('assistant', event.error?.message || 'Ошибка голосового соединения.');
+  }
+  aiUpdateVoiceUi();
+}
+async function aiStartVoice() {
+  if (_aiVoicePeer) return;
+  if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === 'undefined') {
+    alert('Этот браузер не поддерживает живой голос. Обновите Safari или Chrome.');
+    return;
+  }
+  _aiVoiceStatus = 'connecting'; _aiVoiceTranscript = []; aiUpdateVoiceUi();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    _aiVoiceStream = stream;
+    const tokenResponse = await fetch('/api/v1/ai/realtime', {
+      method:'POST', credentials:'same-origin', cache:'no-store',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify({context:aiVoiceCrmContext()}),
+    });
+    const tokenPayload = await tokenResponse.json();
+    const ephemeralKey = tokenPayload.data?.value;
+    if (!tokenResponse.ok || !ephemeralKey) throw new Error(tokenPayload.errors?.[0]?.message || 'Голосовой сервер недоступен.');
+    const peer = new RTCPeerConnection();
+    _aiVoicePeer = peer;
+    stream.getTracks().forEach(track => peer.addTrack(track, stream));
+    const audio = new Audio(); audio.autoplay = true; audio.playsInline = true; _aiVoiceAudio = audio;
+    peer.ontrack = event => { audio.srcObject = event.streams[0]; audio.play().catch(()=>{}); };
+    peer.onconnectionstatechange = () => {
+      if (peer.connectionState === 'connected') _aiVoiceStatus = 'live';
+      if (['failed','disconnected'].includes(peer.connectionState)) _aiVoiceStatus = 'error';
+      aiUpdateVoiceUi();
+    };
+    const channel = peer.createDataChannel('oai-events'); _aiVoiceChannel = channel;
+    channel.onopen = () => { _aiVoiceStatus = 'live'; aiUpdateVoiceUi(); };
+    channel.onmessage = message => { try { aiHandleVoiceEvent(JSON.parse(message.data)); } catch (_) {} };
+    const offer = await peer.createOffer(); await peer.setLocalDescription(offer);
+    const answerResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
+      method:'POST', body:offer.sdp,
+      headers:{Authorization:`Bearer ${ephemeralKey}`,'Content-Type':'application/sdp'},
+    });
+    if (!answerResponse.ok) throw new Error('OpenAI не начал голосовой сеанс.');
+    await peer.setRemoteDescription({type:'answer',sdp:await answerResponse.text()});
+  } catch (error) {
+    aiStopVoice(); _aiVoiceStatus = 'error'; aiVoicePush('assistant', error.message || 'Не удалось начать разговор.'); aiUpdateVoiceUi();
+  }
+}
+function aiToggleVoiceMute() {
+  _aiVoiceMuted = !_aiVoiceMuted;
+  (_aiVoiceStream?.getAudioTracks() || []).forEach(track => { track.enabled = !_aiVoiceMuted; });
+  aiUpdateVoiceUi();
+}
+function aiStopVoice() {
+  try { if (_aiVoiceChannel?.readyState === 'open') _aiVoiceChannel.send(JSON.stringify({type:'session.close'})); } catch (_) {}
+  (_aiVoiceStream?.getTracks() || []).forEach(track => track.stop());
+  try { _aiVoicePeer?.close(); } catch (_) {}
+  try { _aiVoiceAudio?.pause(); } catch (_) {}
+  _aiVoicePeer = null; _aiVoiceChannel = null; _aiVoiceStream = null; _aiVoiceAudio = null;
+  _aiVoiceMuted = false; _aiVoiceStatus = 'idle'; aiUpdateVoiceUi();
+}
 function renderAiSidebar() {
   if (!state.aiSidebarOpen) {
-    return `<button onclick="toggleAiSidebar()" class="fixed bottom-6 right-6 w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-2xl hover:scale-105 transition-transform z-40 overflow-hidden" style="border:2px solid #29A7E1" title="Агент Rolan PRO (Cmd+/)"><img src="/landing/rolan-mascot.webp" alt="Агент Rolan PRO" style="width:58px;height:58px;object-fit:contain"></button>`;
+    return `<button onclick="toggleAiSidebar()" class="ai-agent-launcher rounded-full bg-white flex items-center justify-center shadow-2xl hover:scale-105 transition-transform overflow-hidden" style="border:2px solid #29A7E1" title="Агент Rolan PRO (Cmd+/)" aria-label="Открыть агента Rolan PRO"><img src="/landing/rolan-mascot.webp" alt="" style="width:58px;height:58px;object-fit:contain"></button>`;
   }
   const cfg = db.settings.ai || {};
   const tab = state.aiSidebarTab || 'pulse';
+  const voiceAllowed = ['owner','manager'].includes(currentUser()?.role);
   return `
-  <div class="fixed inset-y-0 right-0 w-96 max-w-full bg-white shadow-2xl z-40 flex flex-col" style="border-left: 1px solid #dbe5ef;">
-    <div class="text-white p-3 flex items-center justify-between" style="background:linear-gradient(135deg,#10253F,#164a70)">
+  <div class="ai-agent-panel bg-white shadow-2xl" style="border-left: 1px solid #dbe5ef;" role="dialog" aria-modal="true" aria-label="Агент Rolan PRO">
+    <div class="ai-agent-header text-white p-3 flex items-center justify-between" style="background:linear-gradient(135deg,#10253F,#164a70)">
       <div class="flex items-center gap-2">
         <div class="bg-white rounded-full overflow-hidden" style="width:44px;height:44px"><img src="/landing/rolan-mascot.webp" alt="Талисман Rolan PRO" style="width:44px;height:44px;object-fit:contain"></div>
         <div>
@@ -35255,10 +35443,18 @@ function renderAiSidebar() {
           <div class="text-xs opacity-75">Наблюдает · подсказывает · ставит задачи</div>
         </div>
       </div>
-      <button onclick="toggleAiSidebar()" class="text-2xl hover:opacity-75">×</button>
+      <button onclick="toggleAiSidebar()" class="ai-agent-close text-2xl hover:opacity-75" aria-label="Закрыть агента Rolan PRO">×</button>
     </div>
-    <div class="grid grid-cols-2 border-b bg-white p-2 gap-2"><button class="${tab==='pulse'?'btn-primary':'btn-ghost'} text-sm" onclick="state.aiSidebarTab='pulse';render()">Пульс</button><button class="${tab==='chat'?'btn-primary':'btn-ghost'} text-sm" onclick="state.aiSidebarTab='chat';render()">Спросить</button></div>
-    ${tab === 'pulse' ? `<div class="flex-1 overflow-y-auto p-3 bg-slate-50">${renderAgentPulse()}</div>` : `
+    <div class="grid ${voiceAllowed?'grid-cols-3':'grid-cols-2'} border-b bg-white p-2 gap-2"><button class="${tab==='pulse'?'btn-primary':'btn-ghost'} text-sm" onclick="state.aiSidebarTab='pulse';render()">Пульс</button><button class="${tab==='chat'?'btn-primary':'btn-ghost'} text-sm" onclick="state.aiSidebarTab='chat';render()">Спросить</button>${voiceAllowed?`<button class="${tab==='voice'?'btn-primary':'btn-ghost'} text-sm" onclick="state.aiSidebarTab='voice';render();setTimeout(aiUpdateVoiceUi,0)">Голос</button>`:''}</div>
+    ${tab === 'pulse' ? `<div class="flex-1 overflow-y-auto p-3 bg-slate-50">${renderAgentPulse()}</div>` : tab === 'voice' && voiceAllowed ? `
+    <div class="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-50">
+      <div id="ai-voice-orb" class="ai-voice-orb ${['connecting','live','speaking'].includes(_aiVoiceStatus)?'is-live':''}">🎙</div>
+      <div id="ai-voice-status" class="text-center font-black text-slate-900">${aiVoiceStatusText()}</div>
+      <div class="text-center text-xs text-slate-500 mt-1">Говорите естественно. Агента можно перебивать.</div>
+      <button id="ai-voice-start" class="btn-primary w-full mt-4" onclick="aiStartVoice()" style="${_aiVoicePeer?'display:none':''}">Поговорить с агентом</button>
+      <div id="ai-voice-controls" class="gap-2 mt-4" style="display:${_aiVoicePeer?'flex':'none'}"><button id="ai-voice-mute" class="btn-ghost flex-1" onclick="aiToggleVoiceMute()">${_aiVoiceMuted?'Включить микрофон':'Выключить микрофон'}</button><button class="btn-danger flex-1" onclick="aiStopVoice()">Завершить</button></div>
+      <div id="ai-voice-transcript" class="mt-4 space-y-2">${_aiVoiceTranscript.length?_aiVoiceTranscript.map(item=>`<div class="${item.role==='user'?'text-right':''}"><span class="inline-block max-w-[90%] rounded-2xl px-3 py-2 ${item.role==='user'?'bg-blue-600 text-white':'bg-white border text-slate-800'}">${academyEsc(item.text)}</span></div>`).join(''):'<div class="text-center text-slate-400 text-xs py-4">Здесь появится расшифровка разговора.</div>'}</div>
+    </div>` : `
     <div id="ai-chat" class="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50">
       ${_aiHistory.length === 0 ? `
         <div class="text-center text-sm text-gray-500 mt-10">
@@ -35278,7 +35474,7 @@ function renderAiSidebar() {
         </div>
       `).join('')}
     </div>
-    <div class="p-3 border-t bg-white">
+    <div class="ai-agent-input-bar p-3 border-t bg-white">
       <div class="flex gap-2">
         <input id="ai-input" placeholder="Спросите что-нибудь…" class="flex-1" onkeydown="if(event.key==='Enter') aiSendInput();">
         <button class="btn-primary" onclick="aiSendInput()">→</button>
