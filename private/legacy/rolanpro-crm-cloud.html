@@ -16657,8 +16657,10 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   // first (the project crew and date the later checks read) and taken back if
   // any check refuses.
   const entersInstallation = PROJECT_SCHEDULED_STATUSES.includes(newStatus) && !PROJECT_SCHEDULED_STATUSES.includes(o.status) && !CLOSED_PROJECT_STATUSES.includes(o.status);
-  const restorePlan = entersInstallation ? projectPlanSnapshot(o) : null;
-  if (entersInstallation && !ensureProjectServicesPlanned(o)) return false;
+  // Closing an installation freezes its plan: every service needs its specialist and date then too.
+  const closesInstallation = CLOSED_PROJECT_STATUSES.includes(newStatus) && PROJECT_SCHEDULED_STATUSES.includes(o.status);
+  const restorePlan = entersInstallation || closesInstallation ? projectPlanSnapshot(o) : null;
+  if ((entersInstallation || closesInstallation) && !ensureProjectServicesPlanned(o)) return false;
   const refuse = () => { if (restorePlan) restorePlan(); return false; };
   if (!opts.skipWorkflowGuard && !ensureOrderWorkflowTransition(o, newStatus, opts.openWorkspace !== false)) return refuse();
   if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return refuse();

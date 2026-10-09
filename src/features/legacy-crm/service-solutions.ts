@@ -19,6 +19,22 @@ function serviceGroupIds(order: Row): string[] {
   for (const line of rows(order.extraServices)) if (line.quickProjectLine !== true || !windows.length) ids.push(`line:${line.id}`);
   return [...new Set(ids)];
 }
+/**
+ * Per-sq-ft services the project chose that no window carries yet
+ * (projectPendingSizedServices): they wait for the measurement. The unit is
+ * the one saved when the project chose the service (older choices: sq ft); a
+ * service priced as a quantity line in this project is not waiting.
+ */
+function pendingSizedOfferings(order: Row, offerings: Row[]): string[] {
+  const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows));
+  const onWindows = new Set(windows.map(win => win.offeringId).filter(Boolean));
+  const quantityLines = new Set(rows(order.extraServices).filter(line => line.offeringId && line.quickProjectLine !== true && line.unit && line.unit !== 'sqft').map(line => line.offeringId));
+  const units = object(order.offeringUnits);
+  const ids = Array.isArray(order.offeringIds) ? order.offeringIds.filter((id: unknown): id is string => typeof id === 'string') : [];
+  return [...new Set(ids)].filter(id => !onWindows.has(id) && !quantityLines.has(id)
+    && (typeof units[id] === 'string' ? units[id] === 'sqft' : true)
+    && offerings.some(offering => offering.id === id));
+}
 /** Owner-only economics of a service: the installer rate and the material cost per unit. */
 const OWNER_OFFERING_FIELDS = ['installerRatePerSqft', 'materialCostPerUnit'] as const;
 
@@ -266,7 +282,11 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     // needs a complete plan for every service of the project.
     const entersInstallation = SCHEDULED_PROJECT_STATUSES.includes(String(order.status))
       && !SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status)) && !CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status));
-    if (entersInstallation && oldOrder.id !== undefined) {
+    // Closing an installation freezes the plan, so it must be complete then too
+    // (a service added after scheduling may still be planned step by step).
+    const closesInstallation = CLOSED_PROJECT_STATUSES.includes(String(order.status)) && SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status));
+    if ((entersInstallation || closesInstallation) && oldOrder.id !== undefined) {
+      if (entersInstallation && pendingSizedOfferings(order, offerings).length) return 'Сначала внесите замер всех услуг проекта.';
       const plans = rows(order.serviceSchedules);
       if (plans.some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
       if (serviceGroupIds(order).some(id => !plans.some(plan => plan.id === id))) return 'Укажите дату и исполнителей каждой услуги.';

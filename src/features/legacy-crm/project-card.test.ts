@@ -388,3 +388,30 @@ test('server: after «Монтаж назначен» a plan leaves only with it
   removed.orders[0].serviceSchedules = [plan('line:z')];
   assert.equal(prepareServiceSolutions(saved, removed, false), null, 'the service itself was removed');
 });
+
+test('server: a service waiting for measurement stops installation; closing an installation needs every service planned', () => {
+  const users = [{ id: 'i1', role: 'installer' }];
+  const offerings = [
+    { id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft', pricePerSqft: 14 },
+    { id: 'a3', direction: 'protective', name: 'A3', unit: 'sqft', pricePerSqft: 22 },
+  ];
+  const plan = (id: string) => ({ id, installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] });
+  const state = (status: string, fields: Row = {}): Row => ({ settings: { serviceOfferings: offerings }, users, orders: [{ id: 'o', status, serviceType: 'protective_film', offeringIds: ['a1', 'a3'], offeringUnits: { a1: 'sqft', a3: 'sqft' }, measurements: { rooms: [{ windows: [{ id: 'w', offeringId: 'a1', measureScope: 'protective_film' }] }] }, extraServices: [], ...fields }] });
+  const into = state('installation_scheduled', { serviceSchedules: [plan('offering:a1')] });
+  assert.equal(prepareServiceSolutions(state('proposal_accepted'), into, false), 'Сначала внесите замер всех услуг проекта.');
+  const measuredOnly = state('installation_scheduled', { offeringIds: ['a1'], serviceSchedules: [plan('offering:a1')] });
+  assert.equal(prepareServiceSolutions(state('proposal_accepted', { offeringIds: ['a1'] }), measuredOnly, false), null);
+  // A service added after scheduling, still unplanned, blocks closing the installation.
+  const active = state('installation_in_progress', { offeringIds: ['a1'], extraServices: [{ id: 'z', type: 'washing', qty: 1, price: 10 }], serviceSchedules: [plan('offering:a1')] });
+  const closed = structuredClone(active);
+  closed.orders[0].status = 'installation_done';
+  assert.equal(prepareServiceSolutions(active, closed, false), 'Укажите дату и исполнителей каждой услуги.');
+  const plannedActive = structuredClone(active);
+  plannedActive.orders[0].serviceSchedules.push(plan('line:z'));
+  const plannedClosed = structuredClone(plannedActive);
+  plannedClosed.orders[0].status = 'installation_done';
+  assert.equal(prepareServiceSolutions(plannedActive, plannedClosed, false), null);
+  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 1600);
+  assert.match(status, /const closesInstallation = CLOSED_PROJECT_STATUSES\.includes\(newStatus\) && PROJECT_SCHEDULED_STATUSES\.includes\(o\.status\);/);
+  assert.match(status, /if \(\(entersInstallation \|\| closesInstallation\) && !ensureProjectServicesPlanned\(o\)\) return false;/);
+});
