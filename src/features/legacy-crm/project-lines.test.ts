@@ -214,7 +214,9 @@ test('the proposal shows the project services by name next to measured rooms', (
   assert.match(out, /Силикон<\/b><br><small>Защитная · 56 lin ft · included with A1 8 mil<\/small><\/span><strong>Included/);
   assert.match(out, /Мойка стёкол[\s\S]*\$80\.00/);
   assert.doesNotMatch(out, /A1 8 mil<\/b>/, 'window film stays in the rooms');
-  assert.match(html, /premiumRenderRoom\(prop, order, r, i, calc\)\)\.join\(''\) \+ premiumProjectServicesPanel\(order\)/);
+  // Rooms, or the preliminary quick lines, and then the services — in every scope.
+  assert.match(html, /\$\{\(\(order\.measurements\?\.rooms \|\| \[\]\)\.length \? \(order\.measurements\.rooms \|\| \[\]\)\.map\(\(r, i\) => premiumRenderRoom\(prop, order, r, i, calc\)\)\.join\(''\) : projectQuickLines\(order\)\.length \? /);
+  assert.match(html, /: ''\) \+ premiumProjectServicesPanel\(order\) \|\| `/);
   const empty: Row = { id: 'e', measurements: { rooms: [] }, extraServices: [] };
   assert.equal(c.premiumProjectServicesPanel(empty), '');
 });
