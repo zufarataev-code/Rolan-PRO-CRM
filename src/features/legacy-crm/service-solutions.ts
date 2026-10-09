@@ -28,12 +28,33 @@ function serviceGroupIds(order: Row): string[] {
 function pendingSizedOfferings(order: Row, offerings: Row[]): string[] {
   const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows));
   const onWindows = new Set(windows.map(win => win.offeringId).filter(Boolean));
+  if (!windows.length) rows(order.extraServices).filter(line => line.quickProjectLine === true && line.offeringId).forEach(line => onWindows.add(line.offeringId));
   const quantityLines = new Set(rows(order.extraServices).filter(line => line.offeringId && line.quickProjectLine !== true && line.unit && line.unit !== 'sqft').map(line => line.offeringId));
   const units = object(order.offeringUnits);
   const ids = Array.isArray(order.offeringIds) ? order.offeringIds.filter((id: unknown): id is string => typeof id === 'string') : [];
   return [...new Set(ids)].filter(id => !onWindows.has(id) && !quantityLines.has(id)
     && (typeof units[id] === 'string' ? units[id] === 'sqft' : true)
     && offerings.some(offering => offering.id === id));
+}
+/**
+ * The plan of every service (projectPlannedSchedules): the saved per-service
+ * plans, or — for a project planned as a whole before them — the project crew
+ * and date for every service, a quick line keeping its own crew and start day.
+ */
+function projectPlans(order: Row): Row[] {
+  const saved = rows(order.serviceSchedules);
+  if (saved.length) return saved;
+  const quick = new Map(rows(order.extraServices).filter(line => line.quickProjectLine === true).map(line => [`line:${line.id}`, line]));
+  const crew = Array.isArray(order.installerIds) ? order.installerIds : [];
+  const at = typeof order.installationAt === 'string' ? order.installationAt : '';
+  return serviceGroupIds(order).map(id => {
+    const line = quick.get(id);
+    return {
+      id,
+      installerIds: Array.isArray(line?.installerIds) && line.installerIds.length ? line.installerIds : crew,
+      installationAt: typeof line?.startDate === 'string' && line.startDate ? `${line.startDate}T09:00:00` : at,
+    };
+  });
 }
 /** Owner-only economics of a service: the installer rate and the material cost per unit. */
 const OWNER_OFFERING_FIELDS = ['installerRatePerSqft', 'materialCostPerUnit'] as const;
@@ -282,20 +303,23 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     // needs a complete plan for every service of the project.
     const entersInstallation = SCHEDULED_PROJECT_STATUSES.includes(String(order.status))
       && !SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status)) && !CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status));
-    // Closing an installation freezes the plan, so it must be complete then too
-    // (a service added after scheduling may still be planned step by step).
-    const closesInstallation = CLOSED_PROJECT_STATUSES.includes(String(order.status)) && SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status));
-    if ((entersInstallation || closesInstallation) && oldOrder.id !== undefined) {
+    // Closing a project (from any open status) freezes its plan, so it must be
+    // complete then too (a service added after scheduling may still be planned
+    // step by step until then).
+    const closesProject = CLOSED_PROJECT_STATUSES.includes(String(order.status)) && !CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status));
+    if ((entersInstallation || closesProject) && oldOrder.id !== undefined) {
       if (pendingSizedOfferings(order, offerings).length) return 'Сначала внесите замер всех услуг проекта.';
-      const plans = rows(order.serviceSchedules);
+      const plans = projectPlans(order);
       if (plans.some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
       if (serviceGroupIds(order).some(id => !plans.some(plan => plan.id === id))) return 'Укажите дату и исполнителей каждой услуги.';
     }
     // Once «Монтаж назначен», a planned service may change its specialist or
     // date but not lose them; a service added later is planned step by step.
+    // A project planned as a whole counts as planned for every service, so its
+    // first per-service plan must keep them all.
     if (schedulesChanged && SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) {
       const services = serviceGroupIds(order);
-      for (const before of rows(oldOrder.serviceSchedules).filter(complete)) {
+      for (const before of projectPlans(oldOrder).filter(complete)) {
         const after = rows(order.serviceSchedules).find(plan => plan.id === before.id);
         // A plan leaves only with its service.
         if (after ? !complete(after) : services.includes(before.id)) return 'Монтаж назначен: у услуги должны остаться исполнитель и дата.';

@@ -414,7 +414,7 @@ test('server: a service waiting for measurement stops installation; closing an i
   plannedClosed.orders[0].status = 'installation_done';
   assert.equal(prepareServiceSolutions(plannedActive, plannedClosed, false), null);
   const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 1600);
-  assert.match(status, /const closesInstallation = CLOSED_PROJECT_STATUSES\.includes\(newStatus\) && PROJECT_SCHEDULED_STATUSES\.includes\(o\.status\);/);
+  assert.match(status, /const closesInstallation = CLOSED_PROJECT_STATUSES\.includes\(newStatus\) && !CLOSED_PROJECT_STATUSES\.includes\(o\.status\);/);
   assert.match(status, /if \(\(entersInstallation \|\| closesInstallation\) && !ensureProjectServicesPlanned\(o\)\) return false;/);
 });
 
@@ -467,5 +467,33 @@ test('deleting a service with a package drops the included service\'s plan and i
   c.getOrder = (id: string) => c.db.orders.find((item: Row) => item.id === id);
   c.projectCardDeleteService('k', 'p');
   assert.deepEqual(plain([o.extraServices.map((line: Row) => line.id), o.serviceSchedules.map((item: Row) => item.id), o.installerIds, o.installationAt]), [['w'], ['line:w'], ['i1'], '2026-10-16T16:00:00.000Z']);
+});
+
+test('server: a project planned as a whole counts as planned; its first per-service plan keeps every service; any close is checked', () => {
+  const users = [{ id: 'i1', role: 'installer' }, { id: 'i2', role: 'installer' }];
+  const legacy = (status: string, fields: Row = {}): Row => ({ settings: { serviceOfferings: [] }, users, orders: [{ id: 'o', status, serviceType: 'smart_film', measurements: { rooms: [] }, extraServices: [{ id: 'z', type: 'washing', qty: 1, price: 10 }, { id: 'y', type: 'washing', qty: 1, price: 10 }], installerIds: ['i1'], installationAt: '2026-10-15T16:00:00.000Z', ...fields }] });
+  // The first per-service plan of a scheduled project must keep every service planned.
+  const partialFirst = legacy('installation_scheduled', { serviceSchedules: [{ id: 'line:z', installationAt: '', installerIds: ['i2'] }] });
+  assert.equal(prepareServiceSolutions(legacy('installation_scheduled'), partialFirst, false), 'Монтаж назначен: у услуги должны остаться исполнитель и дата.');
+  const fullFirst = legacy('installation_scheduled', { serviceSchedules: [{ id: 'line:z', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i2'] }, { id: 'line:y', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }] });
+  assert.equal(prepareServiceSolutions(legacy('installation_scheduled'), fullFirst, false), null);
+  // A project planned as a whole can be closed (a field specialist finishing an older job).
+  assert.equal(prepareServiceSolutions(legacy('installation_in_progress'), legacy('installation_done'), false), null);
+  // Closing straight from «КП принято» is checked like any close.
+  const unplanned = (status: string) => legacy(status, { installerIds: [], installationAt: undefined });
+  assert.equal(prepareServiceSolutions(unplanned('proposal_accepted'), unplanned('installation_done'), false), 'Укажите дату и исполнителей каждой услуги.');
+  // A historical quick project: each line has its specialists and start day.
+  const quick = (status: string): Row => ({ settings: { serviceOfferings: [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }] }, users, orders: [{ id: 'q', status, serviceType: 'protective_film', offeringIds: ['a1'], offeringUnits: { a1: 'sqft' }, measurements: { rooms: [] }, extraServices: [{ id: 'k', quickProjectLine: true, offeringId: 'a1', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film', installerIds: ['i1'], startDate: '2026-09-01' }] }] });
+  assert.equal(prepareServiceSolutions(quick('new'), quick('completed'), false), null, 'a quick line carries its service — not waiting for a measurement');
+});
+
+test('every way into installation refreshes the film purchase deadline; a historical close writes its per-service plan', () => {
+  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 2400);
+  assert.match(status, /o\.status = newStatus;\n  if \(entersInstallation\) refreshManualFilmNeededBy\(o\);/);
+  const close = html.slice(html.indexOf('function closeQuickProjectAsCompleted('), html.indexOf('function closeQuickProjectAsCompleted(') + 4000);
+  assert.match(close, /if \(!o\.serviceSchedules\?\.length\) o\.serviceSchedules = projectPlannedSchedules\(o\);\n  o\.status = 'completed';/);
+  const { c } = load();
+  const draft: Row = { id: 'd', status: 'proposal_accepted', serviceType: 'protective_film', offeringIds: ['a1'], offeringUnits: { a1: 'sqft' }, measurements: { rooms: [] }, extraServices: [{ id: 'k', quickProjectLine: true, offeringId: 'a1', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film' }] };
+  assert.deepEqual(plain(c.projectPendingSizedServices(draft)), [], 'before measurement a quick line carries its service');
 });
 

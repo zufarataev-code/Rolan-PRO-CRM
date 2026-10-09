@@ -16657,8 +16657,8 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   // first (the project crew and date the later checks read) and taken back if
   // any check refuses.
   const entersInstallation = PROJECT_SCHEDULED_STATUSES.includes(newStatus) && !PROJECT_SCHEDULED_STATUSES.includes(o.status) && !CLOSED_PROJECT_STATUSES.includes(o.status);
-  // Closing an installation freezes its plan: every service needs its specialist and date then too.
-  const closesInstallation = CLOSED_PROJECT_STATUSES.includes(newStatus) && PROJECT_SCHEDULED_STATUSES.includes(o.status);
+  // Closing a project freezes its plan: every service needs its specialist and date then too.
+  const closesInstallation = CLOSED_PROJECT_STATUSES.includes(newStatus) && !CLOSED_PROJECT_STATUSES.includes(o.status);
   const restorePlan = entersInstallation || closesInstallation ? projectPlanSnapshot(o) : null;
   if ((entersInstallation || closesInstallation) && !ensureProjectServicesPlanned(o)) return false;
   const refuse = () => { if (restorePlan) restorePlan(); return false; };
@@ -16670,6 +16670,7 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
     return true;
   }
   o.status = newStatus;
+  if (entersInstallation) refreshManualFilmNeededBy(o);
   o.timeline = o.timeline || [];
   o.timeline.push({ at: new Date().toISOString(), key: newStatus, by: by || state.currentUserId });
   // milestone fields
@@ -24555,6 +24556,8 @@ function projectCardEdit(fn) {
 /** Per-sq-ft services the project chose that no window carries yet: they wait for the measurement. */
 function projectPendingSizedServices(o) {
   const onWindows = new Set(measureAllWindows(o).map(({ win }) => win.offeringId).filter(Boolean));
+  // Before measurement quick lines carry their services.
+  if (!onWindows.size && !measureAllWindows(o).length) projectQuickLines(o).forEach(line => { if (line.offeringId) onWindows.add(line.offeringId); });
   return [...new Set(o?.offeringIds || [])]
     .filter(id => !onWindows.has(id) && orderOfferingNeedsSizes(o, id))
     .map(id => serviceOffering(id))
@@ -25656,6 +25659,8 @@ function closeQuickProjectAsCompleted(oid) {
   o.installationDoneAt = o.installationDoneAt || endAt;
   o.actSignedAt = o.actSignedAt || endAt;
   o.paidAt = paidAt;
+  // Every line already has its specialists and dates (projectQuickCompletionIssues): they become its plan.
+  if (!o.serviceSchedules?.length) o.serviceSchedules = projectPlannedSchedules(o);
   o.status = 'completed';
   o.quickProjectImportedCompleted = true;
   o.quickProjectImportedCompletedAt = recordedAt;
