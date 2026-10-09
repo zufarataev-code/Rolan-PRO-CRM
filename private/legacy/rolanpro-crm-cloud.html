@@ -24579,14 +24579,22 @@ function projectCardQtyFromWindows(oid, sid) {
 }
 function projectCardDeleteService(oid, sid) {
   const o = getOrder(oid);
-  if (!o || (o.extraServices || []).some(line => line.id === sid && line.includedBy)) return;
-  // The removed service's plan leaves with it, and the project crew follows.
-  const key = `line:${sid}`;
-  if ((o.serviceSchedules || []).some(item => item.id === key)) {
-    o.serviceSchedules = o.serviceSchedules.filter(item => item.id !== key);
-    projectCardSyncCrew(o);
-  }
-  projectCardEdit(() => projectEstimateDeleteService(oid, sid));
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  if ((o.extraServices || []).some(line => line.id === sid && line.includedBy)) return;
+  o.extraServices = (o.extraServices || []).filter(line => line.id !== sid);
+  // Its package leaves with it; then the plans of services that are gone, and
+  // the project crew and date follow what remains.
+  syncProjectIncludedServices(o);
+  projectPrunePlans(o);
+  projectCardSyncCrew(o);
+  projectEstimateMarkChanged(o, 'Удалена дополнительная услуга');
+  save(); preservePositionForNextRender(); render();
+}
+/** Drops the plans of services no longer in the project. */
+function projectPrunePlans(o) {
+  if (!o.serviceSchedules?.length) return;
+  const ids = new Set(projectServiceGroups(o).map(group => group.id));
+  o.serviceSchedules = o.serviceSchedules.filter(item => ids.has(item.id));
 }
 function projectCardRemovePending(oid, offeringId) {
   const o = getOrder(oid);

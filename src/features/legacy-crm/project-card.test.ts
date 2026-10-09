@@ -432,7 +432,6 @@ test('a finished installation is read-only on the card; deleting a service drops
   scheduled.installationAt = '2026-10-12T16:00:00.000Z';
   c.db.orders.push(scheduled);
   c.getOrder = (id: string) => c.db.orders.find((item: Row) => item.id === id);
-  c.projectEstimateDeleteService = (oid: string, sid: string) => { const target = c.getOrder(oid); target.extraServices = target.extraServices.filter((line: Row) => line.id !== sid); };
   c.projectCardDeleteService('o', 'z');
   assert.deepEqual(plain([scheduled.serviceSchedules.map((item: Row) => item.id), scheduled.installerIds, scheduled.installationAt]), [['offering:a1', 'line:s'], ['i1'], '2026-10-14T16:00:00.000Z']);
   // An included service is not deleted on its own.
@@ -449,3 +448,22 @@ test('server: closing an installation is refused while a service waits for measu
   closed.orders[0].status = 'installation_done';
   assert.equal(prepareServiceSolutions(active, closed, false), 'Сначала внесите замер всех услуг проекта.');
 });
+
+test('deleting a service with a package drops the included service\'s plan and its specialist leaves the crew', () => {
+  const { c } = load();
+  c.db.settings.serviceOfferings.push({ id: 'kit', direction: 'smart', name: 'Smart kit', unit: 'fixed', pricePerSqft: 500, includes: ['wire'] }, { id: 'wire', direction: 'smart', name: 'Проводка', unit: 'piece', pricePerSqft: 0 });
+  const o: Row = { id: 'k', status: 'installation_scheduled', serviceType: 'smart_film', offeringIds: ['kit', 'wire'], offeringUnits: { kit: 'fixed', wire: 'piece' }, measurements: { rooms: [] }, extraServices: [
+    { id: 'p', type: 'offering', offeringId: 'kit', unit: 'fixed', qty: 1, unitPrice: 500, price: 500, serviceType: 'smart_film', offeringName: 'Smart kit' },
+    { id: 'c', type: 'offering', offeringId: 'wire', includedBy: 'kit', unit: 'piece', qty: 1, unitPrice: 0, price: 0, serviceType: 'smart_film', offeringName: 'Проводка' },
+    { id: 'w', type: 'washing', label: 'Мойка', qty: 1, price: 40 },
+  ], serviceSchedules: [
+    { id: 'line:p', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] },
+    { id: 'line:c', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i2'] },
+    { id: 'line:w', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i1'] },
+  ], installerIds: ['i1', 'i2'], installationAt: '2026-10-14T16:00:00.000Z' };
+  c.db.orders.push(o);
+  c.getOrder = (id: string) => c.db.orders.find((item: Row) => item.id === id);
+  c.projectCardDeleteService('k', 'p');
+  assert.deepEqual(plain([o.extraServices.map((line: Row) => line.id), o.serviceSchedules.map((item: Row) => item.id), o.installerIds, o.installationAt]), [['w'], ['line:w'], ['i1'], '2026-10-16T16:00:00.000Z']);
+});
+
