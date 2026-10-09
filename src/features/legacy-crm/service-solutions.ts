@@ -8,6 +8,17 @@ export const SERVICE_UNITS = ['sqft', 'lft', 'piece', 'zone', 'fixed', 'custom']
 // Project statuses for planning its services (Owner, 2026-10-09).
 const SCHEDULED_PROJECT_STATUSES = ['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'];
 const CLOSED_PROJECT_STATUSES = ['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'];
+/**
+ * The services of a project as the CRM plans them (projectServiceGroups): the
+ * windows of one service together, every other row on its own, quick lines
+ * only before measurement. Each needs its own plan to enter installation.
+ */
+function serviceGroupIds(order: Row): string[] {
+  const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows));
+  const ids = windows.map(win => typeof win.offeringId === 'string' && win.offeringId ? `offering:${win.offeringId}` : `direction:${win.measureScope || order.serviceType || 'solar_film'}`);
+  for (const line of rows(order.extraServices)) if (line.quickProjectLine !== true || !windows.length) ids.push(`line:${line.id}`);
+  return [...new Set(ids)];
+}
 /** Owner-only economics of a service: the installer rate and the material cost per unit. */
 const OWNER_OFFERING_FIELDS = ['installerRatePerSqft', 'materialCostPerUnit'] as const;
 
@@ -251,8 +262,15 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const schedulesChanged = JSON.stringify(order.serviceSchedules) !== JSON.stringify(oldOrder.serviceSchedules);
     // A finished project keeps its crew and dates: they are its history and its pay.
     if (schedulesChanged && CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status))) return 'Проект закрыт: исполнителей и даты услуг не меняют.';
-    if (order.status === 'installation_scheduled' && oldOrder.status !== 'installation_scheduled'
-      && Array.isArray(order.serviceSchedules) && rows(order.serviceSchedules).some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
+    // Entering installation (from the card, the schedule window or the kanban)
+    // needs a complete plan for every service of the project.
+    const entersInstallation = SCHEDULED_PROJECT_STATUSES.includes(String(order.status))
+      && !SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status)) && !CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status));
+    if (entersInstallation && oldOrder.id !== undefined) {
+      const plans = rows(order.serviceSchedules);
+      if (plans.some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
+      if (serviceGroupIds(order).some(id => !plans.some(plan => plan.id === id))) return 'Укажите дату и исполнителей каждой услуги.';
+    }
     // Once «Монтаж назначен», a planned service may change its specialist or
     // date but not lose them; a service added later is planned step by step.
     if (schedulesChanged && SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) {

@@ -16656,6 +16656,9 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   if (!opts.skipWorkflowGuard && !ensureOrderWorkflowTransition(o, newStatus, opts.openWorkspace !== false)) return false;
   if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return false;
   if (newStatus === 'installation_scheduled' && !ensureProductionReadyForInstallation(o)) return false;
+  // Entering installation needs every service planned; the plan is published then.
+  const entersInstallation = PROJECT_SCHEDULED_STATUSES.includes(newStatus) && !PROJECT_SCHEDULED_STATUSES.includes(o.status) && !CLOSED_PROJECT_STATUSES.includes(o.status);
+  if (entersInstallation && !ensureProjectServicesPlanned(o)) return false;
   if (o.status === newStatus && !opts.force) {
     render();
     return true;
@@ -24534,6 +24537,7 @@ function projectCardInProduction(o) {
 const PROJECT_PLANNING_STATUSES = ['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'];
 // Once «Монтаж назначен», a planned service keeps a specialist and a date.
 const PROJECT_SCHEDULED_STATUSES = ['installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'];
+const CLOSED_PROJECT_STATUSES = ['installation_done','act_signed','payment_received','completed','review_received'];
 
 let projectCardEditing = false;
 /** Runs an estimate edit from the project card: the card re-renders in place. */
@@ -24608,13 +24612,16 @@ function projectCardSetPrice(oid, key, value) {
  * current assignments of all lines (the old project-wide crew and date), so
  * no line loses its specialist when another one is planned.
  */
+/** The plan of every line: the saved one, or the old project-wide crew and date written per line. */
+function projectPlannedSchedules(o) {
+  if (o.serviceSchedules?.length) return o.serviceSchedules;
+  return projectServiceGroups(o).map(group => {
+    const assignment = projectServiceAssignment(o, group);
+    return { id: group.id, installationAt: assignment.installationAt || '', installerIds: [...(assignment.installerIds || [])] };
+  });
+}
 function projectCardSchedule(o, key) {
-  if (!o.serviceSchedules?.length) {
-    o.serviceSchedules = projectServiceGroups(o).map(group => {
-      const assignment = projectServiceAssignment(o, group);
-      return { id: group.id, installationAt: assignment.installationAt || '', installerIds: [...(assignment.installerIds || [])] };
-    });
-  }
+  if (!o.serviceSchedules?.length) o.serviceSchedules = projectPlannedSchedules(o);
   let entry = o.serviceSchedules.find(item => item.id === key);
   if (!entry) {
     entry = { id: key, installationAt: '', installerIds: [] };
@@ -24676,6 +24683,34 @@ function projectCardSetDate(oid, key, value) {
   projectCardSyncCrew(o);
   save(); preservePositionForNextRender(); render();
 }
+/**
+ * «Монтаж назначен» needs a specialist and a date for every service (Owner,
+ * 2026-10-09), whichever way the project gets there — the card, the schedule
+ * window or the kanban. An older project planned as a whole keeps its crew
+ * and date, now written per service. Then the plan is published.
+ */
+function ensureProjectServicesPlanned(o) {
+  const groups = projectServiceGroups(o);
+  if (!groups.length) return true;
+  const waiting = projectPendingSizedServices(o);
+  if (waiting.length) {
+    alert(`Сначала внесите замер: ${waiting.map(offering => offering.name).join(', ')}.`);
+    return false;
+  }
+  const plans = projectPlannedSchedules(o);
+  const missing = groups.filter(group => {
+    const plan = plans.find(item => item.id === group.id);
+    return !plan || !plan.installationAt || !(plan.installerIds || []).length;
+  });
+  if (missing.length) {
+    alert(`Назначьте исполнителя и дату каждой услуги в карточке проекта: ${missing.map(group => group.name).join(', ')}.`);
+    return false;
+  }
+  o.serviceSchedules = plans;
+  projectCardPublishCrew(o);
+  return true;
+}
+
 /** Lines still missing a specialist or a date. */
 function projectCardUnplanned(o) {
   return projectLines(o).filter(line => !line.installerIds.length || !line.installationAt);
@@ -24688,16 +24723,17 @@ function projectCardConfirmInstallation(oid) {
   if (waiting.length) return alert(`Сначала внесите замер: ${waiting.map(offering => offering.name).join(', ')}.`);
   const missing = projectCardUnplanned(o);
   if (missing.length) return alert(`Укажите исполнителя и дату: ${missing.map(line => line.name).join(', ')}.`);
+  // (changeStatus checks the plan again for every way into installation.)
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
   const technical = orderTechnicalMeasurementIssues(o);
   if (technical.length) return alert('Нельзя назначить монтаж — замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
   if (!ensureProductionReadyForInstallation(o)) return;
   const previous = {
+    serviceSchedules: o.serviceSchedules,
     installerIds: o.installerIds,
     installationAt: o.installationAt,
     lines: projectQuickLines(o).map(line => ({ line, installerIds: line.installerIds, startDate: line.startDate })),
   };
-  projectCardPublishCrew(o);
   if (changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true })) {
     refreshManualFilmNeededBy(o);
     save();
@@ -24705,6 +24741,7 @@ function projectCardConfirmInstallation(oid) {
     return;
   }
   // A refused status keeps the plan a draft.
+  o.serviceSchedules = previous.serviceSchedules;
   o.installerIds = previous.installerIds;
   if (previous.installationAt) o.installationAt = previous.installationAt; else delete o.installationAt;
   previous.lines.forEach(item => { item.line.installerIds = item.installerIds; item.line.startDate = item.startDate; });
@@ -24744,10 +24781,12 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const offering = serviceOffering(line.offeringId);
     const range = projectServicePriceRange(offering);
     const per = line.kind === 'windows' ? 'sq ft' : line.unitShort;
+    // Windows: the base rate per sq ft — the complexity coefficient is applied on top.
+    const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
     const unitPrice = line.kind === 'windows'
-      ? (line.qty > 0 ? line.price / line.qty : Number(line.windows[0]?.pricePerSqft) || 0)
+      ? (line.qty > 0 ? line.price / line.qty / coefficient : Number(line.windows[0]?.pricePerSqft) || 0)
       : line.kind === 'quantity' ? Number(source.unitPrice) || 0 : Number(line.price) || 0;
-    const label = line.kind === 'work' ? 'сумма' : `/ ${per}`;
+    const label = line.kind === 'work' ? 'сумма' : `/ ${per}${line.kind === 'windows' && coefficient !== 1 ? ` × ${coefficient} сложность` : ''}`;
     const editable = edit && (line.kind === 'windows' || line.kind === 'work' || (line.kind === 'quantity' && range));
     if (!editable) return `${fmtMoney(unitPrice)} <span class="text-xs text-gray-500">${academyEsc(label)}</span>`;
     return `<input type="number" min="${range?.min || 0}" ${range?.max ? `max="${range.max}"` : ''} step="0.25" style="width:92px" value="${Math.round(unitPrice * 100) / 100}" aria-label="Цена: ${academyEsc(line.name)}" onchange="projectCardSetPrice('${o.id}','${jsQuote(line.key)}',this.value)"> <span class="text-xs text-gray-500">${academyEsc(label)}</span>${range ? `<div class="text-xs text-gray-500">от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}</div>` : ''}`;

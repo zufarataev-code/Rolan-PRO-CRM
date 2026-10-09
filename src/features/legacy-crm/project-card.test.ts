@@ -173,7 +173,8 @@ test('a quick line planned in its row keeps its own crew and start date for pay'
   c.ensureProductionReadyForInstallation = () => true;
   c.refreshManualFilmNeededBy = () => undefined;
   c.notifyClientEventScheduled = () => undefined;
-  c.changeStatus = (id: string, status: string) => { c.getOrder(id).status = status; return true; };
+  // changeStatus checks and publishes the plan of every service on the way into installation.
+  c.changeStatus = (id: string, status: string) => { const target = c.getOrder(id); if (!c.ensureProjectServicesPlanned(target)) return false; target.status = status; return true; };
   c.projectCardConfirmInstallation('q');
   assert.deepEqual(plain([o.status, o.installerIds, o.installationAt, o.extraServices[0].installerIds, o.extraServices[0].startDate]), ['installation_scheduled', ['i1'], new Date('2026-10-16T08:30').toISOString(), ['i1'], '2026-10-16']);
   // A refused status keeps the plan a draft.
@@ -280,3 +281,59 @@ test('server: a finished project\'s plan is frozen; a scheduled one keeps every 
   swapped.orders[0].serviceSchedules.push({ id: 'line:s', installationAt: '', installerIds: ['i1'] });
   assert.equal(prepareServiceSolutions(scheduled, swapped, false), null, 'a change of crew or date, and a new service planned step by step, pass');
 });
+
+test('every way into installation needs each service planned; an older project keeps its project-wide crew', () => {
+  const { c, calls } = load();
+  // An older project planned as a whole: its crew and date are written per service and published.
+  const legacy = project('proposal_accepted');
+  legacy.offeringIds = ['a1', 'zone'];
+  legacy.installerIds = ['i1'];
+  legacy.installationAt = '2026-10-20T16:00:00.000Z';
+  assert.equal(c.ensureProjectServicesPlanned(legacy), true);
+  assert.deepEqual(plain(legacy.serviceSchedules.map((item: Row) => [item.id, item.installerIds, item.installationAt])), [
+    ['offering:a1', ['i1'], '2026-10-20T16:00:00.000Z'],
+    ['line:s', ['i1'], '2026-10-20T16:00:00.000Z'],
+    ['line:z', ['i1'], '2026-10-20T16:00:00.000Z'],
+  ]);
+  // A plan that misses a service, or a service waiting for its measurement, stops it.
+  const partial = project('proposal_accepted');
+  partial.offeringIds = ['a1', 'zone'];
+  partial.serviceSchedules = [{ id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] }];
+  assert.equal(c.ensureProjectServicesPlanned(partial), false);
+  assert.ok(calls.some(call => call.startsWith('alert:Назначьте исполнителя и дату каждой услуги в карточке проекта: Силикон, Подключение зоны')));
+  assert.equal(partial.installerIds, undefined, 'nothing is published');
+  assert.equal(c.ensureProjectServicesPlanned(project('proposal_accepted')), false, 'A3 still waits for the measurement');
+  // A project without services is not blocked.
+  assert.equal(c.ensureProjectServicesPlanned({ id: 'empty', status: 'proposal_accepted', measurements: { rooms: [] }, extraServices: [] }), true);
+  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 1400);
+  assert.match(status, /const entersInstallation = PROJECT_SCHEDULED_STATUSES\.includes\(newStatus\) && !PROJECT_SCHEDULED_STATUSES\.includes\(o\.status\) && !CLOSED_PROJECT_STATUSES\.includes\(o\.status\);\n  if \(entersInstallation && !ensureProjectServicesPlanned\(o\)\) return false;/);
+});
+
+test('the window price in the row is the base rate; the complexity coefficient stays on top', () => {
+  const { c } = load();
+  c.db.settings.complexityCoefs.ladder = 1.35;
+  const o = project();
+  o.complexity = 'ladder';
+  c.db.orders.push(o);
+  c.getOrder = (id: string) => c.db.orders.find((item: Row) => item.id === id);
+  const out = c.renderProjectCardServices(o, { money: true, manage: true });
+  assert.match(out, /value="14" aria-label="Цена: A1 8 mil"[^>]*> <span class="text-xs text-gray-500">\/ sq ft × 1\.35 сложность<\/span>/);
+  c.projectCardSetPrice('o', 'offering:a1', '15');
+  assert.deepEqual(plain(o.measurements.rooms[0].windows.map((item: Row) => item.pricePerSqft)), [15, 15]);
+  assert.equal(Math.round(c.projectLines(o)[0].price * 100) / 100, 607.5, '30 sq ft × $15 × 1.35');
+});
+
+test('server: entering installation needs a complete plan for every service; imports of new projects pass', () => {
+  const users = [{ id: 'i1', role: 'installer' }];
+  const order = (fields: Row = {}): Row => ({ id: 'o', status: 'proposal_accepted', serviceType: 'smart_film', measurements: { rooms: [{ windows: [{ id: 'w', offeringId: 'a1' }] }] }, extraServices: [{ id: 'z', type: 'washing', qty: 1, price: 10 }], ...fields });
+  const state = (fields: Row = {}): Row => ({ settings: { serviceOfferings: [] }, users, orders: [order(fields)] });
+  const plan = (id: string) => ({ id, installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] });
+  const into = (schedules?: Row[]) => { const next = state({ status: 'installation_scheduled', ...(schedules ? { serviceSchedules: schedules } : {}) }); return prepareServiceSolutions(state(), next, false); };
+  assert.equal(into(), 'Укажите дату и исполнителей каждой услуги.', 'no plan at all');
+  assert.equal(into([plan('offering:a1')]), 'Укажите дату и исполнителей каждой услуги.', 'one service left out');
+  assert.equal(into([plan('offering:a1'), plan('line:z')]), null);
+  const imported: Row = { settings: { serviceOfferings: [] }, users, orders: [] };
+  const importedOrder = state({ status: 'installation_scheduled', measurements: { rooms: [{ windows: [{ id: 'w', measureScope: 'smart_film' }] }] } });
+  assert.equal(prepareServiceSolutions(imported, importedOrder, false), null, 'a new project created as scheduled (import) is not a transition');
+});
+
