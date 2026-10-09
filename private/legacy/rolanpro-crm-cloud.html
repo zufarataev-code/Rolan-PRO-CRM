@@ -24812,8 +24812,10 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
   const qtyCell = line => {
     const source = line.sources[0];
     if (!edit || line.kind === 'windows' || line.kind === 'quick') {
+      // Only the people who price the project open the measurement editor from here.
+      const measured = `замер · ${line.windows.length} ${projectWindowsWord(line.windows.length)}`;
       return line.kind === 'windows'
-        ? `${academyEsc(projectLineQtyText(line))}<div class="text-xs"><button class="btn-ghost text-xs" onclick="openManagerMeasureModal('${o.id}')">замер · ${line.windows.length} ${projectWindowsWord(line.windows.length)}</button></div>`
+        ? `${academyEsc(projectLineQtyText(line))}<div class="text-xs">${edit ? `<button class="btn-ghost text-xs" onclick="openManagerMeasureModal('${o.id}')">${measured}</button>` : `<span class="text-gray-500">${measured}</span>`}</div>`
         : academyEsc(projectLineQtyText(line));
     }
     const fromWindows = (line.kind === 'included' || line.unit === 'lft') && measureAllWindows(o).length;
@@ -24849,7 +24851,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     </tr>`;
   }).concat(pending.map(offering => `<tr data-project-pending="${academyEsc(offering.id)}">
       <td data-label="Услуга"><b>${academyEsc(offering.name)}</b><div class="text-xs text-gray-500">${academyEsc(primaryServiceInfo(offeringServiceType(offering))?.title || '')} · ждёт замера</div></td>
-      <td data-label="Объём"><button class="btn-ghost text-xs" onclick="openManagerMeasureModal('${o.id}')">внести замер</button></td>
+      <td data-label="Объём">${edit ? `<button class="btn-ghost text-xs" onclick="openManagerMeasureModal('${o.id}')">внести замер</button>` : '<span class="text-xs text-gray-500">ждёт замера</span>'}</td>
       ${money ? `<td data-label="Цена">${fmtMoney(Number(offering.pricePerSqft) || 0)} <span class="text-xs text-gray-500">/ sq ft</span></td><td data-label="Сумма" class="money text-gray-500">после замера</td>` : ''}
       ${production ? '<td data-label="Исполнитель"></td><td data-label="Дата"></td>' : ''}
       ${edit ? `<td class="project-estimate-action">${o.offeringId !== offering.id ? `<button class="btn-ghost text-red-600" aria-label="Убрать услугу ${academyEsc(offering.name)}" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">✕</button>` : ''}</td>` : ''}

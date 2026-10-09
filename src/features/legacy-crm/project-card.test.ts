@@ -123,7 +123,7 @@ test('in production each row gets its specialist and date; the schedule is built
   assert.match(c.renderProjectCardServices(measured, { money: true, manage: true }), /<card Подтвердить монтаж \| сначала назначьте: 2 \| projectCardConfirmInstallation\('o'\)>/);
   // A field specialist sees who and when, but cannot plan or see money.
   const field = load('installer').c.renderProjectCardServices(o, { money: false, manage: false });
-  assert.doesNotMatch(field, /\$|projectCardToggleCrew|projectCardSetQty/);
+  assert.doesNotMatch(field, /\$|projectCardToggleCrew|projectCardSetQty|openManagerMeasureModal/, 'no prices, no planning and no measurement editor for the field');
   assert.match(field, /Алан/);
 });
 
