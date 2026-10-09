@@ -23,6 +23,7 @@ test("removes browser-visible credentials and employee pins", () => {
         leadBackendKey: "backend-secret",
         ai: { apiKey: "ai-secret" },
       },
+      ai: { apiKey: "second-ai-secret", model: "claude-haiku-4-5-20251001" },
       sms: {
         twilio: { authToken: "twilio-secret", apiKeySecret: "key-secret" },
         textbelt: { apiKey: "sms-secret" },
@@ -35,7 +36,9 @@ test("removes browser-visible credentials and employee pins", () => {
   assert.equal(result.settings.stripe.secretKey, "");
   assert.equal(result.settings.stripe.publishableKey, "public");
   assert.equal(result.settings.integrations.leadBackendKey, "");
-  assert.equal(result.settings.integrations.ai.apiKey, "");
+  assert.equal("apiKey" in result.settings.integrations.ai, false);
+  assert.equal("apiKey" in result.settings.ai, false);
+  assert.equal(result.settings.ai.model, "claude-haiku-4-5-20251001");
   assert.equal(result.settings.sms.twilio.authToken, "");
   assert.equal(result.settings.sms.twilio.apiKeySecret, "");
   assert.equal(result.settings.sms.textbelt.apiKey, "");

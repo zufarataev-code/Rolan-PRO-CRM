@@ -610,6 +610,14 @@ Owner reviewed the «проект — контейнер» scheme in chat on 202
 - The customer price per sq ft for removing old film is the owner's setting `settings.removalPricePerSqft` in «Услуги и цены» ($2.50 until set; the server lets only the owner change it). It prices new automatic removal lines; saved lines keep their price.
 - Not in this change: moving the stored work into one entity (that belongs to the PostgreSQL core migration), client-selectable optional services on the public proposal page with sync back into the project, and calendar colours by work type.
 
+## 2026-10-09 — The CRM Claude key is server-only
+
+- The Anthropic API key is a protected production environment secret. It must never be stored in `LegacyWorkspace.payload`, browser `localStorage`, rendered in Settings, committed to Git, or sent back to a client.
+- Owner and Manager CRM sessions call the same-origin authenticated `/api/v1/ai/claude` gateway. The server validates a bounded message payload, restricts models to the approved allowlist, adds the secret, and calls Anthropic.
+- Historical browser-stored AI keys are removed during legacy payload normalization and server sanitization. This supersedes the former direct-browser Anthropic integration and its `anthropic-dangerous-direct-browser-access` header.
+- Creating a key does not activate production. Funding the provider account, configuring the production secret, merging, deploying from `main`, and running an authenticated smoke test remain separate owner-authorized release actions.
+- Implemented for review on `codex/secure-anthropic-crm-agent` in PR #322; production deployment remains a separate owner-authorized action.
+
 ## 2026-10-09 — The project card is one working screen: services in rows, specialist and date in production (Owner)
 
 Owner in chat on 2026-10-09: «я просил сделать карточку проекта, где мы в рамках одного проекта будем добавлять услуги и назначать исполнителей… сейчас невозможно сделать — всё разбросано». After a market review (Jobber, Housecall Pro, ServiceTitan keep a job on one page: services → schedule → money) and a mockup, the owner set the rule: «когда мы делаем производство, то мы добавляем исполнителей — появляются поля, а пока для просчёта просто услуги».

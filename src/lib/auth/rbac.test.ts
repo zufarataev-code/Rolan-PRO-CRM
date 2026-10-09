@@ -9,6 +9,10 @@ test("manager can use the dedicated pricing API without gaining other settings a
   assert.deepEqual(getRolesForPath("/api/v1/settings/company-overhead"), [ROLE_CODES.OWNER]);
 });
 
+test("server AI gateway is limited to owner and manager", () => {
+  assert.deepEqual(getRolesForPath("/api/v1/ai/claude"), [ROLE_CODES.OWNER, ROLE_CODES.MANAGER]);
+});
+
 test("every employee opens the same legacy-crm route", () => {
   assert.deepEqual(getRolesForPath("/legacy-crm/survey"), [
     ROLE_CODES.OWNER,
