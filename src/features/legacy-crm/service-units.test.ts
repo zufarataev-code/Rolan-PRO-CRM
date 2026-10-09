@@ -284,7 +284,7 @@ test('a project of services without sizes opens its estimate and shows them to t
   assert.match(card, /const estimateReady = hasMeasurements \|\| !orderNeedsMeasurements\(o\);/);
   assert.match(card, /disabled: !canManage \|\| !estimateReady/);
   assert.match(card, /onclick: estimateReady \? `openProjectEstimateWorkspace\('\$\{o\.id\}'\)` : `openManagerMeasureModal\('\$\{o\.id\}'\)`/);
-  assert.match(html, /projectOfferingLines\(order\)\.length \? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PROJECT SERVICES<\/div>/);
+  assert.match(html, /: ''\) \+ premiumProjectServicesPanel\(order\) \|\| `<div class="pp-panel"><h3 class="text-xl font-black">Project scope is not filled yet<\/h3>/);
 });
 
 test('the server classifies service lines itself: submitted flags cannot unlock a price or skip the size rule', () => {
@@ -309,14 +309,15 @@ test('the server classifies service lines itself: submitted flags cannot unlock 
   assert.match(prepareServiceSolutions(saved, disguised, false)!, /по замеру окон/);
 });
 
-test('installers see services without sizes in the work order and tech sheet, without prices', () => {
-  const rows = html.slice(html.indexOf('function projectOfferingScopeRows(order) {'), html.indexOf('function renderWorkOrderHtml('));
-  assert.match(rows, /serviceOfferingUnitShort\(line\)/);
+test('the crew sees every service of the project in the work order and tech sheet, with its specialist and date, without prices', () => {
+  const rows = html.slice(html.indexOf('function projectLineScopeRows(order) {'), html.indexOf('function projectServiceScheduleHtml('));
+  assert.match(rows, /projectLineQtyText\(line\)/);
+  assert.match(rows, /projectLineCrewText\(line\)/);
   assert.doesNotMatch(rows, /price|fmtMoney/i);
-  assert.match(html, /<div class="wo-block-title">Услуги без размеров<\/div>/);
-  assert.match(html, /\$\{projectOfferingLines\(order\)\.length \? `<div class="mb-5"><h3 class="font-black mb-2">Услуги без размеров<\/h3>/);
-  assert.match(html, /onclick: `openWorkOrder\('\$\{o\.id\}'\)`, disabled: !ctx\.hasMeasurements && !projectOfferingLines\(o\)\.length, primary: true/);
-  assert.match(html, /onclick: `printTechnicalSheet\('\$\{o\.id\}'\)`, disabled: !hasMeasurements && !projectOfferingLines\(o\)\.length/);
+  assert.match(html, /<div class="wo-block-title">Услуги проекта<\/div>/);
+  assert.match(html, /\$\{projectLines\(order\)\.length \? `<div class="mb-5"><h3 class="font-black mb-2">Услуги проекта<\/h3>/);
+  assert.match(html, /onclick: `openWorkOrder\('\$\{o\.id\}'\)`, disabled: !ctx\.hasMeasurements && !projectLines\(o\)\.length, primary: true/);
+  assert.match(html, /onclick: `printTechnicalSheet\('\$\{o\.id\}'\)`, disabled: !hasMeasurements && !projectLines\(o\)\.length/);
   // The field payload drops every money key of these lines (price, unitPrice, material cost).
   const field = readFileSync('src/features/legacy-crm/field-workspace.ts', 'utf8');
   assert.match(field, /const FINANCIAL_KEY = \/\(\?:price\|[^/]*cost[^/]*\)\/i;/);
@@ -356,16 +357,16 @@ test('services chosen before units existed stay per sq ft, whatever the director
 
 
 test('managers open the work order of a size-free project from the passport, the order card and production prep', () => {
-  const card = html.slice(html.indexOf('const hasWorkScope = hasMeasurements || projectOfferingLines(o).length > 0;'), html.indexOf('function openProjectProductionWorkspace('));
+  const card = html.slice(html.indexOf('const hasWorkScope = hasMeasurements || lines.length > 0;'), html.indexOf('function openProjectProductionWorkspace('));
   assert.ok(card.length > 0);
   assert.doesNotMatch(card, /openWorkOrder\('\$\{o\.id\}'\)`, disabled: !hasMeasurements/);
   assert.doesNotMatch(card, /openTechnicalSheet\('\$\{o\.id\}'\)`, disabled: !hasMeasurements/);
   assert.equal((html.match(/openWorkOrder\('\$\{o\.id\}'\)`, disabled: !hasWorkScope/g) || []).length, 3);
   const passportWorkOrder = html.slice(html.indexOf("{ key: 'workorder', icon: '📋', title: 'Заказ-наряд',"), html.indexOf("{ key: 'route', icon: '🧭'"));
-  assert.match(passportWorkOrder, /disabled: !ctx\.hasMeasurements && !projectOfferingLines\(o\)\.length/);
+  assert.match(passportWorkOrder, /disabled: !ctx\.hasMeasurements && !projectLines\(o\)\.length/);
   const production = html.slice(html.indexOf('function openProjectProductionWorkspace('), html.indexOf('function openProjectProductionWorkspace(') + 6000);
-  assert.match(production, /disabled: !measureAllWindows\(o\)\.length && !projectOfferingLines\(o\)\.length/);
-  assert.match(production, /projectOfferingScopeRows\(o\)/);
+  assert.match(production, /disabled: !measureAllWindows\(o\)\.length && !projectLines\(o\)\.length/);
+  assert.match(production, /projectLineScopeRows\(o\)/);
 });
 
 
