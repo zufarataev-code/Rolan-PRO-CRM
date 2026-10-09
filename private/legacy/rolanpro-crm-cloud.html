@@ -24578,6 +24578,14 @@ function projectCardRemovePending(oid, offeringId) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser()) || o.offeringId === offeringId) return;
   o.offeringIds = (o.offeringIds || []).filter(id => id !== offeringId);
+  // The direction leaves the project too when nothing else of it remains, so
+  // the measurement no longer asks for it.
+  const direction = offeringServiceType(serviceOffering(offeringId));
+  const stillUsed = !direction || o.serviceType === direction
+    || (o.offeringIds || []).some(id => offeringServiceType(serviceOffering(id)) === direction)
+    || (o.extraServices || []).some(line => line.serviceType === direction)
+    || measureAllWindows(o).some(({ win }) => (win.measureScope || o.serviceType) === direction);
+  if (!stillUsed) o.serviceTypes = (o.serviceTypes || []).filter(type => type !== direction);
   projectEstimateMarkChanged(o, `Убрана услуга «${serviceOffering(offeringId)?.name || 'услуга'}»`);
   save(); preservePositionForNextRender(); render();
 }

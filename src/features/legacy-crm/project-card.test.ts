@@ -337,3 +337,34 @@ test('server: entering installation needs a complete plan for every service; imp
   assert.equal(prepareServiceSolutions(imported, importedOrder, false), null, 'a new project created as scheduled (import) is not a transition');
 });
 
+
+test('removing a service waiting for measurement drops its direction when nothing else of it remains', () => {
+  const { c } = load();
+  c.getOrder = (id: string) => c.db.orders.find((item: Row) => item.id === id);
+  const o = project();
+  o.offeringIds = ['a1', 'zone', 'solar-x'];
+  o.serviceTypes = ['protective_film', 'smart_film', 'solar_film'];
+  c.db.settings.serviceOfferings.push({ id: 'solar-x', direction: 'solar', name: 'Ceramic 70', unit: 'sqft', pricePerSqft: 9 });
+  c.offeringServiceType = (offering: Row) => ({ protective: 'protective_film', smart: 'smart_film', solar: 'solar_film' } as Row)[offering?.direction] || '';
+  o.offeringUnits['solar-x'] = 'sqft';
+  c.db.orders.push(o);
+  c.projectCardRemovePending('o', 'solar-x');
+  assert.deepEqual(plain([o.offeringIds, o.serviceTypes]), [['a1', 'zone'], ['protective_film', 'smart_film']]);
+  // A direction still used by another service of the project stays.
+  o.offeringIds.push('a3');
+  c.projectCardRemovePending('o', 'a3');
+  assert.deepEqual(plain(o.serviceTypes), ['protective_film', 'smart_film']);
+});
+
+test('server: after «Монтаж назначен» a plan leaves only with its service', () => {
+  const users = [{ id: 'i1', role: 'installer' }];
+  const plan = (id: string) => ({ id, installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] });
+  const saved: Row = { settings: { serviceOfferings: [] }, users, orders: [{ id: 'o', status: 'installation_scheduled', serviceType: 'smart_film', measurements: { rooms: [] }, extraServices: [{ id: 'z', type: 'washing', qty: 1, price: 10 }, { id: 'y', type: 'washing', qty: 1, price: 10 }], serviceSchedules: [plan('line:z'), plan('line:y')] }] };
+  const dropped = structuredClone(saved);
+  dropped.orders[0].serviceSchedules = [plan('line:z')];
+  assert.equal(prepareServiceSolutions(saved, dropped, false), 'Монтаж назначен: у услуги должны остаться исполнитель и дата.');
+  const removed = structuredClone(saved);
+  removed.orders[0].extraServices = [removed.orders[0].extraServices[0]];
+  removed.orders[0].serviceSchedules = [plan('line:z')];
+  assert.equal(prepareServiceSolutions(saved, removed, false), null, 'the service itself was removed');
+});

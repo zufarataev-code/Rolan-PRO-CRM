@@ -274,9 +274,11 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     // Once «Монтаж назначен», a planned service may change its specialist or
     // date but not lose them; a service added later is planned step by step.
     if (schedulesChanged && SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) {
+      const services = serviceGroupIds(order);
       for (const before of rows(oldOrder.serviceSchedules).filter(complete)) {
         const after = rows(order.serviceSchedules).find(plan => plan.id === before.id);
-        if (after && !complete(after)) return 'Монтаж назначен: у услуги должны остаться исполнитель и дата.';
+        // A plan leaves only with its service.
+        if (after ? !complete(after) : services.includes(before.id)) return 'Монтаж назначен: у услуги должны остаться исполнитель и дата.';
       }
     }
     // A plan made at «КП принято» is a draft: the project crew and date (what
