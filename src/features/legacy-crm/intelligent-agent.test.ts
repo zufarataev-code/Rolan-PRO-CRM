@@ -39,11 +39,13 @@ test("agent suggestions are explainable and require confirmation before creating
 
 test("agent dates use the CRM user's local calendar day and agent tasks are auditable", () => {
   assert.match(html, /function localDateKey\(value = new Date\(\)\)/);
-  assert.match(html, /function taskDueDateKey\(value\)/);
+  assert.match(html, /function taskDueDateKey\(value, task = null\)/);
   assert.match(html, /const today = localDateKey\(now\)/);
   assert.match(html, /const todayStr = localDateKey\(now\)/);
-  assert.match(html, /taskDueDateKey\(task\.dueAt\) < today/);
-  assert.match(html, /const d = taskDueDateKey\(t\.dueAt\)/);
+  assert.match(html, /taskDueDateKey\(task\.dueAt, task\) < today/);
+  assert.match(html, /const d = taskDueDateKey\(t\.dueAt, t\)/);
+  assert.match(html, /dueAt: due\.toISOString\(\)/);
+  assert.match(html, /legacyUtc/);
   assert.match(html, /t\.source === 'rolan_agent'/);
   assert.match(html, /Агент Rolan PRO/);
 });
@@ -54,12 +56,12 @@ test("field roles receive operational guidance without company money", () => {
   const insights = html.slice(start, end);
 
   assert.match(insights, /user\.role === 'measurer'/);
-  assert.match(insights, /new Date\(order\.measurementAt\)\.getTime\(\) >= now\.getTime\(\)/);
+  assert.match(insights, /futureMeasurements\.length \? futureMeasurements : measurements\.slice\(-1\)/);
   assert.match(insights, /agentOpenMeasurement\('\$\{pending\[0\]\.id\}'\)/);
   assert.match(insights, /user\.role === 'installer'/);
   assert.match(insights, /projectServiceAssignment\(order, group\)/);
   assert.match(insights, /item\.assignment\.installerIds/);
-  assert.match(insights, /new Date\(item\.assignment\.installationAt\)\.getTime\(\) >= now\.getTime\(\)/);
+  assert.match(insights, /futureInstallations\.length \? futureInstallations : installations\.slice\(-1\)/);
   assert.match(insights, /Открыть замер/);
   assert.match(insights, /Открыть Work Order/);
   assert.match(insights, /if \(user\.role === 'owner' && agentBankReviewCount > 0\).*bank_review/s);

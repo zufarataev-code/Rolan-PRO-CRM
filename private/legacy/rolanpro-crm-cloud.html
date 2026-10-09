@@ -13380,7 +13380,7 @@ function saveCallOutcome(phone, clientId, orderId, outcome) {
       db.tasks.push({
         id: 't_' + uid(),
         title: `📞 Перезвонить: ${c ? c.name : phone}`,
-        dueAt: due.toISOString().slice(0, 16) + ':00',
+        dueAt: due.toISOString(),
         teamIds: [state.currentUserId], responsibleId: state.currentUserId,
         clientId: clientId || null, notes: note,
         status: 'open', createdAt: new Date().toISOString(), createdBy: state.currentUserId, doneAt: null,
@@ -13961,7 +13961,7 @@ function createSalesAgentFollowUp(orderId) {
   db.tasks.push({
     id: 't_' + uid(),
     title: `AI follow-up: ${c?.name || o.number}`,
-    dueAt: due.toISOString().slice(0, 16) + ':00',
+    dueAt: due.toISOString(),
     teamIds: [o.managerId || state.currentUserId].filter(Boolean),
     responsibleId: o.managerId || state.currentUserId || null,
     clientId: o.clientId || null,
@@ -21280,7 +21280,7 @@ function renderTasksView() {
 
   function bucketOf(t) {
     if (!t.dueAt) return 'nodate';
-    const d = taskDueDateKey(t.dueAt);
+    const d = taskDueDateKey(t.dueAt, t);
     if (d < todayStr) return 'overdue';
     if (d === todayStr) return 'today';
     return 'later';
@@ -34952,12 +34952,16 @@ function localDateKey(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 }
-function taskDueDateKey(value) {
+function taskDueDateKey(value, task = null) {
   const text = String(value || '');
   if (!text) return '';
   // Inputs from the task form are local wall-clock values. Server/generated
   // timestamps carry a timezone and must be converted to the user's local day.
-  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(text) ? localDateKey(new Date(text)) : text.slice(0,10);
+  // Older call/follow-up tasks were UTC too, but their producer removed "Z".
+  const legacyUtc = !/(?:Z|[+-]\d{2}:?\d{2})$/.test(text)
+    && (/^📞 Перезвонить:/.test(task?.title || '') || /^AI follow-up:/.test(task?.title || ''));
+  const timestamp = legacyUtc ? `${text}Z` : text;
+  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(timestamp) ? localDateKey(new Date(timestamp)) : text.slice(0,10);
 }
 function agentCreateSuggestedTask(key, title, notes, responsibleId = '') {
   const actor = currentUser();
@@ -34983,7 +34987,7 @@ function agentInsights() {
   const orders = visibleOrdersForUser(user);
   const tasks = (db.tasks || []).filter(task => agentTaskVisibleTo(user, task));
   const insights = [];
-  const overdue = tasks.filter(task => task.dueAt && taskDueDateKey(task.dueAt) < today);
+  const overdue = tasks.filter(task => task.dueAt && taskDueDateKey(task.dueAt, task) < today);
   if (overdue.length) insights.push({
     id:'overdue_tasks', tone:'red', eyebrow:'СРОЧНО', title:`Просрочено задач: ${overdue.length}`,
     detail:'Сначала закройте просроченные действия — агент не даст активной работе остаться без следующего шага.',
@@ -35023,19 +35027,21 @@ function agentInsights() {
     action:'refreshAgentBankPulse()', actionLabel:agentBankReviewLoading?'Обновляется':'Повторить', priority:70,
   });
   if (user.role === 'measurer') {
-    const pending = orders
+    const measurements = orders
       .filter(order => order.measurementAt && !order.measurementDoneAt)
-      .filter(order => new Date(order.measurementAt).getTime() >= now.getTime())
       .sort((a,b)=>String(a.measurementAt).localeCompare(String(b.measurementAt)));
+    const futureMeasurements = measurements.filter(order => new Date(order.measurementAt).getTime() >= now.getTime());
+    const pending = futureMeasurements.length ? futureMeasurements : measurements.slice(-1);
     if (pending[0]) insights.push({ id:'next_measurement', tone:'blue', eyebrow:'СЛЕДУЮЩИЙ ВЫЕЗД', title:getClient(pending[0].clientId)?.name || pending[0].number, detail:`${fmtDateTime(pending[0].measurementAt)} · ${orderAddress(pending[0], getClient(pending[0].clientId)) || 'адрес не указан'}`, action:`agentOpenMeasurement('${pending[0].id}')`, actionLabel:'Открыть замер', priority:90 });
   }
   if (user.role === 'installer') {
-    const pending = orders
+    const installations = orders
       .filter(order => !['installation_done','completed','review_received'].includes(order.status))
       .flatMap(order => projectServiceGroups(order).map(group => ({ order, group, assignment: projectServiceAssignment(order, group) })))
       .filter(item => item.assignment.installationAt && (item.assignment.installerIds || []).includes(user.id))
-      .filter(item => new Date(item.assignment.installationAt).getTime() >= now.getTime())
       .sort((a,b)=>String(a.assignment.installationAt).localeCompare(String(b.assignment.installationAt)));
+    const futureInstallations = installations.filter(item => new Date(item.assignment.installationAt).getTime() >= now.getTime());
+    const pending = futureInstallations.length ? futureInstallations : installations.slice(-1);
     if (pending[0]) {
       const item = pending[0];
       insights.push({ id:'next_installation', tone:'blue', eyebrow:'СЛЕДУЮЩАЯ УСЛУГА', title:getClient(item.order.clientId)?.name || item.order.number, detail:`${item.group.name} · ${fmtDateTime(item.assignment.installationAt)} · ${orderAddress(item.order, getClient(item.order.clientId)) || 'адрес не указан'}`, action:`agentOpenOrder('${item.order.id}')`, actionLabel:'Открыть Work Order', priority:90 });
