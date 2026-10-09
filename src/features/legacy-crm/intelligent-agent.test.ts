@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+const legacyRoute = readFileSync("app/legacy-crm/route.ts", "utf8");
 
 test("the existing CRM assistant becomes a role-safe Rolan PRO agent", () => {
   const start = html.indexOf("// ---------- AI: ASSISTANT SIDEBAR ----------");
@@ -26,7 +27,8 @@ test("agent suggestions are explainable and require confirmation before creating
   assert.match(suggestions, /agentKey: key, source: 'rolan_agent'/);
   assert.match(suggestions, /agentTaskExists\(key\)/);
   assert.match(suggestions, /Клиенты должны/);
-  assert.match(suggestions, /agent_debt_\$\{user\.id\}_\$\{today\}/);
+  assert.match(suggestions, /agent_debt_\$\{user\.id\}/);
+  assert.doesNotMatch(suggestions, /agent_debt_\$\{user\.id\}_\$\{today\}/);
   assert.match(suggestions, /precisionManagerAction\(order\)/);
   assert.doesNotMatch(suggestions, /nextActionAt/);
   assert.match(suggestions, /agentBankReviewCount > 0/);
@@ -40,7 +42,15 @@ test("field roles receive operational guidance without company money", () => {
 
   assert.match(insights, /user\.role === 'measurer'/);
   assert.match(insights, /user\.role === 'installer'/);
+  assert.match(insights, /projectServiceAssignment\(order, group\)/);
+  assert.match(insights, /item\.assignment\.installerIds/);
   assert.match(insights, /Открыть замер/);
   assert.match(insights, /Открыть Work Order/);
   assert.match(insights, /if \(user\.role === 'owner' && agentBankReviewCount > 0\).*bank_review/s);
+});
+
+test("the bank pulse refreshes whenever the owner returns from bank review", () => {
+  assert.match(html, /window\.addEventListener\('rolanpro-bank-closed'/);
+  assert.match(legacyRoute, /window\.dispatchEvent\(new CustomEvent\('rolanpro-bank-closed'\)\)/);
+  assert.match(html, /if \(state\.aiSidebarOpen && currentUser\(\)\?\.role === 'owner'\) refreshAgentBankPulse\(\)/);
 });

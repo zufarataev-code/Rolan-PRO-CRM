@@ -34979,7 +34979,7 @@ function agentInsights() {
   if (['owner','manager'].includes(user.role)) {
     const debtOrders = orders.filter(order => orderDebt(order) > 0 && !['cancelled','lost'].includes(order.status));
     const debt = debtOrders.reduce((sum, order) => sum + orderDebt(order), 0);
-    const debtTaskKey = `agent_debt_${user.id}_${today}`;
+    const debtTaskKey = `agent_debt_${user.id}`;
     if (debtOrders.length) insights.push({
       id:'client_debt', tone:'amber', eyebrow:'ДЕНЬГИ', title:`Клиенты должны ${fmtMoney(debt)}`,
       detail:`Открытых проектов с остатком к оплате: ${debtOrders.length}. Агент предлагает проверить обещанные даты оплаты.`,
@@ -35006,8 +35006,15 @@ function agentInsights() {
     if (pending[0]) insights.push({ id:'next_measurement', tone:'blue', eyebrow:'СЛЕДУЮЩИЙ ВЫЕЗД', title:getClient(pending[0].clientId)?.name || pending[0].number, detail:`${fmtDateTime(pending[0].measurementAt)} · ${orderAddress(pending[0], getClient(pending[0].clientId)) || 'адрес не указан'}`, action:`agentOpenOrder('${pending[0].id}')`, actionLabel:'Открыть замер', priority:90 });
   }
   if (user.role === 'installer') {
-    const pending = orders.filter(order => order.installationAt && !['installation_done','completed','review_received'].includes(order.status)).sort((a,b)=>String(a.installationAt).localeCompare(String(b.installationAt)));
-    if (pending[0]) insights.push({ id:'next_installation', tone:'blue', eyebrow:'СЛЕДУЮЩИЙ ОБЪЕКТ', title:getClient(pending[0].clientId)?.name || pending[0].number, detail:`${fmtDateTime(pending[0].installationAt)} · ${orderAddress(pending[0], getClient(pending[0].clientId)) || 'адрес не указан'}`, action:`agentOpenOrder('${pending[0].id}')`, actionLabel:'Открыть Work Order', priority:90 });
+    const pending = orders
+      .filter(order => !['installation_done','completed','review_received'].includes(order.status))
+      .flatMap(order => projectServiceGroups(order).map(group => ({ order, group, assignment: projectServiceAssignment(order, group) })))
+      .filter(item => item.assignment.installationAt && (item.assignment.installerIds || []).includes(user.id))
+      .sort((a,b)=>String(a.assignment.installationAt).localeCompare(String(b.assignment.installationAt)));
+    if (pending[0]) {
+      const item = pending[0];
+      insights.push({ id:'next_installation', tone:'blue', eyebrow:'СЛЕДУЮЩАЯ УСЛУГА', title:getClient(item.order.clientId)?.name || item.order.number, detail:`${item.group.name} · ${fmtDateTime(item.assignment.installationAt)} · ${orderAddress(item.order, getClient(item.order.clientId)) || 'адрес не указан'}`, action:`agentOpenOrder('${item.order.id}')`, actionLabel:'Открыть Work Order', priority:90 });
+    }
   }
   if (!insights.length) insights.push({ id:'all_clear', tone:'emerald', eyebrow:'ПОД КОНТРОЛЕМ', title:'Срочных отклонений нет', detail:'Агент продолжает следить за задачами, проектами, графиком и деньгами.', action:'agentOpenTasks()', actionLabel:'Открыть задачи', priority:1 });
   return insights.sort((a,b) => b.priority - a.priority);
@@ -35026,8 +35033,12 @@ function toggleAiSidebar() {
   state.aiSidebarOpen = !state.aiSidebarOpen;
   if (state.aiSidebarOpen && !state.aiSidebarTab) state.aiSidebarTab = 'pulse';
   render();
-  if (state.aiSidebarOpen && currentUser()?.role === 'owner' && agentBankReviewCount === null) refreshAgentBankPulse();
+  if (state.aiSidebarOpen && currentUser()?.role === 'owner') refreshAgentBankPulse();
 }
+window.addEventListener('rolanpro-bank-closed', () => {
+  agentBankReviewCount = null;
+  if (state.aiSidebarOpen && currentUser()?.role === 'owner') refreshAgentBankPulse();
+});
 function renderAiSidebar() {
   if (!state.aiSidebarOpen) {
     return `<button onclick="toggleAiSidebar()" class="fixed bottom-6 right-6 w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-2xl hover:scale-105 transition-transform z-40 overflow-hidden" style="border:2px solid #29A7E1" title="Агент Rolan PRO (Cmd+/)"><img src="/landing/rolan-mascot.webp" alt="Агент Rolan PRO" style="width:58px;height:58px;object-fit:contain"></button>`;

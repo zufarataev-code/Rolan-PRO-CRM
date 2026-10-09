@@ -319,6 +319,7 @@ export async function GET(request: NextRequest) {
         // «Деньги → Счета и карты»: bank and card feeds through Plaid (owner only).
         window.closeRolanProBank = function closeRolanProBank() {
           document.getElementById('rolanpro-bank-overlay')?.remove();
+          window.dispatchEvent(new CustomEvent('rolanpro-bank-closed'));
         };
         window.openRolanProBank = function openRolanProBank() {
           document.getElementById('rolanpro-bank-overlay')?.remove();
