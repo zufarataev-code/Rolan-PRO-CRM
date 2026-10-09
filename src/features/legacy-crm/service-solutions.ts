@@ -261,7 +261,9 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         if (after && !complete(after)) return 'Монтаж назначен: у услуги должны остаться исполнитель и дата.';
       }
     }
-    if (Array.isArray(order.serviceSchedules) && order.serviceSchedules.length) {
+    // A plan made at «КП принято» is a draft: the project crew and date (what
+    // the client and the field crew see) follow it once installation is scheduled.
+    if (Array.isArray(order.serviceSchedules) && order.serviceSchedules.length && SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) {
       order.installerIds = [...new Set(rows(order.serviceSchedules).flatMap(plan => Array.isArray(plan.installerIds) ? plan.installerIds : []))];
       order.installationAt = rows(order.serviceSchedules).map(plan => plan.installationAt).filter(value => typeof value === 'string' && value !== '').sort()[0];
     }

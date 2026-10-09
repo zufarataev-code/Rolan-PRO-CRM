@@ -16916,6 +16916,8 @@ function calendarEventDatesForOrder(o, type) {
 }
 function calendarEventsForOrder(o, type) {
   const info = orderEventInfo(type);
+  // A plan at «КП принято» is a draft until «Подтвердить монтаж».
+  if (type === 'install' && o.status === 'proposal_accepted' && o.serviceSchedules?.length) return [];
   if (type === 'install' && o.serviceSchedules?.length) {
     return projectServiceGroups(o).flatMap(group => {
       const assignment = projectServiceAssignment(o, group);
@@ -24620,8 +24622,15 @@ function projectCardSchedule(o, key) {
   }
   return entry;
 }
-/** The project's crew and first date follow its lines; quick lines keep their own crew for pay. */
+/**
+ * The project's crew and first date follow its lines; quick lines keep their
+ * own crew for pay. A plan made at «КП принято» is a draft: the client, the
+ * field crew and the calendar see it only after «Подтвердить монтаж».
+ */
 function projectCardSyncCrew(o) {
+  if (PROJECT_SCHEDULED_STATUSES.includes(o.status)) projectCardPublishCrew(o);
+}
+function projectCardPublishCrew(o) {
   const list = o.serviceSchedules || [];
   o.installerIds = [...new Set(list.flatMap(item => item.installerIds || []))];
   const dates = list.map(item => item.installationAt).filter(Boolean).sort();
@@ -24675,17 +24684,31 @@ function projectCardUnplanned(o) {
 function projectCardConfirmInstallation(oid) {
   const o = getOrder(oid);
   if (!projectCardCanPlan(o) || o.status !== 'proposal_accepted') return;
+  const waiting = projectPendingSizedServices(o);
+  if (waiting.length) return alert(`Сначала внесите замер: ${waiting.map(offering => offering.name).join(', ')}.`);
   const missing = projectCardUnplanned(o);
   if (missing.length) return alert(`Укажите исполнителя и дату: ${missing.map(line => line.name).join(', ')}.`);
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
   const technical = orderTechnicalMeasurementIssues(o);
   if (technical.length) return alert('Нельзя назначить монтаж — замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
   if (!ensureProductionReadyForInstallation(o)) return;
+  const previous = {
+    installerIds: o.installerIds,
+    installationAt: o.installationAt,
+    lines: projectQuickLines(o).map(line => ({ line, installerIds: line.installerIds, startDate: line.startDate })),
+  };
+  projectCardPublishCrew(o);
   if (changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true })) {
     refreshManualFilmNeededBy(o);
     save();
     notifyClientEventScheduled(oid, 'install');
+    return;
   }
+  // A refused status keeps the plan a draft.
+  o.installerIds = previous.installerIds;
+  if (previous.installationAt) o.installationAt = previous.installationAt; else delete o.installationAt;
+  previous.lines.forEach(item => { item.line.installerIds = item.installerIds; item.line.startDate = item.startDate; });
+  save();
 }
 
 function projectCardCrewPicker(o, line) {
@@ -24755,7 +24778,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     <div class="order-clean-stage-head">
       <div>
         <div class="order-clean-stage-title">Услуги проекта</div>
-        <div class="order-clean-stage-sub">${production ? 'Исполнитель и дата — у каждой услуги в её строке.' : 'Расчёт: услуги, объём и цена. Исполнители появятся, когда клиент примет КП.'}</div>
+        <div class="order-clean-stage-sub">${production ? (o.status === 'proposal_accepted' ? 'Исполнитель и дата — у каждой услуги в её строке. Это черновик: клиент и бригада увидят его после «Подтвердить монтаж».' : 'Исполнитель и дата — у каждой услуги в её строке.') : 'Расчёт: услуги, объём и цена. Исполнители появятся, когда клиент примет КП.'}</div>
       </div>
       ${money && edit ? `<div class="flex flex-wrap items-center gap-2">${projectOfferingPickerHtml(o, 'projectCardAddService') || '<span class="text-sm text-gray-500">Добавьте услуги в разделе «Услуги и цены».</span>'}</div>` : ''}
     </div>
@@ -24778,7 +24801,7 @@ function renderProjectCardSchedule(o, unplanned, plan) {
     <div class="font-black text-sm">График</div>
     ${visits.map(visit => `<div class="order-clean-list-row"><span><b>${fmtDateTime(visit.at)}</b> · ${academyEsc(visit.installerIds.map(id => getUser(id)?.name).filter(Boolean).join(', '))}</span><span class="text-sm text-gray-600">${visit.lines.map(line => `${academyEsc(line.name)} — ${academyEsc(projectLineQtyText(line))}`).join('; ')}</span></div>`).join('') || '<div class="text-sm text-gray-500 mt-1">Пока ничего не запланировано.</div>'}
     ${unplanned.length ? `<div class="order-clean-note mt-2" style="border-color:#fcd34d;background:#fffbeb;color:#92400e">Не назначено: ${academyEsc(unplanned.map(line => line.name).join(', '))}</div>` : ''}
-    ${plan && o.status === 'proposal_accepted' ? `<div class="mt-2">${renderOrderActionCard({ icon: '🔧', title: 'Подтвердить монтаж', sub: unplanned.length ? `сначала назначьте: ${unplanned.length}` : 'все услуги назначены — проект перейдёт в «Монтаж назначен»', onclick: `projectCardConfirmInstallation('${o.id}')`, variant: unplanned.length ? 'warning' : 'primary' })}</div>` : ''}
+    ${plan && o.status === 'proposal_accepted' ? `<div class="mt-2">${renderOrderActionCard({ icon: '🔧', title: 'Подтвердить монтаж', sub: projectPendingSizedServices(o).length ? 'сначала внесите замер всех услуг' : unplanned.length ? `сначала назначьте: ${unplanned.length}` : 'все услуги назначены — клиент и бригада увидят дату после подтверждения', onclick: `projectCardConfirmInstallation('${o.id}')`, variant: unplanned.length || projectPendingSizedServices(o).length ? 'warning' : 'primary' })}</div>` : ''}
   </div>`;
 }
 

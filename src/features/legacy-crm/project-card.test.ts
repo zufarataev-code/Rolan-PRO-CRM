@@ -116,7 +116,11 @@ test('in production each row gets its specialist and date; the schedule is built
   assert.match(out, /type="datetime-local" class="" style="min-width:180px" value="2026-10-14T16:00" aria-label="Дата: A1 8 mil" onchange="projectCardSetDate\('o','offering:a1',this\.value\)"/);
   assert.match(out, /<b>2026-10-14T16:00<\/b> · Алан<\/span><span class="text-sm text-gray-600">A1 8 mil — 30 sq ft/);
   assert.match(out, /Не назначено: Силикон, Подключение зоны/);
-  assert.match(out, /<card Подтвердить монтаж \| сначала назначьте: 2 \| projectCardConfirmInstallation\('o'\)>/);
+  assert.match(out, /Это черновик: клиент и бригада увидят его после «Подтвердить монтаж»/);
+  assert.match(out, /<card Подтвердить монтаж \| сначала внесите замер всех услуг \| projectCardConfirmInstallation\('o'\)>/, 'a service waiting for its measurement blocks the confirmation');
+  const measured = structuredClone(o);
+  measured.offeringIds = ['a1', 'zone'];
+  assert.match(c.renderProjectCardServices(measured, { money: true, manage: true }), /<card Подтвердить монтаж \| сначала назначьте: 2 \| projectCardConfirmInstallation\('o'\)>/);
   // A field specialist sees who and when, but cannot plan or see money.
   const field = load('installer').c.renderProjectCardServices(o, { money: false, manage: false });
   assert.doesNotMatch(field, /\$|projectCardToggleCrew|projectCardSetQty/);
@@ -138,9 +142,12 @@ test('planning in the row keeps the other lines\' old crew and fills the project
     ['line:z', ['i2', 'i1'], '2026-10-20T16:00:00.000Z'],
   ]);
   c.projectCardSetDate('o', 'line:z', '2026-10-15T09:00');
-  assert.equal(o.installationAt, new Date('2026-10-15T09:00').toISOString(), 'the project date is the first one');
+  // At «КП принято» the plan is a draft: the project crew and date (what the client and the crew see) stay as they were.
+  assert.deepEqual(plain([o.installerIds, o.installationAt]), [['i2'], '2026-10-20T16:00:00.000Z']);
+  // Once installation is scheduled, the project crew and first date follow the rows.
+  o.status = 'installation_scheduled';
   c.projectCardToggleCrew('o', 'line:z', 'i2', false);
-  c.projectCardSetDate('o', 'line:s', '');
+  assert.equal(o.installationAt, new Date('2026-10-15T09:00').toISOString(), 'the project date is the first one');
   assert.deepEqual(plain(o.installerIds), ['i2', 'i1']);
   assert.ok(calls.includes('save'));
   // A manager cannot plan before the proposal is accepted, nor pick someone who is not a field specialist.
@@ -159,7 +166,22 @@ test('a quick line planned in its row keeps its own crew and start date for pay'
   c.getOrder = (id: string) => c.db.orders.find((item: Row) => item.id === id);
   c.projectCardToggleCrew('q', 'line:k', 'i1', true);
   c.projectCardSetDate('q', 'line:k', '2026-10-16T08:30');
-  assert.deepEqual(plain([o.extraServices[0].installerIds, o.extraServices[0].startDate]), [['i1'], '2026-10-16']);
+  assert.deepEqual(plain([o.extraServices[0].installerIds ?? null, o.extraServices[0].startDate ?? null]), [null, null], 'a draft does not touch the line');
+  // Confirming publishes the plan: the quick line gets its crew and start date.
+  c.ensureVerifiedMeasurementsForStatus = () => true;
+  c.orderTechnicalMeasurementIssues = () => [];
+  c.ensureProductionReadyForInstallation = () => true;
+  c.refreshManualFilmNeededBy = () => undefined;
+  c.notifyClientEventScheduled = () => undefined;
+  c.changeStatus = (id: string, status: string) => { c.getOrder(id).status = status; return true; };
+  c.projectCardConfirmInstallation('q');
+  assert.deepEqual(plain([o.status, o.installerIds, o.installationAt, o.extraServices[0].installerIds, o.extraServices[0].startDate]), ['installation_scheduled', ['i1'], new Date('2026-10-16T08:30').toISOString(), ['i1'], '2026-10-16']);
+  // A refused status keeps the plan a draft.
+  const refused: Row = { id: 'r', status: 'proposal_accepted', serviceType: 'protective_film', measurements: { rooms: [] }, extraServices: [{ id: 'k2', quickProjectLine: true, unit: 'sqft', qty: 5, price: 50, serviceType: 'protective_film' }], serviceSchedules: [{ id: 'line:k2', installationAt: '2026-10-17T16:00:00.000Z', installerIds: ['i2'] }] };
+  c.db.orders.push(refused);
+  c.changeStatus = () => false;
+  c.projectCardConfirmInstallation('r');
+  assert.deepEqual(plain([refused.status, refused.installerIds ?? null, refused.installationAt ?? null, refused.extraServices[0].installerIds ?? null]), ['proposal_accepted', null, null, null]);
 });
 
 test('prices in the row respect the owner\'s range; windows of a service share their price', () => {
@@ -186,8 +208,10 @@ test('card edits reuse the estimate edits and stay on the card', () => {
   assert.match(refresh, /if \(projectCardEditing\) \{ preservePositionForNextRender\(\); render\(\); return; \}/);
   assert.match(html, /function projectCardSetQty\(oid, sid, value\) \{\n  projectCardEdit\(\(\) => projectEstimateUpdateService\(oid, sid, 'qty', value\)\);/);
   assert.match(html, /function projectCardAddService\(oid, offeringId\) \{\n  projectCardEdit\(\(\) => projectAddOfferingLine\(oid, offeringId\)\);/);
+  // The calendar keeps a draft plan to itself until the installation is confirmed.
+  assert.match(html, /if \(type === 'install' && o\.status === 'proposal_accepted' && o\.serviceSchedules\?\.length\) return \[\];/);
   const confirm = html.slice(html.indexOf('function projectCardConfirmInstallation(oid) {'), html.indexOf('function projectCardCrewPicker('));
-  for (const guard of ['projectCardUnplanned(o)', "ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')", 'orderTechnicalMeasurementIssues(o)', 'ensureProductionReadyForInstallation(o)', "changeStatus(oid, 'installation_scheduled'"]) assert.ok(confirm.includes(guard), guard);
+  for (const guard of ['projectPendingSizedServices(o)', 'projectCardUnplanned(o)', "ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')", 'orderTechnicalMeasurementIssues(o)', 'ensureProductionReadyForInstallation(o)', "changeStatus(oid, 'installation_scheduled'"]) assert.ok(confirm.includes(guard), guard);
 });
 
 test('server: a row may be planned step by step; «Монтаж назначен» needs every specialist and date', () => {
@@ -195,7 +219,7 @@ test('server: a row may be planned step by step; «Монтаж назначен
   const partial = base();
   partial.orders[0].serviceSchedules = [{ id: 'line:z', installationAt: '', installerIds: ['i1'] }, { id: 'line:s', installationAt: '2026-10-14T16:00:00.000Z', installerIds: [] }];
   assert.equal(prepareServiceSolutions(base(), partial, false), null);
-  assert.deepEqual([partial.orders[0].installerIds, partial.orders[0].installationAt], [['i1'], '2026-10-14T16:00:00.000Z']);
+  assert.deepEqual([partial.orders[0].installerIds, partial.orders[0].installationAt], [undefined, undefined], 'a draft plan is not published');
   const badDate = base();
   badDate.orders[0].serviceSchedules = [{ id: 'line:z', installationAt: 'tomorrow', installerIds: [] }];
   assert.equal(prepareServiceSolutions(base(), badDate, false), 'Некорректная дата услуги.');
@@ -207,6 +231,7 @@ test('server: a row may be planned step by step; «Монтаж назначен
   const done = structuredClone(complete);
   done.orders[0].status = 'installation_scheduled';
   assert.equal(prepareServiceSolutions(complete, done, false), null);
+  assert.deepEqual([done.orders[0].installerIds, done.orders[0].installationAt], [['i1'], '2026-10-15T16:00:00.000Z'], 'scheduled — the plan is published');
 });
 
 test('a finished project shows its plan read-only; after «Монтаж назначен» a planned row keeps a specialist and a date', () => {
