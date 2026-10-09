@@ -64,7 +64,10 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const normalize = (values: Row[]) => JSON.stringify(values.map(item => Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b)))).sort((a,b)=>String(a.id).localeCompare(String(b.id))));
     if (normalize(submitted) !== normalize(currentOfferings)) return 'Только владелец может менять справочник услуг.';
     if ('serviceOfferings' in object(current.settings)) settings.serviceOfferings = structuredClone(currentOfferings);
+    // The removal price per sq ft is part of the directory (Owner, 2026-10-08).
+    if (settings.removalPricePerSqft !== object(current.settings).removalPricePerSqft) return 'Только владелец может менять справочник услуг.';
   }
+  if (settings.removalPricePerSqft !== undefined && (typeof settings.removalPricePerSqft !== 'number' || !Number.isFinite(settings.removalPricePerSqft) || settings.removalPricePerSqft <= 0 || settings.removalPricePerSqft > 1000)) return 'Цена снятия плёнки должна быть положительным числом.';
   const offerings = rows(settings.serviceOfferings);
   const ids = new Set<string>();
   const films = rows(settings.catalog);

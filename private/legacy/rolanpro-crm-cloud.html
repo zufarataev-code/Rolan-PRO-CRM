@@ -12454,11 +12454,6 @@ function orderWorkPlanRows(order) {
   }).join('');
 }
 
-/** Services without sizes for the field: name, direction, quantity and unit — no prices. */
-function projectOfferingScopeRows(order) {
-  return projectOfferingLines(order).map(line => `<div class="p-3 rounded-lg bg-slate-50 border flex items-start justify-between gap-3"><span><b>${academyEsc(line.label || line.offeringName || 'Услуга')}</b><span class="block text-xs text-gray-500">${academyEsc(primaryServiceInfo(line.serviceType)?.title || '')}</span></span><span class="font-black whitespace-nowrap">${Number(line.qty) || 0} ${academyEsc(serviceOfferingUnitShort(line))}</span></div>`).join('');
-}
-
 function renderWorkOrderHtml(order, printMode = false) {
   const client = getClient(order.clientId) || {};
   const site = projectSiteInfo(order, client);
@@ -12502,10 +12497,10 @@ function renderWorkOrderHtml(order, printMode = false) {
         ${(site.contactName || site.contactPhone) ? `<div class="wo-contact mt-2">Контакт на объекте: ${academyEsc(site.contactName || 'не указан')}${site.contactPhone ? ' · ' + academyEsc(site.contactPhone) : ''}</div>` : ''}
       </div>` : ''}
 
-      ${projectOfferingLines(order).length ? `
+      ${projectLines(order).length ? `
       <div class="wo-block">
-        <div class="wo-block-title">Услуги без размеров</div>
-        <div class="grid gap-2">${projectOfferingScopeRows(order)}</div>
+        <div class="wo-block-title">Услуги проекта</div>
+        <div class="grid gap-2">${projectLineScopeRows(order)}</div>
       </div>` : ''}
 
       ${workPlan ? `
@@ -12704,7 +12699,7 @@ function renderTechnicalSheetHtml(order, printMode = false) {
         <div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Smart блоки</div><div class="font-black text-lg">${smart.blocks || '—'}</div></div>
         ${smart.windows ? `<div class="p-3 rounded-lg bg-slate-50 border"><div class="text-gray-500">Repeater zones</div><div class="font-black text-lg">${smart.repeaters || '—'}</div></div>` : ''}
       </div>
-      ${projectOfferingLines(order).length ? `<div class="mb-5"><h3 class="font-black mb-2">Услуги без размеров</h3><div class="grid gap-2">${projectOfferingScopeRows(order)}</div></div>` : ''}
+      ${projectLines(order).length ? `<div class="mb-5"><h3 class="font-black mb-2">Услуги проекта</h3><div class="grid gap-2">${projectLineScopeRows(order)}</div></div>` : ''}
       ${renderSmartRoomInstallationPlans(order)}
       ${rows.length ? rows.map(({ room, win }, idx) => {
         const cat = windowCatalog(win);
@@ -12735,7 +12730,7 @@ function renderTechnicalSheetHtml(order, printMode = false) {
             </div>
           </div>
         `;
-      }).join('') : projectOfferingLines(order).length ? '' : `<div class="p-5 rounded-lg bg-slate-50 border text-center text-gray-500">Замеры ещё не добавлены.</div>`}
+      }).join('') : projectLines(order).length ? '' : `<div class="p-5 rounded-lg bg-slate-50 border text-center text-gray-500">Замеры ещё не добавлены.</div>`}
       ${renderCutSheetHtml(order, printMode, true)}
       <footer class="pdf-footer">ROLANPRO · ${academyEsc(order.number)} · Технический лист сформирован ${academyEsc(new Date().toLocaleDateString('ru-RU'))}</footer>
     </div>
@@ -15679,6 +15674,11 @@ function ensureProductionReadyForInstallation(o) {
 function orderRemovalAreaSqft(o) {
   return measureAllWindows(o).reduce((sum, { win }) => sum + (windowRemovalRequired(win) ? windowActualAreaSqft(win) : 0), 0);
 }
+/** Customer price per sq ft for removing old film (owner's setting in «Услуги и цены», $2.50 until set). */
+function removalPricePerSqft() {
+  const price = Number(db.settings?.removalPricePerSqft);
+  return price > 0 ? price : 2.5;
+}
 function syncOrderWindowRemovalService(o) {
   if (!o) return;
   o.extraServices = o.extraServices || [];
@@ -15688,8 +15688,7 @@ function syncOrderWindowRemovalService(o) {
     o.extraServices = o.extraServices.filter(service => service.autoWindowRemoval !== true);
     return;
   }
-  const configured = PREMIUM_EXTRA_SERVICES.find(service => service.id === 'film_removal');
-  const unitPrice = Number(existing?.unitPrice) > 0 ? Number(existing.unitPrice) : Number(configured?.price || 2.5);
+  const unitPrice = Number(existing?.unitPrice) > 0 ? Number(existing.unitPrice) : removalPricePerSqft();
   const line = existing || { id: 'auto_window_removal', type: 'removal', label: 'Снятие старой плёнки', cost: 0, autoWindowRemoval: true };
   line.qty = Number(area.toFixed(2));
   line.unit = 'sqft';
@@ -23442,11 +23441,11 @@ function orderPassportActions(o, ctx) {
   if (ctx.isInstaller) {
     return [
       { icon: '📋', title: 'Заказ-наряд',
-        sub: ctx.hasMeasurements ? 'задача, размеры, адрес и фото' : projectOfferingLines(o).length ? 'услуги, количество, адрес' : 'ожидает замера',
-        onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements && !projectOfferingLines(o).length, primary: true },
+        sub: ctx.hasMeasurements ? 'задача, размеры, адрес и фото' : projectLines(o).length ? 'услуги, количество, адрес' : 'ожидает замера',
+        onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements && !projectLines(o).length, primary: true },
       { icon: '🧰', title: 'Технический лист',
-        sub: ctx.hasMeasurements ? 'схема и материалы без цен' : projectOfferingLines(o).length ? 'услуги без размеров' : 'ожидает замера',
-        onclick: `openTechnicalSheet('${o.id}')`, disabled: !ctx.hasMeasurements && !projectOfferingLines(o).length },
+        sub: ctx.hasMeasurements ? 'схема и материалы без цен' : projectLines(o).length ? 'услуги проекта' : 'ожидает замера',
+        onclick: `openTechnicalSheet('${o.id}')`, disabled: !ctx.hasMeasurements && !projectLines(o).length },
       { icon: '🧭', title: 'Маршрут',
         sub: ctx.address ? 'Google Maps' : 'адрес не указан',
         href: ctx.routeHref, disabled: !ctx.address },
@@ -23493,8 +23492,8 @@ function orderPassportActions(o, ctx) {
       onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.production },
 
     { key: 'workorder', icon: '📋', title: 'Заказ-наряд',
-      sub: ctx.hasMeasurements ? 'размеры, раскрой, адрес, фото' : projectOfferingLines(o).length ? 'услуги, количество, адрес' : 'после замера',
-      onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements && !projectOfferingLines(o).length },
+      sub: ctx.hasMeasurements ? 'размеры, раскрой, адрес, фото' : projectLines(o).length ? 'услуги, количество, адрес' : 'после замера',
+      onclick: `openWorkOrder('${o.id}')`, disabled: !ctx.hasMeasurements && !projectLines(o).length },
 
     { key: 'route', icon: '🧭', title: 'Маршрут',
       sub: ctx.address ? 'Google Maps' : 'адрес не указан',
@@ -24278,9 +24277,20 @@ function renderServiceOfferingsSection() {
   }).join('');
   return `<section class="card border border-slate-200 bg-white" style="border-radius:4px">
     <h2 class="text-xl font-black">Услуги по направлениям</h2>
-    <p class="text-sm text-slate-500">Проект — контейнер: в него добавляются услуги любых направлений, у каждой свой специалист и дата. Услуга за погонный фут (силикон, герметик) берёт количество из периметра окон. В услугу можно включить другие услуги бесплатно — например, защитную плёнку с силиконом: силикон встанет в проект отдельной строкой за $0 со своим выездом. Название услуги клиент видит в КП. Цена из справочника — ориентир: менеджер может изменить её в проекте внутри заданного владельцем диапазона. Услуга за кв. фут считается по замеру окон, её материал — плёнки со склада. Исполнителя каждой услуги выбирают в проекте при назначении монтажа.</p>
+    <p class="text-sm text-slate-500">Проект — контейнер: в него добавляются услуги любых направлений, у каждой свой специалист и дата. Услуга за погонный фут (силикон, герметик) берёт количество из периметра окон. В услугу можно включить другие услуги бесплатно — например, защитную плёнку с силиконом: силикон встанет в проект отдельной строкой за $0 со своим выездом. Название услуги клиент видит в КП. Цена из справочника — ориентир: менеджер может изменить её в проекте внутри заданного владельцем диапазона. Услуга за кв. фут считается по замеру окон, её материал — плёнки со склада. Исполнителя каждой услуги выбирают в проекте при назначении монтажа. Дополнительная услуга для КП — тоже услуга из этого справочника: её добавляют в проект, и она попадает в выручку, материал, оплату специалисту и заказ-наряд.</p>
+    <div class="mt-3 p-3 border border-slate-200 flex flex-wrap items-end gap-3" data-removal-price>
+      <div><label>Снятие старой плёнки, $ / кв. фут клиенту</label>${owner ? `<input type="number" min="0" step="0.25" value="${removalPricePerSqft()}" onchange="updateRemovalPrice(this.value)">` : `<div class="font-black">${fmtMoney(removalPricePerSqft())}</div>`}</div>
+      <div class="text-xs text-gray-500 flex-1">Строка «Снятие старой плёнки» появляется в проекте сама, когда на замере у окна отмечено снятие. Новая цена применяется к новым строкам; сохранённые расчёты не меняются.</div>
+    </div>
     ${groups}
   </section>`;
+}
+
+function updateRemovalPrice(value) {
+  if (!serviceOfferingCanEdit()) return;
+  const price = Math.max(0, Number(value) || 0);
+  db.settings.removalPricePerSqft = price > 0 ? Math.round(price * 100) / 100 : 2.5;
+  save();
 }
 
 function projectWindowSolutionHtml(o, room, win, inMeasurement = false) {
@@ -24349,6 +24359,155 @@ function projectServiceAssignment(o, group) {
 function projectServiceCrew(o, item) {
   const group = projectServiceGroups(o).find(group => group.windows.includes(item) || group.lines.includes(item));
   return group ? projectServiceAssignment(o, group).installerIds || [] : o.installerIds || [];
+}
+
+// ---------- ОДИН СПИСОК СТРОК ПРОЕКТА ----------
+// Owner, 2026-10-08: the project is a container — one list of its lines. The
+// work stays stored where it is (windows, extraServices, serviceSchedules);
+// this list reads it the way money and scheduling already do: one line per
+// service group — the windows of one service together, every other row on its
+// own — with its quantity, customer price, material, installer pay, specialist
+// and date. The lines' prices add up to the project revenue (orderRevenue).
+
+const PROJECT_LINE_KIND_LABELS = {
+  windows: 'по окнам',
+  quantity: 'без размеров',
+  included: 'входит в услугу',
+  quick: 'быстрый ввод',
+  work: 'доп. работа',
+};
+
+/** The project's lines: what is done, how much, for how much, by whom and when. */
+function projectLines(o) {
+  if (!o) return [];
+  const offeringLines = projectOfferingLines(o);
+  const complexity = o.complexity || 'standard';
+  return projectServiceGroups(o).map(group => {
+    const assignment = projectServiceAssignment(o, group);
+    const base = {
+      key: group.id,
+      name: group.name,
+      windows: group.windows,
+      sources: group.lines,
+      installerIds: [...new Set(assignment.installerIds || [])],
+      installationAt: assignment.installationAt || '',
+    };
+    if (group.windows.length) {
+      const first = group.windows[0];
+      const sum = fn => group.windows.reduce((total, win) => total + (Number(fn(win)) || 0), 0);
+      return {
+        ...base,
+        kind: 'windows',
+        offeringId: first.offeringId || '',
+        includedBy: '',
+        direction: first.measureScope || o.serviceType || '',
+        unit: 'sqft',
+        unitShort: 'sq ft',
+        qty: Math.round(sum(win => windowActualAreaSqft(win)) * 100) / 100,
+        price: sum(win => windowRetailPrice(win, complexity, o.priceOverridePerSqft)),
+        materialCost: sum(win => windowFilmCost(win)),
+        installerPay: sum(win => windowInstallerPayout(win)),
+      };
+    }
+    const line = group.lines[0] || {};
+    const isOffering = offeringLines.includes(line);
+    const kind = line.quickProjectLine ? 'quick' : isOffering ? (line.includedBy ? 'included' : 'quantity') : 'work';
+    const qty = Number(line.qty) || 0;
+    let materialCost = 0;
+    let installerPay = 0;
+    if (kind === 'quick') {
+      const catalog = getCatalogItem(line.catalogId);
+      if (line.unit === 'sqft' && line.catalogId) materialCost = qty * (1 + (Number(catalog?.wastePct) || 0) / 100) * warehouseCatalogCostPerSqft(line.catalogId);
+      const filmName = catalog ? `${catalog.brand} ${catalog.model}` : line.serviceType;
+      if (line.unit === 'sqft') installerPay = qty * (serviceOfferingInstallerRate(line) || filmRate(filmName));
+    } else {
+      // The same rates as orderAdditionalWorkPayoutForUser: a directory service
+      // pays its own rate per unit, any other row the work-type rate.
+      if (isOffering) materialCost = qty * serviceOfferingMaterialCost(line);
+      installerPay = qty * (line.offeringId ? serviceOfferingInstallerRate(line) : installerAdditionalWorkRate(null, line.type));
+    }
+    return {
+      ...base,
+      kind,
+      offeringId: line.offeringId || '',
+      includedBy: line.includedBy || '',
+      direction: line.serviceType || '',
+      unit: kind === 'work' ? (line.unit || '') : serviceOfferingUnit(line),
+      unitShort: kind === 'work' ? (line.unit === 'sqft' ? 'sq ft' : '') : serviceOfferingUnitShort(line),
+      qty,
+      price: Number(line.price) || 0,
+      materialCost,
+      installerPay,
+    };
+  });
+}
+
+/** Russian plural: 1 окно, 2 окна, 5 окон. */
+function projectPlural(count, one, few, many) {
+  const n = Math.abs(count) % 100;
+  if (n % 10 === 1 && n !== 11) return one;
+  if (n % 10 >= 2 && n % 10 <= 4 && (n < 12 || n > 14)) return few;
+  return many;
+}
+function projectWindowsWord(count) {
+  return projectPlural(count, 'окно', 'окна', 'окон');
+}
+
+/** The kind of a line in words: its direction and how it is counted. */
+function projectLineNote(line) {
+  const direction = primaryServiceInfo(line.direction)?.title || '';
+  const how = line.kind === 'windows'
+    ? `${line.windows.length} ${projectWindowsWord(line.windows.length)}`
+    : line.kind === 'included'
+      ? `входит в «${serviceOffering(line.includedBy)?.name || 'услугу'}»`
+      : PROJECT_LINE_KIND_LABELS[line.kind] || '';
+  return [direction, how].filter(Boolean).join(' · ');
+}
+
+function projectLineQtyText(line) {
+  const qty = Number(line.qty) || 0;
+  return `${Number.isInteger(qty) ? qty : qty.toFixed(2)}${line.unitShort ? ` ${line.unitShort}` : ''}`;
+}
+
+/** The specialists of a line and its date, as the crew sees them. */
+function projectLineCrewText(line) {
+  const people = line.installerIds.map(id => getUser(id)?.name).filter(Boolean);
+  return {
+    people: people.length ? people.join(', ') : 'не назначен',
+    date: line.installationAt ? fmtDateTime(line.installationAt) : 'дата не назначена',
+  };
+}
+
+/**
+ * The project's lines as one table. Prices only with money access; material
+ * and installer pay only with internal economics (owner).
+ */
+function projectLinesTableHtml(o, { money = false, economics = false } = {}) {
+  const lines = projectLines(o);
+  if (!lines.length) return '<div class="order-clean-note">В проекте пока нет услуг.</div>';
+  const columns = 4 + (money ? 1 : 0) + (economics ? 2 : 0);
+  const rows = lines.map(line => {
+    const crew = projectLineCrewText(line);
+    return `<tr data-project-line="${academyEsc(line.key)}">
+      <td data-label="Услуга"><b>${academyEsc(line.name)}</b><div class="text-xs text-gray-500">${academyEsc(projectLineNote(line))}</div></td>
+      <td data-label="Объём" class="money">${academyEsc(projectLineQtyText(line))}</td>
+      ${money ? `<td data-label="Клиенту" class="money">${line.kind === 'included' ? 'в пакете · $0' : fmtMoney(line.price)}</td>` : ''}
+      ${economics ? `<td data-label="Материал" class="money">${fmtMoney(line.materialCost)}</td><td data-label="Специалисту" class="money">${fmtMoney(line.installerPay)}</td>` : ''}
+      <td data-label="Исполнитель">${academyEsc(crew.people)}</td>
+      <td data-label="Дата">${academyEsc(crew.date)}</td>
+    </tr>`;
+  }).join('');
+  const total = field => lines.reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
+  const footer = money ? `<tr class="font-black"><td>Итого</td><td></td><td class="money">${fmtMoney(total('price'))}</td>${economics ? `<td class="money">${fmtMoney(total('materialCost'))}</td><td class="money">${fmtMoney(total('installerPay'))}</td>` : ''}<td colspan="2"></td></tr>` : '';
+  return `<div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table project-lines-table"><thead><tr><th>Услуга</th><th class="money">Объём</th>${money ? '<th class="money">Клиенту</th>' : ''}${economics ? '<th class="money">Материал</th><th class="money">Специалисту</th>' : ''}<th>Исполнитель</th><th>Дата</th></tr></thead><tbody>${rows}${footer}</tbody></table></div>${economics && lines.some(line => line.kind === 'windows') ? '<div class="text-xs text-gray-500 mt-2">Материал по окнам — по складской цене плёнки; итог проекта считает расход по раскрою. Оплата специалисту — по ставкам услуг, до распределения по бригаде.</div>' : ''}`;
+}
+
+/** Services for the crew: what, how much, who and when — no prices. */
+function projectLineScopeRows(order) {
+  return projectLines(order).map(line => {
+    const crew = projectLineCrewText(line);
+    return `<div class="p-3 rounded-lg bg-slate-50 border flex items-start justify-between gap-3" data-project-line="${academyEsc(line.key)}"><span><b>${academyEsc(line.name)}</b><span class="block text-xs text-gray-500">${academyEsc(projectLineNote(line))}</span><span class="block text-xs text-gray-600 mt-1">${academyEsc(crew.people)} · ${academyEsc(crew.date)}</span></span><span class="font-black whitespace-nowrap">${academyEsc(projectLineQtyText(line))}</span></div>`;
+  }).join('');
 }
 function projectServiceScheduleHtml(o) {
   const installers = usersByRole('installer');
@@ -25431,9 +25590,10 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const hasMeasurements = windows.length > 0;
   // A project of services without sizes is calculated without a measurement.
   const estimateReady = hasMeasurements || !orderNeedsMeasurements(o);
-  // Work documents open once the crew has something to do: measured windows
-  // or services counted without sizes.
-  const hasWorkScope = hasMeasurements || projectOfferingLines(o).length > 0;
+  // Work documents open once the crew has something to do: any line of the
+  // project — measured windows or services counted without sizes.
+  const lines = projectLines(o);
+  const hasWorkScope = hasMeasurements || lines.length > 0;
   const sizeFreeSummary = `${projectOfferingLines(o).length} усл. без размеров · ${fmtMoney(orderRevenue(o))}`;
   const unverifiedMeasurements = orderMeasurementVerificationIssues(o);
   const estimateApproved = projectEstimateIsApproved(o);
@@ -25567,6 +25727,14 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       `}
     </div>`;
 
+  const unassignedLines = lines.filter(line => !line.installerIds.length || !line.installationAt).length;
+  const servicesBody = `
+    ${projectLinesTableHtml(o, { money: canSeeMoney, economics: canSeeInternalEconomics })}
+    ${isInstaller ? '' : `<div class="order-clean-actions mt-3">
+      ${canSeeMoney ? `<div class="flex flex-wrap items-center gap-2">${projectOfferingPickerHtml(o) || '<span class="text-sm text-gray-500">Добавьте услуги в разделе «Услуги и цены».</span>'}</div>` : ''}
+      ${lines.length ? renderOrderActionCard({ icon: '👷', title: 'Исполнители и даты', sub: unassignedLines ? `не назначено: ${unassignedLines}` : 'назначены по каждой услуге', onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage || !o.productionReadyAt, variant: unassignedLines ? 'warning' : 'soft' }) : ''}
+    </div>`}`;
+
   const financeBody = canSeeMoney ? `
     <div class="order-clean-mini-grid">
       ${renderOrderCleanMini('Счёт', fmtMoney(orderRevenue(o)))}
@@ -25627,6 +25795,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
         ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'client', icon: '👤', title: 'Клиент и связь', summary: c?.name || 'Данные и все каналы связи', badge: c?.phone || c?.email ? 'контакт' : 'заполнить', body: clientBody, color: '#2563eb', soft: '#eff6ff' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'site', icon: '📍', title: 'Объект', summary: projectSiteSummary(o, c) || projectAddress || 'Доступ и парковка не заполнены', badge: site.gateCode || site.parkingAvailable != null ? 'инструкции' : 'заполнить', body: siteBody, color: '#0369a1', soft: '#f0f9ff' })}
+        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'services', icon: '🧩', title: 'Услуги проекта', summary: lines.length ? `${lines.length} ${projectPlural(lines.length, 'услуга', 'услуги', 'услуг')}${canSeeMoney ? ` · ${fmtMoney(orderRevenue(o))}` : ''}` : 'Услуги ещё не добавлены', badge: !lines.length ? 'добавить' : unassignedLines ? `без исполнителя: ${unassignedLines}` : 'назначены', body: servicesBody, color: '#0f766e', soft: '#f0fdfa' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'measurement', icon: '📐', title: 'Замер', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : estimateReady ? 'Замер не нужен: услуги без размеров' : 'Размеры ещё не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : estimateReady ? 'не нужен' : 'нужно', body: measurementBody, color: '#7c3aed', soft: '#f5f3ff' })}
         ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '🧮', title: estimateReady && !hasMeasurements ? 'Расчёт проекта' : 'Расчёт по замеру', summary: hasMeasurements ? `${windows.length} окон · ${orderActualAreaSqft(o).toFixed(0)} sqft · ${fmtMoney(orderRevenue(o))}` : estimateReady ? sizeFreeSummary : 'Сначала внесите помещения, окна и размеры', badge: estimateApproved ? 'подтверждён' : estimateReady ? 'рассчитать' : 'нужен замер', onclick: estimateReady ? `openProjectEstimateWorkspace('${o.id}')` : `openManagerMeasureModal('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'documents', icon: workDocsOnly ? '🧰' : '📄', title: workDocsOnly ? 'Рабочие документы' : 'КП и документы', summary: workDocsOnly ? 'Без коммерческих сумм' : (proposal ? 'КП создано' : estimateApproved ? 'Расчёт готов — можно формировать КП' : 'Откройте расчёт и проверьте итог'), badge: workDocsOnly ? 'документы' : estimateApproved ? 'КП' : 'проверить', body: docsBody, color: '#d97706', soft: '#fff7ed' })}
@@ -25659,7 +25828,7 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
         </div>
         <div class="order-clean-actions mt-3">
           ${renderOrderActionCard(primary)}
-          ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать ТЗ', sub: hasMeasurements ? 'размеры, схема и раскрой' : 'услуги и количество', onclick: `printTechnicalSheet('${o.id}')`, disabled: !hasMeasurements && !projectOfferingLines(o).length })}
+          ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать ТЗ', sub: hasMeasurements ? 'размеры, схема и раскрой' : 'услуги и количество', onclick: `printTechnicalSheet('${o.id}')`, disabled: !hasMeasurements && !projectLines(o).length })}
           ${projectAddress ? renderOrderActionCard({ icon: '🧭', title: 'Маршрут', sub: projectAddress, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(projectAddress)}` }) : ''}
           ${renderOrderActionCard({ icon: '📷', title: 'Добавить фото', sub: 'до или после монтажа', onclick: `addOrderPhoto('${o.id}')` })}
         </div>
@@ -27905,13 +28074,13 @@ function openProjectProductionWorkspace(oid) {
         </header>
         <div class="order-workspace-modal-body">
           <div class="order-clean-note"><b>Этап перед монтажом.</b> Здесь проверяются принятое КП, аванс, точные размеры, раскрой и наличие материала.</div>
-          ${materialRows ? `<div class="order-clean-list mt-3">${materialRows}</div>` : projectOfferingLines(o).length ? '' : '<div class="order-clean-note mt-3">Сначала внесите помещения, окна, размеры и материал.</div>'}
-          ${projectOfferingLines(o).length ? `<div class="mt-3"><div class="text-xs font-black uppercase text-gray-500 mb-2">Услуги без размеров</div><div class="space-y-2">${projectOfferingScopeRows(o)}</div></div>` : ''}
+          ${materialRows ? `<div class="order-clean-list mt-3">${materialRows}</div>` : projectLines(o).length ? '' : '<div class="order-clean-note mt-3">Сначала внесите помещения, окна, размеры и материал.</div>'}
+          ${projectLines(o).length ? `<div class="mt-3"><div class="text-xs font-black uppercase text-gray-500 mb-2">Услуги проекта</div><div class="space-y-2">${projectLineScopeRows(o)}</div></div>` : ''}
           ${blockingIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Не готово:</b> ${blockingIssues.map(academyEsc).join(', ')}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Проверка пройдена.</b> Можно подтвердить готовность производства.</div>`}
           <div class="order-clean-actions mt-3">
             ${renderOrderActionCard({ icon: '📐', title: 'Проверить точные размеры', sub: `${measureAllWindows(o).length} окон`, onclick: `openManagerMeasureModal('${o.id}')` })}
             ${renderOrderActionCard({ icon: '🎞', title: 'Открыть лист раскроя', sub: `${plan.pieces?.length || 0} деталей`, onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
-            ${renderOrderActionCard({ icon: '📋', title: 'Открыть заказ-наряд', sub: 'материалы и задача бригады', onclick: `openWorkOrder('${o.id}')`, disabled: !measureAllWindows(o).length && !projectOfferingLines(o).length })}
+            ${renderOrderActionCard({ icon: '📋', title: 'Открыть заказ-наряд', sub: 'материалы и задача бригады', onclick: `openWorkOrder('${o.id}')`, disabled: !measureAllWindows(o).length && !projectLines(o).length })}
           </div>
           <div class="project-estimate-footer">
             <div class="text-xs text-gray-500">После подтверждения CRM разрешит назначить монтаж.</div>
@@ -31631,7 +31800,12 @@ const PREMIUM_PROPOSAL_STATUSES = [
   'Financing Approved', 'Financing Declined', 'Expired', 'Cancelled',
 ];
 
-const PREMIUM_EXTRA_SERVICES = [
+// Add-ons the old in-CRM proposal page offered at prices written in code
+// (Owner, 2026-10-08: prices live in «Услуги и цены»). New proposals never
+// offer them: an extra service is a directory service added to the project, so
+// it reaches revenue, material, installer pay and the work order. The list only
+// prices proposals that already selected one, so their totals do not change.
+const LEGACY_PROPOSAL_EXTRAS = [
   { id: 'film_removal', name: 'Film Removal', unit: 'sqft', price: 2.50, desc: 'Remove old film and prepare glass for the new installation.' },
   { id: 'glass_preparation', name: 'Glass Preparation', unit: 'sqft', price: 0.75, desc: 'Deep cleaning, blade work and final surface prep before film.' },
   { id: 'edge_sealing', name: 'Edge Sealing', unit: 'sqft', price: 1.25, desc: 'Premium perimeter sealing for exposed edges and moisture-prone areas.' },
@@ -31731,7 +31905,6 @@ function premiumDefaultSelections(order) {
       selections.products[w.id] = w.catalogId || cat?.id || '';
     });
   });
-  PREMIUM_EXTRA_SERVICES.forEach(s => { selections.services[s.id] = false; });
   return selections;
 }
 function premiumHydrateProposal(prop, order) {
@@ -31750,9 +31923,6 @@ function premiumHydrateProposal(prop, order) {
         prop.selections.products[w.id] = w.catalogId || cat?.id || '';
       }
     });
-  });
-  PREMIUM_EXTRA_SERVICES.forEach(s => {
-    if (prop.selections.services[s.id] == null) prop.selections.services[s.id] = false;
   });
   if (!prop.status) prop.status = 'Draft';
   if (!prop.version) prop.version = 1;
@@ -31876,12 +32046,12 @@ function premiumProposalCalc(prop) {
     result.byRoom[r.id] = room;
   });
   result.legacyServices = orderExtraServicesRevenue(order);
-  const flatAndArea = PREMIUM_EXTRA_SERVICES
+  const flatAndArea = LEGACY_PROPOSAL_EXTRAS
     .filter(s => prop.selections.services?.[s.id] && s.unit !== 'percent')
     .map(s => ({ ...s, amount: premiumServiceAmount(s, { ...result, percentBase: 0 }) }));
   result.premiumServices = flatAndArea.reduce((sum, s) => sum + s.amount, 0);
   result.percentBase = result.productSubtotal + result.legacyServices + result.premiumServices;
-  const percent = PREMIUM_EXTRA_SERVICES
+  const percent = LEGACY_PROPOSAL_EXTRAS
     .filter(s => prop.selections.services?.[s.id] && s.unit === 'percent')
     .map(s => ({ ...s, amount: premiumServiceAmount(s, result) }));
   result.selectedServices = flatAndArea.concat(percent);
@@ -32258,12 +32428,15 @@ function premiumRenderWindow(prop, order, room, window, idx, calc) {
       </div>
     </div>`;
 }
+function premiumLegacyExtrasSelected(prop) {
+  return LEGACY_PROPOSAL_EXTRAS.filter(s => prop.selections.services?.[s.id] === true);
+}
 function premiumRenderServices(prop, calc) {
   const locked = premiumProposalLocked(prop);
   return `
     <div class="grid md:grid-cols-2 gap-3">
-      ${PREMIUM_EXTRA_SERVICES.map(s => {
-        const selected = prop.selections.services?.[s.id] === true;
+      ${premiumLegacyExtrasSelected(prop).map(s => {
+        const selected = true;
         const detail = calc.selectedServices.find(x => x.id === s.id);
         const preview = detail?.amount ?? premiumServiceAmount(s, calc);
         const unit = s.unit === 'sqft' ? `${fmtMoney(s.price)}/sqft` : s.unit === 'percent' ? `${s.price}%` : 'flat';
@@ -32275,7 +32448,7 @@ function premiumRenderServices(prop, calc) {
                 <div class="text-xs text-slate-400 mt-1">${premiumEsc(s.desc)}</div>
                 <div class="text-xs text-blue-200 mt-2">${unit} · ${fmtMoney(preview)}</div>
               </div>
-              <button class="pp-btn ${selected ? 'dark' : ''}" onclick="premiumToggleService('${prop.token}','${s.id}')" ${locked ? 'disabled' : ''}>${selected ? 'Added' : 'Add'}</button>
+              <button class="pp-btn ${selected ? 'dark' : ''}" onclick="premiumToggleService('${prop.token}','${s.id}')" ${locked ? 'disabled' : ''}>Remove</button>
             </div>
           </div>`;
       }).join('')}
@@ -32487,11 +32660,11 @@ function renderPremiumProposalPortal(token) {
                 }).join('')}
               </div>
             </div>
-            <div class="pp-panel">
+            ${premiumLegacyExtrasSelected(prop).length ? `<div class="pp-panel">
               <div class="text-xs text-blue-200 font-bold">ADD-ON SERVICES</div>
               <h2 class="pp-section-title mt-1">Upgrade scope</h2>
               <div class="mt-5">${premiumRenderServices(prop, calc)}</div>
-            </div>
+            </div>` : ''}
             ${premiumRenderPayment(prop, calc)}
           </div>
           ${premiumRenderSummary(prop, calc)}
@@ -32536,8 +32709,9 @@ function premiumSetRoomProduct(token, roomId, catalogId) {
   });
 }
 function premiumToggleService(token, serviceId) {
+  // Old add-ons can only be removed; new extras are services of the project.
   premiumTouchProposal(token, prop => {
-    prop.selections.services[serviceId] = !prop.selections.services[serviceId];
+    if (prop.selections.services?.[serviceId] === true) prop.selections.services[serviceId] = false;
   });
 }
 function premiumSetPaymentMode(token, mode) {
