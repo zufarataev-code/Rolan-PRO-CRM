@@ -54,6 +54,8 @@ test("field roles receive operational guidance without company money", () => {
   const insights = html.slice(start, end);
 
   assert.match(insights, /user\.role === 'measurer'/);
+  assert.match(insights, /new Date\(order\.measurementAt\)\.getTime\(\) >= now\.getTime\(\)/);
+  assert.match(insights, /agentOpenMeasurement\('\$\{pending\[0\]\.id\}'\)/);
   assert.match(insights, /user\.role === 'installer'/);
   assert.match(insights, /projectServiceAssignment\(order, group\)/);
   assert.match(insights, /item\.assignment\.installerIds/);
@@ -61,6 +63,8 @@ test("field roles receive operational guidance without company money", () => {
   assert.match(insights, /Открыть замер/);
   assert.match(insights, /Открыть Work Order/);
   assert.match(insights, /if \(user\.role === 'owner' && agentBankReviewCount > 0\).*bank_review/s);
+  assert.match(insights, /agentBankReviewCount === null/);
+  assert.match(insights, /Статус банка недоступен/);
 });
 
 test("the bank pulse refreshes whenever the owner returns from bank review", () => {

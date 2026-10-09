@@ -34939,6 +34939,7 @@ async function refreshAgentBankPulse() {
   }
 }
 function agentOpenOrder(orderId) { state.aiSidebarOpen = false; openOrder(orderId); }
+function agentOpenMeasurement(orderId) { state.aiSidebarOpen = false; openMeasurerV25ForOrder(orderId); }
 function agentTaskVisibleTo(user, task) {
   if (!user || !task || task.status === 'done') return false;
   if (user.role === 'owner') return true;
@@ -35016,9 +35017,17 @@ function agentInsights() {
     detail:'Подтвердите предложенные категории. Выбор «Запомнить» обучает правила для следующих операций этого продавца.',
     action:'agentOpenBankReview()', actionLabel:'Открыть банк', priority:70,
   });
+  if (user.role === 'owner' && agentBankReviewCount === null) insights.push({
+    id:'bank_status_unknown', tone:'amber', eyebrow:'БУХГАЛТЕРИЯ', title:agentBankReviewLoading?'Проверяю банковские операции':'Статус банка недоступен',
+    detail:agentBankReviewLoading?'Агент загружает актуальную очередь проверки.':'Не удалось подтвердить состояние банковской очереди. Остальные данные пульса продолжают работать.',
+    action:'refreshAgentBankPulse()', actionLabel:agentBankReviewLoading?'Обновляется':'Повторить', priority:70,
+  });
   if (user.role === 'measurer') {
-    const pending = orders.filter(order => order.measurementAt && !order.measurementDoneAt).sort((a,b)=>String(a.measurementAt).localeCompare(String(b.measurementAt)));
-    if (pending[0]) insights.push({ id:'next_measurement', tone:'blue', eyebrow:'СЛЕДУЮЩИЙ ВЫЕЗД', title:getClient(pending[0].clientId)?.name || pending[0].number, detail:`${fmtDateTime(pending[0].measurementAt)} · ${orderAddress(pending[0], getClient(pending[0].clientId)) || 'адрес не указан'}`, action:`agentOpenOrder('${pending[0].id}')`, actionLabel:'Открыть замер', priority:90 });
+    const pending = orders
+      .filter(order => order.measurementAt && !order.measurementDoneAt)
+      .filter(order => new Date(order.measurementAt).getTime() >= now.getTime())
+      .sort((a,b)=>String(a.measurementAt).localeCompare(String(b.measurementAt)));
+    if (pending[0]) insights.push({ id:'next_measurement', tone:'blue', eyebrow:'СЛЕДУЮЩИЙ ВЫЕЗД', title:getClient(pending[0].clientId)?.name || pending[0].number, detail:`${fmtDateTime(pending[0].measurementAt)} · ${orderAddress(pending[0], getClient(pending[0].clientId)) || 'адрес не указан'}`, action:`agentOpenMeasurement('${pending[0].id}')`, actionLabel:'Открыть замер', priority:90 });
   }
   if (user.role === 'installer') {
     const pending = orders
