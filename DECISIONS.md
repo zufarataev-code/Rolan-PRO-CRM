@@ -588,3 +588,14 @@ Owner clarified that creating a Project must not begin with a direction or force
 - Included `$0` lines do not block estimate readiness and do not appear as separate chargeable Proposal lines. Server validation enforces valid components, one-level packages, corridor pricing and the parent/component relationship.
 - The service directory remains owner-created. This change does not seed A1/A2/A3, silicone or any Smart hardware package. Smart components and wiring packages remain out of scope until confirmed by the owner.
 - Editing a package updates its summary in place and preserves the reference-directory scroll position. The calendar continues using the unified CRM design released in PR #316.
+
+## 2026-10-08 — One role-safe Rolan PRO agent, represented by the approved mascot (Owner)
+
+The existing CRM assistant becomes the single Rolan PRO agent instead of adding a second chat. Its first release is a deterministic, explainable operating pulse: it reads only records already authorized for the signed-in role, identifies overdue work, customer debt, missing next actions, upcoming field work and bank-review needs, and offers a direct next step.
+
+- The approved Rolan PRO mascot is the agent's visual entry point. It does not imply a separate data source or a second automation system.
+- Hard calculations, permissions and workflow gates remain normal backend/application rules. AI explains and recommends; it does not replace authoritative finance, payroll, tax, inventory or project calculations.
+- A suggested task is created only after an Owner/Manager confirmation, is deduplicated by an agent key, and records `source: rolan_agent`. Payments, tax positions, customer sends, destructive changes and personnel decisions are never autonomous.
+- Field roles receive only assigned operational work. Revenue, client debt, bank review and company economics remain hidden from Surveyors and Installers. The conversational context uses `visibleOrdersForUser` / `visibleClientsForUser` and omits money for field roles.
+- Financial learning continues through the existing bank categorization rules: the Owner confirms a merchant once and may use «Запомнить». The agent surfaces the review queue but does not silently convert uncertain transactions into deductible expenses.
+- Future phases may add persisted insight history, scheduled daily delivery and more approved safe-write actions. They must reuse the existing Operations Agent HMAC/idempotency layer rather than create an unrestricted automation path.
