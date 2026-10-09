@@ -8132,6 +8132,7 @@ function migrateSchema() {
   if (!Array.isArray(db.tools)) db.tools = [];
   if (!Array.isArray(db.inventoryMovements)) db.inventoryMovements = [];
   if (!Array.isArray(db.purchaseRequests)) db.purchaseRequests = [];
+  if (!Array.isArray(db.warehouseReceipts)) db.warehouseReceipts = [];
   db.inventory.forEach(r => {
     if (!r.qrCode) r.qrCode = 'RP-ROLL-' + r.id;
     if (!r.status) r.status = Number(r.remainingLengthM || 0) > 0 ? 'available' : 'empty';
@@ -15473,14 +15474,14 @@ function catalogFilmCategory(c) {
 }
 function catalogFilmName(c) {
   if (!c) return '';
-  return String(c.productName || c.series || catalogLegacyProductParts(c.model).name || '').trim();
+  return String(c.fullName || c.productName || c.series || catalogLegacyProductParts(c.model).name || '').trim();
 }
 function catalogFilmModel(c) {
   if (!c) return '';
   // A film written in by hand is labelled by its whole name; the model code the
   // catalog normaliser derives from that name would only repeat part of it.
   if (c.addedManuallyAt) return '';
-  return String(c.modelCode || c.sku || c.code || catalogLegacyProductParts(c.model).model || '').trim();
+  return String(c.shortName || c.modelCode || c.sku || c.code || catalogLegacyProductParts(c.model).model || '').trim();
 }
 function catalogLabel(c) {
   if (!c) return '—';
@@ -22218,8 +22219,8 @@ function renderSettings() {
             <tr class="text-left text-xs uppercase text-gray-500">
               <th class="px-2 py-2">${T('brand')}</th>
               <th class="px-2 py-2">Категория плёнки</th>
-              <th class="px-2 py-2">Название</th>
-              <th class="px-2 py-2">Модель</th>
+              <th class="px-2 py-2">Полное название</th>
+              <th class="px-2 py-2">Короткое название</th>
               <th class="px-2 py-2">Направление</th>
               <th class="px-2 py-2">Поставщик</th>
               <th class="px-2 py-2 w-24">${T('retailPrice')} ($/sqft)</th>
@@ -22234,8 +22235,8 @@ function renderSettings() {
               <tr class="border-t">
                 <td class="px-2 py-1"><input value="${c.brand}" onchange="updateCatalogItem('${c.id}','brand',this.value,this)"></td>
                 <td class="px-2 py-1"><input value="${academyEsc(catalogFilmCategory(c))}" placeholder="Зеркальная" onchange="updateCatalogItem('${c.id}','filmCategory',this.value,this)"></td>
-                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmName(c))}" placeholder="Prime" onchange="updateCatalogItem('${c.id}','productName',this.value,this)"></td>
-                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmModel(c))}" placeholder="NE2" onchange="updateCatalogItem('${c.id}','modelCode',this.value,this)"></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmName(c))}" placeholder="Titan Prime Architectural Film" onchange="updateCatalogItem('${c.id}','fullName',this.value,this)"></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogFilmModel(c))}" placeholder="TP-8" onchange="updateCatalogItem('${c.id}','shortName',this.value,this)"></td>
                 <td class="px-2 py-1">
                   <select onchange="updateCatalogItem('${c.id}','category',this.value,this)" style="background:${catColor(c.category).bg};color:${catColor(c.category).text};border:none;font-weight:600;">
                     ${['solar','protective','smart','privacy','decorative','removal','washing'].map(k => `<option value="${k}" ${c.category===k?'selected':''}>${T('cat'+k.charAt(0).toUpperCase()+k.slice(1))}</option>`).join('')}
@@ -29967,8 +29968,10 @@ function addNewFilmType() {
 function updateCatalogItem(id, field, val, control = null) {
   const c = getCatalogItem(id); if (!c) return;
   c[field] = val;
-  if (field === 'productName' || field === 'modelCode') {
-    c.model = [c.productName, c.modelCode].filter(Boolean).join(' ').trim();
+  if (field === 'fullName') c.productName = val;
+  if (field === 'shortName') c.modelCode = val;
+  if (['fullName', 'shortName', 'productName', 'modelCode'].includes(field)) {
+    c.model = [catalogFilmName(c), catalogFilmModel(c)].filter(Boolean).join(' ').trim();
   }
   save();
   // The edited cell already reflects the saved value. Rebuilding the entire
@@ -29982,7 +29985,7 @@ function updateCatalogItem(id, field, val, control = null) {
 function addCatalogItem(presetVendorId, presetCategory = 'solar') {
   db.settings.catalog.push({
     id: uid(), brand: 'Rolan PRO', model: '', category: presetCategory || 'solar', vendorId: presetVendorId || null,
-    filmCategory: '', productName: '', modelCode: '',
+    filmCategory: '', fullName: '', shortName: '', productName: '', modelCode: '',
     retailPerSqft: 10, costPerSqft: 2.5, installerRatePerSqft: 0.27, wastePct: 12,
   });
   save(); render();
@@ -33362,10 +33365,41 @@ function financeLinkedAmount(rows, predicate) {
   return rows.filter(predicate).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
 }
 
+function ensureWarehouseReceipts() {
+  if (!Array.isArray(db.warehouseReceipts)) db.warehouseReceipts = [];
+  return db.warehouseReceipts;
+}
+
+function warehousePaymentAccountOptions(selected = '') {
+  return `<option value="fin_unallocated" ${!selected || selected === 'fin_unallocated' ? 'selected' : ''}>Не распределено</option>`
+    + financeData().accounts.filter(account => account.active !== false).map(account => `<option value="${academyEsc(account.id)}" ${selected === account.id ? 'selected' : ''}>${academyEsc(account.name || account.institution || 'Счёт')}</option>`).join('');
+}
+
+function recordWarehouseReceipt(data) {
+  const total = Math.max(0, Number(data.total) || 0);
+  if (!(total > 0)) return null;
+  const row = { id: 'receipt_' + uid(), createdAt: new Date().toISOString(), createdBy: state.currentUserId, ...data, total };
+  ensureWarehouseReceipts().unshift(row);
+  return row;
+}
+
 function financeSystemRows() {
   const manual = financeManualRows();
   const rows = [];
   const unallocated = 'fin_unallocated';
+
+  ensureWarehouseReceipts().forEach(receipt => {
+    rows.push({
+      id: `sys_warehouse_receipt_${receipt.id}`, type: 'expense', amount: Math.max(0, Number(receipt.total) || 0),
+      date: receipt.date || receipt.createdAt, accountId: receipt.accountId || unallocated,
+      category: receipt.kind === 'tool' ? 'tools' : 'inventory_purchase',
+      inventoryId: receipt.inventoryId || null, warehouseReceiptId: receipt.id,
+      scope: 'business', costBehavior: 'variable', tags: ['склад', receipt.kind === 'tool' ? 'инструмент' : 'закупка'],
+      vendor: db.vendors?.find(v => v.id === receipt.vendorId)?.name || '',
+      note: `Приход · ${receipt.itemName || 'склад'}${receipt.reference ? ` · ${receipt.reference}` : ''}`,
+      source: 'warehouse_receipts', sourceLabel: 'Склад', editable: false,
+    });
+  });
 
   // Client money: the order is authoritative. A linked manual bank operation
   // allocates that receipt to an account and reduces the unallocated remainder.
@@ -33385,6 +33419,7 @@ function financeSystemRows() {
   // Stock receipts represent actual purchases. Material consumption remains a
   // project-cost metric and is not charged to cash a second time.
   (db.inventory || []).forEach(r => {
+    if (ensureWarehouseReceipts().some(receipt => receipt.inventoryId === r.id)) return;
     const cost = Math.max(0, Number(r.costTotal) || 0);
     const linked = financeLinkedAmount(manual, t => t.type === 'expense' && t.inventoryId === r.id);
     const remainder = Math.max(0, cost - linked);
@@ -36956,13 +36991,14 @@ function renderInventory() {
   const activePurchases = (db.purchaseRequests||[]).filter(x => !['received','cancelled'].includes(x.status)).length;
   const tabs = [
     ['overview','Обзор'], ['film','Плёнка'], ['supplies','Расходники'], ['tools','Инструмент'],
-    ['purchases',`Закупки${activePurchases ? ` · ${activePurchases}` : ''}`], ['vendors','Поставщики'], ['movements','Движения']
+    ['purchases',`Закупки${activePurchases ? ` · ${activePurchases}` : ''}`], ['receipts','Приходы'], ['vendors','Поставщики'], ['movements','Движения']
   ];
   let body = '';
   if (tab === 'film') body = renderFilmInventory();
   else if (tab === 'supplies') body = renderSupplies();
   else if (tab === 'tools') body = renderTools();
   else if (tab === 'purchases') body = renderPurchaseRequests();
+  else if (tab === 'receipts') body = renderWarehouseReceipts();
   else if (tab === 'vendors') body = renderWarehouseVendors();
   else if (tab === 'movements') body = renderWarehouseMovements();
   else body = renderWarehouseOverview();
@@ -36973,6 +37009,12 @@ function renderInventory() {
     </div>
     <div class="flex gap-2 mt-4 flex-wrap">${tabs.map(([id,label]) => `<button class="btn-${tab===id?'primary':'ghost'} text-sm" onclick="state.inventoryTab='${id}';${id==='film' ? "state.inventoryFilmCategory=null;state.inventoryFilmModel=null;state.inventoryFilmQuery='';" : ''}render();">${label}${id==='overview'&&needs.length?` · ${needs.length}⚠️`:''}</button>`).join('')}</div>
   </div>${body}`;
+}
+function renderWarehouseReceipts() {
+  const rows = [...ensureWarehouseReceipts()].sort((a,b) => String(b.date || b.createdAt).localeCompare(String(a.date || a.createdAt)));
+  const total = rows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
+  const kindLabel = kind => kind === 'film' ? 'Плёнка' : kind === 'tool' ? 'Инструмент' : 'Расходник';
+  return `<div class="card"><div class="flex items-center justify-between gap-3 mb-3 flex-wrap"><div><h3 class="font-semibold">Приходы на склад</h3><p class="text-sm text-gray-500">Поставщик, сумма и счёт оплаты автоматически отражаются в финансах.</p></div><b>${fmtMoney(total)}</b></div>${rows.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Дата</th><th class="text-left p-2">Тип</th><th class="text-left p-2">Позиция</th><th class="text-left p-2">Поставщик</th><th class="text-left p-2">Счёт</th><th class="text-left p-2">Документ</th><th class="text-right p-2">Сумма</th></tr></thead><tbody>${rows.map(row => `<tr class="border-t"><td class="p-2">${fmtDate(row.date || row.createdAt)}</td><td class="p-2">${kindLabel(row.kind)}</td><td class="p-2">${academyEsc(row.itemName || '—')}</td><td class="p-2">${academyEsc(db.vendors?.find(v => v.id === row.vendorId)?.name || '—')}</td><td class="p-2">${academyEsc(financeData().accounts.find(a => a.id === row.accountId)?.name || 'Не распределено')}</td><td class="p-2">${academyEsc(row.reference || '—')}</td><td class="p-2 text-right font-semibold">${fmtMoney(row.total)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state"><div class="icon">🧾</div><div>Приходов пока нет.</div></div>'}</div>`;
 }
 function renderWarehouseOverview() {
   const needs = warehouseNeedItems();
@@ -37366,9 +37408,11 @@ function renderFilmInventoryLegacy() {
  */
 function catalogSpecLabel(c) {
   const parts = [
+    c.thickness != null ? `Толщина ${c.thickness} mil` : '',
     c.vlt != null ? `VLT ${c.vlt}%` : '',
     c.tser != null ? `TSER ${c.tser}%` : '',
     c.uvBlock != null ? `UV ${c.uvBlock}%` : '',
+    c.irBlock != null ? `IR ${c.irBlock}%` : '',
   ].filter(Boolean);
   if (!parts.length) return '<span class="text-gray-400">нет данных</span>';
   return `<span class="text-slate-600">${parts.join(' · ')}</span>`;
@@ -37522,9 +37566,9 @@ function moveSupply(id, delta) {
 
 function openSupplyMovementModal(id, direction) {
   const s=ensureSupplies().find(x=>x.id===id); if(!s)return;
-  state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:36rem"><h3 class="font-semibold text-lg">${direction==='receipt'?'Приход':'Списание'} · ${academyEsc(s.name)}</h3><p class="text-sm text-gray-500 mb-4">Текущий остаток: ${s.qty||0} ${supplyUnitLabel(s.unit)}</p><div class="grid grid-cols-2 gap-3"><div><label>Количество</label><input id="sm-qty" type="number" min="0.01" step="0.01" value="1"></div><div><label>Проект / заказ</label><select id="sm-order"><option value="">Без проекта</option>${warehouseOrders().map(o=>`<option value="${o.id}">${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div>${direction==='receipt'?`<div><label>Поставщик</label><select id="sm-vendor"><option value="">—</option>${db.vendors.map(v=>`<option value="${v.id}" ${s.vendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select></div><div><label>Цена за единицу, $</label><input id="sm-cost" type="number" min="0" step="0.01" value="${s.costPerUnit||0}"></div>`:''}<div class="col-span-2"><label>Причина / комментарий</label><input id="sm-reason" placeholder="Для какого объекта или зачем"></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveSupplyMovement('${id}','${direction}')">${direction==='receipt'?'Принять':'Списать'}</button></div></div></div>`;render();
+  state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:36rem"><h3 class="font-semibold text-lg">${direction==='receipt'?'Приход':'Списание'} · ${academyEsc(s.name)}</h3><p class="text-sm text-gray-500 mb-4">Текущий остаток: ${s.qty||0} ${supplyUnitLabel(s.unit)}</p><div class="grid grid-cols-2 gap-3"><div><label>Количество</label><input id="sm-qty" type="number" min="0.01" step="0.01" value="1"></div><div><label>Проект / заказ</label><select id="sm-order"><option value="">Без проекта</option>${warehouseOrders().map(o=>`<option value="${o.id}">${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div>${direction==='receipt'?`<div><label>Поставщик</label><select id="sm-vendor"><option value="">—</option>${db.vendors.map(v=>`<option value="${v.id}" ${s.vendorId===v.id?'selected':''}>${academyEsc(v.name)}</option>`).join('')}</select></div><div><label>Цена за единицу, $</label><input id="sm-cost" type="number" min="0" step="0.01" value="${s.costPerUnit||0}"></div><div><label>Счёт оплаты</label><select id="sm-account">${warehousePaymentAccountOptions()}</select></div><div><label>Дата прихода</label><input id="sm-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div class="col-span-2"><label>Invoice / документ</label><input id="sm-reference" placeholder="Номер invoice или чека"></div>`:''}<div class="col-span-2"><label>Причина / комментарий</label><input id="sm-reason" placeholder="Для какого объекта или зачем"></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveSupplyMovement('${id}','${direction}')">${direction==='receipt'?'Принять':'Списать'}</button></div></div></div>`;render();
 }
-function saveSupplyMovement(id,direction){const s=ensureSupplies().find(x=>x.id===id);if(!s)return;const qty=parseFloat(document.getElementById('sm-qty')?.value||0);const orderId=document.getElementById('sm-order')?.value||null;const reason=document.getElementById('sm-reason')?.value.trim()||'';if(qty<=0)return alert('Введите количество.');if(direction==='issue'&&qty>Number(s.qty||0))return alert(`Недостаточно на складе. Есть ${s.qty||0} ${supplyUnitLabel(s.unit)}.`);if(direction==='issue'&&!orderId&&!reason)return alert('Для списания выберите проект или укажите причину.');if(direction==='receipt'){const oldQty=Number(s.qty||0),cost=parseFloat(document.getElementById('sm-cost')?.value||0),vendorId=document.getElementById('sm-vendor')?.value||null;s.costPerUnit=(oldQty+qty)>0?((oldQty*Number(s.costPerUnit||0)+qty*cost)/(oldQty+qty)):cost;s.vendorId=vendorId||s.vendorId;s.qty=oldQty+qty;}else{s.qty=Number(s.qty||0)-qty;}recordInventoryMovement({kind:'supply',itemId:s.id,itemName:s.name,direction,qty,unit:supplyUnitLabel(s.unit),orderId,vendorId:direction==='receipt'?(document.getElementById('sm-vendor')?.value||null):null,reason});save();closeModal();render();}
+function saveSupplyMovement(id,direction){const s=ensureSupplies().find(x=>x.id===id);if(!s)return;const qty=parseFloat(document.getElementById('sm-qty')?.value||0);const orderId=document.getElementById('sm-order')?.value||null;const reason=document.getElementById('sm-reason')?.value.trim()||'';if(qty<=0)return alert('Введите количество.');if(direction==='issue'&&qty>Number(s.qty||0))return alert(`Недостаточно на складе. Есть ${s.qty||0} ${supplyUnitLabel(s.unit)}.`);if(direction==='issue'&&!orderId&&!reason)return alert('Для списания выберите проект или укажите причину.');let vendorId=null;if(direction==='receipt'){const oldQty=Number(s.qty||0),cost=parseFloat(document.getElementById('sm-cost')?.value||0);vendorId=document.getElementById('sm-vendor')?.value||null;if(!(cost>0))return alert('Укажите цену закупки за единицу.');s.costPerUnit=(oldQty+qty)>0?((oldQty*Number(s.costPerUnit||0)+qty*cost)/(oldQty+qty)):cost;s.vendorId=vendorId||s.vendorId;s.qty=oldQty+qty;recordWarehouseReceipt({kind:'supply',supplyId:s.id,itemId:s.id,itemName:s.name,qty,unit:supplyUnitLabel(s.unit),unitCost:cost,total:qty*cost,vendorId,accountId:document.getElementById('sm-account')?.value||'fin_unallocated',date:document.getElementById('sm-date')?.value||new Date().toISOString().slice(0,10),reference:document.getElementById('sm-reference')?.value.trim()||''});}else{s.qty=Number(s.qty||0)-qty;}recordInventoryMovement({kind:'supply',itemId:s.id,itemName:s.name,direction,qty,unit:supplyUnitLabel(s.unit),orderId,vendorId,reason});save();closeModal();render();}
 
 function renderSupplies() {
   const allSupplies = ensureSupplies();
@@ -37642,18 +37686,18 @@ function ensureTools() {
 }
 
 function addTool() {
-  ensureTools().push({
-    id: 'tool_' + uid(),
-    name: 'Новый инструмент',
-    invNumber: '',
-    condition: 'good',
-    holderId: null,
-    issuedAt: null,
-    note: '',
-    history: [],
-  });
-  save();
-  render();
+  state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:36rem"><h3 class="font-semibold text-lg">Приход инструмента</h3><p class="text-sm text-gray-500 mb-4">Закупка попадёт в складской журнал и финансовый итог.</p><div class="grid grid-cols-2 gap-3"><div class="col-span-2"><label>Наименование *</label><input id="tool-name" placeholder="Фен, стремянка, тепловизор…"></div><div><label>Инвентарный №</label><input id="tool-number"></div><div><label>Стоимость, $ *</label><input id="tool-cost" type="number" min="0.01" step="0.01"></div><div><label>Поставщик</label><select id="tool-vendor"><option value="">—</option>${db.vendors.map(v=>`<option value="${v.id}">${academyEsc(v.name)}</option>`).join('')}</select></div><div><label>Счёт оплаты</label><select id="tool-account">${warehousePaymentAccountOptions()}</select></div><div><label>Дата прихода</label><input id="tool-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Invoice / документ</label><input id="tool-reference"></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveToolReceipt()">Принять</button></div></div></div>`;render();
+}
+function saveToolReceipt() {
+  const name=document.getElementById('tool-name')?.value.trim()||'';
+  const cost=parseFloat(document.getElementById('tool-cost')?.value||0);
+  if(!name)return alert('Укажите наименование инструмента.');
+  if(!(cost>0))return alert('Укажите стоимость инструмента.');
+  const item={id:'tool_'+uid(),name,invNumber:document.getElementById('tool-number')?.value.trim()||'',condition:'good',holderId:null,issuedAt:null,note:'',history:[],costTotal:cost,vendorId:document.getElementById('tool-vendor')?.value||null,dateReceived:document.getElementById('tool-date')?.value||new Date().toISOString().slice(0,10)};
+  ensureTools().push(item);
+  recordWarehouseReceipt({kind:'tool',toolId:item.id,itemId:item.id,itemName:item.name,qty:1,unit:'шт',unitCost:cost,total:cost,vendorId:item.vendorId,accountId:document.getElementById('tool-account')?.value||'fin_unallocated',date:item.dateReceived,reference:document.getElementById('tool-reference')?.value.trim()||''});
+  recordInventoryMovement({kind:'tool',itemId:item.id,itemName:item.name,direction:'receipt',qty:1,unit:'шт',vendorId:item.vendorId,reason:'Приход инструмента'});
+  save();closeModal();render();
 }
 
 function updateTool(id, field, value) {
@@ -38014,12 +38058,15 @@ function openAddRollModal(presetCatId, purchaseRequestId='') {
         <div><label for="ar-category">Категория *</label><select id="ar-category" onchange="refreshRollReceiptForm()">${rollReceiptCategories().map(key => `<option value="${academyEsc(key)}" ${category === key ? 'selected' : ''}>${academyEsc(catLabel(key))}</option>`).join('')}</select></div>
         <div id="ar-type-block" class="${category === 'solar' ? '' : 'hidden'}"><label for="ar-type">Тип солнцезащитной</label><select id="ar-type"><option value="">Не указан</option>${SOLAR_FILM_SUBTYPES.map(type => `<option value="${academyEsc(type)}" ${preset?.filmCategory === type ? 'selected' : ''}>${academyEsc(type)}</option>`).join('')}</select></div>
         <div><label for="ar-brand">Бренд *</label><input id="ar-brand" list="ar-brand-list" value="${academyEsc(preset?.brand || '')}" placeholder="Rolan PRO, 3M, LLumar…"><datalist id="ar-brand-list"></datalist></div>
-        <div><label for="ar-model">Модель плёнки *</label><input id="ar-model" list="ar-model-list" value="${academyEsc(preset?.model || preset?.productName || '')}" placeholder="Titan Prime™"><datalist id="ar-model-list"></datalist></div>
+        <div><label for="ar-model">Полное название плёнки *</label><input id="ar-model" list="ar-model-list" value="${academyEsc(catalogFilmName(preset) || preset?.model || '')}" placeholder="Titan Prime Architectural Film"><datalist id="ar-model-list"></datalist></div>
+        <div><label for="ar-short-name">Короткое название</label><input id="ar-short-name" value="${academyEsc(catalogFilmModel(preset) || '')}" placeholder="TP-8"></div>
         <div><label for="ar-vendor">Поставщик</label><select id="ar-vendor"><option value="">Не выбран</option>${(db.vendors || []).filter(v => v.active !== false || v.id === request?.vendorId).map(v => `<option value="${academyEsc(v.id)}" ${(request?.vendorId || preset?.vendorId) === v.id ? 'selected' : ''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
         <div><label for="ar-lot">Lot / партия</label><input id="ar-lot" placeholder="например 240315-A"></div>
         <div><label for="ar-width">Ширина</label><select id="ar-width" onchange="refreshRollReceiptForm()">${widths.map(w => `<option value="${Number(w)}" ${presetWidth === Number(w) ? 'selected' : ''}>${(Number(w) / 1000).toFixed(2)} м · ${(Number(w) / 25.4).toFixed(0)}"</option>`).join('')}</select></div>
         <div><label for="ar-len">Длина рулона (м) *</label><input id="ar-len" type="number" min="0.1" step="0.1" value="30" oninput="refreshRollReceiptForm()"></div>
         <div><label for="ar-cost">Цена закупки рулона ($) *</label><input id="ar-cost" type="number" min="0.01" step="0.01" placeholder="500" oninput="refreshRollReceiptForm()"></div>
+        <div><label for="ar-account">Счёт оплаты</label><select id="ar-account">${warehousePaymentAccountOptions()}</select></div>
+        <div><label for="ar-reference">Invoice / документ</label><input id="ar-reference" placeholder="Номер invoice или чека"></div>
         <div><label>Цена за sq ft</label><div id="ar-cost-preview" class="text-sm font-semibold text-emerald-700 py-2"></div></div>
         <div><label for="ar-date">Дата получения</label><input id="ar-date" type="date" value="${today}" onchange="refreshRollReceiptForm()"></div>
         <div><label for="ar-loc">Локация</label><input id="ar-loc" value="Warehouse"></div>
@@ -38045,7 +38092,7 @@ function openAddRollModal(presetCatId, purchaseRequestId='') {
  * no rolls yet) takes the real brand and model from the receipt, so the project
  * that points to it gets the roll's cost instead of a duplicate film.
  */
-function rollReceiptPresetCatalog(preset, { category, brand, model, filmType, vendorId }) {
+function rollReceiptPresetCatalog(preset, { category, brand, model, shortName, filmType, vendorId }) {
   if (!preset || !sameRollCategory(preset.category, category)) return null;
   const same = value => String(value || '').trim().toLowerCase();
   const placeholder = (preset.pendingPurchase || preset.addedManuallyAt) && !(db.inventory || []).some(roll => roll.catalogId === preset.id);
@@ -38053,7 +38100,8 @@ function rollReceiptPresetCatalog(preset, { category, brand, model, filmType, ve
   if (!placeholder && !sameFilm) return null;
   const renamed = placeholder && !sameFilm;
   if (!preset.brand || renamed) preset.brand = brand;
-  if (renamed) { preset.model = model; preset.productName = model; }
+  if (renamed) { preset.model = [model, shortName].filter(Boolean).join(' '); preset.fullName = model; preset.productName = model; preset.shortName = shortName; preset.modelCode = shortName; }
+  else if (shortName && !preset.shortName) { preset.shortName = shortName; preset.modelCode = shortName; }
   if (filmType && (!preset.filmCategory || renamed)) preset.filmCategory = filmType;
   if (vendorId && !preset.vendorId) preset.vendorId = vendorId;
   if (renamed) (db.orders || []).forEach(order => projectQuickLines(order).forEach(line => { if (line.catalogId === preset.id) line.label = catalogLabel(preset); }));
@@ -38061,7 +38109,7 @@ function rollReceiptPresetCatalog(preset, { category, brand, model, filmType, ve
 }
 
 /** The catalog film for a category + brand + model; a film not in the list is added to it. */
-function rollReceiptCatalog(category, brand, model, filmType, vendorId) {
+function rollReceiptCatalog(category, brand, model, shortName, filmType, vendorId) {
   const same = value => String(value || '').trim().toLowerCase();
   const existing = (db.settings.catalog || []).find(item => sameRollCategory(item.category, category)
     && same(item.brand) === same(brand)
@@ -38071,7 +38119,7 @@ function rollReceiptCatalog(category, brand, model, filmType, vendorId) {
     return existing;
   }
   const catalog = {
-    id: 'film_' + uid(), brand, model, productName: model, modelCode: '', filmCategory: filmType, category,
+    id: 'film_' + uid(), brand, model: [model, shortName].filter(Boolean).join(' '), fullName: model, shortName, productName: model, modelCode: shortName, filmCategory: filmType, category,
     retailPerSqft: 0, vendorId: vendorId || null,
     addedManuallyBy: currentUser()?.id || null, addedManuallyAt: new Date().toISOString(),
   };
@@ -38086,6 +38134,7 @@ async function confirmAddRoll() {
   const filmType = category === 'solar' ? read('ar-type') : '';
   const brand = read('ar-brand');
   const model = read('ar-model');
+  const shortName = read('ar-short-name');
   const vendorId = read('ar-vendor');
   const widthMm = parseInt(read('ar-width'), 10) || 0;
   const lengthM = parseFloat(read('ar-len')) || 0;
@@ -38112,8 +38161,8 @@ async function confirmAddRoll() {
   }
   if (!rollCode || !rollReceiptFormStillOpen('ar-form', formToken)) return;
 
-  const film = { category, brand, model, filmType, vendorId };
-  const catalog = rollReceiptPresetCatalog(getCatalogItem(presetId), film) || rollReceiptCatalog(category, brand, model, filmType, vendorId);
+  const film = { category, brand, model, shortName, filmType, vendorId };
+  const catalog = rollReceiptPresetCatalog(getCatalogItem(presetId), film) || rollReceiptCatalog(category, brand, model, shortName, filmType, vendorId);
   if (catalog.pendingPurchase) catalog.pendingPurchase = false;
   const roll = addInventoryRoll({
     catalogId: catalog.id, vendorId, lotNumber, widthMm, originalLengthM: lengthM, costTotal,
@@ -38121,6 +38170,7 @@ async function confirmAddRoll() {
   });
   const request = (db.purchaseRequests || []).find(x => x.id === requestId);
   recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(catalog),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,reason:`Приход рулона ${rollCode}`});
+  if (typeof recordWarehouseReceipt === 'function') recordWarehouseReceipt({kind:'film',inventoryId:roll.id,itemId:roll.id,itemName:catalogLabel(catalog),qty:1,unit:'рулон',unitCost:costTotal,total:costTotal,vendorId:roll.vendorId,accountId:read('ar-account')||'fin_unallocated',date:dateReceived,reference:read('ar-reference')});
   if (request) { request.status = 'received'; request.updatedAt = new Date().toISOString(); }
   save();
   closeModal();
