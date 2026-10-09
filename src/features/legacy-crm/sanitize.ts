@@ -41,8 +41,8 @@ export function sanitizeLegacyPayload(value: JsonObject): Prisma.InputJsonValue 
   clear(settings, "googleMapsApiKey");
   clear(integrations, "googleMapsApiKey");
   clear(integrations, "leadBackendKey");
-  clear(integrationAi, "apiKey");
-  clear(ai, "apiKey");
+  if (integrationAi) delete integrationAi.apiKey;
+  if (ai) delete ai.apiKey;
   clear(twilio, "authToken");
   clear(twilio, "apiKeySecret");
   clear(textbelt, "apiKey");
