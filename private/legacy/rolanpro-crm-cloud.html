@@ -21280,7 +21280,7 @@ function renderTasksView() {
 
   function bucketOf(t) {
     if (!t.dueAt) return 'nodate';
-    const d = t.dueAt.slice(0,10);
+    const d = taskDueDateKey(t.dueAt);
     if (d < todayStr) return 'overdue';
     if (d === todayStr) return 'today';
     return 'later';
@@ -34951,6 +34951,13 @@ function localDateKey(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 }
+function taskDueDateKey(value) {
+  const text = String(value || '');
+  if (!text) return '';
+  // Inputs from the task form are local wall-clock values. Server/generated
+  // timestamps carry a timezone and must be converted to the user's local day.
+  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(text) ? localDateKey(new Date(text)) : text.slice(0,10);
+}
 function agentCreateSuggestedTask(key, title, notes, responsibleId = '') {
   const actor = currentUser();
   if (!actor || !['owner','manager'].includes(actor.role)) return alert('Создавать задачи из рекомендаций может владелец или менеджер.');
@@ -34975,7 +34982,7 @@ function agentInsights() {
   const orders = visibleOrdersForUser(user);
   const tasks = (db.tasks || []).filter(task => agentTaskVisibleTo(user, task));
   const insights = [];
-  const overdue = tasks.filter(task => task.dueAt && task.dueAt.slice(0,10) < today);
+  const overdue = tasks.filter(task => task.dueAt && taskDueDateKey(task.dueAt) < today);
   if (overdue.length) insights.push({
     id:'overdue_tasks', tone:'red', eyebrow:'СРОЧНО', title:`Просрочено задач: ${overdue.length}`,
     detail:'Сначала закройте просроченные действия — агент не даст активной работе остаться без следующего шага.',
@@ -35018,6 +35025,7 @@ function agentInsights() {
       .filter(order => !['installation_done','completed','review_received'].includes(order.status))
       .flatMap(order => projectServiceGroups(order).map(group => ({ order, group, assignment: projectServiceAssignment(order, group) })))
       .filter(item => item.assignment.installationAt && (item.assignment.installerIds || []).includes(user.id))
+      .filter(item => new Date(item.assignment.installationAt).getTime() >= now.getTime())
       .sort((a,b)=>String(a.assignment.installationAt).localeCompare(String(b.assignment.installationAt)));
     if (pending[0]) {
       const item = pending[0];
