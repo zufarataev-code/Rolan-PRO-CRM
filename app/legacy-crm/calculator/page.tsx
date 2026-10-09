@@ -51,11 +51,11 @@ export default async function LegacyCrmCalculatorPage({ searchParams }: PageProp
   const isEmbedded = embed === "1";
 
   return (
-    <main style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 24 }}>
-      <div style={{ maxWidth: 1040, margin: "0 auto", padding: isEmbedded ? "12px" : "18px" }}>
+    <main className="legacy-calculator-page">
+      <div className={`legacy-calculator-frame${isEmbedded ? " legacy-calculator-frame-embedded" : ""}`}>
         {!isEmbedded ? (
           <header
-            className="surface"
+            className="surface legacy-calculator-header"
             style={{
               display: "flex",
               alignItems: "center",

@@ -302,8 +302,8 @@ export function SimpleQuickCalculator({
   }
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <section className="surface" style={{ padding: 16 }}>
+    <div className="quick-calculator">
+      <section className="surface quick-calculator-hero">
         <div className="page-kicker">БЫСТРЫЙ РАСЧЕТ</div>
         <h2 className="detail-heading" style={{ margin: "4px 0" }}>Цена за минуту</h2>
         <div className="detail-meta"><span>Услуга → объем → коэффициент → цена. Без комнат и окон.</span></div>
@@ -312,7 +312,7 @@ export function SimpleQuickCalculator({
       {lines.map((line, index) => {
         const service = getServiceTypeById(bootstrap.service_types, line.service_type_id);
         return (
-          <section key={line.id} className="surface" style={{ padding: 14 }}>
+          <section key={line.id} className="surface quick-calculator-panel">
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 10 }}>
               <strong>Услуга {index + 1}</strong>
               <button type="button" className="soft-button" disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((item) => item.id !== line.id))}>Удалить</button>
@@ -334,7 +334,7 @@ export function SimpleQuickCalculator({
 
       <button type="button" className="soft-button" style={{ justifySelf: "start" }} onClick={() => setLines((current) => [...current, makeLine(bootstrap)])}>+ Добавить услугу</button>
 
-      <section className="surface" style={{ padding: 16 }}>
+      <section className="surface quick-calculator-panel">
         <div className="page-kicker">ПЛАНОВЫЕ ДОП. РАСХОДЫ</div>
         <div className="detail-meta" style={{ marginTop: 4 }}><span>Менеджер может заложить lift, доставку, парковку, электрика, аренду и другие расходы объекта. Клиенту эти внутренние строки не отправляются.</span></div>
         <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
@@ -354,7 +354,7 @@ export function SimpleQuickCalculator({
       </section>
 
       {showInternalEconomics ? (
-        <section className="surface" style={{ padding: 16 }}>
+        <section className="surface quick-calculator-panel">
           <div className="page-kicker">ЭКОНОМИКА · ТОЛЬКО ВЛАДЕЛЕЦ</div>
           <div className="calculator-grid" style={{ marginTop: 10 }}>
             <label className="calculator-field"><span>Постоянные расходы на заказ</span><input type="number" min="0" step="1" value={overheadShare} onChange={(event) => setOverheadShare(Math.max(0, Number(event.target.value) || 0))} /><small>Подсказка: {money(recommendedOverheadPerDeal)}. Месячный overhead: {money(monthlyOverhead)}.</small></label>
@@ -363,7 +363,7 @@ export function SimpleQuickCalculator({
         </section>
       ) : null}
 
-      <section className="surface" style={{ padding: 16 }}>
+      <section className="surface quick-calculator-panel quick-calculator-results">
         <div className="page-kicker">ИТОГ И ПОДСКАЗКА</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginTop: 10 }}>
           <div className="card"><div className="row-meta">По прайсу</div><strong>{money(result.listTotal)}</strong></div>
@@ -380,7 +380,7 @@ export function SimpleQuickCalculator({
         </div>
       </section>
 
-      <section className="surface" style={{ padding: 16 }}>
+      <section className="surface quick-calculator-panel">
         <div className="page-kicker">ЕСЛИ КЛИЕНТ ЗАИНТЕРЕСОВАН</div>
         <div className="calculator-grid" style={{ marginTop: 10 }}>
           <label className="calculator-field"><span>Существующая сделка</span><select value={selectedDealId} onChange={(event) => { const value = event.target.value; setSelectedDealId(value); if (!value) setPlannedExpenses([]); }}><option value="">Создать нового клиента/лид</option>{deals.map((deal) => <option key={deal.deal_id} value={deal.deal_id}>{deal.deal_code} · {deal.contact_name} · {deal.status_name}</option>)}</select></label>

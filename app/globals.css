@@ -4264,3 +4264,57 @@ select option {
   font-size: 13px;
   white-space: nowrap;
 }
+
+/* Быстрый калькулятор использует тот же визуальный язык, что и CRM. */
+.legacy-calculator-page {
+  min-height: 100vh;
+  padding-bottom: 32px;
+  background: #eef2f7;
+  color: #132238;
+}
+
+.legacy-calculator-frame {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.legacy-calculator-frame-embedded { padding: 12px; }
+
+.legacy-calculator-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 16px 18px;
+  border-top: 4px solid #1769aa;
+  border-radius: 6px;
+  box-shadow: 0 8px 22px rgba(15, 35, 58, 0.08);
+}
+
+.quick-calculator { display: grid; gap: 12px; }
+.quick-calculator .surface { border-radius: 6px; border-color: #d9e1ea; }
+.quick-calculator-hero {
+  padding: 18px;
+  color: white;
+  border: 0 !important;
+  background: linear-gradient(135deg, #123a63 0%, #1769aa 100%);
+}
+.quick-calculator-hero .page-kicker,
+.quick-calculator-hero .detail-meta { color: #d7eaff; }
+.quick-calculator-hero .detail-heading { color: white; }
+.quick-calculator-panel { padding: 16px; box-shadow: 0 6px 18px rgba(15, 35, 58, 0.06); }
+.quick-calculator .calculator-field > span { color: #334155; font-weight: 700; }
+.quick-calculator .calculator-field input,
+.quick-calculator .calculator-field select { border-radius: 4px; border-color: #cbd5e1; background: #fff; }
+.quick-calculator .calculator-field input:focus,
+.quick-calculator .calculator-field select:focus { border-color: #1769aa; box-shadow: 0 0 0 3px rgba(23, 105, 170, 0.12); }
+.quick-calculator-results .card { border-radius: 4px; background: #f7f9fc; border: 1px solid #d9e1ea; }
+.quick-calculator-results .card strong { color: #123a63; font-size: 1.1rem; }
+
+@media (max-width: 640px) {
+  .legacy-calculator-frame { padding: 10px; }
+  .legacy-calculator-header { align-items: flex-start; padding: 14px; }
+  .quick-calculator-panel, .quick-calculator-hero { padding: 14px; }
+}
