@@ -24527,6 +24527,11 @@ const PROJECT_PRODUCTION_STATUSES = [
 function projectCardInProduction(o) {
   return PROJECT_PRODUCTION_STATUSES.includes(o?.status);
 }
+// Plans change only while the work is ahead or under way; a finished project
+// keeps its crew and dates — they are its history and its pay.
+const PROJECT_PLANNING_STATUSES = ['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'];
+// Once «Монтаж назначен», a planned service keeps a specialist and a date.
+const PROJECT_SCHEDULED_STATUSES = ['installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'];
 
 let projectCardEditing = false;
 /** Runs an estimate edit from the project card: the card re-renders in place. */
@@ -24630,7 +24635,15 @@ function projectCardSyncCrew(o) {
   });
 }
 function projectCardCanPlan(o) {
-  return !!o && projectCardInProduction(o) && orderUserCanSeeMoney(o, currentUser()) && orderUserCanManage(currentUser());
+  return !!o && PROJECT_PLANNING_STATUSES.includes(o.status) && orderUserCanSeeMoney(o, currentUser()) && orderUserCanManage(currentUser());
+}
+/** After «Монтаж назначен» a planned service may change its specialist or date, but not lose them. */
+function projectCardKeepsPlan(o, entry, next) {
+  const complete = plan => !!plan.installationAt && (plan.installerIds || []).length > 0;
+  if (!PROJECT_SCHEDULED_STATUSES.includes(o.status) || !complete(entry) || complete(next)) return true;
+  alert('Монтаж уже назначен: у услуги должны остаться исполнитель и дата. Замените их, а не удаляйте.');
+  preservePositionForNextRender(); render();
+  return false;
 }
 function projectCardToggleCrew(oid, key, userId, checked) {
   const o = getOrder(oid);
@@ -24638,6 +24651,7 @@ function projectCardToggleCrew(oid, key, userId, checked) {
   const entry = projectCardSchedule(o, key);
   const crew = new Set(entry.installerIds || []);
   if (checked) crew.add(userId); else crew.delete(userId);
+  if (!projectCardKeepsPlan(o, entry, { ...entry, installerIds: [...crew] })) return;
   entry.installerIds = [...crew];
   projectCardSyncCrew(o);
   save(); preservePositionForNextRender(); render();
@@ -24648,6 +24662,7 @@ function projectCardSetDate(oid, key, value) {
   const at = value ? new Date(value) : null;
   if (at && Number.isNaN(at.getTime())) return;
   const entry = projectCardSchedule(o, key);
+  if (!projectCardKeepsPlan(o, entry, { ...entry, installationAt: at ? at.toISOString() : '' })) return;
   entry.installationAt = at ? at.toISOString() : '';
   projectCardSyncCrew(o);
   save(); preservePositionForNextRender(); render();
@@ -24687,7 +24702,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
   const lines = projectLines(o);
   const pending = projectPendingSizedServices(o);
   const production = projectCardInProduction(o);
-  const plan = production && manage && money;
+  const plan = production && manage && money && PROJECT_PLANNING_STATUSES.includes(o.status);
   const edit = money && !['completed','review_received','act_signed','payment_received'].includes(o.status);
   const columns = 3 + (money ? 1 : 0) + (production ? 2 : 0) + (edit ? 1 : 0);
   const qtyCell = line => {

@@ -5,6 +5,9 @@ const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(orde
 
 export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'privacy'] as const;
 export const SERVICE_UNITS = ['sqft', 'lft', 'piece', 'zone', 'fixed', 'custom'] as const;
+// Project statuses for planning its services (Owner, 2026-10-09).
+const SCHEDULED_PROJECT_STATUSES = ['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'];
+const CLOSED_PROJECT_STATUSES = ['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'];
 /** Owner-only economics of a service: the installer rate and the material cost per unit. */
 const OWNER_OFFERING_FIELDS = ['installerRatePerSqft', 'materialCostPerUnit'] as const;
 
@@ -245,8 +248,19 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       }
     }
     const complete = (plan: Row) => typeof plan.installationAt === 'string' && !Number.isNaN(Date.parse(plan.installationAt)) && Array.isArray(plan.installerIds) && plan.installerIds.length > 0;
+    const schedulesChanged = JSON.stringify(order.serviceSchedules) !== JSON.stringify(oldOrder.serviceSchedules);
+    // A finished project keeps its crew and dates: they are its history and its pay.
+    if (schedulesChanged && CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status))) return 'Проект закрыт: исполнителей и даты услуг не меняют.';
     if (order.status === 'installation_scheduled' && oldOrder.status !== 'installation_scheduled'
       && Array.isArray(order.serviceSchedules) && rows(order.serviceSchedules).some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
+    // Once «Монтаж назначен», a planned service may change its specialist or
+    // date but not lose them; a service added later is planned step by step.
+    if (schedulesChanged && SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) {
+      for (const before of rows(oldOrder.serviceSchedules).filter(complete)) {
+        const after = rows(order.serviceSchedules).find(plan => plan.id === before.id);
+        if (after && !complete(after)) return 'Монтаж назначен: у услуги должны остаться исполнитель и дата.';
+      }
+    }
     if (Array.isArray(order.serviceSchedules) && order.serviceSchedules.length) {
       order.installerIds = [...new Set(rows(order.serviceSchedules).flatMap(plan => Array.isArray(plan.installerIds) ? plan.installerIds : []))];
       order.installationAt = rows(order.serviceSchedules).map(plan => plan.installationAt).filter(value => typeof value === 'string' && value !== '').sort()[0];

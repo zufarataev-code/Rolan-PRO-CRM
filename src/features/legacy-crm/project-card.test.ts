@@ -208,3 +208,50 @@ test('server: a row may be planned step by step; «Монтаж назначен
   done.orders[0].status = 'installation_scheduled';
   assert.equal(prepareServiceSolutions(complete, done, false), null);
 });
+
+test('a finished project shows its plan read-only; after «Монтаж назначен» a planned row keeps a specialist and a date', () => {
+  const { c, calls } = load();
+  c.getOrder = (id: string) => c.db.orders.find((item: Row) => item.id === id);
+  const closed = project('completed');
+  closed.id = 'done';
+  closed.serviceSchedules = [{ id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] }];
+  c.db.orders.push(closed);
+  const out = c.renderProjectCardServices(closed, { money: true, manage: true });
+  assert.match(out, /<th>Исполнитель<\/th><th>Дата<\/th>/);
+  assert.doesNotMatch(out, /projectCardToggleCrew|projectCardSetDate|Подтвердить монтаж/);
+  c.projectCardToggleCrew('done', 'offering:a1', 'i2', true);
+  c.projectCardSetDate('done', 'offering:a1', '');
+  assert.deepEqual(plain(closed.serviceSchedules), [{ id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] }]);
+
+  const scheduled = project('installation_scheduled');
+  scheduled.serviceSchedules = [{ id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] }];
+  c.db.orders.push(scheduled);
+  c.projectCardToggleCrew('o', 'offering:a1', 'i1', false);
+  c.projectCardSetDate('o', 'offering:a1', '');
+  assert.ok(calls.some(call => call.startsWith('alert:Монтаж уже назначен')));
+  assert.deepEqual(plain(scheduled.serviceSchedules[0]), { id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] });
+  // Replacing is fine: a new date, a second specialist, then the first one leaves.
+  c.projectCardSetDate('o', 'offering:a1', '2026-10-15T09:00');
+  c.projectCardToggleCrew('o', 'offering:a1', 'i2', true);
+  c.projectCardToggleCrew('o', 'offering:a1', 'i1', false);
+  assert.deepEqual(plain(scheduled.serviceSchedules[0].installerIds), ['i2']);
+  // A service added later is planned step by step.
+  c.projectCardToggleCrew('o', 'line:z', 'i1', true);
+  assert.deepEqual(plain(scheduled.serviceSchedules.find((item: Row) => item.id === 'line:z')), { id: 'line:z', installationAt: '', installerIds: ['i1'] });
+});
+
+test('server: a finished project\'s plan is frozen; a scheduled one keeps every planned service complete', () => {
+  const base = (status: string): Row => ({ settings: { serviceOfferings: [] }, users: [{ id: 'i1', role: 'installer' }, { id: 'i2', role: 'installer' }], orders: [{ id: 'o', status, extraServices: [], measurements: { rooms: [] }, serviceSchedules: [{ id: 'line:z', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }] }] });
+  const closed = base('completed');
+  const edited = structuredClone(closed);
+  edited.orders[0].serviceSchedules[0].installerIds = ['i2'];
+  assert.equal(prepareServiceSolutions(closed, edited, true), 'Проект закрыт: исполнителей и даты услуг не меняют.');
+  const scheduled = base('installation_scheduled');
+  const emptied = structuredClone(scheduled);
+  emptied.orders[0].serviceSchedules[0].installationAt = '';
+  assert.equal(prepareServiceSolutions(scheduled, emptied, false), 'Монтаж назначен: у услуги должны остаться исполнитель и дата.');
+  const swapped = structuredClone(scheduled);
+  swapped.orders[0].serviceSchedules[0] = { id: 'line:z', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i2'] };
+  swapped.orders[0].serviceSchedules.push({ id: 'line:s', installationAt: '', installerIds: ['i1'] });
+  assert.equal(prepareServiceSolutions(scheduled, swapped, false), null, 'a change of crew or date, and a new service planned step by step, pass');
+});
