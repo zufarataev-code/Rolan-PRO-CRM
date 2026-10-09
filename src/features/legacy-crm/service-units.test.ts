@@ -284,7 +284,7 @@ test('a project of services without sizes opens its estimate and shows them to t
   assert.match(card, /const estimateReady = hasMeasurements \|\| !orderNeedsMeasurements\(o\);/);
   assert.match(card, /disabled: !canManage \|\| !estimateReady/);
   assert.match(card, /onclick: estimateReady \? `openProjectEstimateWorkspace\('\$\{o\.id\}'\)` : `openManagerMeasureModal\('\$\{o\.id\}'\)`/);
-  assert.match(html, /projectOfferingLines\(order\)\.length \? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PROJECT SERVICES<\/div>/);
+  assert.match(html, /: premiumProjectServicesPanel\(order\) \|\| `<div class="pp-panel"><h3 class="text-xl font-black">Project scope is not filled yet<\/h3>/);
 });
 
 test('the server classifies service lines itself: submitted flags cannot unlock a price or skip the size rule', () => {

@@ -202,3 +202,20 @@ test('the price for removing old film is the owner\'s setting', () => {
   const saved: Row = { settings: { serviceOfferings: [], removalPricePerSqft: 3 }, orders: [] };
   assert.equal(prepareServiceSolutions(saved, structuredClone(saved), false), null);
 });
+
+test('the proposal shows the project services by name next to measured rooms', () => {
+  const { c } = load();
+  const panel = html.slice(html.indexOf('function premiumProjectServicesPanel(order) {'), html.indexOf('function premiumLegacyExtrasSelected('));
+  vm.runInContext(panel, c);
+  c.premiumEsc = c.academyEsc;
+  const o = project();
+  const out = c.premiumProjectServicesPanel(o);
+  assert.match(out, /Подключение зоны<\/b><br><small>Смарт · 3 зона × \$100\.00<\/small><\/span><strong>\$300\.00/);
+  assert.match(out, /Силикон<\/b><br><small>Защитная · 56 lin ft · included with A1 8 mil<\/small><\/span><strong>Included/);
+  assert.match(out, /Мойка стёкол[\s\S]*\$80\.00/);
+  assert.doesNotMatch(out, /A1 8 mil<\/b>/, 'window film stays in the rooms');
+  assert.match(html, /premiumRenderRoom\(prop, order, r, i, calc\)\)\.join\(''\) \+ premiumProjectServicesPanel\(order\)/);
+  const empty: Row = { id: 'e', measurements: { rooms: [] }, extraServices: [] };
+  assert.equal(c.premiumProjectServicesPanel(empty), '');
+});
+

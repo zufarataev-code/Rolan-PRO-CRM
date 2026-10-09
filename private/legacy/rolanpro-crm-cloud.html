@@ -32428,6 +32428,25 @@ function premiumRenderWindow(prop, order, room, window, idx, calc) {
       </div>
     </div>`;
 }
+/**
+ * The project's services that are not window film, for the client: name,
+ * quantity, unit price and amount (Owner, 2026-10-08). They replace the old
+ * add-on catalog: an extra is a directory service added to the project.
+ */
+function premiumProjectServicesPanel(order) {
+  const lines = projectLines(order).filter(line => !['windows', 'quick'].includes(line.kind));
+  if (!lines.length) return '';
+  return `<div class="pp-panel" data-project-services><div class="text-xs text-blue-200 font-bold">PROJECT SERVICES</div><h3 class="text-xl font-black mt-1">Services</h3><div class="mt-4">${lines.map(line => {
+    const unitPrice = Number(line.sources[0]?.unitPrice) || 0;
+    const included = line.kind === 'included';
+    const detail = [
+      primaryServiceInfo(line.direction)?.title || '',
+      `${projectLineQtyText(line)}${!included && unitPrice > 0 ? ` × ${fmtMoney(unitPrice)}` : ''}`,
+      included ? `included with ${serviceOffering(line.includedBy)?.name || 'the service'}` : '',
+    ].filter(Boolean).join(' · ');
+    return `<div class="pp-total-line"><span><b>${premiumEsc(line.name)}</b><br><small>${premiumEsc(detail)}</small></span><strong>${included ? 'Included' : fmtMoney(line.price)}</strong></div>`;
+  }).join('')}</div></div>`;
+}
 function premiumLegacyExtrasSelected(prop) {
   return LEGACY_PROPOSAL_EXTRAS.filter(s => prop.selections.services?.[s.id] === true);
 }
@@ -32646,7 +32665,7 @@ function renderPremiumProposalPortal(token) {
                 <div class="pp-product"><div class="text-slate-400">Access complexity</div><div class="text-xl font-black">×${Number(db.settings.complexityCoefs?.[order.complexity || 'standard'] || 1).toFixed(2)}</div></div>
               </div>
             </div>
-            ${(order.measurements?.rooms || []).length ? (order.measurements.rooms || []).map((r, i) => premiumRenderRoom(prop, order, r, i, calc)).join('') : projectQuickLines(order).length ? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PRELIMINARY PROJECT ITEMS</div><h3 class="text-xl font-black mt-1">Scope without measurements</h3><p class="text-slate-400 mt-2">Final room and window dimensions will be verified before installation.</p><div class="mt-4">${projectQuickLines(order).map(line => `<div class="pp-total-line"><span><b>${premiumEsc(primaryServiceInfo(line.serviceType)?.title || 'Service')}</b><br><small>${premiumEsc(line.label || 'Project item')} · ${premiumNum(line.qty)} ${premiumEsc(line.unit || 'unit')} × ${fmtMoney(line.unitPrice)}</small></span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}</div></div>` : projectOfferingLines(order).length ? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PROJECT SERVICES</div><h3 class="text-xl font-black mt-1">Services</h3><div class="mt-4">${projectOfferingLines(order).map(line => `<div class="pp-total-line"><span><b>${premiumEsc(line.label || line.offeringName || 'Service')}</b><br><small>${premiumEsc(primaryServiceInfo(line.serviceType)?.title || '')} · ${premiumNum(line.qty)} ${premiumEsc(serviceOfferingUnitShort(line))} × ${fmtMoney(line.unitPrice)}</small></span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}</div></div>` : `<div class="pp-panel"><h3 class="text-xl font-black">Project scope is not filled yet</h3><p class="text-slate-400 mt-2">Add project items or rooms in CRM, then regenerate this proposal.</p></div>`}
+            ${(order.measurements?.rooms || []).length ? (order.measurements.rooms || []).map((r, i) => premiumRenderRoom(prop, order, r, i, calc)).join('') + premiumProjectServicesPanel(order) : projectQuickLines(order).length ? `<div class="pp-panel"><div class="text-xs text-blue-200 font-bold">PRELIMINARY PROJECT ITEMS</div><h3 class="text-xl font-black mt-1">Scope without measurements</h3><p class="text-slate-400 mt-2">Final room and window dimensions will be verified before installation.</p><div class="mt-4">${projectQuickLines(order).map(line => `<div class="pp-total-line"><span><b>${premiumEsc(primaryServiceInfo(line.serviceType)?.title || 'Service')}</b><br><small>${premiumEsc(line.label || 'Project item')} · ${premiumNum(line.qty)} ${premiumEsc(line.unit || 'unit')} × ${fmtMoney(line.unitPrice)}</small></span><strong>${fmtMoney(line.price)}</strong></div>`).join('')}</div></div>` : premiumProjectServicesPanel(order) || `<div class="pp-panel"><h3 class="text-xl font-black">Project scope is not filled yet</h3><p class="text-slate-400 mt-2">Add project items or rooms in CRM, then regenerate this proposal.</p></div>`}
             <div class="pp-panel">
               <div class="text-xs text-blue-200 font-bold">PRODUCTS</div>
               <h2 class="pp-section-title mt-1">Product intelligence</h2>
