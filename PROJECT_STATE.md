@@ -30,6 +30,13 @@ Before doing any work:
 - Calendar day, week, month, dispatch-map, event, navigation, filter, and field-role controls keep their existing behavior and now use the shared Rolan PRO design theme: the same 8 px surfaces, 6 px controls, navy-to-cyan active state, borders, typography, and restrained shadows as the rest of the CRM.
 - Verification completed locally: 591/591 tests, TypeScript, 119-page production build, inline-script validation, and diff check pass. Release completion remains the normal protected path: final PR CI, merge to `main`, production deploy, then authenticated calendar and reference-directory smoke tests.
 
+## 2026-10-08 handoff — Rolan PRO intelligent agent v1
+
+- Branch: `codex/intelligent-agent-v1`, based on current GitHub `main` `38c9de0` after PR #318. The original checkout had unrelated local changes and a broken stale ref, so implementation uses an isolated fresh clone and does not touch that work.
+- The existing AI assistant now has a role-safe «Пульс» and uses the approved `/landing/rolan-mascot.webp` as its entry point. Owner/Manager receive overdue-task, client-debt and missing-next-action guidance; Owner also receives the bank-review action; Surveyor and Installer receive only their next assigned field work.
+- Suggested task creation requires confirmation, deduplicates open recommendations and records the agent source. The conversational data context now uses the canonical role-scoped order/client functions and omits money for field roles.
+- Verification: 606/606 tests pass, including three new agent tests; all five inline scripts compile and `git diff --check` passes. Local TypeScript and production build were stopped after more than 30 minutes blocked on shared filesystem dependency reads without diagnostics; clean GitHub CI must provide those two gates before merge. No deployment or production data change has been attempted.
+
 ## Active pull requests
 
 | PR | Purpose | Branch | State at last verification |

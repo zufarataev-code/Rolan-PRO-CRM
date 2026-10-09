@@ -13375,7 +13375,7 @@ function saveCallOutcome(phone, clientId, orderId, outcome) {
       db.tasks.push({
         id: 't_' + uid(),
         title: `📞 Перезвонить: ${c ? c.name : phone}`,
-        dueAt: due.toISOString().slice(0, 16) + ':00',
+        dueAt: due.toISOString(),
         teamIds: [state.currentUserId], responsibleId: state.currentUserId,
         clientId: clientId || null, notes: note,
         status: 'open', createdAt: new Date().toISOString(), createdBy: state.currentUserId, doneAt: null,
@@ -13956,7 +13956,7 @@ function createSalesAgentFollowUp(orderId) {
   db.tasks.push({
     id: 't_' + uid(),
     title: `AI follow-up: ${c?.name || o.number}`,
-    dueAt: due.toISOString().slice(0, 16) + ':00',
+    dueAt: due.toISOString(),
     teamIds: [o.managerId || state.currentUserId].filter(Boolean),
     responsibleId: o.managerId || state.currentUserId || null,
     clientId: o.clientId || null,
@@ -21275,11 +21275,11 @@ function renderTasksView() {
   const open = visible.filter(t => t.status !== 'done');
   const done = visible.filter(t => t.status === 'done').sort((a,b) => (b.doneAt||'').localeCompare(a.doneAt||''));
   const now = new Date();
-  const todayStr = now.toISOString().slice(0,10);
+  const todayStr = localDateKey(now);
 
   function bucketOf(t) {
     if (!t.dueAt) return 'nodate';
-    const d = t.dueAt.slice(0,10);
+    const d = taskDueDateKey(t.dueAt, t);
     if (d < todayStr) return 'overdue';
     if (d === todayStr) return 'today';
     return 'later';
@@ -21304,6 +21304,7 @@ function renderTasksView() {
           ${t.dueAt ? `<span class="${overdue && t.status!=='done' ?'text-red-600 font-semibold':'text-gray-500'}">📅 ${fmtDate(t.dueAt)}</span>` : ''}
           ${team.length ? `<span class="tag bg-gray-100 text-gray-600">👥 ${team.map(u=>u.name).join(', ')}</span>` : isManager ? `<span class="tag bg-gray-100 text-gray-400">Вся команда</span>` : ''}
           ${client ? `<span class="tag bg-amber-50 text-amber-700">👤 ${client.name}</span>` : ''}
+          ${t.source === 'rolan_agent' ? `<span class="tag bg-violet-50 text-violet-700">✨ Агент Rolan PRO</span>` : ''}
         </div>
         <div class="flex items-center gap-2 mt-1">
           <span class="text-xs text-gray-500">Исполнитель:</span>
@@ -35107,27 +35108,181 @@ async function aiParsePhotoMeasurement(orderId, photoId) {
 
 // ---------- AI: ASSISTANT SIDEBAR ----------
 let _aiHistory = [];
+function agentOpenTasks() { state.aiSidebarOpen = false; selectAppView('tasks'); }
+let agentBankReviewCount = null;
+let agentBankReviewLoading = false;
+function agentOpenBankReview() {
+  if (typeof openRolanProBank === 'function') return openRolanProBank();
+  window.location.href = '/legacy-crm/bank';
+}
+async function refreshAgentBankPulse() {
+  if (currentUser()?.role !== 'owner' || agentBankReviewLoading) return;
+  agentBankReviewLoading = true;
+  try {
+    const response = await fetch('/api/v1/finance/bank/overview?limit=1', { credentials:'same-origin', cache:'no-store' });
+    if (!response.ok) throw new Error(`bank overview ${response.status}`);
+    const payload = await response.json();
+    agentBankReviewCount = Math.max(0, Number(payload?.data?.reviewCount) || 0);
+  } catch (error) {
+    console.warn('[Rolan Agent] bank pulse unavailable', error);
+    agentBankReviewCount = null;
+  } finally {
+    agentBankReviewLoading = false;
+    if (state.aiSidebarOpen && (state.aiSidebarTab || 'pulse') === 'pulse') render();
+  }
+}
+function agentOpenOrder(orderId) { state.aiSidebarOpen = false; openOrder(orderId); }
+function agentOpenMeasurement(orderId) { state.aiSidebarOpen = false; openMeasurerV25ForOrder(orderId); }
+function agentTaskVisibleTo(user, task) {
+  if (!user || !task || task.status === 'done') return false;
+  if (user.role === 'owner') return true;
+  return task.responsibleId === user.id || (task.teamIds || []).includes(user.id);
+}
+function agentTaskExists(key) {
+  return (db.tasks || []).some(task => task.status !== 'done' && task.agentKey === key);
+}
+function localDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+function taskDueDateKey(value, task = null) {
+  const text = String(value || '');
+  if (!text) return '';
+  // Inputs from the task form are local wall-clock values. Server/generated
+  // timestamps carry a timezone and must be converted to the user's local day.
+  // Older call/follow-up tasks were UTC too, but their producer removed "Z".
+  const legacyUtc = !/(?:Z|[+-]\d{2}:?\d{2})$/.test(text)
+    && (/^📞 Перезвонить:/.test(task?.title || '') || /^AI follow-up:/.test(task?.title || ''));
+  const timestamp = legacyUtc ? `${text}Z` : text;
+  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(timestamp) ? localDateKey(new Date(timestamp)) : text.slice(0,10);
+}
+function agentCreateSuggestedTask(key, title, notes, responsibleId = '') {
+  const actor = currentUser();
+  if (!actor || !['owner','manager'].includes(actor.role)) return alert('Создавать задачи из рекомендаций может владелец или менеджер.');
+  if (agentTaskExists(key)) return alert('Такая задача уже есть в работе.');
+  if (!confirm(`Создать задачу «${title}»?`)) return;
+  const due = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  due.setHours(9, 0, 0, 0);
+  const assignee = responsibleId || actor.id;
+  db.tasks.push({
+    id: 't_' + uid(), title, notes, dueAt: due.toISOString(),
+    teamIds: assignee ? [assignee] : [], responsibleId: assignee || null,
+    status: 'open', createdAt: new Date().toISOString(), createdBy: actor.id,
+    doneAt: null, agentKey: key, source: 'rolan_agent',
+  });
+  save(); render();
+}
+function agentInsights() {
+  const user = currentUser();
+  if (!user) return [];
+  const now = new Date();
+  const today = localDateKey(now);
+  const orders = visibleOrdersForUser(user);
+  const tasks = (db.tasks || []).filter(task => agentTaskVisibleTo(user, task));
+  const insights = [];
+  const overdue = tasks.filter(task => task.dueAt && taskDueDateKey(task.dueAt, task) < today);
+  if (overdue.length) insights.push({
+    id:'overdue_tasks', tone:'red', eyebrow:'СРОЧНО', title:`Просрочено задач: ${overdue.length}`,
+    detail:'Сначала закройте просроченные действия — агент не даст активной работе остаться без следующего шага.',
+    action:'agentOpenTasks()', actionLabel:'Открыть задачи', priority:100,
+  });
+  if (['owner','manager'].includes(user.role)) {
+    const debtOrders = orders.filter(order => orderDebt(order) > 0 && !['cancelled','lost'].includes(order.status));
+    const debt = debtOrders.reduce((sum, order) => sum + orderDebt(order), 0);
+    const debtTaskKey = `agent_debt_${user.id}`;
+    if (debtOrders.length) insights.push({
+      id:'client_debt', tone:'amber', eyebrow:'ДЕНЬГИ', title:`Клиенты должны ${fmtMoney(debt)}`,
+      detail:`Открытых проектов с остатком к оплате: ${debtOrders.length}. Агент предлагает проверить обещанные даты оплаты.`,
+      action:`agentCreateSuggestedTask('${debtTaskKey}','Проверить оплаты клиентов','${debtOrders.length} проектов с остатком к оплате на ${fmtMoney(debt)}','${user.id}')`,
+      actionLabel:agentTaskExists(debtTaskKey)?'Задача уже создана':'Создать задачу', priority:90,
+    });
+    const workflowActions = orders
+      .filter(order => !['completed','review_received','cancelled','lost'].includes(order.status))
+      .map(order => ({ order, action: precisionManagerAction(order) }))
+      .filter(item => item.action);
+    if (workflowActions.length) {
+      const firstWorkflow = workflowActions.sort((a,b) => b.action.priority - a.action.priority)[0];
+      insights.push({
+        id:'workflow_actions', tone:'blue', eyebrow:'ПРОДАЖИ', title:`Следующих действий: ${workflowActions.length}`,
+        detail:`Первое по приоритету: ${firstWorkflow.action.next}.`,
+        action:`agentOpenOrder('${firstWorkflow.order.id}')`, actionLabel:'Открыть проект', priority:80,
+      });
+    }
+  }
+  if (user.role === 'owner' && agentBankReviewCount > 0) insights.push({
+    id:'bank_review', tone:'purple', eyebrow:'БУХГАЛТЕРИЯ', title:`Разобрать банковские операции: ${agentBankReviewCount}`,
+    detail:'Подтвердите предложенные категории. Выбор «Запомнить» обучает правила для следующих операций этого продавца.',
+    action:'agentOpenBankReview()', actionLabel:'Открыть банк', priority:70,
+  });
+  if (user.role === 'owner' && agentBankReviewCount === null) insights.push({
+    id:'bank_status_unknown', tone:'amber', eyebrow:'БУХГАЛТЕРИЯ', title:agentBankReviewLoading?'Проверяю банковские операции':'Статус банка недоступен',
+    detail:agentBankReviewLoading?'Агент загружает актуальную очередь проверки.':'Не удалось подтвердить состояние банковской очереди. Остальные данные пульса продолжают работать.',
+    action:'refreshAgentBankPulse()', actionLabel:agentBankReviewLoading?'Обновляется':'Повторить', priority:70,
+  });
+  if (user.role === 'measurer') {
+    const measurements = orders
+      .filter(order => order.measurementAt && !order.measurementDoneAt)
+      .sort((a,b)=>String(a.measurementAt).localeCompare(String(b.measurementAt)));
+    const futureMeasurements = measurements.filter(order => new Date(order.measurementAt).getTime() >= now.getTime());
+    const pending = futureMeasurements.length ? futureMeasurements : measurements.slice(-1);
+    if (pending[0]) insights.push({ id:'next_measurement', tone:'blue', eyebrow:'СЛЕДУЮЩИЙ ВЫЕЗД', title:getClient(pending[0].clientId)?.name || pending[0].number, detail:`${fmtDateTime(pending[0].measurementAt)} · ${orderAddress(pending[0], getClient(pending[0].clientId)) || 'адрес не указан'}`, action:`agentOpenMeasurement('${pending[0].id}')`, actionLabel:'Открыть замер', priority:90 });
+  }
+  if (user.role === 'installer') {
+    const installations = orders
+      .filter(order => !['installation_done','completed','review_received'].includes(order.status))
+      .flatMap(order => projectServiceGroups(order).map(group => ({ order, group, assignment: projectServiceAssignment(order, group) })))
+      .filter(item => item.assignment.installationAt && (item.assignment.installerIds || []).includes(user.id))
+      .sort((a,b)=>String(a.assignment.installationAt).localeCompare(String(b.assignment.installationAt)));
+    const futureInstallations = installations.filter(item => new Date(item.assignment.installationAt).getTime() >= now.getTime());
+    const pending = futureInstallations.length ? futureInstallations : installations.slice(-1);
+    if (pending[0]) {
+      const item = pending[0];
+      insights.push({ id:'next_installation', tone:'blue', eyebrow:'СЛЕДУЮЩАЯ УСЛУГА', title:getClient(item.order.clientId)?.name || item.order.number, detail:`${item.group.name} · ${fmtDateTime(item.assignment.installationAt)} · ${orderAddress(item.order, getClient(item.order.clientId)) || 'адрес не указан'}`, action:`agentOpenOrder('${item.order.id}')`, actionLabel:'Открыть Work Order', priority:90 });
+    }
+  }
+  if (!insights.length) insights.push({ id:'all_clear', tone:'emerald', eyebrow:'ПОД КОНТРОЛЕМ', title:'Срочных отклонений нет', detail:'Агент продолжает следить за задачами, проектами, графиком и деньгами.', action:'agentOpenTasks()', actionLabel:'Открыть задачи', priority:1 });
+  return insights.sort((a,b) => b.priority - a.priority);
+}
+function agentToneStyle(tone) {
+  return ({red:'border-color:#fecaca;background:#fff7f7',amber:'border-color:#fde68a;background:#fffbeb',blue:'border-color:#bfdbfe;background:#f8fbff',purple:'border-color:#ddd6fe;background:#faf8ff',emerald:'border-color:#a7f3d0;background:#f4fff9'})[tone] || 'border-color:#dbe5ef;background:#fff';
+}
+function renderAgentPulse() {
+  const insights = agentInsights();
+  return `<div class="space-y-3">
+    <div class="text-xs text-slate-500">Агент показывает только данные, доступные вашей роли. Действия с деньгами и клиентами требуют подтверждения.</div>
+    ${insights.map(item => `<section class="rounded-lg border p-3" style="${agentToneStyle(item.tone)}"><div class="text-xs font-black tracking-wide text-slate-500">${academyEsc(item.eyebrow)}</div><div class="font-black text-slate-900 mt-1">${academyEsc(item.title)}</div><div class="text-xs text-slate-600 mt-1">${academyEsc(item.detail)}</div><button class="btn-ghost text-xs mt-3" onclick="${item.action}">${academyEsc(item.actionLabel)} →</button></section>`).join('')}
+  </div>`;
+}
 function toggleAiSidebar() {
   state.aiSidebarOpen = !state.aiSidebarOpen;
+  if (state.aiSidebarOpen && !state.aiSidebarTab) state.aiSidebarTab = 'pulse';
   render();
+  if (state.aiSidebarOpen && currentUser()?.role === 'owner') refreshAgentBankPulse();
 }
+window.addEventListener('rolanpro-bank-closed', () => {
+  agentBankReviewCount = null;
+  if (state.aiSidebarOpen && currentUser()?.role === 'owner') refreshAgentBankPulse();
+});
 function renderAiSidebar() {
   if (!state.aiSidebarOpen) {
-    return `<button onclick="toggleAiSidebar()" class="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 text-white text-2xl flex items-center justify-center shadow-2xl hover:scale-110 transition-transform z-40" title="AI ассистент (Cmd+/)">✨</button>`;
+    return `<button onclick="toggleAiSidebar()" class="fixed bottom-6 right-6 w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-2xl hover:scale-105 transition-transform z-40 overflow-hidden" style="border:2px solid #29A7E1" title="Агент Rolan PRO (Cmd+/)"><img src="/landing/rolan-mascot.webp" alt="Агент Rolan PRO" style="width:58px;height:58px;object-fit:contain"></button>`;
   }
   const cfg = db.settings.ai || {};
+  const tab = state.aiSidebarTab || 'pulse';
   return `
-  <div class="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl z-40 flex flex-col" style="border-left: 1px solid #e5e7eb;">
-    <div class="brand-gradient text-white p-3 flex items-center justify-between">
+  <div class="fixed inset-y-0 right-0 w-96 max-w-full bg-white shadow-2xl z-40 flex flex-col" style="border-left: 1px solid #dbe5ef;">
+    <div class="text-white p-3 flex items-center justify-between" style="background:linear-gradient(135deg,#10253F,#164a70)">
       <div class="flex items-center gap-2">
-        <div class="text-xl">✨</div>
+        <div class="bg-white rounded-full overflow-hidden" style="width:44px;height:44px"><img src="/landing/rolan-mascot.webp" alt="Талисман Rolan PRO" style="width:44px;height:44px;object-fit:contain"></div>
         <div>
-          <div class="font-semibold">AI Ассистент</div>
-          <div class="text-xs opacity-75">${cfg.model || 'haiku'}</div>
+          <div class="font-semibold">Агент Rolan PRO</div>
+          <div class="text-xs opacity-75">Наблюдает · подсказывает · ставит задачи</div>
         </div>
       </div>
       <button onclick="toggleAiSidebar()" class="text-2xl hover:opacity-75">×</button>
     </div>
+    <div class="grid grid-cols-2 border-b bg-white p-2 gap-2"><button class="${tab==='pulse'?'btn-primary':'btn-ghost'} text-sm" onclick="state.aiSidebarTab='pulse';render()">Пульс</button><button class="${tab==='chat'?'btn-primary':'btn-ghost'} text-sm" onclick="state.aiSidebarTab='chat';render()">Спросить</button></div>
+    ${tab === 'pulse' ? `<div class="flex-1 overflow-y-auto p-3 bg-slate-50">${renderAgentPulse()}</div>` : `
     <div id="ai-chat" class="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50">
       ${_aiHistory.length === 0 ? `
         <div class="text-center text-sm text-gray-500 mt-10">
@@ -35154,6 +35309,7 @@ function renderAiSidebar() {
       </div>
       <div class="text-xs text-gray-400 mt-1">${cfg.apiKey ? '✓ API key установлен' : '⚠ Установите API key в Настройках → AI'}</div>
     </div>
+    `}
   </div>`;
 }
 function aiSendInput() {
@@ -35169,17 +35325,20 @@ async function aiAsk(text) {
   _aiHistory.push({ role: 'assistant', content: '' });  // placeholder
   render();
   // Build CRM data context for the AI
+  const visibleOrders = visibleOrdersForUser(currentUser());
+  const visibleClients = visibleClientsForUser(currentUser());
+  const canSeeMoney = ['owner','manager'].includes(currentUser()?.role);
   const compactData = JSON.stringify({
     today: new Date().toISOString().slice(0,10),
     settings: { companyName: db.settings.companyName, currency: db.settings.currency, advancePct: db.settings.advancePct },
-    orders: db.orders.slice(0, 200).map(o => ({
+    orders: visibleOrders.slice(0, 200).map(o => ({
       number: o.number, status: o.status,
       client: getClient(o.clientId)?.name || '',
-      revenue: orderRevenue(o), paid: o.paid || 0,
+      ...(canSeeMoney ? { revenue: orderRevenue(o), paid: o.paid || 0 } : {}),
       installAt: o.installationAt, createdAt: o.createdAt,
       address: orderAddress(o, getClient(o.clientId)) || '',
     })),
-    clients: db.clients.slice(0, 100).map(c => ({
+    clients: visibleClients.slice(0, 100).map(c => ({
       name: c.name, phone: c.phone, email: c.email, address: c.address, type: c.type,
     })),
   });
