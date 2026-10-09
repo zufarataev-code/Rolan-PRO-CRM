@@ -26,8 +26,11 @@ test("agent suggestions are explainable and require confirmation before creating
   assert.match(suggestions, /agentKey: key, source: 'rolan_agent'/);
   assert.match(suggestions, /agentTaskExists\(key\)/);
   assert.match(suggestions, /Клиенты должны/);
-  assert.match(suggestions, /Разобрать банковские операции/);
-  assert.match(suggestions, /Подтвердите спорные категории/);
+  assert.match(suggestions, /agent_debt_\$\{user\.id\}_\$\{today\}/);
+  assert.match(suggestions, /precisionManagerAction\(order\)/);
+  assert.doesNotMatch(suggestions, /nextActionAt/);
+  assert.match(suggestions, /agentBankReviewCount > 0/);
+  assert.match(suggestions, /Подтвердите предложенные категории/);
 });
 
 test("field roles receive operational guidance without company money", () => {
@@ -39,5 +42,5 @@ test("field roles receive operational guidance without company money", () => {
   assert.match(insights, /user\.role === 'installer'/);
   assert.match(insights, /Открыть замер/);
   assert.match(insights, /Открыть Work Order/);
-  assert.match(insights, /if \(user\.role === 'owner'\).*bank_review/s);
+  assert.match(insights, /if \(user\.role === 'owner' && agentBankReviewCount > 0\).*bank_review/s);
 });

@@ -34915,7 +34915,28 @@ async function aiParsePhotoMeasurement(orderId, photoId) {
 // ---------- AI: ASSISTANT SIDEBAR ----------
 let _aiHistory = [];
 function agentOpenTasks() { state.aiSidebarOpen = false; selectAppView('tasks'); }
-function agentOpenBankReview() { window.location.href = '/legacy-crm/bank?tab=review'; }
+let agentBankReviewCount = null;
+let agentBankReviewLoading = false;
+function agentOpenBankReview() {
+  if (typeof openRolanProBank === 'function') return openRolanProBank();
+  window.location.href = '/legacy-crm/bank';
+}
+async function refreshAgentBankPulse() {
+  if (currentUser()?.role !== 'owner' || agentBankReviewLoading) return;
+  agentBankReviewLoading = true;
+  try {
+    const response = await fetch('/api/v1/finance/bank/overview?limit=1', { credentials:'same-origin', cache:'no-store' });
+    if (!response.ok) throw new Error(`bank overview ${response.status}`);
+    const payload = await response.json();
+    agentBankReviewCount = Math.max(0, Number(payload?.data?.reviewCount) || 0);
+  } catch (error) {
+    console.warn('[Rolan Agent] bank pulse unavailable', error);
+    agentBankReviewCount = null;
+  } finally {
+    agentBankReviewLoading = false;
+    if (state.aiSidebarOpen && (state.aiSidebarTab || 'pulse') === 'pulse') render();
+  }
+}
 function agentOpenOrder(orderId) { state.aiSidebarOpen = false; openOrder(orderId); }
 function agentTaskVisibleTo(user, task) {
   if (!user || !task || task.status === 'done') return false;
@@ -34958,22 +34979,26 @@ function agentInsights() {
   if (['owner','manager'].includes(user.role)) {
     const debtOrders = orders.filter(order => orderDebt(order) > 0 && !['cancelled','lost'].includes(order.status));
     const debt = debtOrders.reduce((sum, order) => sum + orderDebt(order), 0);
+    const debtTaskKey = `agent_debt_${user.id}_${today}`;
     if (debtOrders.length) insights.push({
       id:'client_debt', tone:'amber', eyebrow:'ДЕНЬГИ', title:`Клиенты должны ${fmtMoney(debt)}`,
       detail:`Открытых проектов с остатком к оплате: ${debtOrders.length}. Агент предлагает проверить обещанные даты оплаты.`,
-      action:`agentCreateSuggestedTask('agent_debt_${today}','Проверить оплаты клиентов','${debtOrders.length} проектов с остатком к оплате на ${fmtMoney(debt)}','${user.id}')`,
-      actionLabel:agentTaskExists(`agent_debt_${today}`)?'Задача уже создана':'Создать задачу', priority:90,
+      action:`agentCreateSuggestedTask('${debtTaskKey}','Проверить оплаты клиентов','${debtOrders.length} проектов с остатком к оплате на ${fmtMoney(debt)}','${user.id}')`,
+      actionLabel:agentTaskExists(debtTaskKey)?'Задача уже создана':'Создать задачу', priority:90,
     });
-    const stale = orders.filter(order => !['completed','review_received','cancelled','lost'].includes(order.status) && (!order.nextActionAt || order.nextActionAt.slice(0,10) <= today));
-    if (stale.length) insights.push({
-      id:'missing_next_action', tone:'blue', eyebrow:'ПРОДАЖИ', title:`Без актуального следующего шага: ${stale.length}`,
-      detail:'Назначьте ответственному конкретное действие и срок, чтобы лиды и проекты не зависали.',
+    const workflowActions = orders
+      .filter(order => !['completed','review_received','cancelled','lost'].includes(order.status))
+      .map(order => ({ order, action: precisionManagerAction(order) }))
+      .filter(item => item.action);
+    if (workflowActions.length) insights.push({
+      id:'workflow_actions', tone:'blue', eyebrow:'ПРОДАЖИ', title:`Следующих действий: ${workflowActions.length}`,
+      detail:`Первое по приоритету: ${workflowActions.sort((a,b) => b.action.priority - a.action.priority)[0].action.next}.`,
       action:'agentOpenTasks()', actionLabel:'Разобрать', priority:80,
     });
   }
-  if (user.role === 'owner') insights.push({
-    id:'bank_review', tone:'purple', eyebrow:'БУХГАЛТЕРИЯ', title:'Разобрать банковские операции',
-    detail:'Подтвердите спорные категории. Выбор «Запомнить» обучает правила для следующих операций этого продавца.',
+  if (user.role === 'owner' && agentBankReviewCount > 0) insights.push({
+    id:'bank_review', tone:'purple', eyebrow:'БУХГАЛТЕРИЯ', title:`Разобрать банковские операции: ${agentBankReviewCount}`,
+    detail:'Подтвердите предложенные категории. Выбор «Запомнить» обучает правила для следующих операций этого продавца.',
     action:'agentOpenBankReview()', actionLabel:'Открыть банк', priority:70,
   });
   if (user.role === 'measurer') {
@@ -35001,6 +35026,7 @@ function toggleAiSidebar() {
   state.aiSidebarOpen = !state.aiSidebarOpen;
   if (state.aiSidebarOpen && !state.aiSidebarTab) state.aiSidebarTab = 'pulse';
   render();
+  if (state.aiSidebarOpen && currentUser()?.role === 'owner' && agentBankReviewCount === null) refreshAgentBankPulse();
 }
 function renderAiSidebar() {
   if (!state.aiSidebarOpen) {
