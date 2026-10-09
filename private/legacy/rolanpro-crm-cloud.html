@@ -16653,12 +16653,16 @@ function ensureOrderWorkflowTransition(o, newStatus, openWorkspace = true) {
 function changeStatus(orderId, newStatus, by, opts = {}) {
   const o = getOrder(orderId);
   if (!o) return false;
-  if (!opts.skipWorkflowGuard && !ensureOrderWorkflowTransition(o, newStatus, opts.openWorkspace !== false)) return false;
-  if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return false;
-  if (newStatus === 'installation_scheduled' && !ensureProductionReadyForInstallation(o)) return false;
-  // Entering installation needs every service planned; the plan is published then.
+  // Entering installation needs every service planned. The plan is published
+  // first (the project crew and date the later checks read) and taken back if
+  // any check refuses.
   const entersInstallation = PROJECT_SCHEDULED_STATUSES.includes(newStatus) && !PROJECT_SCHEDULED_STATUSES.includes(o.status) && !CLOSED_PROJECT_STATUSES.includes(o.status);
+  const restorePlan = entersInstallation ? projectPlanSnapshot(o) : null;
   if (entersInstallation && !ensureProjectServicesPlanned(o)) return false;
+  const refuse = () => { if (restorePlan) restorePlan(); return false; };
+  if (!opts.skipWorkflowGuard && !ensureOrderWorkflowTransition(o, newStatus, opts.openWorkspace !== false)) return refuse();
+  if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return refuse();
+  if (newStatus === 'installation_scheduled' && !ensureProductionReadyForInstallation(o)) return refuse();
   if (o.status === newStatus && !opts.force) {
     render();
     return true;
@@ -24717,6 +24721,19 @@ function ensureProjectServicesPlanned(o) {
   o.serviceSchedules = plans;
   projectCardPublishCrew(o);
   return true;
+}
+
+/** Takes a copy of the plan fields; the returned function puts them back. */
+function projectPlanSnapshot(o) {
+  const had = { schedules: 'serviceSchedules' in o, installers: 'installerIds' in o, at: 'installationAt' in o };
+  const saved = { serviceSchedules: o.serviceSchedules, installerIds: o.installerIds, installationAt: o.installationAt };
+  const lines = projectQuickLines(o).map(line => ({ line, installerIds: line.installerIds, startDate: line.startDate }));
+  return () => {
+    if (had.schedules) o.serviceSchedules = saved.serviceSchedules; else delete o.serviceSchedules;
+    if (had.installers) o.installerIds = saved.installerIds; else delete o.installerIds;
+    if (had.at) o.installationAt = saved.installationAt; else delete o.installationAt;
+    lines.forEach(item => { item.line.installerIds = item.installerIds; item.line.startDate = item.startDate; });
+  };
 }
 
 /** Lines still missing a specialist or a date. */

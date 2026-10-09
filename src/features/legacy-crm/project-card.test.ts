@@ -305,8 +305,28 @@ test('every way into installation needs each service planned; an older project k
   assert.equal(c.ensureProjectServicesPlanned(project('proposal_accepted')), false, 'A3 still waits for the measurement');
   // A project without services is not blocked.
   assert.equal(c.ensureProjectServicesPlanned({ id: 'empty', status: 'proposal_accepted', measurements: { rooms: [] }, extraServices: [] }), true);
-  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 1400);
-  assert.match(status, /const entersInstallation = PROJECT_SCHEDULED_STATUSES\.includes\(newStatus\) && !PROJECT_SCHEDULED_STATUSES\.includes\(o\.status\) && !CLOSED_PROJECT_STATUSES\.includes\(o\.status\);\n  if \(entersInstallation && !ensureProjectServicesPlanned\(o\)\) return false;/);
+  // changeStatus publishes a complete row plan before the older checks that read the project crew and date.
+  const changeStatusSource = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 4000);
+  const fn = changeStatusSource.slice(0, changeStatusSource.indexOf('\n}\n') + 2);
+  vm.runInContext(fn, c);
+  let productionReady = false;
+  Object.assign(c, {
+    // The older workflow check reads the project-wide crew and date.
+    ensureOrderWorkflowTransition: (target: Row) => !!target.installerIds?.length && !!target.installationAt,
+    ensureVerifiedMeasurementsForStatus: () => true,
+    ensureProductionReadyForInstallation: () => productionReady,
+    invalidateProjectEstimate: () => undefined, notifyStatusChange: () => undefined, autoNotifyClient: () => undefined,
+  });
+  const rowPlanned = project('proposal_accepted');
+  rowPlanned.offeringIds = ['a1', 'zone'];
+  rowPlanned.serviceSchedules = ['offering:a1', 'line:s', 'line:z'].map(id => ({ id, installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] }));
+  c.db.orders.push(rowPlanned);
+  c.getOrder = (id: string) => c.db.orders.find((item: Row) => item.id === id);
+  assert.equal(c.changeStatus('o', 'installation_scheduled', 'u'), false, 'production not ready');
+  assert.deepEqual(plain([rowPlanned.status, rowPlanned.installerIds ?? null, rowPlanned.installationAt ?? null]), ['proposal_accepted', null, null], 'a refused status keeps the plan a draft');
+  productionReady = true;
+  assert.equal(c.changeStatus('o', 'installation_scheduled', 'u'), true);
+  assert.deepEqual(plain([rowPlanned.status, rowPlanned.installerIds, rowPlanned.installationAt]), ['installation_scheduled', ['i1'], '2026-10-14T16:00:00.000Z']);
 });
 
 test('the window price in the row is the base rate; the complexity coefficient stays on top', () => {
