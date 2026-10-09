@@ -927,6 +927,21 @@ Status: implementation and local checks complete; GitHub PR/CI/release pending. 
 - Server: `service-solutions.ts` — five directions, units, `materialCostPerUnit` (owner-only, snapshotted as `offeringMaterialCost`), film categories compared canonically (`canonicalFilmCategory`); `order-intake-cleanup.ts` privacy labels; seed adds DECORATIVE_FILM and PRIVACY_FILM service types.
 - Verification: `service-units.test.ts` plus updated intake/estimate/measurement tests; full suite 567/567, `tsc` clean. Local CRM: five direction cards in «Новый проект»; a Smart «Подключение зоны» at $100/zone, $50 installer, $12 material; a project with only that service opens without measurement, 3 zones → $300 to the client, $36 material, $150 installer pay, no blockers for the proposal.
 
+## 2026-10-09 — Mobile Rolan PRO agent and live voice (Codex)
+
+Branch `fix/mobile-ai-agent-visibility`, based on `main` `a9bf667` after PR #322. The agent launcher now sits above the phone dock and its dialog uses the full phone viewport with iOS safe-area spacing; desktop layout is preserved. Owner and Manager receive a third agent tab, «Голос», with a live WebRTC conversation, microphone mute/end controls and a readable transcript. Closing the agent ends the voice session and releases the microphone.
+
+The browser never receives the standard OpenAI API key. Authenticated Owner/Manager sessions request a short-lived Realtime client secret from `/api/v1/ai/realtime`; the server keeps `OPENAI_API_KEY`, restricts the model, hashes the internal user id as the safety identifier and supplies a bounded role-aware CRM context. The first voice release can explain and recommend, but cannot claim that it changed CRM records; business writes still require explicit confirmation and an existing protected application action.
+
+Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScript and the 121-page production build passed; all inline legacy scripts compile. Production release and authenticated iPhone smoke test are pending PR/CI/merge. Voice additionally requires a funded OpenAI account and `OPENAI_API_KEY` in the protected production environment; absence is reported without exposing a key.
+
+## 2026-10-09 — Production OpenAI voice secret sync (Codex)
+
+- Production exposed the expected `voice_not_configured` message after the mobile voice release because the existing repository-level `OPENAI_API_KEY` was not copied into the canonical production environment file.
+- Branch `fix/production-openai-voice-secret-sync` adds a protected deployment step that validates the existing GitHub Secret and sends it only over SSH stdin. The value is never committed, printed, or placed in an SSH command line.
+- The server atomically replaces only the `OPENAI_API_KEY` line in `/home/runcloud/.rolanpro-crm.env.production.local` with mode `600`; the normal verified release then copies that environment into the new release before starting Next.js.
+- Next action: pass workflow syntax and repository checks, merge through a PR, wait for the automatic production deployment, then confirm that an authenticated voice-session request no longer returns `voice_not_configured`.
+
 
 ## 2026-10-05 handoff — multi-service price corridor, persistent object card, scheduling after accepted Proposal (ChatGPT)
 
@@ -954,6 +969,15 @@ Status: implementation and local checks complete; GitHub PR/CI/release pending. 
 - Server: `service-solutions.ts` — only the owner changes `settings.removalPricePerSqft`; it must be a positive number.
 - Verification: new `project-lines.test.ts` (lines, sums equal `orderRevenue` and reference pay, role-based table, card tile, proposal add-ons, removal price); updated `service-units.test.ts`. Legacy suite 351/351, `npm test` 606/606, TypeScript clean. Local browser check (port 3124, local test DB): a project with a per-sq-ft service on 2 windows, a zone service and an included silicone shows 3 lines, total $762 = revenue; the work order lists all three with specialist/date and no prices; the phone layout shows each line as a card.
 - Next: Codex review + CI; then the client-selectable optional services on the public proposal page with sync back into the project (needs a server→project path), and the public page deposit following unticked lines.
+## 2026-10-09 handoff — voice runtime reloads protected secrets on every server start
+
+- Production symptom: the mobile voice UI was deployed, but `/api/v1/ai/realtime` still returned `voice_not_configured` even after the protected `OPENAI_API_KEY` had been synced to the canonical server environment.
+- Root cause: `deploy/watch-production.sh` loaded the canonical environment while building a release, but `start_next()` could start an already-built release from the long-running watcher's stale process environment. Secret rotation therefore did not reliably reach Next.js.
+- Fix: `start_next()` now sources `/home/runcloud/.rolanpro-crm.env.production.local` immediately before every `next start`. No secret value is logged, committed, passed in argv, or exposed to the browser.
+- Regression coverage: `src/features/core/runtime-secrets-deploy.test.ts` asserts that the canonical protected environment is loaded before the server process starts.
+- Verification: shell syntax clean; focused regression 1/1; full suite 626/626; TypeScript clean after the production build; production build successful.
+- Branch: `fix/runtime-secret-refresh`. Next action: open PR, merge after green CI, then confirm the production realtime route no longer reports `voice_not_configured`.
+
 
 
 

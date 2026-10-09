@@ -618,6 +618,22 @@ Owner reviewed the «проект — контейнер» scheme in chat on 202
 - Creating a key does not activate production. Funding the provider account, configuring the production secret, merging, deploying from `main`, and running an authenticated smoke test remain separate owner-authorized release actions.
 - Implemented for review on `codex/secure-anthropic-crm-agent` in PR #322; production deployment remains a separate owner-authorized action.
 
+## 2026-10-09 — Live CRM voice uses WebRTC and ephemeral browser credentials (Owner)
+
+The Owner asked for a real spoken conversation with the Rolan PRO agent, not speech-to-text in the message box. The phone browser therefore connects to OpenAI Realtime over WebRTC after an explicit user tap grants microphone access.
+
+- `OPENAI_API_KEY` remains a server-only production secret. The browser receives only a short-lived Realtime client secret minted by an authenticated same-origin route.
+- The initial voice release is available to Owner and Manager. It receives the same bounded, role-aware CRM context used for explanations and cannot silently execute writes, payments, customer sends or destructive actions.
+- The UI must work as a full-screen phone conversation, remain above the mobile dock, respect iOS safe areas, show connection/microphone state, allow mute/end, expose a transcript and release microphone resources when closed.
+- A future tool-enabled voice agent must reuse protected application actions and explicit confirmation gates; it must not receive direct database credentials or an unrestricted write channel.
+
+## 2026-10-09 — Production voice uses the existing protected GitHub OpenAI secret
+
+- The CRM voice gateway reads `OPENAI_API_KEY` only from the server environment. The standard key never enters legacy workspace data, browser storage, client JavaScript, or Git.
+- Production deployment synchronizes the existing repository secret into the canonical mode-`600` production environment over SSH stdin before a verified release is built and started.
+- A missing or malformed key fails the deployment step instead of publishing a voice interface that can only return `voice_not_configured`.
+- Realtime clients still receive only a short-lived client secret issued by the authenticated CRM server route.
+
 ## 2026-10-09 — The project card is one working screen: services in rows, specialist and date in production (Owner)
 
 Owner in chat on 2026-10-09: «я просил сделать карточку проекта, где мы в рамках одного проекта будем добавлять услуги и назначать исполнителей… сейчас невозможно сделать — всё разбросано». After a market review (Jobber, Housecall Pro, ServiceTitan keep a job on one page: services → schedule → money) and a mockup, the owner set the rule: «когда мы делаем производство, то мы добавляем исполнителей — появляются поля, а пока для просчёта просто услуги».

@@ -18,6 +18,29 @@ test("the existing CRM assistant becomes a role-safe Rolan PRO agent", () => {
   assert.match(agent, /Наблюдает · подсказывает · ставит задачи/);
 });
 
+test("the Rolan PRO agent remains reachable and usable on phones", () => {
+  assert.match(html, /class="ai-agent-launcher/);
+  assert.match(html, /aria-label="Открыть агента Rolan PRO"/);
+  assert.match(html, /class="ai-agent-panel/);
+  assert.match(html, /role="dialog" aria-modal="true" aria-label="Агент Rolan PRO"/);
+  assert.match(html, /\.ai-agent-launcher \{[\s\S]*?bottom: calc\(82px \+ env\(safe-area-inset-bottom\)\);[\s\S]*?z-index: 64;/);
+  assert.match(html, /\.ai-agent-panel\[role="dialog"\] \{[\s\S]*?inset: 0 !important;[\s\S]*?margin: 0 !important;[\s\S]*?width: 100vw !important;[\s\S]*?height: 100dvh !important;[\s\S]*?border-radius: 0 !important;/);
+  assert.match(html, /\.ai-agent-header \{[\s\S]*?safe-area-inset-top/);
+  assert.match(html, /\.ai-agent-input-bar \{[\s\S]*?safe-area-inset-bottom/);
+});
+
+test("owner and manager can start a protected realtime voice conversation", () => {
+  assert.match(html, /Поговорить с агентом/);
+  assert.match(html, /navigator\.mediaDevices\?\.getUserMedia/);
+  assert.match(html, /new RTCPeerConnection\(\)/);
+  assert.match(html, /fetch\('\/api\/v1\/ai\/realtime'/);
+  assert.match(html, /https:\/\/api\.openai\.com\/v1\/realtime\/calls/);
+  assert.match(html, /Authorization:`Bearer \$\{ephemeralKey\}`/);
+  assert.match(html, /type:'session\.close'/);
+  assert.match(html, /\['owner','manager'\]\.includes\(currentUser\(\)\?\.role\)/);
+  assert.match(html, /Говорите естественно\. Агента можно перебивать\./);
+});
+
 test("agent suggestions are explainable and require confirmation before creating tasks", () => {
   const start = html.indexOf("function agentCreateSuggestedTask(");
   const end = html.indexOf("function toggleAiSidebar()", start);
