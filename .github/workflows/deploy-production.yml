@@ -38,6 +38,45 @@ jobs:
           printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
+      - name: Sync protected OpenAI voice key
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          case "$OPENAI_API_KEY" in
+            sk-*) ;;
+            *) echo "OPENAI_API_KEY is missing or invalid" >&2; exit 1 ;;
+          esac
+
+          # Send a shell-quoted assignment only over SSH stdin. The secret is
+          # never placed in the repository, the SSH command line, or the log.
+          {
+            printf 'set -euo pipefail\n'
+            printf 'openai_api_key=%q\n' "$OPENAI_API_KEY"
+            cat <<'REMOTE'
+          case "$openai_api_key" in
+            sk-*) ;;
+            *) echo "Refusing invalid OpenAI key" >&2; exit 1 ;;
+          esac
+
+          env_file=/home/runcloud/.rolanpro-crm.env.production.local
+          temporary_file="$(mktemp /home/runcloud/.rolanpro-crm.env.production.local.XXXXXX)"
+          trap 'rm -f "$temporary_file"' EXIT
+          if [ -f "$env_file" ]; then
+            awk '!/^OPENAI_API_KEY=/' "$env_file" > "$temporary_file"
+          fi
+          printf 'OPENAI_API_KEY=%q\n' "$openai_api_key" >> "$temporary_file"
+          chmod 600 "$temporary_file"
+          mv "$temporary_file" "$env_file"
+          trap - EXIT
+          REMOTE
+          } | ssh \
+            -i "$HOME/.ssh/rolanpro_production" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            runcloud@143.110.136.211 \
+            'bash -s'
+
       - name: Advance production to verified main commit
         env:
           EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}

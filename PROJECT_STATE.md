@@ -935,6 +935,13 @@ The browser never receives the standard OpenAI API key. Authenticated Owner/Mana
 
 Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScript and the 121-page production build passed; all inline legacy scripts compile. Production release and authenticated iPhone smoke test are pending PR/CI/merge. Voice additionally requires a funded OpenAI account and `OPENAI_API_KEY` in the protected production environment; absence is reported without exposing a key.
 
+## 2026-10-09 — Production OpenAI voice secret sync (Codex)
+
+- Production exposed the expected `voice_not_configured` message after the mobile voice release because the existing repository-level `OPENAI_API_KEY` was not copied into the canonical production environment file.
+- Branch `fix/production-openai-voice-secret-sync` adds a protected deployment step that validates the existing GitHub Secret and sends it only over SSH stdin. The value is never committed, printed, or placed in an SSH command line.
+- The server atomically replaces only the `OPENAI_API_KEY` line in `/home/runcloud/.rolanpro-crm.env.production.local` with mode `600`; the normal verified release then copies that environment into the new release before starting Next.js.
+- Next action: pass workflow syntax and repository checks, merge through a PR, wait for the automatic production deployment, then confirm that an authenticated voice-session request no longer returns `voice_not_configured`.
+
 
 ## 2026-10-05 handoff — multi-service price corridor, persistent object card, scheduling after accepted Proposal (ChatGPT)
 

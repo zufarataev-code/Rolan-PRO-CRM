@@ -626,3 +626,10 @@ The Owner asked for a real spoken conversation with the Rolan PRO agent, not spe
 - The initial voice release is available to Owner and Manager. It receives the same bounded, role-aware CRM context used for explanations and cannot silently execute writes, payments, customer sends or destructive actions.
 - The UI must work as a full-screen phone conversation, remain above the mobile dock, respect iOS safe areas, show connection/microphone state, allow mute/end, expose a transcript and release microphone resources when closed.
 - A future tool-enabled voice agent must reuse protected application actions and explicit confirmation gates; it must not receive direct database credentials or an unrestricted write channel.
+
+## 2026-10-09 — Production voice uses the existing protected GitHub OpenAI secret
+
+- The CRM voice gateway reads `OPENAI_API_KEY` only from the server environment. The standard key never enters legacy workspace data, browser storage, client JavaScript, or Git.
+- Production deployment synchronizes the existing repository secret into the canonical mode-`600` production environment over SSH stdin before a verified release is built and started.
+- A missing or malformed key fails the deployment step instead of publishing a voice interface that can only return `voice_not_configured`.
+- Realtime clients still receive only a short-lived client secret issued by the authenticated CRM server route.
