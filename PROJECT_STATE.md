@@ -977,3 +977,14 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Regression coverage: `src/features/core/runtime-secrets-deploy.test.ts` asserts that the canonical protected environment is loaded before the server process starts.
 - Verification: shell syntax clean; focused regression 1/1; full suite 626/626; TypeScript clean after the production build; production build successful.
 - Branch: `fix/runtime-secret-refresh`. Next action: open PR, merge after green CI, then confirm the production realtime route no longer reports `voice_not_configured`.
+
+
+
+
+## 2026-10-09 handoff — project card as one working screen (Claude)
+
+- Branch `claude/project-card`, based on `main` `0e05479` (after PR #319). Owner rule: DECISIONS.md (2026-10-09).
+- Legacy html: «КАРТОЧКА ПРОЕКТА: УСЛУГИ НА ОДНОМ ЭКРАНЕ» block before `projectLineScopeRows` — `renderProjectCardServices`, `renderProjectCardSchedule`, `projectPendingSizedServices`, `projectServicePriceRange`, card handlers (`projectCardAddService`/`SetQty`/`QtyFromWindows`/`DeleteService`/`RemovePending`/`SetPrice`/`ToggleCrew`/`SetDate`/`ConfirmInstallation`), `projectCardSchedule`, `projectCardSyncCrew`, `projectCardEditing` (read by `refreshProjectEstimateWorkspace`). `projectOfferingPickerHtml(o, handler)`. `renderOrderCleanDetails` renders the section after the stage block; the «Услуги проекта» tile from #319 is removed. CSS `.project-card-*`.
+- Server `service-solutions.ts`: partial `serviceSchedules` entries allowed (empty date or crew); entering `installation_scheduled` requires every entry complete; derived `installationAt` ignores empty dates.
+- Verification: new `project-card.test.ts` (7 tests: pricing vs production rows, schedule, crew materialisation, quick-line crew, price ranges, card edits reuse estimate edits, server rules); `npm test` 622/622; TypeScript clean. Local browser (test DB): quantity edit 3 → 4 zones updates $300 → $400 in the card without opening the estimate; at «КП принято» a specialist and a date chosen in the row are saved through the server (partial first), the schedule lists them, the other rows are highlighted.
+- Next: Codex review + CI; owner's «да» before deploy.

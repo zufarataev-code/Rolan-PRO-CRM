@@ -5,6 +5,57 @@ const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(orde
 
 export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'privacy'] as const;
 export const SERVICE_UNITS = ['sqft', 'lft', 'piece', 'zone', 'fixed', 'custom'] as const;
+// Project statuses for planning its services (Owner, 2026-10-09).
+const SCHEDULED_PROJECT_STATUSES = ['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'];
+const CLOSED_PROJECT_STATUSES = ['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'];
+/**
+ * The services of a project as the CRM plans them (projectServiceGroups): the
+ * windows of one service together, every other row on its own, quick lines
+ * only before measurement. Each needs its own plan to enter installation.
+ */
+function serviceGroupIds(order: Row): string[] {
+  const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows));
+  const ids = windows.map(win => typeof win.offeringId === 'string' && win.offeringId ? `offering:${win.offeringId}` : `direction:${win.measureScope || order.serviceType || 'solar_film'}`);
+  for (const line of rows(order.extraServices)) if (line.quickProjectLine !== true || !windows.length) ids.push(`line:${line.id}`);
+  return [...new Set(ids)];
+}
+/**
+ * Per-sq-ft services the project chose that no window carries yet
+ * (projectPendingSizedServices): they wait for the measurement. The unit is
+ * the one saved when the project chose the service (older choices: sq ft); a
+ * service priced as a quantity line in this project is not waiting.
+ */
+function pendingSizedOfferings(order: Row, offerings: Row[]): string[] {
+  const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows));
+  const onWindows = new Set(windows.map(win => win.offeringId).filter(Boolean));
+  if (!windows.length) rows(order.extraServices).filter(line => line.quickProjectLine === true && line.offeringId).forEach(line => onWindows.add(line.offeringId));
+  const quantityLines = new Set(rows(order.extraServices).filter(line => line.offeringId && line.quickProjectLine !== true && line.unit && line.unit !== 'sqft').map(line => line.offeringId));
+  const units = object(order.offeringUnits);
+  const ids = Array.isArray(order.offeringIds) ? order.offeringIds.filter((id: unknown): id is string => typeof id === 'string') : [];
+  return [...new Set(ids)].filter(id => !onWindows.has(id) && !quantityLines.has(id)
+    && (typeof units[id] === 'string' ? units[id] === 'sqft' : true)
+    && offerings.some(offering => offering.id === id));
+}
+/**
+ * The plan of every service (projectPlannedSchedules): the saved per-service
+ * plans, or — for a project planned as a whole before them — the project crew
+ * and date for every service, a quick line keeping its own crew and start day.
+ */
+function projectPlans(order: Row): Row[] {
+  const saved = rows(order.serviceSchedules);
+  if (saved.length) return saved;
+  const quick = new Map(rows(order.extraServices).filter(line => line.quickProjectLine === true).map(line => [`line:${line.id}`, line]));
+  const crew = Array.isArray(order.installerIds) ? order.installerIds : [];
+  const at = typeof order.installationAt === 'string' ? order.installationAt : '';
+  return serviceGroupIds(order).map(id => {
+    const line = quick.get(id);
+    return {
+      id,
+      installerIds: Array.isArray(line?.installerIds) && line.installerIds.length ? line.installerIds : crew,
+      installationAt: typeof line?.startDate === 'string' && line.startDate ? `${line.startDate}T09:00:00` : at,
+    };
+  });
+}
 /** Owner-only economics of a service: the installer rate and the material cost per unit. */
 const OWNER_OFFERING_FIELDS = ['installerRatePerSqft', 'materialCostPerUnit'] as const;
 
@@ -231,18 +282,54 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     }
     for (const id of Object.keys(oldUnits)) if (!(id in units)) units[id] = oldUnits[id];
     if (Object.keys(units).length) order.offeringUnits = units;
+    // A service is planned in its row on the project card (Owner, 2026-10-09):
+    // its specialist and date may be chosen one after the other, so a saved
+    // plan may still miss one of them. «Монтаж назначен» needs them all.
     if (JSON.stringify(order.serviceSchedules) !== JSON.stringify(oldOrder.serviceSchedules)) {
       if (!Array.isArray(order.serviceSchedules)) return 'Некорректные назначения услуг.';
       const seen = new Set();
       for (const plan of rows(order.serviceSchedules)) {
-        if (typeof plan.id !== 'string' || seen.has(plan.id) || !/^\w[\w:-]{0,240}$/.test(plan.id) || typeof plan.installationAt !== 'string' || Number.isNaN(Date.parse(plan.installationAt)) || !Array.isArray(plan.installerIds) || !plan.installerIds.length) return 'Укажите дату и исполнителей каждой услуги.';
+        if (typeof plan.id !== 'string' || seen.has(plan.id) || !/^\w[\w:-]{0,240}$/.test(plan.id) || !Array.isArray(plan.installerIds)) return 'Некорректные назначения услуг.';
+        if (plan.installationAt !== undefined && plan.installationAt !== '' && (typeof plan.installationAt !== 'string' || Number.isNaN(Date.parse(plan.installationAt)))) return 'Некорректная дата услуги.';
         seen.add(plan.id);
         if (plan.installerIds.some((id: unknown)=>!rows(next.users).some(user=>user.id===id && user.role==='installer'))) return 'Исполнитель услуги должен быть специалистом по установке.';
       }
     }
-    if (Array.isArray(order.serviceSchedules) && order.serviceSchedules.length) {
+    const complete = (plan: Row) => typeof plan.installationAt === 'string' && !Number.isNaN(Date.parse(plan.installationAt)) && Array.isArray(plan.installerIds) && plan.installerIds.length > 0;
+    const schedulesChanged = JSON.stringify(order.serviceSchedules) !== JSON.stringify(oldOrder.serviceSchedules);
+    // A finished project keeps its crew and dates: they are its history and its pay.
+    if (schedulesChanged && CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status))) return 'Проект закрыт: исполнителей и даты услуг не меняют.';
+    // Entering installation (from the card, the schedule window or the kanban)
+    // needs a complete plan for every service of the project.
+    const entersInstallation = SCHEDULED_PROJECT_STATUSES.includes(String(order.status))
+      && !SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status)) && !CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status));
+    // Closing a project (from any open status) freezes its plan, so it must be
+    // complete then too (a service added after scheduling may still be planned
+    // step by step until then).
+    const closesProject = CLOSED_PROJECT_STATUSES.includes(String(order.status)) && !CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status));
+    if ((entersInstallation || closesProject) && oldOrder.id !== undefined) {
+      if (pendingSizedOfferings(order, offerings).length) return 'Сначала внесите замер всех услуг проекта.';
+      const plans = projectPlans(order);
+      if (plans.some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
+      if (serviceGroupIds(order).some(id => !plans.some(plan => plan.id === id))) return 'Укажите дату и исполнителей каждой услуги.';
+    }
+    // Once «Монтаж назначен», a planned service may change its specialist or
+    // date but not lose them; a service added later is planned step by step.
+    // A project planned as a whole counts as planned for every service, so its
+    // first per-service plan must keep them all.
+    if (schedulesChanged && SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) {
+      const services = serviceGroupIds(order);
+      for (const before of projectPlans(oldOrder).filter(complete)) {
+        const after = rows(order.serviceSchedules).find(plan => plan.id === before.id);
+        // A plan leaves only with its service.
+        if (after ? !complete(after) : services.includes(before.id)) return 'Монтаж назначен: у услуги должны остаться исполнитель и дата.';
+      }
+    }
+    // A plan made at «КП принято» is a draft: the project crew and date (what
+    // the client and the field crew see) follow it once installation is scheduled.
+    if (Array.isArray(order.serviceSchedules) && order.serviceSchedules.length && SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) {
       order.installerIds = [...new Set(rows(order.serviceSchedules).flatMap(plan => Array.isArray(plan.installerIds) ? plan.installerIds : []))];
-      order.installationAt = rows(order.serviceSchedules).map(plan => plan.installationAt).filter(value=>typeof value === 'string').sort()[0];
+      order.installationAt = rows(order.serviceSchedules).map(plan => plan.installationAt).filter(value => typeof value === 'string' && value !== '').sort()[0];
     }
   }
   return null;
