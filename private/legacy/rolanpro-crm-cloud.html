@@ -24578,6 +24578,14 @@ function projectCardQtyFromWindows(oid, sid) {
   projectCardEdit(() => projectEstimateServiceQtyFromWindows(oid, sid));
 }
 function projectCardDeleteService(oid, sid) {
+  const o = getOrder(oid);
+  if (!o || (o.extraServices || []).some(line => line.id === sid && line.includedBy)) return;
+  // The removed service's plan leaves with it, and the project crew follows.
+  const key = `line:${sid}`;
+  if ((o.serviceSchedules || []).some(item => item.id === key)) {
+    o.serviceSchedules = o.serviceSchedules.filter(item => item.id !== key);
+    projectCardSyncCrew(o);
+  }
   projectCardEdit(() => projectEstimateDeleteService(oid, sid));
 }
 function projectCardRemovePending(oid, offeringId) {
@@ -24790,7 +24798,8 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
   const pending = projectPendingSizedServices(o);
   const production = projectCardInProduction(o);
   const plan = production && manage && money && PROJECT_PLANNING_STATUSES.includes(o.status);
-  const edit = money && !['completed','review_received','act_signed','payment_received'].includes(o.status);
+  // A finished installation is history: its scope, prices and pay are read-only.
+  const edit = money && !CLOSED_PROJECT_STATUSES.includes(o.status);
   const columns = 3 + (money ? 1 : 0) + (production ? 2 : 0) + (edit ? 1 : 0);
   const qtyCell = line => {
     const source = line.sources[0];

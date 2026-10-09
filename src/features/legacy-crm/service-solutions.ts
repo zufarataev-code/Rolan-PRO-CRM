@@ -286,7 +286,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     // (a service added after scheduling may still be planned step by step).
     const closesInstallation = CLOSED_PROJECT_STATUSES.includes(String(order.status)) && SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status));
     if ((entersInstallation || closesInstallation) && oldOrder.id !== undefined) {
-      if (entersInstallation && pendingSizedOfferings(order, offerings).length) return 'Сначала внесите замер всех услуг проекта.';
+      if (pendingSizedOfferings(order, offerings).length) return 'Сначала внесите замер всех услуг проекта.';
       const plans = rows(order.serviceSchedules);
       if (plans.some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
       if (serviceGroupIds(order).some(id => !plans.some(plan => plan.id === id))) return 'Укажите дату и исполнителей каждой услуги.';

@@ -415,3 +415,37 @@ test('server: a service waiting for measurement stops installation; closing an i
   assert.match(status, /const closesInstallation = CLOSED_PROJECT_STATUSES\.includes\(newStatus\) && PROJECT_SCHEDULED_STATUSES\.includes\(o\.status\);/);
   assert.match(status, /if \(\(entersInstallation \|\| closesInstallation\) && !ensureProjectServicesPlanned\(o\)\) return false;/);
 });
+
+test('a finished installation is read-only on the card; deleting a service drops its plan and the crew follows', () => {
+  const { c } = load();
+  const done = project('installation_done');
+  const out = c.renderProjectCardServices(done, { money: true, manage: true });
+  assert.doesNotMatch(out, /projectCardSetQty|projectCardSetPrice|projectCardDeleteService|projectCardAddService/);
+  const scheduled = project('installation_scheduled');
+  scheduled.offeringIds = ['a1', 'zone'];
+  scheduled.serviceSchedules = [
+    { id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] },
+    { id: 'line:s', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] },
+    { id: 'line:z', installationAt: '2026-10-12T16:00:00.000Z', installerIds: ['i2'] },
+  ];
+  scheduled.installerIds = ['i1', 'i2'];
+  scheduled.installationAt = '2026-10-12T16:00:00.000Z';
+  c.db.orders.push(scheduled);
+  c.getOrder = (id: string) => c.db.orders.find((item: Row) => item.id === id);
+  c.projectEstimateDeleteService = (oid: string, sid: string) => { const target = c.getOrder(oid); target.extraServices = target.extraServices.filter((line: Row) => line.id !== sid); };
+  c.projectCardDeleteService('o', 'z');
+  assert.deepEqual(plain([scheduled.serviceSchedules.map((item: Row) => item.id), scheduled.installerIds, scheduled.installationAt]), [['offering:a1', 'line:s'], ['i1'], '2026-10-14T16:00:00.000Z']);
+  // An included service is not deleted on its own.
+  c.projectCardDeleteService('o', 's');
+  assert.ok(scheduled.serviceSchedules.some((item: Row) => item.id === 'line:s'));
+});
+
+test('server: closing an installation is refused while a service waits for measurement', () => {
+  const users = [{ id: 'i1', role: 'installer' }];
+  const offerings = [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }, { id: 'a3', direction: 'protective', name: 'A3', unit: 'sqft' }];
+  const plan = { id: 'offering:a1', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] };
+  const active: Row = { settings: { serviceOfferings: offerings }, users, orders: [{ id: 'o', status: 'installation_in_progress', serviceType: 'protective_film', offeringIds: ['a1', 'a3'], offeringUnits: { a1: 'sqft', a3: 'sqft' }, measurements: { rooms: [{ windows: [{ id: 'w', offeringId: 'a1', measureScope: 'protective_film' }] }] }, extraServices: [], serviceSchedules: [plan] }] };
+  const closed = structuredClone(active);
+  closed.orders[0].status = 'installation_done';
+  assert.equal(prepareServiceSolutions(active, closed, false), 'Сначала внесите замер всех услуг проекта.');
+});
