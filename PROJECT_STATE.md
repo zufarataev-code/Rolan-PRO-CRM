@@ -969,3 +969,11 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Server: `service-solutions.ts` — only the owner changes `settings.removalPricePerSqft`; it must be a positive number.
 - Verification: new `project-lines.test.ts` (lines, sums equal `orderRevenue` and reference pay, role-based table, card tile, proposal add-ons, removal price); updated `service-units.test.ts`. Legacy suite 351/351, `npm test` 606/606, TypeScript clean. Local browser check (port 3124, local test DB): a project with a per-sq-ft service on 2 windows, a zone service and an included silicone shows 3 lines, total $762 = revenue; the work order lists all three with specialist/date and no prices; the phone layout shows each line as a card.
 - Next: Codex review + CI; then the client-selectable optional services on the public proposal page with sync back into the project (needs a server→project path), and the public page deposit following unticked lines.
+## 2026-10-09 handoff — voice runtime reloads protected secrets on every server start
+
+- Production symptom: the mobile voice UI was deployed, but `/api/v1/ai/realtime` still returned `voice_not_configured` even after the protected `OPENAI_API_KEY` had been synced to the canonical server environment.
+- Root cause: `deploy/watch-production.sh` loaded the canonical environment while building a release, but `start_next()` could start an already-built release from the long-running watcher's stale process environment. Secret rotation therefore did not reliably reach Next.js.
+- Fix: `start_next()` now sources `/home/runcloud/.rolanpro-crm.env.production.local` immediately before every `next start`. No secret value is logged, committed, passed in argv, or exposed to the browser.
+- Regression coverage: `src/features/core/runtime-secrets-deploy.test.ts` asserts that the canonical protected environment is loaded before the server process starts.
+- Verification: shell syntax clean; focused regression 1/1; full suite 626/626; TypeScript clean after the production build; production build successful.
+- Branch: `fix/runtime-secret-refresh`. Next action: open PR, merge after green CI, then confirm the production realtime route no longer reports `voice_not_configured`.

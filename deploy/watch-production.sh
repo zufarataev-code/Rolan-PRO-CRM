@@ -61,6 +61,14 @@ start_next() {
   log "Starting Next.js from $release_dir"
   (
     cd "$release_dir" || exit 1
+    # Secrets can be rotated independently of a code release. Always load the
+    # canonical protected environment immediately before starting Next.js so a
+    # prebuilt release never inherits stale variables from the long-running
+    # watcher process or an older copied .env.production.local file.
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_BACKUP" || exit 1
+    set +a
     exec ./node_modules/.bin/next start -H 0.0.0.0 -p 3000
   ) &
   child_pid=$!
