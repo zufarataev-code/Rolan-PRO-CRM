@@ -66,6 +66,7 @@ function load(role = 'owner') {
     render: () => calls.push('render'),
     preservePositionForNextRender: () => undefined,
     alert: (message: string) => calls.push(`alert:${message}`),
+    refreshManualFilmNeededBy: (o: Row) => calls.push(`neededBy:${o.id}`),
   });
   const start = html.indexOf('// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ');
   vm.runInContext(html.slice(start, html.indexOf('function projectQuickLineCatalog(', start)), context);
@@ -258,6 +259,7 @@ test('a finished project shows its plan read-only; after «Монтаж назн
   assert.deepEqual(plain(scheduled.serviceSchedules[0]), { id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] });
   // Replacing is fine: a new date, a second specialist, then the first one leaves.
   c.projectCardSetDate('o', 'offering:a1', '2026-10-15T09:00');
+  assert.ok(calls.includes('neededBy:o'), 'the film purchase deadline follows the new date');
   c.projectCardToggleCrew('o', 'offering:a1', 'i2', true);
   c.projectCardToggleCrew('o', 'offering:a1', 'i1', false);
   assert.deepEqual(plain(scheduled.serviceSchedules[0].installerIds), ['i2']);

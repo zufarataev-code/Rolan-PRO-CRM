@@ -24665,7 +24665,10 @@ function projectCardSchedule(o, key) {
  * field crew and the calendar see it only after «Подтвердить монтаж».
  */
 function projectCardSyncCrew(o) {
-  if (PROJECT_SCHEDULED_STATUSES.includes(o.status)) projectCardPublishCrew(o);
+  if (!PROJECT_SCHEDULED_STATUSES.includes(o.status)) return;
+  projectCardPublishCrew(o);
+  // A moved service date moves the deadline of its film purchase request too.
+  refreshManualFilmNeededBy(o);
 }
 function projectCardPublishCrew(o) {
   const list = o.serviceSchedules || [];
