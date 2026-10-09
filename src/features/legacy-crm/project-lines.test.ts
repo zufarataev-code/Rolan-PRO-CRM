@@ -152,12 +152,11 @@ test('the project card table shows money by role; the crew rows carry no prices'
   assert.match(crew, /Подключение зоны[\s\S]*не назначен · дата не назначена/);
 });
 
-test('the project card has one «Услуги проекта» tile; work documents open for any line', () => {
+test('the project card shows its services inline; work documents open for any line', () => {
   const card = html.slice(html.indexOf('function renderOrderCleanDetails('), html.indexOf('function renderOrderCleanDetails(') + 40000);
-  assert.match(card, /key: 'services', icon: '🧩', title: 'Услуги проекта'/);
-  assert.match(card, /projectLinesTableHtml\(o, \{ money: canSeeMoney, economics: canSeeInternalEconomics \}\)/);
+  assert.doesNotMatch(card, /key: 'services', icon: '🧩'/, 'no separate tile: the services are on the card itself');
+  assert.match(card, /\$\{renderProjectCardServices\(o, \{ money: canSeeMoney, economics: canSeeInternalEconomics, manage: canManage \}\)\}\n\s+<div class="order-workspace-grid">/);
   assert.match(card, /const hasWorkScope = hasMeasurements \|\| lines\.length > 0;/);
-  assert.match(card, /scheduleInstallationPrompt\('\$\{o\.id\}'\)`, disabled: !canManage \|\| !o\.productionReadyAt/);
 });
 
 test('proposals no longer offer add-ons priced in code; old selections keep their totals', () => {

@@ -1320,6 +1320,16 @@
     display: grid;
     gap: 1rem;
   }
+  /* Project card: services on one screen (Owner, 2026-10-09). */
+  .project-card-table td { vertical-align: top; }
+  .project-card-table tr.project-card-included td:first-child { padding-left: 22px; }
+  .project-card-crew { position: relative; }
+  .project-card-crew summary { cursor: pointer; list-style: none; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 13px; background: #fff; white-space: nowrap; }
+  .project-card-crew summary::-webkit-details-marker { display: none; }
+  .project-card-crew-list { display: grid; gap: 4px; margin-top: 6px; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; min-width: 180px; }
+  .project-card-crew-list label { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 13px; margin: 0; }
+  .project-card-crew-list input { margin: 0; flex: none; }
+  .project-card-missing { border-color: #f59e0b !important; background: #fffbeb !important; color: #92400e; }
   .order-clean-stage {
     border: 1px solid #bfdbfe;
     border-radius: 14px;
@@ -24077,13 +24087,13 @@ function orderOfferingNeedsSizes(o, offeringId) {
 }
 
 /** «+ Услуга»: any active service of any direction. */
-function projectOfferingPickerHtml(o) {
+function projectOfferingPickerHtml(o, handler = 'projectAddOfferingLine') {
   const groups = ORDER_PRIMARY_SERVICES.map(direction => {
     const items = serviceOfferingsFor(serviceOfferingDirection(direction.id));
     return items.length ? `<optgroup label="${academyEsc(direction.title)}">${items.map(item => `<option value="${academyEsc(item.id)}">${academyEsc(item.name)} · ${fmtMoney(Number(item.pricePerSqft) || 0)} / ${academyEsc(serviceOfferingUnitShort(item))}${serviceOfferingIncludes(item).length ? ` · входит: ${academyEsc(serviceOfferingIncludes(item).map(child => child.name).join(', '))}` : ''}</option>`).join('')}</optgroup>` : '';
   }).join('');
   if (!groups) return '';
-  return `<select class="text-sm" style="width:auto" aria-label="Добавить услугу в проект" onchange="if (this.value) projectAddOfferingLine('${o.id}', this.value)"><option value="">+ Услуга в проект</option>${groups}</select>`;
+  return `<select class="text-sm" style="width:auto" aria-label="Добавить услугу в проект" onchange="if (this.value) ${handler}('${o.id}', this.value)"><option value="">+ Услуга в проект</option>${groups}</select>`;
 }
 
 function projectAddOfferingLine(oid, offeringId) {
@@ -24502,6 +24512,259 @@ function projectLinesTableHtml(o, { money = false, economics = false } = {}) {
   const total = field => lines.reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
   const footer = money ? `<tr class="font-black"><td>Итого</td><td></td><td class="money">${fmtMoney(total('price'))}</td>${economics ? `<td class="money">${fmtMoney(total('materialCost'))}</td><td class="money">${fmtMoney(total('installerPay'))}</td>` : ''}<td colspan="2"></td></tr>` : '';
   return `<div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table project-lines-table"><thead><tr><th>Услуга</th><th class="money">Объём</th>${money ? '<th class="money">Клиенту</th>' : ''}${economics ? '<th class="money">Материал</th><th class="money">Специалисту</th>' : ''}<th>Исполнитель</th><th>Дата</th></tr></thead><tbody>${rows}${footer}</tbody></table></div>${economics && lines.some(line => line.kind === 'windows') ? '<div class="text-xs text-gray-500 mt-2">Материал по окнам — по складской цене плёнки; итог проекта считает расход по раскрою. Оплата специалисту — по ставкам услуг, до распределения по бригаде.</div>' : ''}`;
+}
+
+// ---------- КАРТОЧКА ПРОЕКТА: УСЛУГИ НА ОДНОМ ЭКРАНЕ ----------
+// Owner, 2026-10-09: the project card is one working screen. While the project
+// is priced, its services are rows — quantity and price, edited in the row.
+// Once the client accepted the proposal (production), each row also gets its
+// specialist and date, right in the row, and the schedule is built from them.
+
+const PROJECT_PRODUCTION_STATUSES = [
+  'proposal_accepted','installation_scheduled','installation_accepted','installation_en_route',
+  'installation_in_progress','installation_done','act_signed','payment_received','completed','review_received',
+];
+function projectCardInProduction(o) {
+  return PROJECT_PRODUCTION_STATUSES.includes(o?.status);
+}
+
+let projectCardEditing = false;
+/** Runs an estimate edit from the project card: the card re-renders in place. */
+function projectCardEdit(fn) {
+  projectCardEditing = true;
+  try { fn(); } finally { projectCardEditing = false; }
+}
+
+/** Per-sq-ft services the project chose that no window carries yet: they wait for the measurement. */
+function projectPendingSizedServices(o) {
+  const onWindows = new Set(measureAllWindows(o).map(({ win }) => win.offeringId).filter(Boolean));
+  return [...new Set(o?.offeringIds || [])]
+    .filter(id => !onWindows.has(id) && orderOfferingNeedsSizes(o, id))
+    .map(id => serviceOffering(id))
+    .filter(Boolean);
+}
+
+/** The manager's price range of a service, or null when its price is fixed by the directory. */
+function projectServicePriceRange(offering) {
+  const min = Number(offering?.minPricePerUnit) || 0;
+  const max = Number(offering?.maxPricePerUnit) || 0;
+  return min > 0 || max > 0 ? { min, max } : null;
+}
+
+function projectCardAddService(oid, offeringId) {
+  projectCardEdit(() => projectAddOfferingLine(oid, offeringId));
+}
+function projectCardSetQty(oid, sid, value) {
+  projectCardEdit(() => projectEstimateUpdateService(oid, sid, 'qty', value));
+}
+function projectCardQtyFromWindows(oid, sid) {
+  projectCardEdit(() => projectEstimateServiceQtyFromWindows(oid, sid));
+}
+function projectCardDeleteService(oid, sid) {
+  projectCardEdit(() => projectEstimateDeleteService(oid, sid));
+}
+function projectCardRemovePending(oid, offeringId) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser()) || o.offeringId === offeringId) return;
+  o.offeringIds = (o.offeringIds || []).filter(id => id !== offeringId);
+  projectEstimateMarkChanged(o, `Убрана услуга «${serviceOffering(offeringId)?.name || 'услуга'}»`);
+  save(); preservePositionForNextRender(); render();
+}
+
+/** Price of a line: per sq ft for the windows of a service, per unit for a quantity service, the total for other work. */
+function projectCardSetPrice(oid, key, value) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const line = projectLines(o).find(item => item.key === key);
+  if (!line || !['windows', 'quantity', 'work'].includes(line.kind)) return;
+  const price = Math.max(0, parseFloat(value) || 0);
+  const offering = serviceOffering(line.offeringId);
+  const range = projectServicePriceRange(offering);
+  if (line.kind === 'quantity' && !range) { preservePositionForNextRender(); render(); return; }
+  if (range && ((range.min > 0 && price < range.min) || (range.max > 0 && price > range.max))) {
+    alert(`Цена «${offering.name}»: от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}.`);
+    preservePositionForNextRender(); render();
+    return;
+  }
+  const source = line.sources[0];
+  if (line.kind === 'windows') line.windows.forEach(win => { win.pricePerSqft = price; });
+  else if (line.kind === 'quantity') {
+    source.unitPrice = price;
+    source.price = Math.round(price * (Number(source.qty) || 0) * 100) / 100;
+  } else source.price = price;
+  projectEstimateMarkChanged(o, `Изменена цена «${line.name}»`);
+  save(); preservePositionForNextRender(); render();
+}
+
+/**
+ * The saved schedule of every line. The first edit on the card writes the
+ * current assignments of all lines (the old project-wide crew and date), so
+ * no line loses its specialist when another one is planned.
+ */
+function projectCardSchedule(o, key) {
+  if (!o.serviceSchedules?.length) {
+    o.serviceSchedules = projectServiceGroups(o).map(group => {
+      const assignment = projectServiceAssignment(o, group);
+      return { id: group.id, installationAt: assignment.installationAt || '', installerIds: [...(assignment.installerIds || [])] };
+    });
+  }
+  let entry = o.serviceSchedules.find(item => item.id === key);
+  if (!entry) {
+    entry = { id: key, installationAt: '', installerIds: [] };
+    o.serviceSchedules.push(entry);
+  }
+  return entry;
+}
+/** The project's crew and first date follow its lines; quick lines keep their own crew for pay. */
+function projectCardSyncCrew(o) {
+  const list = o.serviceSchedules || [];
+  o.installerIds = [...new Set(list.flatMap(item => item.installerIds || []))];
+  const dates = list.map(item => item.installationAt).filter(Boolean).sort();
+  if (dates[0]) o.installationAt = dates[0];
+  else delete o.installationAt;
+  projectQuickLines(o).forEach(line => {
+    const assignment = list.find(item => item.id === `line:${line.id}`);
+    if (!assignment) return;
+    line.installerIds = [...(assignment.installerIds || [])];
+    line.startDate = assignment.installationAt ? projectQuickDateValue(datetimeLocalValue(assignment.installationAt).slice(0, 10)) : '';
+  });
+}
+function projectCardCanPlan(o) {
+  return !!o && projectCardInProduction(o) && orderUserCanSeeMoney(o, currentUser()) && orderUserCanManage(currentUser());
+}
+function projectCardToggleCrew(oid, key, userId, checked) {
+  const o = getOrder(oid);
+  if (!projectCardCanPlan(o) || !usersByRole('installer').some(user => user.id === userId)) return;
+  const entry = projectCardSchedule(o, key);
+  const crew = new Set(entry.installerIds || []);
+  if (checked) crew.add(userId); else crew.delete(userId);
+  entry.installerIds = [...crew];
+  projectCardSyncCrew(o);
+  save(); preservePositionForNextRender(); render();
+}
+function projectCardSetDate(oid, key, value) {
+  const o = getOrder(oid);
+  if (!projectCardCanPlan(o)) return;
+  const at = value ? new Date(value) : null;
+  if (at && Number.isNaN(at.getTime())) return;
+  const entry = projectCardSchedule(o, key);
+  entry.installationAt = at ? at.toISOString() : '';
+  projectCardSyncCrew(o);
+  save(); preservePositionForNextRender(); render();
+}
+/** Lines still missing a specialist or a date. */
+function projectCardUnplanned(o) {
+  return projectLines(o).filter(line => !line.installerIds.length || !line.installationAt);
+}
+/** All lines planned → the project moves to «Монтаж назначен» through the usual checks. */
+function projectCardConfirmInstallation(oid) {
+  const o = getOrder(oid);
+  if (!projectCardCanPlan(o) || o.status !== 'proposal_accepted') return;
+  const missing = projectCardUnplanned(o);
+  if (missing.length) return alert(`Укажите исполнителя и дату: ${missing.map(line => line.name).join(', ')}.`);
+  if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
+  const technical = orderTechnicalMeasurementIssues(o);
+  if (technical.length) return alert('Нельзя назначить монтаж — замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
+  if (!ensureProductionReadyForInstallation(o)) return;
+  if (changeStatus(oid, 'installation_scheduled', state.currentUserId, { skipClientAuto: true })) {
+    refreshManualFilmNeededBy(o);
+    save();
+    notifyClientEventScheduled(oid, 'install');
+  }
+}
+
+function projectCardCrewPicker(o, line) {
+  const installers = usersByRole('installer');
+  const names = line.installerIds.map(id => getUser(id)?.name).filter(Boolean);
+  return `<details class="project-card-crew"><summary class="${names.length ? '' : 'project-card-missing'}">${academyEsc(names.join(', ') || 'не назначен')} ▾</summary><div class="project-card-crew-list">${installers.map(user => `<label><input type="checkbox" style="width:auto" ${line.installerIds.includes(user.id) ? 'checked' : ''} onchange="projectCardToggleCrew('${o.id}','${jsQuote(line.key)}','${jsQuote(user.id)}',this.checked)"> ${academyEsc(user.name)}</label>`).join('') || '<span class="text-xs text-gray-500">Добавьте специалиста в разделе «Сотрудники».</span>'}</div></details>`;
+}
+
+/**
+ * The services of the project as rows. Pricing: quantity and price in the row.
+ * Production: specialist and date in the row too.
+ */
+function renderProjectCardServices(o, { money = false, economics = false, manage = false } = {}) {
+  const lines = projectLines(o);
+  const pending = projectPendingSizedServices(o);
+  const production = projectCardInProduction(o);
+  const plan = production && manage && money;
+  const edit = money && !['completed','review_received','act_signed','payment_received'].includes(o.status);
+  const columns = 3 + (money ? 1 : 0) + (production ? 2 : 0) + (edit ? 1 : 0);
+  const qtyCell = line => {
+    const source = line.sources[0];
+    if (!edit || line.kind === 'windows' || line.kind === 'quick') {
+      return line.kind === 'windows'
+        ? `${academyEsc(projectLineQtyText(line))}<div class="text-xs"><button class="btn-ghost text-xs" onclick="openManagerMeasureModal('${o.id}')">замер · ${line.windows.length} ${projectWindowsWord(line.windows.length)}</button></div>`
+        : academyEsc(projectLineQtyText(line));
+    }
+    const fromWindows = (line.kind === 'included' || line.unit === 'lft') && measureAllWindows(o).length;
+    return `<input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" style="width:84px" value="${Number(line.qty) || 0}" aria-label="Количество: ${academyEsc(line.name)}" onchange="projectCardSetQty('${o.id}','${jsQuote(source.id)}',this.value)"> <span class="text-xs text-gray-500">${academyEsc(line.unitShort)}</span>${fromWindows ? (source.qtyManual ? ` <button class="btn-ghost text-xs" onclick="projectCardQtyFromWindows('${o.id}','${jsQuote(source.id)}')">↺ по окнам</button>` : ' <span class="text-xs text-gray-500">по окнам</span>') : ''}`;
+  };
+  const priceCell = line => {
+    const source = line.sources[0];
+    if (line.kind === 'included') return '<span class="text-xs text-gray-500">в пакете</span>';
+    const offering = serviceOffering(line.offeringId);
+    const range = projectServicePriceRange(offering);
+    const per = line.kind === 'windows' ? 'sq ft' : line.unitShort;
+    const unitPrice = line.kind === 'windows'
+      ? (line.qty > 0 ? line.price / line.qty : Number(line.windows[0]?.pricePerSqft) || 0)
+      : line.kind === 'quantity' ? Number(source.unitPrice) || 0 : Number(line.price) || 0;
+    const label = line.kind === 'work' ? 'сумма' : `/ ${per}`;
+    const editable = edit && (line.kind === 'windows' || line.kind === 'work' || (line.kind === 'quantity' && range));
+    if (!editable) return `${fmtMoney(unitPrice)} <span class="text-xs text-gray-500">${academyEsc(label)}</span>`;
+    return `<input type="number" min="${range?.min || 0}" ${range?.max ? `max="${range.max}"` : ''} step="0.25" style="width:92px" value="${Math.round(unitPrice * 100) / 100}" aria-label="Цена: ${academyEsc(line.name)}" onchange="projectCardSetPrice('${o.id}','${jsQuote(line.key)}',this.value)"> <span class="text-xs text-gray-500">${academyEsc(label)}</span>${range ? `<div class="text-xs text-gray-500">от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}</div>` : ''}`;
+  };
+  const rows = lines.map(line => {
+    const source = line.sources[0];
+    const deletable = edit && ['quantity', 'work'].includes(line.kind);
+    const date = line.installationAt ? datetimeLocalValue(line.installationAt) : '';
+    return `<tr data-project-line="${academyEsc(line.key)}" class="${line.kind === 'included' ? 'project-card-included' : ''}">
+      <td data-label="Услуга"><b>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</b><div class="text-xs text-gray-500">${academyEsc(projectLineNote(line))}</div></td>
+      <td data-label="Объём">${qtyCell(line)}</td>
+      ${money ? `<td data-label="Цена">${priceCell(line)}</td><td data-label="Сумма" class="money"><b>${line.kind === 'included' ? '$0' : fmtMoney(line.price)}</b></td>` : ''}
+      ${production ? `<td data-label="Исполнитель">${plan ? projectCardCrewPicker(o, line) : academyEsc(projectLineCrewText(line).people)}</td>
+      <td data-label="Дата">${plan ? `<input type="datetime-local" class="${date ? '' : 'project-card-missing'}" style="min-width:180px" value="${date}" aria-label="Дата: ${academyEsc(line.name)}" onchange="projectCardSetDate('${o.id}','${jsQuote(line.key)}',this.value)">` : academyEsc(projectLineCrewText(line).date)}</td>` : ''}
+      ${edit ? `<td class="project-estimate-action">${deletable ? `<button class="btn-ghost text-red-600" aria-label="Убрать услугу ${academyEsc(line.name)}" onclick="projectCardDeleteService('${o.id}','${jsQuote(source.id)}')">✕</button>` : ''}</td>` : ''}
+    </tr>`;
+  }).concat(pending.map(offering => `<tr data-project-pending="${academyEsc(offering.id)}">
+      <td data-label="Услуга"><b>${academyEsc(offering.name)}</b><div class="text-xs text-gray-500">${academyEsc(primaryServiceInfo(offeringServiceType(offering))?.title || '')} · ждёт замера</div></td>
+      <td data-label="Объём"><button class="btn-ghost text-xs" onclick="openManagerMeasureModal('${o.id}')">внести замер</button></td>
+      ${money ? `<td data-label="Цена">${fmtMoney(Number(offering.pricePerSqft) || 0)} <span class="text-xs text-gray-500">/ sq ft</span></td><td data-label="Сумма" class="money text-gray-500">после замера</td>` : ''}
+      ${production ? '<td data-label="Исполнитель"></td><td data-label="Дата"></td>' : ''}
+      ${edit ? `<td class="project-estimate-action">${o.offeringId !== offering.id ? `<button class="btn-ghost text-red-600" aria-label="Убрать услугу ${academyEsc(offering.name)}" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">✕</button>` : ''}</td>` : ''}
+    </tr>`)).join('');
+  const total = field => lines.reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
+  const unplanned = production ? projectCardUnplanned(o) : [];
+  const head = `<tr><th>Услуга</th><th>Объём</th>${money ? '<th>Цена</th><th class="money">Сумма</th>' : ''}${production ? '<th>Исполнитель</th><th>Дата</th>' : ''}${edit ? '<th></th>' : ''}</tr>`;
+  return `<section class="order-clean-stage project-card-services" data-project-card-services>
+    <div class="order-clean-stage-head">
+      <div>
+        <div class="order-clean-stage-title">Услуги проекта</div>
+        <div class="order-clean-stage-sub">${production ? 'Исполнитель и дата — у каждой услуги в её строке.' : 'Расчёт: услуги, объём и цена. Исполнители появятся, когда клиент примет КП.'}</div>
+      </div>
+      ${money && edit ? `<div class="flex flex-wrap items-center gap-2">${projectOfferingPickerHtml(o, 'projectCardAddService') || '<span class="text-sm text-gray-500">Добавьте услуги в разделе «Услуги и цены».</span>'}</div>` : ''}
+    </div>
+    <div class="overflow-x-auto project-estimate-table-wrap mt-3"><table class="project-estimate-table project-card-table"><thead>${head}</thead><tbody>${rows || `<tr><td colspan="${columns}" class="text-gray-500">В проекте пока нет услуг.${money && edit ? ' Добавьте первую — «+ Услуга в проект».' : ''}</td></tr>`}</tbody></table></div>
+    ${money ? `<div class="flex flex-wrap justify-end gap-4 mt-2 text-sm">${economics ? `<span class="text-gray-500">материал ${fmtMoney(total('materialCost'))}</span><span class="text-gray-500">специалистам ${fmtMoney(total('installerPay'))}</span>` : ''}<span><b>клиенту ${fmtMoney(orderRevenue(o))}</b></span></div>` : ''}
+    ${production ? renderProjectCardSchedule(o, unplanned, plan) : ''}
+  </section>`;
+}
+
+/** The schedule, built from the lines: who works when, and what is still not planned. */
+function renderProjectCardSchedule(o, unplanned, plan) {
+  const byVisit = new Map();
+  projectLines(o).filter(line => line.installerIds.length && line.installationAt).forEach(line => {
+    const key = `${line.installationAt.slice(0, 16)}|${[...line.installerIds].sort().join(',')}`;
+    if (!byVisit.has(key)) byVisit.set(key, { at: line.installationAt, installerIds: line.installerIds, lines: [] });
+    byVisit.get(key).lines.push(line);
+  });
+  const visits = [...byVisit.values()].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  return `<div class="mt-3 project-card-schedule">
+    <div class="font-black text-sm">График</div>
+    ${visits.map(visit => `<div class="order-clean-list-row"><span><b>${fmtDateTime(visit.at)}</b> · ${academyEsc(visit.installerIds.map(id => getUser(id)?.name).filter(Boolean).join(', '))}</span><span class="text-sm text-gray-600">${visit.lines.map(line => `${academyEsc(line.name)} — ${academyEsc(projectLineQtyText(line))}`).join('; ')}</span></div>`).join('') || '<div class="text-sm text-gray-500 mt-1">Пока ничего не запланировано.</div>'}
+    ${unplanned.length ? `<div class="order-clean-note mt-2" style="border-color:#fcd34d;background:#fffbeb;color:#92400e">Не назначено: ${academyEsc(unplanned.map(line => line.name).join(', '))}</div>` : ''}
+    ${plan && o.status === 'proposal_accepted' ? `<div class="mt-2">${renderOrderActionCard({ icon: '🔧', title: 'Подтвердить монтаж', sub: unplanned.length ? `сначала назначьте: ${unplanned.length}` : 'все услуги назначены — проект перейдёт в «Монтаж назначен»', onclick: `projectCardConfirmInstallation('${o.id}')`, variant: unplanned.length ? 'warning' : 'primary' })}</div>` : ''}
+  </div>`;
 }
 
 /** Services for the crew: what, how much, who and when — no prices. */
@@ -25390,6 +25653,8 @@ function refreshQuickProjectEntry(oid) {
 
 function refreshProjectEstimateWorkspace(oid) {
   projectSyncServicesFromWindows(oid);
+  // An edit made on the project card stays on the card.
+  if (projectCardEditing) { preservePositionForNextRender(); render(); return; }
   refreshProjectWorkspaceBody(oid, 'project-estimate', renderProjectEstimateWorkspace, openProjectEstimateWorkspace);
 }
 
@@ -25729,14 +25994,6 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       `}
     </div>`;
 
-  const unassignedLines = lines.filter(line => !line.installerIds.length || !line.installationAt).length;
-  const servicesBody = `
-    ${projectLinesTableHtml(o, { money: canSeeMoney, economics: canSeeInternalEconomics })}
-    ${isInstaller ? '' : `<div class="order-clean-actions mt-3">
-      ${canSeeMoney ? `<div class="flex flex-wrap items-center gap-2">${projectOfferingPickerHtml(o) || '<span class="text-sm text-gray-500">Добавьте услуги в разделе «Услуги и цены».</span>'}</div>` : ''}
-      ${lines.length ? renderOrderActionCard({ icon: '👷', title: 'Исполнители и даты', sub: unassignedLines ? `не назначено: ${unassignedLines}` : 'назначены по каждой услуге', onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage || !o.productionReadyAt, variant: unassignedLines ? 'warning' : 'soft' }) : ''}
-    </div>`}`;
-
   const financeBody = canSeeMoney ? `
     <div class="order-clean-mini-grid">
       ${renderOrderCleanMini('Счёт', fmtMoney(orderRevenue(o)))}
@@ -25793,11 +26050,11 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
         </div>
         ${renderOrderCleanProgress(o)}
       </section>
+      ${renderProjectCardServices(o, { money: canSeeMoney, economics: canSeeInternalEconomics, manage: canManage })}
       <div class="order-workspace-grid">
         ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'client', icon: '👤', title: 'Клиент и связь', summary: c?.name || 'Данные и все каналы связи', badge: c?.phone || c?.email ? 'контакт' : 'заполнить', body: clientBody, color: '#2563eb', soft: '#eff6ff' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'site', icon: '📍', title: 'Объект', summary: projectSiteSummary(o, c) || projectAddress || 'Доступ и парковка не заполнены', badge: site.gateCode || site.parkingAvailable != null ? 'инструкции' : 'заполнить', body: siteBody, color: '#0369a1', soft: '#f0f9ff' })}
-        ${renderOrderWorkspaceTile({ orderId: o.id, key: 'services', icon: '🧩', title: 'Услуги проекта', summary: lines.length ? `${lines.length} ${projectPlural(lines.length, 'услуга', 'услуги', 'услуг')}${canSeeMoney ? ` · ${fmtMoney(orderRevenue(o))}` : ''}` : 'Услуги ещё не добавлены', badge: !lines.length ? 'добавить' : unassignedLines ? `без исполнителя: ${unassignedLines}` : 'назначены', body: servicesBody, color: '#0f766e', soft: '#f0fdfa' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'measurement', icon: '📐', title: 'Замер', summary: hasMeasurements ? `${rooms.length} комнат · ${windows.length} окон` : estimateReady ? 'Замер не нужен: услуги без размеров' : 'Размеры ещё не внесены', badge: hasMeasurements ? `${orderActualAreaSqft(o).toFixed(0)} sqft` : estimateReady ? 'не нужен' : 'нужно', body: measurementBody, color: '#7c3aed', soft: '#f5f3ff' })}
         ${canSeeMoney ? renderOrderWorkspaceTile({ orderId: o.id, key: 'estimate', icon: '🧮', title: estimateReady && !hasMeasurements ? 'Расчёт проекта' : 'Расчёт по замеру', summary: hasMeasurements ? `${windows.length} окон · ${orderActualAreaSqft(o).toFixed(0)} sqft · ${fmtMoney(orderRevenue(o))}` : estimateReady ? sizeFreeSummary : 'Сначала внесите помещения, окна и размеры', badge: estimateApproved ? 'подтверждён' : estimateReady ? 'рассчитать' : 'нужен замер', onclick: estimateReady ? `openProjectEstimateWorkspace('${o.id}')` : `openManagerMeasureModal('${o.id}')`, color: '#0f766e', soft: '#f0fdfa' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'documents', icon: workDocsOnly ? '🧰' : '📄', title: workDocsOnly ? 'Рабочие документы' : 'КП и документы', summary: workDocsOnly ? 'Без коммерческих сумм' : (proposal ? 'КП создано' : estimateApproved ? 'Расчёт готов — можно формировать КП' : 'Откройте расчёт и проверьте итог'), badge: workDocsOnly ? 'документы' : estimateApproved ? 'КП' : 'проверить', body: docsBody, color: '#d97706', soft: '#fff7ed' })}

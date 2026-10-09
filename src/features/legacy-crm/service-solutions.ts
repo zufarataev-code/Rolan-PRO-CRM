@@ -231,18 +231,25 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     }
     for (const id of Object.keys(oldUnits)) if (!(id in units)) units[id] = oldUnits[id];
     if (Object.keys(units).length) order.offeringUnits = units;
+    // A service is planned in its row on the project card (Owner, 2026-10-09):
+    // its specialist and date may be chosen one after the other, so a saved
+    // plan may still miss one of them. «Монтаж назначен» needs them all.
     if (JSON.stringify(order.serviceSchedules) !== JSON.stringify(oldOrder.serviceSchedules)) {
       if (!Array.isArray(order.serviceSchedules)) return 'Некорректные назначения услуг.';
       const seen = new Set();
       for (const plan of rows(order.serviceSchedules)) {
-        if (typeof plan.id !== 'string' || seen.has(plan.id) || !/^\w[\w:-]{0,240}$/.test(plan.id) || typeof plan.installationAt !== 'string' || Number.isNaN(Date.parse(plan.installationAt)) || !Array.isArray(plan.installerIds) || !plan.installerIds.length) return 'Укажите дату и исполнителей каждой услуги.';
+        if (typeof plan.id !== 'string' || seen.has(plan.id) || !/^\w[\w:-]{0,240}$/.test(plan.id) || !Array.isArray(plan.installerIds)) return 'Некорректные назначения услуг.';
+        if (plan.installationAt !== undefined && plan.installationAt !== '' && (typeof plan.installationAt !== 'string' || Number.isNaN(Date.parse(plan.installationAt)))) return 'Некорректная дата услуги.';
         seen.add(plan.id);
         if (plan.installerIds.some((id: unknown)=>!rows(next.users).some(user=>user.id===id && user.role==='installer'))) return 'Исполнитель услуги должен быть специалистом по установке.';
       }
     }
+    const complete = (plan: Row) => typeof plan.installationAt === 'string' && !Number.isNaN(Date.parse(plan.installationAt)) && Array.isArray(plan.installerIds) && plan.installerIds.length > 0;
+    if (order.status === 'installation_scheduled' && oldOrder.status !== 'installation_scheduled'
+      && Array.isArray(order.serviceSchedules) && rows(order.serviceSchedules).some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
     if (Array.isArray(order.serviceSchedules) && order.serviceSchedules.length) {
       order.installerIds = [...new Set(rows(order.serviceSchedules).flatMap(plan => Array.isArray(plan.installerIds) ? plan.installerIds : []))];
-      order.installationAt = rows(order.serviceSchedules).map(plan => plan.installationAt).filter(value=>typeof value === 'string').sort()[0];
+      order.installationAt = rows(order.serviceSchedules).map(plan => plan.installationAt).filter(value => typeof value === 'string' && value !== '').sort()[0];
     }
   }
   return null;
