@@ -24,7 +24,7 @@ test("the Rolan PRO agent remains reachable and usable on phones", () => {
   assert.match(html, /class="ai-agent-panel/);
   assert.match(html, /role="dialog" aria-modal="true" aria-label="Агент Rolan PRO"/);
   assert.match(html, /\.ai-agent-launcher \{[\s\S]*?bottom: calc\(82px \+ env\(safe-area-inset-bottom\)\);[\s\S]*?z-index: 64;/);
-  assert.match(html, /\.ai-agent-panel \{[\s\S]*?inset: 0;[\s\S]*?width: 100vw;[\s\S]*?height: 100dvh;/);
+  assert.match(html, /\.ai-agent-panel \{[\s\S]*?inset: 0 !important;[\s\S]*?margin: 0 !important;[\s\S]*?width: 100vw !important;[\s\S]*?height: 100dvh !important;/);
   assert.match(html, /\.ai-agent-header \{[\s\S]*?safe-area-inset-top/);
   assert.match(html, /\.ai-agent-input-bar \{[\s\S]*?safe-area-inset-bottom/);
 });
