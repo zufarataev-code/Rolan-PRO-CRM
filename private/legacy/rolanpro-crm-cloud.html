@@ -21276,7 +21276,7 @@ function renderTasksView() {
   const open = visible.filter(t => t.status !== 'done');
   const done = visible.filter(t => t.status === 'done').sort((a,b) => (b.doneAt||'').localeCompare(a.doneAt||''));
   const now = new Date();
-  const todayStr = now.toISOString().slice(0,10);
+  const todayStr = localDateKey(now);
 
   function bucketOf(t) {
     if (!t.dueAt) return 'nodate';
@@ -21305,6 +21305,7 @@ function renderTasksView() {
           ${t.dueAt ? `<span class="${overdue && t.status!=='done' ?'text-red-600 font-semibold':'text-gray-500'}">📅 ${fmtDate(t.dueAt)}</span>` : ''}
           ${team.length ? `<span class="tag bg-gray-100 text-gray-600">👥 ${team.map(u=>u.name).join(', ')}</span>` : isManager ? `<span class="tag bg-gray-100 text-gray-400">Вся команда</span>` : ''}
           ${client ? `<span class="tag bg-amber-50 text-amber-700">👤 ${client.name}</span>` : ''}
+          ${t.source === 'rolan_agent' ? `<span class="tag bg-violet-50 text-violet-700">✨ Агент Rolan PRO</span>` : ''}
         </div>
         <div class="flex items-center gap-2 mt-1">
           <span class="text-xs text-gray-500">Исполнитель:</span>
@@ -34946,6 +34947,10 @@ function agentTaskVisibleTo(user, task) {
 function agentTaskExists(key) {
   return (db.tasks || []).some(task => task.status !== 'done' && task.agentKey === key);
 }
+function localDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
 function agentCreateSuggestedTask(key, title, notes, responsibleId = '') {
   const actor = currentUser();
   if (!actor || !['owner','manager'].includes(actor.role)) return alert('Создавать задачи из рекомендаций может владелец или менеджер.');
@@ -34966,7 +34971,7 @@ function agentInsights() {
   const user = currentUser();
   if (!user) return [];
   const now = new Date();
-  const today = now.toISOString().slice(0,10);
+  const today = localDateKey(now);
   const orders = visibleOrdersForUser(user);
   const tasks = (db.tasks || []).filter(task => agentTaskVisibleTo(user, task));
   const insights = [];
@@ -34990,11 +34995,14 @@ function agentInsights() {
       .filter(order => !['completed','review_received','cancelled','lost'].includes(order.status))
       .map(order => ({ order, action: precisionManagerAction(order) }))
       .filter(item => item.action);
-    if (workflowActions.length) insights.push({
-      id:'workflow_actions', tone:'blue', eyebrow:'ПРОДАЖИ', title:`Следующих действий: ${workflowActions.length}`,
-      detail:`Первое по приоритету: ${workflowActions.sort((a,b) => b.action.priority - a.action.priority)[0].action.next}.`,
-      action:'agentOpenTasks()', actionLabel:'Разобрать', priority:80,
-    });
+    if (workflowActions.length) {
+      const firstWorkflow = workflowActions.sort((a,b) => b.action.priority - a.action.priority)[0];
+      insights.push({
+        id:'workflow_actions', tone:'blue', eyebrow:'ПРОДАЖИ', title:`Следующих действий: ${workflowActions.length}`,
+        detail:`Первое по приоритету: ${firstWorkflow.action.next}.`,
+        action:`agentOpenOrder('${firstWorkflow.order.id}')`, actionLabel:'Открыть проект', priority:80,
+      });
+    }
   }
   if (user.role === 'owner' && agentBankReviewCount > 0) insights.push({
     id:'bank_review', tone:'purple', eyebrow:'БУХГАЛТЕРИЯ', title:`Разобрать банковские операции: ${agentBankReviewCount}`,

@@ -30,9 +30,19 @@ test("agent suggestions are explainable and require confirmation before creating
   assert.match(suggestions, /agent_debt_\$\{user\.id\}/);
   assert.doesNotMatch(suggestions, /agent_debt_\$\{user\.id\}_\$\{today\}/);
   assert.match(suggestions, /precisionManagerAction\(order\)/);
+  assert.match(suggestions, /agentOpenOrder\('\$\{firstWorkflow\.order\.id\}'\)/);
+  assert.match(suggestions, /actionLabel:'Открыть проект'/);
   assert.doesNotMatch(suggestions, /nextActionAt/);
   assert.match(suggestions, /agentBankReviewCount > 0/);
   assert.match(suggestions, /Подтвердите предложенные категории/);
+});
+
+test("agent dates use the CRM user's local calendar day and agent tasks are auditable", () => {
+  assert.match(html, /function localDateKey\(value = new Date\(\)\)/);
+  assert.match(html, /const today = localDateKey\(now\)/);
+  assert.match(html, /const todayStr = localDateKey\(now\)/);
+  assert.match(html, /t\.source === 'rolan_agent'/);
+  assert.match(html, /Агент Rolan PRO/);
 });
 
 test("field roles receive operational guidance without company money", () => {
