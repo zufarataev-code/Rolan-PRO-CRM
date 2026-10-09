@@ -609,3 +609,11 @@ Owner reviewed the «проект — контейнер» scheme in chat on 202
 - The in-CRM proposal page no longer offers `PREMIUM_EXTRA_SERVICES` (renamed `LEGACY_PROPOSAL_EXTRAS`). The client never saw them (the public proposal page does not render them), and when selected they changed the KP total and the Stripe amount without reaching revenue, payroll or the work order. An extra is a directory service added to the project. A proposal that already selected an old add-on keeps its total and can only remove it.
 - The customer price per sq ft for removing old film is the owner's setting `settings.removalPricePerSqft` in «Услуги и цены» ($2.50 until set; the server lets only the owner change it). It prices new automatic removal lines; saved lines keep their price.
 - Not in this change: moving the stored work into one entity (that belongs to the PostgreSQL core migration), client-selectable optional services on the public proposal page with sync back into the project, and calendar colours by work type.
+
+## 2026-10-09 — The CRM Claude key is server-only
+
+- The Anthropic API key is a protected production environment secret. It must never be stored in `LegacyWorkspace.payload`, browser `localStorage`, rendered in Settings, committed to Git, or sent back to a client.
+- Owner and Manager CRM sessions call the same-origin authenticated `/api/v1/ai/claude` gateway. The server validates a bounded message payload, restricts models to the approved allowlist, adds the secret, and calls Anthropic.
+- Historical browser-stored AI keys are removed during legacy payload normalization and server sanitization. This supersedes the former direct-browser Anthropic integration and its `anthropic-dangerous-direct-browser-access` header.
+- Creating a key does not activate production. Funding the provider account, configuring the production secret, merging, deploying from `main`, and running an authenticated smoke test remain separate owner-authorized release actions.
+- Implemented for review on `codex/secure-anthropic-crm-agent` in PR #322; production deployment remains a separate owner-authorized action.

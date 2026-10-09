@@ -8256,7 +8256,7 @@ function migrateSchema() {
     s.integrations.facebook = { pageId: '', pageName: '', connected: false };
   }
   if (!s.integrations.ai) {
-    s.integrations.ai = { apiKey: '', model: 'claude-sonnet-4-6' };
+    s.integrations.ai = { model: 'claude-sonnet-4-6' };
   }
   if (!s.communication) {
     s.communication = {
@@ -8380,17 +8380,17 @@ function migrateSchema() {
   // ---- AI (Anthropic / Claude) ----
   if (!s.ai) {
     s.ai = {
-      apiKey: '',
       model: 'claude-haiku-4-5-20251001',
       enabled: true,
       systemPersona: 'Ты — co-founder и директор по развитию в RolanPRO CRM, компания тонирует окна (защитные/солнцезащитные/смарт плёнки) в Лос-Анджелесе. У тебя 20 лет опыта в нише. Отвечаешь по-партнёрски, прямо и по делу, на русском. Числа в долларах с $, площади в sqft. Если видишь проблему в данных или бизнес-процессе — говори прямо, без воды.',
     };
   }
-  // Patch existing AI config
-  if (s.ai && !s.ai.apiKey) {
-    s.ai.apiKey = '';
-    s.ai.enabled = true;
+  // API secrets are server-only. Purge legacy browser copies during migration.
+  if (s.ai && Object.prototype.hasOwnProperty.call(s.ai, 'apiKey')) delete s.ai.apiKey;
+  if (s.integrations?.ai && Object.prototype.hasOwnProperty.call(s.integrations.ai, 'apiKey')) {
+    delete s.integrations.ai.apiKey;
   }
+  if (s.ai) s.ai.enabled = true;
   // Patch existing Telegram token if empty
   if (s.telegramBotToken === '' || s.telegramBotToken == null) {
     s.telegramBotToken = '';
@@ -22164,16 +22164,14 @@ function renderSettings() {
 
         <div class="p-3 border rounded-lg">
           <div class="font-medium text-sm mb-1">🤖 ИИ-ассистент (Claude)</div>
-          <p class="text-xs text-gray-500 mb-2">API-ключ Anthropic для ИИ-функций: черновики ответов клиентам, сводки по заказам, помощь с расчётами. Ключ: <a href="https://console.anthropic.com" target="_blank" class="text-blue-600 underline">console.anthropic.com</a> → API Keys.</p>
-          <label class="text-xs">API-ключ</label>
-          <input id="int-ai-key" type="password" value="${s.integrations.ai?.apiKey||''}" placeholder="sk-ant-...">
+          <p class="text-xs text-gray-500 mb-2">Черновики ответов, сводки по заказам и помощь с расчётами работают через защищённый сервер CRM. API-ключ никогда не передаётся в браузер.</p>
+          <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800">🔒 Серверное подключение · доступ только Owner и Manager</div>
           <label class="text-xs mt-2">Модель</label>
           <select id="int-ai-model">
             <option value="claude-sonnet-4-6" ${s.integrations.ai?.model==='claude-sonnet-4-6'?'selected':''}>Claude Sonnet (баланс цены и качества)</option>
             <option value="claude-haiku-4-5-20251001" ${s.integrations.ai?.model==='claude-haiku-4-5-20251001'?'selected':''}>Claude Haiku (быстрый и дешёвый)</option>
           </select>
-          <button class="btn-ghost text-sm mt-2" onclick="testAiIntegration()">Проверить ключ</button>
-          <p class="text-xs text-amber-600 mt-2">⚠️ Ключ хранится в браузере. Не публикуйте ссылку на CRM посторонним.</p>
+          <button class="btn-ghost text-sm mt-2" onclick="testAiIntegration()">Проверить соединение</button>
         </div>
 
         <div class="p-3 border rounded-lg">
@@ -22496,9 +22494,8 @@ function renderSettings() {
 
     <div ${settingsPanelAttrs('ai')}>
       <h3 class="font-semibold mb-3">✨ AI-ассистент (Claude)</h3>
-      <p class="text-sm text-gray-600 mb-3">Получите ключ на <a href="https://console.anthropic.com/settings/keys" target="_blank" class="text-blue-600 underline">console.anthropic.com</a> → Settings → API Keys → Create Key. Минимум $5 пополнения хватит на ~10 000 запросов.</p>
-      <label>API Key</label>
-      <input type="password" value="${s.ai?.apiKey||''}" placeholder="..." onchange="db.settings.ai.apiKey=this.value.trim(); save();">
+      <p class="text-sm text-gray-600 mb-3">Ассистент подключён через защищённый сервер CRM. Секрет Anthropic хранится только в серверном окружении и не попадает в браузер, localStorage или код.</p>
+      <div class="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800">🔒 Защищённое серверное подключение · Owner/Manager</div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
         <div>
           <label>Модель</label>
@@ -22511,7 +22508,7 @@ function renderSettings() {
       </div>
       <label class="mt-3">Системный промпт (тон ассистента)</label>
       <textarea rows="3" onchange="db.settings.ai.systemPersona=this.value; save();">${s.ai?.systemPersona||''}</textarea>
-      <p class="text-xs text-gray-500 mt-2">⚠️ API-ключ хранится в localStorage браузера. Не публикуйте этот файл в открытом интернете — кто угодно через DevTools украдёт ключ.</p>
+      <p class="text-xs text-gray-500 mt-2">Модель и тон можно менять здесь. Сам API-ключ управляется только на сервере.</p>
       <div class="mt-3 flex gap-2">
         <button class="btn-primary text-sm" onclick="aiTestConnection()">🧪 Тест соединения</button>
         <button class="btn-ghost text-sm" onclick="toggleAiSidebar()">💬 Открыть AI чат</button>
@@ -22649,7 +22646,6 @@ function saveIntegrations() {
   i.facebook.pageId = document.getElementById('int-fb-pageid').value.trim();
   i.facebook.connected = document.getElementById('int-fb-connected').checked;
   i.ai = i.ai || {};
-  i.ai.apiKey = document.getElementById('int-ai-key').value.trim();
   i.ai.model = document.getElementById('int-ai-model').value;
   save(); render();
   alert('Интеграции сохранены');
@@ -22659,32 +22655,14 @@ function saveIntegrations() {
 // Универсальный вызов ИИ. Используется всеми будущими ИИ-функциями CRM.
 async function aiComplete(prompt, systemPrompt) {
   const cfg = (db.settings.integrations || {}).ai || {};
-  if (!cfg.apiKey) throw new Error('ИИ не настроен: добавьте API-ключ в Настройки → Интеграции');
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': cfg.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: cfg.model || 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      ...(systemPrompt ? { system: systemPrompt } : {}),
-      messages: [{ role: 'user', content: prompt }],
-    }),
+  return callClaude([{ role: 'user', content: prompt }], {
+    model: cfg.model || 'claude-sonnet-4-6',
+    maxTokens: 1024,
+    system: systemPrompt,
   });
-  const data = await resp.json();
-  if (!resp.ok) throw new Error(data.error?.message || ('HTTP ' + resp.status));
-  return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
 }
 async function testAiIntegration() {
-  const key = document.getElementById('int-ai-key').value.trim();
-  if (!key) { alert('Вставьте API-ключ'); return; }
-  // временно применяем введённый ключ для теста
   db.settings.integrations.ai = db.settings.integrations.ai || {};
-  db.settings.integrations.ai.apiKey = key;
   db.settings.integrations.ai.model = document.getElementById('int-ai-model').value;
   try {
     const answer = await aiComplete('Ответь одним словом: работаешь?');
@@ -34860,28 +34838,26 @@ function clearRouteOnMap() {
 async function callClaude(messages, opts) {
   opts = opts || {};
   const cfg = db.settings.ai || {};
-  if (!cfg.apiKey) throw new Error('Не указан Anthropic API key (Настройки → AI)');
   const body = {
     model: opts.model || cfg.model || 'claude-haiku-4-5-20251001',
     max_tokens: opts.maxTokens || 1500,
     messages,
   };
   if (opts.system || cfg.systemPersona) body.system = opts.system || cfg.systemPersona;
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+  const r = await fetch('/api/v1/ai/claude', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': cfg.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
     },
+    credentials: 'same-origin',
+    cache: 'no-store',
     body: JSON.stringify(body),
   });
   const data = await r.json();
   if (!r.ok) {
-    throw new Error('Anthropic: ' + (data.error?.message || r.status));
+    throw new Error(data.errors?.[0]?.message || ('AI server ' + r.status));
   }
-  return data.content?.[0]?.text || '';
+  return data.data?.text || '';
 }
 
 // Build a compact summary of CRM state for AI context
@@ -35307,7 +35283,7 @@ function renderAiSidebar() {
         <input id="ai-input" placeholder="Спросите что-нибудь…" class="flex-1" onkeydown="if(event.key==='Enter') aiSendInput();">
         <button class="btn-primary" onclick="aiSendInput()">→</button>
       </div>
-      <div class="text-xs text-gray-400 mt-1">${cfg.apiKey ? '✓ API key установлен' : '⚠ Установите API key в Настройках → AI'}</div>
+      <div class="text-xs text-emerald-600 mt-1">🔒 Защищённое серверное подключение</div>
     </div>
     `}
   </div>`;
@@ -35577,7 +35553,6 @@ async function sendWhatsAppViaTwilio(to, body, context = {}) {
   });
 }
 async function aiTestConnection() {
-  if (!db.settings.ai?.apiKey) { alert('Введите API key выше'); return; }
   try {
     const reply = await callClaude([{ role: 'user', content: 'Ответь одним словом: работает?' }], { maxTokens: 50 });
     alert('✓ AI работает\n\nОтвет: ' + reply);
