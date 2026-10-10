@@ -277,27 +277,62 @@ test('when two crews finish at once, the merged save closes the project; its fil
   assert.deepEqual(plain(c.projectCloseFinishedProjects()), ['o']);
   assert.deepEqual([o.status, o.installationDoneAt, open.status], ['installation_done', '2026-10-16T19:00:00.000Z', 'installation_in_progress']);
   const persist = html.slice(html.indexOf('async function cloudPersist('), html.indexOf('async function cloudPersistConfirmed('));
-  assert.match(persist, /const finished = \[\.\.\.projectCloseFinishedProjects\(\), \.\.\.projectTakeServiceClosedNotices\(\)\];\n        if \(finished\.length\) \{ finishedByMerge\.push\(\.\.\.finished\); snapshot = JSON\.parse\(JSON\.stringify\(db\)\); \}/);
-  assert.match(persist, /cloudStatus\('Сохранено', 'green'\);\n      if \(finishedByMerge\.length\) projectNotifyFinishedProjects\(finishedByMerge\);/);
+  assert.match(persist, /projectYieldTakenFollowUps\(remotePayload\);\n        snapshot = mergeCloudWorkspaceSnapshots/);
+  assert.match(persist, /const finished = projectCloseFinishedProjects\(\);\n        if \(finished\.length\) finishedByMerge\.push\(\.\.\.finished\);\n        if \(finished\.length \+ projectClaimServiceFollowUps\(\)\) snapshot = JSON\.parse\(JSON\.stringify\(db\)\);/);
+  assert.match(persist, /cloudStatus\('Сохранено', 'green'\);\n      if \(finishedByMerge\.length\) projectNotifyFinishedProjects\(finishedByMerge\);\n      projectRunClaimedFollowUps\(snapshot\);/);
   // The same notifications as a manual close, once the merged state is saved.
   const sent: string[] = [];
   c.notifyStatusChange = (order: Row) => sent.push(`staff:${order.id}`);
   c.autoNotifyClient = (order: Row, status: string) => sent.push(`client:${order.id}:${status}`);
   c.projectNotifyFinishedProjects(['o', 'p']);
   assert.deepEqual(sent, ['staff:o', 'client:o:installation_done']);
-  // The manager's next load writes off the film of projects closed through their services, once.
+  assert.match(html, /const claimedFollowUps = projectClaimServiceFollowUps\(\);/);
+});
+
+test('a project closed through its services: one manager CRM claims its write-off and notices, runs them once the claim is saved', () => {
+  const { c, db } = load({ id: 'm1', role: 'manager' });
   let deducted = 0;
+  const sent: string[] = [];
   c.autoDeductInventoryForOrder = (order: Row) => { deducted += 1; order._inventoryDeducted = true; };
+  c.notifyStatusChange = (order: Row) => sent.push(`staff:${order.id}`);
+  c.autoNotifyClient = (order: Row) => sent.push(`client:${order.id}`);
   db.inventory = [{ id: 'roll' }];
-  assert.equal(c.projectDeductServiceClosedProjects(), 1);
-  assert.equal(c.projectDeductServiceClosedProjects(), 0);
-  assert.equal(deducted, 1);
-  assert.match(html, /const deductedClosedProjects = projectDeductServiceClosedProjects\(\);/);
-  // Projects the server closed: the manager's CRM sends their notices once and clears the mark.
-  db.orders.push({ id: 'srv', status: 'installation_done', servicesClosedNotice: 'pending' });
-  assert.deepEqual(plain(c.projectTakeServiceClosedNotices()), ['srv']);
-  assert.deepEqual(plain(c.projectTakeServiceClosedNotices()), []);
-  assert.match(html, /const serviceClosedNotices = projectTakeServiceClosedNotices\(\);\n    projectNotifyFinishedProjects\(serviceClosedNotices\);/);
+  const crews = { ...project('installation_done'), id: 'crews', serviceProgress: { 'line:z': { status: 'done' } } };
+  const server = { ...project('installation_done'), id: 'server', serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
+  const taken: Row = { ...project('installation_done'), id: 'taken', serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
+  db.orders.push(crews, server, taken);
+  assert.equal(c.projectClaimServiceFollowUps(), 3);
+  assert.equal(c.projectClaimServiceFollowUps(), 0, 'claimed once');
+  assert.equal(server.servicesClosedNotice, undefined);
+  // Nothing runs before the claim is saved.
+  assert.equal(c.projectRunClaimedFollowUps({ orders: [] }), 0);
+  assert.equal(deducted + sent.length, 0);
+  // Another manager's CRM saved its claim on «taken» first: it is theirs.
+  c.projectYieldTakenFollowUps({ orders: [{ id: 'taken', servicesFollowUpClaim: 'other-session' }] });
+  assert.equal(taken.servicesFollowUpClaim, 'other-session');
+  assert.equal(c.projectRunClaimedFollowUps(plain(db)), 2);
+  assert.equal(deducted, 2);
+  assert.deepEqual(sent, ['staff:server', 'client:server']);
+  assert.equal(c.projectRunClaimedFollowUps(plain(db)), 0, 'run once');
+});
+
+test('a manager removes the last open service of a running installation: the project closes', () => {
+  const { c, db } = load({ id: 'm1', role: 'manager' });
+  const o = project('installation_in_progress');
+  o.serviceProgress = { 'offering:a1': { status: 'done', doneAt: '2026-10-14T20:00:00.000Z' } };
+  db.orders.push(o);
+  const synced: string[] = [];
+  c.projectSyncStatusFromServices = (order: Row) => synced.push(order.id);
+  c.projectSettleChangedServices(false);
+  c.projectSettleChangedServices();
+  assert.deepEqual(synced, [], 'no change, nothing to settle');
+  o.extraServices = [];
+  c.projectSettleChangedServices(false);
+  assert.deepEqual(synced, [], 'a change from another CRM is only noted');
+  o.extraServices = [{ id: 'k', label: 'Мойка', qty: 1 }];
+  c.projectSettleChangedServices();
+  assert.deepEqual(synced, ['o']);
+  assert.match(html, /cloudScheduleSave\(\);\n    setTimeout\(\(\) => projectSettleChangedServices\(\), 0\);/);
 });
 
 test('field save: a started service cannot be taken back; closing takes the date from the services', () => {

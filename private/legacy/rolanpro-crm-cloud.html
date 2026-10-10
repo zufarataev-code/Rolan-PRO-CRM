@@ -16379,7 +16379,10 @@ function save() {
   if (db?.purchaseRequests && db?.vendors && db?.settings?.catalog) ensureAutoDraftPurchaseRequests();
   projectMonthRevenueCache = null;
   localStorage.setItem('rolanpro_crm', JSON.stringify(db));
-  if (ROLANPRO_CLOUD && cloudReady) cloudScheduleSave();
+  if (ROLANPRO_CLOUD && cloudReady) {
+    cloudScheduleSave();
+    setTimeout(() => projectSettleChangedServices(), 0);
+  }
 }
 function T(key) {
   return (I18N[state.lang] && I18N[state.lang][key]) || I18N.ru[key] || key;
@@ -25174,30 +25177,78 @@ function projectNotifyFinishedProjects(orderIds) {
   });
 }
 /**
- * The material of a project closed through its services is written off by the
- * next owner/manager CRM, once (a field specialist's CRM cannot change stock).
+ * Follow-ups of a project closed through its services rather than by a
+ * manager's own «Монтаж выполнен»: its film is written off (a field
+ * specialist's CRM cannot change stock), and the notices of a project the
+ * server closed are sent. One owner/manager CRM claims each project with a
+ * saved mark first — the server accepts that save from one session only (the
+ * revision check) — and runs them once its claim is saved.
  */
-function projectDeductServiceClosedProjects() {
+const PROJECT_FOLLOW_UP_TOKEN = Math.random().toString(36).slice(2) + Date.now().toString(36);
+let projectClaimedFollowUps = [];
+function projectClaimServiceFollowUps() {
   const user = currentUser();
   if (!user || !orderUserCanManage(user)) return 0;
   let count = 0;
   (db.orders || []).forEach(o => {
-    if (o._inventoryDeducted || !CLOSED_PROJECT_STATUSES.includes(o.status) || !o.serviceProgress || !Object.keys(o.serviceProgress).length) return;
-    if (!(db.inventory || []).length) return;
-    try { autoDeductInventoryForOrder(o); count += 1; } catch (error) { console.warn('Inventory deduct failed', error); }
+    if (o.servicesFollowUpClaim || !CLOSED_PROJECT_STATUSES.includes(o.status)) return;
+    const notify = o.servicesClosedNotice === 'pending';
+    const deduct = !o._inventoryDeducted && Object.keys(o.serviceProgress || {}).length > 0 && (db.inventory || []).length > 0;
+    if (!notify && !deduct) return;
+    o.servicesFollowUpClaim = PROJECT_FOLLOW_UP_TOKEN;
+    delete o.servicesClosedNotice;
+    projectClaimedFollowUps.push({ id: o.id, notify, deduct });
+    count += 1;
   });
   return count;
 }
+/** A save conflict: a project another CRM claimed first is theirs. */
+function projectYieldTakenFollowUps(remotePayload) {
+  const remoteOrders = new Map((remotePayload?.orders || []).map(o => [o.id, o]));
+  projectClaimedFollowUps = projectClaimedFollowUps.filter(claim => {
+    const remote = remoteOrders.get(claim.id);
+    if (!remote?.servicesFollowUpClaim || remote.servicesFollowUpClaim === PROJECT_FOLLOW_UP_TOKEN) return true;
+    const o = getOrder(claim.id);
+    if (o) {
+      o.servicesFollowUpClaim = remote.servicesFollowUpClaim;
+      if (remote.servicesClosedNotice) o.servicesClosedNotice = remote.servicesClosedNotice;
+    }
+    return false;
+  });
+}
+/** After a save: the follow-ups whose claim it carried. */
+function projectRunClaimedFollowUps(savedPayload) {
+  const saved = new Map((savedPayload?.orders || []).map(o => [o.id, o]));
+  const ready = projectClaimedFollowUps.filter(claim => saved.get(claim.id)?.servicesFollowUpClaim === PROJECT_FOLLOW_UP_TOKEN);
+  if (!ready.length) return 0;
+  projectClaimedFollowUps = projectClaimedFollowUps.filter(claim => !ready.includes(claim));
+  let deducted = 0;
+  ready.forEach(claim => {
+    const o = getOrder(claim.id);
+    if (!o) return;
+    if (claim.deduct && !o._inventoryDeducted) {
+      try { autoDeductInventoryForOrder(o); deducted += 1; } catch (error) { console.warn('Inventory deduct failed', error); }
+    }
+    if (claim.notify) projectNotifyFinishedProjects([o.id]);
+  });
+  if (deducted) save();
+  return ready.length;
+}
 /**
- * Projects the server closed when a field save marked their last service:
- * the owner/manager's CRM sends their «Монтаж выполнен» notices, once.
+ * The project follows its services (Owner, 2026-10-10): when this CRM changes
+ * the services of a running installation — removes the one still open — and
+ * every service left is done, it closes. Changes that came from another CRM
+ * are only noted (act = false); that CRM settles them.
  */
-function projectTakeServiceClosedNotices() {
+const projectServiceSignatures = new Map();
+function projectSettleChangedServices(act = true) {
   const user = currentUser();
-  if (!user || !orderUserCanManage(user)) return [];
-  return (db.orders || []).filter(o => o.servicesClosedNotice === 'pending').map(o => {
-    delete o.servicesClosedNotice;
-    return o.id;
+  const manage = act && user && orderUserCanManage(user);
+  (db.orders || []).forEach(o => {
+    const signature = projectServiceGroups(o).map(group => group.id).sort().join('|');
+    const before = projectServiceSignatures.get(o.id);
+    projectServiceSignatures.set(o.id, signature);
+    if (manage && before !== undefined && before !== signature && PROJECT_SCHEDULED_STATUSES.includes(o.status)) projectSyncStatusFromServices(o);
   });
 }
 /** Closing an installation by hand finishes every service still open. */
@@ -39597,11 +39648,14 @@ async function cloudPersist(options = {}) {
         const latestResult = await latestResponse.json();
         if (!latestResponse.ok) throw new Error(latestResult?.errors?.[0]?.message || 'workspace refresh failed');
         const remotePayload = latestResult.data.payload;
+        projectYieldTakenFollowUps(remotePayload);
         snapshot = mergeCloudWorkspaceSnapshots(cloudBaseSnapshot, JSON.parse(JSON.stringify(db)), remotePayload);
         db = cloneCloudWorkspaceValue(snapshot);
+        projectSettleChangedServices(false);
         // The other crew may have finished the last open service meanwhile.
-        const finished = [...projectCloseFinishedProjects(), ...projectTakeServiceClosedNotices()];
-        if (finished.length) { finishedByMerge.push(...finished); snapshot = JSON.parse(JSON.stringify(db)); }
+        const finished = projectCloseFinishedProjects();
+        if (finished.length) finishedByMerge.push(...finished);
+        if (finished.length + projectClaimServiceFollowUps()) snapshot = JSON.parse(JSON.stringify(db));
         cloudRevision = latestResult.data.revision;
         cloudBaseSnapshot = cloneCloudWorkspaceValue(remotePayload);
         localStorage.setItem('rolanpro_crm', JSON.stringify(db));
@@ -39612,6 +39666,7 @@ async function cloudPersist(options = {}) {
       cloudBaseSnapshot = cloneCloudWorkspaceValue(snapshot);
       cloudStatus('Сохранено', 'green');
       if (finishedByMerge.length) projectNotifyFinishedProjects(finishedByMerge);
+      projectRunClaimedFollowUps(snapshot);
       return true;
     }
     cloudSaveQueued = true;
@@ -39701,12 +39756,11 @@ async function cloudBoot() {
     cloudReady = true;
     startCanonicalLeadsPolling();
     localStorage.setItem('rolanpro_crm', JSON.stringify(db));
-    // Projects the server closed when their last service was done: the
-    // owner/manager's CRM writes off their film like a manual close does.
-    const deductedClosedProjects = projectDeductServiceClosedProjects();
-    const serviceClosedNotices = projectTakeServiceClosedNotices();
-    projectNotifyFinishedProjects(serviceClosedNotices);
-    if (persistClientNotificationMigration || persistOfficialSupplierMigration || roleWasSynchronized || deductedClosedProjects || serviceClosedNotices.length) cloudScheduleSave();
+    // Projects closed through their services: the owner/manager's CRM claims
+    // their film write-off and notices; they run once the claim is saved.
+    const claimedFollowUps = projectClaimServiceFollowUps();
+    projectSettleChangedServices(false);
+    if (persistClientNotificationMigration || persistOfficialSupplierMigration || roleWasSynchronized || claimedFollowUps) cloudScheduleSave();
     parseHash();
     render();
     cloudStatus('Сохранено', 'green');
