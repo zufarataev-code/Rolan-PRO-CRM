@@ -319,6 +319,9 @@ test('a project closed through its services: one manager CRM claims its write-of
   c.projectFetchSavedOrders = async () => serverOrders();
   let clock = now;
   const run = (payload: Row) => c.projectRunClaimedFollowUps(payload, () => clock);
+  // Each step counts once the server confirmed its save.
+  let confirmed = 0;
+  c.projectPersistFollowUps = async () => { confirmed += 1; return true; };
   assert.equal(c.projectClaimServiceFollowUps(now), 4);
   assert.equal(c.projectClaimServiceFollowUps(now), 0, 'claimed once');
   assert.equal(server.servicesClosedNotice, undefined);
@@ -331,6 +334,8 @@ test('a project closed through its services: one manager CRM claims its write-of
   c.projectYieldTakenFollowUps({ orders: [{ id: 'taken', servicesFollowUpClaim: { token: 'other', at: '2026-10-20T12:00:00.000Z' } }, { id: 'stale', servicesFollowUpClaim: stale.servicesFollowUpClaim && { token: 'gone', at: '2026-10-20T11:00:00.000Z' } }] });
   assert.equal(taken.servicesFollowUpClaim.token, 'other');
   assert.equal(await run(plain(db)), 3);
+  assert.equal(confirmed, 5, 'each staff notice (server, stale) and each finished claim (3) confirmed');
+  assert.match(html, /async function projectPersistFollowUps\(\) \{\n  save\(\);\n  return ROLANPRO_CLOUD \? cloudPersistConfirmed\(\) : true;/);
   assert.equal(deducted, 3);
   assert.deepEqual(sent, ['staff:server', 'client:server', 'staff:stale', 'client:stale']);
   assert.ok(server.servicesFollowUpClaim.doneAt && stale.servicesFollowUpClaim.doneAt, 'marked done for every later CRM');

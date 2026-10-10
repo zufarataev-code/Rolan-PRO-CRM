@@ -25220,6 +25220,11 @@ function projectYieldTakenFollowUps(remotePayload) {
     return false;
   });
 }
+/** Saves now and waits for the server to confirm it (a follow-up step counts once saved). */
+async function projectPersistFollowUps() {
+  save();
+  return ROLANPRO_CLOUD ? cloudPersistConfirmed() : true;
+}
 /** The saved orders on the server now (for checking a claim before it runs). */
 async function projectFetchSavedOrders() {
   const response = await fetch('/api/v1/legacy-crm/state', { cache: 'no-store' });
@@ -25261,13 +25266,14 @@ async function projectRunClaimedFollowUps(savedPayload, now = () => Date.now()) 
       if (!o.servicesFollowUpClaim.staffAt) {
         notifyStatusChange({ ...o, status: 'installation_done' });
         o.servicesFollowUpClaim = { ...o.servicesFollowUpClaim, staffAt: new Date().toISOString() };
+        if (!(await projectPersistFollowUps())) continue;
       }
       try { await autoNotifyClient(o, 'installation_done'); } catch (error) { console.warn('Completion notice failed', error); save(); continue; }
     }
     const current = getOrder(claim.id);
     if (current?.servicesFollowUpClaim?.token !== PROJECT_FOLLOW_UP_TOKEN) continue;
     current.servicesFollowUpClaim = { ...current.servicesFollowUpClaim, doneAt: new Date().toISOString() };
-    done += 1;
+    if (await projectPersistFollowUps()) done += 1;
   }
   save();
   return done;
