@@ -65,6 +65,39 @@ function projectPlans(order: Row): Row[] {
     };
   });
 }
+/** A plan with its specialist and date. */
+const completePlan = (plan: Row) => typeof plan.installationAt === 'string' && !Number.isNaN(Date.parse(plan.installationAt)) && Array.isArray(plan.installerIds) && plan.installerIds.length > 0;
+/**
+ * An installation under way whose every service is done and planned
+ * (projectCloseFinishedProjects): it closes as «Монтаж выполнен».
+ */
+export function projectServicesFinished(order: Row, payload: Row): boolean {
+  if (!SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) return false;
+  const ids = serviceGroupIds(order);
+  const progress = object(order.serviceProgress);
+  if (!ids.length || ids.some(id => object(progress[id]).status !== 'done')) return false;
+  const plans = projectPlans(order);
+  if (plans.some(plan => !completePlan(plan)) || ids.some(id => !plans.some(plan => plan.id === id))) return false;
+  return !pendingSizedOfferings(order, rows(object(payload.settings).serviceOfferings)).length;
+}
+const DIRECTION_TITLES: Record<string, string> = {
+  smart_film: 'Смарт плёнка', solar_film: 'Солнцезащитная плёнка', protective_film: 'Защитная плёнка',
+  decorative_film: 'Декоративная плёнка', privacy_film: 'Приватная плёнка',
+};
+/** The name of a service of a project, as its row shows it (projectServiceGroups). */
+export function serviceGroupName(order: Row, id: string, payload: Row): string {
+  const [kind, key] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
+  if (kind === 'line') {
+    const line = rows(order.extraServices).find(item => String(item.id) === key);
+    return String(line?.offeringName || line?.label || 'Услуга');
+  }
+  if (kind === 'offering') {
+    const win = scope(order).find(item => item.offeringId === key && item.offeringName);
+    const offering = rows(object(payload.settings).serviceOfferings).find(item => item.id === key);
+    return String(win?.offeringName || offering?.name || 'Услуга');
+  }
+  return DIRECTION_TITLES[key] || DIRECTION_TITLES.solar_film;
+}
 /** Owner-only economics of a service: the installer rate and the material cost per unit. */
 const OWNER_OFFERING_FIELDS = ['installerRatePerSqft', 'materialCostPerUnit'] as const;
 
@@ -313,7 +346,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         if (plan.installerIds.some((id: unknown)=>!rows(next.users).some(user=>user.id===id && user.role==='installer'))) return 'Исполнитель услуги должен быть специалистом по установке.';
       }
     }
-    const complete = (plan: Row) => typeof plan.installationAt === 'string' && !Number.isNaN(Date.parse(plan.installationAt)) && Array.isArray(plan.installerIds) && plan.installerIds.length > 0;
+    const complete = completePlan;
     const schedulesChanged = stableJson(order.serviceSchedules) !== stableJson(oldOrder.serviceSchedules);
     // A finished project keeps its crew and dates: they are its history and its pay.
     if (schedulesChanged && CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status))) return 'Проект закрыт: исполнителей и даты услуг не меняют.';

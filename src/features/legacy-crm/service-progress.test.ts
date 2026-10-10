@@ -316,3 +316,38 @@ test('field save: a started service cannot be taken back; closing takes the date
   assert.equal(closed.orders[0].installationDoneAt, closed.orders[0].serviceProgress['line:z'].doneAt);
   assert.notEqual(closed.orders[0].installationDoneAt, '2020-01-01T00:00:00.000Z');
 });
+
+test('field save: the last service done closes the project on the server; the history of marks is the server\'s', () => {
+  const current: Row = {
+    settings: { serviceOfferings: [] },
+    users: [{ id: 'i1', role: 'installer' }, { id: 'i2', role: 'installer' }], clients: [], tasks: [],
+    orders: [{ id: 'o', status: 'installation_in_progress', serviceType: 'smart_film', measurements: { rooms: [] }, installerIds: ['i1', 'i2'],
+      extraServices: [{ id: 'z', label: 'Мойка стёкол', qty: 1 }, { id: 'y', label: 'Демонтаж', qty: 1 }],
+      serviceSchedules: [
+        { id: 'line:z', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i1'] },
+        { id: 'line:y', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i2'] },
+      ],
+      serviceProgress: { 'line:y': { status: 'done', doneAt: '2026-10-01T18:00:00.000Z', doneBy: 'i2' } },
+      timeline: [{ at: '2026-10-01T18:00:00.000Z', key: 'service_done', by: 'i2', note: 'Демонтаж' }] }],
+  };
+  // The browser marks the last service but its «Монтаж выполнен» never came,
+  // and it sends a made-up mark of its own.
+  const submitted = structuredClone(current);
+  submitted.orders[0].serviceProgress['line:z'] = { status: 'done' };
+  submitted.orders[0].timeline = [{ at: '2020-01-01T00:00:00.000Z', key: 'service_done', by: 'i2', note: 'Подделка' }];
+  const merged = mergeFieldWorkspace(current, submitted, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  const order = merged.orders[0];
+  assert.equal(order.status, 'installation_done');
+  assert.equal(order.installationDoneAt, order.serviceProgress['line:z'].doneAt);
+  assert.deepEqual(order.timeline.map((event: Row) => [event.key, event.by, event.note]), [
+    ['service_done', 'i2', 'Демонтаж'],
+    ['service_done', 'i1', 'Мойка стёкол'],
+    ['installation_done', 'i1', 'Все услуги выполнены'],
+  ]);
+  assert.equal(prepareServiceSolutions(current, merged, false), null, 'the closed project passes the closing checks');
+  // A browser that did not see it close cannot reopen it.
+  const stale = structuredClone(submitted);
+  const reopened = mergeFieldWorkspace(merged, stale, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  assert.equal(reopened.orders[0].status, 'installation_done');
+  assert.equal(reopened.orders[0].timeline.filter((event: Row) => event.key === 'service_done').length, 2);
+});
