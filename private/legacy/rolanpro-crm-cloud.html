@@ -11204,10 +11204,21 @@ function measureStudioSelectedDefaults(order) {
   const smart = win?.smart || {};
   return { room, win, smart };
 }
+/** Directions this project measures: those of its chosen services that need sizes (none chosen — all). */
+function measureStudioProjectScopes(order) {
+  return order && (order.offeringId || (order.offeringIds || []).length) ? orderMeasureScopes(order) : [];
+}
+function measureStudioDefaultScope(order) {
+  const own = measureStudioProjectScopes(order);
+  const primary = orderMeasureScope(order);
+  return own.length && !own.includes(primary) ? own[0] : primary;
+}
 function measureStudioScopeButtons(scopeKey, order = null) {
-  // A project with chosen services is measured by their directions only.
-  const own = order && (order.offeringId || (order.offeringIds || []).length) ? orderMeasureScopes(order) : [];
-  const scopes = own.length ? MEASURE_SCOPES.filter(s => own.includes(s.key) || s.key === scopeKey) : MEASURE_SCOPES;
+  // A project with chosen services is measured by their directions only; an
+  // already measured window keeps its own direction visible.
+  const own = measureStudioProjectScopes(order);
+  const windowScopes = new Set((order?.measurements?.rooms || []).flatMap(room => room.windows || []).map(win => win.measureScope).filter(Boolean));
+  const scopes = own.length ? MEASURE_SCOPES.filter(s => own.includes(s.key) || windowScopes.has(s.key)) : MEASURE_SCOPES;
   return `<div class="measure-scope-grid">
     ${scopes.map(s => `
       <button type="button" class="measure-scope-btn ${scopeKey === s.key ? 'active' : ''}" data-measure-scope="${s.key}" style="--scope-color:${s.accent}" onclick="measureStudioSetScope('${s.key}')">
@@ -11516,7 +11527,8 @@ function openEngineeringMeasureStudio(orderId) {
   const client = getClient(order.clientId) || {};
   const { room, win, smart } = measureStudioSelectedDefaults(order);
   const unit = db.settings.inputUnits === 'inches' ? 'in' : 'мм';
-  const scopeKey = win?.measureScope || orderMeasureScope(order);
+  // A new window starts in a direction of this project that needs sizes.
+  const scopeKey = win?.measureScope || measureStudioDefaultScope(order);
   const scope = measureScopeInfo(scopeKey);
   const canManage = orderUserCanManage(viewer);
   const selectedWinType = normalizeMeasureWindowTypeForScope(scopeKey, winTypeOptionValue(win?.winType));

@@ -28,6 +28,7 @@ function load(project: Row) {
     getOrderStatus: (o: Row) => ({ step: ({ new: 0, consultation_scheduled: 1, measurement_scheduled: 2, measurement_done: 2, proposal_sent: 3 } as Row)[o.status] ?? 0 }),
     T: (key: string) => key,
     orderMeasureScopes: (o: Row) => o.scopes || [],
+    orderMeasureScope: (o: Row) => o.primaryScope || 'solar_film',
     measureScopeCardDesc: () => '',
     academyEsc: (value: unknown) => String(value ?? ''),
     MEASURE_SCOPES: ['solar_film', 'smart_film', 'protective_film', 'decorative_film', 'privacy_film'].map(key => ({ key, short: key, icon: '', accent: '#000' })),
@@ -35,7 +36,7 @@ function load(project: Row) {
   vm.runInContext(slice('function projectHasServices(o) {', 'function orderPrimaryNextAction(o) {'), context);
   vm.runInContext(slice('function renderOrderCleanProgress(o) {', 'function clientSocialHandle('), context);
   vm.runInContext(slice('function orderKanbanNextStatus(status) {', 'function orderKanbanAdvance('), context);
-  vm.runInContext(slice('function measureStudioScopeButtons(scopeKey, order = null) {', '\n}\n') + '\n}', context);
+  vm.runInContext(slice('function measureStudioProjectScopes(order) {', 'function openEngineeringMeasureStudio('), context);
   return { c: context, o: project };
 }
 
@@ -89,3 +90,18 @@ test('field measurement offers the directions of this project\'s services', () =
   assert.equal((legacy.match(/data-measure-scope=/g) || []).length, 5, 'a project without chosen services still offers every direction');
   assert.match(html, /\$\{measureStudioScopeButtons\(scopeKey, order\)\}/);
 });
+
+test('field measurement starts in a direction that needs sizes, not the size-free first service', () => {
+  // The first service is a smart zone (no sizes); the protective film needs them.
+  const project = { id: 'o', status: 'new', offeringId: 'zone', offeringIds: ['zone', 'a1'], primaryScope: 'smart_film', scopes: ['protective_film'] };
+  const { c } = load(project);
+  assert.equal(c.measureStudioDefaultScope(project), 'protective_film');
+  const buttons = c.measureStudioScopeButtons('protective_film', project);
+  assert.doesNotMatch(buttons, /data-measure-scope="smart_film"/, 'the size-free direction is not offered');
+  // A window already measured in another direction keeps it visible.
+  const withWindow = { ...project, measurements: { rooms: [{ windows: [{ measureScope: 'solar_film' }] }] } };
+  assert.match(c.measureStudioScopeButtons('protective_film', withWindow), /data-measure-scope="solar_film"/);
+  assert.equal(c.measureStudioDefaultScope({ id: 'l', status: 'new', primaryScope: 'solar_film' }), 'solar_film');
+  assert.match(html, /const scopeKey = win\?\.measureScope \|\| measureStudioDefaultScope\(order\);/);
+});
+
