@@ -16771,7 +16771,23 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
     render();
     return true;
   }
-  if (closesInstallation && PROJECT_SCHEDULED_STATUSES.includes(o.status)) projectFinishOpenServices(o, by || state.currentUserId);
+  if (closesInstallation && PROJECT_SCHEDULED_STATUSES.includes(o.status)) {
+    // A field specialist closes only their own services; the project closes
+    // once nothing is left. The owner/manager closing by hand finishes all.
+    const actor = currentUser();
+    if (actor?.role === 'installer') {
+      projectLines(o).filter(line => line.installerIds.includes(actor.id) && projectServiceProgress(o, line.key).status !== 'done')
+        .forEach(line => projectWriteServiceProgress(o, line, 'done', actor));
+      const left = projectLines(o).filter(line => projectServiceProgress(o, line.key).status !== 'done');
+      if (left.length) {
+        refuse();
+        save();
+        alert(`Ваши услуги отмечены. Проект закроется, когда будут выполнены остальные: ${left.map(line => line.name).join(', ')}.`);
+        render();
+        return false;
+      }
+    } else projectFinishOpenServices(o, by || state.currentUserId);
+  }
   o.status = newStatus;
   if (entersInstallation) refreshManualFilmNeededBy(o);
   o.timeline = o.timeline || [];
@@ -25054,7 +25070,10 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
 const SERVICE_PROGRESS_LABELS = { planned: 'запланирована', in_progress: 'в работе', done: 'выполнена' };
 function projectServiceProgress(o, key) {
   const entry = o?.serviceProgress?.[key];
-  return entry && ['in_progress', 'done'].includes(entry.status) ? entry : { status: 'planned' };
+  if (entry && ['in_progress', 'done'].includes(entry.status)) return entry;
+  // A project closed before progress existed: its services were done with it.
+  if (CLOSED_PROJECT_STATUSES.includes(o?.status)) return { status: 'done', doneAt: o.installationDoneAt || '', inferred: true };
+  return { status: 'planned' };
 }
 /** Progress is marked once installation is scheduled — by the owner/manager, or by the line's own specialist. */
 function projectCanMarkService(o, line, user = currentUser()) {

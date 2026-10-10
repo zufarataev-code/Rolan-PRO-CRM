@@ -152,7 +152,7 @@ test('closing an installation by hand finishes the open services; deleted servic
   c.projectFinishOpenServices(o, 'm1');
   assert.deepEqual(plain(Object.values(o.serviceProgress).map((entry: any) => entry.status)), ['done', 'done']);
   const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 3000);
-  assert.match(status, /if \(closesInstallation && PROJECT_SCHEDULED_STATUSES\.includes\(o\.status\)\) projectFinishOpenServices\(o, by \|\| state\.currentUserId\);\n  o\.status = newStatus;/);
+  assert.match(status, /\} else projectFinishOpenServices\(o, by \|\| state\.currentUserId\);\n  \}\n  o\.status = newStatus;/);
   o.extraServices = [];
   c.projectPrunePlans(o);
   assert.deepEqual(plain(Object.keys(o.serviceProgress)), ['offering:a1']);
@@ -204,5 +204,39 @@ test('server: the same progress with its fields in another order is not a change
   next.orders[0].serviceProgress = { 'line:z': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z', doneBy: 'i1' } };
   next.orders[0].status = 'act_signed';
   assert.equal(prepareServiceSolutions(saved, next, false), null);
+});
+
+test('a specialist\'s old «Завершить монтаж» closes only their services; the project waits for the other crew', () => {
+  const { c, db, calls } = load({ id: 'i1', role: 'installer' });
+  const changeStatusSource = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'));
+  vm.runInContext(changeStatusSource.slice(0, changeStatusSource.indexOf('\n}\n') + 2), c);
+  Object.assign(c, {
+    ensureOrderWorkflowTransition: () => true, ensureVerifiedMeasurementsForStatus: () => true, ensureProductionReadyForInstallation: () => true,
+    invalidateProjectEstimate: () => undefined, notifyStatusChange: () => undefined, autoNotifyClient: () => undefined,
+  });
+  const o = project('installation_in_progress');
+  db.orders.push(o);
+  assert.equal(c.changeStatus('o', 'installation_done', 'i1'), false);
+  assert.equal(o.status, 'installation_in_progress');
+  assert.equal(o.serviceProgress['offering:a1'].status, 'done', 'their own service is done');
+  assert.equal(o.serviceProgress['line:z'], undefined, 'the other crew\'s service stays open');
+  assert.ok(calls.some(call => call.startsWith('alert:Ваши услуги отмечены. Проект закроется, когда будут выполнены остальные: Подключение зоны')));
+});
+
+test('a project closed before progress existed shows its services done', () => {
+  const { c } = load({ id: 'm1', role: 'manager' });
+  const closed = { ...project('completed'), installationDoneAt: '2026-09-20T20:00:00.000Z' };
+  const line = c.projectLines(closed)[0];
+  assert.deepEqual(plain(c.projectServiceProgress(closed, line.key)), { status: 'done', doneAt: '2026-09-20T20:00:00.000Z', inferred: true });
+  assert.match(c.projectServiceProgressCell(closed, line), /✓ выполнена 2026-09-20/);
+  assert.equal(c.projectServiceProgress(project(), line.key).status, 'planned');
+});
+
+test('server: an installation under way closes only when every service is done', () => {
+  const state = (status: string, progress?: Row): Row => ({ settings: { serviceOfferings: [] }, users: [{ id: 'i1', role: 'installer' }, { id: 'i2', role: 'installer' }], orders: [{ id: 'o', status, serviceType: 'smart_film', measurements: { rooms: [] }, extraServices: [{ id: 'z', type: 'washing', qty: 1, price: 10 }, { id: 'y', type: 'washing', qty: 1, price: 10 }], serviceSchedules: [{ id: 'line:z', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }, { id: 'line:y', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i2'] }], ...(progress ? { serviceProgress: progress } : {}) }] });
+  const one = { 'line:z': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } };
+  assert.equal(prepareServiceSolutions(state('installation_in_progress', one), state('installation_done', one), false), 'Сначала отметьте выполненными все услуги проекта.');
+  const both = { ...one, 'line:y': { status: 'done', doneAt: '2026-10-16T20:00:00.000Z' } };
+  assert.equal(prepareServiceSolutions(state('installation_in_progress', one), state('installation_done', both), false), null);
 });
 

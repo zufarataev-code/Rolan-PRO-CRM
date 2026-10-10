@@ -331,6 +331,12 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       if (plans.some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
       if (serviceGroupIds(order).some(id => !plans.some(plan => plan.id === id))) return 'Укажите дату и исполнителей каждой услуги.';
     }
+    // An installation under way closes only when every service is done, so
+    // one crew cannot close the work of another (Owner, 2026-10-10).
+    if (closesProject && oldOrder.id !== undefined && SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status))) {
+      const progress = object(order.serviceProgress);
+      if (serviceGroupIds(order).some(id => object(progress[id]).status !== 'done')) return 'Сначала отметьте выполненными все услуги проекта.';
+    }
     // Once «Монтаж назначен», a planned service may change its specialist or
     // date but not lose them; a service added later is planned step by step.
     // A project planned as a whole counts as planned for every service, so its
