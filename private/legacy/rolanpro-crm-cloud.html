@@ -25193,15 +25193,17 @@ function projectClaimServiceFollowUps(now = Date.now()) {
   let count = 0;
   (db.orders || []).forEach(o => {
     const before = o.servicesFollowUpClaim && typeof o.servicesFollowUpClaim === 'object' ? o.servicesFollowUpClaim : null;
-    if (before?.doneAt || !CLOSED_PROJECT_STATUSES.includes(o.status)) return;
-    if (projectClaimedFollowUps.some(claim => claim.id === o.id)) return;
-    if (before && now - Date.parse(before.at || 0) < PROJECT_FOLLOW_UP_LEASE_MS) return;
-    const notify = o.servicesClosedNotice === 'pending' || before?.notify === true;
-    const deduct = !o._inventoryDeducted && (notify || Object.keys(o.serviceProgress || {}).length > 0) && (db.inventory || []).length > 0;
+    if (!CLOSED_PROJECT_STATUSES.includes(o.status) || projectClaimedFollowUps.some(claim => claim.id === o.id)) return;
+    const unfinished = before && !before.doneAt ? before : null;
+    if (unfinished && now - Date.parse(unfinished.at || 0) < PROJECT_FOLLOW_UP_LEASE_MS) return;
+    // A new close (the project was reopened and closed again) owes its notices anew.
+    const notify = o.servicesClosedNotice === 'pending' || unfinished?.notify === true;
+    // The film is written off once per project: a finished claim already did it.
+    const deduct = !o._inventoryDeducted && !before?.doneAt && (notify || Object.keys(o.serviceProgress || {}).length > 0) && (db.inventory || []).length > 0;
     if (!notify && !deduct) return;
-    o.servicesFollowUpClaim = { token: PROJECT_FOLLOW_UP_TOKEN, at: new Date(now).toISOString(), notify, deduct, ...(before?.staffAt ? { staffAt: before.staffAt } : {}) };
+    o.servicesFollowUpClaim = { token: PROJECT_FOLLOW_UP_TOKEN, at: new Date(now).toISOString(), notify, deduct, ...(unfinished?.staffAt ? { staffAt: unfinished.staffAt } : {}) };
     delete o.servicesClosedNotice;
-    projectClaimedFollowUps.push({ id: o.id, notify, deduct, replaced: before?.token || null });
+    projectClaimedFollowUps.push({ id: o.id, notify, deduct, replaced: before?.token || null, replacedDoneAt: before?.doneAt || null });
     count += 1;
   });
   return count;
@@ -25212,7 +25214,7 @@ function projectYieldTakenFollowUps(remotePayload) {
   projectClaimedFollowUps = projectClaimedFollowUps.filter(claim => {
     const remoteClaim = remoteOrders.get(claim.id)?.servicesFollowUpClaim;
     const token = remoteClaim && typeof remoteClaim === 'object' ? remoteClaim.token : null;
-    if (!token || token === PROJECT_FOLLOW_UP_TOKEN || (token === claim.replaced && !remoteClaim.doneAt)) return true;
+    if (!token || token === PROJECT_FOLLOW_UP_TOKEN || (token === claim.replaced && (remoteClaim.doneAt || null) === claim.replacedDoneAt)) return true;
     const o = getOrder(claim.id);
     if (o) o.servicesFollowUpClaim = JSON.parse(JSON.stringify(remoteClaim));
     return false;
@@ -25235,10 +25237,12 @@ async function projectRunClaimedFollowUps(savedPayload) {
     if (claim.deduct && !o._inventoryDeducted) {
       try { autoDeductInventoryForOrder(o); } catch (error) { console.warn('Inventory deduct failed', error); continue; }
     }
-    if (claim.notify && o.status === 'installation_done') {
+    // The «Монтаж выполнен» notices are owed even when the project has moved
+    // on (act signed, paid) before they went out.
+    if (claim.notify && CLOSED_PROJECT_STATUSES.includes(o.status)) {
       // Staff notices once: a retry after a failed client notice skips them.
       if (!o.servicesFollowUpClaim.staffAt) {
-        notifyStatusChange(o);
+        notifyStatusChange({ ...o, status: 'installation_done' });
         o.servicesFollowUpClaim = { ...o.servicesFollowUpClaim, staffAt: new Date().toISOString() };
       }
       try { await autoNotifyClient(o, 'installation_done'); } catch (error) { console.warn('Completion notice failed', error); save(); continue; }

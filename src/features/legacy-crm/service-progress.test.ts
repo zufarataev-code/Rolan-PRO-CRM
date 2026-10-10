@@ -341,6 +341,21 @@ test('a project closed through its services: one manager CRM claims its write-of
   assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 1);
   assert.deepEqual(sent, ['client:taken2']);
   assert.ok(failing.servicesFollowUpClaim.doneAt);
+  // A project that moved on (act signed) before its notices went out still gets them, as «Монтаж выполнен».
+  const staff: string[] = [];
+  c.notifyStatusChange = (order: Row) => staff.push(`${order.id}:${order.status}`);
+  const signed: Row = { ...project('act_signed'), id: 'signed', _inventoryDeducted: true, serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
+  // Reopened and closed again: the finished claim of the first close does not swallow the new one.
+  const again: Row = { ...project('installation_done'), id: 'again', _inventoryDeducted: true, serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending', servicesFollowUpClaim: { token: 'old', at: '2026-10-01T00:00:00.000Z', notify: true, doneAt: '2026-10-01T00:00:10.000Z', staffAt: '2026-10-01T00:00:05.000Z' } };
+  db.orders.push(signed, again);
+  sent.length = 0;
+  assert.equal(c.projectClaimServiceFollowUps(now + 7200000), 2);
+  assert.equal(again.servicesFollowUpClaim.staffAt, undefined, 'a new close tells the staff again');
+  c.projectYieldTakenFollowUps({ orders: [{ id: 'again', servicesFollowUpClaim: { token: 'old', at: '2026-10-01T00:00:00.000Z', doneAt: '2026-10-01T00:00:10.000Z' } }] });
+  assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 2, 'the replaced finished claim is not someone else\'s');
+  assert.deepEqual(staff, ['signed:installation_done', 'again:installation_done']);
+  assert.deepEqual(sent, ['client:signed', 'client:again']);
+  assert.equal(signed.status, 'act_signed');
 });
 
 test('a manager removes the last open service of a running installation: the project closes', () => {
