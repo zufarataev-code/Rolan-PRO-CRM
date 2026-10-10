@@ -25185,53 +25185,56 @@ function projectNotifyFinishedProjects(orderIds) {
  * revision check) — and runs them once its claim is saved.
  */
 const PROJECT_FOLLOW_UP_TOKEN = Math.random().toString(36).slice(2) + Date.now().toString(36);
+// A claim not finished within this time (the tab closed, the reply was lost)
+// may be taken over by another owner/manager CRM.
+const PROJECT_FOLLOW_UP_LEASE_MS = 10 * 60 * 1000;
 let projectClaimedFollowUps = [];
-function projectClaimServiceFollowUps() {
+function projectClaimServiceFollowUps(now = Date.now()) {
   const user = currentUser();
   if (!user || !orderUserCanManage(user)) return 0;
   let count = 0;
   (db.orders || []).forEach(o => {
-    if (o.servicesFollowUpClaim || !CLOSED_PROJECT_STATUSES.includes(o.status)) return;
-    const notify = o.servicesClosedNotice === 'pending';
+    const before = o.servicesFollowUpClaim && typeof o.servicesFollowUpClaim === 'object' ? o.servicesFollowUpClaim : null;
+    if (before?.doneAt || !CLOSED_PROJECT_STATUSES.includes(o.status)) return;
+    if (before && (before.token === PROJECT_FOLLOW_UP_TOKEN || now - Date.parse(before.at || 0) < PROJECT_FOLLOW_UP_LEASE_MS)) return;
+    const notify = o.servicesClosedNotice === 'pending' || before?.notify === true;
     const deduct = !o._inventoryDeducted && Object.keys(o.serviceProgress || {}).length > 0 && (db.inventory || []).length > 0;
     if (!notify && !deduct) return;
-    o.servicesFollowUpClaim = PROJECT_FOLLOW_UP_TOKEN;
+    o.servicesFollowUpClaim = { token: PROJECT_FOLLOW_UP_TOKEN, at: new Date(now).toISOString(), notify, deduct };
     delete o.servicesClosedNotice;
-    projectClaimedFollowUps.push({ id: o.id, notify, deduct });
+    projectClaimedFollowUps.push({ id: o.id, notify, deduct, replaced: before?.token || null });
     count += 1;
   });
   return count;
 }
-/** A save conflict: a project another CRM claimed first is theirs. */
+/** A save conflict: a project another CRM claimed (or finished) first is theirs. */
 function projectYieldTakenFollowUps(remotePayload) {
   const remoteOrders = new Map((remotePayload?.orders || []).map(o => [o.id, o]));
   projectClaimedFollowUps = projectClaimedFollowUps.filter(claim => {
-    const remote = remoteOrders.get(claim.id);
-    if (!remote?.servicesFollowUpClaim || remote.servicesFollowUpClaim === PROJECT_FOLLOW_UP_TOKEN) return true;
+    const remoteClaim = remoteOrders.get(claim.id)?.servicesFollowUpClaim;
+    const token = remoteClaim && typeof remoteClaim === 'object' ? remoteClaim.token : null;
+    if (!token || token === PROJECT_FOLLOW_UP_TOKEN || (token === claim.replaced && !remoteClaim.doneAt)) return true;
     const o = getOrder(claim.id);
-    if (o) {
-      o.servicesFollowUpClaim = remote.servicesFollowUpClaim;
-      if (remote.servicesClosedNotice) o.servicesClosedNotice = remote.servicesClosedNotice;
-    }
+    if (o) o.servicesFollowUpClaim = JSON.parse(JSON.stringify(remoteClaim));
     return false;
   });
 }
-/** After a save: the follow-ups whose claim it carried. */
+/** After a save: the follow-ups whose claim it carried; each is then marked done. */
 function projectRunClaimedFollowUps(savedPayload) {
   const saved = new Map((savedPayload?.orders || []).map(o => [o.id, o]));
-  const ready = projectClaimedFollowUps.filter(claim => saved.get(claim.id)?.servicesFollowUpClaim === PROJECT_FOLLOW_UP_TOKEN);
+  const ready = projectClaimedFollowUps.filter(claim => saved.get(claim.id)?.servicesFollowUpClaim?.token === PROJECT_FOLLOW_UP_TOKEN);
   if (!ready.length) return 0;
   projectClaimedFollowUps = projectClaimedFollowUps.filter(claim => !ready.includes(claim));
-  let deducted = 0;
   ready.forEach(claim => {
     const o = getOrder(claim.id);
-    if (!o) return;
+    if (!o || o.servicesFollowUpClaim?.token !== PROJECT_FOLLOW_UP_TOKEN) return;
     if (claim.deduct && !o._inventoryDeducted) {
-      try { autoDeductInventoryForOrder(o); deducted += 1; } catch (error) { console.warn('Inventory deduct failed', error); }
+      try { autoDeductInventoryForOrder(o); } catch (error) { console.warn('Inventory deduct failed', error); }
     }
     if (claim.notify) projectNotifyFinishedProjects([o.id]);
+    o.servicesFollowUpClaim = { ...o.servicesFollowUpClaim, doneAt: new Date().toISOString() };
   });
-  if (deducted) save();
+  save();
   return ready.length;
 }
 /**

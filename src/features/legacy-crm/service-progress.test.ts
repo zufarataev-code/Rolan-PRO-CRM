@@ -297,23 +297,33 @@ test('a project closed through its services: one manager CRM claims its write-of
   c.notifyStatusChange = (order: Row) => sent.push(`staff:${order.id}`);
   c.autoNotifyClient = (order: Row) => sent.push(`client:${order.id}`);
   db.inventory = [{ id: 'roll' }];
+  const now = Date.parse('2026-10-20T12:00:00.000Z');
   const crews = { ...project('installation_done'), id: 'crews', serviceProgress: { 'line:z': { status: 'done' } } };
-  const server = { ...project('installation_done'), id: 'server', serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
+  const server: Row = { ...project('installation_done'), id: 'server', serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
   const taken: Row = { ...project('installation_done'), id: 'taken', serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
-  db.orders.push(crews, server, taken);
-  assert.equal(c.projectClaimServiceFollowUps(), 3);
-  assert.equal(c.projectClaimServiceFollowUps(), 0, 'claimed once');
+  // A claim whose CRM never finished (the tab closed) is taken over after the lease…
+  const stale: Row = { ...project('installation_done'), id: 'stale', serviceProgress: { 'line:z': { status: 'done' } }, servicesFollowUpClaim: { token: 'gone', at: '2026-10-20T11:00:00.000Z', notify: true, deduct: true } };
+  // …but not while another CRM may still be running it, nor once done.
+  const fresh: Row = { ...project('installation_done'), id: 'fresh', serviceProgress: { 'line:z': { status: 'done' } }, servicesFollowUpClaim: { token: 'busy', at: '2026-10-20T11:58:00.000Z', notify: true, deduct: true } };
+  const finished: Row = { ...project('installation_done'), id: 'finished', serviceProgress: { 'line:z': { status: 'done' } }, servicesFollowUpClaim: { token: 'gone', at: '2026-10-20T11:00:00.000Z', notify: true, deduct: true, doneAt: '2026-10-20T11:00:05.000Z' } };
+  db.orders.push(crews, server, taken, stale, fresh, finished);
+  assert.equal(c.projectClaimServiceFollowUps(now), 4);
+  assert.equal(c.projectClaimServiceFollowUps(now), 0, 'claimed once');
   assert.equal(server.servicesClosedNotice, undefined);
+  assert.equal(server.servicesFollowUpClaim.notify, true, 'the claim keeps what is owed');
   // Nothing runs before the claim is saved.
   assert.equal(c.projectRunClaimedFollowUps({ orders: [] }), 0);
   assert.equal(deducted + sent.length, 0);
-  // Another manager's CRM saved its claim on «taken» first: it is theirs.
-  c.projectYieldTakenFollowUps({ orders: [{ id: 'taken', servicesFollowUpClaim: 'other-session' }] });
-  assert.equal(taken.servicesFollowUpClaim, 'other-session');
-  assert.equal(c.projectRunClaimedFollowUps(plain(db)), 2);
-  assert.equal(deducted, 2);
-  assert.deepEqual(sent, ['staff:server', 'client:server']);
+  // Another manager's CRM saved its claim on «taken» first: it is theirs. The
+  // stale claim this CRM replaced does not count as taken.
+  c.projectYieldTakenFollowUps({ orders: [{ id: 'taken', servicesFollowUpClaim: { token: 'other', at: '2026-10-20T12:00:00.000Z' } }, { id: 'stale', servicesFollowUpClaim: stale.servicesFollowUpClaim && { token: 'gone', at: '2026-10-20T11:00:00.000Z' } }] });
+  assert.equal(taken.servicesFollowUpClaim.token, 'other');
+  assert.equal(c.projectRunClaimedFollowUps(plain(db)), 3);
+  assert.equal(deducted, 3);
+  assert.deepEqual(sent, ['staff:server', 'client:server', 'staff:stale', 'client:stale']);
+  assert.ok(server.servicesFollowUpClaim.doneAt && stale.servicesFollowUpClaim.doneAt, 'marked done for every later CRM');
   assert.equal(c.projectRunClaimedFollowUps(plain(db)), 0, 'run once');
+  assert.equal(c.projectClaimServiceFollowUps(now + 3600000), 2, 'later: only the claims other CRMs never finished (fresh, taken)');
 });
 
 test('a manager removes the last open service of a running installation: the project closes', () => {
