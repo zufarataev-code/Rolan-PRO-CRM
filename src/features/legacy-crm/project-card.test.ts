@@ -497,3 +497,14 @@ test('every way into installation refreshes the film purchase deadline; a histor
   assert.deepEqual(plain(c.projectPendingSizedServices(draft)), [], 'before measurement a quick line carries its service');
 });
 
+
+test('server: the same plan with its fields in another order is not a change (jsonb reorders keys)', () => {
+  const users = [{ id: 'i1', role: 'installer' }];
+  // As PostgreSQL returns it: object keys reordered.
+  const saved: Row = { settings: { serviceOfferings: [] }, users, orders: [{ id: 'o', status: 'installation_done', serviceType: 'smart_film', measurements: { rooms: [] }, extraServices: [{ id: 'z', type: 'washing', qty: 1, price: 10 }], serviceSchedules: [{ id: 'line:z', installerIds: ['i1'], installationAt: '2026-10-15T16:00:00.000Z' }] }] };
+  // As the browser built it in this session.
+  const next = structuredClone(saved);
+  next.orders[0].serviceSchedules = [{ id: 'line:z', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }];
+  next.orders[0].status = 'act_signed';
+  assert.equal(prepareServiceSolutions(saved, next, false), null);
+});
