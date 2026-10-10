@@ -38,6 +38,7 @@ const MUTABLE_ORDER_FIELDS = new Set([
   "checklist",
   "issues",
   "signature",
+  "serviceProgress",
   "updatedAt",
 ]);
 
@@ -265,6 +266,41 @@ export function createFieldWorkspace(
   };
 }
 
+/**
+ * The crew of one service of a project (projectServiceAssignment): its saved
+ * per-service plan, or — for a project planned as a whole — a quick line's own
+ * crew or the project crew.
+ */
+function serviceCrew(order: JsonObject, serviceId: string): string[] {
+  const plans = (Array.isArray(order.serviceSchedules) ? order.serviceSchedules : []).filter(isObject);
+  if (plans.length) {
+    const plan = plans.find((item) => String(item.id || "") === serviceId);
+    return Array.isArray(plan?.installerIds) ? plan.installerIds.map(String) : [];
+  }
+  const lineId = serviceId.startsWith("line:") ? serviceId.slice(5) : "";
+  const line = (Array.isArray(order.extraServices) ? order.extraServices : [])
+    .filter(isObject)
+    .find((item) => String(item.id || "") === lineId);
+  if (Array.isArray(line?.installerIds) && line.installerIds.length) return line.installerIds.map(String);
+  return Array.isArray(order.installerIds) ? order.installerIds.map(String) : [];
+}
+
+/** A field specialist marks the progress of their own services only (Owner, 2026-10-10). */
+function mergeFieldServiceProgress(currentOrder: JsonObject, submitted: unknown, identityIds: Set<string>): JsonObject {
+  const result: JsonObject = isObject(currentOrder.serviceProgress) ? clone(currentOrder.serviceProgress) : {};
+  if (!isObject(submitted)) return result;
+  for (const serviceId of new Set([...Object.keys(result), ...Object.keys(submitted)])) {
+    if (!serviceCrew(currentOrder, serviceId).some((member) => identityIds.has(member))) continue;
+    // Reopening a done service is the manager's call.
+    const before = isObject(result[serviceId]) ? (result[serviceId] as JsonObject) : null;
+    const after = isObject(submitted[serviceId]) ? (submitted[serviceId] as JsonObject) : null;
+    if (before?.status === "done" && after?.status !== "done") continue;
+    if (after) result[serviceId] = clone(after);
+    else delete result[serviceId];
+  }
+  return result;
+}
+
 export function mergeFieldWorkspace(
   currentPayload: JsonObject,
   submittedPayload: JsonObject,
@@ -294,6 +330,10 @@ export function mergeFieldWorkspace(
       if (key === "status") {
         const status = String(submitted.status || "");
         if (allowedStatuses.has(status)) next.status = status;
+        continue;
+      }
+      if (key === "serviceProgress") {
+        next.serviceProgress = mergeFieldServiceProgress(currentOrder, submitted.serviceProgress, identityIds);
         continue;
       }
       if (key === "timeline") {

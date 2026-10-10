@@ -6711,6 +6711,9 @@ const I18N = {
     enRouteJob: 'Выехали к клиенту',
     reviewReceived: 'Отзыв получен',
     orderCreated: 'Заказ создан',
+    service_started: 'Услуга начата',
+    service_done: 'Услуга выполнена',
+    service_reopened: 'Услуга возвращена в работу',
     project_archived: 'Проект удалён в архив',
     project_restored: 'Проект восстановлен из архива',
     orderNo: 'Проект №',
@@ -7133,6 +7136,9 @@ const I18N = {
     enRouteJob: 'On my way',
     reviewReceived: 'Review received',
     orderCreated: 'Order created',
+    service_started: 'Service started',
+    service_done: 'Service done',
+    service_reopened: 'Service reopened',
     project_archived: 'Project moved to archive',
     project_restored: 'Project restored from archive',
     orderNo: 'Project #',
@@ -16765,6 +16771,7 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
     render();
     return true;
   }
+  if (closesInstallation && PROJECT_SCHEDULED_STATUSES.includes(o.status)) projectFinishOpenServices(o, by || state.currentUserId);
   o.status = newStatus;
   if (entersInstallation) refreshManualFilmNeededBy(o);
   o.timeline = o.timeline || [];
@@ -17171,7 +17178,7 @@ function installerOrderPrimaryAction(o) {
   if (o.status === 'installation_scheduled') return { icon: '✅', title: 'Принять задачу', sub: 'Подтвердите, что увидели назначенный монтаж.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_accepted')` };
   if (o.status === 'installation_accepted') return { icon: '🚗', title: 'Выехал на объект', sub: 'Зафиксировать начало поездки.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_en_route')` };
   if (o.status === 'installation_en_route') return { icon: '▶', title: 'Начать монтаж', sub: 'Перед началом заполните приёмку и сделайте фото.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_in_progress')` };
-  if (o.status === 'installation_in_progress') return { icon: '✓', title: 'Завершить монтаж', sub: 'Добавьте фото после работы и подтвердите сдачу.', variant: 'success', onclick: `changeStatus('${o.id}','installation_done')` };
+  if (o.status === 'installation_in_progress') return { icon: '✓', title: 'Мои услуги выполнены', sub: 'Добавьте фото после работы. Проект закроется, когда все услуги будут выполнены.', variant: 'success', onclick: `projectMarkMyServicesDone('${o.id}')` };
   if (o.status === 'installation_done') return { icon: '📝', title: 'Акт подписан', sub: 'Отметить после подписи клиента.', variant: 'primary', onclick: `changeStatus('${o.id}','act_signed')` };
   return { icon: '🧰', title: 'Открыть ТЗ-лист', sub: 'Схема, размеры, материалы и лист раскроя.', variant: 'soft', onclick: `openTechnicalSheet('${o.id}')` };
 }
@@ -24750,9 +24757,9 @@ function projectCardDeleteService(oid, sid) {
 }
 /** Drops the plans of services no longer in the project. */
 function projectPrunePlans(o) {
-  if (!o.serviceSchedules?.length) return;
   const ids = new Set(projectServiceGroups(o).map(group => group.id));
-  o.serviceSchedules = o.serviceSchedules.filter(item => ids.has(item.id));
+  if (o.serviceSchedules?.length) o.serviceSchedules = o.serviceSchedules.filter(item => ids.has(item.id));
+  if (o.serviceProgress) o.serviceProgress = Object.fromEntries(Object.entries(o.serviceProgress).filter(([key]) => ids.has(key)));
 }
 function projectCardRemovePending(oid, offeringId) {
   const o = getOrder(oid);
@@ -24971,7 +24978,8 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
   const plan = production && manage && money && PROJECT_PLANNING_STATUSES.includes(o.status);
   // A finished installation is history: its scope, prices and pay are read-only.
   const edit = money && !CLOSED_PROJECT_STATUSES.includes(o.status);
-  const columns = 3 + (money ? 1 : 0) + (production ? 2 : 0) + (edit ? 1 : 0);
+  const tracking = PROJECT_SCHEDULED_STATUSES.includes(o.status) || CLOSED_PROJECT_STATUSES.includes(o.status);
+  const columns = 3 + (money ? 1 : 0) + (production ? 2 : 0) + (tracking ? 1 : 0) + (edit ? 1 : 0);
   const qtyCell = line => {
     const source = line.sources[0];
     if (!edit || line.kind === 'windows' || line.kind === 'quick') {
@@ -25010,6 +25018,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       ${money ? `<td data-label="Цена">${priceCell(line)}</td><td data-label="Сумма" class="money"><b>${line.kind === 'included' ? '$0' : fmtMoney(line.price)}</b></td>` : ''}
       ${production ? `<td data-label="Исполнитель">${plan ? projectCardCrewPicker(o, line) : academyEsc(projectLineCrewText(line).people)}</td>
       <td data-label="Дата">${plan ? `<input type="datetime-local" class="${date ? '' : 'project-card-missing'}" style="min-width:180px" value="${date}" aria-label="Дата: ${academyEsc(line.name)}" onchange="projectCardSetDate('${o.id}','${jsQuote(line.key)}',this.value)">` : academyEsc(projectLineCrewText(line).date)}</td>` : ''}
+      ${tracking ? `<td data-label="Ход работ">${projectServiceProgressCell(o, line)}</td>` : ''}
       ${edit ? `<td class="project-estimate-action">${deletable ? `<button class="btn-ghost text-red-600" aria-label="Убрать услугу ${academyEsc(line.name)}" onclick="projectCardDeleteService('${o.id}','${jsQuote(source.id)}')">✕</button>` : ''}</td>` : ''}
     </tr>`;
   }).concat(pending.map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<tr data-project-pending="${academyEsc(offering.id)}">
@@ -25017,11 +25026,12 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       <td data-label="Объём">${edit ? `<button class="btn-ghost text-xs" onclick="openManagerMeasureModal('${o.id}')">внести замер</button>` : '<span class="text-xs text-gray-500">ждёт замера</span>'}</td>
       ${money ? `<td data-label="Цена">${fmtMoney(Number(offering.pricePerSqft) || 0)} <span class="text-xs text-gray-500">/ sq ft</span></td><td data-label="Сумма" class="money text-gray-500">после замера</td>` : ''}
       ${production ? '<td data-label="Исполнитель"></td><td data-label="Дата"></td>' : ''}
+      ${tracking ? '<td data-label="Ход работ"></td>' : ''}
       ${edit ? `<td class="project-estimate-action">${o.offeringId !== offering.id ? `<button class="btn-ghost text-red-600" aria-label="Убрать услугу ${academyEsc(offering.name)}" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">✕</button>` : ''}</td>` : ''}
     </tr>`; })).join('');
   const total = field => lines.reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
   const unplanned = production ? projectCardUnplanned(o) : [];
-  const head = `<tr><th>Услуга</th><th>Объём</th>${money ? '<th>Цена</th><th class="money">Сумма</th>' : ''}${production ? '<th>Исполнитель</th><th>Дата</th>' : ''}${edit ? '<th></th>' : ''}</tr>`;
+  const head = `<tr><th>Услуга</th><th>Объём</th>${money ? '<th>Цена</th><th class="money">Сумма</th>' : ''}${production ? '<th>Исполнитель</th><th>Дата</th>' : ''}${tracking ? '<th>Ход работ</th>' : ''}${edit ? '<th></th>' : ''}</tr>`;
   return `<section class="order-clean-stage project-card-services" data-project-card-services>
     <div class="order-clean-stage-head">
       <div>
@@ -25033,6 +25043,99 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     <div class="overflow-x-auto project-estimate-table-wrap mt-3"><table class="project-estimate-table project-card-table"><thead>${head}</thead><tbody>${rows || `<tr><td colspan="${columns}" class="text-gray-500">В проекте пока нет услуг.${money && edit ? ' Добавьте первую — «+ Услуга в проект».' : ''}</td></tr>`}</tbody></table></div>
     ${money ? `<div class="flex flex-wrap justify-end gap-4 mt-2 text-sm">${economics ? `<span class="text-gray-500">материал ${fmtMoney(total('materialCost'))}</span><span class="text-gray-500">специалистам ${fmtMoney(total('installerPay'))}</span>` : ''}<span><b>клиенту ${fmtMoney(orderRevenue(o))}</b></span></div>` : ''}
     ${production ? renderProjectCardSchedule(o, unplanned, plan) : ''}
+  </section>`;
+}
+
+// ---------- ХОД РАБОТ ПО УСЛУГАМ ----------
+// Owner, 2026-10-10: each service of a project is done on its own day by its
+// own crew. A service is planned, in progress or done; its specialist marks
+// their own service, and the project becomes «Монтаж выполнен» once every
+// service is done.
+const SERVICE_PROGRESS_LABELS = { planned: 'запланирована', in_progress: 'в работе', done: 'выполнена' };
+function projectServiceProgress(o, key) {
+  const entry = o?.serviceProgress?.[key];
+  return entry && ['in_progress', 'done'].includes(entry.status) ? entry : { status: 'planned' };
+}
+/** Progress is marked once installation is scheduled — by the owner/manager, or by the line's own specialist. */
+function projectCanMarkService(o, line, user = currentUser()) {
+  if (!o || !line || !user || !PROJECT_SCHEDULED_STATUSES.includes(o.status)) return false;
+  if (orderUserCanManage(user) && orderUserCanSeeMoney(o, user)) return true;
+  return user.role === 'installer' && line.installerIds.includes(user.id);
+}
+function projectWriteServiceProgress(o, line, status, user) {
+  const now = new Date().toISOString();
+  const progress = { ...(o.serviceProgress || {}) };
+  const before = progress[line.key] || {};
+  if (status === 'planned') delete progress[line.key];
+  else if (status === 'in_progress') progress[line.key] = { status, startedAt: before.startedAt || now, startedBy: before.startedBy || user.id };
+  else progress[line.key] = { ...before, status: 'done', startedAt: before.startedAt || now, doneAt: now, doneBy: user.id };
+  o.serviceProgress = progress;
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: now, key: status === 'done' ? 'service_done' : status === 'in_progress' ? 'service_started' : 'service_reopened', by: user.id, note: line.name });
+}
+/** The project follows its services: in progress once one starts, «Монтаж выполнен» once all are done. */
+function projectSyncStatusFromServices(o) {
+  const lines = projectLines(o);
+  if (!lines.length || !PROJECT_SCHEDULED_STATUSES.includes(o.status)) return;
+  const states = lines.map(line => projectServiceProgress(o, line.key).status);
+  if (states.every(state => state === 'done')) {
+    const lastDone = lines.map(line => o.serviceProgress?.[line.key]?.doneAt).filter(Boolean).sort().pop();
+    if (lastDone) o.installationDoneAt = lastDone;
+    changeStatus(o.id, 'installation_done', state.currentUserId);
+  } else if (states.some(state => state !== 'planned') && o.status !== 'installation_in_progress') {
+    changeStatus(o.id, 'installation_in_progress', state.currentUserId);
+  }
+}
+function projectSetServiceProgress(oid, key, status) {
+  const o = getOrder(oid);
+  const user = currentUser();
+  const line = projectLines(o).find(item => item.key === key);
+  if (!SERVICE_PROGRESS_LABELS[status] || !projectCanMarkService(o, line, user)) return;
+  // Reopening a done service is the manager's call.
+  if (projectServiceProgress(o, key).status === 'done' && status !== 'done' && !(orderUserCanManage(user) && orderUserCanSeeMoney(o, user))) return;
+  projectWriteServiceProgress(o, line, status, user);
+  save();
+  projectSyncStatusFromServices(o);
+  preservePositionForNextRender(); render();
+}
+/** A specialist finishes their own services; the project closes when every service is done. */
+function projectMarkMyServicesDone(oid) {
+  const o = getOrder(oid);
+  const user = currentUser();
+  if (!o || !user) return;
+  const mine = projectLines(o).filter(line => projectCanMarkService(o, line, user) && line.installerIds.includes(user.id) && projectServiceProgress(o, line.key).status !== 'done');
+  if (!projectLines(o).length) { changeStatus(oid, 'installation_done', state.currentUserId); return; }
+  if (!mine.length) return alert('Ваши услуги в этом проекте уже отмечены выполненными.');
+  mine.forEach(line => projectWriteServiceProgress(o, line, 'done', user));
+  save();
+  projectSyncStatusFromServices(o);
+  const left = projectLines(o).filter(line => projectServiceProgress(o, line.key).status !== 'done');
+  if (left.length) alert(`Ваши услуги отмечены. Остальные делает другая бригада: ${left.map(line => line.name).join(', ')}.`);
+  preservePositionForNextRender(); render();
+}
+/** Closing an installation by hand finishes every service still open. */
+function projectFinishOpenServices(o, by) {
+  const user = getUser(by) || currentUser() || { id: by };
+  projectLines(o).filter(line => projectServiceProgress(o, line.key).status !== 'done').forEach(line => projectWriteServiceProgress(o, line, 'done', user));
+}
+function projectServiceProgressCell(o, line, user = currentUser()) {
+  const entry = projectServiceProgress(o, line.key);
+  const chip = entry.status === 'done'
+    ? `<span class="tag bg-emerald-50 text-emerald-700">✓ выполнена${entry.doneAt ? ` ${fmtDate(entry.doneAt)}` : ''}</span>`
+    : entry.status === 'in_progress' ? '<span class="tag bg-blue-50 text-blue-700">в работе</span>' : '<span class="tag">запланирована</span>';
+  if (!projectCanMarkService(o, line, user)) return chip;
+  const manager = orderUserCanManage(user) && orderUserCanSeeMoney(o, user);
+  const act = (status, label) => `<button class="btn-ghost text-xs" onclick="projectSetServiceProgress('${o.id}','${jsQuote(line.key)}','${status}')">${label}</button>`;
+  return `${chip}<div class="flex flex-wrap gap-1 mt-1">${entry.status === 'planned' ? act('in_progress', 'Начать') : ''}${entry.status !== 'done' ? act('done', 'Выполнено') : manager ? act('in_progress', 'Вернуть в работу') : ''}</div>`;
+}
+/** The field specialist's own services, with their progress buttons. */
+function renderInstallerServiceProgress(o, u) {
+  const mine = projectLines(o).filter(line => line.installerIds.includes(u?.id));
+  if (!mine.length || !PROJECT_SCHEDULED_STATUSES.includes(o.status) && !CLOSED_PROJECT_STATUSES.includes(o.status)) return '';
+  return `<section class="order-clean-stage" data-installer-services>
+    <div class="order-clean-stage-title">Мои услуги</div>
+    <div class="order-clean-stage-sub">Отмечайте каждую свою услугу. Проект закроется, когда все услуги будут выполнены.</div>
+    <div class="grid gap-2 mt-3">${mine.map(line => `<div class="p-3 rounded-lg bg-white border flex flex-wrap items-start justify-between gap-3" data-project-line="${academyEsc(line.key)}"><span><b>${academyEsc(line.name)}</b><span class="block text-xs text-gray-500">${academyEsc(projectLineQtyText(line))} · ${academyEsc(projectLineCrewText(line).date)}</span></span><span>${projectServiceProgressCell(o, line, u)}</span></div>`).join('')}</div>
   </section>`;
 }
 
@@ -26380,6 +26483,7 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
           ${renderOrderActionCard({ icon: '📷', title: 'Добавить фото', sub: 'до или после монтажа', onclick: `addOrderPhoto('${o.id}')` })}
         </div>
       </section>
+      ${renderInstallerServiceProgress(o, u)}
       <div class="card p-0 overflow-hidden">
         ${renderTechnicalSheetHtml(o)}
       </div>

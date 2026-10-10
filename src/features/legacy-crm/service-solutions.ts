@@ -1,5 +1,14 @@
 type Row = Record<string, any>;
 const object = (x: unknown): Row => x && typeof x === 'object' && !Array.isArray(x) ? x as Row : {};
+/**
+ * JSON with object keys in a fixed order. PostgreSQL stores the workspace as
+ * jsonb, which reorders object keys, so the saved copy and a browser's copy of
+ * the same plan differ as plain JSON text; comparing them this way does not.
+ */
+const stableJson = (value: unknown): string => JSON.stringify(value, (_key, item) =>
+  item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.keys(item).sort().map(key => [key, (item as Row)[key]]))
+    : item);
 const rows = (x: unknown): Row[] => Array.isArray(x) ? x.map(object) : [];
 const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))];
 
@@ -294,7 +303,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     // A service is planned in its row on the project card (Owner, 2026-10-09):
     // its specialist and date may be chosen one after the other, so a saved
     // plan may still miss one of them. «Монтаж назначен» needs them all.
-    if (JSON.stringify(order.serviceSchedules) !== JSON.stringify(oldOrder.serviceSchedules)) {
+    if (stableJson(order.serviceSchedules) !== stableJson(oldOrder.serviceSchedules)) {
       if (!Array.isArray(order.serviceSchedules)) return 'Некорректные назначения услуг.';
       const seen = new Set();
       for (const plan of rows(order.serviceSchedules)) {
@@ -305,7 +314,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       }
     }
     const complete = (plan: Row) => typeof plan.installationAt === 'string' && !Number.isNaN(Date.parse(plan.installationAt)) && Array.isArray(plan.installerIds) && plan.installerIds.length > 0;
-    const schedulesChanged = JSON.stringify(order.serviceSchedules) !== JSON.stringify(oldOrder.serviceSchedules);
+    const schedulesChanged = stableJson(order.serviceSchedules) !== stableJson(oldOrder.serviceSchedules);
     // A finished project keeps its crew and dates: they are its history and its pay.
     if (schedulesChanged && CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status))) return 'Проект закрыт: исполнителей и даты услуг не меняют.';
     // Entering installation (from the card, the schedule window or the kanban)
@@ -333,6 +342,29 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         // A plan leaves only with its service.
         if (after ? !complete(after) : services.includes(before.id)) return 'Монтаж назначен: у услуги должны остаться исполнитель и дата.';
       }
+    }
+    // The progress of each service (Owner, 2026-10-10) is marked once
+    // installation is scheduled, closes with the installation and then stays.
+    const progressChanged = stableJson(order.serviceProgress ?? null) !== stableJson(oldOrder.serviceProgress ?? null);
+    if (progressChanged) {
+      if (order.serviceProgress !== undefined && (order.serviceProgress === null || typeof order.serviceProgress !== 'object' || Array.isArray(order.serviceProgress))) return 'Некорректный ход работ.';
+      if (CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status))) return 'Проект закрыт: ход работ не меняют.';
+      const open = SCHEDULED_PROJECT_STATUSES.includes(String(order.status))
+        || (CLOSED_PROJECT_STATUSES.includes(String(order.status)) && SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status)));
+      if (!open) return 'Ход работ отмечают после «Монтаж назначен».';
+      const services = new Set(serviceGroupIds(order));
+      const progress: Row = {};
+      for (const [id, value] of Object.entries(object(order.serviceProgress))) {
+        if (!services.has(id)) continue; // a service that left the project
+        const entry = object(value);
+        if (entry.status !== 'in_progress' && entry.status !== 'done') return 'Некорректный ход работ.';
+        for (const field of ['startedAt', 'doneAt']) {
+          if (entry[field] !== undefined && (typeof entry[field] !== 'string' || Number.isNaN(Date.parse(entry[field] as string)))) return 'Некорректная дата хода работ.';
+        }
+        if (entry.status === 'done' && typeof entry.doneAt !== 'string') return 'Некорректная дата хода работ.';
+        progress[id] = entry;
+      }
+      order.serviceProgress = progress;
     }
     // A plan made at «КП принято» is a draft: the project crew and date (what
     // the client and the field crew see) follow it once installation is scheduled.

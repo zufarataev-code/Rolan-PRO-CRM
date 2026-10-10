@@ -1005,3 +1005,11 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Verification: new `project-stages.test.ts` (4 tests); `npm test` green; local browser: a new project with only «Подключение зоны» shows «Рассчитать проект — Замер не нужен», consultation and measurement «не нужен», current step КП.
 - Next: Codex review + CI; owner's «да» before deploy. Then the ERP core (Project → Services → Visits → Measurement → Work log) together with the CRM core consolidation.
 
+## 2026-10-10 handoff — per-service progress (Claude)
+
+- Branch `claude/service-progress`, based on `main` `d148329` (after #330); includes the same `stableJson` comparison as hotfix #331. Owner decision: DECISIONS.md (2026-10-10, «Each service of a project has its own progress»).
+- Legacy html: «ХОД РАБОТ ПО УСЛУГАМ» block — `projectServiceProgress`, `projectCanMarkService`, `projectWriteServiceProgress`, `projectSyncStatusFromServices`, `projectSetServiceProgress`, `projectMarkMyServicesDone`, `projectFinishOpenServices`, `projectServiceProgressCell`, `renderInstallerServiceProgress`; «Ход работ» column in `renderProjectCardServices`; «Мои услуги» on `renderInstallerTechnicalWorkspace`; installer «Мои услуги выполнены» in `installerOrderPrimaryAction`; `changeStatus` finishes open services when an installation is closed by hand; `projectPrunePlans` prunes progress; timeline labels.
+- Server: `service-solutions.ts` validates `serviceProgress`; `field-workspace.ts` lets a field specialist change only their own services' progress (`serviceCrew`, `mergeFieldServiceProgress`).
+- Verification: new `service-progress.test.ts` (8 tests); `npm test` 662/662; `tsc` clean. Local browser (test DB): reopening a service moved the project to «Монтаж в работе»; marking all services done closed it with the last service's date; a closed-project save in the same tab after an in-session plan was accepted (jsonb key order).
+- Next: Codex review + CI; owner's «да». Then pay per service.
+
