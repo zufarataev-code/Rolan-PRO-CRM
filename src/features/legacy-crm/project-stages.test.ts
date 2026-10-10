@@ -22,6 +22,7 @@ function load(project: Row) {
   const context: any = vm.createContext({
     Math, Set,
     projectLines: (o: Row) => o.lines || [],
+    projectPendingSizedServices: (o: Row) => o.pending || [],
     orderMeasurementCompletionIssues: (o: Row) => o.issues || [],
     orderNeedsMeasurements: (o: Row) => !!o.needsSizes,
     projectEstimateIsApproved: (o: Row) => !!o.approved,
@@ -36,7 +37,7 @@ function load(project: Row) {
   vm.runInContext(slice('function projectHasServices(o) {', 'function orderPrimaryNextAction(o) {'), context);
   vm.runInContext(slice('function renderOrderCleanProgress(o) {', 'function clientSocialHandle('), context);
   vm.runInContext(slice('function orderKanbanNextStatus(status) {', 'function orderKanbanAdvance('), context);
-  vm.runInContext(slice('function measureStudioProjectScopes(order) {', 'function openEngineeringMeasureStudio('), context);
+  vm.runInContext(slice('function measureStudioHasChosenServices(order) {', 'function openEngineeringMeasureStudio('), context);
   return { c: context, o: project };
 }
 
@@ -53,7 +54,9 @@ test('the next step follows the services: add them, then estimate and proposal w
   // A measured project whose windows are complete goes to its estimate even before the status moved.
   assert.match(c.projectServicesNextAction({ ...sizeFree, needsSizes: true, status: 'measurement_scheduled' }).sub, /Замер готов/);
   // A per-sq-ft service without sizes keeps the usual consultation and measurement.
-  assert.equal(c.projectServicesNextAction({ id: 'o', status: 'new', offeringIds: ['a1'], needsSizes: true, issues: ['добавьте окна'] }), null);
+  assert.equal(c.projectServicesNextAction({ id: 'o', status: 'new', offeringIds: ['a1'], pending: [{ id: 'a1' }], needsSizes: true, issues: ['добавьте окна'] }), null);
+  // The incoming request alone is not work: after its last line was deleted the project asks for services again.
+  assert.equal(c.projectServicesNextAction({ id: 'o', status: 'new', offeringId: 'zone', offeringIds: ['zone'], lines: [] }).title, 'Добавить услуги проекта');
   // After the proposal the usual steps apply.
   assert.equal(c.projectServicesNextAction({ ...sizeFree, status: 'proposal_sent' }), null);
   const primary = slice('function orderPrimaryNextAction(o) {', 'function installerOrderPrimaryAction(');
@@ -67,7 +70,7 @@ test('the stage bar marks a measurement the services do not need as skipped', ()
   assert.match(bar, /order-clean-progress-step skipped">[\s\S]*?stepConsultation · не нужен/);
   assert.match(bar, /order-clean-progress-step skipped">[\s\S]*?stepMeasurement · не нужен/);
   assert.match(bar, /order-clean-progress-step current">[\s\S]*?stepProposal/);
-  const sized = { id: 'o', status: 'new', offeringIds: ['a1'], needsSizes: true, issues: ['добавьте окна'] };
+  const sized = { id: 'o', status: 'new', offeringIds: ['a1'], pending: [{ id: 'a1' }], needsSizes: true, issues: ['добавьте окна'] };
   assert.doesNotMatch(c.renderOrderCleanProgress(sized), /не нужен/);
 });
 
@@ -75,7 +78,7 @@ test('the kanban arrow skips consultation and measurement for a settled project'
   const sizeFree = { id: 'o', status: 'new', offeringIds: ['zone'], lines: [{ kind: 'quantity' }] };
   const { c } = load(sizeFree);
   assert.equal(c.projectKanbanNextStatus(sizeFree), 'proposal_sent');
-  assert.equal(c.projectKanbanNextStatus({ id: 'o', status: 'new', offeringIds: ['a1'], needsSizes: true, issues: ['добавьте окна'] }), 'consultation_scheduled');
+  assert.equal(c.projectKanbanNextStatus({ id: 'o', status: 'new', offeringIds: ['a1'], pending: [{ id: 'a1' }], needsSizes: true, issues: ['добавьте окна'] }), 'consultation_scheduled');
   assert.equal(c.projectKanbanNextStatus({ ...sizeFree, status: 'proposal_sent' }), 'proposal_accepted');
   assert.match(html, /const next = projectKanbanNextStatus\(o\);\n  const projectAddress = orderAddress\(o, c\);/, 'the card shows the same next stage');
 });
@@ -103,5 +106,15 @@ test('field measurement starts in a direction that needs sizes, not the size-fre
   assert.match(c.measureStudioScopeButtons('protective_film', withWindow), /data-measure-scope="solar_film"/);
   assert.equal(c.measureStudioDefaultScope({ id: 'l', status: 'new', primaryScope: 'solar_film' }), 'solar_film');
   assert.match(html, /const scopeKey = win\?\.measureScope \|\| measureStudioDefaultScope\(order\);/);
+});
+
+test('a project whose services all need no sizes does not open field measurement; a new window keeps a measurable direction', () => {
+  const sizeFree = { id: 'o', status: 'new', offeringId: 'zone', offeringIds: ['zone'], primaryScope: 'smart_film', scopes: [] };
+  const { c } = load(sizeFree);
+  assert.equal((c.measureStudioScopeButtons('smart_film', sizeFree).match(/data-measure-scope=/g) || []).length, 0, 'no direction to measure');
+  const studio = slice('function openEngineeringMeasureStudio(orderId) {', 'order.measurements = order.measurements || { rooms: [] };\n  const first');
+  assert.match(studio, /if \(measureStudioHasChosenServices\(order\) && !measureStudioProjectScopes\(order\)\.length && !measureAllWindows\(order\)\.length\) \{\n    alert\('Замер не нужен/);
+  const newWindow = slice('function measureStudioNewWindow(orderId) {', '\n}\n');
+  assert.match(newWindow, /const defaultScope = measureStudioDefaultScope\(order\);/);
 });
 
