@@ -186,14 +186,20 @@ test('field save: a specialist changes the progress of their own services only, 
     'line:z': { status: 'in_progress' },
   } as any;
   const merged = mergeFieldWorkspace(current, submitted, [ROLE_CODES.INSTALLER], ['i1']) as Row;
-  assert.deepEqual(merged.orders[0].serviceProgress, {
-    'line:z': { status: 'done', doneAt: '2026-10-16T20:00:00.000Z' },
-    'offering:a1': { status: 'done', doneAt: '2026-10-14T20:00:00.000Z' },
-  });
+  assert.deepEqual(merged.orders[0].serviceProgress['line:z'], { status: 'done', doneAt: '2026-10-16T20:00:00.000Z' }, 'another crew\'s service is untouched');
+  const own = merged.orders[0].serviceProgress['offering:a1'];
+  assert.deepEqual([own.status, own.doneBy, own.startedBy], ['done', 'i1', 'i1']);
+  assert.ok(Math.abs(Date.parse(own.doneAt) - Date.now()) < 60000, 'the server clock, not the submitted date');
+  // A forged author or date is ignored: who and when come from the server.
+  const forged = structuredClone(current);
+  forged.orders[0].serviceProgress = { 'offering:a1': { status: 'in_progress', startedBy: 'i2', startedAt: '2020-01-01T00:00:00.000Z' } } as any;
+  const stamped = mergeFieldWorkspace(current, forged, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  assert.equal(stamped.orders[0].serviceProgress['offering:a1'].startedBy, 'i1');
+  assert.notEqual(stamped.orders[0].serviceProgress['offering:a1'].startedAt, '2020-01-01T00:00:00.000Z');
   // Even their own done service stays done.
-  const own = structuredClone(current);
-  own.orders[0].serviceProgress = { 'line:z': { status: 'in_progress' } } as any;
-  const kept = mergeFieldWorkspace(current, own, [ROLE_CODES.INSTALLER], ['i2']) as Row;
+  const reopen = structuredClone(current);
+  reopen.orders[0].serviceProgress = { 'line:z': { status: 'in_progress' } } as any;
+  const kept = mergeFieldWorkspace(current, reopen, [ROLE_CODES.INSTALLER], ['i2']) as Row;
   assert.equal(kept.orders[0].serviceProgress['line:z'].status, 'done');
 });
 

@@ -285,18 +285,34 @@ function serviceCrew(order: JsonObject, serviceId: string): string[] {
   return Array.isArray(order.installerIds) ? order.installerIds.map(String) : [];
 }
 
-/** A field specialist marks the progress of their own services only (Owner, 2026-10-10). */
-function mergeFieldServiceProgress(currentOrder: JsonObject, submitted: unknown, identityIds: Set<string>): JsonObject {
+/**
+ * A field specialist marks the progress of their own services only (Owner,
+ * 2026-10-10). Only the requested status is taken from the browser; who and
+ * when are stamped here from the signed-in specialist and the server clock.
+ */
+function mergeFieldServiceProgress(
+  currentOrder: JsonObject,
+  submitted: unknown,
+  identityIds: Set<string>,
+  now = new Date().toISOString(),
+): JsonObject {
   const result: JsonObject = isObject(currentOrder.serviceProgress) ? clone(currentOrder.serviceProgress) : {};
   if (!isObject(submitted)) return result;
   for (const serviceId of new Set([...Object.keys(result), ...Object.keys(submitted)])) {
-    if (!serviceCrew(currentOrder, serviceId).some((member) => identityIds.has(member))) continue;
-    // Reopening a done service is the manager's call.
+    const actor = serviceCrew(currentOrder, serviceId).find((member) => identityIds.has(member));
+    if (!actor) continue;
     const before = isObject(result[serviceId]) ? (result[serviceId] as JsonObject) : null;
-    const after = isObject(submitted[serviceId]) ? (submitted[serviceId] as JsonObject) : null;
-    if (before?.status === "done" && after?.status !== "done") continue;
-    if (after) result[serviceId] = clone(after);
-    else delete result[serviceId];
+    const requested = isObject(submitted[serviceId]) ? String((submitted[serviceId] as JsonObject).status || "") : "";
+    // Reopening a done service is the manager's call.
+    if (before?.status === "done") continue;
+    if (requested === String(before?.status || "")) continue;
+    if (requested === "in_progress") {
+      result[serviceId] = { status: "in_progress", startedAt: before?.startedAt || now, startedBy: before?.startedBy || actor };
+    } else if (requested === "done") {
+      result[serviceId] = { status: "done", startedAt: before?.startedAt || now, startedBy: before?.startedBy || actor, doneAt: now, doneBy: actor };
+    } else if (!requested) {
+      delete result[serviceId];
+    }
   }
   return result;
 }
