@@ -372,6 +372,12 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       }
       order.serviceProgress = progress;
     }
+    // The progress of a service that left the project goes with it, whatever
+    // else this save changed, so a remeasured service starts afresh.
+    if (order.serviceProgress && typeof order.serviceProgress === 'object' && !Array.isArray(order.serviceProgress)) {
+      const services = new Set(serviceGroupIds(order));
+      order.serviceProgress = Object.fromEntries(Object.entries(object(order.serviceProgress)).filter(([id]) => services.has(id)));
+    }
     // A plan made at «КП принято» is a draft: the project crew and date (what
     // the client and the field crew see) follow it once installation is scheduled.
     if (Array.isArray(order.serviceSchedules) && order.serviceSchedules.length && SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) {

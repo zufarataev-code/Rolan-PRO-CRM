@@ -240,3 +240,22 @@ test('server: an installation under way closes only when every service is done',
   assert.equal(prepareServiceSolutions(state('installation_in_progress', one), state('installation_done', both), false), null);
 });
 
+
+test('progress marks stay out of the client portal; a service whose windows were deleted loses its progress', () => {
+  const portal = html.slice(html.indexOf('function renderClientPortal('), html.indexOf('function renderClientPortal(') + 12000);
+  assert.match(portal, /\(o\.timeline\|\|\[\]\)\.filter\(ev => !PROJECT_INTERNAL_TIMELINE_KEYS\.has\(ev\.key\)\)/);
+  const { c } = load({ id: 'm1', role: 'manager' });
+  assert.deepEqual(plain(vm.runInContext('[...PROJECT_INTERNAL_TIMELINE_KEYS].sort()', c)), ['service_done', 'service_reopened', 'service_started']);
+  const o = project('installation_in_progress');
+  o.serviceProgress = { 'offering:a1': { status: 'done', doneAt: '2026-10-14T20:00:00.000Z' }, 'line:z': { status: 'in_progress' } };
+  o.measurements.rooms[0].windows = [];
+  assert.equal(c.syncProjectIncludedServices(o), true);
+  assert.deepEqual(Object.keys(o.serviceProgress), ['line:z']);
+  // The server drops it too, even when the submitted progress itself did not change.
+  const users = [{ id: 'i1', role: 'installer' }];
+  const saved: Row = { settings: { serviceOfferings: [] }, users, orders: [{ id: 'o', status: 'installation_in_progress', serviceType: 'smart_film', measurements: { rooms: [{ windows: [{ id: 'w', measureScope: 'smart_film' }] }] }, extraServices: [], serviceSchedules: [{ id: 'direction:smart_film', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }], serviceProgress: { 'direction:smart_film': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } } }] };
+  const next = structuredClone(saved);
+  next.orders[0].measurements.rooms[0].windows = [];
+  assert.equal(prepareServiceSolutions(saved, next, false), null);
+  assert.deepEqual(next.orders[0].serviceProgress, {});
+});

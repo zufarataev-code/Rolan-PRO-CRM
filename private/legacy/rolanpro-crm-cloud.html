@@ -24167,6 +24167,13 @@ function projectIncludedQty(o, parentId, child) {
 function syncProjectIncludedServices(o) {
   if (!o) return false;
   let changed = false;
+  // The progress of a service that left the project (its windows deleted,
+  // its line removed) leaves with it, so a later service starts afresh.
+  if (o.serviceProgress && Object.keys(o.serviceProgress).length) {
+    const services = new Set(projectServiceGroups(o).map(group => group.id));
+    const kept = Object.fromEntries(Object.entries(o.serviceProgress).filter(([key]) => services.has(key)));
+    if (Object.keys(kept).length !== Object.keys(o.serviceProgress).length) { o.serviceProgress = kept; changed = true; }
+  }
   const parents = projectParentOfferingIds(o);
   const lines = Array.isArray(o.extraServices) ? o.extraServices : [];
   const removed = lines.filter(line => line.includedBy && !parents.includes(line.includedBy));
@@ -25068,6 +25075,8 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
 // their own service, and the project becomes «Монтаж выполнен» once every
 // service is done.
 const SERVICE_PROGRESS_LABELS = { planned: 'запланирована', in_progress: 'в работе', done: 'выполнена' };
+// Progress marks are the crew's working notes, not the client's history.
+const PROJECT_INTERNAL_TIMELINE_KEYS = new Set(['service_started', 'service_done', 'service_reopened']);
 function projectServiceProgress(o, key) {
   const entry = o?.serviceProgress?.[key];
   if (entry && ['in_progress', 'done'].includes(entry.status)) return entry;
@@ -29466,7 +29475,7 @@ function renderClientPortal() {
       <div class="card">
         <h3 class="font-semibold mb-3">${T('timeline')}</h3>
         <div class="space-y-3">
-          ${(o.timeline||[]).slice().reverse().map(ev => `
+          ${(o.timeline||[]).filter(ev => !PROJECT_INTERNAL_TIMELINE_KEYS.has(ev.key)).slice().reverse().map(ev => `
             <div class="flex gap-3">
               <div class="timeline-dot done"></div>
               <div class="flex-1">
