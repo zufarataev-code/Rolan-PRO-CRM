@@ -17128,8 +17128,16 @@ function projectMeasurementSettled(o) {
   return projectHasServices(o) && !orderMeasurementCompletionIssues(o).length;
 }
 const PROJECT_PRE_PROPOSAL_STATUSES = ['new','consultation_scheduled','measurement_scheduled'];
+/** A consultation or measurement still ahead: the services do not cancel a visit already booked. */
+function projectHasScheduledVisit(o) {
+  const ahead = value => !!value && Date.parse(value) > Date.now();
+  return ahead(o?.consultationAt) || ahead(o?.measurementAt);
+}
 function projectServicesNextAction(o) {
   if (!PROJECT_PRE_PROPOSAL_STATUSES.includes(o.status)) return null;
+  // Services, estimate and proposal belong to the people who price the
+  // project; a measurer keeps the measurement actions.
+  if (!orderUserCanSeeMoney(o, currentUser())) return null;
   if (!projectHasServices(o)) return { icon: '🧩', title: 'Добавить услуги проекта', sub: 'Что делаем у клиента — от услуг зависит, нужен ли замер и что войдёт в КП.', variant: 'primary', onclick: `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})` };
   if (!projectMeasurementSettled(o)) return null;
   if (!projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: orderNeedsMeasurements(o) ? 'Замер готов. Проверьте услуги и цену клиенту до КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цену до КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
@@ -19770,7 +19778,8 @@ function orderKanbanNextStatus(status) {
  */
 function projectKanbanNextStatus(o) {
   const next = orderKanbanNextStatus(o?.status);
-  if (next && ['consultation_scheduled','measurement_scheduled','measurement_done'].includes(next) && projectMeasurementSettled(o)) return 'proposal_sent';
+  // A consultation or measurement already booked is not skipped silently.
+  if (next && ['consultation_scheduled','measurement_scheduled','measurement_done'].includes(next) && projectMeasurementSettled(o) && !projectHasScheduledVisit(o)) return 'proposal_sent';
   return next;
 }
 function orderKanbanAdvance(orderId, event) {
@@ -23719,10 +23728,12 @@ function renderOrderCleanProgress(o) {
   const settled = PROJECT_PRE_PROPOSAL_STATUSES.includes(o.status) && projectMeasurementSettled(o);
   const measurementSkipped = settled && !orderNeedsMeasurements(o);
   if (settled) activeStep = Math.max(activeStep, 3);
+  // A visit that was booked stays on the bar: only an unbooked step is «не нужен».
+  const skippedStep = i => measurementSkipped && ((i === 1 && !o.consultationAt) || (i === 2 && !o.measurementAt));
   return `
     <div class="order-clean-progress">
       ${labels.map((lbl, i) => {
-        const skipped = measurementSkipped && (i === 1 || i === 2);
+        const skipped = skippedStep(i);
         return `
         <div class="order-clean-progress-step ${skipped ? 'skipped' : i < activeStep ? 'done' : i === activeStep ? 'current' : ''}">
           <div class="order-clean-progress-line"></div>

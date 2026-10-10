@@ -18,11 +18,14 @@ const slice = (from: string, to: string) => {
   return html.slice(start, end);
 };
 
-function load(project: Row) {
+function load(project: Row, role = 'manager') {
   const context: any = vm.createContext({
     Math, Set,
     projectLines: (o: Row) => o.lines || [],
     projectPendingSizedServices: (o: Row) => o.pending || [],
+    orderUserCanSeeMoney: () => role !== 'measurer',
+    currentUser: () => ({ role }),
+    Date,
     orderMeasurementCompletionIssues: (o: Row) => o.issues || [],
     orderNeedsMeasurements: (o: Row) => !!o.needsSizes,
     projectEstimateIsApproved: (o: Row) => !!o.approved,
@@ -116,5 +119,19 @@ test('a project whose services all need no sizes does not open field measurement
   assert.match(studio, /if \(measureStudioHasChosenServices\(order\) && !measureStudioProjectScopes\(order\)\.length && !measureAllWindows\(order\)\.length\) \{\n    alert\('Замер не нужен/);
   const newWindow = slice('function measureStudioNewWindow(orderId) {', '\n}\n');
   assert.match(newWindow, /const defaultScope = measureStudioDefaultScope\(order\);/);
+});
+
+test('a measurer keeps the measurement actions; a booked visit is not skipped', () => {
+  const settled = { id: 'o', status: 'measurement_scheduled', offeringIds: ['zone'], lines: [{ kind: 'quantity' }] };
+  assert.equal(load(settled, 'measurer').c.projectServicesNextAction(settled), null, 'the measurer is not sent to the estimate');
+  const { c } = load(settled);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString();
+  const booked = { ...settled, status: 'consultation_scheduled', consultationAt: tomorrow };
+  assert.equal(c.projectKanbanNextStatus(booked), 'measurement_scheduled', 'a booked consultation is not skipped');
+  const bar = c.renderOrderCleanProgress(booked);
+  assert.doesNotMatch(bar, /stepConsultation · не нужен/, 'a booked consultation is not «не нужен»');
+  assert.match(bar, /stepMeasurement · не нужен/);
+  const past = { ...booked, consultationAt: new Date(Date.now() - 86400000).toISOString() };
+  assert.equal(c.projectKanbanNextStatus(past), 'proposal_sent', 'a visit that already happened does not hold the project');
 });
 
