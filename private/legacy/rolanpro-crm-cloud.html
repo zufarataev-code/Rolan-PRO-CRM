@@ -9268,43 +9268,61 @@ function lowStockItems() {
     return { catalogId: catId, catalog: cat, ...data, status };
   }).filter(Boolean).filter(x => x.status !== 'ok').sort((a,b) => a.lengthM - b.lengthM);
 }
-// Auto-deduct film when installation_done. Picks longest matching roll first.
+// Issue film atomically, narrowest suitable width first and oldest lot within a width.
 function autoDeductInventoryForOrder(o) {
-  if (o._inventoryDeducted) return;
+  const oldLog = o._inventoryLog || [];
+  if (o._inventoryDeducted && !oldLog.some(entry => entry.warning)) return { ok: true };
   const usage = filmPlanUsageByCatalog(o);
-  const log = [];
+  const log = oldLog.filter(entry => entry.rollId && !entry.warning);
+  const plan = [], shortages = [];
   Object.entries(usage).forEach(([catId, data]) => {
-    if (catId === '__no_catalog') return;
-    Object.entries(data.widths || {}).forEach(([widthMm, lengthM]) => {
+    if (catId === '__no_catalog') {
+      shortages.push({ catId, warning: 'Не выбрана плёнка для списания' });
+      return;
+    }
+    const rolls = inventoryByCatalogId(catId).map(roll => ({ roll, available: Math.max(0, Number(roll.remainingLengthM) || 0) }));
+    Object.entries(data.widths || {}).sort((a, b) => Number(b[0]) - Number(a[0])).forEach(([widthMm, lengthM]) => {
       const requiredWidth = Number(widthMm) || 0;
-      let remaining = lengthM;
-      const rolls = inventoryByCatalogId(catId)
-        .filter(r => filmCutRollFits(r.widthMm, requiredWidth))
-        .sort((a, b) => (Number(a.widthMm) || 0) - (Number(b.widthMm) || 0) || (Number(b.remainingLengthM) || 0) - (Number(a.remainingLengthM) || 0));
-      for (const roll of rolls) {
-        if (remaining <= 0) break;
-        const take = Math.min(remaining, Number(roll.remainingLengthM) || 0);
+      // Older partial deductions already issued these metres. Never issue them twice.
+      const issued = log.filter(entry => entry.catId === catId && Number(entry.widthMm) === requiredWidth).reduce((sum, entry) => sum + (Number(entry.lengthM) || 0), 0);
+      let remaining = Math.max(0, Number(lengthM) - issued);
+      const fitting = rolls.filter(item => filmCutRollFits(item.roll.widthMm, requiredWidth))
+        .sort((a, b) => filmCutCanonicalRollWidthMm(a.roll.widthMm) - filmCutCanonicalRollWidthMm(b.roll.widthMm)
+          || String(a.roll.dateReceived || '').localeCompare(String(b.roll.dateReceived || ''))
+          || String(a.roll.id).localeCompare(String(b.roll.id)));
+      for (const item of fitting) {
+        const take = Math.min(remaining, item.available);
         if (take <= 0) continue;
-        roll.remainingLengthM = Math.round((roll.remainingLengthM - take) * 100) / 100;
-        roll._consumed = roll._consumed || [];
-        roll._consumed.push({ orderId: o.id, lengthM: take, widthMm: requiredWidth, at: new Date().toISOString() });
-        recordInventoryMovement({ kind:'film', itemId:roll.id, itemName:catalogLabel(getCatalogItem(catId)), direction:'issue', qty:take, unit:'м', orderId:o.id, reason:'Автосписание после монтажа' });
-        log.push({ catId, rollId: roll.id, widthMm: requiredWidth, lengthM: take });
+        const originalM = Number(item.roll.originalLengthM) || 0;
+        const lotCost = Number(item.roll.costTotal) || 0;
+        const catalogCost = Number(getCatalogItem(catId)?.costPerSqft) || 0;
+        const materialCost = originalM > 0 && lotCost > 0 ? take * lotCost / originalM : mm2_to_sqft(requiredWidth * take * 1000) * catalogCost;
+        plan.push({ roll: item.roll, entry: { catId, rollId: item.roll.id, widthMm: requiredWidth, lengthM: take, materialCost } });
+        item.available -= take;
         remaining -= take;
       }
-      if (remaining > 0.1) {
-        log.push({ catId, rollId: null, widthMm: requiredWidth, lengthM: remaining, warning: 'Недостаток на складе ' + (requiredWidth/1000).toFixed(2) + 'м × ' + remaining.toFixed(2) + 'м' });
-      }
+      if (remaining > 0.001) shortages.push({ catId, widthMm: requiredWidth, lengthM: remaining, warning: 'Недостаток на складе ' + (requiredWidth / 1000).toFixed(2) + 'м × ' + remaining.toFixed(2) + 'м' });
     });
+  });
+  // Plan the whole issue before changing any roll, movement or completion flag.
+  if (shortages.length) return { ok: false, shortages };
+  plan.forEach(({ roll, entry }) => {
+    roll.remainingLengthM = Number((roll.remainingLengthM - entry.lengthM).toFixed(6));
+    roll._consumed = roll._consumed || [];
+    roll._consumed.push({ orderId: o.id, ...entry, at: new Date().toISOString() });
+    recordInventoryMovement({ kind: 'film', itemId: roll.id, itemName: catalogLabel(getCatalogItem(entry.catId)), direction: 'issue', qty: entry.lengthM, unit: 'м', orderId: o.id, materialCost: entry.materialCost, reason: 'Автосписание после монтажа' });
+    log.push(entry);
   });
   o._inventoryDeducted = true;
   o._inventoryLog = log;
-  o.timeline = o.timeline || [];
-  if (log.length) {
-    const summary = log.map(l => l.warning || `списано ${l.lengthM.toFixed(2)}м`).join('; ');
-    o.timeline.push({ at: new Date().toISOString(), key: 'inventory_deducted', by: null, note: 'Склад: ' + summary.slice(0, 100) });
+  // New issues carry their actual lot cost. Old logs without prices remain unknown.
+  if (log.length && log.every(entry => Number.isFinite(entry.materialCost))) {
+    o._inventoryMaterialCost = log.reduce((sum, entry) => sum + entry.materialCost, 0);
   }
+  o.timeline = o.timeline || [];
+  if (plan.length) o.timeline.push({ at: new Date().toISOString(), key: 'inventory_deducted', by: null, note: 'Склад: ' + plan.map(item => 'списано ' + item.entry.lengthM.toFixed(2) + 'м').join('; ').slice(0, 100) });
   save();
+  return { ok: true };
 }
 
 // ---------- FILM CUTTING CALCULATOR ----------
@@ -9723,6 +9741,15 @@ function filmCutVariantSummaryHtml(o) {
       </div>
     </div>`;
 }
+function confirmProjectMaterialIssue(orderId) {
+  if (!['owner', 'manager'].includes(currentUser()?.role)) return;
+  const o = getOrder(orderId);
+  if (!o || !projectProfitIsActual(o)) return;
+  const issue = autoDeductInventoryForOrder(o);
+  if (!issue.ok) return alert('Материал не списан: ' + issue.shortages.map(entry => entry.warning).join('; '));
+  openProjectEstimateWorkspace(orderId);
+}
+
 function orderFilmCutMaterialCost(o) {
   const usage = filmPlanUsageByCatalog(o);
   const ids = Object.keys(usage).filter(id => id !== '__no_catalog');
@@ -9757,7 +9784,7 @@ function filmInventoryMaterialCost(catalogId, usage, catalogCostPerSqft = 0) {
       .sort((a, b) => {
         const widthDiff = filmCutCanonicalRollWidthMm(a.roll.widthMm) - filmCutCanonicalRollWidthMm(b.roll.widthMm);
         if (widthDiff) return widthDiff;
-        return String(a.roll.dateReceived || '').localeCompare(String(b.roll.dateReceived || ''));
+        return String(a.roll.dateReceived || '').localeCompare(String(b.roll.dateReceived || '')) || String(a.roll.id).localeCompare(String(b.roll.id));
       });
     fitting.forEach(item => {
       if (outstandingM <= 0.001) return;
@@ -15968,6 +15995,7 @@ function orderInstallerPayoutPerPerson(o, userId = '') {
   return orderInstallerPayout(o) / n;
 }
 function orderFilmCost(o) {
+  if (o._inventoryDeducted && Number.isFinite(o._inventoryMaterialCost)) return o._inventoryMaterialCost;
   const cutCost = orderFilmCutMaterialCost(o);
   if (cutCost != null) return cutCost;
   if (!measureAllWindows(o).length) return orderQuickLineMaterialCost(o);
@@ -16004,6 +16032,14 @@ function orderManualExpensesTotal(o) {
 // (выручка $100 000 в сентябре → $10 000 на рекламу в октябре).
 let projectMonthRevenueCache = null;
 
+function projectProfitIsActual(o) {
+  if (['cancelled', 'canceled', 'lost', 'archived'].includes(o?.status)) return false;
+  return !!o?.installationDoneAt || ['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'].includes(o?.status);
+}
+function projectProfitIsExcluded(o) {
+  return ['cancelled', 'canceled', 'lost', 'archived'].includes(o?.status);
+}
+
 function projectMonthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
@@ -16014,6 +16050,7 @@ function projectMonthRevenueMap() {
   const totals = {};
   const ids = new Set();
   (db.orders || []).forEach(order => {
+    if (!projectProfitIsActual(order)) return;
     ids.add(order.id);
     const revenue = orderRevenue(order);
     if (!(revenue > 0)) return;
@@ -16034,28 +16071,29 @@ function projectMonthLabel(date) {
 }
 
 /** The advertising budget of a month: marketingPct of the previous month's revenue. */
-function projectMonthAdBudget(date) {
+function projectMonthAdBudget(date, forecastOrder = null) {
   const pct = Math.max(0, Number(db.settings.pricingDefaults?.marketingPct) || 0);
   const previous = new Date(date.getFullYear(), date.getMonth() - 1, 1);
   const previousRevenue = projectMonthRevenue(previous);
   // No revenue last month (first month in the CRM): the rule cannot apply yet, so
   // the budget is estimated from this month's revenue.
   const basis = previousRevenue > 0 ? 'previous' : 'current';
-  const baseRevenue = basis === 'previous' ? previousRevenue : projectMonthRevenue(date);
+  const forecastRevenue = forecastOrder && !projectProfitIsActual(forecastOrder) && !projectProfitIsExcluded(forecastOrder) ? Math.max(0, orderRevenue(forecastOrder)) : 0;
+  const baseRevenue = basis === 'previous' ? previousRevenue : projectMonthRevenue(date) + forecastRevenue;
   return { budget: baseRevenue * pct / 100, pct, basis, baseRevenue, baseMonthLabel: projectMonthLabel(basis === 'previous' ? previous : date) };
 }
 
 /** The project's share of its month's revenue (0 for a project without a price yet). */
 function projectRevenueShare(o) {
   const revenue = orderRevenue(o);
-  if (!(revenue > 0)) return 0;
+  if (!(revenue > 0) || projectProfitIsExcluded(o)) return 0;
   const cache = projectMonthRevenueMap();
   const monthTotal = projectMonthRevenue(projectProfitDate(o)) + (cache.ids.has(o?.id) ? 0 : revenue);
   return monthTotal > 0 ? Math.min(1, revenue / monthTotal) : 0;
 }
 
 function orderAdAllocation(o) {
-  return projectMonthAdBudget(projectProfitDate(o)).budget * projectRevenueShare(o);
+  return projectMonthAdBudget(projectProfitDate(o), o).budget * projectRevenueShare(o);
 }
 
 function orderPSS(o) {
@@ -16105,11 +16143,14 @@ function projectProfitDate(o) {
 }
 function projectProfitMonthOrders(o) {
   const date = projectProfitDate(o);
-  return (db.orders || []).filter(order => {
-    if (orderRevenue(order) <= 0) return false;
+  const orders = (db.orders || []).filter(order => {
+    if (!projectProfitIsActual(order) || orderRevenue(order) <= 0) return false;
     const candidate = projectProfitDate(order);
     return candidate.getFullYear() === date.getFullYear() && candidate.getMonth() === date.getMonth();
   });
+  // Forecast this one project without letting other drafts dilute actual results.
+  if (!projectProfitIsExcluded(o) && orderRevenue(o) > 0 && !orders.some(order => order.id === o.id)) orders.push(o);
+  return orders;
 }
 function projectMonthlyFixedExpensePool() {
   financeData();
@@ -16121,7 +16162,7 @@ function projectProfitability(o) {
   const fixedPool = projectMonthlyFixedExpensePool();
   const revenueShare = projectRevenueShare(o);
   const fixedAllocation = fixedPool * revenueShare;
-  const adBudget = projectMonthAdBudget(projectProfitDate(o));
+  const adBudget = projectMonthAdBudget(projectProfitDate(o), o);
   const grossProfit = orderMargin(o);
   const profitBeforeTax = grossProfit - fixedAllocation;
   const monthGrossProfit = monthOrders.reduce((sum, order) => sum + orderMargin(order), 0);
@@ -16133,6 +16174,7 @@ function projectProfitability(o) {
   const monthRevenue = monthOrders.reduce((sum, order) => sum + orderRevenue(order), 0);
   const taxAllocation = monthTaxReserve * revenueShare;
   return {
+    basis: projectProfitIsActual(o) ? 'actual' : 'forecast',
     grossProfit,
     fixedPool,
     fixedAllocation,
@@ -16765,6 +16807,19 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
     render();
     return true;
   }
+  if ((closesInstallation || newStatus === 'installation_done') && ['owner', 'manager'].includes(currentUser()?.role)) {
+    try {
+      const issue = autoDeductInventoryForOrder(o);
+      if (!issue.ok) {
+        alert('Монтаж не закрыт: ' + issue.shortages.map(entry => entry.warning).join('; '));
+        return refuse();
+      }
+    } catch (error) {
+      console.error('Inventory deduct failed', error);
+      alert('Монтаж не закрыт: не удалось списать материал. Проверьте склад и повторите.');
+      return refuse();
+    }
+  }
   o.status = newStatus;
   if (entersInstallation) refreshManualFilmNeededBy(o);
   o.timeline = o.timeline || [];
@@ -16783,10 +16838,6 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   };
   if (map[newStatus] && !o[map[newStatus]]) o[map[newStatus]] = new Date().toISOString();
   if (newStatus === 'measurement_done') invalidateProjectEstimate(o, 'Замер завершён — требуется расчёт проекта');
-  // Auto-deduct inventory on installation_done
-  if (newStatus === 'installation_done' && db.inventory && db.inventory.length) {
-    try { autoDeductInventoryForOrder(o); } catch (e) { console.warn('Inventory deduct failed', e); }
-  }
   save();
   notifyStatusChange(o);
   if (!opts.skipClientAuto) autoNotifyClient(o, newStatus);
@@ -26083,7 +26134,9 @@ function renderProjectEstimateWorkspace(o) {
     </section>
 
     ${canSeeInternalEconomics ? `<section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>6. Чистая прибыль проекта</h4><div class="text-xs text-gray-500">Управленческий расчёт за ${academyEsc(profitability.monthLabel)} Постоянные расходы и реклама делятся между проектами месяца по выручке: этот проект — ${(profitability.revenueShare * 100).toFixed(1)}% выручки месяца (${fmtMoney(orderRevenue(o))} из ${fmtMoney(profitability.monthRevenue)}, проектов: ${profitability.projectCount}). Бюджет рекламы месяца ${fmtMoney(profitability.adBudget.budget)} = ${Number(profitability.adBudget.pct)}% выручки за ${academyEsc(profitability.adBudget.baseMonthLabel)} (${fmtMoney(profitability.adBudget.baseRevenue)})${profitability.adBudget.basis === 'current' ? ' — за прошлый месяц выручки нет, поэтому пока от выручки этого месяца' : ''}.</div></div></div>
+      <div class="project-estimate-section-head"><div><h4>6. Чистая прибыль проекта</h4><div class="text-xs text-gray-500">${profitability.basis === 'forecast' ? 'Прогноз этого проекта; остальные черновики исключены из фактической выручки. ' : 'Распределение между выполненными проектами. '}Управленческий расчёт за ${academyEsc(profitability.monthLabel)} Постоянные расходы и реклама делятся между проектами месяца по выручке: этот проект — ${(profitability.revenueShare * 100).toFixed(1)}% выручки месяца (${fmtMoney(orderRevenue(o))} из ${fmtMoney(profitability.monthRevenue)}, проектов: ${profitability.projectCount}). Бюджет рекламы месяца ${fmtMoney(profitability.adBudget.budget)} = ${Number(profitability.adBudget.pct)}% выручки за ${academyEsc(profitability.adBudget.baseMonthLabel)} (${fmtMoney(profitability.adBudget.baseRevenue)})${profitability.adBudget.basis === 'current' ? ' — за прошлый месяц выручки нет, поэтому пока от выручки этого месяца' : ''}.</div></div></div>
+      ${projectProfitIsActual(o) && (!o._inventoryDeducted || (o._inventoryLog || []).some(entry => entry.warning)) && measureAllWindows(o).length ? `<div class="order-clean-note mb-3">Расход материала ещё не подтверждён на складе; себестоимость плёнки пока расчётная. <button class="btn-ghost" onclick="confirmProjectMaterialIssue('${o.id}')">Подтвердить расход материала</button></div>` : ''}
+      ${o._inventoryDeducted && !Number.isFinite(o._inventoryMaterialCost) && (o._inventoryLog || []).length ? '<div class="order-clean-note mb-3">Старое списание не содержит зафиксированной стоимости. Для подтверждения фактической себестоимости нужна сверка документов.</div>' : ''}
       <div class="project-profit-flow">
         <div class="project-profit-card"><span>Сумма заказа</span><strong class="text-emerald-700">${fmtMoney(orderRevenue(o))}</strong></div>
         <div class="project-profit-card"><span>Прямые затраты</span><strong class="text-red-600">− ${fmtMoney(pss.total)}</strong></div>
@@ -26094,7 +26147,7 @@ function renderProjectEstimateWorkspace(o) {
         <div class="project-profit-card" style="border-color:${profitability.netProfit >= 0 ? '#86efac' : '#fca5a5'};background:${profitability.netProfit >= 0 ? '#f0fdf4' : '#fef2f2'}"><span>Расчётная чистая прибыль</span><strong class="${profitability.netProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(profitability.netProfit)}</strong></div>
         <div class="project-profit-card"><span>Постоянные расходы месяца</span><strong>${fmtMoney(profitability.fixedPool)}</strong></div>
         <div class="project-profit-card"><span>Бюджет рекламы месяца</span><strong>${fmtMoney(profitability.adBudget.budget)}</strong></div>
-        <div class="project-profit-card"><span>Резерв налога месяца</span><strong>${fmtMoney(profitability.monthTaxReserve)}</strong></div>
+        <div class="project-profit-card"><span>Резерв налога месяца${profitability.basis === 'forecast' ? ' · прогноз' : ''}</span><strong>${fmtMoney(profitability.monthTaxReserve)}</strong></div>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3">
         <div><label>Налоговый профиль</label><select onchange="projectEstimateUpdateTaxProfile('${o.id}','entityType',this.value)"><option value="C_CORP" ${profitability.profile.entityType==='C_CORP'?'selected':''}>California C corporation</option><option value="S_CORP" ${profitability.profile.entityType==='S_CORP'?'selected':''}>California S corporation</option><option value="CUSTOM" ${profitability.profile.entityType==='CUSTOM'?'selected':''}>Другая ставка</option></select></div>
@@ -37595,7 +37648,7 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
       label = `Фикс $${pc.fixedPerJob}`;
     }
     if (amount > 0) {
-      const isPaid = (o.payouts || []).some(p => p.userId === u.id && p.paid);
+      const isPaid = (o.payouts || []).filter(p => p.userId === u.id && p.paid).reduce((sum, p) => sum + (Number(p.amount) || 0), 0) >= amount;
       breakdown.push({ kind: pc.type, orderId: o.id, orderNumber: o.number, label, amount, date: dateField, paid: isPaid });
       total += amount;
     }
@@ -37603,14 +37656,39 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
   return { total, breakdown };
 }
 
+
+function payrollPeriodAllocatedAmount(amount, periodStart, periodEnd, startDate, endDate) {
+  const day = value => { const d = new Date(value); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
+  const first = day(periodStart), last = day(periodEnd), start = day(startDate), end = day(endDate);
+  if (![first, last, start, end].every(Number.isFinite) || last < first) return 0;
+  const days = (last - first) / 86400000 + 1;
+  const before = Math.max(0, Math.min(days, (start - first) / 86400000));
+  const through = Math.max(0, Math.min(days, (end - first) / 86400000 + 1));
+  const cents = Math.round((Number(amount) || 0) * 100);
+  return Math.max(0, Math.round(cents * through / days) - Math.round(cents * before / days)) / 100;
+}
+
 function payrollPaidForPeriod(userId, startDate, endDate) {
-  const batches = (db.payrollPayments || [])
-    .filter(p => p.userId === userId && financeDate(p.periodStart || p.paidAt) <= endDate && financeDate(p.periodEnd || p.paidAt) >= startDate)
-    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const batches = (db.payrollPayments || []).filter(p => p.userId === userId).reduce((sum, p) => {
+    let allocations = p.allocations;
+    if (!Array.isArray(allocations)) {
+      allocations = (db.orders || []).flatMap(o => (o.payouts || []).filter(x => x.userId === userId && x.paid && x.paymentBatchId === p.id).map(x => ({
+        amount: x.amount, date: x.accruedAt || (x.type === 'commission' ? o.paidAt : getUser(userId)?.role === 'measurer' ? o.measurementDoneAt : o.installationDoneAt),
+      })));
+      // A historical salary batch has no order details. Spread its amount over its earned period.
+      if (!allocations.length || allocations.some(x => !x.date)) return sum + payrollPeriodAllocatedAmount(p.amount, p.periodStart || p.paidAt, p.periodEnd || p.paidAt, startDate, endDate);
+    }
+    return sum + allocations.reduce((subtotal, x) => subtotal + (x.date
+      ? (financeDate(x.date) >= startDate && financeDate(x.date) <= endDate ? Number(x.amount) || 0 : 0)
+      : payrollPeriodAllocatedAmount(x.amount, x.periodStart || p.periodStart, x.periodEnd || p.periodEnd, startDate, endDate)), 0);
+  }, 0);
   const legacy = (db.orders || []).reduce((sum, o) => sum + (o.payouts || [])
-    .filter(p => p.userId === userId && p.paid && !p.paymentBatchId && financeDate(p.paidAt) >= startDate && financeDate(p.paidAt) <= endDate)
+    .filter(p => {
+      const earnedAt = p.accruedAt || (p.type === 'commission' ? o.paidAt : getUser(userId)?.role === 'measurer' ? o.measurementDoneAt : o.installationDoneAt) || p.paidAt;
+      return p.userId === userId && p.paid && !p.paymentBatchId && financeDate(earnedAt) >= startDate && financeDate(earnedAt) <= endDate;
+    })
     .reduce((s, p) => s + (Number(p.amount) || 0), 0), 0);
-  return batches + legacy;
+  return Number((batches + legacy).toFixed(2));
 }
 
 function renderPayroll() {
@@ -37715,24 +37793,33 @@ function markPayoutPaid(userId, startISO, endISO) {
   const paymentBatchId = 'pay_' + uid();
   const paidAt = new Date().toISOString();
   db.payrollPayments = db.payrollPayments || [];
+  const allocations = calc.breakdown.map(b => {
+    const alreadyPaid = b.orderId ? (getOrder(b.orderId)?.payouts || []).filter(p => p.userId === userId && p.paid).reduce((sum, p) => sum + (Number(p.amount) || 0), 0) : payrollPaidForPeriod(userId, start, end);
+    return { orderId: b.orderId || null, kind: b.kind, amount: Math.max(0, b.amount - alreadyPaid), date: b.date || null, periodStart: startISO, periodEnd: endISO };
+  }).filter(x => x.amount > 0);
+  if (Math.abs(allocations.reduce((sum, x) => sum + x.amount, 0) - amountDue) > 0.01) {
+    return alert('Выплата не записана: исторические суммы не совпадают с начислениями. Сверьте выплаты сотрудника.');
+  }
   db.payrollPayments.push({
     id: paymentBatchId, userId, amount: amountDue, paidAt,
     periodStart: startISO, periodEnd: endISO,
+    allocations,
     createdBy: state.currentUserId,
   });
   calc.breakdown.forEach(b => {
-    if (b.paid) return;
     if (!b.orderId) return;
+    const allocation = allocations.find(x => x.orderId === b.orderId);
+    if (!allocation) return;
     const o = getOrder(b.orderId);
     if (!o) return;
     o.payouts = o.payouts || [];
     o.payouts.push({
-      id: uid(), userId, amount: b.amount,
+      id: uid(), userId, amount: allocation.amount, accruedAt: b.date,
       type: b.kind, label: b.label,
       paid: true, paidAt, paymentBatchId,
     });
     o.timeline = o.timeline || [];
-    o.timeline.push({ at: new Date().toISOString(), key: 'payout_paid', by: state.currentUserId, note: `Выплачено ${u.name}: ${fmtMoney(b.amount)} (${b.label})` });
+    o.timeline.push({ at: new Date().toISOString(), key: 'payout_paid', by: state.currentUserId, note: `Выплачено ${u.name}: ${fmtMoney(allocation.amount)} (${b.label})` });
   });
   save();
   alert(`Выплачено ${fmtMoney(amountDue)} → ${u.name}`);
