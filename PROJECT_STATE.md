@@ -997,3 +997,11 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Measurement is scoped to the exact services selected in the Project. When several sized services share a direction, the surveyor/manager explicitly switches between them; completion requires measurements for every selected sized service. Historical projects without explicit service selections keep the old fallback and remain editable.
 - Installation is still scheduled only after accepted Proposal/production preparation and separately for every service row; intake does not ask for installers and Proposal readiness is not blocked by scheduling.
 - Validation: focused lifecycle/service/card/estimate suite 80/80, service-unit compatibility 21/21, full suite 647/647, inline CRM scripts compile. On this local Mac both standalone `tsc` and `next build` stalled without diagnostics or CPU load and were stopped; required GitHub CI remains the authoritative typecheck/build gate before merge. Production has not been changed.
+
+## 2026-10-10 handoff — flaky bank-secret tampering test (Claude)
+
+- Branch `claude/fix-flaky-bank-tamper-test`, based on `main` `83ffe79` after PR #328. Test-only change; production code, database and deploy untouched.
+- Cause: `bank-feeds.test.ts` «bank secrets are encrypted and cannot be read after tampering» rewrote the last two base64url characters of the ciphertext. When the last character carries only 2 significant bits, the replacement could decode to the same bytes, decryption succeeded and `assert.throws` failed (≈0.4% of runs; seen in CI run 37935753313 on 2026-10-09).
+- Fix: the test decodes the ciphertext and the auth tag, flips one bit of the first byte and re-encodes, so the bytes always change; both tampered variants must fail to decrypt.
+- Verification: old tampering slipped through 20/5000 times in a scratch loop, the new one 0/5000 (ciphertext and tag); the fixed test passed 200/200 repeated runs; `npm test` 647/647; `tsc --noEmit` clean; `git diff --check` clean.
+- Next: CI + Codex review; merge only after the owner's «да».

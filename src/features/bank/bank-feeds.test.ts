@@ -56,8 +56,14 @@ test("bank secrets are encrypted and cannot be read after tampering", () => {
     assert.ok(!sealed.includes("access-sandbox-1234"));
     assert.equal(decryptBankSecret(sealed), "access-sandbox-1234");
     const [version, iv, tag, body] = sealed.split(".");
-    const tampered = [version, iv, tag, body.slice(0, -2) + (body.endsWith("A") ? "BB" : "AA")].join(".");
-    assert.throws(() => decryptBankSecret(tampered));
+    // Flip a bit in the decoded bytes: swapping base64 characters can leave the bytes unchanged.
+    const flipFirstBit = (part: string) => {
+      const bytes = Buffer.from(part, "base64url");
+      bytes[0] ^= 1;
+      return bytes.toString("base64url");
+    };
+    assert.throws(() => decryptBankSecret([version, iv, tag, flipFirstBit(body)].join(".")), "changed ciphertext");
+    assert.throws(() => decryptBankSecret([version, iv, flipFirstBit(tag), body].join(".")), "changed auth tag");
   } finally {
     process.env.AUTH_SECRET = previous;
   }
