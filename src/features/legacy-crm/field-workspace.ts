@@ -14,6 +14,8 @@ const FINANCIAL_TIMELINE_KEYS = new Set([
   "premium_proposal_accepted",
 ]);
 
+const CLOSED_STATUSES = new Set(["installation_done", "act_signed", "payment_received", "completed", "review_received"]);
+
 const MUTABLE_ORDER_FIELDS = new Set([
   "status",
   "measurements",
@@ -310,9 +312,9 @@ function mergeFieldServiceProgress(
       result[serviceId] = { status: "in_progress", startedAt: before?.startedAt || now, startedBy: before?.startedBy || actor };
     } else if (requested === "done") {
       result[serviceId] = { status: "done", startedAt: before?.startedAt || now, startedBy: before?.startedBy || actor, doneAt: now, doneBy: actor };
-    } else if (!requested) {
-      delete result[serviceId];
     }
+    // Anything else (a missing or unknown status) keeps the saved mark: a
+    // started service is not taken back from the field.
   }
   return result;
 }
@@ -367,6 +369,16 @@ export function mergeFieldWorkspace(
         continue;
       }
       next[key] = mergeOperationalValue(currentOrder[key], submitted[key]);
+    }
+    // Closing through the services: the completion date is the last service's
+    // server-stamped time, not a submitted one.
+    if (CLOSED_STATUSES.has(String(next.status)) && !CLOSED_STATUSES.has(String(currentOrder.status)) && isObject(next.serviceProgress)) {
+      const doneTimes = Object.values(next.serviceProgress)
+        .filter(isObject)
+        .map((entry) => String(entry.doneAt || ""))
+        .filter(Boolean)
+        .sort();
+      if (doneTimes.length) next.installationDoneAt = doneTimes[doneTimes.length - 1];
     }
     return next;
   });

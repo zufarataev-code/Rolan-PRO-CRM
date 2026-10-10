@@ -287,3 +287,25 @@ test('when two crews finish at once, the merged save closes the project; its fil
   assert.equal(deducted, 1);
   assert.match(html, /const deductedClosedProjects = projectDeductServiceClosedProjects\(\);/);
 });
+
+test('field save: a started service cannot be taken back; closing takes the date from the services', () => {
+  const current = {
+    users: [{ id: 'i1', role: 'installer' }], clients: [], tasks: [],
+    orders: [{ id: 'o', status: 'installation_in_progress', installerIds: ['i1'], serviceSchedules: [
+      { id: 'line:z', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i1'] },
+    ], serviceProgress: { 'line:z': { status: 'in_progress', startedAt: '2026-10-16T16:05:00.000Z', startedBy: 'i1' } } }],
+  };
+  const erased = structuredClone(current);
+  erased.orders[0].serviceProgress = {} as any;
+  const kept = mergeFieldWorkspace(current, erased, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  assert.deepEqual(kept.orders[0].serviceProgress['line:z'], current.orders[0].serviceProgress['line:z']);
+  // Closing: the submitted date is ignored; the last service's stamp wins.
+  const closing = structuredClone(current);
+  closing.orders[0].status = 'installation_done';
+  (closing.orders[0] as Row).installationDoneAt = '2020-01-01T00:00:00.000Z';
+  closing.orders[0].serviceProgress = { 'line:z': { status: 'done' } } as any;
+  const closed = mergeFieldWorkspace(current, closing, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  assert.equal(closed.orders[0].status, 'installation_done');
+  assert.equal(closed.orders[0].installationDoneAt, closed.orders[0].serviceProgress['line:z'].doneAt);
+  assert.notEqual(closed.orders[0].installationDoneAt, '2020-01-01T00:00:00.000Z');
+});
