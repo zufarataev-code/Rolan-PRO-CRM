@@ -23727,7 +23727,8 @@ function renderOrderCleanProgress(o) {
   // Services that need no sizes (or have them) take the project straight to its proposal.
   const settled = PROJECT_PRE_PROPOSAL_STATUSES.includes(o.status) && projectMeasurementSettled(o);
   const measurementSkipped = settled && !orderNeedsMeasurements(o);
-  if (settled) activeStep = Math.max(activeStep, 3);
+  // A booked visit still ahead stays the current step, as on the kanban.
+  if (settled && !projectHasScheduledVisit(o)) activeStep = Math.max(activeStep, 3);
   // A visit that was booked stays on the bar: only an unbooked step is «не нужен».
   const skippedStep = i => measurementSkipped && ((i === 1 && !o.consultationAt) || (i === 2 && !o.measurementAt));
   return `

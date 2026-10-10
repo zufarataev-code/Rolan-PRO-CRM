@@ -130,6 +130,8 @@ test('a measurer keeps the measurement actions; a booked visit is not skipped', 
   assert.equal(c.projectKanbanNextStatus(booked), 'measurement_scheduled', 'a booked consultation is not skipped');
   const bar = c.renderOrderCleanProgress(booked);
   assert.doesNotMatch(bar, /stepConsultation · не нужен/, 'a booked consultation is not «не нужен»');
+  assert.match(bar, /order-clean-progress-step current">[\s\S]*?stepConsultation</, 'the booked consultation stays the current step');
+  assert.match(bar, /order-clean-progress-step ">\s*<div class="order-clean-progress-line"><\/div>\s*<div class="order-clean-progress-label">stepProposal/, 'the proposal is not current yet');
   assert.match(bar, /stepMeasurement · не нужен/);
   const past = { ...booked, consultationAt: new Date(Date.now() - 86400000).toISOString() };
   assert.equal(c.projectKanbanNextStatus(past), 'proposal_sent', 'a visit that already happened does not hold the project');
