@@ -997,3 +997,11 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Measurement is scoped to the exact services selected in the Project. When several sized services share a direction, the surveyor/manager explicitly switches between them; completion requires measurements for every selected sized service. Historical projects without explicit service selections keep the old fallback and remain editable.
 - Installation is still scheduled only after accepted Proposal/production preparation and separately for every service row; intake does not ask for installers and Proposal readiness is not blocked by scheduling.
 - Validation: focused lifecycle/service/card/estimate suite 80/80, service-unit compatibility 21/21, full suite 647/647, inline CRM scripts compile. On this local Mac both standalone `tsc` and `next build` stalled without diagnostics or CPU load and were stopped; required GitHub CI remains the authoritative typecheck/build gate before merge. Production has not been changed.
+
+## 2026-10-10 handoff — a project's next step follows its services (Claude)
+
+- Branch `claude/project-stages`, based on `main` `83ffe79` (after Codex PR #328). Owner decision: DECISIONS.md (2026-10-10); market review artifact https://claude.ai/artifact/Q2iMamFEYqQDFcJJVyyj57.
+- Legacy html: `projectHasServices`, `projectMeasurementSettled`, `PROJECT_PRE_PROPOSAL_STATUSES`, `projectServicesNextAction` (used first by `orderPrimaryNextAction`); `renderOrderCleanProgress` marks skipped consultation/measurement (`.order-clean-progress-step.skipped`); `projectKanbanNextStatus` (kanban advance and card label); `measureStudioScopeButtons(scopeKey, order)` limits «Полевой замер» to the project's directions.
+- Verification: new `project-stages.test.ts` (4 tests); `npm test` green; local browser: a new project with only «Подключение зоны» shows «Рассчитать проект — Замер не нужен», consultation and measurement «не нужен», current step КП.
+- Next: Codex review + CI; owner's «да» before deploy. Then the ERP core (Project → Services → Visits → Measurement → Work log) together with the CRM core consolidation.
+
