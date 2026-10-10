@@ -1,4 +1,5 @@
 import { ROLE_CODES } from "@/lib/auth/constants";
+import { projectServicesFinished, serviceGroupName } from "@/features/legacy-crm/service-solutions";
 
 type JsonObject = Record<string, unknown>;
 
@@ -13,6 +14,9 @@ const FINANCIAL_TIMELINE_KEYS = new Set([
   "invoice_sent",
   "premium_proposal_accepted",
 ]);
+
+const CLOSED_STATUSES = new Set(["installation_done", "act_signed", "payment_received", "completed", "review_received"]);
+const SERVICE_TIMELINE_KEYS = new Set(["service_started", "service_done", "service_reopened"]);
 
 const MUTABLE_ORDER_FIELDS = new Set([
   "status",
@@ -38,6 +42,7 @@ const MUTABLE_ORDER_FIELDS = new Set([
   "checklist",
   "issues",
   "signature",
+  "serviceProgress",
   "updatedAt",
 ]);
 
@@ -265,6 +270,60 @@ export function createFieldWorkspace(
   };
 }
 
+/**
+ * The crew of one service of a project (projectServiceAssignment): its saved
+ * per-service plan, or — for a project planned as a whole — a quick line's own
+ * crew or the project crew.
+ */
+function serviceCrew(order: JsonObject, serviceId: string): string[] {
+  const plans = (Array.isArray(order.serviceSchedules) ? order.serviceSchedules : []).filter(isObject);
+  if (plans.length) {
+    const plan = plans.find((item) => String(item.id || "") === serviceId);
+    return Array.isArray(plan?.installerIds) ? plan.installerIds.map(String) : [];
+  }
+  const lineId = serviceId.startsWith("line:") ? serviceId.slice(5) : "";
+  const line = (Array.isArray(order.extraServices) ? order.extraServices : [])
+    .filter(isObject)
+    .find((item) => String(item.id || "") === lineId);
+  if (Array.isArray(line?.installerIds) && line.installerIds.length) return line.installerIds.map(String);
+  return Array.isArray(order.installerIds) ? order.installerIds.map(String) : [];
+}
+
+/**
+ * A field specialist marks the progress of their own services only (Owner,
+ * 2026-10-10). Only the requested status is taken from the browser; who and
+ * when are stamped here from the signed-in specialist and the server clock.
+ */
+function mergeFieldServiceProgress(
+  currentOrder: JsonObject,
+  submitted: unknown,
+  identityIds: Set<string>,
+  events: JsonObject[] = [],
+  now = new Date().toISOString(),
+): JsonObject {
+  const result: JsonObject = isObject(currentOrder.serviceProgress) ? clone(currentOrder.serviceProgress) : {};
+  if (!isObject(submitted)) return result;
+  for (const serviceId of new Set([...Object.keys(result), ...Object.keys(submitted)])) {
+    const actor = serviceCrew(currentOrder, serviceId).find((member) => identityIds.has(member));
+    if (!actor) continue;
+    const before = isObject(result[serviceId]) ? (result[serviceId] as JsonObject) : null;
+    const requested = isObject(submitted[serviceId]) ? String((submitted[serviceId] as JsonObject).status || "") : "";
+    // Reopening a done service is the manager's call.
+    if (before?.status === "done") continue;
+    if (requested === String(before?.status || "")) continue;
+    if (requested === "in_progress") {
+      result[serviceId] = { status: "in_progress", startedAt: before?.startedAt || now, startedBy: before?.startedBy || actor };
+      events.push({ at: now, key: "service_started", by: actor, serviceId });
+    } else if (requested === "done") {
+      result[serviceId] = { status: "done", startedAt: before?.startedAt || now, startedBy: before?.startedBy || actor, doneAt: now, doneBy: actor };
+      events.push({ at: now, key: "service_done", by: actor, serviceId });
+    }
+    // Anything else (a missing or unknown status) keeps the saved mark: a
+    // started service is not taken back from the field.
+  }
+  return result;
+}
+
 export function mergeFieldWorkspace(
   currentPayload: JsonObject,
   submittedPayload: JsonObject,
@@ -289,11 +348,16 @@ export function mergeFieldWorkspace(
     if (!submitted) return currentOrder;
 
     const next = clone(currentOrder);
+    const serviceEvents: JsonObject[] = [];
     for (const key of MUTABLE_ORDER_FIELDS) {
       if (!(key in submitted)) continue;
       if (key === "status") {
         const status = String(submitted.status || "");
         if (allowedStatuses.has(status)) next.status = status;
+        continue;
+      }
+      if (key === "serviceProgress") {
+        next.serviceProgress = mergeFieldServiceProgress(currentOrder, submitted.serviceProgress, identityIds, serviceEvents);
         continue;
       }
       if (key === "timeline") {
@@ -311,6 +375,40 @@ export function mergeFieldWorkspace(
         continue;
       }
       next[key] = mergeOperationalValue(currentOrder[key], submitted[key]);
+    }
+    // A closed project is reopened by a manager, not by a field save from a
+    // browser that has not seen it close.
+    if (CLOSED_STATUSES.has(String(currentOrder.status)) && !CLOSED_STATUSES.has(String(next.status))) next.status = currentOrder.status;
+    // The service marks in the history come from the accepted marks, named
+    // and dated here; the browser's own copies of them are not taken.
+    const savedServiceEvents = (Array.isArray(currentOrder.timeline) ? currentOrder.timeline : [])
+      .filter((event) => isObject(event) && SERVICE_TIMELINE_KEYS.has(String(event.key || "")));
+    const timeline: unknown[] = [
+      ...(Array.isArray(next.timeline) ? next.timeline : []).filter(
+        (event) => !(isObject(event) && SERVICE_TIMELINE_KEYS.has(String(event.key || ""))),
+      ),
+      ...clone(savedServiceEvents),
+      ...serviceEvents.map((event) => ({ ...event, note: serviceGroupName(next, String(event.serviceId), currentPayload) })),
+    ].sort((a, b) => String(isObject(a) ? a.at || "" : "").localeCompare(String(isObject(b) ? b.at || "" : "")));
+    next.timeline = timeline;
+    // The last service done closes the project, whatever the browser did next.
+    if (projectServicesFinished(next, currentPayload)) {
+      const last = Object.values(next.serviceProgress as JsonObject)
+        .filter(isObject)
+        .sort((a, b) => String(a.doneAt || "").localeCompare(String(b.doneAt || "")))
+        .pop();
+      next.status = "installation_done";
+      timeline.push({ at: last?.doneAt, key: "installation_done", by: last?.doneBy, note: "Все услуги выполнены" });
+    }
+    // Closing through the services: the completion date is the last service's
+    // server-stamped time, not a submitted one.
+    if (CLOSED_STATUSES.has(String(next.status)) && !CLOSED_STATUSES.has(String(currentOrder.status)) && isObject(next.serviceProgress)) {
+      const doneTimes = Object.values(next.serviceProgress)
+        .filter(isObject)
+        .map((entry) => String(entry.doneAt || ""))
+        .filter(Boolean)
+        .sort();
+      if (doneTimes.length) next.installationDoneAt = doneTimes[doneTimes.length - 1];
     }
     return next;
   });

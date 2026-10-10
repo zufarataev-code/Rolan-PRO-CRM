@@ -655,3 +655,14 @@ Owner in chat on 2026-10-10, after the market review (Tint Wiz, simPRO, ServiceT
 - The kanban «→» (and the next stage shown on the card) skips consultation and measurement for a settled project and goes to the proposal; the usual checks open the estimate if it is not approved yet.
 - «Полевой замер» offers the directions of the project's chosen services only (a project without chosen services still offers every direction).
 - Not in this step: per-service lifecycle statuses and visits as entities (the core model in PostgreSQL), lead conversion with a service picker (a lead project now asks for services on its card).
+
+## 2026-10-10 — Each service of a project has its own progress (Owner)
+
+Owner in chat on 2026-10-10 («ты когда доделаешь логику с проектом»), continuing the hybrid ERP plan: a project's services are done on different days by different crews, so the project must know which of them are done.
+
+- `o.serviceProgress[serviceKey]` — `{ status: 'in_progress' | 'done', startedAt, startedBy, doneAt, doneBy }` per service line (the same keys as `serviceSchedules`); no entry means planned. It is marked once installation is scheduled.
+- The owner/manager marks any service on the project card («Ход работ» column: Начать / Выполнено / Вернуть в работу). A field specialist marks only their own services, on their workspace («Мои услуги») or with «Мои услуги выполнены»; they cannot reopen a done service. Each mark adds a timeline event (`service_started`, `service_done`, `service_reopened`), not shown to the client.
+- The project follows its services: `installation_in_progress` once one starts, `installation_done` once all are done, dated by the last service. The usual checks (verified measurements, complete plans) still apply. Closing an installation by hand finishes the services still open.
+- Server: progress only in scheduled statuses or when closing from them; entries must be valid and belong to a current service; a closed project's progress is frozen; a field specialist's save changes only the progress of services whose crew includes them and cannot reopen a done one.
+- Plans and progress are compared with sorted keys (jsonb reorders object keys).
+- Not in this step: pay accrual per service (payroll still uses the project's completion).

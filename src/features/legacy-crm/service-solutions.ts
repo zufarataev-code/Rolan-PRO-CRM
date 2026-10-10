@@ -65,6 +65,39 @@ function projectPlans(order: Row): Row[] {
     };
   });
 }
+/** A plan with its specialist and date. */
+const completePlan = (plan: Row) => typeof plan.installationAt === 'string' && !Number.isNaN(Date.parse(plan.installationAt)) && Array.isArray(plan.installerIds) && plan.installerIds.length > 0;
+/**
+ * An installation under way whose every service is done and planned
+ * (projectCloseFinishedProjects): it closes as «Монтаж выполнен».
+ */
+export function projectServicesFinished(order: Row, payload: Row): boolean {
+  if (!SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) return false;
+  const ids = serviceGroupIds(order);
+  const progress = object(order.serviceProgress);
+  if (!ids.length || ids.some(id => object(progress[id]).status !== 'done')) return false;
+  const plans = projectPlans(order);
+  if (plans.some(plan => !completePlan(plan)) || ids.some(id => !plans.some(plan => plan.id === id))) return false;
+  return !pendingSizedOfferings(order, rows(object(payload.settings).serviceOfferings)).length;
+}
+const DIRECTION_TITLES: Record<string, string> = {
+  smart_film: 'Смарт плёнка', solar_film: 'Солнцезащитная плёнка', protective_film: 'Защитная плёнка',
+  decorative_film: 'Декоративная плёнка', privacy_film: 'Приватная плёнка',
+};
+/** The name of a service of a project, as its row shows it (projectServiceGroups). */
+export function serviceGroupName(order: Row, id: string, payload: Row): string {
+  const [kind, key] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
+  if (kind === 'line') {
+    const line = rows(order.extraServices).find(item => String(item.id) === key);
+    return String(line?.offeringName || line?.label || 'Услуга');
+  }
+  if (kind === 'offering') {
+    const win = scope(order).find(item => item.offeringId === key && item.offeringName);
+    const offering = rows(object(payload.settings).serviceOfferings).find(item => item.id === key);
+    return String(win?.offeringName || offering?.name || 'Услуга');
+  }
+  return DIRECTION_TITLES[key] || DIRECTION_TITLES.solar_film;
+}
 /** Owner-only economics of a service: the installer rate and the material cost per unit. */
 const OWNER_OFFERING_FIELDS = ['installerRatePerSqft', 'materialCostPerUnit'] as const;
 
@@ -313,7 +346,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         if (plan.installerIds.some((id: unknown)=>!rows(next.users).some(user=>user.id===id && user.role==='installer'))) return 'Исполнитель услуги должен быть специалистом по установке.';
       }
     }
-    const complete = (plan: Row) => typeof plan.installationAt === 'string' && !Number.isNaN(Date.parse(plan.installationAt)) && Array.isArray(plan.installerIds) && plan.installerIds.length > 0;
+    const complete = completePlan;
     const schedulesChanged = stableJson(order.serviceSchedules) !== stableJson(oldOrder.serviceSchedules);
     // A finished project keeps its crew and dates: they are its history and its pay.
     if (schedulesChanged && CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status))) return 'Проект закрыт: исполнителей и даты услуг не меняют.';
@@ -331,6 +364,12 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       if (plans.some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
       if (serviceGroupIds(order).some(id => !plans.some(plan => plan.id === id))) return 'Укажите дату и исполнителей каждой услуги.';
     }
+    // An installation under way closes only when every service is done, so
+    // one crew cannot close the work of another (Owner, 2026-10-10).
+    if (closesProject && oldOrder.id !== undefined && SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status))) {
+      const progress = object(order.serviceProgress);
+      if (serviceGroupIds(order).some(id => object(progress[id]).status !== 'done')) return 'Сначала отметьте выполненными все услуги проекта.';
+    }
     // Once «Монтаж назначен», a planned service may change its specialist or
     // date but not lose them; a service added later is planned step by step.
     // A project planned as a whole counts as planned for every service, so its
@@ -342,6 +381,35 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         // A plan leaves only with its service.
         if (after ? !complete(after) : services.includes(before.id)) return 'Монтаж назначен: у услуги должны остаться исполнитель и дата.';
       }
+    }
+    // The progress of each service (Owner, 2026-10-10) is marked once
+    // installation is scheduled, closes with the installation and then stays.
+    const progressChanged = stableJson(order.serviceProgress ?? null) !== stableJson(oldOrder.serviceProgress ?? null);
+    if (progressChanged) {
+      if (order.serviceProgress !== undefined && (order.serviceProgress === null || typeof order.serviceProgress !== 'object' || Array.isArray(order.serviceProgress))) return 'Некорректный ход работ.';
+      if (CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status))) return 'Проект закрыт: ход работ не меняют.';
+      const open = SCHEDULED_PROJECT_STATUSES.includes(String(order.status))
+        || (CLOSED_PROJECT_STATUSES.includes(String(order.status)) && SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status)));
+      if (!open) return 'Ход работ отмечают после «Монтаж назначен».';
+      const services = new Set(serviceGroupIds(order));
+      const progress: Row = {};
+      for (const [id, value] of Object.entries(object(order.serviceProgress))) {
+        if (!services.has(id)) continue; // a service that left the project
+        const entry = object(value);
+        if (entry.status !== 'in_progress' && entry.status !== 'done') return 'Некорректный ход работ.';
+        for (const field of ['startedAt', 'doneAt']) {
+          if (entry[field] !== undefined && (typeof entry[field] !== 'string' || Number.isNaN(Date.parse(entry[field] as string)))) return 'Некорректная дата хода работ.';
+        }
+        if (entry.status === 'done' && typeof entry.doneAt !== 'string') return 'Некорректная дата хода работ.';
+        progress[id] = entry;
+      }
+      order.serviceProgress = progress;
+    }
+    // The progress of a service that left the project goes with it, whatever
+    // else this save changed, so a remeasured service starts afresh.
+    if (order.serviceProgress && typeof order.serviceProgress === 'object' && !Array.isArray(order.serviceProgress)) {
+      const services = new Set(serviceGroupIds(order));
+      order.serviceProgress = Object.fromEntries(Object.entries(object(order.serviceProgress)).filter(([id]) => services.has(id)));
     }
     // A plan made at «КП принято» is a draft: the project crew and date (what
     // the client and the field crew see) follow it once installation is scheduled.
