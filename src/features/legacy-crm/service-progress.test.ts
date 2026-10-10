@@ -295,8 +295,9 @@ test('a project closed through its services: one manager CRM claims its write-of
   const sent: string[] = [];
   c.autoDeductInventoryForOrder = (order: Row) => { deducted += 1; order._inventoryDeducted = true; };
   c.notifyStatusChange = (order: Row) => sent.push(`staff:${order.id}`);
+  let mailDown = true;
   c.autoNotifyClient = async (order: Row) => {
-    if (order.id === 'taken2') throw new Error('mail down');
+    if (order.id === 'taken2' && mailDown) throw new Error('mail down');
     sent.push(`client:${order.id}`);
   };
   db.inventory = [{ id: 'roll' }];
@@ -334,6 +335,12 @@ test('a project closed through its services: one manager CRM claims its write-of
   assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 2, 'fresh and taken done; the failing one not');
   assert.ok(failing.servicesFollowUpClaim.token && !failing.servicesFollowUpClaim.doneAt);
   assert.equal(c.projectClaimServiceFollowUps(now + 3600000 + 11 * 60000), 1, 'retried after the lease');
+  // The retry sends the client notice only: the staff were told the first time.
+  mailDown = false;
+  sent.length = 0;
+  assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 1);
+  assert.deepEqual(sent, ['client:taken2']);
+  assert.ok(failing.servicesFollowUpClaim.doneAt);
 });
 
 test('a manager removes the last open service of a running installation: the project closes', () => {
@@ -358,7 +365,7 @@ test('a manager removes the last open service of a running installation: the pro
 test('field save: a started service cannot be taken back; closing takes the date from the services', () => {
   const current = {
     users: [{ id: 'i1', role: 'installer' }], clients: [], tasks: [],
-    orders: [{ id: 'o', status: 'installation_in_progress', installerIds: ['i1'], serviceSchedules: [
+    orders: [{ id: 'o', status: 'installation_in_progress', installerIds: ['i1'], extraServices: [{ id: 'z', label: 'Мойка', qty: 1 }], serviceSchedules: [
       { id: 'line:z', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i1'] },
     ], serviceProgress: { 'line:z': { status: 'in_progress', startedAt: '2026-10-16T16:05:00.000Z', startedBy: 'i1' } } }],
   };
@@ -423,6 +430,15 @@ test('field save: the last service done closes the project on the server; the hi
   assert.equal(started.orders[0].status, 'installation_in_progress');
   assert.deepEqual(started.orders[0].timeline.slice(-2).map((event: Row) => [event.key, event.by]), [['service_started', 'i1'], ['installation_in_progress', 'i1']]);
   assert.equal(prepareServiceSolutions(planned, started, false), null);
+  // Progress of a service that left the project does not date the close.
+  const orphan = structuredClone(current);
+  orphan.orders[0].serviceProgress['line:gone'] = { status: 'done', doneAt: '2099-01-01T00:00:00.000Z' };
+  const closing = structuredClone(orphan);
+  closing.orders[0].serviceProgress['line:z'] = { status: 'done' };
+  const dated = mergeFieldWorkspace(orphan, closing, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  assert.equal(dated.orders[0].status, 'installation_done');
+  assert.notEqual(dated.orders[0].installationDoneAt, '2099-01-01T00:00:00.000Z');
+  assert.equal(dated.orders[0].installationDoneAt, dated.orders[0].serviceProgress['line:z'].doneAt);
   // A browser cannot take a started installation back to «scheduled».
   const back = structuredClone(started);
   back.orders[0].status = 'installation_scheduled';

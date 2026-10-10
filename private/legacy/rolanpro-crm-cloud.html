@@ -25174,12 +25174,6 @@ function projectCloseFinishedProjects() {
   });
   return closed;
 }
-/** Staff and client «Монтаж выполнен» notices of one project; settles once they were sent. */
-async function projectSendFinishedNotices(o) {
-  if (!o || o.status !== 'installation_done') return;
-  notifyStatusChange(o);
-  await autoNotifyClient(o, 'installation_done');
-}
 /**
  * Follow-ups of a project closed through its services rather than by a
  * manager's own «Монтаж выполнен»: its film is written off (a field
@@ -25205,7 +25199,7 @@ function projectClaimServiceFollowUps(now = Date.now()) {
     const notify = o.servicesClosedNotice === 'pending' || before?.notify === true;
     const deduct = !o._inventoryDeducted && (notify || Object.keys(o.serviceProgress || {}).length > 0) && (db.inventory || []).length > 0;
     if (!notify && !deduct) return;
-    o.servicesFollowUpClaim = { token: PROJECT_FOLLOW_UP_TOKEN, at: new Date(now).toISOString(), notify, deduct };
+    o.servicesFollowUpClaim = { token: PROJECT_FOLLOW_UP_TOKEN, at: new Date(now).toISOString(), notify, deduct, ...(before?.staffAt ? { staffAt: before.staffAt } : {}) };
     delete o.servicesClosedNotice;
     projectClaimedFollowUps.push({ id: o.id, notify, deduct, replaced: before?.token || null });
     count += 1;
@@ -25241,8 +25235,13 @@ async function projectRunClaimedFollowUps(savedPayload) {
     if (claim.deduct && !o._inventoryDeducted) {
       try { autoDeductInventoryForOrder(o); } catch (error) { console.warn('Inventory deduct failed', error); continue; }
     }
-    if (claim.notify) {
-      try { await projectSendFinishedNotices(o); } catch (error) { console.warn('Completion notice failed', error); save(); continue; }
+    if (claim.notify && o.status === 'installation_done') {
+      // Staff notices once: a retry after a failed client notice skips them.
+      if (!o.servicesFollowUpClaim.staffAt) {
+        notifyStatusChange(o);
+        o.servicesFollowUpClaim = { ...o.servicesFollowUpClaim, staffAt: new Date().toISOString() };
+      }
+      try { await autoNotifyClient(o, 'installation_done'); } catch (error) { console.warn('Completion notice failed', error); save(); continue; }
     }
     const current = getOrder(claim.id);
     if (current?.servicesFollowUpClaim?.token !== PROJECT_FOLLOW_UP_TOKEN) continue;

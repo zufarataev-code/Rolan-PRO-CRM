@@ -1,5 +1,5 @@
 import { ROLE_CODES } from "@/lib/auth/constants";
-import { projectServicesFinished, projectServicesStarted, serviceGroupName } from "@/features/legacy-crm/service-solutions";
+import { projectServicesFinished, projectServicesStarted, serviceGroupIds, serviceGroupName } from "@/features/legacy-crm/service-solutions";
 
 type JsonObject = Record<string, unknown>;
 
@@ -392,9 +392,14 @@ export function mergeFieldWorkspace(
     next.timeline = timeline;
     // The project follows its services, whatever the browser sent: the last
     // service done closes it, a service begun keeps it under way.
+    // Only the project's current services date it (a service that left keeps
+    // its mark until the server drops it).
+    const services = new Set(serviceGroupIds(next));
+    const currentProgress = Object.entries(isObject(next.serviceProgress) ? next.serviceProgress : {})
+      .filter(([id, entry]) => services.has(id) && isObject(entry))
+      .map(([, entry]) => entry as JsonObject);
     if (projectServicesFinished(next, currentPayload)) {
-      const last = Object.values(next.serviceProgress as JsonObject)
-        .filter(isObject)
+      const last = [...currentProgress]
         .sort((a, b) => String(a.doneAt || "").localeCompare(String(b.doneAt || "")))
         .pop();
       next.status = "installation_done";
@@ -409,9 +414,8 @@ export function mergeFieldWorkspace(
     if (CLOSED_STATUSES.has(String(next.status)) && !CLOSED_STATUSES.has(String(currentOrder.status))) next.servicesClosedNotice = "pending";
     // Closing through the services: the completion date is the last service's
     // server-stamped time, not a submitted one.
-    if (CLOSED_STATUSES.has(String(next.status)) && !CLOSED_STATUSES.has(String(currentOrder.status)) && isObject(next.serviceProgress)) {
-      const doneTimes = Object.values(next.serviceProgress)
-        .filter(isObject)
+    if (CLOSED_STATUSES.has(String(next.status)) && !CLOSED_STATUSES.has(String(currentOrder.status))) {
+      const doneTimes = currentProgress
         .map((entry) => String(entry.doneAt || ""))
         .filter(Boolean)
         .sort();

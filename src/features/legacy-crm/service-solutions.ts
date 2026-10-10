@@ -22,7 +22,7 @@ const CLOSED_PROJECT_STATUSES = ['installation_done', 'act_signed', 'payment_rec
  * windows of one service together, every other row on its own, quick lines
  * only before measurement. Each needs its own plan to enter installation.
  */
-function serviceGroupIds(order: Row): string[] {
+export function serviceGroupIds(order: Row): string[] {
   const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows));
   const ids = windows.map(win => typeof win.offeringId === 'string' && win.offeringId ? `offering:${win.offeringId}` : `direction:${win.measureScope || order.serviceType || 'solar_film'}`);
   for (const line of rows(order.extraServices)) if (line.quickProjectLine !== true || !windows.length) ids.push(`line:${line.id}`);
