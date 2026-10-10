@@ -265,3 +265,25 @@ test('progress marks stay out of the client portal; a service whose windows were
   assert.equal(prepareServiceSolutions(saved, next, false), null);
   assert.deepEqual(next.orders[0].serviceProgress, {});
 });
+
+test('when two crews finish at once, the merged save closes the project; its film is written off once by the manager', () => {
+  const { c, db } = load({ id: 'm1', role: 'manager' });
+  const o = project('installation_in_progress');
+  o.serviceProgress = { 'offering:a1': { status: 'done', doneAt: '2026-10-14T20:00:00.000Z' }, 'line:z': { status: 'done', doneAt: '2026-10-16T19:00:00.000Z' } };
+  const open = project('installation_in_progress');
+  open.id = 'p';
+  open.serviceProgress = { 'offering:a1': { status: 'done', doneAt: '2026-10-14T20:00:00.000Z' } };
+  db.orders.push(o, open);
+  assert.equal(c.projectCloseFinishedProjects(), 1);
+  assert.deepEqual([o.status, o.installationDoneAt, open.status], ['installation_done', '2026-10-16T19:00:00.000Z', 'installation_in_progress']);
+  const persist = html.slice(html.indexOf('async function cloudPersist('), html.indexOf('async function cloudPersistConfirmed('));
+  assert.match(persist, /db = cloneCloudWorkspaceValue\(snapshot\);\n        \/\/ The other crew may have finished the last open service meanwhile\.\n        if \(projectCloseFinishedProjects\(\)\) snapshot = JSON\.parse\(JSON\.stringify\(db\)\);/);
+  // The manager's next load writes off the film of projects closed through their services, once.
+  let deducted = 0;
+  c.autoDeductInventoryForOrder = (order: Row) => { deducted += 1; order._inventoryDeducted = true; };
+  db.inventory = [{ id: 'roll' }];
+  assert.equal(c.projectDeductServiceClosedProjects(), 1);
+  assert.equal(c.projectDeductServiceClosedProjects(), 0);
+  assert.equal(deducted, 1);
+  assert.match(html, /const deductedClosedProjects = projectDeductServiceClosedProjects\(\);/);
+});

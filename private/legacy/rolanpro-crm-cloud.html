@@ -25141,6 +25141,45 @@ function projectMarkMyServicesDone(oid) {
   if (left.length) alert(`Ваши услуги отмечены. Остальные делает другая бригада: ${left.map(line => line.name).join(', ')}.`);
   preservePositionForNextRender(); render();
 }
+/**
+ * Two crews may finish from browsers that did not see each other's marks.
+ * When a save merges the other crew's progress, a project whose services are
+ * now all done (and planned) is closed before the merged state is saved,
+ * dated by its last service.
+ */
+function projectCloseFinishedProjects() {
+  let count = 0;
+  (db.orders || []).forEach(o => {
+    if (!PROJECT_SCHEDULED_STATUSES.includes(o.status)) return;
+    const lines = projectLines(o);
+    if (!lines.length || lines.some(line => projectServiceProgress(o, line.key).status !== 'done')) return;
+    const plans = projectPlannedSchedules(o);
+    const planned = projectServiceGroups(o).every(group => plans.some(plan => plan.id === group.id && plan.installationAt && (plan.installerIds || []).length));
+    if (!planned || projectPendingSizedServices(o).length) return;
+    const lastDone = lines.map(line => o.serviceProgress?.[line.key]?.doneAt).filter(Boolean).sort().pop();
+    o.status = 'installation_done';
+    if (lastDone) o.installationDoneAt = lastDone;
+    o.timeline = o.timeline || [];
+    o.timeline.push({ at: lastDone || new Date().toISOString(), key: 'installation_done', by: state.currentUserId, note: 'Все услуги выполнены' });
+    count += 1;
+  });
+  return count;
+}
+/**
+ * The material of a project closed through its services is written off by the
+ * next owner/manager CRM, once (a field specialist's CRM cannot change stock).
+ */
+function projectDeductServiceClosedProjects() {
+  const user = currentUser();
+  if (!user || !orderUserCanManage(user)) return 0;
+  let count = 0;
+  (db.orders || []).forEach(o => {
+    if (o._inventoryDeducted || !CLOSED_PROJECT_STATUSES.includes(o.status) || !o.serviceProgress || !Object.keys(o.serviceProgress).length) return;
+    if (!(db.inventory || []).length) return;
+    try { autoDeductInventoryForOrder(o); count += 1; } catch (error) { console.warn('Inventory deduct failed', error); }
+  });
+  return count;
+}
 /** Closing an installation by hand finishes every service still open. */
 function projectFinishOpenServices(o, by) {
   const user = getUser(by) || currentUser() || { id: by };
@@ -39539,6 +39578,8 @@ async function cloudPersist(options = {}) {
         const remotePayload = latestResult.data.payload;
         snapshot = mergeCloudWorkspaceSnapshots(cloudBaseSnapshot, JSON.parse(JSON.stringify(db)), remotePayload);
         db = cloneCloudWorkspaceValue(snapshot);
+        // The other crew may have finished the last open service meanwhile.
+        if (projectCloseFinishedProjects()) snapshot = JSON.parse(JSON.stringify(db));
         cloudRevision = latestResult.data.revision;
         cloudBaseSnapshot = cloneCloudWorkspaceValue(remotePayload);
         localStorage.setItem('rolanpro_crm', JSON.stringify(db));
@@ -39637,7 +39678,10 @@ async function cloudBoot() {
     cloudReady = true;
     startCanonicalLeadsPolling();
     localStorage.setItem('rolanpro_crm', JSON.stringify(db));
-    if (persistClientNotificationMigration || persistOfficialSupplierMigration || roleWasSynchronized) cloudScheduleSave();
+    // Projects the server closed when their last service was done: the
+    // owner/manager's CRM writes off their film like a manual close does.
+    const deductedClosedProjects = projectDeductServiceClosedProjects();
+    if (persistClientNotificationMigration || persistOfficialSupplierMigration || roleWasSynchronized || deductedClosedProjects) cloudScheduleSave();
     parseHash();
     render();
     cloudStatus('Сохранено', 'green');
