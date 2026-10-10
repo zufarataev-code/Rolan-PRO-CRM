@@ -988,3 +988,12 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Server `service-solutions.ts`: partial `serviceSchedules` entries allowed (empty date or crew); entering `installation_scheduled` requires every entry complete; derived `installationAt` ignores empty dates.
 - Verification: new `project-card.test.ts` (7 tests: pricing vs production rows, schedule, crew materialisation, quick-line crew, price ranges, card edits reuse estimate edits, server rules); `npm test` 622/622; TypeScript clean. Local browser (test DB): quantity edit 3 → 4 zones updates $300 → $400 in the card without opening the estimate; at «КП принято» a specialist and a date chosen in the row are saved through the server (partial first), the schedule lists them, the other rows are highlighted.
 - Next: Codex review + CI; owner's «да» before deploy.
+
+## 2026-10-09 handoff — project intake follows the real lifecycle (Codex)
+
+- Branch `codex/project-intake-lifecycle-1009`, based on `main` `cdbbfb4` after PR #321.
+- «Новый проект» now follows one ordered flow: client/contact → object and site type → exact services → responsible manager. The first selected service remains the immutable incoming lead intent; additional services stay inside the same Project.
+- Each selected per-sq-ft service may store its own warehouse material/model at intake. The choice is optional until measurement, but the server rejects unknown films, films from another service and direction mismatches. The Project card shows either the chosen model or «материал уточнить на замере».
+- Measurement is scoped to the exact services selected in the Project. When several sized services share a direction, the surveyor/manager explicitly switches between them; completion requires measurements for every selected sized service. Historical projects without explicit service selections keep the old fallback and remain editable.
+- Installation is still scheduled only after accepted Proposal/production preparation and separately for every service row; intake does not ask for installers and Proposal readiness is not blocked by scheduling.
+- Validation: focused lifecycle/service/card/estimate suite 80/80, service-unit compatibility 21/21, full suite 647/647, inline CRM scripts compile. On this local Mac both standalone `tsc` and `next build` stalled without diagnostics or CPU load and were stopped; required GitHub CI remains the authoritative typecheck/build gate before merge. Production has not been changed.

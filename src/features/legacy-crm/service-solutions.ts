@@ -149,6 +149,15 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
   }
   for (const order of rows(next.orders)) {
     const oldOrder = rows(current.orders).find(item=>item.id===order.id) || {};
+    const selectedMaterials = object(order.offeringCatalogIds);
+    const selectedOfferingIds = new Set([order.offeringId, ...(Array.isArray(order.offeringIds) ? order.offeringIds : [])].filter((id): id is string => typeof id === 'string' && !!id));
+    for (const [offeringId, filmId] of Object.entries(selectedMaterials)) {
+      const offering = offerings.find(value => value.id === offeringId);
+      const film = films.find(value => value.id === filmId);
+      if (!selectedOfferingIds.has(offeringId) || !offering || !film || !Array.isArray(offering.filmIds) || !offering.filmIds.includes(filmId) || canonicalFilmCategory(film.category) !== offering.direction) {
+        return 'Материал проекта должен быть привязан к выбранной услуге.';
+      }
+    }
     const oldItems = scope(oldOrder);
     const extraValues = Array.isArray(order.extraServices) ? order.extraServices : [];
     const extras = rows(extraValues);

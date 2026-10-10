@@ -29,6 +29,20 @@ test('old saved rate survives later changes to the solution; assignments validat
   next.orders[0].serviceSchedules[0].installerIds=['unknown']; assert.ok(prepareServiceSolutions(old,next,false));
 });
 
+test('project intake material must belong to the exact selected service',()=>{
+  const next:any=serviceSolutionsForViewer(current,false);
+  next.orders[0].offeringIds=['solution'];
+  next.orders[0].offeringCatalogIds={solution:'film'};
+  assert.equal(prepareServiceSolutions(current,next,false),null);
+  next.orders[0].offeringCatalogIds={solution:'missing'};
+  assert.match(prepareServiceSolutions(current,next,false)!,/Материал проекта/);
+  next.orders[0].offeringCatalogIds={unknown:'film'};
+  assert.match(prepareServiceSolutions(current,next,false)!,/Материал проекта/);
+  next.orders[0].offeringIds=[];
+  next.orders[0].offeringCatalogIds={solution:'film'};
+  assert.match(prepareServiceSolutions(current,next,false)!,/Материал проекта/);
+});
+
 test('installer receives the saved rate only for their own assigned service',()=>{
   const payload:any=structuredClone(current);
   payload.orders[0].installerIds=['installer','other'];

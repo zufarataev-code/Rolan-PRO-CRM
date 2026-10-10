@@ -10,7 +10,7 @@ test("new client from order opens in its own workspace", () => {
   const orderModal = html.slice(start, end);
 
   assert.match(orderModal, /onclick="openOrderClientOverlay\(\)"/);
-  assert.match(orderModal, /Выберите контакт/);
+  assert.match(orderModal, /Клиент и контакт/);
   assert.match(orderModal, /\+ Добавить контакт/);
   assert.match(orderModal, /Поиск по имени, телефону или адресу/);
   assert.match(orderModal, /data-new-order-after-client style="display:none"/);
