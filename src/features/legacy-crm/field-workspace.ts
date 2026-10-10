@@ -390,21 +390,23 @@ export function mergeFieldWorkspace(
       ...serviceEvents.map((event) => ({ ...event, note: serviceGroupName(next, String(event.serviceId), currentPayload) })),
     ].sort((a, b) => String(isObject(a) ? a.at || "" : "").localeCompare(String(isObject(b) ? b.at || "" : "")));
     next.timeline = timeline;
-    // The project follows its services, whatever the browser did next: the
-    // last service done closes it (its notices go out from the manager's CRM),
-    // a service begun starts it.
+    // The project follows its services, whatever the browser sent: the last
+    // service done closes it, a service begun keeps it under way.
     if (projectServicesFinished(next, currentPayload)) {
       const last = Object.values(next.serviceProgress as JsonObject)
         .filter(isObject)
         .sort((a, b) => String(a.doneAt || "").localeCompare(String(b.doneAt || "")))
         .pop();
       next.status = "installation_done";
-      next.servicesClosedNotice = "pending";
       timeline.push({ at: last?.doneAt, key: "installation_done", by: last?.doneBy, note: "Все услуги выполнены", source: "services" });
-    } else if (projectServicesStarted(next) && serviceEvents.length) {
+    } else if (projectServicesStarted(next)) {
       next.status = "installation_in_progress";
-      timeline.push({ at: serviceEvents[0].at, key: "installation_in_progress", by: serviceEvents[0].by, source: "services" });
+      timeline.push({ at: new Date().toISOString(), key: "installation_in_progress", by: serviceEvents[0]?.by ?? [...identityIds][0], source: "services" });
     }
+    // A field close is announced, and its film written off, by the
+    // owner/manager CRM that claims this mark (a field CRM cannot send staff
+    // notices or change stock).
+    if (CLOSED_STATUSES.has(String(next.status)) && !CLOSED_STATUSES.has(String(currentOrder.status))) next.servicesClosedNotice = "pending";
     // Closing through the services: the completion date is the last service's
     // server-stamped time, not a submitted one.
     if (CLOSED_STATUSES.has(String(next.status)) && !CLOSED_STATUSES.has(String(currentOrder.status)) && isObject(next.serviceProgress)) {

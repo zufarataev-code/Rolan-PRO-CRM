@@ -16814,8 +16814,12 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
     try { autoDeductInventoryForOrder(o); } catch (e) { console.warn('Inventory deduct failed', e); }
   }
   save();
-  notifyStatusChange(o);
-  if (!opts.skipClientAuto) autoNotifyClient(o, newStatus);
+  // A field specialist's close is announced by the owner/manager CRM: the
+  // server marks it, and that CRM sends the notices once (projectClaimServiceFollowUps).
+  if (!(closesInstallation && !orderUserCanManage(currentUser()))) {
+    notifyStatusChange(o);
+    if (!opts.skipClientAuto) autoNotifyClient(o, newStatus);
+  }
   if (newStatus === 'measurement_done' && orderUserCanSeeMoney(o, currentUser()) && opts.openEstimate !== false) {
     openProjectEstimateWorkspace(orderId);
     return true;
@@ -25164,14 +25168,11 @@ function projectCloseFinishedProjects() {
     if (lastDone) o.installationDoneAt = lastDone;
     o.timeline = o.timeline || [];
     o.timeline.push({ at: lastDone || new Date().toISOString(), key: 'installation_done', by: state.currentUserId, note: 'Все услуги выполнены' });
+    // Its notices go out from the owner/manager CRM that claims this mark.
+    o.servicesClosedNotice = 'pending';
     closed.push(o.id);
   });
   return closed;
-}
-/** After the merged save: the same notifications a manual «Монтаж выполнен» sends. */
-function projectNotifyFinishedProjects(orderIds) {
-  return Promise.all((orderIds || []).map(id => projectSendFinishedNotices(getOrder(id))
-    .catch(error => console.warn('Completion notice failed', error))));
 }
 /** Staff and client «Монтаж выполнен» notices of one project; settles once they were sent. */
 async function projectSendFinishedNotices(o) {
@@ -25202,7 +25203,7 @@ function projectClaimServiceFollowUps(now = Date.now()) {
     if (projectClaimedFollowUps.some(claim => claim.id === o.id)) return;
     if (before && now - Date.parse(before.at || 0) < PROJECT_FOLLOW_UP_LEASE_MS) return;
     const notify = o.servicesClosedNotice === 'pending' || before?.notify === true;
-    const deduct = !o._inventoryDeducted && Object.keys(o.serviceProgress || {}).length > 0 && (db.inventory || []).length > 0;
+    const deduct = !o._inventoryDeducted && (notify || Object.keys(o.serviceProgress || {}).length > 0) && (db.inventory || []).length > 0;
     if (!notify && !deduct) return;
     o.servicesFollowUpClaim = { token: PROJECT_FOLLOW_UP_TOKEN, at: new Date(now).toISOString(), notify, deduct };
     delete o.servicesClosedNotice;
@@ -39625,7 +39626,6 @@ async function cloudPersist(options = {}) {
   cloudSaveInFlight = true;
   cloudStatus('Сохраняем…');
   let snapshot = JSON.parse(JSON.stringify(db));
-  const finishedByMerge = [];
   try {
     for (let attempt = 0; attempt < 4; attempt++) {
       const response = await fetch('/api/v1/legacy-crm/state', {
@@ -39670,9 +39670,7 @@ async function cloudPersist(options = {}) {
         db = cloneCloudWorkspaceValue(snapshot);
         projectSettleChangedServices(false);
         // The other crew may have finished the last open service meanwhile.
-        const finished = projectCloseFinishedProjects();
-        if (finished.length) finishedByMerge.push(...finished);
-        if (finished.length + projectClaimServiceFollowUps()) snapshot = JSON.parse(JSON.stringify(db));
+        if (projectCloseFinishedProjects().length + projectClaimServiceFollowUps()) snapshot = JSON.parse(JSON.stringify(db));
         cloudRevision = latestResult.data.revision;
         cloudBaseSnapshot = cloneCloudWorkspaceValue(remotePayload);
         localStorage.setItem('rolanpro_crm', JSON.stringify(db));
@@ -39682,7 +39680,6 @@ async function cloudPersist(options = {}) {
       cloudRevision = result.data.revision;
       cloudBaseSnapshot = cloneCloudWorkspaceValue(snapshot);
       cloudStatus('Сохранено', 'green');
-      if (finishedByMerge.length) projectNotifyFinishedProjects(finishedByMerge);
       projectRunClaimedFollowUps(snapshot).catch(error => console.warn('Project follow-ups failed', error));
       return true;
     }
