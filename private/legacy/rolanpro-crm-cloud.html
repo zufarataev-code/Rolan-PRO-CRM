@@ -25170,11 +25170,14 @@ function projectCloseFinishedProjects() {
 }
 /** After the merged save: the same notifications a manual «Монтаж выполнен» sends. */
 function projectNotifyFinishedProjects(orderIds) {
-  (orderIds || []).forEach(id => {
-    const o = getOrder(id);
-    if (!o || o.status !== 'installation_done') return;
-    try { notifyStatusChange(o); autoNotifyClient(o, 'installation_done'); } catch (error) { console.warn('Completion notice failed', error); }
-  });
+  return Promise.all((orderIds || []).map(id => projectSendFinishedNotices(getOrder(id))
+    .catch(error => console.warn('Completion notice failed', error))));
+}
+/** Staff and client «Монтаж выполнен» notices of one project; settles once they were sent. */
+async function projectSendFinishedNotices(o) {
+  if (!o || o.status !== 'installation_done') return;
+  notifyStatusChange(o);
+  await autoNotifyClient(o, 'installation_done');
 }
 /**
  * Follow-ups of a project closed through its services rather than by a
@@ -25196,7 +25199,8 @@ function projectClaimServiceFollowUps(now = Date.now()) {
   (db.orders || []).forEach(o => {
     const before = o.servicesFollowUpClaim && typeof o.servicesFollowUpClaim === 'object' ? o.servicesFollowUpClaim : null;
     if (before?.doneAt || !CLOSED_PROJECT_STATUSES.includes(o.status)) return;
-    if (before && (before.token === PROJECT_FOLLOW_UP_TOKEN || now - Date.parse(before.at || 0) < PROJECT_FOLLOW_UP_LEASE_MS)) return;
+    if (projectClaimedFollowUps.some(claim => claim.id === o.id)) return;
+    if (before && now - Date.parse(before.at || 0) < PROJECT_FOLLOW_UP_LEASE_MS) return;
     const notify = o.servicesClosedNotice === 'pending' || before?.notify === true;
     const deduct = !o._inventoryDeducted && Object.keys(o.serviceProgress || {}).length > 0 && (db.inventory || []).length > 0;
     if (!notify && !deduct) return;
@@ -25219,23 +25223,33 @@ function projectYieldTakenFollowUps(remotePayload) {
     return false;
   });
 }
-/** After a save: the follow-ups whose claim it carried; each is then marked done. */
-function projectRunClaimedFollowUps(savedPayload) {
+/**
+ * After a save: the follow-ups whose claim it carried. Each is marked done
+ * only once its notices were sent; one that failed stays claimed, and the
+ * lease lets the next owner/manager CRM retry it.
+ */
+async function projectRunClaimedFollowUps(savedPayload) {
   const saved = new Map((savedPayload?.orders || []).map(o => [o.id, o]));
   const ready = projectClaimedFollowUps.filter(claim => saved.get(claim.id)?.servicesFollowUpClaim?.token === PROJECT_FOLLOW_UP_TOKEN);
   if (!ready.length) return 0;
   projectClaimedFollowUps = projectClaimedFollowUps.filter(claim => !ready.includes(claim));
-  ready.forEach(claim => {
+  let done = 0;
+  for (const claim of ready) {
     const o = getOrder(claim.id);
-    if (!o || o.servicesFollowUpClaim?.token !== PROJECT_FOLLOW_UP_TOKEN) return;
+    if (!o || o.servicesFollowUpClaim?.token !== PROJECT_FOLLOW_UP_TOKEN) continue;
     if (claim.deduct && !o._inventoryDeducted) {
-      try { autoDeductInventoryForOrder(o); } catch (error) { console.warn('Inventory deduct failed', error); }
+      try { autoDeductInventoryForOrder(o); } catch (error) { console.warn('Inventory deduct failed', error); continue; }
     }
-    if (claim.notify) projectNotifyFinishedProjects([o.id]);
-    o.servicesFollowUpClaim = { ...o.servicesFollowUpClaim, doneAt: new Date().toISOString() };
-  });
+    if (claim.notify) {
+      try { await projectSendFinishedNotices(o); } catch (error) { console.warn('Completion notice failed', error); save(); continue; }
+    }
+    const current = getOrder(claim.id);
+    if (current?.servicesFollowUpClaim?.token !== PROJECT_FOLLOW_UP_TOKEN) continue;
+    current.servicesFollowUpClaim = { ...current.servicesFollowUpClaim, doneAt: new Date().toISOString() };
+    done += 1;
+  }
   save();
-  return ready.length;
+  return done;
 }
 /**
  * The project follows its services (Owner, 2026-10-10): when this CRM changes
@@ -39669,7 +39683,7 @@ async function cloudPersist(options = {}) {
       cloudBaseSnapshot = cloneCloudWorkspaceValue(snapshot);
       cloudStatus('Сохранено', 'green');
       if (finishedByMerge.length) projectNotifyFinishedProjects(finishedByMerge);
-      projectRunClaimedFollowUps(snapshot);
+      projectRunClaimedFollowUps(snapshot).catch(error => console.warn('Project follow-ups failed', error));
       return true;
     }
     cloudSaveQueued = true;

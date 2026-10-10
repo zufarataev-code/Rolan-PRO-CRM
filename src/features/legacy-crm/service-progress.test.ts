@@ -266,7 +266,7 @@ test('progress marks stay out of the client portal; a service whose windows were
   assert.deepEqual(next.orders[0].serviceProgress, {});
 });
 
-test('when two crews finish at once, the merged save closes the project; its film is written off once by the manager', () => {
+test('when two crews finish at once, the merged save closes the project; its film is written off once by the manager', async () => {
   const { c, db } = load({ id: 'm1', role: 'manager' });
   const o = project('installation_in_progress');
   o.serviceProgress = { 'offering:a1': { status: 'done', doneAt: '2026-10-14T20:00:00.000Z' }, 'line:z': { status: 'done', doneAt: '2026-10-16T19:00:00.000Z' } };
@@ -279,23 +279,26 @@ test('when two crews finish at once, the merged save closes the project; its fil
   const persist = html.slice(html.indexOf('async function cloudPersist('), html.indexOf('async function cloudPersistConfirmed('));
   assert.match(persist, /projectYieldTakenFollowUps\(remotePayload\);\n        snapshot = mergeCloudWorkspaceSnapshots/);
   assert.match(persist, /const finished = projectCloseFinishedProjects\(\);\n        if \(finished\.length\) finishedByMerge\.push\(\.\.\.finished\);\n        if \(finished\.length \+ projectClaimServiceFollowUps\(\)\) snapshot = JSON\.parse\(JSON\.stringify\(db\)\);/);
-  assert.match(persist, /cloudStatus\('Сохранено', 'green'\);\n      if \(finishedByMerge\.length\) projectNotifyFinishedProjects\(finishedByMerge\);\n      projectRunClaimedFollowUps\(snapshot\);/);
+  assert.match(persist, /cloudStatus\('Сохранено', 'green'\);\n      if \(finishedByMerge\.length\) projectNotifyFinishedProjects\(finishedByMerge\);\n      projectRunClaimedFollowUps\(snapshot\)\.catch\(/);
   // The same notifications as a manual close, once the merged state is saved.
   const sent: string[] = [];
   c.notifyStatusChange = (order: Row) => sent.push(`staff:${order.id}`);
   c.autoNotifyClient = (order: Row, status: string) => sent.push(`client:${order.id}:${status}`);
-  c.projectNotifyFinishedProjects(['o', 'p']);
+  await c.projectNotifyFinishedProjects(['o', 'p']);
   assert.deepEqual(sent, ['staff:o', 'client:o:installation_done']);
   assert.match(html, /const claimedFollowUps = projectClaimServiceFollowUps\(\);/);
 });
 
-test('a project closed through its services: one manager CRM claims its write-off and notices, runs them once the claim is saved', () => {
+test('a project closed through its services: one manager CRM claims its write-off and notices, runs them once the claim is saved', async () => {
   const { c, db } = load({ id: 'm1', role: 'manager' });
   let deducted = 0;
   const sent: string[] = [];
   c.autoDeductInventoryForOrder = (order: Row) => { deducted += 1; order._inventoryDeducted = true; };
   c.notifyStatusChange = (order: Row) => sent.push(`staff:${order.id}`);
-  c.autoNotifyClient = (order: Row) => sent.push(`client:${order.id}`);
+  c.autoNotifyClient = async (order: Row) => {
+    if (order.id === 'taken2') throw new Error('mail down');
+    sent.push(`client:${order.id}`);
+  };
   db.inventory = [{ id: 'roll' }];
   const now = Date.parse('2026-10-20T12:00:00.000Z');
   const crews = { ...project('installation_done'), id: 'crews', serviceProgress: { 'line:z': { status: 'done' } } };
@@ -312,18 +315,25 @@ test('a project closed through its services: one manager CRM claims its write-of
   assert.equal(server.servicesClosedNotice, undefined);
   assert.equal(server.servicesFollowUpClaim.notify, true, 'the claim keeps what is owed');
   // Nothing runs before the claim is saved.
-  assert.equal(c.projectRunClaimedFollowUps({ orders: [] }), 0);
+  assert.equal(await c.projectRunClaimedFollowUps({ orders: [] }), 0);
   assert.equal(deducted + sent.length, 0);
   // Another manager's CRM saved its claim on «taken» first: it is theirs. The
   // stale claim this CRM replaced does not count as taken.
   c.projectYieldTakenFollowUps({ orders: [{ id: 'taken', servicesFollowUpClaim: { token: 'other', at: '2026-10-20T12:00:00.000Z' } }, { id: 'stale', servicesFollowUpClaim: stale.servicesFollowUpClaim && { token: 'gone', at: '2026-10-20T11:00:00.000Z' } }] });
   assert.equal(taken.servicesFollowUpClaim.token, 'other');
-  assert.equal(c.projectRunClaimedFollowUps(plain(db)), 3);
+  assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 3);
   assert.equal(deducted, 3);
   assert.deepEqual(sent, ['staff:server', 'client:server', 'staff:stale', 'client:stale']);
   assert.ok(server.servicesFollowUpClaim.doneAt && stale.servicesFollowUpClaim.doneAt, 'marked done for every later CRM');
-  assert.equal(c.projectRunClaimedFollowUps(plain(db)), 0, 'run once');
+  assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 0, 'run once');
   assert.equal(c.projectClaimServiceFollowUps(now + 3600000), 2, 'later: only the claims other CRMs never finished (fresh, taken)');
+  // A notice that fails is not marked done: the claim stays for a retry.
+  const failing: Row = { ...project('installation_done'), id: 'taken2', _inventoryDeducted: true, serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
+  db.orders.push(failing);
+  assert.equal(c.projectClaimServiceFollowUps(now + 3600000), 1);
+  assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 2, 'fresh and taken done; the failing one not');
+  assert.ok(failing.servicesFollowUpClaim.token && !failing.servicesFollowUpClaim.doneAt);
+  assert.equal(c.projectClaimServiceFollowUps(now + 3600000 + 11 * 60000), 1, 'retried after the lease');
 });
 
 test('a manager removes the last open service of a running installation: the project closes', () => {
