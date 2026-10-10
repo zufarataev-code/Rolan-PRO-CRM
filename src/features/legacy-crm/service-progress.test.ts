@@ -274,10 +274,17 @@ test('when two crews finish at once, the merged save closes the project; its fil
   open.id = 'p';
   open.serviceProgress = { 'offering:a1': { status: 'done', doneAt: '2026-10-14T20:00:00.000Z' } };
   db.orders.push(o, open);
-  assert.equal(c.projectCloseFinishedProjects(), 1);
+  assert.deepEqual(plain(c.projectCloseFinishedProjects()), ['o']);
   assert.deepEqual([o.status, o.installationDoneAt, open.status], ['installation_done', '2026-10-16T19:00:00.000Z', 'installation_in_progress']);
   const persist = html.slice(html.indexOf('async function cloudPersist('), html.indexOf('async function cloudPersistConfirmed('));
-  assert.match(persist, /db = cloneCloudWorkspaceValue\(snapshot\);\n        \/\/ The other crew may have finished the last open service meanwhile\.\n        if \(projectCloseFinishedProjects\(\)\) snapshot = JSON\.parse\(JSON\.stringify\(db\)\);/);
+  assert.match(persist, /const finished = projectCloseFinishedProjects\(\);\n        if \(finished\.length\) \{ finishedByMerge\.push\(\.\.\.finished\); snapshot = JSON\.parse\(JSON\.stringify\(db\)\); \}/);
+  assert.match(persist, /cloudStatus\('Сохранено', 'green'\);\n      if \(finishedByMerge\.length\) projectNotifyFinishedProjects\(finishedByMerge\);/);
+  // The same notifications as a manual close, once the merged state is saved.
+  const sent: string[] = [];
+  c.notifyStatusChange = (order: Row) => sent.push(`staff:${order.id}`);
+  c.autoNotifyClient = (order: Row, status: string) => sent.push(`client:${order.id}:${status}`);
+  c.projectNotifyFinishedProjects(['o', 'p']);
+  assert.deepEqual(sent, ['staff:o', 'client:o:installation_done']);
   // The manager's next load writes off the film of projects closed through their services, once.
   let deducted = 0;
   c.autoDeductInventoryForOrder = (order: Row) => { deducted += 1; order._inventoryDeducted = true; };

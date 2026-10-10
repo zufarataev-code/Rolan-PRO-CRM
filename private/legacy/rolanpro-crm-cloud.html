@@ -25148,7 +25148,7 @@ function projectMarkMyServicesDone(oid) {
  * dated by its last service.
  */
 function projectCloseFinishedProjects() {
-  let count = 0;
+  const closed = [];
   (db.orders || []).forEach(o => {
     if (!PROJECT_SCHEDULED_STATUSES.includes(o.status)) return;
     const lines = projectLines(o);
@@ -25161,9 +25161,17 @@ function projectCloseFinishedProjects() {
     if (lastDone) o.installationDoneAt = lastDone;
     o.timeline = o.timeline || [];
     o.timeline.push({ at: lastDone || new Date().toISOString(), key: 'installation_done', by: state.currentUserId, note: 'Все услуги выполнены' });
-    count += 1;
+    closed.push(o.id);
   });
-  return count;
+  return closed;
+}
+/** After the merged save: the same notifications a manual «Монтаж выполнен» sends. */
+function projectNotifyFinishedProjects(orderIds) {
+  (orderIds || []).forEach(id => {
+    const o = getOrder(id);
+    if (!o || o.status !== 'installation_done') return;
+    try { notifyStatusChange(o); autoNotifyClient(o, 'installation_done'); } catch (error) { console.warn('Completion notice failed', error); }
+  });
 }
 /**
  * The material of a project closed through its services is written off by the
@@ -39537,6 +39545,7 @@ async function cloudPersist(options = {}) {
   cloudSaveInFlight = true;
   cloudStatus('Сохраняем…');
   let snapshot = JSON.parse(JSON.stringify(db));
+  const finishedByMerge = [];
   try {
     for (let attempt = 0; attempt < 4; attempt++) {
       const response = await fetch('/api/v1/legacy-crm/state', {
@@ -39579,7 +39588,8 @@ async function cloudPersist(options = {}) {
         snapshot = mergeCloudWorkspaceSnapshots(cloudBaseSnapshot, JSON.parse(JSON.stringify(db)), remotePayload);
         db = cloneCloudWorkspaceValue(snapshot);
         // The other crew may have finished the last open service meanwhile.
-        if (projectCloseFinishedProjects()) snapshot = JSON.parse(JSON.stringify(db));
+        const finished = projectCloseFinishedProjects();
+        if (finished.length) { finishedByMerge.push(...finished); snapshot = JSON.parse(JSON.stringify(db)); }
         cloudRevision = latestResult.data.revision;
         cloudBaseSnapshot = cloneCloudWorkspaceValue(remotePayload);
         localStorage.setItem('rolanpro_crm', JSON.stringify(db));
@@ -39589,6 +39599,7 @@ async function cloudPersist(options = {}) {
       cloudRevision = result.data.revision;
       cloudBaseSnapshot = cloneCloudWorkspaceValue(snapshot);
       cloudStatus('Сохранено', 'green');
+      if (finishedByMerge.length) projectNotifyFinishedProjects(finishedByMerge);
       return true;
     }
     cloudSaveQueued = true;
