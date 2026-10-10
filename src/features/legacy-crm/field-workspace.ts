@@ -303,7 +303,10 @@ function mergeFieldServiceProgress(
 ): JsonObject {
   const result: JsonObject = isObject(currentOrder.serviceProgress) ? clone(currentOrder.serviceProgress) : {};
   if (!isObject(submitted)) return result;
+  // Only the project's own services are marked.
+  const services = new Set(serviceGroupIds(currentOrder));
   for (const serviceId of new Set([...Object.keys(result), ...Object.keys(submitted)])) {
+    if (!services.has(serviceId)) continue;
     const actor = serviceCrew(currentOrder, serviceId).find((member) => identityIds.has(member));
     if (!actor) continue;
     const before = isObject(result[serviceId]) ? (result[serviceId] as JsonObject) : null;
@@ -405,8 +408,10 @@ export function mergeFieldWorkspace(
       next.status = "installation_done";
       timeline.push({ at: last?.doneAt, key: "installation_done", by: last?.doneBy, note: "Все услуги выполнены", source: "services" });
     } else if (projectServicesStarted(next)) {
+      // A stale save of a project already under way only keeps its status.
+      const restarted = currentOrder.status !== "installation_in_progress";
       next.status = "installation_in_progress";
-      timeline.push({ at: new Date().toISOString(), key: "installation_in_progress", by: serviceEvents[0]?.by ?? [...identityIds][0], source: "services" });
+      if (restarted) timeline.push({ at: new Date().toISOString(), key: "installation_in_progress", by: serviceEvents[0]?.by ?? [...identityIds][0], source: "services" });
     }
     // A field close is announced, and its film written off, by the
     // owner/manager CRM that claims this mark (a field CRM cannot send staff

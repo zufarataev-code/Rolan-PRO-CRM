@@ -175,7 +175,10 @@ test('field save: a specialist changes the progress of their own services only, 
   const current = {
     users: [{ id: 'i1', role: 'installer' }, { id: 'i2', role: 'installer' }],
     clients: [], tasks: [],
-    orders: [{ id: 'o', status: 'installation_in_progress', installerIds: ['i1', 'i2'], serviceSchedules: [
+    orders: [{ id: 'o', status: 'installation_in_progress', installerIds: ['i1', 'i2'],
+      measurements: { rooms: [{ id: 'r', windows: [{ id: 'w1', offeringId: 'a1', measureScope: 'protective_film' }] }] },
+      extraServices: [{ id: 'z', label: 'Мойка', qty: 1 }],
+      serviceSchedules: [
       { id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] },
       { id: 'line:z', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i2'] },
     ], serviceProgress: { 'line:z': { status: 'done', doneAt: '2026-10-16T20:00:00.000Z' } } }],
@@ -311,34 +314,41 @@ test('a project closed through its services: one manager CRM claims its write-of
   const fresh: Row = { ...project('installation_done'), id: 'fresh', serviceProgress: { 'line:z': { status: 'done' } }, servicesFollowUpClaim: { token: 'busy', at: '2026-10-20T11:58:00.000Z', notify: true, deduct: true } };
   const finished: Row = { ...project('installation_done'), id: 'finished', serviceProgress: { 'line:z': { status: 'done' } }, servicesFollowUpClaim: { token: 'gone', at: '2026-10-20T11:00:00.000Z', notify: true, deduct: true, doneAt: '2026-10-20T11:00:05.000Z' } };
   db.orders.push(crews, server, taken, stale, fresh, finished);
+  // Right before running, each claim is checked on the server (here: as this CRM saved it).
+  let serverOrders: () => Row[] = () => plain(db).orders;
+  c.projectFetchSavedOrders = async () => serverOrders();
+  let clock = now;
+  const run = (payload: Row) => c.projectRunClaimedFollowUps(payload, () => clock);
   assert.equal(c.projectClaimServiceFollowUps(now), 4);
   assert.equal(c.projectClaimServiceFollowUps(now), 0, 'claimed once');
   assert.equal(server.servicesClosedNotice, undefined);
   assert.equal(server.servicesFollowUpClaim.notify, true, 'the claim keeps what is owed');
   // Nothing runs before the claim is saved.
-  assert.equal(await c.projectRunClaimedFollowUps({ orders: [] }), 0);
+  assert.equal(await run({ orders: [] }), 0);
   assert.equal(deducted + sent.length, 0);
   // Another manager's CRM saved its claim on «taken» first: it is theirs. The
   // stale claim this CRM replaced does not count as taken.
   c.projectYieldTakenFollowUps({ orders: [{ id: 'taken', servicesFollowUpClaim: { token: 'other', at: '2026-10-20T12:00:00.000Z' } }, { id: 'stale', servicesFollowUpClaim: stale.servicesFollowUpClaim && { token: 'gone', at: '2026-10-20T11:00:00.000Z' } }] });
   assert.equal(taken.servicesFollowUpClaim.token, 'other');
-  assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 3);
+  assert.equal(await run(plain(db)), 3);
   assert.equal(deducted, 3);
   assert.deepEqual(sent, ['staff:server', 'client:server', 'staff:stale', 'client:stale']);
   assert.ok(server.servicesFollowUpClaim.doneAt && stale.servicesFollowUpClaim.doneAt, 'marked done for every later CRM');
-  assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 0, 'run once');
+  assert.equal(await run(plain(db)), 0, 'run once');
+  clock = now + 3600000;
   assert.equal(c.projectClaimServiceFollowUps(now + 3600000), 2, 'later: only the claims other CRMs never finished (fresh, taken)');
   // A notice that fails is not marked done: the claim stays for a retry.
   const failing: Row = { ...project('installation_done'), id: 'taken2', _inventoryDeducted: true, serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
   db.orders.push(failing);
   assert.equal(c.projectClaimServiceFollowUps(now + 3600000), 1);
-  assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 2, 'fresh and taken done; the failing one not');
+  assert.equal(await run(plain(db)), 2, 'fresh and taken done; the failing one not');
   assert.ok(failing.servicesFollowUpClaim.token && !failing.servicesFollowUpClaim.doneAt);
+  clock = now + 3600000 + 11 * 60000;
   assert.equal(c.projectClaimServiceFollowUps(now + 3600000 + 11 * 60000), 1, 'retried after the lease');
   // The retry sends the client notice only: the staff were told the first time.
   mailDown = false;
   sent.length = 0;
-  assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 1);
+  assert.equal(await run(plain(db)), 1);
   assert.deepEqual(sent, ['client:taken2']);
   assert.ok(failing.servicesFollowUpClaim.doneAt);
   // A project that moved on (act signed) before its notices went out still gets them, as «Монтаж выполнен».
@@ -349,13 +359,25 @@ test('a project closed through its services: one manager CRM claims its write-of
   const again: Row = { ...project('installation_done'), id: 'again', _inventoryDeducted: true, serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending', servicesFollowUpClaim: { token: 'old', at: '2026-10-01T00:00:00.000Z', notify: true, doneAt: '2026-10-01T00:00:10.000Z', staffAt: '2026-10-01T00:00:05.000Z' } };
   db.orders.push(signed, again);
   sent.length = 0;
+  clock = now + 7200000;
   assert.equal(c.projectClaimServiceFollowUps(now + 7200000), 2);
   assert.equal(again.servicesFollowUpClaim.staffAt, undefined, 'a new close tells the staff again');
   c.projectYieldTakenFollowUps({ orders: [{ id: 'again', servicesFollowUpClaim: { token: 'old', at: '2026-10-01T00:00:00.000Z', doneAt: '2026-10-01T00:00:10.000Z' } }] });
-  assert.equal(await c.projectRunClaimedFollowUps(plain(db)), 2, 'the replaced finished claim is not someone else\'s');
+  assert.equal(await run(plain(db)), 2, 'the replaced finished claim is not someone else\'s');
   assert.deepEqual(staff, ['signed:installation_done', 'again:installation_done']);
   assert.deepEqual(sent, ['client:signed', 'client:again']);
   assert.equal(signed.status, 'act_signed');
+  // A tab that slept past its lease, or whose claim another CRM took over, runs nothing.
+  const late: Row = { ...project('installation_done'), id: 'late', _inventoryDeducted: true, serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
+  const over: Row = { ...project('installation_done'), id: 'over', _inventoryDeducted: true, serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
+  db.orders.push(late, over);
+  assert.equal(c.projectClaimServiceFollowUps(clock), 2);
+  const savedClaims = plain(db);
+  serverOrders = () => savedClaims.orders.map((order: Row) => order.id === 'over' ? { ...order, servicesFollowUpClaim: { token: 'other', at: new Date(clock).toISOString() } } : order);
+  clock += 10 * 60000;
+  sent.length = 0;
+  assert.equal(await run(savedClaims), 0);
+  assert.deepEqual(sent, []);
 });
 
 test('a manager removes the last open service of a running installation: the project closes', () => {
@@ -440,9 +462,10 @@ test('field save: the last service done closes the project on the server; the hi
   planned.orders[0].status = 'installation_scheduled';
   planned.orders[0].serviceProgress = {};
   const starting = structuredClone(planned);
-  starting.orders[0].serviceProgress = { 'line:z': { status: 'in_progress' } };
+  starting.orders[0].serviceProgress = { 'line:z': { status: 'in_progress' }, 'line:not-real': { status: 'done' } };
   const started = mergeFieldWorkspace(planned, starting, [ROLE_CODES.INSTALLER], ['i1']) as Row;
   assert.equal(started.orders[0].status, 'installation_in_progress');
+  assert.ok(!('line:not-real' in started.orders[0].serviceProgress), 'only the project\'s own services are marked');
   assert.deepEqual(started.orders[0].timeline.slice(-2).map((event: Row) => [event.key, event.by]), [['service_started', 'i1'], ['installation_in_progress', 'i1']]);
   assert.equal(prepareServiceSolutions(planned, started, false), null);
   // Progress of a service that left the project does not date the close.
@@ -459,4 +482,5 @@ test('field save: the last service done closes the project on the server; the hi
   back.orders[0].status = 'installation_scheduled';
   const kept = mergeFieldWorkspace(started, back, [ROLE_CODES.INSTALLER], ['i1']) as Row;
   assert.equal(kept.orders[0].status, 'installation_in_progress');
+  assert.equal(kept.orders[0].timeline.filter((event: Row) => event.key === 'installation_in_progress').length, 1, 'a stale save adds no second start');
 });

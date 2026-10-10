@@ -25220,16 +25220,33 @@ function projectYieldTakenFollowUps(remotePayload) {
     return false;
   });
 }
+/** The saved orders on the server now (for checking a claim before it runs). */
+async function projectFetchSavedOrders() {
+  const response = await fetch('/api/v1/legacy-crm/state', { cache: 'no-store' });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'workspace refresh failed');
+  return result.data.payload?.orders || [];
+}
 /**
- * After a save: the follow-ups whose claim it carried. Each is marked done
- * only once its notices were sent; one that failed stays claimed, and the
- * lease lets the next owner/manager CRM retry it.
+ * After a save: the follow-ups whose claim it carried. Right before they run,
+ * each claim is checked on the server: still this CRM's, unfinished, and with
+ * time left on its lease (a tab that slept past it leaves the work to the CRM
+ * that took it over). Each is marked done only once its notices were sent;
+ * one that failed stays claimed, and the lease lets the next owner/manager
+ * CRM retry it.
  */
-async function projectRunClaimedFollowUps(savedPayload) {
+async function projectRunClaimedFollowUps(savedPayload, now = () => Date.now()) {
   const saved = new Map((savedPayload?.orders || []).map(o => [o.id, o]));
-  const ready = projectClaimedFollowUps.filter(claim => saved.get(claim.id)?.servicesFollowUpClaim?.token === PROJECT_FOLLOW_UP_TOKEN);
+  let ready = projectClaimedFollowUps.filter(claim => saved.get(claim.id)?.servicesFollowUpClaim?.token === PROJECT_FOLLOW_UP_TOKEN);
   if (!ready.length) return 0;
   projectClaimedFollowUps = projectClaimedFollowUps.filter(claim => !ready.includes(claim));
+  const server = new Map((await projectFetchSavedOrders()).map(o => [o.id, o]));
+  const owned = order => {
+    const claim = order?.servicesFollowUpClaim;
+    return claim?.token === PROJECT_FOLLOW_UP_TOKEN && !claim.doneAt
+      && now() - Date.parse(claim.at || 0) < PROJECT_FOLLOW_UP_LEASE_MS - 60 * 1000;
+  };
+  ready = ready.filter(claim => owned(server.get(claim.id)));
   let done = 0;
   for (const claim of ready) {
     const o = getOrder(claim.id);
