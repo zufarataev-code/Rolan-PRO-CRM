@@ -24883,8 +24883,27 @@ function projectCardPublishCrew(o) {
 function projectCardCanPlan(o) {
   return !!o && PROJECT_PLANNING_STATUSES.includes(o.status) && orderUserCanSeeMoney(o, currentUser()) && orderUserCanManage(currentUser());
 }
+const PROJECT_DONE_PLAN_MESSAGE = 'Услуга выполнена: её исполнителя и дату не меняют — это её история и оплата. Сначала верните её в работу.';
+const projectPlanTime = plan => { const at = Date.parse(plan?.installationAt || ''); return Number.isNaN(at) ? '' : new Date(at).toISOString(); };
+/** The name of a done service whose specialist or date these plans change ('' when none). */
+function projectDoneServicePlanChanged(o, plans) {
+  const before = projectPlannedSchedules(o);
+  const crew = plan => [...(plan?.installerIds || [])].map(String).sort().join('|');
+  return projectLines(o).find(line => {
+    if (projectServiceProgress(o, line.key).status !== 'done') return false;
+    const was = before.find(plan => plan.id === line.key);
+    const now = plans.find(plan => plan.id === line.key);
+    return !!was && (crew(was) !== crew(now) || projectPlanTime(was) !== projectPlanTime(now));
+  })?.name || '';
+}
 /** After «Монтаж назначен» a planned service may change its specialist or date, but not lose them. */
 function projectCardKeepsPlan(o, entry, next) {
+  // A done service keeps both: they are its history and its pay.
+  if (o.serviceProgress?.[entry.id]?.status === 'done') {
+    alert(PROJECT_DONE_PLAN_MESSAGE);
+    preservePositionForNextRender(); render();
+    return false;
+  }
   const complete = plan => !!plan.installationAt && (plan.installerIds || []).length > 0;
   if (!PROJECT_SCHEDULED_STATUSES.includes(o.status) || !complete(entry) || complete(next)) return true;
   alert('Монтаж уже назначен: у услуги должны остаться исполнитель и дата. Замените их, а не удаляйте.');
@@ -25106,7 +25125,9 @@ function projectWriteServiceProgress(o, line, status, user) {
   else progress[line.key] = { ...before, status: 'done', startedAt: before.startedAt || now, doneAt: now, doneBy: user.id };
   o.serviceProgress = progress;
   o.timeline = o.timeline || [];
-  o.timeline.push({ at: now, key: status === 'done' ? 'service_done' : status === 'in_progress' ? 'service_started' : 'service_reopened', by: user.id, note: line.name });
+  // Taking back a done service is a reopen, whatever status it goes back to.
+  const key = status === 'done' ? 'service_done' : before.status === 'done' || status === 'planned' ? 'service_reopened' : 'service_started';
+  o.timeline.push({ at: now, key, by: user.id, note: line.name });
 }
 /** The project follows its services: in progress once one starts, «Монтаж выполнен» once all are done. */
 function projectSyncStatusFromServices(o) {
@@ -28986,6 +29007,8 @@ function confirmScheduleInstallation(oid) {
   let schedules;
   try { schedules = readProjectServiceSchedule(o); } catch (error) { alert(error.message); return; }
   if (!schedules.length) return alert('Сначала добавьте услуги проекта.');
+  const frozen = projectDoneServicePlanChanged(o, schedules);
+  if (frozen) return alert(`${frozen}: ${PROJECT_DONE_PLAN_MESSAGE}`);
   o.serviceSchedules = schedules;
   o.installerIds = [...new Set(schedules.flatMap(item => item.installerIds))];
   o.installationAt = schedules.map(item => item.installationAt).sort()[0];

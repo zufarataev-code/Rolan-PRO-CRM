@@ -489,3 +489,40 @@ test('field save: the last service done closes the project on the server; the hi
   assert.equal(kept.orders[0].status, 'installation_in_progress');
   assert.equal(kept.orders[0].timeline.filter((event: Row) => event.key === 'installation_in_progress').length, 1, 'a stale save adds no second start');
 });
+
+test('a done service keeps its specialist and date while the project is open; taking it back is a reopen', () => {
+  const { c, db, calls } = load({ id: 'm1', role: 'manager' });
+  const o = project('installation_in_progress');
+  o.serviceProgress = { 'offering:a1': { status: 'done', doneAt: '2026-10-14T20:00:00.000Z', doneBy: 'i1' }, 'line:z': { status: 'in_progress' } };
+  db.orders.push(o);
+  // The card refuses to change the done row; the open row still changes.
+  c.projectCardToggleCrew('o', 'offering:a1', 'i2', true);
+  assert.deepEqual(plain(o.serviceSchedules.find((plan: Row) => plan.id === 'offering:a1').installerIds), ['i1']);
+  assert.ok(calls.some(call => call.startsWith('alert:Услуга выполнена')));
+  c.projectCardToggleCrew('o', 'line:z', 'i1', true);
+  assert.deepEqual(plain(o.serviceSchedules.find((plan: Row) => plan.id === 'line:z').installerIds), ['i2', 'i1']);
+  // The schedule window too.
+  const moved = plain(o.serviceSchedules).map((plan: Row) => plan.id === 'offering:a1' ? { ...plan, installationAt: '2026-10-20T16:00:00.000Z' } : plan);
+  assert.equal(c.projectDoneServicePlanChanged(o, moved), 'A1 8 mil');
+  assert.equal(c.projectDoneServicePlanChanged(o, plain(o.serviceSchedules)), '');
+  // «Вернуть в работу» on a done service is recorded as a reopen.
+  o.timeline = [];
+  const line = c.projectLines(o).find((item: Row) => item.key === 'offering:a1');
+  c.projectWriteServiceProgress(o, line, 'in_progress', { id: 'm1' });
+  assert.equal(o.timeline[0].key, 'service_reopened');
+  // The server refuses the change too, and allows it once the service is back in work.
+  const users = [{ id: 'i1', role: 'installer' }, { id: 'i2', role: 'installer' }];
+  const saved: Row = { settings: { serviceOfferings: [] }, users, orders: [{ id: 'o', status: 'installation_in_progress', serviceType: 'smart_film', measurements: { rooms: [] },
+    extraServices: [{ id: 'z', label: 'Мойка', qty: 1 }, { id: 'y', label: 'Демонтаж', qty: 1 }],
+    serviceSchedules: [{ id: 'line:z', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }, { id: 'line:y', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i2'] }],
+    serviceProgress: { 'line:z': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } } }] };
+  const swap = structuredClone(saved);
+  swap.orders[0].serviceSchedules[0].installerIds = ['i2'];
+  assert.equal(prepareServiceSolutions(saved, swap, false), 'Услуга выполнена: её исполнителя и дату не меняют. Сначала верните её в работу.');
+  const open = structuredClone(saved);
+  open.orders[0].serviceSchedules[1].installerIds = ['i1'];
+  assert.equal(prepareServiceSolutions(saved, open, false), null, 'a service not done yet still changes');
+  const reopened = structuredClone(swap);
+  reopened.orders[0].serviceProgress = { 'line:z': { status: 'in_progress' } };
+  assert.equal(prepareServiceSolutions(saved, reopened, true), null, 'back in work, it changes');
+});
