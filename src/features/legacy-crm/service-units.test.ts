@@ -139,7 +139,9 @@ test('a project of services without sizes skips measurement; the proposal lists 
   assert.match(html, /projectOfferingLines\(order\)\.filter\(line => premiumNum\(line\.price\) > 0\)\.forEach\(line => \{\n {4}items\.push\(\{\n {6}service_code: canonicalServiceCodeForOrderService\(line\.serviceType\) \|\| 'SOLAR_FILM',/);
   assert.match(html, /const offeringLines = projectOfferingLines\(order\);\n  const regularLegacyServices = \(order\.extraServices \|\| \[\]\)\.filter\(line => !line\.quickProjectLine && !offeringLines\.includes\(line\)\)\.reduce/, 'directory services are not counted twice in «Additional project services»');
   // Windows only take per-sq-ft services.
-  assert.match(html, /serviceOfferingsFor\(direction, \{ includeId: win\.offeringId \}\)\.filter\(item => serviceOfferingNeedsSizes\(item\) \|\| item\.id === win\.offeringId\)/);
+  assert.match(html, /const selectedOfferings = projectSelectedSizedOfferings\(o, win\.measureScope \|\| o\.serviceType\);/);
+  assert.match(html, /const selectedIds = new Set\(selectedOfferings\.map\(item => item\.id\)\);/);
+  assert.match(html, /\(!selectedIds\.size \|\| selectedIds\.has\(item\.id\)\) && serviceOfferingNeedsSizes\(item\)/);
 });
 
 const base: Row = {
