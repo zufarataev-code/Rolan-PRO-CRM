@@ -1005,6 +1005,11 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Verification: new `project-stages.test.ts` (4 tests); `npm test` green; local browser: a new project with only «Подключение зоны» shows «Рассчитать проект — Замер не нужен», consultation and measurement «не нужен», current step КП.
 - Next: Codex review + CI; owner's «да» before deploy. Then the ERP core (Project → Services → Visits → Measurement → Work log) together with the CRM core consolidation.
 
+## 2026-10-10 hotfix — service plans compared independent of key order (Claude)
+
+- Branch `claude/fix-plan-compare` from `main` `d148329`. PostgreSQL stores the legacy workspace as jsonb and reorders object keys, so a plan built in the browser and the saved copy differed as plain JSON text. `prepareServiceSolutions` treated an unchanged plan as changed: after a plan was made in one tab, a later save of the closed project (act, payment) in the same tab was refused with «Проект закрыт: исполнителей и даты услуг не меняют.». `stableJson` (sorted keys) now drives the schedule comparisons.
+- Verification: new server test; `npm test` green; `tsc` clean. Found while verifying service progress on the local test copy (a 400 on save).
+
 ## 2026-10-10 handoff — per-service progress (Claude)
 
 - Branch `claude/service-progress`, based on `main` `d148329` (after #330); includes the same `stableJson` comparison as hotfix #331. Owner decision: DECISIONS.md (2026-10-10, «Each service of a project has its own progress»).
