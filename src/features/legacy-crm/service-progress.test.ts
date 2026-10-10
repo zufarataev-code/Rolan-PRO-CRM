@@ -277,7 +277,7 @@ test('when two crews finish at once, the merged save closes the project; its fil
   assert.deepEqual(plain(c.projectCloseFinishedProjects()), ['o']);
   assert.deepEqual([o.status, o.installationDoneAt, open.status], ['installation_done', '2026-10-16T19:00:00.000Z', 'installation_in_progress']);
   const persist = html.slice(html.indexOf('async function cloudPersist('), html.indexOf('async function cloudPersistConfirmed('));
-  assert.match(persist, /const finished = projectCloseFinishedProjects\(\);\n        if \(finished\.length\) \{ finishedByMerge\.push\(\.\.\.finished\); snapshot = JSON\.parse\(JSON\.stringify\(db\)\); \}/);
+  assert.match(persist, /const finished = \[\.\.\.projectCloseFinishedProjects\(\), \.\.\.projectTakeServiceClosedNotices\(\)\];\n        if \(finished\.length\) \{ finishedByMerge\.push\(\.\.\.finished\); snapshot = JSON\.parse\(JSON\.stringify\(db\)\); \}/);
   assert.match(persist, /cloudStatus\('Сохранено', 'green'\);\n      if \(finishedByMerge\.length\) projectNotifyFinishedProjects\(finishedByMerge\);/);
   // The same notifications as a manual close, once the merged state is saved.
   const sent: string[] = [];
@@ -293,6 +293,11 @@ test('when two crews finish at once, the merged save closes the project; its fil
   assert.equal(c.projectDeductServiceClosedProjects(), 0);
   assert.equal(deducted, 1);
   assert.match(html, /const deductedClosedProjects = projectDeductServiceClosedProjects\(\);/);
+  // Projects the server closed: the manager's CRM sends their notices once and clears the mark.
+  db.orders.push({ id: 'srv', status: 'installation_done', servicesClosedNotice: 'pending' });
+  assert.deepEqual(plain(c.projectTakeServiceClosedNotices()), ['srv']);
+  assert.deepEqual(plain(c.projectTakeServiceClosedNotices()), []);
+  assert.match(html, /const serviceClosedNotices = projectTakeServiceClosedNotices\(\);\n    projectNotifyFinishedProjects\(serviceClosedNotices\);/);
 });
 
 test('field save: a started service cannot be taken back; closing takes the date from the services', () => {
@@ -338,6 +343,7 @@ test('field save: the last service done closes the project on the server; the hi
   const merged = mergeFieldWorkspace(current, submitted, [ROLE_CODES.INSTALLER], ['i1']) as Row;
   const order = merged.orders[0];
   assert.equal(order.status, 'installation_done');
+  assert.equal(order.servicesClosedNotice, 'pending', 'its notices go out from the manager\'s CRM');
   assert.equal(order.installationDoneAt, order.serviceProgress['line:z'].doneAt);
   assert.deepEqual(order.timeline.map((event: Row) => [event.key, event.by, event.note]), [
     ['service_done', 'i2', 'Демонтаж'],
@@ -350,4 +356,15 @@ test('field save: the last service done closes the project on the server; the hi
   const reopened = mergeFieldWorkspace(merged, stale, [ROLE_CODES.INSTALLER], ['i1']) as Row;
   assert.equal(reopened.orders[0].status, 'installation_done');
   assert.equal(reopened.orders[0].timeline.filter((event: Row) => event.key === 'service_done').length, 2);
+  assert.equal(reopened.orders[0].timeline.filter((event: Row) => event.key === 'installation_done').length, 1, 'the server\'s step stays in the history');
+  // A service begun starts a planned installation.
+  const planned = structuredClone(current);
+  planned.orders[0].status = 'installation_scheduled';
+  planned.orders[0].serviceProgress = {};
+  const starting = structuredClone(planned);
+  starting.orders[0].serviceProgress = { 'line:z': { status: 'in_progress' } };
+  const started = mergeFieldWorkspace(planned, starting, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  assert.equal(started.orders[0].status, 'installation_in_progress');
+  assert.deepEqual(started.orders[0].timeline.slice(-2).map((event: Row) => [event.key, event.by]), [['service_started', 'i1'], ['installation_in_progress', 'i1']]);
+  assert.equal(prepareServiceSolutions(planned, started, false), null);
 });

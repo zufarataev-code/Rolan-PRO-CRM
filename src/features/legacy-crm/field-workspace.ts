@@ -1,5 +1,5 @@
 import { ROLE_CODES } from "@/lib/auth/constants";
-import { projectServicesFinished, serviceGroupName } from "@/features/legacy-crm/service-solutions";
+import { projectServicesFinished, projectServicesStarted, serviceGroupName } from "@/features/legacy-crm/service-solutions";
 
 type JsonObject = Record<string, unknown>;
 
@@ -379,26 +379,31 @@ export function mergeFieldWorkspace(
     // A closed project is reopened by a manager, not by a field save from a
     // browser that has not seen it close.
     if (CLOSED_STATUSES.has(String(currentOrder.status)) && !CLOSED_STATUSES.has(String(next.status))) next.status = currentOrder.status;
-    // The service marks in the history come from the accepted marks, named
-    // and dated here; the browser's own copies of them are not taken.
-    const savedServiceEvents = (Array.isArray(currentOrder.timeline) ? currentOrder.timeline : [])
-      .filter((event) => isObject(event) && SERVICE_TIMELINE_KEYS.has(String(event.key || "")));
+    // The service marks in the history, and the project steps they make, come
+    // from the accepted marks, named and dated here; the browser's own copies
+    // of them are not taken, and a browser that has not seen them keeps them.
+    const serverEvent = (event: unknown) =>
+      isObject(event) && (SERVICE_TIMELINE_KEYS.has(String(event.key || "")) || event.source === "services");
     const timeline: unknown[] = [
-      ...(Array.isArray(next.timeline) ? next.timeline : []).filter(
-        (event) => !(isObject(event) && SERVICE_TIMELINE_KEYS.has(String(event.key || ""))),
-      ),
-      ...clone(savedServiceEvents),
+      ...(Array.isArray(next.timeline) ? next.timeline : []).filter((event) => !serverEvent(event)),
+      ...clone((Array.isArray(currentOrder.timeline) ? currentOrder.timeline : []).filter(serverEvent)),
       ...serviceEvents.map((event) => ({ ...event, note: serviceGroupName(next, String(event.serviceId), currentPayload) })),
     ].sort((a, b) => String(isObject(a) ? a.at || "" : "").localeCompare(String(isObject(b) ? b.at || "" : "")));
     next.timeline = timeline;
-    // The last service done closes the project, whatever the browser did next.
+    // The project follows its services, whatever the browser did next: the
+    // last service done closes it (its notices go out from the manager's CRM),
+    // a service begun starts it.
     if (projectServicesFinished(next, currentPayload)) {
       const last = Object.values(next.serviceProgress as JsonObject)
         .filter(isObject)
         .sort((a, b) => String(a.doneAt || "").localeCompare(String(b.doneAt || "")))
         .pop();
       next.status = "installation_done";
-      timeline.push({ at: last?.doneAt, key: "installation_done", by: last?.doneBy, note: "Все услуги выполнены" });
+      next.servicesClosedNotice = "pending";
+      timeline.push({ at: last?.doneAt, key: "installation_done", by: last?.doneBy, note: "Все услуги выполнены", source: "services" });
+    } else if (projectServicesStarted(next) && serviceEvents.length) {
+      next.status = "installation_in_progress";
+      timeline.push({ at: serviceEvents[0].at, key: "installation_in_progress", by: serviceEvents[0].by, source: "services" });
     }
     // Closing through the services: the completion date is the last service's
     // server-stamped time, not a submitted one.

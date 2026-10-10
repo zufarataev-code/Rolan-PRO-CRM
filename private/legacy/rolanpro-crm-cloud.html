@@ -25188,6 +25188,18 @@ function projectDeductServiceClosedProjects() {
   });
   return count;
 }
+/**
+ * Projects the server closed when a field save marked their last service:
+ * the owner/manager's CRM sends their «Монтаж выполнен» notices, once.
+ */
+function projectTakeServiceClosedNotices() {
+  const user = currentUser();
+  if (!user || !orderUserCanManage(user)) return [];
+  return (db.orders || []).filter(o => o.servicesClosedNotice === 'pending').map(o => {
+    delete o.servicesClosedNotice;
+    return o.id;
+  });
+}
 /** Closing an installation by hand finishes every service still open. */
 function projectFinishOpenServices(o, by) {
   const user = getUser(by) || currentUser() || { id: by };
@@ -39588,7 +39600,7 @@ async function cloudPersist(options = {}) {
         snapshot = mergeCloudWorkspaceSnapshots(cloudBaseSnapshot, JSON.parse(JSON.stringify(db)), remotePayload);
         db = cloneCloudWorkspaceValue(snapshot);
         // The other crew may have finished the last open service meanwhile.
-        const finished = projectCloseFinishedProjects();
+        const finished = [...projectCloseFinishedProjects(), ...projectTakeServiceClosedNotices()];
         if (finished.length) { finishedByMerge.push(...finished); snapshot = JSON.parse(JSON.stringify(db)); }
         cloudRevision = latestResult.data.revision;
         cloudBaseSnapshot = cloneCloudWorkspaceValue(remotePayload);
@@ -39692,7 +39704,9 @@ async function cloudBoot() {
     // Projects the server closed when their last service was done: the
     // owner/manager's CRM writes off their film like a manual close does.
     const deductedClosedProjects = projectDeductServiceClosedProjects();
-    if (persistClientNotificationMigration || persistOfficialSupplierMigration || roleWasSynchronized || deductedClosedProjects) cloudScheduleSave();
+    const serviceClosedNotices = projectTakeServiceClosedNotices();
+    projectNotifyFinishedProjects(serviceClosedNotices);
+    if (persistClientNotificationMigration || persistOfficialSupplierMigration || roleWasSynchronized || deductedClosedProjects || serviceClosedNotices.length) cloudScheduleSave();
     parseHash();
     render();
     cloudStatus('Сохранено', 'green');

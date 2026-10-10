@@ -80,6 +80,12 @@ export function projectServicesFinished(order: Row, payload: Row): boolean {
   if (plans.some(plan => !completePlan(plan)) || ids.some(id => !plans.some(plan => plan.id === id))) return false;
   return !pendingSizedOfferings(order, rows(object(payload.settings).serviceOfferings)).length;
 }
+/** A planned installation with a service begun or done: it is under way. */
+export function projectServicesStarted(order: Row): boolean {
+  if (!SCHEDULED_PROJECT_STATUSES.includes(String(order.status)) || order.status === 'installation_in_progress') return false;
+  const progress = object(order.serviceProgress);
+  return serviceGroupIds(order).some(id => ['in_progress', 'done'].includes(object(progress[id]).status));
+}
 const DIRECTION_TITLES: Record<string, string> = {
   smart_film: 'Смарт плёнка', solar_film: 'Солнцезащитная плёнка', protective_film: 'Защитная плёнка',
   decorative_film: 'Декоративная плёнка', privacy_film: 'Приватная плёнка',
