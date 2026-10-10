@@ -645,3 +645,13 @@ Owner in chat on 2026-10-09: «я просил сделать карточку �
 - Plans change only while the work is ahead or under way (`proposal_accepted` … `installation_in_progress`); a finished project shows its crew and dates read-only. After «Монтаж назначен» a planned service may change its specialist or date but not lose them.
 - Every way into installation (the card, the schedule window, the kanban) needs a specialist and a date for every service and no service waiting for its measurement (`ensureProjectServicesPlanned` in `changeStatus`); an older project planned as a whole keeps its crew and date, written per service. The row price of windows is the base rate per sq ft; the complexity coefficient stays on top.
 - Server: a saved plan may miss its specialist or its date while it is being planned; entering installation needs a complete plan covering every service of the project (not for a new project created as scheduled by an import); a complete plan of a scheduled project stays complete; a closed project's plan is frozen; the project crew and date are derived from the plan only in scheduled statuses.
+
+## 2026-10-10 — A project's next step follows its services (Owner)
+
+Owner in chat on 2026-10-10, after the market review (Tint Wiz, simPRO, ServiceTitan, Odoo — https://claude.ai/artifact/Q2iMamFEYqQDFcJJVyyj57): the project should not be pushed to a measurement because of one fixed stage chain; he chose the hybrid path (own ERP core on the market's «project → services → visits» model; accounting, payroll and store bought) and said «да» to its first step.
+
+- Before the proposal (`new`, `consultation_scheduled`, `measurement_scheduled`), «Следующий правильный шаг» reads the services: a project without services asks to add them; a project whose measurement is settled (no chosen service needs sizes, or every one has them — `orderMeasurementCompletionIssues` is empty) goes to «Рассчитать проект», then «Сформировать КП»; otherwise the usual consultation and measurement steps apply.
+- The stage bar shows consultation and measurement as «не нужен» when the services need no sizes, and the current step moves to the proposal for a settled project.
+- The kanban «→» (and the next stage shown on the card) skips consultation and measurement for a settled project and goes to the proposal; the usual checks open the estimate if it is not approved yet.
+- «Полевой замер» offers the directions of the project's chosen services only (a project without chosen services still offers every direction).
+- Not in this step: per-service lifecycle statuses and visits as entities (the core model in PostgreSQL), lead conversion with a service picker (a lead project now asks for services on its card).

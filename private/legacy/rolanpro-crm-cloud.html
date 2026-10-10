@@ -1369,6 +1369,8 @@
     border-radius: 999px;
     background: #e2e8f0;
   }
+  .order-clean-progress-step.skipped .order-clean-progress-line { background: repeating-linear-gradient(90deg, #cbd5e1 0 6px, transparent 6px 10px); }
+  .order-clean-progress-step.skipped .order-clean-progress-label { color: #94a3b8; }
   .order-clean-progress-step.done .order-clean-progress-line {
     background: #10b981;
   }
@@ -11202,9 +11204,12 @@ function measureStudioSelectedDefaults(order) {
   const smart = win?.smart || {};
   return { room, win, smart };
 }
-function measureStudioScopeButtons(scopeKey) {
+function measureStudioScopeButtons(scopeKey, order = null) {
+  // A project with chosen services is measured by their directions only.
+  const own = order && (order.offeringId || (order.offeringIds || []).length) ? orderMeasureScopes(order) : [];
+  const scopes = own.length ? MEASURE_SCOPES.filter(s => own.includes(s.key) || s.key === scopeKey) : MEASURE_SCOPES;
   return `<div class="measure-scope-grid">
-    ${MEASURE_SCOPES.map(s => `
+    ${scopes.map(s => `
       <button type="button" class="measure-scope-btn ${scopeKey === s.key ? 'active' : ''}" data-measure-scope="${s.key}" style="--scope-color:${s.accent}" onclick="measureStudioSetScope('${s.key}')">
         <span class="measure-scope-icon">${s.icon}</span>
         <span>
@@ -11541,8 +11546,8 @@ function openEngineeringMeasureStudio(orderId) {
               <span class="measure-step-no">1</span>
               <div class="min-w-0 flex-1">
                 <div class="measure-step-title">Вид замера</div>
-                <div class="measure-step-sub">Выберите направление. От него зависят поля, риски, подсказки и то, что попадёт в техлист.</div>
-                <div class="mt-3">${measureStudioScopeButtons(scopeKey)}</div>
+                <div class="measure-step-sub">${(order.offeringId || (order.offeringIds || []).length) ? 'Услуги этого проекта, которым нужны размеры. От направления зависят поля, риски, подсказки и техлист.' : 'Выберите направление. От него зависят поля, риски, подсказки и то, что попадёт в техлист.'}</div>
+                <div class="mt-3">${measureStudioScopeButtons(scopeKey, order)}</div>
                 <input type="hidden" id="ms-scope" value="${scopeKey}">
               </div>
             </div>
@@ -17089,10 +17094,32 @@ function notifyClientRequestResolved(orderId, requestId, accepted) {
     : `Здравствуйте, ${c.name || ''}!\n\nМы увидели ваш запрос по заказу ${o.number}. Сейчас оставляем текущий график без изменений, менеджер свяжется с вами.${clientNoticePortalText(o)}\n\nRolanPRO`;
   sendClientOperationalMessage(o, subject, body, accepted ? 'client_request_accepted_notice' : 'client_request_declined_notice');
 }
+// Owner, 2026-10-10: the next step of a project follows its services. A
+// project without services first gets them; a project whose services need no
+// sizes (or already have them) goes to its estimate and proposal instead of a
+// consultation and a measurement.
+function projectHasServices(o) {
+  return !!(o?.offeringId || (o?.offeringIds || []).length || projectLines(o).length);
+}
+/** Measurement is settled: no chosen service needs sizes, or every one has them. */
+function projectMeasurementSettled(o) {
+  return projectHasServices(o) && !orderMeasurementCompletionIssues(o).length;
+}
+const PROJECT_PRE_PROPOSAL_STATUSES = ['new','consultation_scheduled','measurement_scheduled'];
+function projectServicesNextAction(o) {
+  if (!PROJECT_PRE_PROPOSAL_STATUSES.includes(o.status)) return null;
+  if (!projectHasServices(o)) return { icon: '🧩', title: 'Добавить услуги проекта', sub: 'Что делаем у клиента — от услуг зависит, нужен ли замер и что войдёт в КП.', variant: 'primary', onclick: `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})` };
+  if (!projectMeasurementSettled(o)) return null;
+  if (!projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: orderNeedsMeasurements(o) ? 'Замер готов. Проверьте услуги и цену клиенту до КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цену до КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
+  return { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
+}
+
 function orderPrimaryNextAction(o) {
   if (pendingClientRequests(o).length) {
     return { icon: '⚠️', title: 'Ответить на запрос клиента', sub: 'Клиент просит перенос или отмену. Сначала обработайте это, потом двигайте заказ дальше.', variant: 'warning', onclick: `document.getElementById('client-requests-${o.id}')?.scrollIntoView({behavior:'smooth',block:'center'})` };
   }
+  const byServices = projectServicesNextAction(o);
+  if (byServices) return byServices;
   if (o.status === 'new') return { icon: '📞', title: 'Назначить консультацию', sub: 'Событие попадёт в календарь, клиент получит время по SMS/email.', variant: 'primary', onclick: `scheduleConsultationPrompt('${o.id}')` };
   if (o.status === 'consultation_scheduled') return { icon: '📐', title: 'Назначить замер', sub: 'Выберите замерщика и точное время выезда.', variant: 'primary', onclick: `scheduleMeasurementPrompt('${o.id}')` };
   if (o.status === 'measurement_scheduled') return o.measurerId
@@ -19713,10 +19740,21 @@ function orderKanbanNextStatus(status) {
   const idx = order.indexOf(status);
   return idx >= 0 ? order[idx + 1] : null;
 }
+/**
+ * The kanban's next stage for this project: when its services need no sizes
+ * (or have them), consultation and measurement are skipped and the next stage
+ * is the proposal — the usual checks then open the estimate if it is not
+ * approved yet.
+ */
+function projectKanbanNextStatus(o) {
+  const next = orderKanbanNextStatus(o?.status);
+  if (next && ['consultation_scheduled','measurement_scheduled','measurement_done'].includes(next) && projectMeasurementSettled(o)) return 'proposal_sent';
+  return next;
+}
 function orderKanbanAdvance(orderId, event) {
   if (event) event.stopPropagation();
   const o = getOrder(orderId);
-  const next = o ? orderKanbanNextStatus(o.status) : null;
+  const next = o ? projectKanbanNextStatus(o) : null;
   if (!next) return;
   return changeStatus(orderId, next, state.currentUserId);
 }
@@ -19987,7 +20025,7 @@ function renderOrderKanbanCard(o) {
   const installers = (o.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', ');
   const manager = getUser(o.managerId)?.name || '—';
   const urgency = orderKanbanUrgency(o);
-  const next = orderKanbanNextStatus(o.status);
+  const next = projectKanbanNextStatus(o);
   const projectAddress = orderAddress(o, c);
   const text = `RolanPRO ${o.number}: ${clientPortalUrl(o.id) || location.href.split('#')[0] + '#/order/' + o.id}`;
   return `
@@ -23655,13 +23693,20 @@ function renderOrderCleanProgress(o) {
   let activeStep = curStep >= 4 ? curStep + 1 : curStep;
   if (o.status === 'proposal_accepted' && !o.productionReadyAt) activeStep = 4;
   if (o.productionReadyAt && !o.installationAt && curStep <= 3) activeStep = 5;
+  // Services that need no sizes (or have them) take the project straight to its proposal.
+  const settled = PROJECT_PRE_PROPOSAL_STATUSES.includes(o.status) && projectMeasurementSettled(o);
+  const measurementSkipped = settled && !orderNeedsMeasurements(o);
+  if (settled) activeStep = Math.max(activeStep, 3);
   return `
     <div class="order-clean-progress">
-      ${labels.map((lbl, i) => `
-        <div class="order-clean-progress-step ${i < activeStep ? 'done' : i === activeStep ? 'current' : ''}">
+      ${labels.map((lbl, i) => {
+        const skipped = measurementSkipped && (i === 1 || i === 2);
+        return `
+        <div class="order-clean-progress-step ${skipped ? 'skipped' : i < activeStep ? 'done' : i === activeStep ? 'current' : ''}">
           <div class="order-clean-progress-line"></div>
-          <div class="order-clean-progress-label">${lbl === 'Производство' ? lbl : T(lbl)}</div>
-        </div>`).join('')}
+          <div class="order-clean-progress-label">${lbl === 'Производство' ? lbl : T(lbl)}${skipped ? ' · не нужен' : ''}</div>
+        </div>`;
+      }).join('')}
     </div>`;
 }
 
