@@ -15960,7 +15960,9 @@ function projectProductionReadiness(o, { requireReady = true } = {}) {
     const stock = filmPlanInventoryStatus(catalogId, material);
     if (!stock.enough) issues.push(`недостаточно материала: ${catalogLabel(getCatalogItem(catalogId))}`);
   });
-  if (requireReady && !o?.productionReadyAt) issues.push('подготовка производства не подтверждена');
+  // Preparing production is cutting film from stock: a project without
+  // windows (zones, work lines) has nothing to prepare (Owner, 2026-10-11).
+  if (requireReady && !o?.productionReadyAt && measureAllWindows(o).length) issues.push('подготовка производства не подтверждена');
   return Array.from(new Set(issues));
 }
 function orderStatusRequiresVerifiedMeasurements(status) {
@@ -17423,14 +17425,24 @@ function projectHasScheduledVisit(o) {
   const ahead = value => !!value && Date.parse(value) > Date.now();
   return ahead(o?.consultationAt) || ahead(o?.measurementAt);
 }
+/**
+ * Until the proposal the project is priced in its card, by its services
+ * (Owner, 2026-10-11): add the services; the ones priced per sq ft need a
+ * measurement (our funnel goes from the call straight to it — no consultation
+ * detour); then «Расчёт готов» approves the card's numbers and opens the КП.
+ */
 function projectServicesNextAction(o) {
-  if (!PROJECT_PRE_PROPOSAL_STATUSES.includes(o.status)) return null;
+  if (!PROJECT_PRE_PROPOSAL_STATUSES.includes(o.status) && o.status !== 'measurement_done') return null;
   // Services, estimate and proposal belong to the people who price the
   // project; a measurer keeps the measurement actions.
   if (!orderUserCanSeeMoney(o, currentUser())) return null;
   if (!projectHasServices(o)) return { icon: '🧩', title: 'Добавить услуги проекта', sub: 'Что делаем у клиента — от услуг зависит, нужен ли замер и что войдёт в КП.', variant: 'primary', onclick: `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})` };
-  if (!projectMeasurementSettled(o)) return null;
-  if (!projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: orderNeedsMeasurements(o) ? 'Замер готов. Проверьте услуги и цену клиенту до КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цену до КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
+  if (!projectMeasurementSettled(o)) {
+    // A measurement already booked keeps its own step (the measurer's work).
+    if (o.status === 'measurement_scheduled') return null;
+    return { icon: '📐', title: 'Назначить замер', sub: 'Услугам за sq ft нужны размеры окон. Выберите замерщика и время выезда — или внесите размеры сами в «Замер».', variant: 'primary', onclick: `scheduleMeasurementPrompt('${o.id}')` };
+  }
+  if (!projectEstimateIsApproved(o)) return { icon: '✅', title: 'Расчёт готов → КП', sub: orderNeedsMeasurements(o) ? 'Размеры внесены. Проверьте количество и цены в «Услугах проекта» — и сформируйте КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цены — и сформируйте КП.', variant: 'primary', onclick: `approveProjectEstimateAndOpenProposal('${o.id}')` };
   return { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
 }
 
@@ -17450,8 +17462,13 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'proposal_sent') return { icon: '✅', title: 'Отметить КП принятым', sub: 'Используйте, если клиент подтвердил предложение вне портала.', variant: 'primary', onclick: `changeStatus('${o.id}','proposal_accepted')` };
   if (o.status === 'proposal_accepted' && !orderPaymentReadyForProduction(o)) return { icon: '💰', title: 'Отметить аванс', sub: 'Либо подтвердите в расчёте согласованную оплату после выполнения.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
   if (o.status === 'proposal_accepted' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
-  if (o.status === 'proposal_accepted' && !o.productionReadyAt) return { icon: '🏭', title: 'Подготовить производство', sub: 'Проверить раскрой, материал и склад перед назначением бригады.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
-  if (o.status === 'proposal_accepted') return { icon: '🔧', title: 'Назначить монтаж', sub: 'Производство подготовлено. Назначьте бригаду и дату.', variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
+  if (o.status === 'proposal_accepted' && !o.productionReadyAt && measureAllWindows(o).length) return { icon: '🏭', title: 'Подготовить производство', sub: 'Проверить раскрой, материал и склад перед назначением бригады.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
+  // The crew and date are chosen in each row of «Услуги проекта»; then the plan is confirmed there.
+  if (o.status === 'proposal_accepted') {
+    const unplanned = projectCardUnplanned(o);
+    if (unplanned.length) return { icon: '👷', title: 'Назначить исполнителей', sub: `Выберите исполнителя и дату в строке каждой услуги: ${unplanned.map(line => line.name).join(', ')}.`, variant: 'primary', onclick: `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})` };
+    return { icon: '🔧', title: 'Подтвердить монтаж', sub: 'Все услуги назначены — клиент и бригада увидят даты после подтверждения.', variant: 'primary', onclick: `projectCardConfirmInstallation('${o.id}')` };
+  }
   if (o.status === 'installation_done') return { icon: '📝', title: 'Подписать акт', sub: 'Закрываем выполненную работу документально.', variant: 'primary', onclick: `changeStatus('${o.id}','act_signed')` };
   if (o.status === 'act_signed') return { icon: '💳', title: 'Отметить оплату', sub: 'Фиксируем финальную оплату по заказу.', variant: 'primary', onclick: `changeStatus('${o.id}','payment_received')` };
   if (o.status === 'payment_received') return { icon: '⭐', title: 'Закрыть и запросить отзыв', sub: 'Финальный шаг: заказ закрыт, клиенту отправляем отзыв.', variant: 'success', onclick: `changeStatus('${o.id}','completed'); askForReview('${o.id}');` };

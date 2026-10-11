@@ -138,6 +138,11 @@ test("accepted proposal must pass production preparation before installation wit
   assert.doesNotMatch(source, /аванс ещё не получен/);
   assert.match(source, /недостаточно материала/);
   assert.match(nextAction, /title: 'Подготовить производство'/);
+  // Only film to cut needs preparing; then the crew is planned in the card's service rows and confirmed there.
+  assert.match(nextAction, /o\.status === 'proposal_accepted' && !o\.productionReadyAt && measureAllWindows\(o\)\.length\) return \{ icon: '🏭', title: 'Подготовить производство'/);
+  assert.match(source, /if \(requireReady && !o\?\.productionReadyAt && measureAllWindows\(o\)\.length\) issues\.push\('подготовка производства не подтверждена'\)/);
+  assert.match(nextAction, /title: 'Назначить исполнителей'/);
+  assert.match(nextAction, /title: 'Подтвердить монтаж'[\s\S]*?onclick: `projectCardConfirmInstallation\('\$\{o\.id\}'\)`/);
   assert.match(source, /function confirmProjectProductionReady\(oid\)/);
   assert.match(source, /o\.productionReadyAt = new Date\(\)\.toISOString\(\)/);
   assert.match(scheduler, /ensureProductionReadyForInstallation\(o\)/);
