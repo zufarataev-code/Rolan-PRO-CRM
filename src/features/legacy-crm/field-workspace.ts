@@ -54,6 +54,89 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function serviceIdForWindow(order: JsonObject, window: JsonObject) {
+  const offeringId = typeof window.offeringId === "string" ? window.offeringId : "";
+  if (offeringId) return `offering:${offeringId}`;
+  return `direction:${String(window.measureScope || order.serviceType || "solar_film")}`;
+}
+
+/**
+ * A field browser may hold a stale copy of a completed service while editing
+ * another service that is still open. Keep only the completed service windows
+ * authoritative; do not replace the whole measurements tree, or legitimate
+ * edits to unfinished services would be lost.
+ */
+function restoreCompletedServiceMeasurements(currentOrder: JsonObject, nextOrder: JsonObject) {
+  const progress = isObject(currentOrder.serviceProgress) ? currentOrder.serviceProgress : {};
+  const doneServiceIds = new Set(
+    serviceGroupIds(currentOrder).filter((id) => isObject(progress[id]) && progress[id].status === "done"),
+  );
+  if (!doneServiceIds.size) return;
+
+  const currentMeasurements = isObject(currentOrder.measurements) ? currentOrder.measurements : {};
+  const nextMeasurements = isObject(nextOrder.measurements) ? clone(nextOrder.measurements) : {};
+  const currentRooms = (Array.isArray(currentMeasurements.rooms) ? currentMeasurements.rooms : []).filter(isObject);
+  const nextRooms = (Array.isArray(nextMeasurements.rooms) ? nextMeasurements.rooms : []).filter(isObject);
+  const nextById = new Map(nextRooms.map((room) => [String(room.id || ""), room]));
+  const savedWindows = new Map(
+    currentRooms.flatMap((room) => (Array.isArray(room.windows) ? room.windows : []))
+      .filter(isObject)
+      .map((window) => [String(window.id || ""), window] as const),
+  );
+
+  // Classify an existing window by its saved identity, not by fields from a
+  // stale/edited browser snapshot. A completed window is restored wholesale.
+  // An unfinished window may keep new measurements, but it cannot be silently
+  // reassigned into a service that is already completed.
+  for (const room of nextRooms) {
+    if (!Array.isArray(room.windows)) continue;
+    room.windows = room.windows.filter((window) => {
+      if (!isObject(window)) return true;
+      const saved = savedWindows.get(String(window.id || ""));
+      if (saved) {
+        const savedServiceId = serviceIdForWindow(currentOrder, saved);
+        if (doneServiceIds.has(savedServiceId)) return false;
+        const submittedServiceId = serviceIdForWindow(currentOrder, window);
+        if (doneServiceIds.has(submittedServiceId)) {
+          if ("offeringId" in saved) window.offeringId = clone(saved.offeringId);
+          else delete window.offeringId;
+          if ("measureScope" in saved) window.measureScope = clone(saved.measureScope);
+          else delete window.measureScope;
+          if ("offeringName" in saved) window.offeringName = clone(saved.offeringName);
+          else delete window.offeringName;
+        }
+        return true;
+      }
+      // A brand-new field window cannot be added directly to already-completed
+      // work; the service must be reopened by a manager first.
+      return !doneServiceIds.has(serviceIdForWindow(currentOrder, window));
+    });
+  }
+
+  // Reinsert only the completed-service windows from the authoritative saved
+  // project. Unfinished-service windows and room edits remain as submitted.
+  for (const currentRoom of currentRooms) {
+    const doneWindows = (Array.isArray(currentRoom.windows) ? currentRoom.windows : [])
+      .filter(isObject)
+      .filter((window) => doneServiceIds.has(serviceIdForWindow(currentOrder, window)))
+      .map((window) => clone(window));
+    if (!doneWindows.length) continue;
+
+    const roomId = String(currentRoom.id || "");
+    let target = nextById.get(roomId);
+    if (!target) {
+      target = { ...clone(currentRoom), windows: [] };
+      nextRooms.push(target);
+      nextById.set(roomId, target);
+    }
+    const kept = Array.isArray(target.windows) ? target.windows.filter(isObject) : [];
+    target.windows = [...kept, ...doneWindows];
+  }
+
+  nextMeasurements.rooms = nextRooms;
+  nextOrder.measurements = nextMeasurements;
+}
+
 function redactFinancialData(value: unknown, parentKey = ""): unknown {
   if (Array.isArray(value)) {
     const items = value.map((item) => redactFinancialData(item, parentKey));
@@ -380,13 +463,13 @@ export function mergeFieldWorkspace(
       next[key] = mergeOperationalValue(currentOrder[key], submitted[key]);
     }
     // The work of a done service is not changed from the field: only a
-    // manager reopens it. A field save that would change or drop it keeps the
-    // saved measurements of the project (Owner, 2026-10-10).
+    // manager reopens it. Restore only completed-service windows so legitimate
+    // edits to other, unfinished services survive a stale field save.
     if (!CLOSED_STATUSES.has(String(currentOrder.status)) && isObject(currentOrder.serviceProgress)) {
       const savedProgress = currentOrder.serviceProgress;
       const touched = serviceGroupIds(currentOrder).some((id) =>
         isObject(savedProgress[id]) && savedProgress[id].status === "done" && serviceGroupScope(currentOrder, id) !== serviceGroupScope(next, id));
-      if (touched) next.measurements = clone(currentOrder.measurements);
+      if (touched) restoreCompletedServiceMeasurements(currentOrder, next);
     }
     // A closed project is reopened by a manager, not by a field save from a
     // browser that has not seen it close.

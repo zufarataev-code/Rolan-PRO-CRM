@@ -16975,7 +16975,7 @@ function smsLink(phone, text) {
   return `sms:${phone}?&body=${encodeURIComponent(text)}`;
 }
 
-function notifyStatusChange(order) {
+async function notifyStatusChange(order, options = {}) {
   const client = getClient(order.clientId);
   const clientName = client?.name || '—';
   // Build recipient set: assigned team + ALL owners (always notify owner regardless of assignment)
@@ -16984,18 +16984,31 @@ function notifyStatusChange(order) {
     order.managerId, order.measurerId, ...(order.installerIds||[]),
     ...owners,
   ].filter(Boolean));
-  // In-app for everyone in the recipient set
-  recipientIds.forEach(uid => {
-    pushInAppNotification(uid, `${T('orderNo')}${order.number}`, T(order.status), `#/order/${order.id}`);
-  });
-  // Telegram with detailed log for owner visibility
+  const skipInApp = options.skipInApp === true;
+  const skipTelegram = options.skipTelegram === true;
+  const deliveredBefore = new Set((Array.isArray(options.deliveredTelegramIds) ? options.deliveredTelegramIds : []).map(String));
+  // In-app for everyone in the recipient set. Completion follow-up persists a
+  // separate staffInAppAt marker, so retries can skip this side effect.
+  if (!skipInApp) {
+    recipientIds.forEach(uid => {
+      pushInAppNotification(uid, `${T('orderNo')}${order.number}`, T(order.status), `#/order/${order.id}`);
+    });
+  }
+  // Telegram with detailed log for owner visibility. Return successes by
+  // recipient so a partially successful follow-up can persist them and retry
+  // only the failed chats instead of duplicating messages.
   order.timeline = order.timeline || [];
-  let tgSent = 0, tgSkipped = 0, tgErrors = 0;
+  let tgSent = 0, tgSkipped = 0;
   const skipReasons = [];
-  if (!db.settings.telegramBotToken) {
+  const deliveries = [];
+  if (skipTelegram) {
+    // In-app-only pass used by durable completion follow-ups.
+  } else if (!db.settings.telegramBotToken) {
     skipReasons.push('Telegram Bot Token не указан');
   } else {
     recipientIds.forEach(uid => {
+      const recipientId = String(uid);
+      if (deliveredBefore.has(recipientId)) return;
       const u = getUser(uid);
       if (!u) return;
       if (!u.telegramChatId) {
@@ -17003,20 +17016,26 @@ function notifyStatusChange(order) {
         skipReasons.push(`${u.name}: нет Chat ID`);
         return;
       }
-      sendTelegram(u.telegramChatId,
-        `🔔 <b>${order.number}</b> — <b>${T(order.status)}</b>\nКлиент: ${clientName}\n${client?.address?.slice(0,80)||''}\n<a href="${clientPortalUrl(order.id)}">Открыть заказ</a>`
-      ).then(r => {
-        if (r && r.ok) {
-          // increment counter is async — just log to console
-          console.log('[Telegram]', u.name, 'OK');
-        } else {
-          console.warn('[Telegram] failed for', u.name, r);
-        }
-      }).catch(e => console.warn('[Telegram] error', u.name, e));
       tgSent++;
+      deliveries.push((async () => {
+        try {
+          const r = await sendTelegram(u.telegramChatId,
+            `🔔 <b>${order.number}</b> — <b>${T(order.status)}</b>\nКлиент: ${clientName}\n${client?.address?.slice(0,80)||''}\n<a href="${clientPortalUrl(order.id)}">Открыть заказ</a>`
+          );
+          if (r && r.ok) {
+            console.log('[Telegram]', u.name, 'OK');
+            return { uid: recipientId, ok: true };
+          }
+          console.warn('[Telegram] failed for', u.name, r);
+          return { uid: recipientId, ok: false };
+        } catch (e) {
+          console.warn('[Telegram] error', u.name, e);
+          return { uid: recipientId, ok: false };
+        }
+      })());
     });
   }
-  if (tgSent === 0 && skipReasons.length) {
+  if (!skipTelegram && tgSent === 0 && skipReasons.length && deliveredBefore.size === 0) {
     order.timeline.push({
       at: new Date().toISOString(),
       key: 'telegram_skipped',
@@ -17024,6 +17043,13 @@ function notifyStatusChange(order) {
       note: 'Telegram не отправлен: ' + skipReasons.slice(0,3).join('; ')
     });
   }
+  if (!deliveries.length) return { ok: true, deliveredTelegramIds: [], inAppDone: !skipInApp };
+  const results = await Promise.all(deliveries);
+  return {
+    ok: results.every(result => result.ok),
+    deliveredTelegramIds: results.filter(result => result.ok).map(result => result.uid),
+    inAppDone: !skipInApp,
+  };
 }
 
 function clientPortalUrl(orderId) {
@@ -25296,7 +25322,17 @@ function projectClaimServiceFollowUps(now = Date.now()) {
     const notify = fresh || unfinished?.notify === true;
     const deduct = !o._inventoryDeducted && (fresh || unfinished?.deduct === true);
     if (!notify && !deduct) return;
-    o.servicesFollowUpClaim = { token: PROJECT_FOLLOW_UP_TOKEN, at: new Date(now).toISOString(), notify, deduct, ...(unfinished?.staffAt ? { staffAt: unfinished.staffAt } : {}) };
+    o.servicesFollowUpClaim = {
+      token: PROJECT_FOLLOW_UP_TOKEN,
+      at: new Date(now).toISOString(),
+      notify,
+      deduct,
+      ...(unfinished?.staffAt ? { staffAt: unfinished.staffAt } : {}),
+      ...(unfinished?.staffInAppAt ? { staffInAppAt: unfinished.staffInAppAt } : {}),
+      ...(Array.isArray(unfinished?.staffDeliveredIds) && unfinished.staffDeliveredIds.length
+        ? { staffDeliveredIds: [...new Set(unfinished.staffDeliveredIds.map(String))] }
+        : {}),
+    };
     delete o.servicesClosedNotice;
     projectClaimedFollowUps.push({ id: o.id, notify, deduct, replaced: before?.token || null, replacedDoneAt: before?.doneAt || null });
     count += 1;
@@ -25358,9 +25394,34 @@ async function projectRunClaimedFollowUps(savedPayload, now = () => Date.now()) 
     // The «Монтаж выполнен» notices are owed even when the project has moved
     // on (act signed, paid) before they went out.
     if (claim.notify && CLOSED_PROJECT_STATUSES.includes(o.status)) {
-      // Staff notices once: a retry after a failed client notice skips them.
+      // Staff side effects are durable in two stages: persist the in-app pass
+      // first, then remember each successful Telegram recipient so a partial
+      // failure retries only the chats that still need delivery.
       if (!o.servicesFollowUpClaim.staffAt) {
-        notifyStatusChange({ ...o, status: 'installation_done' });
+        if (!o.servicesFollowUpClaim.staffInAppAt) {
+          await notifyStatusChange({ ...o, status: 'installation_done' }, { skipTelegram: true });
+          o.servicesFollowUpClaim = { ...o.servicesFollowUpClaim, staffInAppAt: new Date().toISOString() };
+          if (!(await projectPersistFollowUps())) continue;
+        }
+        const beforeStaff = o.servicesFollowUpClaim;
+        const staffResult = await notifyStatusChange(
+          { ...o, status: 'installation_done' },
+          { skipInApp: true, deliveredTelegramIds: beforeStaff.staffDeliveredIds || [] },
+        );
+        const deliveredIds = [...new Set([
+          ...(Array.isArray(beforeStaff.staffDeliveredIds) ? beforeStaff.staffDeliveredIds : []).map(String),
+          ...(Array.isArray(staffResult?.deliveredTelegramIds) ? staffResult.deliveredTelegramIds : []).map(String),
+        ])];
+        o.servicesFollowUpClaim = {
+          ...o.servicesFollowUpClaim,
+          ...(deliveredIds.length ? { staffDeliveredIds: deliveredIds } : {}),
+        };
+        const staffDelivered = staffResult !== false && staffResult?.ok !== false;
+        if (!staffDelivered) {
+          console.warn('Completion staff notice failed', o.id);
+          await projectPersistFollowUps();
+          continue;
+        }
         o.servicesFollowUpClaim = { ...o.servicesFollowUpClaim, staffAt: new Date().toISOString() };
         if (!(await projectPersistFollowUps())) continue;
       }
