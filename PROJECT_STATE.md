@@ -30,6 +30,13 @@ Before doing any work:
 - Calendar day, week, month, dispatch-map, event, navigation, filter, and field-role controls keep their existing behavior and now use the shared Rolan PRO design theme: the same 8 px surfaces, 6 px controls, navy-to-cyan active state, borders, typography, and restrained shadows as the rest of the CRM.
 - Verification completed locally: 591/591 tests, TypeScript, 119-page production build, inline-script validation, and diff check pass. Release completion remains the normal protected path: final PR CI, merge to `main`, production deploy, then authenticated calendar and reference-directory smoke tests.
 
+## 2026-10-11 handoff — issue #339 project command-center regressions
+
+- Branch: `codex/project-command-center-regressions`, based on production `main` `4f88a2a`; tracked by issue #339. PR #337 was checked at `7b8162d` and owns installation-entry gates, not these command-center regressions.
+- Owner/Manager navigation now keeps both `Расчёт / КП` and `Документы / портал`, and exposes a pending client reschedule/cancellation request. The primary warning opens that request workspace, where the existing accept/decline flow remains the single write path.
+- `Ближайшие работы` now groups only future unfinished service lines. Past service dates, explicitly completed lines, and inferred completed lines of legacy closed projects cannot hide the real next work; the full calendar still retains its historical visits.
+- Verification: 696/696 tests, scoped workspace/progress tests, TypeScript, the 121-page production build, and diff check pass. Draft PR, fresh CI, merge, deploy and production smoke verification remain.
+
 ## 2026-10-08 handoff — Rolan PRO intelligent agent v1
 
 - Branch: `codex/intelligent-agent-v1`, based on current GitHub `main` `38c9de0` after PR #318. The original checkout had unrelated local changes and a broken stale ref, so implementation uses an isolated fresh clone and does not touch that work.

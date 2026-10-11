@@ -43,7 +43,21 @@ test("project command center opens the existing workspaces and stays role-safe",
   assert.match(html, /function renderProjectCommandSide/);
   assert.match(html, /const financialCard = money && !installer \?/);
   assert.match(html, /economics \? `<div class="project-command-metric"><span>Себестоимость/);
-  assert.match(html, /function projectCardVisits\(o\)/);
+  assert.match(html, /function projectCardVisits\(o, lines = projectLines\(o\)\)/);
   assert.match(html, /function renderProjectCardSchedule\(o, unplanned, plan\) \{\n  const visits = projectCardVisits\(o\);/);
   assert.match(html, /@media \(max-width: 760px\)[\s\S]*?project-command-side \{ grid-template-columns: 1fr; \}/);
+});
+
+test("owner and manager navigation keeps documents, the client portal and schedule requests reachable", () => {
+  const nav = html.slice(html.indexOf("function renderProjectCommandNav"), html.indexOf("function renderProjectCommandSide"));
+  const primary = html.slice(html.indexOf("function orderPrimaryNextAction"), html.indexOf("function installerOrderPrimaryAction"));
+
+  assert.match(nav, /money && pendingClientRequests\(o\)\.length \? \[\['request', '⚠ Запрос клиента'\]\]/);
+  assert.match(nav, /\['estimate', 'Расчёт \/ КП'\]/);
+  assert.match(nav, /\['documents', installer \? 'ТЗ' : 'Документы \/ портал'\]/);
+  assert.match(primary, /projectCardOpenWorkspace\('request'\)/);
+  assert.match(html, /key: 'documents'[\s\S]{0,900}title: workDocsOnly \? 'Рабочие документы' : 'КП и документы'/);
+  assert.match(html, /title: 'Ссылка клиенту'/);
+  assert.match(html, /resolveClientScheduleRequest\('\$\{o\.id\}','\$\{r\.id\}',true\)/);
+  assert.match(html, /resolveClientScheduleRequest\('\$\{o\.id\}','\$\{r\.id\}',false\)/);
 });
