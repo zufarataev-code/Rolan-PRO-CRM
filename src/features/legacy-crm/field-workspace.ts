@@ -379,18 +379,14 @@ export function mergeFieldWorkspace(
       }
       next[key] = mergeOperationalValue(currentOrder[key], submitted[key]);
     }
-    // A done service whose work this save changed (a window added or resized)
-    // goes back to work: the added work is not done yet (Owner, 2026-10-10).
-    if (!CLOSED_STATUSES.has(String(currentOrder.status)) && isObject(next.serviceProgress) && isObject(currentOrder.serviceProgress)) {
-      const progress = next.serviceProgress;
+    // The work of a done service is not changed from the field: only a
+    // manager reopens it. A field save that would change or drop it keeps the
+    // saved measurements of the project (Owner, 2026-10-10).
+    if (!CLOSED_STATUSES.has(String(currentOrder.status)) && isObject(currentOrder.serviceProgress)) {
       const savedProgress = currentOrder.serviceProgress;
-      for (const id of serviceGroupIds(next)) {
-        const entry = progress[id];
-        if (!isObject(entry) || entry.status !== "done" || !isObject(savedProgress[id]) || savedProgress[id].status !== "done") continue;
-        if (serviceGroupScope(currentOrder, id) === serviceGroupScope(next, id)) continue;
-        progress[id] = { status: "in_progress", startedAt: entry.startedAt, startedBy: entry.startedBy };
-        serviceEvents.push({ at: new Date().toISOString(), key: "service_reopened", by: [...identityIds][0], serviceId: id });
-      }
+      const touched = serviceGroupIds(currentOrder).some((id) =>
+        isObject(savedProgress[id]) && savedProgress[id].status === "done" && serviceGroupScope(currentOrder, id) !== serviceGroupScope(next, id));
+      if (touched) next.measurements = clone(currentOrder.measurements);
     }
     // A closed project is reopened by a manager, not by a field save from a
     // browser that has not seen it close.

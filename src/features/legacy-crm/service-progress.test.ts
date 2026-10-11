@@ -313,7 +313,8 @@ test('a project closed through its services: one manager CRM claims its write-of
   };
   db.inventory = [{ id: 'roll' }];
   const now = Date.parse('2026-10-20T12:00:00.000Z');
-  const crews = { ...project('installation_done'), id: 'crews', serviceProgress: { 'line:z': { status: 'done' } } };
+  // Closed by a manager's own «Монтаж выполнен»: it wrote off and announced itself, nothing is owed.
+  const crews: Row = { ...project('installation_done'), id: 'crews', serviceProgress: { 'line:z': { status: 'done' } } };
   const server: Row = { ...project('installation_done'), id: 'server', serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
   const taken: Row = { ...project('installation_done'), id: 'taken', serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
   // A claim whose CRM never finished (the tab closed) is taken over after the lease…
@@ -330,7 +331,8 @@ test('a project closed through its services: one manager CRM claims its write-of
   // Each step counts once the server confirmed its save.
   let confirmed = 0;
   c.projectPersistFollowUps = async () => { confirmed += 1; return true; };
-  assert.equal(c.projectClaimServiceFollowUps(now), 4);
+  assert.equal(c.projectClaimServiceFollowUps(now), 3);
+  assert.equal(crews.servicesFollowUpClaim, undefined);
   assert.equal(c.projectClaimServiceFollowUps(now), 0, 'claimed once');
   assert.equal(server.servicesClosedNotice, undefined);
   assert.equal(server.servicesFollowUpClaim.notify, true, 'the claim keeps what is owed');
@@ -339,12 +341,12 @@ test('a project closed through its services: one manager CRM claims its write-of
   assert.equal(deducted + sent.length, 0);
   // Another manager's CRM saved its claim on «taken» first: it is theirs. The
   // stale claim this CRM replaced does not count as taken.
-  c.projectYieldTakenFollowUps({ orders: [{ id: 'taken', servicesFollowUpClaim: { token: 'other', at: '2026-10-20T12:00:00.000Z' } }, { id: 'stale', servicesFollowUpClaim: stale.servicesFollowUpClaim && { token: 'gone', at: '2026-10-20T11:00:00.000Z' } }] });
+  c.projectYieldTakenFollowUps({ orders: [{ id: 'taken', servicesFollowUpClaim: { token: 'other', at: '2026-10-20T12:00:00.000Z', notify: true, deduct: true } }, { id: 'stale', servicesFollowUpClaim: stale.servicesFollowUpClaim && { token: 'gone', at: '2026-10-20T11:00:00.000Z' } }] });
   assert.equal(taken.servicesFollowUpClaim.token, 'other');
-  assert.equal(await run(plain(db)), 3);
-  assert.equal(confirmed, 5, 'each staff notice (server, stale) and each finished claim (3) confirmed');
+  assert.equal(await run(plain(db)), 2);
+  assert.equal(confirmed, 4, 'each staff notice and each finished claim (server, stale) confirmed');
   assert.match(html, /async function projectPersistFollowUps\(\) \{\n  save\(\);\n  return ROLANPRO_CLOUD \? cloudPersistConfirmed\(\) : true;/);
-  assert.equal(deducted, 3);
+  assert.equal(deducted, 2);
   assert.deepEqual(sent, ['staff:server', 'client:server', 'staff:stale', 'client:stale']);
   assert.ok(server.servicesFollowUpClaim.doneAt && stale.servicesFollowUpClaim.doneAt, 'marked done for every later CRM');
   assert.equal(await run(plain(db)), 0, 'run once');
@@ -380,6 +382,15 @@ test('a project closed through its services: one manager CRM claims its write-of
   assert.deepEqual(staff, ['signed:installation_done', 'again:installation_done']);
   assert.deepEqual(sent, ['client:signed', 'client:again']);
   assert.equal(signed.status, 'act_signed');
+  // An empty stock does not drop the write-off: it runs and logs the shortage.
+  db.inventory = [];
+  const empty: Row = { ...project('installation_done'), id: 'empty', serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
+  db.orders.push(empty);
+  const before = deducted;
+  assert.equal(c.projectClaimServiceFollowUps(clock), 1);
+  assert.equal(empty.servicesFollowUpClaim.deduct, true);
+  assert.equal(await run(plain(db)), 1);
+  assert.equal(deducted, before + 1);
   // A tab that slept past its lease, or whose claim another CRM took over, runs nothing.
   const late: Row = { ...project('installation_done'), id: 'late', _inventoryDeducted: true, serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
   const over: Row = { ...project('installation_done'), id: 'over', _inventoryDeducted: true, serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
@@ -592,7 +603,7 @@ test('changing the work of a done service sends it back to work; its price may c
   const repriced = structuredClone(saved);
   repriced.orders[0].extraServices[0].price = 15;
   assert.equal(prepareServiceSolutions(saved, repriced, true), null, 'a price is not the work');
-  // A field save that changes a done service's windows reopens it on the server.
+  // A field save cannot change a done service's windows: the saved measurements stay, the mark stays done.
   const field: Row = { users, clients: [], tasks: [], orders: [{ id: 'o', status: 'installation_in_progress', serviceType: 'protective_film', measurerId: 'i1', installerIds: ['i1'],
     measurements: { rooms: [{ id: 'r', windows: [{ id: 'w1', width: 1000, height: 1000, offeringId: 'a1', measureScope: 'protective_film' }] }] },
     serviceSchedules: [{ id: 'offering:a1', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }],
@@ -600,6 +611,7 @@ test('changing the work of a done service sends it back to work; its price may c
   const resized = structuredClone(field);
   resized.orders[0].measurements.rooms[0].windows[0].width = 1500;
   const merged = mergeFieldWorkspace(field, resized, [ROLE_CODES.INSTALLER], ['i1']) as Row;
-  assert.equal(merged.orders[0].serviceProgress['offering:a1'].status, 'in_progress');
-  assert.equal(merged.orders[0].timeline.at(-1).key, 'service_reopened');
+  assert.equal(merged.orders[0].serviceProgress['offering:a1'].status, 'done');
+  assert.equal(merged.orders[0].measurements.rooms[0].windows[0].width, 1000);
+  assert.equal(prepareServiceSolutions({ ...field, settings: { serviceOfferings: [] } }, { ...merged, settings: { serviceOfferings: [] } }, false), null);
 });

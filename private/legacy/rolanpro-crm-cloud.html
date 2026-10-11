@@ -25239,10 +25239,11 @@ function projectClaimServiceFollowUps(now = Date.now()) {
     if (!CLOSED_PROJECT_STATUSES.includes(o.status) || projectClaimedFollowUps.some(claim => claim.id === o.id)) return;
     const unfinished = before && !before.doneAt ? before : null;
     if (unfinished && now - Date.parse(unfinished.at || 0) < PROJECT_FOLLOW_UP_LEASE_MS) return;
-    // A new close (the project was reopened and closed again) owes its notices anew.
-    const notify = o.servicesClosedNotice === 'pending' || unfinished?.notify === true;
-    // The film is written off once per project: a finished claim already did it.
-    const deduct = !o._inventoryDeducted && !before?.doneAt && (notify || Object.keys(o.serviceProgress || {}).length > 0) && (db.inventory || []).length > 0;
+    // A close that was not a manager's own (it wrote off and announced itself)
+    // owes both; a new close after a reopen owes its notices anew.
+    const fresh = o.servicesClosedNotice === 'pending';
+    const notify = fresh || unfinished?.notify === true;
+    const deduct = !o._inventoryDeducted && (fresh || unfinished?.deduct === true);
     if (!notify && !deduct) return;
     o.servicesFollowUpClaim = { token: PROJECT_FOLLOW_UP_TOKEN, at: new Date(now).toISOString(), notify, deduct, ...(unfinished?.staffAt ? { staffAt: unfinished.staffAt } : {}) };
     delete o.servicesClosedNotice;
@@ -25299,6 +25300,7 @@ async function projectRunClaimedFollowUps(savedPayload, now = () => Date.now()) 
   for (const claim of ready) {
     const o = getOrder(claim.id);
     if (!o || o.servicesFollowUpClaim?.token !== PROJECT_FOLLOW_UP_TOKEN) continue;
+    // Written off even with an empty stock: the shortage is logged, not lost.
     if (claim.deduct && !o._inventoryDeducted) {
       try { autoDeductInventoryForOrder(o); } catch (error) { console.warn('Inventory deduct failed', error); continue; }
     }
