@@ -138,6 +138,21 @@ test("accepted proposal must pass production preparation before installation wit
   assert.doesNotMatch(source, /аванс ещё не получен/);
   assert.match(source, /недостаточно материала/);
   assert.match(nextAction, /title: 'Подготовить производство'/);
+  // Only film to cut needs preparing; then the crew is planned in the card's service rows and confirmed there.
+  assert.match(source, /function projectProductionPrepared\(o\) \{\n  return !!o\?\.productionReadyAt \|\| !measureAllWindows\(o\)\.length;\n\}/);
+  assert.match(source, /function projectProposalAccepted\(o\) \{\n  return PROJECT_PROPOSAL_ACCEPTED_STATUSES\.includes\(o\?\.status\) && orderPaymentReadyForProduction\(o\);\n\}/);
+  assert.match(nextAction, /o\.status === 'proposal_accepted' && !projectProductionPrepared\(o\)\) return \{ icon: '🏭', title: 'Подготовить производство'/);
+  assert.match(source, /if \(requireReady && !projectProductionPrepared\(o\)\) issues\.push\('подготовка производства не подтверждена'\)/);
+  // Every entry to installation reads the same rule: the schedule section, the stage bar, the dashboard and the readiness flags.
+  assert.doesNotMatch(source, /disabled: !canManage \|\| !o\.productionReadyAt/);
+  assert.match(source, /if \(o\.status === 'proposal_accepted' && !projectProductionPrepared\(o\)\) activeStep = 4;/);
+  assert.match(source, /next: projectProductionPrepared\(o\) \? 'Назначить монтаж' : 'Подготовить производство'/);
+  assert.match(source, /production: projectProductionPrepared\(o\),/);
+  assert.match(source, /proposal: projectProposalAccepted\(o\),/);
+  assert.match(source, /onclick: `scheduleInstallationPrompt\('\$\{o\.id\}'\)`, disabled: !done\.proposal \|\| !done\.production/);
+  assert.match(source, /disabled: !canManage \|\| !projectProposalAccepted\(o\) \|\| !projectProductionPrepared\(o\)/);
+  assert.match(nextAction, /title: 'Назначить исполнителей'/);
+  assert.match(nextAction, /title: 'Подтвердить монтаж'[\s\S]*?onclick: `projectCardConfirmInstallation\('\$\{o\.id\}'\)`/);
   assert.match(source, /function confirmProjectProductionReady\(oid\)/);
   assert.match(source, /o\.productionReadyAt = new Date\(\)\.toISOString\(\)/);
   assert.match(scheduler, /ensureProductionReadyForInstallation\(o\)/);
@@ -540,7 +555,8 @@ test("manager-approved payment after completion is explicit and auditable", () =
   assert.match(source, /function projectEstimateConfirmPostpay\(oid, confirmed\)/);
   assert.match(source, /paymentTermsConfirmedBy = confirmed \? state\.currentUserId/);
   assert.match(source, /function orderPaymentReadyForProduction\(o\)/);
-  assert.match(production, /orderPaymentReadyForProduction\(o\)/);
+  assert.match(source, /function projectProposalAccepted\(o\)[\s\S]{0,180}orderPaymentReadyForProduction\(o\)/);
+  assert.match(production, /projectProposalAccepted\(o\)/);
   assert.match(calculator, /mode === 'after_completion'/);
   assert.match(source, /Pay After Completion/);
 });

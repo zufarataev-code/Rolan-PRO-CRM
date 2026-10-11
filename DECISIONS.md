@@ -666,3 +666,11 @@ Owner in chat on 2026-10-10 («ты когда доделаешь логику �
 - Server: progress only in scheduled statuses or when closing from them; entries must be valid and belong to a current service; a closed project's progress is frozen; a field specialist's save changes only the progress of services whose crew includes them and cannot reopen a done one.
 - Plans and progress are compared with sorted keys (jsonb reorders object keys).
 - Not in this step: pay accrual per service (payroll still uses the project's completion).
+
+## 2026-10-11 — The project is priced and planned from its card, step by step (Owner)
+
+Owner in chat on 2026-10-11: «как мне по новой логике считать проект?» and «сделай правильную логику чтобы я мог уже запустить срм». The next step of the project card now follows our funnel (call → measurement → invoice), without detours:
+
+- Before the proposal (new, consultation, measurement): add services → if a service is priced per sq ft and has no sizes, «Назначить замер» (no consultation step; a measurement already booked keeps «Контроль замера») → «Расчёт готов → КП», which approves the card's numbers and publishes the КП in one action (the old estimate window stays available but is no longer required).
+- After the КП is accepted: «Подготовить производство» only when there are windows with film to cut; then «Назначить исполнителей» (crew and date in each service row) and «Подтвердить монтаж» from the card.
+- Production readiness requires the confirmed preparation only for projects with windows.

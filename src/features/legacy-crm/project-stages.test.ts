@@ -44,20 +44,28 @@ function load(project: Row, role = 'manager') {
   return { c: context, o: project };
 }
 
-test('the next step follows the services: add them, then estimate and proposal when no measurement is needed', () => {
+test('the next step follows the services: add them, measure what needs sizes, then «Расчёт готов → КП» from the card', () => {
   const none = load({ id: 'o', status: 'new' });
   assert.equal(none.c.projectServicesNextAction(none.o).title, 'Добавить услуги проекта');
   const sizeFree = { id: 'o', status: 'new', offeringIds: ['zone'], lines: [{ kind: 'quantity' }] };
   const { c } = load(sizeFree);
   const step = c.projectServicesNextAction(sizeFree);
-  assert.equal(step.title, 'Рассчитать проект');
+  assert.equal(step.title, 'Расчёт готов → КП');
   assert.match(step.sub, /Замер не нужен/);
-  assert.equal(step.onclick, "openProjectEstimateWorkspace('o')");
+  assert.equal(step.onclick, "approveProjectEstimateAndOpenProposal('o')", 'approved from the card, not in the old estimate window');
   assert.equal(c.projectServicesNextAction({ ...sizeFree, approved: true }).title, 'Сформировать КП');
   // A measured project whose windows are complete goes to its estimate even before the status moved.
-  assert.match(c.projectServicesNextAction({ ...sizeFree, needsSizes: true, status: 'measurement_scheduled' }).sub, /Замер готов/);
-  // A per-sq-ft service without sizes keeps the usual consultation and measurement.
-  assert.equal(c.projectServicesNextAction({ id: 'o', status: 'new', offeringIds: ['a1'], pending: [{ id: 'a1' }], needsSizes: true, issues: ['добавьте окна'] }), null);
+  assert.match(c.projectServicesNextAction({ ...sizeFree, needsSizes: true, status: 'measurement_scheduled' }).sub, /Размеры внесены/);
+  assert.equal(c.projectServicesNextAction({ ...sizeFree, status: 'measurement_done' }).title, 'Расчёт готов → КП', 'after the measurement too');
+  // A per-sq-ft service without sizes goes straight to a measurement (no consultation detour)…
+  const unmeasured = { id: 'o', status: 'new', offeringIds: ['a1'], pending: [{ id: 'a1' }], needsSizes: true, issues: ['добавьте окна'] };
+  assert.equal(c.projectServicesNextAction(unmeasured).title, 'Назначить замер');
+  assert.equal(c.projectServicesNextAction(unmeasured).onclick, "scheduleMeasurementPrompt('o')");
+  // …and a measurement already booked keeps its own step.
+  assert.equal(c.projectServicesNextAction({ ...unmeasured, status: 'measurement_scheduled' }), null);
+  // …and a finished measurement that misses something is completed, not booked again.
+  const unfinished = c.projectServicesNextAction({ ...unmeasured, status: 'measurement_done' });
+  assert.deepEqual([unfinished.title, unfinished.onclick], ['Дополнить замер', "openManagerMeasureModal('o')"]);
   // The incoming request alone is not work: after its last line was deleted the project asks for services again.
   assert.equal(c.projectServicesNextAction({ id: 'o', status: 'new', offeringId: 'zone', offeringIds: ['zone'], lines: [] }).title, 'Добавить услуги проекта');
   // After the proposal the usual steps apply.
