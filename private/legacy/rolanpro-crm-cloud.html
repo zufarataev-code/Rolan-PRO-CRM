@@ -25336,6 +25336,7 @@ function projectServiceScope(group) {
   const pick = (item, fields) => Object.fromEntries(fields.filter(field => item?.[field] !== undefined).map(field => [field, item[field]]));
   return JSON.stringify([...group.windows.map(win => pick(win, PROJECT_SCOPE_WINDOW_FIELDS)), ...group.lines.map(line => pick(line, PROJECT_SCOPE_LINE_FIELDS))]);
 }
+// order id → done service id → { scope, name }, as this CRM last saw them.
 const projectDoneScopes = new Map();
 function projectSettleChangedServices(act = true) {
   const user = currentUser();
@@ -25347,23 +25348,36 @@ function projectSettleChangedServices(act = true) {
     projectServiceSignatures.set(o.id, signature);
     // A done service whose work this CRM changed (a window added, a quantity)
     // goes back to work: the added work is not done yet (Owner, 2026-10-10).
-    const reopened = [];
-    groups.forEach(group => {
-      const key = `${o.id}|${group.id}`;
-      const done = o.serviceProgress?.[group.id]?.status === 'done';
-      const scope = done ? projectServiceScope(group) : null;
-      const was = projectDoneScopes.get(key);
-      if (scope === null) projectDoneScopes.delete(key); else projectDoneScopes.set(key, scope);
-      if (!manage || !done || was === undefined || was === scope || !PROJECT_SCHEDULED_STATUSES.includes(o.status)) return;
-      const line = projectLines(o).find(item => item.key === group.id);
-      if (!line) return;
-      projectWriteServiceProgress(o, line, 'in_progress', user);
-      projectDoneScopes.delete(key);
-      reopened.push(line.name);
-    });
-    if (reopened.length) {
-      save();
-      alert(`Изменён объём выполненной услуги — она снова в работе: ${reopened.join(', ')}.`);
+    const doneNow = new Map(groups.filter(group => o.serviceProgress?.[group.id]?.status === 'done')
+      .map(group => [group.id, { scope: projectServiceScope(group), name: group.name }]));
+    const doneBefore = projectDoneScopes.get(o.id);
+    projectDoneScopes.set(o.id, doneNow);
+    if (manage && doneBefore && PROJECT_SCHEDULED_STATUSES.includes(o.status)) {
+      const reopened = [];
+      const removed = [];
+      doneBefore.forEach((was, id) => {
+        const now = doneNow.get(id);
+        if (now && now.scope !== was.scope) {
+          const line = projectLines(o).find(item => item.key === id);
+          if (!line) return;
+          projectWriteServiceProgress(o, line, 'in_progress', user);
+          doneNow.delete(id);
+          reopened.push(line.name);
+        } else if (!now && !groups.some(group => group.id === id)) {
+          // Removed by an edit that does not check it (a window moved to
+          // another service…): the history records it as taken back.
+          o.timeline = o.timeline || [];
+          o.timeline.push({ at: new Date().toISOString(), key: 'service_reopened', by: user.id, note: `${was.name} — удалена из проекта`, serviceId: id });
+          removed.push(was.name);
+        }
+      });
+      if (reopened.length || removed.length) {
+        save();
+        alert([
+          reopened.length ? `Изменён объём выполненной услуги — она снова в работе: ${reopened.join(', ')}.` : '',
+          removed.length ? `Выполненная услуга убрана из проекта: ${removed.join(', ')}. Это записано в историю.` : '',
+        ].filter(Boolean).join('\n'));
+      }
     }
     if (manage && before !== undefined && before !== signature && PROJECT_SCHEDULED_STATUSES.includes(o.status)) projectSyncStatusFromServices(o);
   });
@@ -27382,7 +27396,9 @@ function addRoom(oid) {
   save(); render();
 }
 function deleteRoom(oid, rid) {
-  const o = getOrder(oid); o.measurements.rooms = o.measurements.rooms.filter(r => r.id !== rid); save(); render();
+  const o = getOrder(oid);
+  if (!projectKeepsDoneServices(o, () => { o.measurements.rooms = o.measurements.rooms.filter(r => r.id !== rid); })) return;
+  save(); render();
 }
 function addWindow(oid, rid) {
   const o = getOrder(oid);
@@ -28439,7 +28455,7 @@ function managerDeleteRoom(oid, rid) {
   if (!o) return;
   const roomTerms = roomTermsForOrder(o);
   if (!confirm(`${roomTerms.deleteLabel} и все окна в ней?`)) return;
-  o.measurements.rooms = (o.measurements.rooms || []).filter(r => r.id !== rid);
+  if (!projectKeepsDoneServices(o, () => { o.measurements.rooms = (o.measurements.rooms || []).filter(r => r.id !== rid); })) return refreshManagerMeasureModal(oid);
   invalidateProjectEstimate(o, 'Удалена комната из замера');
   state._managerActiveRoomByOrder = state._managerActiveRoomByOrder || {};
   state._managerActiveRoomByOrder[oid] = o.measurements.rooms[0]?.id || '';

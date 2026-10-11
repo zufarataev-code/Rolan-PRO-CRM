@@ -548,6 +548,8 @@ test('the CRM does not remove a done service from an open project; reopened, it 
   c.projectCardDeleteService('o', 'z');
   assert.equal(o.extraServices.length, 0);
   assert.match(html, /function managerDeleteWin\(oid, rid, wid\) \{[\s\S]{0,200}projectKeepsDoneServices\(o,/);
+  assert.match(html, /function deleteRoom\(oid, rid\) \{\n  const o = getOrder\(oid\);\n  if \(!projectKeepsDoneServices\(o,/);
+  assert.match(html, /function managerDeleteRoom\(oid, rid\) \{[\s\S]{0,300}projectKeepsDoneServices\(o,/);
   assert.match(html, /function deleteExtraService\(oid, sid\) \{\n  const o = getOrder\(oid\);\n  if \(!projectKeepsDoneServices\(o,/);
   assert.match(html, /function projectEstimateDeleteService\(oid, sid\) \{[\s\S]{0,200}projectKeepsDoneServices\(o,/);
 });
@@ -569,6 +571,13 @@ test('changing the work of a done service sends it back to work; its price may c
   assert.equal(o.serviceProgress['offering:a1'].status, 'in_progress');
   assert.equal(o.timeline.at(-1).key, 'service_reopened');
   assert.ok(calls.some(call => call.startsWith('alert:Изменён объём выполненной услуги')));
+  // A done service removed by an edit that does not check it: the history records it, so the save goes through.
+  o.serviceProgress['line:z'] = { status: 'done', doneAt: '2026-10-16T20:00:00.000Z' };
+  c.projectSettleChangedServices(false);
+  o.extraServices = [];
+  c.projectSettleChangedServices();
+  assert.deepEqual([o.timeline.at(-1).key, o.timeline.at(-1).serviceId], ['service_reopened', 'line:z']);
+  assert.ok(calls.some(call => call.includes('Выполненная услуга убрана из проекта: Подключение зоны')));
   // The server refuses a changed scope that stays done; the same change reopened passes.
   const users = [{ id: 'i1', role: 'installer' }];
   const saved: Row = { settings: { serviceOfferings: [] }, users, orders: [{ id: 'o', status: 'installation_in_progress', serviceType: 'smart_film', measurements: { rooms: [] },
