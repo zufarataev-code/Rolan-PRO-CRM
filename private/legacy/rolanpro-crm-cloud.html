@@ -16939,6 +16939,9 @@ function orderUserOwns(order, user = currentUser()) {
   if (user.role === 'owner') return true;
   return user.role === 'manager' && order.managerId === user.id;
 }
+function orderUserCanResolveClientRequests(order, user = currentUser()) {
+  return orderUserCanManage(user) && orderUserOwns(order, user);
+}
 function orderUserCanMeasure(order, user = currentUser()) {
   return !!order && !!user && user.role === 'measurer' && order.measurerId === user.id;
 }
@@ -17533,8 +17536,8 @@ function projectServicesNextAction(o) {
 }
 
 function orderPrimaryNextAction(o) {
-  if (pendingClientRequests(o).length) {
-    return { icon: '⚠️', title: 'Ответить на запрос клиента', sub: 'Клиент просит перенос или отмену. Сначала обработайте это, потом двигайте заказ дальше.', variant: 'warning', onclick: `document.getElementById('client-requests-${o.id}')?.scrollIntoView({behavior:'smooth',block:'center'})` };
+  if (orderUserCanResolveClientRequests(o) && pendingClientRequests(o).length) {
+    return { icon: '⚠️', title: 'Ответить на запрос клиента', sub: 'Клиент просит перенос или отмену. Сначала обработайте это, потом двигайте заказ дальше.', variant: 'warning', onclick: `if (!projectCardOpenWorkspace('request')) document.getElementById('client-requests-${o.id}')?.scrollIntoView({behavior:'smooth',block:'center'})` };
   }
   const byServices = projectServicesNextAction(o);
   if (byServices) return byServices;
@@ -17717,9 +17720,13 @@ function requestClientScheduleChange(orderId, eventType, type) {
 }
 function resolveClientScheduleRequest(orderId, requestId, accepted) {
   const o = getOrder(orderId);
-  if (!o) return;
+  if (!o) return false;
+  if (!orderUserCanResolveClientRequests(o)) {
+    alert('Обработать запрос клиента может только владелец или назначенный менеджер проекта.');
+    return false;
+  }
   const req = (o.clientRequests || []).find(r => r.id === requestId);
-  if (!req) return;
+  if (!req) return false;
   const info = orderEventInfo(req.eventType);
   req.status = accepted ? 'accepted' : 'declined';
   req.resolvedAt = new Date().toISOString();
@@ -17745,6 +17752,7 @@ function resolveClientScheduleRequest(orderId, requestId, accepted) {
   save();
   notifyClientRequestResolved(orderId, requestId, accepted);
   render();
+  return true;
 }
 function renderClientPortalScheduleControl(o, c) {
   const active = orderClientActiveEvent(o);
@@ -24088,8 +24096,11 @@ function renderOrderWorkspaceTile({ orderId = '', key = '', icon = '•', title 
 
 function projectCardOpenWorkspace(key) {
   const safeKey = String(key || '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  if (safeKey === 'request' && !orderUserCanResolveClientRequests(getOrder(state.openOrderId))) return false;
   const button = document.querySelector(`[data-project-workspace-key="${safeKey}"] .order-workspace-tile`);
-  if (button) button.click();
+  if (!button) return false;
+  button.click();
+  return true;
 }
 
 function openOrderWorkspaceFromTemplate(templateId, title, icon = '•', color = '#2563eb') {
@@ -25805,14 +25816,23 @@ function renderInstallerServiceProgress(o, u) {
 }
 
 /** Shared visit groups keep the service table, command center and calendar consistent. */
-function projectCardVisits(o) {
+function projectCardVisits(o, lines = projectLines(o)) {
   const byVisit = new Map();
-  projectLines(o).filter(line => line.installerIds.length && line.installationAt).forEach(line => {
+  lines.filter(line => line.installerIds.length && line.installationAt).forEach(line => {
     const key = `${line.installationAt.slice(0, 16)}|${[...line.installerIds].sort().join(',')}`;
     if (!byVisit.has(key)) byVisit.set(key, { at: line.installationAt, installerIds: line.installerIds, lines: [] });
     byVisit.get(key).lines.push(line);
   });
   return [...byVisit.values()].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+}
+
+/** The command-center summary contains only future work that still needs doing. */
+function projectCardUpcomingVisits(o, now = Date.now()) {
+  const lines = projectLines(o).filter(line => {
+    const at = Date.parse(line.installationAt || '');
+    return Number.isFinite(at) && at >= now && projectServiceProgress(o, line.key).status !== 'done';
+  });
+  return projectCardVisits(o, lines);
 }
 
 /** The schedule, built from the lines: who works when, and what is still not planned. */
@@ -25829,10 +25849,12 @@ function renderProjectCardSchedule(o, unplanned, plan) {
 function renderProjectCommandNav(o, { money = false, installer = false } = {}) {
   const items = [
     ['', 'Обзор'],
+    ...(money && pendingClientRequests(o).length ? [['request', '⚠ Запрос клиента']] : []),
     ['client', 'Клиент'],
     ['site', 'Объект'],
     ['measurement', 'Замер'],
-    ...(!installer && money ? [['estimate', 'Расчёт / КП']] : [['documents', installer ? 'ТЗ' : 'Документы']]),
+    ...(!installer && money ? [['estimate', 'Расчёт / КП']] : []),
+    ['documents', installer ? 'ТЗ' : 'Документы / портал'],
     ['schedule', 'Календарь'],
     ...(!installer && money ? [['payment', 'Финансы']] : []),
     ['history', 'Файлы и история'],
@@ -25842,7 +25864,7 @@ function renderProjectCommandNav(o, { money = false, installer = false } = {}) {
 
 function renderProjectCommandSide(o, { money = false, economics = false, installer = false } = {}) {
   const lines = projectLines(o);
-  const visits = projectCardVisits(o);
+  const visits = projectCardUpcomingVisits(o);
   const chosen = projectCardChosenLine(o, lines);
   const paid = Number(o.paid) || 0;
   const debt = money ? orderDebt(o) : 0;
@@ -25875,7 +25897,7 @@ function renderProjectCommandSide(o, { money = false, economics = false, install
     ${financialCard}
     <section class="project-command-card" data-project-command="visits">
       <div class="project-command-card-head"><div><div class="project-command-card-title">Ближайшие работы</div><div class="project-command-card-sub">У каждой услуги своя дата и исполнитель</div></div><button type="button" class="btn-ghost text-xs" onclick="projectCardOpenWorkspace('schedule')">Календарь</button></div>
-      <div class="project-command-card-body">${visitRows || '<div class="text-sm text-gray-500">Работы ещё не назначены.</div>'}</div>
+      <div class="project-command-card-body">${visitRows || '<div class="text-sm text-gray-500">Предстоящих незавершённых работ нет.</div>'}</div>
     </section>
   </aside>`;
 }
@@ -26980,7 +27002,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const rooms = o.measurements?.rooms || [];
   const windows = measureAllWindows(o);
   const events = orderScheduledEvents(o);
-  const pendingRequests = pendingClientRequests(o);
+  const pendingRequests = orderUserCanResolveClientRequests(o, u) ? pendingClientRequests(o) : [];
   const hasMeasurements = windows.length > 0;
   // A project of services without sizes is calculated without a measurement.
   const estimateReady = hasMeasurements || !orderNeedsMeasurements(o);

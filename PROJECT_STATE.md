@@ -30,11 +30,19 @@ Before doing any work:
 - Calendar day, week, month, dispatch-map, event, navigation, filter, and field-role controls keep their existing behavior and now use the shared Rolan PRO design theme: the same 8 px surfaces, 6 px controls, navy-to-cyan active state, borders, typography, and restrained shadows as the rest of the CRM.
 - Verification completed locally: 591/591 tests, TypeScript, 119-page production build, inline-script validation, and diff check pass. Release completion remains the normal protected path: final PR CI, merge to `main`, production deploy, then authenticated calendar and reference-directory smoke tests.
 
+## 2026-10-11 handoff — issue #339 project command-center regressions
+
+- Branch / PR: `codex/project-command-center-regressions` / #340, updated onto `main` merge commit `70bd57b` after PR #337; tracked by issue #339.
+- Owner/Manager navigation now keeps both `Расчёт / КП` and `Документы / портал`, and exposes a pending client reschedule/cancellation request. The primary warning opens that request workspace, where the existing accept/decline flow remains the single write path.
+- Review follow-up: client schedule requests are fail-closed to the owner or the project's assigned manager at the primary action, hidden workspace, direct workspace opener and resolver. Surveyors, installers and unrelated managers cannot render, open or resolve a request, and the denied resolver performs no save or client notification.
+- `Ближайшие работы` now groups only future unfinished service lines. Past service dates, explicitly completed lines, and inferred completed lines of legacy closed projects cannot hide the real next work; the full calendar still retains its historical visits.
+- Verification on the merged review-fix tree: 698/698 tests, 38 scoped workspace/stage/progress tests, TypeScript, the 121-page production build, inline-script coverage, and diff check pass. Fresh PR CI, merge, deploy and production smoke verification remain.
+
 ## 2026-10-11 review follow-up — PR #337
 
-- Branch / PR: `claude/project-flow` / #337; P2 follow-up pushed as `0498af9` on top of reviewed head `7b8162d`.
+- Branch / PR: `claude/project-flow` / #337, merged to `main` as `70bd57b`; P2 follow-up was committed as `0498af9` on top of reviewed head `7b8162d`.
 - The shared proposal-acceptance predicate now gates the production readiness check, the passport «Монтаж» action, and the schedule-workspace «Монтаж» action. A no-window project therefore skips film preparation but cannot offer an actionable installation before the Proposal is accepted.
-- Verification of the P2 follow-up: 694/694 tests, the 74 scoped project-stage/estimate/card tests, TypeScript, and diff check pass. Fresh GitHub CI/re-review is pending; the local GitHub CLI session remains invalid even though the normal Git credential successfully pushed the commit.
+- Verification of the P2 follow-up: 694/694 tests, the 74 scoped project-stage/estimate/card tests, TypeScript, the 121-page production build, and diff check passed locally; GitHub CI run `38164809310` passed before merge.
 
 ## 2026-10-08 handoff — Rolan PRO intelligent agent v1
 

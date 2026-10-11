@@ -146,6 +146,26 @@ test('the card shows progress once installation is scheduled; the specialist see
   assert.match(html, /title: 'Мои услуги выполнены'[\s\S]{0,200}onclick: `projectMarkMyServicesDone\('\$\{o\.id\}'\)`/);
 });
 
+test('the command-center summary keeps only future unfinished services', () => {
+  const { c } = load({ id: 'm1', role: 'manager' });
+  const o = project('installation_in_progress');
+  o.serviceSchedules[0].installationAt = '2026-10-12T16:00:00.000Z';
+  o.serviceSchedules[1].installationAt = '2026-10-16T16:00:00.000Z';
+
+  let visits = c.projectCardUpcomingVisits(o, Date.parse('2026-10-13T00:00:00.000Z'));
+  assert.deepEqual(plain(visits.map((visit: Row) => visit.lines.map((line: Row) => line.key))), [['line:z']], 'past work is omitted before visits are grouped');
+
+  o.serviceProgress = { 'line:z': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } };
+  visits = c.projectCardUpcomingVisits(o, Date.parse('2026-10-13T00:00:00.000Z'));
+  assert.deepEqual(plain(visits), [], 'a future service already marked done is omitted');
+
+  o.status = 'installation_done';
+  delete o.serviceProgress;
+  o.serviceSchedules[0].installationAt = '2026-10-20T16:00:00.000Z';
+  assert.deepEqual(plain(c.projectCardUpcomingVisits(o, Date.parse('2026-10-13T00:00:00.000Z'))), [], 'legacy closed projects infer completed services');
+  assert.match(c.renderProjectCommandSide(o), /Предстоящих незавершённых работ нет/);
+});
+
 test('closing an installation by hand finishes the open services; deleted services drop their progress', () => {
   const { c } = load({ id: 'm1', role: 'manager' });
   const o = project('installation_in_progress');
