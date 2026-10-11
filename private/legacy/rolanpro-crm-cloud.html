@@ -16014,14 +16014,24 @@ function orderPaymentReadyForProduction(o) {
   // are intentionally post-pay; managers must still be able to schedule work.
   return !!o?.proposalAcceptedAt || ['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done','act_signed','payment_received','completed','review_received'].includes(o?.status);
 }
+const PROJECT_PROPOSAL_ACCEPTED_STATUSES = [
+  'proposal_accepted','installation_scheduled','installation_accepted','installation_en_route',
+  'installation_in_progress','installation_done','act_signed','payment_received','completed','review_received',
+];
+function projectProposalAccepted(o) {
+  return PROJECT_PROPOSAL_ACCEPTED_STATUSES.includes(o?.status) && orderPaymentReadyForProduction(o);
+}
+/**
+ * Production is ready once its preparation is confirmed — or when there is
+ * nothing to prepare: preparing is cutting film from stock, so a project
+ * without windows (zones, work lines) has none (Owner, 2026-10-11).
+ */
+function projectProductionPrepared(o) {
+  return !!o?.productionReadyAt || !measureAllWindows(o).length;
+}
 function projectProductionReadiness(o, { requireReady = true } = {}) {
   const issues = [];
-  const acceptedStatuses = [
-    'proposal_accepted','installation_scheduled','installation_accepted','installation_en_route',
-    'installation_in_progress','installation_done','act_signed','payment_received','completed','review_received',
-  ];
-  if (!acceptedStatuses.includes(o?.status)) issues.push('КП ещё не принято клиентом');
-  if (!orderPaymentReadyForProduction(o)) issues.push('КП ещё не принято клиентом');
+  if (!projectProposalAccepted(o)) issues.push('КП ещё не принято клиентом');
   if (!projectEstimateIsApproved(o)) issues.push('расчёт проекта не подтверждён');
   issues.push(...orderMeasurementVerificationIssues(o));
 
@@ -16036,7 +16046,7 @@ function projectProductionReadiness(o, { requireReady = true } = {}) {
     const stock = filmPlanInventoryStatus(catalogId, material);
     if (!stock.enough) issues.push(`недостаточно материала: ${catalogLabel(getCatalogItem(catalogId))}`);
   });
-  if (requireReady && !o?.productionReadyAt) issues.push('подготовка производства не подтверждена');
+  if (requireReady && !projectProductionPrepared(o)) issues.push('подготовка производства не подтверждена');
   return Array.from(new Set(issues));
 }
 function orderStatusRequiresVerifiedMeasurements(status) {
@@ -17499,14 +17509,26 @@ function projectHasScheduledVisit(o) {
   const ahead = value => !!value && Date.parse(value) > Date.now();
   return ahead(o?.consultationAt) || ahead(o?.measurementAt);
 }
+/**
+ * Until the proposal the project is priced in its card, by its services
+ * (Owner, 2026-10-11): add the services; the ones priced per sq ft need a
+ * measurement (our funnel goes from the call straight to it — no consultation
+ * detour); then «Расчёт готов» approves the card's numbers and opens the КП.
+ */
 function projectServicesNextAction(o) {
-  if (!PROJECT_PRE_PROPOSAL_STATUSES.includes(o.status)) return null;
+  if (!PROJECT_PRE_PROPOSAL_STATUSES.includes(o.status) && o.status !== 'measurement_done') return null;
   // Services, estimate and proposal belong to the people who price the
   // project; a measurer keeps the measurement actions.
   if (!orderUserCanSeeMoney(o, currentUser())) return null;
   if (!projectHasServices(o)) return { icon: '🧩', title: 'Добавить услуги проекта', sub: 'Что делаем у клиента — от услуг зависит, нужен ли замер и что войдёт в КП.', variant: 'primary', onclick: `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})` };
-  if (!projectMeasurementSettled(o)) return null;
-  if (!projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: orderNeedsMeasurements(o) ? 'Замер готов. Проверьте услуги и цену клиенту до КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цену до КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
+  if (!projectMeasurementSettled(o)) {
+    // A measurement already booked keeps its own step (the measurer's work);
+    // a finished one is completed in the measurement editor, not booked again.
+    if (o.status === 'measurement_scheduled') return null;
+    if (o.status === 'measurement_done') return { icon: '📏', title: 'Дополнить замер', sub: `Замер не закончен: ${orderMeasurementCompletionIssues(o).slice(0, 3).join(', ')}.`, variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
+    return { icon: '📐', title: 'Назначить замер', sub: 'Услугам за sq ft нужны размеры окон. Выберите замерщика и время выезда — или внесите размеры сами в «Замер».', variant: 'primary', onclick: `scheduleMeasurementPrompt('${o.id}')` };
+  }
+  if (!projectEstimateIsApproved(o)) return { icon: '✅', title: 'Расчёт готов → КП', sub: orderNeedsMeasurements(o) ? 'Размеры внесены. Проверьте количество и цены в «Услугах проекта» — и сформируйте КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цены — и сформируйте КП.', variant: 'primary', onclick: `approveProjectEstimateAndOpenProposal('${o.id}')` };
   return { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
 }
 
@@ -17526,8 +17548,13 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'proposal_sent') return { icon: '✅', title: 'Отметить КП принятым', sub: 'Используйте, если клиент подтвердил предложение вне портала.', variant: 'primary', onclick: `changeStatus('${o.id}','proposal_accepted')` };
   if (o.status === 'proposal_accepted' && !orderPaymentReadyForProduction(o)) return { icon: '💰', title: 'Отметить аванс', sub: 'Либо подтвердите в расчёте согласованную оплату после выполнения.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
   if (o.status === 'proposal_accepted' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
-  if (o.status === 'proposal_accepted' && !o.productionReadyAt) return { icon: '🏭', title: 'Подготовить производство', sub: 'Проверить раскрой, материал и склад перед назначением бригады.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
-  if (o.status === 'proposal_accepted') return { icon: '🔧', title: 'Назначить монтаж', sub: 'Производство подготовлено. Назначьте бригаду и дату.', variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
+  if (o.status === 'proposal_accepted' && !projectProductionPrepared(o)) return { icon: '🏭', title: 'Подготовить производство', sub: 'Проверить раскрой, материал и склад перед назначением бригады.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
+  // The crew and date are chosen in each row of «Услуги проекта»; then the plan is confirmed there.
+  if (o.status === 'proposal_accepted') {
+    const unplanned = projectCardUnplanned(o);
+    if (unplanned.length) return { icon: '👷', title: 'Назначить исполнителей', sub: `Выберите исполнителя и дату в строке каждой услуги: ${unplanned.map(line => line.name).join(', ')}.`, variant: 'primary', onclick: `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})` };
+    return { icon: '🔧', title: 'Подтвердить монтаж', sub: 'Все услуги назначены — клиент и бригада увидят даты после подтверждения.', variant: 'primary', onclick: `projectCardConfirmInstallation('${o.id}')` };
+  }
   if (o.status === 'installation_done') return { icon: '📝', title: 'Подписать акт', sub: 'Закрываем выполненную работу документально.', variant: 'primary', onclick: `changeStatus('${o.id}','act_signed')` };
   if (o.status === 'act_signed') return { icon: '💳', title: 'Отметить оплату', sub: 'Фиксируем финальную оплату по заказу.', variant: 'primary', onclick: `changeStatus('${o.id}','payment_received')` };
   if (o.status === 'payment_received') return { icon: '⭐', title: 'Закрыть и запросить отзыв', sub: 'Финальный шаг: заказ закрыт, клиенту отправляем отзыв.', variant: 'success', onclick: `changeStatus('${o.id}','completed'); askForReview('${o.id}');` };
@@ -19797,7 +19824,7 @@ function precisionManagerAction(o) {
     measurement_scheduled: { priority: 92, color: '#7c64d5', reason: o.measurementAt ? `Замер: ${fmtDateTime(o.measurementAt)}` : 'Замер без назначенного времени', next: 'Проверить назначение', date: o.measurementAt },
     measurement_done: { priority: 88, color: '#7c64d5', reason: 'Замер завершён — КП ещё не отправлено', next: 'Подготовить КП', date: o.measurementDoneAt },
     proposal_sent: { priority: 82, color: '#d88a25', reason: 'КП отправлено — ожидается решение клиента', next: 'Сделать follow-up', date: o.proposalSentAt },
-    proposal_accepted: { priority: 90, color: '#b87926', reason: o.productionReadyAt ? 'Материал готов — монтаж не назначен' : 'КП принято — нужна подготовка производства', next: o.productionReadyAt ? 'Назначить монтаж' : 'Подготовить производство', date: o.proposalAcceptedAt },
+    proposal_accepted: { priority: 90, color: '#b87926', reason: projectProductionPrepared(o) ? (o.productionReadyAt ? 'Материал готов — монтаж не назначен' : 'КП принято — монтаж не назначен') : 'КП принято — нужна подготовка производства', next: projectProductionPrepared(o) ? 'Назначить монтаж' : 'Подготовить производство', date: o.proposalAcceptedAt },
     installation_scheduled: { priority: 94, color: '#168a68', reason: o.installationAt ? `Монтаж: ${fmtDateTime(o.installationAt)}` : 'Монтаж назначен без времени', next: 'Проверить бригаду', date: o.installationAt },
     installation_accepted: { priority: 96, color: '#168a68', reason: 'Бригада приняла заказ', next: 'Контролировать выезд', date: o.installationAt },
     installation_en_route: { priority: 98, color: '#168a68', reason: 'Бригада едет на объект', next: 'Следить за прибытием', date: o.installationAt },
@@ -23964,10 +23991,8 @@ function orderPassportActions(o, ctx) {
     // A project of services without sizes has nothing to measure.
     measure: ctx.hasMeasurements || !orderNeedsMeasurements(o),
     estimate: ctx.estimateApproved,
-    proposal: ['proposal_accepted','installation_scheduled','installation_accepted',
-               'installation_en_route','installation_in_progress','installation_done',
-               'act_signed','payment_received','completed','review_received'].includes(o.status),
-    production: Boolean(o.productionReadyAt),
+    proposal: projectProposalAccepted(o),
+    production: projectProductionPrepared(o),
     install: Boolean(o.installationAt),
   };
 
@@ -23997,7 +24022,7 @@ function orderPassportActions(o, ctx) {
 
     { key: 'install', icon: '▣', title: 'Монтаж',
       sub: o.installationAt ? fmtDateTime(o.installationAt) : 'запланировать',
-      onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.production },
+      onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.proposal || !done.production },
 
     { key: 'workorder', icon: '📋', title: 'Заказ-наряд',
       sub: ctx.hasMeasurements ? 'размеры, раскрой, адрес, фото' : projectLines(o).length ? 'услуги, количество, адрес' : 'после замера',
@@ -24096,7 +24121,8 @@ function renderOrderCleanProgress(o) {
   const curStep = getOrderStatus(o).step;
   const labels = ['stepNew','stepConsultation','stepMeasurement','stepProposal','Производство','stepInstallation','stepAct','stepPayment','stepDone'];
   let activeStep = curStep >= 4 ? curStep + 1 : curStep;
-  if (o.status === 'proposal_accepted' && !o.productionReadyAt) activeStep = 4;
+  if (o.status === 'proposal_accepted' && !projectProductionPrepared(o)) activeStep = 4;
+  if (o.status === 'proposal_accepted' && projectProductionPrepared(o)) activeStep = 5;
   if (o.productionReadyAt && !o.installationAt && curStep <= 3) activeStep = 5;
   // Services that need no sizes (or have them) take the project straight to its proposal.
   const settled = PROJECT_PRE_PROPOSAL_STATUSES.includes(o.status) && projectMeasurementSettled(o);
@@ -27102,8 +27128,8 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ` : `
       ${renderOrderActionCard({ icon: '📞', title: 'Консультация', sub: o.consultationAt ? fmtDateTime(o.consultationAt) : 'назначить', onclick: `scheduleConsultationPrompt('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '📐', title: 'Замер', sub: o.measurementAt ? fmtDateTime(o.measurementAt) : 'назначить', onclick: `scheduleMeasurementPrompt('${o.id}')`, disabled: !canManage })}
-      ${renderOrderActionCard({ icon: '🏭', title: o.productionReadyAt ? 'Производство готово' : 'Подготовка производства', sub: o.productionReadyAt ? fmtDateTime(o.productionReadyAt) : 'раскрой, материал и склад', onclick: `openProjectProductionWorkspace('${o.id}')`, disabled: !canManage || !['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done','act_signed','payment_received','completed','review_received'].includes(o.status), variant: o.productionReadyAt ? 'success' : 'warning' })}
-      ${renderOrderActionCard({ icon: unverifiedMeasurements.length ? '📐' : '🔧', title: unverifiedMeasurements.length ? 'Сначала точные размеры' : 'Монтаж', sub: unverifiedMeasurements.length ? `${unverifiedMeasurements.length} окон не подтверждено` : (o.installationAt ? fmtDateTime(o.installationAt) : 'назначить после производства'), onclick: unverifiedMeasurements.length ? `openManagerMeasureModal('${o.id}')` : `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage || !o.productionReadyAt, variant: unverifiedMeasurements.length || !o.productionReadyAt ? 'warning' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🏭', title: o.productionReadyAt ? 'Производство готово' : projectProductionPrepared(o) ? 'Производство не нужно' : 'Подготовка производства', sub: o.productionReadyAt ? fmtDateTime(o.productionReadyAt) : projectProductionPrepared(o) ? 'нет плёнки для раскроя' : 'раскрой, материал и склад', onclick: `openProjectProductionWorkspace('${o.id}')`, disabled: !canManage || !['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done','act_signed','payment_received','completed','review_received'].includes(o.status), variant: projectProductionPrepared(o) ? 'success' : 'warning' })}
+      ${renderOrderActionCard({ icon: unverifiedMeasurements.length ? '📐' : '🔧', title: unverifiedMeasurements.length ? 'Сначала точные размеры' : 'Монтаж', sub: unverifiedMeasurements.length ? `${unverifiedMeasurements.length} окон не подтверждено` : (o.installationAt ? fmtDateTime(o.installationAt) : projectProposalAccepted(o) && projectProductionPrepared(o) ? 'назначить' : !projectProposalAccepted(o) ? 'сначала примите КП' : 'назначить после производства'), onclick: unverifiedMeasurements.length ? `openManagerMeasureModal('${o.id}')` : `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage || !projectProposalAccepted(o) || !projectProductionPrepared(o), variant: unverifiedMeasurements.length || !projectProposalAccepted(o) || !projectProductionPrepared(o) ? 'warning' : 'soft' })}
       ${renderOrderActionCard({ icon: '👷', title: 'Команда', sub: installers.length ? installers.join(', ') : 'назначить', onclick: `openAssignTeam('${o.id}')`, disabled: !canManage })}
       `}
     </div>`;

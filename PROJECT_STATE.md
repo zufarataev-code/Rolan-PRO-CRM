@@ -32,10 +32,16 @@ Before doing any work:
 
 ## 2026-10-11 handoff — issue #339 project command-center regressions
 
-- Branch: `codex/project-command-center-regressions`, based on production `main` `4f88a2a`; tracked by issue #339. PR #337 was checked at `7b8162d` and owns installation-entry gates, not these command-center regressions.
+- Branch / PR: `codex/project-command-center-regressions` / #340, updated onto `main` merge commit `70bd57b` after PR #337; tracked by issue #339.
 - Owner/Manager navigation now keeps both `Расчёт / КП` and `Документы / портал`, and exposes a pending client reschedule/cancellation request. The primary warning opens that request workspace, where the existing accept/decline flow remains the single write path.
 - `Ближайшие работы` now groups only future unfinished service lines. Past service dates, explicitly completed lines, and inferred completed lines of legacy closed projects cannot hide the real next work; the full calendar still retains its historical visits.
-- Verification: 696/696 tests, scoped workspace/progress tests, TypeScript, the 121-page production build, and diff check pass. Draft PR, fresh CI, merge, deploy and production smoke verification remain.
+- Verification before the `main` update: 696/696 tests, scoped workspace/progress tests, TypeScript, the 121-page production build, and diff check pass. Re-verification on the merged head, PR CI, merge, deploy and production smoke verification remain.
+
+## 2026-10-11 review follow-up — PR #337
+
+- Branch / PR: `claude/project-flow` / #337, merged to `main` as `70bd57b`; P2 follow-up was committed as `0498af9` on top of reviewed head `7b8162d`.
+- The shared proposal-acceptance predicate now gates the production readiness check, the passport «Монтаж» action, and the schedule-workspace «Монтаж» action. A no-window project therefore skips film preparation but cannot offer an actionable installation before the Proposal is accepted.
+- Verification of the P2 follow-up: 694/694 tests, the 74 scoped project-stage/estimate/card tests, TypeScript, the 121-page production build, and diff check passed locally; GitHub CI run `38164809310` passed before merge.
 
 ## 2026-10-08 handoff — Rolan PRO intelligent agent v1
 
