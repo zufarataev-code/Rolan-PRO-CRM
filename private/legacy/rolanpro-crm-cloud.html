@@ -16940,6 +16940,7 @@ function notifyStatusChange(order) {
   // Telegram with detailed log for owner visibility
   order.timeline = order.timeline || [];
   let tgSent = 0, tgSkipped = 0, tgErrors = 0;
+  const deliveries = [];
   const skipReasons = [];
   if (!db.settings.telegramBotToken) {
     skipReasons.push('Telegram Bot Token не указан');
@@ -16952,7 +16953,7 @@ function notifyStatusChange(order) {
         skipReasons.push(`${u.name}: нет Chat ID`);
         return;
       }
-      sendTelegram(u.telegramChatId,
+      deliveries.push(sendTelegram(u.telegramChatId,
         `🔔 <b>${order.number}</b> — <b>${T(order.status)}</b>\nКлиент: ${clientName}\n${client?.address?.slice(0,80)||''}\n<a href="${clientPortalUrl(order.id)}">Открыть заказ</a>`
       ).then(r => {
         if (r && r.ok) {
@@ -16961,7 +16962,7 @@ function notifyStatusChange(order) {
         } else {
           console.warn('[Telegram] failed for', u.name, r);
         }
-      }).catch(e => console.warn('[Telegram] error', u.name, e));
+      }).catch(e => console.warn('[Telegram] error', u.name, e)));
       tgSent++;
     });
   }
@@ -16973,6 +16974,8 @@ function notifyStatusChange(order) {
       note: 'Telegram не отправлен: ' + skipReasons.slice(0,3).join('; ')
     });
   }
+  // Settles once every staff message was sent (or failed and was logged).
+  return Promise.all(deliveries);
 }
 
 function clientPortalUrl(orderId) {
@@ -25309,11 +25312,14 @@ async function projectRunClaimedFollowUps(savedPayload, now = () => Date.now()) 
     if (claim.notify && CLOSED_PROJECT_STATUSES.includes(o.status)) {
       // Staff notices once: a retry after a failed client notice skips them.
       if (!o.servicesFollowUpClaim.staffAt) {
-        notifyStatusChange({ ...o, status: 'installation_done' });
-        o.servicesFollowUpClaim = { ...o.servicesFollowUpClaim, staffAt: new Date().toISOString() };
+        await notifyStatusChange({ ...o, status: 'installation_done' });
+        // A save conflict may have replaced the workspace meanwhile.
+        const live = getOrder(claim.id);
+        if (live?.servicesFollowUpClaim?.token !== PROJECT_FOLLOW_UP_TOKEN) continue;
+        live.servicesFollowUpClaim = { ...live.servicesFollowUpClaim, staffAt: new Date().toISOString() };
         if (!(await projectPersistFollowUps())) continue;
       }
-      try { await autoNotifyClient(o, 'installation_done'); } catch (error) { console.warn('Completion notice failed', error); save(); continue; }
+      try { await autoNotifyClient(getOrder(claim.id) || o, 'installation_done'); } catch (error) { console.warn('Completion notice failed', error); save(); continue; }
     }
     const current = getOrder(claim.id);
     if (current?.servicesFollowUpClaim?.token !== PROJECT_FOLLOW_UP_TOKEN) continue;
@@ -25336,7 +25342,8 @@ const PROJECT_SCOPE_WINDOW_FIELDS = ['id', 'width', 'height', 'qty', 'sqft', 'ac
 const PROJECT_SCOPE_LINE_FIELDS = ['id', 'qty', 'unit', 'type', 'offeringId', 'catalogId', 'serviceType', 'measureScope', 'complexity'];
 function projectServiceScope(group) {
   const pick = (item, fields) => Object.fromEntries(fields.filter(field => item?.[field] !== undefined).map(field => [field, item[field]]));
-  return JSON.stringify([...group.windows.map(win => pick(win, PROJECT_SCOPE_WINDOW_FIELDS)), ...group.lines.map(line => pick(line, PROJECT_SCOPE_LINE_FIELDS))]);
+  const byId = (a, b) => String(a.id ?? '').localeCompare(String(b.id ?? ''));
+  return JSON.stringify([...group.windows.map(win => pick(win, PROJECT_SCOPE_WINDOW_FIELDS)).sort(byId), ...group.lines.map(line => pick(line, PROJECT_SCOPE_LINE_FIELDS))]);
 }
 // order id → done service id → { scope, name }, as this CRM last saw them.
 const projectDoneScopes = new Map();

@@ -305,7 +305,7 @@ test('a project closed through its services: one manager CRM claims its write-of
   let deducted = 0;
   const sent: string[] = [];
   c.autoDeductInventoryForOrder = (order: Row) => { deducted += 1; order._inventoryDeducted = true; };
-  c.notifyStatusChange = (order: Row) => sent.push(`staff:${order.id}`);
+  c.notifyStatusChange = async (order: Row) => { sent.push(`staff:${order.id}`); };
   let mailDown = true;
   c.autoNotifyClient = async (order: Row) => {
     if (order.id === 'taken2' && mailDown) throw new Error('mail down');
@@ -613,5 +613,15 @@ test('changing the work of a done service sends it back to work; its price may c
   const merged = mergeFieldWorkspace(field, resized, [ROLE_CODES.INSTALLER], ['i1']) as Row;
   assert.equal(merged.orders[0].serviceProgress['offering:a1'].status, 'done');
   assert.equal(merged.orders[0].measurements.rooms[0].windows[0].width, 1000);
+  // …while its edits to an unfinished service stay: here a window of another service resized, one added to the done service.
+  const mixedSaved = structuredClone(field);
+  mixedSaved.orders[0].measurements.rooms[0].windows.push({ id: 'w9', width: 800, height: 800, measureScope: 'protective_film' });
+  mixedSaved.orders[0].serviceSchedules.push({ id: 'direction:protective_film', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] });
+  const mixed = structuredClone(mixedSaved);
+  mixed.orders[0].measurements.rooms[0].windows[1].width = 900;
+  mixed.orders[0].measurements.rooms[0].windows.push({ id: 'w10', width: 500, height: 500, offeringId: 'a1', measureScope: 'protective_film' });
+  mixed.orders[0].measurements.rooms[0].windows[0].width = 2000;
+  const kept = mergeFieldWorkspace(mixedSaved, mixed, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  assert.deepEqual(kept.orders[0].measurements.rooms[0].windows.map((win: Row) => [win.id, win.width]), [['w1', 1000], ['w9', 900]]);
   assert.equal(prepareServiceSolutions({ ...field, settings: { serviceOfferings: [] } }, { ...merged, settings: { serviceOfferings: [] } }, false), null);
 });

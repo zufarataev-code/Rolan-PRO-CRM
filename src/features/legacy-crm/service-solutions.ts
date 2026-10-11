@@ -95,7 +95,9 @@ export function serviceGroupScope(order: Row, id: string): string {
   const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))
     .filter(win => (typeof win.offeringId === 'string' && win.offeringId ? `offering:${win.offeringId}` : `direction:${win.measureScope || order.serviceType || 'solar_film'}`) === id);
   const lines = rows(order.extraServices).filter(line => `line:${line.id}` === id);
-  return stableJson([...windows.map(win => pick(win, SCOPE_WINDOW_FIELDS)), ...lines.map(line => pick(line, SCOPE_LINE_FIELDS))]);
+  // The order of the windows is not part of the work.
+  const byId = (a: Row, b: Row) => String(a.id ?? '').localeCompare(String(b.id ?? ''));
+  return stableJson([...windows.map(win => pick(win, SCOPE_WINDOW_FIELDS)).sort(byId), ...lines.map(line => pick(line, SCOPE_LINE_FIELDS))]);
 }
 const DIRECTION_TITLES: Record<string, string> = {
   smart_film: 'Смарт плёнка', solar_film: 'Солнцезащитная плёнка', protective_film: 'Защитная плёнка',

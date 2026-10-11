@@ -327,6 +327,57 @@ function mergeFieldServiceProgress(
   return result;
 }
 
+/** The service a window belongs to (projectServiceGroups). */
+function windowServiceId(order: JsonObject, win: JsonObject) {
+  return typeof win.offeringId === "string" && win.offeringId
+    ? `offering:${win.offeringId}`
+    : `direction:${String(win.measureScope || order.serviceType || "solar_film")}`;
+}
+
+/**
+ * Restores the saved windows of the given services in a field save: each in
+ * its saved room and form; a window that joined one of them goes back to its
+ * saved form (or out, if it is new). Every other window keeps the field edit.
+ */
+function keepServiceWindows(currentOrder: JsonObject, next: JsonObject, serviceIds: Set<string>) {
+  const savedRooms = (isObject(currentOrder.measurements) && Array.isArray(currentOrder.measurements.rooms)
+    ? currentOrder.measurements.rooms : []).filter(isObject);
+  const savedWindows = new Map<string, { room: JsonObject; win: JsonObject }>();
+  for (const room of savedRooms) {
+    for (const win of (Array.isArray(room.windows) ? room.windows : []).filter(isObject)) {
+      savedWindows.set(String(win.id), { room, win });
+    }
+  }
+  const kept = new Map([...savedWindows].filter(([, item]) => serviceIds.has(windowServiceId(currentOrder, item.win))));
+  const measurements: JsonObject = isObject(next.measurements) ? next.measurements : {};
+  const rooms = (Array.isArray(measurements.rooms) ? measurements.rooms : []).filter(isObject);
+  const placed = new Set<string>();
+  for (const room of rooms) {
+    room.windows = (Array.isArray(room.windows) ? room.windows : []).filter(isObject).flatMap((win) => {
+      const id = String(win.id);
+      const keep = kept.get(id);
+      if (keep) {
+        if (String(keep.room.id) !== String(room.id)) return [];
+        placed.add(id);
+        return [clone(keep.win)];
+      }
+      if (!serviceIds.has(windowServiceId(next, win))) return [win];
+      const saved = savedWindows.get(id);
+      return saved ? [clone(saved.win)] : [];
+    });
+  }
+  for (const [id, { room, win }] of kept) {
+    if (placed.has(id)) continue;
+    let target = rooms.find((item) => String(item.id) === String(room.id));
+    if (!target) {
+      target = { ...clone(room), windows: [] };
+      rooms.push(target);
+    }
+    (target.windows as unknown[]).push(clone(win));
+  }
+  next.measurements = { ...measurements, rooms };
+}
+
 export function mergeFieldWorkspace(
   currentPayload: JsonObject,
   submittedPayload: JsonObject,
@@ -380,13 +431,13 @@ export function mergeFieldWorkspace(
       next[key] = mergeOperationalValue(currentOrder[key], submitted[key]);
     }
     // The work of a done service is not changed from the field: only a
-    // manager reopens it. A field save that would change or drop it keeps the
-    // saved measurements of the project (Owner, 2026-10-10).
+    // manager reopens it. A field save keeps the saved windows of such a
+    // service; its edits to the other services stay (Owner, 2026-10-10).
     if (!CLOSED_STATUSES.has(String(currentOrder.status)) && isObject(currentOrder.serviceProgress)) {
       const savedProgress = currentOrder.serviceProgress;
-      const touched = serviceGroupIds(currentOrder).some((id) =>
-        isObject(savedProgress[id]) && savedProgress[id].status === "done" && serviceGroupScope(currentOrder, id) !== serviceGroupScope(next, id));
-      if (touched) next.measurements = clone(currentOrder.measurements);
+      const touched = new Set(serviceGroupIds(currentOrder).filter((id) =>
+        isObject(savedProgress[id]) && savedProgress[id].status === "done" && serviceGroupScope(currentOrder, id) !== serviceGroupScope(next, id)));
+      if (touched.size) keepServiceWindows(currentOrder, next, touched);
     }
     // A closed project is reopened by a manager, not by a field save from a
     // browser that has not seen it close.
