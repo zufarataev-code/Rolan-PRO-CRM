@@ -78,14 +78,39 @@ function restoreCompletedServiceMeasurements(currentOrder: JsonObject, nextOrder
   const currentRooms = (Array.isArray(currentMeasurements.rooms) ? currentMeasurements.rooms : []).filter(isObject);
   const nextRooms = (Array.isArray(nextMeasurements.rooms) ? nextMeasurements.rooms : []).filter(isObject);
   const nextById = new Map(nextRooms.map((room) => [String(room.id || ""), room]));
+  const savedWindows = new Map(
+    currentRooms.flatMap((room) => (Array.isArray(room.windows) ? room.windows : []))
+      .filter(isObject)
+      .map((window) => [String(window.id || ""), window] as const),
+  );
 
-  // Remove stale/edited copies of completed-service windows from the submitted
-  // snapshot. They are reinserted from the server copy below.
+  // Classify an existing window by its saved identity, not by fields from a
+  // stale/edited browser snapshot. A completed window is restored wholesale.
+  // An unfinished window may keep new measurements, but it cannot be silently
+  // reassigned into a service that is already completed.
   for (const room of nextRooms) {
     if (!Array.isArray(room.windows)) continue;
-    room.windows = room.windows.filter(
-      (window) => !isObject(window) || !doneServiceIds.has(serviceIdForWindow(currentOrder, window)),
-    );
+    room.windows = room.windows.filter((window) => {
+      if (!isObject(window)) return true;
+      const saved = savedWindows.get(String(window.id || ""));
+      if (saved) {
+        const savedServiceId = serviceIdForWindow(currentOrder, saved);
+        if (doneServiceIds.has(savedServiceId)) return false;
+        const submittedServiceId = serviceIdForWindow(currentOrder, window);
+        if (doneServiceIds.has(submittedServiceId)) {
+          if ("offeringId" in saved) window.offeringId = clone(saved.offeringId);
+          else delete window.offeringId;
+          if ("measureScope" in saved) window.measureScope = clone(saved.measureScope);
+          else delete window.measureScope;
+          if ("offeringName" in saved) window.offeringName = clone(saved.offeringName);
+          else delete window.offeringName;
+        }
+        return true;
+      }
+      // A brand-new field window cannot be added directly to already-completed
+      // work; the service must be reopened by a manager first.
+      return !doneServiceIds.has(serviceIdForWindow(currentOrder, window));
+    });
   }
 
   // Reinsert only the completed-service windows from the authoritative saved
