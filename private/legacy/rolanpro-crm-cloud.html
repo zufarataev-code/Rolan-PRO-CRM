@@ -16954,18 +16954,25 @@ function markAllRead() {
   save(); render();
 }
 
+// A stalled Telegram request gives up after this time, so a notice that waits
+// for it (a claimed project close) does not hold the ones after it.
+const TELEGRAM_TIMEOUT_MS = 15000;
 async function sendTelegram(chatId, text) {
   const token = db.settings.telegramBotToken;
   if (!token || !chatId) return { ok: false, error: 'Telegram not configured' };
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), TELEGRAM_TIMEOUT_MS) : null;
   try {
     const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+      ...(controller ? { signal: controller.signal } : {}),
     });
     const j = await r.json();
     return j;
   } catch (e) { return { ok: false, error: String(e) }; }
+  finally { if (timer) clearTimeout(timer); }
 }
 function whatsappLink(phone, text) {
   const p = (phone || '').replace(/[^0-9]/g, '');
@@ -25446,9 +25453,12 @@ const projectServiceSignatures = new Map();
 // are not part of it. The server reads the same fields (serviceGroupScope).
 const PROJECT_SCOPE_WINDOW_FIELDS = ['id', 'width', 'height', 'qty', 'sqft', 'actualWidth', 'actualHeight', 'actualQty', 'panels', 'actualPanels', 'winType', 'catalogId', 'offeringId', 'measureScope', 'removalRequired', 'complexity'];
 const PROJECT_SCOPE_LINE_FIELDS = ['id', 'qty', 'unit', 'type', 'offeringId', 'catalogId', 'serviceType', 'measureScope', 'complexity'];
-function projectServiceScope(group) {
+function projectServiceScope(o, group) {
   const pick = (item, fields) => Object.fromEntries(fields.filter(field => item?.[field] !== undefined).map(field => [field, item[field]]));
-  return JSON.stringify([...group.windows.map(win => pick(win, PROJECT_SCOPE_WINDOW_FIELDS)), ...group.lines.map(line => pick(line, PROJECT_SCOPE_LINE_FIELDS))]);
+  // Each window with its room (where the work is); their order is not part of it.
+  const rooms = new Map(measureAllWindows(o).map(({ room, win }) => [win, room?.id ?? null]));
+  const byId = (a, b) => String(a.id ?? '').localeCompare(String(b.id ?? ''));
+  return JSON.stringify([...group.windows.map(win => ({ ...pick(win, PROJECT_SCOPE_WINDOW_FIELDS), roomId: rooms.get(win) ?? null })).sort(byId), ...group.lines.map(line => pick(line, PROJECT_SCOPE_LINE_FIELDS))]);
 }
 // order id → done service id → { scope, name }, as this CRM last saw them.
 const projectDoneScopes = new Map();
@@ -25463,7 +25473,7 @@ function projectSettleChangedServices(act = true) {
     // A done service whose work this CRM changed (a window added, a quantity)
     // goes back to work: the added work is not done yet (Owner, 2026-10-10).
     const doneNow = new Map(groups.filter(group => o.serviceProgress?.[group.id]?.status === 'done')
-      .map(group => [group.id, { scope: projectServiceScope(group), name: group.name }]));
+      .map(group => [group.id, { scope: projectServiceScope(o, group), name: group.name }]));
     const doneBefore = projectDoneScopes.get(o.id);
     projectDoneScopes.set(o.id, doneNow);
     if (manage && doneBefore && PROJECT_SCHEDULED_STATUSES.includes(o.status)) {
