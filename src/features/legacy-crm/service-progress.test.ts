@@ -509,6 +509,55 @@ test('field save: the last service done closes the project on the server; the hi
   assert.equal(kept.orders[0].timeline.filter((event: Row) => event.key === 'installation_in_progress').length, 1, 'a stale save adds no second start');
 });
 
+
+test('field save preserves unfinished-service measurements while restoring a completed service', () => {
+  const current: Row = {
+    settings: { serviceOfferings: [] },
+    users: [{ id: 'i1', role: 'installer' }], clients: [], tasks: [],
+    orders: [{ id: 'o', status: 'installation_in_progress', serviceType: 'protective_film', installerIds: ['i1'],
+      measurements: { rooms: [{ id: 'r', windows: [
+        { id: 'done', width: 1000, height: 1000, offeringId: 'a1', measureScope: 'protective_film' },
+        { id: 'open', width: 1200, height: 1000, offeringId: 'a2', measureScope: 'protective_film' },
+      ] }] },
+      serviceSchedules: [
+        { id: 'offering:a1', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] },
+        { id: 'offering:a2', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i1'] },
+      ],
+      serviceProgress: { 'offering:a1': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z', doneBy: 'i1' } },
+    }],
+  };
+  const submitted = structuredClone(current);
+  submitted.orders[0].measurements.rooms[0].windows[0].width = 1500; // stale/forbidden edit to done service
+  submitted.orders[0].measurements.rooms[0].windows[1].width = 1800; // legitimate unfinished-service edit
+  const merged = mergeFieldWorkspace(current, submitted, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  const windows = merged.orders[0].measurements.rooms[0].windows;
+  assert.equal(windows.find((win: Row) => win.id === 'done').width, 1000, 'completed service stays authoritative');
+  assert.equal(windows.find((win: Row) => win.id === 'open').width, 1800, 'unfinished service edit survives');
+});
+
+test('legacy aggregate crew is frozen once a service is completed', () => {
+  const users = [{ id: 'i1', role: 'installer' }, { id: 'i2', role: 'installer' }];
+  const saved: Row = { settings: { serviceOfferings: [] }, users, orders: [{
+    id: 'o', status: 'installation_in_progress', serviceType: 'smart_film',
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'w', measureScope: 'smart_film' }] }] },
+    extraServices: [], installerIds: ['i1'], installationAt: '2026-10-15T16:00:00.000Z',
+    serviceProgress: { 'direction:smart_film': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z', doneBy: 'i1' } },
+  }] };
+  const swapped = structuredClone(saved);
+  swapped.orders[0].installerIds = ['i2'];
+  assert.equal(
+    prepareServiceSolutions(saved, swapped, false),
+    'Услуга выполнена: её исполнителя и дату не меняют. Сначала верните её в работу.',
+  );
+});
+
+test('completion follow-up awaits Telegram staff delivery before persisting staffAt', () => {
+  assert.match(html, /async function notifyStatusChange\(order\)/);
+  assert.match(html, /const delivered = await Promise\.all\(deliveries\);/);
+  assert.match(html, /const staffDelivered = await notifyStatusChange\(\{ \.\.\.o, status: 'installation_done' \}\);/);
+  assert.match(html, /if \(!staffDelivered\) \{[\s\S]{0,160}continue;[\s\S]{0,220}staffAt:/);
+});
+
 test('a done service keeps its specialist and date while the project is open; taking it back is a reopen', () => {
   const { c, db, calls } = load({ id: 'm1', role: 'manager' });
   const o = project('installation_in_progress');
