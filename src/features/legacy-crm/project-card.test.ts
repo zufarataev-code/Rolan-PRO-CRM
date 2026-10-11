@@ -308,8 +308,8 @@ test('every way into installation needs each service planned; an older project k
   // A project without services is not blocked.
   assert.equal(c.ensureProjectServicesPlanned({ id: 'empty', status: 'proposal_accepted', measurements: { rooms: [] }, extraServices: [] }), true);
   // changeStatus publishes a complete row plan before the older checks that read the project crew and date.
-  const changeStatusSource = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 4000);
-  const fn = changeStatusSource.slice(0, changeStatusSource.indexOf('\n}\n') + 2);
+  const changeStatusSource = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('\n}\n', html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {')) + 2);
+  const fn = changeStatusSource;
   vm.runInContext(fn, c);
   let productionReady = false;
   Object.assign(c, {
@@ -412,6 +412,7 @@ test('server: a service waiting for measurement stops installation; closing an i
   plannedActive.orders[0].serviceSchedules.push(plan('line:z'));
   const plannedClosed = structuredClone(plannedActive);
   plannedClosed.orders[0].status = 'installation_done';
+  plannedClosed.orders[0].serviceProgress = { 'offering:a1': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' }, 'line:z': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } };
   assert.equal(prepareServiceSolutions(plannedActive, plannedClosed, false), null);
   const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 1600);
   assert.match(status, /const closesInstallation = CLOSED_PROJECT_STATUSES\.includes\(newStatus\) && !CLOSED_PROJECT_STATUSES\.includes\(o\.status\);/);
@@ -478,7 +479,8 @@ test('server: a project planned as a whole counts as planned; its first per-serv
   const fullFirst = legacy('installation_scheduled', { serviceSchedules: [{ id: 'line:z', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i2'] }, { id: 'line:y', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }] });
   assert.equal(prepareServiceSolutions(legacy('installation_scheduled'), fullFirst, false), null);
   // A project planned as a whole can be closed (a field specialist finishing an older job).
-  assert.equal(prepareServiceSolutions(legacy('installation_in_progress'), legacy('installation_done'), false), null);
+  const doneAll = { 'line:z': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' }, 'line:y': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } };
+  assert.equal(prepareServiceSolutions(legacy('installation_in_progress'), legacy('installation_done', { serviceProgress: doneAll }), false), null);
   // Closing straight from «КП принято» is checked like any close.
   const unplanned = (status: string) => legacy(status, { installerIds: [], installationAt: undefined });
   assert.equal(prepareServiceSolutions(unplanned('proposal_accepted'), unplanned('installation_done'), false), 'Укажите дату и исполнителей каждой услуги.');
@@ -488,7 +490,7 @@ test('server: a project planned as a whole counts as planned; its first per-serv
 });
 
 test('every way into installation refreshes the film purchase deadline; a historical close writes its per-service plan', () => {
-  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 2400);
+  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('\n}\n', html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {')) + 2);
   assert.match(status, /o\.status = newStatus;\n  if \(entersInstallation\) refreshManualFilmNeededBy\(o\);/);
   const close = html.slice(html.indexOf('function closeQuickProjectAsCompleted('), html.indexOf('function closeQuickProjectAsCompleted(') + 4000);
   assert.match(close, /if \(!o\.serviceSchedules\?\.length\) o\.serviceSchedules = projectPlannedSchedules\(o\);\n  o\.status = 'completed';/);
@@ -497,3 +499,14 @@ test('every way into installation refreshes the film purchase deadline; a histor
   assert.deepEqual(plain(c.projectPendingSizedServices(draft)), [], 'before measurement a quick line carries its service');
 });
 
+
+test('server: the same plan with its fields in another order is not a change (jsonb reorders keys)', () => {
+  const users = [{ id: 'i1', role: 'installer' }];
+  // As PostgreSQL returns it: object keys reordered.
+  const saved: Row = { settings: { serviceOfferings: [] }, users, orders: [{ id: 'o', status: 'installation_done', serviceType: 'smart_film', measurements: { rooms: [] }, extraServices: [{ id: 'z', type: 'washing', qty: 1, price: 10 }], serviceSchedules: [{ id: 'line:z', installerIds: ['i1'], installationAt: '2026-10-15T16:00:00.000Z' }] }] };
+  // As the browser built it in this session.
+  const next = structuredClone(saved);
+  next.orders[0].serviceSchedules = [{ id: 'line:z', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }];
+  next.orders[0].status = 'act_signed';
+  assert.equal(prepareServiceSolutions(saved, next, false), null);
+});

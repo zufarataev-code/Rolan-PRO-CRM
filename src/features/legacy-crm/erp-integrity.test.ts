@@ -137,7 +137,7 @@ test('paying one week then the month allocates only the remaining accruals', () 
     { id: 'b', number: 'B', installerIds: ['i'], installationDoneAt: '2026-10-10T12:00:00', amount: 600 },
   ];
   const db = { orders, payrollPayments: [] as Array<{ amount: number; allocations: Array<{ amount: number }> }> };
-  const c = load(['payrollPeriodAllocatedAmount', 'payrollPaidForPeriod', 'calcUserPayoutForPeriod', 'markPayoutPaid'], {
+  const c = load(['payrollPeriodAllocatedAmount', 'payrollPaidForPeriod', 'payrollSalaryAccruals', 'calcUserPayoutForPeriod', 'markPayoutPaid'], {
     db, getUser: () => ({ id: 'i', name: 'Installer', role: 'installer', payConfig: { type: 'per_sqft' } }),
     getOrder: (id: string) => orders.find(x => x.id === id), financeDate: (x: string) => new Date(x),
     orderInstallerPayoutForUser: (o: { amount: number }) => o.amount,
@@ -194,10 +194,42 @@ test('an installer can report completion without access to the private warehouse
     projectPlanSnapshot: () => () => {}, ensureProjectServicesPlanned: () => true,
     ensureOrderWorkflowTransition: () => true, ensureVerifiedMeasurementsForStatus: () => true,
     autoDeductInventoryForOrder: () => { assert.fail('field roles cannot issue from the private warehouse'); },
+    projectFinishOpenServices: () => {}, projectLines: () => [], orderUserCanManage: () => false,
     state: { currentUserId: 'i' }, save: () => {}, notifyStatusChange: () => {}, render: () => {},
   });
   assert.equal(c.changeStatus('o', 'installation_done', 'i', { skipClientAuto: true }), true);
   assert.equal(order.status, 'installation_done');
   assert.match(html, /Расход материала ещё не подтверждён на складе/);
   assert.match(html, /Подтвердить расход материала/);
+});
+
+
+test('salary paid weekly then monthly leaves every day settled, including February', () => {
+  for (const [year, month, days] of [[2026, 9, 31], [2026, 1, 28], [2028, 1, 29]]) {
+    const user = { id: 'i', name: 'Employee', role: 'installer', payConfig: { type: 'salary', monthlySalary: 1000 } };
+    const db = { orders: [], payrollPayments: [] as Array<{ amount: number }> };
+    const c = load(['payrollPeriodAllocatedAmount', 'payrollPaidForPeriod', 'payrollSalaryAccruals', 'calcUserPayoutForPeriod', 'markPayoutPaid'], {
+      db, getUser: () => user, financeDate: (x: string) => new Date(x), getOrder: () => null,
+      fmtMoney: String, uid: () => String(db.payrollPayments.length), state: { currentUserId: 'owner' },
+      save: () => {}, render: () => {}, confirm: () => true, alert: () => {},
+    });
+    const start = new Date(year, month, 1), end = new Date(year, month, days, 23, 59, 59, 999);
+    const weekEnd = new Date(year, month, 7, 23, 59, 59, 999);
+    c.markPayoutPaid('i', start.toISOString(), weekEnd.toISOString());
+    c.markPayoutPaid('i', start.toISOString(), end.toISOString());
+    assert.equal(Number(db.payrollPayments.reduce((sum, x) => sum + x.amount, 0).toFixed(2)), 1000);
+    for (let day = 1; day <= days; day++) {
+      const first = new Date(year, month, day), last = new Date(year, month, day, 23, 59, 59, 999);
+      assert.equal(c.payrollPaidForPeriod('i', first, last), c.calcUserPayoutForPeriod('i', first, last).total);
+      c.markPayoutPaid('i', first.toISOString(), last.toISOString());
+    }
+    assert.equal(db.payrollPayments.length, 2, 'no day can be paid twice');
+  }
+});
+
+test('unpriced wider rolls cost the full issued width, not the planned cut', () => {
+  const { c } = stock([{ id: 'wide', widthMm: 1800, remainingLengthM: 5 }], { 1500: 1 });
+  const order: Record<string, unknown> = { id: 'o' };
+  assert.equal(c.autoDeductInventoryForOrder(order).ok, true);
+  assert.equal(order._inventoryMaterialCost, 1800 * 1000 / 92903.04);
 });

@@ -6711,6 +6711,9 @@ const I18N = {
     enRouteJob: 'Выехали к клиенту',
     reviewReceived: 'Отзыв получен',
     orderCreated: 'Заказ создан',
+    service_started: 'Услуга начата',
+    service_done: 'Услуга выполнена',
+    service_reopened: 'Услуга возвращена в работу',
     project_archived: 'Проект удалён в архив',
     project_restored: 'Проект восстановлен из архива',
     orderNo: 'Проект №',
@@ -7133,6 +7136,9 @@ const I18N = {
     enRouteJob: 'On my way',
     reviewReceived: 'Review received',
     orderCreated: 'Order created',
+    service_started: 'Service started',
+    service_done: 'Service done',
+    service_reopened: 'Service reopened',
     project_archived: 'Project moved to archive',
     project_restored: 'Project restored from archive',
     orderNo: 'Project #',
@@ -9296,7 +9302,7 @@ function autoDeductInventoryForOrder(o) {
         const originalM = Number(item.roll.originalLengthM) || 0;
         const lotCost = Number(item.roll.costTotal) || 0;
         const catalogCost = Number(getCatalogItem(catId)?.costPerSqft) || 0;
-        const materialCost = originalM > 0 && lotCost > 0 ? take * lotCost / originalM : mm2_to_sqft(requiredWidth * take * 1000) * catalogCost;
+        const materialCost = originalM > 0 && lotCost > 0 ? take * lotCost / originalM : mm2_to_sqft(Number(item.roll.widthMm) * take * 1000) * catalogCost;
         plan.push({ roll: item.roll, entry: { catId, rollId: item.roll.id, widthMm: requiredWidth, lengthM: take, materialCost } });
         item.available -= take;
         remaining -= take;
@@ -16415,7 +16421,10 @@ function save() {
   if (db?.purchaseRequests && db?.vendors && db?.settings?.catalog) ensureAutoDraftPurchaseRequests();
   projectMonthRevenueCache = null;
   localStorage.setItem('rolanpro_crm', JSON.stringify(db));
-  if (ROLANPRO_CLOUD && cloudReady) cloudScheduleSave();
+  if (ROLANPRO_CLOUD && cloudReady) {
+    cloudScheduleSave();
+    setTimeout(() => projectSettleChangedServices(), 0);
+  }
 }
 function T(key) {
   return (I18N[state.lang] && I18N[state.lang][key]) || I18N.ru[key] || key;
@@ -16820,6 +16829,23 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
       return refuse();
     }
   }
+  if (closesInstallation && PROJECT_SCHEDULED_STATUSES.includes(o.status)) {
+    // A field specialist closes only their own services; the project closes
+    // once nothing is left. The owner/manager closing by hand finishes all.
+    const actor = currentUser();
+    if (actor?.role === 'installer') {
+      projectLines(o).filter(line => line.installerIds.includes(actor.id) && projectServiceProgress(o, line.key).status !== 'done')
+        .forEach(line => projectWriteServiceProgress(o, line, 'done', actor));
+      const left = projectLines(o).filter(line => projectServiceProgress(o, line.key).status !== 'done');
+      if (left.length) {
+        refuse();
+        save();
+        alert(`Ваши услуги отмечены. Проект закроется, когда будут выполнены остальные: ${left.map(line => line.name).join(', ')}.`);
+        render();
+        return false;
+      }
+    } else projectFinishOpenServices(o, by || state.currentUserId);
+  }
   o.status = newStatus;
   if (entersInstallation) refreshManualFilmNeededBy(o);
   o.timeline = o.timeline || [];
@@ -16839,8 +16865,12 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   if (map[newStatus] && !o[map[newStatus]]) o[map[newStatus]] = new Date().toISOString();
   if (newStatus === 'measurement_done') invalidateProjectEstimate(o, 'Замер завершён — требуется расчёт проекта');
   save();
-  notifyStatusChange(o);
-  if (!opts.skipClientAuto) autoNotifyClient(o, newStatus);
+  // A field specialist's close is announced by the owner/manager CRM: the
+  // server marks it, and that CRM sends the notices once (projectClaimServiceFollowUps).
+  if (!(closesInstallation && !orderUserCanManage(currentUser()))) {
+    notifyStatusChange(o);
+    if (!opts.skipClientAuto) autoNotifyClient(o, newStatus);
+  }
   if (newStatus === 'measurement_done' && orderUserCanSeeMoney(o, currentUser()) && opts.openEstimate !== false) {
     openProjectEstimateWorkspace(orderId);
     return true;
@@ -17222,7 +17252,7 @@ function installerOrderPrimaryAction(o) {
   if (o.status === 'installation_scheduled') return { icon: '✅', title: 'Принять задачу', sub: 'Подтвердите, что увидели назначенный монтаж.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_accepted')` };
   if (o.status === 'installation_accepted') return { icon: '🚗', title: 'Выехал на объект', sub: 'Зафиксировать начало поездки.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_en_route')` };
   if (o.status === 'installation_en_route') return { icon: '▶', title: 'Начать монтаж', sub: 'Перед началом заполните приёмку и сделайте фото.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_in_progress')` };
-  if (o.status === 'installation_in_progress') return { icon: '✓', title: 'Завершить монтаж', sub: 'Добавьте фото после работы и подтвердите сдачу.', variant: 'success', onclick: `changeStatus('${o.id}','installation_done')` };
+  if (o.status === 'installation_in_progress') return { icon: '✓', title: 'Мои услуги выполнены', sub: 'Добавьте фото после работы. Проект закроется, когда все услуги будут выполнены.', variant: 'success', onclick: `projectMarkMyServicesDone('${o.id}')` };
   if (o.status === 'installation_done') return { icon: '📝', title: 'Акт подписан', sub: 'Отметить после подписи клиента.', variant: 'primary', onclick: `changeStatus('${o.id}','act_signed')` };
   return { icon: '🧰', title: 'Открыть ТЗ-лист', sub: 'Схема, размеры, материалы и лист раскроя.', variant: 'soft', onclick: `openTechnicalSheet('${o.id}')` };
 }
@@ -24195,6 +24225,13 @@ function projectIncludedQty(o, parentId, child) {
 function syncProjectIncludedServices(o) {
   if (!o) return false;
   let changed = false;
+  // The progress of a service that left the project (its windows deleted,
+  // its line removed) leaves with it, so a later service starts afresh.
+  if (o.serviceProgress && Object.keys(o.serviceProgress).length) {
+    const services = new Set(projectServiceGroups(o).map(group => group.id));
+    const kept = Object.fromEntries(Object.entries(o.serviceProgress).filter(([key]) => services.has(key)));
+    if (Object.keys(kept).length !== Object.keys(o.serviceProgress).length) { o.serviceProgress = kept; changed = true; }
+  }
   const parents = projectParentOfferingIds(o);
   const lines = Array.isArray(o.extraServices) ? o.extraServices : [];
   const removed = lines.filter(line => line.includedBy && !parents.includes(line.includedBy));
@@ -24786,11 +24823,33 @@ function projectCardSetQty(oid, sid, value) {
 function projectCardQtyFromWindows(oid, sid) {
   projectCardEdit(() => projectEstimateServiceQtyFromWindows(oid, sid));
 }
+/**
+ * A done service stays in the open project: its row, revenue and pay are its
+ * history, so it is reopened before it can be removed (Owner, 2026-10-10).
+ * Runs the removal and takes it back (with a message) when it would drop one.
+ */
+function projectKeepsDoneServices(o, change) {
+  if (!o || !PROJECT_SCHEDULED_STATUSES.includes(o.status)) { change(); return true; }
+  const saved = JSON.stringify({ measurements: o.measurements ?? null, extraServices: o.extraServices ?? null });
+  const groups = projectServiceGroups(o);
+  const names = new Map(groups.map(group => [group.id, group.name]));
+  const done = groups.map(group => group.id).filter(id => o.serviceProgress?.[id]?.status === 'done');
+  change();
+  const after = new Set(projectServiceGroups(o).map(group => group.id));
+  const lost = done.filter(id => !after.has(id));
+  if (!lost.length) return true;
+  const before = JSON.parse(saved);
+  if (before.measurements === null) delete o.measurements; else o.measurements = before.measurements;
+  if (before.extraServices === null) delete o.extraServices; else o.extraServices = before.extraServices;
+  alert(`${lost.map(id => names.get(id)).join(', ')}: услуга выполнена — её не удаляют. Сначала верните её в работу.`);
+  preservePositionForNextRender(); render();
+  return false;
+}
 function projectCardDeleteService(oid, sid) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   if ((o.extraServices || []).some(line => line.id === sid && line.includedBy)) return;
-  o.extraServices = (o.extraServices || []).filter(line => line.id !== sid);
+  if (!projectKeepsDoneServices(o, () => { o.extraServices = (o.extraServices || []).filter(line => line.id !== sid); })) return;
   // Its package leaves with it; then the plans of services that are gone, and
   // the project crew and date follow what remains.
   syncProjectIncludedServices(o);
@@ -24801,9 +24860,9 @@ function projectCardDeleteService(oid, sid) {
 }
 /** Drops the plans of services no longer in the project. */
 function projectPrunePlans(o) {
-  if (!o.serviceSchedules?.length) return;
   const ids = new Set(projectServiceGroups(o).map(group => group.id));
-  o.serviceSchedules = o.serviceSchedules.filter(item => ids.has(item.id));
+  if (o.serviceSchedules?.length) o.serviceSchedules = o.serviceSchedules.filter(item => ids.has(item.id));
+  if (o.serviceProgress) o.serviceProgress = Object.fromEntries(Object.entries(o.serviceProgress).filter(([key]) => ids.has(key)));
 }
 function projectCardRemovePending(oid, offeringId) {
   const o = getOrder(oid);
@@ -24897,8 +24956,27 @@ function projectCardPublishCrew(o) {
 function projectCardCanPlan(o) {
   return !!o && PROJECT_PLANNING_STATUSES.includes(o.status) && orderUserCanSeeMoney(o, currentUser()) && orderUserCanManage(currentUser());
 }
+const PROJECT_DONE_PLAN_MESSAGE = 'Услуга выполнена: её исполнителя и дату не меняют — это её история и оплата. Сначала верните её в работу.';
+const projectPlanTime = plan => { const at = Date.parse(plan?.installationAt || ''); return Number.isNaN(at) ? '' : new Date(at).toISOString(); };
+/** The name of a done service whose specialist or date these plans change ('' when none). */
+function projectDoneServicePlanChanged(o, plans) {
+  const before = projectPlannedSchedules(o);
+  const crew = plan => [...(plan?.installerIds || [])].map(String).sort().join('|');
+  return projectLines(o).find(line => {
+    if (projectServiceProgress(o, line.key).status !== 'done') return false;
+    const was = before.find(plan => plan.id === line.key);
+    const now = plans.find(plan => plan.id === line.key);
+    return !!was && (crew(was) !== crew(now) || projectPlanTime(was) !== projectPlanTime(now));
+  })?.name || '';
+}
 /** After «Монтаж назначен» a planned service may change its specialist or date, but not lose them. */
 function projectCardKeepsPlan(o, entry, next) {
+  // A done service keeps both: they are its history and its pay.
+  if (o.serviceProgress?.[entry.id]?.status === 'done') {
+    alert(PROJECT_DONE_PLAN_MESSAGE);
+    preservePositionForNextRender(); render();
+    return false;
+  }
   const complete = plan => !!plan.installationAt && (plan.installerIds || []).length > 0;
   if (!PROJECT_SCHEDULED_STATUSES.includes(o.status) || !complete(entry) || complete(next)) return true;
   alert('Монтаж уже назначен: у услуги должны остаться исполнитель и дата. Замените их, а не удаляйте.');
@@ -25022,7 +25100,8 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
   const plan = production && manage && money && PROJECT_PLANNING_STATUSES.includes(o.status);
   // A finished installation is history: its scope, prices and pay are read-only.
   const edit = money && !CLOSED_PROJECT_STATUSES.includes(o.status);
-  const columns = 3 + (money ? 1 : 0) + (production ? 2 : 0) + (edit ? 1 : 0);
+  const tracking = PROJECT_SCHEDULED_STATUSES.includes(o.status) || CLOSED_PROJECT_STATUSES.includes(o.status);
+  const columns = 3 + (money ? 1 : 0) + (production ? 2 : 0) + (tracking ? 1 : 0) + (edit ? 1 : 0);
   const qtyCell = line => {
     const source = line.sources[0];
     if (!edit || line.kind === 'windows' || line.kind === 'quick') {
@@ -25061,6 +25140,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       ${money ? `<td data-label="Цена">${priceCell(line)}</td><td data-label="Сумма" class="money"><b>${line.kind === 'included' ? '$0' : fmtMoney(line.price)}</b></td>` : ''}
       ${production ? `<td data-label="Исполнитель">${plan ? projectCardCrewPicker(o, line) : academyEsc(projectLineCrewText(line).people)}</td>
       <td data-label="Дата">${plan ? `<input type="datetime-local" class="${date ? '' : 'project-card-missing'}" style="min-width:180px" value="${date}" aria-label="Дата: ${academyEsc(line.name)}" onchange="projectCardSetDate('${o.id}','${jsQuote(line.key)}',this.value)">` : academyEsc(projectLineCrewText(line).date)}</td>` : ''}
+      ${tracking ? `<td data-label="Ход работ">${projectServiceProgressCell(o, line)}</td>` : ''}
       ${edit ? `<td class="project-estimate-action">${deletable ? `<button class="btn-ghost text-red-600" aria-label="Убрать услугу ${academyEsc(line.name)}" onclick="projectCardDeleteService('${o.id}','${jsQuote(source.id)}')">✕</button>` : ''}</td>` : ''}
     </tr>`;
   }).concat(pending.map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<tr data-project-pending="${academyEsc(offering.id)}">
@@ -25068,11 +25148,12 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       <td data-label="Объём">${edit ? `<button class="btn-ghost text-xs" onclick="openManagerMeasureModal('${o.id}')">внести замер</button>` : '<span class="text-xs text-gray-500">ждёт замера</span>'}</td>
       ${money ? `<td data-label="Цена">${fmtMoney(Number(offering.pricePerSqft) || 0)} <span class="text-xs text-gray-500">/ sq ft</span></td><td data-label="Сумма" class="money text-gray-500">после замера</td>` : ''}
       ${production ? '<td data-label="Исполнитель"></td><td data-label="Дата"></td>' : ''}
+      ${tracking ? '<td data-label="Ход работ"></td>' : ''}
       ${edit ? `<td class="project-estimate-action">${o.offeringId !== offering.id ? `<button class="btn-ghost text-red-600" aria-label="Убрать услугу ${academyEsc(offering.name)}" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">✕</button>` : ''}</td>` : ''}
     </tr>`; })).join('');
   const total = field => lines.reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
   const unplanned = production ? projectCardUnplanned(o) : [];
-  const head = `<tr><th>Услуга</th><th>Объём</th>${money ? '<th>Цена</th><th class="money">Сумма</th>' : ''}${production ? '<th>Исполнитель</th><th>Дата</th>' : ''}${edit ? '<th></th>' : ''}</tr>`;
+  const head = `<tr><th>Услуга</th><th>Объём</th>${money ? '<th>Цена</th><th class="money">Сумма</th>' : ''}${production ? '<th>Исполнитель</th><th>Дата</th>' : ''}${tracking ? '<th>Ход работ</th>' : ''}${edit ? '<th></th>' : ''}</tr>`;
   return `<section class="order-clean-stage project-card-services" data-project-card-services>
     <div class="order-clean-stage-head">
       <div>
@@ -25084,6 +25165,299 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     <div class="overflow-x-auto project-estimate-table-wrap mt-3"><table class="project-estimate-table project-card-table"><thead>${head}</thead><tbody>${rows || `<tr><td colspan="${columns}" class="text-gray-500">В проекте пока нет услуг.${money && edit ? ' Добавьте первую — «+ Услуга в проект».' : ''}</td></tr>`}</tbody></table></div>
     ${money ? `<div class="flex flex-wrap justify-end gap-4 mt-2 text-sm">${economics ? `<span class="text-gray-500">материал ${fmtMoney(total('materialCost'))}</span><span class="text-gray-500">специалистам ${fmtMoney(total('installerPay'))}</span>` : ''}<span><b>клиенту ${fmtMoney(orderRevenue(o))}</b></span></div>` : ''}
     ${production ? renderProjectCardSchedule(o, unplanned, plan) : ''}
+  </section>`;
+}
+
+// ---------- ХОД РАБОТ ПО УСЛУГАМ ----------
+// Owner, 2026-10-10: each service of a project is done on its own day by its
+// own crew. A service is planned, in progress or done; its specialist marks
+// their own service, and the project becomes «Монтаж выполнен» once every
+// service is done.
+const SERVICE_PROGRESS_LABELS = { planned: 'запланирована', in_progress: 'в работе', done: 'выполнена' };
+// Progress marks are the crew's working notes, not the client's history.
+const PROJECT_INTERNAL_TIMELINE_KEYS = new Set(['service_started', 'service_done', 'service_reopened']);
+function projectServiceProgress(o, key) {
+  const entry = o?.serviceProgress?.[key];
+  if (entry && ['in_progress', 'done'].includes(entry.status)) return entry;
+  // A project closed before progress existed: its services were done with it.
+  if (CLOSED_PROJECT_STATUSES.includes(o?.status)) return { status: 'done', doneAt: o.installationDoneAt || '', inferred: true };
+  return { status: 'planned' };
+}
+/** Progress is marked once installation is scheduled — by the owner/manager, or by the line's own specialist. */
+function projectCanMarkService(o, line, user = currentUser()) {
+  if (!o || !line || !user || !PROJECT_SCHEDULED_STATUSES.includes(o.status)) return false;
+  if (orderUserCanManage(user) && orderUserCanSeeMoney(o, user)) return true;
+  return user.role === 'installer' && line.installerIds.includes(user.id);
+}
+function projectWriteServiceProgress(o, line, status, user) {
+  const now = new Date().toISOString();
+  const progress = { ...(o.serviceProgress || {}) };
+  const before = progress[line.key] || {};
+  if (status === 'planned') delete progress[line.key];
+  else if (status === 'in_progress') progress[line.key] = { status, startedAt: before.startedAt || now, startedBy: before.startedBy || user.id };
+  else progress[line.key] = { ...before, status: 'done', startedAt: before.startedAt || now, doneAt: now, doneBy: user.id };
+  o.serviceProgress = progress;
+  o.timeline = o.timeline || [];
+  // Taking back a done service is a reopen, whatever status it goes back to.
+  const key = status === 'done' ? 'service_done' : before.status === 'done' || status === 'planned' ? 'service_reopened' : 'service_started';
+  o.timeline.push({ at: now, key, by: user.id, note: line.name, serviceId: line.key });
+}
+/** The project follows its services: in progress once one starts, «Монтаж выполнен» once all are done. */
+function projectSyncStatusFromServices(o) {
+  const lines = projectLines(o);
+  if (!lines.length || !PROJECT_SCHEDULED_STATUSES.includes(o.status)) return;
+  const states = lines.map(line => projectServiceProgress(o, line.key).status);
+  if (states.every(state => state === 'done')) {
+    const lastDone = lines.map(line => o.serviceProgress?.[line.key]?.doneAt).filter(Boolean).sort().pop();
+    if (lastDone) o.installationDoneAt = lastDone;
+    changeStatus(o.id, 'installation_done', state.currentUserId);
+  } else if (states.some(state => state !== 'planned') && o.status !== 'installation_in_progress') {
+    changeStatus(o.id, 'installation_in_progress', state.currentUserId);
+  }
+}
+function projectSetServiceProgress(oid, key, status) {
+  const o = getOrder(oid);
+  const user = currentUser();
+  const line = projectLines(o).find(item => item.key === key);
+  if (!SERVICE_PROGRESS_LABELS[status] || !projectCanMarkService(o, line, user)) return;
+  // Reopening a done service is the manager's call.
+  if (projectServiceProgress(o, key).status === 'done' && status !== 'done' && !(orderUserCanManage(user) && orderUserCanSeeMoney(o, user))) return;
+  projectWriteServiceProgress(o, line, status, user);
+  save();
+  projectSyncStatusFromServices(o);
+  preservePositionForNextRender(); render();
+}
+/** A specialist finishes their own services; the project closes when every service is done. */
+function projectMarkMyServicesDone(oid) {
+  const o = getOrder(oid);
+  const user = currentUser();
+  if (!o || !user) return;
+  const mine = projectLines(o).filter(line => projectCanMarkService(o, line, user) && line.installerIds.includes(user.id) && projectServiceProgress(o, line.key).status !== 'done');
+  if (!projectLines(o).length) { changeStatus(oid, 'installation_done', state.currentUserId); return; }
+  if (!mine.length) return alert('Ваши услуги в этом проекте уже отмечены выполненными.');
+  mine.forEach(line => projectWriteServiceProgress(o, line, 'done', user));
+  save();
+  projectSyncStatusFromServices(o);
+  const left = projectLines(o).filter(line => projectServiceProgress(o, line.key).status !== 'done');
+  if (left.length) alert(`Ваши услуги отмечены. Остальные делает другая бригада: ${left.map(line => line.name).join(', ')}.`);
+  preservePositionForNextRender(); render();
+}
+/**
+ * Two crews may finish from browsers that did not see each other's marks.
+ * When a save merges the other crew's progress, a project whose services are
+ * now all done (and planned) is closed before the merged state is saved,
+ * dated by its last service.
+ */
+function projectCloseFinishedProjects() {
+  const closed = [];
+  (db.orders || []).forEach(o => {
+    if (!PROJECT_SCHEDULED_STATUSES.includes(o.status)) return;
+    const lines = projectLines(o);
+    if (!lines.length || lines.some(line => projectServiceProgress(o, line.key).status !== 'done')) return;
+    const plans = projectPlannedSchedules(o);
+    const planned = projectServiceGroups(o).every(group => plans.some(plan => plan.id === group.id && plan.installationAt && (plan.installerIds || []).length));
+    if (!planned || projectPendingSizedServices(o).length) return;
+    const lastDone = lines.map(line => o.serviceProgress?.[line.key]?.doneAt).filter(Boolean).sort().pop();
+    o.status = 'installation_done';
+    if (lastDone) o.installationDoneAt = lastDone;
+    o.timeline = o.timeline || [];
+    o.timeline.push({ at: lastDone || new Date().toISOString(), key: 'installation_done', by: state.currentUserId, note: 'Все услуги выполнены' });
+    // Its notices go out from the owner/manager CRM that claims this mark.
+    o.servicesClosedNotice = 'pending';
+    closed.push(o.id);
+  });
+  return closed;
+}
+/**
+ * Follow-ups of a project closed through its services rather than by a
+ * manager's own «Монтаж выполнен»: its film is written off (a field
+ * specialist's CRM cannot change stock), and the notices of a project the
+ * server closed are sent. One owner/manager CRM claims each project with a
+ * saved mark first — the server accepts that save from one session only (the
+ * revision check) — and runs them once its claim is saved.
+ */
+const PROJECT_FOLLOW_UP_TOKEN = Math.random().toString(36).slice(2) + Date.now().toString(36);
+// A claim not finished within this time (the tab closed, the reply was lost)
+// may be taken over by another owner/manager CRM.
+const PROJECT_FOLLOW_UP_LEASE_MS = 10 * 60 * 1000;
+let projectClaimedFollowUps = [];
+function projectClaimServiceFollowUps(now = Date.now()) {
+  const user = currentUser();
+  if (!user || !orderUserCanManage(user)) return 0;
+  let count = 0;
+  (db.orders || []).forEach(o => {
+    const before = o.servicesFollowUpClaim && typeof o.servicesFollowUpClaim === 'object' ? o.servicesFollowUpClaim : null;
+    if (!CLOSED_PROJECT_STATUSES.includes(o.status) || projectClaimedFollowUps.some(claim => claim.id === o.id)) return;
+    const unfinished = before && !before.doneAt ? before : null;
+    if (unfinished && now - Date.parse(unfinished.at || 0) < PROJECT_FOLLOW_UP_LEASE_MS) return;
+    // A close that was not a manager's own (it wrote off and announced itself)
+    // owes both; a new close after a reopen owes its notices anew.
+    const fresh = o.servicesClosedNotice === 'pending';
+    const notify = fresh || unfinished?.notify === true;
+    const deduct = !o._inventoryDeducted && (fresh || unfinished?.deduct === true);
+    if (!notify && !deduct) return;
+    o.servicesFollowUpClaim = { token: PROJECT_FOLLOW_UP_TOKEN, at: new Date(now).toISOString(), notify, deduct, ...(unfinished?.staffAt ? { staffAt: unfinished.staffAt } : {}) };
+    delete o.servicesClosedNotice;
+    projectClaimedFollowUps.push({ id: o.id, notify, deduct, replaced: before?.token || null, replacedDoneAt: before?.doneAt || null });
+    count += 1;
+  });
+  return count;
+}
+/** A save conflict: a project another CRM claimed (or finished) first is theirs. */
+function projectYieldTakenFollowUps(remotePayload) {
+  const remoteOrders = new Map((remotePayload?.orders || []).map(o => [o.id, o]));
+  projectClaimedFollowUps = projectClaimedFollowUps.filter(claim => {
+    const remoteClaim = remoteOrders.get(claim.id)?.servicesFollowUpClaim;
+    const token = remoteClaim && typeof remoteClaim === 'object' ? remoteClaim.token : null;
+    if (!token || token === PROJECT_FOLLOW_UP_TOKEN || (token === claim.replaced && (remoteClaim.doneAt || null) === claim.replacedDoneAt)) return true;
+    const o = getOrder(claim.id);
+    if (o) o.servicesFollowUpClaim = JSON.parse(JSON.stringify(remoteClaim));
+    return false;
+  });
+}
+/** Saves now and waits for the server to confirm it (a follow-up step counts once saved). */
+async function projectPersistFollowUps() {
+  save();
+  return ROLANPRO_CLOUD ? cloudPersistConfirmed() : true;
+}
+/** The saved orders on the server now (for checking a claim before it runs). */
+async function projectFetchSavedOrders() {
+  const response = await fetch('/api/v1/legacy-crm/state', { cache: 'no-store' });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'workspace refresh failed');
+  return result.data.payload?.orders || [];
+}
+/**
+ * After a save: the follow-ups whose claim it carried. Right before they run,
+ * each claim is checked on the server: still this CRM's, unfinished, and with
+ * time left on its lease (a tab that slept past it leaves the work to the CRM
+ * that took it over). Each is marked done only once its notices were sent;
+ * one that failed stays claimed, and the lease lets the next owner/manager
+ * CRM retry it.
+ */
+async function projectRunClaimedFollowUps(savedPayload, now = () => Date.now()) {
+  const saved = new Map((savedPayload?.orders || []).map(o => [o.id, o]));
+  let ready = projectClaimedFollowUps.filter(claim => saved.get(claim.id)?.servicesFollowUpClaim?.token === PROJECT_FOLLOW_UP_TOKEN);
+  if (!ready.length) return 0;
+  projectClaimedFollowUps = projectClaimedFollowUps.filter(claim => !ready.includes(claim));
+  const server = new Map((await projectFetchSavedOrders()).map(o => [o.id, o]));
+  const owned = order => {
+    const claim = order?.servicesFollowUpClaim;
+    return claim?.token === PROJECT_FOLLOW_UP_TOKEN && !claim.doneAt
+      && now() - Date.parse(claim.at || 0) < PROJECT_FOLLOW_UP_LEASE_MS - 60 * 1000;
+  };
+  ready = ready.filter(claim => owned(server.get(claim.id)));
+  let done = 0;
+  for (const claim of ready) {
+    const o = getOrder(claim.id);
+    if (!o || o.servicesFollowUpClaim?.token !== PROJECT_FOLLOW_UP_TOKEN) continue;
+    // Written off even with an empty stock: the shortage is logged, not lost.
+    if (claim.deduct && !o._inventoryDeducted) {
+      try { autoDeductInventoryForOrder(o); } catch (error) { console.warn('Inventory deduct failed', error); continue; }
+    }
+    // The «Монтаж выполнен» notices are owed even when the project has moved
+    // on (act signed, paid) before they went out.
+    if (claim.notify && CLOSED_PROJECT_STATUSES.includes(o.status)) {
+      // Staff notices once: a retry after a failed client notice skips them.
+      if (!o.servicesFollowUpClaim.staffAt) {
+        notifyStatusChange({ ...o, status: 'installation_done' });
+        o.servicesFollowUpClaim = { ...o.servicesFollowUpClaim, staffAt: new Date().toISOString() };
+        if (!(await projectPersistFollowUps())) continue;
+      }
+      try { await autoNotifyClient(o, 'installation_done'); } catch (error) { console.warn('Completion notice failed', error); save(); continue; }
+    }
+    const current = getOrder(claim.id);
+    if (current?.servicesFollowUpClaim?.token !== PROJECT_FOLLOW_UP_TOKEN) continue;
+    current.servicesFollowUpClaim = { ...current.servicesFollowUpClaim, doneAt: new Date().toISOString() };
+    if (await projectPersistFollowUps()) done += 1;
+  }
+  save();
+  return done;
+}
+/**
+ * The project follows its services (Owner, 2026-10-10): when this CRM changes
+ * the services of a running installation — removes the one still open — and
+ * every service left is done, it closes. Changes that came from another CRM
+ * are only noted (act = false); that CRM settles them.
+ */
+const projectServiceSignatures = new Map();
+// The work of a service (its windows' sizes, its line's quantity…): prices
+// are not part of it. The server reads the same fields (serviceGroupScope).
+const PROJECT_SCOPE_WINDOW_FIELDS = ['id', 'width', 'height', 'qty', 'sqft', 'actualWidth', 'actualHeight', 'actualQty', 'panels', 'actualPanels', 'winType', 'catalogId', 'offeringId', 'measureScope', 'removalRequired', 'complexity'];
+const PROJECT_SCOPE_LINE_FIELDS = ['id', 'qty', 'unit', 'type', 'offeringId', 'catalogId', 'serviceType', 'measureScope', 'complexity'];
+function projectServiceScope(group) {
+  const pick = (item, fields) => Object.fromEntries(fields.filter(field => item?.[field] !== undefined).map(field => [field, item[field]]));
+  return JSON.stringify([...group.windows.map(win => pick(win, PROJECT_SCOPE_WINDOW_FIELDS)), ...group.lines.map(line => pick(line, PROJECT_SCOPE_LINE_FIELDS))]);
+}
+// order id → done service id → { scope, name }, as this CRM last saw them.
+const projectDoneScopes = new Map();
+function projectSettleChangedServices(act = true) {
+  const user = currentUser();
+  const manage = act && user && orderUserCanManage(user);
+  (db.orders || []).forEach(o => {
+    const groups = projectServiceGroups(o);
+    const signature = groups.map(group => group.id).sort().join('|');
+    const before = projectServiceSignatures.get(o.id);
+    projectServiceSignatures.set(o.id, signature);
+    // A done service whose work this CRM changed (a window added, a quantity)
+    // goes back to work: the added work is not done yet (Owner, 2026-10-10).
+    const doneNow = new Map(groups.filter(group => o.serviceProgress?.[group.id]?.status === 'done')
+      .map(group => [group.id, { scope: projectServiceScope(group), name: group.name }]));
+    const doneBefore = projectDoneScopes.get(o.id);
+    projectDoneScopes.set(o.id, doneNow);
+    if (manage && doneBefore && PROJECT_SCHEDULED_STATUSES.includes(o.status)) {
+      const reopened = [];
+      const removed = [];
+      doneBefore.forEach((was, id) => {
+        const now = doneNow.get(id);
+        if (now && now.scope !== was.scope) {
+          const line = projectLines(o).find(item => item.key === id);
+          if (!line) return;
+          projectWriteServiceProgress(o, line, 'in_progress', user);
+          doneNow.delete(id);
+          reopened.push(line.name);
+        } else if (!now && !groups.some(group => group.id === id)) {
+          // Removed by an edit that does not check it (a window moved to
+          // another service…): the history records it as taken back.
+          o.timeline = o.timeline || [];
+          o.timeline.push({ at: new Date().toISOString(), key: 'service_reopened', by: user.id, note: `${was.name} — удалена из проекта`, serviceId: id });
+          removed.push(was.name);
+        }
+      });
+      if (reopened.length || removed.length) {
+        save();
+        alert([
+          reopened.length ? `Изменён объём выполненной услуги — она снова в работе: ${reopened.join(', ')}.` : '',
+          removed.length ? `Выполненная услуга убрана из проекта: ${removed.join(', ')}. Это записано в историю.` : '',
+        ].filter(Boolean).join('\n'));
+      }
+    }
+    if (manage && before !== undefined && before !== signature && PROJECT_SCHEDULED_STATUSES.includes(o.status)) projectSyncStatusFromServices(o);
+  });
+}
+/** Closing an installation by hand finishes every service still open. */
+function projectFinishOpenServices(o, by) {
+  const user = getUser(by) || currentUser() || { id: by };
+  projectLines(o).filter(line => projectServiceProgress(o, line.key).status !== 'done').forEach(line => projectWriteServiceProgress(o, line, 'done', user));
+}
+function projectServiceProgressCell(o, line, user = currentUser()) {
+  const entry = projectServiceProgress(o, line.key);
+  const chip = entry.status === 'done'
+    ? `<span class="tag bg-emerald-50 text-emerald-700">✓ выполнена${entry.doneAt ? ` ${fmtDate(entry.doneAt)}` : ''}</span>`
+    : entry.status === 'in_progress' ? '<span class="tag bg-blue-50 text-blue-700">в работе</span>' : '<span class="tag">запланирована</span>';
+  if (!projectCanMarkService(o, line, user)) return chip;
+  const manager = orderUserCanManage(user) && orderUserCanSeeMoney(o, user);
+  const act = (status, label) => `<button class="btn-ghost text-xs" onclick="projectSetServiceProgress('${o.id}','${jsQuote(line.key)}','${status}')">${label}</button>`;
+  return `${chip}<div class="flex flex-wrap gap-1 mt-1">${entry.status === 'planned' ? act('in_progress', 'Начать') : ''}${entry.status !== 'done' ? act('done', 'Выполнено') : manager ? act('in_progress', 'Вернуть в работу') : ''}</div>`;
+}
+/** The field specialist's own services, with their progress buttons. */
+function renderInstallerServiceProgress(o, u) {
+  const mine = projectLines(o).filter(line => line.installerIds.includes(u?.id));
+  if (!mine.length || !PROJECT_SCHEDULED_STATUSES.includes(o.status) && !CLOSED_PROJECT_STATUSES.includes(o.status)) return '';
+  return `<section class="order-clean-stage" data-installer-services>
+    <div class="order-clean-stage-title">Мои услуги</div>
+    <div class="order-clean-stage-sub">Отмечайте каждую свою услугу. Проект закроется, когда все услуги будут выполнены.</div>
+    <div class="grid gap-2 mt-3">${mine.map(line => `<div class="p-3 rounded-lg bg-white border flex flex-wrap items-start justify-between gap-3" data-project-line="${academyEsc(line.key)}"><span><b>${academyEsc(line.name)}</b><span class="block text-xs text-gray-500">${academyEsc(projectLineQtyText(line))} · ${academyEsc(projectLineCrewText(line).date)}</span></span><span>${projectServiceProgressCell(o, line, u)}</span></div>`).join('')}</div>
   </section>`;
 }
 
@@ -25712,7 +26086,7 @@ function projectEstimateDeleteService(oid, sid) {
   const o = getOrder(oid);
   if (!o) return;
   if ((o.extraServices || []).some(s => s.id === sid && s.includedBy)) return;
-  o.extraServices = (o.extraServices || []).filter(s => s.id !== sid);
+  if (!projectKeepsDoneServices(o, () => { o.extraServices = (o.extraServices || []).filter(s => s.id !== sid); })) return;
   syncProjectIncludedServices(o);
   projectEstimateMarkChanged(o, 'Удалена дополнительная услуга');
   save(); refreshProjectEstimateWorkspace(oid);
@@ -26433,6 +26807,7 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
           ${renderOrderActionCard({ icon: '📷', title: 'Добавить фото', sub: 'до или после монтажа', onclick: `addOrderPhoto('${o.id}')` })}
         </div>
       </section>
+      ${renderInstallerServiceProgress(o, u)}
       <div class="card p-0 overflow-hidden">
         ${renderTechnicalSheetHtml(o)}
       </div>
@@ -27076,7 +27451,9 @@ function addRoom(oid) {
   save(); render();
 }
 function deleteRoom(oid, rid) {
-  const o = getOrder(oid); o.measurements.rooms = o.measurements.rooms.filter(r => r.id !== rid); save(); render();
+  const o = getOrder(oid);
+  if (!projectKeepsDoneServices(o, () => { o.measurements.rooms = o.measurements.rooms.filter(r => r.id !== rid); })) return;
+  save(); render();
 }
 function addWindow(oid, rid) {
   const o = getOrder(oid);
@@ -27087,8 +27464,12 @@ function addWindow(oid, rid) {
   save(); render();
 }
 function deleteWin(oid, rid, wid) {
-  const r = getOrder(oid).measurements.rooms.find(x=>x.id===rid);
-  r.windows = r.windows.filter(w => w.id !== wid); save(); render();
+  const o = getOrder(oid);
+  if (!projectKeepsDoneServices(o, () => {
+    const r = o.measurements.rooms.find(x=>x.id===rid);
+    r.windows = r.windows.filter(w => w.id !== wid);
+  })) return;
+  save(); render();
 }
 function updateWin(oid, rid, wid, field, val) {
   const o = getOrder(oid);
@@ -28129,7 +28510,7 @@ function managerDeleteRoom(oid, rid) {
   if (!o) return;
   const roomTerms = roomTermsForOrder(o);
   if (!confirm(`${roomTerms.deleteLabel} и все окна в ней?`)) return;
-  o.measurements.rooms = (o.measurements.rooms || []).filter(r => r.id !== rid);
+  if (!projectKeepsDoneServices(o, () => { o.measurements.rooms = (o.measurements.rooms || []).filter(r => r.id !== rid); })) return refreshManagerMeasureModal(oid);
   invalidateProjectEstimate(o, 'Удалена комната из замера');
   state._managerActiveRoomByOrder = state._managerActiveRoomByOrder || {};
   state._managerActiveRoomByOrder[oid] = o.measurements.rooms[0]?.id || '';
@@ -28158,8 +28539,12 @@ function managerDeleteWin(oid, rid, wid) {
   const o = getOrder(oid);
   const r = o?.measurements?.rooms?.find(x => x.id === rid);
   if (!o || !r) return;
-  r.windows = (r.windows || []).filter(w => w.id !== wid);
-  syncOrderWindowRemovalService(o);
+  const removed = projectKeepsDoneServices(o, () => {
+    const room = o.measurements.rooms.find(x => x.id === rid);
+    room.windows = (room.windows || []).filter(w => w.id !== wid);
+    syncOrderWindowRemovalService(o);
+  });
+  if (!removed) return refreshManagerMeasureModal(oid);
   invalidateProjectEstimate(o, 'Удалён элемент из замера');
   save();
   refreshManagerMeasureModal(oid);
@@ -28753,6 +29138,8 @@ function confirmScheduleInstallation(oid) {
   let schedules;
   try { schedules = readProjectServiceSchedule(o); } catch (error) { alert(error.message); return; }
   if (!schedules.length) return alert('Сначала добавьте услуги проекта.');
+  const frozen = projectDoneServicePlanChanged(o, schedules);
+  if (frozen) return alert(`${frozen}: ${PROJECT_DONE_PLAN_MESSAGE}`);
   o.serviceSchedules = schedules;
   o.installerIds = [...new Set(schedules.flatMap(item => item.installerIds))];
   o.installationAt = schedules.map(item => item.installationAt).sort()[0];
@@ -29396,7 +29783,7 @@ function renderClientPortal() {
       <div class="card">
         <h3 class="font-semibold mb-3">${T('timeline')}</h3>
         <div class="space-y-3">
-          ${(o.timeline||[]).slice().reverse().map(ev => `
+          ${(o.timeline||[]).filter(ev => !PROJECT_INTERNAL_TIMELINE_KEYS.has(ev.key)).slice().reverse().map(ev => `
             <div class="flex gap-3">
               <div class="timeline-dot done"></div>
               <div class="flex-1">
@@ -30790,7 +31177,7 @@ function updateExtraService(oid, sid, field, val) {
 }
 function deleteExtraService(oid, sid) {
   const o = getOrder(oid);
-  o.extraServices = (o.extraServices || []).filter(s => s.id !== sid);
+  if (!projectKeepsDoneServices(o, () => { o.extraServices = (o.extraServices || []).filter(s => s.id !== sid); })) return;
   invalidateProjectEstimate(o, 'Удалена дополнительная услуга');
   save(); render();
 }
@@ -37609,6 +37996,22 @@ function saveUserPayConfig(userId) {
 }
 
 // Calculate user payout for given period
+function payrollSalaryAccruals(user, startDate, endDate) {
+  const pc = user?.payConfig || {};
+  const monthlySalary = Number(pc.monthlySalary) || Number(pc.weeklySalary || 0) * 4.33;
+  const day = new Date(startDate); day.setHours(0, 0, 0, 0);
+  const last = new Date(endDate); last.setHours(23, 59, 59, 999);
+  const accruals = [];
+  while (Number.isFinite(day.getTime()) && day <= last) {
+    const monthStart = new Date(day.getFullYear(), day.getMonth(), 1);
+    const monthEnd = new Date(day.getFullYear(), day.getMonth() + 1, 0);
+    const amount = payrollPeriodAllocatedAmount(monthlySalary, monthStart, monthEnd, day, day);
+    accruals.push({ kind: 'salary', orderId: null, date: day.toISOString(), amount });
+    day.setDate(day.getDate() + 1);
+  }
+  return accruals;
+}
+
 function calcUserPayoutForPeriod(userId, startDate, endDate) {
   const u = getUser(userId);
   if (!u || !u.payConfig) return { total: 0, breakdown: [] };
@@ -37616,10 +38019,9 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
   const breakdown = [];
   let total = 0;
   if (pc.type === 'salary') {
-    const months = Math.max(0, (endDate - startDate) / (30 * 86400000));
-    const monthlySalary = Number(pc.monthlySalary) || Number(pc.weeklySalary || 0) * 4.33;
-    total = monthlySalary * months;
-    breakdown.push({ kind: 'salary', label: `Оклад × ${months.toFixed(2)} мес.`, amount: total });
+    const accruals = payrollSalaryAccruals(u, startDate, endDate);
+    total = Number(accruals.reduce((sum, x) => sum + x.amount, 0).toFixed(2));
+    breakdown.push({ kind: 'salary', label: 'Оклад за выбранные дни', amount: total });
     return { total, breakdown };
   }
   // Commission / per-sqft / fixed-per-job — based on orders in period
@@ -37793,7 +38195,13 @@ function markPayoutPaid(userId, startISO, endISO) {
   const paymentBatchId = 'pay_' + uid();
   const paidAt = new Date().toISOString();
   db.payrollPayments = db.payrollPayments || [];
-  const allocations = calc.breakdown.map(b => {
+  const allocations = calc.breakdown.flatMap(b => {
+    if (b.kind === 'salary' && !b.orderId) {
+      return payrollSalaryAccruals(u, start, end).map(x => {
+        const first = new Date(x.date), last = new Date(x.date); last.setHours(23, 59, 59, 999);
+        return { ...x, amount: Number(Math.max(0, x.amount - payrollPaidForPeriod(userId, first, last)).toFixed(2)) };
+      });
+    }
     const alreadyPaid = b.orderId ? (getOrder(b.orderId)?.payouts || []).filter(p => p.userId === userId && p.paid).reduce((sum, p) => sum + (Number(p.amount) || 0), 0) : payrollPaidForPeriod(userId, start, end);
     return { orderId: b.orderId || null, kind: b.kind, amount: Math.max(0, b.amount - alreadyPaid), date: b.date || null, periodStart: startISO, periodEnd: endISO };
   }).filter(x => x.amount > 0);
@@ -39492,8 +39900,12 @@ async function cloudPersist(options = {}) {
         const latestResult = await latestResponse.json();
         if (!latestResponse.ok) throw new Error(latestResult?.errors?.[0]?.message || 'workspace refresh failed');
         const remotePayload = latestResult.data.payload;
+        projectYieldTakenFollowUps(remotePayload);
         snapshot = mergeCloudWorkspaceSnapshots(cloudBaseSnapshot, JSON.parse(JSON.stringify(db)), remotePayload);
         db = cloneCloudWorkspaceValue(snapshot);
+        projectSettleChangedServices(false);
+        // The other crew may have finished the last open service meanwhile.
+        if (projectCloseFinishedProjects().length + projectClaimServiceFollowUps()) snapshot = JSON.parse(JSON.stringify(db));
         cloudRevision = latestResult.data.revision;
         cloudBaseSnapshot = cloneCloudWorkspaceValue(remotePayload);
         localStorage.setItem('rolanpro_crm', JSON.stringify(db));
@@ -39503,6 +39915,7 @@ async function cloudPersist(options = {}) {
       cloudRevision = result.data.revision;
       cloudBaseSnapshot = cloneCloudWorkspaceValue(snapshot);
       cloudStatus('Сохранено', 'green');
+      projectRunClaimedFollowUps(snapshot).catch(error => console.warn('Project follow-ups failed', error));
       return true;
     }
     cloudSaveQueued = true;
@@ -39592,7 +40005,11 @@ async function cloudBoot() {
     cloudReady = true;
     startCanonicalLeadsPolling();
     localStorage.setItem('rolanpro_crm', JSON.stringify(db));
-    if (persistClientNotificationMigration || persistOfficialSupplierMigration || roleWasSynchronized) cloudScheduleSave();
+    // Projects closed through their services: the owner/manager's CRM claims
+    // their film write-off and notices; they run once the claim is saved.
+    const claimedFollowUps = projectClaimServiceFollowUps();
+    projectSettleChangedServices(false);
+    if (persistClientNotificationMigration || persistOfficialSupplierMigration || roleWasSynchronized || claimedFollowUps) cloudScheduleSave();
     parseHash();
     render();
     cloudStatus('Сохранено', 'green');
