@@ -25328,13 +25328,43 @@ async function projectRunClaimedFollowUps(savedPayload, now = () => Date.now()) 
  * are only noted (act = false); that CRM settles them.
  */
 const projectServiceSignatures = new Map();
+// The work of a service (its windows' sizes, its line's quantity…): prices
+// are not part of it. The server reads the same fields (serviceGroupScope).
+const PROJECT_SCOPE_WINDOW_FIELDS = ['id', 'width', 'height', 'qty', 'sqft', 'actualWidth', 'actualHeight', 'actualQty', 'panels', 'actualPanels', 'winType', 'catalogId', 'offeringId', 'measureScope', 'removalRequired', 'complexity'];
+const PROJECT_SCOPE_LINE_FIELDS = ['id', 'qty', 'unit', 'type', 'offeringId', 'catalogId', 'serviceType', 'measureScope', 'complexity'];
+function projectServiceScope(group) {
+  const pick = (item, fields) => Object.fromEntries(fields.filter(field => item?.[field] !== undefined).map(field => [field, item[field]]));
+  return JSON.stringify([...group.windows.map(win => pick(win, PROJECT_SCOPE_WINDOW_FIELDS)), ...group.lines.map(line => pick(line, PROJECT_SCOPE_LINE_FIELDS))]);
+}
+const projectDoneScopes = new Map();
 function projectSettleChangedServices(act = true) {
   const user = currentUser();
   const manage = act && user && orderUserCanManage(user);
   (db.orders || []).forEach(o => {
-    const signature = projectServiceGroups(o).map(group => group.id).sort().join('|');
+    const groups = projectServiceGroups(o);
+    const signature = groups.map(group => group.id).sort().join('|');
     const before = projectServiceSignatures.get(o.id);
     projectServiceSignatures.set(o.id, signature);
+    // A done service whose work this CRM changed (a window added, a quantity)
+    // goes back to work: the added work is not done yet (Owner, 2026-10-10).
+    const reopened = [];
+    groups.forEach(group => {
+      const key = `${o.id}|${group.id}`;
+      const done = o.serviceProgress?.[group.id]?.status === 'done';
+      const scope = done ? projectServiceScope(group) : null;
+      const was = projectDoneScopes.get(key);
+      if (scope === null) projectDoneScopes.delete(key); else projectDoneScopes.set(key, scope);
+      if (!manage || !done || was === undefined || was === scope || !PROJECT_SCHEDULED_STATUSES.includes(o.status)) return;
+      const line = projectLines(o).find(item => item.key === group.id);
+      if (!line) return;
+      projectWriteServiceProgress(o, line, 'in_progress', user);
+      projectDoneScopes.delete(key);
+      reopened.push(line.name);
+    });
+    if (reopened.length) {
+      save();
+      alert(`Изменён объём выполненной услуги — она снова в работе: ${reopened.join(', ')}.`);
+    }
     if (manage && before !== undefined && before !== signature && PROJECT_SCHEDULED_STATUSES.includes(o.status)) projectSyncStatusFromServices(o);
   });
 }

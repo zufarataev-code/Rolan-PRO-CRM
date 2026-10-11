@@ -86,6 +86,17 @@ export function projectServicesStarted(order: Row): boolean {
   const progress = object(order.serviceProgress);
   return serviceGroupIds(order).some(id => ['in_progress', 'done'].includes(object(progress[id]).status));
 }
+// The work of a service (projectServiceScope): its windows' sizes, its
+// line's quantity…; prices are not part of it.
+const SCOPE_WINDOW_FIELDS = ['id', 'width', 'height', 'qty', 'sqft', 'actualWidth', 'actualHeight', 'actualQty', 'panels', 'actualPanels', 'winType', 'catalogId', 'offeringId', 'measureScope', 'removalRequired', 'complexity'];
+const SCOPE_LINE_FIELDS = ['id', 'qty', 'unit', 'type', 'offeringId', 'catalogId', 'serviceType', 'measureScope', 'complexity'];
+export function serviceGroupScope(order: Row, id: string): string {
+  const pick = (item: Row, fields: string[]) => Object.fromEntries(fields.filter(field => item[field] !== undefined).map(field => [field, item[field]]));
+  const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))
+    .filter(win => (typeof win.offeringId === 'string' && win.offeringId ? `offering:${win.offeringId}` : `direction:${win.measureScope || order.serviceType || 'solar_film'}`) === id);
+  const lines = rows(order.extraServices).filter(line => `line:${line.id}` === id);
+  return stableJson([...windows.map(win => pick(win, SCOPE_WINDOW_FIELDS)), ...lines.map(line => pick(line, SCOPE_LINE_FIELDS))]);
+}
 const DIRECTION_TITLES: Record<string, string> = {
   smart_film: 'Смарт плёнка', solar_film: 'Солнцезащитная плёнка', protective_film: 'Защитная плёнка',
   decorative_film: 'Декоративная плёнка', privacy_film: 'Приватная плёнка',
@@ -397,6 +408,15 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       const reopened = (id: string) => rows(order.timeline).some(event => event.key === 'service_reopened' && event.serviceId === id
         && String(event.at || '') > String(object(oldProgress[id]).doneAt || ''));
       if (serviceGroupIds(oldOrder).some(id => object(oldProgress[id]).status === 'done' && !remaining.has(id) && !reopened(id))) return 'Услуга выполнена: её не удаляют. Сначала верните её в работу.';
+    }
+    // …nor is its work changed while it stays done (the CRM reopens it).
+    if (oldOrder.id !== undefined && !CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status))) {
+      const oldProgress = object(oldOrder.serviceProgress);
+      const newProgress = object(order.serviceProgress);
+      for (const id of serviceGroupIds(order)) {
+        if (object(oldProgress[id]).status !== 'done' || object(newProgress[id]).status !== 'done') continue;
+        if (serviceGroupScope(oldOrder, id) !== serviceGroupScope(order, id)) return 'Услуга выполнена: её объём не меняют. Сначала верните её в работу.';
+      }
     }
     // A done service keeps its specialist and date while the project is still
     // open: they are its history and its pay (Owner, 2026-10-10).

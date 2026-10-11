@@ -551,3 +551,46 @@ test('the CRM does not remove a done service from an open project; reopened, it 
   assert.match(html, /function deleteExtraService\(oid, sid\) \{\n  const o = getOrder\(oid\);\n  if \(!projectKeepsDoneServices\(o,/);
   assert.match(html, /function projectEstimateDeleteService\(oid, sid\) \{[\s\S]{0,200}projectKeepsDoneServices\(o,/);
 });
+
+test('changing the work of a done service sends it back to work; its price may change', () => {
+  const { c, db, calls } = load({ id: 'm1', role: 'manager' });
+  const o = project('installation_in_progress');
+  o.serviceProgress = { 'offering:a1': { status: 'done', doneAt: '2026-10-14T20:00:00.000Z' }, 'line:z': { status: 'in_progress' } };
+  o.timeline = [];
+  db.orders.push(o);
+  c.projectSettleChangedServices(false);
+  // A price change keeps it done.
+  o.measurements.rooms[0].windows[0].pricePerSqft = 12;
+  c.projectSettleChangedServices();
+  assert.equal(o.serviceProgress['offering:a1'].status, 'done');
+  // Another window of the same service: back in work, with a reopen event and a message.
+  o.measurements.rooms[0].windows.push({ id: 'w2', sqft: 10, offeringId: 'a1', measureScope: 'protective_film' });
+  c.projectSettleChangedServices();
+  assert.equal(o.serviceProgress['offering:a1'].status, 'in_progress');
+  assert.equal(o.timeline.at(-1).key, 'service_reopened');
+  assert.ok(calls.some(call => call.startsWith('alert:Изменён объём выполненной услуги')));
+  // The server refuses a changed scope that stays done; the same change reopened passes.
+  const users = [{ id: 'i1', role: 'installer' }];
+  const saved: Row = { settings: { serviceOfferings: [] }, users, orders: [{ id: 'o', status: 'installation_in_progress', serviceType: 'smart_film', measurements: { rooms: [] },
+    extraServices: [{ id: 'z', label: 'Мойка', qty: 1, price: 10 }, { id: 'y', label: 'Демонтаж', qty: 1 }],
+    serviceSchedules: [{ id: 'line:z', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }, { id: 'line:y', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i1'] }],
+    serviceProgress: { 'line:z': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } } }] };
+  const more = structuredClone(saved);
+  more.orders[0].extraServices[0].qty = 3;
+  assert.equal(prepareServiceSolutions(saved, structuredClone(more), true), 'Услуга выполнена: её объём не меняют. Сначала верните её в работу.');
+  more.orders[0].serviceProgress = { 'line:z': { status: 'in_progress' } };
+  assert.equal(prepareServiceSolutions(saved, more, true), null);
+  const repriced = structuredClone(saved);
+  repriced.orders[0].extraServices[0].price = 15;
+  assert.equal(prepareServiceSolutions(saved, repriced, true), null, 'a price is not the work');
+  // A field save that changes a done service's windows reopens it on the server.
+  const field: Row = { users, clients: [], tasks: [], orders: [{ id: 'o', status: 'installation_in_progress', serviceType: 'protective_film', measurerId: 'i1', installerIds: ['i1'],
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'w1', width: 1000, height: 1000, offeringId: 'a1', measureScope: 'protective_film' }] }] },
+    serviceSchedules: [{ id: 'offering:a1', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }],
+    serviceProgress: { 'offering:a1': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z', startedBy: 'i1' } } }] };
+  const resized = structuredClone(field);
+  resized.orders[0].measurements.rooms[0].windows[0].width = 1500;
+  const merged = mergeFieldWorkspace(field, resized, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  assert.equal(merged.orders[0].serviceProgress['offering:a1'].status, 'in_progress');
+  assert.equal(merged.orders[0].timeline.at(-1).key, 'service_reopened');
+});
