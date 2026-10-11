@@ -703,4 +703,24 @@ test('changing the work of a done service sends it back to work; its price may c
   assert.equal(merged.orders[0].serviceProgress['offering:a1'].status, 'done');
   assert.equal(merged.orders[0].measurements.rooms[0].windows[0].width, 1000);
   assert.equal(prepareServiceSolutions({ ...field, settings: { serviceOfferings: [] } }, { ...merged, settings: { serviceOfferings: [] } }, false), null);
+  // A done window moved to another room is a change of its work: it goes back to its room.
+  const moved = structuredClone(field);
+  moved.orders[0].measurements.rooms.push({ id: 'r2', windows: moved.orders[0].measurements.rooms[0].windows.splice(0, 1) });
+  const back = mergeFieldWorkspace(field, moved, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  assert.deepEqual(back.orders[0].measurements.rooms.map((room: Row) => [room.id, room.windows.map((win: Row) => win.id)]), [['r', ['w1']], ['r2', []]]);
+  assert.equal(prepareServiceSolutions({ ...field, settings: { serviceOfferings: [] } }, { ...moved, settings: { serviceOfferings: [] } }, true), 'Услуга выполнена: её объём не меняют. Сначала верните её в работу.');
+  // The order of the windows is not part of the work.
+  const reordered = structuredClone(field);
+  reordered.orders[0].measurements.rooms[0].windows.push({ id: 'w0', width: 700, height: 700, offeringId: 'a1', measureScope: 'protective_film' });
+  const swapped = structuredClone(reordered);
+  swapped.orders[0].measurements.rooms[0].windows.reverse();
+  assert.equal(prepareServiceSolutions({ ...reordered, settings: { serviceOfferings: [] } }, { ...swapped, settings: { serviceOfferings: [] } }, true), null);
+});
+
+test('a stalled Telegram request gives up after a bounded time', () => {
+  assert.match(html, /const TELEGRAM_TIMEOUT_MS = 15000;/);
+  const send = html.slice(html.indexOf('async function sendTelegram('), html.indexOf('function whatsappLink('));
+  assert.match(send, /setTimeout\(\(\) => controller\.abort\(\), TELEGRAM_TIMEOUT_MS\)/);
+  assert.match(send, /signal: controller\.signal/);
+  assert.match(send, /finally \{ if \(timer\) clearTimeout\(timer\); \}/);
 });

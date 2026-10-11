@@ -92,10 +92,13 @@ const SCOPE_WINDOW_FIELDS = ['id', 'width', 'height', 'qty', 'sqft', 'actualWidt
 const SCOPE_LINE_FIELDS = ['id', 'qty', 'unit', 'type', 'offeringId', 'catalogId', 'serviceType', 'measureScope', 'complexity'];
 export function serviceGroupScope(order: Row, id: string): string {
   const pick = (item: Row, fields: string[]) => Object.fromEntries(fields.filter(field => item[field] !== undefined).map(field => [field, item[field]]));
-  const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))
-    .filter(win => (typeof win.offeringId === 'string' && win.offeringId ? `offering:${win.offeringId}` : `direction:${win.measureScope || order.serviceType || 'solar_film'}`) === id);
+  // Each window with its room (where the work is); their order is not part of it.
+  const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows).map(win => ({ room, win })))
+    .filter(({ win }) => (typeof win.offeringId === 'string' && win.offeringId ? `offering:${win.offeringId}` : `direction:${win.measureScope || order.serviceType || 'solar_film'}`) === id)
+    .map(({ room, win }) => ({ ...pick(win, SCOPE_WINDOW_FIELDS), roomId: room.id ?? null }));
   const lines = rows(order.extraServices).filter(line => `line:${line.id}` === id);
-  return stableJson([...windows.map(win => pick(win, SCOPE_WINDOW_FIELDS)), ...lines.map(line => pick(line, SCOPE_LINE_FIELDS))]);
+  const byId = (a: Row, b: Row) => String(a.id ?? '').localeCompare(String(b.id ?? ''));
+  return stableJson([...windows.sort(byId), ...lines.map(line => pick(line, SCOPE_LINE_FIELDS))]);
 }
 const DIRECTION_TITLES: Record<string, string> = {
   smart_film: 'Смарт плёнка', solar_film: 'Солнцезащитная плёнка', protective_film: 'Защитная плёнка',
