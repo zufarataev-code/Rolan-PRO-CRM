@@ -305,7 +305,10 @@ test('a project closed through its services: one manager CRM claims its write-of
   let deducted = 0;
   const sent: string[] = [];
   c.autoDeductInventoryForOrder = (order: Row) => { deducted += 1; order._inventoryDeducted = true; };
-  c.notifyStatusChange = (order: Row) => sent.push(`staff:${order.id}`);
+  c.notifyStatusChange = async (order: Row, options: Row = {}) => {
+    if (!options.skipInApp) sent.push(`staff:${order.id}`);
+    return { ok: true, deliveredTelegramIds: [], inAppDone: !options.skipInApp };
+  };
   let mailDown = true;
   c.autoNotifyClient = async (order: Row) => {
     if (order.id === 'taken2' && mailDown) throw new Error('mail down');
@@ -344,7 +347,7 @@ test('a project closed through its services: one manager CRM claims its write-of
   c.projectYieldTakenFollowUps({ orders: [{ id: 'taken', servicesFollowUpClaim: { token: 'other', at: '2026-10-20T12:00:00.000Z', notify: true, deduct: true } }, { id: 'stale', servicesFollowUpClaim: stale.servicesFollowUpClaim && { token: 'gone', at: '2026-10-20T11:00:00.000Z' } }] });
   assert.equal(taken.servicesFollowUpClaim.token, 'other');
   assert.equal(await run(plain(db)), 2);
-  assert.equal(confirmed, 4, 'each staff notice and each finished claim (server, stale) confirmed');
+  assert.equal(confirmed, 6, 'in-app marker, staff delivery and finished claim are each confirmed for server and stale');
   assert.match(html, /async function projectPersistFollowUps\(\) \{\n  save\(\);\n  return ROLANPRO_CLOUD \? cloudPersistConfirmed\(\) : true;/);
   assert.equal(deducted, 2);
   assert.deepEqual(sent, ['staff:server', 'client:server', 'staff:stale', 'client:stale']);
@@ -368,7 +371,10 @@ test('a project closed through its services: one manager CRM claims its write-of
   assert.ok(failing.servicesFollowUpClaim.doneAt);
   // A project that moved on (act signed) before its notices went out still gets them, as «Монтаж выполнен».
   const staff: string[] = [];
-  c.notifyStatusChange = (order: Row) => staff.push(`${order.id}:${order.status}`);
+  c.notifyStatusChange = async (order: Row, options: Row = {}) => {
+    if (!options.skipInApp) staff.push(`${order.id}:${order.status}`);
+    return { ok: true, deliveredTelegramIds: [], inAppDone: !options.skipInApp };
+  };
   const signed: Row = { ...project('act_signed'), id: 'signed', _inventoryDeducted: true, serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending' };
   // Reopened and closed again: the finished claim of the first close does not swallow the new one.
   const again: Row = { ...project('installation_done'), id: 'again', _inventoryDeducted: true, serviceProgress: { 'line:z': { status: 'done' } }, servicesClosedNotice: 'pending', servicesFollowUpClaim: { token: 'old', at: '2026-10-01T00:00:00.000Z', notify: true, doneAt: '2026-10-01T00:00:10.000Z', staffAt: '2026-10-01T00:00:05.000Z' } };
@@ -533,6 +539,23 @@ test('field save preserves unfinished-service measurements while restoring a com
   const windows = merged.orders[0].measurements.rooms[0].windows;
   assert.equal(windows.find((win: Row) => win.id === 'done').width, 1000, 'completed service stays authoritative');
   assert.equal(windows.find((win: Row) => win.id === 'open').width, 1800, 'unfinished service edit survives');
+
+  const movedDone = structuredClone(current);
+  movedDone.orders[0].measurements.rooms[0].windows[0].offeringId = 'a2';
+  movedDone.orders[0].measurements.rooms[0].windows[1].width = 1850;
+  const restoredDone = mergeFieldWorkspace(current, movedDone, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  const restoredWindows = restoredDone.orders[0].measurements.rooms[0].windows;
+  assert.equal(restoredWindows.filter((win: Row) => win.id === 'done').length, 1, 'saved window identity is not duplicated');
+  assert.equal(restoredWindows.find((win: Row) => win.id === 'done').offeringId, 'a1', 'completed window keeps its saved service');
+  assert.equal(restoredWindows.find((win: Row) => win.id === 'open').width, 1850, 'other work still survives');
+
+  const movedOpen = structuredClone(current);
+  movedOpen.orders[0].measurements.rooms[0].windows[1].width = 1900;
+  movedOpen.orders[0].measurements.rooms[0].windows[1].offeringId = 'a1';
+  const restoredOpen = mergeFieldWorkspace(current, movedOpen, [ROLE_CODES.INSTALLER], ['i1']) as Row;
+  const openWindow = restoredOpen.orders[0].measurements.rooms[0].windows.find((win: Row) => win.id === 'open');
+  assert.equal(openWindow.offeringId, 'a2', 'unfinished window cannot be reassigned into completed work');
+  assert.equal(openWindow.width, 1900, 'its legitimate measurement edit is preserved');
 });
 
 test('legacy aggregate crew is frozen once a service is completed', () => {
@@ -549,13 +572,29 @@ test('legacy aggregate crew is frozen once a service is completed', () => {
     prepareServiceSolutions(saved, swapped, false),
     'Услуга выполнена: её исполнителя и дату не меняют. Сначала верните её в работу.',
   );
+  const cleared = structuredClone(swapped);
+  cleared.orders[0].serviceProgress = {};
+  assert.equal(
+    prepareServiceSolutions(saved, cleared, true),
+    'Услуга выполнена: её исполнителя и дату не меняют. Сначала верните её в работу.',
+    'clearing progress is not an implicit reopen',
+  );
+  const reopened = structuredClone(swapped);
+  reopened.orders[0].serviceProgress = { 'direction:smart_film': { status: 'in_progress', startedAt: '2026-10-16T10:00:00.000Z' } };
+  reopened.orders[0].timeline = [{ at: '2026-10-16T10:00:00.000Z', key: 'service_reopened', serviceId: 'direction:smart_film', by: 'm1' }];
+  assert.equal(prepareServiceSolutions(saved, reopened, true), null, 'an explicit reopen permits a later plan change');
 });
 
-test('completion follow-up awaits Telegram staff delivery before persisting staffAt', () => {
-  assert.match(html, /async function notifyStatusChange\(order\)/);
-  assert.match(html, /const delivered = await Promise\.all\(deliveries\);/);
-  assert.match(html, /const staffDelivered = await notifyStatusChange\(\{ \.\.\.o, status: 'installation_done' \}\);/);
-  assert.match(html, /if \(!staffDelivered\) \{[\s\S]{0,160}continue;[\s\S]{0,220}staffAt:/);
+test('completion follow-up persists per-recipient staff delivery before staffAt', () => {
+  assert.match(html, /async function notifyStatusChange\(order, options = \{\}\)/);
+  assert.match(html, /deliveredBefore = new Set/);
+  assert.match(html, /const results = await Promise\.all\(deliveries\);/);
+  assert.match(html, /deliveredTelegramIds: results\.filter/);
+  assert.match(html, /staffInAppAt/);
+  assert.match(html, /staffDeliveredIds/);
+  assert.match(html, /skipInApp: true, deliveredTelegramIds: beforeStaff\.staffDeliveredIds \|\| \[\]/);
+  assert.match(html, /await projectPersistFollowUps\(\);[\s\S]{0,140}continue;/);
+  assert.match(html, /staffAt: new Date\(\)\.toISOString\(\)/);
 });
 
 test('a done service keeps its specialist and date while the project is open; taking it back is a reopen', () => {
