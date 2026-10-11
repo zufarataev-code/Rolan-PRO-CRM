@@ -16939,6 +16939,9 @@ function orderUserOwns(order, user = currentUser()) {
   if (user.role === 'owner') return true;
   return user.role === 'manager' && order.managerId === user.id;
 }
+function orderUserCanResolveClientRequests(order, user = currentUser()) {
+  return orderUserCanManage(user) && orderUserOwns(order, user);
+}
 function orderUserCanMeasure(order, user = currentUser()) {
   return !!order && !!user && user.role === 'measurer' && order.measurerId === user.id;
 }
@@ -17533,7 +17536,7 @@ function projectServicesNextAction(o) {
 }
 
 function orderPrimaryNextAction(o) {
-  if (pendingClientRequests(o).length) {
+  if (orderUserCanResolveClientRequests(o) && pendingClientRequests(o).length) {
     return { icon: '⚠️', title: 'Ответить на запрос клиента', sub: 'Клиент просит перенос или отмену. Сначала обработайте это, потом двигайте заказ дальше.', variant: 'warning', onclick: `if (!projectCardOpenWorkspace('request')) document.getElementById('client-requests-${o.id}')?.scrollIntoView({behavior:'smooth',block:'center'})` };
   }
   const byServices = projectServicesNextAction(o);
@@ -17717,9 +17720,13 @@ function requestClientScheduleChange(orderId, eventType, type) {
 }
 function resolveClientScheduleRequest(orderId, requestId, accepted) {
   const o = getOrder(orderId);
-  if (!o) return;
+  if (!o) return false;
+  if (!orderUserCanResolveClientRequests(o)) {
+    alert('Обработать запрос клиента может только владелец или назначенный менеджер проекта.');
+    return false;
+  }
   const req = (o.clientRequests || []).find(r => r.id === requestId);
-  if (!req) return;
+  if (!req) return false;
   const info = orderEventInfo(req.eventType);
   req.status = accepted ? 'accepted' : 'declined';
   req.resolvedAt = new Date().toISOString();
@@ -17745,6 +17752,7 @@ function resolveClientScheduleRequest(orderId, requestId, accepted) {
   save();
   notifyClientRequestResolved(orderId, requestId, accepted);
   render();
+  return true;
 }
 function renderClientPortalScheduleControl(o, c) {
   const active = orderClientActiveEvent(o);
@@ -24088,6 +24096,7 @@ function renderOrderWorkspaceTile({ orderId = '', key = '', icon = '•', title 
 
 function projectCardOpenWorkspace(key) {
   const safeKey = String(key || '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  if (safeKey === 'request' && !orderUserCanResolveClientRequests(getOrder(state.openOrderId))) return false;
   const button = document.querySelector(`[data-project-workspace-key="${safeKey}"] .order-workspace-tile`);
   if (!button) return false;
   button.click();
@@ -26993,7 +27002,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const rooms = o.measurements?.rooms || [];
   const windows = measureAllWindows(o);
   const events = orderScheduledEvents(o);
-  const pendingRequests = pendingClientRequests(o);
+  const pendingRequests = orderUserCanResolveClientRequests(o, u) ? pendingClientRequests(o) : [];
   const hasMeasurements = windows.length > 0;
   // A project of services without sizes is calculated without a measurement.
   const estimateReady = hasMeasurements || !orderNeedsMeasurements(o);

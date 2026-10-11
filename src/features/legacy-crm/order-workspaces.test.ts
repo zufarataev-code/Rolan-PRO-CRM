@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import vm from "node:vm";
 
 const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+const slice = (from: string, to: string) => {
+  const start = html.indexOf(from);
+  assert.ok(start >= 0, from);
+  const end = html.indexOf(to, start + from.length);
+  assert.ok(end > start, to);
+  return html.slice(start, end);
+};
 
 test("order operations open in focused workspaces instead of inline accordions", () => {
   const start = html.indexOf("function renderOrderCleanDetails");
@@ -60,4 +68,78 @@ test("owner and manager navigation keeps documents, the client portal and schedu
   assert.match(html, /title: 'Ссылка клиенту'/);
   assert.match(html, /resolveClientScheduleRequest\('\$\{o\.id\}','\$\{r\.id\}',true\)/);
   assert.match(html, /resolveClientScheduleRequest\('\$\{o\.id\}','\$\{r\.id\}',false\)/);
+});
+
+function requestAccessContext(role: "owner" | "manager" | "measurer" | "installer", userId: string = role) {
+  const order = {
+    id: "o1",
+    managerId: "manager",
+    measurerId: "measurer",
+    installerIds: ["installer"],
+    measurementAt: "2026-10-12T16:00:00.000Z",
+    clientRequests: [{
+      id: "r1",
+      eventType: "measure",
+      type: "reschedule",
+      requestedAt: "2026-10-13T16:00:00.000Z",
+      status: "new",
+    }],
+    timeline: [],
+  };
+  const users = ["owner", "manager", "other-manager", "measurer", "installer"].map(id => ({
+    id,
+    role: id === "other-manager" ? "manager" : id,
+  }));
+  const calls = { clicks: 0, saves: 0, notices: 0, renders: 0, alerts: [] as string[] };
+  const context: any = vm.createContext({
+    Date,
+    db: { orders: [order], users },
+    state: { currentUserId: userId, openOrderId: order.id },
+    getUser: (id: string) => users.find(user => user.id === id),
+    pendingClientRequests: (value: any) => value.clientRequests.filter((request: any) => request.status === "new"),
+    projectServicesNextAction: () => ({ title: "Полевое действие" }),
+    document: { querySelector: () => ({ click: () => { calls.clicks += 1; } }) },
+    orderEventInfo: () => ({ title: "Замер", field: "measurementAt" }),
+    save: () => { calls.saves += 1; },
+    notifyClientRequestResolved: () => { calls.notices += 1; },
+    render: () => { calls.renders += 1; },
+    alert: (message: string) => { calls.alerts.push(message); },
+  });
+  vm.runInContext(slice("function getOrder(id) {", "function visibleOrdersForUser("), context);
+  vm.runInContext(slice("function orderPrimaryNextAction(o) {", "function installerOrderPrimaryAction("), context);
+  vm.runInContext(slice("function resolveClientScheduleRequest(orderId, requestId, accepted) {", "function renderClientPortalScheduleControl("), context);
+  vm.runInContext(slice("function projectCardOpenWorkspace(key) {", "function openOrderWorkspaceFromTemplate("), context);
+  return { context, order, calls };
+}
+
+test("field roles cannot surface, open or resolve a client schedule request", () => {
+  assert.match(html, /const pendingRequests = orderUserCanResolveClientRequests\(o, u\) \? pendingClientRequests\(o\) : \[\];/);
+  for (const role of ["measurer", "installer"] as const) {
+    const { context, order, calls } = requestAccessContext(role);
+    assert.equal(context.orderPrimaryNextAction(order).title, "Полевое действие", `${role} primary action`);
+    assert.equal(context.projectCardOpenWorkspace("request"), false, `${role} workspace`);
+    assert.equal(context.resolveClientScheduleRequest(order.id, "r1", true), false, `${role} handler`);
+    assert.equal(order.clientRequests[0].status, "new");
+    assert.equal(order.measurementAt, "2026-10-12T16:00:00.000Z");
+    assert.deepEqual([calls.clicks, calls.saves, calls.notices, calls.renders], [0, 0, 0, 0]);
+    assert.equal(calls.alerts.length, 1);
+  }
+});
+
+test("owner and assigned manager keep client schedule request access", () => {
+  for (const role of ["owner", "manager"] as const) {
+    const { context, order, calls } = requestAccessContext(role);
+    assert.equal(context.orderPrimaryNextAction(order).title, "Ответить на запрос клиента", `${role} primary action`);
+    assert.equal(context.projectCardOpenWorkspace("request"), true, `${role} workspace`);
+    assert.equal(context.resolveClientScheduleRequest(order.id, "r1", true), true, `${role} handler`);
+    assert.equal(order.clientRequests[0].status, "accepted");
+    assert.equal(order.measurementAt, "2026-10-13T16:00:00.000Z");
+    assert.deepEqual([calls.clicks, calls.saves, calls.notices, calls.renders], [1, 1, 1, 1]);
+  }
+
+  const unassigned = requestAccessContext("manager", "other-manager");
+  assert.equal(unassigned.context.projectCardOpenWorkspace("request"), false);
+  assert.equal(unassigned.context.resolveClientScheduleRequest(unassigned.order.id, "r1", false), false);
+  assert.equal(unassigned.order.clientRequests[0].status, "new");
+  assert.equal(unassigned.calls.notices, 0);
 });

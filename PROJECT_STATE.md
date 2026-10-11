@@ -34,8 +34,9 @@ Before doing any work:
 
 - Branch / PR: `codex/project-command-center-regressions` / #340, updated onto `main` merge commit `70bd57b` after PR #337; tracked by issue #339.
 - Owner/Manager navigation now keeps both `Расчёт / КП` and `Документы / портал`, and exposes a pending client reschedule/cancellation request. The primary warning opens that request workspace, where the existing accept/decline flow remains the single write path.
+- Review follow-up: client schedule requests are fail-closed to the owner or the project's assigned manager at the primary action, hidden workspace, direct workspace opener and resolver. Surveyors, installers and unrelated managers cannot render, open or resolve a request, and the denied resolver performs no save or client notification.
 - `Ближайшие работы` now groups only future unfinished service lines. Past service dates, explicitly completed lines, and inferred completed lines of legacy closed projects cannot hide the real next work; the full calendar still retains its historical visits.
-- Verification before the `main` update: 696/696 tests, scoped workspace/progress tests, TypeScript, the 121-page production build, and diff check pass. Re-verification on the merged head, PR CI, merge, deploy and production smoke verification remain.
+- Verification on the merged review-fix tree: 698/698 tests, 38 scoped workspace/stage/progress tests, TypeScript, the 121-page production build, inline-script coverage, and diff check pass. Fresh PR CI, merge, deploy and production smoke verification remain.
 
 ## 2026-10-11 review follow-up — PR #337
 
