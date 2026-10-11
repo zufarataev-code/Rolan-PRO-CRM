@@ -412,6 +412,7 @@ test('server: a service waiting for measurement stops installation; closing an i
   plannedActive.orders[0].serviceSchedules.push(plan('line:z'));
   const plannedClosed = structuredClone(plannedActive);
   plannedClosed.orders[0].status = 'installation_done';
+  plannedClosed.orders[0].serviceProgress = { 'offering:a1': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' }, 'line:z': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } };
   assert.equal(prepareServiceSolutions(plannedActive, plannedClosed, false), null);
   const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 1600);
   assert.match(status, /const closesInstallation = CLOSED_PROJECT_STATUSES\.includes\(newStatus\) && !CLOSED_PROJECT_STATUSES\.includes\(o\.status\);/);
@@ -478,7 +479,8 @@ test('server: a project planned as a whole counts as planned; its first per-serv
   const fullFirst = legacy('installation_scheduled', { serviceSchedules: [{ id: 'line:z', installationAt: '2026-10-16T16:00:00.000Z', installerIds: ['i2'] }, { id: 'line:y', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }] });
   assert.equal(prepareServiceSolutions(legacy('installation_scheduled'), fullFirst, false), null);
   // A project planned as a whole can be closed (a field specialist finishing an older job).
-  assert.equal(prepareServiceSolutions(legacy('installation_in_progress'), legacy('installation_done'), false), null);
+  const doneAll = { 'line:z': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' }, 'line:y': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } };
+  assert.equal(prepareServiceSolutions(legacy('installation_in_progress'), legacy('installation_done', { serviceProgress: doneAll }), false), null);
   // Closing straight from «КП принято» is checked like any close.
   const unplanned = (status: string) => legacy(status, { installerIds: [], installationAt: undefined });
   assert.equal(prepareServiceSolutions(unplanned('proposal_accepted'), unplanned('installation_done'), false), 'Укажите дату и исполнителей каждой услуги.');
