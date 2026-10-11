@@ -16975,7 +16975,7 @@ function smsLink(phone, text) {
   return `sms:${phone}?&body=${encodeURIComponent(text)}`;
 }
 
-function notifyStatusChange(order) {
+async function notifyStatusChange(order) {
   const client = getClient(order.clientId);
   const clientName = client?.name || '—';
   // Build recipient set: assigned team + ALL owners (always notify owner regardless of assignment)
@@ -16988,10 +16988,13 @@ function notifyStatusChange(order) {
   recipientIds.forEach(uid => {
     pushInAppNotification(uid, `${T('orderNo')}${order.number}`, T(order.status), `#/order/${order.id}`);
   });
-  // Telegram with detailed log for owner visibility
+  // Telegram with detailed log for owner visibility. The returned promise
+  // settles only after every configured send finishes, so durable follow-up
+  // claims never record staffAt before Telegram delivery is known.
   order.timeline = order.timeline || [];
-  let tgSent = 0, tgSkipped = 0, tgErrors = 0;
+  let tgSent = 0, tgSkipped = 0;
   const skipReasons = [];
+  const deliveries = [];
   if (!db.settings.telegramBotToken) {
     skipReasons.push('Telegram Bot Token не указан');
   } else {
@@ -17003,17 +17006,23 @@ function notifyStatusChange(order) {
         skipReasons.push(`${u.name}: нет Chat ID`);
         return;
       }
-      sendTelegram(u.telegramChatId,
-        `🔔 <b>${order.number}</b> — <b>${T(order.status)}</b>\nКлиент: ${clientName}\n${client?.address?.slice(0,80)||''}\n<a href="${clientPortalUrl(order.id)}">Открыть заказ</a>`
-      ).then(r => {
-        if (r && r.ok) {
-          // increment counter is async — just log to console
-          console.log('[Telegram]', u.name, 'OK');
-        } else {
-          console.warn('[Telegram] failed for', u.name, r);
-        }
-      }).catch(e => console.warn('[Telegram] error', u.name, e));
       tgSent++;
+      deliveries.push((async () => {
+        try {
+          const r = await sendTelegram(u.telegramChatId,
+            `🔔 <b>${order.number}</b> — <b>${T(order.status)}</b>\nКлиент: ${clientName}\n${client?.address?.slice(0,80)||''}\n<a href="${clientPortalUrl(order.id)}">Открыть заказ</a>`
+          );
+          if (r && r.ok) {
+            console.log('[Telegram]', u.name, 'OK');
+            return true;
+          }
+          console.warn('[Telegram] failed for', u.name, r);
+          return false;
+        } catch (e) {
+          console.warn('[Telegram] error', u.name, e);
+          return false;
+        }
+      })());
     });
   }
   if (tgSent === 0 && skipReasons.length) {
@@ -17024,6 +17033,9 @@ function notifyStatusChange(order) {
       note: 'Telegram не отправлен: ' + skipReasons.slice(0,3).join('; ')
     });
   }
+  if (!deliveries.length) return true;
+  const delivered = await Promise.all(deliveries);
+  return delivered.every(Boolean);
 }
 
 function clientPortalUrl(orderId) {
@@ -25360,7 +25372,11 @@ async function projectRunClaimedFollowUps(savedPayload, now = () => Date.now()) 
     if (claim.notify && CLOSED_PROJECT_STATUSES.includes(o.status)) {
       // Staff notices once: a retry after a failed client notice skips them.
       if (!o.servicesFollowUpClaim.staffAt) {
-        notifyStatusChange({ ...o, status: 'installation_done' });
+        const staffDelivered = await notifyStatusChange({ ...o, status: 'installation_done' });
+        if (!staffDelivered) {
+          console.warn('Completion staff notice failed', o.id);
+          continue;
+        }
         o.servicesFollowUpClaim = { ...o.servicesFollowUpClaim, staffAt: new Date().toISOString() };
         if (!(await projectPersistFollowUps())) continue;
       }
