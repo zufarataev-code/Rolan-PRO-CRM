@@ -32,9 +32,9 @@ Before doing any work:
 
 ## 2026-10-11 review follow-up — PR #337
 
-- Branch / PR: `claude/project-flow` / #337, reviewed head `7b8162d` plus a local P2 follow-up awaiting push.
+- Branch / PR: `claude/project-flow` / #337; P2 follow-up pushed as `0498af9` on top of reviewed head `7b8162d`.
 - The shared proposal-acceptance predicate now gates the production readiness check, the passport «Монтаж» action, and the schedule-workspace «Монтаж» action. A no-window project therefore skips film preparation but cannot offer an actionable installation before the Proposal is accepted.
-- Verification of the P2 follow-up: 694/694 tests, the 74 scoped project-stage/estimate/card tests, TypeScript, and diff check pass. Push and CI remain blocked until the local GitHub CLI session for `zufarataev-code` is refreshed.
+- Verification of the P2 follow-up: 694/694 tests, the 74 scoped project-stage/estimate/card tests, TypeScript, and diff check pass. Fresh GitHub CI/re-review is pending; the local GitHub CLI session remains invalid even though the normal Git credential successfully pushed the commit.
 
 ## 2026-10-08 handoff — Rolan PRO intelligent agent v1
 
