@@ -388,6 +388,16 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         if (after ? !complete(after) : services.includes(before.id)) return 'Монтаж назначен: у услуги должны остаться исполнитель и дата.';
       }
     }
+    // A done service stays in an open project: it is reopened before it can be
+    // removed (its row, revenue and pay are its history; Owner, 2026-10-10).
+    if (oldOrder.id !== undefined && !CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status))) {
+      const remaining = new Set(serviceGroupIds(order));
+      const oldProgress = object(oldOrder.serviceProgress);
+      // Reopened in this same save (the CRM saves a batch of edits at once).
+      const reopened = (id: string) => rows(order.timeline).some(event => event.key === 'service_reopened' && event.serviceId === id
+        && String(event.at || '') > String(object(oldProgress[id]).doneAt || ''));
+      if (serviceGroupIds(oldOrder).some(id => object(oldProgress[id]).status === 'done' && !remaining.has(id) && !reopened(id))) return 'Услуга выполнена: её не удаляют. Сначала верните её в работу.';
+    }
     // A done service keeps its specialist and date while the project is still
     // open: they are its history and its pay (Owner, 2026-10-10).
     if (schedulesChanged) {

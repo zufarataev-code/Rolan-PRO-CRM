@@ -24772,11 +24772,33 @@ function projectCardSetQty(oid, sid, value) {
 function projectCardQtyFromWindows(oid, sid) {
   projectCardEdit(() => projectEstimateServiceQtyFromWindows(oid, sid));
 }
+/**
+ * A done service stays in the open project: its row, revenue and pay are its
+ * history, so it is reopened before it can be removed (Owner, 2026-10-10).
+ * Runs the removal and takes it back (with a message) when it would drop one.
+ */
+function projectKeepsDoneServices(o, change) {
+  if (!o || !PROJECT_SCHEDULED_STATUSES.includes(o.status)) { change(); return true; }
+  const saved = JSON.stringify({ measurements: o.measurements ?? null, extraServices: o.extraServices ?? null });
+  const groups = projectServiceGroups(o);
+  const names = new Map(groups.map(group => [group.id, group.name]));
+  const done = groups.map(group => group.id).filter(id => o.serviceProgress?.[id]?.status === 'done');
+  change();
+  const after = new Set(projectServiceGroups(o).map(group => group.id));
+  const lost = done.filter(id => !after.has(id));
+  if (!lost.length) return true;
+  const before = JSON.parse(saved);
+  if (before.measurements === null) delete o.measurements; else o.measurements = before.measurements;
+  if (before.extraServices === null) delete o.extraServices; else o.extraServices = before.extraServices;
+  alert(`${lost.map(id => names.get(id)).join(', ')}: услуга выполнена — её не удаляют. Сначала верните её в работу.`);
+  preservePositionForNextRender(); render();
+  return false;
+}
 function projectCardDeleteService(oid, sid) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   if ((o.extraServices || []).some(line => line.id === sid && line.includedBy)) return;
-  o.extraServices = (o.extraServices || []).filter(line => line.id !== sid);
+  if (!projectKeepsDoneServices(o, () => { o.extraServices = (o.extraServices || []).filter(line => line.id !== sid); })) return;
   // Its package leaves with it; then the plans of services that are gone, and
   // the project crew and date follow what remains.
   syncProjectIncludedServices(o);
@@ -25127,7 +25149,7 @@ function projectWriteServiceProgress(o, line, status, user) {
   o.timeline = o.timeline || [];
   // Taking back a done service is a reopen, whatever status it goes back to.
   const key = status === 'done' ? 'service_done' : before.status === 'done' || status === 'planned' ? 'service_reopened' : 'service_started';
-  o.timeline.push({ at: now, key, by: user.id, note: line.name });
+  o.timeline.push({ at: now, key, by: user.id, note: line.name, serviceId: line.key });
 }
 /** The project follows its services: in progress once one starts, «Монтаж выполнен» once all are done. */
 function projectSyncStatusFromServices(o) {
@@ -25967,7 +25989,7 @@ function projectEstimateDeleteService(oid, sid) {
   const o = getOrder(oid);
   if (!o) return;
   if ((o.extraServices || []).some(s => s.id === sid && s.includedBy)) return;
-  o.extraServices = (o.extraServices || []).filter(s => s.id !== sid);
+  if (!projectKeepsDoneServices(o, () => { o.extraServices = (o.extraServices || []).filter(s => s.id !== sid); })) return;
   syncProjectIncludedServices(o);
   projectEstimateMarkChanged(o, 'Удалена дополнительная услуга');
   save(); refreshProjectEstimateWorkspace(oid);
@@ -27341,8 +27363,12 @@ function addWindow(oid, rid) {
   save(); render();
 }
 function deleteWin(oid, rid, wid) {
-  const r = getOrder(oid).measurements.rooms.find(x=>x.id===rid);
-  r.windows = r.windows.filter(w => w.id !== wid); save(); render();
+  const o = getOrder(oid);
+  if (!projectKeepsDoneServices(o, () => {
+    const r = o.measurements.rooms.find(x=>x.id===rid);
+    r.windows = r.windows.filter(w => w.id !== wid);
+  })) return;
+  save(); render();
 }
 function updateWin(oid, rid, wid, field, val) {
   const o = getOrder(oid);
@@ -28412,8 +28438,12 @@ function managerDeleteWin(oid, rid, wid) {
   const o = getOrder(oid);
   const r = o?.measurements?.rooms?.find(x => x.id === rid);
   if (!o || !r) return;
-  r.windows = (r.windows || []).filter(w => w.id !== wid);
-  syncOrderWindowRemovalService(o);
+  const removed = projectKeepsDoneServices(o, () => {
+    const room = o.measurements.rooms.find(x => x.id === rid);
+    room.windows = (room.windows || []).filter(w => w.id !== wid);
+    syncOrderWindowRemovalService(o);
+  });
+  if (!removed) return refreshManagerMeasureModal(oid);
   invalidateProjectEstimate(o, 'Удалён элемент из замера');
   save();
   refreshManagerMeasureModal(oid);
@@ -31046,7 +31076,7 @@ function updateExtraService(oid, sid, field, val) {
 }
 function deleteExtraService(oid, sid) {
   const o = getOrder(oid);
-  o.extraServices = (o.extraServices || []).filter(s => s.id !== sid);
+  if (!projectKeepsDoneServices(o, () => { o.extraServices = (o.extraServices || []).filter(s => s.id !== sid); })) return;
   invalidateProjectEstimate(o, 'Удалена дополнительная услуга');
   save(); render();
 }

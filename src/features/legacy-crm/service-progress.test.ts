@@ -262,11 +262,19 @@ test('progress marks stay out of the client portal; a service whose windows were
   assert.deepEqual(Object.keys(o.serviceProgress), ['line:z']);
   // The server drops it too, even when the submitted progress itself did not change.
   const users = [{ id: 'i1', role: 'installer' }];
-  const saved: Row = { settings: { serviceOfferings: [] }, users, orders: [{ id: 'o', status: 'installation_in_progress', serviceType: 'smart_film', measurements: { rooms: [{ windows: [{ id: 'w', measureScope: 'smart_film' }] }] }, extraServices: [], serviceSchedules: [{ id: 'direction:smart_film', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }], serviceProgress: { 'direction:smart_film': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } } }] };
+  const saved: Row = { settings: { serviceOfferings: [] }, users, orders: [{ id: 'o', status: 'installation_in_progress', serviceType: 'smart_film', measurements: { rooms: [{ windows: [{ id: 'w', measureScope: 'smart_film' }] }] }, extraServices: [], serviceSchedules: [{ id: 'direction:smart_film', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }], serviceProgress: { 'direction:smart_film': { status: 'in_progress', startedAt: '2026-10-15T16:00:00.000Z' } } }] };
   const next = structuredClone(saved);
   next.orders[0].measurements.rooms[0].windows = [];
   assert.equal(prepareServiceSolutions(saved, next, false), null);
   assert.deepEqual(next.orders[0].serviceProgress, {});
+  // A done service is not removed from an open project — unless it is reopened first (in the same save too).
+  const doneSaved = structuredClone(saved);
+  doneSaved.orders[0].serviceProgress = { 'direction:smart_film': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } };
+  const removing = structuredClone(doneSaved);
+  removing.orders[0].measurements.rooms[0].windows = [];
+  assert.equal(prepareServiceSolutions(doneSaved, structuredClone(removing), false), 'Услуга выполнена: её не удаляют. Сначала верните её в работу.');
+  removing.orders[0].timeline = [{ at: '2026-10-16T09:00:00.000Z', key: 'service_reopened', serviceId: 'direction:smart_film', by: 'm1' }];
+  assert.equal(prepareServiceSolutions(doneSaved, removing, false), null);
 });
 
 test('when two crews finish at once, the merged save closes the project; its film is written off once by the manager', async () => {
@@ -525,4 +533,21 @@ test('a done service keeps its specialist and date while the project is open; ta
   const reopened = structuredClone(swap);
   reopened.orders[0].serviceProgress = { 'line:z': { status: 'in_progress' } };
   assert.equal(prepareServiceSolutions(saved, reopened, true), null, 'back in work, it changes');
+});
+
+test('the CRM does not remove a done service from an open project; reopened, it can', () => {
+  const { c, db, calls } = load({ id: 'm1', role: 'manager' });
+  const o = project('installation_in_progress');
+  o.serviceProgress = { 'line:z': { status: 'done', doneAt: '2026-10-16T20:00:00.000Z' } };
+  db.orders.push(o);
+  c.projectEstimateMarkChanged = () => undefined;
+  c.projectCardDeleteService('o', 'z');
+  assert.equal(o.extraServices.length, 1, 'the done row stays');
+  assert.ok(calls.some(call => call.startsWith('alert:Подключение зоны: услуга выполнена')));
+  o.serviceProgress = { 'line:z': { status: 'in_progress' } };
+  c.projectCardDeleteService('o', 'z');
+  assert.equal(o.extraServices.length, 0);
+  assert.match(html, /function managerDeleteWin\(oid, rid, wid\) \{[\s\S]{0,200}projectKeepsDoneServices\(o,/);
+  assert.match(html, /function deleteExtraService\(oid, sid\) \{\n  const o = getOrder\(oid\);\n  if \(!projectKeepsDoneServices\(o,/);
+  assert.match(html, /function projectEstimateDeleteService\(oid, sid\) \{[\s\S]{0,200}projectKeepsDoneServices\(o,/);
 });
