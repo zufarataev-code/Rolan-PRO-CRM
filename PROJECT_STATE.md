@@ -1018,3 +1018,11 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Verification: new `service-progress.test.ts` (8 tests); `npm test` 662/662; `tsc` clean. Local browser (test DB): reopening a service moved the project to «Монтаж в работе»; marking all services done closed it with the last service's date; a closed-project save in the same tab after an in-session plan was accepted (jsonb key order).
 - Next: Codex review + CI; owner's «да». Then pay per service.
 
+## 2026-10-11 handoff — Project card «Операционный штаб» (Codex)
+
+- Branch `codex/project-card-command-center`, based on `main` `84f67d4` after PR #335. The owner approved the recommended «Операционный штаб» visual before implementation.
+- The Project card keeps one authoritative project and one `projectLines` list. Services remain the main inline work area; no duplicate order, financial formula, schedule or workflow was introduced.
+- Added a compact project navigator that opens the existing focused workspaces for client, object, measurement, estimate/Proposal, calendar, finance and files without leaving the card.
+- Added a responsive command-center sidebar: role-safe project economics, grouped upcoming service visits, and readiness counts for measurement, assignment and per-service completion. The schedule and sidebar share the same `projectCardVisits` grouping.
+- Desktop uses a services-plus-summary layout; tablet stacks the command center and keeps two summary columns; phone uses one column and the existing full-width workspace dialogs.
+- Verification: focused Project/workspace/client tests 41/41; full suite 693/693; all inline CRM scripts compile as part of the suite; `git diff --check` clean. Standalone TypeScript/build on this local Mac again stalled without diagnostics or CPU load and must be confirmed by the required GitHub CI gate. Production has not been changed; deployment still requires the owner's explicit confirmation after CI is green.

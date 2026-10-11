@@ -1320,6 +1320,170 @@
     display: grid;
     gap: 1rem;
   }
+  .project-command-nav {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    overflow-x: auto;
+    padding: .2rem 0;
+    scrollbar-width: thin;
+  }
+  .project-command-nav button {
+    flex: 0 0 auto;
+    min-height: 38px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    color: #526175;
+    padding: .5rem .72rem;
+    font-size: .75rem;
+    font-weight: 850;
+    white-space: nowrap;
+  }
+  .project-command-nav button:hover,
+  .project-command-nav button:focus-visible {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+  .project-command-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.65fr) minmax(280px, .7fr);
+    gap: 1rem;
+    align-items: start;
+  }
+  .project-command-main,
+  .project-command-side {
+    min-width: 0;
+  }
+  .project-command-side {
+    display: grid;
+    gap: 1rem;
+  }
+  .project-command-card {
+    border: 1px solid #dbe4ef;
+    border-radius: 14px;
+    background: #fff;
+    overflow: hidden;
+    box-shadow: 0 10px 26px rgba(15,23,42,.045);
+  }
+  .project-command-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .82rem .9rem;
+    border-bottom: 1px solid #eef2f7;
+  }
+  .project-command-card-title {
+    color: #0f172a;
+    font-size: .78rem;
+    font-weight: 950;
+  }
+  .project-command-card-sub {
+    color: #64748b;
+    font-size: .68rem;
+    margin-top: .14rem;
+  }
+  .project-command-card-body {
+    padding: .72rem .9rem .82rem;
+  }
+  .project-command-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .48rem;
+  }
+  .project-command-metric {
+    min-width: 0;
+    border-radius: 10px;
+    background: #f8fafc;
+    padding: .62rem;
+  }
+  .project-command-metric span {
+    display: block;
+    color: #64748b;
+    font-size: .62rem;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+  .project-command-metric strong {
+    display: block;
+    margin-top: .12rem;
+    color: #0f172a;
+    font-size: .98rem;
+    overflow-wrap: anywhere;
+  }
+  .project-command-metric.good strong { color: #047857; }
+  .project-command-metric.warn strong { color: #b45309; }
+  .project-command-visit {
+    display: grid;
+    grid-template-columns: 4.1rem minmax(0, 1fr);
+    gap: .62rem;
+    padding: .62rem 0;
+    border-bottom: 1px solid #eef2f7;
+  }
+  .project-command-visit:last-child { border-bottom: 0; }
+  .project-command-visit-time {
+    color: #1d4ed8;
+    font-size: .7rem;
+    font-weight: 900;
+  }
+  .project-command-visit-main b {
+    display: block;
+    color: #0f172a;
+    font-size: .75rem;
+    line-height: 1.3;
+  }
+  .project-command-visit-main span {
+    display: block;
+    color: #64748b;
+    font-size: .67rem;
+    line-height: 1.35;
+    margin-top: .12rem;
+  }
+  .project-command-status-list {
+    display: grid;
+    gap: .45rem;
+  }
+  .project-command-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .65rem;
+    color: #475569;
+    font-size: .72rem;
+  }
+  .project-command-status b { color: #0f172a; text-align: right; }
+  .project-command-status .ok { color: #047857; }
+  .project-command-status .attention { color: #b45309; }
+  .project-command-card-actions {
+    display: flex;
+    gap: .42rem;
+    flex-wrap: wrap;
+    margin-top: .7rem;
+  }
+  .project-command-card-actions .btn-ghost {
+    flex: 1 1 110px;
+    min-height: 36px;
+  }
+  .project-workspaces-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: .15rem;
+  }
+  .project-workspaces-head h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: .92rem;
+    font-weight: 950;
+  }
+  .project-workspaces-head p {
+    margin: .12rem 0 0;
+    color: #64748b;
+    font-size: .72rem;
+  }
   /* Project card: services on one screen (Owner, 2026-10-09). */
   .project-card-table td { vertical-align: top; }
   .project-card-table tr.project-card-included td:first-child { padding-left: 22px; }
@@ -5986,6 +6150,15 @@
     .order-clean-mini-grid {
       grid-template-columns: 1fr;
     }
+    .project-command-grid {
+      grid-template-columns: 1fr;
+    }
+    .project-command-side {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .project-command-card:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
     .order-clean-summary {
       white-space: normal;
     }
@@ -6311,6 +6484,9 @@
   .settings-detail-title h2 { margin: 0; font-size: 22px; font-weight: 800; color: #0f172a; }
   .settings-detail-title p { margin: 3px 0 0; color: #64748b; font-size: 13px; }
   @media (max-width: 760px) {
+    .project-command-side { grid-template-columns: 1fr; }
+    .project-command-card:last-child:nth-child(odd) { grid-column: auto; }
+    .project-workspaces-head { align-items: flex-start; flex-direction: column; }
     .settings-hub-grid { grid-template-columns: 1fr; }
     .settings-hub-item { min-height: 96px; padding: 14px; }
     .settings-hub-intro h2 { font-size: 21px; }
@@ -23796,7 +23972,7 @@ function renderOrderWorkspaceTile({ orderId = '', key = '', icon = '•', title 
   const templateId = `order-workspace-${String(orderId).replace(/[^a-zA-Z0-9_-]/g, '')}-${safeKey}`;
   const action = onclick || `openOrderWorkspaceFromTemplate('${templateId}','${jsQuote(title)}','${jsQuote(icon)}','${jsQuote(color)}')`;
   return `
-    <div>
+    <div data-project-workspace-key="${academyEsc(safeKey)}">
       <button type="button" class="order-workspace-tile" style="--workspace-color:${color};--workspace-soft:${soft}" onclick="${action}" aria-label="Открыть: ${academyEsc(title)}">
         <span class="order-clean-icon">${icon}</span>
         <span class="order-workspace-tile-copy">
@@ -23807,6 +23983,12 @@ function renderOrderWorkspaceTile({ orderId = '', key = '', icon = '•', title 
       </button>
       ${onclick ? '' : `<template id="${templateId}">${body}</template>`}
     </div>`;
+}
+
+function projectCardOpenWorkspace(key) {
+  const safeKey = String(key || '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  const button = document.querySelector(`[data-project-workspace-key="${safeKey}"] .order-workspace-tile`);
+  if (button) button.click();
 }
 
 function openOrderWorkspaceFromTemplate(templateId, title, icon = '•', color = '#2563eb') {
@@ -25532,21 +25714,79 @@ function renderInstallerServiceProgress(o, u) {
   </section>`;
 }
 
-/** The schedule, built from the lines: who works when, and what is still not planned. */
-function renderProjectCardSchedule(o, unplanned, plan) {
+/** Shared visit groups keep the service table, command center and calendar consistent. */
+function projectCardVisits(o) {
   const byVisit = new Map();
   projectLines(o).filter(line => line.installerIds.length && line.installationAt).forEach(line => {
     const key = `${line.installationAt.slice(0, 16)}|${[...line.installerIds].sort().join(',')}`;
     if (!byVisit.has(key)) byVisit.set(key, { at: line.installationAt, installerIds: line.installerIds, lines: [] });
     byVisit.get(key).lines.push(line);
   });
-  const visits = [...byVisit.values()].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  return [...byVisit.values()].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+}
+
+/** The schedule, built from the lines: who works when, and what is still not planned. */
+function renderProjectCardSchedule(o, unplanned, plan) {
+  const visits = projectCardVisits(o);
   return `<div class="mt-3 project-card-schedule">
     <div class="font-black text-sm">График</div>
     ${visits.map(visit => `<div class="order-clean-list-row"><span><b>${fmtDateTime(visit.at)}</b> · ${academyEsc(visit.installerIds.map(id => getUser(id)?.name).filter(Boolean).join(', '))}</span><span class="text-sm text-gray-600">${visit.lines.map(line => `${academyEsc(line.name)} — ${academyEsc(projectLineQtyText(line))}`).join('; ')}</span></div>`).join('') || '<div class="text-sm text-gray-500 mt-1">Пока ничего не запланировано.</div>'}
     ${unplanned.length ? `<div class="order-clean-note mt-2" style="border-color:#fcd34d;background:#fffbeb;color:#92400e">Не назначено: ${academyEsc(unplanned.map(line => line.name).join(', '))}</div>` : ''}
     ${plan && o.status === 'proposal_accepted' ? `<div class="mt-2">${renderOrderActionCard({ icon: '🔧', title: 'Подтвердить монтаж', sub: projectPendingSizedServices(o).length ? 'сначала внесите замер всех услуг' : unplanned.length ? `сначала назначьте: ${unplanned.length}` : 'все услуги назначены — клиент и бригада увидят дату после подтверждения', onclick: `projectCardConfirmInstallation('${o.id}')`, variant: unplanned.length || projectPendingSizedServices(o).length ? 'warning' : 'primary' })}</div>` : ''}
   </div>`;
+}
+
+function renderProjectCommandNav({ money = false, installer = false } = {}) {
+  const items = [
+    ['client', 'Клиент'],
+    ['site', 'Объект'],
+    ['measurement', 'Замер'],
+    ...(!installer && money ? [['estimate', 'Расчёт / КП']] : [['documents', installer ? 'ТЗ' : 'Документы']]),
+    ['schedule', 'Календарь'],
+    ...(!installer && money ? [['payment', 'Финансы']] : []),
+    ['history', 'Файлы'],
+  ];
+  return `<nav class="project-command-nav" aria-label="Разделы проекта">${items.map(([key, label]) => `<button type="button" onclick="projectCardOpenWorkspace('${key}')">${academyEsc(label)}</button>`).join('')}</nav>`;
+}
+
+function renderProjectCommandSide(o, { money = false, economics = false, installer = false } = {}) {
+  const lines = projectLines(o);
+  const visits = projectCardVisits(o);
+  const pendingMeasurements = projectPendingSizedServices(o);
+  const unplanned = projectCardInProduction(o) ? projectCardUnplanned(o) : [];
+  const done = lines.filter(line => projectServiceProgress(o, line.key).status === 'done').length;
+  const paid = Number(o.paid) || 0;
+  const debt = money ? orderDebt(o) : 0;
+  const financialCard = money && !installer ? `
+    <section class="project-command-card" data-project-command="economics">
+      <div class="project-command-card-head"><div><div class="project-command-card-title">Экономика проекта</div><div class="project-command-card-sub">Продажа, оплата и фактическая экономика</div></div><button type="button" class="btn-ghost text-xs" onclick="projectCardOpenWorkspace('payment')">Открыть</button></div>
+      <div class="project-command-card-body"><div class="project-command-metrics">
+        <div class="project-command-metric"><span>Сумма</span><strong>${fmtMoney(orderRevenue(o))}</strong></div>
+        <div class="project-command-metric good"><span>Оплачено</span><strong>${fmtMoney(paid)}</strong></div>
+        <div class="project-command-metric ${debt > 0 ? 'warn' : 'good'}"><span>Долг</span><strong>${fmtMoney(debt)}</strong></div>
+        ${economics ? `<div class="project-command-metric"><span>Себестоимость</span><strong>${fmtMoney(orderPSS(o).total)}</strong></div><div class="project-command-metric ${orderMargin(o) >= 0 ? 'good' : 'warn'}"><span>Маржа</span><strong>${fmtMoney(orderMargin(o))}</strong></div>` : ''}
+      </div></div>
+    </section>` : '';
+  const visitRows = visits.slice(0, 3).map(visit => {
+    const crew = visit.installerIds.map(id => getUser(id)?.name).filter(Boolean).join(', ') || 'исполнитель не назначен';
+    return `<div class="project-command-visit"><div class="project-command-visit-time">${fmtDateTime(visit.at)}</div><div class="project-command-visit-main"><b>${academyEsc(visit.lines.map(line => line.name).join(', '))}</b><span>${academyEsc(crew)}</span></div></div>`;
+  }).join('');
+  return `<aside class="project-command-side" aria-label="Сводка проекта">
+    ${financialCard}
+    <section class="project-command-card" data-project-command="visits">
+      <div class="project-command-card-head"><div><div class="project-command-card-title">Ближайшие работы</div><div class="project-command-card-sub">У каждой услуги своя дата и исполнитель</div></div><button type="button" class="btn-ghost text-xs" onclick="projectCardOpenWorkspace('schedule')">Календарь</button></div>
+      <div class="project-command-card-body">${visitRows || '<div class="text-sm text-gray-500">Работы ещё не назначены.</div>'}</div>
+    </section>
+    <section class="project-command-card" data-project-command="readiness">
+      <div class="project-command-card-head"><div><div class="project-command-card-title">Готовность проекта</div><div class="project-command-card-sub">Что мешает перейти к следующему этапу</div></div></div>
+      <div class="project-command-card-body"><div class="project-command-status-list">
+        <div class="project-command-status"><span>Услуги</span><b>${lines.length}</b></div>
+        <div class="project-command-status"><span>Выполнено</span><b class="${done === lines.length && lines.length ? 'ok' : ''}">${done} из ${lines.length}</b></div>
+        <div class="project-command-status"><span>Нужен замер</span><b class="${pendingMeasurements.length ? 'attention' : 'ok'}">${pendingMeasurements.length || 'нет'}</b></div>
+        <div class="project-command-status"><span>Не назначены</span><b class="${unplanned.length ? 'attention' : 'ok'}">${unplanned.length || 'нет'}</b></div>
+      </div><div class="project-command-card-actions"><button type="button" class="btn-ghost" onclick="projectCardOpenWorkspace('measurement')">Замер</button><button type="button" class="btn-ghost" onclick="projectCardOpenWorkspace('schedule')">План работ</button></div></div>
+    </section>
+  </aside>`;
 }
 
 /** Services for the crew: what, how much, who and when — no prices. */
@@ -26836,7 +27076,14 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
         </div>
         ${renderOrderCleanProgress(o)}
       </section>
-      ${renderProjectCardServices(o, { money: canSeeMoney, economics: canSeeInternalEconomics, manage: canManage })}
+      ${renderProjectCommandNav({ money: canSeeMoney, installer: isInstaller })}
+      <div class="project-command-grid">
+        <main class="project-command-main">
+          ${renderProjectCardServices(o, { money: canSeeMoney, economics: canSeeInternalEconomics, manage: canManage })}
+        </main>
+        ${renderProjectCommandSide(o, { money: canSeeMoney, economics: canSeeInternalEconomics, installer: isInstaller })}
+      </div>
+      <div class="project-workspaces-head"><div><h3>Все разделы проекта</h3><p>Подробные данные, документы и история открываются без ухода из карточки.</p></div></div>
       <div class="order-workspace-grid">
         ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'client', icon: '👤', title: 'Клиент и связь', summary: c?.name || 'Данные и все каналы связи', badge: c?.phone || c?.email ? 'контакт' : 'заполнить', body: clientBody, color: '#2563eb', soft: '#eff6ff' })}

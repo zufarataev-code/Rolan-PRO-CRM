@@ -35,3 +35,15 @@ test("order workspace dialog keeps the order context and a clear close action", 
   assert.match(html, /if\(event\.target===this\) closeModal\(\)/);
   assert.match(html, /@media \(max-width: 1000px\)[\s\S]*?order-workspace-grid[\s\S]*?grid-template-columns: 1fr/);
 });
+
+test("project command center opens the existing workspaces and stays role-safe", () => {
+  assert.match(html, /data-project-workspace-key="\$\{academyEsc\(safeKey\)\}"/);
+  assert.match(html, /function projectCardOpenWorkspace\(key\)[\s\S]*?\.order-workspace-tile/);
+  assert.match(html, /function renderProjectCommandNav/);
+  assert.match(html, /function renderProjectCommandSide/);
+  assert.match(html, /const financialCard = money && !installer \?/);
+  assert.match(html, /economics \? `<div class="project-command-metric"><span>Себестоимость/);
+  assert.match(html, /function projectCardVisits\(o\)/);
+  assert.match(html, /function renderProjectCardSchedule\(o, unplanned, plan\) \{\n  const visits = projectCardVisits\(o\);/);
+  assert.match(html, /@media \(max-width: 760px\)[\s\S]*?project-command-side \{ grid-template-columns: 1fr; \}/);
+});
