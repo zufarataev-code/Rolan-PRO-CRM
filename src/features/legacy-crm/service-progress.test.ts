@@ -134,7 +134,7 @@ test('marking my services leaves the others open and says so; a manager can reop
 test('the card shows progress once installation is scheduled; the specialist sees «Мои услуги»', () => {
   const { c } = load({ id: 'm1', role: 'manager' });
   const out = c.renderProjectCardServices(project(), { money: true, manage: true });
-  assert.match(out, /<th>Ход работ<\/th>/);
+  assert.match(out, />Ход работ<div/);
   assert.match(out, /projectSetServiceProgress\('o','offering:a1','in_progress'\)/);
   assert.doesNotMatch(c.renderProjectCardServices(project('proposal_accepted'), { money: true, manage: true }), /Ход работ/, 'before scheduling there is no progress');
   const field = load({ id: 'i2', role: 'installer' });

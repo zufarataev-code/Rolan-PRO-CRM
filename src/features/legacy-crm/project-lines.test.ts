@@ -155,9 +155,11 @@ test('the project card table shows money by role; the crew rows carry no prices'
 test('the project card shows its services inline; work documents open for any line', () => {
   const card = html.slice(html.indexOf('function renderOrderCleanDetails('), html.indexOf('function renderOrderCleanDetails(') + 40000);
   assert.doesNotMatch(card, /key: 'services', icon: '🧩'/, 'no separate tile: the services are on the card itself');
-  assert.match(card, /\$\{renderProjectCommandNav\(\{ money: canSeeMoney, installer: isInstaller \}\)\}/);
+  assert.match(card, /\$\{renderProjectCommandHeader\(o, c, primary/);
+  assert.match(card, /\$\{renderProjectCommandNav\(o, \{ money: canSeeMoney, installer: isInstaller \}\)\}/);
   assert.match(card, /class="project-command-grid"[\s\S]*?\$\{renderProjectCardServices\(o, \{ money: canSeeMoney, economics: canSeeInternalEconomics, manage: canManage \}\)\}[\s\S]*?\$\{renderProjectCommandSide\(o, \{ money: canSeeMoney, economics: canSeeInternalEconomics, installer: isInstaller \}\)\}/);
-  assert.match(card, /Все разделы проекта[\s\S]*?<div class="order-workspace-grid">/);
+  assert.match(card, /class="order-workspace-grid project-workspace-templates"/);
+  assert.doesNotMatch(card, /Следующий правильный шаг|Все разделы проекта/);
   assert.match(card, /const hasWorkScope = hasMeasurements \|\| lines\.length > 0;/);
 });
 
