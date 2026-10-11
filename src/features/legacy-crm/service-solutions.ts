@@ -419,16 +419,21 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       }
     }
     // A done service keeps its specialist and date while the project is still
-    // open: they are its history and its pay (Owner, 2026-10-10).
-    if (schedulesChanged) {
+    // open: they are its history and its pay (Owner, 2026-10-10). Compare the
+    // effective plan even for legacy projects without serviceSchedules, where
+    // projectPlans falls back to the aggregate installerIds/installationAt.
+    {
       const time = (plan?: Row) => { const at = Date.parse(String(plan?.installationAt ?? '')); return Number.isNaN(at) ? '' : new Date(at).toISOString(); };
       const crew = (plan?: Row) => (Array.isArray(plan?.installerIds) ? plan.installerIds.map(String).sort() : []).join('|');
       const oldPlans = projectPlans(oldOrder);
+      const newPlans = projectPlans(order);
       for (const id of serviceGroupIds(order)) {
         if (object(object(oldOrder.serviceProgress)[id]).status !== 'done' || object(object(order.serviceProgress)[id]).status !== 'done') continue;
         const before = oldPlans.find(plan => plan.id === id);
-        const after = rows(order.serviceSchedules).find(plan => plan.id === id);
-        if (before && (crew(before) !== crew(after) || time(before) !== time(after))) return 'Услуга выполнена: её исполнителя и дату не меняют. Сначала верните её в работу.';
+        const after = newPlans.find(plan => plan.id === id);
+        if (before && after && (crew(before) !== crew(after) || time(before) !== time(after))) {
+          return 'Услуга выполнена: её исполнителя и дату не меняют. Сначала верните её в работу.';
+        }
       }
     }
     // The progress of each service (Owner, 2026-10-10) is marked once
