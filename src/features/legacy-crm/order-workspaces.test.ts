@@ -13,7 +13,7 @@ test("order operations open in focused workspaces instead of inline accordions",
   assert.notEqual(end, -1);
   assert.match(html, /function renderOrderWorkspaceTile/);
   assert.match(html, /function openOrderWorkspaceFromTemplate/);
-  assert.match(cleanOrder, /class="order-workspace-grid"/);
+  assert.match(cleanOrder, /class="order-workspace-grid project-workspace-templates"/);
   assert.doesNotMatch(cleanOrder, /renderOrderCleanCard\(/);
 
   for (const title of [

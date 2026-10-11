@@ -91,16 +91,18 @@ function project(status = 'measurement_done'): Row {
 test('while priced, the card shows services with quantity and price only; a per-sq-ft service waits for the measurement', () => {
   const { c } = load();
   const out = c.renderProjectCardServices(project(), { money: true, economics: true, manage: true });
-  assert.doesNotMatch(out, /<th>Исполнитель<\/th>|<th>Дата<\/th>/, 'no specialist or date before the proposal is accepted');
-  assert.match(out, /Исполнители появятся, когда клиент примет КП/);
-  assert.match(out, /onchange="projectCardSetQty\('o','z',this\.value\)"/, 'the quantity is edited in the row');
+  assert.doesNotMatch(out, /projectCardToggleCrew|type="datetime-local"/, 'no specialist or date before the proposal is accepted');
+  assert.match(out, /Каждая услуга имеет собственный материал, объём, цену, дату и исполнителя/);
+  c.state.projectCardSelection = { o: 'line:z' };
+  const zone = c.renderProjectCardServices(project(), { money: true, economics: true, manage: true });
+  assert.match(zone, /onchange="projectCardSetQty\('o','z',this\.value\)"/, 'the selected quantity is edited in its service panel');
   assert.match(out, /onchange="projectCardSetPrice\('o','offering:a1',this\.value\)"/, 'the per-sq-ft price of the windows is edited in the row');
   assert.match(out, /от \$12\.00 до \$20\.00/);
-  assert.doesNotMatch(out, /projectCardSetPrice\('o','line:z'/, 'a price without a manager range follows the directory');
+  assert.doesNotMatch(zone, /projectCardSetPrice\('o','line:z'/, 'a price without a manager range follows the directory');
   assert.match(out, /data-project-pending="a3"[\s\S]*ждёт замера[\s\S]*projectCardRemovePending\('o','a3'\)/);
   assert.match(out, /onchange="if \(this\.value\) projectCardAddService\('o', this\.value\)"/);
-  assert.match(out, /клиенту \$720\.00/);
-  assert.match(out, /материал \$0\.00<\/span><span class="text-gray-500">специалистам \$280\.00/);
+  assert.match(out, /Клиенту \$720\.00/);
+  assert.match(out, /Материал \$0\.00 · работа \$280\.00/);
   // The incoming request cannot be removed from its own project.
   const own = project();
   own.measurements.rooms[0].windows = [];
@@ -112,12 +114,11 @@ test('in production each row gets its specialist and date; the schedule is built
   const o = project('proposal_accepted');
   o.serviceSchedules = [{ id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] }];
   const out = c.renderProjectCardServices(o, { money: true, economics: false, manage: true });
-  assert.match(out, /<th>Исполнитель<\/th><th>Дата<\/th>/);
+  assert.match(out, /<label>Исполнитель/);
   assert.match(out, /projectCardToggleCrew\('o','offering:a1','i1',this\.checked\)/);
-  assert.match(out, /type="datetime-local" class="" style="min-width:180px" value="2026-10-14T16:00" aria-label="Дата: A1 8 mil" onchange="projectCardSetDate\('o','offering:a1',this\.value\)"/);
+  assert.match(out, /type="datetime-local" class="" value="2026-10-14T16:00" onchange="projectCardSetDate\('o','offering:a1',this\.value\)"/);
   assert.match(out, /<b>2026-10-14T16:00<\/b> · Алан<\/span><span class="text-sm text-gray-600">A1 8 mil — 30 sq ft/);
   assert.match(out, /Не назначено: Силикон, Подключение зоны/);
-  assert.match(out, /Это черновик: клиент и бригада увидят его после «Подтвердить монтаж»/);
   assert.match(out, /<card Подтвердить монтаж \| сначала внесите замер всех услуг \| projectCardConfirmInstallation\('o'\)>/, 'a service waiting for its measurement blocks the confirmation');
   const measured = structuredClone(o);
   measured.offeringIds = ['a1', 'zone'];
@@ -244,7 +245,7 @@ test('a finished project shows its plan read-only; after «Монтаж назн
   closed.serviceSchedules = [{ id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] }];
   c.db.orders.push(closed);
   const out = c.renderProjectCardServices(closed, { money: true, manage: true });
-  assert.match(out, /<th>Исполнитель<\/th><th>Дата<\/th>/);
+  assert.match(out, /Алан/);
   assert.doesNotMatch(out, /projectCardToggleCrew|projectCardSetDate|Подтвердить монтаж/);
   c.projectCardToggleCrew('done', 'offering:a1', 'i2', true);
   c.projectCardSetDate('done', 'offering:a1', '');
