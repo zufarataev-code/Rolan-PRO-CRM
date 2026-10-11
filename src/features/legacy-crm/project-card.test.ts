@@ -308,8 +308,8 @@ test('every way into installation needs each service planned; an older project k
   // A project without services is not blocked.
   assert.equal(c.ensureProjectServicesPlanned({ id: 'empty', status: 'proposal_accepted', measurements: { rooms: [] }, extraServices: [] }), true);
   // changeStatus publishes a complete row plan before the older checks that read the project crew and date.
-  const changeStatusSource = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 4000);
-  const fn = changeStatusSource.slice(0, changeStatusSource.indexOf('\n}\n') + 2);
+  const changeStatusSource = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('\n}\n', html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {')) + 2);
+  const fn = changeStatusSource;
   vm.runInContext(fn, c);
   let productionReady = false;
   Object.assign(c, {
@@ -490,7 +490,7 @@ test('server: a project planned as a whole counts as planned; its first per-serv
 });
 
 test('every way into installation refreshes the film purchase deadline; a historical close writes its per-service plan', () => {
-  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 2400);
+  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('\n}\n', html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {')) + 2);
   assert.match(status, /o\.status = newStatus;\n  if \(entersInstallation\) refreshManualFilmNeededBy\(o\);/);
   const close = html.slice(html.indexOf('function closeQuickProjectAsCompleted('), html.indexOf('function closeQuickProjectAsCompleted(') + 4000);
   assert.match(close, /if \(!o\.serviceSchedules\?\.length\) o\.serviceSchedules = projectPlannedSchedules\(o\);\n  o\.status = 'completed';/);

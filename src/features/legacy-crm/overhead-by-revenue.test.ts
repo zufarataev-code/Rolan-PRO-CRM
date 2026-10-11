@@ -12,10 +12,10 @@ function slice(startMarker: string, endMarker: string) {
   return html.slice(start, end);
 }
 
-type Order = { id: string; revenue: number; date: string; margin?: number };
+type Order = { id: string; revenue: number; date: string; margin?: number; status?: string };
 
 function load(orders: Order[], fixedPool = 10120) {
-  const db = { orders, settings: { pricingDefaults: { marketingPct: 10 } } };
+  const db = { orders: orders.map(o => { o.status = o.status || 'completed'; return o; }), settings: { pricingDefaults: { marketingPct: 10 } } };
   const context = vm.createContext({
     db,
     queueMicrotask,
