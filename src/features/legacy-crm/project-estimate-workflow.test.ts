@@ -139,8 +139,14 @@ test("accepted proposal must pass production preparation before installation wit
   assert.match(source, /недостаточно материала/);
   assert.match(nextAction, /title: 'Подготовить производство'/);
   // Only film to cut needs preparing; then the crew is planned in the card's service rows and confirmed there.
-  assert.match(nextAction, /o\.status === 'proposal_accepted' && !o\.productionReadyAt && measureAllWindows\(o\)\.length\) return \{ icon: '🏭', title: 'Подготовить производство'/);
-  assert.match(source, /if \(requireReady && !o\?\.productionReadyAt && measureAllWindows\(o\)\.length\) issues\.push\('подготовка производства не подтверждена'\)/);
+  assert.match(source, /function projectProductionPrepared\(o\) \{\n  return !!o\?\.productionReadyAt \|\| !measureAllWindows\(o\)\.length;\n\}/);
+  assert.match(nextAction, /o\.status === 'proposal_accepted' && !projectProductionPrepared\(o\)\) return \{ icon: '🏭', title: 'Подготовить производство'/);
+  assert.match(source, /if \(requireReady && !projectProductionPrepared\(o\)\) issues\.push\('подготовка производства не подтверждена'\)/);
+  // Every entry to installation reads the same rule: the schedule section, the stage bar, the dashboard and the readiness flags.
+  assert.doesNotMatch(source, /disabled: !canManage \|\| !o\.productionReadyAt/);
+  assert.match(source, /if \(o\.status === 'proposal_accepted' && !projectProductionPrepared\(o\)\) activeStep = 4;/);
+  assert.match(source, /next: projectProductionPrepared\(o\) \? 'Назначить монтаж' : 'Подготовить производство'/);
+  assert.match(source, /production: projectProductionPrepared\(o\),/);
   assert.match(nextAction, /title: 'Назначить исполнителей'/);
   assert.match(nextAction, /title: 'Подтвердить монтаж'[\s\S]*?onclick: `projectCardConfirmInstallation\('\$\{o\.id\}'\)`/);
   assert.match(source, /function confirmProjectProductionReady\(oid\)/);
