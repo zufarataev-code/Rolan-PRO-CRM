@@ -631,7 +631,8 @@ test('a done service keeps its specialist and date while the project is open; ta
   assert.equal(prepareServiceSolutions(saved, open, false), null, 'a service not done yet still changes');
   const reopened = structuredClone(swap);
   reopened.orders[0].serviceProgress = { 'line:z': { status: 'in_progress' } };
-  assert.equal(prepareServiceSolutions(saved, reopened, true), null, 'back in work, it changes');
+  reopened.orders[0].timeline = [{ at: '2026-10-16T10:00:00.000Z', key: 'service_reopened', serviceId: 'line:z', by: 'm1' }];
+  assert.equal(prepareServiceSolutions(saved, reopened, true), null, 'explicitly reopened, it changes');
 });
 
 test('the CRM does not remove a done service from an open project; reopened, it can', () => {
