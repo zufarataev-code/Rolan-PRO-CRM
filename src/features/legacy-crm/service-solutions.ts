@@ -422,13 +422,23 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     // open: they are its history and its pay (Owner, 2026-10-10). Compare the
     // effective plan even for legacy projects without serviceSchedules, where
     // projectPlans falls back to the aggregate installerIds/installationAt.
+    // Clearing/changing serviceProgress is not enough to bypass the freeze:
+    // only an explicit reopen event recorded after the saved completion may.
     {
       const time = (plan?: Row) => { const at = Date.parse(String(plan?.installationAt ?? '')); return Number.isNaN(at) ? '' : new Date(at).toISOString(); };
       const crew = (plan?: Row) => (Array.isArray(plan?.installerIds) ? plan.installerIds.map(String).sort() : []).join('|');
       const oldPlans = projectPlans(oldOrder);
       const newPlans = projectPlans(order);
+      const oldProgress = object(oldOrder.serviceProgress);
+      const newProgress = object(order.serviceProgress);
+      const explicitlyReopened = (id: string) => {
+        if (object(oldProgress[id]).status !== 'done' || object(newProgress[id]).status === 'done') return false;
+        const doneAt = String(object(oldProgress[id]).doneAt || '');
+        return rows(order.timeline).some(event =>
+          event.key === 'service_reopened' && event.serviceId === id && String(event.at || '') > doneAt);
+      };
       for (const id of serviceGroupIds(order)) {
-        if (object(object(oldOrder.serviceProgress)[id]).status !== 'done' || object(object(order.serviceProgress)[id]).status !== 'done') continue;
+        if (object(oldProgress[id]).status !== 'done' || explicitlyReopened(id)) continue;
         const before = oldPlans.find(plan => plan.id === id);
         const after = newPlans.find(plan => plan.id === id);
         if (before && after && (crew(before) !== crew(after) || time(before) !== time(after))) {
