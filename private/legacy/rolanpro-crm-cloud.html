@@ -17438,8 +17438,10 @@ function projectServicesNextAction(o) {
   if (!orderUserCanSeeMoney(o, currentUser())) return null;
   if (!projectHasServices(o)) return { icon: '🧩', title: 'Добавить услуги проекта', sub: 'Что делаем у клиента — от услуг зависит, нужен ли замер и что войдёт в КП.', variant: 'primary', onclick: `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})` };
   if (!projectMeasurementSettled(o)) {
-    // A measurement already booked keeps its own step (the measurer's work).
+    // A measurement already booked keeps its own step (the measurer's work);
+    // a finished one is completed in the measurement editor, not booked again.
     if (o.status === 'measurement_scheduled') return null;
+    if (o.status === 'measurement_done') return { icon: '📏', title: 'Дополнить замер', sub: `Замер не закончен: ${orderMeasurementCompletionIssues(o).slice(0, 3).join(', ')}.`, variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
     return { icon: '📐', title: 'Назначить замер', sub: 'Услугам за sq ft нужны размеры окон. Выберите замерщика и время выезда — или внесите размеры сами в «Замер».', variant: 'primary', onclick: `scheduleMeasurementPrompt('${o.id}')` };
   }
   if (!projectEstimateIsApproved(o)) return { icon: '✅', title: 'Расчёт готов → КП', sub: orderNeedsMeasurements(o) ? 'Размеры внесены. Проверьте количество и цены в «Услугах проекта» — и сформируйте КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цены — и сформируйте КП.', variant: 'primary', onclick: `approveProjectEstimateAndOpenProposal('${o.id}')` };

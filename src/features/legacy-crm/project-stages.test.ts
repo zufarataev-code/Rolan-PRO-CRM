@@ -63,6 +63,9 @@ test('the next step follows the services: add them, measure what needs sizes, th
   assert.equal(c.projectServicesNextAction(unmeasured).onclick, "scheduleMeasurementPrompt('o')");
   // …and a measurement already booked keeps its own step.
   assert.equal(c.projectServicesNextAction({ ...unmeasured, status: 'measurement_scheduled' }), null);
+  // …and a finished measurement that misses something is completed, not booked again.
+  const unfinished = c.projectServicesNextAction({ ...unmeasured, status: 'measurement_done' });
+  assert.deepEqual([unfinished.title, unfinished.onclick], ['Дополнить замер', "openManagerMeasureModal('o')"]);
   // The incoming request alone is not work: after its last line was deleted the project asks for services again.
   assert.equal(c.projectServicesNextAction({ id: 'o', status: 'new', offeringId: 'zone', offeringIds: ['zone'], lines: [] }).title, 'Добавить услуги проекта');
   // After the proposal the usual steps apply.
