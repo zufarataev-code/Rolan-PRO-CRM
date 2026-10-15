@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {PrismaClient} from '@prisma/client';
+import {randomUUID} from 'node:crypto';
+import {hashPassword} from '../src/lib/auth/password';
 import {assertServerUsesTestDatabase} from './guard';
 async function main() {
   const prisma=new PrismaClient();
@@ -9,14 +11,16 @@ async function main() {
   await assertServerUsesTestDatabase(base,prisma);
   const {chromium}=createRequire(process.cwd()+'/package.json')(process.env.E2E_PLAYWRIGHT_MODULE || 'playwright');
   const original=await prisma.legacyWorkspace.findUnique({where:{workspace_id:'primary'}});
+  const owner=await prisma.user.findFirstOrThrow({where:{is_active:true,user_accesses:{some:{role:{code:'owner'}}}}});
   let browser:any;
   try {
-    await prisma.user.updateMany({where:{email:'owner@rolanpro.local'},data:{must_change_password:false}});
+    const testPassword=randomUUID();
+    await prisma.user.update({where:{user_id:owner.user_id},data:{must_change_password:false,password_hash:hashPassword(testPassword)}});
     browser=await chromium.launch({headless:true});
     await mkdir('test-results/service-solutions',{recursive:true});
     for(const width of [390,1440]) {
       const context=await browser.newContext({viewport:{width,height:900},timezoneId:'America/Los_Angeles'});
-      const login=await context.request.post(base+'/api/v1/auth/login',{data:{email:'owner@rolanpro.local',password:process.env.E2E_SEED_PASSWORD || 'ChangeMe123!'}});
+      const login=await context.request.post(base+'/api/v1/auth/login',{data:{email:owner.email,password:testPassword}});
       assert.equal(login.status(),200);
       // Production builds issue Secure cookies; this disposable CI server is HTTP.
       // Keep the real login/session, relaxing transport only in this test context.
@@ -32,7 +36,7 @@ async function main() {
       state=(await response.json()).data;
       const installers=state.payload.users.filter((u:any)=>u.role==='installer');
       assert.ok(installers.length);
-      const order={id:'e2e-solutions',serviceType:'solar_film',serviceSchedules:[],installerIds:[],measurements:{rooms:[{id:'room',windows:[{id:'w1',measureScope:'solar_film',offeringId:'solution-a',offeringName:'Solar One',catalogId:'film-a',width:254,height:254,qty:1,pricePerSqft:12},{id:'w2',measureScope:'solar_film',offeringId:'solution-b',offeringName:'Solar Two',catalogId:'film-a',width:254,height:254,qty:1,pricePerSqft:20}]}]},extraServices:[]};
+      const order={id:'e2e-solutions',number:'QA-ERP',status:'proposal_accepted',serviceType:'solar_film',serviceSchedules:[],installerIds:[],measurements:{rooms:[{id:'room',windows:[{id:'w1',measureScope:'solar_film',offeringId:'solution-a',offeringName:'Solar One',catalogId:'film-a',width:254,height:254,qty:1,pricePerSqft:12},{id:'w2',measureScope:'solar_film',offeringId:'solution-b',offeringName:'Solar Two',catalogId:'film-a',width:254,height:254,qty:1,pricePerSqft:20}]}]},extraServices:[]};
       state.payload.settings.catalog=[...(state.payload.settings.catalog||[]).filter((f:any)=>f.id!=='film-a'),{id:'film-a',category:'solar',brand:'QA',model:'Model'}];
       state.payload.settings.serviceOfferings=[{id:'solution-a',name:'Solar One',direction:'solar',pricePerSqft:12,installerRatePerSqft:3,filmIds:['film-a'],active:true},{id:'solution-b',name:'Solar Two',direction:'solar',pricePerSqft:20,installerRatePerSqft:4,filmIds:['film-a'],active:true}];
       state.payload.orders=state.payload.orders.filter((o:any)=>o.id!==order.id).concat(order);
@@ -81,6 +85,36 @@ async function main() {
       const persisted=await context.request.put(base+'/api/v1/legacy-crm/state',{data:latest}); assert.equal(persisted.status(),200,await persisted.text());
       const reloaded=(await (await context.request.get(base+'/api/v1/legacy-crm/state')).json()).data;
       assert.deepEqual(reloaded.payload.orders.find((o:any)=>o.id===order.id).serviceSchedules,schedules);
+      // Multi-stage production uses the same real Project card and state API.
+      await page.goto(base+'/legacy-crm#/order/'+order.id,{waitUntil:'networkidle'});
+      await page.locator('[data-project-line="offering:solution-a"] .project-service-arrow').click();
+      await page.getByRole('button',{name:'+ Добавить этап',exact:true}).click();
+      let stage=page.locator('[data-stage-id]').first();
+      await stage.locator('input[type=datetime-local]').nth(1).fill('2026-10-10T17:00');
+      await page.getByRole('button',{name:'+ Добавить этап',exact:true}).click();
+      assert.equal(await page.locator('[data-stage-id]').count(),2);
+      stage=page.locator('[data-stage-id]').last();
+      await stage.locator('input[type=datetime-local]').nth(0).fill('2026-10-17T09:00');
+      await stage.locator('input[type=datetime-local]').nth(1).fill('2026-10-17T17:00');
+      await stage.getByRole('button',{name:'+ Подрядчик',exact:true}).click();
+      await stage.locator('label').filter({hasText:'Подрядчик'}).locator('input').fill('QA Electrical LLC');
+      await stage.locator('label').filter({hasText:'Стоимость, $'}).locator('input').fill('200');
+      await stage.locator('input[type=number]').first().fill('40');
+      await stage.locator('input[type=number]').first().press('Tab');
+      assert.equal(await page.evaluate(()=> (window as any).cloudPersistConfirmed()),true);
+      const staged=(await (await context.request.get(base+'/api/v1/legacy-crm/state')).json()).data;
+      const project=staged.payload.orders.find((o:any)=>o.id===order.id);
+      assert.equal(project.productionStages.length,2);
+      assert.deepEqual(project.productionStages.map((s:any)=>s.laborSharePct),[60,40]);
+      assert.equal(project.extraExpenses.filter((e:any)=>e.stageDerived).length,1);
+      assert.equal(project.extraExpenses.find((e:any)=>e.stageDerived).amount,200);
+      assert.equal(project.productionStages[1].contractors[0].name,'QA Electrical LLC');
+      const stageDims=await page.locator('[data-production-stages]').evaluate((el:HTMLElement)=>({client:el.clientWidth,scroll:el.scrollWidth}));
+      assert.ok(stageDims.scroll<=stageDims.client+1,JSON.stringify(stageDims));
+      await page.screenshot({path:`test-results/service-solutions/stages-${width}.png`,fullPage:true});
+      await page.reload({waitUntil:'networkidle'});
+      await page.locator('[data-project-line="offering:solution-a"] .project-service-arrow').click();
+      assert.equal(await page.locator('[data-stage-id]').count(),2,'stages persist after reloading the authenticated workspace');
       assert.deepEqual(errors,[]);
       await context.close();console.log(`Solution scheduling components and persisted API: ${width}px passed`);
     }
@@ -91,6 +125,7 @@ async function main() {
     throw error;
   } finally {
     await browser?.close();
+    await prisma.user.update({where:{user_id:owner.user_id},data:{password_hash:owner.password_hash,must_change_password:owner.must_change_password}});
     if(original) await prisma.legacyWorkspace.update({where:{workspace_id:'primary'},data:{payload:original.payload as any,revision:original.revision}});
     else await prisma.legacyWorkspace.deleteMany({where:{workspace_id:'primary'}});
     await prisma.$disconnect();

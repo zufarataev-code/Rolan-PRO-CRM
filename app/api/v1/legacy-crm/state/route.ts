@@ -22,7 +22,10 @@ import {
   findIntroducedClientIdentityDuplicate,
 } from "@/features/sales/client-identity";
 
-import { prepareServiceSolutions, serviceSolutionsForViewer } from "@/features/legacy-crm/service-solutions";
+import { prepareServiceSolutions, serviceSolutionsForViewer, projectServicesFinished } from "@/features/legacy-crm/service-solutions";
+import { validateProjectDirectExpenses } from "@/features/legacy-crm/project-direct-expenses";
+import { prepareProductionStages } from "@/features/legacy-crm/production-stages";
+import { prepareServiceScopeApprovals } from "@/features/legacy-crm/service-scope-approvals";
 
 const WORKSPACE_ID = "primary";
 
@@ -180,12 +183,37 @@ export async function PUT(request: NextRequest) {
     await loadDirectoryMembers((mergedPayload as { users?: unknown }).users ?? []),
   ) as typeof mergedPayload;
 
+  const scopeError = prepareServiceScopeApprovals(currentWorkspace.payload as Record<string, unknown>,nextPayload as Record<string, unknown>,
+    auth.session.roles.includes(ROLE_CODES.OWNER),auth.session.roles.includes(ROLE_CODES.MANAGER) ? auth.session.user.legacy_user_ids : [],auth.session.user.user_id);
+  if(scopeError) return apiError(400,"invalid_service_approval",scopeError);
+  const stageError = prepareProductionStages(currentWorkspace.payload as Record<string, unknown>,
+    nextPayload as Record<string, unknown>, auth.session.roles.includes(ROLE_CODES.OWNER),
+    auth.session.roles.includes(ROLE_CODES.MANAGER) ? auth.session.user.legacy_user_ids : [], !isPrivileged, auth.session.user.user_id);
+  if (stageError) return apiError(400, "invalid_production_stage", stageError);
+
   const solutionError = prepareServiceSolutions(
     currentWorkspace.payload as Record<string, unknown>,
     nextPayload as Record<string, unknown>,
     auth.session.roles.includes(ROLE_CODES.OWNER),
   );
   if (solutionError) return apiError(400, "invalid_service_solution", solutionError);
+  for (const order of (nextPayload as Record<string, any>).orders || []) if (Array.isArray(order.productionStages) && order.productionStages.length) {
+    if (projectServicesFinished(order, nextPayload as Record<string, any>)) {
+      order.status = 'installation_done';
+      order.installationDoneAt = Object.values(order.serviceProgress || {}).map((entry: any) => entry.doneAt).filter(Boolean).sort().at(-1);
+      order.servicesClosedNotice = 'pending';
+      order.timeline ||= [];
+      order.timeline.push({ at: order.installationDoneAt, key: 'installation_done', by: auth.session.user.user_id, note: 'Все этапы и услуги выполнены', source: 'services' });
+    } else if (['installation_scheduled','installation_accepted','installation_en_route'].includes(order.status)
+      && order.productionStages.some((stage: Record<string, any>) => ['in_progress','done'].includes(stage.status))) order.status = 'installation_in_progress';
+  }
+
+  const expenseError = validateProjectDirectExpenses(
+    currentWorkspace.payload as Record<string, unknown>, nextPayload as Record<string, unknown>,
+    auth.session.roles.includes(ROLE_CODES.OWNER),
+    auth.session.roles.includes(ROLE_CODES.MANAGER) ? auth.session.user.legacy_user_ids : [],
+  );
+  if (expenseError) return apiError(400, "invalid_project_expense", expenseError);
 
   const introducedDuplicate = findIntroducedClientIdentityDuplicate(
     workspaceClients(currentWorkspace.payload),
@@ -222,5 +250,11 @@ export async function PUT(request: NextRequest) {
     select: { revision: true, updated_at: true },
   });
 
-  return apiSuccess(workspace);
+  const stagePayload = serviceSolutionsForViewer(isPrivileged ? nextPayload as Record<string, any>
+    : createFieldWorkspace(nextPayload as Record<string, unknown>, auth.session.roles, auth.session.user.legacy_user_ids) as Record<string, any>,
+    auth.session.roles.includes(ROLE_CODES.OWNER)) as Record<string, any>;
+  return apiSuccess({ ...workspace, production_stage_updates: (stagePayload.orders || [])
+    .filter((order: Record<string, any>) => Array.isArray(order.serviceScopeApprovals) || Array.isArray(order.productionStages))
+    .map((order: Record<string, any>) => ({ id: order.id, productionStages: order.productionStages || [], serviceScopeApprovals: order.serviceScopeApprovals, status: order.status, installationDoneAt: order.installationDoneAt,
+      stageExpenses: (order.extraExpenses || []).filter((expense: Record<string, any>) => expense.stageDerived === true) })) });
 }

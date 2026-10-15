@@ -138,7 +138,7 @@ test('paying one week then the month allocates only the remaining accruals', () 
   ];
   const db = { orders, payrollPayments: [] as Array<{ amount: number; allocations: Array<{ amount: number }> }> };
   const c = load(['payrollPeriodAllocatedAmount', 'payrollPaidForPeriod', 'payrollSalaryAccruals', 'calcUserPayoutForPeriod', 'markPayoutPaid'], {
-    db, getUser: () => ({ id: 'i', name: 'Installer', role: 'installer', payConfig: { type: 'per_sqft' } }),
+    db, projectStages: () => [], getUser: () => ({ id: 'i', name: 'Installer', role: 'installer', payConfig: { type: 'per_sqft' } }),
     getOrder: (id: string) => orders.find(x => x.id === id), financeDate: (x: string) => new Date(x),
     orderInstallerPayoutForUser: (o: { amount: number }) => o.amount,
     orderActualAreaSqft: () => 100, fmtMoney: String, uid: () => String(db.payrollPayments.length),
@@ -174,7 +174,7 @@ test('failed material issue cannot complete the project or send completion notif
   const order = { id: 'o', status: 'installation_in_progress' };
   let notified = false;
   const c = load(['changeStatus'], {
-    getOrder: () => order, currentUser: () => ({ role: 'owner' }), PROJECT_SCHEDULED_STATUSES: ['installation_in_progress'], CLOSED_PROJECT_STATUSES: ['installation_done', 'completed'],
+    projectStages: () => [], getOrder: () => order, currentUser: () => ({ role: 'owner' }), PROJECT_SCHEDULED_STATUSES: ['installation_in_progress'], CLOSED_PROJECT_STATUSES: ['installation_done', 'completed'],
     projectPlanSnapshot: () => () => {}, ensureProjectServicesPlanned: () => true,
     ensureOrderWorkflowTransition: () => true, ensureVerifiedMeasurementsForStatus: () => true,
     autoDeductInventoryForOrder: () => ({ ok: false, shortages: [{ warning: 'shortage' }] }),
@@ -189,7 +189,7 @@ test('failed material issue cannot complete the project or send completion notif
 test('an installer can report completion without access to the private warehouse payload', () => {
   const order = { id: 'o', status: 'installation_in_progress' };
   const c = load(['changeStatus'], {
-    getOrder: () => order, currentUser: () => ({ role: 'installer' }),
+    projectStages: () => [], getOrder: () => order, currentUser: () => ({ role: 'installer' }),
     PROJECT_SCHEDULED_STATUSES: ['installation_in_progress'], CLOSED_PROJECT_STATUSES: ['installation_done'],
     projectPlanSnapshot: () => () => {}, ensureProjectServicesPlanned: () => true,
     ensureOrderWorkflowTransition: () => true, ensureVerifiedMeasurementsForStatus: () => true,

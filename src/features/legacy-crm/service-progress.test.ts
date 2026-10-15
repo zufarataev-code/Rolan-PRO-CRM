@@ -171,7 +171,7 @@ test('closing an installation by hand finishes the open services; deleted servic
   const o = project('installation_in_progress');
   c.projectFinishOpenServices(o, 'm1');
   assert.deepEqual(plain(Object.values(o.serviceProgress).map((entry: any) => entry.status)), ['done', 'done']);
-  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 3000);
+  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 4500);
   assert.match(status, /\} else projectFinishOpenServices\(o, by \|\| state\.currentUserId\);\n  \}\n  o\.status = newStatus;/);
   o.extraServices = [];
   c.projectPrunePlans(o);

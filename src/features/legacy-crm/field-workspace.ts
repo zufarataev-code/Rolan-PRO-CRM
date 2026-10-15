@@ -1,10 +1,11 @@
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { projectServicesFinished, projectServicesStarted, serviceGroupIds, serviceGroupName, serviceGroupScope } from "@/features/legacy-crm/service-solutions";
+import { mergeFieldProductionStages } from "@/features/legacy-crm/production-stages";
 
 type JsonObject = Record<string, unknown>;
 
 const FIELD_ROLE_NAMES = new Set(["measurer", "installer"]);
-const FINANCIAL_KEY = /(?:price|retail|wholesale|cost|margin|profit|revenue|lifetimevalue|paid|payment|deposit|debt|invoice|commission|discount|tax|subtotal|saleamount|refund|overhead|targetprofit|payout|ratepersqft|amount)/i;
+const FINANCIAL_KEY = /(?:price|retail|wholesale|cost|margin|profit|revenue|lifetimevalue|paid|payment|deposit|debt|invoice|commission|discount|tax|subtotal|saleamount|refund|overhead|targetprofit|payout|payroll|laborShare|ratepersqft|amount)/i;
 const FINANCIAL_TIMELINE_KEYS = new Set([
   "deposit_received",
   "payment_received",
@@ -43,6 +44,7 @@ const MUTABLE_ORDER_FIELDS = new Set([
   "issues",
   "signature",
   "serviceProgress",
+  "productionStages",
   "updatedAt",
 ]);
 
@@ -337,7 +339,18 @@ export function createFieldWorkspace(
     _allowedLegacyUserIds: [...identityIds],
     users,
     clients,
-    orders: assignedOrders.map((order) => redactFinancialData(clone(order))),
+    orders: assignedOrders.map((order) => {
+      const safe = redactFinancialData(clone(order)) as JsonObject;
+      if (roles.includes(ROLE_CODES.INSTALLER) && Array.isArray(safe.productionStages)) {
+        safe.productionStages = safe.productionStages.filter(isObject).map(stage => {
+          const saved = (Array.isArray(order.productionStages) ? order.productionStages : []).filter(isObject).find(value => value.id === stage.id);
+          const ownEarnings = (Array.isArray(saved?.payroll) ? saved.payroll : []).filter(isObject)
+            .filter(row => identityIds.has(String(row.userId))).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+          return { ...stage, ownEarnings };
+        });
+      }
+      return safe;
+    }),
     notifications: (Array.isArray(payload.notifications) ? payload.notifications : [])
       .filter(isObject)
       .filter(linkedRecord)
@@ -437,6 +450,10 @@ export function mergeFieldWorkspace(
     const serviceEvents: JsonObject[] = [];
     for (const key of MUTABLE_ORDER_FIELDS) {
       if (!(key in submitted)) continue;
+      if (key === "productionStages") {
+        next.productionStages = mergeFieldProductionStages(currentOrder, submitted.productionStages, identityIds);
+        continue;
+      }
       if (key === "status") {
         const status = String(submitted.status || "");
         if (allowedStatuses.has(status)) next.status = status;

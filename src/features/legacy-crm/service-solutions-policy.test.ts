@@ -19,7 +19,7 @@ test('server owns the saved pay basis; unknown materials and directions are reje
   assert.match(prepareServiceSolutions(current,next,false)!,/Плёнка/);
 });
 test('old saved rate survives later changes to the solution; assignments validate crew and date',()=>{
-  const old:any=structuredClone(current); old.orders[0].extraServices=[{id:'line',serviceType:'solar_film',offeringId:'solution',catalogId:'film',offeringInstallerRate:2}];
+  const old:any=structuredClone(current); old.orders[0].status='proposal_accepted'; old.orders[0].extraServices=[{id:'line',serviceType:'solar_film',offeringId:'solution',catalogId:'film',offeringInstallerRate:2}];
   const next:any=serviceSolutionsForViewer(old,false);
   assert.equal(prepareServiceSolutions(old,next,false),null); assert.equal(next.orders[0].extraServices[0].offeringInstallerRate,2);
   next.orders[0].serviceSchedules=[{id:'line:line',installationAt:'invalid',installerIds:['installer']}];
