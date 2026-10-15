@@ -89,11 +89,15 @@ async function main() {
       await page.locator('#solution-ui-test').evaluate((element:HTMLElement)=>element.remove());
       // Multi-stage production uses the same real Project card and state API.
       await page.goto(base+'/legacy-crm#/order/'+order.id,{waitUntil:'networkidle'});
+      // The API above changed the workspace outside this page; load that revision.
+      await page.reload({waitUntil:'networkidle'});
       await page.locator('[data-project-line="offering:solution-a"] .project-service-arrow').click();
       await page.getByRole('button',{name:'+ Добавить этап',exact:true}).click();
+      await page.waitForFunction(()=>document.querySelectorAll('[data-stage-id]').length===1);
       let stage=page.locator('[data-stage-id]').first();
       await stage.locator('input[type=datetime-local]').nth(1).fill('2026-10-10T17:00');
       await page.getByRole('button',{name:'+ Добавить этап',exact:true}).click();
+      await page.waitForFunction(()=>document.querySelectorAll('[data-stage-id]').length===2);
       assert.equal(await page.locator('[data-stage-id]').count(),2);
       stage=page.locator('[data-stage-id]').last();
       await stage.locator('input[type=datetime-local]').nth(0).fill('2026-10-17T09:00');
