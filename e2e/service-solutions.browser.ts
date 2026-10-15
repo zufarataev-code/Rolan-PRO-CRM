@@ -4,6 +4,7 @@ import {createRequire} from 'node:module';
 import {PrismaClient} from '@prisma/client';
 import {randomUUID} from 'node:crypto';
 import {hashPassword} from '../src/lib/auth/password';
+import {ROLE_CODES} from '../src/lib/auth/constants';
 import {assertServerUsesTestDatabase} from './guard';
 async function main() {
   const prisma=new PrismaClient();
@@ -11,7 +12,7 @@ async function main() {
   await assertServerUsesTestDatabase(base,prisma);
   const {chromium}=createRequire(process.cwd()+'/package.json')(process.env.E2E_PLAYWRIGHT_MODULE || 'playwright');
   const original=await prisma.legacyWorkspace.findUnique({where:{workspace_id:'primary'}});
-  const owner=await prisma.user.findFirstOrThrow({where:{is_active:true,user_accesses:{some:{role:{code:'owner'}}}}});
+  const owner=await prisma.user.findFirstOrThrow({where:{is_active:true,user_accesses:{some:{role:{code:ROLE_CODES.OWNER}}}}});
   let browser:any;
   try {
     const testPassword=randomUUID();

@@ -1,4 +1,4 @@
-import { canonicalFilmCategory, serviceGroupIds, serviceGroupScope } from './service-solutions';
+import { canonicalFilmCategory, serviceGroupIds, serviceGroupScope, projectServicesFinished } from './service-solutions';
 import { serviceScopeApproved } from './service-scope-approvals';
 import { createHash } from 'node:crypto';
 
@@ -9,6 +9,19 @@ const stable = (value: unknown) => JSON.stringify(value, (_key, item) => item &&
 const active = ['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'];
 const closed = ['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'];
 const money = (value: number) => Math.round(value * 100) / 100;
+
+/** Settle an active installation once; later payment/closure states retain their history. */
+export function settleProductionProject(before: Row, order: Row, payload: Row, actor: string): void {
+  if (!productionStages(order).length || !active.includes(String(before.status))) return;
+  if (projectServicesFinished({ ...order, status: before.status }, payload) && [...active, 'installation_done'].includes(String(order.status))) {
+    order.status = 'installation_done';
+    order.installationDoneAt = Object.values(order.serviceProgress || {}).map((entry: any) => entry.doneAt).filter(Boolean).sort().at(-1);
+    order.servicesClosedNotice = 'pending';
+    order.timeline ||= [];
+    order.timeline.push({ at: order.installationDoneAt, key: 'installation_done', by: actor, note: 'Все этапы и услуги выполнены', source: 'services' });
+  } else if (['installation_scheduled','installation_accepted','installation_en_route'].includes(order.status)
+    && productionStages(order).some(stage => ['in_progress','done'].includes(stage.status))) order.status = 'installation_in_progress';
+}
 
 export function productionStages(order: Row, serviceId?: string): Row[] {
   return rows(order.productionStages).filter(stage => !serviceId || stage.serviceId === serviceId);

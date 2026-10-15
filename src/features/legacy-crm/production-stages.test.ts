@@ -1,7 +1,7 @@
 import { composeProductionHtml } from './production-ui';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { prepareProductionStages, mergeFieldProductionStages, stagePayroll, serviceLaborBudget } from './production-stages';
+import { prepareProductionStages, mergeFieldProductionStages, stagePayroll, serviceLaborBudget, settleProductionProject } from './production-stages';
 import { prepareServiceSolutions, projectServicesFinished } from './service-solutions';
 import { createFieldWorkspace } from './field-workspace';
 import { ROLE_CODES } from '@/lib/auth/constants';
@@ -164,4 +164,14 @@ test('a separately completed service receives its own server-stamped payroll sta
   assert.deepEqual(stage.payroll.map((p:Row)=>p.amount),[150,150]);
   const repeat=structuredClone(next);assert.equal(prepareProductionStages(next,repeat,false,[],true),null);
   assert.equal(repeat.orders[0].productionStages.length,1);
+});
+
+test('settling a completed installation never rewinds payment states or duplicates history',()=>{
+  const payload=plan();const o=payload.orders[0];o.status='installation_done';
+  o.productionStages.forEach((s:Row)=>s.status='done');o.serviceProgress={'offering:film':{status:'done',doneAt:'2026-10-12T19:00:00Z'}};
+  settleProductionProject({status:'installation_in_progress'},o,payload,'owner');
+  assert.equal(o.timeline.length,1);
+  for(const status of ['installation_done','act_signed','payment_received','completed','review_received']){
+    o.status=status;const before=structuredClone(o);settleProductionProject(before,o,payload,'owner');assert.deepEqual(o,before);
+  }
 });

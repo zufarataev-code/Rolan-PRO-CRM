@@ -386,15 +386,16 @@ async function cloudPersist(options = {}) {
       for (const update of result.data.production_stage_updates || []) {
         const saved = snapshot.orders?.find(o=>o.id===update.id), local = db.orders?.find(o=>o.id===update.id);
         if (!saved) continue;
-        const fields = {productionStages:update.productionStages,serviceScopeApprovals:update.serviceScopeApprovals,status:update.status,installationDoneAt:update.installationDoneAt};
+        const fields = {productionStages:update.productionStages,serviceScopeApprovals:update.serviceScopeApprovals,status:update.status,installationDoneAt:update.installationDoneAt,serviceProgress:update.serviceProgress,serviceSchedules:update.serviceSchedules,installerIds:update.installerIds,installationAt:update.installationAt,servicesClosedNotice:update.servicesClosedNotice,timeline:update.timeline};
         for (const [field,value] of Object.entries(fields)) {
-          if (local && JSON.stringify(local[field])===JSON.stringify(saved[field])) local[field]=cloneCloudWorkspaceValue(value);
+          if (local) local[field]=mergeCloudWorkspaceSnapshots(saved[field],local[field],value);
           saved[field]=cloneCloudWorkspaceValue(value);
         }
         const expenses=(saved.extraExpenses||[]).filter(e=>!e.stageDerived).concat(update.stageExpenses||[]);
         if(local && JSON.stringify(local.extraExpenses)===JSON.stringify(saved.extraExpenses))local.extraExpenses=cloneCloudWorkspaceValue(expenses);
         saved.extraExpenses=expenses;
       }
+      if (projectClaimServiceFollowUps()) cloudSaveQueued = true;
       cloudRevision = result.data.revision;
       cloudBaseSnapshot = cloneCloudWorkspaceValue(snapshot);
       cloudStatus('Сохранено', 'green');
