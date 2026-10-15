@@ -1,4 +1,4 @@
-import { canonicalFilmCategory, serviceGroupIds, serviceGroupScope, projectServicesFinished } from './service-solutions';
+import { canonicalFilmCategory, serviceGroupIds, serviceGroupScope, serviceGroupName, projectServicesFinished } from './service-solutions';
 import { serviceScopeApproved } from './service-scope-approvals';
 import { createHash } from 'node:crypto';
 
@@ -123,7 +123,7 @@ export function prepareProductionStages(current: Row, next: Row, owner: boolean,
       order.productionStages ||= [];
       order.productionStages.push({
         id: 'service_' + createHash('sha256').update(serviceId).digest('hex').slice(0, 24),
-        serviceId, title: 'Выполнение услуги', startsAt,
+        serviceId, title: serviceGroupName(order, serviceId, current).slice(0, 160), startsAt,
         endsAt: new Date(Date.parse(startsAt) + 8 * 3600000).toISOString(),
         installerIds: [...installerIds], responsibleId: installerIds[0], contractors: [],
         laborSharePct: 100, status: 'done', doneBy: order.serviceProgress[serviceId].doneBy,

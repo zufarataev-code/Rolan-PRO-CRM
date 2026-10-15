@@ -704,7 +704,7 @@ function calendarEventsForOrder(o, type) {
   const info = orderEventInfo(type);
   if(type==='install' && projectStages(o).length && o.status!=='proposal_accepted') {
     const stageServices=new Set(projectStages(o).map(s=>s.serviceId));
-    const staged=projectStages(o).filter(s=>s.startsAt).map(s=>({o:{...o,installerIds:s.installerIds || [],installationAt:s.startsAt,stageId:s.id,stageTitle:s.title},dt:new Date(s.startsAt),kind:type,info,id:o.id+'_stage_'+s.id,note:s.title,stageId:s.id,title:s.title}));
+    const staged=projectStages(o).filter(s=>s.startsAt).map(s=>({o:{...o,installerIds:s.installerIds || [],installationAt:s.startsAt,installationDurationMinutes:Math.max(1,(Date.parse(s.endsAt)-Date.parse(s.startsAt))/60000),stageId:s.id,stageTitle:s.title},dt:new Date(s.startsAt),kind:type,info,id:o.id+'_stage_'+s.id,note:s.title,stageId:s.id,title:s.title}));
     const unstaged={...projectStageUnstagedOrder(o),serviceSchedules:(o.serviceSchedules||[]).filter(p=>!stageServices.has(p.id))};
     return staged.concat(unstaged.serviceSchedules.length?calendarEventsForOrder(unstaged,type):[]);
   }
@@ -743,4 +743,13 @@ function projectEditDirectExpense(oid,eid,field,value) {
   else if(field==='delete')o.extraExpenses=o.extraExpenses.filter(e=>e.id!==eid);
   else if(e&&['amount','label','serviceId','actual'].includes(field))e[field]=field==='amount'?Math.max(0,Number(value)||0):value;
   save();if(field==='add'||field==='delete'){preservePositionForNextRender();render();}
+}
+
+function projectServiceScope(o, group) {
+  const bases = { actualWidth:'width',actualHeight:'height',actualQty:'qty' };
+  const pick = (item, fields) => Object.fromEntries(fields.filter(field => item?.[field] !== undefined && !(bases[field] && (Number(item[field])<=0 || Number(item[field])===Number(item[bases[field]])))).map(field=>[field,item[field]]));
+  // Each window with its room (where the work is); their order is not part of it.
+  const rooms = new Map(measureAllWindows(o).map(({ room, win }) => [win, room?.id ?? null]));
+  const byId = (a, b) => String(a.id ?? '').localeCompare(String(b.id ?? ''));
+  return JSON.stringify([...group.windows.map(win => ({ ...pick(win, PROJECT_SCOPE_WINDOW_FIELDS), roomId: rooms.get(win) ?? null })).sort(byId), ...group.lines.map(line => pick(line, PROJECT_SCOPE_LINE_FIELDS))], (_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
 }

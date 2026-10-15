@@ -175,3 +175,15 @@ test('settling a completed installation never rewinds payment states or duplicat
     o.status=status;const before=structuredClone(o);settleProductionProject(before,o,payload,'owner');assert.deepEqual(o,before);
   }
 });
+
+test('legacy actual-size defaults preserve approval while a real size change requires approval',()=>{
+  const original=fixture(),before=structuredClone(original);
+  assert.equal(prepareServiceScopeApprovals(original,before,true,[],'owner'),null);
+  const next=structuredClone(before),w=next.orders[0].measurements.rooms[0].windows[0];
+  w.actualWidth=w.width;w.actualHeight=w.height;w.actualQty=w.qty;
+  next.orders[0].serviceSchedules=[{id:'offering:film',installationAt:'2026-10-12T16:00:00Z',installerIds:['i1']}];
+  assert.equal(prepareServiceScopeApprovals(before,next,true,[],'owner'),null);
+  assert.equal(serviceScopeApproved(next.orders[0],'offering:film'),true);
+  assert.equal(prepareServiceSolutions(before,next,true),null);
+  w.actualWidth+=100;assert.equal(serviceScopeApproved(next.orders[0],'offering:film'),false);
+});

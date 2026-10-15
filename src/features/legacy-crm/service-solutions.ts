@@ -94,7 +94,8 @@ export function projectServicesStarted(order: Row): boolean {
 const SCOPE_WINDOW_FIELDS = ['id', 'width', 'height', 'qty', 'sqft', 'actualWidth', 'actualHeight', 'actualQty', 'panels', 'actualPanels', 'winType', 'catalogId', 'offeringId', 'measureScope', 'removalRequired', 'complexity'];
 const SCOPE_LINE_FIELDS = ['id', 'qty', 'unit', 'type', 'offeringId', 'catalogId', 'serviceType', 'measureScope', 'complexity'];
 export function serviceGroupScope(order: Row, id: string): string {
-  const pick = (item: Row, fields: string[]) => Object.fromEntries(fields.filter(field => item[field] !== undefined).map(field => [field, item[field]]));
+  const bases: Row = { actualWidth: 'width', actualHeight: 'height', actualQty: 'qty' };
+  const pick = (item: Row, fields: string[]) => Object.fromEntries(fields.filter(field => item[field] !== undefined && !(bases[field] && (Number(item[field]) <= 0 || Number(item[field]) === Number(item[bases[field]])))).map(field => [field, item[field]]));
   // Each window with its room (where the work is); their order is not part of it.
   const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows).map(win => ({ room, win })))
     .filter(({ win }) => (typeof win.offeringId === 'string' && win.offeringId ? `offering:${win.offeringId}` : `direction:${win.measureScope || order.serviceType || 'solar_film'}`) === id)
