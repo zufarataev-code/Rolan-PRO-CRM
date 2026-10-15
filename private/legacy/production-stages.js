@@ -303,6 +303,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     <div class="project-service-ledger-head"><div><div class="project-service-ledger-title">Состав проекта <span class="tag">${lines.length + pending.length}</span></div><div class="project-service-ledger-sub">Каждая услуга имеет собственный материал, объём, цену, дату и исполнителя.</div></div>${money && edit ? projectOfferingPickerHtml(o, 'projectCardAddService') : ''}</div>
     <div class="project-service-list">${rows || '<div class="p-4 text-sm text-gray-500">В проекте пока нет услуг.</div>'}${pendingRows}</div>
     <div class="project-service-footer"><span>${economics ? `Материал ${fmtMoney(total('materialCost'))} · работа ${fmtMoney(total('installerPay'))}` : `${lines.length} позиций`}</span>${money ? `<strong>Клиенту ${fmtMoney(orderRevenue(o))}</strong>` : ''}</div>
+    ${manage && money ? projectDirectExpensesHtml(o) : ''}
     ${production ? renderProjectCardSchedule(o, projectCardUnplanned(o), plan) : ''}
   </section>`;
 }
@@ -516,7 +517,10 @@ function orderInstallerPayoutBreakdown(o) {
 function projectFinanceDirectCost(o) {
   const payments=(db.finance?.transactions||[]).filter(t=>t.type==='expense'&&t.scope!=='personal'&&t.orderId===o.id&&t.category==='project_expense');
   const expenses=(o.extraExpenses||[]).filter(e=>e.type!=='gas');
-  return expenses.reduce((sum,e)=>sum+Math.max(Number(e.amount)||0,payments.filter(t=>t.projectExpenseId===e.id).reduce((n,t)=>n+(Number(t.amount)||0),0)),0)+payments.filter(t=>!expenses.some(e=>e.id===t.projectExpenseId)).reduce((sum,t)=>sum+(Number(t.amount)||0),0);
+  const planned=expenses.reduce((sum,e)=>sum+Math.max(Number(e.amount)||0,payments.filter(t=>t.projectExpenseId===e.id).reduce((n,t)=>n+(Number(t.amount)||0),0)),0);
+  const legacy=payments.filter(t=>t.projectExpenseId===undefined).reduce((sum,t)=>sum+(Number(t.amount)||0),0);
+  const newCosts=payments.filter(t=>t.projectExpenseId!==undefined&&!expenses.some(e=>e.id===t.projectExpenseId)).reduce((sum,t)=>sum+(Number(t.amount)||0),0);
+  return Math.max(planned,legacy)+newCosts;
 }
 function orderManualExpensesTotal(o) {
   return projectFinanceDirectCost(o);
@@ -683,21 +687,14 @@ function financeSystemRows() {
     });
   });
 
-  // Расчёт проекта хранит плановые прямые расходы. В денежный журнал попадают
-  // только явно отмеченные как оплаченные — план не должен уменьшать кассу.
+  // Costs accrue on completion; only paid obligations create cash rows.
   (db.orders || []).forEach(o => {
-    const actualExpenses = (o.extraExpenses || []).filter(e => e.paid === true || e.paidAt);
-    const total = actualExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    const linked = financeLinkedAmount(manual, t => t.type === 'expense' && t.orderId === o.id && t.category === 'project_expense');
-    const remainder = Math.max(0, total - linked);
-    if (remainder > 0) rows.push({
-      id: `sys_expense_${o.id}`, type: 'expense', amount: remainder,
-      date: actualExpenses.map(e => e.paidAt || e.date || e.createdAt).filter(Boolean).sort().pop() || o.updatedAt || o.createdAt,
-      accountId: unallocated, category: 'project_expense', orderId: o.id,
-      scope: 'business', costBehavior: 'variable', tags: ['заказ'],
-      note: `Расходы по объекту · ${o.number || o.id}`,
-      source: 'orders', sourceLabel: 'Заказы', editable: false,
-    });
+    const paid=(o.extraExpenses||[]).filter(e=>e.paid===true||e.paidAt);
+    const manualPayments=manual.filter(t=>t.type==='expense'&&t.orderId===o.id&&t.category==='project_expense');
+    const total=paid.reduce((sum,e)=>sum+Math.max(0,(Number(e.amount)||0)-manualPayments.filter(t=>t.projectExpenseId===e.id).reduce((n,t)=>n+(Number(t.amount)||0),0)),0);
+    const legacy=manualPayments.filter(t=>t.projectExpenseId===undefined).reduce((sum,t)=>sum+(Number(t.amount)||0),0);
+    const remainder=Math.max(0,total-legacy);
+    if(remainder>0)rows.push({id:`sys_expense_${o.id}`,type:'expense',amount:remainder,date:paid.map(e=>e.paidAt||e.date||e.createdAt).filter(Boolean).sort().pop()||o.updatedAt||o.createdAt,accountId:unallocated,category:'project_expense',orderId:o.id,scope:'business',costBehavior:'variable',tags:['заказ'],note:`Расходы по объекту · ${o.number||o.id}`,source:'orders',sourceLabel:'Заказы',editable:false});
   });
   return rows;
 }
@@ -733,4 +730,16 @@ function calendarEventsForOrder(o, type) {
 
 function projectCardUpcomingVisits(o, now = Date.now()) {
   return projectCardVisits(o,projectLines(o).filter(l=>projectStages(o,l.key).length || projectServiceProgress(o,l.key).status!=='done')).filter(v=>Date.parse(v.at)>=now);
+}
+
+function projectDirectExpensesHtml(o) {
+  return `<section class="p-3 border-t" data-project-direct-expenses><h4 class="font-bold">Расходы проекта</h4>${(o.extraExpenses||[]).map(e=>`<div class="flex flex-wrap gap-2 mt-2" style="align-items:end"><label style="flex:2;min-width:0">Расход<input style="width:100%;min-height:44px" value="${academyEsc(e.label||'')}" onchange="projectEditDirectExpense('${o.id}','${e.id}','label',this.value)" ${e.stageDerived?'disabled':''}></label><label style="flex:1;min-width:0">Сумма, $<input style="width:100%;min-height:44px" type="number" min="0" value="${Number(e.amount)||0}" onchange="projectEditDirectExpense('${o.id}','${e.id}','amount',this.value)" ${e.stageDerived?'disabled':''}></label><label style="flex:1;min-width:0">Услуга<select onchange="projectEditDirectExpense('${o.id}','${e.id}','serviceId',this.value)" ${e.stageDerived?'disabled':''}><option value="">Весь проект</option>${projectLines(o).map(l=>`<option value="${academyEsc(l.key)}" ${e.serviceId===l.key?'selected':''}>${academyEsc(l.name)}</option>`).join('')}</select></label><label><input type="checkbox" ${e.actual?'checked':''} onchange="projectEditDirectExpense('${o.id}','${e.id}','actual',this.checked)" ${e.stageDerived?'disabled':''}> Факт</label>${!e.stageDerived?`<button class="btn-ghost" onclick="projectEditDirectExpense('${o.id}','${e.id}','delete','')">Удалить</button>`:'<span class="text-xs">Из этапа</span>'}</div>`).join('')}<button class="btn-ghost mt-2" onclick="projectEditDirectExpense('${o.id}','','add','')">+ Расход проекта</button></section>`;
+}
+function projectEditDirectExpense(oid,eid,field,value) {
+  const o=getOrder(oid);if(!o||!orderUserCanManage(currentUser())||!orderUserCanSeeMoney(o,currentUser()))return;
+  o.extraExpenses||=[];const e=o.extraExpenses.find(e=>e.id===eid);if(e?.stageDerived)return;
+  if(field==='add')o.extraExpenses.push({id:uid(),type:'other',label:'Прямой расход',amount:0,actual:false,projectDirect:true,createdAt:new Date().toISOString()});
+  else if(field==='delete')o.extraExpenses=o.extraExpenses.filter(e=>e.id!==eid);
+  else if(e&&['amount','label','serviceId','actual'].includes(field))e[field]=field==='amount'?Math.max(0,Number(value)||0):value;
+  save();if(field==='add'||field==='delete'){preservePositionForNextRender();render();}
 }

@@ -18,7 +18,7 @@ test('voice creates a draft and leaves ambiguous project references unselected',
   assert.equal(context.financeVoiceDraft('проект 5570 расход 80 долларов').orderId,'');
 });
 test('cash expenses reduce project profit once when explicitly settling an obligation',()=>{
-  const db={finance:{transactions:[{type:'expense',scope:'business',orderId:'a',category:'project_expense',amount:200,projectExpenseId:'stage:s'},{type:'expense',orderId:'a',category:'project_expense',amount:30},{type:'expense',scope:'personal',orderId:'a',category:'project_expense',amount:1000}]}};
+  const db={finance:{transactions:[{type:'expense',scope:'business',orderId:'a',category:'project_expense',amount:200,projectExpenseId:'stage:s'},{type:'expense',orderId:'a',category:'project_expense',amount:30,projectExpenseId:null},{type:'expense',scope:'personal',orderId:'a',category:'project_expense',amount:1000}]}};
   const c=vm.createContext({db});vm.runInContext(source('projectFinanceDirectCost'),c);
   assert.equal(c.projectFinanceDirectCost({id:'a',extraExpenses:[{id:'stage:s',amount:200}]}),230);
   assert.equal(c.projectFinanceDirectCost({id:'b',extraExpenses:[]}),0);
