@@ -24,4 +24,6 @@ test('cash expenses reduce project profit once when explicitly settling an oblig
   assert.equal(c.projectFinanceDirectCost({id:'b',extraExpenses:[]}),0);
   db.finance.transactions[0].amount=220;
   assert.equal(c.projectFinanceDirectCost({id:'a',extraExpenses:[{id:'stage:s',amount:200}]}),250);
+  db.finance.transactions.push({type:'expense',scope:'business',orderId:'a',category:'project_expense',amount:50,projectExpenseId:'fuel'});
+  assert.equal(c.projectFinanceDirectCost({id:'a',extraExpenses:[{id:'stage:s',amount:200},{id:'fuel',type:'gas',amount:50}]}),250,'fuel is already included by the project transport calculation');
 });

@@ -520,8 +520,9 @@ function projectFinanceDirectCost(o) {
   const expenses=(o.extraExpenses||[]).filter(e=>e.type!=='gas');
   const planned=expenses.reduce((sum,e)=>sum+Math.max(Number(e.amount)||0,payments.filter(t=>t.projectExpenseId===e.id).reduce((n,t)=>n+(Number(t.amount)||0),0)),0);
   const legacy=payments.filter(t=>t.projectExpenseId===undefined).reduce((sum,t)=>sum+(Number(t.amount)||0),0);
-  const newCosts=payments.filter(t=>t.projectExpenseId!==undefined&&!expenses.some(e=>e.id===t.projectExpenseId)).reduce((sum,t)=>sum+(Number(t.amount)||0),0);
-  return Math.max(planned,legacy)+newCosts;
+  const newCosts=payments.filter(t=>t.projectExpenseId!==undefined&&!(o.extraExpenses||[]).some(e=>e.id===t.projectExpenseId)).reduce((sum,t)=>sum+(Number(t.amount)||0),0);
+  const gasSurplus=(o.extraExpenses||[]).filter(e=>e.type==='gas').reduce((sum,e)=>sum+Math.max(0,payments.filter(t=>t.projectExpenseId===e.id).reduce((n,t)=>n+(Number(t.amount)||0),0)-(Number(e.amount)||0)),0);
+  return Math.max(planned,legacy)+newCosts+gasSurplus;
 }
 function orderManualExpensesTotal(o) {
   return projectFinanceDirectCost(o);
