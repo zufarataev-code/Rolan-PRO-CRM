@@ -86,6 +86,7 @@ async function main() {
       const persisted=await context.request.put(base+'/api/v1/legacy-crm/state',{data:latest}); assert.equal(persisted.status(),200,await persisted.text());
       const reloaded=(await (await context.request.get(base+'/api/v1/legacy-crm/state')).json()).data;
       assert.deepEqual(reloaded.payload.orders.find((o:any)=>o.id===order.id).serviceSchedules,schedules);
+      await page.locator('#solution-ui-test').evaluate((element:HTMLElement)=>element.remove());
       // Multi-stage production uses the same real Project card and state API.
       await page.goto(base+'/legacy-crm#/order/'+order.id,{waitUntil:'networkidle'});
       await page.locator('[data-project-line="offering:solution-a"] .project-service-arrow').click();
