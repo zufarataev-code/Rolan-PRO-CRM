@@ -1,3 +1,4 @@
+import { composeProductionHtml } from './production-ui';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -11,7 +12,7 @@ import { prepareServiceSolutions } from './service-solutions';
 // own crew. A service is planned, in progress or done; its specialist marks
 // their own service, and the project becomes «Монтаж выполнен» once every
 // service is done.
-const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
+const html = composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));
 type Row = Record<string, any>;
 const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
 
@@ -66,6 +67,7 @@ function load(user: Row) {
   vm.runInContext(html.slice(start, html.indexOf('function projectQuickLineCatalog(', start)), context);
   vm.runInContext(html.slice(html.indexOf('function windowRetailPrice('), html.indexOf('function orderInstallerPayout(o)')), context);
   vm.runInContext(html.slice(html.indexOf('function installerAdditionalWorkRate('), html.indexOf('function orderAdditionalWorkPayoutForUser(')), context);
+  for (const name of ['projectStages','projectStagesHtml','projectScopeApproved']) { const at=html.indexOf('function '+name+'('); vm.runInContext(html.slice(at,html.indexOf('\n}',at)+2),context); }
   context.getOrder = (id: string) => db.orders.find((item: Row) => item.id === id);
   return { c: context, db, calls };
 }

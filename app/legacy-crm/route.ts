@@ -11,6 +11,7 @@ import { BEFORE_PAINT_SCRIPT } from "@/features/legacy-crm/before-paint";
 import { ROLE_TESTING_HTML } from "@/features/legacy-crm/role-testing";
 import { PULSE_THEME_HTML } from "@/features/legacy-crm/pulse-theme";
 import { DESIGN_THEME_HTML } from "@/features/legacy-crm/design-theme";
+import { composeProductionHtml } from "@/features/legacy-crm/production-ui";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,8 @@ export async function GET(request: NextRequest) {
     "utf8",
   );
 
-  const cloudHtml = replaceLegacyBootstrapLogin(html);
+  const productionUi = await readFile(path.join(process.cwd(), "private", "legacy", "production-stages.js"), "utf8");
+  const cloudHtml = replaceLegacyBootstrapLogin(composeProductionHtml(html, productionUi));
   const employeeLoginUrl = new URL("/login", publicAppUrl).toString();
   const googleMapsBootstrapPatch = `
     <script>

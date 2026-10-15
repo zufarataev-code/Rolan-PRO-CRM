@@ -1,5 +1,6 @@
 import { canonicalFilmCategory, serviceGroupIds, serviceGroupScope } from './service-solutions';
 import { serviceScopeApproved } from './service-scope-approvals';
+import { createHash } from 'node:crypto';
 
 type Row = Record<string, any>;
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value : [];
@@ -97,6 +98,25 @@ export function prepareProductionStages(current: Row, next: Row, owner: boolean,
   const now = new Date().toISOString();
   for (const order of rows(next.orders)) {
     const before = rows(current.orders).find(value => value.id === order.id) || {};
+    // A service completed without a multi-stage plan is one complete stage.
+    // Field progress was already merged and authorized before this preparation.
+    for (const serviceId of serviceGroupIds(order)) {
+      if (order.serviceProgress?.[serviceId]?.status !== 'done' || before.serviceProgress?.[serviceId]?.status === 'done'
+        || productionStages(order, serviceId).length) continue;
+      const assignment = rows(order.serviceSchedules).find(plan => plan.id === serviceId);
+      const installerIds = assignment?.installerIds || order.installerIds || [];
+      const startsAt = assignment?.installationAt || order.installationAt;
+      if (!startsAt || !installerIds.length || !Number.isFinite(Date.parse(startsAt))) continue;
+      order.productionStages ||= [];
+      order.productionStages.push({
+        id: 'service_' + createHash('sha256').update(serviceId).digest('hex').slice(0, 24),
+        serviceId, title: 'Выполнение услуги', startsAt,
+        endsAt: new Date(Date.parse(startsAt) + 8 * 3600000).toISOString(),
+        installerIds: [...installerIds], responsibleId: installerIds[0], contractors: [],
+        laborSharePct: 100, status: 'done', doneBy: order.serviceProgress[serviceId].doneBy,
+        startedBy: order.serviceProgress[serviceId].doneBy,
+      });
+    }
     const stages = productionStages(order);
     const changed = stable(order.productionStages ?? []) !== stable(before.productionStages ?? []);
     if (!stages.length && !changed) continue;

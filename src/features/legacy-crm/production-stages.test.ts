@@ -1,3 +1,4 @@
+import { composeProductionHtml } from './production-ui';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { prepareProductionStages, mergeFieldProductionStages, stagePayroll, serviceLaborBudget } from './production-stages';
@@ -126,7 +127,7 @@ test('two completed stages accrue in their own weeks and payment cannot count ei
   o.status='installation_done';o.installerIds=['i1','i2'];o.installationDoneAt='2026-10-12T19:00:00Z';
   o.productionStages.forEach((stage:Row,index:number)=>{stage.status='done';stage.doneAt=index===0?'2026-10-05T19:00:00Z':'2026-10-12T19:00:00Z';stage.payroll=stagePayroll(payload,o,stage);});
   payload.payrollPayments=[];
-  const html=readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8');
+  const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));
   const source=(name:string)=>{const start=html.indexOf(`function ${name}(`);return html.slice(start,html.indexOf('\n}',start)+2);};
   const c=vm.createContext({db:payload,state:{currentUserId:'owner'},getOrder:()=>o,getUser:(id:string)=>payload.users.find((u:Row)=>u.id===id),
     measureAllWindows:(order:Row)=>order.measurements.rooms.flatMap((room:Row)=>room.windows.map((win:Row)=>({room,win}))),
@@ -146,9 +147,21 @@ test('two completed stages accrue in their own weeks and payment cannot count ei
   assert.deepEqual(JSON.parse(JSON.stringify(o.payouts.map((p:Row)=>p.stageId))),['a','b']);
 });
 test('an unassigned internal stage retains a labor reserve; an external stage uses its invoice instead',()=>{
-  const html=readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8');const start=html.indexOf('function projectStageReferenceAmount(');
+  const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));const start=html.indexOf('function projectStageReferenceAmount(');
   const c=vm.createContext({db:{settings:{complexityCoefs:{standard:1}}},projectLines:()=>[{key:'service',unit:'sqft',installerPay:300}]});
   vm.runInContext(html.slice(start,html.indexOf('\n}',start)+2),c);
   assert.equal(c.projectStageReferenceAmount({complexity:'standard'},{serviceId:'service',installerIds:[],contractors:[],laborSharePct:40,status:'planned'}),120);
   assert.equal(c.projectStageReferenceAmount({complexity:'standard'},{serviceId:'service',installerIds:[],contractors:[{name:'Firm',amount:200}],laborSharePct:40,status:'planned'}),0);
+});
+test('a separately completed service receives its own server-stamped payroll stage',()=>{
+  const before=fixture('installation_scheduled');
+  before.orders[0].serviceSchedules=[{id:'offering:film',installationAt:'2026-10-12T16:00:00Z',installerIds:['i1','i2']}];
+  const next=structuredClone(before);
+  next.orders[0].serviceProgress={'offering:film':{status:'done',doneBy:'i1',doneAt:'2000-01-01'}};
+  assert.equal(prepareProductionStages(before,next,false,[],true),null);
+  const stage=next.orders[0].productionStages[0];
+  assert.equal(stage.status,'done');assert.notEqual(stage.doneAt,'2000-01-01');
+  assert.deepEqual(stage.payroll.map((p:Row)=>p.amount),[150,150]);
+  const repeat=structuredClone(next);assert.equal(prepareProductionStages(next,repeat,false,[],true),null);
+  assert.equal(repeat.orders[0].productionStages.length,1);
 });

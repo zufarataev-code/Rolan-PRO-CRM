@@ -1,9 +1,10 @@
+import { composeProductionHtml } from './production-ui';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 
-const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
+const html = composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));
 function source(name: string) {
   const start = html.indexOf(`function ${name}(`);
   const end = html.indexOf('\n}', start);
