@@ -88,109 +88,74 @@ export function PublicPaymentOptions({
     }
   }
 
+  const methodTitle = (option: PaymentOption) =>
+    ru
+      ? option.method === "bank_transfer" ? "Банковский перевод" : option.method === "payment_system" ? "Картой онлайн" : option.label
+      : option.method === "payment_system" ? "Card online" : option.label;
+
   return (
-    <section id="proposal-payment" className="proposal-section proposal-payment-section">
-      <div className="proposal-section-kicker">{ru ? "Оплата" : "Payment"}</div>
-      <h2>{paid ? (ru ? "Оплата получена" : "Deposit received") : (ru ? "Оплатить проект" : "Pay for your project")}</h2>
-      <p>
-        {ru ? "Сумма к оплате сейчас: " : "Amount due now: "}<strong>{formatMoney(baseAmount, data.currency)}</strong>.{" "}
-        {ru
-          ? "Zelle и банковский перевод — без комиссии. При оплате картой защищённая форма добавит комиссию 3,5%."
-          : "Zelle and bank transfer have no processing fee. Secure online payment includes a 3.5% processing fee."}
+    <section id="proposal-payment" className="rp-section rp-payment">
+      <div className="rp-kicker">{ru ? "Оплата" : "Payment"}</div>
+      <h2 className="rp-h2">{paid ? (ru ? "Аванс получен" : "Deposit received") : (ru ? "Аванс" : "Deposit")}</h2>
+      <p className="rp-lead">
+        {ru ? "К оплате сейчас: " : "Due now: "}<strong>{formatMoney(baseAmount, data.currency)}</strong>
+        {ru ? " · Zelle и банковский перевод — без комиссии." : " · Zelle and bank transfer have no fee."}
       </p>
 
       {!data.agreement_signed && !paid ? (
-        <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: "rgba(37,99,235,.08)" }}>
-          <strong>{ru ? "Сначала подпишите КП" : "Sign the proposal first"}</strong>
-          <div style={{ marginTop: 4, opacity: 0.78 }}>
-            {ru
-              ? "После подписи кнопки оплаты станут активными автоматически."
-              : "Payment buttons become active automatically after signature."}
-          </div>
+        <div className="rp-note">
+          {ru ? "Способы оплаты откроются сразу после подписи договора." : "Payment opens right after you sign the agreement."}
         </div>
       ) : null}
 
-      <div style={{ display: "grid", gap: 12, marginTop: 18 }}>
+      <div className="rp-pay-grid">
         {data.options.map((option) => {
           const selected = data.deposit?.selected_method === option.method;
+          const blocked = !option.available || !data.agreement_signed;
           return (
-            <div
-              key={option.method}
-              style={{
-                border: selected ? "2px solid currentColor" : "1px solid rgba(15,23,42,.14)",
-                borderRadius: 16,
-                padding: 16,
-                opacity: option.available || paid ? 1 : 0.62,
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-                <div>
-                  <strong>{ru && option.method === "bank_transfer" ? "Банковский перевод" : ru && option.method === "payment_system" ? "Оплата картой" : option.label}</strong>
-                  <div style={{ opacity: 0.72, marginTop: 4 }}>
-                    {ru
-                      ? option.method === "payment_system"
-                        ? "Безопасная онлайн-оплата; комиссия включается в итоговую сумму."
-                        : "Предпочтительный способ — без комиссии."
-                      : option.description}
-                  </div>
-                </div>
-                <strong>{formatMoney(option.payable_amount, data.currency)}</strong>
+            <article key={option.method} className={`rp-pay-card${selected ? " rp-pay-selected" : ""}${blocked && !paid ? " rp-pay-blocked" : ""}`}>
+              <div className="rp-pay-head">
+                <strong>{methodTitle(option)}</strong>
+                <span>{formatMoney(option.payable_amount, data.currency)}</span>
               </div>
+              <p>
+                {option.processing_fee > 0
+                  ? `${ru ? "Комиссия" : "Fee"} ${option.fee_percent}%: ${formatMoney(option.processing_fee, data.currency)}`
+                  : ru ? "Без комиссии" : "No fee"}
+              </p>
 
-              {option.processing_fee > 0 ? (
-                <div style={{ marginTop: 8 }}>
-                  {ru ? "Комиссия" : "Processing fee"} {option.fee_percent}%: {formatMoney(option.processing_fee, data.currency)}
-                </div>
-              ) : null}
-
-              {selected && option.instructions ? (
-                <div style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>{option.instructions}</div>
-              ) : null}
+              {selected && option.instructions ? <div className="rp-pay-instructions">{option.instructions}</div> : null}
 
               {selected && option.method === "payment_system" && option.payment_link ? (
-                <a href={option.payment_link} style={{ display: "inline-block", marginTop: 12 }}>
+                <a className="rp-primary-button" href={option.payment_link}>
                   {ru ? "Перейти к безопасной оплате" : "Continue to secure payment"}
                 </a>
               ) : null}
 
-              {selected && option.method === "payment_system" && option.available && !option.payment_link ? (
-                <div style={{ marginTop: 12, opacity: 0.72 }}>
-                  {ru
-                    ? "Безопасная форма оплаты готовится. Нажмите «Оплата картой» ещё раз, если нужна новая сессия."
-                    : "Secure checkout is being prepared. Choose Online payment again if you need a new payment session."}
-                </div>
-              ) : null}
-
               {!option.available && !paid ? (
-                <div style={{ marginTop: 12, opacity: 0.72 }}>{ru ? "Этот способ оплаты пока не настроен." : "This payment method is not configured yet."}</div>
+                <p className="rp-small">{ru ? "Этот способ пока не подключён." : "Not available yet."}</p>
               ) : null}
 
-              {!paid ? (
+              {!paid && !(selected && option.method === "payment_system" && option.payment_link) ? (
                 <button
                   type="button"
+                  className={selected ? "rp-secondary-button" : "rp-primary-button"}
                   onClick={() => selectMethod(option)}
-                  disabled={saving !== null || !option.available || !data.agreement_signed}
-                  style={{ marginTop: 14 }}
+                  disabled={saving !== null || blocked}
                 >
                   {saving === option.method
                     ? (ru ? "Подготовка…" : "Preparing…")
-                    : !option.available
-                      ? (ru ? "Недоступно" : "Unavailable")
-                      : !data.agreement_signed
-                        ? (ru ? "Сначала подпишите КП" : "Sign proposal first")
-                      : selected
-                        ? (ru ? "Выбрано" : "Selected")
-                        : ru
-                          ? option.method === "payment_system" ? "Оплатить картой" : option.method === "bank_transfer" ? "Выбрать банковский перевод" : "Выбрать Zelle"
-                          : `Choose ${option.label}`}
+                    : selected
+                      ? (ru ? "Выбрано" : "Selected")
+                      : ru ? "Выбрать" : "Choose"}
                 </button>
               ) : null}
-            </div>
+            </article>
           );
         })}
       </div>
 
-      {error ? <p style={{ color: "#b91c1c", marginTop: 12 }}>{error}</p> : null}
+      {error ? <p className="rp-error">{error}</p> : null}
     </section>
   );
 }

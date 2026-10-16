@@ -237,6 +237,7 @@ export function serializeProposalDetail(proposal: any) {
           client_notes: proposal.agreement.client_notes,
           accepted_terms: proposal.agreement.accepted_terms,
           signed_at: proposal.agreement.signed_at,
+          signature_image: proposal.agreement.signature_image ?? null,
         }
       : null,
     deposit: serializeDepositInternal(proposal.deposit),
@@ -366,6 +367,7 @@ export function serializePublicProposal(proposal: any) {
           client_notes: proposal.agreement.client_notes,
           accepted_terms: proposal.agreement.accepted_terms,
           signed_at: proposal.agreement.signed_at,
+          signature_image: proposal.agreement.signature_image ?? null,
         }
       : null,
   };
