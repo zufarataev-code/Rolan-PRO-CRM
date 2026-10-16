@@ -674,3 +674,20 @@ Owner in chat on 2026-10-11: «как мне по новой логике счи
 - Before the proposal (new, consultation, measurement): add services → if a service is priced per sq ft and has no sizes, «Назначить замер» (no consultation step; a measurement already booked keeps «Контроль замера») → «Расчёт готов → КП», which approves the card's numbers and publishes the КП in one action (the old estimate window stays available but is no longer required).
 - After the КП is accepted: «Подготовить производство» only when there are windows with film to cut; then «Назначить исполнителей» (crew and date in each service row) and «Подтвердить монтаж» from the card.
 - Production readiness requires the confirmed preparation only for projects with windows.
+
+## 2026-10-11 — Assigned managers record direct project expenses
+
+- Owner explicitly requested that the manager record rental, parking, delivery and subcontractor expenses within the project.
+- The owner or project's assigned manager may enter those direct expenses and attach each to the project or an existing service/work line. Attachment does not create another expense or duplicate its cost.
+- Planned and actual costs are separate states; marking an expense actual does not claim that it has been paid.
+- This authorizes direct expense entry without expanding access to owner-only company P&L, margins, salary settings or material purchase-cost references.
+- Production crew/date planning is allowed only after accepted Proposal, including partially filled drafts submitted to the state API.
+
+## 2026-10-11 — A service can have several production stages
+
+- Owner authorized implementation in the active CRM: commercial service composition and client approval precede production assignment.
+- Each stage has dates, an internal crew and responsible specialist, optional external contractor firms, and an optional predecessor. A service/project remains open until all required work is done; financial settlement remains separate.
+- Stage shares partition the service piecework budget and sum to 100%. Contractor invoices remain direct Project expenses, separate from employee payroll. Existing salary/fixed-per-job policies retain their current accrual rule.
+- Completion creates a server-calculated payroll snapshot; completed assignments, amounts and work scope are historical records. Stage payroll is included in its completion week and identified by stage on payment, preventing duplicate payment at overall close.
+- An assigned manager can record the client's approval of additional scope; unapproved additions remain pending and cannot be dispatched or increase committed revenue.
+- This owner request authorizes these operational additions within the active legacy workspace until the separately tracked relational installation/payroll migration is ready. No parallel CRM, warehouse or payroll store is created.

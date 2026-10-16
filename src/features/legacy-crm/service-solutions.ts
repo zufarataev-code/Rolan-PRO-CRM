@@ -66,14 +66,17 @@ function projectPlans(order: Row): Row[] {
   });
 }
 /** A plan with its specialist and date. */
-const completePlan = (plan: Row) => typeof plan.installationAt === 'string' && !Number.isNaN(Date.parse(plan.installationAt)) && Array.isArray(plan.installerIds) && plan.installerIds.length > 0;
+const completePlan = (plan: Row) => typeof plan.installationAt === 'string' && !Number.isNaN(Date.parse(plan.installationAt)) && Array.isArray(plan.installerIds)
+  && (plan.installerIds.length > 0 || plan.externalExecutor === true) && plan.stagesComplete !== false;
 /**
  * An installation under way whose every service is done and planned
  * (projectCloseFinishedProjects): it closes as «Монтаж выполнен».
  */
 export function projectServicesFinished(order: Row, payload: Row): boolean {
+  if (rows(order.productionStages).some(stage => stage.status !== 'done')) return false;
   if (!SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) return false;
   const ids = serviceGroupIds(order);
+  if (Array.isArray(order.serviceScopeApprovals) && ids.some(id => !order.serviceScopeApprovals.some((entry:Row) => entry.serviceId === id && entry.scope === serviceGroupScope(order,id)))) return false;
   const progress = object(order.serviceProgress);
   if (!ids.length || ids.some(id => object(progress[id]).status !== 'done')) return false;
   const plans = projectPlans(order);
@@ -91,7 +94,8 @@ export function projectServicesStarted(order: Row): boolean {
 const SCOPE_WINDOW_FIELDS = ['id', 'width', 'height', 'qty', 'sqft', 'actualWidth', 'actualHeight', 'actualQty', 'panels', 'actualPanels', 'winType', 'catalogId', 'offeringId', 'measureScope', 'removalRequired', 'complexity'];
 const SCOPE_LINE_FIELDS = ['id', 'qty', 'unit', 'type', 'offeringId', 'catalogId', 'serviceType', 'measureScope', 'complexity'];
 export function serviceGroupScope(order: Row, id: string): string {
-  const pick = (item: Row, fields: string[]) => Object.fromEntries(fields.filter(field => item[field] !== undefined).map(field => [field, item[field]]));
+  const bases: Row = { actualWidth: 'width', actualHeight: 'height', actualQty: 'qty' };
+  const pick = (item: Row, fields: string[]) => Object.fromEntries(fields.filter(field => item[field] !== undefined && !(bases[field] && (Number(item[field]) <= 0 || Number(item[field]) === Number(item[bases[field]])))).map(field => [field, item[field]]));
   // Each window with its room (where the work is); their order is not part of it.
   const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows).map(win => ({ room, win })))
     .filter(({ win }) => (typeof win.offeringId === 'string' && win.offeringId ? `offering:${win.offeringId}` : `direction:${win.measureScope || order.serviceType || 'solar_film'}`) === id)
@@ -143,6 +147,7 @@ export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInsta
   const copy = structuredClone(payload);
   for (const offering of rows(object(copy.settings).serviceOfferings)) for (const field of OWNER_OFFERING_FIELDS) delete offering[field];
   for (const order of rows(copy.orders)) {
+    for (const stage of rows(order.productionStages)) delete stage.payroll;
     const windows = rows(object(order.measurements).rooms).flatMap(room => rows(room.windows));
     for (const item of scope(order)) {
       const id = windows.includes(item)
@@ -363,11 +368,21 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         if (typeof plan.id !== 'string' || seen.has(plan.id) || !/^\w[\w:-]{0,240}$/.test(plan.id) || !Array.isArray(plan.installerIds)) return 'Некорректные назначения услуг.';
         if (plan.installationAt !== undefined && plan.installationAt !== '' && (typeof plan.installationAt !== 'string' || Number.isNaN(Date.parse(plan.installationAt)))) return 'Некорректная дата услуги.';
         seen.add(plan.id);
+        if (Array.isArray(order.serviceScopeApprovals) && !order.serviceScopeApprovals.some((entry:Row) => entry.serviceId === plan.id && entry.scope === serviceGroupScope(order,plan.id))
+          && stableJson(plan) !== stableJson(rows(oldOrder.serviceSchedules).find(item => item.id === plan.id))) return 'Сначала согласуйте дополнительную услугу с клиентом.';
+        if ((plan.externalExecutor === true || plan.stagesComplete !== undefined)
+          && !rows(order.productionStages).some(stage => stage.serviceId === plan.id)) return 'Назначение подрядчика должно быть связано с этапом услуги.';
         if (plan.installerIds.some((id: unknown)=>!rows(next.users).some(user=>user.id===id && user.role==='installer'))) return 'Исполнитель услуги должен быть специалистом по установке.';
       }
     }
     const complete = completePlan;
     const schedulesChanged = stableJson(order.serviceSchedules) !== stableJson(oldOrder.serviceSchedules);
+    // Production assignments are operational decisions after client approval,
+    // even when the browser submits only a partial draft and keeps the status.
+    if (schedulesChanged && rows(order.serviceSchedules).length && oldOrder.id !== undefined
+      && !['proposal_accepted', ...SCHEDULED_PROJECT_STATUSES, ...CLOSED_PROJECT_STATUSES].includes(String(oldOrder.status))) {
+      return 'Исполнителей и даты назначают после принятия КП.';
+    }
     // A finished project keeps its crew and dates: they are its history and its pay.
     if (schedulesChanged && CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status))) return 'Проект закрыт: исполнителей и даты услуг не меняют.';
     // Entering installation (from the card, the schedule window or the kanban)
@@ -379,6 +394,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     // step by step until then).
     const closesProject = CLOSED_PROJECT_STATUSES.includes(String(order.status)) && !CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status));
     if ((entersInstallation || closesProject) && oldOrder.id !== undefined) {
+      if (Array.isArray(order.serviceScopeApprovals) && serviceGroupIds(order).some(id => !order.serviceScopeApprovals.some((entry:Row) => entry.serviceId === id && entry.scope === serviceGroupScope(order,id)))) return 'Сначала согласуйте дополнительные услуги с клиентом.';
       if (pendingSizedOfferings(order, offerings).length) return 'Сначала внесите замер всех услуг проекта.';
       const plans = projectPlans(order);
       if (plans.some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
@@ -399,7 +415,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       for (const before of projectPlans(oldOrder).filter(complete)) {
         const after = rows(order.serviceSchedules).find(plan => plan.id === before.id);
         // A plan leaves only with its service.
-        if (after ? !complete(after) : services.includes(before.id)) return 'Монтаж назначен: у услуги должны остаться исполнитель и дата.';
+        if (after ? !complete({ ...after, stagesComplete: true }) : services.includes(before.id)) return 'Монтаж назначен: у услуги должны остаться исполнитель и дата.';
       }
     }
     // A done service stays in an open project: it is reopened before it can be
