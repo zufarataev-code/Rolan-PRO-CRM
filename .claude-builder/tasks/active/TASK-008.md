@@ -1,0 +1,33 @@
+# TASK-008 — ROLANPRO CRM full audit and P0 workflow repair
+
+- task_id: TASK-008
+- title: Full CRM audit and P0 end-to-end workflow repair
+- owner_intent: Make the existing ROLANPRO CRM simple, coherent, mobile-usable, and operationally reliable instead of patching isolated buttons. The owner must be able to move a customer from lead through project scheduling and installer assignment without duplicate records or confusing parallel workflows.
+- business_outcome: The current CRM has one understandable daily workflow, critical owner/manager actions work end-to-end, duplicate UX is identified and reduced, and the highest-impact blockers around tasks, SOLD-to-PROJECT handoff, scheduling, installer assignment, and mobile usability are repaired without creating a second CRM or source of truth.
+- status: READY_FOR_BUILD
+- priority: P0
+- risk_level: R2
+- requested_by: Owner
+- planner: ChatGPT Orchestrator
+- builder: Claude Builder
+- reviewer: Codex Reviewer
+- required_skills: [rolanpro-crm, rolanpro-operations]
+- required_tools: [GitHub Actions, Claude Builder, Codex GitHub review]
+- tool_permissions: [Claude model job repository read-only; local working-tree edits only; deterministic publisher generated task branch and PR only; no production access]
+- source_of_truth: [AGENTS.md, PROJECT_STATE.md, DECISIONS.md, CRM_AUDIT_AND_ROADMAP_2026-07-19.md, ARCHITECTURE.md, DATA_MODEL.md, API_SPEC.md, GitHub Issue #119, current main code and Prisma/PostgreSQL contracts]
+- scope_in: [audit the actual current CRM end-to-end rather than trusting stale documentation; create CRM_FULL_AUDIT_2026-09.md with P0/P1/P2/P3 findings tied to exact routes components APIs models and user scenarios; map the current versus target lifecycle Lead -> Deal -> Proposal -> Project -> Installation; reproduce root causes for owner-reported inability or confusion around creating project/order creating tasks scheduling installation and assigning installers; identify duplicate or competing write paths and canonicalize toward PostgreSQL-backed authoritative records; implement the highest-impact safe P0/P1 repairs possible within this task and transport policy; make SOLD-to-PROJECT handoff idempotent and prevent duplicate project creation where current code permits; connect project scheduling and installer assignment to one authoritative operational record where current architecture supports it; improve task creation and Today/next-action usability where current code supports it; repair mobile overflow navigation or role-workspace issues only where transport policy permits safe publication; add or strengthen regression coverage for changed business paths; update PROJECT_STATE.md only when permitted by repository policy and transport boundaries; preserve all existing customer and project records]
+- scope_out: [no second CRM shell; no rewrite from scratch; no new database source of truth; no production deployment; no live Stripe changes; no real SMS email push or customer communication; no production database mutation; no destructive migration; no deletion or rewrite of historical customer order project payroll inventory or financial records; no credentials secrets or permission changes; no real payroll purchasing or payment actions; no merge to main by Builder; no bypass of protected-path publisher policy]
+- dependencies: [Issue #119 master specification; latest origin/main; open PR and branch review to avoid duplicate work; CRM Builder transport must be merged and enabled before execution; any required protected-path change that transport refuses must be reported precisely as a blocker rather than bypassed]
+- assumptions: [the existing Next.js React TypeScript Prisma PostgreSQL application remains the foundation; /legacy-crm is the canonical visible CRM shell; database and backend business rules are authoritative; CRM owns commercial flow through sold handoff and Operations owns post-sale execution; user-facing lifecycle should hide technical-status complexity; active commercial work requires responsible user next action and due date]
+- definition_of_done: [CRM_FULL_AUDIT_2026-09.md exists and clearly prioritizes root causes instead of generic advice; BEFORE and AFTER workflow maps are documented; every P0 finding has either an implemented repair with evidence or an explicit transport/data blocker with exact next action; project/order creation path is traced UI -> request -> API -> validation -> DB -> response and duplicate-project behavior is prevented or precisely blocked; task/next-action workflow is materially simplified or its exact blocking architecture is documented; installation scheduling and installer assignment use or move toward one authoritative record without parallel calendar-only copies; changed code has regression coverage appropriate to the touched path; no unauthorized financial data is exposed to field roles; existing records are preserved; no second product shell is introduced; Builder returns a truthful structured handoff and does not claim tests it could not run]
+- implementation_plan: [read synchronization and decision files first and check current open work; inspect actual routes APIs models and canonical legacy/modern boundaries relevant to Issue #119; produce a concise audit and duplicate-flow map; select the smallest set of P0/P1 repairs that unlocks the real owner journey without broad rewrite; implement scoped backend and UI changes allowed by transport; add regression tests or static checks where feasible; report protected-path or environment blockers exactly; leave all changes as local patch for deterministic publication and independent Codex review]
+- branch_or_pr:
+- changed_files: []
+- tests_run: []
+- review_findings: []
+- approval_requirements: [independent Codex review before merge; Owner approval before any production deployment or R3/R4 action]
+- approval_evidence: []
+- acceptance_result:
+- next_action: Merge and enable reviewed CRM Claude Builder transport, merge this task record, then trigger exact owner comment @claude build TASK-008 on GitHub Issue #119.
+- created_at: 2026-09-06
+- updated_at: 2026-09-06
