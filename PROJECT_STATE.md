@@ -1048,3 +1048,11 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - The authoritative data and business logic did not move: one Project, one `projectLines` list, existing measurement/Proposal/schedule/finance/history workspaces and existing pricing/payroll/warehouse formulas. The old workspace tiles remain hidden templates only, so the new tabs open the established forms without duplicating records or calculations.
 - A service row is selectable and exposes its own quantity/measurement, price corridor, crew, date and progress. Mobile collapses each service to a readable card, stacks the inspector/economics, and keeps the primary action above the bottom navigation.
 - Focused Project/card/progress/workspace tests pass 54/54. Full suite and required GitHub CI remain before release. Production has not been changed; deployment still requires the owner's explicit confirmation after CI is green.
+
+## 2026-10-17 handoff — estimate lines form the canonical Proposal (Codex)
+
+- Branch `codex/project-estimate-proposal-v2`, based on current `origin/main`.
+- The calculation workspace now begins with «Позиции проекта → единое КП», using the existing `projectLines` model. It shows service/material/quantity/client price and, only to the Owner, material cost, installer reserve and direct line margin; shared expenses remain below and reduce final Project profit.
+- Estimate approval stores `schemaVersion: 2`, line-level scope/measurements/materials/prices, payment terms and role-safe economics through `projectEstimateApprovalSnapshot`. Historical quick-import closure uses the same snapshot builder.
+- `premiumCanonicalSnapshot` now builds canonical Proposal items through `projectProposalItemsFromEstimate`: measured windows are grouped by service with window-level technical JSON, quantity/included services remain independent lines, and zero-price included scope is never charged by residual total allocation.
+- After rebasing onto `origin/main` `0f1a8291` (including per-service production stages), focused estimate/project-line regression tests pass 85/85 and the full suite passes 720/720. Local `tsc --noEmit` again stalled without diagnostics or CPU progress and was stopped; the required GitHub CI remains the authoritative type/build gate. Production has not been changed; release requires the Owner's separate explicit confirmation.

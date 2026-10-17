@@ -25015,6 +25015,70 @@ function projectLines(o) {
   });
 }
 
+/** Materials fixed on a project line, without exposing warehouse costs. */
+function projectLineMaterialNames(line) {
+  const names = [];
+  (line.windows || []).forEach(win => {
+    const catalog = windowCatalog(win);
+    const name = catalog ? catalogLabel(catalog) : String(win.filmType || '').trim();
+    if (name) names.push(name);
+  });
+  (line.sources || []).forEach(source => {
+    const catalog = source.catalogId ? getCatalogItem(source.catalogId) : null;
+    const name = catalog ? catalogLabel(catalog) : String(source.manualFilmName || '').trim();
+    if (name) names.push(name);
+  });
+  return [...new Set(names)];
+}
+
+/**
+ * Immutable commercial rows saved when the estimate is approved. These are
+ * the shared source for the estimate audit and the client proposal version.
+ */
+function projectEstimateLineSnapshots(o, { economics = false } = {}) {
+  return projectLines(o).map(line => {
+    const measurements = (line.windows || []).map(win => {
+      const room = (o.measurements?.rooms || []).find(candidate => (candidate.windows || []).includes(win));
+      return {
+        roomId: room?.id || '',
+        roomName: room?.name || '',
+        windowId: win.id || '',
+        windowName: win.name || '',
+        width: Number(win.actualWidth ?? win.width) || 0,
+        height: Number(win.actualHeight ?? win.height) || 0,
+        quantity: Number(win.actualQty ?? win.qty) || 1,
+        sqft: Math.round(windowActualAreaSqft(win) * 100) / 100,
+        glassType: win.glassType || '',
+        installationSide: win.side || '',
+        orientation: win.orientation || '',
+        accessMethod: win.access || '',
+      };
+    });
+    const snapshot = {
+      key: line.key,
+      kind: line.kind,
+      direction: line.direction || '',
+      offeringId: line.offeringId || '',
+      includedBy: line.includedBy || '',
+      name: line.name || 'Услуга',
+      quantity: Math.round((Number(line.qty) || 0) * 100) / 100,
+      unit: line.unit || '',
+      unitLabel: line.unitShort || '',
+      clientPrice: Math.round((Number(line.price) || 0) * 100) / 100,
+      materialNames: projectLineMaterialNames(line),
+      installerIds: [...new Set(line.installerIds || [])],
+      installationAt: line.installationAt || '',
+      measurements,
+    };
+    if (economics) {
+      snapshot.materialCost = Math.round((Number(line.materialCost) || 0) * 100) / 100;
+      snapshot.installerPay = Math.round((Number(line.installerPay) || 0) * 100) / 100;
+      snapshot.directMargin = Math.round((snapshot.clientPrice - snapshot.materialCost - snapshot.installerPay) * 100) / 100;
+    }
+    return snapshot;
+  });
+}
+
 /** Russian plural: 1 окно, 2 окна, 5 окон. */
 function projectPlural(count, one, few, many) {
   const n = Math.abs(count) % 100;
@@ -25058,21 +25122,22 @@ function projectLineCrewText(line) {
 function projectLinesTableHtml(o, { money = false, economics = false } = {}) {
   const lines = projectLines(o);
   if (!lines.length) return '<div class="order-clean-note">В проекте пока нет услуг.</div>';
-  const columns = 4 + (money ? 1 : 0) + (economics ? 2 : 0);
   const rows = lines.map(line => {
     const crew = projectLineCrewText(line);
+    const directMargin = (Number(line.price) || 0) - (Number(line.materialCost) || 0) - (Number(line.installerPay) || 0);
     return `<tr data-project-line="${academyEsc(line.key)}">
-      <td data-label="Услуга"><b>${academyEsc(line.name)}</b><div class="text-xs text-gray-500">${academyEsc(projectLineNote(line))}</div></td>
+      <td data-label="Услуга"><b>${academyEsc(line.name)}</b><div class="text-xs text-gray-500">${academyEsc(projectLineNote(line))}</div>${projectLineMaterialNames(line).length ? `<div class="text-xs text-blue-700">${projectLineMaterialNames(line).map(academyEsc).join(', ')}</div>` : ''}</td>
       <td data-label="Объём" class="money">${academyEsc(projectLineQtyText(line))}</td>
       ${money ? `<td data-label="Клиенту" class="money">${line.kind === 'included' ? 'в пакете · $0' : fmtMoney(line.price)}</td>` : ''}
-      ${economics ? `<td data-label="Материал" class="money">${fmtMoney(line.materialCost)}</td><td data-label="Специалисту" class="money">${fmtMoney(line.installerPay)}</td>` : ''}
+      ${economics ? `<td data-label="Материал" class="money">${fmtMoney(line.materialCost)}</td><td data-label="Специалисту" class="money">${fmtMoney(line.installerPay)}</td><td data-label="Прямая маржа" class="money ${directMargin >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(directMargin)}</td>` : ''}
       <td data-label="Исполнитель">${academyEsc(crew.people)}</td>
       <td data-label="Дата">${academyEsc(crew.date)}</td>
     </tr>`;
   }).join('');
   const total = field => lines.reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
-  const footer = money ? `<tr class="font-black"><td>Итого</td><td></td><td class="money">${fmtMoney(total('price'))}</td>${economics ? `<td class="money">${fmtMoney(total('materialCost'))}</td><td class="money">${fmtMoney(total('installerPay'))}</td>` : ''}<td colspan="2"></td></tr>` : '';
-  return `<div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table project-lines-table"><thead><tr><th>Услуга</th><th class="money">Объём</th>${money ? '<th class="money">Клиенту</th>' : ''}${economics ? '<th class="money">Материал</th><th class="money">Специалисту</th>' : ''}<th>Исполнитель</th><th>Дата</th></tr></thead><tbody>${rows}${footer}</tbody></table></div>${economics && lines.some(line => line.kind === 'windows') ? '<div class="text-xs text-gray-500 mt-2">Материал по окнам — по складской цене плёнки; итог проекта считает расход по раскрою. Оплата специалисту — по ставкам услуг, до распределения по бригаде.</div>' : ''}`;
+  const directMarginTotal = total('price') - total('materialCost') - total('installerPay');
+  const footer = money ? `<tr class="font-black"><td>Итого по услугам</td><td></td><td class="money">${fmtMoney(total('price'))}</td>${economics ? `<td class="money">${fmtMoney(total('materialCost'))}</td><td class="money">${fmtMoney(total('installerPay'))}</td><td class="money ${directMarginTotal >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(directMarginTotal)}</td>` : ''}<td colspan="2"></td></tr>` : '';
+  return `<div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table project-lines-table"><thead><tr><th>Услуга</th><th class="money">Объём</th>${money ? '<th class="money">Клиенту</th>' : ''}${economics ? '<th class="money">Материал</th><th class="money">Специалисту</th><th class="money">Прямая маржа</th>' : ''}<th>Исполнитель</th><th>Дата</th></tr></thead><tbody>${rows}${footer}</tbody></table></div>${economics ? '<div class="text-xs text-gray-500 mt-2">Это маржа строк до общих расходов проекта. Доставка, бензин, аренда, реклама и другие общие расходы учитываются ниже и уменьшают итоговую прибыль.</div>' : ''}`;
 }
 
 // ---------- КАРТОЧКА ПРОЕКТА: УСЛУГИ НА ОДНОМ ЭКРАНЕ ----------
@@ -26564,6 +26629,36 @@ function projectEstimateDeleteExpense(oid, eid) {
   save(); refreshProjectEstimateWorkspace(oid);
 }
 
+/** The approved estimate version: scope, commercial totals and owner-only economics. */
+function projectEstimateApprovalSnapshot(o, approvedAt, canSeeInternalEconomics) {
+  const profitability = canSeeInternalEconomics ? projectProfitability(o) : null;
+  return {
+    schemaVersion: 2,
+    approvedAt,
+    revenue: orderRevenue(o),
+    // A manager's browser has no installer rates or material costs of services:
+    // internal costs are recorded only by someone who sees them.
+    productionCost: canSeeInternalEconomics ? orderPSS(o).total : null,
+    margin: canSeeInternalEconomics ? orderMargin(o) : null,
+    marginPct: canSeeInternalEconomics ? orderMarginPct(o) : null,
+    areaSqft: orderActualAreaSqft(o),
+    serviceCount: projectLines(o).length,
+    expenseCount: (o.extraExpenses || []).length,
+    measurementBasis: measureAllWindows(o).length ? (orderMeasurementVerificationIssues(o).length ? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED') : projectOfferingLines(o).length ? 'SERVICE_QUANTITIES' : 'QUICK_LINE_ITEMS',
+    lines: projectEstimateLineSnapshots(o, { economics: canSeeInternalEconomics }),
+    sharedExpenses: canSeeInternalEconomics ? (o.extraExpenses || []).map(expense => ({
+      id: expense.id || '',
+      type: expense.type || 'other',
+      label: expense.label || projectEstimateExpenseLabel(expense.type),
+      amount: Math.round((Number(expense.amount) || 0) * 100) / 100,
+    })) : null,
+    paymentTerms: o.paymentTerms || 'deposit_before_work',
+    fixedExpenseAllocation: profitability?.fixedAllocation ?? null,
+    californiaTaxAllocation: profitability?.taxAllocation ?? null,
+    managementNetProfit: profitability?.netProfit ?? null,
+  };
+}
+
 function approveProjectEstimateAndOpenProposal(oid) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
@@ -26576,22 +26671,7 @@ function approveProjectEstimateAndOpenProposal(oid) {
   o.projectEstimateApprovedAt = approvedAt;
   o.projectEstimateApprovedBy = state.currentUserId;
   o.projectEstimateUpdatedAt = approvedAt;
-  o.projectEstimateSnapshot = {
-    approvedAt,
-    revenue: orderRevenue(o),
-    // A manager's browser has no installer rates or material costs of services:
-    // internal costs are recorded only by someone who sees them.
-    productionCost: canSeeInternalEconomics ? orderPSS(o).total : null,
-    margin: canSeeInternalEconomics ? orderMargin(o) : null,
-    marginPct: canSeeInternalEconomics ? orderMarginPct(o) : null,
-    areaSqft: orderActualAreaSqft(o),
-    serviceCount: (o.extraServices || []).length,
-    expenseCount: (o.extraExpenses || []).length,
-    measurementBasis: measureAllWindows(o).length ? (orderMeasurementVerificationIssues(o).length ? 'CUSTOMER_PRELIMINARY' : 'SURVEYOR_VERIFIED') : projectOfferingLines(o).length ? 'SERVICE_QUANTITIES' : 'QUICK_LINE_ITEMS',
-    fixedExpenseAllocation: canSeeInternalEconomics ? projectProfitability(o).fixedAllocation : null,
-    californiaTaxAllocation: canSeeInternalEconomics ? projectProfitability(o).taxAllocation : null,
-    managementNetProfit: canSeeInternalEconomics ? projectProfitability(o).netProfit : null,
-  };
+  o.projectEstimateSnapshot = projectEstimateApprovalSnapshot(o, approvedAt, canSeeInternalEconomics);
   o.timeline = o.timeline || [];
   o.timeline.push({ at: approvedAt, key: 'project_estimate_approved', by: state.currentUserId, note: canSeeInternalEconomics ? `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}, маржа ${marginPct.toFixed(1)}%` : `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}` });
   save();
@@ -26684,20 +26764,7 @@ function closeQuickProjectAsCompleted(oid) {
   o.projectEstimateApprovedAt = recordedAt;
   o.projectEstimateApprovedBy = state.currentUserId;
   o.projectEstimateUpdatedAt = recordedAt;
-  o.projectEstimateSnapshot = {
-    approvedAt: recordedAt,
-    revenue,
-    productionCost: orderPSS(o).total,
-    margin: orderMargin(o),
-    marginPct: orderMarginPct(o),
-    areaSqft: orderActualAreaSqft(o),
-    serviceCount: (o.extraServices || []).length,
-    expenseCount: (o.extraExpenses || []).length,
-    measurementBasis: 'QUICK_LINE_ITEMS',
-    fixedExpenseAllocation: projectProfitability(o).fixedAllocation,
-    californiaTaxAllocation: projectProfitability(o).taxAllocation,
-    managementNetProfit: projectProfitability(o).netProfit,
-  };
+  o.projectEstimateSnapshot = projectEstimateApprovalSnapshot(o, recordedAt, true);
   o.timeline = o.timeline || [];
   o.timeline.push({ at: recordedAt, key: 'project_estimate_approved', by: state.currentUserId, note: `Импортированный расчёт подтверждён: ${fmtMoney(revenue)}` });
   o.timeline.push({ at: paidAt, key: 'payment_received', by: state.currentUserId, note: `Полная оплата ${fmtMoney(revenue)} · перенос из старой CRM` });
@@ -26908,6 +26975,11 @@ function renderProjectEstimateWorkspace(o) {
     ${ignoredQuickLineCount ? `<div class="order-clean-note mt-3" style="border-color:#bfdbfe;background:#eff6ff;color:#1e40af"><b>Расчёт идёт по замеру.</b> ${ignoredQuickLineCount} черновик(а) быстрого ввода не участвуют в цене и КП, поэтому пустая строка больше не блокирует документ.</div>` : ''}
     ${issues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>До КП нужно проверить:</b> ${issues.map(academyEsc).join(', ')}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Расчёт заполнен.</b> Проверьте цену клиенту и подтвердите переход к КП.</div>`}
     ${unverifiedMeasurements.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Предварительные размеры клиента.</b> По ним разрешено рассчитать проект и выпустить КП. Перед назначением монтажа потребуется внести и подтвердить точные размеры ${unverifiedMeasurements.length} окон.</div>` : ''}
+
+    <section class="project-estimate-section">
+      <div class="project-estimate-section-head"><div><h4>Позиции проекта → единое КП</h4><div class="text-xs text-gray-500">Одна строка — одна услуга проекта. Именно этот состав, объём, материал и цена фиксируются при подтверждении расчёта и переходят в новую версию КП. У каждой строки позже остаются свои дата и исполнитель.</div></div><span class="tag bg-blue-50 text-blue-700">Источник КП</span></div>
+      ${projectLinesTableHtml(o, { money: true, economics: canSeeInternalEconomics })}
+    </section>
 
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>1. Замер и материалы</h4><div class="text-xs text-gray-500">Обязательная основа расчёта и КП: помещения, окна, размеры и выбранная плёнка.</div></div></div>
@@ -34421,70 +34493,98 @@ async function premiumOpenStripeLink(token) {
     alert('Stripe checkout не готов:\n' + e.message + '\n\nПроверьте настройки Stripe или создайте ссылку из окна КП.');
   }
 }
+function projectProposalDirectionTitle(direction) {
+  return ({
+    solar_film: 'Solar Window Film',
+    smart_film: 'Smart Film',
+    protective_film: 'Safety and Security Film',
+    decorative_film: 'Decorative Window Film',
+  })[direction] || 'Window Film Service';
+}
+function projectProposalLineTitle(line) {
+  const offering = serviceOffering(line.offeringId);
+  const workType = line.sources?.[0]?.type;
+  const knownWork = ({
+    washing: 'Glass Cleaning', removal: 'Existing Film Removal', silicone: 'Structural Silicone',
+    electric: 'Electrical Work', connect: 'Smart Film Zone Connection', warranty: 'Extended Warranty',
+  })[workType];
+  if (line.kind === 'windows' || line.kind === 'quick') {
+    const material = projectLineMaterialNames(line).join(', ');
+    return [projectProposalDirectionTitle(line.direction), material].filter(Boolean).join(' — ');
+  }
+  return offering?.nameEn || offering?.name || knownWork || (line.kind === 'included' ? 'Included Project Service' : 'Additional Project Service');
+}
+function projectProposalItemsFromEstimate(order, prop, calc) {
+  const allowedQuickLines = new Set(projectEstimateQuickLinesForBasis(order));
+  const items = [];
+  projectLines(order).forEach(line => {
+    if (line.kind === 'quick' && !(line.sources || []).some(source => allowedQuickLines.has(source))) return;
+    if (line.kind === 'windows') {
+      const includedWindows = (line.windows || []).filter(win => {
+        const room = (order.measurements?.rooms || []).find(candidate => (candidate.windows || []).includes(win));
+        return room && premiumWindowIncluded(prop, room.id, win.id);
+      });
+      if (!includedWindows.length) return;
+      const measurements = includedWindows.map(win => {
+        const room = (order.measurements?.rooms || []).find(candidate => (candidate.windows || []).includes(win));
+        const priced = calc.byWindow?.[win.id] || premiumWindowPrice(prop, order, win);
+        return {
+          room_name: room?.name || 'Project area', window_id: win.id || null, window_name: win.name || null,
+          width: premiumNum(win.actualWidth ?? win.width), height: premiumNum(win.actualHeight ?? win.height),
+          quantity: premiumNum(win.actualQty ?? win.qty) || 1, sqft: premiumNum(priced.area),
+          glass_type: win.glassType || null, installation_side: win.side || null,
+          facade_orientation: win.orientation || null, access_method: win.access || null,
+        };
+      });
+      const materials = [...new Set(includedWindows.map(win => {
+        const catalog = calc.byWindow?.[win.id]?.catalog || premiumSelectedCatalog(prop, win) || windowCatalog(win);
+        return catalog ? catalogLabel(catalog) : String(win.filmType || '').trim();
+      }).filter(Boolean))];
+      const rooms = [...new Set(measurements.map(item => item.room_name).filter(Boolean))];
+      const quantity = measurements.reduce((sum, item) => sum + premiumNum(item.sqft), 0);
+      const linePrice = includedWindows.reduce((sum, win) => sum + premiumNum(calc.byWindow?.[win.id]?.price ?? premiumWindowPrice(prop, order, win).price), 0);
+      items.push({
+        service_code: canonicalServiceCodeForOrderService(line.direction) || 'SOLAR_FILM',
+        room_name: rooms.join(', ') || null,
+        title_en: [projectProposalDirectionTitle(line.direction), materials.join(', ')].filter(Boolean).join(' — '),
+        description_en: `${includedWindows.length} opening${includedWindows.length === 1 ? '' : 's'} · ${premiumNum(quantity)} sq ft`,
+        quantity: premiumNum(quantity) || 1,
+        unit_label: 'sq ft',
+        line_price: premiumNum(linePrice),
+        measurement_snapshot: { windows: measurements },
+        dynamic_fields: { project_line_key: line.key, offering_id: line.offeringId || null, materials },
+        item_kind: 'film',
+      });
+      return;
+    }
+    const source = line.sources?.[0] || {};
+    const materialNames = projectLineMaterialNames(line);
+    const servicePeriod = [projectQuickDateValue(source.startDate), projectQuickDateValue(source.endDate)].filter(Boolean).join(' — ');
+    const included = line.kind === 'included';
+    const details = [
+      materialNames.length ? `Material: ${materialNames.join(', ')}` : '',
+      included ? `Included with ${serviceOffering(line.includedBy)?.nameEn || serviceOffering(line.includedBy)?.name || 'the main service'}` : '',
+      servicePeriod ? `Service period: ${servicePeriod}` : '',
+    ].filter(Boolean);
+    items.push({
+      service_code: canonicalServiceCodeForOrderService(line.direction) || 'SOLAR_FILM',
+      title_en: projectProposalLineTitle(line),
+      quantity: premiumNum(line.qty) || 1,
+      unit_label: line.unitShort || line.unit || 'service',
+      line_price: included ? 0 : premiumNum(line.price),
+      description_en: details.join(' · ') || null,
+      dynamic_fields: { project_line_key: line.key, offering_id: line.offeringId || null, included_by: line.includedBy || null, materials: materialNames },
+      item_kind: line.kind === 'quick' && materialNames.length ? 'film' : 'service',
+    });
+  });
+  return items;
+}
 function premiumCanonicalSnapshot(prop) {
   const calc = premiumProposalCalc(prop);
   const order = calc.order;
   const client = getClient(order?.clientId) || {};
   if (!order) throw new Error('Order was not found.');
-  const items = [];
-  (order.measurements?.rooms || []).forEach(room => {
-    if (!premiumRoomIncluded(prop, room.id)) return;
-    (room.windows || []).forEach(windowItem => {
-      if (!premiumWindowIncluded(prop, room.id, windowItem.id)) return;
-      const priced = calc.byWindow?.[windowItem.id] || premiumWindowPrice(prop, order, windowItem);
-      const catalog = priced.catalog || {};
-      const productName = [catalog.brand, catalog.model].filter(Boolean).join(' ') || windowItem.filmType || 'Window film';
-      items.push({
-        service_code: installerServiceCodeByCategory(canonicalCatalogCategory(catalog.category)) || 'SOLAR_FILM',
-        room_name: room.name || 'Project area',
-        window_id: windowItem.id,
-        title_en: `${windowItem.name || 'Window'} — ${productName}`,
-        description_en: `${premiumNum(windowItem.width)} × ${premiumNum(windowItem.height)} · ${premiumNum(windowItem.actualQty != null ? windowItem.actualQty : (windowItem.qty || 1))} pcs`,
-        quantity: premiumNum(windowItem.actualQty != null ? windowItem.actualQty : (windowItem.qty || 1)) || 1,
-        unit_label: 'window',
-        line_price: premiumNum(priced.price),
-        measurement_snapshot: {
-          width: premiumNum(windowItem.width),
-          height: premiumNum(windowItem.height),
-          sqft: premiumNum(priced.area),
-          site_type: orderSiteType(order) || null,
-          glass_type: windowItem.glassType || null,
-          installation_side: windowItem.side || null,
-          facade_orientation: windowItem.orientation || null,
-          access_method: windowItem.access || null,
-        },
-        item_kind: 'film',
-      });
-    });
-  });
-  projectEstimateQuickLinesForBasis(order).forEach(line => {
-    const servicePeriod = [projectQuickDateValue(line.startDate), projectQuickDateValue(line.endDate)].filter(Boolean).join(' — ');
-    items.push({
-      service_code: canonicalServiceCodeForOrderService(line.serviceType) || 'SOLAR_FILM',
-      title_en: line.label || primaryServiceInfo(line.serviceType)?.title || 'Project service',
-      quantity: premiumNum(line.qty) || 1,
-      unit_label: line.unit || 'unit',
-      line_price: premiumNum(line.price),
-      description_en: servicePeriod ? `Service period: ${servicePeriod}` : null,
-      item_kind: line.catalogId || projectQuickManualFilmName(line) ? 'film' : 'service',
-    });
-  });
-  // Services from the directory without sizes are their own proposal lines.
-  projectOfferingLines(order).filter(line => premiumNum(line.price) > 0).forEach(line => {
-    items.push({
-      service_code: canonicalServiceCodeForOrderService(line.serviceType) || 'SOLAR_FILM',
-      title_en: line.label || line.offeringName || 'Project service',
-      quantity: premiumNum(line.qty) || 1,
-      unit_label: serviceOfferingUnitShort(line),
-      line_price: premiumNum(line.price),
-      item_kind: 'service',
-    });
-  });
-  const offeringLines = projectOfferingLines(order);
-  const regularLegacyServices = (order.extraServices || []).filter(line => !line.quickProjectLine && !offeringLines.includes(line)).reduce((sum, line) => sum + premiumNum(line.price), 0);
-  if (regularLegacyServices > 0) {
-    items.push({ service_code: 'SOLAR_FILM', title_en: 'Additional project services', quantity: 1, unit_label: 'project', line_price: regularLegacyServices, item_kind: 'service' });
-  }
+  const items = projectProposalItemsFromEstimate(order, prop, calc);
   (calc.selectedServices || []).forEach(service => {
     items.push({
       service_code: service.id === 'film_removal' ? 'REMOVAL' : service.id === 'structural_silicone' ? 'SILICONE' : service.id === 'electrical_installation' ? 'ELECTRICAL_WORK' : 'SOLAR_FILM',
@@ -34498,9 +34598,10 @@ function premiumCanonicalSnapshot(prop) {
   const rawTotal = items.reduce((sum, item) => sum + premiumNum(item.line_price), 0);
   if (!items.length || rawTotal <= 0) throw new Error('Add measured windows or services before publishing the proposal.');
   const factor = calc.total > 0 ? calc.total / rawTotal : 1;
+  const billableItems = items.filter(item => premiumNum(item.line_price) > 0);
   let allocated = 0;
-  items.forEach((item, index) => {
-    const adjusted = index === items.length - 1
+  billableItems.forEach((item, index) => {
+    const adjusted = index === billableItems.length - 1
       ? Math.max(0, Math.round((calc.total - allocated) * 100) / 100)
       : Math.max(0, Math.round(item.line_price * factor * 100) / 100);
     item.line_price = adjusted;

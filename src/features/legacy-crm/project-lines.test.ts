@@ -43,6 +43,7 @@ function load() {
     currentUser: () => ({ role: 'owner' }),
     getUser: (id: string) => users[id],
     getCatalogItem: (id: string) => db.settings.catalog.find((item: Row) => item.id === id),
+    catalogLabel: (item: Row) => [item?.brand, item?.model].filter(Boolean).join(' '),
     windowCatalog: (win: Row) => db.settings.catalog.find((item: Row) => item.id === win.catalogId),
     windowActualAreaSqft: (win: Row) => Number(win.sqft) || 0,
     warehouseCatalogCostPerSqft: () => 2,
@@ -126,19 +127,38 @@ test('the lines add up to the project revenue and the reference installer pay', 
   assert.equal(draftLines.reduce((total: number, line: Row) => total + line.installerPay, 0), c.orderInstallerPayoutBreakdown(draft).total);
 });
 
+test('the approved estimate snapshots every service line that later forms the proposal', () => {
+  const { c } = load();
+  const lines = plain(c.projectEstimateLineSnapshots(project(), { economics: true }));
+  assert.deepEqual(lines.map((line: Row) => line.key), [
+    'offering:a1', 'direction:solar_film', 'line:s', 'line:z', 'line:wash',
+  ]);
+  assert.deepEqual(lines[0].materialNames, ['R 8 mil']);
+  assert.equal(lines[0].measurements.length, 2);
+  assert.equal(lines[0].clientPrice, 420);
+  assert.equal(lines[0].materialCost, 66);
+  assert.equal(lines[0].installerPay, 90);
+  assert.equal(lines[0].directMargin, 264);
+  assert.equal(lines[2].clientPrice, 0, 'an included service remains visible but is not billed twice');
+
+  const manager = plain(c.projectEstimateLineSnapshots(project()));
+  assert.equal('materialCost' in manager[0], false, 'internal economics stay hidden from a manager snapshot');
+  assert.equal('installerPay' in manager[0], false);
+});
+
 test('the project card table shows money by role; the crew rows carry no prices', () => {
   const { c } = load();
   const o = project();
   const owner = c.projectLinesTableHtml(o, { money: true, economics: true });
-  assert.match(owner, /<th class="money">Материал<\/th><th class="money">Специалисту<\/th>/);
-  assert.match(owner, /Итого<\/td><td><\/td><td class="money">\$840\.00<\/td>/);
+  assert.match(owner, /<th class="money">Материал<\/th><th class="money">Специалисту<\/th><th class="money">Прямая маржа<\/th>/);
+  assert.match(owner, /Итого по услугам<\/td><td><\/td><td class="money">\$840\.00<\/td>/);
   assert.match(owner, /входит в «A1 8 mil»/);
   assert.match(owner, /в пакете · \$0/);
   assert.match(owner, /Защитная · 2 окна/);
-  assert.match(owner, /Материал по окнам/);
+  assert.match(owner, /общих расходов проекта/);
   const noWindows = project();
   noWindows.measurements.rooms = [];
-  assert.doesNotMatch(c.projectLinesTableHtml(noWindows, { money: true, economics: true }), /Материал по окнам/);
+  assert.match(c.projectLinesTableHtml(noWindows, { money: true, economics: true }), /общих расходов проекта/);
   assert.deepEqual([1, 2, 5, 11, 22, 25].map(n => c.projectWindowsWord(n)), ['окно', 'окна', 'окон', 'окон', 'окна', 'окон']);
   const manager = c.projectLinesTableHtml(o, { money: true, economics: false });
   assert.match(manager, /\$420\.00/);

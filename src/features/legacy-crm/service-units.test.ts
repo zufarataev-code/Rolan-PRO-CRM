@@ -136,8 +136,10 @@ test('a project of services without sizes skips measurement; the proposal lists 
   const readiness = html.slice(html.indexOf('function projectEstimateReadiness(o) {'), html.indexOf('function projectQuickLines(o) {'));
   assert.match(readiness, /не указано количество: /);
   assert.match(readiness, /не указана цена услуги: /);
-  assert.match(html, /projectOfferingLines\(order\)\.filter\(line => premiumNum\(line\.price\) > 0\)\.forEach\(line => \{\n {4}items\.push\(\{\n {6}service_code: canonicalServiceCodeForOrderService\(line\.serviceType\) \|\| 'SOLAR_FILM',/);
-  assert.match(html, /const offeringLines = projectOfferingLines\(order\);\n  const regularLegacyServices = \(order\.extraServices \|\| \[\]\)\.filter\(line => !line\.quickProjectLine && !offeringLines\.includes\(line\)\)\.reduce/, 'directory services are not counted twice in «Additional project services»');
+  const proposalItems = html.slice(html.indexOf('function projectProposalItemsFromEstimate('), html.indexOf('function premiumCanonicalSnapshot('));
+  assert.match(proposalItems, /projectLines\(order\)\.forEach\(line => \{/);
+  assert.match(proposalItems, /service_code: canonicalServiceCodeForOrderService\(line\.direction\) \|\| 'SOLAR_FILM'/);
+  assert.match(proposalItems, /line_price: included \? 0 : premiumNum\(line\.price\)/, 'directory and included services are emitted once from the project line list');
   // Windows only take per-sq-ft services.
   assert.match(html, /const selectedOfferings = projectSelectedSizedOfferings\(o, win\.measureScope \|\| o\.serviceType\);/);
   assert.match(html, /const selectedIds = new Set\(selectedOfferings\.map\(item => item\.id\)\);/);
@@ -194,10 +196,13 @@ test('the privacy scope has its own measurement fields, saved on the window and 
 });
 
 test('an estimate approved by someone without internal economics records no internal cost', () => {
-  const approve = html.slice(html.indexOf('function approveProjectEstimateAndOpenProposal(oid) {'), html.indexOf('function approveProjectEstimateAndOpenProposal(oid) {') + 3000);
-  assert.match(approve, /productionCost: canSeeInternalEconomics \? orderPSS\(o\)\.total : null,/);
-  assert.match(approve, /margin: canSeeInternalEconomics \? orderMargin\(o\) : null,/);
-  assert.match(approve, /projectOfferingLines\(o\)\.length \? 'SERVICE_QUANTITIES' : 'QUICK_LINE_ITEMS'/);
+  const snapshot = html.slice(html.indexOf('function projectEstimateApprovalSnapshot('), html.indexOf('function approveProjectEstimateAndOpenProposal('));
+  const approve = html.slice(html.indexOf('function approveProjectEstimateAndOpenProposal(oid) {'), html.indexOf('function approveProjectEstimateAndOpenProposal(oid) {') + 1800);
+  assert.match(snapshot, /productionCost: canSeeInternalEconomics \? orderPSS\(o\)\.total : null,/);
+  assert.match(snapshot, /margin: canSeeInternalEconomics \? orderMargin\(o\) : null,/);
+  assert.match(snapshot, /lines: projectEstimateLineSnapshots\(o, \{ economics: canSeeInternalEconomics \}\)/);
+  assert.match(snapshot, /projectOfferingLines\(o\)\.length \? 'SERVICE_QUANTITIES' : 'QUICK_LINE_ITEMS'/);
+  assert.match(approve, /projectEstimateApprovalSnapshot\(o, approvedAt, canSeeInternalEconomics\)/);
 });
 
 function loadScopes(offerings: Row[]) {
