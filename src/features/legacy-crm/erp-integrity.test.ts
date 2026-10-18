@@ -25,6 +25,7 @@ function stock(rolls: Array<Record<string, unknown>>, widths: Record<string, num
     filmCutCanonicalRollWidthMm: (x: number) => x,
     mm2_to_sqft: (x: number) => x / 92903.04,
     getCatalogItem: () => ({ costPerSqft: 1 }), catalogLabel: () => 'Film',
+    projectIncludedDirectionOrder: (order: unknown) => order,
     recordInventoryMovement: (x: unknown) => movements.push(x), save: () => {},
     orderFilmCutMaterialCost: () => c.filmInventoryMaterialCost('f', { widths }, 1),
   });

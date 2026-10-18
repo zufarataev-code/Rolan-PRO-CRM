@@ -258,16 +258,131 @@ function projectSetServiceProgress(oid, key, status) {
   preservePositionForNextRender(); render();
 }
 
+function projectLineDirectionInfo(line) {
+  const offering = serviceOffering(line?.offeringId);
+  const category = offering?.direction || serviceOfferingDirection(line?.direction || 'solar_film');
+  const service = ORDER_PRIMARY_SERVICES.find(item => canonicalCatalogCategory(item.catalogCategory) === category)
+    || primaryServiceInfo(line?.direction || 'solar_film');
+  return { key: service.id, category, icon: service.icon, title: service.title, short: service.short };
+}
+function projectDirectionKeyFromScope(scope, offeringId = '') {
+  return projectLineDirectionInfo({ direction: scope, offeringId }).key;
+}
+function projectDirectionExcluded(o, directionKey) {
+  return (o.excludedProjectDirections || []).includes(directionKey);
+}
+function projectIncludedDirectionOrder(o) {
+  if (!o || !o.excludedProjectDirections?.length) return o;
+  const keep = (scope, offeringId = '') => !projectDirectionExcluded(o, projectDirectionKeyFromScope(scope || o.serviceType, offeringId));
+  return {
+    ...o,
+    measurements: { ...o.measurements, rooms: (o.measurements?.rooms || []).map(room => ({ ...room, windows: (room.windows || []).filter(win => keep(win.measureScope, win.offeringId)) })) },
+    extraServices: (o.extraServices || []).filter(line => keep(line.serviceType, line.offeringId)),
+    offeringIds: (o.offeringIds || []).filter(id => keep(offeringServiceType(serviceOffering(id)), id)),
+    serviceTypes: (o.serviceTypes || []).filter(scope => keep(scope)),
+  };
+}
+function projectToggleDirectionIncluded(oid, directionKey, included) {
+  const o=getOrder(oid);if(!o||!orderUserCanManage(currentUser())||CLOSED_PROJECT_STATUSES.includes(o.status))return;
+  const values=new Set(o.excludedProjectDirections||[]);
+  if(included)values.delete(directionKey);else values.add(directionKey);
+  o.excludedProjectDirections=[...values];
+  projectEstimateMarkChanged(o,`${included?'Возвращено в расчёт':'Исключено из расчёта'} направление «${primaryServiceInfo(directionKey).title}»`);
+  save();preservePositionForNextRender();render();
+}
+function projectDirectionGroups(o, lines = projectLines(o), pending = projectPendingSizedServices(o)) {
+  const groups = new Map();
+  const ensure = info => {
+    if (!groups.has(info.key)) groups.set(info.key, { ...info, lines: [], pending: [] });
+    return groups.get(info.key);
+  };
+  lines.forEach(line => ensure(projectLineDirectionInfo(line)).lines.push(line));
+  pending.forEach(offering => ensure(projectLineDirectionInfo({ offeringId: offering.id, direction: offeringServiceType(offering) })).pending.push(offering));
+  return [...groups.values()];
+}
+function projectDirectionExpenseTotals(o, directionKey, lineKeys = []) {
+  const expenses = (o.extraExpenses || []).filter(expense => expense.direction === directionKey || (expense.serviceId && lineKeys.includes(expense.serviceId)));
+  return {
+    planned: expenses.reduce((sum, expense) => sum + (Number(expense.plannedAmount ?? expense.amount) || 0), 0),
+    actual: expenses.reduce((sum, expense) => sum + (Number(expense.actualAmount) || (expense.actual ? Number(expense.amount) || 0 : 0)), 0),
+  };
+}
+function projectDirectionOfferingPickerHtml(o, directionKey) {
+  const direction = serviceOfferingDirection(directionKey);
+  const used = new Set(projectLines(o).map(line => line.offeringId).filter(Boolean));
+  const pending = new Set(projectPendingSizedServices(o).map(offering => offering.id));
+  const options = serviceOfferingsFor(direction).filter(offering => !used.has(offering.id) && !pending.has(offering.id));
+  if (!options.length) return '<span class="text-xs text-gray-500">Все услуги направления добавлены</span>';
+  return `<select class="project-direction-add" aria-label="Добавить услугу в направление" onchange="if(this.value)projectCardAddService('${o.id}',this.value);this.value=''"><option value="">+ Добавить услугу</option>${options.map(offering => `<option value="${academyEsc(offering.id)}">${academyEsc(offering.name)}</option>`).join('')}</select>`;
+}
+function projectLineNoteValue(o, key) {
+  return String(o.serviceLineNotes?.[key] || '');
+}
+function projectCardSetLineNote(oid, key, value) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanManage(currentUser())) return;
+  o.serviceLineNotes ||= {};
+  const note = String(value || '').trim().slice(0, 2000);
+  if (note) o.serviceLineNotes[key] = note; else delete o.serviceLineNotes[key];
+  projectEstimateMarkChanged(o, `Изменён комментарий к услуге «${projectLines(o).find(line => line.key === key)?.name || 'услуга'}»`);
+  save();
+}
+function projectCardMoveLine(oid, key, delta) {
+  const o=getOrder(oid);if(!o||!orderUserCanManage(currentUser()))return;
+  const keys=projectLines(o).map(line=>line.key),index=keys.indexOf(key),next=index+Number(delta);
+  if(index<0||next<0||next>=keys.length)return;
+  [keys[index],keys[next]]=[keys[next],keys[index]];o.projectLineOrder=keys;
+  save();preservePositionForNextRender();render();
+}
+function projectRecommendations(o) {
+  const lines = projectLines(o);
+  const selected = new Set([...lines.map(line=>line.offeringId),...projectPendingSizedServices(o).map(offering=>offering.id)].filter(Boolean));
+  const dismissed = new Set(o.dismissedProjectRecommendations || []);
+  const suggestions = [];
+  const addOffering = (key, direction, pattern, title, reason) => {
+    const offering = serviceOfferingsFor(direction).find(item => !selected.has(item.id) && pattern.test(`${item.name} ${item.description || ''}`));
+    if (offering && !dismissed.has(key)) suggestions.push({key,title,reason,offeringId:offering.id});
+  };
+  const directions = new Set(lines.map(line=>projectLineDirectionInfo(line).category));
+  const windows = measureAllWindows(o).map(item=>item.win);
+  if (directions.has('smart')) {
+    addOffering('smart-zone','smart',/zone|зон|подключ/i,'Добавить подключение зон','Для Smart-плёнки каждая зона должна попасть в расчёт и заказ-наряд.');
+    addOffering('smart-power','smart',/power|блок.*питан|controller|контрол/i,'Добавить блок питания / управление','Проверьте питание, контроллеры и количество зон до формирования КП.');
+    addOffering('smart-electric','smart',/electric|электр/i,'Добавить электрика','Электрика планируется отдельной услугой со своей датой и исполнителем.');
+  }
+  if (directions.has('protective') || windows.some(win=>win.side==='out')) {
+    addOffering('protective-attachment','protective',/silicon|силикон|attachment|wet.?glaze|креплен/i,'Добавить силиконовое крепление','Защитная плёнка и наружный монтаж могут требовать отдельного второго этапа.');
+  }
+  const pending = projectPendingSizedServices(o);
+  if (pending.length && !dismissed.has('measurement')) suggestions.push({key:'measurement',title:'Создать или связать замер',reason:`${pending.length} ${projectPlural(pending.length,'услуга ждёт','услуги ждут','услуг ждут')} размеров для расчёта.`,measure:true});
+  return suggestions;
+}
+function projectRecommendationAction(oid, key, offeringId = '', measure = false) {
+  const o=getOrder(oid);if(!o||!orderUserCanManage(currentUser()))return;
+  if(measure)return openManagerMeasureModal(oid);
+  if(offeringId)projectCardAddService(oid,offeringId);
+}
+function projectRecommendationDismiss(oid,key) {
+  const o=getOrder(oid);if(!o||!orderUserCanManage(currentUser()))return;
+  o.dismissedProjectRecommendations=[...new Set([...(o.dismissedProjectRecommendations||[]),key])];
+  save();preservePositionForNextRender();render();
+}
+function projectRecommendationsHtml(o) {
+  const rows=projectRecommendations(o);if(!rows.length)return '';
+  return `<section class="project-recommendations"><div><h4 class="font-bold">Подсказки по составу проекта</h4><div class="text-xs text-gray-500">CRM предлагает только услуги из вашего справочника. Ничего не добавляется без решения менеджера.</div></div><div class="project-recommendation-list">${rows.map(item=>`<div class="project-recommendation"><div><b>${academyEsc(item.title)}</b><span>${academyEsc(item.reason)}</span></div><div class="flex gap-1"><button class="btn-primary text-xs" onclick="projectRecommendationAction('${o.id}','${item.key}','${item.offeringId||''}',${item.measure?'true':'false'})">${item.measure?'Открыть замер':'Добавить'}</button><button class="btn-ghost text-xs" onclick="projectRecommendationDismiss('${o.id}','${item.key}')">Не нужно</button></div></div>`).join('')}</div></section>`;
+}
+
 function renderProjectCardServices(o, { money = false, economics = false, manage = false } = {}) {
   const lines = projectLines(o);
   const pending = projectPendingSizedServices(o);
+  const directions = projectDirectionGroups(o, lines, pending);
   const production = projectCardInProduction(o);
   const plan = production && manage && money && PROJECT_PLANNING_STATUSES.includes(o.status);
   const edit = money && !CLOSED_PROJECT_STATUSES.includes(o.status);
   const tracking = PROJECT_SCHEDULED_STATUSES.includes(o.status) || CLOSED_PROJECT_STATUSES.includes(o.status);
   const chosen = projectCardChosenLine(o, lines);
-  const total = field => lines.reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
-  const rows = lines.map(line => {
+  const total = field => lines.filter(line => !line.excluded).reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
+  const row = line => {
     const selected = chosen?.key === line.key;
     const crew = projectLineCrewText(line);
     const status = projectServiceProgress(o, line.key).status;
@@ -294,15 +409,35 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
         ${line.kind === 'windows' ? `<label>Замер<button type="button" class="btn-ghost w-full mt-1" onclick="openManagerMeasureModal('${o.id}')">${line.windows.length} ${projectWindowsWord(line.windows.length)}</button></label>` : edit && source ? `<label>Количество<input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" value="${Number(line.qty) || 0}" onchange="projectCardSetQty('${o.id}','${jsQuote(source.id)}',this.value)"></label>` : '<span></span>'}
         ${edit ? `<label>Цена${priceEditable ? `<input type="number" min="${range?.min || 0}" ${range?.max ? `max="${range.max}"` : ''} step="0.25" value="${Math.round(unitPrice * 100) / 100}" aria-label="Цена: ${academyEsc(line.name)}" onchange="projectCardSetPrice('${o.id}','${jsQuote(line.key)}',this.value)"> <span class="text-xs text-gray-500">${academyEsc(priceUnit)}</span>${range ? `<span class="block text-xs text-gray-500">от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}</span>` : ''}` : `<div class="project-service-value">${line.kind === 'included' ? 'в пакете' : fmtMoney(unitPrice)}</div>`}</label>` : ''}
         ${plan ? `<label>Исполнитель${projectCardCrewPicker(o, line)}</label><label>Дата<input type="datetime-local" class="${date ? '' : 'project-card-missing'}" value="${date}" onchange="projectCardSetDate('${o.id}','${jsQuote(line.key)}',this.value)"></label>` : `<label>Состояние<div class="project-service-value">${academyEsc(statusLabel)}</div></label>`}
-        <label>${tracking ? 'Ход работ' : 'Действия'}<div class="flex gap-1 mt-1">${tracking ? projectServiceProgressCell(o, line) : ''}${deletable ? `<button class="btn-ghost text-red-600" onclick="projectCardDeleteService('${o.id}','${jsQuote(source.id)}')">Удалить</button>` : ''}</div></label>
+        <label>${tracking ? 'Ход работ' : 'Действия'}<div class="flex flex-wrap gap-1 mt-1">${tracking ? projectServiceProgressCell(o, line) : ''}<button class="btn-ghost" title="Выше" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',-1)">↑</button><button class="btn-ghost" title="Ниже" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',1)">↓</button>${deletable ? `<button class="btn-ghost text-red-600" onclick="projectCardDeleteService('${o.id}','${jsQuote(source.id)}')">Удалить</button>` : ''}</div></label>
+        <label style="grid-column:1/-1">Комментарий по услуге<textarea rows="2" placeholder="Что важно учесть при расчёте, замере или монтаже" onchange="projectCardSetLineNote('${o.id}','${jsQuote(line.key)}',this.value)">${academyEsc(projectLineNoteValue(o,line.key))}</textarea></label>
       </div>` : ''}
     </div>`;
+  };
+  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><b>${academyEsc(offering.name)}</b> · ${film ? academyEsc(catalogLabel(film)) : 'материал уточняется'} · для расчёта нужен замер ${edit ? `<button class="btn-ghost text-xs ml-2" onclick="openManagerMeasureModal('${o.id}')">Внести размеры</button>${o.offeringId !== offering.id ? `<button class="btn-ghost text-xs text-red-600 ml-1" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}` : ''}</div>`; };
+  const directionCards = directions.map(direction => {
+    const directionLines = direction.lines;
+    const excluded = projectDirectionExcluded(o,direction.key);
+    const amount = field => excluded ? 0 : directionLines.reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
+    const expenses = projectDirectionExpenseTotals(o, direction.key, directionLines.map(line => line.key));
+    const dates = directionLines.map(line => line.installationAt).filter(Boolean).sort();
+    const done = directionLines.length && directionLines.every(line => projectServiceProgress(o,line.key).status === 'done');
+    const working = directionLines.some(line => projectServiceProgress(o,line.key).status === 'in_progress');
+    const status = done ? 'Выполнено' : working ? 'В работе' : dates.length ? 'Запланировано' : 'Расчёт';
+    return `<section class="project-direction-card ${excluded?'excluded':''}" data-project-direction="${academyEsc(direction.key)}">
+      <header class="project-direction-head">
+        <div><div class="project-direction-title">${direction.icon} ${academyEsc(direction.title)} <span class="tag">${directionLines.length + direction.pending.length}</span></div><div class="project-direction-meta">${excluded?'Не входит в расчёт и КП':academyEsc(status)}${!excluded&&dates.length ? ` · ближайшая дата ${academyEsc(fmtDateTime(dates[0]))}` : ''}</div></div>
+        <div class="project-direction-kpis">${money ? `<span><small>Клиенту</small><b>${fmtMoney(amount('price'))}</b></span>` : ''}${economics ? `<span><small>Материал + работа</small><b>${fmtMoney(amount('materialCost') + amount('installerPay'))}</b></span><span><small>Расходы план / факт</small><b>${fmtMoney(expenses.planned)} / ${fmtMoney(expenses.actual)}</b></span>` : ''}</div>
+        ${money && edit ? `<div class="project-direction-actions">${projectDirectionOfferingPickerHtml(o,direction.key)}<label><input type="checkbox" ${excluded?'':'checked'} onchange="projectToggleDirectionIncluded('${o.id}','${direction.key}',this.checked)"> В расчёте</label></div>` : ''}
+      </header>
+      <div class="project-direction-services">${directionLines.map(row).join('')}${direction.pending.map(pendingRow).join('') || (!directionLines.length ? '<div class="p-4 text-sm text-gray-500">Добавьте услугу этого направления.</div>' : '')}</div>
+    </section>`;
   }).join('');
-  const pendingRows = pending.map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><b>${academyEsc(offering.name)}</b> · ${film ? academyEsc(catalogLabel(film)) : 'материал уточняется'} · ждёт замера ${edit ? `<button class="btn-ghost text-xs ml-2" onclick="openManagerMeasureModal('${o.id}')">Внести размеры</button>${o.offeringId !== offering.id ? `<button class="btn-ghost text-xs text-red-600 ml-1" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}` : ''}</div>`; }).join('');
   return `<section class="project-service-ledger" data-project-card-services>
-    <div class="project-service-ledger-head"><div><div class="project-service-ledger-title">Состав проекта <span class="tag">${lines.length + pending.length}</span></div><div class="project-service-ledger-sub">Каждая услуга имеет собственный материал, объём, цену, дату и исполнителя.</div></div>${money && edit ? projectOfferingPickerHtml(o, 'projectCardAddService') : ''}</div>
-    <div class="project-service-list">${rows || '<div class="p-4 text-sm text-gray-500">В проекте пока нет услуг.</div>'}${pendingRows}</div>
+    <div class="project-service-ledger-head"><div><div class="project-service-ledger-title">Состав проекта <span class="tag">${lines.length + pending.length}</span></div><div class="project-service-ledger-sub">Проект может включать несколько направлений. У каждой услуги — свой объём, цена, дата, исполнитель, этапы и расходы.</div></div>${money && edit ? projectOfferingPickerHtml(o, 'projectCardAddService') : ''}</div>
+    <div class="project-service-list">${directionCards || '<div class="p-4 text-sm text-gray-500">В проекте пока нет услуг.</div>'}</div>
     <div class="project-service-footer"><span>${economics ? `Материал ${fmtMoney(total('materialCost'))} · работа ${fmtMoney(total('installerPay'))}` : `${lines.length} позиций`}</span>${money ? `<strong>Клиенту ${fmtMoney(orderRevenue(o))}</strong>` : ''}</div>
+    ${manage ? projectRecommendationsHtml(o) : ''}
     ${manage && money ? projectDirectExpensesHtml(o) : ''}
     ${production ? renderProjectCardSchedule(o, projectCardUnplanned(o), plan) : ''}
   </section>`;
@@ -420,12 +555,33 @@ async function cloudPersist(options = {}) {
 }
 
 function orderRevenue(o) {
+  o=projectIncludedDirectionOrder(o);
   if (Array.isArray(o.serviceScopeApprovals)) {
     const approved = new Set(projectServiceGroups(o).filter(g=>projectScopeApproved(o,g.id)).map(g=>g.id));
     const filtered = {...o,measurements:{...o.measurements,rooms:(o.measurements?.rooms||[]).map(r=>({...r,windows:(r.windows||[]).filter(w=>approved.has(w.offeringId?'offering:'+w.offeringId:'direction:'+(w.measureScope||o.serviceType||'solar_film')))}))},extraServices:(o.extraServices||[]).filter(l=>approved.has('line:'+l.id))};
     return orderFilmRevenue(filtered)+orderExtraServicesRevenue(filtered);
   }
   return orderFilmRevenue(o) + orderExtraServicesRevenue(o);
+}
+
+function orderActualAreaSqft(o) {
+  o=projectIncludedDirectionOrder(o);
+  return (o.measurements?.rooms || []).reduce((sum, room) => sum + roomActualAreaSqft(room), 0);
+}
+function orderExtraServicesCost(o) {
+  o=projectIncludedDirectionOrder(o);
+  return projectOfferingLines(o).reduce((sum, line) => sum + (Number(line.qty) || 0) * serviceOfferingMaterialCost(line), 0);
+}
+function orderFilmCost(o) {
+  o=projectIncludedDirectionOrder(o);
+  if (o._inventoryDeducted && Number.isFinite(o._inventoryMaterialCost)) return o._inventoryMaterialCost;
+  const cutCost = orderFilmCutMaterialCost(o);
+  if (cutCost != null) return cutCost;
+  if (!measureAllWindows(o).length) return orderQuickLineMaterialCost(o);
+  return (o.measurements?.rooms || []).reduce((sum, room) => sum + (room.windows || []).reduce((part,win)=>part+windowFilmCost(win),0),0);
+}
+function orderInstallerPayout(o) {
+  return orderInstallerPayoutBreakdown(projectIncludedDirectionOrder(o)).total;
 }
 
 function projectQuickAddExpense(oid, type = 'delivery') {
@@ -734,16 +890,53 @@ function projectCardUpcomingVisits(o, now = Date.now()) {
   return projectCardVisits(o,projectLines(o).filter(l=>projectStages(o,l.key).length || projectServiceProgress(o,l.key).status!=='done')).filter(v=>Date.parse(v.at)>=now);
 }
 
+const PROJECT_EXPENSE_TYPES = [
+  ['material','Материалы'],['labor','Работа'],['equipment','Оборудование'],['rent','Аренда'],
+  ['subcontractor','Субподрядчик'],['delivery','Доставка'],['consumables','Расходники'],
+  ['customs','Таможня'],['gas','Бензин'],['other','Другое'],
+];
+function projectExpenseScopeValue(expense) {
+  if (expense.serviceId) return `service:${expense.serviceId}`;
+  if (expense.direction) return `direction:${expense.direction}`;
+  return 'project';
+}
+function projectExpenseScopeOptions(o, expense) {
+  const directions = projectDirectionGroups(o);
+  return `<option value="project" ${projectExpenseScopeValue(expense)==='project'?'selected':''}>Весь проект</option>${directions.map(direction=>`<option value="direction:${academyEsc(direction.key)}" ${projectExpenseScopeValue(expense)===`direction:${direction.key}`?'selected':''}>${direction.icon} ${academyEsc(direction.title)}</option>`).join('')}${directions.flatMap(direction=>direction.lines.map(line=>`<option value="service:${academyEsc(line.key)}" ${projectExpenseScopeValue(expense)===`service:${line.key}`?'selected':''}>↳ ${academyEsc(line.name)}</option>`)).join('')}`;
+}
 function projectDirectExpensesHtml(o) {
-  return `<section class="p-3 border-t" data-project-direct-expenses><h4 class="font-bold">Расходы проекта</h4>${(o.extraExpenses||[]).map(e=>`<div class="flex flex-wrap gap-2 mt-2" style="align-items:end"><label style="flex:2;min-width:0">Расход<input style="width:100%;min-height:44px" value="${academyEsc(e.label||'')}" onchange="projectEditDirectExpense('${o.id}','${e.id}','label',this.value)" ${e.stageDerived?'disabled':''}></label><label style="flex:1;min-width:0">Сумма, $<input style="width:100%;min-height:44px" type="number" min="0" value="${Number(e.amount)||0}" onchange="projectEditDirectExpense('${o.id}','${e.id}','amount',this.value)" ${e.stageDerived?'disabled':''}></label><label style="flex:1;min-width:0">Услуга<select onchange="projectEditDirectExpense('${o.id}','${e.id}','serviceId',this.value)" ${e.stageDerived?'disabled':''}><option value="">Весь проект</option>${projectLines(o).map(l=>`<option value="${academyEsc(l.key)}" ${e.serviceId===l.key?'selected':''}>${academyEsc(l.name)}</option>`).join('')}</select></label><label><input type="checkbox" ${e.actual?'checked':''} onchange="projectEditDirectExpense('${o.id}','${e.id}','actual',this.checked)" ${e.stageDerived?'disabled':''}> Факт</label>${!e.stageDerived?`<button class="btn-ghost" onclick="projectEditDirectExpense('${o.id}','${e.id}','delete','')">Удалить</button>`:'<span class="text-xs">Из этапа</span>'}</div>`).join('')}<button class="btn-ghost mt-2" onclick="projectEditDirectExpense('${o.id}','','add','')">+ Расход проекта</button></section>`;
+  const rows=(o.extraExpenses||[]).map(e=>{
+    const planned=Number(e.plannedAmount ?? e.amount)||0;
+    const actual=Number(e.actualAmount)||(e.actual?Number(e.amount)||0:0);
+    return `<div class="project-expense-row" data-project-expense="${e.id}">
+      <label>Категория<select onchange="projectEditDirectExpense('${o.id}','${e.id}','type',this.value)" ${e.stageDerived?'disabled':''}>${PROJECT_EXPENSE_TYPES.map(([value,label])=>`<option value="${value}" ${e.type===value?'selected':''}>${label}</option>`).join('')}</select></label>
+      <label>Расход<input value="${academyEsc(e.label||'')}" onchange="projectEditDirectExpense('${o.id}','${e.id}','label',this.value)" ${e.stageDerived?'disabled':''}></label>
+      <label>План, $<input type="number" min="0" value="${planned}" onchange="projectEditDirectExpense('${o.id}','${e.id}','plannedAmount',this.value)" ${e.stageDerived?'disabled':''}></label>
+      <label>Факт, $<input type="number" min="0" value="${actual}" onchange="projectEditDirectExpense('${o.id}','${e.id}','actualAmount',this.value)" ${e.stageDerived?'disabled':''}></label>
+      <label>Отнести к<select onchange="projectEditDirectExpense('${o.id}','${e.id}','scope',this.value)" ${e.stageDerived?'disabled':''}>${projectExpenseScopeOptions(o,e)}</select></label>
+      ${!e.stageDerived?`<button class="btn-ghost text-red-600" onclick="projectEditDirectExpense('${o.id}','${e.id}','delete','')">Удалить</button>`:'<span class="text-xs">Из этапа</span>'}
+    </div>`;
+  }).join('');
+  const planned=(o.extraExpenses||[]).reduce((sum,e)=>sum+(Number(e.plannedAmount??e.amount)||0),0);
+  const actual=(o.extraExpenses||[]).reduce((sum,e)=>sum+(Number(e.actualAmount)||(e.actual?Number(e.amount)||0:0)),0);
+  return `<section class="project-expenses" data-project-direct-expenses><div class="project-expenses-head"><div><h4 class="font-bold">Расходы проекта</h4><div class="text-xs text-gray-500">План и факт учитываются один раз; расход можно закрепить за проектом, направлением или услугой.</div></div><strong>${fmtMoney(planned)} план · ${fmtMoney(actual)} факт</strong></div>${rows||'<div class="text-sm text-gray-500 mt-2">Прямых расходов пока нет.</div>'}<button class="btn-ghost mt-2" onclick="projectEditDirectExpense('${o.id}','','add','')">+ Добавить расход</button></section>`;
 }
 function projectEditDirectExpense(oid,eid,field,value) {
   const o=getOrder(oid);if(!o||!orderUserCanManage(currentUser())||!orderUserCanSeeMoney(o,currentUser()))return;
   o.extraExpenses||=[];const e=o.extraExpenses.find(e=>e.id===eid);if(e?.stageDerived)return;
-  if(field==='add')o.extraExpenses.push({id:uid(),type:'other',label:'Прямой расход',amount:0,actual:false,projectDirect:true,createdAt:new Date().toISOString()});
+  if(field==='add')o.extraExpenses.push({id:uid(),type:'other',label:'Прямой расход',plannedAmount:0,actualAmount:0,amount:0,actual:false,projectDirect:true,createdAt:new Date().toISOString()});
   else if(field==='delete')o.extraExpenses=o.extraExpenses.filter(e=>e.id!==eid);
-  else if(e&&['amount','label','serviceId','actual'].includes(field))e[field]=field==='amount'?Math.max(0,Number(value)||0):value;
-  save();if(field==='add'||field==='delete'){preservePositionForNextRender();render();}
+  else if(e&&field==='scope'){
+    delete e.serviceId;delete e.direction;
+    if(String(value).startsWith('service:'))e.serviceId=String(value).slice(8);
+    if(String(value).startsWith('direction:'))e.direction=String(value).slice(10);
+  } else if(e&&['plannedAmount','actualAmount'].includes(field)){
+    e[field]=Math.max(0,Number(value)||0);
+    e.actual=Number(e.actualAmount)>0;
+    e.amount=e.actual?Number(e.actualAmount):Number(e.plannedAmount);
+  } else if(e&&['label','type'].includes(field))e[field]=String(value).slice(0,160);
+  projectEstimateMarkChanged(o,'Изменены расходы проекта');
+  save();if(['add','delete','scope'].includes(field)){preservePositionForNextRender();render();}
 }
 
 function projectServiceScope(o, group) {

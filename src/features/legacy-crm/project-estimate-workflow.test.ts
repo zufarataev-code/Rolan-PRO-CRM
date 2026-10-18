@@ -76,11 +76,13 @@ test("field workers cannot open project economics", () => {
   assert.match(source, /canSeeMoney \? renderOrderWorkspaceTile\(\{ orderId: o\.id, key: 'estimate'/);
 });
 
-test("manual transport expense is not counted twice", () => {
+test("manual formula expenses replace their automatic value and are not counted twice", () => {
   assert.match(
     source,
-    /function orderManualExpensesTotal\(o\)[\s\S]*\.filter\(e => e\.type !== 'gas'\)/,
+    /function orderManualExpensesTotal\(o\)[\s\S]*\.filter\(e => !\['gas','rent','consumables'\]\.includes\(e\.type\)\)/,
   );
+  assert.match(source, /function orderRentExpense\(o\)[\s\S]*e\.type === 'rent'/);
+  assert.match(source, /function orderConsumablesExpense\(o\)[\s\S]*e\.type === 'consumables'/);
 });
 
 test("proposal readiness validates the actual window instead of its room wrapper", () => {

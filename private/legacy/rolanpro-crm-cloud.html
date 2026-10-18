@@ -1520,7 +1520,21 @@
   .project-service-ledger-head { display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;padding:.9rem 1rem;border-bottom:1px solid #e8edf3; }
   .project-service-ledger-title { color:#10213b;font-size:.94rem;font-weight:950; }
   .project-service-ledger-sub { color:#718096;font-size:.69rem;margin-top:.14rem; }
-  .project-service-list { display:grid; }
+  .project-service-list { display:grid;gap:.75rem;padding:.75rem;background:#f5f8fb; }
+  .project-direction-card { min-width:0;border:1px solid #dbe4ef;border-radius:13px;background:#fff;overflow:hidden;box-shadow:0 5px 16px rgba(15,35,61,.04); }
+  .project-direction-card.excluded .project-direction-services { opacity:.52; }
+  .project-direction-card.excluded .project-direction-head { background:#f8fafc; }
+  .project-direction-head { display:grid;grid-template-columns:minmax(170px,1fr) auto minmax(170px,auto);gap:.8rem;align-items:center;padding:.78rem .9rem;background:linear-gradient(135deg,#fff,#f8fbfd);border-bottom:1px solid #e7edf3; }
+  .project-direction-title { color:#10213b;font-size:.85rem;font-weight:950; }
+  .project-direction-meta { color:#718096;font-size:.65rem;margin-top:.18rem; }
+  .project-direction-kpis { display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;justify-content:flex-end; }
+  .project-direction-kpis span { min-width:80px; }
+  .project-direction-kpis small { display:block;color:#8492a6;font-size:.56rem;font-weight:850;text-transform:uppercase; }
+  .project-direction-kpis b { display:block;color:#10213b;font-size:.72rem;margin-top:.1rem; }
+  .project-direction-add { min-width:170px;min-height:38px;font-size:.7rem; }
+  .project-direction-actions { display:grid;gap:.3rem;justify-items:end; }
+  .project-direction-actions label { color:#526176;font-size:.62rem;font-weight:850;white-space:nowrap; }
+  .project-direction-services { display:grid; }
   .project-service-row { display:grid;grid-template-columns:minmax(190px,1.7fr) minmax(92px,.65fr) minmax(100px,.7fr) minmax(120px,.85fr) 36px;gap:.7rem;align-items:center;padding:.85rem 1rem;border:0;border-bottom:1px solid #edf1f5;background:#fff;text-align:left;color:#10213b;width:100%; }
   .project-service-row:hover { background:#f8fbfd; }
   .project-service-row.selected { background:#eef9fc;box-shadow:inset 4px 0 #159bc4; }
@@ -1533,8 +1547,19 @@
   .project-service-edit { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;padding:.75rem 1rem;background:#fbfdff;border-bottom:1px solid #edf1f5; }
   .project-service-edit label { color:#65758a;font-size:.62rem;font-weight:850; }
   .project-service-edit input,.project-service-edit select { margin-top:.25rem;min-height:38px;font-size:.72rem; }
+  .project-service-edit textarea { width:100%;margin-top:.25rem;min-height:64px;resize:vertical;font-size:.72rem; }
   .project-service-pending { padding:.8rem 1rem;background:#fffbeb;border-bottom:1px solid #fde68a;color:#92400e;font-size:.73rem; }
   .project-service-footer { display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.75rem 1rem;background:#f8fafc;border-top:1px solid #e7edf3;font-size:.72rem; }
+  .project-recommendations { padding:.9rem 1rem;border-top:1px solid #bae6fd;background:#f0f9ff; }
+  .project-recommendation-list { display:grid;gap:.45rem;margin-top:.6rem; }
+  .project-recommendation { display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem .7rem;border:1px solid #bae6fd;border-radius:10px;background:#fff; }
+  .project-recommendation b { display:block;color:#0c4a6e;font-size:.73rem; }
+  .project-recommendation span { display:block;color:#64748b;font-size:.64rem;margin-top:.12rem; }
+  .project-expenses { padding:.9rem 1rem;border-top:1px solid #e7edf3;background:#fff; }
+  .project-expenses-head { display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;flex-wrap:wrap; }
+  .project-expense-row { display:grid;grid-template-columns:minmax(120px,.8fr) minmax(170px,1.35fr) minmax(90px,.55fr) minmax(90px,.55fr) minmax(180px,1fr) auto;gap:.55rem;align-items:end;margin-top:.65rem;padding:.65rem;border:1px solid #e5eaf0;border-radius:10px;background:#fbfdff; }
+  .project-expense-row label { min-width:0;color:#65758a;font-size:.62rem;font-weight:850; }
+  .project-expense-row input,.project-expense-row select { width:100%;min-height:40px;margin-top:.2rem;font-size:.7rem; }
   .project-service-inspector h3 { margin:.15rem 0;color:#10213b;font-size:1rem;font-weight:950; }
   .project-inspector-kpis { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.48rem;margin-top:.7rem; }
   .project-inspector-detail { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin-top:.7rem;padding-top:.7rem;border-top:1px solid #edf1f5; }
@@ -1566,6 +1591,14 @@
     .project-service-row > div:not(:first-child):not(:last-child) { display:none; }
     .project-service-edit { grid-template-columns:1fr 1fr;padding:.7rem .8rem; }
     .project-service-ledger-head { padding:.8rem; }
+    .project-service-list { padding:.5rem;gap:.5rem; }
+    .project-direction-head { grid-template-columns:1fr;gap:.55rem; }
+    .project-direction-kpis { justify-content:flex-start; }
+    .project-direction-add { width:100%; }
+    .project-direction-actions { justify-items:stretch; }
+    .project-expense-row { grid-template-columns:1fr 1fr; }
+    .project-expense-row label:nth-child(2),.project-expense-row label:nth-child(5) { grid-column:1/-1; }
+    .project-recommendation { align-items:flex-start;flex-direction:column; }
     .project-command-mobile-action { position:sticky;bottom:calc(68px + env(safe-area-inset-bottom,0px));z-index:20;display:block;padding:.55rem;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border:1px solid #dbe4ef;border-radius:14px;box-shadow:0 14px 32px rgba(15,35,61,.18); }
     .project-command-mobile-action .order-action-card { width:100%; }
   }
@@ -16278,18 +16311,22 @@ function orderGasExpense(o) {
   return (o.distanceKm || 0) * (db.settings.pricingDefaults?.gasPerKm || 0);
 }
 function orderConsumablesExpense(o) {
+  const explicit = (o.extraExpenses || []).find(e => e.type === 'consumables' && !e.auto);
+  if (explicit) return Number(explicit.amount) || 0;
   if (projectEstimateQuickLinesForBasis(o).length) return projectQuickSupplyCost(o);
   return orderActualAreaSqft(o) * (db.settings.pricingDefaults?.consumablesPerSqft || 0);
 }
 function orderRentExpense(o) {
+  const explicit = (o.extraExpenses || []).find(e => e.type === 'rent' && !e.auto);
+  if (explicit) return Number(explicit.amount) || 0;
   const map = db.settings.pricingDefaults?.rentByComplexity || {};
   return map[o.complexity || 'standard'] || 0;
 }
 function orderManualExpensesTotal(o) {
   return (o.extraExpenses || [])
-    // Транспорт считается отдельно в orderGasExpense: либо одна ручная сумма,
-    // либо автоматический расчёт по расстоянию. Здесь повторно его не прибавляем.
-    .filter(e => e.type !== 'gas')
+    // These categories have an automatic formula and a manual value replaces
+    // it. They are counted by their dedicated function, never a second time.
+    .filter(e => !['gas','rent','consumables'].includes(e.type))
     .reduce((s, e) => s + (Number(e.amount) || 0), 0);
 }
 // Production cost ПСС full
@@ -24955,7 +24992,7 @@ function projectLines(o) {
   if (!o) return [];
   const offeringLines = projectOfferingLines(o);
   const complexity = o.complexity || 'standard';
-  return projectServiceGroups(o).map(group => {
+  const lines = projectServiceGroups(o).map(group => {
     const assignment = projectServiceAssignment(o, group);
     const base = {
       key: group.id,
@@ -25013,6 +25050,14 @@ function projectLines(o) {
       installerPay,
     };
   });
+  lines.forEach(line => {
+    line.excluded = typeof projectDirectionExcluded === 'function'
+      && typeof projectDirectionKeyFromScope === 'function'
+      && projectDirectionExcluded(o, projectDirectionKeyFromScope(line.direction, line.offeringId));
+  });
+  const savedOrder = Array.isArray(o.projectLineOrder) ? o.projectLineOrder : [];
+  const positions = new Map(savedOrder.map((key, index) => [key, index]));
+  return lines.sort((a,b) => (positions.get(a.key) ?? Number.MAX_SAFE_INTEGER) - (positions.get(b.key) ?? Number.MAX_SAFE_INTEGER));
 }
 
 /** Materials fixed on a project line, without exposing warehouse costs. */
@@ -25036,7 +25081,7 @@ function projectLineMaterialNames(line) {
  * the shared source for the estimate audit and the client proposal version.
  */
 function projectEstimateLineSnapshots(o, { economics = false } = {}) {
-  return projectLines(o).map(line => {
+  return projectLines(o).filter(line => !line.excluded).map(line => {
     const measurements = (line.windows || []).map(win => {
       const room = (o.measurements?.rooms || []).find(candidate => (candidate.windows || []).includes(win));
       return {
@@ -25125,7 +25170,7 @@ function projectLinesTableHtml(o, { money = false, economics = false } = {}) {
   const rows = lines.map(line => {
     const crew = projectLineCrewText(line);
     const directMargin = (Number(line.price) || 0) - (Number(line.materialCost) || 0) - (Number(line.installerPay) || 0);
-    return `<tr data-project-line="${academyEsc(line.key)}">
+    return `<tr data-project-line="${academyEsc(line.key)}" ${line.excluded?'style="opacity:.55"':''}>
       <td data-label="Услуга"><b>${academyEsc(line.name)}</b><div class="text-xs text-gray-500">${academyEsc(projectLineNote(line))}</div>${projectLineMaterialNames(line).length ? `<div class="text-xs text-blue-700">${projectLineMaterialNames(line).map(academyEsc).join(', ')}</div>` : ''}</td>
       <td data-label="Объём" class="money">${academyEsc(projectLineQtyText(line))}</td>
       ${money ? `<td data-label="Клиенту" class="money">${line.kind === 'included' ? 'в пакете · $0' : fmtMoney(line.price)}</td>` : ''}
@@ -25134,7 +25179,7 @@ function projectLinesTableHtml(o, { money = false, economics = false } = {}) {
       <td data-label="Дата">${academyEsc(crew.date)}</td>
     </tr>`;
   }).join('');
-  const total = field => lines.reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
+  const total = field => lines.filter(line => !line.excluded).reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
   const directMarginTotal = total('price') - total('materialCost') - total('installerPay');
   const footer = money ? `<tr class="font-black"><td>Итого по услугам</td><td></td><td class="money">${fmtMoney(total('price'))}</td>${economics ? `<td class="money">${fmtMoney(total('materialCost'))}</td><td class="money">${fmtMoney(total('installerPay'))}</td><td class="money ${directMarginTotal >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(directMarginTotal)}</td>` : ''}<td colspan="2"></td></tr>` : '';
   return `<div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table project-lines-table"><thead><tr><th>Услуга</th><th class="money">Объём</th>${money ? '<th class="money">Клиенту</th>' : ''}${economics ? '<th class="money">Материал</th><th class="money">Специалисту</th><th class="money">Прямая маржа</th>' : ''}<th>Исполнитель</th><th>Дата</th></tr></thead><tbody>${rows}${footer}</tbody></table></div>${economics ? '<div class="text-xs text-gray-500 mt-2">Это маржа строк до общих расходов проекта. Доставка, бензин, аренда, реклама и другие общие расходы учитываются ниже и уменьшают итоговую прибыль.</div>' : ''}`;
