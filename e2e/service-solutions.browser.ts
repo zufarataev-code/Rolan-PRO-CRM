@@ -127,7 +127,13 @@ async function main() {
       assert.ok(stageDims.scroll<=stageDims.client+1,JSON.stringify(stageDims));
       await page.screenshot({path:`test-results/service-solutions/stages-${width}.png`,fullPage:true});
       await page.reload({waitUntil:'networkidle'});
-      await page.locator('[data-project-line="offering:solution-a"] .project-service-arrow').click();
+      const reloadedServiceArrow=page.locator('[data-project-line="offering:solution-a"] .project-service-arrow');
+      try {
+        await reloadedServiceArrow.waitFor({state:'visible',timeout:15_000});
+      } catch (error) {
+        throw new Error(`Reloaded project card did not render the selected service. URL=${page.url()} errors=${JSON.stringify(errors)} body=${JSON.stringify((await page.locator('body').innerText()).slice(0,1200))}`,{cause:error});
+      }
+      await reloadedServiceArrow.click();
       assert.equal(await page.locator('[data-stage-id]').count(),2,'stages persist after reloading the authenticated workspace');
       assert.deepEqual(errors,[]);
       await context.close();console.log(`Solution scheduling components and persisted API: ${width}px passed`);
