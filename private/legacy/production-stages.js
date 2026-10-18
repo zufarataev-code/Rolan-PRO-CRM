@@ -890,11 +890,13 @@ function projectCardUpcomingVisits(o, now = Date.now()) {
   return projectCardVisits(o,projectLines(o).filter(l=>projectStages(o,l.key).length || projectServiceProgress(o,l.key).status!=='done')).filter(v=>Date.parse(v.at)>=now);
 }
 
-const PROJECT_EXPENSE_TYPES = [
-  ['material','Материалы'],['labor','Работа'],['equipment','Оборудование'],['rent','Аренда'],
-  ['subcontractor','Субподрядчик'],['delivery','Доставка'],['consumables','Расходники'],
-  ['customs','Таможня'],['gas','Бензин'],['other','Другое'],
-];
+function projectExpenseTypes() {
+  return [
+    ['material','Материалы'],['labor','Работа'],['equipment','Оборудование'],['rent','Аренда'],
+    ['subcontractor','Субподрядчик'],['delivery','Доставка'],['consumables','Расходники'],
+    ['customs','Таможня'],['gas','Бензин'],['other','Другое'],
+  ];
+}
 function projectExpenseScopeValue(expense) {
   if (expense.serviceId) return `service:${expense.serviceId}`;
   if (expense.direction) return `direction:${expense.direction}`;
@@ -909,7 +911,7 @@ function projectDirectExpensesHtml(o) {
     const planned=Number(e.plannedAmount ?? e.amount)||0;
     const actual=Number(e.actualAmount)||(e.actual?Number(e.amount)||0:0);
     return `<div class="project-expense-row" data-project-expense="${e.id}">
-      <label>Категория<select onchange="projectEditDirectExpense('${o.id}','${e.id}','type',this.value)" ${e.stageDerived?'disabled':''}>${PROJECT_EXPENSE_TYPES.map(([value,label])=>`<option value="${value}" ${e.type===value?'selected':''}>${label}</option>`).join('')}</select></label>
+      <label>Категория<select onchange="projectEditDirectExpense('${o.id}','${e.id}','type',this.value)" ${e.stageDerived?'disabled':''}>${projectExpenseTypes().map(([value,label])=>`<option value="${value}" ${e.type===value?'selected':''}>${label}</option>`).join('')}</select></label>
       <label>Расход<input value="${academyEsc(e.label||'')}" onchange="projectEditDirectExpense('${o.id}','${e.id}','label',this.value)" ${e.stageDerived?'disabled':''}></label>
       <label>План, $<input type="number" min="0" value="${planned}" onchange="projectEditDirectExpense('${o.id}','${e.id}','plannedAmount',this.value)" ${e.stageDerived?'disabled':''}></label>
       <label>Факт, $<input type="number" min="0" value="${actual}" onchange="projectEditDirectExpense('${o.id}','${e.id}','actualAmount',this.value)" ${e.stageDerived?'disabled':''}></label>

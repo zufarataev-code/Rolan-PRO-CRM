@@ -38,6 +38,8 @@ test('the project card groups services by direction and keeps per-service planni
 });
 
 test('direct expenses have one plan-fact amount and project, direction or service scope',()=>{
+  assert.match(html,/function projectExpenseTypes\(\)/);
+  assert.doesNotMatch(html,/PROJECT_EXPENSE_TYPES/);
   assert.match(html,/План и факт учитываются один раз/);
   assert.match(html,/plannedAmount/);
   assert.match(html,/actualAmount/);
