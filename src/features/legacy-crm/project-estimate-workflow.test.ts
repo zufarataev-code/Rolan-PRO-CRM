@@ -24,6 +24,12 @@ test("project calculation combines measured materials, services, expenses and ma
   assert.match(source, /Прибыль/);
   assert.match(source, /Маржа/);
   assert.match(source, /projectEstimateSnapshot/);
+  assert.match(source, /Позиции проекта → единое КП/);
+  assert.match(source, /function projectEstimateLineSnapshots\(o, \{ economics = false \} = \{\}\)/);
+  assert.match(source, /function projectEstimateApprovalSnapshot\(o, approvedAt, canSeeInternalEconomics\)/);
+  assert.match(source, /schemaVersion: 2/);
+  assert.match(source, /lines: projectEstimateLineSnapshots\(o, \{ economics: canSeeInternalEconomics \}\)/);
+  assert.match(source, /sharedExpenses:/);
 });
 
 test("manager prices the proposal without seeing owner-only project economics", () => {
@@ -70,11 +76,13 @@ test("field workers cannot open project economics", () => {
   assert.match(source, /canSeeMoney \? renderOrderWorkspaceTile\(\{ orderId: o\.id, key: 'estimate'/);
 });
 
-test("manual transport expense is not counted twice", () => {
+test("manual formula expenses replace their automatic value and are not counted twice", () => {
   assert.match(
     source,
-    /function orderManualExpensesTotal\(o\)[\s\S]*\.filter\(e => e\.type !== 'gas'\)/,
+    /function orderManualExpensesTotal\(o\)[\s\S]*\.filter\(e => !\['gas','rent','consumables'\]\.includes\(e\.type\)\)/,
   );
+  assert.match(source, /function orderRentExpense\(o\)[\s\S]*e\.type === 'rent'/);
+  assert.match(source, /function orderConsumablesExpense\(o\)[\s\S]*e\.type === 'consumables'/);
 });
 
 test("proposal readiness validates the actual window instead of its room wrapper", () => {
@@ -437,9 +445,22 @@ test("quick-entry records are calculation input only for completed historical im
   assert.doesNotMatch(readiness, /projectEstimateQuickLinesForBasis/);
   assert.match(readiness, /if \(!windows\.length && orderNeedsMeasurements\(o\)\)/);
   assert.match(revenue, /filter\(line => !line\.quickProjectLine \|\| !measuredProject\)/);
-  assert.match(snapshot, /projectEstimateQuickLinesForBasis\(order\)\.forEach/);
+  assert.match(source, /const allowedQuickLines = new Set\(projectEstimateQuickLinesForBasis\(order\)\)/);
+  assert.match(source, /line\.kind === 'quick' && !\(line\.sources \|\| \[\]\)\.some\(source => allowedQuickLines\.has\(source\)\)/);
   assert.match(source, /Расчёт идёт по замеру/);
   assert.match(source, /пустая строка больше не блокирует документ/);
+});
+
+test("the canonical proposal is built from the same project service lines as the estimate", () => {
+  const itemBuilder = source.match(/function projectProposalItemsFromEstimate\(order, prop, calc\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const snapshot = source.match(/function premiumCanonicalSnapshot\(prop\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(itemBuilder, /projectLines\(order\)\.forEach/);
+  assert.match(itemBuilder, /measurement_snapshot: \{ windows: measurements \}/);
+  assert.match(itemBuilder, /project_line_key: line\.key/);
+  assert.match(itemBuilder, /line\.kind === 'included'/);
+  assert.match(snapshot, /projectProposalItemsFromEstimate\(order, prop, calc\)/);
+  assert.match(snapshot, /const billableItems = items\.filter/);
+  assert.doesNotMatch(snapshot, /\(order\.measurements\?\.rooms \|\| \[\]\)\.forEach/);
 });
 
 test("proposal actions remain locked until the measured estimate is approved", () => {
@@ -471,7 +492,7 @@ test("historical quick import can retain a manual film but live proposals requir
   assert.match(renderer, /Ручной ввод · не привязано к складу/);
   assert.match(renderer, /currentUser\(\)\?\.role === 'owner'[\s\S]*\+ Добавить плёнку на склад/);
   assert.match(completionIssues, /ручную плёнку нужно привязать к складу перед закрытием/);
-  assert.match(source, /item_kind: line\.catalogId \|\| projectQuickManualFilmName\(line\) \? 'film' : 'service'/);
+  assert.match(source, /item_kind: line\.kind === 'quick' && materialNames\.length \? 'film' : 'service'/);
 });
 
 test("kanban cannot bypass the client-to-measurement-to-proposal-to-installation workflow", () => {

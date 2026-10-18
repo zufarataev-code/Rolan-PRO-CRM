@@ -691,3 +691,23 @@ Owner in chat on 2026-10-11: «как мне по новой логике счи
 - Completion creates a server-calculated payroll snapshot; completed assignments, amounts and work scope are historical records. Stage payroll is included in its completion week and identified by stage on payment, preventing duplicate payment at overall close.
 - An assigned manager can record the client's approval of additional scope; unapproved additions remain pending and cannot be dispatched or increase committed revenue.
 - This owner request authorizes these operational additions within the active legacy workspace until the separately tracked relational installation/payroll migration is ready. No parallel CRM, warehouse or payroll store is created.
+
+## 2026-10-17 — The approved project estimate is the source of the Proposal (Owner)
+
+Owner clarified that everything entered in a multi-service Project must participate in one calculation and that the client Proposal must be formed from that calculation, not rebuilt as a separate document.
+
+- `projectLines(o)` remains the single commercial scope. The estimate shows that same list first: one row per service, its material/model, quantity, client price and, for the Owner, material cost, installer reserve and direct line margin. Shared Project expenses stay separate and reduce final Project profit instead of being distributed arbitrarily between services.
+- Estimate approval stores a versioned `schemaVersion: 2` snapshot with every service line, measurements, materials, client price, service schedule identity and role-safe economics. It also stores payment terms and, for the Owner, shared direct expenses and profitability allocations.
+- Canonical Proposal items are generated from the same `projectLines` list. Measured windows of one service become one customer line with its total square feet and an attached window-level technical snapshot; quantity services and included package components remain separate lines. Included `$0` work is visible in scope but can never receive a residual price during discount/tax allocation.
+- Customer-facing line titles and descriptions are English. Internal cost, installer pay and shared expenses never enter the customer payload.
+- Changing the Project after approval continues to invalidate the approved snapshot and requires a new estimate confirmation / Proposal version.
+
+## 2026-10-18 — Project card groups work by direction; costs keep plan and fact (Owner)
+
+Owner required the active CRM to behave as a real multi-service ERP project: one client and object can contain several directions, each direction several services, and each service its own dates, crew, status and cost scope. Choosing a service must not redirect the manager into measurement automatically.
+
+- The existing `projectLines(o)` list remains the single commercial scope and Proposal source. The Project card only groups those same lines into direction cards; it does not create parallel orders or duplicate calculations.
+- Every direction card shows its services, customer total, direct material/labor reserve, scoped expense plan/fact and earliest planned date. A service is still the unit of measurement, price, comment, stage, specialist, date and progress.
+- Direct Project expenses use one counted amount: planned before actual is known, actual after it is entered. They may be scoped to the whole Project, a direction or one service; scoping is analytical and never creates a second expense.
+- Context recommendations use only active services from the Owner's directory and require an explicit manager action. Smart zones/power/electrician, protective attachment/silicone and a missing measurement are suggestions, never automatic additions.
+- Service order is saved on the Project and is reused by calculation and Proposal snapshots. Changing scope after approval continues to invalidate the estimate/Proposal version.

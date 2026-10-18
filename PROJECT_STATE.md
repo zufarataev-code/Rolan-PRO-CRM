@@ -1048,3 +1048,21 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - The authoritative data and business logic did not move: one Project, one `projectLines` list, existing measurement/Proposal/schedule/finance/history workspaces and existing pricing/payroll/warehouse formulas. The old workspace tiles remain hidden templates only, so the new tabs open the established forms without duplicating records or calculations.
 - A service row is selectable and exposes its own quantity/measurement, price corridor, crew, date and progress. Mobile collapses each service to a readable card, stacks the inspector/economics, and keeps the primary action above the bottom navigation.
 - Focused Project/card/progress/workspace tests pass 54/54. Full suite and required GitHub CI remain before release. Production has not been changed; deployment still requires the owner's explicit confirmation after CI is green.
+
+## 2026-10-17 handoff — estimate lines form the canonical Proposal (Codex)
+
+- Branch `codex/project-estimate-proposal-v2`, based on current `origin/main`.
+- The calculation workspace now begins with «Позиции проекта → единое КП», using the existing `projectLines` model. It shows service/material/quantity/client price and, only to the Owner, material cost, installer reserve and direct line margin; shared expenses remain below and reduce final Project profit.
+- Estimate approval stores `schemaVersion: 2`, line-level scope/measurements/materials/prices, payment terms and role-safe economics through `projectEstimateApprovalSnapshot`. Historical quick-import closure uses the same snapshot builder.
+- `premiumCanonicalSnapshot` now builds canonical Proposal items through `projectProposalItemsFromEstimate`: measured windows are grouped by service with window-level technical JSON, quantity/included services remain independent lines, and zero-price included scope is never charged by residual total allocation.
+- After rebasing onto `origin/main` `0f1a8291` (including per-service production stages), focused estimate/project-line regression tests pass 85/85 and the full suite passes 720/720. Local `tsc --noEmit` again stalled without diagnostics or CPU progress and was stopped; the required GitHub CI remains the authoritative type/build gate. Production has not been changed; release requires the Owner's separate explicit confirmation.
+
+## 2026-10-18 handoff — multi-direction Project card and scoped plan/fact expenses (Codex)
+
+- Branch `codex/project-multi-service-20261018`, based on `origin/main` `0f1a829`; includes the reviewed estimate→Proposal work from PR #343 (`2875091` after cherry-pick).
+- The active Project card now groups the authoritative `projectLines` into Solar, Smart, Safety, Decorative and Privacy direction cards. One Project can show several directions at once; each service keeps its own quantity/measurement, client price, note, production stages, crew, date and progress.
+- Services can be added inside their direction and reordered with ↑/↓. A per-sq-ft service remains pending until a measurement is linked; it does not force a redirect. Quantity/zone/fixed services remain calculable without measurement.
+- Direct expenses now have category, planned amount, actual amount and scope: Project, direction or service. Only one amount is counted at a time (`actual` when entered, otherwise `planned`), avoiding plan/fact double counting while keeping both values visible.
+- Context recommendations cover Smart zones/power/electrician, Safety/outside attachment/silicone and missing measurements. They only use active Price Book services and require explicit Add/Open or Dismiss; no automatic service or charge is created.
+- The Project calculation and Proposal use the same ordered service list and approved versioned snapshot. Customer Proposal data does not include material cost, specialist pay or direct expenses.
+- Verification: focused Project/production suite 53/53; full suite 724/724; `tsc --noEmit` clean; production build successful (121 pages). Production is unchanged; merge/deploy still require the Owner's explicit confirmation.

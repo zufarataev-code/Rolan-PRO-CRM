@@ -42,7 +42,8 @@ async function main() {
       state.payload.settings.serviceOfferings=[{id:'solution-a',name:'Solar One',direction:'solar',pricePerSqft:12,installerRatePerSqft:3,filmIds:['film-a'],active:true},{id:'solution-b',name:'Solar Two',direction:'solar',pricePerSqft:20,installerRatePerSqft:4,filmIds:['film-a'],active:true}];
       state.payload.orders=state.payload.orders.filter((o:any)=>o.id!==order.id).concat(order);
       const saved=await context.request.put(base+'/api/v1/legacy-crm/state',{data:state}); assert.equal(saved.status(),200,await saved.text());
-      const page=await context.newPage(); const errors:string[]=[]; page.on('pageerror',(e:Error)=>errors.push(e.message));
+      const page=await context.newPage(); const errors:string[]=[];
+      page.on('pageerror',(e:Error)=>errors.push(`pageerror: ${e.message}`));
       await page.goto(base+'/legacy-crm',{waitUntil:'networkidle'});
       await page.waitForFunction(()=>typeof (window as any).projectServiceScheduleHtml==='function');
       await page.goto(base+'/legacy-crm#/service-pricing',{waitUntil:'networkidle'});
@@ -91,7 +92,13 @@ async function main() {
       await page.goto(base+'/legacy-crm#/order/'+order.id,{waitUntil:'networkidle'});
       // The API above changed the workspace outside this page; load that revision.
       await page.reload({waitUntil:'networkidle'});
-      await page.locator('[data-project-line="offering:solution-a"] .project-service-arrow').click();
+      const serviceArrow=page.locator('[data-project-line="offering:solution-a"] .project-service-arrow');
+      try {
+        await serviceArrow.waitFor({state:'visible',timeout:15_000});
+      } catch (error) {
+        throw new Error(`Project card did not render the selected service. URL=${page.url()} errors=${JSON.stringify(errors)} body=${JSON.stringify((await page.locator('body').innerText()).slice(0,1200))}`,{cause:error});
+      }
+      await serviceArrow.click();
       await page.getByRole('button',{name:'+ Добавить этап',exact:true}).click();
       await page.waitForFunction(()=>document.querySelectorAll('[data-stage-id]').length===1);
       let stage=page.locator('[data-stage-id]').first();
@@ -119,7 +126,13 @@ async function main() {
       assert.ok(stageDims.scroll<=stageDims.client+1,JSON.stringify(stageDims));
       await page.screenshot({path:`test-results/service-solutions/stages-${width}.png`,fullPage:true});
       await page.reload({waitUntil:'networkidle'});
-      await page.locator('[data-project-line="offering:solution-a"] .project-service-arrow').click();
+      const reloadedServiceArrow=page.locator('[data-project-line="offering:solution-a"] .project-service-arrow');
+      try {
+        await reloadedServiceArrow.waitFor({state:'visible',timeout:15_000});
+      } catch (error) {
+        throw new Error(`Reloaded project card did not render the selected service. URL=${page.url()} errors=${JSON.stringify(errors)} body=${JSON.stringify((await page.locator('body').innerText()).slice(0,1200))}`,{cause:error});
+      }
+      await reloadedServiceArrow.click();
       assert.equal(await page.locator('[data-stage-id]').count(),2,'stages persist after reloading the authenticated workspace');
       assert.deepEqual(errors,[]);
       await context.close();console.log(`Solution scheduling components and persisted API: ${width}px passed`);

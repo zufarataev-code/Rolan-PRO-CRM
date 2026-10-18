@@ -189,8 +189,11 @@ test('server restores an included line deleted or repointed without removing its
   assert.deepEqual(parentRemoved.orders[0].extraServices, []);
 });
 
-test('readiness exempts included lines and proposals omit their zero-dollar rows', () => {
+test('readiness exempts included lines and proposals show them without billing twice', () => {
   const readiness = html.slice(html.indexOf('function projectEstimateReadiness(o) {'), html.indexOf('function projectQuickLines(o) {'));
   assert.match(readiness, /!line\.includedBy && !\(Number\(line\.unitPrice\) > 0\)/);
-  assert.match(html, /projectOfferingLines\(order\)\.filter\(line => premiumNum\(line\.price\) > 0\)/);
+  const proposalItems = html.slice(html.indexOf('function projectProposalItemsFromEstimate('), html.indexOf('function premiumCanonicalSnapshot('));
+  assert.match(proposalItems, /const included = line\.kind === 'included'/);
+  assert.match(proposalItems, /line_price: included \? 0 : premiumNum\(line\.price\)/);
+  assert.match(html, /const billableItems = items\.filter\(item => premiumNum\(item\.line_price\) > 0\)/);
 });
