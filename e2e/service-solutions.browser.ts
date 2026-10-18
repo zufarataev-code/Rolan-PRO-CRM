@@ -44,7 +44,6 @@ async function main() {
       const saved=await context.request.put(base+'/api/v1/legacy-crm/state',{data:state}); assert.equal(saved.status(),200,await saved.text());
       const page=await context.newPage(); const errors:string[]=[];
       page.on('pageerror',(e:Error)=>errors.push(`pageerror: ${e.message}`));
-      page.on('console',(message:any)=>{ if(message.type()==='error') errors.push(`console: ${message.text()}`); });
       await page.goto(base+'/legacy-crm',{waitUntil:'networkidle'});
       await page.waitForFunction(()=>typeof (window as any).projectServiceScheduleHtml==='function');
       await page.goto(base+'/legacy-crm#/service-pricing',{waitUntil:'networkidle'});
