@@ -189,6 +189,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
   const offerings = rows(settings.serviceOfferings);
   const ids = new Set<string>();
   const films = rows(settings.catalog);
+  const supplies = rows(next.supplies);
   for (const offering of offerings) {
     if (typeof offering.id !== 'string' || !/^[\w-]{1,120}$/.test(offering.id) || ids.has(offering.id)) return 'Некорректный или повторный ID услуги.';
     ids.add(offering.id);
@@ -203,6 +204,17 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     if (offering.unitLabel !== undefined && (typeof offering.unitLabel !== 'string' || offering.unitLabel.length > 30)) return 'Название единицы — до 30 символов.';
     if (offering.materialCostPerUnit !== undefined && (typeof offering.materialCostPerUnit !== 'number' || !Number.isFinite(offering.materialCostPerUnit) || offering.materialCostPerUnit < 0)) return 'Стоимость материала услуги должна быть неотрицательным числом.';
     if (offering.includes !== undefined && (!Array.isArray(offering.includes) || offering.includes.length > 20 || offering.includes.some((id: unknown) => typeof id !== 'string'))) return 'Некорректный состав услуги.';
+    if (offering.materials !== undefined) {
+      if (!Array.isArray(offering.materials) || offering.materials.length > 100) return 'Некорректные складские материалы услуги.';
+      const seenSupplies = new Set<string>();
+      for (const material of rows(offering.materials)) {
+        if (typeof material.supplyId !== 'string' || !/^[\w-]{1,120}$/.test(material.supplyId) || seenSupplies.has(material.supplyId) || !supplies.some(supply => supply.id === material.supplyId)) return 'Выберите существующую позицию склада без повторов.';
+        if (typeof material.qtyPerUnit !== 'number' || !Number.isFinite(material.qtyPerUnit) || material.qtyPerUnit <= 0 || material.qtyPerUnit > 1000000) return 'Расход материала должен быть положительным числом.';
+        seenSupplies.add(material.supplyId);
+      }
+      // Names, units and purchase prices come from Warehouse, never the link.
+      offering.materials = rows(offering.materials).map(item => ({ supplyId: item.supplyId, qtyPerUnit: item.qtyPerUnit }));
+    }
     // Film categories are compared as the CRM reads them («privacy_film», «Солнцезащитная»…).
     if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id && canonicalFilmCategory(film.category) === offering.direction)))) return 'Материалы должны принадлежать направлению услуги.';
   }
@@ -254,6 +266,20 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     for (const item of scope(order)) {
       const old = oldItems.find(value=>value.id===item.id);
       const offering = offerings.find(value=>value.id===item.offeringId);
+      // Material composition belongs to the directory. Fix it when the service
+      // is chosen, for either role; later directory edits cannot rewrite scope.
+      if (old && old.offeringId === item.offeringId) {
+        if (Array.isArray(old.offeringMaterials)) item.offeringMaterials = structuredClone(old.offeringMaterials);
+        else delete item.offeringMaterials; // pre-link history keeps its allowance
+      } else if (offering) {
+        item.offeringMaterials = rows(offering.materials).map(material => {
+          const supply = supplies.find(value => value.id === material.supplyId)!;
+          return { supplyId: material.supplyId, qtyPerUnit: material.qtyPerUnit, name: supply.name, unit: supply.unit || 'pcs' };
+        });
+      } else delete item.offeringMaterials;
+      for (const material of rows(item.offeringMaterials)) {
+        if (rows(current.supplies).some(supply => supply.id === material.supplyId) && !supplies.some(supply => supply.id === material.supplyId)) return 'Нельзя удалить складской материал сохранённого проекта.';
+      }
       let included = false;
       if (extras.includes(item) && item.includedBy !== undefined) {
         const parent = offerings.find(value => value.id === item.includedBy);
@@ -503,3 +529,4 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
   }
   return null;
 }
+

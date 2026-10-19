@@ -711,3 +711,10 @@ Owner required the active CRM to behave as a real multi-service ERP project: one
 - Direct Project expenses use one counted amount: planned before actual is known, actual after it is entered. They may be scoped to the whole Project, a direction or one service; scoping is analytical and never creates a second expense.
 - Context recommendations use only active services from the Owner's directory and require an explicit manager action. Smart zones/power/electrician, protective attachment/silicone and a missing measurement are suggestions, never automatic additions.
 - Service order is saved on the Project and is reused by calculation and Proposal snapshots. Changing scope after approval continues to invalidate the estimate/Proposal version.
+
+## 2026-10-19 — Every service can link Warehouse materials (Owner)
+
+- Material binding applies to every direction and billing unit. Non-film materials and devices reuse the existing Warehouse supply positions; film model choices remain linked to the existing film catalog.
+- A service may specify multiple stock components and consumption per unit. New Project service rows/windows fix stock identity, name, unit and consumption; later directory changes do not rewrite saved work.
+- Stock-linked material cost is calculated from Warehouse purchase cost and replaces the legacy manual allowance on that line. Included free services retain their real material cost. Calculation does not automatically issue stock.
+- All active directory services remain available for explicit selection inside a Project, using the existing shared picker and service-creation path. A directory entry is not automatically added as chargeable work to every Project.

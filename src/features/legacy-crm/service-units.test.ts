@@ -245,7 +245,7 @@ test('privacy films pay the privacy rate; the material of services without sizes
   assert.match(html, /if \(n\.includes\('privacy'\) \|\| n\.includes\('приват'\)\) return 'privacy';/);
   assert.match(html, /const category = catalog\?\.category \? canonicalCatalogCategory\(catalog\.category\) : filmCategory\(w\?\.filmType \|\| ''\);/);
   assert.match(html, /const directionRate = explicit != null \? explicit : c \? installerServiceRateByCategory\(canonicalCatalogCategory\(c\.category\)\) : filmRate\(filmName\);/);
-  assert.match(html, /\.\.\.\(pss\.extraServicesCost > 0 \? \[\['Материал услуг без размеров', pss\.extraServicesCost\]\] : \[\]\)/);
+  assert.match(html, /\.\.\.\(pss\.extraServicesCost > 0 \? \[\['Складские материалы услуг', pss\.extraServicesCost\]\] : \[\]\)/);
 });
 
 test('the need for windows follows how the project priced its services, not later directory edits', () => {
@@ -396,3 +396,4 @@ test('owner price corridor lets a manager override the project price only inside
   above.orders[0].extraServices[0].unitPrice = 140;
   assert.match(prepareServiceSolutions(current, above, true) || '', /выше разрешённого максимума/);
 });
+
