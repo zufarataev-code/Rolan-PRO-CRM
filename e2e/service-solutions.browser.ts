@@ -39,6 +39,7 @@ async function main() {
       assert.ok(installers.length);
       const order={id:'e2e-solutions',number:'QA-ERP',status:'proposal_accepted',serviceType:'solar_film',serviceSchedules:[],installerIds:[],measurements:{rooms:[{id:'room',windows:[{id:'w1',measureScope:'solar_film',offeringId:'solution-a',offeringName:'Solar One',catalogId:'film-a',width:254,height:254,qty:1,pricePerSqft:12},{id:'w2',measureScope:'solar_film',offeringId:'solution-b',offeringName:'Solar Two',catalogId:'film-a',width:254,height:254,qty:1,pricePerSqft:20}]}]},extraServices:[]};
       state.payload.settings.catalog=[...(state.payload.settings.catalog||[]).filter((f:any)=>f.id!=='film-a'),{id:'film-a',category:'solar',brand:'QA',model:'Model'}];
+      state.payload.supplies=[...(state.payload.supplies||[]).filter((s:any)=>s.id!=='qa-sealant'),{id:'qa-sealant',name:'QA silicone',unit:'ml',qty:1000,costPerUnit:0.5}];
       state.payload.settings.serviceOfferings=[{id:'solution-a',name:'Solar One',direction:'solar',pricePerSqft:12,installerRatePerSqft:3,filmIds:['film-a'],active:true},{id:'solution-b',name:'Solar Two',direction:'solar',pricePerSqft:20,installerRatePerSqft:4,filmIds:['film-a'],active:true}];
       state.payload.orders=state.payload.orders.filter((o:any)=>o.id!==order.id).concat(order);
       const saved=await context.request.put(base+'/api/v1/legacy-crm/state',{data:state}); assert.equal(saved.status(),200,await saved.text());
@@ -56,12 +57,20 @@ async function main() {
       await price.fill('18'); await price.press('Tab');
       await card.locator('summary').click();
       await card.locator(`input[type=checkbox][onchange*="'film-a'"]`).check();
+      const offeringId=await card.getAttribute('data-service-offering-row');
+      await card.locator('#service-material-'+offeringId).selectOption('qa-sealant');
+      await card.locator('#service-material-qty-'+offeringId).fill('2');
+      await card.getByRole('button',{name:'+ Привязать',exact:true}).click();
+      assert.equal(await card.getByLabel('Расход: QA silicone',{exact:true}).inputValue(),'2');
+      const materialDims=await card.evaluate((el:HTMLElement)=>({client:el.clientWidth,scroll:el.scrollWidth}));
+      assert.ok(materialDims.scroll<=materialDims.client+1,JSON.stringify(materialDims));
       const confirmed=await page.evaluate(()=> (window as any).cloudPersistConfirmed());
       assert.equal(confirmed,true,'Solution edits must be acknowledged by the workspace API');
       const catalogState=(await (await context.request.get(base+'/api/v1/legacy-crm/state')).json()).data;
       const solution=catalogState.payload.settings.serviceOfferings.find((x:any)=>x.name==='QA custom solution');
       assert.ok(solution,JSON.stringify({revision:catalogState.revision,solutions:catalogState.payload.settings.serviceOfferings.map((x:any)=>({id:x.id,name:x.name}))}));
       assert.equal(solution.pricePerSqft,18); assert.deepEqual(solution.filmIds,['film-a']);
+      assert.deepEqual(solution.materials,[{supplyId:'qa-sealant',qtyPerUnit:2}]);
       await page.screenshot({path:`test-results/service-solutions/catalog-${width}.png`});
       // Exercise real component functions in the authenticated CRM shell.
       await page.evaluate(({order,installers}:any)=>{
