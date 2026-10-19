@@ -29,6 +29,17 @@ test("mobile workspace adapter keeps mobile behavior isolated and protects speci
   assert.match(result, /scrollIntoView\(\{ block: 'center', behavior: 'smooth' \}\)/);
 });
 
+test("project workspaces keep their actions visible above the phone dock", () => {
+  const result = injectMobileWorkspaceAdapter("<!doctype html><body><main></main></body>");
+
+  assert.match(result, /\.modal-backdrop\.order-workspace-backdrop \{[\s\S]*?z-index: 80 !important/);
+  assert.match(result, /\.modal-content\.workspace-modal\.order-workspace-modal \{[\s\S]*?height: 100dvh !important/);
+  assert.match(result, /grid-template-rows: auto minmax\(0, 1fr\) !important/);
+  assert.match(result, /\.order-workspace-modal \.order-workspace-modal-body \{[\s\S]*?overflow-y: auto !important/);
+  assert.match(result, /\.order-workspace-modal \.project-estimate-footer \{[\s\S]*?bottom: 0 !important/);
+  assert.match(result, /padding-bottom: calc\(12px \+ env\(safe-area-inset-bottom\)\) !important/);
+});
+
 test("mobile workspace adapter is injected only once", () => {
   const source = "<!doctype html><body><main></main></body>";
   const once = injectMobileWorkspaceAdapter(source);

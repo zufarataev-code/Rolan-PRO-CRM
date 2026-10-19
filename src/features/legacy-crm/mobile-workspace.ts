@@ -148,6 +148,49 @@ const MOBILE_WORKSPACE_PATCH = `
       border-radius: 0 !important;
     }
 
+    /* Project workspaces are true phone screens. Keep the CRM dock behind the
+       dialog and give the header, scrolling content and actions separate rows. */
+    .modal-backdrop.order-workspace-backdrop {
+      z-index: 80 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      align-items: stretch !important;
+    }
+
+    .modal-content.workspace-modal.order-workspace-modal {
+      display: grid !important;
+      grid-template-rows: auto minmax(0, 1fr) !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      height: 100dvh !important;
+      max-height: 100dvh !important;
+      margin: 0 !important;
+      overflow: hidden !important;
+      border-radius: 0 !important;
+    }
+
+    .order-workspace-modal .order-workspace-modal-head {
+      position: relative;
+      z-index: 2;
+      padding-top: calc(12px + env(safe-area-inset-top)) !important;
+    }
+
+    .order-workspace-modal .order-workspace-modal-body {
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .order-workspace-modal .project-estimate-footer {
+      bottom: 0 !important;
+      z-index: 4 !important;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+      box-shadow: 0 -10px 24px rgba(15, 23, 42, .1);
+    }
+
     [data-rolanpro-mobile-nav="1"] {
       max-width: 100% !important;
       min-width: 0 !important;
