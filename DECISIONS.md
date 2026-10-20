@@ -711,3 +711,9 @@ Owner required the active CRM to behave as a real multi-service ERP project: one
 - Direct Project expenses use one counted amount: planned before actual is known, actual after it is entered. They may be scoped to the whole Project, a direction or one service; scoping is analytical and never creates a second expense.
 - Context recommendations use only active services from the Owner's directory and require an explicit manager action. Smart zones/power/electrician, protective attachment/silicone and a missing measurement are suggestions, never automatic additions.
 - Service order is saved on the Project and is reused by calculation and Proposal snapshots. Changing scope after approval continues to invalidate the estimate/Proposal version.
+
+## 2026-10-19 — Entity colours have one code-level source of truth
+
+- A film direction, add-on service or stock state must keep the same colour and icon in every CRM workspace. Individual screens must not introduce their own competing palettes.
+- `src/features/legacy-crm/entity-tokens.ts` owns the tokens. The active legacy workspace consumes the same table through injected CSS custom properties and `window.RP_ENTITY` before its script executes.
+- Unknown or historical values render with the neutral fallback. Changing a canonical token must update every consumer through this shared source rather than by editing each screen separately.

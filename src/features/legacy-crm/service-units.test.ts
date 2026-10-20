@@ -37,6 +37,7 @@ function loadServices(role = 'owner') {
     academyEsc: (value: unknown) => String(value ?? ''),
   });
   const start = html.indexOf('// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ');
+  vm.runInContext(html.slice(html.indexOf('// ---------- ENTITY COLOUR CODE'), html.indexOf('// ---------- ENGINEERING MEASUREMENT STUDIO')), context);
   vm.runInContext(html.slice(start, html.indexOf('function projectQuickLineCatalog(', start)), context);
   vm.runInContext(html.slice(html.indexOf('function offeringServiceType('), html.indexOf('function newOrderSelectedOfferings(')), context);
   return { c: context, db };
@@ -47,7 +48,8 @@ test('privacy is the fifth direction with its own measurement scope, colour, cod
   for (const id of ['smart_film', 'solar_film', 'protective_film', 'decorative_film', 'privacy_film']) assert.match(directions, new RegExp(`id: '${id}'`), id);
   assert.match(directions, /id: 'privacy_film',[\s\S]*?catalogCategory: 'privacy'/);
   assert.match(html, /key: 'privacy_film',[\s\S]*?catalogCategory: 'privacy'/);
-  assert.match(html, /privacy_film: \{ color: '#7c3aed', bg: '#f5f3ff' \}/);
+  // Colour comes from the entity colour code (window.RP_ENTITY), not from a local palette.
+  assert.match(html, /function orderServicePalette\(serviceId\) \{\n {2}const t = rpDir\(serviceId\);/);
   assert.match(html, /privacy_film: 'PRIVACY_FILM'/);
   assert.match(html, /const SERVICE_OFFERING_DIRECTIONS = \['smart', 'solar', 'protective', 'decorative', 'privacy'\];/);
   assert.match(html, /const ROLL_CATEGORY_KEYS = \['smart', 'solar', 'protective', 'decorative', 'privacy'\];/);
@@ -213,6 +215,7 @@ function loadScopes(offerings: Row[]) {
     orderOfferingNeedsSizes: (_order: Row, id: string) => { const item = offerings.find(entry => entry.id === id); return !item || !item.unit || item.unit === 'sqft'; },
   });
   const start = html.indexOf('const MEASURE_SCOPES = [');
+  vm.runInContext(html.slice(html.indexOf('// ---------- ENTITY COLOUR CODE'), html.indexOf('// ---------- ENGINEERING MEASUREMENT STUDIO')), context);
   vm.runInContext(html.slice(start, html.indexOf('function managerActiveMeasureScope(', start)), context);
   return context;
 }
