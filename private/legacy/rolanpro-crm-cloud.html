@@ -10380,6 +10380,41 @@ function windowSVG(w, opts = {}) {
   </svg>`;
 }
 
+// ---------- ENTITY COLOUR CODE (one colour — one meaning) ----------
+// Source of truth: src/features/legacy-crm/entity-tokens.ts, injected into <head>
+// as window.RP_ENTITY and as --dir-*/--addon-*/--stock-* CSS variables.
+const RP_ENTITY = (typeof window !== 'undefined' && window.RP_ENTITY) || { directions: {}, aliases: {}, addons: {}, stock: {}, frame: {} };
+const RP_NEUTRAL = { color: '#64748b', tint: '#f1f5f9', deep: '#334155', short: 'Film', icon: '<rect x="4" y="4" width="16" height="16" rx="2"/>' };
+function rpDirectionKey(key) {
+  if (!key) return null;
+  const k = String(key).toLowerCase();
+  return RP_ENTITY.aliases[k] || (RP_ENTITY.directions[k] ? k : null);
+}
+function rpDir(key) {
+  const k = rpDirectionKey(key);
+  return (k && RP_ENTITY.directions[k]) || RP_NEUTRAL;
+}
+function rpAddon(key) { return RP_ENTITY.addons[key] || RP_NEUTRAL; }
+function rpStock(level) { return RP_ENTITY.stock[level] || RP_ENTITY.stock.ok || RP_NEUTRAL; }
+function rpIcon(tone, size = 16, extra = '') {
+  const t = tone && tone.icon ? tone : RP_NEUTRAL;
+  return `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${t.icon}</svg>`;
+}
+function rpDirIcon(key, size = 16) { return rpIcon(rpDir(key), size); }
+// Badge: tinted pill with the direction icon and text in its deep colour.
+function rpDirBadge(key, label, size = 12) {
+  const t = rpDir(key);
+  return `<span class="tag rp-entity-badge" style="background:${t.tint};color:${t.deep};display:inline-flex;align-items:center;gap:4px;">${rpIcon(t, size)}${label ?? t.short}</span>`;
+}
+function rpStockBadge(level, label) {
+  const t = rpStock(level);
+  return `<span class="tag rp-entity-badge" style="background:${t.tint};color:${t.deep};display:inline-flex;align-items:center;gap:5px;">${rpStockDot(level)}${label ?? t.short}</span>`;
+}
+function rpStockDot(level, size = 6) {
+  const t = rpStock(level);
+  return `<span class="rp-stock-dot" title="${t.short}" style="display:inline-block;width:${size}px;height:${size}px;border-radius:50%;background:${t.color};vertical-align:middle;"></span>`;
+}
+
 // ---------- ENGINEERING MEASUREMENT STUDIO ----------
 const MEASURE_SCOPES = [
   {
@@ -10388,7 +10423,7 @@ const MEASURE_SCOPES = [
     title: 'Замер солнцезащитной пленки',
     short: 'Solar',
     catalogCategory: 'solar',
-    accent: '#f59e0b',
+    accent: rpDir('solar').color,
     brief: 'Heat, glare, UV, privacy, VLT, стекло и сторона света.',
     standards: [
       'Фиксируем сторону света и проблему: heat / glare / privacy / UV.',
@@ -10404,7 +10439,7 @@ const MEASURE_SCOPES = [
     title: 'Замер Smart film',
     short: 'Smart',
     catalogCategory: 'smart',
-    accent: '#2563eb',
+    accent: rpDir('smart').color,
     brief: 'Точный размер стекла, зоны, питание, busbar, блоки и трасса провода.',
     standards: [
       'Размер smart film считается по чистому стеклу с зазором 2-3 мм от рамы.',
@@ -10420,7 +10455,7 @@ const MEASURE_SCOPES = [
     title: 'Замер защитной пленки',
     short: 'Security',
     catalogCategory: 'protective',
-    accent: '#dc2626',
+    accent: rpDir('protective').color,
     brief: 'Mil, тип стекла, рама, wet glaze/attachment, зона удара и ответственность.',
     standards: [
       'Определяем задачу: safety, security, anti-graffiti, витрина, дверь, входная группа.',
@@ -10436,7 +10471,7 @@ const MEASURE_SCOPES = [
     title: 'Замер декоративной пленки',
     short: 'Decor',
     catalogCategory: 'decorative',
-    accent: '#db2777',
+    accent: rpDir('decorative').color,
     brief: 'Privacy, frost, pattern, логотип, repeat, направление рисунка и стыки.',
     standards: [
       'Фиксируем уровень приватности и видимость с обеих сторон.',
@@ -10452,7 +10487,7 @@ const MEASURE_SCOPES = [
     title: 'Замер приватной пленки',
     short: 'Privacy',
     catalogCategory: 'privacy',
-    accent: '#7c3aed',
+    accent: rpDir('privacy').color,
     brief: 'От кого закрываемся, днём или ночью, освещение, зеркальность и матовость.',
     standards: [
       'Фиксируем, от кого и когда нужна приватность: днём, ночью или круглосуточно.',
@@ -15170,15 +15205,10 @@ const ORDER_PRIMARY_SERVICES = [
   },
 ];
 
-const ORDER_SERVICE_PALETTE = {
-  smart_film: { color: '#2563eb', bg: '#eff6ff' },
-  solar_film: { color: '#d97706', bg: '#fffbeb' },
-  protective_film: { color: '#059669', bg: '#ecfdf5' },
-  decorative_film: { color: '#db2777', bg: '#fdf2f8' },
-  privacy_film: { color: '#7c3aed', bg: '#f5f3ff' },
-};
+// Palette comes from the entity colour code (window.RP_ENTITY) — one colour per direction everywhere.
 function orderServicePalette(serviceId) {
-  return ORDER_SERVICE_PALETTE[serviceId] || { color: '#2563eb', bg: '#eff6ff' };
+  const t = rpDir(serviceId);
+  return { color: t.color, bg: t.tint, deep: t.deep };
 }
 function orderServiceCardStyle(serviceId) {
   const p = orderServicePalette(serviceId);
@@ -15923,17 +15953,11 @@ function catLabel(catKey) {
 }
 // Color per film category — used everywhere a category badge is shown (catalog table,
 // per-vendor catalog view, inventory dropdown) so categories are visually distinguishable at a glance.
-const CAT_COLORS = {
-  solar:      { bg: '#fef3c7', text: '#92400e', dot: '#f59e0b' }, // amber — sun protection
-  protective: { bg: '#fee2e2', text: '#991b1b', dot: '#ef4444' }, // red — safety/security
-  smart:      { bg: '#e0e7ff', text: '#3730a3', dot: '#6366f1' }, // indigo — smart/PDLC
-  privacy:    { bg: '#dbeafe', text: '#1e40af', dot: '#3b82f6' }, // blue — privacy/mirror
-  decorative: { bg: '#fce7f3', text: '#9d174d', dot: '#ec4899' }, // pink — decorative/frost
-  removal:    { bg: '#f3f4f6', text: '#374151', dot: '#9ca3af' }, // gray — removal service
-  washing:    { bg: '#ecfeff', text: '#155e75', dot: '#06b6d4' }, // cyan — cleaning service
-};
+// Directions and service categories read the entity colour code (window.RP_ENTITY).
 function catColor(catKey) {
-  return CAT_COLORS[catKey] || { bg: '#f3f4f6', text: '#374151', dot: '#9ca3af' };
+  const t = rpDirectionKey(catKey) ? rpDir(catKey) : (RP_ENTITY.addons[catKey] || null);
+  if (!t) return { bg: '#f3f4f6', text: '#374151', dot: '#9ca3af' };
+  return { bg: t.tint, text: t.deep, dot: t.color };
 }
 function catBadge(catKey) {
   const c = catColor(catKey);
@@ -17406,14 +17430,11 @@ function calendarEventPalette(type) {
 }
 function calendarServicePalette(o = {}) {
   const svc = primaryServiceInfo(o.serviceType);
-  const map = {
-    smart_film: { color: '#0284c7', bg: '#e0f2fe', icon: '🪟', short: 'Smart' },
-    solar_film: { color: '#d97706', bg: '#fffbeb', icon: '☀️', short: 'Solar' },
-    protective_film: { color: '#059669', bg: '#ecfdf5', icon: '🛡', short: 'Security' },
-    decorative_film: { color: '#db2777', bg: '#fdf2f8', icon: '🎨', short: 'Decor' },
-    privacy_film: { color: '#7c3aed', bg: '#f5f3ff', icon: '🔒', short: 'Privacy' },
-  };
-  const meta = map[o.serviceType] || map[ORDER_PRIMARY_SERVICES.find(s => (o.tags || []).includes(s.tag))?.id] || { color: '#64748b', bg: '#f8fafc', icon: svc?.icon || '🎞', short: svc?.short || 'Film' };
+  const dirKey = rpDirectionKey(o.serviceType) || rpDirectionKey(ORDER_PRIMARY_SERVICES.find(s => (o.tags || []).includes(s.tag))?.id);
+  const t = dirKey ? rpDir(dirKey) : null;
+  const meta = t
+    ? { color: t.color, bg: t.tint, icon: rpIcon(t, 12), short: t.short }
+    : { color: '#64748b', bg: '#f8fafc', icon: svc?.icon || '🎞', short: svc?.short || 'Film' };
   return { ...meta, title: svc?.title || orderServiceTypeLabel(o.serviceType) };
 }
 function calendarEventStyle(ev) {
@@ -19713,7 +19734,7 @@ function renderOwnerPanel() {
       <h3 class="font-semibold mb-2 text-red-700">⚠️ Склад: заканчивается ${lowStock.length} плёнок</h3>
       <div class="text-sm text-gray-600 mb-2">Перейдите в раздел <a class="text-blue-600 underline cursor-pointer" onclick="state.view='inventory'; render();">Склад</a> чтобы пополнить.</div>
       <div class="flex flex-wrap gap-2">
-        ${lowStock.slice(0,5).map(s => `<span class="tag ${s.status==='critical'?'bg-red-100 text-red-800':'bg-amber-100 text-amber-800'}">${s.catalog?.brand} ${s.catalog?.model}: ${s.lengthM.toFixed(1)} м</span>`).join('')}
+        ${lowStock.slice(0,5).map(s => rpStockBadge(s.status==='critical'?'out':'low', `${s.catalog?.brand} ${s.catalog?.model}: ${s.lengthM.toFixed(1)} м`)).join('')}
       </div>
     </div>` : ''}
   `;})()}
@@ -20177,9 +20198,7 @@ function orderKanbanAccent(o) {
     .flatMap(r => r.windows || [])
     .map(w => windowCatalog(w)?.category)
     .find(Boolean);
-  if (firstCat === 'protective') return { color: '#dc2626', soft: '#fecaca', label: 'Protective' };
-  if (firstCat === 'smart') return { color: '#7c3aed', soft: '#ddd6fe', label: 'Smart' };
-  if (firstCat === 'solar') return { color: '#0891b2', soft: '#bae6fd', label: 'Solar' };
+  if (rpDirectionKey(firstCat)) { const t = rpDir(firstCat); return { color: t.color, soft: t.tint, label: t.short }; }
   return { color: '#059669', soft: '#bbf7d0', label: c.type === 'residential' ? 'B2C' : 'Project' };
 }
 function orderKanbanUrgency(o) {
@@ -25542,7 +25561,8 @@ function projectCardChosenLine(o, lines = projectLines(o)) {
 }
 
 function projectCardServiceIcon(line) {
-  return ({ solar: '☀️', smart: '▣', safety: '🛡', decorative: '🎨' })[line.serviceType] || '◆';
+  const t = rpDir(line.serviceType);
+  return `<span style="color:${t.color};display:inline-flex;vertical-align:middle">${rpIcon(t, 14)}</span>`;
 }
 
 /** The project ledger: every service remains independent inside one project. */
@@ -28662,8 +28682,8 @@ function renderManagerMaterialPlan(o) {
           : status.enough
             ? '<span class="tag bg-emerald-100 text-emerald-800">склад OK</span>'
             : status.rolls.length
-              ? `<span class="tag bg-amber-100 text-amber-800">не хватает ${status.shortages.reduce((s,x)=>s+x.shortage,0).toFixed(2)}м</span>`
-              : '<span class="tag bg-red-100 text-red-800">нет на складе</span>';
+              ? rpStockBadge('low', `не хватает ${status.shortages.reduce((s,x)=>s+x.shortage,0).toFixed(2)}м`)
+              : rpStockBadge('out', 'нет на складе');
         return `
           <div class="manager-material-row">
             <div>
@@ -32553,7 +32573,7 @@ const ACADEMY_DIRECTIONS = [
     name: 'Защитные пленки',
     short: 'Защитка',
     icon: '🛡️',
-    color: '#0f766e',
+    color: rpDir('protective').color,
     leader: 'Руководитель защитного направления',
     mission: 'Безопасность, антиудар, антиграффити, защита витрин и домов.',
     clients: ['витрины магазинов', 'школы и офисы', 'частные дома', 'постоянные B2B клиенты'],
@@ -32567,7 +32587,7 @@ const ACADEMY_DIRECTIONS = [
     name: 'Солнцезащитные пленки',
     short: 'Солар',
     icon: '☀️',
-    color: '#d97706',
+    color: rpDir('solar').color,
     leader: 'Руководитель солнцезащитного направления',
     mission: 'Жара, UV, приватность, комфорт, экономия на кондиционировании.',
     clients: ['жилые дома', 'офисы с перегревом', 'рестораны', 'архитекторы и дизайнеры'],
@@ -32581,7 +32601,7 @@ const ACADEMY_DIRECTIONS = [
     name: 'Smart пленка',
     short: 'Смарт',
     icon: '⚡',
-    color: '#7c3aed',
+    color: rpDir('smart').color,
     leader: 'Руководитель smart направления',
     mission: 'Умная приватность, питание, контроллеры, пульты, автоматизация.',
     clients: ['офисы', 'душевые и перегородки', 'медицинские кабинеты', 'премиальные дома'],
@@ -39168,7 +39188,7 @@ function renderFilmCategoryModels(category) {
       const length = rolls.reduce((sum, roll) => sum + Number(roll.remainingLengthM || 0), 0);
       const widths = [...new Set(rolls.map(roll => Number(roll.widthMm || 0)).filter(Boolean))].sort((a,b)=>a-b).map(width => `${(width/1000).toFixed(2)} м`).join(', ') || (item.rollWidth ? `${item.rollWidth}\"` : '—');
       const low = length <= Number(db.settings.inventoryAlerts?.reorderBelowM || 5);
-      return `<tr class="border-t ${length <= 0 ? 'bg-red-50' : low ? 'bg-amber-50' : ''}" onclick="openFilmWarehouseModel('${item.id}')" style="cursor:pointer"><td class="p-2"><span style="width:8px;height:8px;border-radius:50%;background:${colors.dot};display:inline-block;margin-right:6px"></span><b>${academyEsc(item.brand)} — ${academyEsc(item.model)}</b><div class="text-xs text-gray-400">${catalogSpecLabel(item)}</div></td><td class="p-2">${rolls.length}</td><td class="p-2 font-bold ${length > 0 ? 'text-emerald-700' : 'text-red-700'}">${length.toFixed(1)} м</td><td class="p-2">${widths}</td><td class="p-2"><span class="tag ${length <= 0 ? 'bg-red-100 text-red-800' : low ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">${length <= 0 ? 'нет' : low ? 'мало' : 'в наличии'}</span></td><td class="p-2 text-blue-700 font-semibold">Открыть →</td></tr>`;
+      return `<tr class="border-t ${length <= 0 ? 'bg-red-50' : low ? 'bg-amber-50' : ''}" onclick="openFilmWarehouseModel('${item.id}')" style="cursor:pointer"><td class="p-2"><span style="width:8px;height:8px;border-radius:50%;background:${colors.dot};display:inline-block;margin-right:6px"></span><b>${academyEsc(item.brand)} — ${academyEsc(item.model)}</b><div class="text-xs text-gray-400">${catalogSpecLabel(item)}</div></td><td class="p-2">${rolls.length}</td><td class="p-2 font-bold ${length > 0 ? 'text-emerald-700' : 'text-red-700'}">${length.toFixed(1)} м</td><td class="p-2">${widths}</td><td class="p-2">${rpStockBadge(length <= 0 ? 'out' : low ? 'low' : 'ok')}</td><td class="p-2 text-blue-700 font-semibold">Открыть →</td></tr>`;
     }).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="icon">🔎</div><div>В этой категории модели не найдены.</div></div>`}
   </div>`;
 }
@@ -39220,7 +39240,7 @@ function renderFilmInventoryLegacy() {
     <div class="mb-3">
       <div class="text-xs text-gray-500 mb-1">Расходники</div>
       <div class="flex flex-wrap gap-2">
-        ${lowSupplies().map(s => `<span class="tag ${s.status==='critical'?'bg-red-100 text-red-800':'bg-amber-100 text-amber-800'}">${academyEsc(s.name)}: ${(s.qty||0)} ${supplyUnitLabel(s.unit)}</span>`).join('')}
+        ${lowSupplies().map(s => rpStockBadge(s.status==='critical'?'out':'low', `${academyEsc(s.name)}: ${(s.qty||0)} ${supplyUnitLabel(s.unit)}`)).join('')}
       </div>
     </div>` : ''}
     ${lowStock.length ? `
@@ -39231,7 +39251,7 @@ function renderFilmInventoryLegacy() {
         ${lowStock.map(s => `<tr class="border-t">
           <td class="p-2 font-medium">${catalogLabel(s.catalog)}</td>
           <td class="p-2 ${s.status==='critical'?'text-red-700 font-bold':'text-amber-700'}">${s.lengthM.toFixed(2)} м</td>
-          <td class="p-2"><span class="tag ${s.status==='critical'?'bg-red-100 text-red-800':'bg-amber-100 text-amber-800'}">${s.status==='critical'?'🚨 Критично':'⚠️ Заказать'}</span></td>
+          <td class="p-2">${rpStockBadge(s.status==='critical'?'out':'low', s.status==='critical'?'Критично':'Заказать')}</td>
           <td class="p-2"><button class="btn-primary text-xs" onclick="openAddRollModal('${s.catalogId}')">+ Принять рулон</button></td>
         </tr>`).join('')}
       </tbody>

@@ -11,6 +11,7 @@ import { BEFORE_PAINT_SCRIPT } from "@/features/legacy-crm/before-paint";
 import { ROLE_TESTING_HTML } from "@/features/legacy-crm/role-testing";
 import { PULSE_THEME_HTML } from "@/features/legacy-crm/pulse-theme";
 import { DESIGN_THEME_HTML } from "@/features/legacy-crm/design-theme";
+import { ENTITY_TOKENS_HTML } from "@/features/legacy-crm/entity-tokens";
 import { composeProductionHtml } from "@/features/legacy-crm/production-ui";
 
 export const dynamic = "force-dynamic";
@@ -535,10 +536,16 @@ ${BEFORE_PAINT_SCRIPT}
   const privilegedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
   // The owner's design canvas as one visual layer for every role (2026-10-04).
   const injectedUi = `${DESIGN_THEME_HTML}${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}${previewPatch}${PULSE_THEME_HTML}${roleTestingUi}`;
-  const closingBodyIndex = cloudHtml.toLowerCase().lastIndexOf("</body>");
+  // Entity colour tokens go first in <head>: the legacy palettes read
+  // window.RP_ENTITY at parse time (src/features/legacy-crm/entity-tokens.ts).
+  const headIndex = cloudHtml.toLowerCase().indexOf("<head>");
+  const cloudHtmlWithTokens = headIndex >= 0
+    ? `${cloudHtml.slice(0, headIndex + 6)}${ENTITY_TOKENS_HTML}${cloudHtml.slice(headIndex + 6)}`
+    : `${ENTITY_TOKENS_HTML}${cloudHtml}`;
+  const closingBodyIndex = cloudHtmlWithTokens.toLowerCase().lastIndexOf("</body>");
   const htmlWithCloudUi = closingBodyIndex >= 0
-    ? `${cloudHtml.slice(0, closingBodyIndex)}${injectedUi}${cloudHtml.slice(closingBodyIndex)}`
-    : `${cloudHtml}${injectedUi}`;
+    ? `${cloudHtmlWithTokens.slice(0, closingBodyIndex)}${injectedUi}${cloudHtmlWithTokens.slice(closingBodyIndex)}`
+    : `${cloudHtmlWithTokens}${injectedUi}`;
 
   return new NextResponse(htmlWithCloudUi, {
     headers: {

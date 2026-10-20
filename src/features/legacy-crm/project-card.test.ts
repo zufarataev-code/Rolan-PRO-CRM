@@ -69,6 +69,7 @@ function load(role = 'owner') {
     refreshManualFilmNeededBy: (o: Row) => calls.push(`neededBy:${o.id}`),
   });
   const start = html.indexOf('// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ');
+  vm.runInContext(html.slice(html.indexOf('// ---------- ENTITY COLOUR CODE'), html.indexOf('// ---------- ENGINEERING MEASUREMENT STUDIO')), context);
   vm.runInContext(html.slice(start, html.indexOf('function projectQuickLineCatalog(', start)), context);
   vm.runInContext(html.slice(html.indexOf('function windowRetailPrice('), html.indexOf('function orderInstallerPayout(o)')), context);
   vm.runInContext(html.slice(html.indexOf('function installerAdditionalWorkRate('), html.indexOf('function orderAdditionalWorkPayoutForUser(')), context);
