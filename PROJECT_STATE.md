@@ -23,6 +23,13 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-19 handoff — unified entity colour tokens
+
+- Branch: `codex/entity-color-tokens-20261019`, based on current `origin/main`; source patch `pr1-entity-color-tokens.patch` applied cleanly.
+- `src/features/legacy-crm/entity-tokens.ts` is now the single colour/icon source for the five film directions, add-on services, stock levels and shared frame colours. The `/legacy-crm` route injects its CSS variables and `window.RP_ENTITY` before the legacy script runs.
+- Seven legacy direction palettes and five stock-badge call sites now read the shared tokens, so Project cards, measurement, catalog, calendar, kanban, Academy and Warehouse no longer assign conflicting colours to the same entity.
+- Verification: full automated suite passes 730/730; inline legacy scripts compile through the suite; `git diff --check` passes. Local TypeScript/build verification is blocked by this Mac's stale generated Prisma/`.next` state and the already-documented Prisma generation filesystem stall; clean GitHub CI is required before merge. Production has not been changed.
+
 ## Current task update — 2026-10-07
 
 - Branch / PR: `codex/reference-scroll-calendar-cohesion` / #316, from `origin/main` at `42fe16d`; implementation head `7ffc2ae` passed all three required GitHub checks, including the clean database and phone/desktop browser gate.
