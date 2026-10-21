@@ -23,6 +23,12 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-20 handoff — safe employee deletion
+
+- Added an explicit owner-only `Удалить` action to the canonical employee directory.
+- Deletion is intentionally a reversible archive: login is disabled and the employee leaves new assignment lists, while historical projects, field work, payroll accruals, and audit records keep their employee reference.
+- The active owner cannot delete their own account; the existing last-owner guard remains in force. Archived employees stay under `Доступ выключен` and can be restored through `Изменить`.
+
 ## 2026-10-20 handoff — legacy single-definition stability guard
 
 - Branch: `codex/legacy-single-definition-guard-20261020`, based on production `main` merge `3a1c6cf` after PR #348.

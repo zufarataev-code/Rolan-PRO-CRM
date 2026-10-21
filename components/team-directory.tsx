@@ -98,6 +98,27 @@ export function TeamDirectory({
     }
   }
 
+  async function archive(member: Member) {
+    const confirmed = window.confirm(
+      `Удалить сотрудника «${member.fullName}»?\n\nВход будет отключён, сотрудник исчезнет из новых назначений. Старые проекты, работы и начисления сохранятся.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      await api(`/api/v1/team/${member.userId}`, "DELETE");
+      setNotice({
+        tone: "ok",
+        text: `${member.fullName} удалён(а) из активной команды. История сохранена; восстановить доступ можно в разделе «Доступ выключен».`,
+      });
+      if (window.top && window.top !== window) {
+        window.top.postMessage({ type: "rolanpro-team-changed" }, window.location.origin);
+      }
+      await reload();
+    } catch (error) {
+      setNotice({ tone: "error", text: (error as Error).message });
+    }
+  }
+
   const active = members.filter((member) => member.isActive);
   const inactive = members.filter((member) => !member.isActive);
 
@@ -126,6 +147,7 @@ export function TeamDirectory({
         ownUserId={ownUserId}
         onEdit={setEditing}
         onPreview={preview}
+        onArchive={archive}
       />
       {inactive.length ? (
         <MemberList
@@ -134,6 +156,7 @@ export function TeamDirectory({
           ownUserId={ownUserId}
           onEdit={setEditing}
           onPreview={preview}
+          onArchive={archive}
         />
       ) : null}
 
@@ -163,12 +186,14 @@ function MemberList({
   ownUserId,
   onEdit,
   onPreview,
+  onArchive,
 }: {
   title: string;
   members: Member[];
   ownUserId: string;
   onEdit: (member: Member) => void;
   onPreview: (member: Member) => void;
+  onArchive: (member: Member) => void;
 }) {
   return (
     <section className={styles.card}>
@@ -195,6 +220,11 @@ function MemberList({
               <button className={styles.secondary} onClick={() => onEdit(member)}>
                 Изменить
               </button>
+              {member.userId !== ownUserId && member.isActive ? (
+                <button className={styles.danger} onClick={() => onArchive(member)}>
+                  Удалить
+                </button>
+              ) : null}
             </div>
           </li>
         ))}
