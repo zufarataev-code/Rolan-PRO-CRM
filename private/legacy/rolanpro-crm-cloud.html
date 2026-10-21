@@ -15352,8 +15352,8 @@ function renderOrderServiceWorkflow(o) {
   `;
 }
 function orderManagerCandidates() {
-  const users = db.users.filter(u => ['owner', 'manager'].includes(u.role));
-  return users.length ? users : db.users;
+  const users = activeUsers(['owner', 'manager']);
+  return users.length ? users : activeUsers();
 }
 function splitClientName(fullName) {
   const parts = (fullName || '').trim().split(/\s+/).filter(Boolean);
@@ -16991,6 +16991,9 @@ function focusExistingClientCard(client) {
 function getOrder(id) { return db.orders.find(o => o.id === id); }
 function getOrderStatus(order) { return STATUSES.find(s => s.key === order.status) || STATUSES[0]; }
 function usersByRole(role) { return db.users.filter(u => u.role === role && u.active !== false); }
+// Every picker of people offers only working employees: an archived or
+// unlinked card stays for history but never as a candidate (Owner, 2026-10-20).
+function activeUsers(roles = null) { return (db.users || []).filter(u => u && u.active !== false && (!roles || roles.includes(u.role))); }
 function currentUser() { return state.currentUserId ? getUser(state.currentUserId) : null; }
 function orderUserCanManage(user = currentUser()) {
   return !!user && (user.role === 'manager' || user.role === 'owner');
@@ -21683,7 +21686,7 @@ function coldStatusBadge(status) {
   const meta = COLD_STATUS_META[status] || COLD_STATUS_META.new;
   return `<span class="tag ${meta.cls}">${meta.label}</span>`;
 }
-function coldManagers() { return db.users.filter(u => u.role === 'manager' || u.role === 'owner'); }
+function coldManagers() { return activeUsers(['manager', 'owner']); }
 function coldProspect(id) { return db.coldProspects.find(p => p.id === id); }
 function coldVisibleProspects() {
   const me = currentUser();
@@ -21975,7 +21978,7 @@ function renderTasksView() {
     const client = t.clientId ? getClient(t.clientId) : null;
     const overdue = bucketOf(t) === 'overdue';
     // Candidates for "исполнитель": the assigned team, or (if no team set) everyone
-    const candidates = team.length ? team : db.users;
+    const candidates = team.length ? team : activeUsers();
     return `
     <div class="field-task-row flex items-start gap-3 p-3 ${t.status==='done' ? 'bg-gray-50 opacity-60' : overdue ? 'bg-red-50' : ''}">
       <input type="checkbox" ${t.status==='done'?'checked':''} onchange="toggleTaskDone('${t.id}')" class="mt-1 w-5 h-5">
@@ -22021,14 +22024,14 @@ function renderTasksView() {
       <div>
         <label class="text-xs text-gray-500">Команда (кто участвует в задаче — можно выбрать несколько, Ctrl/Cmd+клик)</label>
         <select id="nt-team" multiple size="4" style="height:auto;">
-          ${db.users.map(u => `<option value="${u.id}">${u.name} (${T(u.role)})</option>`).join('')}
+          ${activeUsers().map(u => `<option value="${u.id}">${u.name} (${T(u.role)})</option>`).join('')}
         </select>
       </div>
       <div>
         <label class="text-xs text-gray-500">Ответственный исполнитель</label>
         <select id="nt-responsible">
           <option value="">— назначить позже —</option>
-          ${db.users.map(u => `<option value="${u.id}">${u.name}</option>`).join('')}
+          ${activeUsers().map(u => `<option value="${u.id}">${u.name}</option>`).join('')}
         </select>
       </div>
     </div>` : `<input type="hidden" id="nt-team" value=""><input type="hidden" id="nt-responsible" value="${me.id}">`}
@@ -22706,7 +22709,7 @@ function renderSettings() {
       <div class="mt-4 pt-4 border-t">
         <div class="text-sm font-medium mb-2">Chat ID сотрудников</div>
         <div class="space-y-2">
-          ${db.users.map(u => `
+          ${activeUsers().map(u => `
             <div class="flex items-center gap-2">
               <div class="flex-1 text-sm">${u.name} (${T(u.role)})</div>
               <input value="${u.telegramChatId}" onchange="setUserTgChat('${u.id}', this.value)" placeholder="chat_id" class="max-w-xs">
@@ -22787,7 +22790,7 @@ function renderSettings() {
           <div class="mt-3 pt-3 border-t border-current/10">
             <div class="text-xs font-semibold mb-2">Закрепить внутренний номер за сотрудником</div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-              ${db.users.filter(u=>u.role==='owner'||u.role==='manager').map(u=>`<label class="flex items-center gap-2 text-sm"><span class="flex-1">${academyEsc(u.name)}</span><select style="width:130px" onchange="setZadarmaExtension('${u.id}',this.value)"><option value="">Не назначен</option>${(zadarmaServerStatus?.extensions||[]).map(ext=>`<option value="${academyEsc(ext)}" ${String(u.zadarmaExtension||'')===String(ext)?'selected':''}>АТС ${academyEsc(ext)}</option>`).join('')}</select></label>`).join('')}
+              ${activeUsers(['owner','manager']).map(u=>`<label class="flex items-center gap-2 text-sm"><span class="flex-1">${academyEsc(u.name)}</span><select style="width:130px" onchange="setZadarmaExtension('${u.id}',this.value)"><option value="">Не назначен</option>${(zadarmaServerStatus?.extensions||[]).map(ext=>`<option value="${academyEsc(ext)}" ${String(u.zadarmaExtension||'')===String(ext)?'selected':''}>АТС ${academyEsc(ext)}</option>`).join('')}</select></label>`).join('')}
             </div>
           </div>
         </div>
@@ -38232,7 +38235,7 @@ function renderCalendar() {
   const fieldMobileCalendar = isCompactViewport() && (u?.role === 'measurer' || u?.role === 'installer');
   const fieldCalendarPanel = state.fieldCalendarPanel === 'map' ? 'map' : 'schedule';
   const canRoleFilter = u && (u.role === 'owner' || u.role === 'manager');
-  const dispatchStaff = canRoleFilter ? db.users.filter(user => user.isActive !== false && ['owner','manager','measurer','installer'].includes(user.role)) : [];
+  const dispatchStaff = canRoleFilter ? activeUsers(['owner','manager','measurer','installer']) : [];
   const today = new Date(); today.setHours(0,0,0,0);
   const anchor = calStartDate();
   const range = calendarRangeForMode(anchor, mode);
