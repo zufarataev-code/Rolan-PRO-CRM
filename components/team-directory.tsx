@@ -108,7 +108,7 @@ export function TeamDirectory({
       await api(`/api/v1/team/${member.userId}`, "DELETE");
       setNotice({
         tone: "ok",
-        text: `${member.fullName} удалён(а) из активной команды. История сохранена; восстановить доступ можно в разделе «Доступ выключен».`,
+        text: `${member.fullName} удалён(а) из команды. История сохранена; при необходимости сотрудника можно восстановить из архива.`,
       });
       if (window.top && window.top !== window) {
         window.top.postMessage({ type: "rolanpro-team-changed" }, window.location.origin);
@@ -150,14 +150,20 @@ export function TeamDirectory({
         onArchive={archive}
       />
       {inactive.length ? (
-        <MemberList
-          title={`Доступ выключен (${inactive.length})`}
-          members={inactive}
-          ownUserId={ownUserId}
-          onEdit={setEditing}
-          onPreview={preview}
-          onArchive={archive}
-        />
+        <details className={styles.archive}>
+          <summary>Архив сотрудников ({inactive.length})</summary>
+          <p className={styles.muted}>
+            Здесь находятся удалённые и отключённые сотрудники. Их история сохранена; восстановить доступ можно через «Изменить».
+          </p>
+          <MemberList
+            title="Удалённые и отключённые"
+            members={inactive}
+            ownUserId={ownUserId}
+            onEdit={setEditing}
+            onPreview={preview}
+            onArchive={archive}
+          />
+        </details>
       ) : null}
 
       {editing ? (

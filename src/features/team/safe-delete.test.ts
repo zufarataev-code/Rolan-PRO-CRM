@@ -28,5 +28,7 @@ test("team directory exposes an explicit confirmed delete action", () => {
   assert.match(source, /Старые проекты, работы и начисления сохранятся/);
   assert.match(source, /api\(`\/api\/v1\/team\/\$\{member\.userId\}`, "DELETE"\)/);
   assert.match(source, />\s*Удалить\s*</);
-  assert.match(source, /разделе «Доступ выключен»/);
+  assert.match(source, /можно восстановить из архива/);
+  assert.match(source, /<details className=\{styles\.archive\}>/);
+  assert.match(source, /Архив сотрудников \(\{inactive\.length\}\)/);
 });
