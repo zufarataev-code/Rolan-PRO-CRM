@@ -10,6 +10,18 @@ test('the served production UI has a single definition per function and valid sc
   for(const match of module.matchAll(/^(?:async )?function (\w+)\(/gm))assert.equal([...html.matchAll(new RegExp('^(?:async )?function '+match[1]+'\\(','gm'))].length,1,match[1]);
   for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))if(match[1].trim())new vm.Script(match[1]);
 });
+
+test('replacing a one-line legacy function preserves the helper declared after it',()=>{
+  const fixture = '<script>\nfunction target(value) { return value; }\nfunction preserved(value) { return value + 1; }\n// ---------- BOOT ----------\n</script>';
+  const composed = composeProductionHtml(fixture, 'function target(value) {\n  return value * 2;\n}');
+  assert.match(composed,/function target\(value\) \{\n  return value \* 2;\n\}/);
+  assert.match(composed,/function preserved\(value\) \{ return value \+ 1; \}/);
+});
+
+test('the production composition keeps the project planned-area helper',()=>{
+  assert.equal([...html.matchAll(/^function orderPlannedAreaSqft\(/gm)].length,1);
+  assert.match(html,/function orderActualAreaSqft\(o\) \{\n  o=projectIncludedDirectionOrder\(o\)/);
+});
 test('voice creates a draft and leaves ambiguous project references unselected',()=>{
   const context=vm.createContext({db:{orders:[{id:'a',number:'557'},{id:'b',number:'568'}]}});
   vm.runInContext(source('financeVoiceDraft'),context);
