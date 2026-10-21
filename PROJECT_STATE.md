@@ -23,6 +23,13 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-21 handoff — approved project-card route map
+
+- Branch: `codex/project-card-artifact-20261021`, based on current `origin/main` `5f33d6a` after PR #354.
+- The approved three-screen concept (project cashier, measurement, installer work order) is transferred into the canonical Project card as one compact route map: every selected direction remains visible together, the primary direction is marked, and managers can add another direction without being forced into measurement.
+- The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
+- Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
+
 ## 2026-10-21 handoff — service cashier (касса услуг)
 
 - Branch / PR: `claude/service-cashier` / #354, rebased onto `main` merge `d2a5bf0` after PR #353.
