@@ -26,10 +26,11 @@ Before doing any work:
 ## 2026-10-20 handoff — legacy single-definition stability guard
 
 - Branch: `codex/legacy-single-definition-guard-20261020`, based on production `main` merge `3a1c6cf` after PR #348.
+- Production regression found during an authenticated smoke check: opening «Проекты» could fail with `orderPlannedAreaSqft is not defined`. `composeProductionHtml` treated a one-line overridden function as multiline and removed the following helper. The composer now terminates one-line declarations on their own line, and its tests assert both the generic preservation case and the real planned-area helper in the served HTML.
 - Root cause found: `private/legacy/rolanpro-crm-cloud.html` declared `printWorkOrder` twice. The later obsolete global function silently replaced the canonical renderer, so a printed work order could omit the unified project services, each service's crew/date, site access and Smart installation plans even though the newer UI and tests existed earlier in the file.
 - Fix: the obsolete shadow printer is removed. `legacy-script-integrity.test.ts` parses the real inline script with the TypeScript parser and fails on any repeated top-level function declaration; it also requires the sole work-order printer to use `renderWorkOrderHtml(order, true)`.
 - Audit: `docs/LEGACY_CRM_STABILITY_AUDIT_2026-10-20.md` records the measured monolith size, overlapping legacy PR risk, persistence risk and a phased no-rewrite remediation plan.
-- Verification: 83 focused project/measurement/service/work-order tests, the full 732/732 test suite and `git diff --check` pass. Local Prisma CLI loading and `next build` both stall on this host before diagnostics; the existing local generated Prisma Client is older than the schema, so local TypeScript reports unrelated missing generated fields. Clean GitHub CI must regenerate Prisma and provide the required TypeScript, production-build and clean-database gates. No production data or deployment changed.
+- Verification: the production-composer/project focused suite passes 22/22 and the full suite passes 734/734. `git diff --check` passes. Local Prisma CLI loading and `next build` both stall on this host before diagnostics; the existing local generated Prisma Client is older than the schema, so local TypeScript reports unrelated missing generated fields. Clean GitHub CI must regenerate Prisma and provide the required TypeScript, production-build and clean-database gates. No production data or deployment changed.
 
 ## 2026-10-19 handoff — unified entity colour tokens
 
