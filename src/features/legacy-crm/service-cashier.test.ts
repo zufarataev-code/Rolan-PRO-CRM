@@ -15,6 +15,7 @@ function load(role = 'owner') {
   const state: Row = { modal: null };
   let sequence = 0;
   const calls: string[] = [];
+  const layers: Row[] = [];
   const services = [
     { id: 'protective_film', catalogCategory: 'protective', title: 'Защитная', short: 'Защита', icon: '🛡' },
     { id: 'solar_film', catalogCategory: 'solar', title: 'Солнцезащитная', short: 'Солнце', icon: '☀' },
@@ -44,6 +45,19 @@ function load(role = 'owner') {
     measureAllWindows: (order: Row) => (order.measurements?.rooms || []).flatMap((room: Row) => (room.windows || []).map((win: Row) => ({ room, win }))),
     projectQuickLines: (order: Row) => (order.extraServices || []).filter((line: Row) => line.quickProjectLine),
     orderUserCanSeeMoney: () => role === 'owner' || role === 'manager',
+    orderUserCanManage: () => role === 'owner' || role === 'manager',
+    toggleNewOrderOffering: (id: string, checked: boolean) => {
+      calls.push(`toggle:${id}:${checked}`);
+      const ids = [state._newOrderOfferingId, ...(state._newOrderExtraOfferingIds || [])].filter(Boolean).filter((v: string) => v !== id);
+      if (checked) ids.push(id);
+      state._newOrderOfferingId = ids[0] || ''; state._newOrderExtraOfferingIds = ids.slice(1);
+    },
+    setNewOrderOfferingMaterial: (id: string, film: string) => { calls.push(`material:${id}:${film}`); (state._newOrderMaterialsByService ||= {})[id] = film; },
+    document: {
+      body: { appendChild: (node: Row) => { layers.push(node); } },
+      getElementById: (id: string) => (id === 'rp-cashier-layer' ? layers.find(node => node.id === id && !node.removed) || null : null),
+      createElement: () => ({ id: '', innerHTML: '', removed: false, remove() { this.removed = true; } }),
+    },
     projectEstimateMarkChanged: () => undefined,
     // The real projectCardEdit is in the loaded slice; it sets projectCardEditing while the edit runs.
     refreshProjectEstimateWorkspace: () => calls.push(vm.runInContext('projectCardEditing', context) ? 'refresh:card' : 'refresh'),
@@ -63,7 +77,7 @@ function load(role = 'owner') {
     db.settings.serviceOfferings.push(item);
     return item;
   };
-  return { context, db, state, add, calls };
+  return { context, db, state, add, calls, layers };
 }
 
 const inch = 25.4;
@@ -192,4 +206,44 @@ test('a closed project and a service already measured are not offered again', ()
   assert.match(state.modal, /уже в проекте/);
   context.serviceCashierPick('offering', a1.id);
   assert.equal(context.serviceCashierState().step, 'material', 'the guard is in the UI; the data path itself stays idempotent');
+});
+
+test('in the new-project form the cashier sits on its own layer, reads the intake state and commits through toggleNewOrderOffering', () => {
+  const { context, state, calls, layers, a1, high, silicone } = fixture();
+  state._newOrderOfferingId = ''; state._newOrderExtraOfferingIds = []; state._newOrderMaterialsByService = {};
+  context.openServiceCashier('', 'intake');
+  const c = context.serviceCashierState();
+  assert.deepEqual([c.returnTo, c.oid, c.step], ['intake', '', 'direction']);
+  assert.equal(state.modal, null, 'the form modal is not replaced');
+  assert.equal(layers.length, 1);
+  assert.match(layers[0].innerHTML, /КАССА УСЛУГ · Новый проект/);
+
+  context.serviceCashierPick('direction', 'protective_film');
+  context.serviceCashierPick('offering', a1.id);
+  context.serviceCashierPick('material', 'f_a1');
+  context.serviceCashierPick('addon', high.id);
+  assert.match(layers[0].innerHTML, /Добавить в проект/);
+  calls.length = 0;
+  context.serviceCashierCommit();
+
+  assert.equal(context.serviceCashierState(), null);
+  assert.equal(layers[0].removed, true, 'the layer is removed after commit');
+  assert.deepEqual(calls, [`toggle:${a1.id}:true`, `material:${a1.id}:f_a1`, `toggle:${high.id}:true`]);
+  assert.deepEqual([state._newOrderOfferingId, ...state._newOrderExtraOfferingIds], [a1.id, high.id]);
+  assert.ok(!calls.some(call => call.startsWith(`toggle:${silicone.id}`)), 'an included component is added by the project itself, not by the intake');
+
+  // A second visit sees what was chosen: the service is marked, its film preselected.
+  context.openServiceCashier('', 'intake');
+  context.serviceCashierPick('direction', 'protective_film');
+  assert.match(layers[1].innerHTML, /уже в проекте/);
+  context.closeServiceCashier();
+  assert.equal(layers[1].removed, true);
+  assert.equal(state.modal, null);
+});
+
+test('field roles cannot open the intake cashier', () => {
+  const { context, layers } = fixture('installer');
+  context.openServiceCashier('', 'intake');
+  assert.equal(context.serviceCashierState(), null);
+  assert.equal(layers.length, 0);
 });

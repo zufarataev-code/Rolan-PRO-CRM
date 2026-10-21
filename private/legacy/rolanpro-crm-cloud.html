@@ -1554,6 +1554,12 @@
   .rp-cashier-summary-note { font-size:.74rem;color:#64748b;margin-top:.2rem; }
   .rp-cashier-foot { display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.75rem 1.25rem 1.1rem;border-top:1px solid #edf1f5;background:#fbfdff; }
   .rp-cashier-commit { background:var(--svc-color);border-color:var(--svc-color); }
+  #rp-cashier-layer .modal-backdrop { z-index:1200; }
+  .rp-intake-service { --svc-color:#2563eb; --svc-bg:#eff6ff; display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.6rem .75rem;margin-bottom:.45rem;border:1.5px solid #dbe4ef;border-left:5px solid var(--svc-color);border-radius:4px;background:#fff; }
+  .rp-intake-service-name { font-weight:800;color:#10213b;font-size:.92rem; }
+  .rp-intake-service-meta { font-size:.74rem;color:#64748b;margin-top:.15rem; }
+  .rp-intake-service-badge { font-size:.66rem;font-weight:800;color:var(--svc-color);background:var(--svc-bg);border-radius:3px;padding:.1rem .4rem;margin-left:.3rem;vertical-align:middle; }
+  .rp-intake-service-empty { font-size:.85rem;color:#64748b;padding:.5rem 0; }
   @media (max-width: 640px) {
     .rp-cashier-grid, .rp-cashier-grid.compact { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .rp-cashier-card { min-height:72px;padding:.7rem .75rem; }
@@ -24876,6 +24882,26 @@ const SERVICE_CASHIER_STEPS = ['direction', 'offering', 'material', 'addons'];
 function serviceCashierState() {
   return state._serviceCashier || null;
 }
+/**
+ * What the cashier adds to: an existing project, or — in the new-project form
+ * (Owner, 2026-10-21: «когда менеджер создаёт проект, по аналогии как касса»)
+ * — the services chosen so far, read from the intake state.
+ */
+function serviceCashierScope(c) {
+  if (!c) return null;
+  if (c.returnTo !== 'intake') return getOrder(c.oid);
+  return {
+    id: '',
+    number: 'Новый проект',
+    status: 'new',
+    offeringId: state._newOrderOfferingId || '',
+    offeringIds: state._newOrderExtraOfferingIds || [],
+    offeringCatalogIds: state._newOrderMaterialsByService || {},
+  };
+}
+function serviceCashierLayer() {
+  return typeof document !== 'undefined' ? document.getElementById('rp-cashier-layer') : null;
+}
 /** Directions of the owner's directory that have at least one active service. */
 function serviceCashierDirections() {
   return ORDER_PRIMARY_SERVICES
@@ -24902,13 +24928,19 @@ function serviceCashierSteps(offering) {
 }
 
 function openServiceCashier(oid, returnTo = 'card') {
-  const o = getOrder(oid);
-  if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return;
-  state._serviceCashier = { oid, returnTo: returnTo === 'estimate' ? 'estimate' : 'card', step: 'direction', directionId: '', offeringId: '', catalogId: '', addonIds: [] };
+  const mode = ['estimate', 'intake'].includes(returnTo) ? returnTo : 'card';
+  if (mode === 'intake') {
+    if (!orderUserCanManage()) return;
+  } else {
+    const o = getOrder(oid);
+    if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return;
+  }
+  state._serviceCashier = { oid: mode === 'intake' ? '' : oid, returnTo: mode, step: 'direction', directionId: '', offeringId: '', catalogId: '', addonIds: [] };
   renderServiceCashier();
 }
 function serviceCashierReturn(oid, returnTo) {
   state._serviceCashier = null;
+  if (returnTo === 'intake') { serviceCashierLayer()?.remove(); return; }
   state.modal = null;
   if (returnTo === 'estimate') openProjectEstimateWorkspace(oid); else { preservePositionForNextRender(); render(); }
 }
@@ -24920,6 +24952,14 @@ function closeServiceCashier() {
 function renderServiceCashier() {
   const c = serviceCashierState();
   if (!c) return;
+  if (c.returnTo === 'intake') {
+    // The new-project form is the open modal and holds typed fields; the
+    // cashier sits on top of it as its own layer instead of replacing it.
+    let layer = serviceCashierLayer();
+    if (!layer && typeof document !== 'undefined') { layer = document.createElement('div'); layer.id = 'rp-cashier-layer'; document.body.appendChild(layer); }
+    if (layer) layer.innerHTML = serviceCashierHtml(c);
+    return;
+  }
   preservePositionForNextRender();
   state.modal = serviceCashierHtml(c);
   render();
@@ -24933,7 +24973,7 @@ function serviceCashierPick(field, value) {
   } else if (field === 'offering') {
     const offering = serviceOffering(value);
     if (!offering || offering.active === false || offeringServiceType(offering) !== c.directionId) return;
-    const o = getOrder(c.oid);
+    const o = serviceCashierScope(c);
     Object.assign(c, { offeringId: value, catalogId: projectOfferingCatalogId(o, value), addonIds: [] });
     c.step = serviceCashierHasMaterialStep(offering) ? 'material' : 'addons';
   } else if (field === 'material') {
@@ -24943,7 +24983,7 @@ function serviceCashierPick(field, value) {
     c.step = 'addons';
   } else if (field === 'addon') {
     const offering = serviceOffering(c.offeringId);
-    const o = getOrder(c.oid);
+    const o = serviceCashierScope(c);
     if (!serviceCashierAddons(o, offering).some(item => item.id === value)) return;
     c.addonIds = c.addonIds.includes(value) ? c.addonIds.filter(id => id !== value) : [...c.addonIds, value];
   } else if (field === 'step') {
@@ -24961,13 +25001,23 @@ function serviceCashierPick(field, value) {
 /** Puts the chosen service, its material and add-ons into the project through the usual path. */
 function serviceCashierCommit() {
   const c = serviceCashierState();
-  const o = c ? getOrder(c.oid) : null;
+  const o = serviceCashierScope(c);
   const offering = serviceOffering(c?.offeringId);
-  if (!c || !o || !offering || offering.active === false || !orderUserCanSeeMoney(o, currentUser())) return;
+  if (!c || !o || !offering || offering.active === false) return;
+  if (c.returnTo === 'intake' ? !orderUserCanManage() : !orderUserCanSeeMoney(o, currentUser())) return;
   const addons = serviceCashierAddons(o, offering).filter(item => c.addonIds.includes(item.id));
   const film = c.catalogId && serviceCashierFilms(offering).some(item => item.id === c.catalogId) ? getCatalogItem(c.catalogId) : null;
   const { oid, returnTo } = c;
   state._serviceCashier = null;
+  if (returnTo === 'intake') {
+    // The intake keeps its own selection; the first chosen service is the
+    // client's incoming request, the rest are upsells of the same project.
+    serviceCashierLayer()?.remove();
+    toggleNewOrderOffering(offering.id, true);
+    if (film) setNewOrderOfferingMaterial(offering.id, film.id);
+    addons.forEach(item => toggleNewOrderOffering(item.id, true));
+    return;
+  }
   state.modal = null;
   const apply = () => {
     if (film) o.offeringCatalogIds = { ...(o.offeringCatalogIds || {}), [offering.id]: film.id };
@@ -24995,7 +25045,7 @@ function serviceCashierOfferingMeta(offering) {
   return `${price} / ${academyEsc(serviceOfferingUnitShort(offering))}${serviceOfferingNeedsSizes(offering) ? ' · по замеру' : ''}${includes.length ? ` · входит: ${academyEsc(includes.map(child => child.name).join(', '))}` : ''}`;
 }
 function serviceCashierHtml(c) {
-  const o = getOrder(c.oid);
+  const o = serviceCashierScope(c);
   if (!o) return '';
   const direction = ORDER_PRIMARY_SERVICES.find(item => item.id === c.directionId) || null;
   const offering = serviceOffering(c.offeringId);
@@ -30841,7 +30891,7 @@ function openOrderModal() {
               <div class="erp-intake-card-head">
                 <div>
                   <div class="erp-intake-card-title"><span class="erp-intake-step">3</span> Услуги проекта <span class="order-required">*</span></div>
-                  <div class="text-sm text-gray-500 mt-1">Отметьте конкретные услуги. Первая отмеченная сохраняется как исходный запрос клиента; остальные — допродажи этого же проекта.</div>
+                  <div class="text-sm text-gray-500 mt-1">Добавьте услуги через кассу. Первая добавленная сохраняется как исходный запрос клиента; остальные — допродажи этого же проекта.</div>
                 </div>
               </div>
               <div id="no-offerings" class="mt-2"></div>
@@ -30916,18 +30966,23 @@ function newOrderOfferingCatalogIds(offerings = newOrderSelectedOfferings()) {
 function renderNewOrderOfferings() {
   const node = document.getElementById('no-offerings');
   if (!node) return;
-  const selected = new Set(newOrderSelectedOfferings().map(item => item.id));
-  let total = 0;
-  node.innerHTML = ORDER_PRIMARY_SERVICES.map(direction => {
-    const offerings = serviceOfferingsFor(serviceOfferingDirection(direction.id));
-    total += offerings.length;
-    return offerings.length ? `<fieldset class="mb-3"><legend class="font-semibold text-sm mb-2">${direction.icon || ''} ${academyEsc(direction.title)}</legend>${offerings.map(item => {
-      const checked = selected.has(item.id);
-      const films = (db.settings.catalog || []).filter(film => !film.archived && serviceOfferingFilmIds(item).includes(film.id));
-      const selectedFilmId = state._newOrderMaterialsByService?.[item.id] || '';
-      return `<div class="p-2 border mb-2 rounded-lg" data-intake-offering="${academyEsc(item.id)}"><label class="flex items-start gap-2" style="min-height:44px"><input type="checkbox" style="width:20px;height:20px" data-offering="${academyEsc(item.id)}" ${checked ? 'checked' : ''} onchange="toggleNewOrderOffering('${academyEsc(item.id)}',this.checked)"><span class="min-w-0"><b>${academyEsc(item.name)}</b><span class="block text-xs text-gray-500">${serviceOfferingNeedsSizes(item) ? 'по замеру' : `за ${academyEsc(serviceOfferingUnitShort(item))}`}${serviceOfferingIncludes(item).length ? ` · входит: ${academyEsc(serviceOfferingIncludes(item).map(child => child.name).join(', '))}` : ''}${item.id === state._newOrderOfferingId ? ' · исходный запрос' : ''}</span></span></label>${checked && serviceOfferingNeedsSizes(item) ? `<label class="block mt-2 text-xs">Материал / модель <span class="text-gray-500">(можно уточнить на замере)</span><select aria-label="Материал ${academyEsc(item.name)}" style="min-height:44px" onchange="setNewOrderOfferingMaterial('${academyEsc(item.id)}',this.value)"><option value="">Уточнить на замере</option>${films.map(film => { const stock = warehouseCatalogStockStats(film.id); return `<option value="${academyEsc(film.id)}" ${selectedFilmId === film.id ? 'selected' : ''}>${academyEsc(catalogLabel(film))} · ${stock.availableSqft > 0 ? `${stock.availableSqft.toFixed(0)} sqft` : film.pendingPurchase ? 'ожидает закупки' : 'нет остатка'}</option>`; }).join('')}</select></label>${!films.length ? '<div class="text-xs text-amber-700 mt-1">К услуге пока не привязана модель плёнки. Проект можно создать, но расчёт потребует материал.</div>' : ''}` : ''}</div>`;
-    }).join('')}</fieldset>` : '';
+  // Owner, 2026-10-21: the manager composes the project at the cashier, not
+  // from checkboxes. The chosen services are listed here; «+ Услуга» opens the
+  // cashier on top of the form, and toggleNewOrderOffering stays the data path.
+  const selected = newOrderSelectedOfferings();
+  const total = ORDER_PRIMARY_SERVICES.reduce((sum, direction) => sum + serviceOfferingsFor(serviceOfferingDirection(direction.id)).length, 0);
+  const rows = selected.map((item, index) => {
+    const direction = offeringServiceType(item);
+    const filmId = state._newOrderMaterialsByService?.[item.id] || '';
+    const film = filmId ? getCatalogItem(filmId) : null;
+    const includes = serviceOfferingIncludes(item);
+    const material = serviceOfferingNeedsSizes(item) ? (film ? catalogLabel(film) : 'материал уточним на замере') : `за ${serviceOfferingUnitShort(item)}`;
+    return `<div class="rp-intake-service" data-intake-offering="${academyEsc(item.id)}" data-offering="${academyEsc(item.id)}" style="${orderServiceCardStyle(direction)}">
+      <div class="rp-intake-service-main"><div class="rp-intake-service-name">${academyEsc(item.name)}${index === 0 ? ' <span class="rp-intake-service-badge">исходный запрос</span>' : ''}</div><div class="rp-intake-service-meta">${academyEsc(primaryServiceInfo(direction)?.title || '')} · ${academyEsc(material)}${includes.length ? ` · входит: ${academyEsc(includes.map(child => child.name).join(', '))}` : ''}</div></div>
+      <button type="button" class="btn-ghost text-sm text-red-600" aria-label="Убрать ${academyEsc(item.name)}" onclick="toggleNewOrderOffering('${academyEsc(item.id)}', false)">Убрать</button>
+    </div>`;
   }).join('');
+  node.innerHTML = `${rows || (total ? '<div class="rp-intake-service-empty" data-intake-offering="empty">Услуг пока нет — добавьте через кассу.</div>' : '')}${total ? `<button type="button" class="btn-primary text-sm mt-2" data-intake-offering="add" onclick="openServiceCashier('', 'intake')">+ Услуга</button>` : ''}`;
   const empty = document.getElementById('no-offering-empty');
   if (empty) empty.style.display = total ? 'none' : '';
 }
