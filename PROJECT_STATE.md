@@ -23,6 +23,13 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-21 handoff — employee ghosts
+
+- Branch: `claude/employee-ghosts`, based on `main` merge `ac5aed1` after PR #352. Not yet pushed (no GitHub push access in that session); complete locally.
+- Owner, 2026-10-20: a deleted surveyor kept appearing in crew, manager and task pickers after the Owner re-created himself under the same email. Cause: `applyEmployeeDirectory` left legacy cards no PostgreSQL employee is linked to untouched, so a former employee's card stayed `active: true` forever; and nine legacy pickers listed `db.users` without the active filter (the dispatch calendar checked a non-existent `isActive` field).
+- Fix: unlinked cards are switched off on every read/save — the card and its id stay for historical orders, and re-linking turns it back on. One helper, `activeUsers(roles)`, now feeds the manager, cold-call, task team/assignee, task candidate, Telegram chat-id, Zadarma extension and dispatch lists.
+- Verification: `directory.test.ts` (archive/relink rule) and `employee-pickers.test.ts` (helper + no raw `db.users` pickers); full suite 742/742; single-definition guard passes. GitHub CI, merge and deploy remain. After deploy the Owner should review «Команда → Архив сотрудников», where every ghost will now sit.
+
 ## 2026-10-20 handoff — safe employee deletion
 
 - Added an explicit owner-only `Удалить` action to the canonical employee directory.
