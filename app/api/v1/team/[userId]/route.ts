@@ -83,6 +83,35 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
+/**
+ * "Удаление" сотрудника намеренно архивное.
+ *
+ * User связан с проектами, замерами, монтажами, начислениями и журналом
+ * действий. Физическое DELETE уничтожило бы аудит или упёрлось бы в RESTRICT
+ * связи. Отключение немедленно закрывает вход и убирает сотрудника из новых
+ * назначений, сохраняя имя во всей исторической работе.
+ */
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  const auth = await requireRequestSession(request, TEAM_ADMIN_ROLES);
+
+  if (!auth.ok) {
+    return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Team access denied.");
+  }
+
+  const { userId } = await context.params;
+  if (userId === auth.session.user.user_id) {
+    return apiError(400, "cannot_archive_self", "Нельзя удалить собственную учётную запись.");
+  }
+
+  try {
+    const archived = await updateTeamMember(userId, { isActive: false });
+    return apiSuccess({ ...archived, isActive: false });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Не удалось удалить сотрудника.";
+    return apiError(400, "archive_failed", message);
+  }
+}
+
 async function refreshOwnSessionIfNeeded(response: NextResponse, targetUserId: string, actorUserId: string) {
   if (targetUserId !== actorUserId) return response;
 
