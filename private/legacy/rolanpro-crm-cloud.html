@@ -18387,6 +18387,7 @@ function openCreateSheet() {
     <div class="modal-content workspace-modal p-5" style="max-width: 30rem;">
       <div class="flex items-center justify-between"><h3 class="font-semibold text-lg">Создать</h3><button class="btn-ghost" aria-label="Закрыть" onclick="closeModal()">✕</button></div>
       <div class="rp-create-sheet">
+        ${tile('Касса проекта', 'направления, плёнка, размеры, чек', 'linear-gradient(135deg,#FFA726,#E65100)', 'rgba(230,81,0,.9)', 'plus', "window.location.href='/legacy-crm/cashier'")}
         ${tile('Новый проект', 'клиент, объект, адрес', 'linear-gradient(135deg,#3D7BD8,#22488F)', 'rgba(34,72,143,.9)', 'plus', 'openOrderModal()')}
         ${tile('Клиент', 'карточка B2C или B2B', 'linear-gradient(135deg,#EF6A4C,#C2402A)', 'rgba(194,64,42,.9)', 'clients', 'openClientModal()')}
         ${tile('Лиды', 'заявки и звонки', 'linear-gradient(135deg,#E9A92A,#B97500)', 'rgba(185,117,0,.9)', 'leads', "selectAppView('leads')")}
