@@ -4,6 +4,7 @@ import test from "node:test";
 
 const route = () => readFileSync("app/api/v1/team/[userId]/route.ts", "utf8");
 const directory = () => readFileSync("components/team-directory.tsx", "utf8");
+const legacy = () => readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 
 test("employee deletion archives the account instead of erasing audit history", () => {
   const source = route();
@@ -31,4 +32,14 @@ test("team directory exposes an explicit confirmed delete action", () => {
   assert.match(source, /можно восстановить из архива/);
   assert.match(source, /<details className=\{styles\.archive\}>/);
   assert.match(source, /Архив сотрудников \(\{inactive\.length\}\)/);
+});
+
+test("the visible legacy employee cards expose the same safe delete action", () => {
+  const source = legacy();
+
+  assert.match(source, /archiveTeamMemberFromCard\('\$\{u\.id\}'\)/);
+  assert.match(source, /method: 'DELETE'/);
+  assert.match(source, /Старые проекты, работы и начисления сохранятся/);
+  assert.match(source, /card\.active = false/);
+  assert.match(source, /g\.role !== 'owner'/);
 });
