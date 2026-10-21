@@ -131,6 +131,16 @@ export function applyEmployeeDirectory<T extends Record<string, unknown>>(
     .map((card) => ({ ...card }));
   const index = new Map(cards.map((card, position) => [card.id, position]));
 
+  // A card no employee is linked to is a former employee (deleted before the
+  // directory existed, or re-created under another account). It stays, so
+  // historical orders keep their reference, but it is switched off: otherwise
+  // the "ghost" keeps appearing in crew, manager and task pickers
+  // (Owner, 2026-10-20: a removed surveyor still showed up everywhere).
+  const linked = new Set(members.flatMap((member) => member.legacyUserIds));
+  for (const [position, card] of cards.entries()) {
+    if (!linked.has(card.id) && card.active !== false) cards[position] = { ...card, active: false };
+  }
+
   for (const member of members) {
     const legacyRoles = legacyRolesForServerRoles(member.roles);
     if (!legacyRoles.length) continue;

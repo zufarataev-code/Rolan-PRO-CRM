@@ -77,14 +77,27 @@ test("a surveyor + installer keeps one card per role (production u_z1 / u_i1)", 
   ]);
 });
 
-test("cards not linked to any employee are kept for historical orders", () => {
+test("cards not linked to any employee are kept for historical orders, but switched off", () => {
   const result = applyEmployeeDirectory(
     { users: [{ id: "u_old", name: "Former installer", role: "installer", active: true }] },
     [alan],
   );
-  const ids = (result.users as Array<{ id: string }>).map((card) => card.id).sort();
+  const cards = result.users as Array<{ id: string; active: boolean }>;
+  const ids = cards.map((card) => card.id).sort();
 
   assert.deepEqual(ids, ["u_i1", "u_old", "u_z1"]);
+  // The former employee is a ghost: it must not be offered as crew, manager or
+  // task assignee again (Owner, 2026-10-20), yet the card and its id remain.
+  assert.equal(cards.find((card) => card.id === "u_old")?.active, false);
+  assert.ok(cards.filter((card) => card.id !== "u_old").every((card) => card.active === true));
+});
+
+test("a card re-linked to an employee is switched back on", () => {
+  const result = applyEmployeeDirectory(
+    { users: [{ id: "u_z1", name: "Alan", role: "measurer", active: false }] },
+    [alan],
+  );
+  assert.equal((result.users as Array<{ id: string; active: boolean }>).find((card) => card.id === "u_z1")?.active, true);
 });
 
 test("disabling an employee in PostgreSQL disables the card", () => {
