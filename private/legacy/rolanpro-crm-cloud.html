@@ -1516,6 +1516,50 @@
   .project-command-nav button { border-radius:9px 9px 0 0;border-bottom:2px solid transparent; }
   .project-command-nav button.active { color:#087da8;background:#ecf8fc;border-color:#a9d9ea;border-bottom-color:#159bc4; }
   .project-command-grid { grid-template-columns:minmax(0,1.55fr) minmax(300px,.72fr); }
+  /* Касса услуг: карточки одного цвета с направлением (--svc-color из entity tokens). */
+  .rp-cashier { --svc-color:#2563eb; --svc-bg:#eff6ff; padding:0; overflow:hidden; }
+  .rp-cashier-head { display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;padding:1.1rem 1.25rem .5rem;border-top:4px solid var(--svc-color); }
+  .rp-cashier-head h3 { font-size:1.25rem;font-weight:900;margin:0;color:#10213b; }
+  .rp-cashier-kicker { font-size:.68rem;font-weight:900;letter-spacing:.08em;color:var(--svc-color); }
+  .rp-cashier-crumbs { display:flex;flex-wrap:wrap;align-items:center;gap:.25rem;padding:0 1.25rem .6rem;font-size:.8rem; }
+  .rp-cashier-crumb { display:inline-flex;align-items:center;gap:.4rem;border:1px solid #e2e8f0;background:#fff;border-radius:4px;padding:.3rem .6rem;color:#64748b;font-weight:700; }
+  .rp-cashier-crumb.done { color:#10213b;cursor:pointer;border-color:var(--svc-color); }
+  .rp-cashier-crumb.current { background:var(--svc-color);border-color:var(--svc-color);color:#fff; }
+  .rp-cashier-crumb-n { display:inline-grid;place-items:center;width:1.1rem;height:1.1rem;border-radius:3px;background:rgba(16,33,59,.08);font-size:.68rem; }
+  .rp-cashier-crumb.current .rp-cashier-crumb-n { background:rgba(255,255,255,.25); }
+  .rp-cashier-crumb-sep { color:#cbd5e1; }
+  .rp-cashier-body { padding:.4rem 1.25rem 1rem;max-height:min(62vh,640px);overflow:auto; }
+  .rp-cashier-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:.6rem; }
+  .rp-cashier-grid.compact { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
+  .rp-cashier-card { position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:.3rem;text-align:left;padding:.85rem .9rem;min-height:84px;border:1.5px solid #dbe4ef;border-left:5px solid var(--svc-color);border-radius:4px;background:#fff;color:#10213b;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s; }
+  .rp-cashier-card:hover:not(:disabled) { transform:translateY(-1px);box-shadow:0 8px 20px rgba(15,35,61,.08);border-color:var(--svc-color); }
+  .rp-cashier-card.selected { background:var(--svc-bg);border-color:var(--svc-color);box-shadow:inset 0 0 0 1px var(--svc-color); }
+  .rp-cashier-card.taken, .rp-cashier-card:disabled { opacity:.55;cursor:default; }
+  .rp-cashier-direction { min-height:110px;background:linear-gradient(135deg,var(--svc-bg),#fff); }
+  .rp-cashier-icon { font-size:1.5rem;line-height:1; }
+  .rp-cashier-title { font-weight:800;font-size:.95rem;line-height:1.2; }
+  .rp-cashier-meta { font-size:.74rem;color:#64748b;line-height:1.3; }
+  .rp-cashier-badge { position:absolute;top:.5rem;right:.5rem;font-size:.66rem;font-weight:800;color:var(--svc-color);background:var(--svc-bg);border-radius:3px;padding:.1rem .4rem; }
+  .rp-cashier-check { position:absolute;top:.55rem;right:.6rem;display:grid;place-items:center;width:1.4rem;height:1.4rem;border-radius:3px;border:1.5px solid var(--svc-color);color:var(--svc-color);font-weight:900;font-size:.85rem;background:#fff; }
+  .rp-cashier-card.selected .rp-cashier-check { background:var(--svc-color);color:#fff; }
+  .rp-cashier-group { margin-bottom:.9rem; }
+  .rp-cashier-group-title { font-size:.72rem;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin:.2rem 0 .45rem; }
+  .rp-cashier-skip { display:block;width:100%;margin-top:.4rem;padding:.7rem;border:1.5px dashed #cbd5e1;border-radius:4px;background:#fff;color:#475569;font-weight:700;cursor:pointer; }
+  .rp-cashier-skip:hover { border-color:var(--svc-color);color:var(--svc-color); }
+  .rp-cashier-summary { border:1.5px solid var(--svc-color);border-radius:4px;background:var(--svc-bg);padding:.85rem 1rem;display:grid;gap:.35rem; }
+  .rp-cashier-summary-title { font-size:.7rem;font-weight:900;letter-spacing:.08em;color:var(--svc-color); }
+  .rp-cashier-summary-line { display:flex;justify-content:space-between;gap:1rem;font-size:.88rem;color:#10213b; }
+  .rp-cashier-summary-line span:last-child { color:#475569;text-align:right; }
+  .rp-cashier-summary-line.included { color:#64748b; }
+  .rp-cashier-summary-note { font-size:.74rem;color:#64748b;margin-top:.2rem; }
+  .rp-cashier-foot { display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.75rem 1.25rem 1.1rem;border-top:1px solid #edf1f5;background:#fbfdff; }
+  .rp-cashier-commit { background:var(--svc-color);border-color:var(--svc-color); }
+  @media (max-width: 640px) {
+    .rp-cashier-grid, .rp-cashier-grid.compact { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .rp-cashier-card { min-height:72px;padding:.7rem .75rem; }
+    .rp-cashier-body { max-height:min(66vh,560px);padding:.3rem .9rem .8rem; }
+    .rp-cashier-head, .rp-cashier-crumbs, .rp-cashier-foot { padding-left:.9rem;padding-right:.9rem; }
+  }
   .project-service-ledger { border:1px solid #dbe4ef;border-radius:15px;background:#fff;overflow:hidden;box-shadow:0 10px 28px rgba(15,35,61,.045); }
   .project-service-ledger-head { display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;padding:.9rem 1rem;border-bottom:1px solid #e8edf3; }
   .project-service-ledger-title { color:#10213b;font-size:.94rem;font-weight:950; }
@@ -24765,12 +24809,12 @@ function orderOfferingNeedsSizes(o, offeringId) {
 
 /** «+ Услуга»: any active service of any direction. */
 function projectOfferingPickerHtml(o, handler = 'projectAddOfferingLine') {
-  const groups = ORDER_PRIMARY_SERVICES.map(direction => {
-    const items = serviceOfferingsFor(serviceOfferingDirection(direction.id));
-    return items.length ? `<optgroup label="${academyEsc(direction.title)}">${items.map(item => `<option value="${academyEsc(item.id)}">${academyEsc(item.name)} · ${fmtMoney(Number(item.pricePerSqft) || 0)} / ${academyEsc(serviceOfferingUnitShort(item))}${serviceOfferingIncludes(item).length ? ` · входит: ${academyEsc(serviceOfferingIncludes(item).map(child => child.name).join(', '))}` : ''}</option>`).join('')}</optgroup>` : '';
-  }).join('');
-  if (!groups) return '';
-  return `<select class="text-sm" style="width:auto" aria-label="Добавить услугу в проект" onchange="if (this.value) ${handler}('${o.id}', this.value)"><option value="">+ Услуга в проект</option>${groups}</select>`;
+  // The dropdown became the service cashier (Owner, 2026-10-19): direction →
+  // service → film → add-ons, as cards. The same directory feeds it, and the
+  // chosen services still enter the project through projectAddOfferingLine.
+  if (!ORDER_PRIMARY_SERVICES.some(direction => serviceOfferingsFor(serviceOfferingDirection(direction.id)).length)) return '';
+  const returnTo = handler === 'projectCardAddService' ? 'card' : 'estimate';
+  return `<button type="button" class="btn-primary text-sm" aria-label="Добавить услугу в проект" onclick="openServiceCashier('${o.id}','${returnTo}')">+ Услуга в проект</button>`;
 }
 
 function projectAddOfferingLine(oid, offeringId) {
@@ -24794,6 +24838,185 @@ function projectAddOfferingLine(oid, offeringId) {
   projectEstimateMarkChanged(o, `Добавлена услуга «${offering.name}»`);
   save(); refreshProjectEstimateWorkspace(oid);
 }
+// ---------- КАССА УСЛУГ ----------
+// Owner, 2026-10-19: services are added to a project like dishes at a
+// restaurant till — cards, not a dropdown. Direction → service → material →
+// add-ons → «в проект». The cashier only chooses; the project is changed by
+// the existing projectAddOfferingLine / offeringCatalogIds paths, so estimate,
+// proposal, included services and work orders see exactly what they saw before.
+const SERVICE_CASHIER_STEPS = ['direction', 'offering', 'material', 'addons'];
+
+function serviceCashierState() {
+  return state._serviceCashier || null;
+}
+/** Directions of the owner's directory that have at least one active service. */
+function serviceCashierDirections() {
+  return ORDER_PRIMARY_SERVICES
+    .map(direction => ({ direction, offerings: serviceOfferingsFor(serviceOfferingDirection(direction.id)) }))
+    .filter(item => item.offerings.length);
+}
+/** Films the chosen service may be done with (its explicit links, not archived). */
+function serviceCashierFilms(offering) {
+  return serviceOfferingFilmIds(offering).map(getCatalogItem).filter(film => film && !film.archived);
+}
+/** Size-free services of the same direction that can ride along, minus what the service already includes. */
+function serviceCashierAddons(o, offering) {
+  if (!offering) return [];
+  const included = new Set(serviceOfferingIncludes(offering).map(child => child.id));
+  const inProject = new Set([o?.offeringId, ...(o?.offeringIds || [])].filter(Boolean));
+  return serviceOfferingsFor(offering.direction)
+    .filter(item => item.id !== offering.id && !serviceOfferingNeedsSizes(item) && !included.has(item.id) && !inProject.has(item.id));
+}
+function serviceCashierHasMaterialStep(offering) {
+  return !!offering && serviceOfferingNeedsSizes(offering) && serviceCashierFilms(offering).length > 0;
+}
+function serviceCashierSteps(offering) {
+  return SERVICE_CASHIER_STEPS.filter(step => step !== 'material' || serviceCashierHasMaterialStep(offering));
+}
+
+function openServiceCashier(oid, returnTo = 'card') {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return;
+  state._serviceCashier = { oid, returnTo: returnTo === 'estimate' ? 'estimate' : 'card', step: 'direction', directionId: '', offeringId: '', catalogId: '', addonIds: [] };
+  renderServiceCashier();
+}
+function serviceCashierReturn(oid, returnTo) {
+  state._serviceCashier = null;
+  state.modal = null;
+  if (returnTo === 'estimate') openProjectEstimateWorkspace(oid); else { preservePositionForNextRender(); render(); }
+}
+function closeServiceCashier() {
+  const c = serviceCashierState();
+  if (!c) { closeModal(); return; }
+  serviceCashierReturn(c.oid, c.returnTo);
+}
+function renderServiceCashier() {
+  const c = serviceCashierState();
+  if (!c) return;
+  preservePositionForNextRender();
+  state.modal = serviceCashierHtml(c);
+  render();
+}
+function serviceCashierPick(field, value) {
+  const c = serviceCashierState();
+  if (!c) return;
+  if (field === 'direction') {
+    if (!serviceCashierDirections().some(item => item.direction.id === value)) return;
+    Object.assign(c, { directionId: value, offeringId: '', catalogId: '', addonIds: [], step: 'offering' });
+  } else if (field === 'offering') {
+    const offering = serviceOffering(value);
+    if (!offering || offering.active === false || offeringServiceType(offering) !== c.directionId) return;
+    const o = getOrder(c.oid);
+    Object.assign(c, { offeringId: value, catalogId: projectOfferingCatalogId(o, value), addonIds: [] });
+    c.step = serviceCashierHasMaterialStep(offering) ? 'material' : 'addons';
+  } else if (field === 'material') {
+    const offering = serviceOffering(c.offeringId);
+    if (value && !serviceCashierFilms(offering).some(film => film.id === value)) return;
+    c.catalogId = value || '';
+    c.step = 'addons';
+  } else if (field === 'addon') {
+    const offering = serviceOffering(c.offeringId);
+    const o = getOrder(c.oid);
+    if (!serviceCashierAddons(o, offering).some(item => item.id === value)) return;
+    c.addonIds = c.addonIds.includes(value) ? c.addonIds.filter(id => id !== value) : [...c.addonIds, value];
+  } else if (field === 'step') {
+    const steps = serviceCashierSteps(serviceOffering(c.offeringId));
+    const index = steps.indexOf(value);
+    if (index === -1) return;
+    // Going back keeps the choices below untouched; they are re-made on the way forward.
+    if (value === 'direction') Object.assign(c, { directionId: '', offeringId: '', catalogId: '', addonIds: [] });
+    else if (value === 'offering') Object.assign(c, { offeringId: '', catalogId: '', addonIds: [] });
+    else if (value === 'material') Object.assign(c, { addonIds: [] });
+    c.step = value;
+  } else return;
+  renderServiceCashier();
+}
+/** Puts the chosen service, its material and add-ons into the project through the usual path. */
+function serviceCashierCommit() {
+  const c = serviceCashierState();
+  const o = c ? getOrder(c.oid) : null;
+  const offering = serviceOffering(c?.offeringId);
+  if (!c || !o || !offering || offering.active === false || !orderUserCanSeeMoney(o, currentUser())) return;
+  const addons = serviceCashierAddons(o, offering).filter(item => c.addonIds.includes(item.id));
+  const film = c.catalogId && serviceCashierFilms(offering).some(item => item.id === c.catalogId) ? getCatalogItem(c.catalogId) : null;
+  const { oid, returnTo } = c;
+  state._serviceCashier = null;
+  state.modal = null;
+  const apply = () => {
+    if (film) o.offeringCatalogIds = { ...(o.offeringCatalogIds || {}), [offering.id]: film.id };
+    projectAddOfferingLine(oid, offering.id);
+    if (film) {
+      // Windows that just received this service and have no film yet take the chosen one.
+      (o.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => {
+        if (win.offeringId === offering.id && !win.catalogId) { win.catalogId = film.id; win.filmType = catalogLabel(film); }
+      }));
+    }
+    addons.forEach(item => projectAddOfferingLine(oid, item.id));
+    if (film) save();
+  };
+  if (returnTo === 'card') projectCardEdit(apply); else apply();
+  if (returnTo === 'estimate') openProjectEstimateWorkspace(oid);
+}
+
+function serviceCashierCardStyle(directionId) {
+  return orderServiceCardStyle(directionId);
+}
+function serviceCashierOfferingMeta(offering) {
+  const includes = serviceOfferingIncludes(offering);
+  const range = projectServicePriceRange(offering);
+  const price = range ? `${fmtMoney(range.min)}${range.max ? ` – ${fmtMoney(range.max)}` : '+'}` : fmtMoney(Number(offering.pricePerSqft) || 0);
+  return `${price} / ${academyEsc(serviceOfferingUnitShort(offering))}${serviceOfferingNeedsSizes(offering) ? ' · по замеру' : ''}${includes.length ? ` · входит: ${academyEsc(includes.map(child => child.name).join(', '))}` : ''}`;
+}
+function serviceCashierHtml(c) {
+  const o = getOrder(c.oid);
+  if (!o) return '';
+  const direction = ORDER_PRIMARY_SERVICES.find(item => item.id === c.directionId) || null;
+  const offering = serviceOffering(c.offeringId);
+  const steps = serviceCashierSteps(offering);
+  const titles = { direction: 'Направление', offering: 'Услуга', material: 'Материал', addons: 'Допы и итог' };
+  const stepIndex = steps.indexOf(c.step);
+  const crumbs = steps.map((step, index) => {
+    const done = index < stepIndex;
+    const label = step === 'direction' && direction ? direction.short : step === 'offering' && offering ? offering.name : step === 'material' && c.catalogId && getCatalogItem(c.catalogId) ? catalogFilmName(getCatalogItem(c.catalogId)) || catalogLabel(getCatalogItem(c.catalogId)) : titles[step];
+    return `<button type="button" class="rp-cashier-crumb ${index === stepIndex ? 'current' : ''} ${done ? 'done' : ''}" ${done ? `onclick="serviceCashierPick('step','${step}')"` : 'disabled'}><span class="rp-cashier-crumb-n">${index + 1}</span>${academyEsc(label)}</button>`;
+  }).join('<span class="rp-cashier-crumb-sep">›</span>');
+  const inProject = new Set([o.offeringId, ...(o.offeringIds || [])].filter(Boolean));
+  let body = '';
+  if (c.step === 'direction') {
+    body = `<div class="rp-cashier-grid">${serviceCashierDirections().map(({ direction: dir, offerings }) => `<button type="button" class="rp-cashier-card rp-cashier-direction" style="${serviceCashierCardStyle(dir.id)}" onclick="serviceCashierPick('direction','${dir.id}')"><span class="rp-cashier-icon">${dir.icon || '•'}</span><span class="rp-cashier-title">${academyEsc(dir.title)}</span><span class="rp-cashier-meta">${offerings.length} ${offerings.length === 1 ? 'услуга' : offerings.length < 5 ? 'услуги' : 'услуг'}</span></button>`).join('')}</div>`;
+  } else if (c.step === 'offering') {
+    const items = serviceOfferingsFor(serviceOfferingDirection(c.directionId));
+    body = `<div class="rp-cashier-grid">${items.map(item => { const taken = inProject.has(item.id) && serviceOfferingNeedsSizes(item); return `<button type="button" class="rp-cashier-card ${taken ? 'taken' : ''}" style="${serviceCashierCardStyle(c.directionId)}" ${taken ? 'disabled' : `onclick="serviceCashierPick('offering','${jsQuote(item.id)}')"`}><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span>${taken ? '<span class="rp-cashier-badge">уже в проекте</span>' : ''}</button>`; }).join('')}</div>`;
+  } else if (c.step === 'material') {
+    const films = serviceCashierFilms(offering);
+    const groups = new Map();
+    films.forEach(film => { const key = catalogFilmName(film) || film.brand || 'Плёнка'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(film); });
+    body = `${[...groups.entries()].map(([name, list]) => `<div class="rp-cashier-group"><div class="rp-cashier-group-title">${academyEsc(name)}</div><div class="rp-cashier-grid compact">${list.map(film => `<button type="button" class="rp-cashier-card ${film.id === c.catalogId ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" onclick="serviceCashierPick('material','${jsQuote(film.id)}')"><span class="rp-cashier-title">${academyEsc(catalogFilmModel(film) || catalogLabel(film))}</span><span class="rp-cashier-meta">${academyEsc([film.vlt ? `VLT ${film.vlt}%` : '', film.tser ? `TSER ${film.tser}%` : ''].filter(Boolean).join(' · ') || catalogFilmCategory(film) || '')}</span></button>`).join('')}</div></div>`).join('')}
+      <button type="button" class="rp-cashier-skip" onclick="serviceCashierPick('material','')">Материал уточним на замере →</button>`;
+  } else {
+    const addons = serviceCashierAddons(o, offering);
+    const film = c.catalogId ? getCatalogItem(c.catalogId) : null;
+    const chosen = addons.filter(item => c.addonIds.includes(item.id));
+    const includes = serviceOfferingIncludes(offering);
+    body = `${addons.length ? `<div class="rp-cashier-group"><div class="rp-cashier-group-title">Дополнительно к услуге</div><div class="rp-cashier-grid compact">${addons.map(item => `<button type="button" class="rp-cashier-card rp-cashier-addon ${c.addonIds.includes(item.id) ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${c.addonIds.includes(item.id)}" onclick="serviceCashierPick('addon','${jsQuote(item.id)}')"><span class="rp-cashier-check">${c.addonIds.includes(item.id) ? '✓' : '+'}</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span></button>`).join('')}</div></div>` : ''}
+      <div class="rp-cashier-summary" style="${serviceCashierCardStyle(c.directionId)}">
+        <div class="rp-cashier-summary-title">В проект ${academyEsc(o.number || '')}</div>
+        <div class="rp-cashier-summary-line"><b>${academyEsc(offering.name)}</b><span>${serviceCashierOfferingMeta(offering)}</span></div>
+        ${film ? `<div class="rp-cashier-summary-line"><span>Материал</span><span>${academyEsc(catalogLabel(film))}</span></div>` : serviceOfferingNeedsSizes(offering) ? '<div class="rp-cashier-summary-line"><span>Материал</span><span>уточним на замере</span></div>' : ''}
+        ${includes.map(child => `<div class="rp-cashier-summary-line included"><span>↳ ${academyEsc(child.name)}</span><span>в пакете</span></div>`).join('')}
+        ${chosen.map(item => `<div class="rp-cashier-summary-line"><span>+ ${academyEsc(item.name)}</span><span>${fmtMoney(Number(item.pricePerSqft) || 0)} / ${academyEsc(serviceOfferingUnitShort(item))}</span></div>`).join('')}
+        ${serviceOfferingNeedsSizes(offering) ? '<div class="rp-cashier-summary-note">Цена по кв. футам сложится после замера.</div>' : ''}
+      </div>`;
+  }
+  const canCommit = c.step === 'addons' && !!offering;
+  return `<div class="modal-backdrop" onclick="if(event.target===this)closeServiceCashier()"><div class="modal-content workspace-modal rp-cashier" style="max-width:52rem;${direction ? serviceCashierCardStyle(direction.id) : ''}" role="dialog" aria-modal="true" aria-label="Касса услуг" onclick="event.stopPropagation()">
+    <div class="rp-cashier-head"><div><div class="rp-cashier-kicker">КАССА УСЛУГ · ${academyEsc(o.number || '')}</div><h3>${academyEsc(titles[c.step])}</h3></div><button type="button" class="btn-ghost" onclick="closeServiceCashier()">Закрыть</button></div>
+    <div class="rp-cashier-crumbs">${crumbs}</div>
+    <div class="rp-cashier-body">${body}</div>
+    <div class="rp-cashier-foot">${stepIndex > 0 ? `<button type="button" class="btn-ghost" onclick="serviceCashierPick('step','${steps[stepIndex - 1]}')">← Назад</button>` : '<span></span>'}${canCommit ? `<button type="button" class="btn-primary rp-cashier-commit" onclick="serviceCashierCommit()">Добавить в проект</button>` : ''}</div>
+  </div></div>`;
+}
+
 function projectQuickLineFilms(line) {
   const films = projectQuickLineCatalog(line.serviceType, line.catalogId);
   if (!line.offeringId) return films;

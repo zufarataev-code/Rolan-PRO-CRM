@@ -23,9 +23,15 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-21 handoff — service cashier (касса услуг)
+
+- Branch / PR: `claude/service-cashier` / #354, rebased onto `main` merge `d2a5bf0` after PR #353.
+- The «+ Услуга в проект» dropdown on the Project card and the estimate workspace is replaced by the cashier modal (Owner, 2026-10-19): direction → service → film → add-ons → «Добавить в проект». Cards take the direction colour from the shared entity tokens (`--svc-color`), inactive services and archived films are left out, a per-sq-ft service already in the project is shown as «уже в проекте», an included package component is listed in the summary and never offered twice.
+- No data-model change. The chosen service, film (`offeringCatalogIds` + windows without a film) and add-ons enter the project through the existing `projectAddOfferingLine`, so estimate, Proposal, included services, schedules and work orders are untouched. From the card the edit stays on the card (`projectCardEdit`); from the estimate workspace the cashier returns to it.
+- Verification: `service-cashier.test.ts` (6 tests: guards, flow, back-navigation, commit, return paths), `project-card.test.ts` updated for the button; full suite 744/744; single-definition guard passes; desktop and 390 px renders of all four steps checked with the real stylesheet. GitHub CI, merge, deploy and a production smoke check remain.
 ## 2026-10-21 handoff — employee ghosts
 
-- Branch: `claude/employee-ghosts`, based on `main` merge `ac5aed1` after PR #352. Not yet pushed (no GitHub push access in that session); complete locally.
+- Branch / PR: `claude/employee-ghosts` / #353, merged to `main` as `d2a5bf0`; CI (tests/typecheck/build, clean-database gate) passed before merge.
 - Owner, 2026-10-20: a deleted surveyor kept appearing in crew, manager and task pickers after the Owner re-created himself under the same email. Cause: `applyEmployeeDirectory` left legacy cards no PostgreSQL employee is linked to untouched, so a former employee's card stayed `active: true` forever; and nine legacy pickers listed `db.users` without the active filter (the dispatch calendar checked a non-existent `isActive` field).
 - Fix: unlinked cards are switched off on every read/save — the card and its id stay for historical orders, and re-linking turns it back on. One helper, `activeUsers(roles)`, now feeds the manager, cold-call, task team/assignee, task candidate, Telegram chat-id, Zadarma extension and dispatch lists.
 - Verification: `directory.test.ts` (archive/relink rule) and `employee-pickers.test.ts` (helper + no raw `db.users` pickers); full suite 742/742; single-definition guard passes. GitHub CI, merge and deploy remain. After deploy the Owner should review «Команда → Архив сотрудников», where every ghost will now sit.
