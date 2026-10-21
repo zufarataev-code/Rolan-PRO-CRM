@@ -50,6 +50,22 @@ function normalizeCode(value: unknown) {
     .slice(0, 50);
 }
 
+function codeListValue(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  return value.map((item) => textValue(item)).filter(Boolean).map((item) => normalizeCode(item));
+}
+
+function numberListValue(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const list = value.map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0);
+  return [...new Set(list)].sort((a, b) => a - b);
+}
+
+function filmClassValue(value: unknown) {
+  const text = textValue(value).toLowerCase();
+  return text === "standard" || text === "premium" ? text : undefined;
+}
+
 function isOwner(roles: string[]) {
   return roles.includes(ROLE_CODES.OWNER);
 }
@@ -60,9 +76,18 @@ export async function GET(request: NextRequest) {
     return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Pricing access denied.");
   }
 
-  const [services, addons, planning] = await Promise.all([
+  const [services, addons, films, accessLevels, planning] = await Promise.all([
     prisma.serviceType.findMany({ orderBy: [{ sort_order: "asc" }, { name_ru: "asc" }] }),
     prisma.serviceAddon.findMany({ orderBy: [{ sort_order: "asc" }, { name_ru: "asc" }] }),
+    prisma.filmCatalog.findMany({
+      orderBy: [{ category_code: "asc" }, { sort_order: "asc" }, { model_name_ru: "asc" }],
+      select: {
+        film_id: true, category_code: true, brand_code: true, brand_name_ru: true, model_code: true, model_name_ru: true,
+        film_type_code: true, film_class: true, price_per_sqft: true, min_price_per_sqft: true, max_price_per_sqft: true,
+        roll_widths_in: true, cutting_margin_in: true, vlt_percent: true, is_active: true, sort_order: true,
+      },
+    }),
+    prisma.accessLevel.findMany({ orderBy: [{ sort_order: "asc" }] }),
     getBusinessPlanningSnapshot(),
   ]);
 
@@ -70,6 +95,8 @@ export async function GET(request: NextRequest) {
   return apiSuccess({
     services: services.map((service) => servicePricingForRole(service, owner)),
     addons: addons.map((addon) => addonPricingForRole(addon, owner)),
+    films,
+    access_levels: accessLevels,
     planning: owner ? planning : withoutInternalPlanningCosts(planning),
     can_view_costs: owner,
   });
@@ -196,11 +223,55 @@ export async function PATCH(request: NextRequest) {
         default_price: numberValue(patch.default_price),
         min_price: numberValue(patch.min_price),
         cost_price: isOwner(auth.session.roles) ? numberValue(patch.cost_price) : undefined,
+        color_token: optionalText(patch.color_token),
+        suggested_with_addon_codes: codeListValue(patch.suggested_with_addon_codes),
         is_active: booleanValue(patch.is_active),
         sort_order: integerValue(patch.sort_order),
       },
     });
     return apiSuccess(addonPricingForRole(updated, isOwner(auth.session.roles)));
+  }
+
+  // Плёнка: класс, тип, коридор цены за sq ft и рулоны для раскроя — всё, что нужно кассе.
+  if (entity === "film") {
+    const minPrice = numberValue(patch.min_price_per_sqft);
+    const maxPrice = numberValue(patch.max_price_per_sqft);
+    if (minPrice !== undefined && maxPrice !== undefined && minPrice > maxPrice) {
+      return apiError(400, "invalid_corridor", "Минимальная цена не может быть выше максимальной.");
+    }
+    const updated = await prisma.filmCatalog.update({
+      where: { film_id: id },
+      data: {
+        film_type_code: optionalText(patch.film_type_code)?.toLowerCase(),
+        film_class: filmClassValue(patch.film_class),
+        price_per_sqft: numberValue(patch.price_per_sqft),
+        min_price_per_sqft: minPrice,
+        max_price_per_sqft: maxPrice,
+        roll_widths_in: numberListValue(patch.roll_widths_in),
+        cutting_margin_in: numberValue(patch.cutting_margin_in),
+        is_active: booleanValue(patch.is_active),
+        sort_order: integerValue(patch.sort_order),
+      },
+    });
+    return apiSuccess(updated);
+  }
+
+  // Доступ к окну: коэффициент к монтажу и стоимость техники — только владелец.
+  if (entity === "access_level") {
+    if (!isOwner(auth.session.roles)) return apiError(403, "forbidden", "Коэффициенты доступа меняет только владелец.");
+    const updated = await prisma.accessLevel.update({
+      where: { access_level_id: id },
+      data: {
+        name_ru: optionalText(patch.name_ru),
+        labor_coefficient: numberValue(patch.labor_coefficient),
+        equipment_day_cost: numberValue(patch.equipment_day_cost),
+        equipment_name_ru: optionalText(patch.equipment_name_ru),
+        is_contractor: booleanValue(patch.is_contractor),
+        is_active: booleanValue(patch.is_active),
+        sort_order: integerValue(patch.sort_order),
+      },
+    });
+    return apiSuccess(updated);
   }
 
   return apiError(400, "unsupported_entity", "Этот тип записи не поддерживается.");

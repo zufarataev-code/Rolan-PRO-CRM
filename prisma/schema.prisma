@@ -150,6 +150,13 @@ model ServiceAddon {
   default_price                Decimal     @default(0) @db.Decimal(12, 2)
   min_price                    Decimal     @default(0) @db.Decimal(12, 2)
   cost_price                   Decimal     @default(0) @db.Decimal(12, 2)
+  // Один цвет — один смысл: токен цвета услуги из цветового кода CRM
+  // (addon-silicone, addon-removal, addon-height, addon-cleaning…).
+  color_token                  String?     @db.VarChar(50)
+  // Касса не добавляет услугу сама — только подсказывает: коды услуг этого
+  // направления, при выборе которых эту услугу стоит предложить
+  // (силикон — при наружной оклейке).
+  suggested_with_addon_codes   Json?
   is_active                    Boolean     @default(true)
   sort_order                   Int         @default(0)
   created_at                   DateTime    @default(now()) @db.Timestamptz(6)
@@ -196,6 +203,23 @@ model FilmCatalog {
   requires_review              Boolean           @default(false)
   selection_note_ru            String?           @db.Text
 
+  // Касса: уровень 2 — тип плёнки внутри направления (ceramic, metal, a1, a2, a3,
+  // anti_graffiti, pdlc_self, pdlc_laminated, frost, pattern, one_way…),
+  // уровень 3 — класс: standard (своя линейка) или premium (брендовая).
+  film_type_code               String?           @db.VarChar(50)
+  film_class                   String            @default("standard") @db.VarChar(20)
+
+  // Коридор цены за sq ft для менеджера: ниже min продать нельзя (сервер
+  // отклоняет), выше max — предупреждение. price_per_sqft — цена по умолчанию.
+  price_per_sqft               Decimal?          @db.Decimal(12, 2)
+  min_price_per_sqft           Decimal?          @db.Decimal(12, 2)
+  max_price_per_sqft           Decimal?          @db.Decimal(12, 2)
+
+  // Раскрой: ширины рулонов модели в дюймах ([36, 48, 60, 72]) и припуск на
+  // сторону. Пусто — берутся стандартные.
+  roll_widths_in               Json?
+  cutting_margin_in            Decimal           @default(1) @db.Decimal(5, 2)
+
   is_active                    Boolean           @default(true)
   sort_order                   Int               @default(0)
   created_at                   DateTime          @default(now()) @db.Timestamptz(6)
@@ -203,6 +227,7 @@ model FilmCatalog {
   project_positions            ProjectPosition[]
   survey_recommendations       SurveyRecommendation[]
   proposal_items               ProposalItem[]
+  measurements                 Measurement[]     @relation("measurement_film")
 
   @@map("film_catalog")
 }
@@ -301,6 +326,30 @@ model ComplexityLevel {
   measurements                 Measurement[]
 
   @@map("complexity_levels")
+}
+
+// Доступ к окну — свойство окна, фиксирует замерщик. Коэффициент применяется к
+// монтажной части цены (installation_cost_per_sqft), не к плёнке: материал
+// наверху тот же, дороже труд. Техника — отдельной строкой по стоимости дня,
+// альпинист — подрядчик по смете.
+model AccessLevel {
+  access_level_id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  access_code                  String      @unique @db.VarChar(50)
+  name_ru                      String      @db.VarChar(120)
+  name_en                      String      @db.VarChar(120)
+  min_height_ft                Decimal?    @db.Decimal(6, 2)
+  max_height_ft                Decimal?    @db.Decimal(6, 2)
+  labor_coefficient            Decimal     @default(1) @db.Decimal(6, 2)
+  equipment_name_ru            String?     @db.VarChar(120)
+  equipment_day_cost           Decimal     @default(0) @db.Decimal(12, 2)
+  is_contractor                Boolean     @default(false)
+  color_token                  String?     @db.VarChar(50)
+  is_active                    Boolean     @default(true)
+  sort_order                   Int         @default(0)
+  created_at                   DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
+
+  @@map("access_levels")
 }
 
 model City {
@@ -1024,6 +1073,20 @@ model Measurement {
   measurement_source String? @db.VarChar(30)
   verification_status String? @db.VarChar(30)
   drawing_data                 Json?
+
+  // Модуль замера (касса): раскладка створок задаёт число стёкол для раскроя
+  // (double_sash → 2×1, french_grid → 2×3), стекло — тип и пакет отдельно,
+  // доступ — код из access_levels, услуги на окне — галочки, плёнка окна —
+  // переопределение плёнки направления только на этом окне.
+  sash_layout_code             String?     @db.VarChar(40)
+  sash_cols                    Int?
+  sash_rows                    Int?
+  glass_finish_code            String?     @db.VarChar(40)
+  pane_structure_code          String?     @db.VarChar(20)
+  access_code                  String?     @db.VarChar(50)
+  removal_required             Boolean     @default(false)
+  silicone_required            Boolean     @default(false)
+  film_id                      String?     @db.Uuid
   sort_order                   Int         @default(0)
   created_at                   DateTime    @default(now()) @db.Timestamptz(6)
   updated_at                   DateTime    @updatedAt @db.Timestamptz(6)
@@ -1033,10 +1096,12 @@ model Measurement {
   measurement_revisions         Measurement[] @relation("measurement_revisions")
   recorded_by_user              User? @relation("measurement_recorded_by", fields: [recorded_by_user_id], references: [user_id], onDelete: SetNull)
   complexity_level             ComplexityLevel? @relation(fields: [complexity_level_id], references: [complexity_level_id], onDelete: SetNull)
+  film                         FilmCatalog? @relation("measurement_film", fields: [film_id], references: [film_id], onDelete: SetNull)
   recommendations              SurveyRecommendation[]
   attachments_files            AttachmentFile[]
   proposal_items               ProposalItem[]
 
+  @@index([film_id])
   @@index([survey_id])
   @@index([project_position_id])
   @@index([recorded_by_user_id])

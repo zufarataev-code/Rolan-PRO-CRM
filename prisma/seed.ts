@@ -735,6 +735,95 @@ async function seedServiceReferences() {
   }
 }
 
+// Касса: справочники, которых не хватало для кассовой логики создания проекта.
+// Цены, введённые владельцем в «Услуги и цены», не трогаем: заполняем только пустые.
+async function seedCashierReferences() {
+  // Доступ к окну: коэффициент к монтажной части цены, техника отдельной строкой.
+  const accessLevels = [
+    ["floor", "С пола", "From the floor", null, "8", "1.00", null, "0.00", false, "muted", 1],
+    ["ladder", "Стремянка", "Ladder", "8", "12", "1.20", "Стремянка", "0.00", false, "addon-height", 2],
+    ["tower", "Тура / леса", "Scaffold tower", "12", "20", "1.50", "Тура", "0.00", false, "addon-height", 3],
+    ["lift", "Подъёмник", "Lift / boom", "20", null, "2.00", "Подъёмник", "450.00", false, "addon-height", 4],
+    ["rope", "Альпинист", "Rope access", null, null, "1.00", "Подрядчик", "0.00", true, "addon-equipment", 5],
+  ] as const;
+  for (const [access_code, name_ru, name_en, min_height_ft, max_height_ft, labor_coefficient, equipment_name_ru, equipment_day_cost, is_contractor, color_token, sort_order] of accessLevels) {
+    await prisma.accessLevel.upsert({
+      where: { access_code },
+      update: {},
+      create: { access_code, name_ru, name_en, min_height_ft, max_height_ft, labor_coefficient, equipment_name_ru, equipment_day_cost, is_contractor, color_token, sort_order },
+    });
+  }
+
+  // Услуги направлений, которых в справочнике не было, и цвет + подсказки у существующих.
+  const serviceTypeMap = Object.fromEntries(
+    (await prisma.serviceType.findMany({ select: { service_type_id: true, service_code: true } })).map((item) => [item.service_code, item.service_type_id]),
+  );
+  const directionAddons = [
+    // direction, code, name_ru, name_en, unit, default, min, cost, sort, color, suggested_with
+    ["SOLAR_FILM", "EXTERIOR", "Наружная оклейка", "Exterior application", "sqft", "2.50", "2.00", "0.90", 6, "dir-sun", []],
+    ["SAFETY_FILM", "EXTERIOR", "Наружная оклейка", "Exterior application", "sqft", "2.50", "2.00", "0.90", 6, "dir-safety", []],
+    ["DECORATIVE_FILM", "EXTERIOR", "Наружная оклейка", "Exterior application", "sqft", "2.50", "2.00", "0.90", 6, "dir-decor", []],
+    ["PRIVACY_FILM", "EXTERIOR", "Наружная оклейка", "Exterior application", "sqft", "2.50", "2.00", "0.90", 6, "dir-privacy", []],
+    ["DECORATIVE_FILM", "WASHING", "Мойка", "Washing", "sqft", "1.50", "1.20", "0.35", 1, "addon-cleaning", []],
+    ["DECORATIVE_FILM", "REMOVAL", "Удаление", "Removal", "sqft", "2.50", "2.00", "0.80", 2, "addon-removal", []],
+    ["DECORATIVE_FILM", "PLOTTER", "Плоттерная резка", "Plotter cutting", "fixed", "150.00", "120.00", "40.00", 3, "addon-equipment", []],
+    ["PRIVACY_FILM", "WASHING", "Мойка", "Washing", "sqft", "1.50", "1.20", "0.35", 1, "addon-cleaning", []],
+    ["PRIVACY_FILM", "REMOVAL", "Удаление", "Removal", "sqft", "2.50", "2.00", "0.80", 2, "addon-removal", []],
+    ["PRIVACY_FILM", "SILICONE", "Силикон", "Silicone", "lft", "1.50", "1.20", "0.45", 3, "addon-silicone", ["EXTERIOR"]],
+    ["SMART_FILM", "VOICE_CONTROL", "Голосовое управление", "Voice Control", "fixed", "250.00", "200.00", "90.00", 22, "addon-electrical", []],
+    ["SMART_FILM", "LOW_VOLTAGE", "Слаботочник", "Low-voltage technician", "fixed", "300.00", "250.00", "180.00", 27, "addon-electrical", []],
+    ["SMART_FILM", "POWER_ELECTRICIAN", "Силовой электрик", "Electrician", "fixed", "200.00", "160.00", "120.00", 28, "addon-electrical", []],
+    ["SMART_FILM", "NEW_OUTLET", "Новая розетка", "New outlet", "qty", "120.00", "90.00", "45.00", 29, "addon-electrical", []],
+  ] as const;
+  for (const [serviceCode, addon_code, name_ru, name_en, unit_type, default_price, min_price, cost_price, sort_order, color_token, suggested] of directionAddons) {
+    const service_type_id = serviceTypeMap[serviceCode];
+    if (!service_type_id) continue;
+    await prisma.serviceAddon.upsert({
+      where: { service_type_id_addon_code: { service_type_id, addon_code } },
+      update: {},
+      create: { service_type_id, addon_code, name_ru, name_en, unit_type, default_price, min_price, cost_price, sort_order, color_token, suggested_with_addon_codes: [...suggested] },
+    });
+  }
+  // Цвет и подсказки у существующих услуг: один цвет — один смысл во всей CRM.
+  const addonMeta: Record<string, { color: string; suggested: string[] }> = {
+    SILICONE: { color: "addon-silicone", suggested: ["EXTERIOR"] },
+    REMOVAL: { color: "addon-removal", suggested: [] },
+    WASHING: { color: "addon-cleaning", suggested: [] },
+    ANCHORING: { color: "addon-anchoring", suggested: [] },
+    EXTRA_ELECTRICAL: { color: "addon-electrical", suggested: [] },
+    WALL_SWITCH: { color: "addon-electrical", suggested: [] },
+  };
+  for (const [addon_code, meta] of Object.entries(addonMeta)) {
+    await prisma.serviceAddon.updateMany({
+      where: { addon_code, color_token: null },
+      data: { color_token: meta.color, suggested_with_addon_codes: meta.suggested },
+    });
+  }
+
+  // Плёнки: тип и класс по категории/бренду; рулоны стандартные; цены только там, где пусто.
+  const films = await prisma.filmCatalog.findMany({
+    select: { film_id: true, category_code: true, brand_code: true, model_code: true, film_type_code: true, price_per_sqft: true, roll_widths_in: true },
+  });
+  for (const film of films) {
+    const premium = !film.brand_code.startsWith("ROLANPRO");
+    const type =
+      film.category_code === "SOLAR" ? "ceramic"
+      : film.category_code === "SAFETY" ? (film.model_code.includes("24") ? "a3" : film.model_code.includes("14") || film.model_code.includes("12") ? "a2" : "a1")
+      : film.category_code === "SMART" ? (film.model_code.startsWith("DEC-SMART") ? "pdlc_decorative" : "pdlc_self")
+      : film.category_code === "DECORATIVE" ? "frost"
+      : film.category_code === "PRIVACY" ? "one_way"
+      : null;
+    await prisma.filmCatalog.update({
+      where: { film_id: film.film_id },
+      data: {
+        film_type_code: film.film_type_code ?? type,
+        film_class: premium ? "premium" : "standard",
+        roll_widths_in: film.roll_widths_in ?? [36, 48, 60, 72],
+      },
+    });
+  }
+}
+
 async function seedDevUsers() {
   if (process.env.NODE_ENV === "production") {
     return;
@@ -2722,6 +2811,7 @@ async function main() {
   }
   await seedStatusesAndReferences();
   await seedServiceReferences();
+  await seedCashierReferences();
   await seedDevUsers();
   await seedDevLegacyWorkspace();
   await seedDevSalesData();
