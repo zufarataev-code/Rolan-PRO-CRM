@@ -52,12 +52,15 @@ function loadIntake(offerings: any[]) {
     requestAnimationFrame: () => undefined,
     serviceOfferingNeedsSizes: (offering: any) => !offering?.unit || offering.unit === 'sqft',
     serviceOfferingUnitShort: (offering: any) => offering?.unit || 'sq ft',
+    orderServiceCardStyle: () => '',
+    primaryServiceInfo: (id: string) => ({ title: id }),
+    catalogLabel: () => '—',
   });
   vm.runInContext(html.slice(html.indexOf('function offeringServiceType('), html.indexOf('function selectOrderExecution(')), context);
   return { context, state, nodes, gates };
 }
 
-test('services of several directions are ticked; the first is the incoming request; inactive ones are refused', () => {
+test('services are composed at the cashier; the first is the incoming request; inactive ones are refused', () => {
   const offerings = [
     { id: 'solar', name: 'Solar solution', direction: 'solar' },
     { id: 'smart', name: 'Smart solution', direction: 'smart', unit: 'piece' },
@@ -65,9 +68,11 @@ test('services of several directions are ticked; the first is the incoming reque
   ];
   const { context, state, nodes, gates } = loadIntake(offerings);
   context.renderNewOrderOfferings();
-  assert.match(nodes.get('no-offerings').innerHTML, /Solar solution/);
-  assert.match(nodes.get('no-offerings').innerHTML, /Smart solution/);
-  assert.doesNotMatch(nodes.get('no-offerings').innerHTML, /Old/);
+  // Owner, 2026-10-21: no checkbox list — the chosen services and a cashier button.
+  assert.doesNotMatch(nodes.get('no-offerings').innerHTML, /type="checkbox"/);
+  assert.match(nodes.get('no-offerings').innerHTML, /Услуг пока нет/);
+  assert.match(nodes.get('no-offerings').innerHTML, /openServiceCashier\('', 'intake'\)/);
+  assert.doesNotMatch(nodes.get('no-offerings').innerHTML, /Solar solution|Old/);
   context.refreshOrderIntakeGates();
   assert.equal(gates.get('[data-intake-site]')![0].style.display, 'none');
 
@@ -83,6 +88,12 @@ test('services of several directions are ticked; the first is the incoming reque
   context.toggleNewOrderOffering('solar', true);
   assert.equal(state._newOrderOfferingId, 'smart');
   assert.deepEqual([...state._newOrderExtraOfferingIds], ['solar']);
+  const list = nodes.get('no-offerings').innerHTML;
+  assert.match(list, /Smart solution <span class="rp-intake-service-badge">исходный запрос/);
+  assert.match(list, /Solar solution/);
+  assert.doesNotMatch(list, /Solar solution <span class="rp-intake-service-badge">/);
+  assert.match(list, /toggleNewOrderOffering\('solar', false\)/, 'a chosen service can be removed from the list');
+  assert.doesNotMatch(list, /Услуг пока нет/);
   assert.equal(state._newOrderService, 'smart_film');
   assert.equal(nodes.get('no-svc').value, 'smart_film');
   assert.equal(gates.get('[data-new-order-after-client]')![0].style.display, '');

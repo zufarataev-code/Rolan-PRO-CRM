@@ -30,6 +30,13 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-21 handoff — service cashier in the new-project form
+
+- Branch: `claude/new-project-cashier`, based on `main` merge `5f33d6a` after PR #354.
+- Owner, 2026-10-21 (voice): the cashier was meant for the moment the manager creates a project, not only for an existing card. Step «3. Услуги проекта» of the new-project form no longer lists checkboxes: it shows the chosen services (direction colour, «исходный запрос» on the first, chosen film, included components, «Убрать») and a «+ Услуга» button that opens the same cashier.
+- Because the form is the open modal and holds typed fields, the intake cashier renders on its own layer (`#rp-cashier-layer`) above it instead of replacing `state.modal`; it reads the intake state as its scope and commits through the existing `toggleNewOrderOffering` / `setNewOrderOfferingMaterial`, so `createOrder` and everything after it are untouched.
+- Verification: `service-cashier.test.ts` +2 (intake layer/scope/commit, field-role guard), `project-intake-sequence.test.ts` updated for the list; full suite 750/751 with one unrelated flaky test (`bank-feeds.test.ts` encryption case) that passes in isolation on this and on the previous `main`; single-definition guard passes; intake list and overlay rendered with the real stylesheet. GitHub CI, merge, deploy and production smoke remain.
+
 ## 2026-10-21 handoff — service cashier (касса услуг)
 
 - Branch / PR: `claude/service-cashier` / #354, rebased onto `main` merge `d2a5bf0` after PR #353.
