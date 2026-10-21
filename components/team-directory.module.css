@@ -149,6 +149,30 @@
   background: #fef2f2;
 }
 
+.archive {
+  margin-top: 16px;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px 16px;
+}
+
+.archive > summary {
+  cursor: pointer;
+  color: #475569;
+  font-weight: 800;
+  list-style-position: inside;
+}
+
+.archive[open] > summary {
+  margin-bottom: 8px;
+}
+
+.archive .card {
+  margin-top: 12px;
+  box-shadow: none;
+}
+
 .ok,
 .error {
   border-radius: 10px;

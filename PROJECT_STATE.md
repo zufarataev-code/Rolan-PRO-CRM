@@ -27,7 +27,7 @@ Before doing any work:
 
 - Added an explicit owner-only `Удалить` action to the canonical employee directory.
 - Deletion is intentionally a reversible archive: login is disabled and the employee leaves new assignment lists, while historical projects, field work, payroll accruals, and audit records keep their employee reference.
-- The active owner cannot delete their own account; the existing last-owner guard remains in force. Archived employees stay under `Доступ выключен` and can be restored through `Изменить`.
+- The active owner cannot delete their own account; the existing last-owner guard remains in force. Archived employees are hidden from the working list under a collapsed `Архив сотрудников` and can be restored through `Изменить`.
 
 ## 2026-10-20 handoff — legacy single-definition stability guard
 
