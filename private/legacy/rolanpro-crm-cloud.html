@@ -20996,6 +20996,9 @@ function renderTeam() {
                   : ''}
                 <button class="btn-ghost text-xs" onclick="openUserPayConfig('${u.id}')">💰 Зарплата</button>
                 ${canManage ? `<button class="btn-ghost text-xs" onclick="openTeamMemberAccess('${u.id}')">🔑 Доступ</button>` : ''}
+                ${canManage && g.role !== 'owner'
+                  ? `<button class="btn-ghost text-xs text-red-600" onclick="archiveTeamMemberFromCard('${u.id}')">🗑 Удалить</button>`
+                  : ''}
               </div>
               <div class="mt-2 flex items-center justify-between text-sm">
                 <span class="text-gray-500">${T('activeOrders')}:</span>
@@ -21299,6 +21302,65 @@ async function hydrateTeamMemberAccount(userId) {
     if (roleSelect?.tagName === 'SELECT' && serverRole) roleSelect.value = serverRole;
   } catch (error) {
     console.error('[Team card] account hydration failed', error);
+  }
+}
+
+/**
+ * Отключает вход сотрудника, но не стирает его историю.
+ *
+ * В старом экране «Команда» раньше не было кнопки удаления: она находилась
+ * только во вложенном справочнике ниже страницы. Поэтому владелец видел
+ * карточку сотрудника, но не мог выполнить действие там, где работал.
+ */
+async function archiveTeamMemberFromCard(legacyUserId) {
+  const viewer = currentUser();
+  const legacyUser = getUser(legacyUserId);
+  if (viewer?.role !== 'owner' || !legacyUser) return;
+
+  const confirmed = confirm(
+    `Удалить сотрудника «${legacyUser.name || legacyUser.email || 'Без имени'}»?\n\n` +
+    'Вход будет отключён. Старые проекты, работы и начисления сохранятся.'
+  );
+  if (!confirmed) return;
+
+  try {
+    const listResponse = await fetch('/api/v1/team', { cache: 'no-store' });
+    const list = await listResponse.json();
+    const apiMessage = (payload, fallback) => payload?.errors?.[0]?.message || payload?.error?.message || fallback;
+    if (!listResponse.ok) {
+      alert(apiMessage(list, 'Не удалось загрузить учётные записи сотрудников.'));
+      return;
+    }
+
+    const members = Array.isArray(list?.data) ? list.data : [];
+    const cardEmail = String(legacyUser.email || '').trim().toLowerCase();
+    const member = members.find(item => Array.isArray(item.legacyUserIds) && item.legacyUserIds.includes(legacyUserId))
+      || (cardEmail ? members.find(item => String(item.email || '').trim().toLowerCase() === cardEmail) : null);
+    if (!member) {
+      alert('Серверная учётная запись сотрудника не найдена. Откройте «Доступ» и проверьте привязку.');
+      return;
+    }
+
+    const response = await fetch(`/api/v1/team/${member.userId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      alert(apiMessage(result, 'Не удалось удалить сотрудника.'));
+      return;
+    }
+
+    // У одного человека может быть две карточки (замерщик + специалист по установке).
+    // Выключаем их вместе; сервер при следующей загрузке подтвердит состояние.
+    new Set([legacyUserId, ...(Array.isArray(member.legacyUserIds) ? member.legacyUserIds : [])])
+      .forEach(id => { const card = getUser(id); if (card) card.active = false; });
+    save();
+    render();
+    if (typeof cloudStatus === 'function') cloudStatus('Сотрудник удалён. История сохранена.', 'green');
+  } catch (error) {
+    console.error('[Team card] employee archive failed', error);
+    alert('Сервер не ответил. Сотрудник не удалён — попробуйте ещё раз.');
   }
 }
 
