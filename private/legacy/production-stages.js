@@ -372,6 +372,43 @@ function projectRecommendationsHtml(o) {
   return `<section class="project-recommendations"><div><h4 class="font-bold">Подсказки по составу проекта</h4><div class="text-xs text-gray-500">CRM предлагает только услуги из вашего справочника. Ничего не добавляется без решения менеджера.</div></div><div class="project-recommendation-list">${rows.map(item=>`<div class="project-recommendation"><div><b>${academyEsc(item.title)}</b><span>${academyEsc(item.reason)}</span></div><div class="flex gap-1"><button class="btn-primary text-xs" onclick="projectRecommendationAction('${o.id}','${item.key}','${item.offeringId||''}',${item.measure?'true':'false'})">${item.measure?'Открыть замер':'Добавить'}</button><button class="btn-ghost text-xs" onclick="projectRecommendationDismiss('${o.id}','${item.key}')">Не нужно</button></div></div>`).join('')}</div></section>`;
 }
 
+/**
+ * The project is a cashier, not a wizard: all chosen directions stay visible
+ * together, while measurement, calculation and the work order remain views of
+ * the same projectLines. This is the navigation map approved in the three-screen
+ * project / measurement / work-order concept (Owner, 2026-10-21).
+ */
+function projectCardFocusDirection(oid, directionKey) {
+  const o = getOrder(oid);
+  if (!o) return;
+  const direction = projectDirectionGroups(o).find(item => item.key === directionKey);
+  const line = direction?.lines?.find(item => item.kind !== 'included') || direction?.lines?.[0];
+  if (line) state.projectCardSelection = { ...(state.projectCardSelection || {}), [oid]: line.key };
+  preservePositionForNextRender();
+  render();
+  requestAnimationFrame(() => document.querySelector(`[data-project-direction="${CSS.escape(directionKey)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+}
+function projectCashierMapHtml(o, directions, { money = false, edit = false } = {}) {
+  const included = directions.filter(direction => !projectDirectionExcluded(o, direction.key));
+  const primaryKey = included[0]?.key || '';
+  const directionCards = directions.map(direction => {
+    const token = typeof rpDir === 'function' ? rpDir(direction.key) : null;
+    const color = token?.color || '#2563eb';
+    const count = direction.lines.length + direction.pending.length;
+    const total = direction.lines.filter(line => !line.excluded).reduce((sum, line) => sum + (Number(line.price) || 0), 0);
+    const excluded = projectDirectionExcluded(o, direction.key);
+    return `<button type="button" class="project-cashier-direction ${excluded ? 'excluded' : ''}" style="--direction-color:${academyEsc(color)}" onclick="projectCardFocusDirection('${o.id}','${jsQuote(direction.key)}')"><span class="project-cashier-direction-icon">${direction.icon}</span><span><b>${academyEsc(direction.title)}</b><span>${count} ${projectPlural(count, 'услуга', 'услуги', 'услуг')}${money ? ` · ${fmtMoney(total)}` : ''}${excluded ? ' · вне расчёта' : ''}</span></span>${direction.key === primaryKey ? '<span class="project-cashier-primary">основное</span>' : ''}</button>`;
+  }).join('');
+  const rooms = o.measurements?.rooms?.length || 0;
+  const windows = measureAllWindows(o).length;
+  const area = orderActualAreaSqft(o);
+  return `<div class="project-cashier-map" data-project-cashier-map>
+    <div class="project-cashier-map-head"><div><div class="project-cashier-map-kicker">Касса проекта · направления и услуги</div><div class="project-cashier-map-title">Всё, что продаём и выполняем на этом объекте</div></div><div class="project-cashier-map-help">Несколько направлений · у каждой услуги свои дата, исполнитель и расходы</div></div>
+    <div class="project-cashier-directions">${directionCards}${money && edit ? `<button type="button" class="project-cashier-direction add" onclick="openServiceCashier('${o.id}','card')"><span class="project-cashier-direction-icon">+</span><span><b>Добавить направление</b><span>услуга, материал и дополнения</span></span></button>` : ''}</div>
+    <div class="project-cashier-flow"><div class="project-cashier-flow-facts"><span><b>${rooms}</b> ${projectPlural(rooms, 'помещение', 'помещения', 'помещений')}</span><span><b>${windows}</b> ${projectWindowsWord(windows)}</span><span><b>${area.toFixed(2)}</b> sq ft</span><span>Размеры общие, направления назначаются услугам и окнам</span></div><div class="project-cashier-flow-actions"><button type="button" class="btn-ghost" onclick="openManagerMeasureModal('${o.id}')">Замер</button>${money ? `<button type="button" class="btn-ghost" onclick="openProjectEstimateWorkspace('${o.id}')">Расчёт / КП</button>` : ''}<button type="button" class="btn-ghost" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button></div></div>
+  </div>`;
+}
+
 function renderProjectCardServices(o, { money = false, economics = false, manage = false } = {}) {
   const lines = projectLines(o);
   const pending = projectPendingSizedServices(o);
@@ -434,7 +471,8 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     </section>`;
   }).join('');
   return `<section class="project-service-ledger" data-project-card-services>
-    <div class="project-service-ledger-head"><div><div class="project-service-ledger-title">Состав проекта <span class="tag">${lines.length + pending.length}</span></div><div class="project-service-ledger-sub">Проект может включать несколько направлений. У каждой услуги — свой объём, цена, дата, исполнитель, этапы и расходы.</div></div>${money && edit ? projectOfferingPickerHtml(o, 'projectCardAddService') : ''}</div>
+    <div class="project-service-ledger-head"><div><div class="project-service-ledger-title">Состав проекта <span class="tag">${lines.length + pending.length}</span></div><div class="project-service-ledger-sub">Проект может включать несколько направлений. У каждой услуги — свой объём, цена, дата, исполнитель, этапы и расходы.</div></div></div>
+    ${typeof projectCashierMapHtml === 'function' ? projectCashierMapHtml(o, directions, { money, edit }) : ''}
     <div class="project-service-list">${directionCards || '<div class="p-4 text-sm text-gray-500">В проекте пока нет услуг.</div>'}</div>
     <div class="project-service-footer"><span>${economics ? `Материал ${fmtMoney(total('materialCost'))} · работа ${fmtMoney(total('installerPay'))}` : `${lines.length} позиций`}</span>${money ? `<strong>Клиенту ${fmtMoney(orderRevenue(o))}</strong>` : ''}</div>
     ${manage ? projectRecommendationsHtml(o) : ''}

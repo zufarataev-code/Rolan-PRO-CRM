@@ -49,6 +49,18 @@ test('the project card groups services by direction and keeps per-service planni
   assert.match(html,/projectCardSetLineNote/);
 });
 
+test('the project card carries the approved cashier → measurement → work-order map without a parallel calculation',()=>{
+  assert.match(html,/data-project-cashier-map/);
+  assert.match(html,/Касса проекта · направления и услуги/);
+  assert.match(html,/Добавить направление/);
+  assert.match(html,/openServiceCashier\('\$\{o\.id\}','card'\)/);
+  assert.match(html,/openManagerMeasureModal\('\$\{o\.id\}'\)/);
+  assert.match(html,/openProjectEstimateWorkspace\('\$\{o\.id\}'\)/);
+  assert.match(html,/openWorkOrder\('\$\{o\.id\}'\)/);
+  assert.match(html,/projectCashierMapHtml\(o, directions, \{ money, edit \}\)/);
+  assert.doesNotMatch(html,/cashierProjectLines|projectCashierLines|cashierEstimateTotal/);
+});
+
 test('direct expenses have one plan-fact amount and project, direction or service scope',()=>{
   assert.match(html,/function projectExpenseTypes\(\)/);
   assert.doesNotMatch(html,/PROJECT_EXPENSE_TYPES/);
