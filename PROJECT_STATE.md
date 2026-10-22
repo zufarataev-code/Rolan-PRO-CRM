@@ -23,6 +23,15 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-21 handoff — касса проекта на PostgreSQL (PR #357)
+
+- Branch: `claude/cashier-project-flow`, based on `origin/main` `a7e3db1` after PR #356. PR #357 open.
+- Эталон — три экрана на канвасе «RolanPRO — экран проекта (касса)» и ТЗ «Кассовая логика создания проекта» (Owner, 20–21 окт). Legacy-касса #354/#356 не тронута; это параллельная реализация на Prisma-стороне с тем, чего в legacy нет: размеры и раскрой (клиенту по стеклу, складу по плёнке), коридор цены на модели плёнки (ниже минимума — 422, проект не создаётся), доступ к окну с коэффициентом к монтажной части, несколько направлений в проекте с чеком по группам, подсказки услуг вместо автодобавления.
+- Схема: миграция `20261021020000_cashier_catalog` — `film_catalog` (тип, класс, коридор, рулоны), `service_addons` (цвет, подсказки), новая `access_levels`, `measurements` (створки, стекло двумя полями, доступ, услуги на окне, плёнка окна). Seed только дополняет, цены владельца не трогает.
+- Код: `src/features/cutting/openings.ts`, `src/features/projects/cashier.ts` (чистый расчёт), `cashier-service.ts`, `cashier-payload.ts`; API `app/api/v1/projects/cashier` (+`/quote`); экран `app/legacy-crm/cashier` + `src/components/project-cashier.tsx`; плитка «Касса проекта» в листе «Создать» legacy.
+- Verification: `tsc` 0 ошибок; unit 765/783 (18 падений — отсутствие бинарного движка Prisma в среде, те же на `main`); миграция применена на чистую PostgreSQL 16 вместе со всей историей. `next build` и e2e здесь не запускались — на CI.
+- Next action: ревью и слияние PR #357; затем экран замерщика на тех же `measurements`, наряд со схемой раскроя, списание склада после #345.
+
 ## 2026-10-21 handoff — approved project-card route map
 
 - Branch: `codex/project-card-artifact-20261021`, based on current `origin/main` `5f33d6a` after PR #354.
