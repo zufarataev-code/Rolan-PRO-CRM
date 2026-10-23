@@ -30,6 +30,13 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-22 hotfix — the server accepts «Общее по объекту»
+
+- Branch: `claude/general-server-fix`, based on `main` merge `6524b58`.
+- PR #358 added the `general` direction on the client only; `service-solutions.ts` still validated `offering.direction` against five directions and mapped project lines through `DIRECTION_BY_SERVICE_TYPE` without `general_works`, so the Owner's save of a general service (and any project with a general line) was refused with «Укажите направление и название услуги» / «Услуга не соответствует направлению проекта».
+- Fix: `SERVICE_DIRECTIONS` gains `general`, `DIRECTION_BY_SERVICE_TYPE` gains `general_works`, and a general service per sq ft / lin ft is refused server-side as well.
+- Verification: `service-units.test.ts` +1 (directory save, project line, sq-ft refusal); full suite 756/756.
+
 ## 2026-10-22 handoff — measurement window card layout on tablet and phone
 
 - Branch / PR: `claude/measure-window-layout` / #359, based on `main` merge `a7e3db1`.

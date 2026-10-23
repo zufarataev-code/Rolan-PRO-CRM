@@ -12,7 +12,8 @@ const stableJson = (value: unknown): string => JSON.stringify(value, (_key, item
 const rows = (x: unknown): Row[] => Array.isArray(x) ? x.map(object) : [];
 const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))];
 
-export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'privacy'] as const;
+// «general» = «Общее по объекту» (Owner, 2026-10-22): works without a film, never per sq ft.
+export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'privacy', 'general'] as const;
 export const SERVICE_UNITS = ['sqft', 'lft', 'piece', 'zone', 'fixed', 'custom'] as const;
 // Project statuses for planning its services (Owner, 2026-10-09).
 const SCHEDULED_PROJECT_STATUSES = ['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'];
@@ -139,7 +140,7 @@ export function canonicalFilmCategory(value: unknown): string {
   return aliases[normalized] || normalized;
 }
 
-const DIRECTION_BY_SERVICE_TYPE: Row = { solar_film: 'solar', smart_film: 'smart', protective_film: 'protective', decorative_film: 'decorative', privacy_film: 'privacy' };
+const DIRECTION_BY_SERVICE_TYPE: Row = { solar_film: 'solar', smart_film: 'smart', protective_film: 'protective', decorative_film: 'decorative', privacy_film: 'privacy', general_works: 'general' };
 
 /** Managers receive customer prices; the owner alone maintains solution definitions. */
 export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInstallerIds: readonly string[] = []): Row {
@@ -200,6 +201,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const maxPrice = Number(offering.maxPricePerUnit) || 0;
     if (minPrice > 0 && maxPrice > 0 && minPrice > maxPrice) return 'Минимальная цена услуги не может быть выше максимальной.';
     if (offering.unit !== undefined && !(SERVICE_UNITS as readonly string[]).includes(offering.unit)) return 'Неизвестная единица услуги.';
+    if (offering.direction === 'general' && (offering.unit === undefined || offering.unit === 'sqft' || offering.unit === 'lft')) return 'Услуга «Общее по объекту» не считается по размерам окон.';
     if (offering.unitLabel !== undefined && (typeof offering.unitLabel !== 'string' || offering.unitLabel.length > 30)) return 'Название единицы — до 30 символов.';
     if (offering.materialCostPerUnit !== undefined && (typeof offering.materialCostPerUnit !== 'number' || !Number.isFinite(offering.materialCostPerUnit) || offering.materialCostPerUnit < 0)) return 'Стоимость материала услуги должна быть неотрицательным числом.';
     if (offering.includes !== undefined && (!Array.isArray(offering.includes) || offering.includes.length > 20 || offering.includes.some((id: unknown) => typeof id !== 'string'))) return 'Некорректный состав услуги.';
