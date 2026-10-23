@@ -30,6 +30,15 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-22 handoff — «Общее по объекту»: works without a film in the cashier
+
+- Branch: `claude/general-services`, based on `main` merge `a7e3db1` after PR #356.
+- Owner, 2026-10-22: besides film services the project needs works that belong to the site, not to a film — removal of old film, washing, electrician, equipment rental, a contractor (ТЗ кассы, level 4 and «Общее по объекту»). Until now every service had to belong to a film direction, so such works could neither be created in «Услуги и цены» nor chosen at the cashier.
+- `ORDER_PRIMARY_SERVICES` gains a sixth entry `general_works` (`general: true`, catalogCategory `general`); `SERVICE_OFFERING_DIRECTIONS` gains `general`. The directory shows the group «🧰 Общее по объекту» with its own «+ Добавить услугу»; its services are size-free only (`serviceOfferingUnitsFor`: piece, zone, fixed, custom — never sq ft / lin ft; a saved sq-ft unit falls back to per piece). `filmDirections()` keeps film-only selects (quick-line direction, lead capture) and measurement scopes untouched.
+- Cashier: general works appear as a separate add-on group under any film direction, and «Общее по объекту» is also a direction card of its own (no film step). Intake: a general work alone can be the whole project, but once a film direction is chosen it becomes the incoming request (`toggleNewOrderOffering` orders film first).
+- No seeded services: the Owner creates the real works and prices in «Услуги и цены» → «Общее по объекту».
+- Verification: `service-cashier.test.ts` +2, `project-intake-sequence.test.ts` +1, `service-units.test.ts` updated for the sixth group; full suite 754/754; single-definition guard passes; add-on screen rendered with the real stylesheet. GitHub CI, merge, deploy and production smoke remain.
+
 ## 2026-10-21 handoff — service cashier in the new-project form
 
 - Branch: `claude/new-project-cashier`, based on `main` merge `5f33d6a` after PR #354.

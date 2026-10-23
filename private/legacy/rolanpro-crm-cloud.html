@@ -15280,7 +15280,30 @@ const ORDER_PRIMARY_SERVICES = [
       'Сдача: проверка приватности, уход, акт',
     ],
   },
+  {
+    // Owner, 2026-10-22 (ТЗ кассы «Общее по объекту»): works sold with a project
+    // that belong to the site, not to a film — removal of old film, washing,
+    // electrician, equipment rental, a contractor. They have no film, no
+    // measurement and no window sizes; priced per piece, zone, fixed sum or the
+    // owner's own unit. Never a measurement scope and never a film catalog.
+    id: 'general_works',
+    icon: '🧰',
+    title: 'Общее по объекту',
+    short: 'Общее',
+    desc: 'Работы без плёнки: демонтаж, мойка, электрик, техника, подрядчик.',
+    tag: 'general',
+    catalogCategory: 'general',
+    general: true,
+    workflow: [
+      'Согласование: что нужно на объекте помимо плёнки',
+      'Назначение: исполнитель или подрядчик, дата',
+      'Выполнение: отметка «выполнено» из кабинета',
+    ],
+  },
 ];
+/** Directions a project can be measured and filmed in — everything but «Общее по объекту». */
+function filmDirections() { return ORDER_PRIMARY_SERVICES.filter(item => !item.general); }
+function isGeneralDirection(serviceType) { return !!ORDER_PRIMARY_SERVICES.find(item => item.id === serviceType)?.general; }
 
 // Palette comes from the entity colour code (window.RP_ENTITY) — one colour per direction everywhere.
 function orderServicePalette(serviceId) {
@@ -24597,7 +24620,9 @@ function projectQuickRequiredSupplies(o, lines = projectQuickLines(o)) {
 // идёт в КП, у неё цена клиенту за sq ft и ставка специалисту за sq ft. Плёнки
 // склада привязываются к услугам (одна плёнка может подходить нескольким); материал проекта
 // по-прежнему считается по закупочной цене выбранной плёнки.
-const SERVICE_OFFERING_DIRECTIONS = ['smart', 'solar', 'protective', 'decorative', 'privacy'];
+const SERVICE_OFFERING_DIRECTIONS = ['smart', 'solar', 'protective', 'decorative', 'privacy', 'general'];
+/** Units a service of a direction may use: «Общее по объекту» has no windows, so nothing per sq ft or per linear ft. */
+function serviceOfferingUnitsFor(direction) { return direction === 'general' ? SERVICE_OFFERING_UNITS.filter(unit => !['sqft', 'lft'].includes(unit.id)) : SERVICE_OFFERING_UNITS; }
 // The owner creates the real solutions; no invented starter products or prices.
 function serviceOfferingsAll() {
   return Array.isArray(db.settings.serviceOfferings) ? db.settings.serviceOfferings : [];
@@ -24643,7 +24668,9 @@ const SERVICE_OFFERING_UNITS = [
 ];
 
 function serviceOfferingUnit(offering) {
-  return SERVICE_OFFERING_UNITS.some(unit => unit.id === offering?.unit) ? offering.unit : 'sqft';
+  const allowed = serviceOfferingUnitsFor(offering?.direction);
+  if (allowed.some(unit => unit.id === offering?.unit)) return offering.unit;
+  return offering?.direction === 'general' ? 'piece' : 'sqft';
 }
 
 function serviceOfferingNeedsSizes(offering) {
@@ -24917,7 +24944,12 @@ function serviceCashierAddons(o, offering) {
   if (!offering) return [];
   const included = new Set(serviceOfferingIncludes(offering).map(child => child.id));
   const inProject = new Set([o?.offeringId, ...(o?.offeringIds || [])].filter(Boolean));
-  return serviceOfferingsFor(offering.direction)
+  // Add-ons: size-free services of the same direction, then «Общее по объекту»
+  // (ТЗ кассы: removal, washing, electrician, equipment, contractor ride along
+  // with any film direction).
+  const own = serviceOfferingsFor(offering.direction);
+  const general = offering.direction === 'general' ? [] : serviceOfferingsFor('general');
+  return [...own, ...general]
     .filter(item => item.id !== offering.id && !serviceOfferingNeedsSizes(item) && !included.has(item.id) && !inProject.has(item.id));
 }
 function serviceCashierHasMaterialStep(offering) {
@@ -25075,7 +25107,10 @@ function serviceCashierHtml(c) {
     const film = c.catalogId ? getCatalogItem(c.catalogId) : null;
     const chosen = addons.filter(item => c.addonIds.includes(item.id));
     const includes = serviceOfferingIncludes(offering);
-    body = `${addons.length ? `<div class="rp-cashier-group"><div class="rp-cashier-group-title">Дополнительно к услуге</div><div class="rp-cashier-grid compact">${addons.map(item => `<button type="button" class="rp-cashier-card rp-cashier-addon ${c.addonIds.includes(item.id) ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${c.addonIds.includes(item.id)}" onclick="serviceCashierPick('addon','${jsQuote(item.id)}')"><span class="rp-cashier-check">${c.addonIds.includes(item.id) ? '✓' : '+'}</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span></button>`).join('')}</div></div>` : ''}
+    const addonCard = item => `<button type="button" class="rp-cashier-card rp-cashier-addon ${c.addonIds.includes(item.id) ? 'selected' : ''}" style="${serviceCashierCardStyle(item.direction === 'general' ? 'general_works' : c.directionId)}" aria-pressed="${c.addonIds.includes(item.id)}" onclick="serviceCashierPick('addon','${jsQuote(item.id)}')"><span class="rp-cashier-check">${c.addonIds.includes(item.id) ? '✓' : '+'}</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span></button>`;
+    const ownAddons = addons.filter(item => item.direction !== 'general' || c.directionId === 'general_works');
+    const generalAddons = addons.filter(item => item.direction === 'general' && c.directionId !== 'general_works');
+    body = `${ownAddons.length ? `<div class="rp-cashier-group"><div class="rp-cashier-group-title">Дополнительно к услуге</div><div class="rp-cashier-grid compact">${ownAddons.map(addonCard).join('')}</div></div>` : ''}${generalAddons.length ? `<div class="rp-cashier-group"><div class="rp-cashier-group-title">🧰 Общее по объекту</div><div class="rp-cashier-grid compact">${generalAddons.map(addonCard).join('')}</div></div>` : ''}
       <div class="rp-cashier-summary" style="${serviceCashierCardStyle(c.directionId)}">
         <div class="rp-cashier-summary-title">В проект ${academyEsc(o.number || '')}</div>
         <div class="rp-cashier-summary-line"><b>${academyEsc(offering.name)}</b><span>${serviceCashierOfferingMeta(offering)}</span></div>
@@ -25122,7 +25157,7 @@ function addServiceOffering(direction) {
   if (!serviceOfferingCanEdit() || !SERVICE_OFFERING_DIRECTIONS.includes(direction)) return;
   const sort = serviceOfferingsFor(direction, { includeInactive: true }).length;
   db.settings.serviceOfferings = serviceOfferingsAll();
-  db.settings.serviceOfferings.push({ id: 'svc_' + uid(), direction, name: 'Новая услуга', unit: 'sqft', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort });
+  db.settings.serviceOfferings.push({ id: 'svc_' + uid(), direction, name: 'Новая услуга', unit: direction === 'general' ? 'piece' : 'sqft', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort });
   save();
   renderServiceOfferingDirectory();
 }
@@ -25142,7 +25177,7 @@ function updateServiceOffering(id, field, value, control = null) {
     if (field === 'maxPricePerUnit' && Number(offering.minPricePerUnit) > 0 && nextValue < offering.minPricePerUnit) return alert('Максимальная цена не может быть ниже минимальной.');
     offering[field] = nextValue;
   } else if (field === 'unit') {
-    if (!SERVICE_OFFERING_UNITS.some(unit => unit.id === value)) return;
+    if (!serviceOfferingUnitsFor(offering.direction).some(unit => unit.id === value)) return;
     offering.unit = value;
   } else if (field === 'unitLabel') {
     offering.unitLabel = String(value || '').trim().slice(0, 30);
@@ -25247,7 +25282,7 @@ function renderServiceOfferingsSection() {
       return owner ? `<div data-service-offering-row="${offering.id}" class="p-3 border border-slate-200 ${offering.active === false ? 'opacity-60' : ''}">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
           <div class="md:col-span-2"><label>Услуга (название в КП)</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value,this)"></div>
-          <div class="md:col-span-2"><label>Как считается</label><select onchange="updateServiceOffering('${offering.id}','unit',this.value,this)">${SERVICE_OFFERING_UNITS.map(item => `<option value="${item.id}" ${unit === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
+          <div class="md:col-span-2"><label>Как считается</label><select onchange="updateServiceOffering('${offering.id}','unit',this.value,this)">${serviceOfferingUnitsFor(offering.direction).map(item => `<option value="${item.id}" ${unit === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
           ${unit === 'custom' ? `<div class="md:col-span-2"><label>Единица (например, час или выезд)</label><input value="${academyEsc(offering.unitLabel || '')}" maxlength="30" placeholder="ед." onchange="updateServiceOffering('${offering.id}','unitLabel',this.value,this)"></div>` : ''}
           <div><label>Цена клиенту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value,this)"></div>
           <div><label>Минимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.minPricePerUnit) || ''}" placeholder="без минимума" onchange="updateServiceOffering('${offering.id}','minPricePerUnit',this.value,this)"></div>
@@ -27212,7 +27247,7 @@ function renderQuickProjectEntry(o) {
     const offering = serviceOffering(line.offeringId);
     const selectedStock = line.catalogId ? warehouseCatalogStockStats(line.catalogId) : null;
     return `<tr>
-      <td data-label="Направление и услуга"><select aria-label="Направление" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${ORDER_PRIMARY_SERVICES.map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select><select aria-label="Услуга" class="mt-1" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','offeringId',this.value)"><option value="">${offerings.length ? 'Выберите услугу' : 'Услуг нет — «Услуги и цены»'}</option>${offerings.map(item => `<option value="${item.id}" ${line.offeringId===item.id?'selected':''}>${academyEsc(item.name)}${Number(item.pricePerSqft) > 0 ? ` · $${Number(item.pricePerSqft).toFixed(2)}/sq ft` : ''}</option>`).join('')}</select>${offering && Number(offering.pricePerSqft) > 0 ? `<div class="text-xs text-gray-500">Цена услуги: ${fmtSqftPrice(offering.pricePerSqft)} / sq ft</div>` : ''}<button class="btn-ghost text-red-600 quick-commercial-remove" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить</button></td>
+      <td data-label="Направление и услуга"><select aria-label="Направление" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','serviceType',this.value)">${filmDirections().map(service => `<option value="${service.id}" ${line.serviceType===service.id?'selected':''}>${service.icon} ${service.title}</option>`).join('')}</select><select aria-label="Услуга" class="mt-1" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','offeringId',this.value)"><option value="">${offerings.length ? 'Выберите услугу' : 'Услуг нет — «Услуги и цены»'}</option>${offerings.map(item => `<option value="${item.id}" ${line.offeringId===item.id?'selected':''}>${academyEsc(item.name)}${Number(item.pricePerSqft) > 0 ? ` · $${Number(item.pricePerSqft).toFixed(2)}/sq ft` : ''}</option>`).join('')}</select>${offering && Number(offering.pricePerSqft) > 0 ? `<div class="text-xs text-gray-500">Цена услуги: ${fmtSqftPrice(offering.pricePerSqft)} / sq ft</div>` : ''}<button class="btn-ghost text-red-600 quick-commercial-remove" onclick="projectEstimateDeleteQuickLine('${o.id}','${line.id}')">Удалить</button></td>
       <td data-label="Плёнка"><select onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','catalogId',this.value)"><option value="">${catalog.length ? 'Выберите плёнку со склада' : 'Нет плёнки этой категории на складе'}</option>${catalog.map(item => { const stock = warehouseCatalogStockStats(item.id); return `<option value="${item.id}" ${line.catalogId===item.id?'selected':''}>${academyEsc(catalogLabel(item))} · ${stock.lengthM.toFixed(1)} м</option>`; }).join('')}</select>${selectedStock ? `<div class="text-xs text-gray-500">Остаток: ${selectedStock.lengthM.toFixed(1)} м · ${selectedStock.availableSqft.toFixed(0)} sqft</div>` : ''}${projectQuickManualFilmName(line) ? '<div class="text-xs text-amber-700">Ручной ввод · не привязано к складу</div>' : ''}${manualFilmPurchaseStatusHtml(o, line)}<details class="quick-film-alternative" ${projectQuickManualFilmName(line) ? 'open' : ''}><summary>Плёнки нет в списке</summary><div class="quick-film-alternative-body"><button type="button" class="btn-ghost text-xs" onclick="openManualProjectFilmForm('${o.id}','${line.id}')">✍️ Вписать плёнку вручную и заказать</button>${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-xs" onclick="openQuickProjectFilmForm('${o.id}','${line.id}')">+ Добавить плёнку на склад</button>` : ''}</div></details></td>
       <td data-label="Метраж, sqft"><input type="number" min="0" step="0.01" value="${Number(line.qty || 0)}" placeholder="Например, 250" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','qty',this.value)"></td>
       <td data-label="Цена клиенту"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" placeholder="Общая сумма" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','price',this.value)"><div class="quick-commercial-price">${Number(line.qty) > 0 && Number(line.price) > 0 ? `${fmtMoney(line.unitPrice)} / sqft` : 'Цена / sqft появится автоматически'}</div></td>
@@ -30390,7 +30425,7 @@ function renderClientAccountPortal() {
           <div>
             <label>Направление</label>
             <select id="cap-service">
-              ${ORDER_PRIMARY_SERVICES.map(s => `<option value="${s.id}">${academyEsc(s.title)}</option>`).join('')}
+              ${filmDirections().map(s => `<option value="${s.id}">${academyEsc(s.title)}</option>`).join('')}
             </select>
           </div>
           <div>
@@ -31003,8 +31038,10 @@ function toggleNewOrderOffering(id, checked) {
     const item = serviceOffering(value);
     return item && item.active !== false && offeringServiceType(item);
   });
-  state._newOrderOfferingId = valid[0] || '';
-  state._newOrderExtraOfferingIds = valid.slice(1);
+  // «Общее по объекту» rides along: a film direction, if any was chosen, is the incoming request.
+  const ordered = [...valid.filter(value => !isGeneralDirection(offeringServiceType(serviceOffering(value)))), ...valid.filter(value => isGeneralDirection(offeringServiceType(serviceOffering(value))))];
+  state._newOrderOfferingId = ordered[0] || '';
+  state._newOrderExtraOfferingIds = ordered.slice(1);
   if (!checked && state._newOrderMaterialsByService) delete state._newOrderMaterialsByService[id];
   const direction = offeringServiceType(serviceOffering(state._newOrderOfferingId));
   state._newOrderService = direction;

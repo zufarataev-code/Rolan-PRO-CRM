@@ -28,7 +28,7 @@ function loadIntake(offerings: any[]) {
   for (const id of ['no-svc', 'no-offerings', 'no-offering-empty', 'no-site-type']) nodes.set(id, { value: '', style: {}, innerHTML: '' });
   const blocks = ['data-intake-site', 'data-intake-client', 'data-intake-offering', 'data-new-order-after-client'];
   const gates = new Map(blocks.map(name => [`[${name}]`, [{ style: { display: '' } }]]));
-  const directions = [{ id: 'solar_film', title: 'Solar' }, { id: 'smart_film', title: 'Smart' }];
+  const directions = [{ id: 'solar_film', title: 'Solar' }, { id: 'smart_film', title: 'Smart' }, { id: 'general_works', title: 'Общее', general: true }];
   const context: any = vm.createContext({
     state,
     db: { settings: { catalog: [] } },
@@ -53,6 +53,7 @@ function loadIntake(offerings: any[]) {
     serviceOfferingNeedsSizes: (offering: any) => !offering?.unit || offering.unit === 'sqft',
     serviceOfferingUnitShort: (offering: any) => offering?.unit || 'sq ft',
     orderServiceCardStyle: () => '',
+    isGeneralDirection: (id: string) => id === 'general_works',
     primaryServiceInfo: (id: string) => ({ title: id }),
     catalogLabel: () => '—',
   });
@@ -131,4 +132,17 @@ test('multiple concrete services are deduplicated and inactive or unknown direct
   vm.runInContext(html.slice(html.indexOf('function offeringServiceType('), html.indexOf('function renderNewOrderOfferings(')), context);
   assert.deepEqual(Array.from(context.newOrderSelectedOfferings(), (offering: any) => offering.id), ['a', 'b', 'c']);
   assert.deepEqual(Array.from(context.newOrderSelectedOfferings(), (offering: any) => context.offeringServiceType(offering)), ['solar_film', 'solar_film', 'smart_film']);
+});
+
+test('a general work chosen first still leaves the incoming request to the film direction', () => {
+  const offerings = [
+    { id: 'wash', name: 'Мойка', direction: 'general', unit: 'piece' },
+    { id: 'solar', name: 'Solar solution', direction: 'solar' },
+  ];
+  const { context, state } = loadIntake(offerings);
+  context.toggleNewOrderOffering('wash', true);
+  assert.equal(state._newOrderOfferingId, 'wash', 'alone, a general work can be the whole project');
+  context.toggleNewOrderOffering('solar', true);
+  assert.deepEqual([state._newOrderOfferingId, ...state._newOrderExtraOfferingIds], ['solar', 'wash']);
+  assert.equal(state._newOrderService, 'solar_film');
 });

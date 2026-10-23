@@ -51,7 +51,8 @@ test('privacy is the fifth direction with its own measurement scope, colour, cod
   // Colour comes from the entity colour code (window.RP_ENTITY), not from a local palette.
   assert.match(html, /function orderServicePalette\(serviceId\) \{\n {2}const t = rpDir\(serviceId\);/);
   assert.match(html, /privacy_film: 'PRIVACY_FILM'/);
-  assert.match(html, /const SERVICE_OFFERING_DIRECTIONS = \['smart', 'solar', 'protective', 'decorative', 'privacy'\];/);
+  // Owner, 2026-10-22: a sixth group of size-free works «Общее по объекту» — not a film direction.
+  assert.match(html, /const SERVICE_OFFERING_DIRECTIONS = \['smart', 'solar', 'protective', 'decorative', 'privacy', 'general'\];/);
   assert.match(html, /const ROLL_CATEGORY_KEYS = \['smart', 'solar', 'protective', 'decorative', 'privacy'\];/);
   // Privacy films stop being decorative; frost stays decorative.
   const aliases = html.slice(html.indexOf('function canonicalCatalogCategory(value)'), html.indexOf('function catalogMatchesCategory('));
