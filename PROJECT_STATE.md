@@ -30,6 +30,13 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-23 fix — window works visible on the window card
+
+- Branch: `claude/window-services-fix`, based on `main` `c4b192a` (after PR #363).
+- Found in the Owner's end-to-end user test (client → project → cashier → measurement → calculation → KP → production → installation → act → payment): the «Работы на этом окне» chips sat inside the collapsed «Стекло, доступ и технические характеристики» block, which also collapsed again after every edit, so the ticks were effectively hidden. They now render right after the window sizes.
+- The «Работы на окнах» bar compared ticked windows with the ticked set itself, so «1 из 2» offered «снять со всех». It now compares with all candidate windows (the parent service's windows for a package component), shows «N из M» against them, and is hidden until the project has a window.
+- Verification: `window-services.test.ts` updated (+partial state, no-window case, chips outside the technical block); full suite 765/765; TypeScript passes; measurement re-rendered locally with the real stylesheet.
+
 ## 2026-10-22 handoff — works ticked on individual windows in the measurement
 
 - Branch: `claude/window-services`, based on `main` `0a2d411` (after PR #362).

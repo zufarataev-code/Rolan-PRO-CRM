@@ -120,6 +120,12 @@ test('«на все окна» ticks every window and «снять со всех
   const bar = context.managerWindowServicesBarHtml('o', order);
   assert.match(bar, /3 из 3/);
   assert.match(bar, /снять со всех/);
+  context.managerToggleWindowService('o', 'r', 'w3', silicone.id, false);
+  const partial = context.managerWindowServicesBarHtml('o', order);
+  assert.match(partial, /2 из 3/);
+  assert.match(partial, /на все окна/, 'some windows ticked: the button ticks the rest');
+  assert.doesNotMatch(partial, /снять со всех/);
+  assert.equal(context.managerWindowServicesBarHtml('o', { ...order, measurements: { rooms: [] } }), '', 'no bar before any window');
   context.managerSetServiceOnAllWindows('o', silicone.id, false);
   assert.ok(order.measurements.rooms[0].windows.every((w: Row) => w.serviceIds.length === 0));
   assert.match(context.managerWindowServicesBarHtml('o', order), /все 3[\s\S]*на все окна/);
@@ -158,6 +164,10 @@ test('window card shows a chip per window-level service with its measure and tic
   assert.match(chips, /2 шт\./);
   assert.equal(context.managerWindowServiceChipsHtml('o', 'r', win, { ...order, extraServices: [] }), '', 'no chips without window-level services');
   // The measurement modal renders the chips on every window card and the bar in the header.
-  assert.match(html, /\$\{managerWindowServiceChipsHtml\(oid, r\.id, w, o\)\}\s*<label class="manager-window-removal-check/);
+  // Chips sit with the sizes, outside the collapsed technical block (Owner's user test, 2026-10-23):
+  // inside it they were hidden and every tick collapsed the block again.
+  const card = html.slice(html.indexOf('<label>Площадь, sqft</label>'), html.indexOf('<div class="manager-window-notes">'));
+  assert.ok(card.indexOf('managerWindowServiceChipsHtml(oid, r.id, w, o)') !== -1);
+  assert.ok(card.indexOf('managerWindowServiceChipsHtml(oid, r.id, w, o)') < card.indexOf('<details class="manager-window-technical">'));
   assert.match(html, /\$\{managerMeasureProgressHtml\(o, activeScopeKey\)\}\s*\$\{managerWindowServicesBarHtml\(oid, o\)\}/);
 });

@@ -29464,12 +29464,12 @@ function renderManagerMeasureModal(oid) {
                           <div class="manager-window-field"><label>Ширина (${inUnits ? 'in' : 'мм'})</label><input id="mm-width-${w.id}" aria-label="Ширина" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.width || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></div>
                           <div class="manager-window-field"><label>Высота (${inUnits ? 'in' : 'мм'})</label><input id="mm-height-${w.id}" aria-label="Высота" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.height || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></div>
                           <div class="manager-window-field readonly"><label>Площадь, sqft</label><input aria-label="Площадь" value="${windowActualAreaSqft(w).toFixed(2)}" readonly></div>
+                          ${managerWindowServiceChipsHtml(oid, r.id, w, o)}
                           <details class="manager-window-technical">
                             <summary>Стекло, доступ и технические характеристики${windowRemovalRequired(w) ? ' · требуется демонтаж' : ''}</summary>
                             <div class="manager-window-fields mt-3">
                               ${needsSolar ? `<div class="manager-window-field"><label>Сторона фасада</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','orientation',this.value)">${managerOrientationOptionsHtml(w.orientation || '')}</select></div><div class="manager-window-field"><label>Сторона установки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','side',this.value)"><option value="">Выберите</option><option value="in" ${w.side==='in'?'selected':''}>Изнутри</option><option value="out" ${w.side==='out'?'selected':''}>Снаружи</option></select></div><div class="manager-window-field"><label>Доступ / высота</label><select onchange="managerSetSolarAccess('${oid}','${r.id}','${w.id}',this.value)">${managerSolarAccessOptionsHtml(w.access || '')}</select></div>` : ''}
                               <div class="manager-window-field wide"><label>Тип и прочность стекла</label>${managerGlassChipHtml(oid, r.id, w)}${needsSolar ? managerSolarRiskHtml(w) : ''}</div>
-                              ${managerWindowServiceChipsHtml(oid, r.id, w, o)}
                               <label class="manager-window-removal-check ${windowRemovalRequired(w) ? 'active' : ''}"><input type="checkbox" ${windowRemovalRequired(w) ? 'checked' : ''} onchange="managerSetWindowRemoval('${oid}','${r.id}','${w.id}',this.checked)"><span>Требуется демонтаж старой плёнки${windowRemovalRequired(w) ? ` · ${windowActualAreaSqft(w).toFixed(2)} sqft` : ''}</span></label>
                             </div>
                           </details>
@@ -29695,13 +29695,14 @@ function managerWindowServiceChipsHtml(oid, rid, w, o) {
 /** Header row: each window-level service with how many windows carry it and «на все окна». */
 function managerWindowServicesBarHtml(oid, o) {
   const lines = projectWindowServiceLines(o);
-  if (!lines.length) return '';
   const windows = (o.measurements?.rooms || []).flatMap(room => room.windows || []);
+  if (!lines.length || !windows.length) return '';
   return `<div class="manager-measure-services" data-scroll-key="measure-window-services"><span class="text-xs font-bold text-slate-600">Работы на окнах:</span>${lines.map(line => {
-    const ticked = windows.filter(win => windowHasService(win, line.offeringId)).length;
-    const applies = projectWindowsForService(o, line.offeringId, line.includedBy || '').length;
-    const all = ticked > 0 && ticked === applies;
-    return `<span class="manager-window-service-bar" style="${orderServiceCardStyle(line.serviceType)}"><b>${academyEsc(line.offeringName || line.label)}</b> ${ticked ? `${ticked} из ${windows.length}` : `все ${windows.length}`} <button type="button" class="btn-ghost text-xs" onclick="managerSetServiceOnAllWindows('${oid}','${jsQuote(line.offeringId)}',${all ? 'false' : 'true'})">${all ? 'снять со всех' : 'на все окна'}</button></span>`;
+    // Candidates: every window, or the parent service's windows for a package component.
+    const candidates = line.includedBy ? projectOfferingWindows(o, line.includedBy) : windows;
+    const ticked = candidates.filter(win => windowHasService(win, line.offeringId)).length;
+    const all = ticked > 0 && ticked === candidates.length;
+    return `<span class="manager-window-service-bar" style="${orderServiceCardStyle(line.serviceType)}"><b>${academyEsc(line.offeringName || line.label)}</b> ${ticked ? `${ticked} из ${candidates.length}` : `все ${candidates.length}`} <button type="button" class="btn-ghost text-xs" onclick="managerSetServiceOnAllWindows('${oid}','${jsQuote(line.offeringId)}',${all ? 'false' : 'true'})">${all ? 'снять со всех' : 'на все окна'}</button></span>`;
   }).join('')}</div>`;
 }
 function managerSetRoomRemoval(oid, rid, scopeKey, enabled) {
