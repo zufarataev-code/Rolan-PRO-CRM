@@ -30,6 +30,13 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-22 handoff — measurement window card layout on tablet and phone
+
+- Branch / PR: `claude/measure-window-layout` / #359, based on `main` merge `a7e3db1`.
+- Owner, 2026-10-22 (iPad screenshot of «Замер объекта»): field labels broke letter by letter, inputs were a few characters wide, the select was cut, «Удалить окно» sat on its own full-width row.
+- Cause: `.manager-window-card-body` is a two-column grid (solution | window type) with three children — the `.manager-window-fields` block fell into the first column (170–180 px) and split three fields across it; the global `overflow-wrap: anywhere` from PR #55 then broke label words. `.manager-window-card-head` had three tracks for four children, so the delete button wrapped onto a new row.
+- Fix (CSS only): the field block spans the card body and uses `repeat(auto-fit, minmax(150px, 1fr))` at every breakpoint (desktop 4–5 columns, iPad portrait 4, phone 2); labels wrap at spaces only; the head has four tracks and on ≤840 px becomes a wrapping flex row. First column on ≤1180 px is `minmax(200px, .9fr)`.
+- Verification: `measurement-ui.test.ts` +1 layout guard; full suite 752/752; single-definition guard passes; window card rendered with the real stylesheet at 1080, 820 and 390 px. GitHub CI, merge, deploy and a check on the Owner's iPad remain.
 ## 2026-10-22 handoff — «Общее по объекту»: works without a film in the cashier
 
 - Branch: `claude/general-services`, based on `main` merge `a7e3db1` after PR #356.
