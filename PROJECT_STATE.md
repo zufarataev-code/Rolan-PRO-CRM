@@ -30,6 +30,16 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-22 handoff — works ticked on individual windows in the measurement
+
+- Branch: `claude/window-services`, based on `main` `0a2d411` (after PR #362).
+- Owner's ТЗ кассы («Что требуется на окне»): a size-free service of the project — silicone by lin ft, a per-piece work such as removal of old film — can now be ticked on each window in the measurement, and «на все окна» ticks the whole project (or every window of the package's parent service for an included component).
+- Model: `win.serviceIds: string[]`. `projectWindowsForService(o, offeringId, parentId)` returns the ticked windows; while **no** window of the project is ticked for a service the line keeps its old meaning — every window (every parent window for an included line) — so existing projects keep their quantities. `projectWindowServiceLines(o)` lists the lines a window can carry (lft/piece, not quick lines).
+- Quantities: lin ft = perimeter of the ticked windows; pieces = sum of their quantities (once a window is ticked). `projectIncludedQty` and the lft auto-sync in `syncProjectIncludedServices` use the same helper; ticking a window clears `qtyManual`, invalidates the estimate and refreshes only the measurement modal (no full render).
+- UI: chips «Работы на этом окне» in each window card (direction colour via `orderServiceCardStyle`, measure of that window shown under the name) next to the existing removal checkbox; a «Работы на окнах:» row under the measurement progress with «N из M» / «все M» and «на все окна» / «снять со всех» per service (`managerToggleWindowService`, `managerSetServiceOnAllWindows`, `managerWindowServiceChipsHtml`, `managerWindowServicesBarHtml`).
+- Server: window fields are passed through unchanged, so `serviceIds` needs no schema change.
+- Verification: new `window-services.test.ts` (6 tests: legacy meaning, quantities, manual qty, all/none, package parent scope, chips/bar markup); full suite 765/765; TypeScript passes; chips and bar rendered with the real stylesheet. GitHub CI, merge, deploy and the Owner's check remain.
+
 ## 2026-10-22 handoff — a service may be offered in several directions
 
 - Branch: `claude/service-directions`, based on `main` merge `6524b58`.

@@ -3032,6 +3032,12 @@
     font-size: .67rem;
     font-weight: 700;
   }
+  .manager-window-service-chips { display:flex; flex-wrap:wrap; gap:.4rem; }
+  .manager-window-field label.manager-window-service-chip { --svc-color:#2563eb; --svc-bg:#eff6ff; display:inline-flex; align-items:center; gap:.5rem; margin:0; padding:.35rem .6rem; border:1.5px solid #dbe4ef; border-left:4px solid var(--svc-color); border-radius:4px; background:#fff; cursor:pointer; font-size:.8rem; font-weight:700; text-transform:none; line-height:1.25; color:#10213b; min-height:40px; }
+  .manager-window-field label.manager-window-service-chip.active { background:var(--svc-bg); border-color:var(--svc-color); }
+  .manager-window-field .manager-window-service-chip input[type="checkbox"] { width:18px; height:18px; min-height:0; margin:0; flex:0 0 18px; accent-color:var(--svc-color); }
+  .manager-window-service-chip small { display:block; color:#64748b; font-size:.68rem; font-weight:600; }
+  .manager-window-service-bar { --svc-color:#2563eb; display:inline-flex; align-items:center; gap:.4rem; padding:.2rem .5rem; border-left:4px solid var(--svc-color); background:#f8fafc; border-radius:4px; font-size:.8rem; white-space:nowrap; }
   .manager-window-removal-check {
     display: inline-flex;
     align-items: center;
@@ -24802,6 +24808,32 @@ function serviceOfferingIncludes(offering) {
 function projectOfferingWindows(o, offeringId) {
   return (o?.measurements?.rooms || []).flatMap(room => room.windows || []).filter(win => win.offeringId === offeringId);
 }
+// ---------- РАБОТЫ НА ОКНЕ (ТЗ кассы «Что требуется на окне», Owner 2026-10-22) ----------
+// A size-free service of the project (silicone per lin ft, a per-piece work)
+// can be ticked on individual windows. Ticked windows make the line's
+// quantity; while no window of the project is ticked for a service, the line
+// keeps its old meaning — every window — so existing projects do not change.
+function windowServiceIds(win) {
+  return Array.isArray(win?.serviceIds) ? win.serviceIds.filter(Boolean) : [];
+}
+function windowHasService(win, offeringId) {
+  return windowServiceIds(win).includes(offeringId);
+}
+/** Windows a window-level service applies to: the ticked ones, else (nothing ticked anywhere) all candidates. */
+function projectWindowsForService(o, offeringId, parentId = '') {
+  const candidates = parentId ? projectOfferingWindows(o, parentId) : (o?.measurements?.rooms || []).flatMap(room => room.windows || []);
+  const anyTicked = (o?.measurements?.rooms || []).flatMap(room => room.windows || []).some(win => windowHasService(win, offeringId));
+  return anyTicked ? candidates.filter(win => windowHasService(win, offeringId)) : candidates;
+}
+/** Project lines a window can carry: size-free services by lin ft or per piece, one per service. */
+function projectWindowServiceLines(o) {
+  const seen = new Set();
+  return (o?.extraServices || []).filter(line => {
+    if (!line.offeringId || line.quickProjectLine || !['lft', 'piece'].includes(line.unit) || seen.has(line.offeringId)) return false;
+    seen.add(line.offeringId);
+    return true;
+  });
+}
 
 /** Services that currently exist in project scope and can own package lines. */
 function projectParentOfferingIds(o) {
@@ -24812,7 +24844,7 @@ function projectParentOfferingIds(o) {
 
 function projectIncludedQty(o, parentId, child) {
   const unit = serviceOfferingUnit(child);
-  const windows = projectOfferingWindows(o, parentId);
+  const windows = projectWindowsForService(o, child.id, parentId);
   const parentLine = (o?.extraServices || []).find(line => line.offeringId === parentId && !line.includedBy && !line.quickProjectLine);
   if (unit === 'lft') return Math.round(windows.reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100;
   if (unit === 'piece') return windows.length ? windows.reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0) : Number(parentLine?.qty) || 1;
@@ -24879,7 +24911,9 @@ function syncProjectIncludedServices(o) {
       const child = serviceOffering(line.offeringId) || { id: line.offeringId, unit: line.unit };
       qty = projectIncludedQty(o, line.includedBy, child);
     } else if (line.unit === 'lft' && allWindows.length) {
-      qty = Math.round(allWindows.reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100;
+      qty = Math.round(projectWindowsForService(o, line.offeringId).reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100;
+    } else if (line.unit === 'piece' && allWindows.some(win => windowHasService(win, line.offeringId))) {
+      qty = projectWindowsForService(o, line.offeringId).reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0);
     }
     if (qty === null) return;
     const price = line.includedBy ? 0 : Math.round((Number(line.unitPrice) || 0) * qty * 100) / 100;
@@ -29346,6 +29380,7 @@ function renderManagerMeasureModal(oid) {
         <div class="manager-measure-services" data-scroll-key="measure-services"><span class="text-xs font-bold text-slate-600">Услуга:</span>${projectScopes.map(key => { const item = measureScopeInfo(key); return `<button class="btn-ghost text-sm ${key===activeScopeKey?'bg-blue-50 text-blue-700':''}" onclick="managerSelectMeasureScope('${oid}','${key}')">${item.icon} ${academyEsc(item.short)} · ${measureAllWindows(o).filter(x => (x.win.measureScope || orderMeasureScope(o))===key).length}</button>`; }).join('')}<button class="btn-ghost text-sm" onclick="openManagerProjectServicesModal('${oid}')">+ Добавить услугу</button></div>
         ${projectSelectedSizedOfferings(o, activeScopeKey).length > 1 ? `<div class="manager-measure-services"><span class="text-xs font-bold text-slate-600">Конкретная услуга новых окон:</span>${projectSelectedSizedOfferings(o, activeScopeKey).map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<button class="btn-ghost text-sm ${managerActiveOffering(o)?.id === offering.id ? 'bg-blue-50 text-blue-700' : ''}" onclick="managerSelectOffering('${oid}','${offering.id}')">${academyEsc(offering.name)}${film ? ` · ${academyEsc(catalogFilmModel(film) || catalogFilmName(film))}` : ''}</button>`; }).join('')}</div>` : ''}
         ${managerMeasureProgressHtml(o, activeScopeKey)}
+        ${managerWindowServicesBarHtml(oid, o)}
       </div>
       <div class="manager-measure-body" data-scroll-key="measure-body">
         <div class="manager-measure-workspace">
@@ -29434,6 +29469,7 @@ function renderManagerMeasureModal(oid) {
                             <div class="manager-window-fields mt-3">
                               ${needsSolar ? `<div class="manager-window-field"><label>Сторона фасада</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','orientation',this.value)">${managerOrientationOptionsHtml(w.orientation || '')}</select></div><div class="manager-window-field"><label>Сторона установки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','side',this.value)"><option value="">Выберите</option><option value="in" ${w.side==='in'?'selected':''}>Изнутри</option><option value="out" ${w.side==='out'?'selected':''}>Снаружи</option></select></div><div class="manager-window-field"><label>Доступ / высота</label><select onchange="managerSetSolarAccess('${oid}','${r.id}','${w.id}',this.value)">${managerSolarAccessOptionsHtml(w.access || '')}</select></div>` : ''}
                               <div class="manager-window-field wide"><label>Тип и прочность стекла</label>${managerGlassChipHtml(oid, r.id, w)}${needsSolar ? managerSolarRiskHtml(w) : ''}</div>
+                              ${managerWindowServiceChipsHtml(oid, r.id, w, o)}
                               <label class="manager-window-removal-check ${windowRemovalRequired(w) ? 'active' : ''}"><input type="checkbox" ${windowRemovalRequired(w) ? 'checked' : ''} onchange="managerSetWindowRemoval('${oid}','${r.id}','${w.id}',this.checked)"><span>Требуется демонтаж старой плёнки${windowRemovalRequired(w) ? ` · ${windowActualAreaSqft(w).toFixed(2)} sqft` : ''}</span></label>
                             </div>
                           </details>
@@ -29612,6 +29648,61 @@ function managerSetWindowRemoval(oid, rid, wid, enabled) {
   invalidateProjectEstimate(o, enabled ? 'Добавлено удаление плёнки с окна' : 'Удалено снятие плёнки с окна');
   save();
   refreshManagerMeasureModal(oid);
+}
+/** Tick or untick a window-level service on one window; the line's quantity follows. */
+function managerToggleWindowService(oid, rid, wid, offeringId, enabled) {
+  const o = getOrder(oid);
+  const w = o?.measurements?.rooms?.find(room => room.id === rid)?.windows?.find(item => item.id === wid);
+  const line = projectWindowServiceLines(o).find(item => item.offeringId === offeringId);
+  if (!o || !w || !line) return;
+  const ids = new Set(windowServiceIds(w));
+  if (enabled) ids.add(offeringId); else ids.delete(offeringId);
+  w.serviceIds = [...ids];
+  delete line.qtyManual;
+  syncProjectIncludedServices(o);
+  invalidateProjectEstimate(o, `${enabled ? 'Добавлена' : 'Снята'} работа «${line.offeringName || line.label}» на окне`);
+  save();
+  refreshManagerMeasureModal(oid);
+}
+/** «На все окна» / «снять со всех» for one window-level service. */
+function managerSetServiceOnAllWindows(oid, offeringId, enabled) {
+  const o = getOrder(oid);
+  const line = projectWindowServiceLines(o).find(item => item.offeringId === offeringId);
+  if (!o || !line) return;
+  const parentWindows = line.includedBy ? new Set(projectOfferingWindows(o, line.includedBy).map(win => win.id)) : null;
+  (o.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => {
+    if (parentWindows && !parentWindows.has(win.id)) return;
+    const ids = new Set(windowServiceIds(win));
+    if (enabled) ids.add(offeringId); else ids.delete(offeringId);
+    win.serviceIds = [...ids];
+  }));
+  delete line.qtyManual;
+  syncProjectIncludedServices(o);
+  invalidateProjectEstimate(o, `Работа «${line.offeringName || line.label}» ${enabled ? 'на всех окнах' : 'снята со всех окон'}`);
+  save();
+  refreshManagerMeasureModal(oid);
+}
+/** Chips of the project's window-level services for one window card. */
+function managerWindowServiceChipsHtml(oid, rid, w, o) {
+  const lines = projectWindowServiceLines(o);
+  if (!lines.length) return '';
+  return `<div class="manager-window-field wide"><label>Работы на этом окне</label><div class="manager-window-service-chips">${lines.map(line => {
+    const on = windowHasService(w, line.offeringId);
+    const measure = line.unit === 'lft' ? `${windowPerimeterLinearFt(w).toFixed(1)} lin ft` : `${Number(w.actualQty) > 0 ? Number(w.actualQty) : Number(w.qty) || 1} шт.`;
+    return `<label class="manager-window-service-chip ${on ? 'active' : ''}" style="${orderServiceCardStyle(line.serviceType)}"><input type="checkbox" ${on ? 'checked' : ''} onchange="managerToggleWindowService('${oid}','${rid}','${w.id}','${jsQuote(line.offeringId)}',this.checked)"><span>${academyEsc(line.offeringName || line.label)}${line.includedBy ? ' · в пакете' : ''}<small>${measure}</small></span></label>`;
+  }).join('')}</div></div>`;
+}
+/** Header row: each window-level service with how many windows carry it and «на все окна». */
+function managerWindowServicesBarHtml(oid, o) {
+  const lines = projectWindowServiceLines(o);
+  if (!lines.length) return '';
+  const windows = (o.measurements?.rooms || []).flatMap(room => room.windows || []);
+  return `<div class="manager-measure-services" data-scroll-key="measure-window-services"><span class="text-xs font-bold text-slate-600">Работы на окнах:</span>${lines.map(line => {
+    const ticked = windows.filter(win => windowHasService(win, line.offeringId)).length;
+    const applies = projectWindowsForService(o, line.offeringId, line.includedBy || '').length;
+    const all = ticked > 0 && ticked === applies;
+    return `<span class="manager-window-service-bar" style="${orderServiceCardStyle(line.serviceType)}"><b>${academyEsc(line.offeringName || line.label)}</b> ${ticked ? `${ticked} из ${windows.length}` : `все ${windows.length}`} <button type="button" class="btn-ghost text-xs" onclick="managerSetServiceOnAllWindows('${oid}','${jsQuote(line.offeringId)}',${all ? 'false' : 'true'})">${all ? 'снять со всех' : 'на все окна'}</button></span>`;
+  }).join('')}</div>`;
 }
 function managerSetRoomRemoval(oid, rid, scopeKey, enabled) {
   const o = getOrder(oid);
