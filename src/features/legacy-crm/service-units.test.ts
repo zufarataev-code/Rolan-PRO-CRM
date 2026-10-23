@@ -130,7 +130,7 @@ test('the money of a service without sizes: revenue, material, installer pay per
 
 test('a project of services without sizes skips measurement; the proposal lists them line by line', () => {
   const creation = html.slice(html.indexOf('function createOrder(nextStep'), html.indexOf('function openClientModal()'));
-  assert.match(creation, /extraServices: selectedOfferings\.filter\(item => !serviceOfferingNeedsSizes\(item\)\)\.map\(item => projectOfferingLine\(item, 1\)\)/);
+  assert.match(creation, /extraServices: selectedOfferings\.filter\(item => !serviceOfferingNeedsSizes\(item\)\)\.map\(item => projectOfferingLine\(item, 1, newOrderOfferingServiceType\(item\)\)\)/);
   assert.doesNotMatch(creation, /openManagerMeasureModal/);
   assert.match(creation, /syncProjectIncludedServices\(o\);/);
   assert.match(html, /id="no-create-btn" onclick="createOrder\('project'\)">Создать проект →/);
@@ -413,4 +413,19 @@ test('owner price corridor lets a manager override the project price only inside
   const above = structuredClone(current);
   above.orders[0].extraServices[0].unitPrice = 140;
   assert.match(prepareServiceSolutions(current, above, true) || '', /выше разрешённого максимума/);
+});
+
+test('the server accepts a size-free service shared into other directions and a line sold under one of them', () => {
+  const shared: Row = structuredClone(base);
+  shared.settings.serviceOfferings.push({ id: 'sil', name: 'Силикон', direction: 'protective', unit: 'lft', pricePerSqft: 3, installerRatePerSqft: 1, active: true, directions: ['solar', 'smart'] });
+  assert.equal(prepareServiceSolutions(base, shared, true), null);
+  const sold: Row = structuredClone(shared);
+  sold.orders[0].extraServices = [{ id: 'l1', type: 'offering', offeringId: 'sil', serviceType: 'smart_film', unit: 'lft', qty: 10, unitPrice: 3, price: 30 }];
+  assert.equal(prepareServiceSolutions(shared, sold, true), null, 'sold under smart, a shared direction');
+  const elsewhere: Row = structuredClone(shared);
+  elsewhere.orders[0].extraServices = [{ id: 'l1', type: 'offering', offeringId: 'sil', serviceType: 'decorative_film', unit: 'lft', qty: 10, unitPrice: 3, price: 30 }];
+  assert.match(prepareServiceSolutions(shared, elsewhere, true)!, /не соответствует направлению/);
+  const sized: Row = structuredClone(base);
+  sized.settings.serviceOfferings.push({ id: 'f', name: 'Плёнка', direction: 'solar', unit: 'sqft', pricePerSqft: 9, active: true, directions: ['smart'] });
+  assert.match(prepareServiceSolutions(base, sized, true)!, /только в своём направлении/);
 });

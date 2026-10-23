@@ -54,6 +54,10 @@ function loadIntake(offerings: any[]) {
     serviceOfferingUnitShort: (offering: any) => offering?.unit || 'sq ft',
     orderServiceCardStyle: () => '',
     isGeneralDirection: (id: string) => id === 'general_works',
+    SERVICE_OFFERING_DIRECTIONS: ['smart', 'solar', 'protective', 'decorative', 'privacy', 'general'],
+    serviceOfferingDirections: (o: any) => [o?.direction, ...((!o?.unit || o.unit === 'sqft') ? [] : (o?.directions || []))].filter(Boolean),
+    serviceOfferingInDirection: (o: any, d: string) => [o?.direction, ...((!o?.unit || o.unit === 'sqft') ? [] : (o?.directions || []))].includes(d),
+    offeringServiceTypeIn: (o: any, st: string) => (st && [o?.direction, ...((!o?.unit || o.unit === 'sqft') ? [] : (o?.directions || []))].includes(st.split('_')[0]) ? st : (o?.direction === 'general' ? 'general_works' : o?.direction ? `${o.direction}_film` : '')),
     primaryServiceInfo: (id: string) => ({ title: id }),
     catalogLabel: () => '—',
   });
@@ -113,10 +117,10 @@ test('services are composed at the cashier; the first is the incoming request; i
 
 test('saved project keeps the chosen services for measurement, estimate and proposal', () => {
   const creation = html.slice(html.indexOf('function createOrder(nextStep'), html.indexOf('function openClientModal()'));
-  assert.match(creation, /const serviceId = offeringServiceType\(selectedOfferings\[0\]\);/);
+  assert.match(creation, /const serviceId = newOrderOfferingServiceType\(selectedOfferings\[0\]\);/);
   assert.match(creation, /offeringId: offering\.id/);
   assert.match(creation, /offeringCatalogIds/);
-  assert.match(creation, /offering\.direction !== serviceOfferingDirection\(service\.id\)/);
+  assert.match(creation, /!serviceOfferingInDirection\(offering, serviceOfferingDirection\(service\.id\)\)/);
   assert.doesNotMatch(creation, /openManagerMeasureModal/);
   const defaults = html.slice(html.indexOf('function managerWindowDefaults('), html.indexOf('function syncWindowPanelsForType('));
   assert.match(defaults, /o\.offeringIds \|\| o\.orderBuilder\?\.offeringIds/);
