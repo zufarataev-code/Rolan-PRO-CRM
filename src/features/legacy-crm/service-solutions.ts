@@ -205,6 +205,11 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     if (offering.unitLabel !== undefined && (typeof offering.unitLabel !== 'string' || offering.unitLabel.length > 30)) return 'Название единицы — до 30 символов.';
     if (offering.materialCostPerUnit !== undefined && (typeof offering.materialCostPerUnit !== 'number' || !Number.isFinite(offering.materialCostPerUnit) || offering.materialCostPerUnit < 0)) return 'Стоимость материала услуги должна быть неотрицательным числом.';
     if (offering.includes !== undefined && (!Array.isArray(offering.includes) || offering.includes.length > 20 || offering.includes.some((id: unknown) => typeof id !== 'string'))) return 'Некорректный состав услуги.';
+    // Owner, 2026-10-22: a size-free service may also be offered in other directions.
+    if (offering.directions !== undefined) {
+      if (!Array.isArray(offering.directions) || offering.directions.some((key: unknown) => !(SERVICE_DIRECTIONS as readonly string[]).includes(key as string))) return 'Некорректный список направлений услуги.';
+      if (offering.directions.length && (offering.unit === undefined || offering.unit === 'sqft')) return 'Услуга по замеру предлагается только в своём направлении.';
+    }
     // Film categories are compared as the CRM reads them («privacy_film», «Солнцезащитная»…).
     if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id && canonicalFilmCategory(film.category) === offering.direction)))) return 'Материалы должны принадлежать направлению услуги.';
   }
@@ -342,7 +347,8 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       // Old signed/history selections survive archival or changed material lists.
       if (item.offeringId && (item.offeringId !== old?.offeringId || item.catalogId !== old?.catalogId)) {
         const direction = DIRECTION_BY_SERVICE_TYPE[item.measureScope || item.serviceType || order.serviceType];
-        if (!offering || offering.active === false || offering.direction !== direction) return 'Услуга не соответствует направлению проекта.';
+        const offeredIn = offering ? [offering.direction, ...(Array.isArray(offering.directions) && offering.unit && offering.unit !== 'sqft' ? offering.directions : [])] : [];
+        if (!offering || offering.active === false || !offeredIn.includes(direction)) return 'Услуга не соответствует направлению проекта.';
         if (item.catalogId && !offering.filmIds?.includes(item.catalogId)) return 'Плёнка не привязана к выбранной услуге.';
       }
     }

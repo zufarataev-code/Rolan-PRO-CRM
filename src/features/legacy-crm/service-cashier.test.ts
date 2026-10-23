@@ -286,3 +286,37 @@ test('a general service never takes sizes: its units exclude sq ft and lin ft', 
   assert.equal(context.serviceOfferingUnit({ direction: 'solar', unit: 'sqft' }), 'sqft');
   assert.equal(context.serviceOfferingNeedsSizes({ direction: 'general', unit: 'sqft' }), false);
 });
+
+// Owner, 2026-10-22: a service is created in one direction and may be offered
+// in others (silicone in protective and smart, high-access work everywhere).
+test('a size-free service shared into other directions is offered under each and lands under the one it was sold in', () => {
+  const { context, state, add, order } = fixture();
+  const silicone = add({ name: 'Силикон по кромке', direction: 'protective', unit: 'lft', pricePerSqft: 3.5, directions: ['solar', 'smart'] });
+  assert.deepEqual([...context.serviceOfferingDirections(silicone)], ['protective', 'solar', 'smart']);
+  assert.ok(context.serviceOfferingsFor('solar').some((item: Row) => item.id === silicone.id), 'offered under solar');
+  assert.ok(!context.serviceOfferingsFor('solar', { homeOnly: true }).some((item: Row) => item.id === silicone.id), 'but edited only at home');
+
+  context.openServiceCashier('o', 'card');
+  context.serviceCashierPick('direction', 'solar_film');
+  assert.match(state.modal, /Силикон по кромке/, 'the shared service is a card under solar');
+  context.serviceCashierPick('offering', 'svc_Солнце SP35');
+  assert.match(state.modal, /Дополнительно к услуге[\s\S]*Силикон по кромке/, 'and an add-on under a solar film');
+  context.serviceCashierPick('addon', silicone.id);
+  context.serviceCashierCommit();
+  const line = order.extraServices.find((item: Row) => item.offeringId === silicone.id);
+  assert.equal(line.serviceType, 'solar_film', 'the line belongs to the direction it was sold in, not to its home');
+  assert.ok(order.serviceTypes.includes('solar_film'), 'the project gains the sold direction');
+});
+
+test('a per-sq-ft service cannot be shared and sharing is dropped when a service becomes per sq ft', () => {
+  const { context, add } = fixture();
+  const film = add({ name: 'Плёнка X', direction: 'solar', unit: 'sqft', pricePerSqft: 9, directions: ['smart'] });
+  assert.deepEqual([...context.serviceOfferingDirections(film)], ['solar'], 'directions on a per-sq-ft service are ignored');
+  assert.match(context.serviceOfferingDirectionsEditorHtml(film), /живёт в своём направлении/);
+  const sil = add({ name: 'Герметик', direction: 'protective', unit: 'lft', pricePerSqft: 3, directions: ['smart'] });
+  const editor = context.serviceOfferingDirectionsEditorHtml(sil);
+  assert.match(editor, /type="checkbox" checked onchange="toggleServiceOfferingDirection\('svc_Герметик','smart'/);
+  assert.doesNotMatch(editor, /toggleServiceOfferingDirection\('svc_Герметик','protective'/, 'the home direction is not a checkbox');
+  context.updateServiceOffering(sil.id, 'unit', 'sqft');
+  assert.deepEqual([...(sil.directions || [])], []);
+});

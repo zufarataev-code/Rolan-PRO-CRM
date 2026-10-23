@@ -30,6 +30,15 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-22 handoff — a service may be offered in several directions
+
+- Branch: `claude/service-directions`, based on `main` merge `6524b58`.
+- Owner, 2026-10-22: when a service is created in «Услуги и цены» the owner must pick which direction(s) it relates to, so that at project creation it is pulled in under each of them (silicone under protective and smart; high-access work under every film direction). Until now a service lived in exactly one section.
+- Model: `offering.direction` stays the home (edited there; films live there); new `offering.directions: string[]` lists the other directions a **size-free** service is also offered in. A per-sq-ft service cannot be shared (its films and measurement belong to one category); switching a shared service to sq ft clears `directions`.
+- Directory: each size-free service gets «Также предлагать в направлениях» checkboxes in the direction colours; the other sections show «Также предлагаются здесь: … (из «…»)». `serviceOfferingsFor(direction)` now includes shared services (`homeOnly: true` for the editor).
+- Project: `projectAddOfferingLine(oid, offeringId, serviceType)` and `projectOfferingLine(offering, qty, serviceType)` keep the direction the service was sold under (`offeringServiceTypeIn`); a package component follows its parent's direction (`projectOfferingServiceType`). Cashier passes the chosen direction from the card; the intake remembers it (`state._newOrderDirectionsByService`, `newOrderOfferingServiceType`) so `createOrder` builds `serviceTypes` and lines from the chosen direction, not the home.
+- Server: `directions` is validated (known directions, size-free only); a line may be sold under any direction the service is offered in.
+- Verification: `service-cashier.test.ts` +2, `service-units.test.ts` +1, pattern tests updated; full suite 758/758; single-definition guard passes; directory rendered with the real stylesheet. GitHub CI, merge (after hotfix #360), deploy and the Owner's check remain.
 ## 2026-10-22 hotfix — the server accepts «Общее по объекту»
 
 - Branch: `claude/general-server-fix`, based on `main` merge `6524b58`.

@@ -24659,10 +24659,36 @@ function serviceOfferingDirection(serviceType) {
   return canonicalCatalogCategory(primaryServiceInfo(serviceType)?.catalogCategory);
 }
 
-function serviceOfferingsFor(direction, { includeId = '', includeInactive = false } = {}) {
+/**
+ * Owner, 2026-10-22: a service is created in one direction (its home — where
+ * it is edited and where its films live) and may also be offered in others:
+ * silicone in protective and smart, high-access work in every film direction.
+ * Only a size-free service can span directions; a per-sq-ft service belongs to
+ * the film category of its home.
+ */
+function serviceOfferingDirections(offering) {
+  const extra = !serviceOfferingNeedsSizes(offering) && Array.isArray(offering?.directions) ? offering.directions : [];
+  return [...new Set([offering?.direction, ...extra].filter(key => SERVICE_OFFERING_DIRECTIONS.includes(key)))];
+}
+function serviceOfferingInDirection(offering, direction) {
+  return serviceOfferingDirections(offering).includes(direction);
+}
+/** Services offered in a direction: its own plus the size-free ones shared into it. */
+function serviceOfferingsFor(direction, { includeId = '', includeInactive = false, homeOnly = false } = {}) {
   return serviceOfferingsAll()
-    .filter(item => item.direction === direction && (includeInactive || item.active !== false || item.id === includeId))
+    .filter(item => (homeOnly ? item.direction === direction : serviceOfferingInDirection(item, direction)) && (includeInactive || item.active !== false || item.id === includeId))
     .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0) || String(a.name).localeCompare(String(b.name)));
+}
+/** The direction an offering is used under in this project (its windows or its line), else its home. */
+function projectOfferingServiceType(o, offeringId) {
+  const win = (o?.measurements?.rooms || []).flatMap(room => room.windows || []).find(item => item.offeringId === offeringId);
+  if (win?.measureScope) return win.measureScope;
+  const line = (o?.extraServices || []).find(item => item.offeringId === offeringId && item.serviceType);
+  return line?.serviceType || offeringServiceType(serviceOffering(offeringId));
+}
+/** The project direction a shared service is sold under, if it may be, else its home. */
+function offeringServiceTypeIn(offering, serviceType) {
+  return serviceType && serviceOfferingInDirection(offering, serviceOfferingDirection(serviceType)) ? serviceType : offeringServiceType(offering);
 }
 
 /** What the line is called for the client: the service, else the film, else the direction. */
@@ -24719,7 +24745,7 @@ function projectOfferingLines(o) {
 }
 
 /** A project line for a service without sizes, priced from the service directory. */
-function projectOfferingLine(offering, qty = 1) {
+function projectOfferingLine(offering, qty = 1, serviceType = '') {
   const unitPrice = Math.max(0, Number(offering?.pricePerSqft) || 0);
   const amount = Math.max(0, Number(qty) || 0);
   const line = {
@@ -24728,7 +24754,7 @@ function projectOfferingLine(offering, qty = 1) {
     offeringId: offering.id,
     offeringName: offering.name,
     label: offering.name,
-    serviceType: offeringServiceType(offering),
+    serviceType: offeringServiceTypeIn(offering, serviceType),
     unit: serviceOfferingUnit(offering),
     unitLabel: serviceOfferingUnit(offering) === 'custom' ? String(offering.unitLabel || '').trim() : '',
     unitPrice,
@@ -24828,16 +24854,19 @@ function syncProjectIncludedServices(o) {
     }
   }
   parents.forEach(parentId => {
+    // A component follows the direction its parent is sold under (silicone inside
+    // smart film is smart work), when the component may be offered there.
+    const parentDirection = projectOfferingServiceType(o, parentId);
     serviceOfferingIncludes(serviceOffering(parentId)).forEach(child => {
       if (o.extraServices.some(line => line.includedBy === parentId && line.offeringId === child.id)) return;
-      const line = projectOfferingLine(child, projectIncludedQty(o, parentId, child));
+      const line = projectOfferingLine(child, projectIncludedQty(o, parentId, child), parentDirection);
       line.includedBy = parentId;
       line.unitPrice = 0;
       line.price = 0;
       o.extraServices.push(line);
       o.offeringIds = [...new Set([...(o.offeringIds || []), child.id])];
       o.offeringUnits = { ...(o.offeringUnits || {}), [child.id]: o.offeringUnits?.[child.id] || serviceOfferingUnit(child) };
-      const direction = offeringServiceType(child);
+      const direction = line.serviceType;
       if (direction && !(o.serviceTypes || []).includes(direction)) o.serviceTypes = [...(o.serviceTypes || [o.serviceType].filter(Boolean)), direction];
       changed = true;
     });
@@ -24900,11 +24929,11 @@ function projectOfferingPickerHtml(o, handler = 'projectAddOfferingLine') {
   return `<button type="button" class="btn-primary text-sm" aria-label="Добавить услугу в проект" onclick="openServiceCashier('${o.id}','${returnTo}')">+ Услуга в проект</button>`;
 }
 
-function projectAddOfferingLine(oid, offeringId) {
+function projectAddOfferingLine(oid, offeringId, serviceType = '') {
   const o = getOrder(oid);
   const offering = serviceOffering(offeringId);
   if (!o || !offering || offering.active === false || !orderUserCanSeeMoney(o, currentUser())) return;
-  const direction = offeringServiceType(offering);
+  const direction = offeringServiceTypeIn(offering, serviceType);
   if (!direction) return;
   if (serviceOfferingNeedsSizes(offering)) {
     (o.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => {
@@ -24912,7 +24941,7 @@ function projectAddOfferingLine(oid, offeringId) {
     }));
   } else {
     o.extraServices = o.extraServices || [];
-    o.extraServices.push(projectOfferingLine(offering, 1));
+    o.extraServices.push(projectOfferingLine(offering, 1, direction));
   }
   if (!(o.serviceTypes || []).includes(direction)) o.serviceTypes = [...(o.serviceTypes || [o.serviceType].filter(Boolean)), direction];
   o.offeringIds = [...new Set([...(o.offeringIds || []), offering.id])];
@@ -24963,15 +24992,16 @@ function serviceCashierFilms(offering) {
   return serviceOfferingFilmIds(offering).map(getCatalogItem).filter(film => film && !film.archived);
 }
 /** Size-free services of the same direction that can ride along, minus what the service already includes. */
-function serviceCashierAddons(o, offering) {
+function serviceCashierAddons(o, offering, directionId = '') {
   if (!offering) return [];
   const included = new Set(serviceOfferingIncludes(offering).map(child => child.id));
   const inProject = new Set([o?.offeringId, ...(o?.offeringIds || [])].filter(Boolean));
-  // Add-ons: size-free services of the same direction, then «Общее по объекту»
-  // (ТЗ кассы: removal, washing, electrician, equipment, contractor ride along
-  // with any film direction).
-  const own = serviceOfferingsFor(offering.direction);
-  const general = offering.direction === 'general' ? [] : serviceOfferingsFor('general');
+  // Add-ons: size-free services offered in the direction being sold (own and
+  // shared into it), then «Общее по объекту» (ТЗ кассы: removal, washing,
+  // electrician, equipment, contractor ride along with any film direction).
+  const soldIn = directionId ? serviceOfferingDirection(directionId) : offering.direction;
+  const own = serviceOfferingsFor(soldIn);
+  const general = soldIn === 'general' ? [] : serviceOfferingsFor('general').filter(item => !serviceOfferingInDirection(item, soldIn));
   return [...own, ...general]
     .filter(item => item.id !== offering.id && !serviceOfferingNeedsSizes(item) && !included.has(item.id) && !inProject.has(item.id));
 }
@@ -25027,7 +25057,7 @@ function serviceCashierPick(field, value) {
     Object.assign(c, { directionId: value, offeringId: '', catalogId: '', addonIds: [], step: 'offering' });
   } else if (field === 'offering') {
     const offering = serviceOffering(value);
-    if (!offering || offering.active === false || offeringServiceType(offering) !== c.directionId) return;
+    if (!offering || offering.active === false || !serviceOfferingInDirection(offering, serviceOfferingDirection(c.directionId))) return;
     const o = serviceCashierScope(c);
     Object.assign(c, { offeringId: value, catalogId: projectOfferingCatalogId(o, value), addonIds: [] });
     c.step = serviceCashierHasMaterialStep(offering) ? 'material' : 'addons';
@@ -25039,7 +25069,7 @@ function serviceCashierPick(field, value) {
   } else if (field === 'addon') {
     const offering = serviceOffering(c.offeringId);
     const o = serviceCashierScope(c);
-    if (!serviceCashierAddons(o, offering).some(item => item.id === value)) return;
+    if (!serviceCashierAddons(o, offering, c.directionId).some(item => item.id === value)) return;
     c.addonIds = c.addonIds.includes(value) ? c.addonIds.filter(id => id !== value) : [...c.addonIds, value];
   } else if (field === 'step') {
     const steps = serviceCashierSteps(serviceOffering(c.offeringId));
@@ -25060,30 +25090,30 @@ function serviceCashierCommit() {
   const offering = serviceOffering(c?.offeringId);
   if (!c || !o || !offering || offering.active === false) return;
   if (c.returnTo === 'intake' ? !orderUserCanManage() : !orderUserCanSeeMoney(o, currentUser())) return;
-  const addons = serviceCashierAddons(o, offering).filter(item => c.addonIds.includes(item.id));
+  const addons = serviceCashierAddons(o, offering, c.directionId).filter(item => c.addonIds.includes(item.id));
   const film = c.catalogId && serviceCashierFilms(offering).some(item => item.id === c.catalogId) ? getCatalogItem(c.catalogId) : null;
-  const { oid, returnTo } = c;
+  const { oid, returnTo, directionId } = c;
   state._serviceCashier = null;
   if (returnTo === 'intake') {
     // The intake keeps its own selection; the first chosen service is the
     // client's incoming request, the rest are upsells of the same project.
     serviceCashierLayer()?.remove();
-    toggleNewOrderOffering(offering.id, true);
+    toggleNewOrderOffering(offering.id, true, directionId);
     if (film) setNewOrderOfferingMaterial(offering.id, film.id);
-    addons.forEach(item => toggleNewOrderOffering(item.id, true));
+    addons.forEach(item => toggleNewOrderOffering(item.id, true, directionId));
     return;
   }
   state.modal = null;
   const apply = () => {
     if (film) o.offeringCatalogIds = { ...(o.offeringCatalogIds || {}), [offering.id]: film.id };
-    projectAddOfferingLine(oid, offering.id);
+    projectAddOfferingLine(oid, offering.id, directionId);
     if (film) {
       // Windows that just received this service and have no film yet take the chosen one.
       (o.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => {
         if (win.offeringId === offering.id && !win.catalogId) { win.catalogId = film.id; win.filmType = catalogLabel(film); }
       }));
     }
-    addons.forEach(item => projectAddOfferingLine(oid, item.id));
+    addons.forEach(item => projectAddOfferingLine(oid, item.id, directionId));
     if (film) save();
   };
   if (returnTo === 'card') projectCardEdit(apply); else apply();
@@ -25126,13 +25156,14 @@ function serviceCashierHtml(c) {
     body = `${[...groups.entries()].map(([name, list]) => `<div class="rp-cashier-group"><div class="rp-cashier-group-title">${academyEsc(name)}</div><div class="rp-cashier-grid compact">${list.map(film => `<button type="button" class="rp-cashier-card ${film.id === c.catalogId ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" onclick="serviceCashierPick('material','${jsQuote(film.id)}')"><span class="rp-cashier-title">${academyEsc(catalogFilmModel(film) || catalogLabel(film))}</span><span class="rp-cashier-meta">${academyEsc([film.vlt ? `VLT ${film.vlt}%` : '', film.tser ? `TSER ${film.tser}%` : ''].filter(Boolean).join(' · ') || catalogFilmCategory(film) || '')}</span></button>`).join('')}</div></div>`).join('')}
       <button type="button" class="rp-cashier-skip" onclick="serviceCashierPick('material','')">Материал уточним на замере →</button>`;
   } else {
-    const addons = serviceCashierAddons(o, offering);
+    const addons = serviceCashierAddons(o, offering, c.directionId);
     const film = c.catalogId ? getCatalogItem(c.catalogId) : null;
     const chosen = addons.filter(item => c.addonIds.includes(item.id));
     const includes = serviceOfferingIncludes(offering);
     const addonCard = item => `<button type="button" class="rp-cashier-card rp-cashier-addon ${c.addonIds.includes(item.id) ? 'selected' : ''}" style="${serviceCashierCardStyle(item.direction === 'general' ? 'general_works' : c.directionId)}" aria-pressed="${c.addonIds.includes(item.id)}" onclick="serviceCashierPick('addon','${jsQuote(item.id)}')"><span class="rp-cashier-check">${c.addonIds.includes(item.id) ? '✓' : '+'}</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span></button>`;
-    const ownAddons = addons.filter(item => item.direction !== 'general' || c.directionId === 'general_works');
-    const generalAddons = addons.filter(item => item.direction === 'general' && c.directionId !== 'general_works');
+    const soldIn = serviceOfferingDirection(c.directionId);
+    const ownAddons = addons.filter(item => serviceOfferingInDirection(item, soldIn));
+    const generalAddons = addons.filter(item => !serviceOfferingInDirection(item, soldIn));
     body = `${ownAddons.length ? `<div class="rp-cashier-group"><div class="rp-cashier-group-title">Дополнительно к услуге</div><div class="rp-cashier-grid compact">${ownAddons.map(addonCard).join('')}</div></div>` : ''}${generalAddons.length ? `<div class="rp-cashier-group"><div class="rp-cashier-group-title">🧰 Общее по объекту</div><div class="rp-cashier-grid compact">${generalAddons.map(addonCard).join('')}</div></div>` : ''}
       <div class="rp-cashier-summary" style="${serviceCashierCardStyle(c.directionId)}">
         <div class="rp-cashier-summary-title">В проект ${academyEsc(o.number || '')}</div>
@@ -25202,6 +25233,7 @@ function updateServiceOffering(id, field, value, control = null) {
   } else if (field === 'unit') {
     if (!serviceOfferingUnitsFor(offering.direction).some(unit => unit.id === value)) return;
     offering.unit = value;
+    if (value === 'sqft') offering.directions = []; // a per-sq-ft service belongs to one direction
   } else if (field === 'unitLabel') {
     offering.unitLabel = String(value || '').trim().slice(0, 30);
   } else if (field === 'active') {
@@ -25285,13 +25317,35 @@ function serviceOfferingIncludesEditorHtml(offering) {
   return `<details class="mt-2"><summary class="cursor-pointer text-sm">Входит в услугу бесплатно: <span data-service-offering-includes-summary="${offering.id}">${included.length ? included.map(item => academyEsc(item.name)).join(', ') : 'ничего'}</span></summary><div class="mt-2 grid gap-1">${options.map(item => `<label class="text-sm"><input type="checkbox" style="width:auto" ${included.some(child => child.id === item.id) ? 'checked' : ''} onchange="toggleServiceOfferingInclude('${offering.id}','${item.id}',this.checked,this)"> ${academyEsc(item.name)} <span class="text-xs text-gray-500">· ${academyEsc(serviceOfferingUnitShort(item))}</span></label>`).join('')}<div class="text-xs text-gray-500">В проекте отдельной строкой за $0: своё количество, специалист, дата и оплата специалисту.</div></div></details>`;
 }
 
+/** Owner, 2026-10-22: a size-free service ticks the other directions it is sold in; the cashier shows it under each. */
+function serviceOfferingDirectionsEditorHtml(offering) {
+  if (serviceOfferingNeedsSizes(offering)) return '<div class="text-xs text-gray-500 mt-2">Услуга по замеру живёт в своём направлении: у него свои плёнки и свой замер.</div>';
+  const chosen = new Set(serviceOfferingDirections(offering));
+  const others = SERVICE_OFFERING_DIRECTIONS.filter(key => key !== offering.direction);
+  const label = key => ORDER_PRIMARY_SERVICES.find(entry => canonicalCatalogCategory(entry.catalogCategory) === key);
+  return `<div class="mt-2" data-service-offering-directions="${offering.id}"><div class="text-xs font-bold text-slate-600">Также предлагать в направлениях</div><div class="flex flex-wrap gap-2 mt-1">${others.map(key => `<label class="tag" style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;${orderServiceCardStyle(label(key)?.id || '')}border-left:4px solid var(--svc-color)"><input style="width:auto" type="checkbox" ${chosen.has(key) ? 'checked' : ''} onchange="toggleServiceOfferingDirection('${offering.id}','${key}',this.checked,this)"> ${label(key)?.icon || ''} ${academyEsc(label(key)?.title || key)}</label>`).join('')}</div><div class="text-xs text-gray-500 mt-1">Здесь её домашнее направление: тут она редактируется. В кассе услуга появится под каждым отмеченным направлением и ляжет в проект под тем, где её выбрали.</div></div>`;
+}
+function toggleServiceOfferingDirection(id, direction, checked, control = null) {
+  if (!serviceOfferingCanEdit()) return;
+  const offering = serviceOffering(id);
+  if (!offering || !SERVICE_OFFERING_DIRECTIONS.includes(direction) || direction === offering.direction) return;
+  if (checked && serviceOfferingNeedsSizes(offering)) { if (control) control.checked = false; return alert('Услуга по замеру не может предлагаться в других направлениях: у каждого направления свои плёнки.'); }
+  const ids = new Set(Array.isArray(offering.directions) ? offering.directions : []);
+  if (checked) ids.add(direction); else ids.delete(direction);
+  offering.directions = [...ids].filter(key => key !== offering.direction);
+  offering.updatedAt = new Date().toISOString();
+  save();
+  renderServiceOfferingDirectory();
+}
+
 function renderServiceOfferingsSection() {
   const owner = currentUser()?.role === 'owner';
   const money = value => (Number(value) > 0 ? `$${Number(value).toFixed(2)}` : '—');
   const groups = SERVICE_OFFERING_DIRECTIONS.map(direction => {
     const info = ORDER_PRIMARY_SERVICES.find(item => canonicalCatalogCategory(item.catalogCategory) === direction);
     const films = (db.settings.catalog || []).filter(item => !item.archived && canonicalCatalogCategory(item.category) === direction);
-    const rows = serviceOfferingsFor(direction, { includeInactive: owner }).map(offering => {
+    const shared = serviceOfferingsFor(direction, { includeInactive: owner }).filter(item => item.direction !== direction);
+    const rows = serviceOfferingsFor(direction, { includeInactive: owner, homeOnly: true }).map(offering => {
       const linked = films.filter(item => serviceOfferingFilmIds(offering).includes(item.id));
       const filmList = films.length
         ? `<details><summary class="cursor-pointer text-sm">Плёнки: <span data-service-offering-film-summary="${offering.id}">${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'выберите материалы услуги'}</span></summary><div class="mt-2 grid gap-1">${films.map(item => `<label class="text-sm"><input type="checkbox" ${serviceOfferingFilmIds(offering).includes(item.id) ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(сейчас: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label>`).join('')}</div></details>`
@@ -25314,12 +25368,14 @@ function renderServiceOfferingsSection() {
         </div>
         <div class="text-xs mt-2 ${sized ? 'text-blue-700' : 'text-emerald-700'}">${sized ? 'Нужен замер: цена и материал считаются по площади окон.' : unit === 'lft' ? 'По периметру окон: количество считается по замеру, его можно поправить вручную.' : 'Без размеров: в проекте указывается количество, замер для этой услуги не нужен.'}</div>
         ${serviceOfferingIncludesEditorHtml(offering)}
+        ${serviceOfferingDirectionsEditorHtml(offering)}
         <div class="mt-2 flex flex-wrap items-start justify-between gap-3"><div class="flex-1">${material}</div><label class="tag" style="display:inline-flex;white-space:nowrap;gap:6px"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked,this)"> Активна</label></div>
       </div>` : `<div class="p-3 border border-slate-200"><div class="flex justify-between gap-3"><b>${academyEsc(offering.name)}</b><span>${money(offering.pricePerSqft)} / ${academyEsc(per)}</span></div>${sized ? `<div class="mt-1">${filmList}</div>` : '<div class="text-xs text-gray-500 mt-1">Без размеров — количество в проекте</div>'}</div>`;
     }).join('');
     return `<div class="mt-4">
       <div class="flex items-center justify-between gap-3"><h3 class="font-black">${academyEsc(info ? `${info.icon} ${info.title}` : direction)}</h3>${owner ? `<button class="btn-ghost text-sm" onclick="addServiceOffering('${direction}')">+ Добавить услугу</button>` : ''}</div>
       <div class="grid gap-2 mt-2">${rows || '<div class="text-sm text-gray-500">Услуг пока нет.</div>'}</div>
+      ${shared.length ? `<div class="text-xs text-gray-500 mt-2" data-service-offering-shared="${academyEsc(direction)}">Также предлагаются здесь: ${shared.map(item => `${academyEsc(item.name)} <span class="text-gray-400">(из «${academyEsc(ORDER_PRIMARY_SERVICES.find(entry => canonicalCatalogCategory(entry.catalogCategory) === item.direction)?.title || item.direction)}»)</span>`).join(', ')}</div>` : ''}
     </div>`;
   }).join('');
   return `<section class="card border border-slate-200 bg-white" style="border-radius:4px">
@@ -30901,6 +30957,7 @@ function openOrderModal() {
   state._newOrderExtraOfferingIds = [];
   state._newOrderServices = [];
   state._newOrderMaterialsByService = {};
+  state._newOrderDirectionsByService = {};
   state._newOrderExecution = 'standard_project';
   const viewer = currentUser();
   const allManagers = orderManagerCandidates();
@@ -31030,7 +31087,7 @@ function renderNewOrderOfferings() {
   const selected = newOrderSelectedOfferings();
   const total = ORDER_PRIMARY_SERVICES.reduce((sum, direction) => sum + serviceOfferingsFor(serviceOfferingDirection(direction.id)).length, 0);
   const rows = selected.map((item, index) => {
-    const direction = offeringServiceType(item);
+    const direction = newOrderOfferingServiceType(item);
     const filmId = state._newOrderMaterialsByService?.[item.id] || '';
     const film = filmId ? getCatalogItem(filmId) : null;
     const includes = serviceOfferingIncludes(item);
@@ -31052,9 +31109,16 @@ function setNewOrderOfferingMaterial(offeringId, catalogId) {
   if (catalogId) state._newOrderMaterialsByService[offeringId] = catalogId;
   else delete state._newOrderMaterialsByService[offeringId];
 }
-function toggleNewOrderOffering(id, checked) {
+/** The project direction an intake service was chosen under (cashier), else its home. */
+function newOrderOfferingServiceType(offering) {
+  return offeringServiceTypeIn(offering, state._newOrderDirectionsByService?.[offering?.id] || '');
+}
+function toggleNewOrderOffering(id, checked, directionId = '') {
   const offering = serviceOffering(id);
   if (checked && (!offering || offering.active === false || !offeringServiceType(offering))) return;
+  state._newOrderDirectionsByService = state._newOrderDirectionsByService || {};
+  if (checked && directionId && serviceOfferingInDirection(offering, serviceOfferingDirection(directionId))) state._newOrderDirectionsByService[id] = directionId;
+  if (!checked) delete state._newOrderDirectionsByService[id];
   const ids = [state._newOrderOfferingId, ...(state._newOrderExtraOfferingIds || [])].filter(Boolean).filter(value => value !== id);
   if (checked) ids.push(id);
   const valid = [...new Set(ids)].filter(value => {
@@ -31062,11 +31126,11 @@ function toggleNewOrderOffering(id, checked) {
     return item && item.active !== false && offeringServiceType(item);
   });
   // «Общее по объекту» rides along: a film direction, if any was chosen, is the incoming request.
-  const ordered = [...valid.filter(value => !isGeneralDirection(offeringServiceType(serviceOffering(value)))), ...valid.filter(value => isGeneralDirection(offeringServiceType(serviceOffering(value))))];
+  const ordered = [...valid.filter(value => !isGeneralDirection(newOrderOfferingServiceType(serviceOffering(value)))), ...valid.filter(value => isGeneralDirection(newOrderOfferingServiceType(serviceOffering(value))))];
   state._newOrderOfferingId = ordered[0] || '';
   state._newOrderExtraOfferingIds = ordered.slice(1);
   if (!checked && state._newOrderMaterialsByService) delete state._newOrderMaterialsByService[id];
-  const direction = offeringServiceType(serviceOffering(state._newOrderOfferingId));
+  const direction = newOrderOfferingServiceType(serviceOffering(state._newOrderOfferingId));
   state._newOrderService = direction;
   state._newOrderServices = direction ? [direction] : [];
   const hidden = document.getElementById('no-svc');
@@ -31585,9 +31649,9 @@ function createOrderClientFromOverlay() {
 function createOrder(nextStep = 'project') {
   let clientId = state._newOrderClient;
   const selectedOfferings = newOrderSelectedOfferings();
-  const serviceId = offeringServiceType(selectedOfferings[0]);
+  const serviceId = newOrderOfferingServiceType(selectedOfferings[0]);
   const service = primaryServiceInfo(serviceId);
-  const selectedServices = [...new Set([serviceId, ...selectedOfferings.map(offeringServiceType)])].filter(Boolean).map(id => primaryServiceInfo(id));
+  const selectedServices = [...new Set([serviceId, ...selectedOfferings.map(newOrderOfferingServiceType)])].filter(Boolean).map(id => primaryServiceInfo(id));
   const offeringCatalogIds = newOrderOfferingCatalogIds(selectedOfferings);
   const executionVariantId = document.getElementById('no-execution')?.value || state._newOrderExecution || 'standard_project';
   const executionVariant = orderExecutionVariantInfo(executionVariantId);
@@ -31599,7 +31663,7 @@ function createOrder(nextStep = 'project') {
   const pickedTags = Array.from(document.getElementById('no-tags')?.selectedOptions || []).map(o => o.value);
 
   const offering = selectedOfferings[0];
-  if (!offering || !service || !ORDER_PRIMARY_SERVICES.some(s => s.id === serviceId) || offering.direction !== serviceOfferingDirection(service.id)) {
+  if (!offering || !service || !ORDER_PRIMARY_SERVICES.some(s => s.id === serviceId) || !serviceOfferingInDirection(offering, serviceOfferingDirection(service.id))) {
     alert('Отметьте хотя бы одну активную услугу проекта');
     return;
   }
@@ -31653,7 +31717,7 @@ function createOrder(nextStep = 'project') {
     measurements: { rooms: [] },
     siteType,
     // Services without sizes are a quantity in the project from the start.
-    extraServices: selectedOfferings.filter(item => !serviceOfferingNeedsSizes(item)).map(item => projectOfferingLine(item, 1)),
+    extraServices: selectedOfferings.filter(item => !serviceOfferingNeedsSizes(item)).map(item => projectOfferingLine(item, 1, newOrderOfferingServiceType(item))),
     extraExpenses: [],
     timeline: [{
       at: new Date().toISOString(),
