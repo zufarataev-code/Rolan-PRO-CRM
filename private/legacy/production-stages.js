@@ -556,22 +556,31 @@ async function cloudPersist(options = {}) {
         continue;
       }
       if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'save failed');
+      let productionUiChanged = false;
       for (const update of result.data.production_stage_updates || []) {
         const saved = snapshot.orders?.find(o=>o.id===update.id), local = db.orders?.find(o=>o.id===update.id);
         if (!saved) continue;
         const fields = {productionStages:update.productionStages,serviceScopeApprovals:update.serviceScopeApprovals,status:update.status,installationDoneAt:update.installationDoneAt,serviceProgress:update.serviceProgress,serviceSchedules:update.serviceSchedules,installerIds:update.installerIds,installationAt:update.installationAt,servicesClosedNotice:update.servicesClosedNotice,timeline:update.timeline};
         for (const [field,value] of Object.entries(fields)) {
-          if (local) local[field]=mergeCloudWorkspaceSnapshots(saved[field],local[field],value);
+          if (local) {
+            const merged=mergeCloudWorkspaceSnapshots(saved[field],local[field],value);
+            if (!cloudWorkspaceValuesEqual(local[field],merged)) productionUiChanged=true;
+            local[field]=merged;
+          }
           saved[field]=cloneCloudWorkspaceValue(value);
         }
         const expenses=(saved.extraExpenses||[]).filter(e=>!e.stageDerived).concat(update.stageExpenses||[]);
-        if(local && JSON.stringify(local.extraExpenses)===JSON.stringify(saved.extraExpenses))local.extraExpenses=cloneCloudWorkspaceValue(expenses);
+        if(local && JSON.stringify(local.extraExpenses)===JSON.stringify(saved.extraExpenses)){
+          if (!cloudWorkspaceValuesEqual(local.extraExpenses,expenses)) productionUiChanged=true;
+          local.extraExpenses=cloneCloudWorkspaceValue(expenses);
+        }
         saved.extraExpenses=expenses;
       }
       if (projectClaimServiceFollowUps()) cloudSaveQueued = true;
       cloudRevision = result.data.revision;
       cloudBaseSnapshot = cloneCloudWorkspaceValue(snapshot);
       cloudStatus('Сохранено', 'green');
+      if (productionUiChanged) projectRefreshProductionUi();
       projectRunClaimedFollowUps(snapshot).catch(error => console.warn('Project follow-ups failed', error));
       return true;
     }
@@ -986,4 +995,13 @@ function projectServiceScope(o, group) {
   const rooms = new Map(measureAllWindows(o).map(({ room, win }) => [win, room?.id ?? null]));
   const byId = (a, b) => String(a.id ?? '').localeCompare(String(b.id ?? ''));
   return JSON.stringify([...group.windows.map(win => ({ ...pick(win, PROJECT_SCOPE_WINDOW_FIELDS), roomId: rooms.get(win) ?? null })).sort(byId), ...group.lines.map(line => pick(line, PROJECT_SCOPE_LINE_FIELDS))], (_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
+}
+
+function projectRefreshProductionUi() {
+  const active=document.activeElement;
+  if(active?.matches('input,textarea,select')) {
+    active.addEventListener('blur',()=>{preservePositionForNextRender();render();},{once:true});
+    return;
+  }
+  preservePositionForNextRender();render();
 }
