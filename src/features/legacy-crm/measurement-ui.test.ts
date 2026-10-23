@@ -181,3 +181,16 @@ test("field measurement keeps the active project context visible", () => {
   assert.match(legacyCrm, /orderAddress\(order, client\) \|\| 'Адрес не указан'/);
   assert.match(legacyCrm, /aria-label="Полевой замер/);
 });
+
+// Owner, 2026-10-22 (iPad): the window card's field block fell into the narrow
+// first column of the two-column card body and labels broke letter by letter;
+// the delete button sat on its own full-width row. Guard the layout rules.
+test('the window card fields span the card and never squeeze below a label width', () => {
+  const css = legacyCrm.slice(legacyCrm.indexOf('.manager-window-card-body > .manager-window-fields'), legacyCrm.indexOf('.manager-window-field.wide {'));
+  assert.match(css, /\.manager-window-card-body > \.manager-window-fields \{\s*grid-column: 1 \/ -1;/);
+  assert.match(css, /\.manager-window-fields \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(150px, 1fr\)\)/);
+  assert.match(css, /\.manager-window-field label \{[^}]*overflow-wrap: normal;[^}]*word-break: normal;/);
+  const head = legacyCrm.slice(legacyCrm.indexOf('.manager-window-card-head {'), legacyCrm.indexOf('.manager-window-card-title {'));
+  assert.match(head, /grid-template-columns: minmax\(0, 1fr\) auto auto auto;/, 'four children, four tracks');
+  assert.doesNotMatch(legacyCrm, /\.manager-window-fields \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/, 'no breakpoint forces two squeezed columns');
+});

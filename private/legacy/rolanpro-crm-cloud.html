@@ -3069,7 +3069,9 @@
   }
   .manager-window-card-head {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    /* title | area | verify | delete — four children, four tracks; with three
+       the delete button fell onto its own full-width row (Owner, 2026-10-22). */
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     gap: .65rem;
     align-items: center;
     padding: .65rem .75rem;
@@ -3094,18 +3096,28 @@
     font-weight: 950;
     white-space: nowrap;
   }
+  .manager-window-card-head > button { white-space: nowrap; }
   .manager-window-card-body {
     display: grid;
     grid-template-columns: minmax(170px, 0.85fr) minmax(0, 2.15fr);
     gap: .8rem;
     padding: .75rem;
   }
+  /* The card body is a two-column grid (solution | window type) with THREE
+     children: the field block used to fall into the narrow first column and
+     split three fields across 180 px (Owner, 2026-10-22, iPad: labels broke
+     letter by letter). The fields always take the full width and lay out as
+     many columns as fit, never narrower than a label. */
+  .manager-window-card-body > .manager-window-fields {
+    grid-column: 1 / -1;
+  }
   .manager-window-fields {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: .6rem;
     align-content: start;
   }
+  .manager-window-field { min-width: 0; }
   .manager-window-field label {
     display: block;
     margin-bottom: .25rem;
@@ -3113,6 +3125,10 @@
     font-size: .66rem;
     font-weight: 900;
     text-transform: uppercase;
+    line-height: 1.2;
+    overflow-wrap: normal;   /* a label wraps at spaces, never inside a word */
+    word-break: normal;
+    hyphens: none;
   }
   .manager-window-field input,
   .manager-window-field select {
@@ -5909,7 +5925,7 @@
       grid-template-columns: 220px minmax(0, 1fr);
     }
     .manager-window-card-body {
-      grid-template-columns: 180px minmax(0, 1fr);
+      grid-template-columns: minmax(200px, 0.9fr) minmax(0, 1.1fr);
     }
     .manager-measure-table th:first-child,
     .manager-measure-table td:first-child {
@@ -6182,7 +6198,7 @@
       grid-template-columns: 1fr;
     }
     .manager-window-fields {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
     .manager-room-add-panel {
       margin: .6rem;
@@ -6277,15 +6293,22 @@
     .manager-room-focus-head {
       align-items: stretch;
     }
+    /* Phone: the name on its own row; area and the two buttons wrap below it. */
     .manager-window-card-head {
-      grid-template-columns: minmax(0, 1fr) auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem .65rem;
     }
-    .manager-window-card-area {
-      grid-column: 1 / -1;
-      grid-row: 2;
+    .manager-window-card-title {
+      flex: 1 1 100%;
     }
+    .manager-window-card-title input {
+      max-width: none;
+      flex: 1;
+    }
+    .manager-window-card-head > button { white-space: normal; text-align: left; }
     .manager-window-fields {
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
     .manager-window-field.wide {
       grid-column: 1 / -1;
