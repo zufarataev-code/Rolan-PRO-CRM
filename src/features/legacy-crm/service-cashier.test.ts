@@ -19,6 +19,7 @@ function load(role = 'owner') {
   const services = [
     { id: 'protective_film', catalogCategory: 'protective', title: 'Защитная', short: 'Защита', icon: '🛡' },
     { id: 'solar_film', catalogCategory: 'solar', title: 'Солнцезащитная', short: 'Солнце', icon: '☀' },
+    { id: 'general_works', catalogCategory: 'general', title: 'Общее по объекту', short: 'Общее', icon: '🧰', general: true },
   ];
   const context: any = vm.createContext({
     db,
@@ -63,6 +64,8 @@ function load(role = 'owner') {
     refreshProjectEstimateWorkspace: () => calls.push(vm.runInContext('projectCardEditing', context) ? 'refresh:card' : 'refresh'),
     invalidateProjectEstimate: () => undefined,
     orderServiceCardStyle: (id: string) => `--svc-color:${id};`,
+    isGeneralDirection: (id: string) => id === 'general_works',
+    filmDirections: () => services.filter(item => !item.general),
     fmtMoney: (value: number) => `$${value}`,
     jsQuote: (value: string) => value,
     academyEsc: (value: unknown) => String(value ?? ''),
@@ -246,4 +249,40 @@ test('field roles cannot open the intake cashier', () => {
   context.openServiceCashier('', 'intake');
   assert.equal(context.serviceCashierState(), null);
   assert.equal(layers.length, 0);
+});
+
+// Owner, 2026-10-22 (ТЗ кассы): works that belong to the site, not to a film —
+// removal, washing, electrician, equipment, contractor — live in «Общее по
+// объекту», ride along with any direction as add-ons, and can be sold alone.
+test('general works are offered as add-ons under any film direction and as their own direction', () => {
+  const { context, state, add } = fixture();
+  const wash = add({ name: 'Мойка окон', direction: 'general', unit: 'piece', pricePerSqft: 15 });
+  const lift = add({ name: 'Аренда подъёмника', direction: 'general', unit: 'fixed', pricePerSqft: 450 });
+  context.openServiceCashier('o', 'card');
+  assert.match(state.modal, /serviceCashierPick\('direction','general_works'\)/, 'the sixth card appears once it has services');
+  context.serviceCashierPick('direction', 'protective_film');
+  context.serviceCashierPick('offering', 'svc_A1 8 mil');
+  context.serviceCashierPick('material', 'f_a1');
+  assert.match(state.modal, /🧰 Общее по объекту[\s\S]*Аренда подъёмника[\s\S]*Мойка окон/, 'general works are a separate add-on group');
+  assert.match(state.modal, /Высотные работы/, 'own-direction add-ons stay');
+  context.serviceCashierPick('addon', wash.id);
+  assert.deepEqual([...context.serviceCashierState().addonIds], [wash.id]);
+
+  // Sold alone: direction «Общее» → its services → add-ons are the other general works.
+  context.closeServiceCashier();
+  context.openServiceCashier('o', 'card');
+  context.serviceCashierPick('direction', 'general_works');
+  assert.match(state.modal, /Мойка окон/);
+  context.serviceCashierPick('offering', lift.id);
+  assert.equal(context.serviceCashierState().step, 'addons', 'no film step for general works');
+  assert.match(state.modal, /Дополнительно к услуге[\s\S]*Мойка окон/);
+  assert.doesNotMatch(state.modal, /rp-cashier-group-title">🧰/, 'no second general group when the direction itself is general');
+});
+
+test('a general service never takes sizes: its units exclude sq ft and lin ft', () => {
+  const { context } = fixture();
+  assert.deepEqual([...context.serviceOfferingUnitsFor('general').map((u: Row) => u.id)], ['piece', 'zone', 'fixed', 'custom']);
+  assert.equal(context.serviceOfferingUnit({ direction: 'general', unit: 'sqft' }), 'piece', 'a saved sq-ft unit on a general service falls back to per piece');
+  assert.equal(context.serviceOfferingUnit({ direction: 'solar', unit: 'sqft' }), 'sqft');
+  assert.equal(context.serviceOfferingNeedsSizes({ direction: 'general', unit: 'sqft' }), false);
 });
