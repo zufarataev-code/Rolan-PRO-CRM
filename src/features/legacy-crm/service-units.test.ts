@@ -174,6 +174,20 @@ test('the server accepts privacy services, units and films of the CRM category s
   assert.match(prepareServiceSolutions(base, badCost, true)!, /материала/);
 });
 
+// Owner, 2026-10-22: «Общее по объекту» — works without a film. The server must
+// accept them in the directory and as project lines, but never per sq ft.
+test('the server accepts general works without a film and refuses them per sq ft', () => {
+  const withGeneral: Row = structuredClone(base);
+  withGeneral.settings.serviceOfferings.push({ id: 'wash', name: 'Мойка окон', direction: 'general', unit: 'piece', pricePerSqft: 15, installerRatePerSqft: 5, active: true });
+  assert.equal(prepareServiceSolutions(base, withGeneral, true), null);
+  const line: Row = structuredClone(withGeneral);
+  line.orders[0].extraServices = [{ id: 'g1', type: 'offering', offeringId: 'wash', serviceType: 'general_works', unit: 'piece', qty: 4, unitPrice: 15, price: 60 }];
+  assert.equal(prepareServiceSolutions(withGeneral, line, true), null, 'a general line belongs to the general_works direction');
+  const sized: Row = structuredClone(base);
+  sized.settings.serviceOfferings.push({ id: 'bad', name: 'Мойка', direction: 'general', unit: 'sqft', pricePerSqft: 1, active: true });
+  assert.match(prepareServiceSolutions(base, sized, true)!, /не считается по размерам/);
+});
+
 test('managers do not see a service\'s installer rate or material cost; the server keeps and snapshots them', () => {
   const view = serviceSolutionsForViewer(base, false);
   assert.equal(view.settings.serviceOfferings[1].installerRatePerSqft, undefined);
