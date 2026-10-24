@@ -30,6 +30,16 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-23 handoff — KP drawing, one service path, direct installation scheduling (Owner's second pass)
+
+- Branch: `claude/kp-and-flow`, based on `main` after PR #367.
+- KP technical drawing: every window in the published KP carries `width_in`, `height_in`, `window_type` (English part), `panels` and `panel_layout` (`premiumWindowDrawingData`); the client page draws each window to scale with its panes and sizes (`WindowDrawing` in `client-proposal-view.tsx`, styles `.proposal-window-drawing*` in `globals.css`). The cover counts openings (was sq ft as «windows») and the line chips show «N windows · X sqft».
+- KP language: films read «Madico Sunscape Select 15» (`premiumCatalogTitleEn`, `projectLineMaterialNames(line, { en: true })`) instead of the Russian category label; standard room names and «Окно N» are translated on the English page; quantities and sq ft rounded to hundredths; panes keep hundredths of a millimetre (36×48 in = 12 sq ft, was 12.0079).
+- Deposit: `orderExpectedDeposit` takes the KP's «к оплате при подписи» (fallback: advance % of settings) — KP $90 and CRM $270 no longer disagree.
+- One way to add a service: the per-direction dropdown in the project card became «+ Услуга в направление», opening the cashier at that direction; the calculation's free line is «+ Своя строка» with a tooltip.
+- Installation: the next step «Назначить монтаж» opens the crew-and-date form; «Та же дата и бригада для всех услуг» copies the first service to the rest (`projectScheduleCopyFirstToAll`); while installation is planned the next step shows date and crew instead of «Заказ под контролем». The stage-aware `projectSetServiceProgress` override (production-stages.js) also warns on no photo / future date. «Отметить КП принятым» and «Подписать акт» ask for confirmation.
+- Verification: new `kp-and-flow.test.ts` (6 tests, incl. a server-side render of the client KP); one workflow test updated; full suite 792/792; TypeScript passes; the whole cycle (client → project → cashier → measurement → calculation → KP publish with the server's snapshot rules → share → accept → deposit → confirm sizes → production → schedule → installer → act → payment → close) passes end to end in a local copy.
+
 ## 2026-10-23 handoff — third batch from the Owner's user test (confirm all sizes, calculation clarity, closing warnings, compact header)
 
 - Branch: `claude/flow-fixes-3`, based on `main` after PR #366.

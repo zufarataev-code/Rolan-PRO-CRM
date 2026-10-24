@@ -277,6 +277,18 @@ function localizeItemText(text: unknown, language: "en" | "ru" = "en"): string {
         [/(?<!\p{L})Перегородка(?!\p{L})/gu, "Partition"],
         [/(?<!\p{L})Витрина(?!\p{L})/gu, "Storefront"],
         [/(?<!\p{L})шт\.?(?!\p{L})/gu, "pcs"],
+        // The CRM's standard room names (Owner, 2026-10-23: the English KP showed «Гостиная»).
+        [/(?<!\p{L})Гостиная(?!\p{L})/gu, "Living room"],
+        [/(?<!\p{L})Спальня(?!\p{L})/gu, "Bedroom"],
+        [/(?<!\p{L})Кухня(?!\p{L})/gu, "Kitchen"],
+        [/(?<!\p{L})Столовая(?!\p{L})/gu, "Dining room"],
+        [/(?<!\p{L})Ванная(?!\p{L})/gu, "Bathroom"],
+        [/(?<!\p{L})Кабинет(?!\p{L})/gu, "Office"],
+        [/(?<!\p{L})Коридор(?!\p{L})/gu, "Hallway"],
+        [/(?<!\p{L})Вход \/ фойе(?!\p{L})/gu, "Entry / Foyer"],
+        [/(?<!\p{L})Гараж(?!\p{L})/gu, "Garage"],
+        [/(?<!\p{L})Патио \/ зимний сад(?!\p{L})/gu, "Patio / Sunroom"],
+        [/(?<!\p{L})Другое(?!\p{L})/gu, "Other"],
       ];
 
   for (const [pattern, replacement] of words) {
@@ -293,20 +305,98 @@ function localizeItemText(text: unknown, language: "en" | "ru" = "en"): string {
  * клиент видел объём работ до цены. Здесь они собираются из позиций:
  * площадь берётся из снимка замера, если он есть.
  */
+function snapshotWindows(item: any): any[] {
+  const windows = item?.measurement_snapshot?.windows;
+  return Array.isArray(windows) ? windows : [];
+}
+
 function getProjectSummary(items: any[]) {
   const rooms = new Set<string>();
   let windows = 0;
   let area = 0;
 
   for (const item of items ?? []) {
+    const measured = snapshotWindows(item);
+    if (measured.length) {
+      // A film line carries its windows: count openings, not its sq ft quantity
+      // (Owner, 2026-10-23: the cover said «42 windows» for two windows).
+      for (const win of measured) {
+        if (win?.room_name) rooms.add(String(win.room_name));
+        windows += Number(win?.quantity) || 1;
+        const sqft = Number(win?.sqft);
+        if (Number.isFinite(sqft)) area += sqft;
+      }
+      continue;
+    }
     if (item.room_name) rooms.add(String(item.room_name));
-    windows += Number(item.quantity) || 0;
-
     const sqft = Number(item?.measurement_snapshot?.sqft);
     if (Number.isFinite(sqft)) area += sqft;
   }
 
   return { rooms: rooms.size, windows, area };
+}
+
+function formatInches(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return "";
+  return `${Number(number.toFixed(2))}″`;
+}
+
+/**
+ * Technical drawing of one window for the KP: the opening to scale with its
+ * panes and the sizes the film is cut to (Owner, 2026-10-23: «в КП не
+ * формируется чертёж»).
+ */
+function WindowDrawing({ win, language }: { win: any; language: "en" | "ru" }) {
+  const widthIn = Number(win?.width_in) || Number(win?.width) / 25.4 || 0;
+  const heightIn = Number(win?.height_in) || Number(win?.height) / 25.4 || 0;
+  if (!(widthIn > 0 && heightIn > 0)) return null;
+  const box = 120;
+  const scale = box / Math.max(widthIn, heightIn);
+  const w = Math.max(24, widthIn * scale);
+  const h = Math.max(24, heightIn * scale);
+  const x0 = 24 + (box - w) / 2;
+  const y0 = 8 + (box - h) / 2;
+  const panels: any[] = Array.isArray(win?.panels) ? win.panels : [];
+  const layout = String(win?.panel_layout || "single");
+  const lines: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+  if (panels.length > 1 && (layout === "rows" || layout === "columns")) {
+    const total = panels.reduce((sum, panel) => sum + (Number(layout === "rows" ? panel.height_in : panel.width_in) || 0), 0) || 1;
+    let acc = 0;
+    panels.slice(0, -1).forEach((panel) => {
+      acc += Number(layout === "rows" ? panel.height_in : panel.width_in) || 0;
+      if (layout === "rows") {
+        const y = y0 + (h * acc) / total;
+        lines.push({ x1: x0, y1: y, x2: x0 + w, y2: y });
+      } else {
+        const x = x0 + (w * acc) / total;
+        lines.push({ x1: x, y1: y0, x2: x, y2: y0 + h });
+      }
+    });
+  }
+  const ru = language === "ru";
+  const qty = Number(win?.quantity) || 1;
+  return (
+    <figure className="proposal-window-drawing">
+      <svg viewBox={`0 0 ${box + 76} ${box + 40}`} role="img" aria-label={`${win?.window_name || "Window"} ${formatInches(widthIn)} × ${formatInches(heightIn)}`}>
+        <rect x={x0} y={y0} width={w} height={h} fill="#e0f2fe" stroke="#0f172a" strokeWidth="2" />
+        {lines.map((line, index) => (
+          <line key={index} {...line} stroke="#0f172a" strokeWidth="1.5" />
+        ))}
+        <line x1={x0} y1={y0 + h + 12} x2={x0 + w} y2={y0 + h + 12} stroke="#64748b" strokeWidth="1" />
+        <text x={x0 + w / 2} y={y0 + h + 26} textAnchor="middle" fontSize="11" fill="#0f172a">{formatInches(widthIn)}</text>
+        <line x1={x0 + w + 10} y1={y0} x2={x0 + w + 10} y2={y0 + h} stroke="#64748b" strokeWidth="1" />
+        <text x={x0 + w + 14} y={y0 + h / 2} fontSize="11" fill="#0f172a" dominantBaseline="middle">{formatInches(heightIn)}</text>
+      </svg>
+      <figcaption>
+        <b>{localizeItemText(String(win?.window_name || (ru ? "Окно" : "Window")), language)}</b>
+        {qty > 1 ? ` × ${qty}` : ""}
+        {win?.window_type ? ` · ${win.window_type}` : ""}
+        {Number(win?.sqft) > 0 ? ` · ${Number(win.sqft).toFixed(1)} sqft` : ""}
+        {panels.length > 1 ? ` · ${panels.length} ${ru ? "панели" : "panes"}` : ""}
+      </figcaption>
+    </figure>
+  );
 }
 
 /**
@@ -348,6 +438,15 @@ function getDynamicFieldSummary(item: any, language: "en" | "ru" = "en") {
 function getMeasurementSummary(item: any, language: "en" | "ru" = "en") {
   const snapshot = item?.measurement_snapshot;
   if (!snapshot || typeof snapshot !== "object") return [];
+  const measured = snapshotWindows(item);
+  if (measured.length) {
+    const openings = measured.reduce((sum, win) => sum + (Number(win?.quantity) || 1), 0);
+    const area = measured.reduce((sum, win) => sum + (Number(win?.sqft) || 0), 0);
+    return [
+      `${openings} ${language === "ru" ? "окон" : openings === 1 ? "window" : "windows"}`,
+      area > 0 ? `${area.toFixed(1)} sqft` : null,
+    ].filter((fact): fact is string => Boolean(fact));
+  }
 
   const width = parseNumber(snapshot.width);
   const height = parseNumber(snapshot.height);
@@ -748,6 +847,14 @@ export function ClientProposalView({
                           <span key={summary} className="chip">
                             {summary}
                           </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {snapshotWindows(item).length > 0 && (
+                      <div className="proposal-window-drawings" aria-label={ru ? "Схема окон" : "Window drawings"}>
+                        {snapshotWindows(item).map((win: any, index: number) => (
+                          <WindowDrawing key={win?.window_id || index} win={win} language={language} />
                         ))}
                       </div>
                     )}

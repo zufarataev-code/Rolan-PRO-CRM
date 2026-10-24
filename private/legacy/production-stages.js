@@ -252,6 +252,8 @@ function projectSetServiceProgress(oid, key, status) {
   if (!SERVICE_PROGRESS_LABELS[status] || !projectCanMarkService(o, line, user)) return;
   // Reopening a done service is the manager's call.
   if (projectServiceProgress(o, key).status === 'done' && status !== 'done' && !(orderUserCanManage(user) && orderUserCanSeeMoney(o, user))) return;
+  // Same check as the base CRM: no photo or a future date asks first (Owner, 2026-10-23).
+  if (status === 'done' && projectServiceProgress(o, key).status !== 'done' && typeof projectConfirmServicesDone === 'function' && !projectConfirmServicesDone(o, [line])) return;
   projectWriteServiceProgress(o, line, status, user);
   save();
   projectSyncStatusFromServices(o);
@@ -313,7 +315,9 @@ function projectDirectionOfferingPickerHtml(o, directionKey) {
   const pending = new Set(projectPendingSizedServices(o).map(offering => offering.id));
   const options = serviceOfferingsFor(direction).filter(offering => !used.has(offering.id) && !pending.has(offering.id));
   if (!options.length) return '<span class="text-xs text-gray-500">Все услуги направления добавлены</span>';
-  return `<select class="project-direction-add" aria-label="Добавить услугу в направление" onchange="if(this.value)projectCardAddService('${o.id}',this.value);this.value=''"><option value="">+ Добавить услугу</option>${options.map(offering => `<option value="${academyEsc(offering.id)}">${academyEsc(offering.name)}</option>`).join('')}</select>`;
+  // One way to add a service: the cashier, opened at this direction (Owner, 2026-10-23:
+  // «услуги имеют два варианта — зачем?» — a dropdown here and the cashier above).
+  return `<button type="button" class="btn-ghost text-sm project-direction-add" onclick="openServiceCashier('${o.id}','card');serviceCashierPick('direction','${directionKey}')">+ Услуга в направление</button>`;
 }
 function projectLineNoteValue(o, key) {
   return String(o.serviceLineNotes?.[key] || '');
