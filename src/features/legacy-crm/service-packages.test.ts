@@ -197,3 +197,27 @@ test('readiness exempts included lines and proposals show them without billing t
   assert.match(proposalItems, /line_price: included \? 0 : premiumNum\(line\.price\)/);
   assert.match(html, /const billableItems = items\.filter\(item => premiumNum\(item\.line_price\) > 0\)/);
 });
+
+test('server: a service without linked films accepts any film of its direction; linked films restrict (Owner, 2026-10-24)', () => {
+  const withFilm = (catalogId: string, filmIds?: string[]) => {
+    const next = base();
+    next.settings.catalog = [
+      { id: 'p1', category: 'protective', model: 'A 8 mil' },
+      { id: 'p2', category: 'protective', model: 'B 8 mil' },
+      { id: 's1', category: 'solar', model: 'Select 15' },
+    ];
+    const offering = next.settings.serviceOfferings.find((item: Row) => item.id === 'a1');
+    if (filmIds) offering.filmIds = filmIds; else delete offering.filmIds;
+    next.orders[0].measurements.rooms[0].windows[0].catalogId = catalogId;
+    const current = base();
+    current.settings.catalog = next.settings.catalog;
+    if (filmIds) current.settings.serviceOfferings.find((item: Row) => item.id === 'a1').filmIds = filmIds;
+    else delete current.settings.serviceOfferings.find((item: Row) => item.id === 'a1').filmIds;
+    return prepareServiceSolutions(current, next, true);
+  };
+  assert.equal(withFilm('p1'), null, 'no links: a protective film is fine');
+  assert.equal(withFilm('p2', []), null, 'empty links behave the same');
+  assert.match(String(withFilm('s1')), /Плёнка не подходит выбранной услуге/, 'another direction is refused');
+  assert.equal(withFilm('p1', ['p1']), null);
+  assert.match(String(withFilm('p2', ['p1'])), /Плёнка не подходит выбранной услуге/, 'linked films restrict');
+});

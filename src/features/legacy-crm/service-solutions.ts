@@ -190,6 +190,16 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
   const offerings = rows(settings.serviceOfferings);
   const ids = new Set<string>();
   const films = rows(settings.catalog);
+  // A service with linked films allows only those; a service without links
+  // allows every film of its direction — the manager picks direction →
+  // category → film (Owner, 2026-10-24: KP was impossible because services
+  // had no linked films and saves were refused).
+  const filmAllowed = (offering: Row, filmId: unknown) => {
+    const film = films.find(value => value.id === filmId);
+    if (!film || canonicalFilmCategory(film.category) !== offering.direction) return false;
+    const linked = Array.isArray(offering.filmIds) ? offering.filmIds : [];
+    return linked.length ? linked.includes(filmId) : true;
+  };
   for (const offering of offerings) {
     if (typeof offering.id !== 'string' || !/^[\w-]{1,120}$/.test(offering.id) || ids.has(offering.id)) return 'Некорректный или повторный ID услуги.';
     ids.add(offering.id);
@@ -228,7 +238,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     for (const [offeringId, filmId] of Object.entries(selectedMaterials)) {
       const offering = offerings.find(value => value.id === offeringId);
       const film = films.find(value => value.id === filmId);
-      if (!selectedOfferingIds.has(offeringId) || !offering || !film || !Array.isArray(offering.filmIds) || !offering.filmIds.includes(filmId) || canonicalFilmCategory(film.category) !== offering.direction) {
+      if (!selectedOfferingIds.has(offeringId) || !offering || !film || !filmAllowed(offering, filmId)) {
         return 'Материал проекта должен быть привязан к выбранной услуге.';
       }
     }
@@ -349,7 +359,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         const direction = DIRECTION_BY_SERVICE_TYPE[item.measureScope || item.serviceType || order.serviceType];
         const offeredIn = offering ? [offering.direction, ...(Array.isArray(offering.directions) && offering.unit && offering.unit !== 'sqft' ? offering.directions : [])] : [];
         if (!offering || offering.active === false || !offeredIn.includes(direction)) return 'Услуга не соответствует направлению проекта.';
-        if (item.catalogId && !offering.filmIds?.includes(item.catalogId)) return 'Плёнка не привязана к выбранной услуге.';
+        if (item.catalogId && !filmAllowed(offering, item.catalogId)) return 'Плёнка не подходит выбранной услуге: выберите плёнку её направления.';
       }
     }
     // The unit each chosen service had when the project chose it: a new entry
