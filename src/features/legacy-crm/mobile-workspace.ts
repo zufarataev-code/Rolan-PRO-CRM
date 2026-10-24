@@ -551,7 +551,7 @@ const MOBILE_WORKSPACE_PATCH = `
 
     const enhanceGrid = (element) => {
       if (!(element instanceof HTMLElement) || !isVisible(element)) return;
-      if (element.closest('table, .manager-measure-modal, .rp-cashier, [data-rp-keep-layout]') || isProtectedCalendarLayout(element)) return;
+      if (element.closest('table, .manager-measure-modal, .rp-cashier, .rp-dirwin, [data-rp-keep-layout]') || isProtectedCalendarLayout(element)) return;
       const style = window.getComputedStyle(element);
       if (style.display !== 'grid') return;
       const columns = style.gridTemplateColumns.split(' ').filter(Boolean);
@@ -562,7 +562,7 @@ const MOBILE_WORKSPACE_PATCH = `
 
     const enhanceToolbar = (element) => {
       if (!(element instanceof HTMLElement) || !isVisible(element)) return;
-      if (element.closest('table, .manager-measure-modal, .rp-cashier, [data-rp-keep-layout]')) return;
+      if (element.closest('table, .manager-measure-modal, .rp-cashier, .rp-dirwin, [data-rp-keep-layout]')) return;
       const style = window.getComputedStyle(element);
       if (style.display !== 'flex' && style.display !== 'inline-flex') return;
       if (element.children.length < 2) return;
@@ -598,7 +598,7 @@ const MOBILE_WORKSPACE_PATCH = `
       document.querySelectorAll('form, .modal-content, .workspace-modal, main, section').forEach((container) => {
         if (!(container instanceof HTMLElement) || !isVisible(container)) return;
         Array.from(container.children).forEach((row) => {
-          if (!(row instanceof HTMLElement) || !isVisible(row) || row.closest('table, .manager-measure-modal, .rp-cashier, [data-rp-keep-layout]')) return;
+          if (!(row instanceof HTMLElement) || !isVisible(row) || row.closest('table, .manager-measure-modal, .rp-cashier, .rp-dirwin, [data-rp-keep-layout]')) return;
           const directActions = Array.from(row.children).filter((child) =>
             child.matches?.('button, a[href], [role="button"]'),
           );
@@ -642,7 +642,7 @@ const MOBILE_WORKSPACE_PATCH = `
         if (
           !(element instanceof HTMLElement) ||
           !isVisible(element) ||
-          element.closest('table, .manager-measure-modal, .rp-cashier, [data-rp-keep-layout]') ||
+          element.closest('table, .manager-measure-modal, .rp-cashier, .rp-dirwin, [data-rp-keep-layout]') ||
           isProtectedCalendarLayout(element)
         ) return;
         if (element.scrollWidth > window.innerWidth + 4) {

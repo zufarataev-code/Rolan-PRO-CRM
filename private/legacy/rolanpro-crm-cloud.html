@@ -1935,6 +1935,65 @@
   .order-client-more > summary { cursor:pointer; font-size:.78rem; color:#475569; font-weight:600; list-style:none; }
   .order-client-more > summary::after { content:' ↓'; color:#94a3b8; }
   .order-client-more[open] > summary::after { content:' ↑'; }
+  /* Direction window (Owner, 2026-10-24): the CRM frame, the direction's colour. */
+  .rp-dirwin { max-width: 46rem; border-top: 4px solid var(--dir-color); }
+  .rp-dirwin-icon { background: var(--dir-tint) !important; color: var(--dir-color) !important; }
+  .rp-dirwin-head .order-workspace-modal-heading { flex: 1; }
+  .rp-dirwin-sum { font-weight: 900; font-size: 1.1rem; color: #10213b; white-space: nowrap; margin-left: .75rem; flex: none; }
+  .rp-dirwin-steps { display: flex; gap: .4rem; padding: .6rem 1.15rem; border-bottom: 1px solid #e2e8f0; background: #fff; }
+  .rp-dirwin-step { flex: 1; border: 1px solid #dbe4ef; border-radius: 999px; padding: .45rem .5rem; font-size: .85rem; font-weight: 700; color: #475569; background: #f8fafc; cursor: pointer; white-space: nowrap; }
+  .rp-dirwin-step.done { background: var(--dir-tint); color: var(--dir-deep); border-color: var(--dir-tint); }
+  .rp-dirwin-step.current { background: var(--dir-color); color: #fff; border-color: var(--dir-color); }
+  .rp-dirwin-body { display: flex; flex-direction: column; gap: .5rem; }
+  .rp-dirwin-hint { margin: 0 0 .25rem; font-size: .85rem; color: #64748b; }
+  .rp-dirwin-group { font-size: .7rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: var(--dir-deep); margin-top: .4rem; }
+  .rp-dirwin-row { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: .7rem .85rem; border: 1px solid #dbe4ef; border-left: 4px solid var(--dir-color); border-radius: 10px; background: #fff; }
+  .rp-dirwin-row.pending { border-style: dashed; border-left-style: solid; }
+  .rp-dirwin-row > div:first-child { display: flex; flex-direction: column; min-width: 0; }
+  .rp-dirwin-row > div:first-child span { font-size: .78rem; color: #64748b; }
+  .rp-dirwin-num { display: flex; flex-direction: column; align-items: flex-end; font-size: .8rem; color: #475569; text-align: right; white-space: nowrap; }
+  .rp-dirwin-num b { font-size: .95rem; color: #10213b; }
+  .rp-dirwin-ok { color: #15803d; font-weight: 800; }
+  .rp-dirwin-wait { color: #92400e; font-weight: 700; }
+  .rp-dirwin-warn { font-size: .82rem; color: #b23a3a; font-weight: 700; }
+  .rp-dirwin-empty { padding: 1rem; text-align: center; color: #64748b; border: 1px dashed #cbd5e1; border-radius: 10px; }
+  .rp-dirwin-add { width: 100%; min-height: 48px; border: 1.5px dashed var(--dir-color); border-radius: 10px; background: var(--dir-tint); color: var(--dir-deep); font-weight: 800; cursor: pointer; }
+  .rp-dirwin-total { display: flex; justify-content: space-between; align-items: baseline; padding: .8rem .85rem; border-radius: 10px; background: var(--dir-tint); color: var(--dir-deep); font-weight: 800; }
+  .rp-dirwin-total b { font-size: 1.3rem; color: #10213b; }
+  .rp-dirwin-owner { display: flex; flex-direction: column; gap: .4rem; padding: .6rem; border: 1px solid #e8d9b0; border-radius: 10px; background: #fff9ea; }
+  .rp-dirwin-foot { padding: .75rem 1.15rem 1rem; border-top: 1px solid #e2e8f0; background: #fbfdff; }
+  html body .rp-dirwin .rp-dirwin-next { width: 100%; min-height: 48px; background: var(--dir-color) !important; border-color: var(--dir-color) !important; color: #fff !important; }
+  html body .rp-dirwin .rp-dirwin-step { border-radius: 999px !important; width: auto !important; min-height: 36px !important; height: auto !important; max-height: 44px; flex: 1 1 0 !important; }
+  html body .modal-backdrop .modal-content.rp-dirwin.order-workspace-modal { display: grid !important; grid-template-rows: auto auto minmax(0, 1fr) auto !important; grid-template-columns: minmax(0, 1fr) !important; }
+  html body .rp-dirwin > .rp-dirwin-head, html body .rp-dirwin > .rp-dirwin-steps, html body .rp-dirwin > .rp-dirwin-foot { flex: none !important; }
+  html body .rp-dirwin > .rp-dirwin-body { flex: 1 1 auto !important; min-height: 0 !important; overflow: auto !important; }
+  html body .rp-dirwin .rp-dirwin-head .order-workspace-modal-heading { min-width: 0; }
+  html body .rp-dirwin .rp-dirwin-steps { display: flex !important; align-items: center !important; flex-wrap: nowrap !important; }
+  html body .rp-dirwin .rp-dirwin-head h3 { word-break: normal !important; overflow-wrap: normal !important; hyphens: none; }
+  .rp-kpwin-dir { border: 1px solid #dbe4ef; border-left: 4px solid var(--dir-color); border-radius: 10px; background: #fff; padding: .6rem .8rem; display: flex; flex-direction: column; gap: .35rem; }
+  .rp-kpwin-dir-head { display: flex; align-items: center; gap: .5rem; }
+  .rp-kpwin-dir-head b { flex: 1; }
+  .rp-kpwin-dot { width: 10px; height: 10px; border-radius: 5px; background: var(--dir-color); }
+  .rp-kpwin-dir-sum { font-weight: 900; }
+  .rp-kpwin-line { display: flex; justify-content: space-between; gap: .75rem; font-size: .82rem; color: #334155; }
+  .rp-kpwin-line.warn { color: #b23a3a; }
+  .rp-kpwin-edit { align-self: flex-start; background: none; border: 0; padding: .2rem 0; color: var(--dir-deep); font-weight: 800; font-size: .82rem; cursor: pointer; }
+  .rp-kpwin-total { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+  .rp-kpwin-total > div { display: flex; flex-direction: column; padding: .7rem .85rem; border-radius: 10px; background: #e9efff; color: #1d4ed8; font-size: .8rem; font-weight: 700; }
+  .rp-kpwin-total b { font-size: 1.2rem; color: #10213b; }
+  .rp-kpwin-frame { border: 1px solid #dbe4ef; border-radius: 14px; overflow: hidden; height: 560px; max-width: 420px; margin: 0 auto; width: 100%; background: #fff; }
+  .rp-kpwin-frame iframe { width: 100%; height: 100%; border: 0; }
+  .rp-kpwin-channel { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; width: 100%; text-align: left; padding: .75rem .9rem; border: 1px solid #dbe4ef; border-radius: 10px; background: #fff; color: #10213b; cursor: pointer; }
+  .rp-kpwin-channel span { font-size: .78rem; color: #64748b; }
+  .rp-kpwin-channel.off { opacity: .55; cursor: default; }
+  .rp-kpwin-sent { padding: .7rem .85rem; border-radius: 10px; background: #e7f6ec; color: #15803d; font-weight: 800; }
+  @media (max-width: 640px) {
+    .rp-dirwin-steps { padding: .5rem .75rem; gap: .3rem; }
+    .rp-dirwin-step { font-size: .78rem; padding: .4rem .3rem; }
+    .rp-dirwin-head h3 { font-size: 1rem !important; line-height: 1.2; }
+    .rp-dirwin-sum { font-size: .95rem; }
+    .rp-dirwin-foot { padding: .6rem .75rem .8rem; }
+  }
   .workspace-back { display:inline-flex; align-items:center; gap:.25rem; flex:none; padding:.4rem .7rem; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#0f172a; font-weight:700; font-size:.85rem; white-space:nowrap; }
   .workspace-back:hover { background:#f1f5f9; }
   .order-workspace-modal-head .workspace-back { margin-right:.5rem; }
@@ -17922,7 +17981,7 @@ function projectServicesNextAction(o) {
     if (o.status === 'measurement_done') return { icon: '📏', title: 'Дополнить замер', sub: `Замер не закончен: ${orderMeasurementCompletionIssues(o).slice(0, 3).join(', ')}.`, variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
     return { icon: '📐', title: 'Назначить замер', sub: 'Услугам за sq ft нужны размеры окон. Выберите замерщика и время выезда — или внесите размеры сами в «Замер».', variant: 'primary', onclick: `scheduleMeasurementPrompt('${o.id}')` };
   }
-  if (!projectEstimateIsApproved(o)) return { icon: '✅', title: 'Расчёт готов → КП', sub: orderNeedsMeasurements(o) ? 'Размеры внесены. Проверьте количество и цены в «Услугах проекта» — и сформируйте КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цены — и сформируйте КП.', variant: 'primary', onclick: `approveProjectEstimateAndOpenProposal('${o.id}')` };
+  if (!projectEstimateIsApproved(o)) return { icon: '✅', title: 'Расчёт готов → КП', sub: orderNeedsMeasurements(o) ? 'Размеры внесены. Проверьте количество и цены в «Услугах проекта» — и сформируйте КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цены — и сформируйте КП.', variant: 'primary', onclick: `openProposalWizard('${o.id}')` };
   return projectProposalNextAction(o);
 }
 
@@ -17930,8 +17989,8 @@ function projectServicesNextAction(o) {
 function projectProposalNextAction(o) {
   const published = (db.proposals || []).some(prop => prop.orderId === o.id && prop.status === 'Draft' && prop.publishedAt);
   return published
-    ? { icon: '📨', title: 'Отправить КП клиенту', sub: 'Ссылка на КП готова, но клиенту ещё не отправлена: WhatsApp, SMS, email или скопировать ссылку.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` }
-    : { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
+    ? { icon: '📨', title: 'Отправить КП клиенту', sub: 'Ссылка на КП готова, но клиенту ещё не отправлена: WhatsApp, SMS, email или скопировать ссылку.', variant: 'primary', onclick: `openProposalWizard('${o.id}','send')` }
+    : { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProposalWizard('${o.id}')` };
 }
 function orderPrimaryNextAction(o) {
   if (orderUserCanResolveClientRequests(o) && pendingClientRequests(o).length) {
@@ -25334,7 +25393,7 @@ function serviceCashierSteps(offering) {
 }
 
 function openServiceCashier(oid, returnTo = 'card') {
-  const mode = ['estimate', 'intake'].includes(returnTo) ? returnTo : 'card';
+  const mode = ['estimate', 'intake', 'direction'].includes(returnTo) ? returnTo : 'card';
   if (mode === 'intake') {
     if (!orderUserCanManage()) return;
   } else {
@@ -25348,7 +25407,9 @@ function serviceCashierReturn(oid, returnTo) {
   state._serviceCashier = null;
   if (returnTo === 'intake') { serviceCashierLayer()?.remove(); return; }
   state.modal = null;
-  if (returnTo === 'estimate') openProjectEstimateWorkspace(oid); else { preservePositionForNextRender(); render(); }
+  if (returnTo === 'estimate') openProjectEstimateWorkspace(oid);
+  else if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function' && returnToProjectDirectionWindow()) return;
+  else { preservePositionForNextRender(); render(); }
 }
 function closeServiceCashier() {
   const c = serviceCashierState();
@@ -25437,8 +25498,9 @@ function serviceCashierCommit() {
     addons.forEach(item => projectAddOfferingLine(oid, item.id, directionId));
     if (film) save();
   };
-  if (returnTo === 'card') projectCardEdit(apply); else apply();
+  if (returnTo === 'card' || returnTo === 'direction') projectCardEdit(apply); else apply();
   if (returnTo === 'estimate') openProjectEstimateWorkspace(oid);
+  if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function') returnToProjectDirectionWindow();
 }
 
 function serviceCashierCardStyle(directionId) {
@@ -29723,7 +29785,7 @@ function renderManagerMeasureModal(oid) {
             <div class="manager-measure-title text-2xl font-black text-slate-900">${academyEsc(o.number)}<span class="manager-measure-title-suffix"> · замер проекта</span></div>
             <div class="manager-measure-address text-sm text-gray-500 mt-1">${academyEsc(c?.name || 'Без клиента')} · ${academyEsc(orderAddress(o, c) || 'адрес не указан')}</div>
           </div>
-          <button class="btn-ghost" onclick="closeModal()">Закрыть</button>
+          <div class="flex gap-2">${state._directionWindow?.oid === oid ? `<button class="workspace-back" onclick="returnToProjectDirectionWindow()">← К направлению</button>` : ''}<button class="btn-ghost" onclick="closeModal()">Закрыть</button></div>
         </div>
         <details class="manager-measure-overview" ${state._managerMeasureDetails?.[oid]?.overview ? 'open' : ''} ontoggle="managerMeasureDetailsToggle('${oid}','overview',this.open)"><summary>Сводка · ${rooms.length} ${academyEsc(roomTerms.plural.toLowerCase())} · ${allWindows.length} окон / дверей · ${orderActualAreaSqft(o).toFixed(1)} sqft</summary><div class="manager-measure-kpis mt-3">
           <div class="manager-measure-kpi"><div>${academyEsc(roomTerms.plural)}</div><div>${rooms.length}</div></div>
@@ -35873,6 +35935,11 @@ function openPremiumProposalManagerModal(token) {
   const prop = getPremiumProposalByToken(token);
   const order = getOrder(prop?.orderId);
   if (!prop || !order) return;
+  // While the KP window is open (or building the KP), stay in it (Owner, 2026-10-24).
+  if (typeof proposalWizardActive === 'function' && proposalWizardActive(order.id)) {
+    const w = state._proposalWizard;
+    return openProposalWizard(order.id, w.pending ? 'preview' : (w.step === 'compose' ? 'preview' : w.step));
+  }
   if (!orderUserCanViewProposal(order)) { alert('КП доступно только владельцу и назначенному менеджеру'); return; }
   const client = getClient(order.clientId) || {};
   const calc = premiumProposalCalc(prop);

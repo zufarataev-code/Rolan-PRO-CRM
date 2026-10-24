@@ -24,7 +24,7 @@ test('the calculation and the KP studio have a visible way back to the project',
 
 test('on a phone the cashier steps are one row and the cashier keeps its own layout', () => {
   assert.match(html, /\.rp-cashier-crumbs \{ flex-wrap:nowrap !important;overflow-x:auto;/);
-  assert.equal((mobile.match(/\.rp-cashier, \[data-rp-keep-layout\]/g) || []).length, 4, 'toolbar, stack, action-row and generic passes skip the cashier');
+  assert.equal((mobile.match(/\.rp-cashier, \.rp-dirwin, \[data-rp-keep-layout\]/g) || []).length, 4, 'toolbar, stack, action-row and generic passes skip the cashier');
 });
 
 test('a long film list folds by series and «уточним на замере» comes first', () => {
