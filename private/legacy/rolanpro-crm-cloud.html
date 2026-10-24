@@ -3041,6 +3041,16 @@
   .manager-measure-progress-step .manager-measure-progress-no { width: 22px; height: 22px; font-size: .7rem; }
   /* A later .grid rule beat .hidden, so a private (B2C) client saw «Название компании *» (Owner, 2026-10-23). */
   [id$="-company-block"].hidden { display:none !important; }
+  .crm-notice-layer { position:fixed; inset:0; z-index:100000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(15,23,42,.35); }
+  .crm-notice-card { width:min(440px,100%); max-height:80vh; overflow:auto; background:#fff; border:1px solid #e2e8f0; border-top:4px solid #2563eb; border-radius:10px; box-shadow:0 24px 60px rgba(15,23,42,.25); padding:18px 18px 14px; }
+  .crm-notice-text { white-space:pre-line; font-size:.95rem; line-height:1.45; color:#0f172a; }
+  .crm-notice-actions { display:flex; justify-content:flex-end; align-items:center; gap:.75rem; margin-top:14px; }
+  .crm-notice-more { font-size:.75rem; color:#64748b; }
+  .project-command-signed { margin-top:.6rem; padding:.45rem .7rem; border:1px solid #86efac; background:#f0fdf4; border-radius:8px; font-size:.85rem; color:#166534; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  .act-signature-pad { width:100%; height:180px; border:2px dashed #94a3b8; border-radius:8px; background:#fff; touch-action:none; display:block; }
+  .act-signature-work ul { list-style:disc; padding-left:1.1rem; }
+  .act-signature-accept { display:flex; gap:.6rem; align-items:flex-start; font-size:.85rem; }
+  .act-signature-accept input { width:20px; height:20px; flex:0 0 20px; margin-top:2px; }
   .manager-size-placeholder { border-color:#f59e0b !important; background:#fffbeb !important; }
   .manager-size-placeholder::placeholder { color:#b45309; opacity:.75; }
   .manager-window-service-chips { display:flex; flex-wrap:wrap; gap:.4rem; }
@@ -17901,7 +17911,7 @@ function orderPrimaryNextAction(o) {
     const stage = ({ installation_scheduled: 'Монтаж назначен', installation_accepted: 'Бригада приняла монтаж', installation_en_route: 'Бригада в пути', installation_in_progress: 'Монтаж идёт' })[o.status];
     return { icon: '🔧', title: stage, sub: first ? `${fmtDateTime(first.installationAt)}${crew ? ' · ' + crew : ''}. Бригада отмечает выполнение у себя; акт и оплата — после монтажа.` : 'Проверьте календарь и бригаду.', variant: 'soft', onclick: `scheduleInstallationPrompt('${o.id}')` };
   }
-  if (o.status === 'installation_done') return { icon: '📝', title: 'Подписать акт', sub: 'Закрываем выполненную работу документально.', variant: 'primary', onclick: `if (confirm('Клиент подписал акт выполненных работ?')) changeStatus('${o.id}','act_signed')` };
+  if (o.status === 'installation_done') return { icon: '✍️', title: 'Подпись клиента под актом', sub: 'Клиент расписывается на экране — на месте или при встрече. Акт с подписью сохраняется в проекте.', variant: 'primary', onclick: `openActSignature('${o.id}')` };
   if (o.status === 'act_signed') return orderAmountDue(o) > 0.01
     ? { icon: '💳', title: 'Получить оплату', sub: `Клиент должен ${fmtMoney(orderAmountDue(o))}. Укажите сумму и способ — проект станет «Оплачен», когда сумма будет полной.`, variant: 'primary', onclick: `openPaymentModal('${o.id}',{kind:'final',thenStatus:'payment_received'})` }
     : { icon: '💳', title: 'Отметить оплату', sub: 'Вся сумма получена — фиксируем оплату по заказу.', variant: 'primary', onclick: `changeStatus('${o.id}','payment_received')` };
@@ -17913,7 +17923,7 @@ function installerOrderPrimaryAction(o) {
   if (o.status === 'installation_accepted') return { icon: '🚗', title: 'Выехал на объект', sub: 'Зафиксировать начало поездки.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_en_route')` };
   if (o.status === 'installation_en_route') return { icon: '▶', title: 'Начать монтаж', sub: 'Перед началом заполните приёмку и сделайте фото.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_in_progress')` };
   if (o.status === 'installation_in_progress') return { icon: '✓', title: 'Мои услуги выполнены', sub: 'Добавьте фото после работы. Проект закроется, когда все услуги будут выполнены.', variant: 'success', onclick: `projectMarkMyServicesDone('${o.id}')` };
-  if (o.status === 'installation_done') return { icon: '📝', title: 'Акт подписан', sub: 'Отметить после подписи клиента.', variant: 'primary', onclick: `if (confirm('Клиент подписал акт выполненных работ?')) changeStatus('${o.id}','act_signed')` };
+  if (o.status === 'installation_done') return { icon: '✍️', title: 'Подпись клиента под актом', sub: 'Дайте клиенту телефон: он проверит работы и распишется пальцем на экране.', variant: 'primary', onclick: `openActSignature('${o.id}')` };
   return { icon: '🧰', title: 'Открыть ТЗ-лист', sub: 'Схема, размеры, материалы и лист раскроя.', variant: 'soft', onclick: `openTechnicalSheet('${o.id}')` };
 }
 function renderOrderActionCard(a) {
@@ -26764,7 +26774,7 @@ function renderProjectCommandHeader(o, c, primary, { money = false, pendingReque
   const manager = getUser(o.managerId || o.ownerId)?.name || 'ответственный не назначен';
   return `<section class="project-command-hero">
     <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${academyEsc(c?.name || 'Проект без клиента')}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div></div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
-    <div class="project-command-facts"><div class="project-command-fact"><span>Услуги</span><strong>${projectLines(o).length + projectPendingSizedServices(o).length}</strong></div><div class="project-command-fact"><span>Ближайшее событие</span><strong>${nextEvent ? fmtDateTime(nextEvent.at) : 'не назначено'}</strong></div>${money ? `<div class="project-command-fact"><span>Сумма проекта</span><strong>${fmtMoney(orderRevenue(o))}</strong></div><div class="project-command-fact"><span>Остаток</span><strong>${fmtMoney(orderDebt(o))}</strong></div>` : `<div class="project-command-fact"><span>Запросы клиента</span><strong>${pendingRequests.length || 'нет'}</strong></div><div class="project-command-fact"><span>Статус</span><strong>${academyEsc(T(o.status))}</strong></div>`}</div>
+    <div class="project-command-facts"><div class="project-command-fact"><span>Услуги</span><strong>${projectLines(o).length + projectPendingSizedServices(o).length}</strong></div><div class="project-command-fact"><span>Ближайшее событие</span><strong>${nextEvent ? fmtDateTime(nextEvent.at) : 'не назначено'}</strong></div>${money ? `<div class="project-command-fact"><span>Сумма проекта</span><strong>${fmtMoney(orderRevenue(o))}</strong></div><div class="project-command-fact"><span>Остаток</span><strong>${fmtMoney(orderDebt(o))}</strong></div>` : `<div class="project-command-fact"><span>Запросы клиента</span><strong>${pendingRequests.length || 'нет'}</strong></div><div class="project-command-fact"><span>Статус</span><strong>${academyEsc(T(o.status))}</strong></div>`}</div>${o.actSignature ? `<div class="project-command-signed">✍️ Акт подписан клиентом: <b>${academyEsc(o.actSignature.name)}</b> · ${fmtDateTime(o.actSignature.signedAt)} <button type="button" class="btn-ghost text-xs" onclick="openSignedActDocument('${o.id}')">Открыть акт</button></div>` : ''}
     ${renderOrderCleanProgress(o)}
   </section>`;
 }
@@ -32276,6 +32286,169 @@ function createClient() {
 }
 
 function closeModal() { state.modal = null; state.pendingColdProspectId = null; render(); }
+
+// ---------- СООБЩЕНИЯ CRM ВНУТРИ CRM (Owner, 2026-10-23) ----------
+// Every alert() of the CRM used to be the browser's grey system window.
+// Messages now open as a CRM card on top of the page (queued, OK / Enter /
+// Esc closes). The card lives outside #app, so a re-render does not remove
+// it; a message shown right before a reload is shown again after it.
+const CRM_NOTICE_KEY = 'rolanpro_pending_notice';
+let crmNoticeQueue = [];
+function crmNoticeRender() {
+  let layer = document.getElementById('crm-notice-layer');
+  if (!crmNoticeQueue.length) { layer?.remove(); return; }
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'crm-notice-layer';
+    layer.className = 'crm-notice-layer';
+    document.body.appendChild(layer);
+  }
+  const text = String(crmNoticeQueue[0] ?? '');
+  layer.innerHTML = `<div class="crm-notice-card" role="alertdialog" aria-modal="true" aria-label="Сообщение CRM"><div class="crm-notice-text"></div><div class="crm-notice-actions">${crmNoticeQueue.length > 1 ? `<span class="crm-notice-more">ещё ${crmNoticeQueue.length - 1}</span>` : ''}<button type="button" class="btn-primary" id="crm-notice-ok">Понятно</button></div></div>`;
+  layer.querySelector('.crm-notice-text').textContent = text;
+  const ok = layer.querySelector('#crm-notice-ok');
+  ok.onclick = crmNoticeClose;
+  setTimeout(() => ok.focus(), 0);
+}
+function crmNoticeClose() {
+  crmNoticeQueue.shift();
+  try { if (!crmNoticeQueue.length) sessionStorage.removeItem(CRM_NOTICE_KEY); else sessionStorage.setItem(CRM_NOTICE_KEY, JSON.stringify(crmNoticeQueue)); } catch (_) {}
+  crmNoticeRender();
+}
+function crmNotice(message) {
+  crmNoticeQueue.push(String(message ?? ''));
+  try { sessionStorage.setItem(CRM_NOTICE_KEY, JSON.stringify(crmNoticeQueue)); } catch (_) {}
+  crmNoticeRender();
+}
+if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window.__crmNoticeInstalled) {
+  window.__crmNoticeInstalled = true;
+  window.__nativeAlert = window.alert.bind(window);
+  window.alert = message => crmNotice(message);
+  document.addEventListener('keydown', event => {
+    if (!crmNoticeQueue.length || !document.getElementById('crm-notice-layer')) return;
+    if (event.key === 'Enter' || event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); crmNoticeClose(); }
+  }, true);
+  // A message the page reloaded over: show it again.
+  window.addEventListener('DOMContentLoaded', () => {
+    try {
+      const pending = JSON.parse(sessionStorage.getItem(CRM_NOTICE_KEY) || '[]');
+      if (Array.isArray(pending) && pending.length) { crmNoticeQueue = pending.map(String); crmNoticeRender(); }
+    } catch (_) {}
+  });
+}
+
+// ---------- ПОДПИСЬ КЛИЕНТА ПОД АКТОМ (Owner, 2026-10-23) ----------
+// «Акт подписан» was a button with no signature. Now the client checks the
+// work on the installer's phone (or the manager's tablet), types the name and
+// signs with a finger; the signature, name and time stay in the project and
+// in a printable certificate.
+function actSignatureWorkLines(o) {
+  return projectLines(o).filter(line => !line.excluded).map(line => {
+    const qty = Number(line.qty) || 0;
+    // The client reads it: the English title of the KP line (film brand and model), else the service name.
+    const title = typeof projectProposalLineTitle === 'function' ? projectProposalLineTitle(line) : '';
+    return `${title || line.name || 'Service'}${qty ? ` — ${Math.round(qty * 100) / 100} ${line.unitShort || line.unit || ''}`.trimEnd() : ''}`;
+  });
+}
+function openActSignature(oid) {
+  const o = getOrder(oid);
+  if (!o) return;
+  const c = getClient(o.clientId) || {};
+  const lines = actSignatureWorkLines(o);
+  const windows = measureAllWindows(o).reduce((sum, { win }) => sum + (Number(win.actualQty ?? win.qty) || 1), 0);
+  state.modal = `
+  <div class="modal-backdrop">
+    <div class="modal-content workspace-modal p-5 act-signature-modal" style="max-width:34rem">
+      <div class="text-xs text-blue-700 font-semibold">Certificate of completion · Акт выполненных работ</div>
+      <h3 class="font-black text-xl mt-1">${academyEsc(o.number || '')} · ${academyEsc(c.name || '')}</h3>
+      <p class="text-sm text-gray-600">${academyEsc(orderAddress(o, c) || '')}</p>
+      <div class="act-signature-work mt-3">
+        <div class="font-bold text-sm">Completed work${windows ? ` · ${windows} windows` : ''}</div>
+        <ul class="text-sm mt-1">${lines.map(line => `<li>${academyEsc(line)}</li>`).join('') || '<li>Window film installation</li>'}</ul>
+      </div>
+      <label class="mt-3">Client name / Имя клиента</label>
+      <input id="act-sign-name" value="${academyEsc(c.name || '')}" autocomplete="name">
+      <label class="mt-3">Signature / Подпись — sign with your finger</label>
+      <canvas id="act-sign-pad" class="act-signature-pad" width="600" height="220" aria-label="Подпись клиента"></canvas>
+      <label class="act-signature-accept mt-3"><input id="act-sign-accept" type="checkbox"><span>I confirm the work listed above is completed and accepted. · Работы выполнены и приняты.</span></label>
+      <div class="flex gap-2 mt-4 flex-wrap">
+        <button class="btn-primary flex-1" onclick="confirmActSignature('${o.id}')">Sign · Подписать</button>
+        <button class="btn-ghost" onclick="actSignaturePadClear()">Clear · Стереть</button>
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+  setTimeout(actSignaturePadInit, 0);
+}
+function actSignaturePadInit() {
+  const canvas = document.getElementById('act-sign-pad');
+  if (!canvas || canvas.dataset.ready) return;
+  canvas.dataset.ready = '1';
+  canvas.dataset.strokes = '0';
+  const ctx = canvas.getContext('2d');
+  ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f172a';
+  let drawing = false;
+  const point = event => {
+    const rect = canvas.getBoundingClientRect();
+    return { x: (event.clientX - rect.left) * canvas.width / rect.width, y: (event.clientY - rect.top) * canvas.height / rect.height };
+  };
+  canvas.addEventListener('pointerdown', event => { drawing = true; canvas.setPointerCapture?.(event.pointerId); const p = point(event); ctx.beginPath(); ctx.moveTo(p.x, p.y); event.preventDefault(); });
+  canvas.addEventListener('pointermove', event => { if (!drawing) return; const p = point(event); ctx.lineTo(p.x, p.y); ctx.stroke(); canvas.dataset.strokes = String(Number(canvas.dataset.strokes || 0) + 1); event.preventDefault(); });
+  const stop = () => { drawing = false; };
+  canvas.addEventListener('pointerup', stop);
+  canvas.addEventListener('pointercancel', stop);
+  canvas.addEventListener('pointerleave', stop);
+}
+function actSignaturePadClear() {
+  const canvas = document.getElementById('act-sign-pad');
+  if (!canvas) return;
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  canvas.dataset.strokes = '0';
+}
+function confirmActSignature(oid) {
+  const o = getOrder(oid);
+  const canvas = document.getElementById('act-sign-pad');
+  if (!o || !canvas) return;
+  const name = String(document.getElementById('act-sign-name')?.value || '').trim();
+  if (!name) { alert('Введите имя клиента.'); return; }
+  if (Number(canvas.dataset.strokes || 0) < 5) { alert('Попросите клиента расписаться в поле подписи.'); return; }
+  if (!document.getElementById('act-sign-accept')?.checked) { alert('Клиент должен отметить, что работы приняты.'); return; }
+  const signedAt = new Date().toISOString();
+  o.actSignature = {
+    name: name.slice(0, 120),
+    signedAt,
+    collectedBy: state.currentUserId || null,
+    // PNG of a line drawing at 600×220 is a few kilobytes.
+    image: canvas.toDataURL('image/png'),
+    work: actSignatureWorkLines(o).slice(0, 40),
+  };
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: signedAt, key: 'act_signature', by: state.currentUserId, note: `Акт подписан клиентом: ${o.actSignature.name}` });
+  save();
+  closeModal();
+  changeStatus(oid, 'act_signed');
+}
+/** Printable certificate with the client's signature (opens in a new tab). */
+function openSignedActDocument(oid) {
+  const o = getOrder(oid);
+  const sig = o?.actSignature;
+  if (!o || !sig) return;
+  const c = getClient(o.clientId) || {};
+  const company = db.settings?.companyName || 'RolanPRO';
+  const esc = academyEsc;
+  const page = `<!doctype html><html><head><meta charset="utf-8"><title>Certificate of completion ${esc(o.number || '')}</title>
+  <style>body{font-family:Inter,Arial,sans-serif;color:#0f172a;max-width:720px;margin:32px auto;padding:0 20px}h1{font-size:24px;margin:0}small{color:#64748b}ul{padding-left:18px}.sig{border-top:1px solid #cbd5e1;margin-top:24px;padding-top:12px}.sig img{max-width:320px;height:auto;display:block}@media print{button{display:none}}</style></head><body>
+  <small>${esc(company)}</small><h1>Certificate of completion</h1><small>Project ${esc(o.number || '')}</small>
+  <p><b>Client:</b> ${esc(c.name || sig.name)}<br><b>Address:</b> ${esc(orderAddress(o, c) || '')}</p>
+  <p><b>Completed work</b></p><ul>${(sig.work || []).map(line => `<li>${esc(line)}</li>`).join('')}</ul>
+  <p>The client confirms that the work listed above is completed and accepted.</p>
+  <div class="sig"><img src="${sig.image}" alt="Signature"><b>${esc(sig.name)}</b><br><small>Signed ${esc(new Date(sig.signedAt).toLocaleString('en-US'))}</small></div>
+  <p><button onclick="print()">Print / Save as PDF</button></p></body></html>`;
+  const win = window.open('', '_blank');
+  if (!win) { alert('Разрешите всплывающие окна, чтобы открыть акт.'); return; }
+  win.document.open(); win.document.write(page); win.document.close();
+}
 
 // ---------- FILM TYPES (rate-aware) ----------
 function renameFilmType(oldName, newName) {

@@ -85,7 +85,8 @@ test('closing a service early or without any photo asks first; a signed act is c
   assert.deepEqual([...ok], [], 'same day with a photo: no question');
   assert.match(slice('function projectSetServiceProgress(oid, key, status)', 'function projectMarkMyServicesDone('), /status === 'done'[^\n]*projectConfirmServicesDone\(o, \[line\]\)/);
   assert.match(slice('function projectMarkMyServicesDone(oid)', 'function projectCloseFinishedProjects()'), /projectConfirmServicesDone\(o, mine\)/);
-  assert.ok(html.includes("onclick: `if (confirm('Клиент подписал акт выполненных работ?')) changeStatus('${o.id}','act_signed')`"));
+  // Since 2026-10-23 the act is signed by the client on screen (openActSignature).
+  assert.ok(html.includes("onclick: `openActSignature('${o.id}')`"));
 });
 
 test('the measurement header is compact on a laptop', () => {

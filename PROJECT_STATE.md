@@ -30,6 +30,14 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-23 handoff — client signature under the act, CRM message cards
+
+- Branch: `claude/act-signature`, based on `main` after PR #368.
+- Act: the installer's «Подпись клиента под актом» and the manager's next step open `openActSignature` — the completed work in English (KP line titles), client name, a finger-signature canvas (`touch-action:none`) and an acceptance checkbox. `confirmActSignature` requires all three, stores `o.actSignature` {name, signedAt, collectedBy, image (PNG data URL, a few KB), work}, adds an `act_signature` timeline entry and moves the project to `act_signed`. The project header shows «Акт подписан клиентом: … · Открыть акт»; `openSignedActDocument` opens a printable certificate of completion with the signature.
+- Messages: `window.alert` now opens a CRM card (`crmNotice`, layer outside `#app`, queued, Enter/Esc/«Понятно»), kept in sessionStorage so a message shown right before a reload appears again. `confirm` stays native (synchronous callers).
+- Card: the «Создать или связать замер» suggestion is gone — the measurement is already the main next-step button.
+- Verification: new `act-signature.test.ts` (4 tests); one test updated for the new act action; full suite 796/796; TypeScript passes; the full cycle with the on-screen signature passes in a local copy (empty signature refused with a CRM card, signed act stored and shown).
+
 ## 2026-10-23 handoff — KP drawing, one service path, direct installation scheduling (Owner's second pass)
 
 - Branch: `claude/kp-and-flow`, based on `main` after PR #367.
