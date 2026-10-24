@@ -243,7 +243,7 @@ test('a specialist\'s old «Завершить монтаж» closes only their 
   const changeStatusSource = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'));
   vm.runInContext(changeStatusSource.slice(0, changeStatusSource.indexOf('\n}\n') + 2), c);
   Object.assign(c, {
-    ensureOrderWorkflowTransition: () => true, ensureVerifiedMeasurementsForStatus: () => true, ensureProductionReadyForInstallation: () => true,
+    ensureOrderWorkflowTransition: () => true, ensureVerifiedMeasurementsForStatus: () => true, ensureProductionReadyForInstallation: () => true, ensurePaidForStatus: () => true,
     invalidateProjectEstimate: () => undefined, notifyStatusChange: () => undefined, autoNotifyClient: () => undefined,
   });
   const o = project('installation_in_progress');

@@ -30,6 +30,16 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-23 handoff — fixes from the Owner's end-to-end user test (payment, deposit, estimate reset, films)
+
+- Branch: `claude/flow-fixes`, based on `main` `50d9cee` (after PR #364).
+- Payment: «Отметить оплату» set `payment_received` with $0 recorded and $800 still owed. Now `ensurePaidForStatus` (called in `changeStatus`) refuses `payment_received`/`completed`/`review_received` while `orderAmountDue(o) > 0` and opens the payment form; the act-signed next step is «Получить оплату» (amount, method, date). A partial payment is saved and the status waits; once payments cover the price the status follows (`state._paymentModal.thenStatus`). Payment dates default to the user's local day (`paymentLocalDate`).
+- Deposit: `markDepositReceived` used to add to `o.paid` without a payment record. It now opens the payment form with the KP deposit (`orderExpectedDeposit`, advance %) and records a real payment. After acceptance the first next step is «Получить аванс» (`projectDepositExpected`: deposit terms, nothing paid, not waived). It does not block work — «Без аванса» (`waiveProjectDeposit`) records who decided and why. Agreed post-pay asks for nothing.
+- Estimate reset: confirming unchanged sizes or picking facade/installation side reopened an accepted calculation and production readiness (three loops per project). `invalidateProjectEstimate` now keeps the approval while `projectEstimatePriceFingerprint` (line qty/price, area, total) is unchanged, and keeps production readiness while `projectProductionFingerprint` (sizes, panels, film, film direction) is unchanged. Fingerprints are stored at approval / production confirmation; older approvals without one behave as before.
+- Readiness: production readiness now lists `orderTechnicalMeasurementIssues` (glass, sides, access), so «готово» no longer leads to a refused schedule.
+- Films: a service without linked films left an empty «Материал» list and a measurement that could not be finished (in production Magnetron, Silver, Ceramic have none). The owner now sees «Другие плёнки направления — привяжутся к услуге»; choosing one (after a confirm) adds it to `offering.filmIds` and sets the window. Others see a hint that the owner links films in «Услуги и цены». The server rule (window film must belong to the service) is unchanged and satisfied.
+- Verification: new `flow-fixes.test.ts` (8 tests); 4 sliced tests stub the new guard; full suite 773/773; TypeScript passes; deposit, film linking, approval survival and partial→full payment walked through in a local copy of the CRM.
+
 ## 2026-10-23 fix — window works visible on the window card
 
 - Branch: `claude/window-services-fix`, based on `main` `c4b192a` (after PR #363).

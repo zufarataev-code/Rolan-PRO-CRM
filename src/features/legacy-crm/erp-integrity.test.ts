@@ -178,7 +178,7 @@ test('failed material issue cannot complete the project or send completion notif
   const c = load(['changeStatus'], {
     projectStages: () => [], getOrder: () => order, currentUser: () => ({ role: 'owner' }), PROJECT_SCHEDULED_STATUSES: ['installation_in_progress'], CLOSED_PROJECT_STATUSES: ['installation_done', 'completed'],
     projectPlanSnapshot: () => () => {}, ensureProjectServicesPlanned: () => true,
-    ensureOrderWorkflowTransition: () => true, ensureVerifiedMeasurementsForStatus: () => true,
+    ensureOrderWorkflowTransition: () => true, ensureVerifiedMeasurementsForStatus: () => true, ensurePaidForStatus: () => true,
     autoDeductInventoryForOrder: () => ({ ok: false, shortages: [{ warning: 'shortage' }] }),
     notifyStatusChange: () => { notified = true; }, alert: () => {}, console,
   });
@@ -194,7 +194,7 @@ test('an installer can report completion without access to the private warehouse
     projectStages: () => [], getOrder: () => order, currentUser: () => ({ role: 'installer' }),
     PROJECT_SCHEDULED_STATUSES: ['installation_in_progress'], CLOSED_PROJECT_STATUSES: ['installation_done'],
     projectPlanSnapshot: () => () => {}, ensureProjectServicesPlanned: () => true,
-    ensureOrderWorkflowTransition: () => true, ensureVerifiedMeasurementsForStatus: () => true,
+    ensureOrderWorkflowTransition: () => true, ensureVerifiedMeasurementsForStatus: () => true, ensurePaidForStatus: () => true,
     autoDeductInventoryForOrder: () => { assert.fail('field roles cannot issue from the private warehouse'); },
     projectFinishOpenServices: () => {}, projectLines: () => [], orderUserCanManage: () => false,
     state: { currentUserId: 'i' }, save: () => {}, notifyStatusChange: () => {}, render: () => {},

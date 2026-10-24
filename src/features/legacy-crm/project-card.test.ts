@@ -173,6 +173,7 @@ test('a quick line planned in its row keeps its own crew and start date for pay'
   assert.deepEqual(plain([o.extraServices[0].installerIds ?? null, o.extraServices[0].startDate ?? null]), [null, null], 'a draft does not touch the line');
   // Confirming publishes the plan: the quick line gets its crew and start date.
   c.ensureVerifiedMeasurementsForStatus = () => true;
+  c.ensurePaidForStatus = () => true;
   c.orderTechnicalMeasurementIssues = () => [];
   c.ensureProductionReadyForInstallation = () => true;
   c.refreshManualFilmNeededBy = () => undefined;
@@ -319,6 +320,7 @@ test('every way into installation needs each service planned; an older project k
     // The older workflow check reads the project-wide crew and date.
     ensureOrderWorkflowTransition: (target: Row) => !!target.installerIds?.length && !!target.installationAt,
     ensureVerifiedMeasurementsForStatus: () => true,
+    ensurePaidForStatus: () => true,
     ensureProductionReadyForInstallation: () => productionReady,
     invalidateProjectEstimate: () => undefined, notifyStatusChange: () => undefined, autoNotifyClient: () => undefined,
   });

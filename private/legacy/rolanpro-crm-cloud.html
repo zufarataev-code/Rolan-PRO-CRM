@@ -16194,6 +16194,12 @@ function orderMeasurementVerificationIssues(o) {
     .filter(({ win }) => !windowMeasurementIsVerified(win))
     .map(({ room, win }) => `${room.name || 'Помещение'} · ${win.name || 'Окно'}`);
 }
+/** The project still waits for its deposit: terms ask for one, nothing has come in, nobody waived it. */
+function projectDepositExpected(o) {
+  if (!o || o.paymentTerms === 'after_completion' || o.depositReceived || o.depositWaivedAt) return false;
+  if (orderPaidTotal(o) > 0 || Number(o.paid) > 0) return false;
+  return orderExpectedDeposit(o) > 0;
+}
 function orderPaymentReadyForProduction(o) {
   // Payment remains visible and auditable, but it does not block operational
   // preparation after the customer has accepted the proposal. Some projects
@@ -16220,6 +16226,10 @@ function projectProductionReadiness(o, { requireReady = true } = {}) {
   if (!projectProposalAccepted(o)) issues.push('КП ещё не принято клиентом');
   if (!projectEstimateIsApproved(o)) issues.push('расчёт проекта не подтверждён');
   issues.push(...orderMeasurementVerificationIssues(o));
+  // Scheduling refuses windows without glass, side, facade or access: say so
+  // here, before the crew and dates are filled in (Owner's user test, 2026-10-23).
+  const technical = typeof orderTechnicalMeasurementIssues === 'function' ? orderTechnicalMeasurementIssues(o) : [];
+  if (technical.length) issues.push(`замерщик должен уточнить: ${technical.slice(0, 3).join('; ')}${technical.length > 3 ? ` и ещё ${technical.length - 3}` : ''}`);
 
   const plan = calcFilmPlan(o);
   if (plan.unfit?.length) issues.push('есть детали, которые не помещаются на доступный рулон');
@@ -16653,14 +16663,40 @@ function projectProfitability(o) {
 function projectEstimateIsApproved(o) {
   return !!o?.projectEstimateApprovedAt;
 }
+/**
+ * What the approved price depends on: every line's quantity and price, the
+ * area and the project total. Facade side, installation side, glass notes,
+ * confirming an unchanged size do not change it.
+ */
+function projectEstimatePriceFingerprint(o) {
+  try {
+    const lines = projectLines(o).filter(line => !line.excluded).map(line => [line.key, Math.round((Number(line.qty) || 0) * 100), Math.round((Number(line.price) || 0) * 100), line.catalogId || '']);
+    return JSON.stringify({ total: Math.round(orderRevenue(o) * 100), area: Math.round(orderActualAreaSqft(o) * 100), lines });
+  } catch (_) { return null; }
+}
+/** What the cut and the stock check depend on: sizes, panels, film and its direction per window. */
+function projectProductionFingerprint(o) {
+  try {
+    return JSON.stringify(measureAllWindows(o).map(({ win }) => [win.id, win.width, win.height, win.actualWidth, win.actualHeight, win.qty, win.actualQty, win.catalogId || '', win.filmDirection || '', JSON.stringify(win.actualPanels || win.panels || [])]));
+  } catch (_) { return null; }
+}
 function invalidateProjectEstimate(o, reason = '') {
   if (!o) return;
-  o.productionReadyAt = null;
-  o.productionReadyBy = null;
+  const priceUnchanged = !!o.projectEstimateApprovedAt && !!o.projectEstimateFingerprint && o.projectEstimateFingerprint === projectEstimatePriceFingerprint(o);
+  const cutUnchanged = !!o.productionReadyAt && !!o.productionFingerprint && o.productionFingerprint === projectProductionFingerprint(o);
+  if (!cutUnchanged) {
+    o.productionReadyAt = null;
+    o.productionReadyBy = null;
+  }
+  // The approved calculation stays approved while its price is the same
+  // (Owner's user test, 2026-10-23: confirming sizes or picking the facade
+  // side sent an accepted project back to «расчёт не подтверждён» three times).
+  if (priceUnchanged) return;
   if (o.projectEstimateApprovedAt) {
     o.projectEstimateApprovedAt = null;
     o.projectEstimateApprovedBy = null;
     o.projectEstimateSnapshot = null;
+    o.projectEstimateFingerprint = null;
     o.timeline = o.timeline || [];
     o.timeline.push({ at: new Date().toISOString(), key: 'project_estimate_reopened', by: state.currentUserId, note: reason || 'Расчёт проекта изменён и требует повторной проверки' });
   }
@@ -16713,13 +16749,17 @@ function syncOrderPaid(o) {
   o.paid = orderPaidTotal(o);
 }
 
+/** Today in the CRM user's own time zone (an evening payment in LA is not tomorrow's). */
+function paymentLocalDate(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 function addOrderPayment(orderId, data) {
   const o = getOrder(orderId);
   if (!o) return;
   orderPayments(o).push({
     id: 'pay_' + uid(),
     amount: Number(data.amount) || 0,
-    date: data.date || new Date().toISOString().slice(0, 10),
+    date: data.date || paymentLocalDate(),
     method: data.method || 'zelle',
     note: data.note || '',
     recordedBy: state.currentUserId || null,
@@ -16743,19 +16783,53 @@ function deleteOrderPayment(orderId, paymentId) {
  * Окно отметки поступления. Сумма подставляется остатком долга —
  * чаще всего приходит именно он.
  */
-function openPaymentModal(orderId) {
+/** What the client still owes: price minus every recorded payment (or the legacy `o.paid`). */
+function orderAmountDue(o) {
+  if (!o) return 0;
+  const paid = Math.max(orderPaidTotal(o), Number(o.paid) || 0);
+  return Math.max(0, Math.round((orderRevenue(o) - paid) * 100) / 100);
+}
+/** The deposit the proposal asks for: advance % of the project price, never above what is due. */
+function orderExpectedDeposit(o) {
+  const advance = Math.round(orderRevenue(o) * (Number(db.settings?.advancePct) || 30)) / 100;
+  return Math.min(advance, orderAmountDue(o));
+}
+// Statuses that say «the money is in» (Owner's user test, 2026-10-23: one
+// click marked a project paid with $0 received and $800 still owed).
+const PAID_PROJECT_STATUSES = ['payment_received', 'completed', 'review_received'];
+/**
+ * A project reaches «Оплачено» only with nothing left to pay. Otherwise the
+ * payment form opens; once the payments cover the price the status follows.
+ */
+function ensurePaidForStatus(o, newStatus, open = true) {
+  if (!o || !PAID_PROJECT_STATUSES.includes(newStatus) || PAID_PROJECT_STATUSES.includes(o.status)) return true;
+  if (orderRevenue(o) <= 0 || orderAmountDue(o) <= 0.01) return true;
+  if (open && orderUserCanSeeMoney(o, currentUser())) openPaymentModal(o.id, { kind: 'final', thenStatus: newStatus });
+  else alert(`Клиент ещё должен ${fmtMoney(orderAmountDue(o))}. Сначала отметьте поступление.`);
+  return false;
+}
+/**
+ * Окно отметки поступления. Сумма подставляется остатком долга (или авансом
+ * из КП) — чаще всего приходит именно он. `thenStatus` — статус, который
+ * проект получит, когда поступления покроют всю сумму.
+ */
+function openPaymentModal(orderId, opts = {}) {
   const o = getOrder(orderId);
   if (!o) return;
   const c = getClient(o.clientId);
-  const due = Math.max(0, orderRevenue(o) - orderPaidTotal(o));
+  const due = orderAmountDue(o);
+  const deposit = opts.kind === 'deposit';
+  const suggested = deposit ? orderExpectedDeposit(o) : due;
+  state._paymentModal = { orderId: o.id, kind: deposit ? 'deposit' : (opts.kind || 'payment'), thenStatus: opts.thenStatus || '' };
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6" style="max-width:30rem;">
-      <h3 class="font-semibold text-lg mb-1">Отметить поступление</h3>
-      <p class="text-xs text-gray-500 mb-4">${academyEsc(o.number)} · ${academyEsc(c?.name || '')} · к оплате ${fmtMoney(due)}</p>
+      <h3 class="font-semibold text-lg mb-1">${deposit ? 'Аванс по КП' : opts.thenStatus ? 'Оплата по проекту' : 'Отметить поступление'}</h3>
+      <p class="text-xs text-gray-500 mb-4">${academyEsc(o.number)} · ${academyEsc(c?.name || '')} · сумма проекта ${fmtMoney(orderRevenue(o))} · получено ${fmtMoney(orderRevenue(o) - due)} · к оплате ${fmtMoney(due)}</p>
+      ${opts.thenStatus ? `<p class="text-sm mb-3" style="color:#92400e">Проект станет «Оплачен», когда поступления покроют всю сумму. Частичная оплата сохранится, статус не изменится.</p>` : ''}
 
       <label>Сумма</label>
-      <input id="pay-amount" type="number" step="0.01" value="${due > 0 ? due.toFixed(2) : ''}">
+      <input id="pay-amount" type="number" step="0.01" value="${suggested > 0 ? suggested.toFixed(2) : ''}">
 
       <label class="mt-3">Способ</label>
       <select id="pay-method">
@@ -16763,17 +16837,33 @@ function openPaymentModal(orderId) {
       </select>
 
       <label class="mt-3">Дата поступления</label>
-      <input id="pay-date" type="date" value="${new Date().toISOString().slice(0,10)}">
+      <input id="pay-date" type="date" value="${paymentLocalDate()}">
 
       <label class="mt-3">Заметка</label>
       <input id="pay-note" placeholder="Номер платежа, от кого, за что">
 
-      <div class="flex gap-2 mt-5">
+      <div class="flex gap-2 mt-5 flex-wrap">
         <button class="btn-primary flex-1" onclick="confirmPayment('${o.id}')">Отметить</button>
+        ${deposit ? `<button class="btn-ghost" onclick="waiveProjectDeposit('${o.id}')">Без аванса</button>` : ''}
         <button class="btn-ghost" onclick="closeModal()">Отмена</button>
       </div>
     </div>
   </div>`;
+  render();
+}
+/** The owner/manager decides to go on without a deposit; the decision is kept in the history. */
+function waiveProjectDeposit(orderId) {
+  const o = getOrder(orderId);
+  if (!o || !orderUserCanManage(currentUser())) return;
+  const reason = prompt('Почему без аванса? (например: оплата после выполнения, постоянный клиент)', '');
+  if (reason === null) return;
+  o.depositWaivedAt = new Date().toISOString();
+  o.depositWaivedBy = state.currentUserId;
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: o.depositWaivedAt, key: 'deposit_waived', by: state.currentUserId, note: `Без аванса${String(reason).trim() ? ': ' + String(reason).trim() : ''}` });
+  state._paymentModal = null;
+  save();
+  closeModal();
   render();
 }
 
@@ -16783,13 +16873,28 @@ function confirmPayment(orderId) {
     alert('Укажите сумму поступления.');
     return;
   }
+  const flow = state._paymentModal?.orderId === orderId ? state._paymentModal : {};
+  state._paymentModal = null;
   addOrderPayment(orderId, {
     amount,
     method: document.getElementById('pay-method')?.value,
     date: document.getElementById('pay-date')?.value,
-    note: document.getElementById('pay-note')?.value,
+    note: document.getElementById('pay-note')?.value || (flow.kind === 'deposit' ? 'Аванс' : ''),
   });
+  const o = getOrder(orderId);
+  if (o && flow.kind === 'deposit' && !o.depositReceived) {
+    o.depositReceived = true;
+    o.depositReceivedAt = new Date().toISOString();
+    o.timeline = o.timeline || [];
+    o.timeline.push({ at: o.depositReceivedAt, key: 'deposit_received', by: state.currentUserId, note: `Аванс ${fmtMoney(amount)}` });
+    save();
+  }
   closeModal();
+  if (o && flow.thenStatus) {
+    const left = orderAmountDue(o);
+    if (left <= 0.01) changeStatus(orderId, flow.thenStatus);
+    else alert(`Поступление ${fmtMoney(amount)} отмечено. Осталось получить ${fmtMoney(left)} — статус «Оплачен» поставится, когда сумма будет полной.`);
+  }
   render();
 }
 
@@ -17270,6 +17375,7 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   if (!opts.skipWorkflowGuard && !ensureOrderWorkflowTransition(o, newStatus, opts.openWorkspace !== false)) return refuse();
   if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return refuse();
   if (newStatus === 'installation_scheduled' && !ensureProductionReadyForInstallation(o)) return refuse();
+  if (!opts.skipPaymentGuard && !ensurePaidForStatus(o, newStatus, opts.openPayment !== false)) return refuse();
   if (o.status === newStatus && !opts.force) {
     render();
     return true;
@@ -17740,6 +17846,9 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'measurement_done') return { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
   if (o.status === 'proposal_sent') return { icon: '✅', title: 'Отметить КП принятым', sub: 'Используйте, если клиент подтвердил предложение вне портала.', variant: 'primary', onclick: `changeStatus('${o.id}','proposal_accepted')` };
   if (o.status === 'proposal_accepted' && !orderPaymentReadyForProduction(o)) return { icon: '💰', title: 'Отметить аванс', sub: 'Либо подтвердите в расчёте согласованную оплату после выполнения.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
+  // The deposit is asked for right after acceptance (Owner, 2026-10-23); it
+  // never blocks the work — «Без аванса» records who decided and why.
+  if (o.status === 'proposal_accepted' && projectDepositExpected(o)) return { icon: '💰', title: 'Получить аванс', sub: `По КП аванс ${fmtMoney(orderExpectedDeposit(o))}. Отметьте поступление — или «Без аванса», если договорились иначе.`, variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
   if (o.status === 'proposal_accepted' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
   if (o.status === 'proposal_accepted' && !projectProductionPrepared(o)) return { icon: '🏭', title: 'Подготовить производство', sub: 'Проверить раскрой, материал и склад перед назначением бригады.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
   // The crew and date are chosen in each row of «Услуги проекта»; then the plan is confirmed there.
@@ -17749,8 +17858,10 @@ function orderPrimaryNextAction(o) {
     return { icon: '🔧', title: 'Подтвердить монтаж', sub: 'Все услуги назначены — клиент и бригада увидят даты после подтверждения.', variant: 'primary', onclick: `projectCardConfirmInstallation('${o.id}')` };
   }
   if (o.status === 'installation_done') return { icon: '📝', title: 'Подписать акт', sub: 'Закрываем выполненную работу документально.', variant: 'primary', onclick: `changeStatus('${o.id}','act_signed')` };
-  if (o.status === 'act_signed') return { icon: '💳', title: 'Отметить оплату', sub: 'Фиксируем финальную оплату по заказу.', variant: 'primary', onclick: `changeStatus('${o.id}','payment_received')` };
-  if (o.status === 'payment_received') return { icon: '⭐', title: 'Закрыть и запросить отзыв', sub: 'Финальный шаг: заказ закрыт, клиенту отправляем отзыв.', variant: 'success', onclick: `changeStatus('${o.id}','completed'); askForReview('${o.id}');` };
+  if (o.status === 'act_signed') return orderAmountDue(o) > 0.01
+    ? { icon: '💳', title: 'Получить оплату', sub: `Клиент должен ${fmtMoney(orderAmountDue(o))}. Укажите сумму и способ — проект станет «Оплачен», когда сумма будет полной.`, variant: 'primary', onclick: `openPaymentModal('${o.id}',{kind:'final',thenStatus:'payment_received'})` }
+    : { icon: '💳', title: 'Отметить оплату', sub: 'Вся сумма получена — фиксируем оплату по заказу.', variant: 'primary', onclick: `changeStatus('${o.id}','payment_received')` };
+  if (o.status === 'payment_received') return { icon: '⭐', title: 'Закрыть и запросить отзыв', sub: 'Финальный шаг: заказ закрыт, клиенту отправляем отзыв.', variant: 'success', onclick: `if (changeStatus('${o.id}','completed')) askForReview('${o.id}');` };
   return { icon: '📌', title: 'Заказ под контролем', sub: 'Проверьте календарь, документы и связь с клиентом.', variant: 'soft', onclick: `openOrder('${o.id}')` };
 }
 function installerOrderPrimaryAction(o) {
@@ -25437,7 +25548,11 @@ function projectWindowSolutionHtml(o, room, win, inMeasurement = false) {
   const selectedIds = new Set(selectedOfferings.map(item => item.id));
   const offerings = serviceOfferingsFor(direction, { includeId: win.offeringId }).filter(item => ((!selectedIds.size || selectedIds.has(item.id)) && serviceOfferingNeedsSizes(item)) || item.id === win.offeringId);
   const films = (db.settings.catalog || []).filter(film => !film.archived && serviceOfferingFilmIds(serviceOffering(win.offeringId)).includes(film.id));
-  return `<div class="grid gap-2" style="min-width:0"><label>Услуга / решение<select aria-label="Услуга окна" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','offeringId',this.value,${inMeasurement})"><option value="">Выберите услугу</option>${offerings.map(item => `<option value="${academyEsc(item.id)}" ${win.offeringId === item.id ? 'selected' : ''}>${academyEsc(item.name)}</option>`).join('')}</select></label>${win.offeringId ? `<label>Материал услуги<select aria-label="Материал услуги" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','catalogId',this.value,${inMeasurement})"><option value="">Выберите плёнку</option>${films.map(film => `<option value="${academyEsc(film.id)}" ${win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogLabel(film))}</option>`).join('')}</select></label>` : ''}</div>`;
+  // A service without linked films used to leave an empty list and a measurement
+  // that could not be finished (Owner's user test, 2026-10-23). The owner picks
+  // a film of the direction right here; it is linked to the service at once.
+  const linkable = currentUser()?.role === 'owner' && win.offeringId ? projectWindowLinkableFilms(o, win, films) : [];
+  return `<div class="grid gap-2" style="min-width:0"><label>Услуга / решение<select aria-label="Услуга окна" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','offeringId',this.value,${inMeasurement})"><option value="">Выберите услугу</option>${offerings.map(item => `<option value="${academyEsc(item.id)}" ${win.offeringId === item.id ? 'selected' : ''}>${academyEsc(item.name)}</option>`).join('')}</select></label>${win.offeringId ? `<label>Материал услуги<select aria-label="Материал услуги" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','catalogId',this.value,${inMeasurement})"><option value="">${films.length || linkable.length ? 'Выберите плёнку' : 'К услуге не привязана плёнка'}</option>${films.map(film => `<option value="${academyEsc(film.id)}" ${win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogLabel(film))}</option>`).join('')}${linkable.length ? `<optgroup label="Другие плёнки направления — привяжутся к услуге">${linkable.map(film => `<option value="${academyEsc(film.id)}">${academyEsc(catalogLabel(film))}</option>`).join('')}</optgroup>` : ''}</select></label>${!films.length && !linkable.length ? `<div class="text-xs" style="color:#92400e">Плёнку к услуге «${academyEsc(serviceOffering(win.offeringId)?.name || '')}» привязывает владелец в «Услуги и цены».</div>` : ''}` : ''}</div>`;
 }
 function applyWindowOffering(win, offering) {
     win.offeringId = offering?.id || '';
@@ -25448,6 +25563,12 @@ function applyWindowOffering(win, offering) {
       win.catalogId = ''; win.filmType = '';
     }
   return win;
+}
+/** Films of the window's direction that are not linked to its service yet (offered to the owner). */
+function projectWindowLinkableFilms(o, win, linked = []) {
+  const category = primaryServiceInfo(win.measureScope || o.serviceType)?.catalogCategory;
+  const linkedIds = new Set(linked.map(film => film.id));
+  return (db.settings.catalog || []).filter(film => !film.archived && !linkedIds.has(film.id) && catalogMatchesCategory(film, category));
 }
 function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = false) {
   const o = getOrder(oid);
@@ -25467,7 +25588,14 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
     syncProjectIncludedServices(o);
   } else if (field === 'catalogId') {
     const film = getCatalogItem(value);
-    if (!film || film.archived || !catalogMatchesCategory(film, primaryServiceInfo(win.measureScope || o.serviceType)?.catalogCategory) || !serviceOfferingFilmIds(serviceOffering(win.offeringId)).includes(film.id)) return;
+    const offering = serviceOffering(win.offeringId);
+    if (!film || film.archived || !offering || !catalogMatchesCategory(film, primaryServiceInfo(win.measureScope || o.serviceType)?.catalogCategory)) return;
+    if (!serviceOfferingFilmIds(offering).includes(film.id)) {
+      // Only the owner edits «Услуги и цены»; the film joins the service for every project.
+      if (currentUser()?.role !== 'owner') return;
+      if (!confirm(`Привязать «${catalogLabel(film)}» к услуге «${offering.name}»? Плёнка станет доступна для этой услуги во всех проектах.`)) { if (inMeasurement) refreshManagerMeasureModal(oid); else refreshProjectEstimateWorkspace(oid); return; }
+      offering.filmIds = [...new Set([...serviceOfferingFilmIds(offering), film.id])];
+    }
     win.catalogId = film.id; win.filmType = catalogLabel(film);
   } else return;
   invalidateProjectEstimate(o, 'Изменена услуга или материал');
@@ -27250,6 +27378,7 @@ function approveProjectEstimateAndOpenProposal(oid) {
   o.projectEstimateApprovedBy = state.currentUserId;
   o.projectEstimateUpdatedAt = approvedAt;
   o.projectEstimateSnapshot = projectEstimateApprovalSnapshot(o, approvedAt, canSeeInternalEconomics);
+  o.projectEstimateFingerprint = projectEstimatePriceFingerprint(o);
   o.timeline = o.timeline || [];
   o.timeline.push({ at: approvedAt, key: 'project_estimate_approved', by: state.currentUserId, note: canSeeInternalEconomics ? `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}, маржа ${marginPct.toFixed(1)}%` : `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}` });
   save();
@@ -30227,6 +30356,7 @@ function confirmProjectProductionReady(oid) {
   if (issues.length) { alert('Производство пока не готово: ' + issues.join(', ') + '.'); return; }
   o.productionReadyAt = new Date().toISOString();
   o.productionReadyBy = state.currentUserId;
+  o.productionFingerprint = projectProductionFingerprint(o);
   o.timeline = o.timeline || [];
   o.timeline.push({ at: o.productionReadyAt, key: 'production_ready', by: state.currentUserId, note: 'Раскрой, материал и склад проверены' });
   save();
@@ -30904,16 +31034,10 @@ function renderClientPortal() {
 }
 
 function markDepositReceived(orderId) {
-  const o = getOrder(orderId);
-  if (!o) return;
-  const advance = orderRevenue(o) * (db.settings.advancePct || 30) / 100;
-  if (!confirm(`Подтверждаете получение аванса ${fmtMoney(advance)}?`)) return;
-  o.depositReceived = true;
-  o.depositReceivedAt = new Date().toISOString();
-  o.paid = (o.paid || 0) + advance;
-  o.timeline = o.timeline || [];
-  o.timeline.push({ at: o.depositReceivedAt, key: 'deposit_received', by: state.currentUserId, note: `Аванс ${fmtMoney(advance)}` });
-  save(); render();
+  // The deposit is a payment like any other: amount, method and date are
+  // recorded, so «получено» and «долг» agree everywhere (Owner, 2026-10-23).
+  if (!getOrder(orderId)) return;
+  openPaymentModal(orderId, { kind: 'deposit' });
 }
 
 // ---------- CLIENT-SIDE PROPOSAL CONFIRMATION ----------
