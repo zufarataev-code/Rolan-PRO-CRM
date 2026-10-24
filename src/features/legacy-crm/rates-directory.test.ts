@@ -83,3 +83,31 @@ test('the directory shows company rates; personal and duplicate rate fields are 
   assert.doesNotMatch(html, /id="pc-ratePerSqft"|id="pc-rate-\$\{cat\}"/);
   assert.doesNotMatch(html, /updateCatalogItem\('\$\{c\.id\}','installerRatePerSqft'/, 'no rate per film in the warehouse');
 });
+
+test('senior installer: equal split, the senior gets +10% of his half (1000 → 500 and 550)', () => {
+  const users: Row[] = [
+    { id: 'jr', role: 'installer', payConfig: { type: 'per_sqft' } },
+    { id: 'sr', role: 'installer', installerLevel: 'senior', payConfig: { type: 'per_sqft' } },
+  ];
+  const order: Row = { installerIds: ['jr', 'sr'], windows: [{ offeringId: 'mag', sqft: 400 }] };
+  const c: any = vm.createContext({
+    console,
+    db: { settings: { seniorInstallerBonusPct: 10 } },
+    getUser: (id: string) => users.find(u => u.id === id),
+    measureAllWindows: (o: Row) => o.windows.map((win: Row) => ({ win })),
+    projectServiceCrew: (o: Row) => o.installerIds,
+    windowActualAreaSqft: (w: Row) => w.sqft,
+    installerRateForWindow: () => 2.5,
+    orderQuickInstallerPayoutForUser: () => 0,
+    orderAdditionalWorkPayoutForUser: () => 0,
+    orderRevenue: () => 0,
+  });
+  vm.runInContext(slice('function orderInstallerPayoutForUser(o, userId)', 'function orderInstallerPayoutBreakdown(o)'), c);
+  assert.equal(c.orderInstallerPayoutForUser(order, 'jr'), 500);
+  assert.equal(c.orderInstallerPayoutForUser(order, 'sr'), 550);
+  const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
+  assert.match(stages, /\* installerSeniorFactor\(getUser\(userId\)\) \+ orderInstallerPayoutForUser\(projectStageUnstagedOrder\(o\),userId\)/);
+  assert.match(stages, /\(filmPayout \+ orderAdditionalWorkPayoutForUser\(o, user, installerIds\.length\)\) \* installerSeniorFactor\(user\)/);
+  assert.match(html, /Надбавка старшему в бригаде, %/);
+  assert.match(html, /if \(s\.seniorInstallerBonusPct == null\) s\.seniorInstallerBonusPct = 10;/);
+});
