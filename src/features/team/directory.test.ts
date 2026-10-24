@@ -148,3 +148,24 @@ test("isolated role preview derives a field card from a manager identity without
   assert.equal(payload.users[0].role,"manager");
   assert.deepEqual(member.roles,["MANAGER","CONSULTANT"]);
 });
+
+test("a card shared by two employees goes to the one whose email is on it; the other gets its own", async () => {
+  const { resolveSharedLegacyIds } = await import("./directory");
+  // Production, 2026-10-24: installer and consultant both linked to u_z1/u_i1.
+  const installer = { user_id: "inst", email: "zufa2012@yandex.ru", legacy_user_ids: ["u_z1", "u_i1"] };
+  const consultant = { user_id: "cons", email: "ataevzufar888@gmail.com", legacy_user_ids: ["u_z1", "u_i1"] };
+  const cards = [
+    { id: "u_z1", email: "ataevzufar888@gmail.com", role: "measurer" },
+    { id: "u_i1", email: "ataevzufar888@gmail.com", role: "measurer" },
+  ];
+  const own = resolveSharedLegacyIds([installer, consultant], cards);
+  assert.deepEqual(own.get("cons"), ["u_z1", "u_i1"]);
+  assert.deepEqual(own.get("inst"), [], "the installer loses the shared cards and gets a new one");
+  // No email on the card: the first employee keeps it.
+  const first = resolveSharedLegacyIds([installer, consultant], [{ id: "u_z1" }, { id: "u_i1" }]);
+  assert.deepEqual(first.get("inst"), ["u_z1", "u_i1"]);
+  assert.deepEqual(first.get("cons"), []);
+  // Unshared ids are untouched.
+  const solo = resolveSharedLegacyIds([{ user_id: "a", email: "a@x", legacy_user_ids: ["u_a"] }], []);
+  assert.deepEqual(solo.get("a"), ["u_a"]);
+});

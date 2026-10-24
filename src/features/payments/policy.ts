@@ -8,11 +8,14 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[keyof typeof PAYMENT_METHOD
 
 export const PAYMENT_SYSTEM_FEE_PERCENT = 3.5;
 
-export function calculateSuggestedDeposit(total: number, propertyType: string | null | undefined) {
+/** Company rule (Owner, 2026-10-24): 10% of the project, never more than $1 000 — residential and commercial alike. */
+export const DEPOSIT_PERCENT = 10;
+export const DEPOSIT_CAP_USD = 1_000;
+
+// propertyType is kept in the signature for callers; the rule no longer depends on it.
+export function calculateSuggestedDeposit(total: number, _propertyType?: string | null) {
   const normalizedTotal = Math.max(0, Number.isFinite(total) ? total : 0);
-  return propertyType === "residential"
-    ? Math.min(normalizedTotal * 0.1, 1_000)
-    : normalizedTotal * 0.5;
+  return Math.round(Math.min(normalizedTotal * (DEPOSIT_PERCENT / 100), DEPOSIT_CAP_USD) * 100) / 100;
 }
 
 function roundMoney(value: number) {

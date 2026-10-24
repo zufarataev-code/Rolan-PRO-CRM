@@ -213,6 +213,32 @@ export function resolveLegacyIdForUser(
 }
 
 /**
+ * A legacy card belongs to ONE employee. Two employees linked to the same card
+ * overwrite each other on every load (production, 2026-10-24: an installer and a
+ * consultant shared u_z1/u_i1, so the installer card ended up as a second
+ * measurer and the CRM had no installer at all). The card goes to the employee
+ * whose email is on it, else to the first employee in the given order; the
+ * others drop it and get their own card through the usual assignment.
+ */
+export function resolveSharedLegacyIds<U extends { user_id: string; email: string; legacy_user_ids: string[] }>(
+  users: readonly U[],
+  payloadUsers: unknown,
+): Map<string, string[]> {
+  const cardEmail = new Map(cardsOf(payloadUsers).map((card) => [card.id, String(card.email ?? "").trim().toLowerCase()]));
+  const claimants = new Map<string, U[]>();
+  for (const user of users) {
+    for (const id of user.legacy_user_ids) claimants.set(id, [...(claimants.get(id) ?? []), user]);
+  }
+  const keeper = new Map<string, string>();
+  for (const [id, list] of claimants) {
+    const email = cardEmail.get(id) ?? "";
+    const byEmail = list.find((user) => email && user.email.trim().toLowerCase() === email);
+    keeper.set(id, (byEmail ?? list[0]).user_id);
+  }
+  return new Map(users.map((user) => [user.user_id, user.legacy_user_ids.filter((id) => keeper.get(id) === user.user_id)]));
+}
+
+/**
  * Loads every employee and makes sure each has a legacy card id. Employees
  * created without one (or before this rule) get a stable server-assigned id,
  * persisted once, so their login never depends on a browser sync.
@@ -232,13 +258,19 @@ export async function loadDirectoryMembers(
   });
 
   const cards = payloadUsers === undefined ? await loadWorkspaceUsers() : payloadUsers;
-  const linked = new Set(users.flatMap((user) => user.legacy_user_ids));
+  const ordered = [...users].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  const ownIds = resolveSharedLegacyIds(ordered, cards);
+  const linked = new Set([...ownIds.values()].flat());
   const members: DirectoryMember[] = [];
-  for (const user of users) {
+  for (const user of ordered) {
     const roles = user.user_accesses.map((access) => access.role.code);
-    let legacyUserIds = user.legacy_user_ids;
+    let legacyUserIds = ownIds.get(user.user_id) ?? [];
+    const shared = legacyUserIds.length !== user.legacy_user_ids.length;
     const legacyRoles = legacyRolesForServerRoles(roles);
     // Only CRM workspace roles need cards; service actors (AI_SERVICE) do not.
+    if (shared && persist && legacyUserIds.length >= legacyRoles.length) {
+      await prisma.user.update({ where: { user_id: user.user_id }, data: { legacy_user_ids: { set: legacyUserIds } } });
+    }
     if (legacyRoles.length && legacyUserIds.length < legacyRoles.length) {
       const first = legacyUserIds.length
         ? legacyUserIds

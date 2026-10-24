@@ -600,6 +600,8 @@ test("residential premium proposal applies the California home-improvement depos
   const calculator = source.match(/function premiumProposalCalc\(prop\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(calculator, /orderSiteType\(order\) === 'RESIDENTIAL'/);
   assert.match(calculator, /Math\.min\(result\.total \* 0\.10, 1000\)/);
+  // Company rule (2026-10-24): the same 10% / $1 000 from settings for every project.
+  assert.match(calculator, /companyDepositFor\(result\.total\)/);
   assert.match(source, /Legal Deposit \(max 10% \/ \$1,000\)/);
 });
 
