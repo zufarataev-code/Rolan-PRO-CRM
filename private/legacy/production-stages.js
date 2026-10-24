@@ -113,7 +113,7 @@ function projectStagesHtml(o,key) {
 
 
 function orderInstallerPayoutForUser(o, userId) {
-  if (projectStages(o).length && getUser(userId)?.payConfig?.type === 'per_sqft') return projectStages(o).reduce((sum,s) => sum + projectStageEmployeeAmount(o,s,userId),0) + orderInstallerPayoutForUser(projectStageUnstagedOrder(o),userId);
+  if (projectStages(o).length && getUser(userId)?.payConfig?.type === 'per_sqft') return projectStages(o).reduce((sum,s) => sum + projectStageEmployeeAmount(o,s,userId),0) * installerSeniorFactor(getUser(userId)) + orderInstallerPayoutForUser(projectStageUnstagedOrder(o),userId);
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.includes(userId)) return 0;
   const user = getUser(userId);
@@ -126,7 +126,7 @@ function orderInstallerPayoutForUser(o, userId) {
     if (!crew.includes(userId)) return sum;
     return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / Math.max(1, crew.length);
   }, 0);
-  return filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length);
+  return (filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * installerSeniorFactor(user);
 }
 
 function calcUserPayoutForPeriod(userId, startDate, endDate) {

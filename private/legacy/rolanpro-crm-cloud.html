@@ -9147,6 +9147,13 @@ function migrateSchema() {
     s._ratesDirectory20261024 = true;
   }
   if (s.depositCapUsd == null) s.depositCapUsd = 1000;
+  if (s.seniorInstallerBonusPct == null) s.seniorInstallerBonusPct = 10;
+  // One commission number per manager: payConfig.commissionPct is what payroll uses;
+  // the old top-level copy (10% for Danil while payroll paid 5%) follows it.
+  if (!s._commissionMirror20261024 && Array.isArray(db.users)) {
+    db.users.forEach(u => { if (u && u.role === 'manager' && u.payConfig && u.payConfig.commissionPct != null) u.commissionPct = Number(u.payConfig.commissionPct) || 0; });
+    s._commissionMirror20261024 = true;
+  }
   if (!s.paymentInstructions) {
     s.paymentInstructions = 'Реквизиты для оплаты:\n\nЗолотая карта/перевод: укажите свои реквизиты в Настройки → Оплата.\n\nПосле перевода пришлите чек на email или WhatsApp.';
   }
@@ -16464,7 +16471,14 @@ function orderInstallerPayoutForUser(o, userId) {
     if (!crew.includes(userId)) return sum;
     return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / Math.max(1, crew.length);
   }, 0);
-  return filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length);
+  return (filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * installerSeniorFactor(user);
+}
+/** Senior installer (Owner, 2026-10-24): the crew splits the job equally, and the
+ * senior gets his half plus seniorInstallerBonusPct of it — 1000 → 500 + 550. */
+function installerSeniorFactor(user) {
+  if (!user || user.installerLevel !== 'senior') return 1;
+  const pct = Number(db.settings?.seniorInstallerBonusPct);
+  return 1 + (Number.isFinite(pct) && pct > 0 ? pct : 0) / 100;
 }
 function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
@@ -19621,6 +19635,7 @@ function saveCanonicalPlanning() {
 function companyRatesBlockHtml(owner) {
   const s = db.settings || {};
   const managers = (db.users || []).filter(u => u.role === 'manager' && u.active !== false);
+  const installers = (db.users || []).filter(u => u.role === 'installer' && u.active !== false);
   const tax = Number(s.projectProfitTax?.ratePct);
   const field = (label, html, hint = '') => `<div><label>${label}</label>${html}${hint ? `<div class="text-xs text-gray-500 mt-1">${hint}</div>` : ''}</div>`;
   const num = (value, onchange, step = 1) => owner ? `<input type="number" min="0" step="${step}" value="${value ?? ''}" onchange="${onchange}">` : `<div class="font-black">${value ?? '—'}</div>`;
@@ -19631,9 +19646,19 @@ function companyRatesBlockHtml(owner) {
       ${field('Аванс, % от проекта', num(s.advancePct ?? 10, "db.settings.advancePct=Math.max(0, Number(this.value)||0); save(); render();"))}
       ${field('Аванс не больше, $', num(s.depositCapUsd ?? 1000, "db.settings.depositCapUsd=Math.max(0, Number(this.value)||0)||null; save(); render();", 50))}
       ${field('Налог с прибыли проекта, %', num(Number.isFinite(tax) ? tax : '', "db.settings.projectProfitTax=Object.assign({}, db.settings.projectProfitTax||{}, {ratePct: Math.max(0, Number(this.value)||0)}); save(); render();", 0.1))}
-      ${managers.map(u => field(`Комиссия: ${academyEsc(u.name)}, %`, num(Number(u.payConfig?.commissionPct) || 0, `companyRatesSetCommission('${u.id}', this.value)`, 0.5), 'от суммы оплаченного проекта')).join('')}
+      ${managers.map(u => field(`Комиссия: ${academyEsc(u.name)}, %`, num(Number(u.payConfig?.commissionPct) || 0, `companyRatesSetCommission('${u.id}', this.value)`, 0.5), 'от валовой выручки оплаченного проекта')).join('')}
+      ${field('Надбавка старшему в бригаде, %', num(s.seniorInstallerBonusPct ?? 10, "db.settings.seniorInstallerBonusPct=Math.max(0, Number(this.value)||0); save(); render();", 1), 'к его равной доле: 1000 на двоих → 500 и 550')}
     </div>
+    ${installers.length ? `<div class="mt-2 flex flex-wrap gap-2 items-center"><span class="text-xs font-bold text-slate-600">Старшие в бригаде:</span>${installers.map(u => `<label class="tag" style="display:inline-flex;gap:6px;align-items:center"><input style="width:auto" type="checkbox" ${u.installerLevel === 'senior' ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="companyRatesSetSenior('${u.id}', this.checked)"> ${academyEsc(u.name)}</label>`).join('')}</div>` : ''}
   </div>`;
+}
+function companyRatesSetSenior(userId, checked) {
+  if (currentUser()?.role !== 'owner') return;
+  const u = getUser(userId);
+  if (!u) return;
+  if (checked) u.installerLevel = 'senior'; else delete u.installerLevel;
+  save();
+  render();
 }
 function companyRatesSetCommission(userId, value) {
   if (currentUser()?.role !== 'owner') return;
@@ -39578,7 +39603,7 @@ function openUserPayConfig(userId) {
 
       <div id="pc-per_sqft" class="pc-section mt-3" style="display:${pc.type==='per_sqft'?'block':'none'}">
         <p class="text-sm text-gray-700">Сдельно: ставка за монтаж берётся из услуги в «Услуги и цены» — одна для всех специалистов по установке. Персональных ставок нет.</p>
-        <p class="text-xs text-gray-500 mt-1">Если на объекте несколько специалистов по установке, начисление по услуге делится поровну.</p>
+        <p class="text-xs text-gray-500 mt-1">Если на объекте несколько специалистов по установке, начисление по услуге делится поровну. Старший в бригаде получает надбавку к своей доле — отмечается в «Услуги и цены» → «Общие ставки компании».</p>
       </div>
 
       <div id="pc-fixed_per_job" class="pc-section mt-3" style="display:${pc.type==='fixed_per_job'?'block':'none'}">

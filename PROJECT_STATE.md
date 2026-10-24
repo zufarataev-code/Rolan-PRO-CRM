@@ -30,6 +30,14 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-24 handoff — senior in the crew, commission as one number
+
+- Branch: `claude/senior-installer`, based on `main` after PR #373.
+- Owner, 2026-10-24: the crew splits the job equally and the senior gets +10% of his share (1000 → 500 and 550); the manager earns 5% of gross revenue.
+- `installerSeniorFactor(user)`: `user.installerLevel === 'senior'` multiplies that installer's per-sq-ft share by 1 + `settings.seniorInstallerBonusPct` (default 10), in both `orderInstallerPayoutForUser` definitions (HTML and production-stages, incl. stage pay). «Общие ставки компании» has «Надбавка старшему в бригаде, %» and the «Старшие в бригаде» checkboxes (house term: no «старший специалист»).
+- Migration `_commissionMirror20261024` copies each manager's `payConfig.commissionPct` (what payroll uses; Danil 5%) over the stale top-level copy (10%).
+- Verification: senior split test in `rates-directory.test.ts`; full suite 809/809; TypeScript passes.
+
 ## 2026-10-24 handoff — one rates directory
 
 - Branch: `claude/rates-directory`, based on `main` after PR #372.

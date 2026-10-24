@@ -129,7 +129,7 @@ test('two completed stages accrue in their own weeks and payment cannot count ei
   payload.payrollPayments=[];
   const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));
   const source=(name:string)=>{const start=html.indexOf(`function ${name}(`);return html.slice(start,html.indexOf('\n}',start)+2);};
-  const c=vm.createContext({db:payload,state:{currentUserId:'owner'},getOrder:()=>o,getUser:(id:string)=>payload.users.find((u:Row)=>u.id===id),
+  const c=vm.createContext({db:payload,state:{currentUserId:'owner'},getOrder:()=>o,getUser:(id:string)=>payload.users.find((u:Row)=>u.id===id),installerSeniorFactor:()=>1,
     measureAllWindows:(order:Row)=>order.measurements.rooms.flatMap((room:Row)=>room.windows.map((win:Row)=>({room,win}))),
     orderQuickInstallerPayoutForUser:()=>0,orderAdditionalWorkPayoutForUser:()=>0,orderActualAreaSqft:()=>100,
     financeDate:(value:string)=>new Date(value),fmtMoney:String,uid:()=>String(payload.payrollPayments.length),save:()=>{},render:()=>{},confirm:()=>true,alert:()=>{},
