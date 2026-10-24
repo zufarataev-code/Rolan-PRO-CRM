@@ -30,6 +30,17 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-24 handoff — phone flow: back buttons, cashier row, simpler project form, one services list
+
+- Branch: `claude/mobile-flow`, based on `main` after PR #370.
+- Owner, 2026-10-24 (phone screenshots): no way back from the calculation and the KP, cashier steps stacked as full-width buttons, project creation hard to read, and on «Услуги и цены» a second «Услуги» list under the directions that looked like a duplicate.
+- «Услуги и цены»: the old server price list (`renderCanonicalServicePricing` services + add-ons) only feeds the «Калькулятор» page, not projects, cashier or KP. It is now one closed block «Прайс быстрого калькулятора» under the directions, with that explanation; nothing deleted.
+- Back: «← К проекту» in the calculation header and in Proposal Studio («← К списку КП» when opened from the registry).
+- Cashier: `mobile-workspace.ts` auto-layout passes skip `.rp-cashier` and `[data-rp-keep-layout]`; on phones the steps are one swipeable row. A material list over 8 films folds by series with «Материал уточним на замере» first.
+- Calculation footer on phones: hint clamped to two lines, «Сохранить черновик» beside the main button.
+- Project form: the chosen client is one line with chips and «Сменить»; segment/relationship fold under «Сегмент и тип клиента · изменить»; one «Адрес объекта» (a select only with several addresses, «+ Другой адрес»); the «старым форматом» address warning is no longer shown here; plain hint for «Услуги проекта».
+- Verification: new `mobile-flow.test.ts`; full suite 803/803; TypeScript passes; local full cycle (client → payment, signature) passes on desktop; phone (390 px) screenshots of form, cashier, calculation and KP checked.
+
 ## 2026-10-24 handoff — films by direction when a service has none linked
 
 - Branch: `claude/films-by-category`, based on `main` after PR #369.
