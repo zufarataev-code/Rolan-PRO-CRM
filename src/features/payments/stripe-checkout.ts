@@ -1,4 +1,5 @@
 import { getEnv } from "@/lib/env";
+import { PAYMENT_SYSTEM_FEE_PERCENT } from "@/features/payments/policy";
 
 export type StripeDepositCheckoutInput = {
   accessToken: string;
@@ -44,7 +45,7 @@ export async function createStripeDepositCheckout(input: StripeDepositCheckoutIn
   body.set("line_items[0][price_data][product_data][name]", "ROLANPRO project deposit");
   body.set(
     "line_items[0][price_data][product_data][description]",
-    `Deposit ${input.baseAmount.toFixed(2)} + 3.5% processing fee ${input.processingFee.toFixed(2)}`,
+    `Deposit ${input.baseAmount.toFixed(2)} + ${PAYMENT_SYSTEM_FEE_PERCENT}% card processing fee ${input.processingFee.toFixed(2)}`,
   );
   body.set("line_items[0][price_data][unit_amount]", String(amountCents));
   body.set("line_items[0][quantity]", "1");
@@ -52,10 +53,10 @@ export async function createStripeDepositCheckout(input: StripeDepositCheckoutIn
   body.set("metadata[deposit_id]", input.depositId);
   body.set("metadata[base_amount]", input.baseAmount.toFixed(2));
   body.set("metadata[processing_fee]", input.processingFee.toFixed(2));
-  body.set("metadata[fee_percent]", "3.5");
+  body.set("metadata[fee_percent]", String(PAYMENT_SYSTEM_FEE_PERCENT));
   body.set("payment_intent_data[metadata][proposal_id]", input.proposalId);
   body.set("payment_intent_data[metadata][deposit_id]", input.depositId);
-  body.set("payment_intent_data[metadata][fee_percent]", "3.5");
+  body.set("payment_intent_data[metadata][fee_percent]", String(PAYMENT_SYSTEM_FEE_PERCENT));
 
   const email = input.clientEmail?.trim().toLowerCase();
   if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {

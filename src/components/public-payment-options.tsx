@@ -95,8 +95,8 @@ export function PublicPaymentOptions({
       <p>
         {ru ? "Сумма к оплате сейчас: " : "Amount due now: "}<strong>{formatMoney(baseAmount, data.currency)}</strong>.{" "}
         {ru
-          ? "Zelle и банковский перевод — без комиссии. При оплате картой защищённая форма добавит комиссию 3,5%."
-          : "Zelle and bank transfer have no processing fee. Secure online payment includes a 3.5% processing fee."}
+          ? "Zelle и банковский перевод — без комиссии. При оплате картой добавляется комиссия за обработку карты 3%."
+          : "Zelle and bank transfer have no fee. Paying by card adds a 3% card processing fee."}
       </p>
 
       {!data.agreement_signed && !paid ? (

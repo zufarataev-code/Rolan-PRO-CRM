@@ -1,4 +1,4 @@
-import { calculatePaymentAmount, calculateSuggestedDeposit, isPaymentMethod, PAYMENT_METHODS, type PaymentMethod } from "@/features/payments/policy";
+import { calculatePaymentAmount, calculateSuggestedDeposit, isPaymentMethod, LEGACY_PAYMENT_SYSTEM_FEE_PERCENTS, PAYMENT_METHODS, PAYMENT_SYSTEM_FEE_PERCENT, type PaymentMethod } from "@/features/payments/policy";
 import { createStripeDepositCheckout, isStripeCheckoutConfigured } from "@/features/payments/stripe-checkout";
 import { prisma } from "@/lib/db";
 
@@ -6,10 +6,34 @@ function money(value: { toString(): string } | null | undefined) {
   return value ? Number(value.toString()) : 0;
 }
 
-function protectedPaymentInstructions() {
+/**
+ * Zelle and bank details: the server env when set, else what the owner entered in
+ * the CRM («Настройки → Оплата из КП»), so the client page never says «not
+ * configured» while the CRM has the details (Owner, 2026-10-24).
+ */
+async function protectedPaymentInstructions() {
+  const envZelle = process.env.ROLANPRO_ZELLE_RECIPIENT?.trim() || null;
+  const envBank = process.env.ROLANPRO_BANK_TRANSFER_INSTRUCTIONS?.trim() || null;
+  if (envZelle && envBank) return { zelle_recipient: envZelle, bank_transfer_instructions: envBank };
+  let crm: Record<string, unknown> = {};
+  try {
+    const workspace = await prisma.legacyWorkspace.findUnique({ where: { workspace_id: "primary" }, select: { payload: true } });
+    const settings = asRecord(asRecord(workspace?.payload)?.settings);
+    crm = asRecord(settings?.clientPayments) ?? {};
+  } catch {
+    crm = {};
+  }
+  return paymentInstructionsFromSettings(crm, { zelle: envZelle, bank: envBank });
+}
+
+export function paymentInstructionsFromSettings(crm: Record<string, unknown>, env: { zelle: string | null; bank: string | null }) {
+  const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const recipient = text(crm.zelleRecipient);
+  const name = text(crm.zelleRecipientName);
+  const zelleOn = crm.zelleEnabled !== false;
   return {
-    zelle_recipient: process.env.ROLANPRO_ZELLE_RECIPIENT?.trim() || null,
-    bank_transfer_instructions: process.env.ROLANPRO_BANK_TRANSFER_INSTRUCTIONS?.trim() || null,
+    zelle_recipient: env.zelle || (zelleOn && recipient ? (name ? `${recipient} (${name})` : recipient) : null),
+    bank_transfer_instructions: env.bank || text(crm.bankTransferInstructions) || null,
   };
 }
 
@@ -29,7 +53,7 @@ function isVerifiedFeeAwareCheckout(
 
   return (
     metadata.deposit_id === depositId &&
-    Number(metadata.fee_percent) === 3.5 &&
+    [PAYMENT_SYSTEM_FEE_PERCENT, ...LEGACY_PAYMENT_SYSTEM_FEE_PERCENTS].includes(Number(metadata.fee_percent)) &&
     Number(metadata.payable_amount) === payableAmount &&
     typeof metadata.checkout_session_id === "string" &&
     metadata.checkout_session_id.length > 0
@@ -68,7 +92,7 @@ export async function getPublicPaymentOptions(accessToken: string) {
 
   if (!proposal) return null;
 
-  const instructions = protectedPaymentInstructions();
+  const instructions = await protectedPaymentInstructions();
   const suggestedBaseAmount = calculateSuggestedDeposit(
     money(proposal.selected_total_amount),
     proposal.property_type,
@@ -122,7 +146,7 @@ export async function getPublicPaymentOptions(accessToken: string) {
         ...onlineAmount,
         label: "Online payment",
         description: isStripeCheckoutConfigured()
-          ? "Secure online checkout — the 3.5% processing fee is included in the charged amount."
+          ? `Credit card — a ${PAYMENT_SYSTEM_FEE_PERCENT}% card processing fee is added. Zelle and bank transfer have no fee.`
           : "Online payment is temporarily unavailable until the secure processor is configured.",
         instructions: null,
         available: isStripeCheckoutConfigured(),

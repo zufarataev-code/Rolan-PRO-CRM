@@ -30,6 +30,15 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-24 handoff — Zelle from CRM settings, card fee 3%
+
+- Branch: `claude/zelle-and-card-fee`, based on `main` after PR #375.
+- Owner, 2026-10-24: clients should pay by Zelle; a card payment passes Stripe's fee to the client («доплата за карту»). Zelle details given: zufarast@gmail.com, ROLANPRO LLC.
+- The client KP page showed every method «not configured» because Zelle/bank details were read only from server env vars. `protectedPaymentInstructions` now falls back to the CRM settings (`settings.clientPayments.zelleRecipient` / `zelleRecipientName` / `zelleEnabled`, `bankTransferInstructions`) in the legacy workspace; env still wins.
+- Card fee `PAYMENT_SYSTEM_FEE_PERCENT` 3.5 → 3 (Visa's surcharge cap, ≈ Stripe's rate); Stripe checkout description/metadata use the constant; checkouts created at 3.5% still verify (`LEGACY_PAYMENT_SYSTEM_FEE_PERCENTS`). Client texts say «card processing fee 3%; Zelle and bank transfer have no fee».
+- Open (owner): surcharging needs notice to Stripe/Visa 30 days ahead, credit cards only (no debit), and California law restricts surcharges — the owner was told and chose the surcharge.
+- Verification: two tests in `public-options.test.ts`; fee tests updated; full suite 815/815; TypeScript passes.
+
 ## 2026-10-24 handoff — direction windows and the KP window
 
 - Branch: `claude/direction-windows`, based on `main` after PR #374.

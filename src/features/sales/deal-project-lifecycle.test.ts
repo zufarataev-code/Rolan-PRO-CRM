@@ -49,7 +49,7 @@ test("sales pipeline ends at CLOSED_WON and cannot enter project execution statu
   assert.deepEqual(getAllowedStageTransitions("IN_PROGRESS"), []);
 });
 
-test("Zelle and bank transfer have no fee while online payment adds exactly 3.5 percent", () => {
+test("Zelle and bank transfer have no fee while online payment adds exactly 3 percent (Owner, 2026-10-24)", () => {
   const base = 1000;
   const zelle = calculatePaymentAmount(base, PAYMENT_METHODS.ZELLE);
   const bank = calculatePaymentAmount(base, PAYMENT_METHODS.BANK_TRANSFER);
@@ -63,17 +63,17 @@ test("Zelle and bank transfer have no fee while online payment adds exactly 3.5 
   assert.equal(bank.processing_fee, 0);
   assert.equal(bank.payable_amount, 1000);
 
-  assert.equal(online.fee_percent, 3.5);
-  assert.equal(online.processing_fee, 35);
-  assert.equal(online.payable_amount, 1035);
+  assert.equal(online.fee_percent, 3);
+  assert.equal(online.processing_fee, 30);
+  assert.equal(online.payable_amount, 1030);
 });
 
 test("payment fee calculation rounds to cents and never creates a negative payable amount", () => {
   const rounded = calculatePaymentAmount(1234.56, PAYMENT_METHODS.PAYMENT_SYSTEM);
   const negative = calculatePaymentAmount(-100, PAYMENT_METHODS.PAYMENT_SYSTEM);
 
-  assert.equal(rounded.processing_fee, 43.21);
-  assert.equal(rounded.payable_amount, 1277.77);
+  assert.equal(rounded.processing_fee, 37.04);
+  assert.equal(rounded.payable_amount, 1271.6);
   assert.equal(negative.base_amount, 0);
   assert.equal(negative.processing_fee, 0);
   assert.equal(negative.payable_amount, 0);
