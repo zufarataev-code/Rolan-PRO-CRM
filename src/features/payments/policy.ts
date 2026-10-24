@@ -6,7 +6,12 @@ export const PAYMENT_METHODS = {
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[keyof typeof PAYMENT_METHODS];
 
-export const PAYMENT_SYSTEM_FEE_PERCENT = 3.5;
+// Card processing fee passed to the client (Owner, 2026-10-24: «доплата за карту…
+// процент Stripe перекинуть на клиента»). 3% = Visa's surcharge cap and roughly
+// Stripe's own rate; Zelle and bank transfer stay free.
+export const PAYMENT_SYSTEM_FEE_PERCENT = 3;
+/** Checkouts created before 2026-10-24 carried 3.5%; they still verify. */
+export const LEGACY_PAYMENT_SYSTEM_FEE_PERCENTS = [3.5];
 
 /** Company rule (Owner, 2026-10-24): 10% of the project, never more than $1 000 — residential and commercial alike. */
 export const DEPOSIT_PERCENT = 10;

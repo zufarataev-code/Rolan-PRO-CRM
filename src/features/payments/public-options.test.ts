@@ -16,3 +16,18 @@ test("invalid totals never produce a payable deposit", () => {
   assert.equal(calculateSuggestedDeposit(-100, "residential"), 0);
   assert.equal(calculateSuggestedDeposit(Number.NaN, "commercial"), 0);
 });
+
+test("Zelle details come from the CRM settings when the server env has none (Owner, 2026-10-24)", async () => {
+  const { paymentInstructionsFromSettings } = await import("./public-options");
+  const crm = { zelleRecipient: "zufarast@gmail.com", zelleRecipientName: "ROLANPRO LLC", zelleEnabled: true };
+  assert.equal(paymentInstructionsFromSettings(crm, { zelle: null, bank: null }).zelle_recipient, "zufarast@gmail.com (ROLANPRO LLC)");
+  assert.equal(paymentInstructionsFromSettings({ ...crm, zelleEnabled: false }, { zelle: null, bank: null }).zelle_recipient, null);
+  assert.equal(paymentInstructionsFromSettings(crm, { zelle: "env@x", bank: null }).zelle_recipient, "env@x", "the env still wins");
+});
+
+test("the card fee passed to the client is 3%; Zelle and bank transfer are free", async () => {
+  const { calculatePaymentAmount, PAYMENT_METHODS, PAYMENT_SYSTEM_FEE_PERCENT } = await import("./policy");
+  assert.equal(PAYMENT_SYSTEM_FEE_PERCENT, 3);
+  assert.equal(calculatePaymentAmount(1000, PAYMENT_METHODS.PAYMENT_SYSTEM).payable_amount, 1030);
+  assert.equal(calculatePaymentAmount(1000, PAYMENT_METHODS.ZELLE).payable_amount, 1000);
+});
