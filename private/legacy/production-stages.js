@@ -357,8 +357,8 @@ function projectRecommendations(o) {
   if (directions.has('protective') || windows.some(win=>win.side==='out')) {
     addOffering('protective-attachment','protective',/silicon|силикон|attachment|wet.?glaze|креплен/i,'Добавить силиконовое крепление','Защитная плёнка и наружный монтаж могут требовать отдельного второго этапа.');
   }
-  const pending = projectPendingSizedServices(o);
-  if (pending.length && !dismissed.has('measurement')) suggestions.push({key:'measurement',title:'Создать или связать замер',reason:`${pending.length} ${projectPlural(pending.length,'услуга ждёт','услуги ждут','услуг ждут')} размеров для расчёта.`,measure:true});
+  // The measurement is already the card's main «next step» button; a second
+  // «Создать или связать замер» here was one more way to the same place (Owner, 2026-10-23).
   return suggestions;
 }
 function projectRecommendationAction(oid, key, offeringId = '', measure = false) {
