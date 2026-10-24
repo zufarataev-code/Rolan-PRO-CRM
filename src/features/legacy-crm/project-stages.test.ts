@@ -53,7 +53,7 @@ test('the next step follows the services: add them, measure what needs sizes, th
   const step = c.projectServicesNextAction(sizeFree);
   assert.equal(step.title, 'Расчёт готов → КП');
   assert.match(step.sub, /Замер не нужен/);
-  assert.equal(step.onclick, "approveProjectEstimateAndOpenProposal('o')", 'approved from the card, not in the old estimate window');
+  assert.equal(step.onclick, "openProposalWizard('o')", 'the KP window: composition, then «Собрать КП» (Owner, 2026-10-24)');
   assert.equal(c.projectServicesNextAction({ ...sizeFree, approved: true }).title, 'Сформировать КП');
   // A measured project whose windows are complete goes to its estimate even before the status moved.
   assert.match(c.projectServicesNextAction({ ...sizeFree, needsSizes: true, status: 'measurement_scheduled' }).sub, /Размеры внесены/);

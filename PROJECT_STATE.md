@@ -30,6 +30,15 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-24 handoff — direction windows and the KP window
+
+- Branch: `claude/direction-windows`, based on `main` after PR #374.
+- Owner, 2026-10-24: «когда выбираешь направление, оно должно открываться в окне отдельно и добавлять свои услуги… и КП тоже самое»; «дизайн должен остаться как есть… самое главное везде цветовые решения». A phone mock-up (Design canvas «Проект по направлениям — новый путь») was approved first.
+- `openProjectDirectionWindow(oid, key, step)` (production-stages.js): the calculation workspace frame in the direction's `rpDir` colour, three steps Услуги → Замер → Цена with only that direction's lines, pending services, windows and money (owner: direct cost and margin). The project-card direction tiles and «Открыть направление →» open it. «+ Услуга направления» opens the cashier at that direction with `returnTo: 'direction'`, which comes back to the window; «Открыть замер этого направления» selects that scope in the measurement modal, whose header gets «← К направлению».
+- `openProposalWizard(oid, step)`: Состав (direction blocks in their colours, total, deposit, readiness issues) → Как увидит (the client page in an iframe) → Отправить (WhatsApp, SMS, Email, copy link via the existing `premiumMarkProposalSent` / `premiumSendCanonicalProposal`). «Собрать КП» runs the existing approve/generate; `openPremiumProposalManagerModal` redirects into the window while it is open or building (`proposalWizardActive`), and the studio stays reachable («Все настройки КП»). Next actions «Расчёт готов → КП», «Сформировать КП» and «Отправить КП клиенту» open the window.
+- Phones: `.rp-dirwin` skips the mobile auto-layout; the window is a 4-row grid so the step row does not stretch.
+- Verification: new `direction-windows.test.ts`; one next-action assertion updated; full suite 813/813; TypeScript passes; local full cycle passes; KP window flow (compose → build → preview → WhatsApp → sent) and phone/desktop screenshots checked.
+
 ## 2026-10-24 handoff — senior in the crew, commission as one number
 
 - Branch: `claude/senior-installer`, based on `main` after PR #373.

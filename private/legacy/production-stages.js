@@ -401,7 +401,7 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
     const count = direction.lines.length + direction.pending.length;
     const total = direction.lines.filter(line => !line.excluded).reduce((sum, line) => sum + (Number(line.price) || 0), 0);
     const excluded = projectDirectionExcluded(o, direction.key);
-    return `<button type="button" class="project-cashier-direction ${excluded ? 'excluded' : ''}" style="--direction-color:${academyEsc(color)}" onclick="projectCardFocusDirection('${o.id}','${jsQuote(direction.key)}')"><span class="project-cashier-direction-icon">${direction.icon}</span><span><b>${academyEsc(direction.title)}</b><span>${count} ${projectPlural(count, 'услуга', 'услуги', 'услуг')}${money ? ` · ${fmtMoney(total)}` : ''}${excluded ? ' · вне расчёта' : ''}</span></span>${direction.key === primaryKey ? '<span class="project-cashier-primary">основное</span>' : ''}</button>`;
+    return `<button type="button" class="project-cashier-direction ${excluded ? 'excluded' : ''}" style="--direction-color:${academyEsc(color)}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')"><span class="project-cashier-direction-icon">${direction.icon}</span><span><b>${academyEsc(direction.title)}</b><span>${count} ${projectPlural(count, 'услуга', 'услуги', 'услуг')}${money ? ` · ${fmtMoney(total)}` : ''}${excluded ? ' · вне расчёта' : ''}</span></span>${direction.key === primaryKey ? '<span class="project-cashier-primary">основное</span>' : ''}</button>`;
   }).join('');
   const rooms = o.measurements?.rooms?.length || 0;
   const windows = measureAllWindows(o).length;
@@ -469,6 +469,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       <header class="project-direction-head">
         <div><div class="project-direction-title">${direction.icon} ${academyEsc(direction.title)} <span class="tag">${directionLines.length + direction.pending.length}</span></div><div class="project-direction-meta">${excluded?'Не входит в расчёт и КП':academyEsc(status)}${!excluded&&dates.length ? ` · ближайшая дата ${academyEsc(fmtDateTime(dates[0]))}` : ''}</div></div>
         <div class="project-direction-kpis">${money ? `<span><small>Клиенту</small><b>${fmtMoney(amount('price'))}</b></span>` : ''}${economics ? `<span><small>Материал + работа</small><b>${fmtMoney(amount('materialCost') + amount('installerPay'))}</b></span><span><small>Расходы план / факт</small><b>${fmtMoney(expenses.planned)} / ${fmtMoney(expenses.actual)}</b></span>` : ''}</div>
+        <button type="button" class="btn-primary text-sm project-direction-open" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')">Открыть направление →</button>
         ${money && edit ? `<div class="project-direction-actions">${projectDirectionOfferingPickerHtml(o,direction.key)}<label><input type="checkbox" ${excluded?'':'checked'} onchange="projectToggleDirectionIncluded('${o.id}','${direction.key}',this.checked)"> В расчёте</label></div>` : ''}
       </header>
       <div class="project-direction-services">${directionLines.map(row).join('')}${direction.pending.map(pendingRow).join('') || (!directionLines.length ? '<div class="p-4 text-sm text-gray-500">Добавьте услугу этого направления.</div>' : '')}</div>
@@ -988,4 +989,211 @@ function projectServiceScope(o, group) {
   const rooms = new Map(measureAllWindows(o).map(({ room, win }) => [win, room?.id ?? null]));
   const byId = (a, b) => String(a.id ?? '').localeCompare(String(b.id ?? ''));
   return JSON.stringify([...group.windows.map(win => ({ ...pick(win, PROJECT_SCOPE_WINDOW_FIELDS), roomId: rooms.get(win) ?? null })).sort(byId), ...group.lines.map(line => pick(line, PROJECT_SCOPE_LINE_FIELDS))], (_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
+}
+
+// ---------- DIRECTION WINDOW (Owner, 2026-10-24) ----------
+// «Когда выбираешь направление, оно должно открываться в окне отдельно и
+// добавлять свои услуги». Each direction of a project opens in its own window
+// with three steps — Услуги → Замер → Цена — showing only that direction's
+// services, windows and money, in the direction's colour. The CRM's look stays
+// as it is: the window reuses the calculation workspace frame.
+function projectDirectionWindowSteps() {
+  return [{ id: 'services', label: 'Услуги' }, { id: 'measure', label: 'Замер' }, { id: 'price', label: 'Цена' }];
+}
+function projectDirectionWindowData(o, directionKey) {
+  const lines = projectLines(o);
+  const pending = projectPendingSizedServices(o);
+  const direction = projectDirectionGroups(o, lines, pending).find(item => item.key === directionKey)
+    || { ...projectLineDirectionInfo({ direction: directionKey }), lines: [], pending: [] };
+  const windows = measureAllWindows(o).filter(({ win }) => projectLineDirectionInfo({ direction: win.measureScope || o.serviceType, offeringId: win.offeringId }).key === directionKey);
+  const sized = direction.lines.filter(line => line.kind === 'windows').length + direction.pending.length;
+  const unsized = windows.filter(({ win }) => typeof windowSizeEntered === 'function' && !windowSizeEntered(win)).length;
+  const total = projectDirectionExcluded(o, directionKey) ? 0 : direction.lines.filter(line => !line.excluded && line.kind !== 'included').reduce((sum, line) => sum + (Number(line.price) || 0), 0);
+  const done = {
+    services: direction.lines.length + direction.pending.length > 0,
+    measure: !sized || (windows.length > 0 && !unsized && !direction.pending.length),
+    price: total > 0 && !direction.pending.length,
+  };
+  return { direction, windows, total, done, unsized };
+}
+function openProjectDirectionWindow(oid, directionKey, step = '') {
+  const o = getOrder(oid);
+  if (!o) return;
+  const prev = state._directionWindow;
+  const current = step || (prev && prev.oid === oid && prev.key === directionKey ? prev.step : '') || 'services';
+  state._directionWindow = { oid, key: directionKey, step: current };
+  state.modal = projectDirectionWindowHtml(o, directionKey, current);
+  render();
+}
+function closeProjectDirectionWindow() {
+  state._directionWindow = null;
+  closeModal();
+}
+function returnToProjectDirectionWindow() {
+  const w = state._directionWindow;
+  if (!w || !getOrder(w.oid)) return false;
+  openProjectDirectionWindow(w.oid, w.key, w.step);
+  return true;
+}
+function projectDirectionWindowAddService(oid, directionKey) {
+  state._directionWindow = { ...(state._directionWindow || {}), oid, key: directionKey, step: 'services' };
+  openServiceCashier(oid, 'direction');
+  serviceCashierPick('direction', directionKey);
+}
+function projectDirectionWindowMeasure(oid, directionKey) {
+  state._directionWindow = { ...(state._directionWindow || {}), oid, key: directionKey, step: 'measure' };
+  openManagerMeasureModal(oid);
+  const o = getOrder(oid);
+  if (o && orderMeasureScopes(o).includes(directionKey)) managerSelectMeasureScope(oid, directionKey);
+}
+function projectDirectionWindowHtml(o, directionKey, step) {
+  const tone = rpDir(directionKey);
+  const money = orderUserCanSeeMoney(o, currentUser());
+  const owner = currentUser()?.role === 'owner';
+  const edit = money && !CLOSED_PROJECT_STATUSES.includes(o.status);
+  const { direction, windows, total, done, unsized } = projectDirectionWindowData(o, directionKey);
+  const steps = projectDirectionWindowSteps();
+  const index = Math.max(0, steps.findIndex(item => item.id === step));
+  const tabs = steps.map((item, i) => `<button type="button" class="rp-dirwin-step ${i === index ? 'current' : done[item.id] ? 'done' : ''}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','${item.id}')">${done[item.id] && i !== index ? '✓' : i + 1} ${item.label}</button>`).join('');
+  const lineRow = line => `<div class="rp-dirwin-row"><div><b>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</b><span>${academyEsc(projectLineNote(line))}</span></div><div class="rp-dirwin-num">${academyEsc(projectLineQtyText(line))}${money ? `<b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b>` : ''}</div></div>`;
+  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="rp-dirwin-row pending"><div><b>${academyEsc(offering.name)}</b><span>${film ? academyEsc(catalogLabel(film)) : 'материал уточним на замере'}</span></div><div class="rp-dirwin-num">нужен замер</div></div>`; };
+  let body = '';
+  if (step === 'measure') {
+    const rooms = new Map();
+    windows.forEach(({ room, win }) => { if (!rooms.has(room.id)) rooms.set(room.id, { room, list: [] }); rooms.get(room.id).list.push(win); });
+    const unit = db.settings?.inputUnits === 'inches' ? 'in' : 'mm';
+    const size = win => (typeof windowSizeEntered === 'function' && !windowSizeEntered(win)) ? 'размер не внесён' : `${measureMmToInput(win.width)} × ${measureMmToInput(win.height)} ${unit}${Number(win.qty) > 1 ? ` · ${win.qty} шт.` : ''} · ${windowAreaSqft(win).toFixed(1)} sq ft`;
+    body = `<p class="rp-dirwin-hint">Только окна этого направления. Окна других направлений — в их окнах.</p>
+      ${[...rooms.values()].map(({ room, list }) => `<div class="rp-dirwin-group">${academyEsc(room.name || 'Помещение')} · ${list.length} ${projectWindowsWord(list.length)}</div>${list.map(win => `<div class="rp-dirwin-row"><div><b>${academyEsc(win.name || 'Окно')}</b><span>${academyEsc(size(win))}</span></div><div class="rp-dirwin-num">${windowMeasurementIsVerified(win) ? '<span class="rp-dirwin-ok">✓ точно</span>' : '<span class="rp-dirwin-wait">от клиента</span>'}</div></div>`).join('')}`).join('') || '<div class="rp-dirwin-empty">Окон этого направления пока нет.</div>'}
+      ${unsized ? `<div class="rp-dirwin-warn">Без размеров: ${unsized} ${projectWindowsWord(unsized)}</div>` : ''}
+      <button type="button" class="btn-ghost w-full mt-2" onclick="projectDirectionWindowMeasure('${o.id}','${jsQuote(directionKey)}')">${windows.length ? 'Открыть замер этого направления' : '+ Внести окна этого направления'}</button>`;
+  } else if (step === 'price') {
+    const cost = direction.lines.reduce((sum, line) => sum + (Number(line.materialCost) || 0) + (Number(line.installerPay) || 0), 0);
+    body = `<p class="rp-dirwin-hint">Цена посчитана из услуг и замера этого направления.</p>
+      ${direction.lines.map(lineRow).join('')}${direction.pending.map(pendingRow).join('')}
+      ${money ? `<div class="rp-dirwin-total"><span>Итого направление</span><b>${fmtMoney(total)}</b></div>` : ''}
+      ${owner && total > 0 ? `<div class="rp-dirwin-owner"><div class="rp-dirwin-group">Видит только владелец</div><div class="rp-dirwin-row"><div><b>Материал и специалисты по установке</b><span>по строкам направления</span></div><div class="rp-dirwin-num"><b>${fmtMoney(cost)}</b></div></div><div class="rp-dirwin-row"><div><b>Прямая маржа</b><span>без общих расходов проекта</span></div><div class="rp-dirwin-num"><b>${fmtMoney(total - cost)} · ${total ? Math.round((total - cost) / total * 100) : 0}%</b></div></div></div>` : ''}
+      ${money ? `<button type="button" class="btn-ghost w-full mt-2" onclick="state._directionWindow=null;openProjectEstimateWorkspace('${o.id}')">Полный расчёт проекта и КП</button>` : ''}`;
+  } else {
+    body = `<p class="rp-dirwin-hint">Что делаем в этом направлении. Здесь только его услуги и плёнки.</p>
+      ${direction.lines.map(lineRow).join('')}${direction.pending.map(pendingRow).join('')}
+      ${!direction.lines.length && !direction.pending.length ? '<div class="rp-dirwin-empty">Услуг пока нет.</div>' : ''}
+      ${edit ? `<button type="button" class="rp-dirwin-add" onclick="projectDirectionWindowAddService('${o.id}','${jsQuote(directionKey)}')">+ Услуга направления «${academyEsc(direction.title)}»</button>` : ''}`;
+  }
+  const next = index < steps.length - 1
+    ? `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','${steps[index + 1].id}')">Далее: ${steps[index + 1].label.toLowerCase()} →</button>`
+    : `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="closeProjectDirectionWindow()">✓ Готово — к проекту</button>`;
+  return `<div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeProjectDirectionWindow()">
+    <div class="modal-content workspace-modal order-workspace-modal rp-dirwin" style="--workspace-color:${academyEsc(tone.color)};--dir-color:${academyEsc(tone.color)};--dir-tint:${academyEsc(tone.tint)};--dir-deep:${academyEsc(tone.deep)}" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Направление ${academyEsc(direction.title)}">
+      <header class="order-workspace-modal-head rp-dirwin-head">
+        <button type="button" class="workspace-back" onclick="closeProjectDirectionWindow()">← К проекту</button>
+        <div class="order-workspace-modal-heading"><span class="order-workspace-modal-icon rp-dirwin-icon">${rpIcon(tone, 20)}</span><div><div class="order-workspace-modal-kicker">${academyEsc(o.number)}</div><h3>${academyEsc(direction.title)}</h3></div></div>
+        ${money ? `<div class="rp-dirwin-sum">${fmtMoney(total)}</div>` : ''}
+      </header>
+      <div class="rp-dirwin-steps">${tabs}</div>
+      <div class="order-workspace-modal-body rp-dirwin-body">${body}</div>
+      <div class="rp-dirwin-foot">${next}</div>
+    </div>
+  </div>`;
+}
+
+// ---------- KP WINDOW (Owner, 2026-10-24: «и КП тоже самое») ----------
+// One window, three steps — Состав → Как увидит клиент → Отправить — on top of
+// the existing calculation and Proposal Studio (both still reachable).
+function proposalWizardSteps() {
+  return [{ id: 'compose', label: 'Состав' }, { id: 'preview', label: 'Как увидит' }, { id: 'send', label: 'Отправить' }];
+}
+function proposalWizardActive(oid) {
+  const w = state._proposalWizard;
+  if (!w || w.oid !== oid) return false;
+  return !!w.pending || String(state.modal || '').includes('data-proposal-wizard');
+}
+function openProposalWizard(oid, step = 'compose') {
+  const o = getOrder(oid);
+  if (!o) return;
+  if (!orderUserCanViewProposal(o)) { alert('КП доступно только владельцу и назначенному менеджеру'); return; }
+  const prop = getPremiumProposalByOrder(oid);
+  const ready = projectEstimateIsApproved(o) && prop && prop.publishedAt;
+  const current = ready ? step : 'compose';
+  state._proposalWizard = { oid, step: current, pending: false };
+  state.modal = proposalWizardHtml(o, current);
+  render();
+}
+function closeProposalWizard() {
+  state._proposalWizard = null;
+  closeModal();
+}
+function proposalWizardBuild(oid) {
+  const o = getOrder(oid);
+  if (!o) return;
+  state._proposalWizard = { oid, step: 'preview', pending: true };
+  if (projectEstimateIsApproved(o)) openProfessionalKP(oid); else approveProjectEstimateAndOpenProposal(oid);
+  // Refused (issues, low-margin «нет»): the flag must not hijack a later studio.
+  setTimeout(() => { const w = state._proposalWizard; if (w && w.pending && !String(state.modal || '').includes('data-proposal-wizard')) w.pending = false; }, 15000);
+}
+function proposalWizardHtml(o, step) {
+  const steps = proposalWizardSteps();
+  const index = Math.max(0, steps.findIndex(item => item.id === step));
+  const prop = getPremiumProposalByOrder(o.id);
+  const approved = projectEstimateIsApproved(o);
+  const ready = approved && prop && prop.publishedAt;
+  const client = getClient(o.clientId) || {};
+  const groups = projectDirectionGroups(o).filter(direction => !projectDirectionExcluded(o, direction.key));
+  const total = orderRevenue(o);
+  const calc = prop ? premiumProposalCalc(prop) : null;
+  const deposit = calc ? calc.paymentDue : (typeof companyDepositFor === 'function' ? companyDepositFor(total) : 0);
+  const tabs = steps.map((item, i) => `<button type="button" class="rp-dirwin-step ${i === index ? 'current' : i < index ? 'done' : ''}" ${ready || i === 0 ? `onclick="openProposalWizard('${o.id}','${item.id}')"` : 'disabled'}>${i < index ? '✓' : i + 1} ${item.label}</button>`).join('');
+  let body = '';
+  let foot = '';
+  if (step === 'preview' && ready) {
+    const url = premiumProposalUrl(prop);
+    body = `<p class="rp-dirwin-hint">Так клиент увидит КП на телефоне. Язык и всё содержимое — как у клиента.</p>
+      <div class="rp-kpwin-frame"><iframe src="${academyEsc(url)}" title="КП глазами клиента" loading="lazy"></iframe></div>
+      <a class="btn-ghost w-full mt-2 text-center" href="${academyEsc(url)}" target="_blank" rel="noopener">Открыть как клиент ↗</a>`;
+    foot = `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="openProposalWizard('${o.id}','send')">Всё верно — отправить →</button>`;
+  } else if (step === 'send' && ready) {
+    const url = premiumProposalUrl(prop);
+    const msg = `Hi ${client.name || ''}, your ROLANPRO proposal is ready: ${url}`;
+    const sent = prop.status && prop.status !== 'Draft';
+    body = `${sent ? `<div class="rp-kpwin-sent">✓ ${academyEsc(premiumStatusLabelRu(prop.status, prop))}</div>` : '<p class="rp-dirwin-hint">Выберите, как отправить. CRM отметит «КП отправлено».</p>'}
+      <a class="rp-kpwin-channel" href="${whatsappLink(client.phone, msg)}" target="_blank" rel="noopener" onclick="premiumMarkProposalSent('${prop.token}','WhatsApp')"><b>WhatsApp</b><span>${academyEsc(client.phone || 'нет телефона')}</span></a>
+      <a class="rp-kpwin-channel" href="${smsLink(client.phone, msg)}" onclick="premiumMarkProposalSent('${prop.token}','SMS')"><b>SMS</b><span>${client.smsConsent ? 'согласие есть' : 'нет согласия на SMS — лучше WhatsApp'}</span></a>
+      ${client.email ? `<button type="button" class="rp-kpwin-channel" onclick="premiumSendCanonicalProposal('${prop.token}')"><b>Email</b><span>${academyEsc(client.email)}</span></button>` : '<div class="rp-kpwin-channel off"><b>Email</b><span>у клиента нет email</span></div>'}
+      <button type="button" class="rp-kpwin-channel" onclick="navigator.clipboard.writeText('${jsQuote(url)}'); premiumMarkProposalSent('${prop.token}','ссылка скопирована')"><b>Скопировать ссылку</b><span>отправить другим способом</span></button>
+      <button type="button" class="btn-ghost w-full mt-2" onclick="state._proposalWizard=null; openPremiumProposalManagerModal('${prop.token}')">Все настройки КП: оплата, версии</button>`;
+    foot = `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="closeProposalWizard()">✓ Готово — к проекту</button>`;
+  } else {
+    const row = direction => {
+      const tone = rpDir(direction.key);
+      const sum = direction.lines.filter(line => !line.excluded && line.kind !== 'included').reduce((s, line) => s + (Number(line.price) || 0), 0);
+      return `<div class="rp-kpwin-dir" style="--dir-color:${academyEsc(tone.color)};--dir-tint:${academyEsc(tone.tint)};--dir-deep:${academyEsc(tone.deep)}">
+        <div class="rp-kpwin-dir-head"><span class="rp-kpwin-dot"></span><b>${academyEsc(direction.title)}</b><span class="rp-kpwin-dir-sum">${fmtMoney(sum)}</span></div>
+        ${direction.lines.map(line => `<div class="rp-kpwin-line"><span>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)} · ${academyEsc(projectLineQtyText(line))}</span><span>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</span></div>`).join('')}
+        ${direction.pending.map(offering => `<div class="rp-kpwin-line warn"><span>${academyEsc(offering.name)}</span><span>нужен замер</span></div>`).join('')}
+        <button type="button" class="rp-kpwin-edit" onclick="state._proposalWizard=null; openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')">Изменить направление</button>
+      </div>`;
+    };
+    const issues = projectEstimateReadiness(o);
+    body = `<p class="rp-dirwin-hint">КП собирается из посчитанных направлений. Состав меняется в окне направления.</p>
+      ${groups.map(row).join('') || '<div class="rp-dirwin-empty">В проекте пока нет услуг.</div>'}
+      <div class="rp-kpwin-total"><div><span>Итого</span><b>${fmtMoney(total)}</b></div><div><span>Аванс при подписи</span><b>${fmtMoney(deposit)}</b></div></div>
+      ${issues.length ? `<div class="rp-dirwin-warn">Чего не хватает: ${academyEsc(issues.join(', '))}</div>` : ''}`;
+    foot = issues.length
+      ? `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="state._proposalWizard=null; openProjectEstimateWorkspace('${o.id}')">Показать, чего не хватает</button>`
+      : ready
+        ? `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="openProposalWizard('${o.id}','preview')">Далее: как увидит клиент →</button>`
+        : `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="proposalWizardBuild('${o.id}')">Собрать КП →</button>`;
+  }
+  return `<div class="modal-backdrop order-workspace-backdrop" data-proposal-wizard onclick="if(event.target===this) closeProposalWizard()">
+    <div class="modal-content workspace-modal order-workspace-modal rp-dirwin rp-kpwin" style="--workspace-color:#2563eb;--dir-color:#2563eb;--dir-tint:#e9efff;--dir-deep:#1d4ed8" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Коммерческое предложение">
+      <header class="order-workspace-modal-head rp-dirwin-head">
+        <button type="button" class="workspace-back" onclick="closeProposalWizard()">← К проекту</button>
+        <div class="order-workspace-modal-heading"><span class="order-workspace-modal-icon rp-dirwin-icon">📄</span><div><div class="order-workspace-modal-kicker">${academyEsc(o.number)} · ${academyEsc(client.name || '')}</div><h3>Коммерческое предложение</h3></div></div>
+        <div class="rp-dirwin-sum">${fmtMoney(total)}</div>
+      </header>
+      <div class="rp-dirwin-steps">${tabs}</div>
+      <div class="order-workspace-modal-body rp-dirwin-body">${body}</div>
+      <div class="rp-dirwin-foot">${foot}</div>
+    </div>
+  </div>`;
 }
