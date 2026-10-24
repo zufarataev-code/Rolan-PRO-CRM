@@ -9131,7 +9131,10 @@ function migrateSchema() {
   }
 
   // ---- ADVANCE / DEPOSIT defaults ----
-  if (s.advancePct == null) s.advancePct = 30;
+  // Company deposit policy (Owner, 2026-10-24): 10% of the project, never more than $1 000.
+  if (!s._depositPolicy20261024) { s.advancePct = 10; s.depositCapUsd = 1000; s._depositPolicy20261024 = true; }
+  if (s.advancePct == null) s.advancePct = 10;
+  if (s.depositCapUsd == null) s.depositCapUsd = 1000;
   if (!s.paymentInstructions) {
     s.paymentInstructions = 'Реквизиты для оплаты:\n\nЗолотая карта/перевод: укажите свои реквизиты в Настройки → Оплата.\n\nПосле перевода пришлите чек на email или WhatsApp.';
   }
@@ -16844,6 +16847,17 @@ function orderAmountDue(o) {
   return Math.max(0, Math.round((orderRevenue(o) - paid) * 100) / 100);
 }
 /** The deposit the proposal asks for: advance % of the project price, never above what is due. */
+/** Company deposit: advancePct of the amount, capped at depositCapUsd (10%, ≤ $1 000 since 2026-10-24). */
+function companyDepositPct() { const v = Number(db.settings?.advancePct); return Number.isFinite(v) && v >= 0 ? v : 10; }
+function companyDepositCap() { const v = Number(db.settings?.depositCapUsd); return Number.isFinite(v) && v > 0 ? v : Infinity; }
+function companyDepositFor(total) {
+  const amount = Math.min((Number(total) || 0) * companyDepositPct() / 100, companyDepositCap());
+  return Math.round(Math.max(0, amount) * 100) / 100;
+}
+function companyDepositLabel() {
+  const cap = companyDepositCap();
+  return `${companyDepositPct()}%${Number.isFinite(cap) ? `, не больше ${fmtMoney(cap)}` : ''}`;
+}
 function orderExpectedDeposit(o) {
   // The KP tells the client what to pay at signing; the CRM asks for the same sum
   // (Owner's user test, 2026-10-23: KP $90 at signing, CRM asked for $270).
@@ -16852,7 +16866,7 @@ function orderExpectedDeposit(o) {
     const prop = typeof getPremiumProposalByOrder === 'function' ? getPremiumProposalByOrder(o.id) : null;
     if (prop && typeof premiumProposalCalc === 'function') fromProposal = Number(premiumProposalCalc(prop)?.paymentDue) || 0;
   } catch (_) { fromProposal = 0; }
-  const advance = fromProposal > 0 ? Math.round(fromProposal * 100) / 100 : Math.round(orderRevenue(o) * (Number(db.settings?.advancePct) || 30)) / 100;
+  const advance = fromProposal > 0 ? Math.round(fromProposal * 100) / 100 : companyDepositFor(orderRevenue(o));
   return Math.min(advance, orderAmountDue(o));
 }
 // Statuses that say «the money is in» (Owner's user test, 2026-10-23: one
@@ -18037,7 +18051,7 @@ function renderOrderCommandCenter(o, c) {
         <a href="${proposalStripeUrl}" target="_blank" class="text-blue-600 underline break-all">${proposalStripeUrl}</a>
         <div class="mt-1">${proposal?.stripe?.paid || o.stripe?.paid ? 'Оплачено' : `Ожидает оплату ${fmtMoney(proposalCalc.paymentDue)}`}</div>
       </div>` : renderOrderActionCard({ icon: '💳', title: 'Оплата через КП', sub: hasDrawings ? 'Zelle / ACH / Chase / карта после подписания' : 'Сначала внесите размеры, потом CRM соберет КП с оплатой', onclick: `openProfessionalKP('${o.id}')`, disabled: !hasDrawings, variant: hasDrawings ? 'primary' : 'soft' })}
-    ${!o.depositReceived ? renderOrderActionCard({ icon: '💰', title: 'Отметить аванс', sub: `Ожидаемый аванс ${fmtMoney(orderRevenue(o) * (db.settings.advancePct || 30) / 100)}`, onclick: `markDepositReceived('${o.id}')`, variant: 'warning' }) : renderOrderActionCard({ icon: '✅', title: 'Аванс получен', sub: fmtDateTime(o.depositReceivedAt), onclick: `openOrder('${o.id}')`, variant: 'success' })}
+    ${!o.depositReceived ? renderOrderActionCard({ icon: '💰', title: 'Отметить аванс', sub: `Ожидаемый аванс ${fmtMoney(companyDepositFor(orderRevenue(o)))}`, onclick: `markDepositReceived('${o.id}')`, variant: 'warning' }) : renderOrderActionCard({ icon: '✅', title: 'Аванс получен', sub: fmtDateTime(o.depositReceivedAt), onclick: `openOrder('${o.id}')`, variant: 'success' })}
     ${['completed','payment_received'].includes(o.status) ? renderOrderActionCard({ icon: '⭐', title: 'Запросить отзыв', sub: 'Отправить клиенту ссылку на отзыв', onclick: `askForReview('${o.id}')` }) : ''}
   `;
   return `
@@ -23413,7 +23427,11 @@ function renderSettings() {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label>Аванс, % от заказа</label>
-          <input type="number" min="0" max="100" step="5" value="${s.advancePct||30}" onchange="db.settings.advancePct=parseInt(this.value)||30; save();">
+          <input type="number" min="0" max="100" step="1" value="${s.advancePct ?? 10}" onchange="db.settings.advancePct=Math.max(0, Number(this.value) || 0); save();">
+        </div>
+        <div>
+          <label>Аванс не больше, $</label>
+          <input type="number" min="0" step="50" value="${s.depositCapUsd ?? 1000}" onchange="db.settings.depositCapUsd=Math.max(0, Number(this.value) || 0) || null; save();">
         </div>
         <div>
           <label>Основной способ</label>
@@ -28084,7 +28102,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ${canSeeInternalEconomics ? renderOrderCleanMini('Рентабельность', `${(orderMarginPct(o)*100).toFixed(1)}%`) : ''}
     </div>
     <div class="order-clean-actions mt-3">
-      ${renderOrderActionCard({ icon: '💰', title: o.depositReceived ? 'Аванс получен' : 'Отметить аванс', sub: o.depositReceived ? fmtDateTime(o.depositReceivedAt) : `ожидаемый ${fmtMoney(orderRevenue(o) * (db.settings.advancePct || 30) / 100)}`, onclick: o.depositReceived ? `openOrder('${o.id}')` : `markDepositReceived('${o.id}')`, variant: o.depositReceived ? 'success' : 'warning' })}
+      ${renderOrderActionCard({ icon: '💰', title: o.depositReceived ? 'Аванс получен' : 'Отметить аванс', sub: o.depositReceived ? fmtDateTime(o.depositReceivedAt) : `ожидаемый ${fmtMoney(companyDepositFor(orderRevenue(o)))}`, onclick: o.depositReceived ? `openOrder('${o.id}')` : `markDepositReceived('${o.id}')`, variant: o.depositReceived ? 'success' : 'warning' })}
       ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: estimateReady ? (!hasMeasurements ? 'услуги без размеров и цена клиенту' : canSeeInternalEconomics ? 'замер, цена, расходы и маржа' : 'замер, услуги и цена клиенту') : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !estimateReady, variant: !estimateApproved && estimateReady ? 'primary' : 'soft' })}
     </div>` : `<div class="order-clean-note">Финансы скрыты для роли ${academyEsc(u?.role || '')}. В рабочем режиме видны только клиент, адрес, замер, техлист и задача.</div>`;
 
@@ -30819,7 +30837,7 @@ function printProposal(oid) {
       <div style="font-weight: 600; margin-bottom: 0.5rem;">📱 Подтвердите КП онлайн</div>
       <div style="font-size: 13px; color: #1e3a8a; margin-bottom: 0.5rem;">Перейдите по ссылке и нажмите «Подтверждаю КП», чтобы мы зарезервировали дату монтажа:</div>
       <div style="font-family: monospace; font-size: 12px; word-break: break-all; color: #1e40af;">${clientPortalUrl(o.id) || '— настройте Публичный URL CRM в настройках —'}</div>
-      <div style="font-size: 12px; color: #475569; margin-top: 0.5rem;">Аванс ${db.settings.advancePct||30}%: <b>${fmtMoney(orderRevenue(o)*(db.settings.advancePct||30)/100)}</b></div>
+      <div style="font-size: 12px; color: #475569; margin-top: 0.5rem;">Аванс ${companyDepositLabel()}: <b>${fmtMoney(companyDepositFor(orderRevenue(o)))}</b></div>
     </div>
     <div class="sig">
       <div>${T('clientSignature')}</div>
@@ -31149,7 +31167,7 @@ function renderClientPortal() {
       </div>
 
       ${o.status === 'proposal_sent' ? (() => {
-        const advance = orderRevenue(o) * (db.settings.advancePct || 30) / 100;
+        const advance = companyDepositFor(orderRevenue(o));
         return `
         <div class="card border-2 border-blue-500" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);">
           <div class="text-center">
@@ -31165,13 +31183,13 @@ function renderClientPortal() {
       })() : ''}
 
       ${['proposal_accepted','installation_scheduled','installation_accepted','installation_in_progress','installation_done'].includes(o.status) && !o.depositReceived ? (() => {
-        const advance = orderRevenue(o) * (db.settings.advancePct || 30) / 100;
+        const advance = companyDepositFor(orderRevenue(o));
         const stripeUrl = o.stripe?.paymentLinkUrl;
         return `
         <div class="card border-2 border-amber-500" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);">
           <div class="text-center">
             <div class="text-3xl mb-2">💰</div>
-            <h3 class="text-xl font-bold text-slate-800">Внесите аванс ${db.settings.advancePct || 30}%</h3>
+            <h3 class="text-xl font-bold text-slate-800">Внесите аванс (${companyDepositLabel()})</h3>
             <div class="text-3xl font-black text-amber-700 my-3">${fmtMoney(advance)}</div>
             ${stripeUrl ? `
               <a href="${stripeUrl}" target="_blank" class="btn-primary inline-block px-8 py-3 text-base font-semibold mt-2" style="font-size: 1.1rem; background: #635bff;">💳 Оплатить картой через Stripe</a>
@@ -31282,7 +31300,7 @@ function confirmProposal(orderId) {
           to_email: mgr.email,
           to_name: mgr.name,
           subject: `✅ КП ${o.number} подтверждено клиентом`,
-          message: `Клиент ${c?.name || ''} подтвердил коммерческое предложение по заказу ${o.number}.\n\nСумма заказа: ${fmtMoney(orderRevenue(o))}\nАванс к оплате: ${fmtMoney(orderRevenue(o) * (db.settings.advancePct || 30) / 100)}\n\nОткройте заказ в CRM и согласуйте дату монтажа.`,
+          message: `Клиент ${c?.name || ''} подтвердил коммерческое предложение по заказу ${o.number}.\n\nСумма заказа: ${fmtMoney(orderRevenue(o))}\nАванс к оплате: ${fmtMoney(companyDepositFor(orderRevenue(o)))}\n\nОткройте заказ в CRM и согласуйте дату монтажа.`,
           ...emailVars(o),
         }).catch(e => console.warn('email mgr failed', e));
       } catch (e) { console.warn(e); }
@@ -34615,9 +34633,13 @@ function premiumProposalCalc(prop) {
   result.discount = premiumClamp(premiumNum(prop.discount), 0, result.subtotal);
   result.tax = Math.max(0, result.subtotal - result.discount) * premiumNum(prop.taxPct) / 100;
   result.total = Math.max(0, result.subtotal - result.discount) + result.tax;
+  // One deposit rule for the KP and the CRM: 10% of the project, never more than $1 000
+  // (Owner, 2026-10-24); the same settings drive both.
+  // California home-improvement law keeps a residential deposit at 10% / $1,000 even if
+  // the settings are raised later.
   result.deposit50 = orderSiteType(order) === 'RESIDENTIAL'
-    ? Math.min(result.total * 0.10, 1000)
-    : result.total * 0.5;
+    ? Math.min(companyDepositFor(result.total), Math.min(result.total * 0.10, 1000))
+    : companyDepositFor(result.total);
   result.currentPaid = premiumNum(order.paid);
   result.balanceDue = Math.max(0, result.total - result.currentPaid);
   result.paymentDue = premiumPaymentDue(prop, result);
@@ -37553,13 +37575,13 @@ ${measurements || '(не введены)'}
 
 Общая площадь: ${orderActualAreaSqft(o).toFixed(2)} sqft
 Сумма заказа: $${orderRevenue(o).toFixed(2)}
-Аванс ${db.settings.advancePct||30}%: $${(orderRevenue(o)*(db.settings.advancePct||30)/100).toFixed(2)}
+Аванс ${companyDepositLabel()}: $${(companyDepositFor(orderRevenue(o))).toFixed(2)}
 
 Включи в КП:
 1. Приветствие
 2. Краткое описание услуг
 3. Сводку по плёнкам и их преимуществам (на основе списка выше)
-4. Цену и условия оплаты (аванс ${db.settings.advancePct||30}%)
+4. Цену и условия оплаты (аванс ${companyDepositLabel()})
 5. Сроки выполнения
 6. Призыв к действию (подтвердить КП)
 
@@ -38379,12 +38401,12 @@ async function createStripePaymentLink(order, amount, description) {
 async function generateStripeDepositLink(orderId) {
   const o = getOrder(orderId);
   if (!o) return;
-  const advance = orderRevenue(o) * (db.settings.advancePct || 30) / 100;
+  const advance = companyDepositFor(orderRevenue(o));
   if (advance <= 0) { alert('Сумма заказа = 0, нельзя создать ссылку'); return; }
   if (!confirm(`Создать Stripe Payment Link на аванс ${fmtMoney(advance)} ?`)) return;
   try {
     const c = getClient(o.clientId);
-    const link = await createStripePaymentLink(o, advance, `Аванс ${db.settings.advancePct||30}% по заказу ${o.number} (${c?.name||''})`);
+    const link = await createStripePaymentLink(o, advance, `Аванс ${companyDepositLabel()} по заказу ${o.number} (${c?.name||''})`);
     o.stripe = o.stripe || {};
     o.stripe.paymentLinkUrl = link.url;
     o.stripe.paymentLinkId = link.id;
@@ -41180,7 +41202,7 @@ function buildCashDashboard() {
       const d = o.installationAt ? new Date(o.installationAt) : null;
       return d && d >= today && d <= next30 && !o.depositReceived;
     })
-    .reduce((s,o) => s + (orderRevenue(o) * (db.settings.advancePct||30) / 100), 0);
+    .reduce((s,o) => s + (companyDepositFor(orderRevenue(o))), 0);
   // Total cash in (paid)
   const totalIn = db.orders.reduce((s,o) => s + (o.paid || 0), 0);
   // Total cash out (PSS spent on completed)

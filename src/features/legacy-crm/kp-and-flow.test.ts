@@ -108,3 +108,14 @@ test('panes keep hundredths of a millimetre, so 36×48 in is 12 sq ft, not 12.00
   assert.match(panels, /Math\.round\(height \/ 2 \* 100\) \/ 100/);
   assert.match(panels, /Math\.round\(width \/ count \* 100\) \/ 100/);
 });
+
+test('deposit rule: 10% of the project, never more than $1 000 (Owner, 2026-10-24)', () => {
+  const settings: Row = { advancePct: 10, depositCapUsd: 1000 };
+  const c: any = vm.createContext({ console, db: { settings }, fmtMoney: (v: number) => `$${v}` });
+  vm.runInContext(slice(html, 'function companyDepositPct()', 'function orderExpectedDeposit('), c);
+  assert.equal(c.companyDepositFor(630), 63);
+  assert.equal(c.companyDepositFor(25000), 1000, 'capped');
+  assert.equal(c.companyDepositLabel(), '10%, не больше $1000');
+  assert.match(html, /if \(!s\._depositPolicy20261024\) \{ s\.advancePct = 10; s\.depositCapUsd = 1000;/);
+  assert.doesNotMatch(html, /advancePct \|\| 30|advancePct\|\|30/, 'no hard-coded 30% left');
+});

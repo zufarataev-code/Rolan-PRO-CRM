@@ -30,6 +30,13 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-24 handoff — installer card fixed, one deposit rule
+
+- Branch: `claude/team-and-deposit`, based on `main` after PR #371.
+- Production audit: the CRM had no active installer. Root cause: two employees (installer zufa2012@yandex.ru and consultant ataevzufar888@gmail.com) were both linked to legacy cards u_z1/u_i1, so every directory load overwrote the installer cards with the consultant's role. `resolveSharedLegacyIds` gives a shared card to the employee whose email is on it (else the earliest), and `loadDirectoryMembers` persists that; the other employee gets their own card.
+- Owner, 2026-10-24: «аванс 10 процентов не больше 1000». `companyDepositFor` (settings `advancePct` 10, `depositCapUsd` 1000, applied once via `_depositPolicy20261024`) replaces every hard-coded 30%; the KP deposit uses it too, residential still capped by the California 10% / $1,000 rule; the server fallback `calculateSuggestedDeposit` is 10% / $1,000 for commercial as well. Settings show «Аванс не больше, $».
+- Verification: new tests in `directory.test.ts` and `kp-and-flow.test.ts`; full suite 805/805; TypeScript passes.
+
 ## 2026-10-24 handoff — phone flow: back buttons, cashier row, simpler project form, one services list
 
 - Branch: `claude/mobile-flow`, based on `main` after PR #370.
