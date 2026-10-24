@@ -261,8 +261,8 @@ test('measurement requires windows only for directions with a per-sq-ft service'
 
 test('privacy films pay the privacy rate; the material of services without sizes is listed in the cost', () => {
   assert.match(html, /if \(n\.includes\('privacy'\) \|\| n\.includes\('приват'\)\) return 'privacy';/);
-  assert.match(html, /const category = catalog\?\.category \? canonicalCatalogCategory\(catalog\.category\) : filmCategory\(w\?\.filmType \|\| ''\);/);
-  assert.match(html, /const directionRate = explicit != null \? explicit : c \? installerServiceRateByCategory\(canonicalCatalogCategory\(c\.category\)\) : filmRate\(filmName\);/);
+  // Rows made before the service directory still pay their film's direction rate (2026-10-24).
+  assert.match(html, /return explicit != null \? Number\(explicit\) \|\| 0 : c \? installerServiceRateByCategory\(canonicalCatalogCategory\(c\.category\)\) : filmRate\(filmName\);/);
   assert.match(html, /\.\.\.\(pss\.extraServicesCost > 0 \? \[\['Материал услуг без размеров', pss\.extraServicesCost\]\] : \[\]\)/);
 });
 

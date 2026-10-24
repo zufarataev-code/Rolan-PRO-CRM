@@ -47,6 +47,7 @@ function load(role = 'owner') {
     windowActualAreaSqft: (win: Row) => Number(win.sqft) || 0,
     warehouseCatalogCostPerSqft: () => 0,
     filmRate: () => 2.5,
+    canonicalServiceCodeForOrderService: () => '',
     installerServiceRateByCategory: () => 2.5,
     measureAllWindows: (o: Row) => (o.measurements?.rooms || []).flatMap((room: Row) => (room.windows || []).map((win: Row) => ({ room, win }))),
     projectQuickLines: (o: Row) => (o.extraServices || []).filter((line: Row) => line.quickProjectLine),

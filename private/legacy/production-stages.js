@@ -699,9 +699,7 @@ function orderInstallerPayoutBreakdown(o) {
     const total = windows.length
       ? windows.reduce((sum, { win }) => sum + windowInstallerPayout(win), 0)
       : projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => {
-          const catalog = getCatalogItem(line.catalogId);
-          const filmName = catalog ? `${catalog.brand} ${catalog.model}` : line.serviceType;
-          return sum + (Number(line.qty) || 0) * (serviceOfferingInstallerRate(line) || filmRate(filmName));
+          return sum + (Number(line.qty) || 0) * installerRateForQuickLine(null, line);
         }, 0);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
     return { total: total + work, byInstaller: [], source: 'REFERENCE_DEFAULT' };
