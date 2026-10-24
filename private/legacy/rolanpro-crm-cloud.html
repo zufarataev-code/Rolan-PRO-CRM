@@ -24878,6 +24878,17 @@ function projectQuickLineLabel(line, catalog) {
 function serviceOfferingFilmIds(offering) {
   return Array.isArray(offering?.filmIds) ? offering.filmIds : [];
 }
+/**
+ * Films a service may be done with: its linked films; with none linked,
+ * every film of its direction (direction → category → film, the way the
+ * manager picks it). Same rule on the server (Owner, 2026-10-24).
+ */
+function serviceOfferingAllowedFilmIds(offering) {
+  const linked = serviceOfferingFilmIds(offering);
+  if (linked.length || !offering) return linked;
+  const direction = offering.direction;
+  return (db.settings?.catalog || []).filter(film => !film.archived && canonicalCatalogCategory(film.category) === direction).map(film => film.id);
+}
 
 // How a service is priced (Owner, 2026-10-05). Per sq ft it needs measured
 // windows (sizes are required); per piece, per zone, a fixed sum or the
@@ -25199,7 +25210,7 @@ function serviceCashierDirections() {
 }
 /** Films the chosen service may be done with (its explicit links, not archived). */
 function serviceCashierFilms(offering) {
-  return serviceOfferingFilmIds(offering).map(getCatalogItem).filter(film => film && !film.archived);
+  return serviceOfferingAllowedFilmIds(offering).map(getCatalogItem).filter(film => film && !film.archived);
 }
 /** Size-free services of the same direction that can ride along, minus what the service already includes. */
 function serviceCashierAddons(o, offering, directionId = '') {
@@ -25396,7 +25407,7 @@ function serviceCashierHtml(c) {
 function projectQuickLineFilms(line) {
   const films = projectQuickLineCatalog(line.serviceType, line.catalogId);
   if (!line.offeringId) return films;
-  const allowed = serviceOfferingFilmIds(serviceOffering(line.offeringId));
+  const allowed = serviceOfferingAllowedFilmIds(serviceOffering(line.offeringId));
   return films.filter(item => allowed.includes(item.id) || item.id === line.catalogId);
 }
 
@@ -25613,7 +25624,7 @@ function projectWindowSolutionHtml(o, room, win, inMeasurement = false) {
   const selectedOfferings = projectSelectedSizedOfferings(o, win.measureScope || o.serviceType);
   const selectedIds = new Set(selectedOfferings.map(item => item.id));
   const offerings = serviceOfferingsFor(direction, { includeId: win.offeringId }).filter(item => ((!selectedIds.size || selectedIds.has(item.id)) && serviceOfferingNeedsSizes(item)) || item.id === win.offeringId);
-  const films = (db.settings.catalog || []).filter(film => !film.archived && serviceOfferingFilmIds(serviceOffering(win.offeringId)).includes(film.id));
+  const films = (db.settings.catalog || []).filter(film => !film.archived && serviceOfferingAllowedFilmIds(serviceOffering(win.offeringId)).includes(film.id));
   // A service without linked films used to leave an empty list and a measurement
   // that could not be finished (Owner's user test, 2026-10-23). The owner picks
   // a film of the direction right here; it is linked to the service at once.
@@ -25625,7 +25636,7 @@ function applyWindowOffering(win, offering) {
     win.offeringName = offering?.name || '';
     if (currentUser()?.role === 'owner') win.offeringInstallerRate = Number(offering?.installerRatePerSqft) || 0;
     win.pricePerSqft = offering ? Number(offering.pricePerSqft) || 0 : null;
-    if (offering && !serviceOfferingFilmIds(offering).includes(win.catalogId)) {
+    if (offering && !serviceOfferingAllowedFilmIds(offering).includes(win.catalogId)) {
       win.catalogId = ''; win.filmType = '';
     }
   return win;
@@ -25656,7 +25667,7 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
     const film = getCatalogItem(value);
     const offering = serviceOffering(win.offeringId);
     if (!film || film.archived || !offering || !catalogMatchesCategory(film, primaryServiceInfo(win.measureScope || o.serviceType)?.catalogCategory)) return;
-    if (!serviceOfferingFilmIds(offering).includes(film.id)) {
+    if (!serviceOfferingAllowedFilmIds(offering).includes(film.id)) {
       // Only the owner edits «Услуги и цены»; the film joins the service for every project.
       if (currentUser()?.role !== 'owner') return;
       if (!confirm(`Привязать «${catalogLabel(film)}» к услуге «${offering.name}»? Плёнка станет доступна для этой услуги во всех проектах.`)) { if (inMeasurement) refreshManagerMeasureModal(oid); else refreshProjectEstimateWorkspace(oid); return; }
@@ -25958,7 +25969,7 @@ function projectOfferingCatalogId(o, offeringId) {
   const catalogId = o?.offeringCatalogIds?.[offeringId] || o?.orderBuilder?.offeringCatalogIds?.[offeringId] || '';
   const offering = serviceOffering(offeringId);
   const film = getCatalogItem(catalogId);
-  return film && !film.archived && serviceOfferingFilmIds(offering).includes(film.id) ? film.id : '';
+  return film && !film.archived && serviceOfferingAllowedFilmIds(offering).includes(film.id) ? film.id : '';
 }
 function projectSelectedSizedOfferings(o, scopeKey = '') {
   const ids = [...new Set([o?.offeringId, ...(o?.offeringIds || [])].filter(Boolean))];
@@ -26892,7 +26903,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     const catalog = getCatalogItem(value);
     const requiredCategory = primaryServiceInfo(line.serviceType)?.catalogCategory;
     if (catalog && (!catalogCanBeSelected(catalog, line.catalogId) || !catalogMatchesCategory(catalog, requiredCategory) || (warehouseCatalogStockStats(catalog.id).availableSqft <= 0 && !catalog.pendingPurchase))) return;
-    if (catalog && line.offeringId && !serviceOfferingFilmIds(serviceOffering(line.offeringId)).includes(catalog.id)) return alert('Эта плёнка не привязана к выбранной услуге.');
+    if (catalog && line.offeringId && !serviceOfferingAllowedFilmIds(serviceOffering(line.offeringId)).includes(catalog.id)) return alert('Эта плёнка не подходит выбранной услуге.');
     line.catalogId = catalog?.id || '';
     if (catalog) {
       line.manualFilmName = '';
@@ -26905,7 +26916,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     line.offeringId = offering?.id || '';
     line.offeringName = offering?.name || '';
     if (currentUser()?.role === 'owner') line.offeringInstallerRate = Number(offering?.installerRatePerSqft) || 0;
-    if (offering && !serviceOfferingFilmIds(offering).includes(line.catalogId)) line.catalogId = '';
+    if (offering && !serviceOfferingAllowedFilmIds(offering).includes(line.catalogId)) line.catalogId = '';
     line.manualFilmName = '';
     line.unitPrice = Number(offering?.pricePerSqft) || 0;
     line.pricingMode = 'unit';
@@ -29248,7 +29259,7 @@ function managerWindowDefaults(o, room, opts = {}) {
   };
   const offering = activeOffering || [o.offeringId || o.orderBuilder?.offeringId, ...(o.offeringIds || o.orderBuilder?.offeringIds || [])].map(serviceOffering).find(item => item && serviceOfferingNeedsSizes(item) && item.direction === serviceOfferingDirection(scopeKey));
   if (offering && offering.active !== false && offering.direction === serviceOfferingDirection(scopeKey)) applyWindowOffering(win, offering);
-  if (cat && offering && serviceOfferingFilmIds(offering).includes(cat.id)) { win.catalogId = cat.id; win.filmType = catalogLabel(cat); }
+  if (cat && offering && serviceOfferingAllowedFilmIds(offering).includes(cat.id)) { win.catalogId = cat.id; win.filmType = catalogLabel(cat); }
   syncWindowPanelsForType(win, scopeKey);
   return syncSmartWindowPlan(win, room?.name || '');
 }
@@ -31435,7 +31446,7 @@ function newOrderOfferingCatalogIds(offerings = newOrderSelectedOfferings()) {
   return Object.fromEntries(offerings.map(offering => {
     const catalogId = state._newOrderMaterialsByService?.[offering.id] || '';
     const film = getCatalogItem(catalogId);
-    return film && !film.archived && serviceOfferingFilmIds(offering).includes(film.id) ? [offering.id, film.id] : null;
+    return film && !film.archived && serviceOfferingAllowedFilmIds(offering).includes(film.id) ? [offering.id, film.id] : null;
   }).filter(Boolean));
 }
 function renderNewOrderOfferings() {
@@ -31464,7 +31475,7 @@ function renderNewOrderOfferings() {
 function setNewOrderOfferingMaterial(offeringId, catalogId) {
   const offering = serviceOffering(offeringId);
   const film = getCatalogItem(catalogId);
-  if (!offering || (catalogId && (!film || film.archived || !serviceOfferingFilmIds(offering).includes(catalogId)))) return;
+  if (!offering || (catalogId && (!film || film.archived || !serviceOfferingAllowedFilmIds(offering).includes(catalogId)))) return;
   state._newOrderMaterialsByService = state._newOrderMaterialsByService || {};
   if (catalogId) state._newOrderMaterialsByService[offeringId] = catalogId;
   else delete state._newOrderMaterialsByService[offeringId];

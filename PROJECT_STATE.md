@@ -30,6 +30,13 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-24 handoff — films by direction when a service has none linked
+
+- Branch: `claude/films-by-category`, based on `main` after PR #369.
+- Owner, 2026-10-24: «ты выбираешь направление, категорию и под эту категорию плёнку из списка». A service without linked films (production: Silver, Ceramic, A2 Security) left the window's «Материал» list empty and the server refused windows whose film was not in `filmIds` — so the calculation could not be approved and no KP could be made.
+- Rule now, the same in the browser (`serviceOfferingAllowedFilmIds`) and on the server (`filmAllowed` in `service-solutions.ts`): linked films restrict the choice; with none linked, every non-archived film of the service's direction is allowed. The browser uses it for the window picker, the cashier material step, quick lines, defaults and every validity check; the directory editor and the code that adds links still read the raw `filmIds`. The owner's «привяжутся к услуге» group appears only when a service already has links.
+- Verification: the film test in `flow-fixes.test.ts` rewritten for the rule; new server test in `service-packages.test.ts`; full suite 797/797; TypeScript passes.
+
 ## 2026-10-23 handoff — client signature under the act, CRM message cards
 
 - Branch: `claude/act-signature`, based on `main` after PR #368.

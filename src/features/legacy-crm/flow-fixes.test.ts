@@ -184,7 +184,7 @@ test('production readiness lists the technical details scheduling would refuse',
   assert.match(readiness, /замерщик должен уточнить/);
 });
 
-test('a service without linked films offers the owner the direction films and links the chosen one', () => {
+test('a service without linked films takes any film of its direction; linked films restrict, and only the owner links more', () => {
   const offering: Row = { id: 'ceramic', name: 'Ceramic', direction: 'solar', filmIds: [] };
   const catalog = [
     { id: 'f1', category: 'solar', model: 'Select 15' },
@@ -194,7 +194,7 @@ test('a service without linked films offers the owner the direction films and li
   ];
   const win: Row = { id: 'w', offeringId: 'ceramic', measureScope: 'solar_film' };
   const order: Row = { id: 'o', serviceType: 'solar_film', measurements: { rooms: [{ id: 'r', windows: [win] }] } };
-  let role = 'owner';
+  let role = 'manager';
   const calls: string[] = [];
   const context: any = vm.createContext({
     db: { settings: { catalog } },
@@ -205,6 +205,7 @@ test('a service without linked films offers the owner the direction films and li
     serviceOffering: (id: string) => (id === 'ceramic' ? offering : null),
     primaryServiceInfo: () => ({ catalogCategory: 'solar' }),
     catalogMatchesCategory: (film: Row, category: string) => film.category === category,
+    canonicalCatalogCategory: (value: string) => value,
     catalogLabel: (film: Row) => film.model,
     orderUserCanSeeMoney: () => true,
     invalidateProjectEstimate: () => calls.push('invalidate'),
@@ -212,21 +213,27 @@ test('a service without linked films offers the owner the direction films and li
     refreshManagerMeasureModal: () => calls.push('refresh'),
     refreshProjectEstimateWorkspace: () => calls.push('refreshEstimate'),
     confirm: () => true,
-    serviceOfferingFilmIds: (o: Row) => (Array.isArray(o?.filmIds) ? o.filmIds : []),
   });
+  vm.runInContext(slice('function serviceOfferingFilmIds(offering)', '\n\n// How a service is priced'), context);
   vm.runInContext(slice('function projectWindowLinkableFilms(o, win, linked = [])', '// Services are projections of the existing commercial scope'), context);
-  assert.deepEqual(context.projectWindowLinkableFilms(order, win, []).map((f: Row) => f.id), ['f1', 'f2']);
-
-  context.projectSetWindowSolution('o', 'r', 'w', 'catalogId', 'f1', true);
-  assert.deepEqual([...offering.filmIds], ['f1'], 'the film joins the service');
-  assert.equal(win.catalogId, 'f1');
-
-  role = 'manager';
+  // Owner, 2026-10-24: direction → category → film, no linking needed.
+  assert.deepEqual([...context.serviceOfferingAllowedFilmIds(offering)], ['f1', 'f2']);
   context.projectSetWindowSolution('o', 'r', 'w', 'catalogId', 'f2', true);
-  assert.equal(win.catalogId, 'f1', 'only the owner links films to a service');
-  assert.deepEqual([...offering.filmIds], ['f1']);
+  assert.equal(win.catalogId, 'f2', 'a manager picks any film of the direction');
+  assert.deepEqual([...offering.filmIds], [], 'nothing is linked behind the scenes');
+  context.projectSetWindowSolution('o', 'r', 'w', 'catalogId', 'f3', true);
+  assert.equal(win.catalogId, 'f2', 'a film of another direction is refused');
+
+  offering.filmIds = ['f1'];
+  assert.deepEqual([...context.serviceOfferingAllowedFilmIds(offering)], ['f1'], 'linked films restrict the choice');
+  context.projectSetWindowSolution('o', 'r', 'w', 'catalogId', 'f1', true);
+  context.projectSetWindowSolution('o', 'r', 'w', 'catalogId', 'f2', true);
+  assert.equal(win.catalogId, 'f1', 'outside the linked list a manager cannot pick');
+  role = 'owner';
+  context.projectSetWindowSolution('o', 'r', 'w', 'catalogId', 'f2', true);
+  assert.equal(win.catalogId, 'f2');
+  assert.deepEqual([...offering.filmIds], ['f1', 'f2'], 'the owner links one more film after a confirm');
 
   const picker = slice('function projectWindowSolutionHtml(o, room, win, inMeasurement = false)', 'function projectWindowLinkableFilms(');
   assert.match(picker, /Другие плёнки направления — привяжутся к услуге/);
-  assert.match(picker, /привязывает владелец в «Услуги и цены»/);
 });
