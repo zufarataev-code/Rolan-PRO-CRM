@@ -541,7 +541,11 @@ test("a manager can price from customer dimensions; technical survey details gat
 test("published proposals synchronize the order stage milestone", () => {
   const generator = source.match(/async function generatePremiumProposal\(orderId\) \{[\s\S]*?\n\}/)?.[0] || "";
   const sender = source.match(/async function premiumSendCanonicalProposal\(token\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.match(generator, /order\.proposalSentAt = order\.proposalSentAt \|\| prop\.sentAt/);
+  // Publishing only makes the link (Owner's user test, 2026-10-23); sharing it marks the KP sent.
+  const shared = source.match(/function premiumMarkProposalSent\(token, channel = ''\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(generator, /prop\.status = 'Sent'/);
+  assert.match(generator, /prop\.publishedAt = new Date\(\)\.toISOString\(\)/);
+  assert.match(shared, /order\.proposalSentAt = order\.proposalSentAt \|\| prop\.sentAt/);
   assert.match(sender, /order\.proposalSentAt = order\.proposalSentAt \|\| prop\.sentAt/);
 });
 
