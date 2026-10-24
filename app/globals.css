@@ -4318,3 +4318,20 @@ select option {
   .legacy-calculator-header { align-items: flex-start; padding: 14px; }
   .quick-calculator-panel, .quick-calculator-hero { padding: 14px; }
 }
+
+/* KP technical drawing: every measured window to scale with its panes (Owner, 2026-10-23). */
+.proposal-window-drawings {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.proposal-window-drawing {
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+.proposal-window-drawing svg { display: block; width: 100%; height: auto; }
+.proposal-window-drawing figcaption { font-size: 12px; color: #334155; margin-top: 4px; line-height: 1.35; }

@@ -10785,15 +10785,15 @@ function measureDefaultPanels(win) {
     const rows = measureDefaultFrenchRows(win);
     for (let r = 1; r <= rows; r++) {
       for (let c = 1; c <= cols; c++) {
-        panels.push({ id: uid(), label: `Cell ${r}-${c}`, width: Math.round(width / cols), height: Math.round(height / rows), role: 'cell' });
+        panels.push({ id: uid(), label: `Cell ${r}-${c}`, width: Math.round(width / cols * 100) / 100, height: Math.round(height / rows * 100) / 100, role: 'cell' });
       }
     }
   } else if (info.panelMode === 'hung') {
-    panels.push({ id: uid(), label: 'Top sash', width, height: Math.round(height / 2), role: 'sash' });
-    panels.push({ id: uid(), label: 'Bottom sash', width, height: Math.round(height / 2), role: 'sash' });
+    panels.push({ id: uid(), label: 'Top sash', width, height: Math.round(height / 2 * 100) / 100, role: 'sash' });
+    panels.push({ id: uid(), label: 'Bottom sash', width, height: Math.round(height / 2 * 100) / 100, role: 'sash' });
   } else if (info.panelMode === 'sliding' || info.panelMode === 'sash' || info.panelMode === 'panoramic') {
     const count = measureDefaultPanelCount(win);
-    for (let i = 1; i <= count; i++) panels.push({ id: uid(), label: info.panelMode === 'sliding' ? `Panel ${i}` : `Lite ${i}`, width: Math.round(width / count), height, role: info.panelMode });
+    for (let i = 1; i <= count; i++) panels.push({ id: uid(), label: info.panelMode === 'sliding' ? `Panel ${i}` : `Lite ${i}`, width: Math.round(width / count * 100) / 100, height, role: info.panelMode });
   } else if (info.panelMode === 'transom') {
     panels.push({ id: uid(), label: 'Transom', width, height: Math.round(height * .25), role: 'transom' });
     panels.push({ id: uid(), label: 'Main glass', width, height: Math.round(height * .75), role: 'main' });
@@ -16807,7 +16807,14 @@ function orderAmountDue(o) {
 }
 /** The deposit the proposal asks for: advance % of the project price, never above what is due. */
 function orderExpectedDeposit(o) {
-  const advance = Math.round(orderRevenue(o) * (Number(db.settings?.advancePct) || 30)) / 100;
+  // The KP tells the client what to pay at signing; the CRM asks for the same sum
+  // (Owner's user test, 2026-10-23: KP $90 at signing, CRM asked for $270).
+  let fromProposal = 0;
+  try {
+    const prop = typeof getPremiumProposalByOrder === 'function' ? getPremiumProposalByOrder(o.id) : null;
+    if (prop && typeof premiumProposalCalc === 'function') fromProposal = Number(premiumProposalCalc(prop)?.paymentDue) || 0;
+  } catch (_) { fromProposal = 0; }
+  const advance = fromProposal > 0 ? Math.round(fromProposal * 100) / 100 : Math.round(orderRevenue(o) * (Number(db.settings?.advancePct) || 30)) / 100;
   return Math.min(advance, orderAmountDue(o));
 }
 // Statuses that say «the money is in» (Owner's user test, 2026-10-23: one
@@ -17872,7 +17879,7 @@ function orderPrimaryNextAction(o) {
     : { icon: '👷', title: 'Назначить замерщика', sub: 'Без ответственного замерщик не увидит задачу в своём кабинете.', variant: 'warning', onclick: `openAssignTeam('${o.id}')` };
   if (o.status === 'measurement_done' && !projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: orderUserCanSeeInternalEconomics(o, currentUser()) ? 'Проверьте цену, расходы и маржу до формирования КП.' : 'Проверьте размеры, услуги и цену клиенту до формирования КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
   if (o.status === 'measurement_done') return projectProposalNextAction(o);
-  if (o.status === 'proposal_sent') return { icon: '✅', title: 'Отметить КП принятым', sub: 'Используйте, если клиент подтвердил предложение вне портала.', variant: 'primary', onclick: `changeStatus('${o.id}','proposal_accepted')` };
+  if (o.status === 'proposal_sent') return { icon: '✅', title: 'Отметить КП принятым', sub: 'Используйте, если клиент подтвердил предложение вне портала.', variant: 'primary', onclick: `if (confirm('Клиент подтвердил КП (по телефону, в переписке)? Подписанное КП нельзя будет изменить — только новой версией.')) changeStatus('${o.id}','proposal_accepted')` };
   if (o.status === 'proposal_accepted' && !orderPaymentReadyForProduction(o)) return { icon: '💰', title: 'Отметить аванс', sub: 'Либо подтвердите в расчёте согласованную оплату после выполнения.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
   // The deposit is asked for right after acceptance (Owner, 2026-10-23); it
   // never blocks the work — «Без аванса» records who decided and why.
@@ -17882,10 +17889,19 @@ function orderPrimaryNextAction(o) {
   // The crew and date are chosen in each row of «Услуги проекта»; then the plan is confirmed there.
   if (o.status === 'proposal_accepted') {
     const unplanned = projectCardUnplanned(o);
-    if (unplanned.length) return { icon: '👷', title: 'Назначить исполнителей', sub: `Выберите исполнителя и дату в строке каждой услуги: ${unplanned.map(line => line.name).join(', ')}.`, variant: 'primary', onclick: `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})` };
+    // Opens the crew-and-date form directly (Owner, 2026-10-23: «нет возможности назначить монтаж»).
+    if (unplanned.length) return { icon: '👷', title: 'Назначить монтаж', sub: `Дата и исполнитель для каждой услуги: ${unplanned.map(line => line.name).join(', ')}.`, variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
     return { icon: '🔧', title: 'Подтвердить монтаж', sub: 'Все услуги назначены — клиент и бригада увидят даты после подтверждения.', variant: 'primary', onclick: `projectCardConfirmInstallation('${o.id}')` };
   }
-  if (o.status === 'installation_done') return { icon: '📝', title: 'Подписать акт', sub: 'Закрываем выполненную работу документально.', variant: 'primary', onclick: `changeStatus('${o.id}','act_signed')` };
+  if (['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'].includes(o.status)) {
+    // Say when and who instead of «Заказ под контролем» (Owner, 2026-10-23).
+    const plans = projectPlannedSchedules(o).filter(plan => plan.installationAt).sort((a, b) => new Date(a.installationAt) - new Date(b.installationAt));
+    const first = plans[0];
+    const crew = first ? (first.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', ') : '';
+    const stage = ({ installation_scheduled: 'Монтаж назначен', installation_accepted: 'Бригада приняла монтаж', installation_en_route: 'Бригада в пути', installation_in_progress: 'Монтаж идёт' })[o.status];
+    return { icon: '🔧', title: stage, sub: first ? `${fmtDateTime(first.installationAt)}${crew ? ' · ' + crew : ''}. Бригада отмечает выполнение у себя; акт и оплата — после монтажа.` : 'Проверьте календарь и бригаду.', variant: 'soft', onclick: `scheduleInstallationPrompt('${o.id}')` };
+  }
+  if (o.status === 'installation_done') return { icon: '📝', title: 'Подписать акт', sub: 'Закрываем выполненную работу документально.', variant: 'primary', onclick: `if (confirm('Клиент подписал акт выполненных работ?')) changeStatus('${o.id}','act_signed')` };
   if (o.status === 'act_signed') return orderAmountDue(o) > 0.01
     ? { icon: '💳', title: 'Получить оплату', sub: `Клиент должен ${fmtMoney(orderAmountDue(o))}. Укажите сумму и способ — проект станет «Оплачен», когда сумма будет полной.`, variant: 'primary', onclick: `openPaymentModal('${o.id}',{kind:'final',thenStatus:'payment_received'})` }
     : { icon: '💳', title: 'Отметить оплату', sub: 'Вся сумма получена — фиксируем оплату по заказу.', variant: 'primary', onclick: `changeStatus('${o.id}','payment_received')` };
@@ -25761,16 +25777,22 @@ function projectLines(o) {
 }
 
 /** Materials fixed on a project line, without exposing warehouse costs. */
-function projectLineMaterialNames(line) {
+/** The film as the client reads it: brand, series, model — no Russian category (Owner, 2026-10-23). */
+function premiumCatalogTitleEn(c) {
+  if (!c) return '';
+  return [...new Set([c.brand, catalogFilmName(c), catalogFilmModel(c)].map(v => String(v || '').trim()).filter(Boolean))].join(' ') || catalogLabel(c);
+}
+function projectLineMaterialNames(line, { en = false } = {}) {
+  const label = en ? premiumCatalogTitleEn : catalogLabel;
   const names = [];
   (line.windows || []).forEach(win => {
     const catalog = windowCatalog(win);
-    const name = catalog ? catalogLabel(catalog) : String(win.filmType || '').trim();
+    const name = catalog ? label(catalog) : String(win.filmType || '').trim();
     if (name) names.push(name);
   });
   (line.sources || []).forEach(source => {
     const catalog = source.catalogId ? getCatalogItem(source.catalogId) : null;
-    const name = catalog ? catalogLabel(catalog) : String(source.manualFilmName || '').trim();
+    const name = catalog ? label(catalog) : String(source.manualFilmName || '').trim();
     if (name) names.push(name);
   });
   return [...new Set(names)];
@@ -26758,8 +26780,17 @@ function projectServiceScheduleHtml(o) {
   const installers = usersByRole('installer');
   return projectServiceGroups(o).map((group, index) => {
     const assignment = projectServiceAssignment(o, group);
-    return `<section class="card mt-3" data-service-schedule="${academyEsc(group.id)}"><h4 class="font-bold">${academyEsc(group.name)}</h4><label class="mt-2">Дата и время услуги<input style="min-height:44px" type="datetime-local" id="service-date-${index}" value="${datetimeLocalValue(assignment.installationAt)}"></label><div class="work-people mt-2">${installers.map(user => `<label class="work-person"><input type="checkbox" class="service-installer-${index}" value="${academyEsc(user.id)}" ${(assignment.installerIds || []).includes(user.id) ? 'checked' : ''}><span>${academyEsc(user.name)}</span></label>`).join('') || '<p>Добавьте специалиста в разделе «Сотрудники».</p>'}</div></section>`;
+    return `<section class="card mt-3" data-service-schedule="${academyEsc(group.id)}"><h4 class="font-bold">${academyEsc(group.name)}</h4><label class="mt-2">Дата и время услуги<input style="min-height:44px" type="datetime-local" id="service-date-${index}" value="${datetimeLocalValue(assignment.installationAt)}"></label><div class="work-people mt-2">${installers.map(user => `<label class="work-person"><input type="checkbox" class="service-installer-${index}" value="${academyEsc(user.id)}" ${(assignment.installerIds || []).includes(user.id) ? 'checked' : ''}><span>${academyEsc(user.name)}</span></label>`).join('') || '<p>Добавьте специалиста в разделе «Сотрудники».</p>'}</div>${index === 0 && projectServiceGroups(o).length > 1 ? `<button type="button" class="btn-ghost text-sm mt-2" onclick="projectScheduleCopyFirstToAll()">Та же дата и бригада для всех услуг ↓</button>` : ''}</section>`;
   }).join('');
+}
+/** Silicone and film usually go in one visit: copy the first service's date and crew to the rest (Owner, 2026-10-23). */
+function projectScheduleCopyFirstToAll() {
+  const date = document.getElementById('service-date-0')?.value || '';
+  const crew = new Set(Array.from(document.querySelectorAll('.service-installer-0:checked')).map(input => input.value));
+  for (let index = 1; document.getElementById(`service-date-${index}`); index++) {
+    document.getElementById(`service-date-${index}`).value = date;
+    document.querySelectorAll(`.service-installer-${index}`).forEach(input => { input.checked = crew.has(input.value); });
+  }
 }
 function readProjectServiceSchedule(o) {
   const activeIds = new Set(usersByRole('installer').map(user => user.id));
@@ -27758,7 +27789,7 @@ function renderProjectEstimateWorkspace(o) {
     </section>
 
     <section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>2. Услуги</h4><div class="text-xs text-gray-500">У услуг из справочника цена, оплата специалисту и материал берутся из «Услуг и цен» — указывается только количество. У остальных — количество и цена клиенту, оплата работника из раздела «Зарплата».</div></div><div class="flex flex-wrap gap-2">${projectOfferingPickerHtml(o)}<button class="btn-primary text-sm" onclick="projectEstimateAddService('${o.id}','washing')">+ Добавить услугу</button></div></div>
+      <div class="project-estimate-section-head"><div><h4>2. Услуги</h4><div class="text-xs text-gray-500">У услуг из справочника цена, оплата специалисту и материал берутся из «Услуг и цен» — указывается только количество. У остальных — количество и цена клиенту, оплата работника из раздела «Зарплата».</div></div><div class="flex flex-wrap gap-2">${projectOfferingPickerHtml(o)}<button class="btn-ghost text-sm" title="Разовая работа, которой нет в «Услугах и ценах»: своё название и цена" onclick="projectEstimateAddService('${o.id}','washing')">+ Своя строка</button></div></div>
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Тип</th><th>Описание</th><th>Кол-во</th><th>Цена клиенту, всего</th><th></th></tr></thead><tbody>${serviceRows || '<tr><td colspan="5" class="text-gray-500">Дополнительных услуг нет.</td></tr>'}</tbody></table></div>
     </section>
 
@@ -35299,10 +35330,26 @@ function projectProposalLineTitle(line) {
     electric: 'Electrical Work', connect: 'Smart Film Zone Connection', warranty: 'Extended Warranty',
   })[workType];
   if (line.kind === 'windows' || line.kind === 'quick') {
-    const material = projectLineMaterialNames(line).join(', ');
+    const material = projectLineMaterialNames(line, { en: true }).join(', ');
     return [projectProposalDirectionTitle(line.direction), material].filter(Boolean).join(' — ');
   }
   return offering?.nameEn || offering?.name || knownWork || (line.kind === 'included' ? 'Included Project Service' : 'Additional Project Service');
+}
+/** Window drawing for the client KP: inches, type and panes laid out in rows or columns. */
+function premiumWindowDrawingData(win) {
+  const toIn = mm => Math.round((Number(mm) || 0) / 25.4 * 100) / 100;
+  const width = Number(win.actualWidth ?? win.width) || 0;
+  const height = Number(win.actualHeight ?? win.height) || 0;
+  const panels = (typeof measureWindowPanels === 'function' ? measureWindowPanels(win) : []).map(panel => ({ width_in: toIn(panel.width), height_in: toIn(panel.height) }));
+  const close = (a, b) => Math.abs(a - b) <= Math.max(1, b * 0.03);
+  const layout = panels.length <= 1 ? 'single'
+    : panels.every(panel => close(panel.width_in, toIn(width))) ? 'rows'
+    : panels.every(panel => close(panel.height_in, toIn(height))) ? 'columns' : 'grid';
+  return {
+    width_in: toIn(width), height_in: toIn(height),
+    window_type: typeof winTypeInfo === 'function' ? (String(winTypeInfo(win.winType)?.label || '').split(' / ')[0] || null) : null,
+    panels, panel_layout: layout,
+  };
 }
 function projectProposalItemsFromEstimate(order, prop, calc) {
   const allowedQuickLines = new Set(projectEstimateQuickLinesForBasis(order));
@@ -35321,14 +35368,16 @@ function projectProposalItemsFromEstimate(order, prop, calc) {
         return {
           room_name: room?.name || 'Project area', window_id: win.id || null, window_name: win.name || null,
           width: premiumNum(win.actualWidth ?? win.width), height: premiumNum(win.actualHeight ?? win.height),
-          quantity: premiumNum(win.actualQty ?? win.qty) || 1, sqft: premiumNum(priced.area),
+          quantity: premiumNum(win.actualQty ?? win.qty) || 1, sqft: Math.round(premiumNum(priced.area) * 100) / 100,
           glass_type: win.glassType || null, installation_side: win.side || null,
           facade_orientation: win.orientation || null, access_method: win.access || null,
+          // The technical drawing of the KP (Owner, 2026-10-23): sizes in inches and the panes.
+          ...premiumWindowDrawingData(win),
         };
       });
       const materials = [...new Set(includedWindows.map(win => {
         const catalog = calc.byWindow?.[win.id]?.catalog || premiumSelectedCatalog(prop, win) || windowCatalog(win);
-        return catalog ? catalogLabel(catalog) : String(win.filmType || '').trim();
+        return catalog ? premiumCatalogTitleEn(catalog) : String(win.filmType || '').trim();
       }).filter(Boolean))];
       const rooms = [...new Set(measurements.map(item => item.room_name).filter(Boolean))];
       const quantity = measurements.reduce((sum, item) => sum + premiumNum(item.sqft), 0);
@@ -35337,8 +35386,8 @@ function projectProposalItemsFromEstimate(order, prop, calc) {
         service_code: canonicalServiceCodeForOrderService(line.direction) || 'SOLAR_FILM',
         room_name: rooms.join(', ') || null,
         title_en: [projectProposalDirectionTitle(line.direction), materials.join(', ')].filter(Boolean).join(' — '),
-        description_en: `${includedWindows.length} opening${includedWindows.length === 1 ? '' : 's'} · ${premiumNum(quantity)} sq ft`,
-        quantity: premiumNum(quantity) || 1,
+        description_en: `${includedWindows.length} opening${includedWindows.length === 1 ? '' : 's'} · ${Math.round(premiumNum(quantity) * 100) / 100} sq ft`,
+        quantity: Math.round((premiumNum(quantity) || 1) * 100) / 100,
         unit_label: 'sq ft',
         line_price: premiumNum(linePrice),
         measurement_snapshot: { windows: measurements },
@@ -35352,7 +35401,7 @@ function projectProposalItemsFromEstimate(order, prop, calc) {
     const servicePeriod = [projectQuickDateValue(source.startDate), projectQuickDateValue(source.endDate)].filter(Boolean).join(' — ');
     const included = line.kind === 'included';
     const details = [
-      materialNames.length ? `Material: ${materialNames.join(', ')}` : '',
+      materialNames.length ? `Material: ${projectLineMaterialNames(line, { en: true }).join(', ')}` : '',
       included ? `Included with ${serviceOffering(line.includedBy)?.nameEn || serviceOffering(line.includedBy)?.name || 'the main service'}` : '',
       servicePeriod ? `Service period: ${servicePeriod}` : '',
     ].filter(Boolean);
