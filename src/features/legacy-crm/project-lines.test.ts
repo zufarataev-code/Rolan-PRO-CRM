@@ -155,10 +155,10 @@ test('the project card table shows money by role; the crew rows carry no prices'
   assert.match(owner, /входит в «A1 8 mil»/);
   assert.match(owner, /в пакете · \$0/);
   assert.match(owner, /Защитная · 2 окна/);
-  assert.match(owner, /общих расходов проекта/);
+  assert.match(owner, /входят в себестоимость проекта/);
   const noWindows = project();
   noWindows.measurements.rooms = [];
-  assert.match(c.projectLinesTableHtml(noWindows, { money: true, economics: true }), /общих расходов проекта/);
+  assert.match(c.projectLinesTableHtml(noWindows, { money: true, economics: true }), /входят в себестоимость проекта/);
   assert.deepEqual([1, 2, 5, 11, 22, 25].map(n => c.projectWindowsWord(n)), ['окно', 'окна', 'окон', 'окон', 'окна', 'окон']);
   const manager = c.projectLinesTableHtml(o, { money: true, economics: false });
   assert.match(manager, /\$420\.00/);

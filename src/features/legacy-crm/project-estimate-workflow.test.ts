@@ -571,7 +571,7 @@ test("solar estimate exposes optimized film waste and warehouse consumption", ()
   assert.match(estimate, /Расход плёнки/);
   assert.match(estimate, /Отход раскроя/);
   assert.match(estimate, /filmPlan\.wastePct/);
-  assert.match(estimate, /Материал со склада/);
+  assert.match(estimate, /Плёнка с отходом раскроя/);
 });
 
 test("manager-approved payment after completion is explicit and auditable", () => {

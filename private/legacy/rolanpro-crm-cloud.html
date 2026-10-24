@@ -3032,6 +3032,13 @@
     font-size: .67rem;
     font-weight: 700;
   }
+  /* Compact measurement header (Owner's user test, 2026-10-23: the header took a
+     third of a laptop screen; the windows got ~470px). Phone/tablet rules below win. */
+  .manager-measure-header { padding: .55rem 1rem; }
+  .manager-measure-progress { margin-top: .4rem; gap: .35rem; }
+  .manager-measure-progress-step { padding: .28rem .5rem; grid-template-columns: 22px minmax(0, 1fr); border-radius: 8px; }
+  .manager-measure-services { margin-top: .35rem; }
+  .manager-measure-progress-step .manager-measure-progress-no { width: 22px; height: 22px; font-size: .7rem; }
   /* A later .grid rule beat .hidden, so a private (B2C) client saw «Название компании *» (Owner, 2026-10-23). */
   [id$="-company-block"].hidden { display:none !important; }
   .manager-size-placeholder { border-color:#f59e0b !important; background:#fffbeb !important; }
@@ -17890,7 +17897,7 @@ function installerOrderPrimaryAction(o) {
   if (o.status === 'installation_accepted') return { icon: '🚗', title: 'Выехал на объект', sub: 'Зафиксировать начало поездки.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_en_route')` };
   if (o.status === 'installation_en_route') return { icon: '▶', title: 'Начать монтаж', sub: 'Перед началом заполните приёмку и сделайте фото.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_in_progress')` };
   if (o.status === 'installation_in_progress') return { icon: '✓', title: 'Мои услуги выполнены', sub: 'Добавьте фото после работы. Проект закроется, когда все услуги будут выполнены.', variant: 'success', onclick: `projectMarkMyServicesDone('${o.id}')` };
-  if (o.status === 'installation_done') return { icon: '📝', title: 'Акт подписан', sub: 'Отметить после подписи клиента.', variant: 'primary', onclick: `changeStatus('${o.id}','act_signed')` };
+  if (o.status === 'installation_done') return { icon: '📝', title: 'Акт подписан', sub: 'Отметить после подписи клиента.', variant: 'primary', onclick: `if (confirm('Клиент подписал акт выполненных работ?')) changeStatus('${o.id}','act_signed')` };
   return { icon: '🧰', title: 'Открыть ТЗ-лист', sub: 'Схема, размеры, материалы и лист раскроя.', variant: 'soft', onclick: `openTechnicalSheet('${o.id}')` };
 }
 function renderOrderActionCard(a) {
@@ -25875,7 +25882,7 @@ function projectLinesTableHtml(o, { money = false, economics = false } = {}) {
   const total = field => lines.filter(line => !line.excluded).reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
   const directMarginTotal = total('price') - total('materialCost') - total('installerPay');
   const footer = money ? `<tr class="font-black"><td>Итого по услугам</td><td></td><td class="money">${fmtMoney(total('price'))}</td>${economics ? `<td class="money">${fmtMoney(total('materialCost'))}</td><td class="money">${fmtMoney(total('installerPay'))}</td><td class="money ${directMarginTotal >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(directMarginTotal)}</td>` : ''}<td colspan="2"></td></tr>` : '';
-  return `<div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table project-lines-table"><thead><tr><th>Услуга</th><th class="money">Объём</th>${money ? '<th class="money">Клиенту</th>' : ''}${economics ? '<th class="money">Материал</th><th class="money">Специалисту</th><th class="money">Прямая маржа</th>' : ''}<th>Исполнитель</th><th>Дата</th></tr></thead><tbody>${rows}${footer}</tbody></table></div>${economics ? '<div class="text-xs text-gray-500 mt-2">Это маржа строк до общих расходов проекта. Доставка, бензин, аренда, реклама и другие общие расходы учитываются ниже и уменьшают итоговую прибыль.</div>' : ''}`;
+  return `<div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table project-lines-table"><thead><tr><th>Услуга</th><th class="money">Объём</th>${money ? '<th class="money">Клиенту</th>' : ''}${economics ? '<th class="money">Материал</th><th class="money">Специалисту</th><th class="money">Прямая маржа</th>' : ''}<th>Исполнитель</th><th>Дата</th></tr></thead><tbody>${rows}${footer}</tbody></table></div>${economics ? '<div class="text-xs text-gray-500 mt-2">«Материал» в строках — плёнка по площади окон. Отход раскроя, доставка, бензин, расходники и прямые расходы входят в себестоимость проекта выше; поэтому она больше суммы строк.</div>' : ''}`;
 }
 
 // ---------- КАРТОЧКА ПРОЕКТА: УСЛУГИ НА ОДНОМ ЭКРАНЕ ----------
@@ -26335,6 +26342,28 @@ function projectSyncStatusFromServices(o) {
     changeStatus(o.id, 'installation_in_progress', state.currentUserId);
   }
 }
+/**
+ * What looks wrong when a service is marked done (Owner's user test,
+ * 2026-10-23): no photo of the work at all, or a date that has not come yet.
+ * The specialist may still confirm — a warning, not a lock on field work.
+ */
+function projectServiceDoneWarnings(o, lines, now = new Date()) {
+  const warnings = [];
+  if (!(o?.photos || []).length) warnings.push('в проекте нет ни одного фото работы');
+  const plans = projectPlannedSchedules(o);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  lines.forEach(line => {
+    const at = plans.find(plan => plan.id === line.key)?.installationAt;
+    if (!at) return;
+    const day = new Date(at);
+    if (new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime() > today) warnings.push(`«${line.name}» назначена на ${fmtDateTime(at)}, это ещё не наступило`);
+  });
+  return warnings;
+}
+function projectConfirmServicesDone(o, lines) {
+  const warnings = projectServiceDoneWarnings(o, lines);
+  return !warnings.length || confirm(`Проверьте перед закрытием:\n\n• ${warnings.join('\n• ')}\n\nВсё равно отметить выполненным?`);
+}
 function projectSetServiceProgress(oid, key, status) {
   const o = getOrder(oid);
   const user = currentUser();
@@ -26342,6 +26371,7 @@ function projectSetServiceProgress(oid, key, status) {
   if (!SERVICE_PROGRESS_LABELS[status] || !projectCanMarkService(o, line, user)) return;
   // Reopening a done service is the manager's call.
   if (projectServiceProgress(o, key).status === 'done' && status !== 'done' && !(orderUserCanManage(user) && orderUserCanSeeMoney(o, user))) return;
+  if (status === 'done' && projectServiceProgress(o, key).status !== 'done' && !projectConfirmServicesDone(o, [line])) return;
   projectWriteServiceProgress(o, line, status, user);
   save();
   projectSyncStatusFromServices(o);
@@ -26355,6 +26385,7 @@ function projectMarkMyServicesDone(oid) {
   const mine = projectLines(o).filter(line => projectCanMarkService(o, line, user) && line.installerIds.includes(user.id) && projectServiceProgress(o, line.key).status !== 'done');
   if (!projectLines(o).length) { changeStatus(oid, 'installation_done', state.currentUserId); return; }
   if (!mine.length) return alert('Ваши услуги в этом проекте уже отмечены выполненными.');
+  if (!projectConfirmServicesDone(o, mine)) return;
   mine.forEach(line => projectWriteServiceProgress(o, line, 'done', user));
   save();
   projectSyncStatusFromServices(o);
@@ -27695,7 +27726,7 @@ function renderProjectEstimateWorkspace(o) {
       <div class="project-estimate-kpi"><span>Цена клиенту</span><strong class="text-emerald-700">${fmtMoney(orderRevenue(o))}</strong></div>
       <div class="project-estimate-kpi"><span>Площадь по замеру</span><strong>${measuredArea.toFixed(2)} sqft</strong></div>
       <div class="project-estimate-kpi"><span>Услуги</span><strong>${new Set(quickLines.map(line => line.serviceType)).size || (o.serviceTypes || []).length}</strong></div>
-      ${canSeeInternalEconomics ? `<div class="project-estimate-kpi"><span>Себестоимость</span><strong class="text-red-600">${fmtMoney(pss.total)}</strong></div><div class="project-estimate-kpi"><span>Прибыль / маржа</span><strong class="${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(margin)} · ${marginPct.toFixed(1)}%</strong></div>` : ''}
+      ${canSeeInternalEconomics ? `<div class="project-estimate-kpi"><span>Себестоимость</span><strong class="text-red-600">${fmtMoney(pss.total)}</strong></div><div class="project-estimate-kpi"><span>Валовая прибыль / маржа</span><strong class="${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(margin)} · ${marginPct.toFixed(1)}%</strong></div>` : ''}
     </div>
     <div class="project-estimate-quick">
       <div class="project-estimate-section-head"><div><h4>Итог по замеру</h4><div class="text-xs text-gray-500">${orderNeedsMeasurements(o) ? 'Расчёт строится по помещениям, размерам, выбранной плёнке, складу и справочнику сотрудников.' : 'Замер не нужен: в проекте только услуги без размеров — количество, цена, материал и оплата специалисту за единицу.'}</div></div>${measuredArea ? '<span class="tag bg-blue-50 text-blue-700">Источник: замер</span>' : orderNeedsMeasurements(o) ? `<button class="btn-primary text-sm" onclick="openManagerMeasureModal('${o.id}')">Перейти к замеру</button>` : '<span class="tag bg-emerald-50 text-emerald-700">Без замера</span>'}</div>
@@ -27708,7 +27739,7 @@ function renderProjectEstimateWorkspace(o) {
         <div class="project-estimate-quick-card"><span>Доступ / сложность</span><strong>${T('complexity'+(o.complexity||'standard').charAt(0).toUpperCase()+(o.complexity||'standard').slice(1))} · ×${Number(db.settings.complexityCoefs?.[o.complexity||'standard'] || 1).toFixed(2)}</strong></div>
         <div class="project-estimate-quick-card"><span>Окна / двери</span><strong>${measureAllWindows(o).length} · ${fmtMoney(orderRevenue(o))}</strong></div>
         <div class="project-estimate-quick-card"><span>Исполнители</span><strong>${installerPay.byInstaller.length ? installerPay.byInstaller.map(row => academyEsc(row.name)).join(', ') : 'ставка категории · команда не назначена'}</strong></div>
-        <div class="project-estimate-quick-card"><span>Материал со склада</span><strong>${fmtMoney(pss.film)}</strong></div>
+        <div class="project-estimate-quick-card"><span>Плёнка с отходом раскроя</span><strong>${fmtMoney(pss.film)}</strong></div>
         <div class="project-estimate-quick-card"><span>Оплата бригады</span><strong>${fmtMoney(pss.installers)}</strong></div>
       </div>
     </div>
@@ -27753,8 +27784,10 @@ function renderProjectEstimateWorkspace(o) {
       ${canSeeInternalEconomics ? `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">${costLines.map(([label, amount]) => `<div class="order-clean-list-row"><span>${label}</span><b>${fmtMoney(amount)}</b></div>`).join('')}</div><div class="order-clean-list-row mt-2" style="border-top:2px solid #cbd5e1"><span><b>Общая себестоимость проекта</b></span><b class="text-red-600">${fmtMoney(pss.total)}</b></div>` : ''}
     </section>
 
-    ${canSeeInternalEconomics ? `<section class="project-estimate-section">
-      <div class="project-estimate-section-head"><div><h4>6. Чистая прибыль проекта</h4><div class="text-xs text-gray-500">${profitability.basis === 'forecast' ? 'Прогноз этого проекта; остальные черновики исключены из фактической выручки. ' : 'Распределение между выполненными проектами. '}Управленческий расчёт за ${academyEsc(profitability.monthLabel)} Постоянные расходы и реклама делятся между проектами месяца по выручке: этот проект — ${(profitability.revenueShare * 100).toFixed(1)}% выручки месяца (${fmtMoney(orderRevenue(o))} из ${fmtMoney(profitability.monthRevenue)}, проектов: ${profitability.projectCount}). Бюджет рекламы месяца ${fmtMoney(profitability.adBudget.budget)} = ${Number(profitability.adBudget.pct)}% выручки за ${academyEsc(profitability.adBudget.baseMonthLabel)} (${fmtMoney(profitability.adBudget.baseRevenue)})${profitability.adBudget.basis === 'current' ? ' — за прошлый месяц выручки нет, поэтому пока от выручки этого месяца' : ''}.</div></div></div>
+    ${canSeeInternalEconomics ? `<details class="project-estimate-section project-net-profit" ${state._projectNetProfitOpen ? 'open' : ''} ontoggle="state._projectNetProfitOpen=this.open">
+      <summary class="project-estimate-section-head" style="cursor:pointer"><div><h4>6. Чистая прибыль с долей расходов компании · оценка</h4><div class="text-sm font-bold ${profitability.netProfit >= 0 ? 'text-emerald-700' : 'text-slate-700'}">${fmtMoney(profitability.netProfit)} · открыть расчёт</div></div></summary>
+      ${profitability.revenueShare >= 0.99 && profitability.projectCount <= 1 ? `<div class="order-clean-note mb-3" style="border-color:#bfdbfe;background:#eff6ff;color:#1e40af"><b>В этом месяце пока один проект.</b> На него ложатся все постоянные расходы месяца (${fmtMoney(profitability.fixedPool)}), поэтому цифра ниже выглядит как убыток. Она выровняется, когда появятся другие проекты месяца. Решение о цене принимайте по валовой прибыли и марже вверху.</div>` : ''}
+      <div class="text-xs text-gray-500 mb-2">${profitability.basis === 'forecast' ? 'Прогноз этого проекта; остальные черновики исключены из фактической выручки. ' : 'Распределение между выполненными проектами. '}Управленческий расчёт за ${academyEsc(profitability.monthLabel)} Постоянные расходы и реклама делятся между проектами месяца по выручке: этот проект — ${(profitability.revenueShare * 100).toFixed(1)}% выручки месяца (${fmtMoney(orderRevenue(o))} из ${fmtMoney(profitability.monthRevenue)}, проектов: ${profitability.projectCount}). Бюджет рекламы месяца ${fmtMoney(profitability.adBudget.budget)} = ${Number(profitability.adBudget.pct)}% выручки за ${academyEsc(profitability.adBudget.baseMonthLabel)} (${fmtMoney(profitability.adBudget.baseRevenue)})${profitability.adBudget.basis === 'current' ? ' — за прошлый месяц выручки нет, поэтому пока от выручки этого месяца' : ''}.</div>
       ${projectProfitIsActual(o) && (!o._inventoryDeducted || (o._inventoryLog || []).some(entry => entry.warning)) && measureAllWindows(o).length ? `<div class="order-clean-note mb-3">Расход материала ещё не подтверждён на складе; себестоимость плёнки пока расчётная. <button class="btn-ghost" onclick="confirmProjectMaterialIssue('${o.id}')">Подтвердить расход материала</button></div>` : ''}
       ${o._inventoryDeducted && !Number.isFinite(o._inventoryMaterialCost) && (o._inventoryLog || []).length ? '<div class="order-clean-note mb-3">Старое списание не содержит зафиксированной стоимости. Для подтверждения фактической себестоимости нужна сверка документов.</div>' : ''}
       <div class="project-profit-flow">
@@ -27775,7 +27808,7 @@ function renderProjectEstimateWorkspace(o) {
         <div><label>Годовой минимум, $</label><input type="number" min="0" step="1" value="${Number(profitability.profile.annualMinimum || 0)}" onchange="projectEstimateUpdateTaxProfile('${o.id}','annualMinimum',this.value)"></div>
       </div>
       <div class="order-clean-note mt-3">Это управленческий резерв, а не налоговая декларация. Фактические федеральные и California налоги подтверждает бухгалтер; оплаченные суммы учитываются отдельно в финансах.</div>
-    </section>` : ''}
+    </details>` : ''}
 
     <div class="project-estimate-footer">
       <div class="text-xs text-gray-500">${projectEstimateIsApproved(o) ? `Подтверждено ${fmtDateTime(o.projectEstimateApprovedAt)}` : issues.length ? `Нужно проверить: ${academyEsc(issues.join(', '))}.` : 'Готово к подтверждению и формированию КП.'}</div>
@@ -29661,7 +29694,8 @@ function renderManagerMeasureModal(oid) {
       </div>
       <div class="manager-measure-footer flex items-center justify-between gap-2 flex-wrap">
         <div class="text-xs text-gray-500">Размеры клиента можно использовать для расчёта и КП. До назначения монтажа каждое окно должно быть подтверждено как точный замер.</div>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
+          ${managerConfirmableWindows(o).length ? `<button class="btn-ghost" onclick="managerConfirmAllWindowMeasurements('${oid}')">✓ Подтвердить все размеры (${managerConfirmableWindows(o).length})</button>` : ''}
           <button class="btn-ghost" onclick="openWorkOrder('${oid}')">Заказ-наряд</button>
           <button class="btn-primary" onclick="completeManagerMeasurement('${oid}')">Завершить замер<span class="manager-measure-title-suffix"> и рассчитать проект</span> →</button>
         </div>
@@ -29882,6 +29916,35 @@ function managerSetRoomRemoval(oid, rid, scopeKey, enabled) {
   });
   syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, enabled ? 'Добавлено удаление плёнки со всех окон помещения' : 'Удалено снятие плёнки со всех окон помещения');
+  save();
+  refreshManagerMeasureModal(oid);
+}
+/** Windows whose typed sizes still wait for the «точный замер» confirmation. */
+function managerConfirmableWindows(o) {
+  return measureAllWindows(o).filter(({ win }) => !windowMeasurementIsVerified(win) && windowSizeEntered(win) && Number(win.width) > 0 && Number(win.height) > 0 && Number(win.qty || 1) > 0);
+}
+/**
+ * One confirmation for every window measured on site (Owner's user test,
+ * 2026-10-23: thirty windows meant thirty browser dialogs). Windows without
+ * typed sizes are left for the measurer and named.
+ */
+function managerConfirmAllWindowMeasurements(oid) {
+  const o = getOrder(oid);
+  if (!o) return;
+  const ready = managerConfirmableWindows(o);
+  if (!ready.length) { alert('Нет окон с внесёнными размерами, которые ждут подтверждения.'); return; }
+  const missing = measureAllWindows(o).filter(({ win }) => !windowMeasurementIsVerified(win) && !windowSizeEntered(win));
+  const unit = db.settings.inputUnits === 'inches' ? 'in' : 'мм';
+  const list = ready.slice(0, 8).map(({ room, win }) => `• ${room.name || 'Помещение'} · ${win.name || 'Окно'}: ${measureMmToInput(win.width)} × ${measureMmToInput(win.height)} ${unit} · ${Number(win.qty || 1)} шт.`).join('\n');
+  const more = ready.length > 8 ? `\n… и ещё ${ready.length - 8}` : '';
+  const skipped = missing.length ? `\n\nБез размеров, останутся неподтверждёнными: ${missing.length}.` : '';
+  if (!confirm(`Подтвердить как точный проверенный замер ${ready.length} окон?\n\n${list}${more}${skipped}`)) return;
+  const at = new Date().toISOString();
+  o.timeline = o.timeline || [];
+  ready.forEach(({ win }) => markWindowMeasurementVerified(win));
+  o.timeline.push({ at, key: 'measurement_verified', by: state.currentUserId, note: `Подтверждены точные размеры: ${ready.length} окон` });
+  syncOrderWindowRemovalService(o);
+  invalidateProjectEstimate(o, 'Точные размеры подтверждены — требуется проверить расчёт проекта');
   save();
   refreshManagerMeasureModal(oid);
 }

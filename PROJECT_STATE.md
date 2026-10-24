@@ -30,6 +30,15 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-23 handoff — third batch from the Owner's user test (confirm all sizes, calculation clarity, closing warnings, compact header)
+
+- Branch: `claude/flow-fixes-3`, based on `main` after PR #366.
+- Measurement: «✓ Подтвердить все размеры (N)» in the footer (`managerConfirmAllWindowMeasurements`, `managerConfirmableWindows`) confirms every window with typed sizes in one dialog that lists them; windows still on the typical size are named and left; one history entry.
+- Calculation: KPI reads «Валовая прибыль / маржа»; the quick card «Плёнка с отходом раскроя»; the lines table note explains why project cost is above the sum of lines. Section 6 is a folded «Чистая прибыль с долей расходов компании · оценка» (remembers open state) and, when the project is the only one of the month, says that all monthly fixed costs fall on it instead of showing a bare −$8 575.
+- Installation: marking a service (or «Мои услуги выполнены») done with no photo in the project, or before its planned day, asks first (`projectServiceDoneWarnings` / `projectConfirmServicesDone`) — a warning, never a lock on field work. «Акт подписан» asks «Клиент подписал акт…?».
+- Header: compact desktop paddings for the measurement header and progress steps (phone/tablet rules unchanged).
+- Verification: new `flow-fixes-3.test.ts` (4 tests); label tests updated; `service-progress.test.ts` stubs `confirm`; full suite 786/786; TypeScript passes; confirm-all, folded net profit and header checked in a local copy of the CRM.
+
 ## 2026-10-23 handoff — second batch from the Owner's user test (sizes, KP sent state, drafts, labels, client card)
 
 - Branch: `claude/flow-fixes-2`, based on `main` after PR #365.

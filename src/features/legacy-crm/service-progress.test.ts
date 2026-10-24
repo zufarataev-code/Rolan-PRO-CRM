@@ -61,6 +61,7 @@ function load(user: Row) {
     changeStatus: (id: string, status: string) => { calls.push(`status:${status}`); db.orders.find((item: Row) => item.id === id).status = status; return true; },
     save: () => calls.push('save'), render: () => undefined, preservePositionForNextRender: () => undefined,
     alert: (message: string) => calls.push(`alert:${message}`),
+    confirm: (message: string) => { calls.push(`confirm:${message}`); return true; },
     refreshManualFilmNeededBy: () => undefined,
   });
   const start = html.indexOf('// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ');
