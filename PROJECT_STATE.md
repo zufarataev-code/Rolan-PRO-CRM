@@ -30,6 +30,19 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-23 handoff — second batch from the Owner's user test (sizes, KP sent state, drafts, labels, client card)
+
+- Branch: `claude/flow-fixes-2`, based on `main` after PR #365.
+- Sizes: a new window starts with `sizePlaceholder: {width, height}` — the typical size draws it, the inputs stay empty with the size as an orange hint, area shows «—», «Размеры» is not green, finishing the measurement / approving the estimate / confirming exact sizes ask for typed sizes (`windowSizeEntered`). Typing a size clears the flag; older windows count as measured.
+- Inches: `measureInputToMm` keeps hundredths of a millimetre, so 72 in reads back as 72 (was 72.01, 36 → 35.98).
+- KP: publishing only makes the link (`prop.publishedAt`, timeline «ещё не отправлена»); the KP and project become «Отправлено» when the manager shares it (`premiumMarkProposalSent` on WhatsApp / SMS / «Скопировать ссылку»; email already did). The next step reads «Отправить КП клиенту» meanwhile (`projectProposalNextAction`). «КП принято» from the card marks the latest open proposal Accepted. Manager modal in Russian (`premiumStatusLabelRu`); the client portal keeps English labels; opening the modal no longer overwrites the clipboard.
+- Directory: a service with the default name «Новая услуга» and no price is a draft (`serviceOfferingIsDraft`) — hidden from the cashier and pickers, shown to the owner with a «Черновик» note; projects that already use it keep it.
+- «Ближайшее событие» no longer shows a finished measurement; the fallback takes only future events.
+- Labels: direction short names in Russian (Солнцезащитная, Смарт, Защитная, Декоративная, Приватная); the work order shows the access label and the glass card title instead of raw codes.
+- Client card: the search text fills name/phone/email; phones are stored as +1XXXXXXXXXX (`normalizeClientPhone`, server matching is E.164 too); empty required fields are outlined and scrolled to; a note explains that without consent the client gets no SMS/email; the B2C company block is really hidden (a later `.grid` rule beat `.hidden`).
+- Lin ft lines are 0 (unknown) until windows exist when the project needs a measurement — no «Сумма $5» before any price.
+- Verification: new `flow-fixes-2.test.ts` (9 tests); two existing tests updated for the intended KP change; full suite 782/782; TypeScript passes; client card, cashier and placeholder sizes checked in a local copy of the CRM.
+
 ## 2026-10-23 handoff — fixes from the Owner's end-to-end user test (payment, deposit, estimate reset, films)
 
 - Branch: `claude/flow-fixes`, based on `main` `50d9cee` (after PR #364).

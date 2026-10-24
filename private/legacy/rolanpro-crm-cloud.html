@@ -3032,6 +3032,10 @@
     font-size: .67rem;
     font-weight: 700;
   }
+  /* A later .grid rule beat .hidden, so a private (B2C) client saw «Название компании *» (Owner, 2026-10-23). */
+  [id$="-company-block"].hidden { display:none !important; }
+  .manager-size-placeholder { border-color:#f59e0b !important; background:#fffbeb !important; }
+  .manager-size-placeholder::placeholder { color:#b45309; opacity:.75; }
   .manager-window-service-chips { display:flex; flex-wrap:wrap; gap:.4rem; }
   .manager-window-field label.manager-window-service-chip { --svc-color:#2563eb; --svc-bg:#eff6ff; display:inline-flex; align-items:center; gap:.5rem; margin:0; padding:.35rem .6rem; border:1.5px solid #dbe4ef; border-left:4px solid var(--svc-color); border-radius:4px; background:#fff; cursor:pointer; font-size:.8rem; font-weight:700; text-transform:none; line-height:1.25; color:#10213b; min-height:40px; }
   .manager-window-field label.manager-window-service-chip.active { background:var(--svc-bg); border-color:var(--svc-color); }
@@ -10527,7 +10531,7 @@ const MEASURE_SCOPES = [
     key: 'solar_film',
     icon: '☀️',
     title: 'Замер солнцезащитной пленки',
-    short: 'Solar',
+    short: 'Солнцезащитная',
     catalogCategory: 'solar',
     accent: rpDir('solar').color,
     brief: 'Heat, glare, UV, privacy, VLT, стекло и сторона света.',
@@ -10543,7 +10547,7 @@ const MEASURE_SCOPES = [
     key: 'smart_film',
     icon: '🪟',
     title: 'Замер Smart film',
-    short: 'Smart',
+    short: 'Смарт',
     catalogCategory: 'smart',
     accent: rpDir('smart').color,
     brief: 'Точный размер стекла, зоны, питание, busbar, блоки и трасса провода.',
@@ -10559,7 +10563,7 @@ const MEASURE_SCOPES = [
     key: 'protective_film',
     icon: '🛡',
     title: 'Замер защитной пленки',
-    short: 'Security',
+    short: 'Защитная',
     catalogCategory: 'protective',
     accent: rpDir('protective').color,
     brief: 'Mil, тип стекла, рама, wet glaze/attachment, зона удара и ответственность.',
@@ -10575,7 +10579,7 @@ const MEASURE_SCOPES = [
     key: 'decorative_film',
     icon: '🎨',
     title: 'Замер декоративной пленки',
-    short: 'Decor',
+    short: 'Декоративная',
     catalogCategory: 'decorative',
     accent: rpDir('decorative').color,
     brief: 'Privacy, frost, pattern, логотип, repeat, направление рисунка и стыки.',
@@ -10591,7 +10595,7 @@ const MEASURE_SCOPES = [
     key: 'privacy_film',
     icon: '🔒',
     title: 'Замер приватной пленки',
-    short: 'Privacy',
+    short: 'Приватная',
     catalogCategory: 'privacy',
     accent: rpDir('privacy').color,
     brief: 'От кого закрываемся, днём или ночью, освещение, зеркальность и матовость.',
@@ -11127,7 +11131,12 @@ function measureWindowByIds(order, rid, wid) {
 }
 function measureInputToMm(value) {
   const n = parseFloat(String(value || '').replace(',', '.')) || 0;
-  return db.settings.inputUnits === 'inches' ? Math.round(inches_to_mm(n)) : Math.round(n);
+  // Hundredths of a millimetre: 72 in is 1828.8 mm and reads back as 72, not 72.01 (Owner, 2026-10-23).
+  return db.settings.inputUnits === 'inches' ? Math.round(inches_to_mm(n) * 100) / 100 : Math.round(n);
+}
+/** Width and height were typed by a person (not the typical size a new window starts with). */
+function windowSizeEntered(w) {
+  return !(w?.sizePlaceholder && (w.sizePlaceholder.width || w.sizePlaceholder.height));
 }
 function measureMmToInput(mm) {
   return db.settings.inputUnits === 'inches' ? Number(mm_to_inches(mm || 0).toFixed(2)) : Math.round(mm || 0);
@@ -13280,10 +13289,10 @@ function renderTechnicalSheetHtml(order, printMode = false) {
                 <span class="tag" style="background:${scope.accent}18;color:${scope.accent}">${scope.icon} ${academyEsc(scope.short)} · ${academyEsc(measureCompassLabel(win.orientation))}</span>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
-                <div><b>Стекло:</b> ${academyEsc(win.glassType || '—')}</div>
+                <div><b>Стекло:</b> ${win.glassType ? academyEsc(`${measureGlassCardInfo(win.glassType).title} · ${measureGlassCardInfo(win.glassType).sub}`) : '—'}</div>
                 <div><b>Материал:</b> ${academyEsc(cat ? `${cat.brand} — ${cat.model}` : (win.filmType || '—'))}</div>
                 <div><b>Сторона:</b> ${win.side === 'out' ? 'Снаружи' : 'Внутри'}</div>
-                <div><b>Доступ:</b> ${academyEsc(win.access || 'normal')}</div>
+                <div><b>Доступ:</b> ${academyEsc(managerSolarAccessOption(win.access)?.label || (win.access ? win.access : '—'))}</div>
                 <div><b>Этаж/высота:</b> ${academyEsc(win.floor || '—')}</div>
                 <div><b>Зона:</b> ${academyEsc(win.filmZone || win.smart?.zone || '—')}</div>
               </div>
@@ -15231,7 +15240,7 @@ const ORDER_PRIMARY_SERVICES = [
     id: 'smart_film',
     icon: '🪟',
     title: 'Смарт плёнка',
-    short: 'Smart',
+    short: 'Смарт',
     desc: 'Приватность по кнопке: плёнка, блок питания, проводка, управление.',
     tag: 'smart',
     catalogCategory: 'smart',
@@ -15247,7 +15256,7 @@ const ORDER_PRIMARY_SERVICES = [
     id: 'solar_film',
     icon: '☀️',
     title: 'Солнцезащитная плёнка',
-    short: 'Solar',
+    short: 'Солнцезащитная',
     desc: 'Контроль жара, бликов и UV с подбором оттенка и светопропускания.',
     tag: 'solar',
     catalogCategory: 'solar',
@@ -15263,7 +15272,7 @@ const ORDER_PRIMARY_SERVICES = [
     id: 'protective_film',
     icon: '🛡',
     title: 'Защитная плёнка',
-    short: 'Security',
+    short: 'Защитная',
     desc: 'Усиление стекла, удержание осколков, защита витрин и входных групп.',
     tag: 'safety',
     catalogCategory: 'protective',
@@ -15279,7 +15288,7 @@ const ORDER_PRIMARY_SERVICES = [
     id: 'decorative_film',
     icon: '🎨',
     title: 'Декоративная плёнка',
-    short: 'Decor',
+    short: 'Декоративная',
     desc: 'Матовые, брендированные и дизайнерские решения: рисунок, логотип, frost.',
     tag: 'decorative',
     catalogCategory: 'decorative',
@@ -15297,7 +15306,7 @@ const ORDER_PRIMARY_SERVICES = [
     id: 'privacy_film',
     icon: '🔒',
     title: 'Приватная плёнка',
-    short: 'Privacy',
+    short: 'Приватная',
     desc: 'Приватность: зеркальные, матовые и односторонние плёнки, вид днём и ночью.',
     tag: 'privacy',
     catalogCategory: 'privacy',
@@ -17297,6 +17306,8 @@ function orderMeasurementCompletionIssues(o) {
   const missingOfferings = projectSelectedSizedOfferings(o).filter(offering => !windows.some(({ win }) => win.offeringId === offering.id && windowActualAreaSqft(win) > 0));
   if (missingOfferings.length) issues.push('Добавьте размеры для выбранных услуг: ' + missingOfferings.map(offering => offering.name).join(', '));
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('заполните размеры и количество для всех окон');
+  const typical = windows.filter(({ win }) => !windowSizeEntered(win));
+  if (typical.length) issues.push(`внесите ширину и высоту: ${typical.slice(0, 4).map(({ room, win }) => `${room.name || 'Помещение'} · ${win.name || 'Окно'}`).join(', ')}${typical.length > 4 ? ` и ещё ${typical.length - 4}` : ''}`);
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('выберите плёнку со склада для каждого окна');
   return issues;
 }
@@ -17412,6 +17423,8 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   }
   o.status = newStatus;
   if (entersInstallation) refreshManualFilmNeededBy(o);
+  // «КП принято» from the card: the latest open proposal says so too (Owner's user test, 2026-10-23).
+  if (newStatus === 'proposal_accepted') premiumMarkLatestProposalAccepted(o);
   o.timeline = o.timeline || [];
   o.timeline.push({ at: new Date().toISOString(), key: newStatus, by: by || state.currentUserId });
   // milestone fields
@@ -17729,7 +17742,8 @@ function orderClientActiveEvent(o) {
   if (!o) return null;
   const priority = [];
   if (['new','consultation_scheduled'].includes(o.status) && o.consultationAt) priority.push('consultation');
-  if (['new','consultation_scheduled','measurement_scheduled','measurement_done'].includes(o.status) && o.measurementAt) priority.push('measure');
+  // A finished measurement is not «the next event» any more (Owner's user test, 2026-10-23).
+  if (['new','consultation_scheduled','measurement_scheduled'].includes(o.status) && o.measurementAt) priority.push('measure');
   if (['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'].includes(o.status) && o.installationAt) priority.push('install');
   const byPriority = priority
     .map(type => ({ ...orderEventInfo(type), at: o[orderEventInfo(type).field] }))
@@ -17828,9 +17842,16 @@ function projectServicesNextAction(o) {
     return { icon: '📐', title: 'Назначить замер', sub: 'Услугам за sq ft нужны размеры окон. Выберите замерщика и время выезда — или внесите размеры сами в «Замер».', variant: 'primary', onclick: `scheduleMeasurementPrompt('${o.id}')` };
   }
   if (!projectEstimateIsApproved(o)) return { icon: '✅', title: 'Расчёт готов → КП', sub: orderNeedsMeasurements(o) ? 'Размеры внесены. Проверьте количество и цены в «Услугах проекта» — и сформируйте КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цены — и сформируйте КП.', variant: 'primary', onclick: `approveProjectEstimateAndOpenProposal('${o.id}')` };
-  return { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
+  return projectProposalNextAction(o);
 }
 
+/** «Сформировать КП» until the link exists; then «Отправить КП», until it is shared. */
+function projectProposalNextAction(o) {
+  const published = (db.proposals || []).some(prop => prop.orderId === o.id && prop.status === 'Draft' && prop.publishedAt);
+  return published
+    ? { icon: '📨', title: 'Отправить КП клиенту', sub: 'Ссылка на КП готова, но клиенту ещё не отправлена: WhatsApp, SMS, email или скопировать ссылку.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` }
+    : { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
+}
 function orderPrimaryNextAction(o) {
   if (orderUserCanResolveClientRequests(o) && pendingClientRequests(o).length) {
     return { icon: '⚠️', title: 'Ответить на запрос клиента', sub: 'Клиент просит перенос или отмену. Сначала обработайте это, потом двигайте заказ дальше.', variant: 'warning', onclick: `if (!projectCardOpenWorkspace('request')) document.getElementById('client-requests-${o.id}')?.scrollIntoView({behavior:'smooth',block:'center'})` };
@@ -17843,7 +17864,7 @@ function orderPrimaryNextAction(o) {
     ? { icon: '🧭', title: 'Контроль замера', sub: 'Замерщик видит заказ без денег. Замер работает в CRM на телефоне и планшете.', variant: 'soft', onclick: `openMeasurerV25ForOrder('${o.id}')` }
     : { icon: '👷', title: 'Назначить замерщика', sub: 'Без ответственного замерщик не увидит задачу в своём кабинете.', variant: 'warning', onclick: `openAssignTeam('${o.id}')` };
   if (o.status === 'measurement_done' && !projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: orderUserCanSeeInternalEconomics(o, currentUser()) ? 'Проверьте цену, расходы и маржу до формирования КП.' : 'Проверьте размеры, услуги и цену клиенту до формирования КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
-  if (o.status === 'measurement_done') return { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProfessionalKP('${o.id}')` };
+  if (o.status === 'measurement_done') return projectProposalNextAction(o);
   if (o.status === 'proposal_sent') return { icon: '✅', title: 'Отметить КП принятым', sub: 'Используйте, если клиент подтвердил предложение вне портала.', variant: 'primary', onclick: `changeStatus('${o.id}','proposal_accepted')` };
   if (o.status === 'proposal_accepted' && !orderPaymentReadyForProduction(o)) return { icon: '💰', title: 'Отметить аванс', sub: 'Либо подтвердите в расчёте согласованную оплату после выполнения.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
   // The deposit is asked for right after acceptance (Owner, 2026-10-23); it
@@ -24698,7 +24719,7 @@ function projectEstimateReadiness(o) {
     if (!line.includedBy && !(Number(line.unitPrice) > 0)) issues.push(`не указана цена услуги: ${line.label || 'услуга'}`);
   });
   if (windows.some(({ win }) => win.offeringId && !(Number(win.pricePerSqft) > 0))) issues.push('не указана цена выбранной услуги');
-  if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('есть окна без размера');
+  if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0 || !windowSizeEntered(win))) issues.push('есть окна без размера');
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
   if ((o.extraServices || []).filter(s => !s.quickProjectLine && !s.includedBy).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
   if (o.paymentTerms === 'after_completion' && !o.paymentTermsConfirmedAt) issues.push('менеджер не подтвердил ответственность за оплату после выполнения');
@@ -24791,9 +24812,16 @@ function serviceOfferingInDirection(offering, direction) {
   return serviceOfferingDirections(offering).includes(direction);
 }
 /** Services offered in a direction: its own plus the size-free ones shared into it. */
+/** A service just added in the directory and never filled in: default name, no price. */
+function serviceOfferingIsDraft(item) {
+  return String(item?.name || '').trim() === 'Новая услуга' && !(Number(item?.pricePerSqft) > 0) && !(Number(item?.minPricePerUnit) > 0);
+}
 function serviceOfferingsFor(direction, { includeId = '', includeInactive = false, homeOnly = false } = {}) {
+  // Drafts are visible only in the owner's directory (includeInactive); the
+  // cashier and pickers never offer them (Owner's user test, 2026-10-23: six
+  // empty «Новая услуга $0» stood first in the cashier).
   return serviceOfferingsAll()
-    .filter(item => (homeOnly ? item.direction === direction : serviceOfferingInDirection(item, direction)) && (includeInactive || item.active !== false || item.id === includeId))
+    .filter(item => (homeOnly ? item.direction === direction : serviceOfferingInDirection(item, direction)) && (includeInactive || item.id === includeId || (item.active !== false && !serviceOfferingIsDraft(item))))
     .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0) || String(a.name).localeCompare(String(b.name)));
 }
 /** The direction an offering is used under in this project (its windows or its line), else its home. */
@@ -25023,6 +25051,10 @@ function syncProjectIncludedServices(o) {
       qty = projectIncludedQty(o, line.includedBy, child);
     } else if (line.unit === 'lft' && allWindows.length) {
       qty = Math.round(projectWindowsForService(o, line.offeringId).reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100;
+    } else if (line.unit === 'lft' && !allWindows.length && orderNeedsMeasurements(o)) {
+      // Lin ft comes from the windows: before the measurement it is unknown,
+      // not «1 lin ft · $5» (Owner's user test, 2026-10-23).
+      qty = 0;
     } else if (line.unit === 'piece' && allWindows.some(win => windowHasService(win, line.offeringId))) {
       qty = projectWindowsForService(o, line.offeringId).reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0);
     }
@@ -25502,6 +25534,7 @@ function renderServiceOfferingsSection() {
         ? filmList
         : `<label class="block" style="max-width:16rem">Материал, $ / ${academyEsc(per)}<input type="number" min="0" step="0.5" value="${Number(offering.materialCostPerUnit) || ''}" placeholder="нет материала" onchange="updateServiceOffering('${offering.id}','materialCostPerUnit',this.value,this)"></label>`;
       return owner ? `<div data-service-offering-row="${offering.id}" class="p-3 border border-slate-200 ${offering.active === false ? 'opacity-60' : ''}">
+        ${serviceOfferingIsDraft(offering) ? '<div class="text-xs font-bold mb-2" style="color:#92400e">Черновик · не показывается в кассе, пока нет названия и цены</div>' : ''}
         <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
           <div class="md:col-span-2"><label>Услуга (название в КП)</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value,this)"></div>
           <div class="md:col-span-2"><label>Как считается</label><select onchange="updateServiceOffering('${offering.id}','unit',this.value,this)">${serviceOfferingUnitsFor(offering.direction).map(item => `<option value="${item.id}" ${unit === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
@@ -27812,7 +27845,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   const proposal = getPremiumProposalByOrder(o.id);
   const proposalCalc = proposal ? premiumProposalCalc(proposal) : null;
   const proposalStripeUrl = proposal ? premiumStripeCheckoutUrl(proposal, proposalCalc) : '';
-  const nextEvent = orderClientActiveEvent(o) || events[0] || null;
+  const nextEvent = orderClientActiveEvent(o) || events.filter(ev => new Date(ev.at) >= new Date()).sort((a, b) => new Date(a.at) - new Date(b.at))[0] || null;
   const measureAction = canManage
     ? `openManagerMeasureModal('${o.id}')`
     : canMeasure
@@ -29119,6 +29152,9 @@ function managerWindowDefaults(o, room, opts = {}) {
     name: kindInfo.baseName + ' ' + (sameKindCount + 1),
     width: Math.round(inches_to_mm(objectKind === 'skylight' ? 36 : objectKind === 'glass_partition' ? 48 : 40)),
     height: Math.round(inches_to_mm(objectKind === 'skylight' ? 36 : objectKind === 'glass_partition' ? 96 : 70)),
+    // The typical size only draws the window; it is not a measurement until typed
+    // (Owner's user test, 2026-10-23: «Размеры» turned green with nobody measuring).
+    sizePlaceholder: { width: true, height: true },
     qty: 1,
     winType,
     measureScope: scopeKey,
@@ -29371,7 +29407,7 @@ function managerMeasureProgressHtml(order, scopeKey = '') {
   const windows = rooms.flatMap(r => r.windows || []).filter(w => !scopeKey || (w.measureScope || orderMeasureScope(order)) === scopeKey);
   const hasRooms = rooms.length > 0;
   const hasWindows = windows.length > 0;
-  const hasSizes = hasWindows && windows.every(w => Number(w.width) > 0 && Number(w.height) > 0 && Number(w.qty || 1) > 0);
+  const hasSizes = hasWindows && windows.every(w => Number(w.width) > 0 && Number(w.height) > 0 && Number(w.qty || 1) > 0 && windowSizeEntered(w));
   const hasMaterials = hasWindows && windows.every(w => Boolean(w.catalogId));
   const steps = [
     { label: roomTerms.plural, done: hasRooms },
@@ -29590,9 +29626,9 @@ function renderManagerMeasureModal(oid) {
                         <div class="manager-window-fields">
                           <div class="manager-window-field"><label>Направление плёнки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','filmDirection',this.value)">${managerFilmDirectionOptionsHtml(w.filmDirection || '')}</select></div>
                           <div class="manager-window-field"><label>Количество панелей</label><input id="mm-qty-${w.id}" aria-label="Количество панелей" type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></div>
-                          <div class="manager-window-field"><label>Ширина (${inUnits ? 'in' : 'мм'})</label><input id="mm-width-${w.id}" aria-label="Ширина" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.width || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></div>
-                          <div class="manager-window-field"><label>Высота (${inUnits ? 'in' : 'мм'})</label><input id="mm-height-${w.id}" aria-label="Высота" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" value="${measureMmToInput(w.height || 0)}" onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></div>
-                          <div class="manager-window-field readonly"><label>Площадь, sqft</label><input aria-label="Площадь" value="${windowActualAreaSqft(w).toFixed(2)}" readonly></div>
+                          <div class="manager-window-field"><label>Ширина (${inUnits ? 'in' : 'мм'})</label><input id="mm-width-${w.id}" aria-label="Ширина" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" ${w.sizePlaceholder?.width ? `value="" placeholder="${measureMmToInput(w.width || 0)}" class="manager-size-placeholder"` : `value="${measureMmToInput(w.width || 0)}"`} onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></div>
+                          <div class="manager-window-field"><label>Высота (${inUnits ? 'in' : 'мм'})</label><input id="mm-height-${w.id}" aria-label="Высота" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" ${w.sizePlaceholder?.height ? `value="" placeholder="${measureMmToInput(w.height || 0)}" class="manager-size-placeholder"` : `value="${measureMmToInput(w.height || 0)}"`} onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></div>
+                          <div class="manager-window-field readonly"><label>Площадь, sqft</label><input aria-label="Площадь" value="${windowSizeEntered(w) ? windowActualAreaSqft(w).toFixed(2) : '—'}" readonly></div>
                           ${managerWindowServiceChipsHtml(oid, r.id, w, o)}
                           <details class="manager-window-technical">
                             <summary>Стекло, доступ и технические характеристики${windowRemovalRequired(w) ? ' · требуется демонтаж' : ''}</summary>
@@ -29858,7 +29894,7 @@ function managerConfirmWindowMeasurement(oid, rid, wid) {
     alert('Точные размеры этого окна уже подтверждены. Если изменить ширину, высоту или количество, потребуется подтвердить их повторно.');
     return;
   }
-  if (Number(w.width) <= 0 || Number(w.height) <= 0 || Number(w.qty || 1) <= 0) {
+  if (Number(w.width) <= 0 || Number(w.height) <= 0 || Number(w.qty || 1) <= 0 || !windowSizeEntered(w)) {
     alert('Сначала внесите точную ширину, высоту и количество.');
     return;
   }
@@ -29949,6 +29985,10 @@ function managerUpdateWinDim(oid, rid, wid, field, val) {
   const previous = Number(w[field]) || 0;
   const next = measureInputToMm(val);
   w[field] = next;
+  if (w.sizePlaceholder && next > 0) {
+    delete w.sizePlaceholder[field];
+    if (!w.sizePlaceholder.width && !w.sizePlaceholder.height) delete w.sizePlaceholder;
+  }
   const actualField = field === 'width' ? 'actualWidth' : field === 'height' ? 'actualHeight' : '';
   if (actualField && (Number(w[actualField]) <= 0 || Math.abs(Number(w[actualField]) - previous) < 1)) {
     w[actualField] = next;
@@ -31760,6 +31800,7 @@ function openOrderClientOverlay() {
               <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="oc-consent-email" type="checkbox" style="width:18px;height:18px">Согласие на Email</label>
               <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="oc-consent-whatsapp" type="checkbox" style="width:18px;height:18px">Согласие WhatsApp</label>
             </div>
+            <div class="text-xs mt-2" style="color:#92400e">Без согласия клиент не получит SMS и email о замере, монтаже и КП. Отметьте, если клиент согласился.</div>
           </section>
 
           <section class="border-t pt-4">
@@ -31786,7 +31827,28 @@ function openOrderClientOverlay() {
       </div>
     </div>
   `);
+  // What the manager already typed in the search goes into the card (Owner's user test, 2026-10-23).
+  const typed = String(document.getElementById('no-client-search')?.value || '').trim();
+  if (typed) {
+    if (/\d{7,}/.test(typed.replace(/[\s()+-]/g, ''))) document.getElementById('oc-phone').value = typed;
+    else if (/@/.test(typed)) document.getElementById('oc-email').value = typed;
+    else {
+      const [first, ...rest] = typed.split(/\s+/);
+      const firstInput = document.getElementById('oc-first-name');
+      const lastInput = document.getElementById('oc-last-name');
+      if (firstInput) firstInput.value = first;
+      if (lastInput && rest.length) lastInput.value = rest.join(' ');
+    }
+  }
   setTimeout(() => document.getElementById('oc-first-name')?.focus(), 50);
+}
+/** A US phone in one form (+18185550123): duplicates match and SMS providers accept it. */
+function normalizeClientPhone(value) {
+  const raw = String(value || '').trim();
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10 && !raw.startsWith('+')) return '+1' + digits;
+  if (digits.length === 11 && digits.startsWith('1')) return '+' + digits;
+  return raw;
 }
 
 function createOrderClientFromOverlay() {
@@ -31794,16 +31856,23 @@ function createOrderClientFromOverlay() {
   const identity = readClientIdentityFields('oc');
   if (identity.error) { alert(identity.error); return; }
   const name = identity.fields.name;
-  const phone = value('oc-phone');
+  const phone = normalizeClientPhone(value('oc-phone'));
   const email = value('oc-email').toLowerCase();
   const street = value('oc-street');
   const unit = value('oc-unit');
   const city = value('oc-city');
   const stateCode = value('oc-state');
   const zip = value('oc-zip');
-  const required = [[phone, 'телефон'], [street, 'улица'], [city, 'город']]
-    .filter(([field]) => !field).map(([, label]) => label);
-  if (required.length) { alert('Заполните обязательные поля: ' + required.join(', ')); return; }
+  const required = [[phone, 'телефон', 'oc-phone'], [street, 'улица', 'oc-street'], [city, 'город', 'oc-city']]
+    .filter(([field]) => !field);
+  if (required.length) {
+    // Point at the empty fields (the address sits below the fold).
+    required.forEach(([, , id]) => { const input = document.getElementById(id); if (input) input.style.borderColor = '#dc2626'; });
+    document.getElementById(required[0][2])?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById(required[0][2])?.focus();
+    alert('Заполните обязательные поля: ' + required.map(([, label]) => label).join(', '));
+    return;
+  }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Проверьте email клиента.'); return; }
   const existing = uniqueExistingClientByContact(phone, email);
   if (existing === false) return;
@@ -35339,19 +35408,46 @@ async function generatePremiumProposal(orderId) {
   if (!prop) return;
   try {
     await premiumPublishCanonicalProposal(prop);
-    if (!premiumProposalLocked(prop) && prop.status === 'Draft') {
-      prop.status = 'Sent';
-      prop.sentAt = new Date().toISOString();
-      order.proposalSentAt = order.proposalSentAt || prop.sentAt;
+    // Publishing makes the client link; the KP counts as sent only when the
+    // manager shares it (Owner's user test, 2026-10-23: «Sent» with nothing sent).
+    if (!premiumProposalLocked(prop) && prop.status === 'Draft' && !prop.publishedAt) {
+      prop.publishedAt = new Date().toISOString();
       order.timeline = order.timeline || [];
-      order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_sent', by: state.currentUserId, note: 'Public client proposal published' });
-      if (['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done'].includes(order.status)) order.status = 'proposal_sent';
+      order.timeline.push({ at: prop.publishedAt, key: 'premium_proposal_published', by: state.currentUserId, note: 'Ссылка на КП готова — ещё не отправлена клиенту' });
       save();
     }
     openPremiumProposalManagerModal(prop.token);
   } catch (error) {
     alert('КП не опубликовано:\n' + (error?.message || error));
   }
+}
+/** The manager shared the KP (WhatsApp, SMS, copied link): from now on it is «Отправлено». */
+/** «КП принято» set by the manager: the latest open proposal of the project becomes «Accepted». */
+function premiumMarkLatestProposalAccepted(order) {
+  const props = (db.proposals || []).filter(prop => prop.orderId === order?.id && ['Draft', 'Sent', 'Viewed'].includes(prop.status));
+  const prop = props.sort((a, b) => (Number(b.version) || 0) - (Number(a.version) || 0))[0];
+  if (!prop) return;
+  prop.status = 'Accepted';
+  prop.acceptedAt = prop.acceptedAt || new Date().toISOString();
+  prop.acceptedBy = prop.acceptedBy || 'manager';
+}
+function premiumMarkProposalSent(token, channel = '') {
+  const prop = getPremiumProposalByToken(token);
+  const order = getOrder(prop?.orderId);
+  if (!prop || !order || prop.status !== 'Draft' || premiumProposalLocked(prop)) return;
+  prop.status = 'Sent';
+  prop.sentAt = new Date().toISOString();
+  order.proposalSentAt = order.proposalSentAt || prop.sentAt;
+  order.timeline = order.timeline || [];
+  order.timeline.push({ at: prop.sentAt, key: 'premium_proposal_sent', by: state.currentUserId, note: `КП отправлено клиенту${channel ? ' · ' + channel : ''}` });
+  if (['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done'].includes(order.status)) order.status = 'proposal_sent';
+  save();
+  setTimeout(() => { if (state.modal) openPremiumProposalManagerModal(token); }, 0);
+}
+/** Labels for the manager's screen; the client portal keeps its English ones. */
+function premiumStatusLabelRu(status, prop = {}) {
+  if (status === 'Draft') return prop.publishedAt ? 'ссылка готова · ещё не отправлено' : 'черновик';
+  return ({ Sent: 'отправлено', Viewed: 'клиент открыл', Accepted: 'принято', 'Payment Pending': 'ожидает оплату', 'Deposit Paid': 'аванс оплачен', 'Paid in Full': 'оплачено полностью', 'Financing Submitted': 'заявка на рассрочку', 'Financing Approved': 'рассрочка одобрена', 'Financing Declined': 'рассрочка отклонена', Expired: 'истекло' })[status] || premiumStatusLabel(status);
 }
 async function premiumSendCanonicalProposal(token) {
   const prop = getPremiumProposalByToken(token);
@@ -35397,7 +35493,6 @@ function openPremiumProposalManagerModal(token) {
         : stripeUrl
           ? 'Refresh needed'
           : 'Auto at approval';
-  try { navigator.clipboard.writeText(url); } catch (e) {}
   state.modal = `
     <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
       <div class="modal-content workspace-modal p-6" style="max-width: 42rem;">
@@ -35405,22 +35500,23 @@ function openPremiumProposalManagerModal(token) {
           <div>
 	            <div class="text-xs text-blue-700 font-semibold">ROLANPRO Proposal Studio</div>
 	            <h3 class="font-black text-xl">${premiumEsc(prop.proposalCode || order.number)} · КП + оплата</h3>
-	            <p class="text-sm text-gray-600 mt-1">${premiumEsc(client.name || 'Client')} · ${fmtMoney(calc.total)} · ${premiumStatusLabel(prop.status)}</p>
+	            <p class="text-sm text-gray-600 mt-1">${premiumEsc(client.name || 'Клиент')} · ${fmtMoney(calc.total)} · ${premiumStatusLabelRu(prop.status, prop)}</p>
 	          </div>
 	          <button class="btn-ghost" onclick="closeModal()">✕</button>
 	        </div>
-	        <label class="mt-4">Client link</label>
+	        ${prop.status === 'Draft' ? `<div class="mt-3 p-3 rounded-lg border text-sm" style="background:#fffbeb;border-color:#fcd34d;color:#92400e">КП ещё не отправлено. Отправьте клиенту через WhatsApp, SMS или email — или скопируйте ссылку.</div>` : ''}
+	        <label class="mt-4">Ссылка для клиента</label>
 	        <input readonly value="${premiumEsc(url)}" onclick="this.select()">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
-          <a class="btn-primary text-center" href="${url}" target="_blank">Open</a>
-          <a class="btn-ghost text-center" href="${whatsappLink(client.phone, msg)}" target="_blank">WhatsApp</a>
-          <a class="btn-ghost text-center" href="${smsLink(client.phone, msg)}">SMS</a>
-          ${client.email ? `<button class="btn-ghost text-center" onclick="premiumSendCanonicalProposal('${prop.token}')">Email</button>` : `<button class="btn-ghost" disabled>Email</button>`}
+          <a class="btn-primary text-center" href="${url}" target="_blank">Открыть</a>
+          <a class="btn-ghost text-center" href="${whatsappLink(client.phone, msg)}" target="_blank" onclick="premiumMarkProposalSent('${prop.token}','WhatsApp')">WhatsApp</a>
+          <a class="btn-ghost text-center" href="${smsLink(client.phone, msg)}" onclick="premiumMarkProposalSent('${prop.token}','SMS')">SMS</a>
+          ${client.email ? `<button class="btn-ghost text-center" onclick="premiumSendCanonicalProposal('${prop.token}')">Email</button>` : `<button class="btn-ghost" disabled title="У клиента нет email">Email</button>`}
         </div>
 	        <div class="grid md:grid-cols-4 gap-3 mt-5 text-sm">
-	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Rooms</div><div class="font-black text-lg">${calc.includedRooms}</div></div>
-	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Windows</div><div class="font-black text-lg">${calc.totalWindowsQty}</div></div>
-	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Payment due</div><div class="font-black text-lg">${fmtMoney(calc.paymentDue)}</div></div>
+	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Помещений</div><div class="font-black text-lg">${calc.includedRooms}</div></div>
+	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Окон</div><div class="font-black text-lg">${calc.totalWindowsQty}</div></div>
+	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">К оплате при подписи</div><div class="font-black text-lg">${fmtMoney(calc.paymentDue)}</div></div>
 	          <div class="p-3 rounded-lg ${prop.paymentClaim?.status === 'pending_review' ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'} border"><div class="text-gray-500">Оплата</div><div class="font-black text-lg">${prop.paymentClaim?.status === 'pending_review' ? 'Проверить Chase' : (premiumPrimaryPaymentMethod() === 'zelle' ? 'Zelle → Chase' : 'Готово')}</div></div>
 	        </div>
 	        <div class="mt-4 p-4 rounded-xl ${prop.paymentClaim?.status === 'pending_review' ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} border">
@@ -35436,11 +35532,11 @@ function openPremiumProposalManagerModal(token) {
 	          </div>
 	        </div>
 	        <div class="flex gap-2 mt-5 justify-end flex-wrap">
-	          ${premiumProposalLocked(prop) ? `<button class="btn-ghost" onclick="newPremiumProposalVersion('${order.id}')">+ New Version</button>` : ''}
+	          ${premiumProposalLocked(prop) ? `<button class="btn-ghost" onclick="newPremiumProposalVersion('${order.id}')">+ Новая версия</button>` : ''}
 	          <button class="btn-ghost" onclick="openWorkOrder('${order.id}')">Заказ-наряд</button>
-	          <button class="btn-primary" onclick="navigator.clipboard.writeText('${url.replace(/'/g, "\\'")}'); this.textContent='Copied';">Copy link</button>
+	          <button class="btn-primary" onclick="navigator.clipboard.writeText('${url.replace(/'/g, "\\'")}'); this.textContent='Скопировано'; premiumMarkProposalSent('${prop.token}','ссылка скопирована');">Скопировать ссылку</button>
 	        </div>
-        <p class="text-xs text-gray-500 mt-4">Signed proposals are locked. Create a new version for any later change.</p>
+        <p class="text-xs text-gray-500 mt-4">Подписанное КП заблокировано. Для изменений создайте новую версию.</p>
       </div>
     </div>`;
   render();

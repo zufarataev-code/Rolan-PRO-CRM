@@ -35,6 +35,7 @@ function load(project: Row, role = 'manager') {
     orderMeasureScope: (o: Row) => o.primaryScope || 'solar_film',
     measureScopeCardDesc: () => '',
     academyEsc: (value: unknown) => String(value ?? ''),
+    db: { proposals: [] },
     MEASURE_SCOPES: ['solar_film', 'smart_film', 'protective_film', 'decorative_film', 'privacy_film'].map(key => ({ key, short: key, icon: '', accent: '#000' })),
   });
   vm.runInContext(slice('function projectHasServices(o) {', 'function orderPrimaryNextAction(o) {'), context);
