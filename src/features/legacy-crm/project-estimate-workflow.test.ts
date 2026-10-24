@@ -355,7 +355,9 @@ test("project add-on rows contain customer price only and labor comes from confi
   assert.doesNotMatch(serviceUpdater, /field === 'cost'|['"]cost['"]/);
   assert.doesNotMatch(estimateRenderer, /projectEstimateUpdateService\([^\n]+,'cost'/);
   assert.match(source, /ratesByWorkType/);
-  assert.match(source, /id="pc-work-\$\{type\}"/);
+  // Personal rates are gone (2026-10-24): every directory service pays its own rate.
+  assert.doesNotMatch(source, /id="pc-work-\$\{type\}"/);
+  assert.match(source, /Персональных ставок нет\./);
   assert.match(source, /function orderAdditionalWorkPayoutForUser\(o, user, installerCount = 1\)/);
   assert.match(source, /filmPayout \+ orderAdditionalWorkPayoutForUser/);
 });
@@ -365,13 +367,13 @@ test("the Services reference owns installer pay while material stays in Warehous
   const rendererEnd = source.indexOf("async function loadCanonicalInstallerOperations", rendererStart);
   const renderer = source.slice(rendererStart, rendererEnd);
   assert.doesNotMatch(renderer, /cps-\$\{row\.service_type_id\}-material/);
-  assert.match(renderer, /cps-\$\{row\.service_type_id\}-installer/);
-  assert.match(renderer, /Специалисту по установке \/ sqft, \$/);
+  // Since 2026-10-24 the old calculator price list holds no installer rate: the
+  // service directory is the only source, and the old list no longer rewrites it.
+  assert.doesNotMatch(renderer, /cps-\$\{row\.service_type_id\}-installer/);
   assert.doesNotMatch(renderer, /cpa-\$\{row\.service_addon_id\}-cost/);
-  assert.match(renderer, /Стоимость плёнки берётся со склада\. Ставка монтажа из этой услуги автоматически начисляется/);
-  assert.match(source, /patch\.installation_cost_per_sqft = canonicalPricingValue/);
-  assert.match(source, /syncLegacyInstallerServiceRate\(service\.service_code, patch\.installation_cost_per_sqft\)/);
-  assert.match(source, /syncLegacyInstallerServiceRate\(service\.service_code, service\.installation_cost_per_sqft\)/);
+  assert.match(renderer, /Ставки монтажа — в услугах направлений выше\./);
+  assert.doesNotMatch(source, /patch\.installation_cost_per_sqft = canonicalPricingValue/);
+  assert.match(source, /if \(!syncLegacyInstallerServiceRate\.enabled\) return false;/);
 });
 
 test("each manager-entered window starts preliminary and can be explicitly verified", () => {

@@ -9134,6 +9134,18 @@ function migrateSchema() {
   // Company deposit policy (Owner, 2026-10-24): 10% of the project, never more than $1 000.
   if (!s._depositPolicy20261024) { s.advancePct = 10; s.depositCapUsd = 1000; s._depositPolicy20261024 = true; }
   if (s.advancePct == null) s.advancePct = 10;
+  // One rates directory (2026-10-24): a per-sq-ft service without its own installer
+  // rate used to pay the direction default silently. Write that rate into the
+  // service so the payout does not change, and flag it for the owner to check.
+  if (!s._ratesDirectory20261024 && Array.isArray(s.serviceOfferings)) {
+    s.serviceOfferings.forEach(item => {
+      if (!item || (item.unit && item.unit !== 'sqft') || Number(item.installerRatePerSqft) > 0) return;
+      if (!(Number(item.pricePerSqft) > 0)) return; // drafts stay empty
+      const rate = typeof installerServiceRateByCategory === 'function' ? installerServiceRateByCategory(canonicalCatalogCategory(item.direction)) : 0;
+      if (rate > 0) { item.installerRatePerSqft = rate; item.installerRateNeedsReview = true; }
+    });
+    s._ratesDirectory20261024 = true;
+  }
   if (s.depositCapUsd == null) s.depositCapUsd = 1000;
   if (!s.paymentInstructions) {
     s.paymentInstructions = 'Реквизиты для оплаты:\n\nЗолотая карта/перевод: укажите свои реквизиты в Настройки → Оплата.\n\nПосле перевода пришлите чек на email или WhatsApp.';
@@ -16186,6 +16198,9 @@ function installerServiceRateByCategory(category) {
   return Number(db.settings.installerRates?._defaults?.[category]) || Number(db.settings.installerRates?._defaults?.other) || 2.5;
 }
 function syncLegacyInstallerServiceRate(serviceCode, rate) {
+  // Since 2026-10-24 installer rates live only in the service directory; the old
+  // calculator price list no longer rewrites them.
+  if (!syncLegacyInstallerServiceRate.enabled) return false;
   const normalizedRate = Math.max(0, Number(rate) || 0);
   if (!serviceCode) return false;
   db.settings.installerRates.serviceTypes = db.settings.installerRates.serviceTypes || {};
@@ -16390,38 +16405,27 @@ function windowFilmCost(w) {
   const withWaste = sqft * (1 + (c.wastePct || 0) / 100);
   return withWaste * c.costPerSqft;
 }
-function windowInstallerPayout(w) {
+// ONE SOURCE OF INSTALLER RATES (Owner, 2026-10-24: «единый справочник… единый
+// источник правды»). A window or line of a directory service pays that service's
+// rate — the same for every installer, no personal overrides. Only rows made
+// before the directory (no service) fall back to the old direction rates.
+function windowServiceInstallerRate(w) {
+  if (w?.offeringId || w?.offeringInstallerRate != null) return serviceOfferingInstallerRate(w);
   const c = windowCatalog(w);
-  const filmName = c ? `${c.brand} ${c.model}` : (w.filmType || '');
-  // A warehouse film knows its direction: its rate is the direction's (privacy,
-  // smart…), not a guess from the brand and model text.
+  const filmName = c ? `${c.brand} ${c.model}` : (w?.filmType || '');
   const explicit = db.settings.installerRates?.types?.[filmName];
-  const directionRate = explicit != null ? explicit : c ? installerServiceRateByCategory(canonicalCatalogCategory(c.category)) : filmRate(filmName);
-  return windowActualAreaSqft(w) * (serviceOfferingInstallerRate(w) || directionRate);
+  return explicit != null ? Number(explicit) || 0 : c ? installerServiceRateByCategory(canonicalCatalogCategory(c.category)) : filmRate(filmName);
 }
-function installerRateForWindow(user, w) {
-  const offeringRate = serviceOfferingInstallerRate(w);
-  if (offeringRate > 0) return offeringRate;
-  const pc = user?.payConfig || {};
-  const catalog = windowCatalog(w);
-  const category = catalog?.category ? canonicalCatalogCategory(catalog.category) : filmCategory(w?.filmType || '');
-  const categoryRate = Number(pc.ratesByCategory?.[category]);
-  if (categoryRate > 0) return categoryRate;
-  const baseRate = Number(pc.ratePerSqft);
-  if (baseRate > 0) return baseRate;
-  return installerServiceRateByCategory(category);
+function windowInstallerPayout(w) {
+  return windowActualAreaSqft(w) * windowServiceInstallerRate(w);
 }
-function installerRateForQuickLine(user, line) {
-  // A service with its own rate pays that rate (Owner, 2026-10-02).
-  const offeringRate = serviceOfferingInstallerRate(line);
-  if (offeringRate > 0) return offeringRate;
-  const pc = user?.payConfig || {};
+function installerRateForWindow(_user, w) {
+  return windowServiceInstallerRate(w);
+}
+function installerRateForQuickLine(_user, line) {
+  if (line?.offeringId || line?.offeringInstallerRate != null) return serviceOfferingInstallerRate(line);
   const catalog = getCatalogItem(line?.catalogId);
   const category = canonicalCatalogCategory(catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other');
-  const categoryRate = Number(pc.ratesByCategory?.[category]);
-  if (categoryRate > 0) return categoryRate;
-  const baseRate = Number(pc.ratePerSqft);
-  if (baseRate > 0) return baseRate;
   const serviceCode = canonicalServiceCodeForOrderService(line?.serviceType);
   const serviceRate = Number(db.settings.installerRates?.serviceTypes?.[serviceCode]);
   return serviceRate > 0 ? serviceRate : installerServiceRateByCategory(category);
@@ -16434,9 +16438,8 @@ function orderQuickInstallerPayoutForUser(o, user) {
       return sum + (Number(line.qty) || 0) * installerRateForQuickLine(user, line) / installerCount;
     }, 0);
 }
-function installerAdditionalWorkRate(user, type) {
-  const employeeRate = Number(user?.payConfig?.ratesByWorkType?.[type]);
-  if (employeeRate > 0) return employeeRate;
+function installerAdditionalWorkRate(_user, type) {
+  // Rows made before the directory only; directory services pay their own rate.
   return Math.max(0, Number(db.settings.installerRates?.workTypes?.[type]) || 0);
 }
 function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
@@ -16470,9 +16473,7 @@ function orderInstallerPayoutBreakdown(o) {
     const total = windows.length
       ? windows.reduce((sum, { win }) => sum + windowInstallerPayout(win), 0)
       : projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => {
-          const catalog = getCatalogItem(line.catalogId);
-          const filmName = catalog ? `${catalog.brand} ${catalog.model}` : line.serviceType;
-          return sum + (Number(line.qty) || 0) * (serviceOfferingInstallerRate(line) || filmRate(filmName));
+          return sum + (Number(line.qty) || 0) * installerRateForQuickLine(null, line);
         }, 0);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
     return { total: total + work, byInstaller: [], source: 'REFERENCE_DEFAULT' };
@@ -19547,7 +19548,7 @@ async function saveCanonicalService(id) {
     block_revenue_price: canonicalPricingValue(`cps-${id}-block`, true),
     is_active: !!document.getElementById(`cps-${id}-active`)?.checked,
   };
-  if (owner) patch.installation_cost_per_sqft = canonicalPricingValue(`cps-${id}-installer`, true);
+  // Installer rates are kept in the service directory only (2026-10-24); the old price list keeps its stored value.
   const saved = await canonicalPricingSave({ entity: 'service_type', id, patch }, 'Услуга сохранена');
   if (saved && owner && service?.service_code) {
     syncLegacyInstallerServiceRate(service.service_code, patch.installation_cost_per_sqft);
@@ -19575,7 +19576,7 @@ async function createCanonicalService() {
     base_price: canonicalPricingValue('cp-new-service-base', true),
     min_price: canonicalPricingValue('cp-new-service-min', true),
   };
-  if (owner) values.installation_cost_per_sqft = canonicalPricingValue('cp-new-service-installer', true);
+
   if (!values.name_ru) return alert('Укажите название услуги');
   try {
     const created = await canonicalPricingRequest('POST', { entity: 'service_type', values });
@@ -19615,6 +19616,35 @@ function saveCanonicalPlanning() {
   } }, 'План продаж пересчитан');
 }
 
+/** «Общие ставки компании» — the rates that are not per service live here, in the
+ * same directory (Owner, 2026-10-24: one source of truth for every rate). */
+function companyRatesBlockHtml(owner) {
+  const s = db.settings || {};
+  const managers = (db.users || []).filter(u => u.role === 'manager' && u.active !== false);
+  const tax = Number(s.projectProfitTax?.ratePct);
+  const field = (label, html, hint = '') => `<div><label>${label}</label>${html}${hint ? `<div class="text-xs text-gray-500 mt-1">${hint}</div>` : ''}</div>`;
+  const num = (value, onchange, step = 1) => owner ? `<input type="number" min="0" step="${step}" value="${value ?? ''}" onchange="${onchange}">` : `<div class="font-black">${value ?? '—'}</div>`;
+  return `<div class="mt-3 p-3 border border-slate-200" data-company-rates>
+    <div class="font-black">Общие ставки компании</div>
+    <div class="text-xs text-gray-500">Единственное место для ставок, не привязанных к услуге. Ставка монтажа — в каждой услуге ниже, одна для всех специалистов по установке.</div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-2">
+      ${field('Аванс, % от проекта', num(s.advancePct ?? 10, "db.settings.advancePct=Math.max(0, Number(this.value)||0); save(); render();"))}
+      ${field('Аванс не больше, $', num(s.depositCapUsd ?? 1000, "db.settings.depositCapUsd=Math.max(0, Number(this.value)||0)||null; save(); render();", 50))}
+      ${field('Налог с прибыли проекта, %', num(Number.isFinite(tax) ? tax : '', "db.settings.projectProfitTax=Object.assign({}, db.settings.projectProfitTax||{}, {ratePct: Math.max(0, Number(this.value)||0)}); save(); render();", 0.1))}
+      ${managers.map(u => field(`Комиссия: ${academyEsc(u.name)}, %`, num(Number(u.payConfig?.commissionPct) || 0, `companyRatesSetCommission('${u.id}', this.value)`, 0.5), 'от суммы оплаченного проекта')).join('')}
+    </div>
+  </div>`;
+}
+function companyRatesSetCommission(userId, value) {
+  if (currentUser()?.role !== 'owner') return;
+  const u = getUser(userId);
+  if (!u) return;
+  u.payConfig = { ...(u.payConfig || {}), commissionPct: Math.max(0, Number(value) || 0) };
+  u.commissionPct = u.payConfig.commissionPct; // one number, no second copy that disagrees
+  save();
+  render();
+}
+
 function renderCanonicalServicePricing() {
   const data = state.canonicalPricingData;
   if (!data && !state.canonicalPricingLoading && !state.canonicalPricingError) setTimeout(() => loadCanonicalServicePricing(), 0);
@@ -19637,9 +19667,8 @@ function renderCanonicalServicePricing() {
       ${canonicalPricingField(`cps-${row.service_type_id}-base`, 'Цена клиенту, $', row.base_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-min`, 'Минимальная цена, $', row.min_price)}
       ${canonicalPricingField(`cps-${row.service_type_id}-block`, 'Блок клиенту, $', row.block_revenue_price)}
-      ${owner ? canonicalPricingField(`cps-${row.service_type_id}-installer`, 'Специалисту по установке / sqft, $', row.installation_cost_per_sqft) : ''}
     </div>
-    <p class="text-xs text-slate-500 mt-3">Стоимость плёнки берётся со склада. Ставка монтажа из этой услуги автоматически начисляется назначенным специалистам по установке; индивидуальная ставка сотрудника может её переопределить.</p>
+    <p class="text-xs text-slate-500 mt-3">Только цена для «Калькулятора». Ставки монтажа — в услугах направлений выше.</p>
     <div class="mt-4 flex flex-wrap items-center gap-3"><label class="tag"><input id="cps-${row.service_type_id}-active" type="checkbox" ${row.is_active ? 'checked' : ''}> Активна</label><button class="btn-primary" onclick="saveCanonicalService('${row.service_type_id}')">Сохранить услугу</button></div>
   </details>`).join('');
 
@@ -19658,7 +19687,7 @@ function renderCanonicalServicePricing() {
     </section>
     ${renderServiceOfferingsSection()}
     <details class="card border border-slate-200 bg-white canonical-calculator-price" style="border-radius:4px"><summary class="cursor-pointer list-none flex items-center justify-between gap-3"><div><h2 class="text-lg font-black">Прайс быстрого калькулятора</h2><p class="text-sm text-slate-500">Только для раздела «Калькулятор» — прикинуть цену по телефону. В проекты, кассу и КП идут услуги из направлений выше.</p></div><span class="text-slate-400 whitespace-nowrap">Открыть ↓</span></summary><div class="space-y-5 mt-4">
-    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Позиции калькулятора</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту позицию, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}${owner ? canonicalPricingField('cp-new-service-installer', 'Специалисту по установке / sqft, $', '') : ''}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
+    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Позиции калькулятора</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту позицию, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
     <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between"><div><h2 class="text-xl font-black">Допработы калькулятора</h2><p class="text-sm text-slate-500">Подключение зон, демонтаж, силикон — только для быстрой прикидки.</p></div><span class="tag">${addons.length}</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить допработу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Основная услуга</span><select id="cp-new-addon-service" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2">${services.map(s => `<option value="${s.service_type_id}">${academyEsc(s.name_ru)}</option>`).join('')}</select></label>${canonicalPricingField('cp-new-addon-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-addon-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-addon-unit', 'Единица', 'item', 'text')}${canonicalPricingField('cp-new-addon-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-addon-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalAddon()">Создать допработу</button></details><div class="space-y-3 mt-4">${addonCards || '<div class="text-slate-500">Дополнительных работ пока нет</div>'}</div></section>
     </div></details>
   </div>`;
@@ -23246,7 +23275,6 @@ function renderSettings() {
               <th class="px-2 py-2">Поставщик</th>
               <th class="px-2 py-2 w-24">${T('retailPrice')} ($/sqft)</th>
               <th class="px-2 py-2 w-20">${T('cost')} ($/sqft)</th>
-              <th class="px-2 py-2 w-20">${T('installerPayout')} ($/sqft)</th>
               <th class="px-2 py-2 w-20">${T('waste')}</th>
               <th></th>
             </tr>
@@ -23271,7 +23299,6 @@ function renderSettings() {
                 </td>
                 <td class="px-2 py-1"><input type="number" step="0.5" value="${c.retailPerSqft}" onchange="updateCatalogItem('${c.id}','retailPerSqft',parseFloat(this.value)||0,this)"></td>
                 <td class="px-2 py-1"><input type="number" step="0.1" value="${c.costPerSqft}" onchange="updateCatalogItem('${c.id}','costPerSqft',parseFloat(this.value)||0,this)"></td>
-                <td class="px-2 py-1"><input type="number" step="0.05" value="${c.installerRatePerSqft}" onchange="updateCatalogItem('${c.id}','installerRatePerSqft',parseFloat(this.value)||0,this)"></td>
                 <td class="px-2 py-1"><input type="number" step="1" value="${c.wastePct}" onchange="updateCatalogItem('${c.id}','wastePct',parseFloat(this.value)||0,this)"></td>
                 <td class="px-2 py-1"><button class="btn-ghost text-red-600 text-xs" onclick="deleteCatalogItem('${c.id}')">✕</button></td>
               </tr>
@@ -25503,6 +25530,7 @@ function updateServiceOffering(id, field, value, control = null) {
     if (field === 'minPricePerUnit' && Number(offering.maxPricePerUnit) > 0 && nextValue > offering.maxPricePerUnit) return alert('Минимальная цена не может быть выше максимальной.');
     if (field === 'maxPricePerUnit' && Number(offering.minPricePerUnit) > 0 && nextValue < offering.minPricePerUnit) return alert('Максимальная цена не может быть ниже минимальной.');
     offering[field] = nextValue;
+    if (field === 'installerRatePerSqft') delete offering.installerRateNeedsReview;
   } else if (field === 'unit') {
     if (!serviceOfferingUnitsFor(offering.direction).some(unit => unit.id === value)) return;
     offering.unit = value;
@@ -25638,7 +25666,7 @@ function renderServiceOfferingsSection() {
           <div><label>Цена клиенту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value,this)"></div>
           <div><label>Минимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.minPricePerUnit) || ''}" placeholder="без минимума" onchange="updateServiceOffering('${offering.id}','minPricePerUnit',this.value,this)"></div>
           <div><label>Максимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.maxPricePerUnit) || ''}" placeholder="без максимума" onchange="updateServiceOffering('${offering.id}','maxPricePerUnit',this.value,this)"></div>
-          <div><label>Специалисту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="${sized ? 'ставка направления' : 'не платится'}" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value,this)"></div>
+          <div><label>Специалисту по установке, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="не заполнено" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value,this)">${offering.installerRateNeedsReview ? '<div class="text-xs mt-1" style="color:#92400e">перенесено из старых настроек — проверьте</div>' : !(Number(offering.installerRatePerSqft) > 0) && !serviceOfferingIsDraft(offering) ? '<div class="text-xs mt-1 text-red-700">не заполнено — монтаж $0</div>' : ''}</div>
         </div>
         <div class="text-xs mt-2 ${sized ? 'text-blue-700' : 'text-emerald-700'}">${sized ? 'Нужен замер: цена и материал считаются по площади окон.' : unit === 'lft' ? 'По периметру окон: количество считается по замеру, его можно поправить вручную.' : 'Без размеров: в проекте указывается количество, замер для этой услуги не нужен.'}</div>
         ${serviceOfferingIncludesEditorHtml(offering)}
@@ -25654,6 +25682,7 @@ function renderServiceOfferingsSection() {
   }).join('');
   return `<section class="card border border-slate-200 bg-white" style="border-radius:4px">
     <h2 class="text-xl font-black">Услуги по направлениям</h2>
+    ${companyRatesBlockHtml(owner)}
     <p class="text-sm text-slate-500">Проект — контейнер: в него добавляются услуги любых направлений, у каждой свой специалист и дата. Услуга за погонный фут (силикон, герметик) берёт количество из периметра окон. В услугу можно включить другие услуги бесплатно — например, защитную плёнку с силиконом: силикон встанет в проект отдельной строкой за $0 со своим выездом. Название услуги клиент видит в КП. Цена из справочника — ориентир: менеджер может изменить её в проекте внутри заданного владельцем диапазона. Услуга за кв. фут считается по замеру окон, её материал — плёнки со склада. Исполнителя каждой услуги выбирают в проекте при назначении монтажа. Дополнительная услуга для КП — тоже услуга из этого справочника: её добавляют в проект, и она попадает в выручку, материал, оплату специалисту и заказ-наряд.</p>
     <div class="mt-3 p-3 border border-slate-200 flex flex-wrap items-end gap-3" data-removal-price>
       <div><label>Снятие старой плёнки, $ / кв. фут клиенту</label>${owner ? `<input type="number" min="0" step="0.25" value="${removalPricePerSqft()}" onchange="updateRemovalPrice(this.value)">` : `<div class="font-black">${fmtMoney(removalPricePerSqft())}</div>`}</div>
@@ -25817,8 +25846,7 @@ function projectLines(o) {
     if (kind === 'quick') {
       const catalog = getCatalogItem(line.catalogId);
       if (line.unit === 'sqft' && line.catalogId) materialCost = qty * (1 + (Number(catalog?.wastePct) || 0) / 100) * warehouseCatalogCostPerSqft(line.catalogId);
-      const filmName = catalog ? `${catalog.brand} ${catalog.model}` : line.serviceType;
-      if (line.unit === 'sqft') installerPay = qty * (serviceOfferingInstallerRate(line) || filmRate(filmName));
+      if (line.unit === 'sqft') installerPay = qty * installerRateForQuickLine(null, line);
     } else {
       // The same rates as orderAdditionalWorkPayoutForUser: a directory service
       // pays its own rate per unit, any other row the work-type rate.
@@ -28435,7 +28463,7 @@ function renderOrderDetails(id) {
                     const c = windowCatalog(w);
                     const planned = windowAreaSqft(w);
                     const actual = windowActualAreaSqft(w);
-                    const rate = c?.installerRatePerSqft ?? 0.27;
+                    const rate = windowServiceInstallerRate(w);
                     const payout = windowInstallerPayout(w);
                     const diff = actual - planned;
                     const inUnits = db.settings.inputUnits === 'inches';
@@ -39549,33 +39577,8 @@ function openUserPayConfig(userId) {
       </div>
 
       <div id="pc-per_sqft" class="pc-section mt-3" style="display:${pc.type==='per_sqft'?'block':'none'}">
-        <label>Индивидуальная ставка $/sqft (необязательно)</label>
-        <input id="pc-ratePerSqft" type="number" step="0.05" value="${pc.ratePerSqft ?? 0}">
-        <p class="text-xs text-gray-500 mt-1">0 = ставка монтажа из раздела «Услуги». Если несколько специалистов по установке — начисление делится поровну.</p>
-        <details class="mt-3">
-          <summary class="text-sm font-medium cursor-pointer">⚙️ Ставки по категориям плёнок (override)</summary>
-          <div class="grid grid-cols-2 gap-2 mt-2">
-            ${['solar','protective','smart','decorative','privacy'].map(cat => `
-              <div>
-                <label class="text-xs">${T('cat'+cat.charAt(0).toUpperCase()+cat.slice(1))}</label>
-                <input id="pc-rate-${cat}" type="number" step="0.05" value="${pc.ratesByCategory?.[cat]||0}" placeholder="0">
-              </div>
-            `).join('')}
-          </div>
-          <p class="text-xs text-gray-500 mt-1">0 = используется ставка монтажа выбранной услуги. Заполняйте только для индивидуального исключения сотрудника.</p>
-        </details>
-        <details class="mt-3">
-          <summary class="text-sm font-medium cursor-pointer">⚙️ Оплата дополнительных услуг ($/ед.)</summary>
-          <div class="grid grid-cols-2 gap-2 mt-2">
-            ${['washing','removal','silicone','electric','connect','warranty','custom'].map(type => `
-              <div>
-                <label class="text-xs">${projectEstimateServiceLabel(type)}</label>
-                <input id="pc-work-${type}" type="number" step="0.5" value="${pc.ratesByWorkType?.[type]||0}" placeholder="0">
-              </div>
-            `).join('')}
-          </div>
-          <p class="text-xs text-gray-500 mt-1">Эта ставка автоматически входит в себестоимость проекта. В строке услуги менеджер её не вводит.</p>
-        </details>
+        <p class="text-sm text-gray-700">Сдельно: ставка за монтаж берётся из услуги в «Услуги и цены» — одна для всех специалистов по установке. Персональных ставок нет.</p>
+        <p class="text-xs text-gray-500 mt-1">Если на объекте несколько специалистов по установке, начисление по услуге делится поровну.</p>
       </div>
 
       <div id="pc-fixed_per_job" class="pc-section mt-3" style="display:${pc.type==='fixed_per_job'?'block':'none'}">
@@ -39613,7 +39616,7 @@ function saveUserPayConfig(userId) {
   const pc = u.payConfig = u.payConfig || {};
   pc.type = document.getElementById('pc-type').value;
   pc.commissionPct = parseFloat(document.getElementById('pc-commissionPct')?.value) || 0;
-  pc.ratePerSqft = parseFloat(document.getElementById('pc-ratePerSqft')?.value) || 0;
+  pc.ratePerSqft = 0; // personal rates removed 2026-10-24: the service directory pays
   pc.fixedPerJob = parseFloat(document.getElementById('pc-fixedPerJob')?.value) || 0;
   pc.monthlySalary = parseFloat(document.getElementById('pc-monthlySalary')?.value) || 0;
   pc.hourlyRate = parseFloat(document.getElementById('pc-hourlyRate')?.value) || 0;

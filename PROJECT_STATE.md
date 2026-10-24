@@ -30,6 +30,15 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-24 handoff — one rates directory
+
+- Branch: `claude/rates-directory`, based on `main` after PR #372.
+- Owner, 2026-10-24: «единый справочник… все ставки… единый источник правды»; no personal installer rates.
+- Installer rates came from six places (service, settings by direction, settings by service code, per film, employee card, old server price list) with a silent fallback chain. Now `windowServiceInstallerRate` / `installerRateForQuickLine`: a row of a directory service pays that service's rate, the same for everyone (0 means $0); only rows made before the directory fall back to the old direction rates. Employee per-sq-ft, category and work-type rates are removed from the pay editor and ignored; the warehouse no longer shows a rate per film; the old calculator price list no longer edits or syncs installer rates (`syncLegacyInstallerServiceRate.enabled` off).
+- Migration `_ratesDirectory20261024`: a priced per-sq-ft service without a rate gets the rate it was actually paid (production: A2 Security → $5.60) and `installerRateNeedsReview`; the card says «перенесено из старых настроек — проверьте» until the owner edits it.
+- «Услуги и цены» → «Общие ставки компании»: deposit %, deposit cap, project profit tax %, commission per active manager (one number: `payConfig.commissionPct`, mirrored to the legacy field).
+- Verification: new `rates-directory.test.ts`; affected tests updated; full suite 808/808; TypeScript passes.
+
 ## 2026-10-24 handoff — installer card fixed, one deposit rule
 
 - Branch: `claude/team-and-deposit`, based on `main` after PR #371.
