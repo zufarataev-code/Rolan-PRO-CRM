@@ -38,6 +38,13 @@ Before doing any work:
 - Verification: `src/features/legacy-crm/notification-sound.test.ts` (2 tests) passes; the rest of `npm test` matches main locally (env-dependent failures only).
 - Not done: system push notifications when the CRM tab is closed (needs Web Push).
 
+## 2026-10-25 handoff — CRM key for Google Ads (script-based costs)
+
+- PR #397 (3018a45) merged and deployed; prod checked: key endpoint 200 (no key yet), summary 200, public endpoint 401 on a wrong key, block «📈 Google Ads» in Настройки → Интеграции.
+- `IntegrationApiKey` (migration 20261025120000, SHA-256 hash only), `src/features/integrations/api-keys.ts`; owner routes `/api/v1/settings/integration-keys` (GET/POST/DELETE); public `POST /api/public/google-ads/costs` (Bearer key) → `GoogleAdsDailyCost` upsert (`script-costs.ts`); `/api/v1/integrations/google-ads/summary`.
+- CRM block (`googleAdsCrmPanelHtml` in production-stages.js): create key → one-time modal with the Google Ads script (GAQL last 30 days, UrlFetchApp); spend, CPL, cost per project, revenue/ROAS for orders whose source is google. Script text is built line by line (a lone «}» line would end the function for the composer).
+- Owner's step: create the key, paste the script in Google Ads → Tools → Scripts, authorize, run, schedule daily.
+
 ## 2026-10-25 handoff — KP → installation walkthrough on production
 
 - Walked test project R-261025-061 (client «Zufar», owner's own contact) on prod: project → measurement → estimate → KP sent by Gmail → signed on the client page with the 10-year warranty option → Zelle chosen → deposit marked → exact sizes → production → installation scheduled 2026-11-02 10:00. Test data stays on prod (purchase request PUR-2026-0004 is a draft for it).
