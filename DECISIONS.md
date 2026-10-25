@@ -2,6 +2,12 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-10-25 — Подпись КП подтверждается клиенту и менеджеру по email
+
+- После успешной электронной подписи corporate Gmail отправляет transactional confirmation подписанту/клиенту и назначенному менеджеру проекта.
+- Клиент получает имя подписанта, дату, защищённую ссылку на принятое КП, PDF и оплату. Менеджер получает клиента, подписанта и прямую ссылку на проект в CRM.
+- Каждая попытка доставки записывается в историю КП. Временная ошибка почтового канала не отменяет юридически значимую подпись; повторная отправка того же запроса не создаёт вторую подпись и дубли писем.
+
 ## 2026-10-25 — Service email needs an opt-out, not opt-in consent
 
 - Automatic client emails about the job (measurement booked, KP, payment, installation) go to every client with an email address unless the client asked not to get them (`emailOptOut`). Before this, a default-off «Согласие на Email» checkbox silently skipped 30 of 32 emails.

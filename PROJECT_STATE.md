@@ -23,6 +23,15 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-25 handoff — подпись КП сразу меняет проект и уведомляет его менеджера
+
+- Root cause: сервер создавал `agreement.signed` в PostgreSQL, но legacy CRM показывала только локальные `db.notifications`; вдобавок canonical Deal получал того, кто публиковал КП, вместо менеджера, назначенного в проекте. Поэтому подпись клиента была видна только после ручного открытия проекта, а нужный менеджер мог вообще не получить событие.
+- Proposal snapshot теперь передаёт `manager_legacy_id`; сервер связывает Deal с активным Owner/Manager из карточки проекта и сохраняет этого ответственного при повторной публикации.
+- Подпись клиента — коммерческое принятие: `signPublicAgreement` сразу переводит canonical Deal в `APPROVED`, создаёт `agreement.signed` для назначенного менеджера, а legacy CRM опрашивает `/api/v1/notifications` раз в 20 секунд, показывает событие в колокольчике и синхронизирует проект в этап «КП принято» без ручного открытия карточки.
+- После подписи corporate Gmail отправляет два transactional confirmation: клиенту — подтверждение, имя подписанта, время и ссылка на сохранённое КП/PDF/оплату; менеджеру проекта — клиент, подписант и прямая ссылка на legacy-проект. Каждая попытка записывается как `EmailAction` и `agreement.signature_emails`; временная ошибка Gmail не откатывает действительную подпись. Повторная подпись уже подписанного КП блокируется, поэтому письма не дублируются повторным POST.
+- Добавлен защищённый authenticated API для списка уведомлений и отметки прочитанного; пользователь может читать/подтверждать только свои уведомления.
+- PR #391. Verification после email-дополнения: 28/28 targeted tests, включая email copy, KP/payment sync, notification sound и компиляцию всех inline CRM scripts; `git diff --check` passes; GitHub `Test, typecheck, and build`, clean-database build/end-to-end и responder checks — green на commit `19c0b58`. Merge/deploy требует отдельного подтверждения владельца.
+
 ## 2026-10-25 handoff — client emails were silently skipped
 
 - Production check: Gmail (info@rolan-pro.com) is connected with no sync error, but 30 of 32 automatic client emails were `skipped | нет согласия клиента на Email` — the consent checkbox defaulted to off.

@@ -17833,6 +17833,72 @@ async function autoNotifyClient(o, statusKey) {
 }
 
 // ---------- NOTIFICATIONS ----------
+let canonicalServerNotifications = [];
+
+function proposalOrderLinkForServerNotification(notification) {
+  if (notification?.entity_type !== 'proposal' || !notification.entity_id) return null;
+  const prop = (db.premiumProposals || []).find(item => item.canonicalProposalId === notification.entity_id);
+  return prop?.orderId ? `#/order/${prop.orderId}` : null;
+}
+
+function serverNotificationTitle(notification) {
+  return ({
+    'agreement.signed': '✅ Клиент подписал КП',
+    'proposal.client_updated': 'Клиент изменил состав КП',
+    'proposal.approved': 'КП согласовано',
+    'deposit.paid': '💰 Аванс получен',
+  })[notification?.type_key] || notification?.title || 'Новое событие';
+}
+
+function normalizedServerNotifications() {
+  return canonicalServerNotifications.map(notification => ({
+    id: `server:${notification.notification_id}`,
+    serverId: notification.notification_id,
+    userId: state.currentUserId,
+    title: serverNotificationTitle(notification),
+    body: notification.message || '',
+    link: proposalOrderLinkForServerNotification(notification),
+    readAt: notification.is_read ? (notification.created_at_iso || notification.created_at || new Date().toISOString()) : null,
+    createdAt: notification.created_at_iso || notification.created_at || new Date().toISOString(),
+    typeKey: notification.type_key || '',
+    entityId: notification.entity_id || '',
+  }));
+}
+
+function serverNotificationSignature(items) {
+  return items.map(item => `${item.notification_id}:${item.is_read ? 1 : 0}`).join('|');
+}
+
+async function syncProposalFromServerNotification(notification) {
+  if (notification?.entity_type !== 'proposal' || !notification.entity_id) return;
+  if (!['agreement.signed', 'proposal.client_updated', 'deposit.paid'].includes(notification.type_key)) return;
+  const prop = (db.premiumProposals || []).find(item => item.canonicalProposalId === notification.entity_id);
+  if (!prop?.orderId || typeof premiumApplyServerProposalState !== 'function') return;
+  try {
+    const response = await fetch(`/api/v1/proposals/${encodeURIComponent(notification.entity_id)}`, { cache: 'no-store', credentials: 'include' });
+    const payload = await response.json().catch(() => ({}));
+    const proposal = payload?.data?.proposal;
+    if (response.ok && proposal) premiumApplyServerProposalState(prop.orderId, proposal);
+  } catch (error) {}
+}
+
+async function refreshServerNotifications(rerender = true) {
+  if (!ROLANPRO_CLOUD || !cloudReady || typeof fetch !== 'function') return false;
+  try {
+    const before = serverNotificationSignature(canonicalServerNotifications);
+    const response = await fetch('/api/v1/notifications', { cache: 'no-store', credentials: 'include' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return false;
+    const items = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+    canonicalServerNotifications = items;
+    await Promise.all(items.filter(item => !item.is_read).map(syncProposalFromServerNotification));
+    if (rerender && before !== serverNotificationSignature(items)) render();
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 function pushInAppNotification(userId, title, body, link) {
   db.notifications.push({
     id: uid(), userId, title, body, link: link || null,
@@ -17841,13 +17907,24 @@ function pushInAppNotification(userId, title, body, link) {
   save();
 }
 function myNotifications() {
-  return db.notifications.filter(n => n.userId === state.currentUserId).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+  const local = db.notifications.filter(n => n.userId === state.currentUserId);
+  return [...normalizedServerNotifications(), ...local].sort((a,b) => b.createdAt.localeCompare(a.createdAt));
 }
 function unreadCount() {
   return myNotifications().filter(n => !n.readAt).length;
 }
 function markAllRead() {
   myNotifications().forEach(n => { if (!n.readAt) n.readAt = new Date().toISOString(); });
+  const serverIds = canonicalServerNotifications.filter(n => !n.is_read).map(n => n.notification_id);
+  canonicalServerNotifications.forEach(n => { n.is_read = true; });
+  if (serverIds.length && ROLANPRO_CLOUD && typeof fetch === 'function') {
+    fetch('/api/v1/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ notification_ids: serverIds }),
+    }).catch(() => {});
+  }
   save(); render();
 }
 
@@ -36251,6 +36328,7 @@ function premiumCanonicalSnapshot(prop) {
     lead_intent_service_code: canonicalServiceCodeForOrderService(orderLeadIntentServiceId(order)) || null,
     payment_due: calc.paymentDue,
     payment_mode: prop.selections.paymentMode || 'deposit50',
+    manager_legacy_id: order.managerId || null,
     title: `ROLANPRO Proposal ${order.number || ''}`.trim(),
     client: {
       legacy_client_id: client.id,
@@ -42200,6 +42278,7 @@ async function cloudBoot() {
     parseHash();
     render();
     cloudStatus('Сохранено', 'green');
+    refreshServerNotifications();
     syncTwilioMessages();
     refreshTwilioStatus();
     refreshEmailChannelStatus(true);
@@ -42235,6 +42314,7 @@ if (ROLANPRO_CLOUD && 'serviceWorker' in navigator) {
 setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) syncTwilioMessages(); }, 15000);
 setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) syncZadarmaCalls(); }, 15000);
 setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) refreshEmailChannelStatus(true); }, 300000);
+setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) refreshServerNotifications(); }, 20000);
 </script>
 
 
