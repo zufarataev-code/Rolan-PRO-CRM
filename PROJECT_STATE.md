@@ -38,6 +38,13 @@ Before doing any work:
 - Verification: `src/features/legacy-crm/notification-sound.test.ts` (2 tests) passes; the rest of `npm test` matches main locally (env-dependent failures only).
 - Not done: system push notifications when the CRM tab is closed (needs Web Push).
 
+## 2026-10-25 handoff — KP → installation walkthrough on production
+
+- Walked test project R-261025-061 (client «Zufar», owner's own contact) on prod: project → measurement → estimate → KP sent by Gmail → signed on the client page with the 10-year warranty option → Zelle chosen → deposit marked → exact sizes → production → installation scheduled 2026-11-02 10:00. Test data stays on prod (purchase request PUR-2026-0004 is a draft for it).
+- PR #392 (37ef622): client options keep the signed estimate approved (`projectReapproveEstimate`); monthly options go to `o.subscriptions`; production modal has «Подтвердить расчёт» and «Заказать плёнку под проект» (`projectOrderShortFilm`, source `project_production_shortage`); film with an active project purchase request no longer blocks readiness; server `markDepositPaid` accepts `agreement_signed`; proposal detail returns `deposit.payment_method`; client page: payment before warranty, scroll after signing, Zelle amount/recipient/memo (`reference` = proposal_code), monthly price label; cashier hides priceless options, «/ мес»; estimate → KP window (not the old studio); Chase texts removed.
+- This PR: paid deposit wording on the client page; sync retries a missed server deposit mark.
+- Still for the owner: Stripe key and bank details in CRM settings (card and bank transfer show «not configured» to clients); installers in Team — only two «Zufar Ataev» installer accounts exist; SMS needs the client's consent tick; film purchase prices missing for Vision 89 (material $0 in the estimate).
+
 ## 2026-10-24 handoff — KP payment sync, one measurement button, paid → installation
 
 - PR #386 (d31c594) and #387 (17d6a4f) merged and deployed; functions present on prod.

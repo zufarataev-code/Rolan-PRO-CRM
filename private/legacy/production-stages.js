@@ -1595,6 +1595,8 @@ function premiumApplyServerProposalState(oid, server) {
     changeStatus(oid, 'proposal_accepted', null, { skipWorkflowGuard: true, openWorkspace: false, openMeasurement: false, openPayment: false });
     changed = true;
   }
+  // A deposit marked in the CRM before the server could take it is sent again.
+  if (o.depositReceived && dep?.deposit_id && dep.status !== 'paid' && typeof syncServerDepositPaid === 'function') setTimeout(() => syncServerDepositPaid(o), 0);
   if (dep?.status === 'paid' && !o.depositReceived) {
     const amount = Number(dep.amount) || 0;
     const date = String(dep.paid_at || new Date().toISOString()).slice(0, 10);
