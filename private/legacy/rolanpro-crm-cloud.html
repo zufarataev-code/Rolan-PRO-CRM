@@ -25195,7 +25195,7 @@ function serviceOfferingInDirection(offering, direction) {
 /** Services offered in a direction: its own plus the size-free ones shared into it. */
 /** A service just added in the directory and never filled in: default name, no price. */
 function serviceOfferingIsDraft(item) {
-  return String(item?.name || '').trim() === 'Новая услуга' && !(Number(item?.pricePerSqft) > 0) && !(Number(item?.minPricePerUnit) > 0);
+  return ['Новая услуга', 'Новая опция'].includes(String(item?.name || '').trim()) && !(Number(item?.pricePerSqft) > 0) && !(Number(item?.minPricePerUnit) > 0);
 }
 function serviceOfferingsFor(direction, { includeId = '', includeInactive = false, homeOnly = false } = {}) {
   // Drafts are visible only in the owner's directory (includeInactive); the
@@ -25828,6 +25828,14 @@ function updateServiceOffering(id, field, value, control = null) {
     if (!serviceOfferingUnitsFor(offering.direction).some(unit => unit.id === value)) return;
     offering.unit = value;
     if (value === 'sqft') offering.directions = []; // a per-sq-ft service belongs to one direction
+  } else if (field === 'direction') {
+    // Owner, 2026-10-24: options are edited in one list; the direction decides
+    // in which projects the KP offers the option.
+    if (!SERVICE_OFFERING_DIRECTIONS.includes(value) || serviceOfferingNeedsSizes(offering)) return;
+    offering.direction = value;
+    offering.directions = (offering.directions || []).filter(key => key !== value);
+    offering.filmIds = [];
+    if (!serviceOfferingUnitsFor(value).some(unit => unit.id === offering.unit)) offering.unit = 'piece';
   } else if (field === 'unitLabel') {
     offering.unitLabel = String(value || '').trim().slice(0, 30);
   } else if (field === 'active') {
@@ -25839,9 +25847,71 @@ function updateServiceOffering(id, field, value, control = null) {
   // The control already contains the saved value. Rebuilding the entire CRM
   // here made the directory jump after every edit. Only changing the unit
   // changes the fields that must be displayed.
-  if (field === 'unit') {
+  if (field === 'unit' || field === 'direction' || field === 'proposalOptional') {
     renderServiceOfferingDirectory();
+  } else if (control?.closest('[data-kp-option-row]')) {
+    refreshProposalOptionRowStatus(id);
   }
+}
+
+/** Owner, 2026-10-24: «один раздел, где вносим эти услуги и цены с возможностью менять». */
+function serviceOfferingDirectionTitle(key) {
+  const info = ORDER_PRIMARY_SERVICES.find(entry => canonicalCatalogCategory(entry.catalogCategory) === key);
+  return info ? `${info.icon} ${info.title}` : key;
+}
+function proposalOptionOfferings() {
+  return serviceOfferingsAll()
+    .filter(item => item.proposalOptional && !serviceOfferingNeedsSizes(item))
+    .sort((a, b) => SERVICE_OFFERING_DIRECTIONS.indexOf(a.direction) - SERVICE_OFFERING_DIRECTIONS.indexOf(b.direction) || (Number(a.sort) || 0) - (Number(b.sort) || 0));
+}
+function proposalOptionStatus(offering) {
+  if (offering.active === false) return { text: 'Выключена — в КП не попадает', color: '#64748b' };
+  if (!(Number(offering.pricePerSqft) > 0)) return { text: 'Нет цены — в КП не попадает', color: '#b45309' };
+  return { text: 'В КП: клиент отмечает сам', color: '#15803d' };
+}
+function refreshProposalOptionRowStatus(id) {
+  const offering = serviceOffering(id);
+  if (!offering || typeof document === 'undefined') return;
+  const status = proposalOptionStatus(offering);
+  document.querySelectorAll('[data-kp-option-status]').forEach(node => {
+    if (node.getAttribute('data-kp-option-status') !== id) return;
+    node.textContent = status.text;
+    node.style.color = status.color;
+  });
+}
+function addProposalOption() {
+  if (!serviceOfferingCanEdit()) return;
+  const select = typeof document !== 'undefined' ? document.getElementById('kp-option-new-direction') : null;
+  const direction = SERVICE_OFFERING_DIRECTIONS.includes(select?.value) ? select.value : 'smart';
+  db.settings.serviceOfferings = serviceOfferingsAll();
+  db.settings.serviceOfferings.push({ id: 'svc_' + uid(), direction, name: 'Новая опция', unit: 'piece', pricePerSqft: 0, installerRatePerSqft: 0, active: true, proposalOptional: true, sort: Math.max(0, ...serviceOfferingsAll().map(item => Number(item.sort) || 0)) + 1 });
+  save();
+  renderServiceOfferingDirectory();
+}
+function proposalOptionsSectionHtml(owner) {
+  const options = proposalOptionOfferings();
+  const directions = SERVICE_OFFERING_DIRECTIONS.map(key => ({ key, title: serviceOfferingDirectionTitle(key) }));
+  const rows = options.map(offering => {
+    const status = proposalOptionStatus(offering);
+    if (!owner) return `<div class="p-3 border border-slate-200 flex justify-between gap-3"><span><b>${academyEsc(offering.name)}</b><br><span class="text-xs text-gray-500">${academyEsc(serviceOfferingDirectionTitle(offering.direction))}</span></span><b>${Number(offering.pricePerSqft) > 0 ? `${fmtMoney(Number(offering.pricePerSqft))}${offering.monthly ? ' / мес' : ''}` : '—'}</b></div>`;
+    return `<div data-kp-option-row="${offering.id}" class="p-3 border border-slate-200 ${offering.active === false ? 'opacity-60' : ''}" style="border-left:4px solid ${status.color}">
+      <div class="flex items-center justify-between gap-2"><span class="text-xs font-bold" data-kp-option-status="${offering.id}" style="color:${status.color}">${status.text}</span><button type="button" class="btn-ghost text-xs" onclick="updateServiceOffering('${offering.id}','proposalOptional',false,this)" title="Станет обычной услугой своего направления">Убрать из опций</button></div>
+      <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2">
+        <div class="col-span-2"><label>Название в CRM</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value,this)"></div>
+        <div><label>Цена клиенту, $</label><input type="number" min="0" step="0.5" inputmode="decimal" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value,this)"></div>
+        <div><label>Как платит</label><select onchange="updateServiceOffering('${offering.id}','monthly',this.value === 'monthly',this)"><option value="once" ${offering.monthly ? '' : 'selected'}>Разово</option><option value="monthly" ${offering.monthly ? 'selected' : ''}>В месяц</option></select></div>
+        <div class="col-span-2"><label>Для клиента (EN)</label><input value="${academyEsc(offering.nameEn || '')}" placeholder="${academyEsc(serviceOfferingEnglishGuess(offering) || 'e.g. Second Remote')}" onchange="updateServiceOffering('${offering.id}','nameEn',this.value,this)"></div>
+        <div class="col-span-2"><label>Направление</label><select onchange="updateServiceOffering('${offering.id}','direction',this.value,this)">${directions.map(item => `<option value="${item.key}" ${offering.direction === item.key ? 'selected' : ''}>${academyEsc(item.title)}</option>`).join('')}</select></div>
+        <div><label>Специалисту, $</label><input type="number" min="0" step="0.25" inputmode="decimal" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="0" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value,this)"></div>
+        <div class="flex items-end"><label class="tag" style="display:inline-flex;gap:6px;white-space:nowrap"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked,this)"> Активна</label></div>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="mt-4 p-3 border-2" data-kp-options style="border-color:#C9A24A;background:#FFFCF4">
+    <div class="flex flex-wrap items-center justify-between gap-2"><h3 class="font-black text-lg">⭐ Опции для КП</h3>${owner ? `<div class="flex flex-wrap items-center gap-2"><select id="kp-option-new-direction" style="width:auto">${directions.map(item => `<option value="${item.key}">${academyEsc(item.title)}</option>`).join('')}</select><button class="btn-primary text-sm" onclick="addProposalOption()">+ Опция</button></div>` : ''}</div>
+    <p class="text-sm text-slate-600 mt-1">Всё, что клиент может добавить сам: голосовое управление, выключатель, второй пульт, расширенная гарантия. КП предлагает опцию в проектах её направления, клиент отмечает её галочкой. Без цены опция в КП не попадает. Цена «в месяц» — подписка, в сумму проекта она не входит.</p>
+    <div class="grid gap-2 mt-3">${rows || '<div class="text-sm text-gray-500">Опций пока нет — нажмите «+ Опция».</div>'}</div>
+  </div>`;
 }
 
 function refreshServiceOfferingFilmSummary(id) {
@@ -25939,7 +26009,8 @@ function renderServiceOfferingsSection() {
     const info = ORDER_PRIMARY_SERVICES.find(item => canonicalCatalogCategory(item.catalogCategory) === direction);
     const films = (db.settings.catalog || []).filter(item => !item.archived && canonicalCatalogCategory(item.category) === direction);
     const shared = serviceOfferingsFor(direction, { includeInactive: owner }).filter(item => item.direction !== direction);
-    const rows = serviceOfferingsFor(direction, { includeInactive: owner, homeOnly: true }).map(offering => {
+    const optionCount = serviceOfferingsFor(direction, { includeInactive: owner, homeOnly: true }).filter(item => item.proposalOptional && !serviceOfferingNeedsSizes(item)).length;
+    const rows = serviceOfferingsFor(direction, { includeInactive: owner, homeOnly: true }).filter(item => !(item.proposalOptional && !serviceOfferingNeedsSizes(item))).map(offering => {
       const linked = films.filter(item => serviceOfferingFilmIds(offering).includes(item.id));
       const filmList = films.length
         ? `<details><summary class="cursor-pointer text-sm">Плёнки: <span data-service-offering-film-summary="${offering.id}">${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'выберите материалы услуги'}</span></summary><div class="mt-2 grid gap-1">${films.map(item => `<label class="text-sm"><input type="checkbox" ${serviceOfferingFilmIds(offering).includes(item.id) ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(сейчас: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label>`).join('')}</div></details>`
@@ -25975,6 +26046,7 @@ function renderServiceOfferingsSection() {
     return `<div class="mt-4">
       <div class="flex items-center justify-between gap-3"><h3 class="font-black">${academyEsc(info ? `${info.icon} ${info.title}` : direction)}</h3>${owner ? `<button class="btn-ghost text-sm" onclick="addServiceOffering('${direction}')">+ Добавить услугу</button>` : ''}</div>
       <div class="grid gap-2 mt-2">${rows || '<div class="text-sm text-gray-500">Услуг пока нет.</div>'}</div>
+      ${optionCount ? `<div class="text-xs text-gray-500 mt-2">Опций для КП в этом направлении: ${optionCount} — они в блоке «⭐ Опции для КП» выше.</div>` : ''}
       ${shared.length ? `<div class="text-xs text-gray-500 mt-2" data-service-offering-shared="${academyEsc(direction)}">Также предлагаются здесь: ${shared.map(item => `${academyEsc(item.name)} <span class="text-gray-400">(из «${academyEsc(ORDER_PRIMARY_SERVICES.find(entry => canonicalCatalogCategory(entry.catalogCategory) === item.direction)?.title || item.direction)}»)</span>`).join(', ')}</div>` : ''}
     </div>`;
   }).join('');
@@ -25986,6 +26058,7 @@ function renderServiceOfferingsSection() {
       <div><label>Снятие старой плёнки, $ / кв. фут клиенту</label>${owner ? `<input type="number" min="0" step="0.25" value="${removalPricePerSqft()}" onchange="updateRemovalPrice(this.value)">` : `<div class="font-black">${fmtMoney(removalPricePerSqft())}</div>`}</div>
       <div class="text-xs text-gray-500 flex-1">Строка «Снятие старой плёнки» появляется в проекте сама, когда на замере у окна отмечено снятие. Новая цена применяется к новым строкам; сохранённые расчёты не меняются.</div>
     </div>
+    ${proposalOptionsSectionHtml(owner)}
     ${groups}
   </section>`;
 }
