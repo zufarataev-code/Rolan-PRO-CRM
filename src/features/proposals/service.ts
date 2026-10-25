@@ -1693,7 +1693,9 @@ export async function markDepositPaid(session: SessionLike, depositId: string) {
     return null;
   }
 
-  if (!isProposalApproved(deposit.proposal.status)) {
+  // The client's signature is the approval: a deposit received after an online
+  // signature is recorded (Owner's walkthrough, 2026-10-25).
+  if (!isProposalPublicLocked(deposit.proposal.status)) {
     return "proposal_not_approved" as const;
   }
 

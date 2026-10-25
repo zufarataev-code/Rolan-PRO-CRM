@@ -1646,6 +1646,60 @@ function projectAcceptPaidWithoutProposal(oid) {
   render();
 }
 
+/** The estimate the client signed for is approved again — without reopening the KP. */
+function projectReapproveEstimate(o, note) {
+  if (!o) return false;
+  const at = new Date().toISOString();
+  const internal = orderUserCanSeeInternalEconomics(o, currentUser());
+  o.projectEstimateApprovedAt = at;
+  o.projectEstimateApprovedBy = state.currentUserId;
+  o.projectEstimateUpdatedAt = at;
+  o.projectEstimateSnapshot = projectEstimateApprovalSnapshot(o, at, internal);
+  o.projectEstimateFingerprint = projectEstimatePriceFingerprint(o);
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at, key: 'project_estimate_approved', by: state.currentUserId, note: `${note || 'Расчёт подтверждён'}: ${fmtMoney(orderRevenue(o))}` });
+  return true;
+}
+function projectReapproveEstimateFromProduction(oid) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  projectReapproveEstimate(o, 'Расчёт подтверждён при подготовке производства');
+  save();
+  openProjectProductionWorkspace(oid);
+}
+/**
+ * Owner's walkthrough, 2026-10-25: «Подтвердить готовность» stayed grey on
+ * «недостаточно материала». The film is bought for the project (from China, cut
+ * to size): a purchase request for the shortage lets production go on, and the
+ * installation date is set after the film arrives.
+ */
+function projectOrderShortFilm(oid, catalogId) {
+  const o = getOrder(oid);
+  const catalog = getCatalogItem(catalogId);
+  if (!o || !catalog || !orderUserCanManage(currentUser())) return;
+  if (activeProjectFilmPurchaseRequest(o.id, catalogId)) { openProjectProductionWorkspace(oid); return; }
+  const usage = filmPlanUsageByCatalog(o, calcFilmPlan(o))[catalogId];
+  const stock = usage ? filmPlanInventoryStatus(catalogId, usage) : null;
+  const shortages = stock?.shortages || [];
+  const metres = Math.max(0.5, Math.ceil(shortages.reduce((sum, row) => sum + row.shortage, 0) * 1.1 * 2) / 2);
+  const now = new Date().toISOString();
+  const request = {
+    id: 'pr_' + uid(), number: purchaseRequestNumber(), kind: 'film', itemId: catalog.id,
+    itemNameSnapshot: catalogLabel(catalog), qty: metres, unit: 'м', orderId: o.id,
+    vendorId: catalog.vendorId || null, responsibleId: null, neededBy: null,
+    note: `Не хватает на проект ${o.number || ''}: ${usage ? usage.consumedSqft.toFixed(1) : '?'} sq ft по раскрою.`,
+    requirements: shortages.map(row => ({ widthMm: row.width, requiredM: row.need, availableM: row.available, shortageM: row.shortage })),
+    status: 'draft', source: 'project_production_shortage', requestedBy: state.currentUserId || null, createdAt: now, updatedAt: now,
+  };
+  db.purchaseRequests = db.purchaseRequests || [];
+  db.purchaseRequests.push(request);
+  o.purchaseRequestIds = Array.from(new Set([...(o.purchaseRequestIds || []), request.id]));
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: now, key: 'purchase_requested', by: state.currentUserId, note: `Заявка на закупку ${request.number}: ${request.itemNameSnapshot}, ${metres} м` });
+  save();
+  openProjectProductionWorkspace(oid);
+}
+
 function projectFeedHtml(o, c, u, ctx) {
   setTimeout(() => premiumSyncClientProposal(o.id), 0);
   const { canManage, canSeeMoney, primary, measureAction, recentTimeline } = ctx;
@@ -1771,14 +1825,25 @@ async function premiumApplyClientOptions(oid, { quiet = false } = {}) {
     const items = Array.isArray(payload?.data?.proposal?.items) ? payload.data.proposal.items : [];
     const chosen = items.filter(item => item.is_optional && item.client_selected && item.dynamic_fields?.offering_id);
     const fresh = getOrder(oid);
-    const have = new Set([...(fresh.offeringIds || []), ...projectLines(fresh).map(line => line.offeringId)].filter(Boolean));
+    const have = new Set([...(fresh.offeringIds || []), ...projectLines(fresh).map(line => line.offeringId), ...(fresh.subscriptions || []).map(sub => sub.offeringId)].filter(Boolean));
+    // Owner's walkthrough, 2026-10-25: the options the client ticked reopened the
+    // estimate after he signed, and production refused «расчёт не подтверждён».
+    // What the client signed for is the approved estimate.
+    const wasApproved = projectEstimateIsApproved(fresh);
     let added = 0;
     projectCardEdit(() => chosen.forEach(item => {
       const id = item.dynamic_fields.offering_id;
       if (have.has(id) || !serviceOffering(id)) return;
-      projectAddOfferingLine(oid, id, item.dynamic_fields.direction || '');
+      if (item.dynamic_fields.billing === 'monthly') {
+        // A subscription is billed monthly: not a line, no crew, not in the price.
+        fresh.subscriptions = fresh.subscriptions || [];
+        fresh.subscriptions.push({ offeringId: id, name: serviceOffering(id).name, monthlyPrice: Number(item.dynamic_fields.monthly_price) || Number(serviceOffering(id).pricePerSqft) || 0, since: new Date().toISOString() });
+      } else {
+        projectAddOfferingLine(oid, id, item.dynamic_fields.direction || '');
+      }
       have.add(id); added++;
     }));
+    if (added && (wasApproved || projectProposalAccepted(fresh))) projectReapproveEstimate(fresh, 'Клиент выбрал опции в КП');
     fresh.kpClientOptions = chosen.map(item => ({ offeringId: item.dynamic_fields.offering_id, title: item.title_en, billing: item.dynamic_fields.billing || 'one_time', monthly: item.dynamic_fields.monthly_price || null }));
     fresh.kpClientOptionsAt = new Date().toISOString();
     if (added) { fresh.timeline = fresh.timeline || []; fresh.timeline.push({ at: fresh.kpClientOptionsAt, key: 'kp_client_options', by: state.currentUserId, note: `Клиент выбрал в КП: ${chosen.map(item => item.title_en).join(', ')}` }); }

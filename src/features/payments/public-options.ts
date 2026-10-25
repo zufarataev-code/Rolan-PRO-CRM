@@ -66,6 +66,7 @@ export async function getPublicPaymentOptions(accessToken: string) {
     where: { access_token: accessToken },
     select: {
       proposal_id: true,
+      proposal_code: true,
       currency: true,
       selected_total_amount: true,
       property_type: true,
@@ -115,6 +116,8 @@ export async function getPublicPaymentOptions(accessToken: string) {
 
   return {
     proposal_id: proposal.proposal_id,
+    // The client writes it in the Zelle / transfer memo so the payment is matched.
+    reference: proposal.proposal_code ?? null,
     currency: proposal.currency,
     agreement_signed: proposal.agreement?.status === "signed" && Boolean(proposal.agreement.signed_at),
     suggested_base_amount: suggestedBaseAmount,

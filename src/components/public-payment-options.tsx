@@ -16,6 +16,7 @@ type PaymentOption = {
 };
 
 type PaymentData = {
+  reference?: string | null;
   currency: string;
   agreement_signed: boolean;
   suggested_base_amount: number;
@@ -144,7 +145,23 @@ export function PublicPaymentOptions({
               ) : null}
 
               {selected && option.instructions ? (
-                <div style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>{option.instructions}</div>
+                <div style={{ marginTop: 12, whiteSpace: "pre-wrap", padding: 12, borderRadius: 12, background: "#f1f5f9", lineHeight: 1.5 }}>
+                  {option.method === "zelle" ? (
+                    <>
+                      <b>{ru ? `Переведите ${formatMoney(option.payable_amount, data.currency)} через Zelle` : `Send ${formatMoney(option.payable_amount, data.currency)} with Zelle`}</b>
+                      <br />
+                      {ru ? "Получатель: " : "To: "}<b>{option.instructions}</b>
+                      {data.reference ? (<><br />{ru ? "В комментарии укажите: " : "Memo: "}<b>{data.reference}</b></>) : null}
+                      <br />
+                      <span style={{ opacity: 0.75 }}>{ru ? "Мы подтвердим поступление и напишем вам." : "We confirm the payment and let you know."}</span>
+                    </>
+                  ) : (
+                    <>
+                      {option.instructions}
+                      {data.reference ? (<><br />{ru ? "Назначение платежа: " : "Reference: "}<b>{data.reference}</b></>) : null}
+                    </>
+                  )}
+                </div>
               ) : null}
 
               {selected && option.method === "payment_system" && option.payment_link ? (

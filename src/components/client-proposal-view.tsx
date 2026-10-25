@@ -506,6 +506,15 @@ function getAddonSummary(addonsSnapshot: unknown, language: "en" | "ru" = "en") 
     .filter((entry): entry is string => Boolean(entry));
 }
 
+/** A monthly option (10-year warranty at $5/month) shows its monthly price, not $0.00. */
+function itemPriceLabel(item: any, language: "en" | "ru") {
+  const fields = item?.dynamic_fields;
+  if (fields?.billing === "monthly" && Number(fields.monthly_price) > 0) {
+    return `${formatCurrency(Number(fields.monthly_price))}/${language === "ru" ? "мес" : "mo"}`;
+  }
+  return formatCurrency(item.line_price);
+}
+
 export function ClientProposalView({
   initialProposal,
   language = "en",
@@ -677,7 +686,7 @@ export function ClientProposalView({
                         <h3>{itemTitle}</h3>
                         <p>{localizeItemText(item.room_name ?? (ru ? "Общее" : "General"), language)} - {serviceName ?? (ru ? "Услуга" : "Service")}</p>
                       </div>
-                      <strong>{formatCurrency(item.line_price)}</strong>
+                      <strong>{itemPriceLabel(item, language)}</strong>
                     </div>
                     <p className="proposal-print-description">
                       {(filmName ?? itemDescription) || (ru ? "Индивидуальная услуга проекта" : "Custom project service")}
@@ -824,7 +833,7 @@ export function ClientProposalView({
                           {localizeItemText(item.room_name ?? (ru ? "Общее" : "General"), language)} · {serviceName ?? (ru ? "Услуга" : "Service")}
                         </div>
                       </div>
-                      <div className="chip chip-accent">{formatCurrency(item.line_price)}</div>
+                      <div className="chip chip-accent">{itemPriceLabel(item, language)}</div>
                     </div>
 
                     <div className="row-meta">
