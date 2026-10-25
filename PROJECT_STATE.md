@@ -23,6 +23,15 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-24 handoff — project shell first, compact field measurement
+
+- Branch: `codex/field-action-bar-20261024`, rebased onto current `origin/main` `993e765` after PR #380. Review PR: #378.
+- A new Project now requires the client, object/site type, responsible manager and next action; services are optional at creation. The saved Project opens as its normal card and no longer jumps directly into Measurement. Services may be added immediately or later from the same Project card, without creating a second order.
+- The field measurement keeps the daily fields visible (room/opening, construction, size, material) and folds glass/facade, access notes, photos and direction-specific engineering checks into compact optional sections. No measurement data or technical gate was removed.
+- Measurement has one persistent action bar outside the scrolling form: `Сохранить`, `Сохранить и новое окно`, `Сохранить и выйти`, `Сохранить и завершить замер`. Save-and-new persists the current opening before clearing; exit and finish save without rebuilding the modal.
+- Film options in Measurement are limited to the selected service direction, blank imported catalog shells are hidden, duplicate labels are collapsed, and an already selected historical film remains readable.
+- Verification: the 154-test project/measurement/calculation/KP/installation selection and the full suite (835/835) pass; `git diff --check` passes. GitHub `Test, typecheck, and build`, clean-database end-to-end gate and response checks all passed for implementation commit `2b49e68`. This branch is not deployed.
+
 ## 2026-10-21 handoff — approved project-card route map
 
 - Branch: `codex/project-card-artifact-20261021`, based on current `origin/main` `5f33d6a` after PR #354.

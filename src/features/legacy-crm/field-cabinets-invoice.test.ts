@@ -20,16 +20,16 @@ function slice(src: string, from: string, to: string) {
 test('the measurement studio measures for a service of the project, with its films', () => {
   const studio = slice(html, 'function measureStudioOrder()', 'function measureStudioWindowListHtml(order)');
   assert.match(studio, /projectSelectedSizedOfferings\(order, scopeKey\)/);
-  assert.match(studio, /serviceOfferingAllowedFilmIds\(offering\)/, 'only the service films');
+  assert.match(studio, /serviceOfferingSelectableFilms\(offering, selectedId\)/, 'only selectable films of the service direction');
   assert.match(studio, /projectOfferingCatalogId\(order, offering\.id\)/, 'the film chosen in the cashier comes first');
   assert.match(studio, /— уточнит менеджер —/);
-  const save = slice(html, 'function measureStudioSaveWindow(orderId)', 'function measureSwapDims()');
+  const save = slice(html, 'function measureStudioSaveWindow(orderId, options = {})', 'function measureSwapDims()');
   assert.match(save, /applyWindowOffering\(targetWin, offering\);/);
   assert.match(html, /\$\{measureStudioOfferingHtml\(order, scopeKey, win\)\}/);
 });
 
 test('«Завершить замер» is inside the studio; the measurer may leave the film to the manager', () => {
-  assert.match(html, /onclick="measureStudioFinish\('\$\{order\.id\}'\)">✓ Завершить замер<\/button>/);
+  assert.match(html, /onclick="measureStudioFinish\('\$\{order\.id\}'\)">Сохранить и завершить замер<\/button>/);
   const finish = slice(html, 'function measureStudioFinish(orderId)', 'function measureSwapDims()');
   assert.match(finish, /orderWorkflowTransitionIssues\(o, 'measurement_done'\)/);
   assert.match(finish, /box\.innerHTML = `<b>Чтобы сдать замер:<\/b>/, 'issues in place, not another window');

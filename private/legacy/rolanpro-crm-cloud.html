@@ -4941,6 +4941,45 @@
     backdrop-filter: blur(12px);
     border-radius: 0 0 14px 14px;
   }
+  .measure-optional-details {
+    border:1px solid #dbe3ee;
+    border-radius:12px;
+    background:#f8fafc;
+    overflow:hidden;
+  }
+  .measure-optional-details > summary {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.75rem;
+    cursor:pointer;
+    padding:.72rem .8rem;
+    color:#334155;
+    font-size:.82rem;
+    font-weight:800;
+    list-style:none;
+  }
+  .measure-optional-details > summary::-webkit-details-marker { display:none; }
+  .measure-optional-details > summary::after { content:'⌄'; font-size:1rem; color:#64748b; }
+  .measure-optional-details[open] > summary::after { content:'⌃'; }
+  .measure-optional-details > summary span { margin-left:auto; color:#64748b; font-size:.72rem; font-weight:600; }
+  .measure-optional-details > .measure-form-grid,
+  .measure-optional-details > .space-y-3 { padding:0 .8rem .8rem; }
+  .measure-technical-details { background:transparent; }
+  .measure-global-actions {
+    position:relative;
+    z-index:8;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    justify-content:flex-end;
+    gap:.55rem;
+    padding:.72rem 1rem calc(.72rem + env(safe-area-inset-bottom));
+    border-top:1px solid #dbe3ee;
+    background:rgba(255,255,255,.98);
+    box-shadow:0 -10px 26px rgba(15,23,42,.1);
+  }
+  .measure-global-actions .measure-finish-issues { flex:1 0 100%; order:10; }
   .tech-panel-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -5479,7 +5518,7 @@
     z-index: 4;
   }
   .measure-modal .measure-studio {
-    max-height: calc(88svh - 88px);
+    max-height: calc(88svh - 152px);
   }
   .modal-form-grid {
     display: grid;
@@ -6919,7 +6958,7 @@
     }
     .measure-modal .measure-studio {
       grid-template-columns:minmax(0,1.45fr) minmax(300px,.85fr);
-      max-height:calc(100dvh - 104px);
+      max-height:calc(100dvh - 174px);
       gap:12px; padding:12px;
     }
     .measure-workbench { grid-column:1; grid-row:1 / span 2; }
@@ -6953,7 +6992,7 @@
     #ms-mode-pill { display:none; }
     .measure-modal .measure-studio {
       display:grid; grid-template-columns:minmax(0,1fr); gap:10px; padding:10px 10px calc(18px + env(safe-area-inset-bottom));
-      max-height:calc(100dvh - 92px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain;
+      max-height:calc(100dvh - 166px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain;
       -webkit-overflow-scrolling:touch; scroll-padding-block:12px;
     }
     .measure-workbench, .measure-context, .measure-checklist { grid-column:auto; grid-row:auto; min-width:0; }
@@ -6973,6 +7012,14 @@
       bottom:-12px; margin:10px -12px -12px; padding:10px 12px calc(10px + env(safe-area-inset-bottom));
     }
     .measure-sticky-actions .flex { display:grid; grid-template-columns:minmax(0,1fr); }
+    .measure-global-actions {
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:7px;
+      padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+    }
+    .measure-global-actions button { min-height:44px; padding:8px 7px; font-size:12px; line-height:1.15; }
+    .measure-global-actions .measure-finish-btn { grid-column:1 / -1; font-size:14px; }
   }
 
 </style>
@@ -11800,9 +11847,9 @@ function measureStudioCatalogOptions(selectedId, scopeKey = '') {
   const order = measureStudioOrder();
   const offering = order ? measureStudioOffering(order, scopeKey) : null;
   if (offering) {
-    const allowed = serviceOfferingAllowedFilmIds(offering).map(getCatalogItem).filter(film => film && !film.archived);
+    const allowed = serviceOfferingSelectableFilms(offering, selectedId);
     const chosen = allowed.some(film => film.id === selectedId) ? selectedId : (selectedId ? '' : projectOfferingCatalogId(order, offering.id));
-    return `<option value="">— уточнит менеджер —</option>${allowed.map(film => `<option value="${film.id}" ${chosen === film.id ? 'selected' : ''}>${academyEsc(film.brand)} — ${academyEsc(film.model)}</option>`).join('')}`;
+    return `<option value="">— уточнит менеджер —</option>${allowed.map(film => `<option value="${film.id}" ${chosen === film.id ? 'selected' : ''}>${academyEsc(catalogLabel(film))}</option>`).join('')}`;
   }
   const groups = catalogByCategory();
   const preferred = measureScopeInfo(scopeKey).catalogCategory;
@@ -12269,39 +12316,44 @@ function openEngineeringMeasureStudio(orderId) {
             <div class="measure-step">
               <span class="measure-step-no">4</span>
               <div class="min-w-0 flex-1">
-                <div class="measure-step-title">Материал и стекло</div>
-                <div class="measure-step-sub">Здесь система понимает склад, совместимость стекла и риски для КП.</div>
+                <div class="measure-step-title">Материал</div>
+                <div class="measure-step-sub">Выберите плёнку для этой услуги. Стекло и фасад заполняются ниже только когда нужны.</div>
                 <div class="measure-form-grid mt-3">
                   <div>
                     ${measureStudioOfferingHtml(order, scopeKey, win)}
                     <label>Плёнка / материал</label>
                     <select id="ms-catalog" onchange="measureStudioCatalogChanged()">${measureStudioCatalogOptions(win?.catalogId || '', scopeKey)}</select>
                   </div>
-                  <div class="measure-two-col">
-                    <div>
-                      <label>Тип стекла</label>
-                      <select id="ms-glass" onchange="measureStudioPreview()">${MEASURE_GLASS_TYPES.map(g => `<option value="${g}" ${(win?.glassType || '') === g ? 'selected' : ''}>${g}</option>`).join('')}</select>
+                  <details class="measure-optional-details">
+                    <summary>Стекло, сторона и фасад <span>дополнительно</span></summary>
+                    <div class="measure-form-grid mt-3">
+                      <div class="measure-two-col">
+                        <div>
+                          <label>Тип стекла</label>
+                          <select id="ms-glass" onchange="measureStudioPreview()">${MEASURE_GLASS_TYPES.map(g => `<option value="${g}" ${(win?.glassType || '') === g ? 'selected' : ''}>${g}</option>`).join('')}</select>
+                        </div>
+                        <div>
+                          <label>Сторона монтажа</label>
+                          <select id="ms-side" onchange="measureStudioPreview()">
+                            <option value="in" ${(win?.side || 'in') === 'in' ? 'selected' : ''}>Внутри</option>
+                            <option value="out" ${win?.side === 'out' ? 'selected' : ''}>Снаружи</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="measure-two-col">
+                        <div>
+                          <label>Ориентация фасада</label>
+                          <select id="ms-orientation" onchange="measureStudioPreview()">
+                            ${MEASURE_ORIENTATIONS.map(o => `<option value="${o.value}" ${(win?.orientation || '') === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+                          </select>
+                        </div>
+                        <div>
+                          <label>Компас</label>
+                          <button class="btn-ghost w-full text-sm" onclick="measureCaptureCompass()">Определить сторону</button>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label>Сторона монтажа</label>
-                      <select id="ms-side" onchange="measureStudioPreview()">
-                        <option value="in" ${(win?.side || 'in') === 'in' ? 'selected' : ''}>Внутри</option>
-                        <option value="out" ${win?.side === 'out' ? 'selected' : ''}>Снаружи</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div class="measure-two-col">
-                    <div>
-                      <label>Ориентация фасада</label>
-                      <select id="ms-orientation" onchange="measureStudioPreview()">
-                        ${MEASURE_ORIENTATIONS.map(o => `<option value="${o.value}" ${(win?.orientation || '') === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
-                      </select>
-                    </div>
-                    <div>
-                      <label>Компас</label>
-                      <button class="btn-ghost w-full text-sm" onclick="measureCaptureCompass()">Определить сторону</button>
-                    </div>
-                  </div>
+                  </details>
                 </div>
               </div>
             </div>
@@ -12309,31 +12361,24 @@ function openEngineeringMeasureStudio(orderId) {
             <div class="measure-step">
               <span class="measure-step-no">5</span>
               <div class="min-w-0 flex-1">
-                <div class="measure-step-title">Доступ и заметки</div>
-                <div class="measure-step-sub">Эти данные идут специалисту по установке в наряд, чтобы он не гадал на объекте.</div>
-                <div class="measure-form-grid mt-3">
-                  <div class="measure-two-col">
-                    <div><label>Этаж / высота</label><input id="ms-floor" value="${academyEsc(win?.floor || '')}" placeholder="1 floor / 12 ft"></div>
-                    <div><label>Доступ</label><select id="ms-access">
-                      ${['normal','ladder','lift','rope','blocked'].map(v => `<option value="${v}" ${(win?.access || 'normal') === v ? 'selected' : ''}>${{normal:'Обычный',ladder:'Лестница',lift:'Лифт/вышка',rope:'Верёвка',blocked:'Сложный доступ'}[v]}</option>`).join('')}
-                    </select></div>
+                <div class="measure-step-title">Условия монтажа</div>
+                <div class="measure-step-sub">Раскройте только если есть высота, сложный доступ или важная заметка для бригады.</div>
+                <details class="measure-optional-details mt-3">
+                  <summary>Доступ и технические заметки <span>дополнительно</span></summary>
+                  <div class="measure-form-grid mt-3">
+                    <div class="measure-two-col">
+                      <div><label>Этаж / высота</label><input id="ms-floor" value="${academyEsc(win?.floor || '')}" placeholder="1 floor / 12 ft"></div>
+                      <div><label>Доступ</label><select id="ms-access">
+                        ${['normal','ladder','lift','rope','blocked'].map(v => `<option value="${v}" ${(win?.access || 'normal') === v ? 'selected' : ''}>${{normal:'Обычный',ladder:'Лестница',lift:'Лифт/вышка',rope:'Верёвка',blocked:'Сложный доступ'}[v]}</option>`).join('')}
+                      </select></div>
+                    </div>
+                    <div>
+                      <label>Технические заметки</label>
+                      <textarea id="ms-notes" rows="3" placeholder="Рама, подрезка, риски, доступ, что показать специалистам по установке">${academyEsc(win?.technicalNotes || '')}</textarea>
+                    </div>
                   </div>
-                  <div>
-                    <label>Технические заметки</label>
-                    <textarea id="ms-notes" rows="3" placeholder="Рама, подрезка, риски, доступ, что показать специалистам по установке">${academyEsc(win?.technicalNotes || '')}</textarea>
-                  </div>
-                </div>
+                </details>
               </div>
-            </div>
-
-            <div class="measure-sticky-actions">
-              <div class="flex gap-2">
-                <button class="btn-primary flex-1" onclick="measureStudioSaveWindow('${order.id}')">Сохранить окно</button>
-                <button class="btn-ghost" onclick="measureStudioNewWindow('${order.id}')">+ Новое окно</button>
-              </div>
-              <button class="btn-ghost w-full mt-2 measure-exit-btn" onclick="measureStudioSaveAndExit('${order.id}')">Сохранить и выйти</button>
-              ${order.status === 'measurement_scheduled' && (viewer?.role === 'measurer' || canManage) ? `<button class="btn-ghost w-full mt-2 measure-finish-btn" onclick="measureStudioFinish('${order.id}')">✓ Завершить замер</button>
-              <div id="ms-finish-issues" class="measure-finish-issues" hidden></div>` : ''}
             </div>
           </section>
 
@@ -12365,6 +12410,9 @@ function openEngineeringMeasureStudio(orderId) {
           </section>
 
           <section class="space-y-3 measure-checklist">
+            <details class="measure-optional-details measure-technical-details">
+              <summary>Техническая проверка ${scope.icon} <span>фото, стекло и параметры услуги</span></summary>
+              <div class="space-y-3 mt-3">
             ${measureStudioStandardsHtml(scopeKey)}
             <div class="measure-panel">
               <h4>Фото и тип стекла</h4>
@@ -12439,7 +12487,16 @@ function openEngineeringMeasureStudio(orderId) {
               <textarea id="ms-smart-notes" rows="2" placeholder="Трансформатор, зона, управление, риски">${academyEsc(smart.notes || '')}</textarea>
               <div id="ms-smart-load" class="text-xs text-blue-700 font-semibold mt-2">—</div>
             </div>
+              </div>
+            </details>
           </section>
+        </div>
+        <div class="measure-global-actions" role="group" aria-label="Действия замера">
+          <button class="btn-ghost" onclick="measureStudioSaveWindow('${order.id}')">Сохранить</button>
+          <button class="btn-ghost" onclick="measureStudioSaveAndNew('${order.id}')">Сохранить и новое окно</button>
+          <button class="btn-ghost measure-exit-btn" onclick="measureStudioSaveAndExit('${order.id}')">Сохранить и выйти</button>
+          ${order.status === 'measurement_scheduled' && (viewer?.role === 'measurer' || canManage) ? `<button class="btn-primary measure-finish-btn" onclick="measureStudioFinish('${order.id}')">Сохранить и завершить замер</button>` : ''}
+          <div id="ms-finish-issues" class="measure-finish-issues" hidden></div>
         </div>
       </div>
     </div>`;
@@ -12814,12 +12871,12 @@ function measureStudioNewWindow(orderId) {
   measureStudioRefreshPanelTable(true);
   measureStudioPreview();
 }
-function measureStudioSaveWindow(orderId) {
+function measureStudioSaveWindow(orderId, options = {}) {
   const order = getOrder(orderId);
-  if (!order) return;
+  if (!order) return false;
   order.measurements = order.measurements || { rooms: [] };
   const data = measureStudioFormWindow();
-  if (!data.width || !data.height) { alert('Введите ширину и высоту окна'); return; }
+  if (!data.width || !data.height) { alert('Введите ширину и высоту окна'); return false; }
   order.serviceTypes = Array.from(new Set([...(order.serviceTypes || [orderMeasureScope(order)]), data.measureScope]));
   let targetRoomId = document.getElementById('ms-room')?.value || '__new';
   let targetRoom = targetRoomId !== '__new' ? order.measurements.rooms.find(r => r.id === targetRoomId) : null;
@@ -12866,7 +12923,14 @@ function measureStudioSaveWindow(orderId) {
   order.timeline.push({ at: order.technicalSheetUpdatedAt, key: 'engineering_measurement_saved', by: state.currentUserId, note: `${targetRoom.name}: ${targetWin.name}` });
   save();
   state.measureStudio = { orderId, rid: targetRoom.id, wid: targetWin.id, photoDataUrl: targetWin.photoDataUrl || '', photoName: targetWin.photoName || '', dirty: false };
-  openEngineeringMeasureStudio(orderId);
+  if (options.reopen !== false) openEngineeringMeasureStudio(orderId);
+  return true;
+}
+function measureStudioSaveAndNew(orderId) {
+  if (!measureStudioSaveWindow(orderId, { reopen: false })) return false;
+  measureStudioNewWindow(orderId);
+  if (typeof crmNotice === 'function') crmNotice('Окно сохранено. Можно вводить следующее.');
+  return true;
 }
 function measureStudioMarkDirty() { if (state.measureStudio) state.measureStudio.dirty = true; }
 /** Leave the studio keeping what was typed: the open window is saved first when it was changed. */
@@ -12874,8 +12938,7 @@ function measureStudioSaveAndExit(orderId) {
   const dirty = !!state.measureStudio?.dirty;
   const typed = Number(document.getElementById('ms-w')?.value) > 0 && Number(document.getElementById('ms-h')?.value) > 0;
   if (dirty && typed) {
-    measureStudioSaveWindow(orderId);
-    if (state.measureStudio?.dirty) return; // validation stopped the save; the reason is on screen
+    if (!measureStudioSaveWindow(orderId, { reopen: false })) return;
   }
   save();
   closeModal();
@@ -12888,8 +12951,7 @@ function measureStudioClose(orderId) {
 /** «Завершить замер» inside the studio: what is missing is shown right here, not in another window. */
 function measureStudioFinish(orderId) {
   if (state.measureStudio?.dirty && Number(document.getElementById('ms-w')?.value) > 0) {
-    measureStudioSaveWindow(orderId);
-    if (state.measureStudio?.dirty) return;
+    if (!measureStudioSaveWindow(orderId, { reopen: false })) return;
   }
   const o = getOrder(orderId);
   if (!o) return;
@@ -25201,6 +25263,29 @@ function serviceOfferingAllowedFilmIds(offering) {
   return (db.settings?.catalog || []).filter(film => !film.archived && canonicalCatalogCategory(film.category) === direction).map(film => film.id);
 }
 
+/**
+ * Clean, direction-safe material choices for operational forms.
+ * Historical imports may contain empty shells (for example only a brand) or
+ * duplicate rows. They stay in the catalog for audit/history but must never
+ * appear as selectable film models in a new project or measurement.
+ */
+function serviceOfferingSelectableFilms(offering, selectedId = '') {
+  const seen = new Set();
+  return serviceOfferingAllowedFilmIds(offering)
+    .map(getCatalogItem)
+    .filter(film => film && catalogCanBeSelected(film, selectedId))
+    .filter(film => canonicalCatalogCategory(film.category) === canonicalCatalogCategory(offering?.direction))
+    .filter(film => {
+      const name = catalogFilmName(film);
+      const model = catalogFilmModel(film);
+      if (!name && !model && film.id !== selectedId) return false;
+      const key = `${canonicalCatalogCategory(film.category)}|${String(catalogLabel(film)).trim().toLowerCase()}`;
+      if (!key || key.endsWith('|—') || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 // How a service is priced (Owner, 2026-10-05). Per sq ft it needs measured
 // windows (sizes are required); per piece, per zone, a fixed sum or the
 // owner's own unit it is a quantity in the project, without sizes. The price,
@@ -31718,8 +31803,8 @@ function openOrderModal() {
             <section class="erp-intake-card" data-intake-offering style="display:none">
               <div class="erp-intake-card-head">
                 <div>
-                  <div class="erp-intake-card-title"><span class="erp-intake-step">3</span> Услуги проекта <span class="order-required">*</span></div>
-                  <div class="text-sm text-gray-500 mt-1">Что делаем у клиента. «+ Услуга» → направление → услуга → плёнка (можно «уточним на замере»). Цены и размеры посчитаются после замера.</div>
+                  <div class="erp-intake-card-title"><span class="erp-intake-step">3</span> Услуги проекта <span class="tag bg-slate-100 text-slate-600">необязательно</span></div>
+                  <div class="text-sm text-gray-500 mt-1">Можно добавить услугу сейчас или после создания — прямо в карточке проекта. Создание проекта больше не отправляет менеджера на замер.</div>
                 </div>
               </div>
               <div id="no-offerings" class="mt-2"></div>
@@ -31855,10 +31940,9 @@ function toggleNewOrderOffering(id, checked, directionId = '') {
 function refreshOrderIntakeGates() {
   const hasClient = Boolean(state._newOrderClient);
   const hasSite = hasClient && Boolean(state._newOrderSiteType);
-  const validOffering = newOrderSelectedOfferings().length > 0;
   document.querySelectorAll('[data-intake-site]').forEach(node => { node.style.display = hasClient ? '' : 'none'; });
   document.querySelectorAll('[data-intake-offering]').forEach(node => { node.style.display = hasSite ? '' : 'none'; });
-  document.querySelectorAll('[data-new-order-after-client]').forEach(node => { node.style.display = hasSite && validOffering ? '' : 'none'; });
+  document.querySelectorAll('[data-new-order-after-client]').forEach(node => { node.style.display = hasSite ? '' : 'none'; });
 }
 function selectOrderSiteType(value) {
   const siteType = value ? normalizeOrderSiteType(value) : '';
@@ -32385,7 +32469,7 @@ function createOrder(nextStep = 'project') {
   let clientId = state._newOrderClient;
   const selectedOfferings = newOrderSelectedOfferings();
   const serviceId = newOrderOfferingServiceType(selectedOfferings[0]);
-  const service = primaryServiceInfo(serviceId);
+  const service = serviceId ? primaryServiceInfo(serviceId) : null;
   const selectedServices = [...new Set([serviceId, ...selectedOfferings.map(newOrderOfferingServiceType)])].filter(Boolean).map(id => primaryServiceInfo(id));
   const offeringCatalogIds = newOrderOfferingCatalogIds(selectedOfferings);
   const executionVariantId = document.getElementById('no-execution')?.value || state._newOrderExecution || 'standard_project';
@@ -32398,8 +32482,8 @@ function createOrder(nextStep = 'project') {
   const pickedTags = Array.from(document.getElementById('no-tags')?.selectedOptions || []).map(o => o.value);
 
   const offering = selectedOfferings[0];
-  if (!offering || !service || !ORDER_PRIMARY_SERVICES.some(s => s.id === serviceId) || !serviceOfferingInDirection(offering, serviceOfferingDirection(service.id))) {
-    alert('Отметьте хотя бы одну активную услугу проекта');
+  if (offering && (!service || !ORDER_PRIMARY_SERVICES.some(s => s.id === serviceId) || !serviceOfferingInDirection(offering, serviceOfferingDirection(service.id)))) {
+    alert('Проверьте выбранную услугу проекта');
     return;
   }
   if (!managerId) {
@@ -32458,21 +32542,21 @@ function createOrder(nextStep = 'project') {
       at: new Date().toISOString(),
       key: 'orderCreated',
       by: state.currentUserId,
-      note: `Входящий запрос: ${service.title} · ${executionVariant.title}`,
+      note: offering ? `Входящий запрос: ${service.title} · ${executionVariant.title}` : `Проект создан без услуг · ${executionVariant.title}`,
     }],
     notes: document.getElementById('no-notes').value,
     offeringIds: selectedOfferings.map(item => item.id),
     offeringCatalogIds,
     // How each chosen service was priced when the project was created.
     offeringUnits: Object.fromEntries(selectedOfferings.map(item => [item.id, serviceOfferingUnit(item)])),
-    offeringId: offering.id,
-    offeringName: offering.name,
-    serviceType: service.id,
+    offeringId: offering?.id || '',
+    offeringName: offering?.name || '',
+    serviceType: service?.id || '',
     serviceTypes: selectedServices.map(item => item.id),
-    serviceCategory: service.catalogCategory,
-    serviceWorkflow: [...service.workflow],
-    leadIntentServiceType: service.id,
-    leadIntentServiceLabel: service.title,
+    serviceCategory: service?.catalogCategory || '',
+    serviceWorkflow: [...(service?.workflow || [])],
+    leadIntentServiceType: service?.id || '',
+    leadIntentServiceLabel: service?.title || '',
     leadSource: c.source || 'direct',
     leadIntentCapturedAt: new Date().toISOString(),
     leadIntentConfidence: 'captured',
@@ -32482,17 +32566,17 @@ function createOrder(nextStep = 'project') {
     orderBuilder: {
       offeringIds: selectedOfferings.map(item => item.id),
       offeringCatalogIds: { ...offeringCatalogIds },
-      offeringId: offering.id,
-      offeringName: offering.name,
-      serviceId: service.id,
-      serviceTitle: service.title,
+      offeringId: offering?.id || '',
+      offeringName: offering?.name || '',
+      serviceId: service?.id || '',
+      serviceTitle: service?.title || '',
       serviceIds: selectedServices.map(item => item.id),
-      leadIntentServiceType: service.id,
-      leadIntentServiceLabel: service.title,
+      leadIntentServiceType: service?.id || '',
+      leadIntentServiceLabel: service?.title || '',
       leadSource: c.source || 'direct',
       variantId: executionVariant.id,
       variantTitle: executionVariant.title,
-      color: orderServicePalette(service.id).color,
+      color: service ? orderServicePalette(service.id).color : '#64748b',
       siteType,
       createdByCards: true,
     },

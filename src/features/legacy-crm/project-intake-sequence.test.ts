@@ -65,7 +65,7 @@ function loadIntake(offerings: any[]) {
   return { context, state, nodes, gates };
 }
 
-test('services are composed at the cashier; the first is the incoming request; inactive ones are refused', () => {
+test('services are optional at creation and later composed at the cashier; inactive ones are refused', () => {
   const offerings = [
     { id: 'solar', name: 'Solar solution', direction: 'solar' },
     { id: 'smart', name: 'Smart solution', direction: 'smart', unit: 'piece' },
@@ -88,6 +88,7 @@ test('services are composed at the cashier; the first is the incoming request; i
 
   context.selectOrderSiteType('RESIDENTIAL');
   assert.equal(gates.get('[data-intake-offering]')![0].style.display, '');
+  assert.equal(gates.get('[data-new-order-after-client]')![0].style.display, '', 'client + object are enough to create the project shell');
 
   context.toggleNewOrderOffering('smart', true);
   context.toggleNewOrderOffering('solar', true);
@@ -112,13 +113,15 @@ test('services are composed at the cashier; the first is the incoming request; i
 
   context.toggleNewOrderOffering('solar', false);
   assert.equal(state._newOrderOfferingId, '');
-  assert.equal(gates.get('[data-new-order-after-client]')![0].style.display, 'none');
+  assert.equal(gates.get('[data-new-order-after-client]')![0].style.display, '', 'removing every service does not block project creation');
 });
 
 test('saved project keeps the chosen services for measurement, estimate and proposal', () => {
   const creation = html.slice(html.indexOf('function createOrder(nextStep'), html.indexOf('function openClientModal()'));
   assert.match(creation, /const serviceId = newOrderOfferingServiceType\(selectedOfferings\[0\]\);/);
-  assert.match(creation, /offeringId: offering\.id/);
+  assert.match(creation, /offeringId: offering\?\.id \|\| ''/);
+  assert.match(creation, /serviceType: service\?\.id \|\| ''/);
+  assert.match(creation, /Проект создан без услуг/);
   assert.match(creation, /offeringCatalogIds/);
   assert.match(creation, /!serviceOfferingInDirection\(offering, serviceOfferingDirection\(service\.id\)\)/);
   assert.doesNotMatch(creation, /openManagerMeasureModal/);

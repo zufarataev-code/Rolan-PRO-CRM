@@ -23,7 +23,7 @@ test('the measurer always works in his studio and can save and leave', () => {
   assert.match(html, /onclick="measureStudioSaveAndExit\('\$\{order\.id\}'\)">Сохранить и выйти<\/button>/);
   assert.match(html, /onclick="measureStudioClose\('\$\{order\.id\}'\)">✕<\/button>/);
   const exit = slice(html, 'function measureStudioSaveAndExit(orderId) {', 'function measureStudioClose(');
-  assert.match(exit, /if \(dirty && typed\) \{\s*measureStudioSaveWindow\(orderId\);/, 'the open window is saved first');
+  assert.match(exit, /if \(dirty && typed\) \{\s*if \(!measureStudioSaveWindow\(orderId, \{ reopen: false \}\)\) return;/, 'the open window is saved first without rebuilding the modal');
   assert.match(exit, /closeModal\(\);/);
   assert.match(html, /photoName: targetWin\.photoName \|\| '', dirty: false \};/);
 });
