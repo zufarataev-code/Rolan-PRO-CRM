@@ -38,6 +38,13 @@ Before doing any work:
 - Verification: `src/features/legacy-crm/notification-sound.test.ts` (2 tests) passes; the rest of `npm test` matches main locally (env-dependent failures only).
 - Not done: system push notifications when the CRM tab is closed (needs Web Push).
 
+## 2026-10-25 handoff — services by direction: tile on the card, add/remove in the window
+
+- PR #399 (42b9c14) merged and deployed; prod checked on R-261025-063: two direction tiles, card services block ~650 px instead of ~1050.
+- Card (`renderProjectCardServices`): one `project-direction-tile` per direction (icon, count, status, sum, ›) + short `project-direction-line`s that open the window; before production no per-line editor, no second add button, no include checkbox. Planning rows remain in production.
+- Window (`projectDirectionWindowHtml`, step services): «В проекте» with ✕ (`projectDirectionLineRemovable`, `projectDirectionRemoveLine` — a measured service frees its windows, sizes stay; `projectDirectionRemovePending`), add list, «Направление входит в расчёт и КП». Sum moved into the kicker.
+- Harness note: exact-size confirmation is now a dialog (Codex #396) — click «✓ Подтвердить точные размеры» after «Подтвердить все размеры».
+
 ## 2026-10-25 handoff — CRM key for Google Ads (script-based costs)
 
 - PR #397 (3018a45) merged and deployed; prod checked: key endpoint 200 (no key yet), summary 200, public endpoint 401 on a wrong key, block «📈 Google Ads» in Настройки → Интеграции.

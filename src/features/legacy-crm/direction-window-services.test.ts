@@ -15,7 +15,7 @@ test('the card shows one tile per direction; before production its lines open th
   assert.match(card, /\$\{production \? directionLines\.map\(row\)\.join\(''\) \+ direction\.pending\.map\(pendingRow\)\.join\(''\) : directionLines\.map\(compactRow\)/);
   assert.doesNotMatch(card, /projectDirectionOfferingPickerHtml\(o,direction\.key\)/, 'no second add button on the card');
   assert.doesNotMatch(card, /> В расчёте<\/label>/, 'the include switch lives in the window');
-  assert.match(fn(stages, 'projectCashierMapHtml'), /<b>\+ Направление<\/b>/);
+  assert.match(fn(stages, 'projectCashierMapHtml'), /<b>Добавить направление<\/b><span>выберите — откроется его окно, там услуги<\/span>/);
 });
 
 test('in the window every service has ✕, the include switch and the add list', () => {
