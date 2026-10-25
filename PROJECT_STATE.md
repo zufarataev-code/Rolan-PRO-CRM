@@ -23,6 +23,14 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-25 handoff — подпись КП сразу меняет проект и уведомляет его менеджера
+
+- Root cause: сервер создавал `agreement.signed` в PostgreSQL, но legacy CRM показывала только локальные `db.notifications`; вдобавок canonical Deal получал того, кто публиковал КП, вместо менеджера, назначенного в проекте. Поэтому подпись клиента была видна только после ручного открытия проекта, а нужный менеджер мог вообще не получить событие.
+- Proposal snapshot теперь передаёт `manager_legacy_id`; сервер связывает Deal с активным Owner/Manager из карточки проекта и сохраняет этого ответственного при повторной публикации.
+- Подпись клиента — коммерческое принятие: `signPublicAgreement` сразу переводит canonical Deal в `APPROVED`, создаёт `agreement.signed` для назначенного менеджера, а legacy CRM опрашивает `/api/v1/notifications` раз в 20 секунд, показывает событие в колокольчике и синхронизирует проект в этап «КП принято» без ручного открытия карточки.
+- Добавлен защищённый authenticated API для списка уведомлений и отметки прочитанного; пользователь может читать/подтверждать только свои уведомления.
+- Verification: 25/25 targeted tests, включая KP/payment sync, notification sound и компиляцию всех inline CRM scripts; `git diff --check` passes. Полный TypeScript/CI — следующий gate перед merge/deploy.
+
 ## 2026-10-25 handoff — client emails were silently skipped
 
 - Production check: Gmail (info@rolan-pro.com) is connected with no sync error, but 30 of 32 automatic client emails were `skipped | нет согласия клиента на Email` — the consent checkbox defaulted to off.

@@ -42,6 +42,7 @@ export type LegacyProposalSnapshot = {
   payment_due?: number | null;
   payment_mode?: string | null;
   title?: string;
+  manager_legacy_id?: string | null;
   client?: {
     legacy_client_id?: string;
     /** The PostgreSQL client chosen by the manager after an identity conflict. */
@@ -120,6 +121,7 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
     legacyClientId: cleanText(input.client?.legacy_client_id, 120),
     orderNumber: cleanText(input.order_number, 80),
     title: cleanText(input.title, 180) || `${cleanText(input.order_number, 80) || "ROLANPRO"} Proposal`,
+    managerLegacyId: cleanText(input.manager_legacy_id, 120) || null,
     clientName,
     chosenClientId: cleanText(input.client?.client_id, 60) || null,
     email,
@@ -161,6 +163,21 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
 
     let clientId = existing?.client_id;
     let dealId = existing?.deal_id;
+    const assignedManager = snapshot.managerLegacyId
+      ? await tx.user.findFirst({
+          where: {
+            is_active: true,
+            legacy_user_ids: { has: snapshot.managerLegacyId },
+            user_accesses: {
+              some: {
+                is_active: true,
+                role: { code: { in: ["OWNER", "MANAGER"] }, is_active: true },
+              },
+            },
+          },
+          select: { user_id: true },
+        })
+      : null;
     if (!clientId || !dealId) {
       const contact = { email: snapshot.email, phone: snapshot.phone };
       await lockClientIdentity(tx, contact);
@@ -197,7 +214,7 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
         data: {
           deal_code: `LEG-${crypto.randomUUID().slice(0, 8)}`,
           client_id: clientId,
-          assigned_manager_id: session.user.user_id,
+          assigned_manager_id: assignedManager?.user_id ?? session.user.user_id,
           pipeline_status_id: pipelineStatus.pipeline_status_id,
           title: snapshot.title,
           estimated_value: snapshot.items.reduce((sum, item) => sum + item.linePrice, 0),
@@ -206,6 +223,16 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
         },
       });
       dealId = deal.deal_id;
+    }
+
+    // The employee assigned in the Project is the recipient of signature and
+    // payment events. Publishing is often done by the Owner, so the current
+    // browser session must never silently replace the Project's manager.
+    if (dealId && assignedManager?.user_id) {
+      await tx.deal.update({
+        where: { deal_id: dealId },
+        data: { assigned_manager_id: assignedManager.user_id },
+      });
     }
 
     // Publishing a proposal never rewrites an existing client card: a repeat

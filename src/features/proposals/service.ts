@@ -565,7 +565,7 @@ async function notifyManager(
   });
 }
 
-async function updateDealStage(tx: typeof prisma, dealId: string, statusCode: string) {
+async function updateDealStage(tx: ProposalDbClient, dealId: string, statusCode: string) {
   const pipelineStatusId = await getPipelineStatusId(statusCode);
 
   if (!pipelineStatusId) {
@@ -1980,6 +1980,11 @@ export async function signPublicAgreement(
         client_updated_at: new Date(),
       },
     });
+
+    // The client's signature is the commercial acceptance. Keep the canonical
+    // deal in the same stage as the legacy Project without waiting for a
+    // second manager confirmation.
+    await updateDealStage(tx, proposal.deal.deal_id, "APPROVED");
 
     await recalculateProposalTotals(tx, proposal.proposal_id);
     await createProposalEvent(tx, {

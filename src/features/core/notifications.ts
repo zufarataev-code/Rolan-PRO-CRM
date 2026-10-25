@@ -1,7 +1,7 @@
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
 
-type NotificationSession = {
+export type NotificationSession = {
   user: {
     user_id: string;
   };
@@ -10,6 +10,23 @@ type NotificationSession = {
 
 function toIsoDate(value: Date | null | undefined) {
   return value ? value.toISOString() : null;
+}
+
+export async function markNotificationsReadForSession(
+  session: NotificationSession,
+  notificationIds: string[] = [],
+) {
+  const ids = [...new Set(notificationIds.map((id) => id.trim()).filter(Boolean))].slice(0, 100);
+  const result = await prisma.notification.updateMany({
+    where: {
+      recipient_user_id: session.user.user_id,
+      is_read: false,
+      ...(ids.length ? { notification_id: { in: ids } } : {}),
+    },
+    data: { is_read: true },
+  });
+
+  return { updated: result.count };
 }
 
 export async function getNotificationSummaryForSession(session: NotificationSession) {
