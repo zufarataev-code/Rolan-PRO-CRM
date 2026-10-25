@@ -1617,7 +1617,7 @@ function projectProposalOptionalOfferings(o, { all = false } = {}) {
   const seen = new Set();
   const out = [];
   directions.forEach(key => serviceOfferingsFor(serviceOfferingDirection(key)).forEach(offering => {
-    if (seen.has(offering.id) || !offering.proposalOptional || offering.active === false || serviceOfferingIsDraft(offering) || serviceOfferingNeedsSizes(offering) || inProject.has(offering.id)) return;
+    if (seen.has(offering.id) || !offering.proposalOptional || offering.active === false || serviceOfferingIsDraft(offering) || !(Number(offering.pricePerSqft) > 0) || serviceOfferingNeedsSizes(offering) || inProject.has(offering.id)) return;
     seen.add(offering.id);
     if (all || !excluded.has(offering.id)) out.push({ offering, direction: key });
   }));

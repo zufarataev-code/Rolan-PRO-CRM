@@ -13,7 +13,7 @@ function functionSource(name: string, nextName: string) {
 
 test("ordinary service directory edits save without rebuilding the CRM", () => {
   const update = functionSource("updateServiceOffering", "refreshServiceOfferingFilmSummary");
-  assert.match(update, /save\(\);[\s\S]*?if \(field === 'unit'\) \{[\s\S]*?renderServiceOfferingDirectory\(\);/);
+  assert.match(update, /save\(\);[\s\S]*?if \(field === 'unit'[^)]*\) \{[\s\S]*?renderServiceOfferingDirectory\(\);/);
   assert.doesNotMatch(update, /save\(\);\s*render\(\);/);
   assert.match(source, /function renderServiceOfferingDirectory\(\) \{[\s\S]*?preservePositionForNextRender\(\);[\s\S]*?render\(\);/);
   assert.match(source, /updateServiceOffering\('\$\{offering\.id\}','pricePerSqft',this\.value,this\)/);
