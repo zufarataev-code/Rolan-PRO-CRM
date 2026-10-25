@@ -18026,16 +18026,41 @@ async function notifyStatusChange(order, options = {}) {
 }
 
 function clientPortalUrl(orderId) {
-  // If admin set a public URL in Settings, use it (so emails work outside this PC)
+  // Legacy order portal is retained for its other tools (review, status and
+  // account sharing). Appointment notices use the server-backed link below.
   const publicUrl = db.settings?.publicBaseUrl?.trim();
-  if (publicUrl) {
-    return publicUrl.replace(/\/+$/, '') + '#/client/' + orderId;
-  }
-  // Fallback: current location (only works when CRM is hosted, not file://)
-  const base = (location.protocol === 'file:')
-    ? '' // empty string — the link in email won't open, but we won't insert garbage
-    : location.origin + location.pathname;
+  if (publicUrl) return publicUrl.replace(/\/+$/, '') + '#/client/' + orderId;
+  const base = location.protocol === 'file:' ? '' : location.origin + location.pathname;
   return base ? `${base}#/client/${orderId}` : '';
+}
+function clientAppointmentUrl(orderId) {
+  const order = getOrder(orderId);
+  if (!order?.clientAppointmentToken || location.protocol === 'file:') return '';
+  return `${location.origin}/appointment/${encodeURIComponent(order.clientAppointmentToken)}`;
+}
+async function ensureClientAppointmentUrl(orderId) {
+  if (!ROLANPRO_CLOUD) return '';
+  // The visit must exist on the server before it can issue a signed public
+  // link. This also prevents an email from racing the autosave after booking.
+  if (!await cloudPersistConfirmed()) return '';
+  try {
+    const response = await fetch('/api/v1/legacy-crm/appointment-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'appointment link failed');
+    const order = getOrder(orderId);
+    if (order && result.data?.token) {
+      order.clientAppointmentToken = result.data.token;
+      save();
+    }
+    return result.data?.url || clientAppointmentUrl(orderId);
+  } catch (error) {
+    console.error('[Client appointment link]', error);
+    return '';
+  }
 }
 
 // ---------- ORDER OPERATING EVENTS ----------
@@ -18147,8 +18172,8 @@ function orderClientActiveEvent(o) {
 function pendingClientRequests(o) {
   return (o?.clientRequests || []).filter(r => !r.status || r.status === 'new');
 }
-function clientNoticePortalText(o) {
-  const url = clientPortalUrl(o.id);
+function clientNoticePortalText(o, appointmentUrl = clientAppointmentUrl(o.id)) {
+  const url = appointmentUrl;
   return url ? `\nКабинет заказа: ${url}` : '\nЕсли нужно перенести или отменить визит, ответьте менеджеру RolanPRO.';
 }
 async function sendClientOperationalMessage(o, subject, body, timelineKey, opts = {}) {
@@ -18167,14 +18192,18 @@ async function sendClientOperationalMessage(o, subject, body, timelineKey, opts 
   }
   await dispatchClientCommunication(o, subject, body, timelineKey, { ...opts, kind: 'operational' });
 }
-function notifyClientEventScheduled(orderId, type) {
+async function notifyClientEventScheduled(orderId, type) {
   const o = getOrder(orderId);
   const c = getClient(o?.clientId);
   const info = orderEventInfo(type);
   if (!o || !c || !info.field || !o[info.field]) return;
+  const appointmentUrl = await ensureClientAppointmentUrl(orderId);
   const when = fmtDateTime(o[info.field]);
   const subject = `${info.title} RolanPRO назначен(а) — ${o.number}`;
-  const body = `Здравствуйте, ${c.name || ''}!\n\n${info.title} по заказу ${o.number} назначен(а) на ${when}.\nАдрес: ${orderAddress(o, c) || 'уточняется'}.\n\nВы можете попросить перенос или отмену через кабинет заказа.${clientNoticePortalText(o)}\n\nRolanPRO`;
+  const actionText = appointmentUrl
+    ? `Чтобы попросить перенос или отмену, откройте безопасную страницу визита.${clientNoticePortalText(o, appointmentUrl)}`
+    : 'Если нужно перенести или отменить визит, ответьте на это сообщение менеджеру RolanPRO.';
+  const body = `Здравствуйте, ${c.name || ''}!\n\n${info.title} по заказу ${o.number} назначен(а) на ${when}.\nАдрес: ${orderAddress(o, c) || 'уточняется'}.\n\n${actionText}\n\nRolanPRO`;
   const statusKey = type === 'consultation' ? 'consultation_scheduled' : type === 'measure' ? 'measurement_scheduled' : 'installation_scheduled';
   const smsTemplate = getSmsTemplate(statusKey);
   const smsBody = smsTemplate ? fillTemplate(smsTemplate, smsVars(o, statusKey)) : `ROLANPRO: ${info.title} for ${o.number} is scheduled for ${when}.`;
