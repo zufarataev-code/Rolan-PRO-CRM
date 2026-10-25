@@ -1929,3 +1929,145 @@ function openProjectDirectionPicker(oid) {
   </div></div>`;
   render();
 }
+
+// ---------- GOOGLE ADS → CRM: КЛЮЧ И СКРИПТ (Owner, 2026-10-25) ----------
+// «Сделай API ключ нашей CRM, чтобы подключить Google Ads для аналитики». The
+// owner creates a CRM key here and pastes a ready script into Google Ads
+// (Tools → Scripts). Every night the script sends campaign costs; this block
+// sets them against the projects that came from Google.
+function googleAdsCrmScriptText(key) {
+  // Built line by line: a «}» alone on a line would end this function for the page composer.
+  const url = `${location.origin}/api/public/google-ads/costs`;
+  return [
+    '// RolanPRO CRM — расходы Google Ads в CRM. Расписание: ежедневно.',
+    `var CRM_URL = '${url}';`,
+    `var CRM_KEY = '${key}';`,
+    '',
+    'function main() {',
+    '  var report = AdsApp.report(',
+    '    "SELECT segments.date, campaign.id, campaign.name, metrics.cost_micros, metrics.clicks, metrics.impressions " +',
+    '    "FROM campaign WHERE segments.date DURING LAST_30_DAYS");',
+    '  var rows = [];',
+    '  var it = report.rows();',
+    '  while (it.hasNext()) {',
+    '    var r = it.next();',
+    '    rows.push({',
+    "      date: r['segments.date'],",
+    "      campaign_id: String(r['campaign.id']),",
+    "      campaign_name: r['campaign.name'],",
+    "      cost_micros: Number(r['metrics.cost_micros']) || 0,",
+    "      clicks: Number(r['metrics.clicks']) || 0,",
+    "      impressions: Number(r['metrics.impressions']) || 0",
+    '    });',
+    '  }',
+    '  var account = AdsApp.currentAccount();',
+    '  var response = UrlFetchApp.fetch(CRM_URL, {',
+    "    method: 'post',",
+    "    contentType: 'application/json',",
+    "    headers: { Authorization: 'Bearer ' + CRM_KEY },",
+    '    payload: JSON.stringify({ customer_id: account.getCustomerId(), currency: account.getCurrencyCode(), rows: rows }),',
+    '    muteHttpExceptions: true',
+    '  });',
+    "  Logger.log('CRM ответила ' + response.getResponseCode() + ': ' + response.getContentText());",
+    '}',
+    '',
+  ].join('\n');
+}
+async function loadGoogleAdsCrm(force = false) {
+  if (currentUser()?.role !== 'owner') return;
+  const s = state.googleAdsCrm || {};
+  if (s.loading || (!force && s.loadedAt && Date.now() - s.loadedAt < 60000)) return;
+  state.googleAdsCrm = { ...s, loading: true };
+  try {
+    const [keyRes, sumRes] = await Promise.all([
+      fetch('/api/v1/settings/integration-keys?integration=google_ads', { credentials: 'same-origin', cache: 'no-store' }),
+      fetch('/api/v1/integrations/google-ads/summary?days=30', { credentials: 'same-origin', cache: 'no-store' }),
+    ]);
+    const key = keyRes.ok ? (await keyRes.json())?.data : null;
+    const summary = sumRes.ok ? (await sumRes.json())?.data : null;
+    state.googleAdsCrm = { key, summary, loadedAt: Date.now(), loading: false, error: !keyRes.ok || !sumRes.ok ? `Сервер ответил ${keyRes.status}/${sumRes.status}` : '' };
+  } catch (error) {
+    state.googleAdsCrm = { ...s, loading: false, loadedAt: Date.now(), error: error?.message || String(error) };
+  }
+  render();
+}
+/** Projects that came from Google over the same days, from the CRM's own records. */
+function googleAdsCrmProjectsStats(startDate) {
+  const from = String(startDate || '');
+  const fromGoogle = o => /google/i.test(String(o.leadSource || o.marketing?.source || o.source || ''));
+  const leads = (db.orders || []).filter(o => fromGoogle(o) && String(o.createdAt || '').slice(0, 10) >= from && o.status !== 'cancelled');
+  const won = leads.filter(o => o.depositReceived || ['proposal_accepted', 'installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress', 'installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'].includes(o.status));
+  const revenue = won.reduce((sum, o) => sum + (Number(orderRevenue(o)) || 0), 0);
+  const paid = won.reduce((sum, o) => sum + (Number(orderPaidTotal(o)) || 0), 0);
+  return { leads: leads.length, won: won.length, revenue, paid };
+}
+function googleAdsCrmPanelHtml() {
+  if (currentUser()?.role !== 'owner') return '';
+  const g = state.googleAdsCrm;
+  if (!g || (!g.loadedAt && !g.loading)) setTimeout(() => loadGoogleAdsCrm(), 0);
+  const key = g?.key;
+  const sum = g?.summary;
+  const stats = googleAdsCrmProjectsStats(sum?.start_date);
+  const spend = Number(sum?.total_cost) || 0;
+  const per = (value, count) => (count > 0 && value > 0 ? fmtMoney(value / count) : '—');
+  const roas = spend > 0 && stats.revenue > 0 ? `${(stats.revenue / spend).toFixed(1)}×` : '—';
+  const connected = key?.active;
+  const lastImport = sum?.last_imported_at ? new Date(sum.last_imported_at).toLocaleString('ru-RU') : '';
+  return `<div class="p-4 border ${connected && lastImport ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}" data-google-ads-crm>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <div class="font-semibold text-sm mb-1">📈 Google Ads — расходы и окупаемость в CRM</div>
+        <p class="text-xs text-gray-600">${connected ? `Ключ CRM активен (${academyEsc(key.key_prefix || '')}…)${key.last_used_at ? ` · скрипт присылал данные ${academyEsc(new Date(key.last_used_at).toLocaleString('ru-RU'))}` : ' · скрипт ещё не присылал данные'}` : 'Не подключено. Создайте ключ — CRM покажет готовый скрипт для Google Ads.'}</p>
+        ${g?.error ? `<p class="text-xs text-red-700 mt-1">${academyEsc(g.error)}</p>` : ''}
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn-primary text-sm" onclick="googleAdsCrmCreateKey()">${connected ? 'Новый ключ и скрипт' : 'Создать ключ и скрипт'}</button>
+        ${connected ? `<button class="btn-ghost text-sm text-red-600" onclick="googleAdsCrmRevokeKey()">Отключить</button>` : ''}
+        <button class="btn-ghost text-sm" onclick="loadGoogleAdsCrm(true)">Обновить</button>
+      </div>
+    </div>
+    ${sum && (sum.campaigns || []).length ? `<div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-sm">
+      <div class="p-2 border bg-white"><div class="text-xs text-gray-500">Расход за ${sum.days} дн.</div><b>${fmtMoney(spend)}</b><div class="text-xs text-gray-500">${Number(sum.total_clicks || 0)} кликов</div></div>
+      <div class="p-2 border bg-white"><div class="text-xs text-gray-500">Лиды из Google в CRM</div><b>${stats.leads}</b><div class="text-xs text-gray-500">цена лида ${per(spend, stats.leads)}</div></div>
+      <div class="p-2 border bg-white"><div class="text-xs text-gray-500">Проекты из Google</div><b>${stats.won}</b><div class="text-xs text-gray-500">цена проекта ${per(spend, stats.won)}</div></div>
+      <div class="p-2 border bg-white"><div class="text-xs text-gray-500">Выручка / окупаемость</div><b>${fmtMoney(stats.revenue)}</b><div class="text-xs text-gray-500">ROAS ${roas}</div></div>
+    </div>
+    <details class="mt-2"><summary class="text-xs cursor-pointer">Кампании · данные от ${academyEsc(lastImport)}</summary><div class="mt-2 space-y-1">${sum.campaigns.map(c => `<div class="flex justify-between gap-2 text-xs border-b py-1"><span>${academyEsc(c.campaign_name)}</span><span>${fmtMoney(c.cost)} · ${c.clicks} кл.</span></div>`).join('')}</div></details>
+    <p class="text-xs text-gray-500 mt-2">Лид считается из Google, если в проекте источник «google». Ставьте его при создании проекта — тогда цена лида и окупаемость считаются точно.</p>` : connected ? '<p class="text-xs text-gray-500 mt-2">Данных пока нет: вставьте скрипт в Google Ads и нажмите там «Выполнить» — расходы появятся здесь.</p>' : ''}
+  </div>`;
+}
+async function googleAdsCrmCreateKey() {
+  if (currentUser()?.role !== 'owner') return;
+  if (state.googleAdsCrm?.key?.active && !confirm('Создать новый ключ? Старый перестанет работать — скрипт в Google Ads нужно будет заменить.')) return;
+  try {
+    const response = await fetch('/api/v1/settings/integration-keys', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ integration: 'google_ads' }) });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.data?.key) throw new Error(payload?.errors?.[0]?.message || `Сервер ответил ${response.status}`);
+    googleAdsCrmShowScript(payload.data.key);
+    state.googleAdsCrm = { ...(state.googleAdsCrm || {}), loadedAt: 0 };
+    loadGoogleAdsCrm(true);
+  } catch (error) {
+    alert('Не удалось создать ключ: ' + (error?.message || error));
+  }
+}
+/** The key is shown once, inside the script; it is not kept in the CRM page. */
+function googleAdsCrmShowScript(key) {
+  const script = googleAdsCrmScriptText(key);
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:46rem">
+    <h3 class="font-semibold text-lg mb-1">Скрипт для Google Ads</h3>
+    <p class="text-sm text-gray-600 mb-3">Ключ CRM уже вставлен в скрипт. Он показан один раз: скопируйте скрипт сейчас.</p>
+    <ol class="text-sm list-decimal ml-5 space-y-1 mb-3">
+      <li>Google Ads → <b>Инструменты → Массовые действия → Скрипты</b> → <b>+</b> → Новый скрипт.</li>
+      <li>Удалите всё в редакторе, вставьте скрипт ниже, нажмите <b>Авторизовать</b> и <b>Выполнить</b>.</li>
+      <li>В журнале должно быть «CRM ответила 200». Поставьте расписание <b>Ежедневно</b> и сохраните.</li>
+    </ol>
+    <textarea id="google-ads-crm-script" readonly style="width:100%;height:16rem;font-family:monospace;font-size:12px">${academyEsc(script)}</textarea>
+    <div class="flex gap-2 mt-3 justify-end"><button class="btn-primary" onclick="navigator.clipboard.writeText(document.getElementById('google-ads-crm-script').value); this.textContent='Скопировано'">Скопировать скрипт</button><button class="btn-ghost" onclick="closeModal()">Готово</button></div>
+  </div></div>`;
+  render();
+}
+async function googleAdsCrmRevokeKey() {
+  if (currentUser()?.role !== 'owner' || !confirm('Отключить ключ? Скрипт в Google Ads перестанет присылать расходы.')) return;
+  await fetch('/api/v1/settings/integration-keys?integration=google_ads', { method: 'DELETE', credentials: 'same-origin' }).catch(() => null);
+  loadGoogleAdsCrm(true);
+}

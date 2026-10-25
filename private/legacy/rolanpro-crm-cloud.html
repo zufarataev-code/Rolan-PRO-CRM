@@ -23493,6 +23493,7 @@ function renderSettings() {
       <p class="text-sm text-gray-600 mb-3">Настройки сервисов. Ссылки «позвонить / написать / открыть карту» начинают работать сразу; полноценные API-интеграции подключим следующим шагом.</p>
 
       <div class="space-y-4">
+        ${typeof googleAdsCrmPanelHtml === 'function' ? googleAdsCrmPanelHtml() : ''}
         <div class="p-4 border ${zadarmaServerStatus?.connected ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
