@@ -22,6 +22,13 @@ test("a client signature advances the canonical deal and notifies its manager", 
   assert.match(signatureBlock, /updateDealStage\([\s\S]*?"APPROVED"\)/);
   assert.match(signatureBlock, /recipientUserId:\s*proposal\.deal\.assigned_manager_id/);
   assert.match(signatureBlock, /typeKey:\s*"agreement\.signed"/);
+  assert.match(signatureBlock, /buildAgreementSignedClientEmail/);
+  assert.match(signatureBlock, /buildAgreementSignedManagerEmail/);
+  assert.match(signatureBlock, /sendPrimaryGmail/);
+  assert.match(signatureBlock, /audience:\s*"client"/);
+  assert.match(signatureBlock, /audience:\s*"manager"/);
+  assert.match(signatureBlock, /eventKey:\s*"agreement\.signature_emails"/);
+  assert.match(signatureBlock, /temporary mail-channel problem must never roll back/i);
 });
 
 test("legacy CRM reads server notifications, syncs the Project and acknowledges the bell", () => {

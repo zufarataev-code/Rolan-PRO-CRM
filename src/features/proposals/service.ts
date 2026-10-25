@@ -9,7 +9,11 @@ import { AGREEMENT_STATUSES, DEPOSIT_STATUSES, PROPOSAL_STATUSES } from "@/featu
 import { onDepositPaid, onProposalApproved, onProposalSent } from "@/features/core/events";
 import { getServiceCalculatorBootstrap } from "@/features/calculator/bootstrap";
 import { calculateLineEconomics, calculateLineTotal, getServiceAddonById, getServiceTypeById } from "@/features/calculator/logic";
-import { buildProposalEmail } from "@/features/proposals/email";
+import {
+  buildAgreementSignedClientEmail,
+  buildAgreementSignedManagerEmail,
+  buildProposalEmail,
+} from "@/features/proposals/email";
 import { sendPrimaryGmail } from "@/features/gmail/service";
 import { getEnv } from "@/lib/env";
 import type { CalculatorCard } from "@/features/calculator/types";
@@ -1926,6 +1930,18 @@ export async function signPublicAgreement(
         select: {
           deal_id: true,
           assigned_manager_id: true,
+          assigned_manager: {
+            select: {
+              email: true,
+              full_name: true,
+            },
+          },
+        },
+      },
+      client: {
+        select: {
+          name: true,
+          email: true,
         },
       },
     },
@@ -1939,10 +1955,11 @@ export async function signPublicAgreement(
     return "terms_required" as const;
   }
 
-  if (isProposalApproved(proposal.status)) {
+  if (isProposalPublicLocked(proposal.status)) {
     return "locked" as const;
   }
 
+  const signedAt = new Date();
   await prisma.$transaction(async (tx) => {
     await tx.agreement.upsert({
       where: {
@@ -1956,7 +1973,7 @@ export async function signPublicAgreement(
         signature_text: input.signature_text.trim(),
         client_notes: input.client_notes?.trim() || null,
         accepted_terms: true,
-        signed_at: new Date(),
+        signed_at: signedAt,
       },
       create: {
         proposal_id: proposal.proposal_id,
@@ -1967,7 +1984,7 @@ export async function signPublicAgreement(
         signature_text: input.signature_text.trim(),
         client_notes: input.client_notes?.trim() || null,
         accepted_terms: true,
-        signed_at: new Date(),
+        signed_at: signedAt,
       },
     });
 
@@ -2014,6 +2031,76 @@ export async function signPublicAgreement(
     metadata: {
       deal_id: proposal.deal.deal_id,
     },
+  });
+
+  const appUrl = getEnv().appUrl.replace(/\/$/, "");
+  const publicUrl = `${appUrl}/proposal/${proposal.access_token}`;
+  const legacyOrderId = proposal.notes?.match(/Canonical copy of legacy order ([^.]+)\./)?.[1]?.trim() || "";
+  const managerUrl = legacyOrderId
+    ? `${appUrl}/legacy-crm#/order/${encodeURIComponent(legacyOrderId)}`
+    : `${appUrl}/manager/crm/proposals/${proposal.proposal_id}`;
+  const signerName = input.signer_name.trim();
+  const signerEmail = input.signer_email.trim().toLowerCase();
+  const clientRecipient = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signerEmail)
+    ? signerEmail
+    : proposal.client.email?.trim().toLowerCase() || "";
+  const managerRecipient = proposal.deal.assigned_manager?.email.trim().toLowerCase() || "";
+  const emailInput = {
+    clientName: proposal.client.name,
+    proposalCode: proposal.proposal_code,
+    proposalTitle: proposal.title,
+    signerName,
+    signedAt,
+    publicUrl,
+    managerUrl,
+  };
+  const clientEmail = buildAgreementSignedClientEmail(emailInput);
+  const managerEmail = buildAgreementSignedManagerEmail(emailInput);
+  const deliveryRequests = [
+    { audience: "client", recipient: clientRecipient, message: clientEmail },
+    { audience: "manager", recipient: managerRecipient, message: managerEmail },
+  ].filter((item) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.recipient));
+  const deliveries = await Promise.all(deliveryRequests.map(async (item) => {
+    try {
+      const delivered = await sendPrimaryGmail({
+        to: item.recipient,
+        subject: item.message.subject,
+        body: item.message.body,
+      });
+      return { ...item, status: "sent", gmailMessageId: delivered.id ?? null };
+    } catch {
+      // A temporary mail-channel problem must never roll back or hide a valid
+      // client signature. The failed attempt remains visible in proposal history.
+      return { ...item, status: "failed", gmailMessageId: null };
+    }
+  }));
+
+  await prisma.$transaction(async (tx) => {
+    await Promise.all(deliveries.map((delivery) => tx.emailAction.create({
+      data: {
+        entity_type: "proposal",
+        entity_id: proposal.proposal_id,
+        recipient_email: delivery.recipient,
+        subject: delivery.message.subject,
+        status: delivery.status,
+        created_by: proposal.deal.assigned_manager_id ?? proposal.created_by,
+        sent_at: delivery.status === "sent" ? new Date() : null,
+      },
+    })));
+    await createProposalEvent(tx, {
+      proposalId: proposal.proposal_id,
+      actorType: "system",
+      eventKey: "agreement.signature_emails",
+      message: "Signature confirmation emails processed for client and manager.",
+      metadata: deliveries.map((delivery) => ({
+        audience: delivery.audience,
+        recipient: delivery.recipient,
+        status: delivery.status,
+        gmail_message_id: delivery.gmailMessageId,
+      })),
+    });
+  }).catch(() => {
+    // Email audit is secondary to the already committed client signature.
   });
 
   return getPublicProposal(accessToken);

@@ -43,7 +43,7 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   if (proposal === "locked") {
-    return apiError(409, "proposal_locked", "Proposal is already approved and can no longer be re-signed.");
+    return apiError(409, "proposal_locked", "Proposal is already signed or approved and can no longer be re-signed.");
   }
 
   const sale = await closeSaleIfReady({ accessToken });
