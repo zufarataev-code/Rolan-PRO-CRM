@@ -18,7 +18,7 @@ function slice(from: string, to: string) {
   return html.slice(start, end);
 }
 
-test('«Подтвердить все размеры» confirms every typed window in one step and leaves windows without sizes', () => {
+test('«Подтвердить все размеры» uses the CRM modal, saves immediately and leaves windows without sizes', async () => {
   const windows: Row[] = [
     { id: 'a', name: 'Окно 1', width: 1828.8, height: 1524, qty: 1, measurementSource: 'CUSTOMER' },
     { id: 'b', name: 'Окно 2', width: 914.4, height: 1219.2, qty: 2, measurementSource: 'CUSTOMER' },
@@ -27,11 +27,12 @@ test('«Подтвердить все размеры» confirms every typed wind
   ];
   const order: Row = { id: 'o', measurements: { rooms: [{ id: 'r', name: 'Гостиная', windows }] } };
   const calls: string[] = [];
-  let prompt = '';
   const context: any = vm.createContext({
     console,
     db: { settings: { inputUnits: 'inches' } },
     state: { currentUserId: 'u' },
+    ROLANPRO_CLOUD: true,
+    cloudReady: true,
     getOrder: () => order,
     measureAllWindows: (o: Row) => o.measurements.rooms.flatMap((room: Row) => room.windows.map((win: Row) => ({ room, win }))),
     windowMeasurementIsVerified: (w: Row) => w.measurementSource === 'SURVEYOR_VERIFIED',
@@ -41,20 +42,28 @@ test('«Подтвердить все размеры» confirms every typed wind
     syncOrderWindowRemovalService: () => undefined,
     invalidateProjectEstimate: () => calls.push('invalidate'),
     save: () => calls.push('save'),
+    cloudPersistConfirmed: async () => { calls.push('persist'); return true; },
+    cloudScheduleSave: () => calls.push('schedule'),
     refreshManagerMeasureModal: () => calls.push('refresh'),
+    academyEsc: (value: unknown) => String(value),
+    jsQuote: (value: unknown) => String(value),
+    projectPlural: (count: number, one: string, few: string, many: string) => count === 1 ? one : count < 5 ? few : many,
+    render: () => undefined,
     alert: (m: string) => calls.push(`alert:${m}`),
-    confirm: (m: string) => { prompt = m; return true; },
   });
-  vm.runInContext(slice('function managerConfirmableWindows(o)', 'function managerConfirmWindowMeasurement(oid, rid, wid)'), context);
+  vm.runInContext(slice('function managerConfirmableWindows(o)', 'async function managerConfirmWindowMeasurement(oid, rid, wid)'), context);
   assert.deepEqual(context.managerConfirmableWindows(order).map((x: Row) => x.win.id), ['a', 'b']);
-  context.managerConfirmAllWindowMeasurements('o');
-  assert.match(prompt, /точный проверенный замер 2 окон/);
-  assert.match(prompt, /Окно 1: 72 × 60 in · 1 шт\./);
-  assert.match(prompt, /Без размеров, останутся неподтверждёнными: 1/);
+  context.openManagerConfirmAllWindowMeasurements('o');
+  assert.match(context.state.modal, /Подтвердить 2 окна/);
+  assert.match(context.state.modal, /Окно 1<\/b><span>72 × 60 in · 1 шт\./);
+  assert.match(context.state.modal, /Без размеров останутся: 1/);
+  assert.match(context.state.modal, /managerConfirmAllWindowMeasurements\('o'\)/);
+  await context.managerConfirmAllWindowMeasurements('o');
   assert.deepEqual(windows.map(w => w.measurementSource), ['SURVEYOR_VERIFIED', 'SURVEYOR_VERIFIED', 'CUSTOMER', 'SURVEYOR_VERIFIED']);
   assert.equal(order.timeline.length, 1, 'one history entry, not one per window');
-  assert.deepEqual(calls, ['invalidate', 'save', 'refresh']);
-  assert.match(html, /managerConfirmableWindows\(o\)\.length \? ` <button type="button" class="manager-measure-confirm-all"[^>]*onclick="managerConfirmAllWindowMeasurements\('\$\{oid\}'\)">Подтвердить все размеры/);
+  assert.deepEqual(calls, ['invalidate', 'save', 'persist', 'refresh']);
+  assert.match(html, /managerConfirmableWindows\(o\)\.length \? `<button class="btn-ghost" onclick="openManagerConfirmAllWindowMeasurements\('\$\{oid\}'\)">✓ Подтвердить все размеры/);
+  assert.doesNotMatch(slice('function openManagerConfirmAllWindowMeasurements(oid)', 'async function managerConfirmAllWindowMeasurements(oid)'), /\bconfirm\s*\(/);
 });
 
 test('calculation numbers say what they are; company-wide net profit is a folded estimate', () => {

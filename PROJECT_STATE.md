@@ -23,43 +23,13 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
-## 2026-10-25 handoff — client emails were silently skipped
+## 2026-10-24 handoff — exact-measurement confirmation reliability
 
-- Production check: Gmail (info@rolan-pro.com) is connected with no sync error, but 30 of 32 automatic client emails were `skipped | нет согласия клиента на Email` — the consent checkbox defaulted to off.
-- Fix: service email now goes to every client with an email unless «Не присылать письма» (`emailOptOut`) is ticked; SMS still needs consent. See DECISIONS.md 2026-10-25.
-- KP: 5 of 10 proposals on production are still Draft — never sent. KP email goes only when the manager presses Email in the KP window step «Отправить».
-- Verification: legacy-sms-ui.test.ts updated; `npm test` matches main locally (env-dependent failures only).
-
-## 2026-10-25 handoff — notification sound
-
-- Owner: in-app notices were silent. New unread notices (🔔) and new incoming client messages now play a short two-tone chime and vibrate on phones.
-- Legacy CRM: `checkNotifySound()` polls every 3 s and rings only for ids not seen before; the first check after login stays silent. Audio unlocks on the first tap (browser autoplay rule).
-- Topbar: 🔊/🔇 toggle next to the bell, stored per device in localStorage (`rolanpro.notifySound`).
-- Verification: `src/features/legacy-crm/notification-sound.test.ts` (2 tests) passes; the rest of `npm test` matches main locally (env-dependent failures only).
-- Not done: system push notifications when the CRM tab is closed (needs Web Push).
-
-## 2026-10-25 handoff — KP → installation walkthrough on production
-
-- Walked test project R-261025-061 (client «Zufar», owner's own contact) on prod: project → measurement → estimate → KP sent by Gmail → signed on the client page with the 10-year warranty option → Zelle chosen → deposit marked → exact sizes → production → installation scheduled 2026-11-02 10:00. Test data stays on prod (purchase request PUR-2026-0004 is a draft for it).
-- PR #392 (37ef622): client options keep the signed estimate approved (`projectReapproveEstimate`); monthly options go to `o.subscriptions`; production modal has «Подтвердить расчёт» and «Заказать плёнку под проект» (`projectOrderShortFilm`, source `project_production_shortage`); film with an active project purchase request no longer blocks readiness; server `markDepositPaid` accepts `agreement_signed`; proposal detail returns `deposit.payment_method`; client page: payment before warranty, scroll after signing, Zelle amount/recipient/memo (`reference` = proposal_code), monthly price label; cashier hides priceless options, «/ мес»; estimate → KP window (not the old studio); Chase texts removed.
-- This PR: paid deposit wording on the client page; sync retries a missed server deposit mark.
-- Still for the owner: Stripe key and bank details in CRM settings (card and bank transfer show «not configured» to clients); installers in Team — only two «Zufar Ataev» installer accounts exist; SMS needs the client's consent tick; film purchase prices missing for Vision 89 (material $0 in the estimate).
-
-## 2026-10-24 handoff — KP payment sync, one measurement button, paid → installation
-
-- PR #386 (d31c594) and #387 (17d6a4f) merged and deployed; functions present on prod.
-- #386: opening a project (`projectFeedHtml`) calls `premiumSyncClientProposal` (throttled 60s) → `premiumApplyServerProposalState`: viewed → local Viewed; agreement signed → status `proposal_accepted` (skipWorkflowGuard) + timeline; deposit paid online → payment + deposit. `o.kpOnline` keeps depositId/status/method. Deposit step names the client's method; payment form preselects it. `confirmPayment`: a payment covering the deposit counts as the deposit (`paymentCoversDeposit`), and `syncServerDepositPaid` POSTs `/api/v1/deposits/{id}/pay`. Measurement footer = one button (`managerMeasureFooterActionHtml`).
-- #387: paid (≥ deposit) project in measurement_done/proposal_sent → next action «Оплачено → к монтажу» (`projectAcceptPaidWithoutProposal`): approve estimate, mark deposit, accept.
-- Prod: R-261025-057 shows «Оплачено → к монтажу»; R-261024-055 (signed online, Zelle) moves to «Получить аванс» when its card is opened.
-- Client payment page: only Zelle is available — bank details and Stripe key are not entered yet (owner enters them in CRM settings).
-
-## 2026-10-24 handoff — one «Опции для КП» block in «Услуги и цены»
-
-- PR #383, merged as 36bfc59, deployed; checked on prod (block renders with the 4 smart options).
-- All `proposalOptional` services (non-sized) of every direction are edited in one block at the top of «Услуги и цены» (`proposalOptionsSectionHtml`): name, nameEn, direction (new `updateServiceOffering(id,'direction',…)`), price, once/monthly, installer pay, active; «+ Опция» (`addProposalOption`, draft name «Новая опция»). Options are no longer listed under their directions.
-- `projectProposalOptionalOfferings` now skips options priced $0 (before, a named $0 option reached the KP).
-- Prod data: smart options «Голосовое управление», «Настенный выключатель», «Второй пульт» (no price yet — owner fills), «Гарантия 10 лет (вместо 5)» $5/month.
-- Tests: `kp-options-section.test.ts`; full local cycle ok.
+- Branch: `codex/project-lifecycle-20261024`, based on current `origin/main` `1bd9fff9` after PR #371.
+- Live end-to-end audit found that the native browser confirmation used by «Подтвердить все размеры» could leave the measurement workspace hanging and the verified state was not reliably visible after reopening the Project.
+- The bulk and single-window confirmation actions now use an in-CRM review dialog instead of a blocking browser `confirm`. The dialog shows the exact windows and dimensions, names any openings still missing sizes, and explains that verified values feed cutting, the Work Order and installation release.
+- After verification, the CRM forces the queued cloud workspace write through `cloudPersistConfirmed()` before rebuilding the measurement workspace. If the server is temporarily unavailable, the local change remains visible, a retry is queued and the operator receives an explicit warning not to close the CRM before «Сохранено».
+- Verification: focused flow test 4/4; Project estimate/workflow tests 48/48; legacy single-definition/script integrity 2/2; `git diff --check` still required on a responsive filesystem. Full suite, TypeScript, production build, authenticated browser smoke and deployment remain pending. No production data or deployment changed.
 
 ## 2026-10-21 handoff — approved project-card route map
 
@@ -67,92 +37,6 @@ Before doing any work:
 - The approved three-screen concept (project cashier, measurement, installer work order) is transferred into the canonical Project card as one compact route map: every selected direction remains visible together, the primary direction is marked, and managers can add another direction without being forced into measurement.
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
-
-## 2026-10-24 handoff — KP options the client ticks; services added inside the direction window
-
-- Branch: `claude/kp-client-options`, based on `main` after PR #381.
-- Owner, 2026-10-24: «на замере подбираем плёнку, а в КП добавляем допы — клиент сам выбирает»; smart standard = power supply with remotes; options: voice control, wall switch, second remote, warranty 5 → 10 years at $5/month. And: «выбираем направление — открывается отдельное окно, и тут же внутри добавляешь услуги, чтобы не прыгало туда-сюда».
-- Directory: a size-free service can be «Опция в КП — клиент отмечает сам» (`proposalOptional`) and «Подписка: цена — в месяц» (`monthly`). No option services exist on prod yet — the owner adds them with prices.
-- KP window «Состав»: «Опции для клиента» list (untick to leave one out, `o.kpOptionsExcluded`). Snapshot appends them after the total is fixed as `is_optional: true, client_selected: false`; a monthly one is $0 now with «— $5/month» in the title.
-- Server: `publishLegacyProposal` keeps `is_optional`/`client_selected`; subtotal = required lines, selected total = ticked; `updatePublicProposalSelections` lets the client change only optional items (before, any item could be unticked) and moves an unpaid standard deposit to 10%/≤$1 000 of the selection.
-- Back to the CRM: «Забрать выбор клиента» in the feed's KP section, and automatically when the manager marks the KP accepted (`premiumApplyClientOptions` reads `/api/v1/proposals/{id}` and adds ticked options as project lines).
-- Direction window «Услуги»: the direction's services are cards right there; a per-sq-ft service asks for its film in the same window (in stock first, «уточним на замере»); the window stays open. «+ Добавить направление» / «+ Направление / услуга» on the card → a short direction list → that direction's window. The cashier remains in the new-project form and the estimate.
-- Verification: `kp-options-direction-add.test.ts`; updated cashier/card tests; harness full cycle + phone: picker → Смарт → Smart 90 → film step → «Уточним на замере» → Установка блока питания, all inside the window; KP «Состав» shows the two options.
-
-## 2026-10-24 handoff — project feed and one measurement window (approved mock-up)
-
-- Branch: `claude/project-feed-one-measure`, based on `main` after PR #380 (card step 1).
-- Owner approved the Design canvas row «Новый вариант после аудита» (boards 8–11) after a TintWiz test order («делай»).
-- Project card = one feed (`projectFeedHtml`, production-stages.js): «Следующий шаг» card, then Визиты → Клиент и объект → Услуги (the existing services list, without its second heading) → Замер → Плёнка и закупка → КП → Оплата и счёт → Монтаж → Документы → История; one button each, opening the existing workspaces. Tabs, side panel and the sticky duplicate step are gone; hero shows Сумма / Оплачено / Остаток. Money sections only for roles that see money.
-- One measurement window for every role: `openMeasurerV25ForOrder` → the office window (the field studio stays in code, unused by routing). Footer: «Сохранить и следующее окно» (`managerMeasureNextWindow`), «Сохранить и назад», «✓ Сдать замер» for the measurer (film optional, on-site details required, issues shown in place) / «✓ Завершить замер и рассчитать» for the office.
-- Window film list: «На складе» (with sq ft) first, then «Нет на складе — под заказ», then «Нет в списке — добавить и заказать».
-- Next: КП with variants (board 11) — a change of the proposal model, separate PR.
-- Verification: `project-feed.test.ts`, updated measure/estimate/project-lines tests; harness full cycle at 1440 (project → measure → KP → accept → deposit → verify → production → installer → act → payment → completed) and phone screenshots of the feed and the measurer window.
-
-## 2026-10-24 handoff — measurement unblocked, film «add and order», services land on windows
-
-- Branch: `claude/measure-unblock-audit`, based on `main` after PR #377.
-- Owner, 2026-10-24: «замерщик элементарно не может закончить замер… выйти не может, просто сохранить»; «окно добавить плёнку выведено по умолчанию — а логика: при выборе плёнки, если нет на складе, добавить самому, и формируется заказ на закупку»; «услугу из списка можно добавить, но она не добавляется в проект, не считается»; «теги дублируют услуги».
-- Measurer dead end: the project card «Замер» opened the office window, which hides films/prices from the measurer and then demands a film to finish. `openManagerMeasureModal` now sends the measurer to his studio. Studio: «Сохранить и выйти» (saves the open window if it was changed, `measureStudioMarkDirty`), ✕ asks to save changes, «Завершить замер» saves the open window first. Office window: «Сохранить и выйти» in a footer that stays on screen on a phone.
-- Film: the room-level «Плёнка и склад» block no longer opens by default («Одна плёнка на всю комнату», folded). The window film list ends with «➕ Нет в списке — добавить плёнку и заказать…» (`openWindowManualFilmForm` / `saveWindowManualFilm`): catalog film «ожидает закупки», linked to the service, put on the window (or all windows of the service without film), draft purchase request for the project via the existing `createManualFilmDraft`; the window shows «нет на складе — заявка PUR-…».
-- Services: a per-sq-ft service added to a project whose windows already carry another service stayed «ждёт замера» at $0. The cashier now opens «<услуга> — на какие окна?» (`openOfferingWindowsPicker` / `saveOfferingWindows`); pending rows say «не стоит ни на одном окне — $0 · Выбрать окна».
-- Duplicates: direction tiles in «Касса проекта» repeated the direction cards below — removed (only «+ Добавить направление» stays). `orderPrice` (м² × price per м²) was still used by the projects list and reports ($468 for a $1 900 project) — now the project revenue; the list shows sq ft.
-- Verification: `measure-unblock.test.ts`; updated direction-windows and estimate-workflow tests; legacy suite passes (20 Prisma files fail locally only for the missing engine); TypeScript passes; harness walk: measurer save & exit, owner add-and-order film (PUR draft), Magnetron → window picker → window moved.
-
-## 2026-10-24 handoff — field cabinets, Invoice, Stripe key on the server
-
-- Branch: `claude/field-cabinets-invoice`, based on `main` after PR #376.
-- Owner, 2026-10-24: «проверь роль замерщика со всего кабинета и мастера»; «хочу отправить инвойс коммерческим клиентам, чтобы они платили по счёту… снять зависимость от Stripe»; «ключ от Stripe в CRM».
-- Measurer: «Сегодня» is local-time (`localDateKey`), the hero says when (`fieldDayLabel`: сегодня / завтра / просрочен · date) and one button from `measurerOrderPrimaryAction` (Принять → Начать/Продолжить → Замер сдан), numbers are Сегодня / Впереди / Сдано за месяц; cards show direction chips in their colours and sq ft (no м²); «Мои замеры» lists open first, then «Сданные». The canonical constructor left the measurer menu; the project card speaks to the measurer and «← Мои замеры».
-- Measurement studio: a window is measured for a service of the project (`ms-offering`, `applyWindowOffering`), the film list is that service's films with the cashier's film preselected and «— уточнит менеджер —». «✓ Завершить замер» is inside the studio (`measureStudioFinish`) and lists what is missing in place. The measurer may leave the film to the manager (`orderMeasurementCompletionIssues(o, { film })`); the KP still requires it.
-- Installer: «Сегодня» opens on the next job with its one step (`installerOrderPrimaryAction`), overdue jobs say so, «Заработано за месяц», tasks first, map folded. Task cards use the same next step (finishing no longer bypasses «Мои услуги»), the project shows «Ваша выплата», in-progress step «Отметить мои услуги выполненными». Project numbers use the local date (was UTC).
-- Invoice: project money actions → «Счёт (Invoice)» (`openProjectInvoice`, production-stages.js): INV-<project> number, Net 15 for commercial / Due on receipt, balance / deposit / custom amount, PO #, bill-to company + attn, English lines (+ adjustment to the project total), payment by bank transfer / Zelle / check from settings; opens a printable page (Save as PDF), saved in `o.invoices` + timeline; «Текст для письма» copies an email. Settings: «Банковский перевод (ACH / wire)» clarified, check payee/mailing address added. Bank details are entered by the owner, never sent in chat.
-- Server reads bank details from `achInstructions` (the settings field) — the client KP page showed bank transfer «not configured» because it read a non-existent `bankTransferInstructions`.
-- Stripe: the secret key was never stored (sanitize clears `settings.stripe.secretKey`), so the CRM field silently did nothing and the browser called api.stripe.com with it. Now: `StripeSettings` table (migration `20261024120000_stripe_settings`), key encrypted with the bank-secret envelope; `/api/v1/settings/stripe` GET (owner+manager status: mode, `sk_…1234`), PUT/DELETE owner only; `/payment-link` and `/payment-status` make links and check payments on the server. Env `STRIPE_SECRET_KEY` still wins. Browser holds no key and no api.stripe.com calls. Stripe is optional; without it the card option just isn't offered.
-- Client documents: services get «Name for the client (EN)»; Russian names fall back to a known English name (Силикон → Structural Silicone) in KP, act and invoice.
-- Verification: new `field-cabinets-invoice.test.ts`, `stripe-settings.test.ts`, bank-instructions test; updated surveyor, order-visibility, order-workspaces, service-progress, project-constructor, estimate-workflow, service-units tests. Locally all legacy tests pass; 20 files that open Prisma fail here only for the missing query engine (no network to binaries.prisma.sh) — CI is the check. TypeScript passes. Phone walk-through in the local harness: measurer accept → studio → finish; installer accept → start → done → act signature; invoice PDF.
-
-## 2026-10-24 handoff — Zelle from CRM settings, card fee 3%
-
-- Branch: `claude/zelle-and-card-fee`, based on `main` after PR #375.
-- Owner, 2026-10-24: clients should pay by Zelle; a card payment passes Stripe's fee to the client («доплата за карту»). Zelle details given: zufarast@gmail.com, ROLANPRO LLC.
-- The client KP page showed every method «not configured» because Zelle/bank details were read only from server env vars. `protectedPaymentInstructions` now falls back to the CRM settings (`settings.clientPayments.zelleRecipient` / `zelleRecipientName` / `zelleEnabled`, `bankTransferInstructions`) in the legacy workspace; env still wins.
-- Card fee `PAYMENT_SYSTEM_FEE_PERCENT` 3.5 → 3 (Visa's surcharge cap, ≈ Stripe's rate); Stripe checkout description/metadata use the constant; checkouts created at 3.5% still verify (`LEGACY_PAYMENT_SYSTEM_FEE_PERCENTS`). Client texts say «card processing fee 3%; Zelle and bank transfer have no fee».
-- Open (owner): surcharging needs notice to Stripe/Visa 30 days ahead, credit cards only (no debit), and California law restricts surcharges — the owner was told and chose the surcharge.
-- Verification: two tests in `public-options.test.ts`; fee tests updated; full suite 815/815; TypeScript passes.
-
-## 2026-10-24 handoff — direction windows and the KP window
-
-- Branch: `claude/direction-windows`, based on `main` after PR #374.
-- Owner, 2026-10-24: «когда выбираешь направление, оно должно открываться в окне отдельно и добавлять свои услуги… и КП тоже самое»; «дизайн должен остаться как есть… самое главное везде цветовые решения». A phone mock-up (Design canvas «Проект по направлениям — новый путь») was approved first.
-- `openProjectDirectionWindow(oid, key, step)` (production-stages.js): the calculation workspace frame in the direction's `rpDir` colour, three steps Услуги → Замер → Цена with only that direction's lines, pending services, windows and money (owner: direct cost and margin). The project-card direction tiles and «Открыть направление →» open it. «+ Услуга направления» opens the cashier at that direction with `returnTo: 'direction'`, which comes back to the window; «Открыть замер этого направления» selects that scope in the measurement modal, whose header gets «← К направлению».
-- `openProposalWizard(oid, step)`: Состав (direction blocks in their colours, total, deposit, readiness issues) → Как увидит (the client page in an iframe) → Отправить (WhatsApp, SMS, Email, copy link via the existing `premiumMarkProposalSent` / `premiumSendCanonicalProposal`). «Собрать КП» runs the existing approve/generate; `openPremiumProposalManagerModal` redirects into the window while it is open or building (`proposalWizardActive`), and the studio stays reachable («Все настройки КП»). Next actions «Расчёт готов → КП», «Сформировать КП» and «Отправить КП клиенту» open the window.
-- Phones: `.rp-dirwin` skips the mobile auto-layout; the window is a 4-row grid so the step row does not stretch.
-- Verification: new `direction-windows.test.ts`; one next-action assertion updated; full suite 813/813; TypeScript passes; local full cycle passes; KP window flow (compose → build → preview → WhatsApp → sent) and phone/desktop screenshots checked.
-
-## 2026-10-24 handoff — senior in the crew, commission as one number
-
-- Branch: `claude/senior-installer`, based on `main` after PR #373.
-- Owner, 2026-10-24: the crew splits the job equally and the senior gets +10% of his share (1000 → 500 and 550); the manager earns 5% of gross revenue.
-- `installerSeniorFactor(user)`: `user.installerLevel === 'senior'` multiplies that installer's per-sq-ft share by 1 + `settings.seniorInstallerBonusPct` (default 10), in both `orderInstallerPayoutForUser` definitions (HTML and production-stages, incl. stage pay). «Общие ставки компании» has «Надбавка старшему в бригаде, %» and the «Старшие в бригаде» checkboxes (house term: no «старший специалист»).
-- Migration `_commissionMirror20261024` copies each manager's `payConfig.commissionPct` (what payroll uses; Danil 5%) over the stale top-level copy (10%).
-- Verification: senior split test in `rates-directory.test.ts`; full suite 809/809; TypeScript passes.
-
-## 2026-10-24 handoff — one rates directory
-
-- Branch: `claude/rates-directory`, based on `main` after PR #372.
-- Owner, 2026-10-24: «единый справочник… все ставки… единый источник правды»; no personal installer rates.
-- Installer rates came from six places (service, settings by direction, settings by service code, per film, employee card, old server price list) with a silent fallback chain. Now `windowServiceInstallerRate` / `installerRateForQuickLine`: a row of a directory service pays that service's rate, the same for everyone (0 means $0); only rows made before the directory fall back to the old direction rates. Employee per-sq-ft, category and work-type rates are removed from the pay editor and ignored; the warehouse no longer shows a rate per film; the old calculator price list no longer edits or syncs installer rates (`syncLegacyInstallerServiceRate.enabled` off).
-- Migration `_ratesDirectory20261024`: a priced per-sq-ft service without a rate gets the rate it was actually paid (production: A2 Security → $5.60) and `installerRateNeedsReview`; the card says «перенесено из старых настроек — проверьте» until the owner edits it.
-- «Услуги и цены» → «Общие ставки компании»: deposit %, deposit cap, project profit tax %, commission per active manager (one number: `payConfig.commissionPct`, mirrored to the legacy field).
-- Verification: new `rates-directory.test.ts`; affected tests updated; full suite 808/808; TypeScript passes.
-
-## 2026-10-24 handoff — installer card fixed, one deposit rule
-
-- Branch: `claude/team-and-deposit`, based on `main` after PR #371.
-- Production audit: the CRM had no active installer. Root cause: two employees (installer zufa2012@yandex.ru and consultant ataevzufar888@gmail.com) were both linked to legacy cards u_z1/u_i1, so every directory load overwrote the installer cards with the consultant's role. `resolveSharedLegacyIds` gives a shared card to the employee whose email is on it (else the earliest), and `loadDirectoryMembers` persists that; the other employee gets their own card.
-- Owner, 2026-10-24: «аванс 10 процентов не больше 1000». `companyDepositFor` (settings `advancePct` 10, `depositCapUsd` 1000, applied once via `_depositPolicy20261024`) replaces every hard-coded 30%; the KP deposit uses it too, residential still capped by the California 10% / $1,000 rule; the server fallback `calculateSuggestedDeposit` is 10% / $1,000 for commercial as well. Settings show «Аванс не больше, $».
-- Verification: new tests in `directory.test.ts` and `kp-and-flow.test.ts`; full suite 805/805; TypeScript passes.
 
 ## 2026-10-24 handoff — phone flow: back buttons, cashier row, simpler project form, one services list
 
