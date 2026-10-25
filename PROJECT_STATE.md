@@ -23,6 +23,14 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-24 handoff — KP payment sync, one measurement button, paid → installation
+
+- PR #386 (d31c594) and #387 (17d6a4f) merged and deployed; functions present on prod.
+- #386: opening a project (`projectFeedHtml`) calls `premiumSyncClientProposal` (throttled 60s) → `premiumApplyServerProposalState`: viewed → local Viewed; agreement signed → status `proposal_accepted` (skipWorkflowGuard) + timeline; deposit paid online → payment + deposit. `o.kpOnline` keeps depositId/status/method. Deposit step names the client's method; payment form preselects it. `confirmPayment`: a payment covering the deposit counts as the deposit (`paymentCoversDeposit`), and `syncServerDepositPaid` POSTs `/api/v1/deposits/{id}/pay`. Measurement footer = one button (`managerMeasureFooterActionHtml`).
+- #387: paid (≥ deposit) project in measurement_done/proposal_sent → next action «Оплачено → к монтажу» (`projectAcceptPaidWithoutProposal`): approve estimate, mark deposit, accept.
+- Prod: R-261025-057 shows «Оплачено → к монтажу»; R-261024-055 (signed online, Zelle) moves to «Получить аванс» when its card is opened.
+- Client payment page: only Zelle is available — bank details and Stripe key are not entered yet (owner enters them in CRM settings).
+
 ## 2026-10-24 handoff — one «Опции для КП» block in «Услуги и цены»
 
 - PR #383, merged as 36bfc59, deployed; checked on prod (block renders with the 4 smart options).
