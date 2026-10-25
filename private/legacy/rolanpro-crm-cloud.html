@@ -1649,6 +1649,10 @@
   .project-command-timeline-row:last-child { border-bottom:0; }
   .project-workspace-templates { display:none !important; }
   .project-command-mobile-action { display:none; }
+  .project-more-menu { position:relative; }
+  .project-more-menu > summary { list-style:none; cursor:pointer; min-width:44px; text-align:center; }
+  .project-more-menu > summary::-webkit-details-marker { display:none; }
+  .project-more-menu-body { position:absolute; right:0; top:110%; z-index:30; display:grid; gap:4px; min-width:220px; padding:6px; background:#fff; border:1px solid #dbe4ef; border-radius:12px; box-shadow:0 14px 32px rgba(15,35,61,.16); }
   @media (max-width: 980px) {
     .project-command-grid { grid-template-columns:1fr; }
     .project-command-side { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -1689,6 +1693,9 @@
     .project-recommendation { align-items:flex-start;flex-direction:column; }
     .project-command-mobile-action { position:sticky;bottom:calc(68px + env(safe-area-inset-bottom,0px));z-index:20;display:block;padding:.55rem;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border:1px solid #dbe4ef;border-radius:14px;box-shadow:0 14px 32px rgba(15,35,61,.18); }
     .project-command-mobile-action .order-action-card { width:100%; }
+    .project-command-hero-actions { display:none; }
+    .project-command-nav { flex-wrap:nowrap !important; overflow-x:auto; }
+    .project-command-nav > button { flex:0 0 auto; }
   }
   .project-card-missing { border-color: #f59e0b !important; background: #fffbeb !important; color: #92400e; }
   .order-clean-stage {
@@ -27048,19 +27055,18 @@ function renderProjectCardSchedule(o, unplanned, plan) {
 }
 
 function renderProjectCommandNav(o, { money = false, installer = false } = {}) {
+  // Owner's audit, 2026-10-24: one row, in the order the work goes; «Обзор» was
+  // the page itself, «Объект» sits with the client, «Финансы» with the KP money.
   const items = [
-    ['', 'Обзор'],
     ...(money && pendingClientRequests(o).length ? [['request', '⚠ Запрос клиента']] : []),
-    ['client', 'Клиент'],
-    ['site', 'Объект'],
     ['measurement', 'Замер'],
-    ...(!installer && money ? [['estimate', 'Расчёт / КП']] : []),
-    ['documents', installer ? 'ТЗ' : 'Документы / портал'],
-    ['schedule', 'Календарь'],
-    ...(!installer && money ? [['payment', 'Финансы']] : []),
-    ['history', 'Файлы и история'],
+    ...(!installer && money ? [['estimate', 'Расчёт и КП'], ['payment', 'Оплата']] : []),
+    ['schedule', 'Монтаж и календарь'],
+    ['client', 'Клиент и объект'],
+    ['documents', installer ? 'ТЗ' : 'Документы'],
+    ['history', 'История'],
   ];
-  return `<nav class="project-command-nav" aria-label="Разделы проекта">${items.map(([key, label], index) => `<button type="button" class="${index === 0 ? 'active' : ''}" onclick="${key ? `projectCardOpenWorkspace('${key}')` : `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})`}">${academyEsc(label)}${key === 'measurement' ? ` · ${measureAllWindows(o).length}` : ''}</button>`).join('')}</nav>`;
+  return `<nav class="project-command-nav" aria-label="Разделы проекта">${items.map(([key, label], index) => `<button type="button" class="" onclick="${key ? `projectCardOpenWorkspace('${key}')` : `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})`}">${academyEsc(label)}${key === 'measurement' ? ` · ${measureAllWindows(o).length}` : ''}</button>`).join('')}</nav>`;
 }
 
 function renderProjectCommandSide(o, { money = false, economics = false, installer = false } = {}) {
@@ -27093,8 +27099,10 @@ function renderProjectCommandSide(o, { money = false, economics = false, install
     const crew = visit.installerIds.map(id => getUser(id)?.name).filter(Boolean).join(', ') || 'исполнитель не назначен';
     return `<div class="project-command-visit"><div class="project-command-visit-time">${fmtDateTime(visit.at)}</div><div class="project-command-visit-main"><b>${academyEsc(visit.lines.map(line => line.name).join(', '))}</b><span>${academyEsc(crew)}</span></div></div>`;
   }).join('');
+  // The inspector repeated the selected row (volume, price, crew, date) — the row
+  // itself shows them (Owner's audit, 2026-10-24).
+  void inspector;
   return `<aside class="project-command-side" aria-label="Сводка проекта">
-    ${inspector}
     ${financialCard}
     <section class="project-command-card" data-project-command="visits">
       <div class="project-command-card-head"><div><div class="project-command-card-title">Ближайшие работы</div><div class="project-command-card-sub">У каждой услуги своя дата и исполнитель</div></div><button type="button" class="btn-ghost text-xs" onclick="projectCardOpenWorkspace('schedule')">Календарь</button></div>
@@ -27108,7 +27116,7 @@ function renderProjectCommandHeader(o, c, primary, { money = false, pendingReque
   const manager = getUser(o.managerId || o.ownerId)?.name || 'ответственный не назначен';
   return `<section class="project-command-hero">
     <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${academyEsc(c?.name || 'Проект без клиента')}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div></div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
-    <div class="project-command-facts"><div class="project-command-fact"><span>Услуги</span><strong>${projectLines(o).length + projectPendingSizedServices(o).length}</strong></div><div class="project-command-fact"><span>Ближайшее событие</span><strong>${nextEvent ? fmtDateTime(nextEvent.at) : 'не назначено'}</strong></div>${money ? `<div class="project-command-fact"><span>Сумма проекта</span><strong>${fmtMoney(orderRevenue(o))}</strong></div><div class="project-command-fact"><span>Остаток</span><strong>${fmtMoney(orderDebt(o))}</strong></div>` : `<div class="project-command-fact"><span>Запросы клиента</span><strong>${pendingRequests.length || 'нет'}</strong></div><div class="project-command-fact"><span>Статус</span><strong>${academyEsc(T(o.status))}</strong></div>`}</div>${o.actSignature ? `<div class="project-command-signed">✍️ Акт подписан клиентом: <b>${academyEsc(o.actSignature.name)}</b> · ${fmtDateTime(o.actSignature.signedAt)} <button type="button" class="btn-ghost text-xs" onclick="openSignedActDocument('${o.id}')">Открыть акт</button></div>` : ''}
+    <div class="project-command-facts"><div class="project-command-fact"><span>Ближайшее событие</span><strong>${nextEvent ? fmtDateTime(nextEvent.at) : 'не назначено'}</strong></div>${money ? `<div class="project-command-fact"><span>Сумма проекта</span><strong>${fmtMoney(orderRevenue(o))}</strong></div><div class="project-command-fact"><span>Остаток</span><strong>${fmtMoney(orderDebt(o))}</strong></div>` : `<div class="project-command-fact"><span>Запросы клиента</span><strong>${pendingRequests.length || 'нет'}</strong></div><div class="project-command-fact"><span>Статус</span><strong>${academyEsc(T(o.status))}</strong></div>`}</div>${o.actSignature ? `<div class="project-command-signed">✍️ Акт подписан клиентом: <b>${academyEsc(o.actSignature.name)}</b> · ${fmtDateTime(o.actSignature.signedAt)} <button type="button" class="btn-ghost text-xs" onclick="openSignedActDocument('${o.id}')">Открыть акт</button></div>` : ''}
     ${renderOrderCleanProgress(o)}
   </section>`;
 }
@@ -28405,8 +28413,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   return `
     <div class="order-clean-topbar">
       <button class="btn-ghost" onclick="state.view='${isInstaller ? 'installations' : u?.role === 'measurer' ? 'measurements' : 'orders'}'; location.hash=''; render();">← ${isInstaller ? 'Мои задачи' : u?.role === 'measurer' ? 'Мои замеры' : T('orders')}</button>
-      ${u?.role === 'owner' ? `<button class="btn-ghost text-sm text-red-600" onclick="openArchiveProjectModal('${o.id}')" title="Проект уйдёт в архив; его можно восстановить">🗑 Удалить в архив</button>` : ''}
-      ${u?.role === 'owner' ? `<button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();" title="Открыть старую полную форму, если нужны все поля сразу">Расширенный режим</button>` : ''}
+      ${u?.role === 'owner' ? `<details class="project-more-menu"><summary class="btn-ghost text-sm" aria-label="Ещё действия">⋯</summary><div class="project-more-menu-body"><button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();">Все поля (старая форма)</button><button class="btn-ghost text-sm text-red-600" onclick="openArchiveProjectModal('${o.id}')">🗑 Удалить в архив</button></div></details>` : ''}
     </div>
     <div class="order-clean-shell">
       ${renderProjectCommandHeader(o, c, primary, { money: canSeeMoney, pendingRequests, nextEvent })}
