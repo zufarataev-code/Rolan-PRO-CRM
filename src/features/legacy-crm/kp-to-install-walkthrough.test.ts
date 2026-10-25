@@ -49,3 +49,8 @@ test('the cashier hides options without a price; the estimate opens the KP windo
   assert.match(fn(html, 'approveProjectEstimateAndOpenProposal'), /state\._proposalWizard = \{ oid, step: 'preview', pending: true \};/);
   assert.doesNotMatch(html, /Zelle на Chase/);
 });
+
+test('a paid deposit thanks the client instead of asking again; a missed server mark is retried', () => {
+  assert.match(payUi, /Deposit received: /);
+  assert.match(fn(stages, 'premiumApplyServerProposalState'), /if \(o\.depositReceived && dep\?\.deposit_id && dep\.status !== 'paid' && typeof syncServerDepositPaid === 'function'\)/);
+});

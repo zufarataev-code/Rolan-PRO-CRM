@@ -93,12 +93,19 @@ export function PublicPaymentOptions({
     <section id="proposal-payment" className="proposal-section proposal-payment-section">
       <div className="proposal-section-kicker">{ru ? "Оплата" : "Payment"}</div>
       <h2>{paid ? (ru ? "Оплата получена" : "Deposit received") : (ru ? "Оплатить проект" : "Pay for your project")}</h2>
-      <p>
-        {ru ? "Сумма к оплате сейчас: " : "Amount due now: "}<strong>{formatMoney(baseAmount, data.currency)}</strong>.{" "}
-        {ru
-          ? "Zelle и банковский перевод — без комиссии. При оплате картой добавляется комиссия за обработку карты 3%."
-          : "Zelle and bank transfer have no fee. Paying by card adds a 3% card processing fee."}
-      </p>
+      {paid ? (
+        <p>
+          {ru ? "Аванс получен: " : "Deposit received: "}<strong>{formatMoney(baseAmount, data.currency)}</strong>.{" "}
+          {ru ? "Спасибо! Менеджер свяжется с вами, чтобы согласовать дату монтажа." : "Thank you! Your project manager will contact you to schedule the installation."}
+        </p>
+      ) : (
+        <p>
+          {ru ? "Сумма к оплате сейчас: " : "Amount due now: "}<strong>{formatMoney(baseAmount, data.currency)}</strong>.{" "}
+          {ru
+            ? "Zelle и банковский перевод — без комиссии. При оплате картой добавляется комиссия за обработку карты 3%."
+            : "Zelle and bank transfer have no fee. Paying by card adds a 3% card processing fee."}
+        </p>
+      )}
 
       {!data.agreement_signed && !paid ? (
         <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: "rgba(37,99,235,.08)" }}>
