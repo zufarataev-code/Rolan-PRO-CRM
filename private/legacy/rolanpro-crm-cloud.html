@@ -16525,7 +16525,8 @@ function projectProductionReadiness(o, { requireReady = true } = {}) {
       return;
     }
     const stock = filmPlanInventoryStatus(catalogId, material);
-    if (!stock.enough) issues.push(`недостаточно материала: ${catalogLabel(getCatalogItem(catalogId))}`);
+    // Film ordered for the project does not stop production (Owner's walkthrough, 2026-10-25).
+    if (!stock.enough && !activeProjectFilmPurchaseRequest(o.id, catalogId)) issues.push(`недостаточно материала: ${catalogLabel(getCatalogItem(catalogId))}`);
   });
   if (requireReady && !projectProductionPrepared(o)) issues.push('подготовка производства не подтверждена');
   return Array.from(new Set(issues));
@@ -25310,7 +25311,7 @@ function serviceOfferingsFor(direction, { includeId = '', includeInactive = fals
   // cashier and pickers never offer them (Owner's user test, 2026-10-23: six
   // empty «Новая услуга $0» stood first in the cashier).
   return serviceOfferingsAll()
-    .filter(item => (homeOnly ? item.direction === direction : serviceOfferingInDirection(item, direction)) && (includeInactive || item.id === includeId || (item.active !== false && !serviceOfferingIsDraft(item))))
+    .filter(item => (homeOnly ? item.direction === direction : serviceOfferingInDirection(item, direction)) && (includeInactive || item.id === includeId || (item.active !== false && !serviceOfferingIsDraft(item) && !(item.proposalOptional && !(Number(item.pricePerSqft) > 0)))))
     .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0) || String(a.name).localeCompare(String(b.name)));
 }
 /** The direction an offering is used under in this project (its windows or its line), else its home. */
@@ -25818,7 +25819,7 @@ function serviceCashierOfferingMeta(offering) {
   const includes = serviceOfferingIncludes(offering);
   const range = projectServicePriceRange(offering);
   const price = range ? `${fmtMoney(range.min)}${range.max ? ` – ${fmtMoney(range.max)}` : '+'}` : fmtMoney(Number(offering.pricePerSqft) || 0);
-  return `${price} / ${academyEsc(serviceOfferingUnitShort(offering))}${serviceOfferingNeedsSizes(offering) ? ' · по замеру' : ''}${includes.length ? ` · входит: ${academyEsc(includes.map(child => child.name).join(', '))}` : ''}`;
+  return `${price} / ${offering.monthly ? 'мес' : academyEsc(serviceOfferingUnitShort(offering))}${serviceOfferingNeedsSizes(offering) ? ' · по замеру' : ''}${includes.length ? ` · входит: ${academyEsc(includes.map(child => child.name).join(', '))}` : ''}`;
 }
 function serviceCashierHtml(c) {
   const o = serviceCashierScope(c);
@@ -28060,6 +28061,9 @@ function approveProjectEstimateAndOpenProposal(oid) {
   o.timeline.push({ at: approvedAt, key: 'project_estimate_approved', by: state.currentUserId, note: canSeeInternalEconomics ? `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}, маржа ${marginPct.toFixed(1)}%` : `Расчёт подтверждён: ${fmtMoney(orderRevenue(o))}` });
   save();
   closeModal();
+  // Owner's walkthrough, 2026-10-25: from the estimate the old Proposal Studio
+  // opened (Chase texts, no options step). The KP window opens instead.
+  if (typeof proposalWizardSteps === 'function' && state._proposalWizard?.oid !== oid) state._proposalWizard = { oid, step: 'preview', pending: true };
   openProfessionalKP(oid);
 }
 
@@ -31074,7 +31078,10 @@ function openProjectProductionWorkspace(oid) {
   const materialRows = Object.entries(usage).map(([catalogId, material]) => {
     const catalog = catalogId === '__no_catalog' ? null : getCatalogItem(catalogId);
     const stock = catalog ? filmPlanInventoryStatus(catalogId, material) : null;
-    return `<div class="order-clean-list-row"><span>${academyEsc(catalog ? catalogLabel(catalog) : 'Плёнка не выбрана')}</span><b class="${stock?.enough ? 'text-emerald-700' : 'text-red-600'}">${material.consumedSqft.toFixed(1)} sqft · ${stock?.enough ? 'склад OK' : 'нужно пополнить'}</b></div>`;
+    const request = catalog && !stock?.enough ? activeProjectFilmPurchaseRequest(o.id, catalogId) : null;
+    const state_ = stock?.enough ? 'склад OK' : request ? `под заказ · заявка ${academyEsc(request.number || '')}` : 'нужно пополнить';
+    const action = catalog && !stock?.enough && !request ? ` <button type="button" class="btn-primary text-xs" onclick="projectOrderShortFilm('${o.id}','${catalogId}')">Заказать плёнку под проект</button>` : '';
+    return `<div class="order-clean-list-row"><span>${academyEsc(catalog ? catalogLabel(catalog) : 'Плёнка не выбрана')}</span><b class="${stock?.enough ? 'text-emerald-700' : request ? 'text-amber-700' : 'text-red-600'}">${material.consumedSqft.toFixed(1)} sqft · ${state_}</b>${action}</div>`;
   }).join('');
   state.modal = `
     <div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
@@ -31087,7 +31094,7 @@ function openProjectProductionWorkspace(oid) {
           <div class="order-clean-note"><b>Этап перед монтажом.</b> Здесь проверяются принятое КП, аванс, точные размеры, раскрой и наличие материала.</div>
           ${materialRows ? `<div class="order-clean-list mt-3">${materialRows}</div>` : projectLines(o).length ? '' : '<div class="order-clean-note mt-3">Сначала внесите помещения, окна, размеры и материал.</div>'}
           ${projectLines(o).length ? `<div class="mt-3"><div class="text-xs font-black uppercase text-gray-500 mb-2">Услуги проекта</div><div class="space-y-2">${projectLineScopeRows(o)}</div></div>` : ''}
-          ${blockingIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Не готово:</b> ${blockingIssues.map(academyEsc).join(', ')}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Проверка пройдена.</b> Можно подтвердить готовность производства.</div>`}
+          ${blockingIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Не готово:</b> ${blockingIssues.map(academyEsc).join(', ')}.${!projectEstimateIsApproved(o) && projectProposalAccepted(o) ? ` <button type="button" class="btn-primary text-xs" onclick="projectReapproveEstimateFromProduction('${o.id}')">Подтвердить расчёт ${fmtMoney(orderRevenue(o))}</button>` : ''}</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Проверка пройдена.</b> Можно подтвердить готовность производства.${Object.keys(usage).some(id => id !== '__no_catalog' && activeProjectFilmPurchaseRequest(o.id, id) && !filmPlanInventoryStatus(id, usage[id]).enough) ? ' Плёнка под заказ — дату монтажа ставьте после её поступления.' : ''}</div>`}
           <div class="order-clean-actions mt-3">
             ${renderOrderActionCard({ icon: '📐', title: 'Проверить точные размеры', sub: `${measureAllWindows(o).length} окон`, onclick: `openManagerMeasureModal('${o.id}')` })}
             ${renderOrderActionCard({ icon: '🎞', title: 'Открыть лист раскроя', sub: `${plan.pieces?.length || 0} деталей`, onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
@@ -36433,13 +36440,13 @@ function openPremiumProposalManagerModal(token) {
 	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Помещений</div><div class="font-black text-lg">${calc.includedRooms}</div></div>
 	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">Окон</div><div class="font-black text-lg">${calc.totalWindowsQty}</div></div>
 	          <div class="p-3 rounded-lg bg-gray-50 border"><div class="text-gray-500">К оплате при подписи</div><div class="font-black text-lg">${fmtMoney(calc.paymentDue)}</div></div>
-	          <div class="p-3 rounded-lg ${prop.paymentClaim?.status === 'pending_review' ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'} border"><div class="text-gray-500">Оплата</div><div class="font-black text-lg">${prop.paymentClaim?.status === 'pending_review' ? 'Проверить Chase' : (premiumPrimaryPaymentMethod() === 'zelle' ? 'Zelle → Chase' : 'Готово')}</div></div>
+	          <div class="p-3 rounded-lg ${prop.paymentClaim?.status === 'pending_review' ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'} border"><div class="text-gray-500">Оплата</div><div class="font-black text-lg">${prop.paymentClaim?.status === 'pending_review' ? 'Проверить поступление' : (premiumPrimaryPaymentMethod() === 'zelle' ? 'Zelle' : 'Готово')}</div></div>
 	        </div>
 	        <div class="mt-4 p-4 rounded-xl ${prop.paymentClaim?.status === 'pending_review' ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} border">
 	          <div class="flex items-start justify-between gap-3 flex-wrap">
 	            <div>
 	              <div class="font-black text-slate-900">Оплата встроена в КП</div>
-	              <p class="text-sm text-slate-600 mt-1">Клиент подписывает КП и выбирает Zelle на Chase, ACH, ссылку Chase или карту. Перевод не закрывает долг автоматически — сначала проверьте поступление в Chase.</p>
+	              <p class="text-sm text-slate-600 mt-1">Клиент подписывает КП и сразу видит оплату: Zelle, банковский перевод или карта — то, что включено в настройках. Перевод отмечается в проекте, когда деньги пришли.</p>
 	            </div>
 	            <div class="flex gap-2 flex-wrap">
 	              ${stripeUrl ? `<a class="btn-ghost text-sm" href="${premiumEsc(stripeUrl)}" target="_blank">Open checkout</a>` : ''}
@@ -36452,7 +36459,7 @@ function openPremiumProposalManagerModal(token) {
 	          <button class="btn-ghost" onclick="openWorkOrder('${order.id}')">Заказ-наряд</button>
 	          <button class="btn-primary" onclick="navigator.clipboard.writeText('${url.replace(/'/g, "\\'")}'); this.textContent='Скопировано'; premiumMarkProposalSent('${prop.token}','ссылка скопирована');">Скопировать ссылку</button>
 	        </div>
-        <p class="text-xs text-gray-500 mt-4">Подписанное КП заблокировано. Для изменений создайте новую версию.</p>
+        ${premiumProposalLocked(prop) ? '<p class="text-xs text-gray-500 mt-4">Подписанное КП заблокировано. Для изменений создайте новую версию.</p>' : ''}
       </div>
     </div>`;
   render();

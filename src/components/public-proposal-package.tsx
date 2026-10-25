@@ -51,15 +51,22 @@ export function PublicProposalPackage({
         key={language}
         initialProposal={proposal}
         language={language}
-        onAgreementSigned={() => setPaymentRefreshKey((value) => value + 1)}
+        onAgreementSigned={() => {
+          setPaymentRefreshKey((value) => value + 1);
+          // Owner, 2026-10-25: «КП само по себе не позволяет произвести оплату» —
+          // after signing the client is taken straight to the payment.
+          setTimeout(() => document.getElementById("proposal-payment")?.scrollIntoView({ behavior: "smooth", block: "start" }), 400);
+        }}
       />
+      <div id="proposal-payment">
+        <PublicPaymentOptions
+          accessToken={accessToken}
+          initialData={paymentOptions}
+          language={language}
+          refreshKey={paymentRefreshKey}
+        />
+      </div>
       <PublicWarrantySummary language={language} />
-      <PublicPaymentOptions
-        accessToken={accessToken}
-        initialData={paymentOptions}
-        language={language}
-        refreshKey={paymentRefreshKey}
-      />
     </>
   );
 }

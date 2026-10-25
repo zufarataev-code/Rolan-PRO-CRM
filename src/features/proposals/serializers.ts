@@ -85,6 +85,8 @@ function serializeDepositInternal(deposit: any) {
     deposit_id: deposit.deposit_id,
     amount: toNumber(deposit.amount),
     status: deposit.status,
+    // What the client chose on his page (zelle, bank_transfer, payment_system).
+    payment_method: deposit.payment_method ?? null,
     paid_at: deposit.paid_at,
     created_at: deposit.created_at,
     updated_at: deposit.updated_at,
