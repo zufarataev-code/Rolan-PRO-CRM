@@ -61,8 +61,9 @@ test("owner and manager navigation keeps documents, the client portal and schedu
   const primary = html.slice(html.indexOf("function orderPrimaryNextAction"), html.indexOf("function installerOrderPrimaryAction"));
 
   assert.match(nav, /money && pendingClientRequests\(o\)\.length \? \[\['request', '⚠ Запрос клиента'\]\]/);
-  assert.match(nav, /\['estimate', 'Расчёт \/ КП'\]/);
-  assert.match(nav, /\['documents', installer \? 'ТЗ' : 'Документы \/ портал'\]/);
+  // One row in work order (Owner's audit, 2026-10-24).
+  assert.match(nav, /\['estimate', 'Расчёт и КП'\], \['payment', 'Оплата'\]/);
+  assert.match(nav, /\['documents', installer \? 'ТЗ' : 'Документы'\]/);
   assert.match(primary, /projectCardOpenWorkspace\('request'\)/);
   assert.match(html, /key: 'documents'[\s\S]{0,900}title: workDocsOnly \? 'Рабочие документы' : 'КП и документы'/);
   assert.match(html, /title: 'Ссылка клиенту'/);

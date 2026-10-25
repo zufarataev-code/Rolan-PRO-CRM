@@ -76,7 +76,8 @@ test("only the owner can delete or restore projects", () => {
   assert.equal(db.orders.length, 2);
   assert.equal(alerts.length, 3);
   assert.match(alerts[0], /только владелец/);
-  assert.match(html, /\$\{u\?\.role === 'owner' \? `<button class="btn-ghost text-sm text-red-600" onclick="openArchiveProjectModal/);
+  // The archive button lives in the owner's «⋯» menu of the project card (2026-10-24).
+  assert.match(html, /\$\{u\?\.role === 'owner' \? `<details class="project-more-menu">[\s\S]{0,400}onclick="openArchiveProjectModal\('\$\{o\.id\}'\)">🗑 Удалить в архив/);
   assert.match(html, /currentUser\(\)\?\.role === 'owner' \? `<button class="btn-ghost" onclick="openProjectArchive\(\)">🗄 Архив/);
   assert.equal(html.match(/String\(projectNumberSequence\(\)\)\.padStart\(3, '0'\)/g)?.length, 2);
 });
