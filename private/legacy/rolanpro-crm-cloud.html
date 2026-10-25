@@ -1649,6 +1649,16 @@
   .project-command-timeline-row:last-child { border-bottom:0; }
   .project-workspace-templates { display:none !important; }
   .project-command-mobile-action { display:none; }
+  .rp-dirwin-adder { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .rp-dirwin-sub { font-size:11px; font-weight:800; letter-spacing:.06em; color:#5a6577; text-transform:uppercase; margin-top:4px; }
+  .rp-dirwin-pick { display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; width:100%; min-height:52px; padding:10px 12px; border:1px solid #d9dee6; border-left:4px solid var(--dir-color, #2563eb); border-radius:12px; background:#fff; }
+  .rp-dirwin-pick b { font-size:14px; color:#10213b; } .rp-dirwin-pick span { font-size:12px; color:#5a6577; } .rp-dirwin-pick small { font-size:11px; color:#8a6d1e; font-weight:700; }
+  .rp-dirwin-pick.soft { border-style:dashed; }
+  .rp-kpwin-options { border:1px dashed #b8c1ce; border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .rp-kpwin-options-head { font-size:12px; font-weight:800; letter-spacing:.04em; color:#3b4659; text-transform:uppercase; }
+  .rp-kpwin-option { display:flex; align-items:center; gap:8px; min-height:44px; font-size:14px; border-bottom:1px solid #eef1f5; }
+  .rp-kpwin-option input { width:20px; height:20px; }
+  .rp-kpwin-option .rp-kpwin-dot { background:var(--dir-color); }
   .project-feed { display:flex; flex-direction:column; gap:12px; margin-top:12px; }
   .project-feed-next { background:#fff; border:2px solid #C9A24A; border-radius:14px; padding:12px; }
   .project-feed-next-kicker { font-size:11px; font-weight:800; letter-spacing:.08em; color:#8A6D1E; text-transform:uppercase; margin-bottom:6px; }
@@ -25485,7 +25495,11 @@ function projectOfferingPickerHtml(o, handler = 'projectAddOfferingLine') {
   // chosen services still enter the project through projectAddOfferingLine.
   if (!ORDER_PRIMARY_SERVICES.some(direction => serviceOfferingsFor(serviceOfferingDirection(direction.id)).length)) return '';
   const returnTo = handler === 'projectCardAddService' ? 'card' : 'estimate';
-  return `<button type="button" class="btn-primary text-sm" aria-label="Добавить услугу в проект" onclick="openServiceCashier('${o.id}','${returnTo}')">+ Услуга в проект</button>`;
+  // Owner, 2026-10-24: a service is added inside its direction's window; on the card the
+  // button asks for the direction first. The estimate keeps the cashier.
+  return returnTo === 'card'
+    ? `<button type="button" class="btn-primary text-sm" aria-label="Добавить услугу в проект" onclick="openProjectDirectionPicker('${o.id}')">+ Направление / услуга</button>`
+    : `<button type="button" class="btn-primary text-sm" aria-label="Добавить услугу в проект" onclick="openServiceCashier('${o.id}','${returnTo}')">+ Услуга в проект</button>`;
 }
 
 function projectAddOfferingLine(oid, offeringId, serviceType = '') {
@@ -25800,6 +25814,10 @@ function updateServiceOffering(id, field, value, control = null) {
     // Existing estimates retain the name and price chosen for that project.
   } else if (field === 'nameEn') {
     offering.nameEn = String(value || '').trim().slice(0, 120);
+  } else if (field === 'proposalOptional' || field === 'monthly') {
+    // Owner, 2026-10-24: the KP offers extras the client ticks himself (voice
+    // control, wall switch, a second remote, a 10-year warranty at $5/month).
+    offering[field] = !!value;
   } else if (['pricePerSqft','installerRatePerSqft','materialCostPerUnit','minPricePerUnit','maxPricePerUnit'].includes(field)) {
     const nextValue = Math.max(0, Number(value) || 0);
     if (field === 'minPricePerUnit' && Number(offering.maxPricePerUnit) > 0 && nextValue > offering.maxPricePerUnit) return alert('Минимальная цена не может быть выше максимальной.');
@@ -25944,6 +25962,10 @@ function renderServiceOfferingsSection() {
           <div><label>Максимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.maxPricePerUnit) || ''}" placeholder="без максимума" onchange="updateServiceOffering('${offering.id}','maxPricePerUnit',this.value,this)"></div>
           <div><label>Специалисту по установке, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="не заполнено" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value,this)">${offering.installerRateNeedsReview ? '<div class="text-xs mt-1" style="color:#92400e">перенесено из старых настроек — проверьте</div>' : !(Number(offering.installerRatePerSqft) > 0) && !serviceOfferingIsDraft(offering) ? '<div class="text-xs mt-1 text-red-700">не заполнено — монтаж $0</div>' : ''}</div>
         </div>
+        ${sized ? '' : `<div class="mt-2 flex flex-wrap gap-2">
+          <label class="tag" style="display:inline-flex;gap:6px;white-space:normal"><input style="width:auto" type="checkbox" ${offering.proposalOptional ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','proposalOptional',this.checked,this)"> Опция в КП — клиент отмечает сам</label>
+          <label class="tag" style="display:inline-flex;gap:6px;white-space:normal"><input style="width:auto" type="checkbox" ${offering.monthly ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','monthly',this.checked,this)"> Подписка: цена — в месяц</label>
+        </div>`}
         <div class="text-xs mt-2 ${sized ? 'text-blue-700' : 'text-emerald-700'}">${sized ? 'Нужен замер: цена и материал считаются по площади окон.' : unit === 'lft' ? 'По периметру окон: количество считается по замеру, его можно поправить вручную.' : 'Без размеров: в проекте указывается количество, замер для этой услуги не нужен.'}</div>
         ${serviceOfferingIncludesEditorHtml(offering)}
         ${serviceOfferingDirectionsEditorHtml(offering)}
@@ -36030,6 +36052,8 @@ function premiumCanonicalSnapshot(prop) {
     item.line_price = adjusted;
     allocated += adjusted;
   });
+  // Options the client ticks himself (2026-10-24): after the total is fixed, unticked.
+  if (typeof projectProposalOptionItems === 'function') items.push(...projectProposalOptionItems(order));
   return {
     token: prop.token,
     legacy_order_id: order.id,
@@ -36126,6 +36150,8 @@ function premiumMarkLatestProposalAccepted(order) {
   prop.status = 'Accepted';
   prop.acceptedAt = prop.acceptedAt || new Date().toISOString();
   prop.acceptedBy = prop.acceptedBy || 'manager';
+  // What the client ticked on his KP page comes into the project with the acceptance.
+  if (prop.canonicalProposalId && typeof premiumApplyClientOptions === 'function') setTimeout(() => premiumApplyClientOptions(order.id, { quiet: true }), 0);
 }
 function premiumMarkProposalSent(token, channel = '') {
   const prop = getPremiumProposalByToken(token);

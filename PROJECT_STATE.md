@@ -30,6 +30,17 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-24 handoff — KP options the client ticks; services added inside the direction window
+
+- Branch: `claude/kp-client-options`, based on `main` after PR #381.
+- Owner, 2026-10-24: «на замере подбираем плёнку, а в КП добавляем допы — клиент сам выбирает»; smart standard = power supply with remotes; options: voice control, wall switch, second remote, warranty 5 → 10 years at $5/month. And: «выбираем направление — открывается отдельное окно, и тут же внутри добавляешь услуги, чтобы не прыгало туда-сюда».
+- Directory: a size-free service can be «Опция в КП — клиент отмечает сам» (`proposalOptional`) and «Подписка: цена — в месяц» (`monthly`). No option services exist on prod yet — the owner adds them with prices.
+- KP window «Состав»: «Опции для клиента» list (untick to leave one out, `o.kpOptionsExcluded`). Snapshot appends them after the total is fixed as `is_optional: true, client_selected: false`; a monthly one is $0 now with «— $5/month» in the title.
+- Server: `publishLegacyProposal` keeps `is_optional`/`client_selected`; subtotal = required lines, selected total = ticked; `updatePublicProposalSelections` lets the client change only optional items (before, any item could be unticked) and moves an unpaid standard deposit to 10%/≤$1 000 of the selection.
+- Back to the CRM: «Забрать выбор клиента» in the feed's KP section, and automatically when the manager marks the KP accepted (`premiumApplyClientOptions` reads `/api/v1/proposals/{id}` and adds ticked options as project lines).
+- Direction window «Услуги»: the direction's services are cards right there; a per-sq-ft service asks for its film in the same window (in stock first, «уточним на замере»); the window stays open. «+ Добавить направление» / «+ Направление / услуга» on the card → a short direction list → that direction's window. The cashier remains in the new-project form and the estimate.
+- Verification: `kp-options-direction-add.test.ts`; updated cashier/card tests; harness full cycle + phone: picker → Смарт → Smart 90 → film step → «Уточним на замере» → Установка блока питания, all inside the window; KP «Состав» shows the two options.
+
 ## 2026-10-24 handoff — project feed and one measurement window (approved mock-up)
 
 - Branch: `claude/project-feed-one-measure`, based on `main` after PR #380 (card step 1).
