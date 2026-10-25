@@ -151,7 +151,7 @@ test("dense desktop workspaces override the compact generic dialog width", () =>
 test("surveyor measurement opens inside the cloud CRM instead of a local Mac file", () => {
   assert.match(
     legacyCrm,
-    /function openMeasurerV25ForOrder\(oid\) \{[\s\S]*?openEngineeringMeasureStudio\(oid\);[\s\S]*?\}/,
+    /function openMeasurerV25ForOrder\(oid\) \{[\s\S]*?openManagerMeasureModal\(oid\);[\s\S]*?\}/, // one window for every role (2026-10-24)
   );
   assert.doesNotMatch(legacyCrm, /MEASURER_V25_PATH/);
   assert.doesNotMatch(legacyCrm, /file:\/\/.*measurer_v2_5/);

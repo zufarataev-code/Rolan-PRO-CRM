@@ -1512,3 +1512,92 @@ function saveOfferingWindows(oid, offeringId, returnTo = 'card') {
   if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function') returnToProjectDirectionWindow();
   else render();
 }
+
+// ---------- ЛЕНТА ПРОЕКТА (Owner, 2026-10-24: approved mock-up «Лента проекта») ----------
+// One page, sections in the order the work goes, each with a short summary and
+// ONE button — as in TintWiz: Визиты → Клиент и объект → Услуги → Замер →
+// Плёнка и закупка → КП → Оплата и счёт → Монтаж → Документы → История. The
+// buttons open the same workspaces as before (projectCardOpenWorkspace etc.).
+function projectFeedSection(num, title, body, { chip = '', button = '', id = '' } = {}) {
+  return `<section class="project-feed-section" ${id ? `data-project-feed="${id}"` : ''}>
+    <div class="project-feed-head"><h3><span class="project-feed-num">${num}</span>${academyEsc(title)}</h3>${chip}</div>
+    <div class="project-feed-body">${body}</div>
+    ${button ? `<div class="project-feed-actions">${button}</div>` : ''}
+  </section>`;
+}
+function projectFeedChip(text, tone = 'quiet') {
+  return `<span class="project-feed-chip ${tone}">${academyEsc(text)}</span>`;
+}
+function projectFeedRow(left, right = '', tone = '') {
+  return `<div class="project-feed-row ${tone}"><span>${left}</span><b>${right}</b></div>`;
+}
+function projectFeedBtn(label, onclick, kind = 'ghost') {
+  return `<button type="button" class="${kind === 'primary' ? 'btn-primary' : 'btn-ghost'} project-feed-btn" onclick="${onclick}">${academyEsc(label)}</button>`;
+}
+function projectFeedFilmRows(o) {
+  const need = new Map();
+  measureAllWindows(o).forEach(({ win }) => {
+    if (!win.catalogId) return;
+    need.set(win.catalogId, (need.get(win.catalogId) || 0) + (windowActualAreaSqft(win) || 0));
+  });
+  projectQuickLines(o).forEach(line => { if (line.catalogId && line.unit === 'sqft') need.set(line.catalogId, (need.get(line.catalogId) || 0) + (Number(line.qty) || 0)); });
+  return [...need.entries()].map(([id, sqft]) => {
+    const film = getCatalogItem(id);
+    const stock = warehouseCatalogStockStats(id).availableSqft || 0;
+    const request = typeof activeProjectFilmPurchaseRequest === 'function' ? activeProjectFilmPurchaseRequest(o.id, id) : null;
+    const status = stock >= sqft ? '<span class="good">✓ на складе</span>' : request ? `<span class="warn">заявка ${academyEsc(request.number || '')}</span>` : '<span class="bad">нужна закупка</span>';
+    return projectFeedRow(`${academyEsc(film ? catalogLabel(film) : 'Плёнка')} · нужно ${Math.round(sqft)} sq ft`, status);
+  });
+}
+function projectFeedHtml(o, c, u, ctx) {
+  const { canManage, canSeeMoney, primary, measureAction, recentTimeline } = ctx;
+  const money = canSeeMoney;
+  const lines = projectLines(o);
+  const rooms = o.measurements?.rooms || [];
+  const windows = measureAllWindows(o);
+  const site = projectSiteInfo(o, c);
+  const events = orderScheduledEvents(o).filter(ev => ev.type !== 'complaint' || o.status === 'complaint_open');
+  const proposal = getPremiumProposalByOrder(o.id);
+  const invoices = Array.isArray(o.invoices) ? o.invoices : [];
+  const groups = projectServiceGroups(o);
+
+  const visits = events.length
+    ? events.map(ev => projectFeedRow(`${ev.icon} ${academyEsc(ev.title)}`, `${new Date(ev.at) < new Date() ? '✓ ' : ''}${fmtDateTime(ev.at)}`)).join('')
+    : '<div class="project-feed-empty">Визитов пока нет</div>';
+  const clientBody = `${projectFeedRow(academyEsc([c?.phone, c?.email].filter(Boolean).join(' · ') || 'контакты не заполнены'))}${projectFeedRow(`<span class="quiet">${academyEsc([orderSiteType(o) === 'COMMERCIAL' ? 'Commercial' : 'Residential', projectSiteSummary(o, c)].filter(Boolean).join(' · ') || 'доступ и парковка не заполнены')}</span>`)}`;
+  const measureBody = rooms.length
+    ? rooms.map(room => { const rw = (room.windows || []); const sq = rw.reduce((sum, win) => sum + (windowActualAreaSqft(win) || 0), 0); return projectFeedRow(`${academyEsc(room.name || 'Помещение')} · ${rw.length} ${projectWindowsWord(rw.length)}`, `${sq.toFixed(1)} sq ft`); }).join('') + projectFeedRow('Всего', `${windows.length} ${projectWindowsWord(windows.length)} · ${orderActualAreaSqft(o).toFixed(1)} sq ft`, 'total')
+    : `<div class="project-feed-empty">${orderNeedsMeasurements(o) ? 'Замера ещё нет' : 'Замер не нужен: услуги без размеров'}</div>`;
+  const measureChip = !windows.length ? '' : orderMeasurementVerificationIssues(o).length ? projectFeedChip('размеры клиента', 'warn') : projectFeedChip('точные размеры', 'good');
+  const filmRows = projectFeedFilmRows(o);
+  const proposalStatus = proposal ? (proposal.status || 'Draft') : '';
+  const proposalChip = !proposal ? projectFeedChip('не собрано') : ['Accepted', 'Deposit Paid', 'Paid in Full'].includes(proposalStatus) ? projectFeedChip('подписано', 'good') : ['Sent', 'Viewed'].includes(proposalStatus) ? projectFeedChip(proposalStatus === 'Viewed' ? 'клиент смотрел' : 'отправлено', 'info') : projectFeedChip('черновик');
+  const paid = Math.max(orderPaidTotal(o), Number(o.paid) || 0);
+  const payBody = `${projectFeedRow('Аванс', o.depositReceived ? `✓ ${fmtMoney(orderExpectedDeposit(o) || 0)}` : fmtMoney(orderExpectedDeposit(o) || companyDepositFor(orderRevenue(o))))}${projectFeedRow('Оплачено', fmtMoney(paid))}${projectFeedRow('Остаток', fmtMoney(orderDebt(o)), orderDebt(o) > 0 ? 'total' : '')}${invoices.length ? projectFeedRow(`Счета: ${invoices.map(inv => academyEsc(inv.number)).join(', ')}`, '') : ''}`;
+  const installBody = groups.length
+    ? groups.map(group => { const plan = projectServiceAssignment(o, group); const crew = (plan?.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', '); return projectFeedRow(academyEsc(group.name), plan?.installationAt ? `${fmtDateTime(plan.installationAt)}${crew ? ' · ' + academyEsc(crew) : ''}` : '<span class="quiet">не назначено</span>'); }).join('')
+    : '<div class="project-feed-empty">Сначала добавьте услуги</div>';
+  const docs = `<div class="project-feed-chips">
+      <button type="button" class="project-feed-doc" onclick="projectCardOpenWorkspace('documents')">${money ? 'КП и документы' : 'Документы'}</button>
+      <button type="button" class="project-feed-doc" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button>
+      <button type="button" class="project-feed-doc" onclick="printTechnicalSheet('${o.id}')">ТЗ-лист</button>
+      ${o.actSignature ? `<button type="button" class="project-feed-doc" onclick="openSignedActDocument('${o.id}')">Акт ✓</button>` : '<span class="project-feed-doc muted">Акт — после монтажа</span>'}
+    </div>`;
+  const history = recentTimeline.slice(0, 3).map(ev => `<div class="project-feed-row quiet"><span>${fmtDateTime(ev.at)} · ${academyEsc(T(ev.key))}${ev.note ? ' — ' + academyEsc(String(ev.note).slice(0, 60)) : ''}</span></div>`).join('') || '<div class="project-feed-empty">История пока пустая</div>';
+
+  let n = 0;
+  const next = () => ++n;
+  return `<div class="project-feed">
+    ${primary ? `<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг</div>${renderOrderActionCard(primary)}</div>` : ''}
+    ${projectFeedSection(next(), 'Визиты', visits, { id: 'visits', chip: events.some(ev => new Date(ev.at) >= new Date()) ? projectFeedChip('запланировано', 'info') : '', button: canManage ? projectFeedBtn('Назначить визит', "projectCardOpenWorkspace('schedule')") : '' })}
+    ${projectFeedSection(next(), 'Клиент и объект', clientBody, { id: 'client', button: projectFeedBtn(canManage ? 'Изменить' : 'Открыть', "projectCardOpenWorkspace('client')") })}
+    ${lines.length || projectPendingSizedServices(o).length || canManage ? `<div class="project-feed-services" data-project-feed="services"><div class="project-feed-head"><h3><span class="project-feed-num">${next()}</span>Услуги</h3>${money ? `<b>${fmtMoney(orderRevenue(o))}</b>` : ''}</div>${renderProjectCardServices(o, { money, economics: ctx.canSeeInternalEconomics, manage: canManage })}</div>` : ''}
+    ${projectFeedSection(next(), 'Замер', measureBody, { id: 'measure', chip: measureChip, button: projectFeedBtn('Открыть замер', measureAction, windows.length ? 'ghost' : 'primary') })}
+    ${money && filmRows.length ? projectFeedSection(next(), 'Плёнка и закупка', filmRows.join(''), { id: 'film', button: projectFeedBtn('Открыть закупку', 'openProjectPurchaseRequests()') }) : ''}
+    ${money ? projectFeedSection(next(), 'КП', proposal ? projectFeedRow(`КП ${academyEsc(proposal.number || '')}`, fmtMoney(premiumProposalCalc(proposal)?.total || orderRevenue(o))) : '<div class="project-feed-empty">Соберите КП, когда услуги посчитаны</div>', { id: 'kp', chip: proposalChip, button: projectFeedBtn(proposal ? 'Открыть КП' : 'Собрать КП', `openProposalWizard('${o.id}')`, proposal ? 'ghost' : 'primary') }) : ''}
+    ${money ? projectFeedSection(next(), 'Оплата и счёт', payBody, { id: 'pay', button: `${projectFeedBtn('Счёт (Invoice)', `openProjectInvoice('${o.id}')`)}${orderDebt(o) > 0.01 ? projectFeedBtn('Отметить оплату', `openPaymentModal('${o.id}',{kind:'final'})`) : ''}` }) : ''}
+    ${projectFeedSection(next(), 'Монтаж', installBody, { id: 'install', button: canManage ? projectFeedBtn('Назначить монтаж', "projectCardOpenWorkspace('schedule')") : '' })}
+    ${projectFeedSection(next(), 'Документы', docs, { id: 'docs' })}
+    ${projectFeedSection(next(), 'История и файлы', history, { id: 'history', button: projectFeedBtn('Вся история и фото', "projectCardOpenWorkspace('history')") })}
+  </div>`;
+}

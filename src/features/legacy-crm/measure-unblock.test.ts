@@ -18,19 +18,21 @@ function slice(src: string, from: string, to: string) {
   return src.slice(start, end);
 }
 
-test('the measurer always works in his studio and can save and leave', () => {
-  assert.match(slice(html, 'function openManagerMeasureModal(oid) {', '\n}\n'), /if \(currentUser\(\)\?\.role === 'measurer'\) \{ openEngineeringMeasureStudio\(oid\); return; \}/);
-  assert.match(html, /onclick="measureStudioSaveAndExit\('\$\{order\.id\}'\)">Сохранить и выйти<\/button>/);
-  assert.match(html, /onclick="measureStudioClose\('\$\{order\.id\}'\)">✕<\/button>/);
-  const exit = slice(html, 'function measureStudioSaveAndExit(orderId) {', 'function measureStudioClose(');
-  assert.match(exit, /if \(dirty && typed\) \{\s*measureStudioSaveWindow\(orderId\);/, 'the open window is saved first');
-  assert.match(exit, /closeModal\(\);/);
-  assert.match(html, /photoName: targetWin\.photoName \|\| '', dirty: false \};/);
+test('one measurement window for every role: next window, save and back, the measurer hands in without a film', () => {
+  assert.doesNotMatch(slice(html, 'function openManagerMeasureModal(oid) {', '\n}\n'), /openEngineeringMeasureStudio/);
+  assert.match(slice(html, 'function openMeasurerV25ForOrder(oid) {', '\n}\n'), /openManagerMeasureModal\(oid\);/);
+  assert.match(html, /onclick="managerMeasureNextWindow\('\$\{oid\}','\$\{activeRoom\.id\}'\)">Сохранить и следующее окно<\/button>/);
+  assert.match(html, /onclick="managerMeasureSaveAndExit\('\$\{oid\}'\)">Сохранить и назад<\/button>/);
+  assert.match(html, /onclick="completeManagerMeasurement\('\$\{oid\}'\)">✓ Сдать замер<\/button>/);
+  const done = slice(html, 'function completeManagerMeasurement(oid) {', '\n}\n');
+  assert.match(done, /orderWorkflowTransitionIssues\(o, 'measurement_done'\), \.\.\.orderTechnicalMeasurementIssues\(o\)/);
+  assert.match(done, /box\.innerHTML = `<b>Чтобы сдать замер:<\/b>/);
+  assert.match(html, /\.manager-measure-modal \.manager-measure-footer \{ position:sticky; bottom:0;/);
 });
 
-test('the office measurement window has «Сохранить и выйти» in a footer that stays on screen', () => {
-  assert.match(html, /onclick="managerMeasureSaveAndExit\('\$\{oid\}'\)">Сохранить и выйти<\/button>/);
-  assert.match(html, /\.manager-measure-modal \.manager-measure-footer \{ position:sticky; bottom:0;/);
+test('the film list of a window: in stock first, then the service films to order', () => {
+  assert.match(html, /<optgroup label="На складе">/);
+  assert.match(html, /<optgroup label="Нет на складе — под заказ">/);
 });
 
 test('film: the room block is folded; a missing film is added from the window list and ordered', () => {

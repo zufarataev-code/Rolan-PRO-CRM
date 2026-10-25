@@ -30,6 +30,16 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-24 handoff — project feed and one measurement window (approved mock-up)
+
+- Branch: `claude/project-feed-one-measure`, based on `main` after PR #380 (card step 1).
+- Owner approved the Design canvas row «Новый вариант после аудита» (boards 8–11) after a TintWiz test order («делай»).
+- Project card = one feed (`projectFeedHtml`, production-stages.js): «Следующий шаг» card, then Визиты → Клиент и объект → Услуги (the existing services list, without its second heading) → Замер → Плёнка и закупка → КП → Оплата и счёт → Монтаж → Документы → История; one button each, opening the existing workspaces. Tabs, side panel and the sticky duplicate step are gone; hero shows Сумма / Оплачено / Остаток. Money sections only for roles that see money.
+- One measurement window for every role: `openMeasurerV25ForOrder` → the office window (the field studio stays in code, unused by routing). Footer: «Сохранить и следующее окно» (`managerMeasureNextWindow`), «Сохранить и назад», «✓ Сдать замер» for the measurer (film optional, on-site details required, issues shown in place) / «✓ Завершить замер и рассчитать» for the office.
+- Window film list: «На складе» (with sq ft) first, then «Нет на складе — под заказ», then «Нет в списке — добавить и заказать».
+- Next: КП with variants (board 11) — a change of the proposal model, separate PR.
+- Verification: `project-feed.test.ts`, updated measure/estimate/project-lines tests; harness full cycle at 1440 (project → measure → KP → accept → deposit → verify → production → installer → act → payment → completed) and phone screenshots of the feed and the measurer window.
+
 ## 2026-10-24 handoff — measurement unblocked, film «add and order», services land on windows
 
 - Branch: `claude/measure-unblock-audit`, based on `main` after PR #377.
