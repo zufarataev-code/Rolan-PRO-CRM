@@ -53,7 +53,7 @@ test('the project card carries the approved cashier → measurement → work-ord
   assert.match(html,/data-project-cashier-map/);
   assert.match(html,/Касса проекта · направления и услуги/);
   assert.match(html,/Добавить направление/);
-  assert.match(html,/openServiceCashier\('\$\{o\.id\}','card'\)/);
+  assert.match(html,/openProjectDirectionPicker\('\$\{o\.id\}'\)/); // a direction first, then its window (2026-10-24)
   assert.match(html,/openManagerMeasureModal\('\$\{o\.id\}'\)/);
   assert.match(html,/openProjectEstimateWorkspace\('\$\{o\.id\}'\)/);
   assert.match(html,/openWorkOrder\('\$\{o\.id\}'\)/);

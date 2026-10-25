@@ -1,3 +1,4 @@
+import { calculateSuggestedDeposit } from "@/features/payments/policy";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
@@ -1835,6 +1836,8 @@ export async function updatePublicProposalSelections(
         where: {
           proposal_item_id: item.proposal_item_id,
           proposal_id: proposal.proposal_id,
+          // Only extras are the client's to tick; the agreed scope stays as sent.
+          is_optional: true,
         },
         data: {
           client_selected: item.client_selected,
@@ -1854,7 +1857,24 @@ export async function updatePublicProposalSelections(
       },
     });
 
-    await recalculateProposalTotals(tx, proposal.proposal_id);
+    const totals = await recalculateProposalTotals(tx, proposal.proposal_id);
+    // An unpaid standard deposit follows what the client picked (10%, capped).
+    const deposit = await tx.deposit.findUnique({
+      where: { proposal_id: proposal.proposal_id },
+      select: { deposit_id: true, status: true, payment_reference: true },
+    });
+    if (deposit && deposit.status !== "paid" && (!deposit.payment_reference || deposit.payment_reference === "deposit50")) {
+      const amount = calculateSuggestedDeposit(toNumber(totals.selected_total_amount), proposal.property_type);
+      if (amount > 0) {
+        await tx.deposit.update({
+          where: { deposit_id: deposit.deposit_id },
+          data: {
+            amount,
+            legal_cap_amount: proposal.property_type === "residential" ? amount : null,
+          },
+        });
+      }
+    }
     await createProposalEvent(tx, {
       proposalId: proposal.proposal_id,
       actorType: "client",

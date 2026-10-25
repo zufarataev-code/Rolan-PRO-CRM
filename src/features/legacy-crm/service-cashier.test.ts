@@ -105,7 +105,7 @@ function fixture(role = 'owner') {
 
 test('the picker is the cashier button; it opens on the first step only for people who may price', () => {
   const { context, order, state } = fixture();
-  assert.match(context.projectOfferingPickerHtml(order, 'projectCardAddService'), /openServiceCashier\('o','card'\)/);
+  assert.match(context.projectOfferingPickerHtml(order, 'projectCardAddService'), /openProjectDirectionPicker\('o'\)/);
   assert.match(context.projectOfferingPickerHtml(order), /openServiceCashier\('o','estimate'\)/);
   context.openServiceCashier('o', 'card');
   const c = context.serviceCashierState();

@@ -317,7 +317,7 @@ function projectDirectionOfferingPickerHtml(o, directionKey) {
   if (!options.length) return '<span class="text-xs text-gray-500">Все услуги направления добавлены</span>';
   // One way to add a service: the cashier, opened at this direction (Owner, 2026-10-23:
   // «услуги имеют два варианта — зачем?» — a dropdown here and the cashier above).
-  return `<button type="button" class="btn-ghost text-sm project-direction-add" onclick="openServiceCashier('${o.id}','card');serviceCashierPick('direction','${directionKey}')">+ Услуга в направление</button>`;
+  return `<button type="button" class="btn-ghost text-sm project-direction-add" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','services')">+ Услуга в направление</button>`;
 }
 function projectLineNoteValue(o, key) {
   return String(o.serviceLineNotes?.[key] || '');
@@ -411,7 +411,7 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   const area = orderActualAreaSqft(o);
   return `<div class="project-cashier-map" data-project-cashier-map>
     <!-- Касса проекта · направления и услуги: heading dropped 2026-10-24, «Состав проекта» above says it -->
-    <div class="project-cashier-directions">${money && edit ? `<button type="button" class="project-cashier-direction add" onclick="openServiceCashier('${o.id}','card')"><span class="project-cashier-direction-icon">+</span><span><b>Добавить направление</b><span>услуга, материал и дополнения</span></span></button>` : ''}</div>
+    <div class="project-cashier-directions">${money && edit ? `<button type="button" class="project-cashier-direction add" onclick="openProjectDirectionPicker('${o.id}')"><span class="project-cashier-direction-icon">+</span><span><b>Добавить направление</b><span>услуга, материал и дополнения</span></span></button>` : ''}</div>
     <div class="project-cashier-flow"><div class="project-cashier-flow-facts"><span><b>${rooms}</b> ${projectPlural(rooms, 'помещение', 'помещения', 'помещений')}</span><span><b>${windows}</b> ${projectWindowsWord(windows)}</span><span><b>${area.toFixed(2)}</b> sq ft</span><span>Размеры общие, направления назначаются услугам и окнам</span></div><div class="project-cashier-flow-actions"><button type="button" class="btn-ghost" onclick="openManagerMeasureModal('${o.id}')">Замер</button>${money ? `<button type="button" class="btn-ghost" onclick="openProjectEstimateWorkspace('${o.id}')">Расчёт / КП</button>` : ''}<button type="button" class="btn-ghost" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button></div></div>
   </div>`;
 }
@@ -1024,7 +1024,8 @@ function openProjectDirectionWindow(oid, directionKey, step = '') {
   if (!o) return;
   const prev = state._directionWindow;
   const current = step || (prev && prev.oid === oid && prev.key === directionKey ? prev.step : '') || 'services';
-  state._directionWindow = { oid, key: directionKey, step: current };
+  const pick = prev && prev.oid === oid && prev.key === directionKey ? prev.pick || '' : '';
+  state._directionWindow = { oid, key: directionKey, step: current, pick };
   state.modal = projectDirectionWindowHtml(o, directionKey, current);
   render();
 }
@@ -1081,7 +1082,7 @@ function projectDirectionWindowHtml(o, directionKey, step) {
     body = `<p class="rp-dirwin-hint">Что делаем в этом направлении. Здесь только его услуги и плёнки.</p>
       ${direction.lines.map(lineRow).join('')}${direction.pending.map(pendingRow).join('')}
       ${!direction.lines.length && !direction.pending.length ? '<div class="rp-dirwin-empty">Услуг пока нет.</div>' : ''}
-      ${edit ? `<button type="button" class="rp-dirwin-add" onclick="projectDirectionWindowAddService('${o.id}','${jsQuote(directionKey)}')">+ Услуга направления «${academyEsc(direction.title)}»</button>` : ''}`;
+      ${edit ? projectDirectionAddHtml(o, directionKey) : ''}`;
   }
   const next = index < steps.length - 1
     ? `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','${steps[index + 1].id}')">Далее: ${steps[index + 1].label.toLowerCase()} →</button>`
@@ -1179,6 +1180,7 @@ function proposalWizardHtml(o, step) {
     const issues = projectEstimateReadiness(o);
     body = `<p class="rp-dirwin-hint">КП собирается из посчитанных направлений. Состав меняется в окне направления.</p>
       ${groups.map(row).join('') || '<div class="rp-dirwin-empty">В проекте пока нет услуг.</div>'}
+      ${projectProposalOptionsHtml(o)}
       <div class="rp-kpwin-total"><div><span>Итого</span><b>${fmtMoney(total)}</b></div><div><span>Аванс при подписи</span><b>${fmtMoney(deposit)}</b></div></div>
       ${issues.length ? `<div class="rp-dirwin-warn">Чего не хватает: ${academyEsc(issues.join(', '))}</div>` : ''}`;
     foot = issues.length
@@ -1594,10 +1596,173 @@ function projectFeedHtml(o, c, u, ctx) {
     ${lines.length || projectPendingSizedServices(o).length || canManage ? `<div class="project-feed-services" data-project-feed="services"><div class="project-feed-head"><h3><span class="project-feed-num">${next()}</span>Услуги</h3>${money ? `<b>${fmtMoney(orderRevenue(o))}</b>` : ''}</div>${renderProjectCardServices(o, { money, economics: ctx.canSeeInternalEconomics, manage: canManage })}</div>` : ''}
     ${projectFeedSection(next(), 'Замер', measureBody, { id: 'measure', chip: measureChip, button: projectFeedBtn('Открыть замер', measureAction, windows.length ? 'ghost' : 'primary') })}
     ${money && filmRows.length ? projectFeedSection(next(), 'Плёнка и закупка', filmRows.join(''), { id: 'film', button: projectFeedBtn('Открыть закупку', 'openProjectPurchaseRequests()') }) : ''}
-    ${money ? projectFeedSection(next(), 'КП', proposal ? projectFeedRow(`КП ${academyEsc(proposal.number || '')}`, fmtMoney(premiumProposalCalc(proposal)?.total || orderRevenue(o))) : '<div class="project-feed-empty">Соберите КП, когда услуги посчитаны</div>', { id: 'kp', chip: proposalChip, button: projectFeedBtn(proposal ? 'Открыть КП' : 'Собрать КП', `openProposalWizard('${o.id}')`, proposal ? 'ghost' : 'primary') }) : ''}
+    ${money ? projectFeedSection(next(), 'КП', (proposal ? projectFeedRow(`КП ${academyEsc(proposal.number || '')}`, fmtMoney(premiumProposalCalc(proposal)?.total || orderRevenue(o))) : '<div class="project-feed-empty">Соберите КП, когда услуги посчитаны</div>') + (projectProposalOptionalOfferings(o).length ? projectFeedRow(`<span class="quiet">Опции на выбор клиента: ${projectProposalOptionalOfferings(o).map(item => academyEsc(item.offering.name)).join(', ')}</span>`) : '') + ((o.kpClientOptions || []).length ? projectFeedRow(`Клиент выбрал: ${o.kpClientOptions.map(item => academyEsc(item.title)).join(', ')}`, '') : ''), { id: 'kp', chip: proposalChip, button: projectFeedBtn(proposal ? 'Открыть КП' : 'Собрать КП', `openProposalWizard('${o.id}')`, proposal ? 'ghost' : 'primary') + (proposal?.canonicalProposalId && proposal.status !== 'Draft' ? projectFeedBtn('Забрать выбор клиента', `premiumApplyClientOptions('${o.id}')`) : '') }) : ''}
     ${money ? projectFeedSection(next(), 'Оплата и счёт', payBody, { id: 'pay', button: `${projectFeedBtn('Счёт (Invoice)', `openProjectInvoice('${o.id}')`)}${orderDebt(o) > 0.01 ? projectFeedBtn('Отметить оплату', `openPaymentModal('${o.id}',{kind:'final'})`) : ''}` }) : ''}
     ${projectFeedSection(next(), 'Монтаж', installBody, { id: 'install', button: canManage ? projectFeedBtn('Назначить монтаж', "projectCardOpenWorkspace('schedule')") : '' })}
     ${projectFeedSection(next(), 'Документы', docs, { id: 'docs' })}
     ${projectFeedSection(next(), 'История и файлы', history, { id: 'history', button: projectFeedBtn('Вся история и фото', "projectCardOpenWorkspace('history')") })}
   </div>`;
+}
+
+// ---------- ОПЦИИ В КП: КЛИЕНТ ОТМЕЧАЕТ САМ (Owner, 2026-10-24) ----------
+// «На замере подбираем плёнку, а в КП добавляем допы, и клиент сам выбирает»:
+// smart standard = power supply with remotes; the KP offers voice control, a
+// wall switch, a second remote, a 10-year warranty at $5/month. Services marked
+// «Опция в КП» in the directory go to the KP unticked; the client ticks them on
+// his page; «Забрать выбор клиента» puts the ticked ones into the project.
+function projectProposalOptionalOfferings(o, { all = false } = {}) {
+  const inProject = new Set([o?.offeringId, ...(o?.offeringIds || []), ...projectLines(o).map(line => line.offeringId)].filter(Boolean));
+  const excluded = new Set(o?.kpOptionsExcluded || []);
+  const directions = projectDirectionGroups(o).filter(direction => !projectDirectionExcluded(o, direction.key)).map(direction => direction.key);
+  const seen = new Set();
+  const out = [];
+  directions.forEach(key => serviceOfferingsFor(serviceOfferingDirection(key)).forEach(offering => {
+    if (seen.has(offering.id) || !offering.proposalOptional || offering.active === false || serviceOfferingIsDraft(offering) || serviceOfferingNeedsSizes(offering) || inProject.has(offering.id)) return;
+    seen.add(offering.id);
+    if (all || !excluded.has(offering.id)) out.push({ offering, direction: key });
+  }));
+  return out;
+}
+function projectProposalOptionToggle(oid, offeringId, offered) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const set = new Set(o.kpOptionsExcluded || []);
+  if (offered) set.delete(offeringId); else set.add(offeringId);
+  o.kpOptionsExcluded = [...set];
+  save();
+  if (typeof openProposalWizard === 'function' && state._proposalWizard?.oid === oid) openProposalWizard(oid, 'compose');
+}
+function projectProposalOptionPriceText(offering) {
+  const price = Number(offering.pricePerSqft) || 0;
+  return offering.monthly ? `${fmtMoney(price)} / мес` : fmtMoney(price);
+}
+function projectProposalOptionsHtml(o) {
+  const rows = projectProposalOptionalOfferings(o, { all: true });
+  if (!rows.length) return `<div class="rp-kpwin-options"><div class="rp-kpwin-options-head">Опции для клиента</div><div class="rp-dirwin-hint">Отметьте в «Услугах и ценах» услуги как «Опция в КП» — например, голосовое управление, выключатель, второй пульт, расширенную гарантию. Клиент выберет их сам в КП.</div></div>`;
+  const excluded = new Set(o.kpOptionsExcluded || []);
+  return `<div class="rp-kpwin-options"><div class="rp-kpwin-options-head">Опции для клиента — он отмечает сам</div>
+    ${rows.map(({ offering, direction }) => { const tone = rpDir(direction); return `<label class="rp-kpwin-option" style="--dir-color:${academyEsc(tone.color)}"><input type="checkbox" ${excluded.has(offering.id) ? '' : 'checked'} onchange="projectProposalOptionToggle('${o.id}','${jsQuote(offering.id)}',this.checked)"><span class="rp-kpwin-dot"></span><span class="flex-1">${academyEsc(offering.name)}</span><b>${projectProposalOptionPriceText(offering)}</b></label>`; }).join('')}
+    <div class="rp-dirwin-hint">Отмеченные попадут в КП без галочки — клиент добавит то, что ему нужно, сумма и аванс пересчитаются.</div></div>`;
+}
+/** KP lines for the options: optional, unticked; a subscription shows its monthly price and adds $0 now. */
+function projectProposalOptionItems(o) {
+  return projectProposalOptionalOfferings(o).map(({ offering, direction }) => {
+    const price = Math.round((Number(offering.pricePerSqft) || 0) * 100) / 100;
+    const title = offering.nameEn || serviceOfferingEnglishGuess(offering) || offering.name;
+    return {
+      service_code: canonicalServiceCodeForOrderService(direction) || 'SOLAR_FILM',
+      title_en: offering.monthly ? `${title} — $${price}/month` : title,
+      description_en: offering.description || (offering.monthly ? 'Monthly subscription, billed separately.' : 'Optional upgrade.'),
+      quantity: 1,
+      unit_label: offering.monthly ? 'month' : (serviceOfferingUnitShort(offering) || 'item'),
+      line_price: offering.monthly ? 0 : price,
+      item_kind: 'addon',
+      is_optional: true,
+      client_selected: false,
+      dynamic_fields: { offering_id: offering.id, optional: true, billing: offering.monthly ? 'monthly' : 'one_time', monthly_price: offering.monthly ? price : null, direction },
+    };
+  });
+}
+/** The options the client ticked on his KP page come into the project as its lines. */
+async function premiumApplyClientOptions(oid, { quiet = false } = {}) {
+  const o = getOrder(oid);
+  const prop = getPremiumProposalByOrder(oid);
+  if (!o || !prop?.canonicalProposalId || !orderUserCanSeeMoney(o, currentUser())) { if (!quiet) alert('КП ещё не опубликовано — клиент пока ничего не выбирал.'); return 0; }
+  try {
+    const response = await fetch(`/api/v1/proposals/${encodeURIComponent(prop.canonicalProposalId)}`, { credentials: 'same-origin', cache: 'no-store' });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.errors?.[0]?.message || `КП ${response.status}`);
+    const items = Array.isArray(payload?.data?.proposal?.items) ? payload.data.proposal.items : [];
+    const chosen = items.filter(item => item.is_optional && item.client_selected && item.dynamic_fields?.offering_id);
+    const fresh = getOrder(oid);
+    const have = new Set([...(fresh.offeringIds || []), ...projectLines(fresh).map(line => line.offeringId)].filter(Boolean));
+    let added = 0;
+    projectCardEdit(() => chosen.forEach(item => {
+      const id = item.dynamic_fields.offering_id;
+      if (have.has(id) || !serviceOffering(id)) return;
+      projectAddOfferingLine(oid, id, item.dynamic_fields.direction || '');
+      have.add(id); added++;
+    }));
+    fresh.kpClientOptions = chosen.map(item => ({ offeringId: item.dynamic_fields.offering_id, title: item.title_en, billing: item.dynamic_fields.billing || 'one_time', monthly: item.dynamic_fields.monthly_price || null }));
+    fresh.kpClientOptionsAt = new Date().toISOString();
+    if (added) { fresh.timeline = fresh.timeline || []; fresh.timeline.push({ at: fresh.kpClientOptionsAt, key: 'kp_client_options', by: state.currentUserId, note: `Клиент выбрал в КП: ${chosen.map(item => item.title_en).join(', ')}` }); }
+    save(); render();
+    if (!quiet) alert(added ? `Добавлено в проект: ${added}. ${chosen.map(item => item.title_en).join(', ')}` : chosen.length ? 'Выбранные клиентом опции уже в проекте.' : 'Клиент пока не отметил ни одной опции.');
+    return added;
+  } catch (error) {
+    if (!quiet) alert('Не удалось забрать выбор клиента: ' + (error?.message || error));
+    return 0;
+  }
+}
+
+// ---------- УСЛУГИ ДОБАВЛЯЮТСЯ ПРЯМО В ОКНЕ НАПРАВЛЕНИЯ (Owner, 2026-10-24) ----------
+// «Выбираем направление — оно открывается в отдельном окне, и тут же внутри
+// добавляешь услуги, чтобы не прыгало туда-сюда». The services step lists the
+// direction's services as cards; a tap adds it (a film is picked right there,
+// in stock first); a new direction is chosen from a short list and opens its
+// window. The cashier stays for the new-project form only.
+function projectDirectionAddableOfferings(o, directionKey) {
+  const inProject = new Set([o?.offeringId, ...(o?.offeringIds || []), ...projectLines(o).map(line => line.offeringId)].filter(Boolean));
+  return serviceOfferingsFor(serviceOfferingDirection(directionKey)).filter(offering => offering.active !== false && !serviceOfferingIsDraft(offering) && !inProject.has(offering.id));
+}
+function projectDirectionPickService(oid, directionKey, offeringId) {
+  const offering = serviceOffering(offeringId);
+  const o = getOrder(oid);
+  if (!o || !offering) return;
+  const films = serviceCashierFilms(offering);
+  if (films.length && serviceOfferingNeedsSizes(offering)) {
+    state._directionWindow = { ...(state._directionWindow || {}), oid, key: directionKey, step: 'services', pick: offeringId };
+    openProjectDirectionWindow(oid, directionKey, 'services');
+    return;
+  }
+  projectDirectionAddService(oid, directionKey, offeringId, '');
+}
+function projectDirectionAddService(oid, directionKey, offeringId, catalogId = '') {
+  const o = getOrder(oid);
+  const offering = serviceOffering(offeringId);
+  if (!o || !offering || !orderUserCanSeeMoney(o, currentUser())) return;
+  const film = catalogId && serviceCashierFilms(offering).some(item => item.id === catalogId) ? getCatalogItem(catalogId) : null;
+  projectCardEdit(() => {
+    if (film) o.offeringCatalogIds = { ...(o.offeringCatalogIds || {}), [offering.id]: film.id };
+    projectAddOfferingLine(oid, offering.id, directionKey);
+    if (film) (o.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => {
+      if (win.offeringId === offering.id && !win.catalogId) { win.catalogId = film.id; win.filmType = catalogLabel(film); }
+    }));
+    save();
+  });
+  state._directionWindow = { ...(state._directionWindow || {}), oid, key: directionKey, step: 'services', pick: '' };
+  openProjectDirectionWindow(oid, directionKey, 'services');
+}
+function projectDirectionAddHtml(o, directionKey) {
+  const w = state._directionWindow || {};
+  const picked = w.oid === o.id && w.key === directionKey && w.pick ? serviceOffering(w.pick) : null;
+  if (picked) {
+    const films = serviceCashierFilms(picked);
+    const stock = films.filter(film => warehouseCatalogStockStats(film.id).availableSqft > 0);
+    const order = films.filter(film => !(warehouseCatalogStockStats(film.id).availableSqft > 0));
+    const filmBtn = film => `<button type="button" class="rp-dirwin-pick" onclick="projectDirectionAddService('${o.id}','${jsQuote(directionKey)}','${jsQuote(picked.id)}','${jsQuote(film.id)}')"><b>${academyEsc(catalogLabel(film))}</b><span>${warehouseCatalogStockStats(film.id).availableSqft > 0 ? `${warehouseCatalogStockStats(film.id).availableSqft.toFixed(0)} sq ft на складе` : 'под заказ'}</span></button>`;
+    return `<div class="rp-dirwin-adder"><div class="rp-dirwin-group">${academyEsc(picked.name)} — какая плёнка?</div>
+      <button type="button" class="rp-dirwin-pick soft" onclick="projectDirectionAddService('${o.id}','${jsQuote(directionKey)}','${jsQuote(picked.id)}','')"><b>Уточним на замере</b><span>плёнку выберет замер или менеджер</span></button>
+      ${stock.length ? `<div class="rp-dirwin-sub">На складе</div>${stock.map(filmBtn).join('')}` : ''}
+      ${order.length ? `<div class="rp-dirwin-sub">Нет на складе — под заказ</div>${order.map(filmBtn).join('')}` : ''}
+      <button type="button" class="btn-ghost w-full mt-2" onclick="state._directionWindow.pick=''; openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','services')">← Другая услуга</button></div>`;
+  }
+  const list = projectDirectionAddableOfferings(o, directionKey);
+  if (!list.length) return '<div class="rp-dirwin-hint">Все услуги направления уже в проекте.</div>';
+  return `<div class="rp-dirwin-adder"><div class="rp-dirwin-group">Добавить услугу</div>
+    ${list.map(offering => `<button type="button" class="rp-dirwin-pick" onclick="projectDirectionPickService('${o.id}','${jsQuote(directionKey)}','${jsQuote(offering.id)}')"><b>${academyEsc(offering.name)}${offering.proposalOptional ? ' <small>опция в КП</small>' : ''}</b><span>${fmtMoney(Number(offering.pricePerSqft) || 0)} / ${offering.monthly ? 'мес' : academyEsc(serviceOfferingUnitShort(offering))}${serviceOfferingNeedsSizes(offering) ? ' · по замеру' : ''}</span></button>`).join('')}
+  </div>`;
+}
+/** «+ Добавить направление»: a short list; the chosen direction opens its own window. */
+function openProjectDirectionPicker(oid) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const have = new Set(projectDirectionGroups(o).map(direction => direction.key));
+  const options = ORDER_PRIMARY_SERVICES.filter(direction => !have.has(direction.id) && serviceOfferingsFor(serviceOfferingDirection(direction.id)).some(offering => offering.active !== false && !serviceOfferingIsDraft(offering)));
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content workspace-modal p-5" style="max-width:30rem" onclick="event.stopPropagation()" data-rp-keep-layout>
+    <button type="button" class="workspace-back mb-2" onclick="closeModal()">← К проекту</button>
+    <h3 class="font-black text-xl">Какое направление добавить?</h3>
+    <div class="grid gap-2 mt-3">${options.map(direction => { const tone = rpDir(direction.id); return `<button type="button" class="rp-dirwin-pick" style="border-left:4px solid ${academyEsc(tone.color)}" onclick="closeModal(); openProjectDirectionWindow('${o.id}','${jsQuote(direction.id)}','services')"><b>${direction.icon} ${academyEsc(direction.title)}</b><span>${academyEsc(direction.desc || '')}</span></button>`; }).join('') || '<div class="rp-dirwin-hint">Все направления уже в проекте.</div>'}</div>
+  </div></div>`;
+  render();
 }

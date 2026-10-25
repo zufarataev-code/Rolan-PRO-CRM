@@ -103,7 +103,7 @@ test('while priced, the card shows services with quantity and price only; a per-
   assert.doesNotMatch(zone, /projectCardSetPrice\('o','line:z'/, 'a price without a manager range follows the directory');
   assert.match(out, /data-project-pending="a3"[\s\S]*ждёт замера[\s\S]*projectCardRemovePending\('o','a3'\)/);
   // Services are added through the cashier (Owner, 2026-10-19), which returns to the card.
-  assert.match(out, /onclick="openServiceCashier\('o','card'\)">\+ Услуга в проект</);
+  assert.match(out, /onclick="openProjectDirectionPicker\('o'\)">\+ Направление \/ услуга</);
   assert.match(out, /Клиенту \$720\.00/);
   assert.match(out, /Материал \$0\.00 · работа \$280\.00/);
   // The incoming request cannot be removed from its own project.

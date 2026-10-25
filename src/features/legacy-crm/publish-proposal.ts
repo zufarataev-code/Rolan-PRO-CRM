@@ -27,6 +27,9 @@ type LegacyProposalLine = {
   measurement_snapshot?: Record<string, unknown>;
   dynamic_fields?: Record<string, unknown>;
   item_kind?: string;
+  /** An extra the client ticks himself on the proposal page (Owner, 2026-10-24). */
+  is_optional?: boolean;
+  client_selected?: boolean;
 };
 
 export type LegacyProposalSnapshot = {
@@ -105,8 +108,11 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
       ...(leadIntentServiceCode ? { lead_intent_service_code: leadIntentServiceCode } : {}),
     } as Prisma.InputJsonValue,
     itemKind: cleanText(item.item_kind, 40) || "service",
+    isOptional: item.is_optional === true,
+    // An option starts unticked unless the snapshot says the client chose it.
+    clientSelected: item.is_optional === true ? item.client_selected === true : true,
   }));
-  if (!items.length) throw new Error("The proposal has no billable lines.");
+  if (!items.some((item) => !item.isOptional)) throw new Error("The proposal has no billable lines.");
 
   return {
     token,
@@ -223,7 +229,9 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
       });
     }
 
-    const total = snapshot.items.reduce((sum, item) => sum + item.linePrice, 0);
+    // The scope is the required lines; options count once the client ticks them.
+    const total = snapshot.items.filter((item) => !item.isOptional).reduce((sum, item) => sum + item.linePrice, 0);
+    const selectedTotal = snapshot.items.filter((item) => item.clientSelected).reduce((sum, item) => sum + item.linePrice, 0);
     const proposal = existing
       ? await tx.proposal.update({
           where: { proposal_id: existing.proposal_id },
@@ -231,7 +239,7 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
             title: snapshot.title,
             status: existing.status,
             subtotal_amount: total,
-            selected_total_amount: total,
+            selected_total_amount: selectedTotal,
             property_type: snapshot.siteType === "COMMERCIAL" ? "commercial" : "residential",
             client_message: "Review the saved project scope below, approve the proposal, and continue to payment when ready.",
             notes: `Canonical copy of legacy order ${snapshot.legacyOrderId}.`,
@@ -247,7 +255,7 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
             access_token: snapshot.token,
             currency: "USD",
             subtotal_amount: total,
-            selected_total_amount: total,
+            selected_total_amount: selectedTotal,
             property_type: snapshot.siteType === "COMMERCIAL" ? "commercial" : "residential",
             client_message: "Review the saved project scope below, approve the proposal, and continue to payment when ready.",
             notes: `Canonical copy of legacy order ${snapshot.legacyOrderId}.`,
@@ -273,8 +281,8 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
         quantity: item.quantity,
         unit_label: item.unitLabel,
         line_price: item.linePrice,
-        is_optional: false,
-        client_selected: true,
+        is_optional: item.isOptional,
+        client_selected: item.clientSelected,
         sort_order: index + 1,
       })),
     });

@@ -91,7 +91,7 @@ test('the deposit the CRM asks for is the one the KP asks the client to pay', ()
 });
 
 test('one way to add a service; scheduling and acceptance are one clear step each', () => {
-  assert.match(slice(stages, 'function projectDirectionOfferingPickerHtml(o, directionKey)', 'function projectLineNoteValue('), /openServiceCashier\('\$\{o\.id\}','card'\);serviceCashierPick\('direction','\$\{directionKey\}'\)/);
+  assert.match(slice(stages, 'function projectDirectionOfferingPickerHtml(o, directionKey)', 'function projectLineNoteValue('), /openProjectDirectionWindow\('\$\{o\.id\}','\$\{jsQuote\(directionKey\)\}','services'\)/); // services are added inside the direction window (2026-10-24)
   assert.doesNotMatch(stages, /<select class="project-direction-add"/);
   assert.match(html, /\+ Своя строка<\/button>/);
   const next = slice(html, 'function orderPrimaryNextAction(o)', 'function installerOrderPrimaryAction(o)');
