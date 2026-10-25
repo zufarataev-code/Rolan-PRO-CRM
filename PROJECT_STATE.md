@@ -23,6 +23,13 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-25 handoff — client emails were silently skipped
+
+- Production check: Gmail (info@rolan-pro.com) is connected with no sync error, but 30 of 32 automatic client emails were `skipped | нет согласия клиента на Email` — the consent checkbox defaulted to off.
+- Fix: service email now goes to every client with an email unless «Не присылать письма» (`emailOptOut`) is ticked; SMS still needs consent. See DECISIONS.md 2026-10-25.
+- KP: 5 of 10 proposals on production are still Draft — never sent. KP email goes only when the manager presses Email in the KP window step «Отправить».
+- Verification: legacy-sms-ui.test.ts updated; `npm test` matches main locally (env-dependent failures only).
+
 ## 2026-10-25 handoff — notification sound
 
 - Owner: in-app notices were silent. New unread notices (🔔) and new incoming client messages now play a short two-tone chime and vibrate on phones.

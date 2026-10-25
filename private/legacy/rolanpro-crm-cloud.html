@@ -14571,6 +14571,12 @@ async function sendWhatsAppViaBackend(phone, body, o, c, subject) {
   }
   return data;
 }
+// Service emails (замер назначен, КП, оплата, монтаж) go to every client with
+// an email unless the client asked not to get them. SMS still needs consent
+// (TCPA); email needs only an opt-out (Owner, 2026-10-25).
+function clientEmailAllowed(c) {
+  return !!c?.email && c?.emailOptOut !== true;
+}
 async function dispatchClientCommunication(o, subject, body, timelineKey, opts = {}) {
   const c = getClient(o?.clientId);
   if (!o || !c) return [];
@@ -14617,7 +14623,7 @@ async function dispatchClientCommunication(o, subject, body, timelineKey, opts =
 
   if (communicationChannelEnabled('email')) {
     const emCfg = db.settings.email || {};
-    if (emCfg.autoSend && c.email && c.emailConsent === true) {
+    if (emCfg.autoSend && clientEmailAllowed(c)) {
       if (ROLANPRO_CLOUD) {
         try {
           await workMailApi('/messages', {
@@ -14665,8 +14671,8 @@ async function dispatchClientCommunication(o, subject, body, timelineKey, opts =
         notes.push('Автоотправка email не настроена');
       }
     } else {
-      const reason = !emCfg.autoSend ? 'Email auto выключен' : !c.email ? 'нет email' : 'нет согласия клиента на Email';
-      const status = !c.email || c.emailConsent !== true ? 'skipped' : 'manual_required';
+      const reason = !emCfg.autoSend ? 'Email auto выключен' : !c.email ? 'нет email' : 'клиент отказался от писем';
+      const status = !clientEmailAllowed(c) ? 'skipped' : 'manual_required';
       recordCommunicationDispatch(o, 'email', status, emailBody, reason, status === 'manual_required' ? { subject, url: emailLink(c.email, subject, emailBody) } : { subject });
       notes.push(reason);
     }
@@ -15068,7 +15074,7 @@ function renderOrderCommunicationHub(o, c) {
       ${channelChip(!!c?.phone, 'Телефон')}
       ${channelChip(!!c?.phone && c?.smsConsent === true && communicationChannelEnabled('sms'), c?.smsConsent === true ? 'SMS' : 'SMS: нет согласия')}
       ${channelChip(!!c?.phone && communicationChannelEnabled('whatsapp'), 'WhatsApp')}
-      ${channelChip(!!c?.email && c?.emailConsent === true && communicationChannelEnabled('email'), c?.emailConsent === true ? 'Email' : 'Email: нет согласия')}
+      ${channelChip(clientEmailAllowed(c) && communicationChannelEnabled('email'), !c?.email ? 'Email: нет адреса' : c?.emailOptOut === true ? 'Email: отказался' : 'Email')}
       ${channelChip(teamTg > 0 && communicationChannelEnabled('telegram'), `Telegram ${teamTg}`)}
       ${manual.length ? `<span class="px-2 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">${manual.length} в очереди</span>` : ''}
     </div>
@@ -25089,7 +25095,7 @@ function openClientContactProfile(clientId, orderId = '') {
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-4">
         <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="client-consent-sms" type="checkbox" ${c.smsConsent?'checked':''} style="width:18px;height:18px">Согласие на SMS</label>
-        <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="client-consent-email" type="checkbox" ${c.emailConsent?'checked':''} style="width:18px;height:18px">Согласие на Email</label>
+        <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="client-email-optout" type="checkbox" ${c.emailOptOut===true?'checked':''} style="width:18px;height:18px">Не присылать письма</label>
         <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="client-consent-whatsapp" type="checkbox" ${c.whatsappConsent?'checked':''} style="width:18px;height:18px">Согласие WhatsApp</label>
       </div>
       <div class="flex justify-end gap-2 mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveClientContactProfile('${clientId}','${orderId}')">Сохранить контакты</button></div>
@@ -25126,7 +25132,7 @@ function saveClientContactProfile(clientId, orderId = '') {
   c.preferredChannel = document.getElementById('client-contact-preferred')?.value || '';
   c.preferredLanguage = document.getElementById('client-contact-language')?.value === 'ru' ? 'ru' : 'en';
   c.smsConsent = !!document.getElementById('client-consent-sms')?.checked;
-  c.emailConsent = !!document.getElementById('client-consent-email')?.checked;
+  c.emailOptOut = !!document.getElementById('client-email-optout')?.checked;
   c.whatsappConsent = !!document.getElementById('client-consent-whatsapp')?.checked;
   c.updatedAt = new Date().toISOString();
   save();
@@ -32498,7 +32504,7 @@ function openOrderClientOverlay() {
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3">
               <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="oc-consent-sms" type="checkbox" style="width:18px;height:18px">Согласие на SMS</label>
-              <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="oc-consent-email" type="checkbox" style="width:18px;height:18px">Согласие на Email</label>
+              <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="oc-email-optout" type="checkbox" style="width:18px;height:18px">Не присылать письма</label>
               <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="oc-consent-whatsapp" type="checkbox" style="width:18px;height:18px">Согласие WhatsApp</label>
             </div>
             <div class="text-xs mt-2" style="color:#92400e">Без согласия клиент не получит SMS и email о замере, монтаже и КП. Отметьте, если клиент согласился.</div>
@@ -32615,7 +32621,7 @@ function createOrderClientFromOverlay() {
     preferredChannel: value('oc-preferred-channel') || 'phone',
     preferredLanguage: value('oc-language') === 'ru' ? 'ru' : 'en',
     smsConsent: Boolean(document.getElementById('oc-consent-sms')?.checked),
-    emailConsent: Boolean(document.getElementById('oc-consent-email')?.checked),
+    emailOptOut: Boolean(document.getElementById('oc-email-optout')?.checked),
     whatsappConsent: Boolean(document.getElementById('oc-consent-whatsapp')?.checked),
     source: value('oc-source') || 'direct',
     address,
@@ -32795,7 +32801,7 @@ function openClientModal() {
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
           <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="nc-consent-sms" type="checkbox" style="width:18px;height:18px">Согласие на SMS</label>
-          <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="nc-consent-email" type="checkbox" style="width:18px;height:18px">Согласие на Email</label>
+          <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="nc-email-optout" type="checkbox" style="width:18px;height:18px">Не присылать письма</label>
           <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="nc-consent-whatsapp" type="checkbox" style="width:18px;height:18px">Согласие WhatsApp</label>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -32865,7 +32871,7 @@ function createClient() {
     preferredChannel: document.getElementById('nc-preferred-channel').value,
     preferredLanguage: document.getElementById('nc-language').value === 'ru' ? 'ru' : 'en',
     smsConsent: document.getElementById('nc-consent-sms').checked,
-    emailConsent: document.getElementById('nc-consent-email').checked,
+    emailOptOut: Boolean(document.getElementById('nc-email-optout')?.checked),
     whatsappConsent: document.getElementById('nc-consent-whatsapp').checked,
     source: document.getElementById('nc-source').value,
     primaryAddressId: addressRecord?.id || null,

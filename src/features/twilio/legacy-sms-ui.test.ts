@@ -17,10 +17,13 @@ test("automatic stage updates keep SMS and email bodies separate", () => {
   assert.match(legacyCrm, /body:\s*emailBody/);
 });
 
-test("automatic client messages require recorded channel consent", () => {
+test("SMS needs recorded consent; service email goes unless the client opted out", () => {
   assert.match(legacyCrm, /c\.smsConsent === true/);
-  assert.match(legacyCrm, /c\.emailConsent === true/);
   assert.match(legacyCrm, /нет согласия клиента на SMS/);
+  assert.match(legacyCrm, /function clientEmailAllowed\(c\) \{\s*return !!c\?\.email && c\?\.emailOptOut !== true;/);
+  assert.match(legacyCrm, /if \(emCfg\.autoSend && clientEmailAllowed\(c\)\)/);
+  assert.doesNotMatch(legacyCrm, /c\.emailConsent === true/);
+  assert.match(legacyCrm, /id="client-email-optout"/);
 });
 
 test("Twilio acceptance is not presented as delivery", () => {
