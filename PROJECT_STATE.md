@@ -23,6 +23,13 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-25 handoff — installation assignment is inside the project card
+
+- Branch: `codex/employee-pay-history-20261024`, rebased on current `origin/main` `8f3ae2c`; PR #385.
+- The «Монтаж» section no longer sends the manager to the generic calendar workspace. «Назначить монтаж» opens the existing project service scheduler directly; every project service has its own date, time and installers. Once any service has a plan, the action is labelled «Изменить монтаж».
+- Before the customer accepts the proposal, the same action explains the prerequisite instead of silently opening an unrelated workspace. Measurement verification and production readiness remain the authoritative operational guards.
+- Verification: `project-feed.test.ts` covers the direct project action and the per-service schedule fields. Full verification and CI remain before merge.
+
 ## 2026-10-24 handoff — KP payment sync, one measurement button, paid → installation
 
 - PR #386 (d31c594) and #387 (17d6a4f) merged and deployed; functions present on prod.

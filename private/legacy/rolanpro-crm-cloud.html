@@ -31094,13 +31094,18 @@ function confirmProjectProductionReady(oid) {
 function scheduleInstallationPrompt(oid) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  if (!projectProposalAccepted(o)) {
+    alert('Монтаж назначается внутри проекта после принятия КП клиентом. Сначала завершите КП или отметьте полученную оплату.');
+    return;
+  }
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
   if (!ensureProductionReadyForInstallation(o)) return;
   const installers = usersByRole('installer');
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6">
-      <h3 class="font-semibold text-lg mb-3">${T('scheduleInstallation')}</h3>
+      <h3 class="font-semibold text-lg mb-1">Монтаж по услугам проекта</h3>
+      <p class="text-sm text-gray-600 mb-3">Назначьте дату и исполнителей отдельно для каждой услуги.</p>
       ${projectServiceScheduleHtml(o)}
       <p class="text-xs text-gray-500 mt-2">У каждой услуги своя дата и свои специалисты. Назначения появятся в календаре.</p>
       <div class="p-3 mt-3 rounded-lg bg-slate-50 border border-slate-200">
