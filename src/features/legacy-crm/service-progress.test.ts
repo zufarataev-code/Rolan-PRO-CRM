@@ -147,7 +147,7 @@ test('the card shows progress once installation is scheduled; the specialist see
   assert.match(mine, /Подключение зоны/);
   assert.doesNotMatch(mine, /A1 8 mil/);
   assert.match(html, /\$\{renderInstallerServiceProgress\(o, u\)\}/);
-  assert.match(html, /title: 'Мои услуги выполнены'[\s\S]{0,200}onclick: `projectMarkMyServicesDone\('\$\{o\.id\}'\)`/);
+  assert.match(html, /title: 'Отметить мои услуги выполненными'[\s\S]{0,200}onclick: `projectMarkMyServicesDone\('\$\{o\.id\}'\)`/);
 });
 
 test('the command-center summary keeps only future unfinished services', () => {

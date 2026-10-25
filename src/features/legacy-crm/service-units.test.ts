@@ -255,7 +255,7 @@ test('measurement requires windows only for directions with a per-sq-ft service'
   assert.deepEqual([...c.orderMeasureScopes(zonesOnly)], []);
   const withWindow = { ...zonesOnly, measurements: { rooms: [{ windows: [{ measureScope: 'smart_film' }] }] } };
   assert.deepEqual([...c.orderMeasureScopes(withWindow)], ['smart_film'], 'a measured window keeps its scope');
-  const completion = html.slice(html.indexOf('function orderMeasurementCompletionIssues(o) {'), html.indexOf('function orderTechnicalMeasurementIssues('));
+  const completion = html.slice(html.indexOf('function orderMeasurementCompletionIssues(o, { film = true } = {}) {'), html.indexOf('function orderTechnicalMeasurementIssues('));
   assert.match(completion, /if \(!windows\.length\) return orderNeedsMeasurements\(o\) \? \['добавьте хотя бы одно окно или панель'\] : \[\];/, 'a proposal of services without sizes can be sent');
 });
 

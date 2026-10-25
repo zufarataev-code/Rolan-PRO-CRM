@@ -1,5 +1,6 @@
 import { getEnv } from "@/lib/env";
 import { PAYMENT_SYSTEM_FEE_PERCENT } from "@/features/payments/policy";
+import { getStripeSecretKey } from "@/features/payments/stripe-settings";
 
 export type StripeDepositCheckoutInput = {
   accessToken: string;
@@ -20,12 +21,12 @@ type StripeCheckoutSessionResponse = {
   };
 };
 
-export function isStripeCheckoutConfigured() {
-  return Boolean(process.env.STRIPE_SECRET_KEY?.trim());
+export async function isStripeCheckoutConfigured() {
+  return Boolean(await getStripeSecretKey());
 }
 
 export async function createStripeDepositCheckout(input: StripeDepositCheckoutInput) {
-  const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
+  const secretKey = await getStripeSecretKey();
   if (!secretKey) {
     return "not_configured" as const;
   }
@@ -88,4 +89,53 @@ export async function createStripeDepositCheckout(input: StripeDepositCheckoutIn
     checkoutUrl: payload.url,
     amountCents,
   };
+}
+
+async function stripeRequest(secretKey: string, path: string, init: { method?: string; body?: URLSearchParams } = {}) {
+  const response = await fetch(`https://api.stripe.com/v1/${path}`, {
+    method: init.method ?? "GET",
+    headers: { Authorization: `Bearer ${secretKey}`, ...(init.body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}) },
+    body: init.body?.toString(),
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => null)) as Record<string, unknown> & { error?: { message?: string } } | null;
+  if (!response.ok || !payload) throw new Error(`Stripe: ${payload?.error?.message ?? response.status}`);
+  return payload;
+}
+
+/**
+ * A Stripe Payment Link for a CRM project, made on the server (the browser
+ * used to call Stripe with the secret key itself).
+ */
+export async function createStripeProjectPaymentLink(input: { orderId: string; orderNumber: string; amount: number; description: string; currency?: string }) {
+  const secretKey = await getStripeSecretKey();
+  if (!secretKey) return "not_configured" as const;
+  const cents = Math.round(Number(input.amount) * 100);
+  if (!Number.isFinite(cents) || cents <= 0) return "invalid_amount" as const;
+  const currency = /^[a-z]{3}$/.test(String(input.currency ?? "").toLowerCase()) ? String(input.currency).toLowerCase() : "usd";
+  const product = await stripeRequest(secretKey, "products", { method: "POST", body: new URLSearchParams({ name: input.description.slice(0, 250) || "ROLANPRO project" }) });
+  const price = await stripeRequest(secretKey, "prices", { method: "POST", body: new URLSearchParams({ unit_amount: String(cents), currency, product: String(product.id) }) });
+  const link = await stripeRequest(secretKey, "payment_links", {
+    method: "POST",
+    body: new URLSearchParams({
+      "line_items[0][price]": String(price.id),
+      "line_items[0][quantity]": "1",
+      "metadata[order_id]": input.orderId.slice(0, 100),
+      "metadata[order_number]": input.orderNumber.slice(0, 100),
+    }),
+  });
+  return { url: String(link.url), id: String(link.id), priceId: String(price.id), productId: String(product.id) };
+}
+
+/** Paid checkout session ids by payment link id (null — not paid yet). */
+export async function findPaidStripePaymentLinks(paymentLinkIds: string[]) {
+  const secretKey = await getStripeSecretKey();
+  if (!secretKey) return "not_configured" as const;
+  const result: Record<string, string | null> = {};
+  for (const id of paymentLinkIds.filter((value) => /^plink_[A-Za-z0-9]+$/.test(value)).slice(0, 50)) {
+    const sessions = await stripeRequest(secretKey, `checkout/sessions?payment_link=${encodeURIComponent(id)}&limit=10`);
+    const paid = (Array.isArray(sessions.data) ? sessions.data : []).find((session: { payment_status?: string }) => session?.payment_status === "paid") as { id?: string } | undefined;
+    result[id] = paid?.id ?? null;
+  }
+  return result;
 }

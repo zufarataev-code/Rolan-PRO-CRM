@@ -112,10 +112,12 @@ test("field-role calendar and proposal actions keep project totals hidden", () =
 test("installer order workspace exposes only the technical sheet", () => {
   assert.match(html, /function installerOrderPrimaryAction\(o\)/);
   assert.match(html, /function renderInstallerTechnicalWorkspace\(o, c, u\)/);
-  assert.match(html, /Специалисту по установке доступен только ТЗ-лист/);
+  // Owner, 2026-10-24: the installer sees his own pay, not a note about access.
+  assert.match(html, /Ваша выплата: <b>&nbsp;\$\{fmtMoney\(orderInstallerPayoutPerPerson\(o, u\?\.id\)\)\}<\/b>/);
   assert.match(html, /function renderOrderDetails\(id\)[\s\S]*?if \(u\.role === 'installer'\) \{[\s\S]*?return renderInstallerTechnicalWorkspace\(o, c, u\);/);
-  assert.match(html, /onclick="openOrder\('\$\{o\.id\}'\)\">Открыть ТЗ-лист/);
-  assert.match(html, /onclick="printTechnicalSheet\('\$\{o\.id\}'\)\">🖨 ТЗ-лист/);
+  // The task card has one next step (the same as inside the project), the sheet and a call.
+  assert.match(html, /const next = installerOrderPrimaryAction\(o\);/);
+  assert.match(html, /<button class="btn-ghost" onclick="openOrder\('\$\{o\.id\}'\)">ТЗ-лист<\/button>/);
   assert.match(html, /viewer && !orderUserCanViewProposal\(proposalOrder, viewer\)/);
   assert.match(html, /Мои расценки/);
   assert.match(html, /Стоимость заказа для клиента и маржа компании скрыты/);

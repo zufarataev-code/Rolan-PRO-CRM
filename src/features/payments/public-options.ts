@@ -33,7 +33,8 @@ export function paymentInstructionsFromSettings(crm: Record<string, unknown>, en
   const zelleOn = crm.zelleEnabled !== false;
   return {
     zelle_recipient: env.zelle || (zelleOn && recipient ? (name ? `${recipient} (${name})` : recipient) : null),
-    bank_transfer_instructions: env.bank || text(crm.bankTransferInstructions) || null,
+    // The CRM settings field is «Банковский перевод» (achInstructions).
+    bank_transfer_instructions: env.bank || text(crm.bankTransferInstructions) || (crm.achEnabled !== false ? text(crm.achInstructions) : "") || null,
   };
 }
 
@@ -93,6 +94,7 @@ export async function getPublicPaymentOptions(accessToken: string) {
   if (!proposal) return null;
 
   const instructions = await protectedPaymentInstructions();
+  const cardReady = await isStripeCheckoutConfigured();
   const suggestedBaseAmount = calculateSuggestedDeposit(
     money(proposal.selected_total_amount),
     proposal.property_type,
@@ -104,7 +106,7 @@ export async function getPublicPaymentOptions(accessToken: string) {
   const onlineAmount = calculatePaymentAmount(baseAmount, PAYMENT_METHODS.PAYMENT_SYSTEM);
   const verifiedOnlineCheckout =
     selectedMethod === PAYMENT_METHODS.PAYMENT_SYSTEM &&
-    isStripeCheckoutConfigured() &&
+    cardReady &&
     isVerifiedFeeAwareCheckout(
       proposal.proposal_events[0]?.metadata,
       proposal.deposit?.deposit_id,
@@ -145,11 +147,11 @@ export async function getPublicPaymentOptions(accessToken: string) {
       {
         ...onlineAmount,
         label: "Online payment",
-        description: isStripeCheckoutConfigured()
+        description: cardReady
           ? `Credit card — a ${PAYMENT_SYSTEM_FEE_PERCENT}% card processing fee is added. Zelle and bank transfer have no fee.`
           : "Online payment is temporarily unavailable until the secure processor is configured.",
         instructions: null,
-        available: isStripeCheckoutConfigured(),
+        available: cardReady,
         payment_link: verifiedOnlineCheckout ? proposal.deposit?.payment_link ?? null : null,
       },
     ],

@@ -25,7 +25,13 @@ test("surveyor today view uses assigned work and resumes the canonical measureme
 
   assert.match(dashboard, /field-day-hero/);
   assert.match(dashboard, /o\.measurerId === u\.id/);
-  assert.match(dashboard, /openMeasurerV25ForOrder\('\$\{nextTask\.id\}'\)/);
+  // One button: accept, start or continue — the same step as on the card.
+  assert.match(dashboard, /const nextAction = nextTask \? measurerOrderPrimaryAction\(nextTask\) : null;/);
+  assert.match(dashboard, /onclick="\$\{nextAction\.onclick\}"/);
+  assert.match(dashboard, /localDateKey\(o\.measurementAt\) === todayKey/, 'today in local time');
+  assert.match(dashboard, /Сдано за месяц/);
+  assert.match(legacy, /acceptMeasurementTask\('\$\{o\.id\}', true\)/);
+  assert.match(legacy, /title: measureAllWindows\(o\)\.length \? 'Продолжить замер' : 'Начать замер'/);
   assert.match(dashboard, /selectAppView\('calendar'\)/);
   assert.match(dashboard, /selectAppView\('measurements'\)/);
 });
@@ -36,11 +42,15 @@ test("surveyor task cards keep the existing operational actions", () => {
     legacy.indexOf("// ---------- INSTALLER VIEWS ----------"),
   );
 
-  assert.match(tasks, /acceptMeasurementTask/);
-  assert.match(tasks, /openMeasurerV25ForOrder/);
+  // Accept / start / continue come from measurerOrderPrimaryAction; «Завершить
+  // замер» moved into the measurement, where missing items are shown in place.
+  assert.match(tasks, /const action = measurerOrderPrimaryAction\(o\);/);
+  assert.match(tasks, /openOrder\('\$\{o\.id\}'\)/);
   assert.match(tasks, /startCall/);
   assert.match(tasks, /whatsappLink/);
-  assert.match(tasks, /changeStatus/);
+  assert.match(tasks, /sq ft/);
+  assert.doesNotMatch(tasks, /T\('m2'\)/);
+  assert.match(legacy, /function measureStudioFinish\(orderId\)/);
 });
 
 test("field calendar offers a phone schedule and map without a second data source", () => {

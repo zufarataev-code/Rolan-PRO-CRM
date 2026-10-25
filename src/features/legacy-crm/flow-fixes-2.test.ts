@@ -42,7 +42,7 @@ test('a new window shows its typical size as a hint until a person types the siz
   assert.match(dim, /delete w\.sizePlaceholder\[field\]/);
   assert.match(html, /\$\{w\.sizePlaceholder\?\.width \? `value="" placeholder=/);
   assert.match(slice('function managerMeasureProgressHtml(order', 'const steps = ['), /windowSizeEntered\(w\)/, '«Размеры» is not green on typical sizes');
-  assert.match(slice('function orderMeasurementCompletionIssues(o)', '// Technical survey details'), /внесите ширину и высоту/);
+  assert.match(slice('function orderMeasurementCompletionIssues(o, { film = true } = {})', '// Technical survey details'), /внесите ширину и высоту/);
   assert.match(slice('function projectEstimateReadiness(o)', 'return issues;'), /!windowSizeEntered\(win\)/);
   assert.match(slice('function managerConfirmWindowMeasurement(oid, rid, wid)', 'function managerUpdateWin('), /!windowSizeEntered\(w\)/);
 });
