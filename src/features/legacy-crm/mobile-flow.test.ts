@@ -46,7 +46,8 @@ test('the chosen client is one line; card details fold; one «Адрес объ�
   assert.match(panel, /Адрес объекта <span class="order-required">\*<\/span>/);
   assert.match(panel, /addresses\.length > 1 \? `<select id="no-client-address"/, 'a select only when there is a choice');
   assert.match(panel, /warnings\.filter\(w => !\/старым форматом\/\.test\(w\)\)/);
-  assert.match(html, /«\+ Услуга» → направление → услуга → плёнка \(можно «уточним на замере»\)/);
+  assert.match(html, /Можно добавить услугу сейчас или после создания/);
+  assert.match(html, /Создание проекта больше не отправляет менеджера на замер/);
 });
 
 test('«Услуги и цены»: directions are the services; the old calculator price list is folded and named', () => {

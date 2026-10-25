@@ -2,6 +2,14 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-10-24 — Create the Project shell before its services and measurements
+
+- A Project starts with a client, object/site type, responsible manager and next action. Selecting a service is useful but is not a prerequisite for creating the Project record.
+- Creating a Project opens the canonical Project card. It must never force the manager into Measurement merely because a direction or service was selected.
+- One Project may gain, remove and plan multiple services over time. Each service continues to own its measurement scope, material, customer price, expenses, work date and crew inside that one Project.
+- Measurement keeps its full technical data model, but the primary field path is compact: opening → size → material → save. Glass/facade, access, photos and engineering details are progressive disclosure, not removed fields.
+- Every measurement exit path is explicit and loss-resistant: save, save-and-new, save-and-exit, or save-and-finish. Film selectors are restricted to real selectable catalog models of the selected service direction.
+
 ## 2026-09-30 — Client identity, correspondence, objects, and portal access are separate concerns
 
 - A client card represents one person or company. B2C stores first/last name; B2B additionally stores company, company type, representative, and job title.

@@ -11,11 +11,11 @@ const migration = readFileSync(
 const publisher = readFileSync("src/features/legacy-crm/publish-proposal.ts", "utf8");
 const launcher = readFileSync("src/features/projects/launch.ts", "utf8");
 
-test("new order captures one immutable incoming service separately from project services", () => {
+test("new order captures an optional immutable incoming service separately from later project services", () => {
   assert.match(legacyCrm, /erp-intake-step">3<\/span> Услуги проекта/);
   assert.match(legacyCrm, /id="no-offerings"/);
   assert.match(legacyCrm, /state\._newOrderServices = direction \? \[direction\] : \[\]/);
-  assert.match(legacyCrm, /leadIntentServiceType: service\.id/);
+  assert.match(legacyCrm, /leadIntentServiceType: service\?\.id \|\| ''/);
   assert.match(legacyCrm, /leadSource: c\.source \|\| 'direct'/);
   assert.match(legacyCrm, /Добавленные услуги не меняют исходное направление лида/);
   assert.match(legacyCrm, /order\.serviceTypes = services/);
