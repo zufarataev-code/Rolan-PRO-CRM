@@ -23,6 +23,14 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-24 handoff — one «Опции для КП» block in «Услуги и цены»
+
+- PR #383, merged as 36bfc59, deployed; checked on prod (block renders with the 4 smart options).
+- All `proposalOptional` services (non-sized) of every direction are edited in one block at the top of «Услуги и цены» (`proposalOptionsSectionHtml`): name, nameEn, direction (new `updateServiceOffering(id,'direction',…)`), price, once/monthly, installer pay, active; «+ Опция» (`addProposalOption`, draft name «Новая опция»). Options are no longer listed under their directions.
+- `projectProposalOptionalOfferings` now skips options priced $0 (before, a named $0 option reached the KP).
+- Prod data: smart options «Голосовое управление», «Настенный выключатель», «Второй пульт» (no price yet — owner fills), «Гарантия 10 лет (вместо 5)» $5/month.
+- Tests: `kp-options-section.test.ts`; full local cycle ok.
+
 ## 2026-10-21 handoff — approved project-card route map
 
 - Branch: `codex/project-card-artifact-20261021`, based on current `origin/main` `5f33d6a` after PR #354.
