@@ -2,6 +2,12 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-10-25 — Service email needs an opt-out, not opt-in consent
+
+- Automatic client emails about the job (measurement booked, KP, payment, installation) go to every client with an email address unless the client asked not to get them (`emailOptOut`). Before this, a default-off «Согласие на Email» checkbox silently skipped 30 of 32 emails.
+- SMS still requires recorded consent (`smsConsent === true`).
+- Client forms show «Не присылать письма» instead of «Согласие на Email». The old `emailConsent` field is left in records but no longer gates sending.
+
 ## 2026-09-30 — Client identity, correspondence, objects, and portal access are separate concerns
 
 - A client card represents one person or company. B2C stores first/last name; B2B additionally stores company, company type, representative, and job title.
