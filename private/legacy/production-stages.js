@@ -411,7 +411,7 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   const area = orderActualAreaSqft(o);
   return `<div class="project-cashier-map" data-project-cashier-map>
     <!-- Касса проекта · направления и услуги: heading dropped 2026-10-24, «Состав проекта» above says it -->
-    <div class="project-cashier-directions">${money && edit ? `<button type="button" class="project-cashier-direction add" onclick="openProjectDirectionPicker('${o.id}')"><span class="project-cashier-direction-icon">+</span><span><b>Добавить направление</b><span>услуга, материал и дополнения</span></span></button>` : ''}</div>
+    <div class="project-cashier-directions">${money && edit ? `<button type="button" class="project-cashier-direction add" onclick="openProjectDirectionPicker('${o.id}')"><span class="project-cashier-direction-icon">+</span><span><b>+ Направление</b><span>выберите — откроется его окно, там услуги</span></span></button>` : ''}</div>
     <div class="project-cashier-flow"><div class="project-cashier-flow-facts"><span><b>${rooms}</b> ${projectPlural(rooms, 'помещение', 'помещения', 'помещений')}</span><span><b>${windows}</b> ${projectWindowsWord(windows)}</span><span><b>${area.toFixed(2)}</b> sq ft</span><span>Размеры общие, направления назначаются услугам и окнам</span></div><div class="project-cashier-flow-actions"><button type="button" class="btn-ghost" onclick="openManagerMeasureModal('${o.id}')">Замер</button>${money ? `<button type="button" class="btn-ghost" onclick="openProjectEstimateWorkspace('${o.id}')">Расчёт / КП</button>` : ''}<button type="button" class="btn-ghost" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button></div></div>
   </div>`;
 }
@@ -468,14 +468,22 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const done = directionLines.length && directionLines.every(line => projectServiceProgress(o,line.key).status === 'done');
     const working = directionLines.some(line => projectServiceProgress(o,line.key).status === 'in_progress');
     const status = done ? 'Выполнено' : working ? 'В работе' : dates.length ? 'Запланировано' : 'Расчёт';
-    return `<section class="project-direction-card ${excluded?'excluded':''}" data-project-direction="${academyEsc(direction.key)}">
-      <header class="project-direction-head">
-        <div><div class="project-direction-title">${direction.icon} ${academyEsc(direction.title)} <span class="tag">${directionLines.length + direction.pending.length}</span></div><div class="project-direction-meta">${excluded?'Не входит в расчёт и КП':academyEsc(status)}${!excluded&&dates.length ? ` · ближайшая дата ${academyEsc(fmtDateTime(dates[0]))}` : ''}</div></div>
-        <div class="project-direction-kpis">${money ? `<span><small>Клиенту</small><b>${fmtMoney(amount('price'))}</b></span>` : ''}${economics ? `<span><small>Материал + работа</small><b>${fmtMoney(amount('materialCost') + amount('installerPay'))}</b></span><span><small>Расходы план / факт</small><b>${fmtMoney(expenses.planned)} / ${fmtMoney(expenses.actual)}</b></span>` : ''}</div>
-        <button type="button" class="btn-primary text-sm project-direction-open" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')">Открыть направление →</button>
-        ${money && edit ? `<div class="project-direction-actions">${projectDirectionOfferingPickerHtml(o,direction.key)}<label><input type="checkbox" ${excluded?'':'checked'} onchange="projectToggleDirectionIncluded('${o.id}','${direction.key}',this.checked)"> В расчёте</label></div>` : ''}
-      </header>
-      <div class="project-direction-services">${directionLines.map(row).join('')}${direction.pending.map(pendingRow).join('') || (!directionLines.length ? '<div class="p-4 text-sm text-gray-500">Добавьте услугу этого направления.</div>' : '')}</div>
+    // Owner, 2026-10-25: «понятный механизм: выбираешь направление — открывается
+    // отдельное окно, и уже в нём добавляешь и удаляешь лишнее». The card shows
+    // each direction as one tile; services are added and removed in its window.
+    const tone = typeof rpDir === 'function' ? rpDir(direction.key) : null;
+    const count = directionLines.length + direction.pending.length;
+    const open = `openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')`;
+    const compactRow = line => `<button type="button" class="project-direction-line" onclick="${open}"><span>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</span><span>${academyEsc(projectLineQtyText(line))}${money ? ` · ${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}` : ''}</span></button>`;
+    const compactPending = offering => `<button type="button" class="project-direction-line pending" onclick="${open}"><span>${academyEsc(offering.name)}</span><span>нужен замер</span></button>`;
+    return `<section class="project-direction-card ${excluded?'excluded':''}" data-project-direction="${academyEsc(direction.key)}" style="--direction-color:${academyEsc(tone?.color || '#2563eb')}">
+      <button type="button" class="project-direction-tile" onclick="${open}" aria-label="Открыть направление ${academyEsc(direction.title)}">
+        <span class="project-direction-tile-icon">${direction.icon}</span>
+        <span class="project-direction-tile-text"><b>${academyEsc(direction.title)}</b><span>${count} ${projectPlural(count, 'услуга', 'услуги', 'услуг')}${excluded ? ' · Не входит в расчёт и КП' : ` · ${academyEsc(status)}`}${!excluded && dates.length ? ` · ${academyEsc(fmtDateTime(dates[0]))}` : ''}${economics && !excluded ? ` · материал+работа ${fmtMoney(amount('materialCost') + amount('installerPay'))}` : ''}</span></span>
+        ${money ? `<span class="project-direction-tile-sum">${fmtMoney(amount('price'))}</span>` : ''}
+        <span class="project-direction-tile-arrow">›</span>
+      </button>
+      <div class="project-direction-services">${production ? directionLines.map(row).join('') + direction.pending.map(pendingRow).join('') : directionLines.map(compactRow).join('') + direction.pending.map(compactPending).join('')}${!directionLines.length && !direction.pending.length ? `<button type="button" class="project-direction-line pending" onclick="${open}"><span>Услуг пока нет</span><span>добавить →</span></button>` : ''}</div>
     </section>`;
   }).join('');
   return `<section class="project-service-ledger" data-project-card-services>
@@ -1050,6 +1058,41 @@ function projectDirectionWindowMeasure(oid, directionKey) {
   const o = getOrder(oid);
   if (o && orderMeasureScopes(o).includes(directionKey)) managerSelectMeasureScope(oid, directionKey);
 }
+/** What the ✕ in the direction window may take out: not a package part, not finished work. */
+function projectDirectionLineRemovable(o, line) {
+  if (!line || line.kind === 'included' || line.kind === 'quick') return false;
+  if (projectServiceProgress(o, line.key).status === 'done') return false;
+  return ['quantity', 'work'].includes(line.kind) ? !!line.sources?.[0]?.id && !line.sources[0].includedBy : line.kind === 'windows' && !!line.offeringId;
+}
+function projectDirectionRemoveLine(oid, directionKey, lineKey) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const line = projectLines(o).find(item => item.key === lineKey);
+  if (!projectDirectionLineRemovable(o, line)) return;
+  if (line.kind === 'windows') {
+    const count = line.windows.length;
+    if (!confirm(`Убрать «${line.name}» из проекта? Размеры ${count} ${projectWindowsWord(count)} останутся в замере — им можно выбрать другую услугу.`)) return;
+    measureAllWindows(o).forEach(({ win }) => { if (win.offeringId === line.offeringId) { win.offeringId = ''; win.catalogId = ''; } });
+    o.offeringIds = (o.offeringIds || []).filter(id => id !== line.offeringId);
+    syncProjectIncludedServices(o);
+    projectPrunePlans(o);
+    projectCardSyncCrew(o);
+    projectEstimateMarkChanged(o, `Убрана услуга «${line.name}»`);
+    save();
+  } else {
+    if (!confirm(`Убрать «${line.name}» из проекта?`)) return;
+    projectCardDeleteService(oid, line.sources[0].id);
+  }
+  openProjectDirectionWindow(oid, directionKey, 'services');
+}
+function projectDirectionRemovePending(oid, directionKey, offeringId) {
+  const o = getOrder(oid);
+  if (!o || o.offeringId === offeringId) return;
+  if (!confirm(`Убрать «${serviceOffering(offeringId)?.name || 'услугу'}» из проекта?`)) return;
+  projectCardRemovePending(oid, offeringId);
+  openProjectDirectionWindow(oid, directionKey, 'services');
+}
+
 function projectDirectionWindowHtml(o, directionKey, step) {
   const tone = rpDir(directionKey);
   const money = orderUserCanSeeMoney(o, currentUser());
@@ -1059,8 +1102,10 @@ function projectDirectionWindowHtml(o, directionKey, step) {
   const steps = projectDirectionWindowSteps();
   const index = Math.max(0, steps.findIndex(item => item.id === step));
   const tabs = steps.map((item, i) => `<button type="button" class="rp-dirwin-step ${i === index ? 'current' : done[item.id] ? 'done' : ''}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','${item.id}')">${done[item.id] && i !== index ? '✓' : i + 1} ${item.label}</button>`).join('');
-  const lineRow = line => `<div class="rp-dirwin-row"><div><b>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</b><span>${academyEsc(projectLineNote(line))}</span></div><div class="rp-dirwin-num">${academyEsc(projectLineQtyText(line))}${money ? `<b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b>` : ''}</div></div>`;
-  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="rp-dirwin-row pending"><div><b>${academyEsc(offering.name)}</b><span>${film ? academyEsc(catalogLabel(film)) : 'материал уточним на замере'}</span></div>${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button type="button" class="btn-ghost text-xs" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}','direction')">Выбрать окна</button>` : '<div class="rp-dirwin-num">нужен замер</div>'}</div>`; };
+  const removeBtn = (onclick, name) => (edit && step === 'services' ? `<button type="button" class="rp-dirwin-remove" onclick="${onclick}" aria-label="Убрать ${academyEsc(name)}" title="Убрать из проекта">✕</button>` : '');
+  const lineRemove = line => (projectDirectionLineRemovable(o, line) ? removeBtn(`projectDirectionRemoveLine('${o.id}','${jsQuote(directionKey)}','${jsQuote(line.key)}')`, line.name) : '');
+  const lineRow = line => `<div class="rp-dirwin-row"><div><b>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</b><span>${academyEsc(projectLineNote(line))}</span></div><div class="rp-dirwin-num">${academyEsc(projectLineQtyText(line))}${money ? `<b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b>` : ''}</div>${lineRemove(line)}</div>`;
+  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="rp-dirwin-row pending"><div><b>${academyEsc(offering.name)}</b><span>${film ? academyEsc(catalogLabel(film)) : 'материал уточним на замере'}</span></div>${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button type="button" class="btn-ghost text-xs" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}','direction')">Выбрать окна</button>` : '<div class="rp-dirwin-num">нужен замер</div>'}${o.offeringId !== offering.id ? removeBtn(`projectDirectionRemovePending('${o.id}','${jsQuote(directionKey)}','${jsQuote(offering.id)}')`, offering.name) : ''}</div>`; };
   let body = '';
   if (step === 'measure') {
     const rooms = new Map();
@@ -1079,10 +1124,12 @@ function projectDirectionWindowHtml(o, directionKey, step) {
       ${owner && total > 0 ? `<div class="rp-dirwin-owner"><div class="rp-dirwin-group">Видит только владелец</div><div class="rp-dirwin-row"><div><b>Материал и специалисты по установке</b><span>по строкам направления</span></div><div class="rp-dirwin-num"><b>${fmtMoney(cost)}</b></div></div><div class="rp-dirwin-row"><div><b>Прямая маржа</b><span>без общих расходов проекта</span></div><div class="rp-dirwin-num"><b>${fmtMoney(total - cost)} · ${total ? Math.round((total - cost) / total * 100) : 0}%</b></div></div></div>` : ''}
       ${money ? `<button type="button" class="btn-ghost w-full mt-2" onclick="state._directionWindow=null;openProjectEstimateWorkspace('${o.id}')">Полный расчёт проекта и КП</button>` : ''}`;
   } else {
-    body = `<p class="rp-dirwin-hint">Что делаем в этом направлении. Здесь только его услуги и плёнки.</p>
+    const excludedDir = projectDirectionExcluded(o, directionKey);
+    body = `<div class="rp-dirwin-sub">В проекте</div>
       ${direction.lines.map(lineRow).join('')}${direction.pending.map(pendingRow).join('')}
-      ${!direction.lines.length && !direction.pending.length ? '<div class="rp-dirwin-empty">Услуг пока нет.</div>' : ''}
-      ${edit ? projectDirectionAddHtml(o, directionKey) : ''}`;
+      ${!direction.lines.length && !direction.pending.length ? '<div class="rp-dirwin-empty">Услуг пока нет — добавьте ниже.</div>' : ''}
+      ${edit ? projectDirectionAddHtml(o, directionKey) : ''}
+      ${edit && money ? `<label class="rp-dirwin-toggle"><input type="checkbox" ${excludedDir ? '' : 'checked'} onchange="projectToggleDirectionIncluded('${o.id}','${jsQuote(directionKey)}',this.checked); openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','services')"> Направление входит в расчёт и КП</label>` : ''}`;
   }
   const next = index < steps.length - 1
     ? `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','${steps[index + 1].id}')">Далее: ${steps[index + 1].label.toLowerCase()} →</button>`
@@ -1091,8 +1138,7 @@ function projectDirectionWindowHtml(o, directionKey, step) {
     <div class="modal-content workspace-modal order-workspace-modal rp-dirwin" style="--workspace-color:${academyEsc(tone.color)};--dir-color:${academyEsc(tone.color)};--dir-tint:${academyEsc(tone.tint)};--dir-deep:${academyEsc(tone.deep)}" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Направление ${academyEsc(direction.title)}">
       <header class="order-workspace-modal-head rp-dirwin-head">
         <button type="button" class="workspace-back" onclick="closeProjectDirectionWindow()">← К проекту</button>
-        <div class="order-workspace-modal-heading"><span class="order-workspace-modal-icon rp-dirwin-icon">${rpIcon(tone, 20)}</span><div><div class="order-workspace-modal-kicker">${academyEsc(o.number)}</div><h3>${academyEsc(direction.title)}</h3></div></div>
-        ${money ? `<div class="rp-dirwin-sum">${fmtMoney(total)}</div>` : ''}
+        <div class="order-workspace-modal-heading"><span class="order-workspace-modal-icon rp-dirwin-icon">${rpIcon(tone, 20)}</span><div><div class="order-workspace-modal-kicker">${academyEsc(o.number)}${money ? ` · <span class="rp-dirwin-sum">${fmtMoney(total)}</span>` : ''}</div><h3>${academyEsc(direction.title)}</h3></div></div>
       </header>
       <div class="rp-dirwin-steps">${tabs}</div>
       <div class="order-workspace-modal-body rp-dirwin-body">${body}</div>

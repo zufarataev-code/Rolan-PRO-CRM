@@ -25,7 +25,7 @@ test('a direction opens in its own window: Услуги → Замер → Це�
   assert.match(stages, /\{ id: 'services', label: 'Услуги' \}, \{ id: 'measure', label: 'Замер' \}, \{ id: 'price', label: 'Цена' \}/);
   // The tile strip duplicated the direction cards (2026-10-24); the card opens the window.
   assert.doesNotMatch(stages, /<div class="project-cashier-directions">\$\{directionCards\}/);
-  assert.match(stages, /Открыть направление →/);
+  assert.match(stages, /class="project-direction-tile" onclick="\$\{open\}" aria-label="Открыть направление/);
 });
 
 test('adding a service or measuring from the window comes back to it', () => {

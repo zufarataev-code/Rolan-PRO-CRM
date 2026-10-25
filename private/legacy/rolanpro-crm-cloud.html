@@ -1983,6 +1983,24 @@
   .rp-dirwin-icon { background: var(--dir-tint) !important; color: var(--dir-color) !important; }
   .rp-dirwin-head .order-workspace-modal-heading { flex: 1; }
   .rp-dirwin-sum { font-weight: 900; font-size: 1.1rem; color: #10213b; white-space: nowrap; margin-left: .75rem; flex: none; }
+  /* Owner, 2026-10-25: one tile per direction on the card; services live in its window. */
+  .project-direction-tile { display:flex;align-items:center;gap:.7rem;width:100%;padding:.85rem .9rem;background:#fff;border:0;border-left:5px solid var(--direction-color,#2563eb);text-align:left;cursor:pointer;min-height:64px; }
+  .project-direction-tile-icon { font-size:1.35rem;flex:none; }
+  .project-direction-tile-text { display:flex;flex-direction:column;min-width:0;flex:1; }
+  .project-direction-tile-text b { font-size:1rem;color:#10213b; }
+  .project-direction-tile-text span { font-size:.78rem;color:#5a6577; }
+  .project-direction-tile-sum { font-weight:900;color:#10213b;white-space:nowrap; }
+  .project-direction-tile-arrow { font-size:1.4rem;color:#94a3b8;flex:none; }
+  .project-direction-line { display:flex;justify-content:space-between;gap:.6rem;width:100%;padding:.55rem .9rem .55rem 1.3rem;background:#fff;border:0;border-top:1px solid #eef2f6;text-align:left;font-size:.86rem;color:#1e293b;cursor:pointer; }
+  .project-direction-line span:last-child { color:#5a6577;white-space:nowrap; }
+  .project-direction-line.pending span:last-child { color:#b45309; }
+  .rp-dirwin-row { position: relative; }
+  .project-cashier-directions .project-cashier-direction.add { grid-column: 1 / -1; width: 100%; }
+  .rp-dirwin-head .rp-dirwin-sum { font-size: inherit; margin-left: 0; color: inherit; }
+  .rp-dirwin-remove { flex:none;width:36px;height:36px;margin-left:.4rem;border:1px solid #fecaca;border-radius:10px;background:#fff;color:#b91c1c;font-weight:800;line-height:1; }
+  .rp-dirwin-toggle { display:flex;align-items:center;gap:.5rem;margin-top:1rem;padding:.7rem .8rem;border:1px solid #d9dee6;border-radius:12px;font-size:.9rem; }
+  .rp-dirwin-toggle input { width:18px;height:18px; }
+  html body .rp-dirwin .rp-dirwin-head h3 { white-space: normal; }
   .rp-dirwin-steps { display: flex; gap: .4rem; padding: .6rem 1.15rem; border-bottom: 1px solid #e2e8f0; background: #fff; }
   .rp-dirwin-step { flex: 1; border: 1px solid #dbe4ef; border-radius: 999px; padding: .45rem .5rem; font-size: .85rem; font-weight: 700; color: #475569; background: #f8fafc; cursor: pointer; white-space: nowrap; }
   .rp-dirwin-step.done { background: var(--dir-tint); color: var(--dir-deep); border-color: var(--dir-tint); }
