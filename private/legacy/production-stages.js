@@ -1242,6 +1242,7 @@ function invoicePaymentMethods() {
   if (cp.checkEnabled !== false) out.push({ key: 'check', title: 'Check', text: `Payable to ${company}${mail ? `\nMail to: ${mail}` : ''}` });
   return out;
 }
+function invoiceCardFee(amount) { return Math.round(Math.max(0, Number(amount) || 0) * 0.03 * 100) / 100; }
 function invoiceDraft(o, form = {}) {
   const c = getClient(o.clientId) || {};
   const lines = projectLines(o).filter(line => !line.excluded).map(line => ({
@@ -1260,13 +1261,18 @@ function invoiceDraft(o, form = {}) {
   const amount = mode === 'deposit' ? deposit : mode === 'custom' ? Math.min(balance, Math.max(0, Number(form.custom) || 0)) : balance;
   const issued = form.issued || localDateKey();
   const term = invoiceTerm(form.terms || (orderSiteType(o) === 'COMMERCIAL' ? 'net15' : 'receipt'));
+  const number = form.number || invoiceNextNumber(o);
+  const saved = (o.invoices || []).find(item => item.number === number && Math.abs((Number(item.amount) || 0) - amount) < 0.01) || {};
+  const cardFee = invoiceCardFee(amount);
   return {
-    number: form.number || invoiceNextNumber(o),
+    number,
     issued, due: invoiceAddDays(issued, term.days), terms: term.id, termsLabel: term.label,
     mode, amount: Math.round(amount * 100) / 100, total, paid, balance, deposit,
     poNumber: String(form.po || '').trim().slice(0, 60),
     billTo: { name: String(form.billName ?? c.companyName ?? c.name ?? '').trim() || c.name || 'Client', attn: c.companyName && c.name !== c.companyName ? c.name : '', email: c.email || '', phone: c.phone || '', address: orderAddress(o, c) || '' },
     lines, methods: invoicePaymentMethods(), project: o.number || '', note: String(form.note || '').trim().slice(0, 500),
+    paymentLinkUrl: saved.paymentLinkUrl || '', paymentLinkId: saved.paymentLinkId || '',
+    cardFee, cardPayable: Math.round((amount + cardFee) * 100) / 100,
   };
 }
 function invoiceFormValues() {
@@ -1309,6 +1315,7 @@ function openProjectInvoice(oid) {
       </div>
       <div class="rounded-lg mt-3 p-3 text-sm" style="background:${d.tint}">
         <b>Как клиент заплатит:</b> ${methods.map(m => academyEsc(m.title)).join(' · ') || '—'}
+        <div class="mt-1">Карта через Stripe добавляется в сам счёт автоматически; комиссия 3% показывается клиенту отдельно.</div>
         ${noBank ? `<div class="text-amber-800 mt-1">Банковские реквизиты не заполнены — впишите их сами в «Настройки → Как клиент платит → Банковский перевод». В чат и сообщения их не отправляйте.</div>` : ''}
       </div>
       <div class="flex gap-2 flex-wrap mt-4">
@@ -1331,7 +1338,7 @@ function invoiceDocumentHtml(inv) {
   const from = [db.settings?.officeAddress, db.settings?.companyPhone, db.settings?.companyEmail].filter(Boolean).map(esc).join('<br>');
   const money = v => (v < 0 ? '−' : '') + '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Invoice ${esc(inv.number)}</title>
-<style>body{font-family:Inter,Arial,sans-serif;color:#0f172a;max-width:780px;margin:28px auto;padding:0 22px;font-size:14px}h1{font-size:30px;margin:0;letter-spacing:.02em}.muted{color:#64748b}.top{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;border-bottom:3px solid #0f2440;padding-bottom:14px}.meta td{padding:2px 0 2px 14px;text-align:right}.grid{display:flex;justify-content:space-between;gap:24px;margin:18px 0}table.items{width:100%;border-collapse:collapse;margin-top:8px}table.items th{text-align:left;font-size:12px;text-transform:uppercase;color:#475569;border-bottom:1px solid #cbd5e1;padding:8px 6px}table.items td{border-bottom:1px solid #e2e8f0;padding:8px 6px;vertical-align:top}.r{text-align:right;white-space:nowrap}.totals{margin-left:auto;width:300px;margin-top:10px}.totals div{display:flex;justify-content:space-between;padding:4px 0}.due{font-size:18px;font-weight:800;border-top:2px solid #0f2440;padding-top:8px!important}.pay{margin-top:22px;padding:14px 16px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc}.pay pre{font-family:inherit;white-space:pre-wrap;margin:2px 0 10px}@media print{button{display:none}body{margin:0 auto}}</style></head><body>
+<style>body{font-family:Inter,Arial,sans-serif;color:#0f172a;max-width:780px;margin:28px auto;padding:0 22px;font-size:14px}h1{font-size:30px;margin:0;letter-spacing:.02em}.muted{color:#64748b}.top{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;border-bottom:3px solid #0f2440;padding-bottom:14px}.meta td{padding:2px 0 2px 14px;text-align:right}.grid{display:flex;justify-content:space-between;gap:24px;margin:18px 0}table.items{width:100%;border-collapse:collapse;margin-top:8px}table.items th{text-align:left;font-size:12px;text-transform:uppercase;color:#475569;border-bottom:1px solid #cbd5e1;padding:8px 6px}table.items td{border-bottom:1px solid #e2e8f0;padding:8px 6px;vertical-align:top}.r{text-align:right;white-space:nowrap}.totals{margin-left:auto;width:300px;margin-top:10px}.totals div{display:flex;justify-content:space-between;padding:4px 0}.due{font-size:18px;font-weight:800;border-top:2px solid #0f2440;padding-top:8px!important}.pay{margin-top:22px;padding:14px 16px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc}.pay pre{font-family:inherit;white-space:pre-wrap;margin:2px 0 10px}.pay-online{display:block;text-align:center;text-decoration:none;background:#635bff;color:#fff;padding:13px 18px;border-radius:9px;font-weight:800;font-size:16px;margin:12px 0 6px}@media print{button{display:none}body{margin:0 auto}.pay-online{border:1px solid #635bff;color:#312e81;background:#fff}}</style></head><body>
 <div class="top"><div><h1>INVOICE</h1><div style="font-weight:800;font-size:16px;margin-top:6px">${esc(company)}</div><div class="muted">${from}</div></div>
 <table class="meta"><tr><td class="muted">Invoice #</td><td><b>${esc(inv.number)}</b></td></tr><tr><td class="muted">Date</td><td>${esc(invoiceUsDate(inv.issued))}</td></tr><tr><td class="muted">Terms</td><td>${esc(inv.termsLabel)}</td></tr><tr><td class="muted">Due date</td><td><b>${esc(invoiceUsDate(inv.due))}</b></td></tr>${inv.poNumber ? `<tr><td class="muted">PO #</td><td>${esc(inv.poNumber)}</td></tr>` : ''}<tr><td class="muted">Project</td><td>${esc(inv.project)}</td></tr></table></div>
 <div class="grid"><div><div class="muted" style="font-size:12px;text-transform:uppercase">Bill to</div><b>${esc(inv.billTo.name)}</b>${inv.billTo.attn ? `<br>Attn: ${esc(inv.billTo.attn)}` : ''}<br>${esc(inv.billTo.address)}${inv.billTo.email ? `<br>${esc(inv.billTo.email)}` : ''}${inv.billTo.phone ? `<br>${esc(inv.billTo.phone)}` : ''}</div>
@@ -1340,24 +1347,40 @@ function invoiceDocumentHtml(inv) {
 ${inv.lines.map(l => `<tr><td>${esc(l.title)}</td><td class="r">${l.qty ? `${l.qty} ${esc(l.unit)}` : ''}</td><td class="r">${money(l.amount)}</td></tr>`).join('')}
 </tbody></table>
 <div class="totals"><div><span>Project total</span><b>${money(inv.total)}</b></div>${inv.paid > 0 ? `<div><span>Paid to date</span><b>−${money(inv.paid).replace('−','')}</b></div>` : ''}<div><span>Balance</span><b>${money(inv.balance)}</b></div>${Math.abs(inv.amount - inv.balance) >= 0.01 ? `<div><span>${inv.mode === 'deposit' ? 'Deposit due now' : 'Due now'}</span><b>${money(inv.amount)}</b></div>` : ''}<div class="due"><span>Amount due</span><span>${money(inv.amount)}</span></div></div>
-<div class="pay"><b>How to pay</b> <span class="muted">— no processing fee. Please include invoice # ${esc(inv.number)} in the payment memo.</span>
+<div class="pay"><b>How to pay</b> <span class="muted">— bank transfer, Zelle and check have no processing fee. Please include invoice # ${esc(inv.number)} in the payment memo.</span>
+${inv.paymentLinkUrl ? `<a class="pay-online" href="${esc(inv.paymentLinkUrl)}" target="_blank" rel="noopener">Pay ${money(inv.cardPayable)} securely by card</a><div class="muted" style="text-align:center">Includes a 3% card processing fee of ${money(inv.cardFee)}. Bank transfer and Zelle have no fee.</div>` : ''}
 ${inv.methods.map(m => `<div style="margin-top:8px"><b>${esc(m.title)}</b><pre>${esc(m.text)}</pre></div>`).join('')}</div>
 ${inv.note ? `<p style="margin-top:16px">${esc(inv.note)}</p>` : ''}
 <p class="muted" style="margin-top:22px">Thank you for your business.</p>
 <p><button onclick="print()" style="padding:10px 16px;font-weight:700">Print / Save as PDF</button></p></body></html>`;
 }
-function issueProjectInvoice(oid) {
+async function issueProjectInvoice(oid) {
   const o = getOrder(oid);
   if (!o) return;
   const inv = invoiceDraft(o, { ...(state._invoiceForm?.oid === oid ? state._invoiceForm : {}), ...invoiceFormValues() });
   if (inv.amount <= 0) { alert('Сумма счёта 0 — проект уже оплачен.'); return; }
   const win = window.open('', '_blank');
   if (!win) { alert('Разрешите всплывающие окна, чтобы открыть счёт.'); return; }
+  win.document.write('<!doctype html><title>Preparing invoice…</title><body style="font-family:Arial;padding:32px">Preparing secure invoice…</body>');
+  const savedInvoice = (o.invoices || []).find(item => item.number === inv.number && Math.abs((Number(item.amount) || 0) - inv.amount) < 0.01);
+  if (savedInvoice?.paymentLinkUrl) {
+    inv.paymentLinkUrl = savedInvoice.paymentLinkUrl;
+    inv.paymentLinkId = savedInvoice.paymentLinkId || '';
+  } else {
+    try {
+      const link = await createStripePaymentLink(o, inv.cardPayable, `Invoice ${inv.number} · project ${inv.project} · amount due ${fmtMoney(inv.amount)}`);
+      inv.paymentLinkUrl = link.url;
+      inv.paymentLinkId = link.id;
+    } catch (error) {
+      console.warn('[Invoice] Stripe link unavailable; invoice keeps bank/Zelle/check methods', error);
+    }
+  }
+  win.document.open();
   win.document.write(invoiceDocumentHtml(inv));
   win.document.close();
   o.invoices = Array.isArray(o.invoices) ? o.invoices : [];
   const existing = o.invoices.find(i => i.number === inv.number);
-  const record = { number: inv.number, issued: inv.issued, due: inv.due, terms: inv.terms, amount: inv.amount, mode: inv.mode, po: inv.poNumber, by: state.currentUserId || null, at: new Date().toISOString() };
+  const record = { number: inv.number, issued: inv.issued, due: inv.due, terms: inv.terms, amount: inv.amount, mode: inv.mode, po: inv.poNumber, by: state.currentUserId || null, at: new Date().toISOString(), paymentLinkUrl: inv.paymentLinkUrl || '', paymentLinkId: inv.paymentLinkId || '', cardFee: inv.cardFee, cardPayable: inv.cardPayable };
   if (existing) Object.assign(existing, record); else o.invoices.push(record);
   o.timeline = o.timeline || [];
   o.timeline.push({ at: record.at, key: 'invoice_issued', by: state.currentUserId, note: `Счёт ${inv.number} на ${fmtMoney(inv.amount)}, оплатить до ${invoiceUsDate(inv.due)}` });
@@ -1366,7 +1389,7 @@ function issueProjectInvoice(oid) {
   openProjectInvoice(oid);
 }
 function invoiceEmailText(inv) {
-  return `Hello${inv.billTo.attn ? ' ' + inv.billTo.attn : ''},\n\nPlease find attached invoice ${inv.number} for project ${inv.project}.\nAmount due: $${inv.amount.toFixed(2)} — due ${invoiceUsDate(inv.due)} (${inv.termsLabel}).\n\nHow to pay (no processing fee; please reference ${inv.number}):\n${inv.methods.map(m => `\n${m.title}:\n${m.text}`).join('\n')}\n\nThank you,\n${db.settings?.companyName || 'ROLANPRO'}`;
+  return `Hello${inv.billTo.attn ? ' ' + inv.billTo.attn : ''},\n\nPlease find attached invoice ${inv.number} for project ${inv.project}.\nAmount due: $${inv.amount.toFixed(2)} — due ${invoiceUsDate(inv.due)} (${inv.termsLabel}).${inv.paymentLinkUrl ? `\n\nPay securely by card (3% processing fee; card total $${inv.cardPayable.toFixed(2)}):\n${inv.paymentLinkUrl}` : ''}\n\nBank transfer / Zelle / check (no processing fee; please reference ${inv.number}):\n${inv.methods.map(m => `\n${m.title}:\n${m.text}`).join('\n')}\n\nThank you,\n${db.settings?.companyName || 'ROLANPRO'}`;
 }
 async function copyProjectInvoiceText(oid) {
   const o = getOrder(oid);
