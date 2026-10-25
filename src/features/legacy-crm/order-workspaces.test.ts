@@ -98,6 +98,8 @@ function requestAccessContext(role: "owner" | "manager" | "measurer" | "installe
     getUser: (id: string) => users.find(user => user.id === id),
     pendingClientRequests: (value: any) => value.clientRequests.filter((request: any) => request.status === "new"),
     projectServicesNextAction: () => ({ title: "Полевое действие" }),
+    fmtDateTime: (value: string) => value,
+    measureAllWindows: () => [],
     document: { querySelector: () => ({ click: () => { calls.clicks += 1; } }) },
     orderEventInfo: () => ({ title: "Замер", field: "measurementAt" }),
     save: () => { calls.saves += 1; },
@@ -116,7 +118,9 @@ test("field roles cannot surface, open or resolve a client schedule request", ()
   assert.match(html, /const pendingRequests = orderUserCanResolveClientRequests\(o, u\) \? pendingClientRequests\(o\) : \[\];/);
   for (const role of ["measurer", "installer"] as const) {
     const { context, order, calls } = requestAccessContext(role);
-    assert.equal(context.orderPrimaryNextAction(order).title, "Полевое действие", `${role} primary action`);
+    // The measurer gets his own step (Owner, 2026-10-24), never the client request.
+    assert.notEqual(context.orderPrimaryNextAction(order).title, "Ответить на запрос клиента", `${role} primary action`);
+    if (role === "installer") assert.equal(context.orderPrimaryNextAction(order).title, "Полевое действие");
     assert.equal(context.projectCardOpenWorkspace("request"), false, `${role} workspace`);
     assert.equal(context.resolveClientScheduleRequest(order.id, "r1", true), false, `${role} handler`);
     assert.equal(order.clientRequests[0].status, "new");

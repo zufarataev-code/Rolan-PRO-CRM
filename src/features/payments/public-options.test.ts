@@ -25,6 +25,14 @@ test("Zelle details come from the CRM settings when the server env has none (Own
   assert.equal(paymentInstructionsFromSettings(crm, { zelle: "env@x", bank: null }).zelle_recipient, "env@x", "the env still wins");
 });
 
+test("bank transfer details come from «Банковский перевод» in CRM settings (achInstructions)", async () => {
+  const { paymentInstructionsFromSettings } = await import("./public-options");
+  const crm = { achEnabled: true, achInstructions: "Bank: Chase\nAccount name: ROLANPRO LLC" };
+  assert.equal(paymentInstructionsFromSettings(crm, { zelle: null, bank: null }).bank_transfer_instructions, "Bank: Chase\nAccount name: ROLANPRO LLC");
+  assert.equal(paymentInstructionsFromSettings({ ...crm, achEnabled: false }, { zelle: null, bank: null }).bank_transfer_instructions, null);
+  assert.equal(paymentInstructionsFromSettings(crm, { zelle: null, bank: "env bank" }).bank_transfer_instructions, "env bank");
+});
+
 test("the card fee passed to the client is 3%; Zelle and bank transfer are free", async () => {
   const { calculatePaymentAmount, PAYMENT_METHODS, PAYMENT_SYSTEM_FEE_PERCENT } = await import("./policy");
   assert.equal(PAYMENT_SYSTEM_FEE_PERCENT, 3);

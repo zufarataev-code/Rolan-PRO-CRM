@@ -1962,6 +1962,9 @@
   .rp-dirwin-total b { font-size: 1.3rem; color: #10213b; }
   .rp-dirwin-owner { display: flex; flex-direction: column; gap: .4rem; padding: .6rem; border: 1px solid #e8d9b0; border-radius: 10px; background: #fff9ea; }
   .rp-dirwin-foot { padding: .75rem 1.15rem 1rem; border-top: 1px solid #e2e8f0; background: #fbfdff; }
+  .measure-finish-btn { border: 1.5px solid #16a34a !important; color: #15803d !important; font-weight: 800; min-height: 44px; }
+  .measure-finish-issues { margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #fffbeb; border: 1px solid #f59e0b; color: #78350f; font-size: 13px; }
+  .measure-finish-issues ul { margin: 4px 0 0 16px; list-style: disc; }
   html body .rp-dirwin .rp-dirwin-next { width: 100%; min-height: 48px; background: var(--dir-color) !important; border-color: var(--dir-color) !important; color: #fff !important; }
   html body .rp-dirwin .rp-dirwin-step { border-radius: 999px !important; width: auto !important; min-height: 36px !important; height: auto !important; max-height: 44px; flex: 1 1 0 !important; }
   html body .modal-backdrop .modal-content.rp-dirwin.order-workspace-modal { display: grid !important; grid-template-rows: auto auto minmax(0, 1fr) auto !important; grid-template-columns: minmax(0, 1fr) !important; }
@@ -6705,6 +6708,8 @@
   .field-task-card h3 { margin: .25rem 0 .3rem; color: #102033; font-size: 1rem; }
   .field-task-card .field-task-meta { color: #66778d; font-size: .76rem; line-height: 1.45; }
   .field-task-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px,1fr)); border-top: 1px solid #e2e8f0; background: #f8fafc; }
+  .installer-card-actions { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+  .installer-card-actions .installer-card-next { min-height: 46px; }
   .field-task-actions > * { min-width: 0; min-height: 48px; display: grid; place-items: center; padding: .4rem; border: 0; border-right: 1px solid #e2e8f0; border-radius: 0; background: transparent; color: #334155; font-size: .7rem; font-weight: 800; text-align: center; }
   .field-task-actions > *:last-child { border-right: 0; }
   .field-task-actions .field-primary-action { background: #10253f; color: #fff; }
@@ -9209,6 +9214,7 @@ function migrateSchema() {
   if (s.seniorInstallerBonusPct == null) s.seniorInstallerBonusPct = 10;
   // One commission number per manager: payConfig.commissionPct is what payroll uses;
   // the old top-level copy (10% for Danil while payroll paid 5%) follows it.
+  if (s.stripe && s.stripe.secretKey) delete s.stripe.secretKey; // the key lives on the server now
   if (!s._commissionMirror20261024 && Array.isArray(db.users)) {
     db.users.forEach(u => { if (u && u.role === 'manager' && u.payConfig && u.payConfig.commissionPct != null) u.commissionPct = Number(u.payConfig.commissionPct) || 0; });
     s._commissionMirror20261024 = true;
@@ -11757,7 +11763,38 @@ function measureStudioRoomOptions(order, selectedId) {
   const rooms = order.measurements?.rooms || [];
   return `${rooms.map(r => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${academyEsc(r.name)}</option>`).join('')}<option value="__new">+ Новая зона / комната</option>`;
 }
+// The studio follows the project (Owner, 2026-10-24): a window is measured for a
+// service of this project, the film list is that service's films and the film
+// the client chose in the cashier comes first. «Уточнит менеджер» is allowed.
+function measureStudioOrder() { return getOrder(state.measureStudio?.orderId); }
+function measureStudioOfferings(order, scopeKey) {
+  return order ? projectSelectedSizedOfferings(order, scopeKey) : [];
+}
+function measureStudioOffering(order, scopeKey, preferredId = '') {
+  const choices = measureStudioOfferings(order, scopeKey);
+  const wanted = preferredId || document.getElementById('ms-offering')?.value || '';
+  return choices.find(offering => offering.id === wanted) || choices[0] || null;
+}
+function measureStudioOfferingHtml(order, scopeKey, win = null) {
+  const choices = measureStudioOfferings(order, scopeKey);
+  if (!choices.length) return '<div id="ms-offering-wrap"></div>';
+  const current = measureStudioOffering(order, scopeKey, win?.offeringId || '');
+  if (choices.length === 1) return `<div id="ms-offering-wrap"><input type="hidden" id="ms-offering" value="${current.id}"><div class="text-sm"><span class="text-gray-500">Услуга:</span> <b>${academyEsc(current.name)}</b></div></div>`;
+  return `<div id="ms-offering-wrap"><label>Услуга проекта</label><select id="ms-offering" onchange="measureStudioOfferingChanged()">${choices.map(offering => `<option value="${offering.id}" ${offering.id === current.id ? 'selected' : ''}>${academyEsc(offering.name)}</option>`).join('')}</select></div>`;
+}
+function measureStudioOfferingChanged() {
+  const catalog = document.getElementById('ms-catalog');
+  if (catalog) catalog.innerHTML = measureStudioCatalogOptions('', document.getElementById('ms-scope')?.value || '');
+  if (typeof measureStudioCatalogChanged === 'function') measureStudioCatalogChanged();
+}
 function measureStudioCatalogOptions(selectedId, scopeKey = '') {
+  const order = measureStudioOrder();
+  const offering = order ? measureStudioOffering(order, scopeKey) : null;
+  if (offering) {
+    const allowed = serviceOfferingAllowedFilmIds(offering).map(getCatalogItem).filter(film => film && !film.archived);
+    const chosen = allowed.some(film => film.id === selectedId) ? selectedId : (selectedId ? '' : projectOfferingCatalogId(order, offering.id));
+    return `<option value="">— уточнит менеджер —</option>${allowed.map(film => `<option value="${film.id}" ${chosen === film.id ? 'selected' : ''}>${academyEsc(film.brand)} — ${academyEsc(film.model)}</option>`).join('')}`;
+  }
   const groups = catalogByCategory();
   const preferred = measureScopeInfo(scopeKey).catalogCategory;
   const ordered = Object.entries(groups).sort(([a], [b]) => {
@@ -12227,6 +12264,7 @@ function openEngineeringMeasureStudio(orderId) {
                 <div class="measure-step-sub">Здесь система понимает склад, совместимость стекла и риски для КП.</div>
                 <div class="measure-form-grid mt-3">
                   <div>
+                    ${measureStudioOfferingHtml(order, scopeKey, win)}
                     <label>Плёнка / материал</label>
                     <select id="ms-catalog" onchange="measureStudioCatalogChanged()">${measureStudioCatalogOptions(win?.catalogId || '', scopeKey)}</select>
                   </div>
@@ -12284,6 +12322,8 @@ function openEngineeringMeasureStudio(orderId) {
                 <button class="btn-primary flex-1" onclick="measureStudioSaveWindow('${order.id}')">Сохранить окно</button>
                 <button class="btn-ghost" onclick="measureStudioNewWindow('${order.id}')">+ Новое окно</button>
               </div>
+              ${order.status === 'measurement_scheduled' && (viewer?.role === 'measurer' || canManage) ? `<button class="btn-ghost w-full mt-2 measure-finish-btn" onclick="measureStudioFinish('${order.id}')">✓ Завершить замер</button>
+              <div id="ms-finish-issues" class="measure-finish-issues" hidden></div>` : ''}
             </div>
           </section>
 
@@ -12416,6 +12456,8 @@ function measureStudioSetScope(scopeKey) {
     titleLine.textContent = `${parts[0] || 'Клиент'} · ${scope.title} · ${parts[2] || ''}`.replace(/ · $/, '');
   }
   const selectedCatalog = document.getElementById('ms-catalog')?.value || '';
+  const offeringWrap = document.getElementById('ms-offering-wrap');
+  if (offeringWrap) offeringWrap.outerHTML = measureStudioOfferingHtml(measureStudioOrder(), scope.key);
   const catalog = document.getElementById('ms-catalog');
   if (catalog) catalog.innerHTML = measureStudioCatalogOptions(selectedCatalog, scope.key);
   const typeSelect = document.getElementById('ms-type');
@@ -12791,6 +12833,14 @@ function measureStudioSaveWindow(orderId) {
   }
   const targetWin = existing || { id: uid() };
   Object.assign(targetWin, data);
+  // The window belongs to a service of the project: its price, pay and films.
+  const offering = measureStudioOffering(order, targetWin.measureScope || data.measureScope, document.getElementById('ms-offering')?.value || '');
+  if (offering) {
+    const film = targetWin.catalogId;
+    applyWindowOffering(targetWin, offering);
+    const keep = film && serviceOfferingAllowedFilmIds(offering).includes(film) ? film : '';
+    if (keep) { targetWin.catalogId = keep; targetWin.filmType = catalogLabel(getCatalogItem(keep)); }
+  }
   if (!targetWin.name) targetWin.name = `${winTypeInfo(targetWin.winType).label} ${(targetRoom.windows || []).length + 1}`;
   if (targetWin.actualWidth == null) targetWin.actualWidth = targetWin.width;
   if (targetWin.actualHeight == null) targetWin.actualHeight = targetWin.height;
@@ -12807,6 +12857,28 @@ function measureStudioSaveWindow(orderId) {
   save();
   state.measureStudio = { orderId, rid: targetRoom.id, wid: targetWin.id, photoDataUrl: targetWin.photoDataUrl || '', photoName: targetWin.photoName || '' };
   openEngineeringMeasureStudio(orderId);
+}
+/** «Завершить замер» inside the studio: what is missing is shown right here, not in another window. */
+function measureStudioFinish(orderId) {
+  const o = getOrder(orderId);
+  if (!o) return;
+  const u = currentUser();
+  const issues = orderWorkflowTransitionIssues(o, 'measurement_done');
+  // On site the measurer also confirms side, facade, glass and Smart wiring.
+  if (u?.role === 'measurer') issues.push(...orderTechnicalMeasurementIssues(o));
+  const box = document.getElementById('ms-finish-issues');
+  const list = [...new Set(issues)];
+  if (list.length) {
+    if (box) {
+      box.hidden = false;
+      box.innerHTML = `<b>Чтобы сдать замер:</b><ul>${list.map(item => `<li>${academyEsc(item)}</li>`).join('')}</ul>`;
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else alert('Чтобы сдать замер:\n\n• ' + list.join('\n• '));
+    return;
+  }
+  if (u?.role === 'measurer' && o.measurerId === u.id && !o.measurementAcceptedAt) o.measurementAcceptedAt = new Date().toISOString();
+  closeModal();
+  changeStatus(orderId, 'measurement_done');
 }
 function measureSwapDims() {
   const w = document.getElementById('ms-w');
@@ -17432,7 +17504,7 @@ function roomArea(r) { return (r.windows || []).reduce((s, w) => s + windowArea(
 function orderArea(o) { return (o.measurements?.rooms || []).reduce((s, r) => s + roomArea(r), 0); }
 function orderPrice(o) { return orderArea(o) * (o.pricePerM2 || db.settings.pricePerM2 || 0); }
 
-function orderMeasurementCompletionIssues(o) {
+function orderMeasurementCompletionIssues(o, { film = true } = {}) {
   const issues = [];
   const windows = measureAllWindows(o);
   if (!windows.length) return orderNeedsMeasurements(o) ? ['добавьте хотя бы одно окно или панель'] : [];
@@ -17448,7 +17520,7 @@ function orderMeasurementCompletionIssues(o) {
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('заполните размеры и количество для всех окон');
   const typical = windows.filter(({ win }) => !windowSizeEntered(win));
   if (typical.length) issues.push(`внесите ширину и высоту: ${typical.slice(0, 4).map(({ room, win }) => `${room.name || 'Помещение'} · ${win.name || 'Окно'}`).join(', ')}${typical.length > 4 ? ` и ещё ${typical.length - 4}` : ''}`);
-  if (windows.some(({ win }) => !windowCatalog(win))) issues.push('выберите плёнку со склада для каждого окна');
+  if (film && windows.some(({ win }) => !windowCatalog(win))) issues.push('выберите плёнку со склада для каждого окна');
   return issues;
 }
 
@@ -17473,7 +17545,8 @@ function orderWorkflowTransitionIssues(o, newStatus) {
     if (!o.measurerId) issues.push('выберите замерщика');
     if (!o.measurementAt) issues.push('укажите дату и время замера');
   }
-  if (newStatus === 'measurement_done') issues.push(...orderMeasurementCompletionIssues(o));
+  // The measurer may leave the film to the manager («уточним на замере» → KP).
+  if (newStatus === 'measurement_done') issues.push(...orderMeasurementCompletionIssues(o, { film: currentUser()?.role !== 'measurer' }));
   if (newStatus === 'proposal_sent') {
     issues.push(...orderMeasurementCompletionIssues(o));
     if (!projectEstimateIsApproved(o)) issues.push('подтвердите расчёт проекта');
@@ -17993,6 +18066,7 @@ function projectProposalNextAction(o) {
     : { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProposalWizard('${o.id}')` };
 }
 function orderPrimaryNextAction(o) {
+  if (currentUser()?.role === 'measurer' && o.measurerId === currentUser()?.id) return measurerOrderPrimaryAction(o);
   if (orderUserCanResolveClientRequests(o) && pendingClientRequests(o).length) {
     return { icon: '⚠️', title: 'Ответить на запрос клиента', sub: 'Клиент просит перенос или отмену. Сначала обработайте это, потом двигайте заказ дальше.', variant: 'warning', onclick: `if (!projectCardOpenWorkspace('request')) document.getElementById('client-requests-${o.id}')?.scrollIntoView({behavior:'smooth',block:'center'})` };
   }
@@ -18034,11 +18108,17 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'payment_received') return { icon: '⭐', title: 'Закрыть и запросить отзыв', sub: 'Финальный шаг: заказ закрыт, клиенту отправляем отзыв.', variant: 'success', onclick: `if (changeStatus('${o.id}','completed')) askForReview('${o.id}');` };
   return { icon: '📌', title: 'Заказ под контролем', sub: 'Проверьте календарь, документы и связь с клиентом.', variant: 'soft', onclick: `openOrder('${o.id}')` };
 }
+/** The measurer's own step on the project card (Owner, 2026-10-24: the card spoke to the manager). */
+function measurerOrderPrimaryAction(o) {
+  if (o.status === 'measurement_scheduled' && !o.measurementAcceptedAt) return { icon: '✅', title: 'Принять замер', sub: `${fmtDateTime(o.measurementAt)} · подтвердите, что приедете.`, variant: 'primary', onclick: `acceptMeasurementTask('${o.id}', true)` };
+  if (o.status === 'measurement_scheduled') return { icon: '📐', title: measureAllWindows(o).length ? 'Продолжить замер' : 'Начать замер', sub: 'Окна, размеры и стекло. «Завершить замер» — внизу замера.', variant: 'primary', onclick: `openMeasurerV25ForOrder('${o.id}')` };
+  return { icon: '✓', title: 'Замер сдан', sub: 'Расчёт и КП делает менеджер. Размеры можно открыть и посмотреть.', variant: 'success', onclick: `openMeasurerV25ForOrder('${o.id}')` };
+}
 function installerOrderPrimaryAction(o) {
   if (o.status === 'installation_scheduled') return { icon: '✅', title: 'Принять задачу', sub: 'Подтвердите, что увидели назначенный монтаж.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_accepted')` };
   if (o.status === 'installation_accepted') return { icon: '🚗', title: 'Выехал на объект', sub: 'Зафиксировать начало поездки.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_en_route')` };
   if (o.status === 'installation_en_route') return { icon: '▶', title: 'Начать монтаж', sub: 'Перед началом заполните приёмку и сделайте фото.', variant: 'primary', onclick: `changeStatus('${o.id}','installation_in_progress')` };
-  if (o.status === 'installation_in_progress') return { icon: '✓', title: 'Мои услуги выполнены', sub: 'Добавьте фото после работы. Проект закроется, когда все услуги будут выполнены.', variant: 'success', onclick: `projectMarkMyServicesDone('${o.id}')` };
+  if (o.status === 'installation_in_progress') return { icon: '✓', title: 'Отметить мои услуги выполненными', sub: 'Сначала фото после работы. Можно отмечать и по одной услуге — ниже, в «Мои услуги».', variant: 'success', onclick: `projectMarkMyServicesDone('${o.id}')` };
   if (o.status === 'installation_done') return { icon: '✍️', title: 'Подпись клиента под актом', sub: 'Дайте клиенту телефон: он проверит работы и распишется пальцем на экране.', variant: 'primary', onclick: `openActSignature('${o.id}')` };
   return { icon: '🧰', title: 'Открыть ТЗ-лист', sub: 'Схема, размеры, материалы и лист раскроя.', variant: 'soft', onclick: `openTechnicalSheet('${o.id}')` };
 }
@@ -18758,8 +18838,7 @@ function renderAppShell() {
     ...(role === 'owner' ? [['roleTesting', 'Проверка ролей', '👁'], ['settings', T('settings'), '⚙️']] : []),
   ] : (role === 'measurer') ? [
     ['dashboard', T('dashboard'), '📊'],
-    ['canonicalProjects', 'Замеры проектов', '🏗'],
-    ['measurements', T('myTasks'), '📐'],
+    ['measurements', 'Мои замеры', '📐'],
     ['calendar', T('calendar'), '📅'],
     ['tasks', 'Задачи', '✅'],
   ] : (role === 'installer') ? [
@@ -19513,7 +19592,7 @@ function renderCanonicalInstallerWorkday() {
   const totals = data.totals || {};
   return `
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-      <div class="card"><div class="text-xs text-gray-500">Часы · 30 смен</div><div class="text-2xl font-bold">${installerWorkdayHours(totals.work_minutes)}</div></div>
+      <div class="card"><div class="text-xs text-gray-500">Часы за последние 30 смен</div><div class="text-2xl font-bold">${installerWorkdayHours(totals.work_minutes)}</div></div>
       <div class="card"><div class="text-xs text-gray-500">Пробег</div><div class="text-2xl font-bold">${Number(totals.miles || 0).toFixed(1)} mi</div></div>
       <div class="card"><div class="text-xs text-gray-500">К выплате</div><div class="text-2xl font-bold text-amber-700">${installerWorkdayMoney(totals.owed)}</div></div>
       <div class="card"><div class="text-xs text-gray-500">Выплачено</div><div class="text-2xl font-bold text-emerald-700">${installerWorkdayMoney(totals.paid)}</div></div>
@@ -22817,7 +22896,7 @@ async function convertLeadOnce(leadId) {
     };
     db.clients.push(client);
   }
-  const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(projectNumberSequence()).padStart(3, '0');
+  const num = 'R-' + localDateKey().slice(2).replace(/-/g,'') + '-' + String(projectNumberSequence()).padStart(3, '0');
   const o = {
     id: 'o' + uid(), number: num, clientId: client.id,
     ...(canonical ? { canonicalLeadId: leadId } : {}),
@@ -23443,18 +23522,26 @@ function renderSettings() {
         <div>
           <label class="flex items-center gap-2">
             <input type="checkbox" ${s.clientPayments.achEnabled?'checked':''} onchange="db.settings.clientPayments.achEnabled=this.checked; save(); render();">
-            <span>Банковский перевод — фиксированная комиссия</span>
+            <span>Банковский перевод (ACH / wire) — для счетов и коммерческих клиентов</span>
           </label>
-          <textarea rows="4" placeholder="Название компании, номер счёта, routing number, адрес банка"
+          <textarea rows="5" placeholder="Bank: Chase&#10;Account name: ROLANPRO LLC&#10;Routing (ACH): …&#10;Account: …&#10;Wire routing (если другой): …"
                     onchange="db.settings.clientPayments.achInstructions=this.value; save();">${academyEsc(s.clientPayments.achInstructions||'')}</textarea>
-          <div class="text-xs text-gray-400 mt-1">Выгоднее карты на крупных суммах: $20–30 вместо процента.</div>
+          <div class="text-xs text-gray-400 mt-1">Вписываете сами, по-английски — как в выписке Chase. Клиент видит это в КП и в счёте (Invoice). Без комиссии для вас.</div>
+        </div>
+        <div>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" ${s.clientPayments.checkEnabled!==false?'checked':''} onchange="db.settings.clientPayments.checkEnabled=this.checked; save(); render();">
+            <span>Чек — в счёте пишем «Payable to ${academyEsc(s.companyName || 'ROLANPRO')}»</span>
+          </label>
+          <input value="${academyEsc(s.clientPayments.checkMailingAddress||'')}" placeholder="Адрес для чеков (если не адрес офиса)"
+                 onchange="db.settings.clientPayments.checkMailingAddress=this.value.trim(); save();">
         </div>
         <div>
           <label class="flex items-center gap-2">
             <input type="checkbox" ${s.clientPayments.cardEnabled?'checked':''} onchange="db.settings.clientPayments.cardEnabled=this.checked; save(); render();">
             <span>Карта — удобно клиенту, но с процентом</span>
           </label>
-          <div class="text-xs text-gray-400 mt-1">Ссылка на оплату вставляется в заказе. Ключи Stripe прописывает владелец на сервере.</div>
+          <div class="text-xs text-gray-400 mt-1">Ключ Stripe вставляется в «Настройки → Stripe» и хранится на сервере. Без него карта просто не показывается клиенту.</div>
         </div>
         <div>
           <label class="text-xs">Какой способ предлагать первым</label>
@@ -23505,16 +23592,15 @@ function renderSettings() {
     </div>
 
     <div ${settingsPanelAttrs('stripe')}>
-      <h3 class="font-semibold mb-3">💳 Stripe — приём платежей картой</h3>
-      <p class="text-sm text-gray-600 mb-3">Регистрация: <a href="https://dashboard.stripe.com/register" target="_blank" class="text-blue-600 underline">stripe.com</a>. Получите ключ: Dashboard → Developers → API Keys. Для безопасности рекомендую <b>Restricted Key</b> с правами <code>products: write</code>, <code>prices: write</code>, <code>payment_links: write</code>, <code>checkout.sessions: read</code>.</p>
+      <h3 class="font-semibold mb-1">💳 Stripe — оплата картой (необязательно)</h3>
+      <p class="text-sm text-gray-600 mb-3">CRM работает и без Stripe: Zelle, банковский перевод и счёт (Invoice) для коммерческих клиентов. Stripe нужен только для оплаты картой — комиссия 3% добавляется клиенту.</p>
+      <div id="stripe-server-status" class="rounded-lg border p-3 text-sm mb-3">${stripeServerStatusHtml()}</div>
+      ${currentUser()?.role === 'owner' ? `
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <label>Secret/Restricted Key (sk_... или rk_...)</label>
-          <input type="password" value="${s.stripe?.secretKey||''}" placeholder="sk_test_... или rk_live_..." onchange="db.settings.stripe.secretKey=this.value.trim(); save();">
-        </div>
-        <div>
-          <label>Publishable Key (для фронтенда, опционально)</label>
-          <input value="${s.stripe?.publishableKey||''}" placeholder="pk_test_..." onchange="db.settings.stripe.publishableKey=this.value.trim(); save();">
+          <label>Secret или Restricted key (sk_live_… / rk_live_…)</label>
+          <input id="stripe-secret-input" type="password" autocomplete="off" placeholder="Вставьте ключ из Stripe → Developers → API keys">
+          <div class="text-xs text-gray-500 mt-1">Ключ уходит прямо на сервер и хранится зашифрованным. В CRM, браузере и чате его больше не видно — только последние 4 символа.</div>
         </div>
         <div>
           <label>Валюта</label>
@@ -23525,10 +23611,11 @@ function renderSettings() {
           </select>
         </div>
       </div>
-      <p class="text-xs text-gray-500 mt-3">⚠️ Secret Key даёт полный доступ к Stripe-аккаунту — не публикуйте CRM в открытом интернете! Рекомендую Restricted Key с минимальным набором прав.</p>
-      <div class="mt-3 flex gap-2">
+      <div class="mt-3 flex gap-2 flex-wrap">
+        <button class="btn-primary text-sm" onclick="saveStripeServerKey()">Сохранить ключ на сервере</button>
+        ${stripeServerStatus?.source === 'crm' ? `<button class="btn-ghost text-sm text-red-600" onclick="clearStripeServerKey()">Отключить Stripe</button>` : ''}
         <button class="btn-ghost text-sm" onclick="checkStripePayments()">🔄 Проверить новые оплаты</button>
-      </div>
+      </div>` : `<button class="btn-ghost text-sm" onclick="checkStripePayments()">🔄 Проверить новые оплаты</button>`}
       <p class="text-xs text-gray-500 mt-2">Кнопку «🔄 Проверить» жмите когда клиент оплатил — CRM спросит у Stripe и автоматически отметит «Аванс получен».</p>
     </div>
 
@@ -23856,62 +23943,83 @@ async function testLeadBackend() {
 }
 
 // ---------- MEASURER VIEWS ----------
+// Owner, 2026-10-24 («роль замерщика — пиздец»): the day is in local time, the
+// hero says when (сегодня / завтра / date) and whether to start or continue,
+// the numbers are about measurements, the area is sq ft.
+function fieldDayLabel(value) {
+  if (!value) return 'без даты';
+  const key = localDateKey(value);
+  const today = localDateKey();
+  const tomorrow = localDateKey(new Date(Date.now() + 86400000));
+  if (key === today) return 'сегодня';
+  if (key === tomorrow) return 'завтра';
+  if (key < today) return 'просрочен · ' + new Date(value).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+  return new Date(value).toLocaleDateString('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit' });
+}
+function orderMeasuredSqft(o) {
+  return measureAllWindows(o).reduce((sum, { win }) => sum + (windowActualAreaSqft(win) || 0), 0);
+}
+function measurerTaskOpen(o) { return o.status === 'measurement_scheduled' && !o.measurementDoneAt; }
 function renderMeasurerDashboard() {
   const u = currentUser();
   const now = new Date();
-  const todayKey = now.toISOString().slice(0,10);
+  const todayKey = localDateKey();
   const assigned = db.orders.filter(o => o.measurerId === u.id);
-  const myTasks = assigned.filter(o => ['measurement_scheduled','measurement_done'].includes(o.status))
-    .sort((a,b) => (a.measurementAt||'9999').localeCompare(b.measurementAt||'9999'));
-  const todayTasks = myTasks.filter(o => o.measurementAt?.slice(0,10) === todayKey && !o.measurementDoneAt);
-  const nextTask = todayTasks.find(o => new Date(o.measurementAt) >= now) || todayTasks[0] || myTasks.find(o => !o.measurementDoneAt) || null;
+  const open = assigned.filter(measurerTaskOpen).sort((a,b) => (a.measurementAt||'9999').localeCompare(b.measurementAt||'9999'));
+  const todayTasks = open.filter(o => o.measurementAt && localDateKey(o.measurementAt) === todayKey);
+  const nextTask = open.find(o => o.measurementAt && localDateKey(o.measurementAt) >= todayKey) || open[0] || null;
   const nextClient = nextTask ? getClient(nextTask.clientId) : null;
-  const openPersonalTasks = (db.tasks || []).filter(t => t.status !== 'done' && ((t.teamIds || []).includes(u.id) || t.responsibleId === u.id));
-  const attentionCount = myTasks.filter(o => o.status === 'measurement_scheduled' && !o.measurementAcceptedAt).length + openPersonalTasks.filter(t => t.dueAt && t.dueAt.slice(0,10) <= todayKey).length;
+  const waitingAccept = open.filter(o => !o.measurementAcceptedAt).length;
+  const overdue = open.filter(o => o.measurementAt && localDateKey(o.measurementAt) < todayKey).length;
   const completedThisMonth = assigned.filter(o => o.measurementDoneAt && new Date(o.measurementDoneAt).getMonth()===now.getMonth() && new Date(o.measurementDoneAt).getFullYear()===now.getFullYear()).length;
-  const route = buildMeasurerRouteBar(u);
+  const nextAction = nextTask ? measurerOrderPrimaryAction(nextTask) : null;
+  const title = todayTasks.length ? `Сегодня ${todayTasks.length} ${todayTasks.length === 1 ? 'выезд' : 'выезда'}` : nextTask ? `Ближайший замер — ${fieldDayLabel(nextTask.measurementAt)}` : 'Замеров пока нет';
+  const notes = [waitingAccept ? `ждут принятия: ${waitingAccept}` : '', overdue ? `просрочено: ${overdue}` : ''].filter(Boolean).join(' · ');
   return `
   <section class="field-day-hero" aria-label="Рабочий день замерщика">
-    <div class="field-day-overline">${academyEsc(u.name)} · замерщик · online</div>
-    <h2>${todayTasks.length ? `Сегодня ${todayTasks.length} ${todayTasks.length === 1 ? 'выезд' : 'выезда'}` : 'Сегодня выездов нет'}</h2>
-    <p>${attentionCount ? `Требует внимания: ${attentionCount}` : 'Все срочные действия под контролем'}</p>
+    <div class="field-day-overline">${academyEsc(u.name)} · замерщик</div>
+    <h2>${title}</h2>
+    <p>${notes ? academyEsc(notes[0].toUpperCase() + notes.slice(1)) : 'Все замеры приняты'}</p>
     ${nextTask ? `
       <div class="field-day-next">
-        <div class="field-day-time">${new Date(nextTask.measurementAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div>
+        <div class="field-day-time">${nextTask.measurementAt ? new Date(nextTask.measurementAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '—'}<small style="display:block;font-size:11px;font-weight:600;opacity:.8">${academyEsc(fieldDayLabel(nextTask.measurementAt))}</small></div>
         <div>
           <strong>${academyEsc(nextClient?.name || nextTask.number)}</strong>
           <span>${academyEsc(orderAddress(nextTask, nextClient) || 'Адрес не указан')}</span>
         </div>
-        <button type="button" onclick="openMeasurerV25ForOrder('${nextTask.id}')">Продолжить замер</button>
+        <button type="button" onclick="${nextAction.onclick}">${academyEsc(nextAction.title)}</button>
       </div>` : `
       <div class="field-day-next">
         <div class="field-day-time">✓</div>
-        <div><strong>Рабочий день свободен</strong><span>Новые назначения появятся здесь автоматически</span></div>
+        <div><strong>Свободно</strong><span>Новые назначения появятся здесь автоматически</span></div>
         <button type="button" onclick="selectAppView('calendar')">Открыть календарь</button>
       </div>`}
   </section>
 
   <div class="field-metric-strip" aria-label="Сводка замерщика">
     <div><small>Сегодня</small><strong>${todayTasks.length}</strong></div>
-    <div><small>Мои задачи</small><strong>${openPersonalTasks.length}</strong></div>
-    <div><small>За месяц</small><strong>${completedThisMonth}</strong></div>
+    <div><small>Впереди</small><strong>${open.length}</strong></div>
+    <div><small>Сдано за месяц</small><strong>${completedThisMonth}</strong></div>
   </div>
 
-  ${route}
+  ${buildMeasurerRouteBar(u)}
   <div class="field-section-head"><h3>Ближайшие замеры</h3><button type="button" onclick="selectAppView('measurements')">Все замеры →</button></div>
-  ${renderMeasurerList(myTasks.filter(o => !o.measurementDoneAt).slice(0,4))}
+  ${renderMeasurerList(open.slice(0,4))}
   `;
 }
 function renderMeasurerTasks() {
   const u = currentUser();
-  const tasks = db.orders.filter(o => o.measurerId === u.id)
-                .sort((a,b) => (b.createdAt).localeCompare(a.createdAt));
-  return `<div class="field-section-head"><h3>Мои замеры</h3><button type="button" onclick="selectAppView('calendar')">Календарь →</button></div>` + buildMeasurerRouteBar(u) + renderMeasurerList(tasks);
+  const mine = db.orders.filter(o => o.measurerId === u.id);
+  // Open measurements first, by date; done ones after, newest first.
+  const open = mine.filter(measurerTaskOpen).sort((a,b) => (a.measurementAt||'9999').localeCompare(b.measurementAt||'9999'));
+  const done = mine.filter(o => !measurerTaskOpen(o)).sort((a,b) => String(b.measurementDoneAt || b.createdAt || '').localeCompare(String(a.measurementDoneAt || a.createdAt || '')));
+  return `<div class="field-section-head"><h3>Мои замеры</h3><button type="button" onclick="selectAppView('calendar')">Календарь →</button></div>` + buildMeasurerRouteBar(u) + renderMeasurerList(open)
+    + (done.length ? `<div class="field-section-head mt-4"><h3>Сданные</h3></div>` + renderMeasurerList(done.slice(0, 20)) : '');
 }
 function buildMeasurerRouteBar(u) {
-  const today = new Date().toISOString().slice(0,10);
+  const today = localDateKey();
   const todays = db.orders
-    .filter(o => o.measurerId === u.id && o.measurementAt && o.measurementAt.slice(0,10) === today && !o.measurementDoneAt)
+    .filter(o => o.measurerId === u.id && o.measurementAt && localDateKey(o.measurementAt) === today && !o.measurementDoneAt)
     .sort((a,b) => a.measurementAt.localeCompare(b.measurementAt));
   const addrs = todays.map(o => orderAddress(o, getClient(o.clientId))).filter(Boolean);
   if (!addrs.length) return '';
@@ -23935,41 +24043,35 @@ function renderMeasurerList(tasks) {
     ${tasks.map(o => {
       const c = getClient(o.clientId);
       const accepted = !!o.measurementAcceptedAt;
-      const scheduled = o.status === 'measurement_scheduled';
+      const open = measurerTaskOpen(o);
+      const action = measurerOrderPrimaryAction(o);
+      const scopes = [...new Set([...orderMeasureScopes(o), ...measureAllWindows(o).map(({ win }) => win.measureScope).filter(Boolean)])];
+      const sqft = orderMeasuredSqft(o);
+      const windows = measureAllWindows(o).length;
       return `
       <article class="field-task-card">
         <div class="field-task-card-main">
-        <div class="flex items-start justify-between">
-          <div>
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
             <div class="field-task-kicker">${academyEsc(o.number)}</div>
             <h3>${academyEsc(c?.name || 'Клиент')}</h3>
             <div class="field-task-meta">${addressAnchor(orderAddress(o, c) || 'Адрес не указан')}</div>
-            <div class="field-task-meta">${academyEsc(c?.phone || 'Телефон не указан')}</div>
           </div>
-          <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
+          <span class="tag ${!open ? 'bg-emerald-100 text-emerald-800' : accepted ? 'bg-blue-50 text-blue-800' : 'bg-amber-100 text-amber-800'}">${!open ? '✓ Сдан' : accepted ? 'Принят' : 'Ждёт принятия'}</span>
         </div>
-        <div class="mt-3 flex flex-wrap gap-2 text-xs">
-          <span class="tag ${accepted ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${accepted ? '✓ Замер принят' : 'Ожидает принятия'}</span>
-          <span class="tag bg-slate-100 text-slate-700">${academyEsc(orderServiceTypeLabel(o.serviceType))}</span>
-          <span class="tag bg-blue-50 text-blue-700">${measureScopeInfo(orderMeasureScope(o)).icon} ${measureScopeInfo(orderMeasureScope(o)).short}</span>
+        <div class="mt-2 flex flex-wrap gap-2 text-xs">
+          ${scopes.map(key => { const d = rpDir(key); return `<span class="tag" style="background:${d.tint};color:${d.deep};border-color:${d.color}44">${measureScopeInfo(key).icon} ${academyEsc(measureScopeInfo(key).short)}</span>`; }).join('')}
         </div>
-        <div class="mt-3 text-sm bg-blue-50 border-l-4 border-blue-500 p-2 rounded">
-          📅 ${fmtDateTime(o.measurementAt)}
+        <div class="mt-3 text-sm bg-blue-50 border-l-4 border-blue-500 p-2 rounded flex justify-between gap-2">
+          <span>📅 ${fmtDateTime(o.measurementAt)}</span>${open ? `<b>${academyEsc(fieldDayLabel(o.measurementAt))}</b>` : ''}
         </div>
-        <div class="mt-3 flex items-center justify-between text-sm">
-          <span class="text-gray-500">${T('area')}:</span>
-          <span class="font-semibold">${orderArea(o).toFixed(2)} ${T('m2')}</span>
+        ${windows ? `<div class="mt-2 text-sm text-gray-600">${windows} ${windows === 1 ? 'окно' : windows < 5 ? 'окна' : 'окон'} · <b>${sqft.toFixed(1)} sq ft</b></div>` : ''}
         </div>
-        </div>
-        </div>
-        <div class="field-task-actions">
-          ${scheduled && !accepted
-            ? `<button type="button" onclick="acceptMeasurementTask('${o.id}', true)">Принять</button>`
-            : `<button type="button" onclick="openOrder('${o.id}')">Проект</button>`}
-          <button type="button" class="field-primary-action" onclick="openMeasurerV25ForOrder('${o.id}')">Открыть замер</button>
-          <button type="button" onclick="startCall('${academyEsc(c?.phone || '')}','${academyEsc(c?.id || '')}','${o.id}')">Позвонить</button>
-          <a href="${whatsappLink(c?.phone || '', 'Здравствуйте, я замерщик Rolan PRO, еду к вам на замер.')}" target="_blank" rel="noopener">WhatsApp</a>
-          ${scheduled && accepted ? `<button type="button" onclick="changeStatus('${o.id}','measurement_done')">Завершить</button>` : ''}
+        <div class="field-task-actions" data-rp-keep-layout>
+          <button type="button" class="field-primary-action" onclick="${action.onclick}">${academyEsc(action.title)}</button>
+          <button type="button" onclick="openOrder('${o.id}')">Проект</button>
+          <button type="button" aria-label="Позвонить" onclick="startCall('${academyEsc(c?.phone || '')}','${academyEsc(c?.id || '')}','${o.id}')">📞</button>
+          <a href="${whatsappLink(c?.phone || '', 'Здравствуйте, я замерщик Rolan PRO, еду к вам на замер.')}" target="_blank" rel="noopener" aria-label="WhatsApp">💬</a>
         </div>
       </article>`;
     }).join('')}
@@ -23978,42 +24080,67 @@ function renderMeasurerList(tasks) {
 }
 
 // ---------- INSTALLER VIEWS ----------
+// Owner, 2026-10-24: the installer's «Сегодня» opens on the next job and its
+// one button, like the measurer's day; overdue jobs are said so; the map folds.
+const INSTALLER_OPEN_STATUSES = ['installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done'];
 function renderInstallerDashboard() {
   const u = currentUser();
-  const myTasks = db.orders.filter(o => (o.installerIds||[]).includes(u.id) && !['completed','review_received'].includes(o.status));
-  // Today's payout total (only what user earned)
-  const today = new Date(); today.setHours(0,0,0,0);
-  const todayTasks = myTasks.filter(o => o.installationAt && new Date(o.installationAt).toDateString() === today.toDateString());
+  const mine = db.orders.filter(o => (o.installerIds||[]).includes(u.id));
+  const myTasks = mine.filter(o => !['completed','review_received'].includes(o.status));
+  const open = myTasks.filter(o => INSTALLER_OPEN_STATUSES.includes(o.status)).sort((a,b) => (a.installationAt||'9999').localeCompare(b.installationAt||'9999'));
+  const todayKey = localDateKey();
+  const todayTasks = open.filter(o => o.installationAt && localDateKey(o.installationAt) === todayKey);
+  const overdue = open.filter(o => o.installationAt && localDateKey(o.installationAt) < todayKey && o.status !== 'installation_done');
+  const nextTask = open.find(o => o.status === 'installation_in_progress' || o.status === 'installation_done') || overdue[0] || open.find(o => o.installationAt && localDateKey(o.installationAt) >= todayKey) || open[0] || null;
+  const nextClient = nextTask ? getClient(nextTask.clientId) : null;
+  const next = nextTask ? installerOrderPrimaryAction(nextTask) : null;
   const todayPayout = todayTasks.reduce((s, o) => s + orderInstallerPayoutPerPerson(o, u.id), 0);
-  // Trigger map after render
+  const now = new Date();
+  const monthDone = mine.filter(o => o.installationDoneAt && new Date(o.installationDoneAt).getMonth() === now.getMonth() && new Date(o.installationDoneAt).getFullYear() === now.getFullYear());
+  const monthPay = monthDone.reduce((s, o) => s + orderInstallerPayoutPerPerson(o, u.id), 0);
+  const title = todayTasks.length ? `Сегодня ${todayTasks.length} ${todayTasks.length === 1 ? 'монтаж' : 'монтажа'}` : nextTask ? `Ближайший монтаж — ${fieldDayLabel(nextTask.installationAt)}` : 'Монтажей пока нет';
   setTimeout(() => renderInstallerMap('installer-map', myTasks), 100);
   return `
-  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-    <div class="card"><div class="text-sm text-gray-500">${T('pendingTasks')}</div><div class="text-3xl font-bold">${myTasks.filter(t=>t.status==='installation_scheduled').length}</div></div>
-    <div class="card"><div class="text-sm text-gray-500">${T('jobInProgress')}</div><div class="text-3xl font-bold text-blue-600">${myTasks.filter(t=>t.status==='installation_in_progress'||t.status==='installation_accepted').length}</div></div>
-    <div class="card"><div class="text-sm text-gray-500">${T('jobFinished')} (${T('thisMonth')})</div><div class="text-3xl font-bold text-green-600">${db.orders.filter(o=>(o.installerIds||[]).includes(u.id) && o.installationDoneAt && new Date(o.installationDoneAt).getMonth()===new Date().getMonth()).length}</div></div>
-    <div class="card bg-emerald-50"><div class="text-sm text-emerald-700">💰 На сегодня</div><div class="text-3xl font-bold text-emerald-700">${fmtMoney(todayPayout)}</div><div class="text-xs text-gray-500">${todayTasks.length} монтаж${todayTasks.length===1?'':'ей'}</div></div>
+  <section class="field-day-hero" aria-label="Рабочий день специалиста по установке">
+    <div class="field-day-overline">${academyEsc(u.name)} · специалист по установке</div>
+    <h2>${title}</h2>
+    <p>${overdue.length ? `Просрочено: ${overdue.length} — отметьте выполнение или сообщите менеджеру` : todayTasks.length ? `К выплате за сегодня: ${fmtMoney(todayPayout)}` : 'Новые назначения появятся здесь автоматически'}</p>
+    ${nextTask ? `
+      <div class="field-day-next">
+        <div class="field-day-time">${nextTask.installationAt ? new Date(nextTask.installationAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '—'}<small style="display:block;font-size:11px;font-weight:600;opacity:.8">${academyEsc(fieldDayLabel(nextTask.installationAt))}</small></div>
+        <div>
+          <strong>${academyEsc(nextClient?.name || nextTask.number)}</strong>
+          <span>${academyEsc(orderAddress(nextTask, nextClient) || 'Адрес не указан')} · ваша выплата ${fmtMoney(orderInstallerPayoutPerPerson(nextTask, u.id))}</span>
+        </div>
+        <button type="button" onclick="${next.onclick.startsWith('openTechnicalSheet') ? `openOrder('${nextTask.id}')` : next.onclick}">${academyEsc(next.title)}</button>
+      </div>` : `
+      <div class="field-day-next">
+        <div class="field-day-time">✓</div>
+        <div><strong>Свободно</strong><span>Посмотрите календарь на неделю</span></div>
+        <button type="button" onclick="selectAppView('calendar')">Открыть календарь</button>
+      </div>`}
+  </section>
+
+  <div class="field-metric-strip" aria-label="Сводка специалиста по установке">
+    <div><small>Сегодня</small><strong>${todayTasks.length}</strong></div>
+    <div><small>Впереди</small><strong>${open.length}</strong></div>
+    <div><small>Заработано за месяц</small><strong>${fmtMoney(monthPay)}</strong></div>
   </div>
 
-  <div class="card mb-4 p-0 overflow-hidden">
-    <div class="px-4 py-2 bg-gray-50 border-b flex items-center gap-3 flex-wrap">
-      <span class="text-sm font-semibold">🗺 Мои объекты</span>
-      <span class="text-xs text-gray-500">Кликните по точке → откроется навигация в Google Maps / Apple Maps</span>
+  <div class="field-section-head"><h3>${T('myTasks')}</h3><button type="button" onclick="selectAppView('analytics')">Аналитика →</button></div>
+  ${renderInstallerList(open.length ? open : myTasks)}
+
+  <details class="card mt-4 p-0 overflow-hidden installer-map-fold" ontoggle="if(this.open){ try { _map && _map.invalidateSize(); } catch(e){} }">
+    <summary class="px-4 py-3 font-semibold cursor-pointer">🗺 Карта объектов и маршрут</summary>
+    <div class="px-4 py-2 bg-gray-50 border-y flex items-center gap-3 flex-wrap">
+      <span class="text-xs text-gray-500">Нажмите на точку — откроется навигация</span>
       <div class="flex-1"></div>
-      <button class="btn-primary text-sm" onclick="buildInstallerRoute()">🧭 Построить маршрут на сегодня</button>
+      <button class="btn-primary text-sm" onclick="buildInstallerRoute()">🧭 Маршрут на сегодня</button>
     </div>
-    <div id="installer-map" style="width: 100%; height: 360px; background: #f3f4f6;">
+    <div id="installer-map" style="width: 100%; height: 320px; background: #f3f4f6;">
       <div class="flex items-center justify-center h-full text-sm text-gray-400">Загрузка карты…</div>
     </div>
-  </div>
-
-  <button type="button" class="card w-full text-left mb-4 flex items-center justify-between gap-3" onclick="selectAppView('analytics')">
-    <span><span class="font-semibold">📈 Аналитика по объектам</span><span class="block text-xs text-gray-500">Сданные объекты, метраж и заработок за месяц</span></span>
-    <span class="text-blue-700 font-semibold">Открыть →</span>
-  </button>
-
-  <h3 class="font-semibold mb-3">${T('myTasks')}</h3>
-  ${renderInstallerList(myTasks)}
+  </details>
   `;
 }
 
@@ -24380,10 +24507,6 @@ function renderInstallerList(tasks) {
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
     ${tasks.map(o => {
       const c = getClient(o.clientId);
-      const canAccept = o.status === 'installation_scheduled';
-      const canGo     = o.status === 'installation_accepted';
-      const canStart  = o.status === 'installation_en_route';
-      const canFinish = o.status === 'installation_in_progress';
       // Show only personal payout (not order revenue)
       const myPayout = orderInstallerPayoutPerPerson(o, u.id);
       // Films summary (no prices)
@@ -24405,8 +24528,8 @@ function renderInstallerList(tasks) {
           </div>
           <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
         </div>
-        <div class="mt-3 text-sm bg-purple-50 border-l-4 border-purple-500 p-2 rounded">
-          📅 ${fmtDateTime(o.installationAt)}
+        <div class="mt-3 text-sm bg-purple-50 border-l-4 border-purple-500 p-2 rounded flex justify-between gap-2">
+          <span>📅 ${fmtDateTime(o.installationAt)}</span><b>${academyEsc(fieldDayLabel(o.installationAt))}</b>
         </div>
         <div class="mt-3 text-sm">
           <div class="text-gray-500 mb-1">Площадь: <b class="text-slate-800">${orderActualAreaSqft(o).toFixed(2)} sqft</b></div>
@@ -24414,15 +24537,11 @@ function renderInstallerList(tasks) {
           ${filmsList ? `<div class="text-gray-500 mt-1">Плёнки: ${filmsList}</div>` : ''}
           <div class="mt-2 p-2 bg-emerald-50 rounded text-emerald-800"><b>💰 Ваша выплата:</b> ${fmtMoney(myPayout)}</div>
         </div>
-        <div class="mt-3 flex gap-2 flex-wrap">
-          <button class="btn-primary" onclick="openOrder('${o.id}')">Открыть ТЗ-лист</button>
-          <button class="btn-ghost" onclick="printTechnicalSheet('${o.id}')">🖨 ТЗ-лист</button>
-          ${canAccept ? `<button class="btn-primary bg-green-600 hover:bg-green-700" onclick="changeStatus('${o.id}','installation_accepted')">✓ ${T('acceptJob')}</button>` : ''}
-          ${canGo ? `<button class="btn-primary bg-purple-600 hover:bg-purple-700" onclick="changeStatus('${o.id}','installation_en_route')">🚗 ${T('enRouteJob')}</button>` : ''}
-          ${canStart  ? `<button class="btn-primary bg-blue-600 hover:bg-blue-700" onclick="changeStatus('${o.id}','installation_in_progress')">▶ ${T('startJob')}</button>` : ''}
-          ${canFinish ? `<button class="btn-primary bg-emerald-600 hover:bg-emerald-700" onclick="changeStatus('${o.id}','installation_done')">✓ ${T('finishJob')}</button>` : ''}
-          <button class="btn-ghost" onclick="startCall('${c.phone}','${c.id}','${o.id}')">📞</button>
-        </div>
+        ${(() => { const next = installerOrderPrimaryAction(o); return `<div class="installer-card-actions mt-3" data-rp-keep-layout>
+          <button class="btn-primary installer-card-next" onclick="${next.onclick.startsWith('openTechnicalSheet') ? `openOrder('${o.id}')` : next.onclick}">${next.icon} ${academyEsc(next.title)}</button>
+          <button class="btn-ghost" onclick="openOrder('${o.id}')">ТЗ-лист</button>
+          <button class="btn-ghost" aria-label="Позвонить клиенту" onclick="startCall('${c.phone}','${c.id}','${o.id}')">📞</button>
+        </div>`; })()}
       </div>`;
     }).join('')}
   </div>
@@ -25612,6 +25731,8 @@ function updateServiceOffering(id, field, value, control = null) {
     if (!name) return alert('Название услуги не может быть пустым.');
     offering.name = name;
     // Existing estimates retain the name and price chosen for that project.
+  } else if (field === 'nameEn') {
+    offering.nameEn = String(value || '').trim().slice(0, 120);
   } else if (['pricePerSqft','installerRatePerSqft','materialCostPerUnit','minPricePerUnit','maxPricePerUnit'].includes(field)) {
     const nextValue = Math.max(0, Number(value) || 0);
     if (field === 'minPricePerUnit' && Number(offering.maxPricePerUnit) > 0 && nextValue > offering.maxPricePerUnit) return alert('Минимальная цена не может быть выше максимальной.');
@@ -25747,7 +25868,8 @@ function renderServiceOfferingsSection() {
       return owner ? `<div data-service-offering-row="${offering.id}" class="p-3 border border-slate-200 ${offering.active === false ? 'opacity-60' : ''}">
         ${serviceOfferingIsDraft(offering) ? '<div class="text-xs font-bold mb-2" style="color:#92400e">Черновик · не показывается в кассе, пока нет названия и цены</div>' : ''}
         <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-          <div class="md:col-span-2"><label>Услуга (название в КП)</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value,this)"></div>
+          <div class="md:col-span-2"><label>Услуга (название в CRM)</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value,this)"></div>
+          <div class="md:col-span-2"><label>Name for the client (EN) — КП, акт и счёт</label><input value="${academyEsc(offering.nameEn || '')}" placeholder="${academyEsc(serviceOfferingEnglishGuess(offering) || 'e.g. Structural Silicone')}" onchange="updateServiceOffering('${offering.id}','nameEn',this.value,this)"></div>
           <div class="md:col-span-2"><label>Как считается</label><select onchange="updateServiceOffering('${offering.id}','unit',this.value,this)">${serviceOfferingUnitsFor(offering.direction).map(item => `<option value="${item.id}" ${unit === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
           ${unit === 'custom' ? `<div class="md:col-span-2"><label>Единица (например, час или выезд)</label><input value="${academyEsc(offering.unitLabel || '')}" maxlength="30" placeholder="ед." onchange="updateServiceOffering('${offering.id}','unitLabel',this.value,this)"></div>` : ''}
           <div><label>Цена клиенту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value,this)"></div>
@@ -28219,6 +28341,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     <div class="order-clean-actions mt-3">
       ${renderOrderActionCard({ icon: '💰', title: o.depositReceived ? 'Аванс получен' : 'Отметить аванс', sub: o.depositReceived ? fmtDateTime(o.depositReceivedAt) : `ожидаемый ${fmtMoney(companyDepositFor(orderRevenue(o)))}`, onclick: o.depositReceived ? `openOrder('${o.id}')` : `markDepositReceived('${o.id}')`, variant: o.depositReceived ? 'success' : 'warning' })}
       ${renderOrderActionCard({ icon: '🧮', title: 'Расчёт проекта', sub: estimateReady ? (!hasMeasurements ? 'услуги без размеров и цена клиенту' : canSeeInternalEconomics ? 'замер, цена, расходы и маржа' : 'замер, услуги и цена клиенту') : 'сначала внесите помещения и размеры', onclick: `openProjectEstimateWorkspace('${o.id}')`, disabled: !estimateReady, variant: !estimateApproved && estimateReady ? 'primary' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🧾', title: 'Счёт (Invoice)', sub: (o.invoices || []).length ? `${o.invoices[o.invoices.length - 1].number} · ${fmtMoney(o.invoices[o.invoices.length - 1].amount)}` : 'оплата по счёту: перевод, Zelle или чек', onclick: `openProjectInvoice('${o.id}')`, disabled: !projectLines(o).length })}
     </div>` : `<div class="order-clean-note">Финансы скрыты для роли ${academyEsc(u?.role || '')}. В рабочем режиме видны только клиент, адрес, замер, техлист и задача.</div>`;
 
   const routeBody = `
@@ -28247,7 +28370,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
 
   return `
     <div class="order-clean-topbar">
-      <button class="btn-ghost" onclick="state.view='${isInstaller ? 'installations' : 'orders'}'; location.hash=''; render();">← ${isInstaller ? 'Мои задачи' : T('orders')}</button>
+      <button class="btn-ghost" onclick="state.view='${isInstaller ? 'installations' : u?.role === 'measurer' ? 'measurements' : 'orders'}'; location.hash=''; render();">← ${isInstaller ? 'Мои задачи' : u?.role === 'measurer' ? 'Мои замеры' : T('orders')}</button>
       ${u?.role === 'owner' ? `<button class="btn-ghost text-sm text-red-600" onclick="openArchiveProjectModal('${o.id}')" title="Проект уйдёт в архив; его можно восстановить">🗑 Удалить в архив</button>` : ''}
       ${u?.role === 'owner' ? `<button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();" title="Открыть старую полную форму, если нужны все поля сразу">Расширенный режим</button>` : ''}
     </div>
@@ -28284,7 +28407,7 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
   return `
     <div class="order-clean-topbar">
       <button class="btn-ghost" onclick="state.view='installations'; location.hash=''; render();">← Мои задачи</button>
-      <span class="tag">Специалисту по установке доступен только ТЗ-лист</span>
+      <span class="tag bg-emerald-50 text-emerald-800">Ваша выплата: <b>&nbsp;${fmtMoney(orderInstallerPayoutPerPerson(o, u?.id))}</b></span>
     </div>
     <div class="order-clean-shell">
       <section class="order-clean-stage">
@@ -31171,7 +31294,7 @@ function submitClientPortalRequest(clientId) {
   const relationship = clientRelationshipType(c) === 'regular' ? 'regular' : 'one_time';
   const o = {
     id: 'o' + uid(),
-    number: 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(db.orders.length + 1).padStart(3, '0'),
+    number: 'R-' + localDateKey().slice(2).replace(/-/g,'') + '-' + String(db.orders.length + 1).padStart(3, '0'),
     clientId: c.id,
     status: 'new',
     managerId,
@@ -32263,7 +32386,7 @@ function createOrder(nextStep = 'project') {
     alert('У выбранного клиента не хватает данных для заказа: ' + missing.join(', ') + '. Добавьте эти данные в карточку клиента или создайте новый адрес объекта.');
     return;
   }
-  const num = 'R-' + new Date().toISOString().slice(2,10).replace(/-/g,'').slice(0,6) + '-' + String(projectNumberSequence()).padStart(3, '0');
+  const num = 'R-' + localDateKey().slice(2).replace(/-/g,'') + '-' + String(projectNumberSequence()).padStart(3, '0');
   const tags = Array.from(new Set([...selectedServices.map(item => item.tag), accountTypeForOrder, relationshipForOrder === 'regular' ? 'regular' : 'one_time', ...(executionVariant.tags || []), ...pickedTags].filter(Boolean)));
 
   const o = {
@@ -35568,7 +35691,8 @@ function premiumAcceptProposal(token) {
 }
 
 function premiumStripeConfigured() {
-  return !!(db.settings.stripe || {}).secretKey;
+  if (!stripeServerStatus && typeof refreshStripeServerStatus === 'function' && ROLANPRO_CLOUD) setTimeout(() => refreshStripeServerStatus(), 0);
+  return !!stripeServerStatus?.configured;
 }
 function premiumStripeCheckoutUrl(prop, calc) {
   if (prop?.stripe?.paymentLinkUrl) return prop.stripe.paymentLinkUrl;
@@ -35681,7 +35805,20 @@ function projectProposalLineTitle(line) {
     const material = projectLineMaterialNames(line, { en: true }).join(', ');
     return [projectProposalDirectionTitle(line.direction), material].filter(Boolean).join(' — ');
   }
-  return offering?.nameEn || offering?.name || knownWork || (line.kind === 'included' ? 'Included Project Service' : 'Additional Project Service');
+  // Documents go to US clients (Owner, 2026-10-24: «Силикон» in an English act and invoice).
+  return offering?.nameEn || knownWork || serviceOfferingEnglishGuess(offering) || offering?.name || (line.kind === 'included' ? 'Included Project Service' : 'Additional Project Service');
+}
+/** An English name for a Russian-named service until the owner writes his own. */
+function serviceOfferingEnglishGuess(offering) {
+  const name = String(offering?.name || '');
+  if (!name || !/[А-Яа-яЁё]/.test(name)) return '';
+  const n = name.toLowerCase();
+  const known = [
+    [/силикон|герметик/, 'Structural Silicone'], [/мойк|очистк|чистк/, 'Glass Cleaning'], [/снят|демонтаж|удален/, 'Existing Film Removal'],
+    [/электр|проводк/, 'Electrical Work'], [/подключ/, 'Smart Film Zone Connection'], [/гарант/, 'Extended Warranty'],
+    [/выезд|доставк/, 'Trip Charge'], [/замер/, 'Site Measurement'], [/леса|подъ[её]мник|вышк/, 'Lift / Scaffolding'],
+  ].find(([re]) => re.test(n));
+  return known ? known[1] : '';
 }
 /** Window drawing for the client KP: inches, type and panes laid out in rows or columns. */
 function premiumWindowDrawingData(win) {
@@ -38483,41 +38620,54 @@ async function aiTestConnection() {
 }
 
 // ---------- STRIPE PAYMENTS ----------
-async function createStripePaymentLink(order, amount, description) {
-  const cfg = db.settings.stripe || {};
-  if (!cfg.secretKey) throw new Error('Stripe Secret/Restricted Key не указан в Настройках');
-  // Step 1: create a Product
-  const productRes = await fetch('https://api.stripe.com/v1/products', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + cfg.secretKey, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ name: description }).toString(),
+// Owner, 2026-10-24: the key lives on the server (encrypted), never in the
+// browser or the shared workspace. The browser asks the server for links and
+// for paid sessions.
+let stripeServerStatus = null;
+async function stripeServerApi(path = '', options = {}) {
+  if (ROLANPRO_LOCAL_FILE) throw new Error('Stripe работает только в рабочей CRM: ' + ROLANPRO_PRODUCTION_URL);
+  const r = await fetch(`/api/v1/settings/stripe${path}`, {
+    credentials: 'same-origin', cache: 'no-store', ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
   });
-  const product = await productRes.json();
-  if (!productRes.ok) throw new Error('Stripe products: ' + (product.error?.message || productRes.status));
-  // Step 2: create a Price
-  const priceRes = await fetch('https://api.stripe.com/v1/prices', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + cfg.secretKey, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ unit_amount: String(Math.round(amount * 100)), currency: cfg.currency || 'usd', product: product.id }).toString(),
-  });
-  const price = await priceRes.json();
-  if (!priceRes.ok) throw new Error('Stripe prices: ' + (price.error?.message || priceRes.status));
-  // Step 3: create a Payment Link
-  const linkRes = await fetch('https://api.stripe.com/v1/payment_links', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + cfg.secretKey, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      'line_items[0][price]': price.id,
-      'line_items[0][quantity]': '1',
-      'metadata[order_id]': order.id,
-      'metadata[order_number]': order.number,
-    }).toString(),
-  });
-  const link = await linkRes.json();
-  if (!linkRes.ok) throw new Error('Stripe payment_links: ' + (link.error?.message || linkRes.status));
-  return { url: link.url, id: link.id, priceId: price.id, productId: product.id };
+  const payload = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(payload?.errors?.[0]?.message || `Stripe server ${r.status}`);
+  return payload?.data;
 }
-
+let stripeServerStatusPending = null;
+function refreshStripeServerStatus(rerender = true) {
+  if (stripeServerStatusPending) return stripeServerStatusPending;
+  stripeServerStatusPending = stripeServerApi('')
+    .then(data => { stripeServerStatus = data; })
+    .catch(e => { stripeServerStatus = { configured: false, error: e.message }; })
+    .then(() => { stripeServerStatusPending = null; if (rerender) render(); return stripeServerStatus; });
+  return stripeServerStatusPending;
+}
+function stripeServerStatusHtml() {
+  if (!stripeServerStatus) { setTimeout(() => refreshStripeServerStatus(), 0); return 'Проверяем Stripe…'; }
+  if (stripeServerStatus.error) return `<span class="text-amber-700">Не удалось проверить: ${academyEsc(stripeServerStatus.error)}</span>`;
+  if (!stripeServerStatus.configured) return '<b class="text-slate-700">Stripe не подключён.</b> Клиенты платят Zelle, переводом или по счёту — без комиссии.';
+  return `<b class="text-emerald-700">✓ Stripe подключён</b> · ${stripeServerStatus.mode === 'live' ? 'боевой режим' : 'тестовый режим'} · ключ ${academyEsc(stripeServerStatus.hint || '')}${stripeServerStatus.source === 'server' ? ' · задан на сервере' : ''}`;
+}
+async function saveStripeServerKey() {
+  const input = document.getElementById('stripe-secret-input');
+  const value = String(input?.value || '').trim();
+  if (!value) { alert('Вставьте ключ Stripe.'); return; }
+  try {
+    stripeServerStatus = await stripeServerApi('', { method: 'PUT', body: JSON.stringify({ secret_key: value }) });
+    if (input) input.value = '';
+    alert('✓ Ключ сохранён на сервере. Оплата картой в КП включена.');
+  } catch (e) { alert(e.message); }
+  render();
+}
+async function clearStripeServerKey() {
+  if (!confirm('Отключить оплату картой? Ключ будет удалён с сервера.')) return;
+  try { stripeServerStatus = await stripeServerApi('', { method: 'DELETE' }); } catch (e) { alert(e.message); }
+  render();
+}
+async function createStripePaymentLink(order, amount, description) {
+  return stripeServerApi('/payment-link', { method: 'POST', body: JSON.stringify({ order_id: order.id, order_number: order.number, amount, description, currency: db.settings.stripe?.currency || 'usd' }) });
+}
 async function generateStripeDepositLink(orderId) {
   const o = getOrder(orderId);
   if (!o) return;
@@ -38542,19 +38692,15 @@ async function generateStripeDepositLink(orderId) {
 
 async function checkStripePayments() {
   // Poll Stripe for paid sessions, mark deposits received
-  const cfg = db.settings.stripe || {};
-  if (!cfg.secretKey) { alert('Stripe не настроен'); return; }
   const orders = db.orders.filter(o => o.stripe?.paymentLinkId && !o.stripe?.paid);
   if (!orders.length) { alert('Нет ожидающих платежей через Stripe'); return; }
+  let paidByLink = {};
+  try { paidByLink = await stripeServerApi('/payment-status', { method: 'POST', body: JSON.stringify({ payment_link_ids: orders.map(o => o.stripe.paymentLinkId) }) }) || {}; }
+  catch (e) { alert(e.message); return; }
   let confirmed = 0;
   for (const o of orders) {
     try {
-      // List checkout sessions for this payment link
-      const r = await fetch(`https://api.stripe.com/v1/checkout/sessions?payment_link=${o.stripe.paymentLinkId}&limit=10`, {
-        headers: { 'Authorization': 'Bearer ' + cfg.secretKey },
-      });
-      const data = await r.json();
-      const paidSession = (data.data || []).find(s => s.payment_status === 'paid');
+      const paidSession = paidByLink[o.stripe.paymentLinkId] ? { id: paidByLink[o.stripe.paymentLinkId] } : null;
       if (paidSession) {
         o.stripe.paid = true;
         o.stripe.sessionId = paidSession.id;

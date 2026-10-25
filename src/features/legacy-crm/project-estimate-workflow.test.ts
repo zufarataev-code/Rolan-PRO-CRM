@@ -514,7 +514,7 @@ test("kanban cannot bypass the client-to-measurement-to-proposal-to-installation
 });
 
 test("a manager can price from customer dimensions; technical survey details gate installation", () => {
-  const readiness = source.match(/function orderMeasurementCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const readiness = source.match(/function orderMeasurementCompletionIssues\(o, \{ film = true \} = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
   const technical = source.match(/function orderTechnicalMeasurementIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const completion = source.match(/function completeManagerMeasurement\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   const transitions = source.match(/function orderWorkflowTransitionIssues\(o, newStatus\) \{[\s\S]*?\n\}/)?.[0] || "";

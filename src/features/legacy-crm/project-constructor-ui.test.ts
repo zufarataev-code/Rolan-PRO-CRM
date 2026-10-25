@@ -86,7 +86,9 @@ test("new order requires site type and site type drives room presets", () => {
 });
 
 test("surveyor uses assigned canonical projects without finance controls", () => {
-  assert.match(legacyCrm, /\['canonicalProjects', 'Замеры проектов', '🏗'\]/);
+  // Owner, 2026-10-24: the measurer's menu is his day and his measurements; the
+  // canonical constructor stays for the office.
+  assert.doesNotMatch(legacyCrm, /\['canonicalProjects', 'Замеры проектов', '🏗'\]/);
   assert.match(legacyCrm, /currentUser\(\)\?\.role === 'measurer'/);
   assert.match(legacyCrm, /sourceSelect\.disabled = true/);
 });

@@ -73,6 +73,12 @@ export const ROUTE_ROLE_RULES: Array<{
     roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
   },
   {
+    // Managers check card status and make payment links; the route itself
+    // keeps saving the key to the owner.
+    prefix: "/api/v1/settings/stripe",
+    roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
+  },
+  {
     prefix: "/api/v1/settings",
     roles: [ROLE_CODES.OWNER],
   },

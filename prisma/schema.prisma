@@ -1608,6 +1608,19 @@ model PlaidSettings {
   @@map("plaid_settings")
 }
 
+/// The owner's Stripe secret key, entered in CRM settings (Owner, 2026-10-24).
+/// Encrypted at rest; the browser only ever sees the mode and the last four characters.
+model StripeSettings {
+  settings_id      String   @id @default("primary") @db.VarChar(20)
+  secret_encrypted String   @db.Text
+  key_hint         String   @db.VarChar(16)
+  mode             String   @default("test") @db.VarChar(10)
+  updated_by       String?  @db.Uuid
+  updated_at       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("stripe_settings")
+}
+
 /// One bank login connected through Plaid (a Plaid "Item"); may hold several accounts.
 model BankConnection {
   connection_id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

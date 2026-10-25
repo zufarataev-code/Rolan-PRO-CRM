@@ -1197,3 +1197,176 @@ function proposalWizardHtml(o, step) {
     </div>
   </div>`;
 }
+
+// ---------- СЧЁТ (INVOICE) ДЛЯ КОММЕРЧЕСКИХ КЛИЕНТОВ (Owner, 2026-10-24) ----------
+// «Хочу отправить инвойс коммерческим клиентам, чтобы они платили по счёту, и
+// снять зависимость от Stripe». A numbered invoice from the project: lines in
+// English, what is paid, balance due, due date (Net 15/30), and how to pay —
+// bank transfer, Zelle, check — from «Настройки → Как клиент платит». It opens
+// as a printable page (Save as PDF) and is kept in the project.
+// Only functions are composed into the CRM page (production-ui.ts), so the terms are a function.
+function invoiceTerms() {
+  return [
+    { id: 'receipt', label: 'Due on receipt', days: 0 },
+    { id: 'net15', label: 'Net 15', days: 15 },
+    { id: 'net30', label: 'Net 30', days: 30 },
+  ];
+}
+function invoiceTerm(id) { return invoiceTerms().find(t => t.id === id) || invoiceTerms()[1]; }
+function invoiceNextNumber(o) {
+  const n = (o.invoices || []).length + 1;
+  return `INV-${String(o.number || o.id).replace(/^R-/, '')}${n > 1 ? '-' + n : ''}`;
+}
+function invoiceAddDays(dateKey, days) {
+  const [y, m, d] = String(dateKey).split('-').map(Number);
+  return localDateKey(new Date(y, (m || 1) - 1, (d || 1) + days));
+}
+function invoiceUsDate(dateKey) {
+  const [y, m, d] = String(dateKey || '').split('-');
+  return y && m && d ? `${m}/${d}/${y}` : '';
+}
+function invoicePaymentMethods() {
+  const cp = db.settings?.clientPayments || {};
+  const company = db.settings?.companyName || 'ROLANPRO';
+  const out = [];
+  const bank = String(cp.achInstructions || cp.bankTransferInstructions || '').trim();
+  if (bank && cp.achEnabled !== false) out.push({ key: 'bank', title: 'Bank transfer (ACH / wire)', text: bank });
+  const zelle = String(cp.zelleRecipient || '').trim();
+  if (zelle && cp.zelleEnabled !== false) out.push({ key: 'zelle', title: 'Zelle', text: `${zelle}${cp.zelleRecipientName ? ` (${cp.zelleRecipientName})` : ''}` });
+  const mail = String(cp.checkMailingAddress || db.settings?.officeAddress || '').trim();
+  if (cp.checkEnabled !== false) out.push({ key: 'check', title: 'Check', text: `Payable to ${company}${mail ? `\nMail to: ${mail}` : ''}` });
+  return out;
+}
+function invoiceDraft(o, form = {}) {
+  const c = getClient(o.clientId) || {};
+  const lines = projectLines(o).filter(line => !line.excluded).map(line => ({
+    title: (typeof projectProposalLineTitle === 'function' && projectProposalLineTitle(line)) || line.name || 'Service',
+    qty: Math.round((Number(line.qty) || 0) * 100) / 100,
+    unit: line.unitShort || line.unit || '',
+    amount: Math.round((Number(line.price) || 0) * 100) / 100,
+  }));
+  const total = Math.round(orderRevenue(o) * 100) / 100;
+  const linesSum = lines.reduce((sum, line) => sum + line.amount, 0);
+  if (Math.abs(total - linesSum) >= 0.01) lines.push({ title: total < linesSum ? 'Discount' : 'Adjustment', qty: 0, unit: '', amount: Math.round((total - linesSum) * 100) / 100 });
+  const paid = Math.round(Math.max(orderPaidTotal(o), Number(o.paid) || 0) * 100) / 100;
+  const balance = Math.max(0, Math.round((total - paid) * 100) / 100);
+  const mode = form.mode || 'balance';
+  const deposit = Math.min(balance, companyDepositFor(total));
+  const amount = mode === 'deposit' ? deposit : mode === 'custom' ? Math.min(balance, Math.max(0, Number(form.custom) || 0)) : balance;
+  const issued = form.issued || localDateKey();
+  const term = invoiceTerm(form.terms || (orderSiteType(o) === 'COMMERCIAL' ? 'net15' : 'receipt'));
+  return {
+    number: form.number || invoiceNextNumber(o),
+    issued, due: invoiceAddDays(issued, term.days), terms: term.id, termsLabel: term.label,
+    mode, amount: Math.round(amount * 100) / 100, total, paid, balance, deposit,
+    poNumber: String(form.po || '').trim().slice(0, 60),
+    billTo: { name: String(form.billName ?? c.companyName ?? c.name ?? '').trim() || c.name || 'Client', attn: c.companyName && c.name !== c.companyName ? c.name : '', email: c.email || '', phone: c.phone || '', address: orderAddress(o, c) || '' },
+    lines, methods: invoicePaymentMethods(), project: o.number || '', note: String(form.note || '').trim().slice(0, 500),
+  };
+}
+function invoiceFormValues() {
+  const v = id => document.getElementById(id)?.value;
+  return { number: v('inv-number'), issued: v('inv-issued'), terms: v('inv-terms'), mode: v('inv-mode'), custom: v('inv-custom'), po: v('inv-po'), billName: v('inv-bill'), note: v('inv-note') };
+}
+function openProjectInvoice(oid) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const inv = invoiceDraft(o, state._invoiceForm?.oid === oid ? state._invoiceForm : {});
+  // Money documents keep the company navy, not a direction colour.
+  const d = { color: '#0F2440', tint: '#EEF2F8', deep: '#0F2440' };
+  const methods = inv.methods;
+  const noBank = !methods.some(m => m.key === 'bank');
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-5 rp-invoice-modal" style="max-width:40rem;border-top:4px solid ${d.color}" onclick="event.stopPropagation()" data-rp-keep-layout>
+      <button type="button" class="workspace-back mb-2" onclick="closeModal()">← К проекту</button>
+      <div class="flex items-start justify-between gap-3">
+        <div><div class="text-xs font-bold" style="color:${d.deep}">СЧЁТ · INVOICE</div><h3 class="font-black text-xl">${academyEsc(inv.number)} · ${fmtMoney(inv.amount)}</h3>
+        <p class="text-sm text-gray-600">${academyEsc(inv.billTo.name)} · проект ${academyEsc(inv.project)} · оплатить до ${academyEsc(invoiceUsDate(inv.due))}</p></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-3">
+        <label>Номер счёта<input id="inv-number" value="${academyEsc(inv.number)}" oninput="invoiceFormChanged('${o.id}', false)"></label>
+        <label>Дата<input id="inv-issued" type="date" value="${inv.issued}" onchange="invoiceFormChanged('${o.id}')"></label>
+        <label>Срок оплаты<select id="inv-terms" onchange="invoiceFormChanged('${o.id}')">${invoiceTerms().map(t => `<option value="${t.id}" ${t.id === inv.terms ? 'selected' : ''}>${t.label}</option>`).join('')}</select></label>
+        <label>PO / номер заказа клиента<input id="inv-po" value="${academyEsc(inv.poNumber)}" placeholder="если клиент дал" oninput="invoiceFormChanged('${o.id}', false)"></label>
+        <label class="col-span-2">Кому (компания)<input id="inv-bill" value="${academyEsc(inv.billTo.name)}" oninput="invoiceFormChanged('${o.id}', false)"></label>
+        <label>Сумма счёта<select id="inv-mode" onchange="invoiceFormChanged('${o.id}')">
+          <option value="balance" ${inv.mode === 'balance' ? 'selected' : ''}>Остаток ${fmtMoney(inv.balance)}</option>
+          <option value="deposit" ${inv.mode === 'deposit' ? 'selected' : ''}>Аванс ${fmtMoney(inv.deposit)}</option>
+          <option value="custom" ${inv.mode === 'custom' ? 'selected' : ''}>Другая сумма</option></select></label>
+        <label style="${inv.mode === 'custom' ? '' : 'visibility:hidden'}">Сумма, $<input id="inv-custom" type="number" min="0" step="0.01" value="${inv.mode === 'custom' ? inv.amount : ''}" oninput="invoiceFormChanged('${o.id}', false)"></label>
+        <label class="col-span-2">Примечание для клиента<input id="inv-note" value="${academyEsc(inv.note)}" placeholder="необязательно" oninput="invoiceFormChanged('${o.id}', false)"></label>
+      </div>
+      <div class="rounded-lg border mt-3 p-3 text-sm">
+        <div class="flex justify-between"><span>Проект</span><b>${fmtMoney(inv.total)}</b></div>
+        <div class="flex justify-between"><span>Оплачено</span><b>${fmtMoney(inv.paid)}</b></div>
+        <div class="flex justify-between"><span>Остаток</span><b>${fmtMoney(inv.balance)}</b></div>
+      </div>
+      <div class="rounded-lg mt-3 p-3 text-sm" style="background:${d.tint}">
+        <b>Как клиент заплатит:</b> ${methods.map(m => academyEsc(m.title)).join(' · ') || '—'}
+        ${noBank ? `<div class="text-amber-800 mt-1">Банковские реквизиты не заполнены — впишите их сами в «Настройки → Как клиент платит → Банковский перевод». В чат и сообщения их не отправляйте.</div>` : ''}
+      </div>
+      <div class="flex gap-2 flex-wrap mt-4">
+        <button class="btn-primary flex-1" style="background:${d.color}!important;border-color:${d.color}!important" onclick="issueProjectInvoice('${o.id}')">🧾 Открыть счёт (PDF)</button>
+        <button class="btn-ghost" onclick="copyProjectInvoiceText('${o.id}')">Текст для письма</button>
+        ${inv.balance > 0.01 ? `<button class="btn-ghost" onclick="closeModal(); openPaymentModal('${o.id}',{kind:'final'})">Отметить оплату</button>` : ''}
+      </div>
+      ${(o.invoices || []).length ? `<div class="mt-4 text-sm"><b>Выставленные счета</b>${o.invoices.slice().reverse().map(i => `<div class="flex justify-between border-t py-1 mt-1"><span>${academyEsc(i.number)} · ${academyEsc(invoiceUsDate(i.issued))} · до ${academyEsc(invoiceUsDate(i.due))}</span><b>${fmtMoney(i.amount)}</b></div>`).join('')}</div>` : ''}
+    </div>
+  </div>`;
+  render();
+}
+function invoiceFormChanged(oid, rerender = true) {
+  state._invoiceForm = { oid, ...invoiceFormValues() };
+  if (rerender) openProjectInvoice(oid);
+}
+function invoiceDocumentHtml(inv) {
+  const esc = academyEsc;
+  const company = db.settings?.companyName || 'ROLANPRO';
+  const from = [db.settings?.officeAddress, db.settings?.companyPhone, db.settings?.companyEmail].filter(Boolean).map(esc).join('<br>');
+  const money = v => (v < 0 ? '−' : '') + '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Invoice ${esc(inv.number)}</title>
+<style>body{font-family:Inter,Arial,sans-serif;color:#0f172a;max-width:780px;margin:28px auto;padding:0 22px;font-size:14px}h1{font-size:30px;margin:0;letter-spacing:.02em}.muted{color:#64748b}.top{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;border-bottom:3px solid #0f2440;padding-bottom:14px}.meta td{padding:2px 0 2px 14px;text-align:right}.grid{display:flex;justify-content:space-between;gap:24px;margin:18px 0}table.items{width:100%;border-collapse:collapse;margin-top:8px}table.items th{text-align:left;font-size:12px;text-transform:uppercase;color:#475569;border-bottom:1px solid #cbd5e1;padding:8px 6px}table.items td{border-bottom:1px solid #e2e8f0;padding:8px 6px;vertical-align:top}.r{text-align:right;white-space:nowrap}.totals{margin-left:auto;width:300px;margin-top:10px}.totals div{display:flex;justify-content:space-between;padding:4px 0}.due{font-size:18px;font-weight:800;border-top:2px solid #0f2440;padding-top:8px!important}.pay{margin-top:22px;padding:14px 16px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc}.pay pre{font-family:inherit;white-space:pre-wrap;margin:2px 0 10px}@media print{button{display:none}body{margin:0 auto}}</style></head><body>
+<div class="top"><div><h1>INVOICE</h1><div style="font-weight:800;font-size:16px;margin-top:6px">${esc(company)}</div><div class="muted">${from}</div></div>
+<table class="meta"><tr><td class="muted">Invoice #</td><td><b>${esc(inv.number)}</b></td></tr><tr><td class="muted">Date</td><td>${esc(invoiceUsDate(inv.issued))}</td></tr><tr><td class="muted">Terms</td><td>${esc(inv.termsLabel)}</td></tr><tr><td class="muted">Due date</td><td><b>${esc(invoiceUsDate(inv.due))}</b></td></tr>${inv.poNumber ? `<tr><td class="muted">PO #</td><td>${esc(inv.poNumber)}</td></tr>` : ''}<tr><td class="muted">Project</td><td>${esc(inv.project)}</td></tr></table></div>
+<div class="grid"><div><div class="muted" style="font-size:12px;text-transform:uppercase">Bill to</div><b>${esc(inv.billTo.name)}</b>${inv.billTo.attn ? `<br>Attn: ${esc(inv.billTo.attn)}` : ''}<br>${esc(inv.billTo.address)}${inv.billTo.email ? `<br>${esc(inv.billTo.email)}` : ''}${inv.billTo.phone ? `<br>${esc(inv.billTo.phone)}` : ''}</div>
+<div style="text-align:right"><div class="muted" style="font-size:12px;text-transform:uppercase">Amount due</div><div style="font-size:28px;font-weight:800">${money(inv.amount)}</div><div class="muted">by ${esc(invoiceUsDate(inv.due))}</div></div></div>
+<table class="items"><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Amount</th></tr></thead><tbody>
+${inv.lines.map(l => `<tr><td>${esc(l.title)}</td><td class="r">${l.qty ? `${l.qty} ${esc(l.unit)}` : ''}</td><td class="r">${money(l.amount)}</td></tr>`).join('')}
+</tbody></table>
+<div class="totals"><div><span>Project total</span><b>${money(inv.total)}</b></div>${inv.paid > 0 ? `<div><span>Paid to date</span><b>−${money(inv.paid).replace('−','')}</b></div>` : ''}<div><span>Balance</span><b>${money(inv.balance)}</b></div>${Math.abs(inv.amount - inv.balance) >= 0.01 ? `<div><span>${inv.mode === 'deposit' ? 'Deposit due now' : 'Due now'}</span><b>${money(inv.amount)}</b></div>` : ''}<div class="due"><span>Amount due</span><span>${money(inv.amount)}</span></div></div>
+<div class="pay"><b>How to pay</b> <span class="muted">— no processing fee. Please include invoice # ${esc(inv.number)} in the payment memo.</span>
+${inv.methods.map(m => `<div style="margin-top:8px"><b>${esc(m.title)}</b><pre>${esc(m.text)}</pre></div>`).join('')}</div>
+${inv.note ? `<p style="margin-top:16px">${esc(inv.note)}</p>` : ''}
+<p class="muted" style="margin-top:22px">Thank you for your business.</p>
+<p><button onclick="print()" style="padding:10px 16px;font-weight:700">Print / Save as PDF</button></p></body></html>`;
+}
+function issueProjectInvoice(oid) {
+  const o = getOrder(oid);
+  if (!o) return;
+  const inv = invoiceDraft(o, { ...(state._invoiceForm?.oid === oid ? state._invoiceForm : {}), ...invoiceFormValues() });
+  if (inv.amount <= 0) { alert('Сумма счёта 0 — проект уже оплачен.'); return; }
+  const win = window.open('', '_blank');
+  if (!win) { alert('Разрешите всплывающие окна, чтобы открыть счёт.'); return; }
+  win.document.write(invoiceDocumentHtml(inv));
+  win.document.close();
+  o.invoices = Array.isArray(o.invoices) ? o.invoices : [];
+  const existing = o.invoices.find(i => i.number === inv.number);
+  const record = { number: inv.number, issued: inv.issued, due: inv.due, terms: inv.terms, amount: inv.amount, mode: inv.mode, po: inv.poNumber, by: state.currentUserId || null, at: new Date().toISOString() };
+  if (existing) Object.assign(existing, record); else o.invoices.push(record);
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: record.at, key: 'invoice_issued', by: state.currentUserId, note: `Счёт ${inv.number} на ${fmtMoney(inv.amount)}, оплатить до ${invoiceUsDate(inv.due)}` });
+  state._invoiceForm = null;
+  save();
+  openProjectInvoice(oid);
+}
+function invoiceEmailText(inv) {
+  return `Hello${inv.billTo.attn ? ' ' + inv.billTo.attn : ''},\n\nPlease find attached invoice ${inv.number} for project ${inv.project}.\nAmount due: $${inv.amount.toFixed(2)} — due ${invoiceUsDate(inv.due)} (${inv.termsLabel}).\n\nHow to pay (no processing fee; please reference ${inv.number}):\n${inv.methods.map(m => `\n${m.title}:\n${m.text}`).join('\n')}\n\nThank you,\n${db.settings?.companyName || 'ROLANPRO'}`;
+}
+async function copyProjectInvoiceText(oid) {
+  const o = getOrder(oid);
+  if (!o) return;
+  const text = invoiceEmailText(invoiceDraft(o, { ...(state._invoiceForm?.oid === oid ? state._invoiceForm : {}), ...invoiceFormValues() }));
+  try { await navigator.clipboard.writeText(text); alert('Текст письма скопирован. Приложите PDF счёта и отправьте клиенту.'); }
+  catch (_) { prompt('Скопируйте текст письма:', text); }
+}
