@@ -29,7 +29,7 @@ Before doing any work:
 - Proposal snapshot теперь передаёт `manager_legacy_id`; сервер связывает Deal с активным Owner/Manager из карточки проекта и сохраняет этого ответственного при повторной публикации.
 - Подпись клиента — коммерческое принятие: `signPublicAgreement` сразу переводит canonical Deal в `APPROVED`, создаёт `agreement.signed` для назначенного менеджера, а legacy CRM опрашивает `/api/v1/notifications` раз в 20 секунд, показывает событие в колокольчике и синхронизирует проект в этап «КП принято» без ручного открытия карточки.
 - Добавлен защищённый authenticated API для списка уведомлений и отметки прочитанного; пользователь может читать/подтверждать только свои уведомления.
-- Verification: 25/25 targeted tests, включая KP/payment sync, notification sound и компиляцию всех inline CRM scripts; `git diff --check` passes. Полный TypeScript/CI — следующий gate перед merge/deploy.
+- PR #391. Verification: 25/25 targeted tests, включая KP/payment sync, notification sound и компиляцию всех inline CRM scripts; `git diff --check` passes; GitHub `Test, typecheck, and build`, clean-database build/end-to-end и responder checks — green. Merge/deploy требует отдельного подтверждения владельца.
 
 ## 2026-10-25 handoff — client emails were silently skipped
 
