@@ -176,8 +176,8 @@ test('the project card shows its services inline; work documents open for any li
   const card = html.slice(html.indexOf('function renderOrderCleanDetails('), html.indexOf('function renderOrderCleanDetails(') + 40000);
   assert.doesNotMatch(card, /key: 'services', icon: '🧩'/, 'no separate tile: the services are on the card itself');
   assert.match(card, /\$\{renderProjectCommandHeader\(o, c, primary/);
-  assert.match(card, /\$\{renderProjectCommandNav\(o, \{ money: canSeeMoney, installer: isInstaller \}\)\}/);
-  assert.match(card, /class="project-command-grid"[\s\S]*?\$\{renderProjectCardServices\(o, \{ money: canSeeMoney, economics: canSeeInternalEconomics, manage: canManage \}\)\}[\s\S]*?\$\{renderProjectCommandSide\(o, \{ money: canSeeMoney, economics: canSeeInternalEconomics, installer: isInstaller \}\)\}/);
+  // One feed in work order (Owner's mock-up, 2026-10-24); the services section is the services list itself.
+  assert.match(card, /\$\{projectFeedHtml\(o, c, u, \{ canManage, canSeeMoney, canSeeInternalEconomics, primary, measureAction, recentTimeline \}\)\}/);
   assert.match(card, /class="order-workspace-grid project-workspace-templates"/);
   assert.doesNotMatch(card, /Следующий правильный шаг|Все разделы проекта/);
   assert.match(card, /const hasWorkScope = hasMeasurements \|\| lines\.length > 0;/);
