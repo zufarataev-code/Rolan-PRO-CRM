@@ -17845,6 +17845,74 @@ function markAllRead() {
   save(); render();
 }
 
+// ---------- NOTIFICATION SOUND ----------
+// New unread notices and client messages play a short chime (and vibrate on
+// phones). Browsers allow audio only after the first tap, so the audio
+// context is unlocked on the first user gesture. Mute is per device.
+const NOTIFY_SOUND_KEY = 'rolanpro.notifySound';
+let __notifyAudioCtx = null;
+let __notifySeenIds = null;
+function notifySoundEnabled() {
+  try { return localStorage.getItem(NOTIFY_SOUND_KEY) !== 'off'; } catch (e) { return true; }
+}
+function toggleNotifySound() {
+  const next = !notifySoundEnabled();
+  try { localStorage.setItem(NOTIFY_SOUND_KEY, next ? 'on' : 'off'); } catch (e) {}
+  if (next) playNotifySound();
+  render();
+}
+function unlockNotifyAudio() {
+  try {
+    if (!__notifyAudioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      __notifyAudioCtx = new Ctx();
+    }
+    if (__notifyAudioCtx.state === 'suspended') __notifyAudioCtx.resume();
+  } catch (e) { return null; }
+  return __notifyAudioCtx;
+}
+['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
+  window.addEventListener(ev, unlockNotifyAudio, { passive: true }));
+function playNotifySound() {
+  const ctx = unlockNotifyAudio();
+  if (ctx) {
+    try {
+      const now = ctx.currentTime;
+      [[880, 0], [1320, 0.16]].forEach(([freq, at]) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, now + at);
+        gain.gain.exponentialRampToValueAtTime(0.35, now + at + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.32);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + at);
+        osc.stop(now + at + 0.34);
+      });
+    } catch (e) {}
+  }
+  try { if (navigator.vibrate) navigator.vibrate([120, 60, 120]); } catch (e) {}
+}
+function currentAlertIds() {
+  if (!state.currentUserId || !db || !Array.isArray(db.notifications)) return [];
+  const ids = myNotifications().filter(n => !n.readAt).map(n => 'n:' + n.id);
+  try { unreadInboundClientMessages().forEach(m => ids.push('m:' + m.id)); } catch (e) {}
+  return ids;
+}
+function checkNotifySound() {
+  const ids = currentAlertIds();
+  if (__notifySeenIds === null || __notifySeenIds.user !== state.currentUserId) {
+    __notifySeenIds = { user: state.currentUserId, ids: new Set(ids) };
+    return;
+  }
+  const fresh = ids.filter(id => !__notifySeenIds.ids.has(id));
+  ids.forEach(id => __notifySeenIds.ids.add(id));
+  if (fresh.length && notifySoundEnabled()) playNotifySound();
+}
+setInterval(checkNotifySound, 3000);
+
 // A stalled Telegram request gives up after this time, so a notice that waits
 // for it (a claimed project close) does not hold the ones after it.
 const TELEGRAM_TIMEOUT_MS = 15000;
@@ -19041,6 +19109,7 @@ function renderAppShell() {
           <button class="topbar-icon-btn relative" onclick="state.view='notifications'; markAllRead();">
             🔔 ${unreadCount() > 0 ? `<span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">${unreadCount()}</span>` : ''}
           </button>
+          <button class="topbar-icon-btn" onclick="toggleNotifySound()" title="${notifySoundEnabled() ? 'Звук уведомлений включён — нажмите, чтобы выключить' : 'Звук уведомлений выключен — нажмите, чтобы включить'}" aria-label="Звук уведомлений">${notifySoundEnabled() ? '🔊' : '🔇'}</button>
           <select onchange="state.lang=this.value; save(); render();" class="w-auto text-sm">
             <option value="ru" ${state.lang==='ru'?'selected':''}>RU</option>
             <option value="en" ${state.lang==='en'?'selected':''}>EN</option>

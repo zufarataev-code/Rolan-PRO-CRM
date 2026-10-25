@@ -23,6 +23,14 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-25 handoff — notification sound
+
+- Owner: in-app notices were silent. New unread notices (🔔) and new incoming client messages now play a short two-tone chime and vibrate on phones.
+- Legacy CRM: `checkNotifySound()` polls every 3 s and rings only for ids not seen before; the first check after login stays silent. Audio unlocks on the first tap (browser autoplay rule).
+- Topbar: 🔊/🔇 toggle next to the bell, stored per device in localStorage (`rolanpro.notifySound`).
+- Verification: `src/features/legacy-crm/notification-sound.test.ts` (2 tests) passes; the rest of `npm test` matches main locally (env-dependent failures only).
+- Not done: system push notifications when the CRM tab is closed (needs Web Push).
+
 ## 2026-10-24 handoff — KP payment sync, one measurement button, paid → installation
 
 - PR #386 (d31c594) and #387 (17d6a4f) merged and deployed; functions present on prod.
