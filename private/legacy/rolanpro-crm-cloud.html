@@ -17595,7 +17595,10 @@ const ORDER_FINANCIAL_TIMELINE_KEYS = new Set([
 ]);
 function orderTimelineForUser(order, user = currentUser()) {
   const items = order?.timeline || [];
-  if (orderUserOwns(order, user)) return items;
+  if (user?.role === 'owner') return items;
+  // Выплаты другим сотрудникам являются внутренней бухгалтерией компании.
+  // Менеджер видит клиентские оплаты своего заказа, но не payroll бригады.
+  if (orderUserOwns(order, user)) return items.filter(ev => ev.key !== 'payout_paid');
   return items.filter(ev => !ORDER_FINANCIAL_TIMELINE_KEYS.has(ev.key));
 }
 function windowArea(w) { return windowAreaSqft(w) * M2_PER_SQFT; } // sqft -> m², panel-aware
@@ -18944,6 +18947,7 @@ function renderAppShell() {
     ['measurements', 'Мои замеры', '📐'],
     ['calendar', T('calendar'), '📅'],
     ['tasks', 'Задачи', '✅'],
+    ['payroll', 'Моя зарплата', '💰'],
   ] : (role === 'installer') ? [
     ['dashboard', T('dashboard'), '🏠'],
     ['workday', 'Рабочий день', '⏱'],
@@ -18951,6 +18955,7 @@ function renderAppShell() {
     ['analytics', 'Аналитика', '📈'],
     ['calendar', T('calendar'), '📅'],
     ['tasks', 'Задачи', '✅'],
+    ['payroll', 'Моя зарплата', '💰'],
   ] : [];
 
   const mobileNavItems = (role === 'manager' || role === 'owner') ? [
@@ -19151,7 +19156,7 @@ function renderView() {
       case 'academy': return renderAcademy();
       case 'clients': return renderClients();
       case 'inventory': return renderInventory();
-      case 'payroll': return renderPayroll();
+      case 'payroll': return u.role === 'owner' ? renderPayroll() : renderMyPayroll();
       case 'accounting': return u.role === 'owner' ? renderAccounting() : `<div class="card">Доступ только владельцу</div>`;
       case 'paymentsdue': return u.role === 'owner' ? renderPaymentsDue() : `<div class="card">Доступ только владельцу</div>`;
       case 'reports': return renderReports();
@@ -19171,6 +19176,7 @@ function renderView() {
       case 'measurements': return renderMeasurerTasks();
       case 'calendar': return renderCalendar();
       case 'tasks': return renderTasksView();
+      case 'payroll': return renderMyPayroll();
     }
   } else if (u.role === 'installer') {
     switch (state.view) {
@@ -19180,6 +19186,7 @@ function renderView() {
       case 'analytics': return renderInstallerAnalytics();
       case 'calendar': return renderCalendar();
       case 'tasks': return renderTasksView();
+      case 'payroll': return renderMyPayroll();
     }
   }
   return `<div class="card">${T('empty')}</div>`;
@@ -24989,6 +24996,41 @@ function renderClientChannelDock(o, c, canManage) {
   </div>`;
 }
 
+function renderEmployeeOrderHistory(order, user = currentUser(), limit = 0) {
+  const timeline = orderTimelineForUser(order, user).slice().reverse();
+  const visible = limit > 0 ? timeline.slice(0, limit) : timeline;
+  if (!visible.length) return `<div class="order-clean-note">История заказа пока пустая.</div>`;
+  return `<div class="project-command-timeline">${visible.map(ev => {
+    const actor = getUser(ev.by);
+    return `<div class="project-command-timeline-row">
+      <span>${fmtDateTime(ev.at)}</span>
+      <b>${academyEsc(T(ev.key))}${actor ? ` · ${academyEsc(actor.name)}` : ''}${ev.note ? `<small class="block mt-1 text-slate-600">${academyEsc(ev.note)}</small>` : ''}</b>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function openEmployeeOrderHistory(orderId) {
+  const order = getOrder(orderId);
+  const user = currentUser();
+  if (!order || !orderUserCanAccess(order, user)) return alert('Нет доступа к истории этого заказа.');
+  state.modal = `
+    <div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
+      <div class="modal-content workspace-modal order-workspace-modal" style="--workspace-color:#475569" onclick="event.stopPropagation()">
+        <header class="order-workspace-modal-head">
+          <div class="order-workspace-modal-heading"><span class="order-workspace-modal-icon">🗂</span><div><div class="order-workspace-modal-kicker">${academyEsc(order.number || 'Заказ')}</div><h3>История заказа</h3></div></div>
+          <button type="button" class="order-workspace-close" onclick="closeModal()" aria-label="Закрыть историю">×</button>
+        </header>
+        <div class="order-workspace-modal-body">
+          <div class="order-clean-actions mb-3">
+            ${renderOrderActionCard({ icon: '💬', title: 'Добавить комментарий', sub: 'запись попадёт в единую хронологию', onclick: `closeModal(); openOrderCommentModal('${order.id}')` })}
+          </div>
+          ${renderEmployeeOrderHistory(order, user)}
+        </div>
+      </div>
+    </div>`;
+  render();
+}
+
 function openClientContactProfile(clientId, orderId = '') {
   const c = getClient(clientId);
   if (!c) return;
@@ -28563,7 +28605,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ${renderOrderActionCard({ icon: '📷', title: 'Добавить фото', sub: 'до / после / замер', onclick: `addOrderPhoto('${o.id}')`, disabled: !(canManage || canMeasure || (u.role==='installer' && (o.installerIds||[]).includes(u.id))) })}
       ${renderOrderActionCard({ icon: '💬', title: 'Комментарий', sub: 'в историю заказа', onclick: `openOrderCommentModal('${o.id}')` })}
     </div>
-    ${recentTimeline.length ? `<div class="mt-3">${renderOrderCleanRows(recentTimeline.map(ev => [T(ev.key), `${fmtDateTime(ev.at)}${ev.note ? ' · ' + academyEsc(ev.note).slice(0, 60) : ''}`]))}</div>` : `<div class="order-clean-note mt-3">История пока пустая.</div>`}`;
+    <div class="mt-3">${renderEmployeeOrderHistory(o, u)}</div>`;
 
   return `
     <div class="order-clean-topbar">
@@ -28594,6 +28636,7 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
   const projectAddress = orderAddress(o, c);
   const hasMeasurements = measureAllWindows(o).length > 0;
   const primary = installerOrderPrimaryAction(o);
+  const visibleTimeline = orderTimelineForUser(o, u);
   return `
     <div class="order-clean-topbar">
       <button class="btn-ghost" onclick="state.view='installations'; location.hash=''; render();">← Мои задачи</button>
@@ -28614,12 +28657,17 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
           ${renderOrderActionCard({ icon: '🖨', title: 'Распечатать ТЗ', sub: hasMeasurements ? 'размеры, схема и раскрой' : 'услуги и количество', onclick: `printTechnicalSheet('${o.id}')`, disabled: !hasMeasurements && !projectLines(o).length })}
           ${projectAddress ? renderOrderActionCard({ icon: '🧭', title: 'Маршрут', sub: projectAddress, href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(projectAddress)}` }) : ''}
           ${renderOrderActionCard({ icon: '📷', title: 'Добавить фото', sub: 'до или после монтажа', onclick: `addOrderPhoto('${o.id}')` })}
+          ${renderOrderActionCard({ icon: '🗂', title: 'История заказа', sub: `${visibleTimeline.length} событий и комментарии`, onclick: `openEmployeeOrderHistory('${o.id}')` })}
         </div>
       </section>
       ${renderInstallerServiceProgress(o, u)}
       <div class="card p-0 overflow-hidden">
         ${renderTechnicalSheetHtml(o)}
       </div>
+      <section class="project-command-card">
+        <div class="project-command-card-head"><div><div class="project-command-card-title">Последние события</div><div class="project-command-card-sub">Единая история заказа без внутренних финансов</div></div><button class="btn-ghost text-xs" onclick="openEmployeeOrderHistory('${o.id}')">Вся история</button></div>
+        <div class="project-command-card-body">${renderEmployeeOrderHistory(o, u, 5)}</div>
+      </section>
     </div>`;
 }
 
@@ -40205,10 +40253,7 @@ function payrollPaidForPeriod(userId, startDate, endDate) {
   return Number((batches + legacy).toFixed(2));
 }
 
-function renderPayroll() {
-  const u = currentUser();
-  if (u.role !== 'owner' && u.role !== 'manager') return `<div class="card text-center text-gray-500">Доступ только для Owner/Manager</div>`;
-  // Period selector
+function payrollSelectedRange() {
   const period = state.payrollPeriod || 'this_week';
   const now = new Date(); now.setHours(23,59,59,999);
   let start, end;
@@ -40227,7 +40272,63 @@ function renderPayroll() {
   } else if (period === 'custom') {
     start = state.payrollStart ? new Date(state.payrollStart) : new Date(now.getFullYear(), now.getMonth(), 1);
     end = state.payrollEnd ? new Date(state.payrollEnd + 'T23:59:59') : now;
-  } else { start = new Date(now.getFullYear(), now.getMonth(), 1); end = now; }
+  } else {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = now;
+  }
+  return { period, start, end };
+}
+
+function payrollPeriodControls(period, start, end) {
+  return `<div class="flex items-center gap-2 flex-wrap">
+    <select aria-label="Период зарплаты" onchange="state.payrollPeriod=this.value; render();">
+      <option value="this_week" ${period==='this_week'?'selected':''}>Эта неделя</option>
+      <option value="last_week" ${period==='last_week'?'selected':''}>Прошлая неделя</option>
+      <option value="this_month" ${period==='this_month'?'selected':''}>Этот месяц</option>
+      <option value="last_month" ${period==='last_month'?'selected':''}>Прошлый месяц</option>
+      <option value="custom" ${period==='custom'?'selected':''}>Свой период</option>
+    </select>
+    ${period === 'custom' ? `<input aria-label="Начало периода" type="date" value="${state.payrollStart||''}" onchange="state.payrollStart=this.value; render();"><span>→</span><input aria-label="Конец периода" type="date" value="${state.payrollEnd||''}" onchange="state.payrollEnd=this.value; render();">` : ''}
+    <span class="text-sm text-gray-600">${fmtDate(start.toISOString())} — ${fmtDate(end.toISOString())}</span>
+  </div>`;
+}
+
+function renderMyPayroll() {
+  const user = currentUser();
+  if (!user || user.role === 'owner') return renderPayroll();
+  const { period, start, end } = payrollSelectedRange();
+  const accrual = calcUserPayoutForPeriod(user.id, start, end);
+  const paid = payrollPaidForPeriod(user.id, start, end);
+  const due = Math.max(0, Number((accrual.total - paid).toFixed(2)));
+  const payments = (db.payrollPayments || []).filter(payment => payment.userId === user.id).slice().sort((a, b) => String(b.paidAt || '').localeCompare(String(a.paidAt || ''))).slice(0, 10);
+  return `
+    <div class="card mb-4">
+      <div class="flex items-start justify-between gap-3 flex-wrap">
+        <div><h3 class="font-semibold text-lg">💰 Моя зарплата</h3><p class="text-sm text-gray-500 mt-1">Только ваши начисления, выплаты и связанные заказы.</p></div>
+        ${payrollPeriodControls(period, start, end)}
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+      <div class="card"><div class="text-xs text-gray-500">Начислено</div><div class="text-2xl font-bold text-slate-900 mt-1">${fmtMoney(accrual.total)}</div></div>
+      <div class="card"><div class="text-xs text-gray-500">Выплачено</div><div class="text-2xl font-bold text-emerald-700 mt-1">${fmtMoney(paid)}</div></div>
+      <div class="card"><div class="text-xs text-gray-500">К выплате</div><div class="text-2xl font-bold ${due > 0 ? 'text-amber-700' : 'text-emerald-700'} mt-1">${fmtMoney(due)}</div></div>
+    </div>
+    <div class="card mb-4">
+      <h3 class="font-semibold mb-3">Начисления по заказам</h3>
+      ${accrual.breakdown.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500"><th class="text-left p-2">Дата</th><th class="text-left p-2">Заказ</th><th class="text-left p-2">Расчёт</th><th class="text-right p-2">Сумма</th><th class="text-left p-2">Статус</th></tr></thead><tbody>
+        ${accrual.breakdown.map(row => `<tr class="border-t"><td class="p-2 whitespace-nowrap">${row.date ? fmtDate(row.date) : 'за период'}</td><td class="p-2">${row.orderId ? `<button class="text-blue-700 underline font-semibold" onclick="openOrder('${row.orderId}')">${academyEsc(row.orderNumber || 'Открыть')}</button>` : 'Оклад'}</td><td class="p-2 text-gray-600">${academyEsc(row.label || 'Начисление')}</td><td class="p-2 text-right font-bold text-emerald-700">${fmtMoney(row.amount)}</td><td class="p-2"><span class="tag ${row.paid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${row.paid ? 'выплачено' : 'начислено'}</span></td></tr>`).join('')}
+      </tbody></table></div>` : `<div class="empty-state"><div class="icon">🧾</div><div>За выбранный период начислений нет. Они появятся после завершения вашего этапа заказа.</div></div>`}
+    </div>
+    <div class="card">
+      <h3 class="font-semibold mb-3">История выплат</h3>
+      ${payments.length ? `<div class="order-clean-list">${payments.map(payment => `<div class="order-clean-list-row"><span>${fmtDateTime(payment.paidAt)}${payment.periodStart && payment.periodEnd ? `<small class="block text-gray-500">за ${fmtDate(payment.periodStart)} — ${fmtDate(payment.periodEnd)}</small>` : ''}</span><b class="text-emerald-700">${fmtMoney(payment.amount)}</b></div>`).join('')}</div>` : `<div class="order-clean-note">Подтверждённых выплат пока нет.</div>`}
+    </div>`;
+}
+
+function renderPayroll() {
+  const u = currentUser();
+  if (u.role !== 'owner') return renderMyPayroll();
+  const { period, start, end } = payrollSelectedRange();
 
   const users = db.users.filter(u => u.role !== 'owner' && u.active !== false);
   const payouts = users.map(u => {
@@ -40242,19 +40343,7 @@ function renderPayroll() {
   <div class="card mb-4">
     <div class="flex items-center gap-3 flex-wrap">
       <h3 class="font-semibold">💰 Зарплата к выплате</h3>
-      <select onchange="state.payrollPeriod=this.value; render();">
-        <option value="this_week" ${period==='this_week'?'selected':''}>Эта неделя</option>
-        <option value="last_week" ${period==='last_week'?'selected':''}>Прошлая неделя</option>
-        <option value="this_month" ${period==='this_month'?'selected':''}>Этот месяц</option>
-        <option value="last_month" ${period==='last_month'?'selected':''}>Прошлый месяц</option>
-        <option value="custom" ${period==='custom'?'selected':''}>Свой период</option>
-      </select>
-      ${period === 'custom' ? `
-        <input type="date" value="${state.payrollStart||''}" onchange="state.payrollStart=this.value; render();">
-        <span>→</span>
-        <input type="date" value="${state.payrollEnd||''}" onchange="state.payrollEnd=this.value; render();">
-      ` : ''}
-      <span class="text-sm text-gray-600 ml-2">${fmtDate(start.toISOString())} — ${fmtDate(end.toISOString())}</span>
+      ${payrollPeriodControls(period, start, end)}
       <div class="flex-1"></div>
       <div class="text-2xl font-bold text-red-600">${fmtMoney(totalPayroll)}</div>
     </div>

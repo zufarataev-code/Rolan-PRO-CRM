@@ -39,6 +39,14 @@ Before doing any work:
 - Prod data: smart options «Голосовое управление», «Настенный выключатель», «Второй пульт» (no price yet — owner fills), «Гарантия 10 лет (вместо 5)» $5/month.
 - Tests: `kp-options-section.test.ts`; full local cycle ok.
 
+## 2026-10-24 handoff — personal payroll and assigned-order history
+
+- Branch: `codex/employee-pay-history-20261024`, based on current `origin/main` `9886d3f`.
+- Manager, measurer and installer now have «Моя зарплата». The page shows only the signed-in employee's accrued amount, payments, balance and order-level calculation; owner keeps the company payroll workspace.
+- Field-role server payload now includes only that employee's pay configuration and payroll allocations for their assigned orders. It never sends another employee's payroll data.
+- Assigned project workspaces now expose a safe canonical order history and a full «История заказа» window. Field roles do not receive internal company economics; managers do not see employee payout events in the order timeline.
+- Verification: targeted role/pay/history tests 34/34, full suite 841/841 and `git diff --check` pass. Local `next build` and standalone TypeScript processes did not finish in the dependency-linked temporary worktree and printed no compile error; GitHub CI remains the authoritative build check before merge.
+
 ## 2026-10-21 handoff — approved project-card route map
 
 - Branch: `codex/project-card-artifact-20261021`, based on current `origin/main` `5f33d6a` after PR #354.

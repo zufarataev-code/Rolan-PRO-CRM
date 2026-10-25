@@ -3,11 +3,11 @@ import test from "node:test";
 
 import { injectRoleUiPolicy } from "./role-ui";
 
-test("role UI policy hides manager-only sensitive navigation and removes duplicate user/install UI", () => {
+test("role UI policy keeps personal payroll but hides manager-only team navigation", () => {
   const result = injectRoleUiPolicy(`<!doctype html><body><div id="app"></div></body>`);
 
   assert.match(result, /rolanpro-role-ui-policy-style/);
-  assert.match(result, /selectAppView\('payroll'\)/);
+  assert.doesNotMatch(result, /selectAppView\('payroll'\)/);
   assert.match(result, /selectAppView\('team'\)/);
   assert.match(result, /installRolanProApp/);
   assert.match(result, /sidebar-user/);
