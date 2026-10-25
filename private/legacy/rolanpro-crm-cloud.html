@@ -1964,6 +1964,7 @@
   .rp-dirwin-foot { padding: .75rem 1.15rem 1rem; border-top: 1px solid #e2e8f0; background: #fbfdff; }
   .measure-finish-btn { border: 1.5px solid #16a34a !important; color: #15803d !important; font-weight: 800; min-height: 44px; }
   .measure-finish-issues { margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #fffbeb; border: 1px solid #f59e0b; color: #78350f; font-size: 13px; }
+  .measure-exit-btn { min-height: 44px; font-weight: 700; }
   .measure-finish-issues ul { margin: 4px 0 0 16px; list-style: disc; }
   html body .rp-dirwin .rp-dirwin-next { width: 100%; min-height: 48px; background: var(--dir-color) !important; border-color: var(--dir-color) !important; color: #fff !important; }
   html body .rp-dirwin .rp-dirwin-step { border-radius: 999px !important; width: auto !important; min-height: 36px !important; height: auto !important; max-height: 44px; flex: 1 1 0 !important; }
@@ -6892,7 +6893,8 @@
     .manager-measure-modal .manager-room-list { max-width:100%; }
     .manager-measure-modal .manager-measure-main { min-width:0; }
     .manager-measure-modal input, .manager-measure-modal select { font-size:16px; min-height:44px; max-width:100%; scroll-margin-block:16px; }
-    .manager-measure-modal .manager-measure-footer { position:static; display:block; padding:12px 12px calc(16px + env(safe-area-inset-bottom)); }
+    .manager-measure-modal .manager-measure-footer { position:sticky; bottom:0; z-index:6; background:#fff; box-shadow:0 -6px 16px rgba(15,36,64,.08); display:block; padding:10px 12px calc(12px + env(safe-area-inset-bottom)); }
+    .manager-measure-modal .manager-measure-footer > div:first-child { display:none; }
     .manager-measure-footer > div:first-child { margin-bottom:8px; }
     .manager-measure-footer > div:last-child { display:flex; flex-wrap:wrap; }
     .manager-measure-modal .manager-measure-footer button { min-height:44px; flex:1 1 auto; font-size:14px; padding:10px; }
@@ -12188,11 +12190,11 @@ function openEngineeringMeasureStudio(orderId) {
             <span id="ms-mode-pill" class="tag" style="background:${scope.accent}14;border-color:${scope.accent}44;color:${scope.accent}">${academyEsc(scope.short)} режим</span>
             <button class="btn-ghost" onclick="openWorkOrder('${order.id}')">Заказ-наряд</button>
             ${canManage ? `<button class="btn-primary bg-slate-900 hover:bg-slate-800" onclick="generatePremiumProposal('${order.id}')">✦ КП</button>` : ''}
-            <button class="btn-ghost" onclick="closeModal()">✕</button>
+            <button class="btn-ghost" aria-label="Закрыть замер" onclick="measureStudioClose('${order.id}')">✕</button>
           </div>
         </div>
         <div class="measure-studio">
-          <section class="measure-panel measure-workbench">
+          <section class="measure-panel measure-workbench" oninput="measureStudioMarkDirty()" onchange="measureStudioMarkDirty()" onclick="if(event.target.closest('.measure-type-card,[data-win-type]'))measureStudioMarkDirty()">
             <div class="measure-step">
               <span class="measure-step-no">1</span>
               <div class="min-w-0 flex-1">
@@ -12322,6 +12324,7 @@ function openEngineeringMeasureStudio(orderId) {
                 <button class="btn-primary flex-1" onclick="measureStudioSaveWindow('${order.id}')">Сохранить окно</button>
                 <button class="btn-ghost" onclick="measureStudioNewWindow('${order.id}')">+ Новое окно</button>
               </div>
+              <button class="btn-ghost w-full mt-2 measure-exit-btn" onclick="measureStudioSaveAndExit('${order.id}')">Сохранить и выйти</button>
               ${order.status === 'measurement_scheduled' && (viewer?.role === 'measurer' || canManage) ? `<button class="btn-ghost w-full mt-2 measure-finish-btn" onclick="measureStudioFinish('${order.id}')">✓ Завершить замер</button>
               <div id="ms-finish-issues" class="measure-finish-issues" hidden></div>` : ''}
             </div>
@@ -12855,11 +12858,32 @@ function measureStudioSaveWindow(orderId) {
   order.timeline = order.timeline || [];
   order.timeline.push({ at: order.technicalSheetUpdatedAt, key: 'engineering_measurement_saved', by: state.currentUserId, note: `${targetRoom.name}: ${targetWin.name}` });
   save();
-  state.measureStudio = { orderId, rid: targetRoom.id, wid: targetWin.id, photoDataUrl: targetWin.photoDataUrl || '', photoName: targetWin.photoName || '' };
+  state.measureStudio = { orderId, rid: targetRoom.id, wid: targetWin.id, photoDataUrl: targetWin.photoDataUrl || '', photoName: targetWin.photoName || '', dirty: false };
   openEngineeringMeasureStudio(orderId);
+}
+function measureStudioMarkDirty() { if (state.measureStudio) state.measureStudio.dirty = true; }
+/** Leave the studio keeping what was typed: the open window is saved first when it was changed. */
+function measureStudioSaveAndExit(orderId) {
+  const dirty = !!state.measureStudio?.dirty;
+  const typed = Number(document.getElementById('ms-w')?.value) > 0 && Number(document.getElementById('ms-h')?.value) > 0;
+  if (dirty && typed) {
+    measureStudioSaveWindow(orderId);
+    if (state.measureStudio?.dirty) return; // validation stopped the save; the reason is on screen
+  }
+  save();
+  closeModal();
+  if (typeof crmNotice === 'function') crmNotice('Замер сохранён. Продолжить можно в любой момент — «Открыть замер».');
+}
+function measureStudioClose(orderId) {
+  if (state.measureStudio?.dirty && confirm('Сохранить изменения в окне перед выходом?')) { measureStudioSaveAndExit(orderId); return; }
+  closeModal();
 }
 /** «Завершить замер» inside the studio: what is missing is shown right here, not in another window. */
 function measureStudioFinish(orderId) {
+  if (state.measureStudio?.dirty && Number(document.getElementById('ms-w')?.value) > 0) {
+    measureStudioSaveWindow(orderId);
+    if (state.measureStudio?.dirty) return;
+  }
   const o = getOrder(orderId);
   if (!o) return;
   const u = currentUser();
@@ -17502,7 +17526,9 @@ function orderTimelineForUser(order, user = currentUser()) {
 function windowArea(w) { return windowAreaSqft(w) * M2_PER_SQFT; } // sqft -> m², panel-aware
 function roomArea(r) { return (r.windows || []).reduce((s, w) => s + windowArea(w), 0); }
 function orderArea(o) { return (o.measurements?.rooms || []).reduce((s, r) => s + roomArea(r), 0); }
-function orderPrice(o) { return orderArea(o) * (o.pricePerM2 || db.settings.pricePerM2 || 0); }
+// The old «м² × price per м²» total drifted from the project (list showed $468 for a $1 900 project,
+// reports summed it). One price everywhere: the project revenue (Owner's audit, 2026-10-24).
+function orderPrice(o) { return orderRevenue(o); }
 
 function orderMeasurementCompletionIssues(o, { film = true } = {}) {
   const issues = [];
@@ -21351,8 +21377,8 @@ function renderOrders() {
         ${filtered.length === 0 ? `<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">${T('empty')}</td></tr>` :
         filtered.map(o => {
           const c = getClient(o.clientId);
-          const area = orderArea(o);
-          const price = orderPrice(o);
+          const area = orderActualAreaSqft(o);
+          const price = orderRevenue(o);
           const installers = (o.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', ');
           return `
           <tr class="table-row border-b" onclick="openOrder('${o.id}')">
@@ -21362,7 +21388,7 @@ function renderOrders() {
               <div class="text-xs text-gray-500">${c?.phone || ''}</div>
             </td>
             <td class="px-4 py-3"><span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span></td>
-            <td class="px-4 py-3">${area.toFixed(2)} ${T('m2')}</td>
+            <td class="px-4 py-3">${area ? area.toFixed(1) + ' sq ft' : '—'}</td>
             <td class="px-4 py-3">${fmtMoney(price)}</td>
             <td class="px-4 py-3 text-sm">${installers || '—'}</td>
             <td class="px-4 py-3 text-sm">${fmtDateTime(o.installationAt)}</td>
@@ -25618,6 +25644,13 @@ function serviceCashierCommit() {
     if (film) save();
   };
   if (returnTo === 'card' || returnTo === 'direction') projectCardEdit(apply); else apply();
+  // A per-sq-ft service in a project with measured windows: choose the windows now,
+  // otherwise it would wait for a measurement that already happened ($0).
+  if (serviceOfferingNeedsSizes(offering) && typeof openOfferingWindowsPicker === 'function'
+    && projectPendingSizedServices(o).some(item => item.id === offering.id) && offeringWindowCandidates(o, offering).length) {
+    openOfferingWindowsPicker(oid, offering.id, returnTo === 'estimate' ? 'card' : returnTo);
+    return;
+  }
   if (returnTo === 'estimate') openProjectEstimateWorkspace(oid);
   if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function') returnToProjectDirectionWindow();
 }
@@ -25919,7 +25952,7 @@ function projectWindowSolutionHtml(o, room, win, inMeasurement = false) {
   // that could not be finished (Owner's user test, 2026-10-23). The owner picks
   // a film of the direction right here; it is linked to the service at once.
   const linkable = currentUser()?.role === 'owner' && win.offeringId ? projectWindowLinkableFilms(o, win, films) : [];
-  return `<div class="grid gap-2" style="min-width:0"><label>Услуга / решение<select aria-label="Услуга окна" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','offeringId',this.value,${inMeasurement})"><option value="">Выберите услугу</option>${offerings.map(item => `<option value="${academyEsc(item.id)}" ${win.offeringId === item.id ? 'selected' : ''}>${academyEsc(item.name)}</option>`).join('')}</select></label>${win.offeringId ? `<label>Материал услуги<select aria-label="Материал услуги" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','catalogId',this.value,${inMeasurement})"><option value="">${films.length || linkable.length ? 'Выберите плёнку' : 'К услуге не привязана плёнка'}</option>${films.map(film => `<option value="${academyEsc(film.id)}" ${win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogLabel(film))}</option>`).join('')}${linkable.length ? `<optgroup label="Другие плёнки направления — привяжутся к услуге">${linkable.map(film => `<option value="${academyEsc(film.id)}">${academyEsc(catalogLabel(film))}</option>`).join('')}</optgroup>` : ''}</select></label>${!films.length && !linkable.length ? `<div class="text-xs" style="color:#92400e">Плёнку к услуге «${academyEsc(serviceOffering(win.offeringId)?.name || '')}» привязывает владелец в «Услуги и цены».</div>` : ''}` : ''}</div>`;
+  return `<div class="grid gap-2" style="min-width:0"><label>Услуга / решение<select aria-label="Услуга окна" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','offeringId',this.value,${inMeasurement})"><option value="">Выберите услугу</option>${offerings.map(item => `<option value="${academyEsc(item.id)}" ${win.offeringId === item.id ? 'selected' : ''}>${academyEsc(item.name)}</option>`).join('')}</select></label>${win.offeringId ? `<label>Материал услуги<select aria-label="Материал услуги" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','catalogId',this.value,${inMeasurement})"><option value="">${films.length || linkable.length ? 'Выберите плёнку' : 'К услуге не привязана плёнка'}</option>${films.map(film => `<option value="${academyEsc(film.id)}" ${win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogLabel(film))}</option>`).join('')}${linkable.length ? `<optgroup label="Другие плёнки направления — привяжутся к услуге">${linkable.map(film => `<option value="${academyEsc(film.id)}">${academyEsc(catalogLabel(film))}</option>`).join('')}</optgroup>` : ''}${orderUserCanManage(currentUser()) ? `<option value="__manual">➕ Нет в списке — добавить плёнку и заказать…</option>` : ''}</select></label>${win.catalogId && getCatalogItem(win.catalogId)?.pendingPurchase && warehouseCatalogStockStats(win.catalogId).availableSqft <= 0 ? `<div class="text-xs" style="color:#92400e">Плёнки нет на складе — ${activeProjectFilmPurchaseRequest(o.id, win.catalogId) ? `заявка на закупку ${academyEsc(activeProjectFilmPurchaseRequest(o.id, win.catalogId).number || '')}` : 'нужна закупка'}</div>` : ''}` : ''}</div>`;
 }
 function applyWindowOffering(win, offering) {
     win.offeringId = offering?.id || '';
@@ -25941,6 +25974,7 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
   const o = getOrder(oid);
   const win = o?.measurements?.rooms?.find(room => room.id === rid)?.windows?.find(item => item.id === wid);
   if (!win || !orderUserCanSeeMoney(o, currentUser())) return;
+  if (field === 'catalogId' && value === '__manual') { openWindowManualFilmForm(oid, rid, wid, inMeasurement); return; }
   if (field === 'offeringId') {
     const offering = serviceOffering(value);
     const selectedOfferings = projectSelectedSizedOfferings(o, win.measureScope || o.serviceType);
@@ -26618,7 +26652,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       </div>` : ''}
     </div>`;
   }).join('');
-  const pendingRows = pending.map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><b>${academyEsc(offering.name)}</b> · ${film ? academyEsc(catalogLabel(film)) : 'материал уточняется'} · ждёт замера ${edit ? `<button class="btn-ghost text-xs ml-2" onclick="openManagerMeasureModal('${o.id}')">Внести размеры</button>${o.offeringId !== offering.id ? `<button class="btn-ghost text-xs text-red-600 ml-1" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}` : ''}</div>`; }).join('');
+  const pendingRows = pending.map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><b>${academyEsc(offering.name)}</b> · ${film ? academyEsc(catalogLabel(film)) : 'материал уточняется'} · ${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? 'не стоит ни на одном окне' : 'ждёт замера'} ${edit ? `${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button class="btn-ghost text-xs ml-2" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}')">Выбрать окна</button>` : `<button class="btn-ghost text-xs ml-2" onclick="openManagerMeasureModal('${o.id}')">Внести размеры</button>`}${o.offeringId !== offering.id ? `<button class="btn-ghost text-xs text-red-600 ml-1" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}` : ''}</div>`; }).join('');
   return `<section class="project-service-ledger" data-project-card-services>
     <div class="project-service-ledger-head"><div><div class="project-service-ledger-title">Состав проекта <span class="tag">${lines.length + pending.length}</span></div><div class="project-service-ledger-sub">Каждая услуга имеет собственный материал, объём, цену, дату и исполнителя.</div></div>${money && edit ? projectOfferingPickerHtml(o, 'projectCardAddService') : ''}</div>
     <div class="project-service-list">${rows || '<div class="p-4 text-sm text-gray-500">В проекте пока нет услуг.</div>'}${pendingRows}</div>
@@ -28563,7 +28597,7 @@ function renderOrderDetails(id) {
             <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <input value="${r.name}" ${(canMeasure||canManage)?'':'readonly'} onchange="updateRoomName('${o.id}','${r.id}',this.value)" class="font-semibold bg-transparent border-0 p-0 focus:ring-0">
               <div class="flex items-center gap-2 text-sm flex-wrap">
-                <span class="tag">${T('totalAreaRoom')}: ${roomArea(r).toFixed(2)} ${T('m2')}</span>
+                <span class="tag">${T('totalAreaRoom')}: ${roomActualAreaSqft(r).toFixed(1)} sq ft</span>
                 ${(canMeasure||canManage) ? `<button class="btn-ghost text-red-600 text-xs" onclick="deleteRoom('${o.id}','${r.id}')">✕</button>` : ''}
               </div>
             </div>
@@ -29971,8 +30005,8 @@ function renderManagerMeasureModal(oid) {
                   <button class="btn-ghost text-sm text-red-600" onclick="managerDeleteRoom('${oid}','${r.id}')">${academyEsc(roomTerms.deleteLabel)}</button>
                 </div>
 
-                <details class="manager-room-film-disclosure" ${selectedRoomCatalog ? '' : 'open'}>
-                  <summary><span>🎞 Плёнка и склад · ${academyEsc(scope.short)}</span><span>${roomCatalog ? academyEsc(`${catalogFilmCategory(roomCatalog)} · ${roomCatalog.brand} · ${catalogFilmName(roomCatalog)} ${catalogFilmModel(roomCatalog)}`.trim()) : 'не выбрана'}</span></summary>
+                <details class="manager-room-film-disclosure">
+                  <summary><span>🎞 Одна плёнка на всю комнату · ${academyEsc(scope.short)}</span><span>${roomCatalog ? academyEsc(`${catalogFilmCategory(roomCatalog)} · ${roomCatalog.brand} · ${catalogFilmName(roomCatalog)} ${catalogFilmModel(roomCatalog)}`.trim()) : 'не выбрана'}</span></summary>
                   <div class="manager-room-film-control">
                     ${managerRoomFilmPickerHtml(oid, r, selectedRoomCatalog, preferredCategory)}
                   </div>
@@ -30039,6 +30073,7 @@ function renderManagerMeasureModal(oid) {
         <div class="flex gap-2 flex-wrap">
           ${managerConfirmableWindows(o).length ? `<button class="btn-ghost" onclick="managerConfirmAllWindowMeasurements('${oid}')">✓ Подтвердить все размеры (${managerConfirmableWindows(o).length})</button>` : ''}
           <button class="btn-ghost" onclick="openWorkOrder('${oid}')">Заказ-наряд</button>
+          <button class="btn-ghost manager-measure-exit" onclick="managerMeasureSaveAndExit('${oid}')">Сохранить и выйти</button>
           <button class="btn-primary" onclick="completeManagerMeasurement('${oid}')">Завершить замер<span class="manager-measure-title-suffix"> и рассчитать проект</span> →</button>
         </div>
       </div>
@@ -30051,6 +30086,10 @@ function managerMeasureDetailsToggle(oid, key, open) {
   state._managerMeasureDetails[oid][key] = open;
 }
 function openManagerMeasureModal(oid) {
+  // Owner, 2026-10-24: «замерщик не может закончить замер и выйти». The office
+  // window hides films and prices from him, then demands a film to finish — a
+  // dead end. The measurer always works in his field studio.
+  if (currentUser()?.role === 'measurer') { openEngineeringMeasureStudio(oid); return; }
   state.modal = renderManagerMeasureModal(oid);
   render();
 }
@@ -30099,6 +30138,12 @@ function completeManagerMeasurement(oid) {
 function projectSyncServicesFromWindows(oid) {
   const o = getOrder(oid);
   if (o && orderUserCanSeeMoney(o, currentUser()) && syncProjectIncludedServices(o)) save();
+}
+/** Every field is saved as it changes; the button says so and leaves (Owner, 2026-10-24). */
+function managerMeasureSaveAndExit(oid) {
+  save();
+  closeModal();
+  if (typeof crmNotice === 'function') crmNotice('Замер сохранён. Вернуться можно в любой момент — кнопка «Замер» в проекте.');
 }
 function refreshManagerMeasureModal(oid) {
   projectSyncServicesFromWindows(oid);

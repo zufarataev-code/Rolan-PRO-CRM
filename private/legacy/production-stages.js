@@ -395,6 +395,9 @@ function projectCardFocusDirection(oid, directionKey) {
 function projectCashierMapHtml(o, directions, { money = false, edit = false } = {}) {
   const included = directions.filter(direction => !projectDirectionExcluded(o, direction.key));
   const primaryKey = included[0]?.key || '';
+  // Owner, 2026-10-24 («теги, которые дублируют услуги»): direction tiles here
+  // repeated the direction cards right below; each direction is shown once, as
+  // its card, and its tile opens nothing new. Only «+ Добавить направление» stays.
   const directionCards = directions.map(direction => {
     const token = typeof rpDir === 'function' ? rpDir(direction.key) : null;
     const color = token?.color || '#2563eb';
@@ -408,7 +411,7 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   const area = orderActualAreaSqft(o);
   return `<div class="project-cashier-map" data-project-cashier-map>
     <div class="project-cashier-map-head"><div><div class="project-cashier-map-kicker">Касса проекта · направления и услуги</div><div class="project-cashier-map-title">Всё, что продаём и выполняем на этом объекте</div></div><div class="project-cashier-map-help">Несколько направлений · у каждой услуги свои дата, исполнитель и расходы</div></div>
-    <div class="project-cashier-directions">${directionCards}${money && edit ? `<button type="button" class="project-cashier-direction add" onclick="openServiceCashier('${o.id}','card')"><span class="project-cashier-direction-icon">+</span><span><b>Добавить направление</b><span>услуга, материал и дополнения</span></span></button>` : ''}</div>
+    <div class="project-cashier-directions">${money && edit ? `<button type="button" class="project-cashier-direction add" onclick="openServiceCashier('${o.id}','card')"><span class="project-cashier-direction-icon">+</span><span><b>Добавить направление</b><span>услуга, материал и дополнения</span></span></button>` : ''}</div>
     <div class="project-cashier-flow"><div class="project-cashier-flow-facts"><span><b>${rooms}</b> ${projectPlural(rooms, 'помещение', 'помещения', 'помещений')}</span><span><b>${windows}</b> ${projectWindowsWord(windows)}</span><span><b>${area.toFixed(2)}</b> sq ft</span><span>Размеры общие, направления назначаются услугам и окнам</span></div><div class="project-cashier-flow-actions"><button type="button" class="btn-ghost" onclick="openManagerMeasureModal('${o.id}')">Замер</button>${money ? `<button type="button" class="btn-ghost" onclick="openProjectEstimateWorkspace('${o.id}')">Расчёт / КП</button>` : ''}<button type="button" class="btn-ghost" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button></div></div>
   </div>`;
 }
@@ -455,7 +458,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       </div>` : ''}
     </div>`;
   };
-  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><b>${academyEsc(offering.name)}</b> · ${film ? academyEsc(catalogLabel(film)) : 'материал уточняется'} · для расчёта нужен замер ${edit ? `<button class="btn-ghost text-xs ml-2" onclick="openManagerMeasureModal('${o.id}')">Внести размеры</button>${o.offeringId !== offering.id ? `<button class="btn-ghost text-xs text-red-600 ml-1" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}` : ''}</div>`; };
+  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><b>${academyEsc(offering.name)}</b> · ${film ? academyEsc(catalogLabel(film)) : 'материал уточняется'} · ${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? 'не стоит ни на одном окне — $0' : 'для расчёта нужен замер'} ${edit ? `${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button class="btn-ghost text-xs ml-2" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}')">Выбрать окна</button>` : `<button class="btn-ghost text-xs ml-2" onclick="openManagerMeasureModal('${o.id}')">Внести размеры</button>`}${o.offeringId !== offering.id ? `<button class="btn-ghost text-xs text-red-600 ml-1" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}` : ''}</div>`; };
   const directionCards = directions.map(direction => {
     const directionLines = direction.lines;
     const excluded = projectDirectionExcluded(o,direction.key);
@@ -1056,7 +1059,7 @@ function projectDirectionWindowHtml(o, directionKey, step) {
   const index = Math.max(0, steps.findIndex(item => item.id === step));
   const tabs = steps.map((item, i) => `<button type="button" class="rp-dirwin-step ${i === index ? 'current' : done[item.id] ? 'done' : ''}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','${item.id}')">${done[item.id] && i !== index ? '✓' : i + 1} ${item.label}</button>`).join('');
   const lineRow = line => `<div class="rp-dirwin-row"><div><b>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</b><span>${academyEsc(projectLineNote(line))}</span></div><div class="rp-dirwin-num">${academyEsc(projectLineQtyText(line))}${money ? `<b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b>` : ''}</div></div>`;
-  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="rp-dirwin-row pending"><div><b>${academyEsc(offering.name)}</b><span>${film ? academyEsc(catalogLabel(film)) : 'материал уточним на замере'}</span></div><div class="rp-dirwin-num">нужен замер</div></div>`; };
+  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="rp-dirwin-row pending"><div><b>${academyEsc(offering.name)}</b><span>${film ? academyEsc(catalogLabel(film)) : 'материал уточним на замере'}</span></div>${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button type="button" class="btn-ghost text-xs" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}','direction')">Выбрать окна</button>` : '<div class="rp-dirwin-num">нужен замер</div>'}</div>`; };
   let body = '';
   if (step === 'measure') {
     const rooms = new Map();
@@ -1369,4 +1372,143 @@ async function copyProjectInvoiceText(oid) {
   const text = invoiceEmailText(invoiceDraft(o, { ...(state._invoiceForm?.oid === oid ? state._invoiceForm : {}), ...invoiceFormValues() }));
   try { await navigator.clipboard.writeText(text); alert('Текст письма скопирован. Приложите PDF счёта и отправьте клиенту.'); }
   catch (_) { prompt('Скопируйте текст письма:', text); }
+}
+
+// ---------- ПЛЁНКИ НЕТ НА СКЛАДЕ — ДОБАВИТЬ И ЗАКАЗАТЬ ПРЯМО ИЗ ОКНА (Owner, 2026-10-24) ----------
+// «Логика была такой: при выборе плёнки, если её нет на складе, можно добавить
+// плёнку самому, и от этого формируется заказ-наряд на закупку». The film list
+// of a window ends with «Нет в списке — добавить и заказать»; the film is written
+// into the catalog as «ожидает закупки», linked to the service, put on the
+// windows of that service, and a purchase request for this project is drafted.
+function windowManualFilmReturn(oid, inMeasurement) {
+  if (inMeasurement && typeof refreshManagerMeasureModal === 'function') refreshManagerMeasureModal(oid);
+  else if (typeof refreshProjectEstimateWorkspace === 'function') refreshProjectEstimateWorkspace(oid);
+  else render();
+}
+function openWindowManualFilmForm(oid, rid, wid, inMeasurement = false) {
+  const o = getOrder(oid);
+  const win = o?.measurements?.rooms?.find(room => room.id === rid)?.windows?.find(item => item.id === wid);
+  if (!o || !win || !orderUserCanManage(currentUser()) || !orderUserCanSeeMoney(o, currentUser())) return;
+  const category = primaryServiceInfo(win.measureScope || o.serviceType)?.catalogCategory || 'solar';
+  const offering = serviceOffering(win.offeringId);
+  const widths = db.settings.filmRolls?.widths || [1524, 1829];
+  const vendors = (db.vendors || []).filter(vendor => vendor.active !== false);
+  const same = measureAllWindows(o).filter(({ win: item }) => item.offeringId && item.offeringId === win.offeringId);
+  const back = `windowManualFilmReturn('${oid}',${inMeasurement ? 'true' : 'false'})`;
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) ${back}"><div class="modal-content workspace-modal p-6" style="max-width:40rem" onclick="event.stopPropagation()">
+    <button type="button" class="workspace-back mb-2" onclick="${back}">← Назад к замеру</button>
+    <h3 class="font-semibold text-lg">Плёнки нет в списке — добавить и заказать</h3>
+    <p class="text-xs text-gray-500 mb-4">Плёнка появится в каталоге со статусом «ожидает закупки»${offering ? ` и в услуге «${academyEsc(offering.name)}»` : ''}, встанет на окна и сразу создастся заявка на закупку под этот проект. Когда рулон придёт — его принимают на склад как обычно.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div><label>Направление</label><input value="${academyEsc(catLabel(category))}" disabled></div>
+      <div><label>Тип плёнки${category === 'solar' ? ' *' : ''}</label>${category === 'solar'
+        ? `<select id="wmf-type"><option value="">Выберите тип</option>${SOLAR_FILM_SUBTYPES.map(type => `<option value="${academyEsc(type)}">${academyEsc(type)}</option>`).join('')}</select>`
+        : `<input id="wmf-type" placeholder="Например: прозрачная 8 mil">`}</div>
+      <div class="md:col-span-2"><label>Бренд и модель *</label><input id="wmf-name" placeholder="Как у поставщика, например 3M Prestige 70"></div>
+      <div><label>Поставщик</label><select id="wmf-vendor"><option value="">Не выбран</option>${vendors.map(vendor => `<option value="${academyEsc(vendor.id)}">${academyEsc(vendor.name)}</option>`).join('')}</select></div>
+      <div><label>Ширина рулона</label><select id="wmf-width">${widths.map(width => `<option value="${Number(width)}">${(Number(width) / 25.4).toFixed(0)}" · ${Number(width)} мм</option>`).join('')}</select></div>
+      <div class="md:col-span-2"><label>Комментарий для закупки</label><input id="wmf-note" placeholder="Цвет, плотность, сроки"></div>
+      ${same.length > 1 ? `<label class="md:col-span-2 flex items-center gap-2"><input id="wmf-all" type="checkbox" checked style="width:18px;height:18px"> На все окна услуги «${academyEsc(offering?.name || '')}» без плёнки (${same.length})</label>` : ''}
+    </div>
+    <div id="wmf-error" class="text-sm text-red-600 mt-3 hidden"></div>
+    <div class="flex gap-2 mt-5"><button class="btn-primary flex-1" onclick="saveWindowManualFilm('${oid}','${rid}','${wid}',${inMeasurement ? 'true' : 'false'})">Добавить плёнку и создать заявку</button><button class="btn-ghost" onclick="${back}">Отмена</button></div>
+  </div></div>`;
+  render();
+}
+function saveWindowManualFilm(oid, rid, wid, inMeasurement = false) {
+  const o = getOrder(oid);
+  const win = o?.measurements?.rooms?.find(room => room.id === rid)?.windows?.find(item => item.id === wid);
+  if (!o || !win || !orderUserCanManage(currentUser()) || !orderUserCanSeeMoney(o, currentUser())) return;
+  const fail = message => { const box = document.getElementById('wmf-error'); if (box) { box.textContent = message; box.classList.remove('hidden'); } else alert(message); };
+  const category = primaryServiceInfo(win.measureScope || o.serviceType)?.catalogCategory || 'solar';
+  const filmType = String(document.getElementById('wmf-type')?.value || '').trim();
+  const name = String(document.getElementById('wmf-name')?.value || '').trim().slice(0, 120);
+  const vendorId = String(document.getElementById('wmf-vendor')?.value || '');
+  const widthMm = Number(document.getElementById('wmf-width')?.value) || 1524;
+  const note = String(document.getElementById('wmf-note')?.value || '').trim().slice(0, 300);
+  const all = document.getElementById('wmf-all') ? document.getElementById('wmf-all').checked : false;
+  if (!name) return fail('Впишите бренд и модель плёнки.');
+  if (category === 'solar' && !filmType) return fail('Выберите тип солнцезащитной плёнки.');
+  // The same film written in again is reused, never duplicated in the catalog.
+  let catalog = (db.settings.catalog || []).find(item => !item.archived && item.category === category && String(item.model || '').trim().toLowerCase() === name.toLowerCase()) || null;
+  if (!catalog) {
+    catalog = { id: 'film_' + uid(), brand: '', filmCategory: filmType, productName: name, modelCode: '', model: name, category, retailPerSqft: 0, vendorId: vendorId || null, pendingPurchase: true, addedManuallyBy: currentUser()?.id || null, addedManuallyAt: new Date().toISOString() };
+    db.settings.catalog.push(catalog);
+  } else if (warehouseCatalogStockStats(catalog.id).availableSqft <= 0) {
+    catalog.pendingPurchase = true;
+    if (vendorId && !catalog.vendorId) catalog.vendorId = vendorId;
+  }
+  catalog.manualRollWidthMm = widthMm;
+  const offering = serviceOffering(win.offeringId);
+  if (offering) offering.filmIds = [...new Set([...serviceOfferingFilmIds(offering), catalog.id])];
+  const targets = all ? measureAllWindows(o).map(({ win: item }) => item).filter(item => item.id === win.id || (item.offeringId === win.offeringId && !item.catalogId)) : [win];
+  targets.forEach(item => { item.catalogId = catalog.id; item.filmType = catalogLabel(catalog); });
+  const sqft = Math.round(measureAllWindows(o).filter(({ win: item }) => item.catalogId === catalog.id).reduce((sum, { win: item }) => sum + (windowActualAreaSqft(item) || 0), 0) * 100) / 100;
+  let request = manualFilmPurchaseRequest(o.id, catalog.id) || activeProjectFilmPurchaseRequest(o.id, catalog.id);
+  if (!request && warehouseCatalogStockStats(catalog.id).availableSqft < sqft) {
+    request = createManualFilmDraft(o, catalog, sqft || 1, { widthMm, vendorId, note });
+  } else if (request && request.status === 'draft' && request.source === 'manual_project_film') {
+    const metres = manualFilmMetres(sqft, widthMm);
+    request.qty = metres; request.sqftSnapshot = sqft; request.widthMm = widthMm;
+    request.requirements = [{ widthMm, requiredM: metres, availableM: 0, shortageM: metres }];
+    request.note = manualFilmRequestNote(o, sqft, note || request.manualNote);
+    request.updatedAt = new Date().toISOString();
+  }
+  if (typeof invalidateProjectEstimate === 'function') invalidateProjectEstimate(o, `Плёнка «${name}» добавлена вручную`);
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: new Date().toISOString(), key: 'manual_film_added', by: state.currentUserId, note: `Плёнка «${name}» — нет на складе${request ? `, заявка ${request.number}` : ''}` });
+  save();
+  windowManualFilmReturn(oid, inMeasurement);
+  if (request && typeof crmNotice === 'function') crmNotice(`Плёнка «${name}» добавлена. Заявка на закупку ${request.number} создана — её видно в «Закупки».`);
+}
+
+// ---------- УСЛУГА «ЗА КВ. ФУТ» В ЗАМЕРЕННЫЙ ПРОЕКТ: НА КАКИЕ ОКНА (Owner, 2026-10-24) ----------
+// «Можно добавить услугу из списка, но она не добавляется в проект, не считается».
+// A per-sq-ft service is priced by the windows that carry it. In a project whose
+// windows are already measured (all with another service) it waited for a
+// measurement that had already happened — $0 forever. Now the owner picks the
+// windows right away; a window has one film service, so it is moved over.
+function offeringWindowCandidates(o, offering) {
+  const scope = offeringServiceType(offering);
+  return measureAllWindows(o).filter(({ win }) => (win.measureScope || o.serviceType) === scope);
+}
+function openOfferingWindowsPicker(oid, offeringId, returnTo = 'card') {
+  const o = getOrder(oid);
+  const offering = serviceOffering(offeringId);
+  if (!o || !offering || !orderUserCanSeeMoney(o, currentUser())) return;
+  const rows = offeringWindowCandidates(o, offering);
+  if (!rows.length) return;
+  const d = rpDir(offeringServiceType(offering));
+  const free = rows.filter(({ win }) => !win.offeringId);
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content workspace-modal p-5" style="max-width:36rem;border-top:4px solid ${d.color}" onclick="event.stopPropagation()" data-rp-keep-layout>
+    <button type="button" class="workspace-back mb-2" onclick="closeModal()">← К проекту</button>
+    <div class="text-xs font-bold" style="color:${d.deep}">УСЛУГА ПО ЗАМЕРУ · ${academyEsc(measureScopeInfo(offeringServiceType(offering)).short || '')}</div>
+    <h3 class="font-black text-xl">${academyEsc(offering.name)} — на какие окна?</h3>
+    <p class="text-sm text-gray-600 mt-1">Цена считается по площади окон с этой услугой. У окна одна плёночная услуга — отмеченные окна перейдут на «${academyEsc(offering.name)}».</p>
+    <div class="mt-3 grid gap-2">${rows.map(({ room, win }) => `<label class="flex items-center gap-3 rounded-lg border p-3" style="border-color:${win.offeringId === offering.id ? d.color : '#e2e8f0'}">
+      <input type="checkbox" data-offering-window="${academyEsc(win.id)}" ${win.offeringId === offering.id || (!win.offeringId && free.length) ? 'checked' : ''} style="width:20px;height:20px">
+      <span class="flex-1"><b>${academyEsc(room.name || 'Помещение')} · ${academyEsc(win.name || 'Окно')}</b><span class="block text-xs text-gray-500">${(windowActualAreaSqft(win) || 0).toFixed(1)} sq ft · ${win.offeringId ? (win.offeringId === offering.id ? 'уже эта услуга' : 'сейчас: ' + academyEsc(serviceOffering(win.offeringId)?.name || '—')) : 'без услуги'}</span></span></label>`).join('')}</div>
+    <div class="flex gap-2 mt-4"><button class="btn-primary flex-1" style="background:${d.color}!important;border-color:${d.color}!important" onclick="saveOfferingWindows('${oid}','${jsQuote(offering.id)}','${returnTo}')">Поставить на отмеченные окна</button><button class="btn-ghost" onclick="closeModal()">Позже</button></div>
+  </div></div>`;
+  render();
+}
+function saveOfferingWindows(oid, offeringId, returnTo = 'card') {
+  const o = getOrder(oid);
+  const offering = serviceOffering(offeringId);
+  if (!o || !offering || !orderUserCanSeeMoney(o, currentUser())) return;
+  const checked = new Set([...document.querySelectorAll('[data-offering-window]')].filter(box => box.checked).map(box => box.dataset.offeringWindow));
+  const film = projectOfferingCatalogId(o, offering.id);
+  projectCardEdit(() => {
+    offeringWindowCandidates(o, offering).forEach(({ win }) => {
+      if (!checked.has(win.id) || win.offeringId === offering.id) return;
+      applyWindowOffering(win, offering);
+      if (film && !win.catalogId) { win.catalogId = film; win.filmType = catalogLabel(getCatalogItem(film)); }
+    });
+    o.offeringIds = [...new Set([...(o.offeringIds || []), offering.id])];
+    projectEstimateMarkChanged(o, `Услуга «${offering.name}» поставлена на окна: ${checked.size}`);
+    save();
+  });
+  closeModal();
+  if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function') returnToProjectDirectionWindow();
+  else render();
 }
