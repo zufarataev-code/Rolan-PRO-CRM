@@ -23,6 +23,13 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-25 handoff — installation assignment is inside the project card
+
+- Branch: `codex/employee-pay-history-20261024`, rebased on current `origin/main` `8f3ae2c`; PR #385.
+- The «Монтаж» section no longer sends the manager to the generic calendar workspace. «Назначить монтаж» opens the existing project service scheduler directly; every project service has its own date, time and installers. Once any service has a plan, the action is labelled «Изменить монтаж».
+- Before the customer accepts the proposal, the same action explains the prerequisite instead of silently opening an unrelated workspace. Measurement verification and production readiness remain the authoritative operational guards.
+- Verification: `project-feed.test.ts` covers the direct project action and the per-service schedule fields. Full verification and CI remain before merge.
+
 ## 2026-10-24 handoff — KP payment sync, one measurement button, paid → installation
 
 - PR #386 (d31c594) and #387 (17d6a4f) merged and deployed; functions present on prod.
@@ -38,6 +45,14 @@ Before doing any work:
 - `projectProposalOptionalOfferings` now skips options priced $0 (before, a named $0 option reached the KP).
 - Prod data: smart options «Голосовое управление», «Настенный выключатель», «Второй пульт» (no price yet — owner fills), «Гарантия 10 лет (вместо 5)» $5/month.
 - Tests: `kp-options-section.test.ts`; full local cycle ok.
+
+## 2026-10-24 handoff — personal payroll and assigned-order history
+
+- Branch: `codex/employee-pay-history-20261024`, based on current `origin/main` `9886d3f`.
+- Manager, measurer and installer now have «Моя зарплата». The page shows only the signed-in employee's accrued amount, payments, balance and order-level calculation; owner keeps the company payroll workspace.
+- Field-role server payload now includes only that employee's pay configuration and payroll allocations for their assigned orders. It never sends another employee's payroll data.
+- Assigned project workspaces now expose a safe canonical order history and a full «История заказа» window. Field roles do not receive internal company economics; managers do not see employee payout events in the order timeline.
+- Verification: targeted role/pay/history tests 34/34, full suite 841/841 and `git diff --check` pass. Local `next build` and standalone TypeScript processes did not finish in the dependency-linked temporary worktree and printed no compile error; GitHub CI remains the authoritative build check before merge.
 
 ## 2026-10-21 handoff — approved project-card route map
 

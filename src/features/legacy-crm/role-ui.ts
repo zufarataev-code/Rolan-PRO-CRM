@@ -6,7 +6,6 @@ const ROLE_UI_POLICY_PATCH = `
     display: none !important;
   }
 
-  html[data-rolanpro-role="manager"] .nav-item[onclick*="selectAppView('payroll')"],
   html[data-rolanpro-role="manager"] .nav-item[onclick*="selectAppView('team')"] {
     display: none !important;
   }
@@ -95,7 +94,7 @@ const ROLE_UI_POLICY_PATCH = `
 </style>
 <script id="rolanpro-role-ui-policy-script">
   (() => {
-    const restrictedManagerViews = new Set(['payroll', 'team']);
+    const restrictedManagerViews = new Set(['team']);
 
     const getUser = () => {
       try {
@@ -145,7 +144,7 @@ const ROLE_UI_POLICY_PATCH = `
       if (!user || user.role !== 'manager') return;
 
       document.querySelectorAll(
-        '.nav-item[onclick*="selectAppView(\\'payroll\\')"], .nav-item[onclick*="selectAppView(\\'team\\')"]',
+        '.nav-item[onclick*="selectAppView(\\'team\\')"]',
       ).forEach((element) => element.remove());
     };
 

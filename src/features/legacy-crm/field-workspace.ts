@@ -257,9 +257,12 @@ function safeUser(user: JsonObject, own: boolean, roles: readonly string[]) {
     photo: user.photo,
   };
 
-  // An installer may see their own configured work rates, never another
-  // employee's compensation settings.
-  if (own && effectiveRole === "installer") result.payConfig = clone(user.payConfig || {});
+  // Every field employee may see their own compensation configuration, never
+  // another employee's settings. The browser needs this to explain each own
+  // accrual; calculation still uses the shared payroll engine.
+  if (own && effectiveRole && FIELD_ROLE_NAMES.has(effectiveRole)) {
+    result.payConfig = clone(user.payConfig || {});
+  }
   return result;
 }
 
@@ -334,6 +337,28 @@ export function createFieldWorkspace(
     .filter((client) => clientIds.has(String(client.id || "")))
     .map((client) => redactFinancialData(clone(client)));
   const settings = isObject(payload.settings) ? safeSettings(payload.settings, roles) : {};
+  const payrollPayments = (Array.isArray(payload.payrollPayments) ? payload.payrollPayments : [])
+    .filter(isObject)
+    .filter((payment) => identityIds.has(String(payment.userId || "")))
+    .map((payment) => ({
+      id: payment.id,
+      userId: payment.userId,
+      amount: Number(payment.amount || 0),
+      paidAt: payment.paidAt,
+      periodStart: payment.periodStart,
+      periodEnd: payment.periodEnd,
+      allocations: (Array.isArray(payment.allocations) ? payment.allocations : [])
+        .filter(isObject)
+        .filter((allocation) => !allocation.orderId || orderIds.has(String(allocation.orderId)))
+        .map((allocation) => ({
+          orderId: allocation.orderId || null,
+          kind: allocation.kind,
+          amount: Number(allocation.amount || 0),
+          date: allocation.date,
+          periodStart: allocation.periodStart,
+          periodEnd: allocation.periodEnd,
+        })),
+    }));
 
   return {
     _allowedLegacyUserIds: [...identityIds],
@@ -360,6 +385,7 @@ export function createFieldWorkspace(
       .filter(linkedRecord)
       .map((record) => redactFinancialData(clone(record))),
     reviews: [],
+    payrollPayments,
     settings,
     geocache: clone(payload.geocache || {}),
     schemaVersion: payload.schemaVersion,

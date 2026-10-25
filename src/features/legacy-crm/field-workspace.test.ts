@@ -8,7 +8,7 @@ import { createFieldWorkspace, mergeFieldWorkspace } from "./field-workspace";
 const workspace = {
   users: [
     { id: "owner", role: "owner", name: "Owner", hourlyRate: 100 },
-    { id: "measure", role: "measurer", name: "Alan", commissionPct: 10 },
+    { id: "measure", role: "measurer", name: "Alan", commissionPct: 10, payConfig: { type: "fixed_per_job", fixedPerJob: 100 } },
     { id: "install", role: "installer", name: "Installer", payConfig: { ratePerSqft: 5 } },
   ],
   clients: [
@@ -57,6 +57,11 @@ const workspace = {
   vendors: [{ id: "vendor", name: "Supplier", dealerPrice: 4 }],
   inventory: [{ id: "roll", catalogId: "film", costTotal: 500 }],
   purchaseRequests: [{ id: "request", itemId: "film", quotedPrice: 300 }],
+  payrollPayments: [
+    { id: "pay-measure", userId: "measure", amount: 100, paidAt: "2026-10-02", allocations: [{ orderId: "order-a", amount: 100, date: "2026-10-01" }] },
+    { id: "pay-install", userId: "install", amount: 250, paidAt: "2026-10-03", allocations: [{ orderId: "order-a", amount: 250, date: "2026-10-02" }] },
+    { id: "pay-other", userId: "someone-else", amount: 999, paidAt: "2026-10-03" },
+  ],
 };
 
 test("surveyor receives only assigned work and no customer or company money", () => {
@@ -94,6 +99,19 @@ test("installer receives only their own compensation configuration", () => {
 
   assert.deepEqual(installer?.payConfig, { ratePerSqft: 5 });
   assert.equal("hourlyRate" in (owner || {}), false);
+  assert.deepEqual((field.payrollPayments as Array<Record<string, unknown>>).map((payment) => payment.id), ["pay-install"]);
+});
+
+test("surveyor receives only their own pay configuration and payment history", () => {
+  const field = createFieldWorkspace(workspace, [ROLE_CODES.CONSULTANT], ["measure"]);
+  const users = field.users as Array<Record<string, unknown>>;
+  const measurer = users.find((user) => user.id === "measure");
+  const payments = field.payrollPayments as Array<Record<string, unknown>>;
+
+  assert.deepEqual(measurer?.payConfig, { type: "fixed_per_job", fixedPerJob: 100 });
+  assert.deepEqual(payments.map((payment) => payment.id), ["pay-measure"]);
+  assert.equal(payments[0].amount, 100);
+  assert.equal((payments[0].allocations as Array<Record<string, unknown>>)[0].orderId, "order-a");
 });
 
 test("server role change immediately switches a linked legacy card from surveyor to installer", () => {

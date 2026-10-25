@@ -1675,6 +1675,10 @@ function projectFeedHtml(o, c, u, ctx) {
   const installBody = groups.length
     ? groups.map(group => { const plan = projectServiceAssignment(o, group); const crew = (plan?.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', '); return projectFeedRow(academyEsc(group.name), plan?.installationAt ? `${fmtDateTime(plan.installationAt)}${crew ? ' · ' + academyEsc(crew) : ''}` : '<span class="quiet">не назначено</span>'); }).join('')
     : '<div class="project-feed-empty">Сначала добавьте услуги</div>';
+  const installationIsPlanned = groups.some(group => {
+    const plan = projectServiceAssignment(o, group);
+    return !!plan?.installationAt && !!plan?.installerIds?.length;
+  });
   const docs = `<div class="project-feed-chips">
       <button type="button" class="project-feed-doc" onclick="projectCardOpenWorkspace('documents')">${money ? 'КП и документы' : 'Документы'}</button>
       <button type="button" class="project-feed-doc" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button>
@@ -1694,7 +1698,7 @@ function projectFeedHtml(o, c, u, ctx) {
     ${money && filmRows.length ? projectFeedSection(next(), 'Плёнка и закупка', filmRows.join(''), { id: 'film', button: projectFeedBtn('Открыть закупку', 'openProjectPurchaseRequests()') }) : ''}
     ${money ? projectFeedSection(next(), 'КП', (proposal ? projectFeedRow(`КП ${academyEsc(proposal.number || '')}`, fmtMoney(premiumProposalCalc(proposal)?.total || orderRevenue(o))) : '<div class="project-feed-empty">Соберите КП, когда услуги посчитаны</div>') + (projectProposalOptionalOfferings(o).length ? projectFeedRow(`<span class="quiet">Опции на выбор клиента: ${projectProposalOptionalOfferings(o).map(item => academyEsc(item.offering.name)).join(', ')}</span>`) : '') + ((o.kpClientOptions || []).length ? projectFeedRow(`Клиент выбрал: ${o.kpClientOptions.map(item => academyEsc(item.title)).join(', ')}`, '') : ''), { id: 'kp', chip: proposalChip, button: projectFeedBtn(proposal ? 'Открыть КП' : 'Собрать КП', `openProposalWizard('${o.id}')`, proposal ? 'ghost' : 'primary') + (proposal?.canonicalProposalId && proposal.status !== 'Draft' ? projectFeedBtn('Забрать выбор клиента', `premiumApplyClientOptions('${o.id}')`) : '') }) : ''}
     ${money ? projectFeedSection(next(), 'Оплата и счёт', payBody, { id: 'pay', button: `${projectFeedBtn('Счёт (Invoice)', `openProjectInvoice('${o.id}')`)}${orderDebt(o) > 0.01 ? projectFeedBtn('Отметить оплату', `openPaymentModal('${o.id}',{kind:'final'})`) : ''}` }) : ''}
-    ${projectFeedSection(next(), 'Монтаж', installBody, { id: 'install', button: canManage ? projectFeedBtn('Назначить монтаж', "projectCardOpenWorkspace('schedule')") : '' })}
+    ${projectFeedSection(next(), 'Монтаж', installBody, { id: 'install', button: canManage && groups.length ? projectFeedBtn(installationIsPlanned ? 'Изменить монтаж' : 'Назначить монтаж', `scheduleInstallationPrompt('${o.id}')`, installationIsPlanned ? 'ghost' : 'primary') : '' })}
     ${projectFeedSection(next(), 'Документы', docs, { id: 'docs' })}
     ${projectFeedSection(next(), 'История и файлы', history, { id: 'history', button: projectFeedBtn('Вся история и фото', "projectCardOpenWorkspace('history')") })}
   </div>`;

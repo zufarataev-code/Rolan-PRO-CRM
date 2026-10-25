@@ -15,8 +15,22 @@ test('the project card is one feed in the order the work goes', () => {
   assert.match(feed, /<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг<\/div>/);
   assert.match(feed, /projectFeedBtn\('Счёт \(Invoice\)', `openProjectInvoice\('\$\{o\.id\}'\)`\)/);
   assert.match(feed, /projectFeedBtn\('Открыть закупку', 'openProjectPurchaseRequests\(\)'\)/);
+  assert.match(feed, /projectFeedBtn\(installationIsPlanned \? 'Изменить монтаж' : 'Назначить монтаж', `scheduleInstallationPrompt\('\$\{o\.id\}'\)`/);
+  assert.doesNotMatch(feed, /projectFeedBtn\('Назначить монтаж', "projectCardOpenWorkspace\('schedule'\)"\)/);
   assert.match(html, /\$\{projectFeedHtml\(o, c, u, \{ canManage, canSeeMoney, canSeeInternalEconomics, primary, measureAction, recentTimeline \}\)\}/);
   assert.doesNotMatch(html.slice(html.indexOf('function renderOrderCleanDetails('), html.indexOf('function renderInstallerTechnicalWorkspace(')), /\$\{renderProjectCommandNav\(|<div class="project-command-mobile-action">/);
+});
+
+test('installation is assigned inside the project, separately for every service', () => {
+  const scheduler = html.slice(html.indexOf('function scheduleInstallationPrompt('), html.indexOf('function confirmScheduleInstallation('));
+  assert.match(scheduler, /if \(!projectProposalAccepted\(o\)\)/);
+  assert.match(scheduler, /Монтаж по услугам проекта/);
+  assert.match(scheduler, /projectServiceScheduleHtml\(o\)/);
+  assert.match(scheduler, /Назначьте дату и исполнителей отдельно для каждой услуги/);
+
+  const serviceSchedule = html.slice(html.indexOf('function projectServiceScheduleHtml('), html.indexOf('function projectScheduleCopyFirstToAll('));
+  assert.match(serviceSchedule, /Дата и время услуги/);
+  assert.match(serviceSchedule, /service-installer-\$\{index\}/);
 });
 
 test('money stays hidden from field roles in the feed', () => {
