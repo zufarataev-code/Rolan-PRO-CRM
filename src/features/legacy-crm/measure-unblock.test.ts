@@ -21,9 +21,12 @@ function slice(src: string, from: string, to: string) {
 test('one measurement window for every role: next window, save and back, the measurer hands in without a film', () => {
   assert.doesNotMatch(slice(html, 'function openManagerMeasureModal(oid) {', '\n}\n'), /openEngineeringMeasureStudio/);
   assert.match(slice(html, 'function openMeasurerV25ForOrder(oid) {', '\n}\n'), /openManagerMeasureModal\(oid\);/);
-  assert.match(html, /onclick="managerMeasureNextWindow\('\$\{oid\}','\$\{activeRoom\.id\}'\)">Сохранить и следующее окно<\/button>/);
-  assert.match(html, /onclick="managerMeasureSaveAndExit\('\$\{oid\}'\)">Сохранить и назад<\/button>/);
-  assert.match(html, /onclick="completeManagerMeasurement\('\$\{oid\}'\)">✓ Сдать замер<\/button>/);
+  // Owner, 2026-10-24: one button in the footer, not five.
+  const footer = slice(html, 'function managerMeasureFooterActionHtml(o) {', '\n}\n');
+  assert.match(footer, /'✓ Сдать замер' : '✓ Замер готов — рассчитать'/);
+  assert.match(footer, /onclick="managerMeasureSaveAndExit\('\$\{oid\}'\)">Готово<\/button>/);
+  assert.match(html, /\$\{managerMeasureFooterActionHtml\(o\)\}/);
+  assert.doesNotMatch(html, />Сохранить и назад<\/button>|>Сохранить и следующее окно<\/button>/);
   const done = slice(html, 'function completeManagerMeasurement(oid) {', '\n}\n');
   assert.match(done, /orderWorkflowTransitionIssues\(o, 'measurement_done'\), \.\.\.orderTechnicalMeasurementIssues\(o\)/);
   assert.match(done, /box\.innerHTML = `<b>Чтобы сдать замер:<\/b>/);

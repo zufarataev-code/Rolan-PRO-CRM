@@ -54,7 +54,7 @@ test('«Подтвердить все размеры» confirms every typed wind
   assert.deepEqual(windows.map(w => w.measurementSource), ['SURVEYOR_VERIFIED', 'SURVEYOR_VERIFIED', 'CUSTOMER', 'SURVEYOR_VERIFIED']);
   assert.equal(order.timeline.length, 1, 'one history entry, not one per window');
   assert.deepEqual(calls, ['invalidate', 'save', 'refresh']);
-  assert.match(html, /managerConfirmableWindows\(o\)\.length \? `<button class="btn-ghost" onclick="managerConfirmAllWindowMeasurements\('\$\{oid\}'\)">✓ Подтвердить все размеры/);
+  assert.match(html, /managerConfirmableWindows\(o\)\.length \? ` <button type="button" class="manager-measure-confirm-all"[^>]*onclick="managerConfirmAllWindowMeasurements\('\$\{oid\}'\)">Подтвердить все размеры/);
 });
 
 test('calculation numbers say what they are; company-wide net profit is a folded estimate', () => {

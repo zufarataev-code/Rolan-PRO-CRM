@@ -1551,7 +1551,67 @@ function projectFeedFilmRows(o) {
     return projectFeedRow(`${academyEsc(film ? catalogLabel(film) : 'Плёнка')} · нужно ${Math.round(sqft)} sq ft`, status);
   });
 }
+// Owner, 2026-10-24: «логика оплаты из КП не работает». The client signed the KP
+// online and chose Zelle; the project still waited for «Отправить КП». Opening
+// the project reads the KP from the server: viewed, signed, payment chosen, paid.
+function premiumSyncClientProposal(oid) {
+  const o = getOrder(oid);
+  const prop = o && typeof getPremiumProposalByOrder === 'function' ? getPremiumProposalByOrder(oid) : null;
+  if (!prop?.canonicalProposalId || typeof fetch !== 'function' || !orderUserCanSeeMoney(o, currentUser())) return;
+  if (o.depositReceived && o.kpOnline?.depositStatus === 'paid') return;
+  state._kpSyncAt = state._kpSyncAt || {};
+  if (Date.now() - (state._kpSyncAt[oid] || 0) < 60000) return;
+  state._kpSyncAt[oid] = Date.now();
+  fetch(`/api/v1/proposals/${encodeURIComponent(prop.canonicalProposalId)}`, { credentials: 'include' })
+    .then(response => (response.ok ? response.json() : null))
+    .then(payload => { const server = payload?.data?.proposal; if (server) premiumApplyServerProposalState(oid, server); })
+    .catch(() => {});
+}
+function premiumApplyServerProposalState(oid, server) {
+  const o = getOrder(oid);
+  const prop = typeof getPremiumProposalByOrder === 'function' ? getPremiumProposalByOrder(oid) : null;
+  if (!o || !prop || !server) return false;
+  const dep = server.deposit || null;
+  const agreement = server.agreement || null;
+  const kp = {
+    depositId: dep?.deposit_id || '',
+    depositStatus: dep?.status || '',
+    amount: Number(dep?.amount) || 0,
+    method: dep?.payment_method || '',
+    signedAt: agreement?.status === 'signed' ? agreement.signed_at || '' : '',
+    signer: agreement?.signer_name || '',
+  };
+  let changed = JSON.stringify(o.kpOnline || {}) !== JSON.stringify(kp);
+  o.kpOnline = kp;
+  o.timeline = o.timeline || [];
+  if (server.client_viewed_at && ['Draft', 'Sent'].includes(prop.status)) {
+    prop.status = 'Viewed';
+    prop.viewedAt = prop.viewedAt || server.client_viewed_at;
+    changed = true;
+  }
+  if (kp.signedAt && ['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done', 'proposal_sent'].includes(o.status)) {
+    o.timeline.push({ at: kp.signedAt, key: 'proposal_signed_online', by: null, note: `Клиент подписал КП онлайн${kp.signer ? ' · ' + kp.signer : ''}` });
+    // The client's signature is the acceptance; no manager confirmation is asked.
+    changeStatus(oid, 'proposal_accepted', null, { skipWorkflowGuard: true, openWorkspace: false, openMeasurement: false, openPayment: false });
+    changed = true;
+  }
+  if (dep?.status === 'paid' && !o.depositReceived) {
+    const amount = Number(dep.amount) || 0;
+    const date = String(dep.paid_at || new Date().toISOString()).slice(0, 10);
+    if (amount > 0 && !orderPayments(o).some(pay => pay.kpDepositId === dep.deposit_id)) {
+      addOrderPayment(oid, { amount, method: kpOnlinePaymentMethod(dep.payment_method) || 'card', date, note: 'Аванс по КП — оплачен онлайн' });
+      const last = orderPayments(o)[orderPayments(o).length - 1];
+      if (last) last.kpDepositId = dep.deposit_id;
+    }
+    markOrderDepositReceived(o, amount);
+    changed = true;
+  }
+  if (changed) { save(); render(); }
+  return changed;
+}
+
 function projectFeedHtml(o, c, u, ctx) {
+  setTimeout(() => premiumSyncClientProposal(o.id), 0);
   const { canManage, canSeeMoney, primary, measureAction, recentTimeline } = ctx;
   const money = canSeeMoney;
   const lines = projectLines(o);

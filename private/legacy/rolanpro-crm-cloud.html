@@ -2008,7 +2008,8 @@
   .measure-finish-btn { border: 1.5px solid #16a34a !important; color: #15803d !important; font-weight: 800; min-height: 44px; }
   .measure-finish-issues { margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #fffbeb; border: 1px solid #f59e0b; color: #78350f; font-size: 13px; }
   .measure-exit-btn { min-height: 44px; font-weight: 700; }
-  .manager-measure-finish { border: 1.5px solid #16a34a !important; color: #15803d !important; font-weight: 800; }
+  .manager-measure-finish { background: #16a34a !important; border: 0 !important; color: #fff !important; font-weight: 800; }
+  .manager-measure-footer .manager-measure-exit, .manager-measure-footer .manager-measure-finish { width: 100%; font-size: 16px; }
   .measure-finish-issues ul { margin: 4px 0 0 16px; list-style: disc; }
   html body .rp-dirwin .rp-dirwin-next { width: 100%; min-height: 48px; background: var(--dir-color) !important; border-color: var(--dir-color) !important; color: #fff !important; }
   html body .rp-dirwin .rp-dirwin-step { border-radius: 999px !important; width: auto !important; min-height: 36px !important; height: auto !important; max-height: 44px; flex: 1 1 0 !important; }
@@ -6938,7 +6939,7 @@
     .manager-measure-modal .manager-measure-main { min-width:0; }
     .manager-measure-modal input, .manager-measure-modal select { font-size:16px; min-height:44px; max-width:100%; scroll-margin-block:16px; }
     .manager-measure-modal .manager-measure-footer { position:sticky; bottom:0; z-index:6; background:#fff; box-shadow:0 -6px 16px rgba(15,36,64,.08); display:block; padding:10px 12px calc(12px + env(safe-area-inset-bottom)); }
-    .manager-measure-modal .manager-measure-footer > div:first-child { display:none; }
+    .manager-measure-modal .manager-measure-footer > div:first-child { font-size:12px; margin-bottom:6px; }
     .manager-measure-footer > div:first-child { margin-bottom:8px; }
     .manager-measure-footer > div:last-child { display:flex; flex-wrap:wrap; }
     .manager-measure-modal .manager-measure-footer button { min-height:44px; flex:1 1 auto; font-size:14px; padding:10px; }
@@ -17122,7 +17123,7 @@ function openPaymentModal(orderId, opts = {}) {
 
       <label class="mt-3">Способ</label>
       <select id="pay-method">
-        ${PAYMENT_METHODS.map(m => `<option value="${m.id}">${m.label}</option>`).join('')}
+        ${PAYMENT_METHODS.map(m => `<option value="${m.id}" ${kpOnlinePaymentMethod(o.kpOnline?.method) === m.id ? 'selected' : ''}>${m.label}</option>`).join('')}
       </select>
 
       <label class="mt-3">Дата поступления</label>
@@ -17171,12 +17172,12 @@ function confirmPayment(orderId) {
     note: document.getElementById('pay-note')?.value || (flow.kind === 'deposit' ? 'Аванс' : ''),
   });
   const o = getOrder(orderId);
-  if (o && flow.kind === 'deposit' && !o.depositReceived) {
-    o.depositReceived = true;
-    o.depositReceivedAt = new Date().toISOString();
-    o.timeline = o.timeline || [];
-    o.timeline.push({ at: o.depositReceivedAt, key: 'deposit_received', by: state.currentUserId, note: `Аванс ${fmtMoney(amount)}` });
+  // A payment that covers the KP deposit is the deposit, whichever button
+  // recorded it (Owner, 2026-10-24: $3 416 by Zelle, the project still «ждёт аванс»).
+  if (o && !o.depositReceived && (flow.kind === 'deposit' || paymentCoversDeposit(o, amount))) {
+    markOrderDepositReceived(o, amount);
     save();
+    syncServerDepositPaid(o);
   }
   closeModal();
   if (o && flow.thenStatus) {
@@ -17185,6 +17186,36 @@ function confirmPayment(orderId) {
     else alert(`Поступление ${fmtMoney(amount)} отмечено. Осталось получить ${fmtMoney(left)} — статус «Оплачен» поставится, когда сумма будет полной.`);
   }
   render();
+}
+
+/** Owner, 2026-10-24: «логика оплаты из КП не работает». One place marks the deposit. */
+function markOrderDepositReceived(o, amount) {
+  if (!o || o.depositReceived) return;
+  o.depositReceived = true;
+  o.depositReceivedAt = new Date().toISOString();
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: o.depositReceivedAt, key: 'deposit_received', by: state.currentUserId || null, note: `Аванс ${fmtMoney(amount)}` });
+}
+/** Before this payment nothing was paid, and it is at least the deposit the KP asks for. */
+function paymentCoversDeposit(o, amount) {
+  if (!o || o.paymentTerms === 'after_completion') return false;
+  const before = orderPaidTotal(o) - (Number(amount) || 0);
+  const deposit = companyDepositFor(orderRevenue(o));
+  const kp = Number(o.kpOnline?.amount) || 0;
+  return before <= 0.01 && (Number(amount) || 0) + 0.01 >= Math.min(kp > 0 ? kp : deposit, orderRevenue(o));
+}
+/** The client page stops asking for the deposit once the CRM has it. */
+async function syncServerDepositPaid(o) {
+  const depositId = o?.kpOnline?.depositId;
+  if (!depositId || o.kpOnline.depositStatus === 'paid' || typeof fetch !== 'function') return;
+  try {
+    const response = await fetch(`/api/v1/deposits/${encodeURIComponent(depositId)}/pay`, { method: 'POST', credentials: 'include' });
+    if (response.ok) { o.kpOnline.depositStatus = 'paid'; save(); }
+  } catch (_) { /* the CRM keeps its own record; the next sync retries */ }
+}
+/** What the client chose on his KP page, in the CRM's words. */
+function kpOnlinePaymentMethod(method) {
+  return ({ zelle: 'zelle', bank_transfer: 'wire', payment_system: 'card' })[method] || '';
 }
 
 /**
@@ -18153,7 +18184,7 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'proposal_accepted' && !orderPaymentReadyForProduction(o)) return { icon: '💰', title: 'Отметить аванс', sub: 'Либо подтвердите в расчёте согласованную оплату после выполнения.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
   // The deposit is asked for right after acceptance (Owner, 2026-10-23); it
   // never blocks the work — «Без аванса» records who decided and why.
-  if (o.status === 'proposal_accepted' && projectDepositExpected(o)) return { icon: '💰', title: 'Получить аванс', sub: `По КП аванс ${fmtMoney(orderExpectedDeposit(o))}. Отметьте поступление — или «Без аванса», если договорились иначе.`, variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
+  if (o.status === 'proposal_accepted' && projectDepositExpected(o)) return { icon: '💰', title: 'Получить аванс', sub: o.kpOnline?.method ? `Клиент подписал КП и выбрал ${paymentMethodLabel(kpOnlinePaymentMethod(o.kpOnline.method))}. Проверьте поступление ${fmtMoney(orderExpectedDeposit(o))} и отметьте.` : `По КП аванс ${fmtMoney(orderExpectedDeposit(o))}. Отметьте поступление — или «Без аванса», если договорились иначе.`, variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
   if (o.status === 'proposal_accepted' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
   if (o.status === 'proposal_accepted' && !projectProductionPrepared(o)) return { icon: '🏭', title: 'Подготовить производство', sub: 'Проверить раскрой, материал и склад перед назначением бригады.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
   // The crew and date are chosen in each row of «Услуги проекта»; then the plan is confirmed there.
@@ -30192,16 +30223,8 @@ function renderManagerMeasureModal(oid) {
         </div>
       </div>
       <div class="manager-measure-footer flex items-center justify-between gap-2 flex-wrap">
-        <div class="text-xs text-gray-500">Размеры клиента можно использовать для расчёта и КП. До назначения монтажа каждое окно должно быть подтверждено как точный замер.</div>
-        <div class="flex gap-2 flex-wrap">
-          ${managerConfirmableWindows(o).length ? `<button class="btn-ghost" onclick="managerConfirmAllWindowMeasurements('${oid}')">✓ Подтвердить все размеры (${managerConfirmableWindows(o).length})</button>` : ''}
-          <button class="btn-ghost" onclick="openWorkOrder('${oid}')">Заказ-наряд</button>
-          ${activeRoom ? `<button class="btn-primary manager-measure-next" onclick="managerMeasureNextWindow('${oid}','${activeRoom.id}')">Сохранить и следующее окно</button>` : ''}
-          <button class="btn-ghost manager-measure-exit" onclick="managerMeasureSaveAndExit('${oid}')">Сохранить и назад</button>
-          ${currentUser()?.role === 'measurer'
-            ? (o.status === 'measurement_scheduled' ? `<button class="btn-ghost manager-measure-finish" onclick="completeManagerMeasurement('${oid}')">✓ Сдать замер</button>` : '')
-            : `<button class="btn-ghost manager-measure-finish" onclick="completeManagerMeasurement('${oid}')">✓ Завершить замер<span class="manager-measure-title-suffix"> и рассчитать</span></button>`}
-        </div>
+        <div class="text-xs text-gray-500">Всё сохраняется само.${managerConfirmableWindows(o).length ? ` <button type="button" class="manager-measure-confirm-all" style="text-decoration:underline;color:#0F2440" onclick="managerConfirmAllWindowMeasurements('${oid}')">Подтвердить все размеры (${managerConfirmableWindows(o).length})</button>` : ''}</div>
+        ${managerMeasureFooterActionHtml(o)}
         <div id="mm-finish-issues" class="measure-finish-issues" hidden></div>
         <div hidden>
         </div>
@@ -30287,6 +30310,21 @@ function projectSyncServicesFromWindows(oid) {
 function managerMeasureNextWindow(oid, rid) {
   managerAddWindow(oid, rid);
   requestAnimationFrame(() => { const cards = document.querySelectorAll('.manager-window-card'); cards[cards.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+}
+/**
+ * Owner, 2026-10-24: «снова тысяча кнопок: сохранить, назад и сохранить — можно
+ * одно поставить». Fields save as they change; the footer has one button:
+ * finish the measurement while it is open, otherwise «Готово» closes the window.
+ * New windows are added in the room («+ Добавить окно»), the work order lives in the project.
+ */
+function managerMeasureFooterActionHtml(o) {
+  const oid = o.id;
+  const open = !o.measurementDoneAt && ['new', 'consultation_scheduled', 'measurement_scheduled'].includes(o.status);
+  if (open) {
+    const label = currentUser()?.role === 'measurer' ? '✓ Сдать замер' : '✓ Замер готов — рассчитать';
+    return `<button class="btn-primary manager-measure-finish" style="min-height:48px;flex:1 1 100%" onclick="completeManagerMeasurement('${oid}')">${label}</button>`;
+  }
+  return `<button class="btn-primary manager-measure-exit" style="min-height:48px;flex:1 1 100%" onclick="managerMeasureSaveAndExit('${oid}')">Готово</button>`;
 }
 /** Every field is saved as it changes; the button says so and leaves (Owner, 2026-10-24). */
 function managerMeasureSaveAndExit(oid) {
