@@ -3166,6 +3166,13 @@
   .manager-measure-progress-step { padding: .28rem .5rem; grid-template-columns: 22px minmax(0, 1fr); border-radius: 8px; }
   .manager-measure-services { margin-top: .35rem; }
   .manager-measure-progress-step .manager-measure-progress-no { width: 22px; height: 22px; font-size: .7rem; }
+  .manager-measure-confirm-list { display:grid; gap:.45rem; margin:0; padding:0; list-style:none; max-height:320px; overflow:auto; }
+  .manager-measure-confirm-list li,
+  .manager-measure-confirm-one { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.7rem .8rem; border:1px solid #dbe4ef; border-radius:8px; background:#f8fafc; }
+  .manager-measure-confirm-list li b,
+  .manager-measure-confirm-one b { color:#10213b; font-size:.82rem; }
+  .manager-measure-confirm-list li span,
+  .manager-measure-confirm-one span { color:#475569; font-size:.8rem; text-align:right; white-space:nowrap; }
   /* A later .grid rule beat .hidden, so a private (B2C) client saw «Название компании *» (Owner, 2026-10-23). */
   [id$="-company-block"].hidden { display:none !important; }
   .crm-notice-layer { position:fixed; inset:0; z-index:100000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(15,23,42,.35); }
@@ -30261,7 +30268,7 @@ function renderManagerMeasureModal(oid) {
                           <input id="mm-window-name-${w.id}" aria-label="Название элемента" value="${academyEsc(w.name || ('Окно ' + (wi + 1)))}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','name',this.value)">
                         </div>
                         <div class="manager-window-card-area">${windowActualAreaSqft(w).toFixed(2)} sqft</div>
-                        <button class="btn-ghost text-xs ${windowMeasurementIsVerified(w) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}" aria-pressed="${windowMeasurementIsVerified(w) ? 'true' : 'false'}" onclick="managerConfirmWindowMeasurement('${oid}','${r.id}','${w.id}')">${windowMeasurementIsVerified(w) ? '✓ Точные размеры' : 'От клиента · подтвердить точные'}</button>
+                        <button class="btn-ghost text-xs ${windowMeasurementIsVerified(w) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}" aria-pressed="${windowMeasurementIsVerified(w) ? 'true' : 'false'}" onclick="${windowMeasurementIsVerified(w) ? `managerConfirmWindowMeasurement('${oid}','${r.id}','${w.id}')` : `openManagerConfirmWindowMeasurement('${oid}','${r.id}','${w.id}')`}">${windowMeasurementIsVerified(w) ? '✓ Точные размеры' : 'От клиента · подтвердить точные'}</button>
                         <button class="btn-ghost text-red-600 text-xs" aria-label="Удалить элемент" onclick="managerDeleteWin('${oid}','${r.id}','${w.id}')">Удалить окно</button>
                       </div>
                       <div class="manager-window-card-body">
@@ -30304,7 +30311,7 @@ function renderManagerMeasureModal(oid) {
         </div>
       </div>
       <div class="manager-measure-footer flex items-center justify-between gap-2 flex-wrap">
-        <div class="text-xs text-gray-500">Всё сохраняется само.${managerConfirmableWindows(o).length ? ` <button type="button" class="manager-measure-confirm-all" style="text-decoration:underline;color:#0F2440" onclick="managerConfirmAllWindowMeasurements('${oid}')">Подтвердить все размеры (${managerConfirmableWindows(o).length})</button>` : ''}</div>
+        <div class="text-xs text-gray-500">Всё сохраняется само.${managerConfirmableWindows(o).length ? ` <button type="button" class="manager-measure-confirm-all" style="text-decoration:underline;color:#0F2440" onclick="openManagerConfirmAllWindowMeasurements('${oid}')">Подтвердить все размеры (${managerConfirmableWindows(o).length})</button>` : ''}</div>
         ${managerMeasureFooterActionHtml(o)}
         <div id="mm-finish-issues" class="measure-finish-issues" hidden></div>
         <div hidden>
@@ -30583,48 +30590,78 @@ function managerConfirmableWindows(o) {
  * 2026-10-23: thirty windows meant thirty browser dialogs). Windows without
  * typed sizes are left for the measurer and named.
  */
-function managerConfirmAllWindowMeasurements(oid) {
+function openManagerConfirmAllWindowMeasurements(oid) {
   const o = getOrder(oid);
   if (!o) return;
   const ready = managerConfirmableWindows(o);
   if (!ready.length) { alert('Нет окон с внесёнными размерами, которые ждут подтверждения.'); return; }
   const missing = measureAllWindows(o).filter(({ win }) => !windowMeasurementIsVerified(win) && !windowSizeEntered(win));
   const unit = db.settings.inputUnits === 'inches' ? 'in' : 'мм';
-  const list = ready.slice(0, 8).map(({ room, win }) => `• ${room.name || 'Помещение'} · ${win.name || 'Окно'}: ${measureMmToInput(win.width)} × ${measureMmToInput(win.height)} ${unit} · ${Number(win.qty || 1)} шт.`).join('\n');
-  const more = ready.length > 8 ? `\n… и ещё ${ready.length - 8}` : '';
-  const skipped = missing.length ? `\n\nБез размеров, останутся неподтверждёнными: ${missing.length}.` : '';
-  if (!confirm(`Подтвердить как точный проверенный замер ${ready.length} окон?\n\n${list}${more}${skipped}`)) return;
+  const list = ready.slice(0, 8).map(({ room, win }) => `<li><b>${academyEsc(room.name || 'Помещение')} · ${academyEsc(win.name || 'Окно')}</b><span>${measureMmToInput(win.width)} × ${measureMmToInput(win.height)} ${unit} · ${Number(win.qty || 1)} шт.</span></li>`).join('');
+  const more = ready.length > 8 ? `<p class="text-sm text-gray-500">И ещё ${ready.length - 8}</p>` : '';
+  const skipped = missing.length ? `<div class="alert alert-warning mt-3">Без размеров останутся: ${missing.length}. Они не будут допущены к производству и монтажу.</div>` : '';
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)refreshManagerMeasureModal('${jsQuote(oid)}')"><div class="modal-content workspace-modal p-5" style="max-width:38rem" onclick="event.stopPropagation()"><div class="flex items-start justify-between gap-3"><div><div class="text-xs font-bold text-blue-700 uppercase">Точный замер</div><h3 class="text-xl font-black mt-1">Подтвердить ${ready.length} ${projectPlural(ready.length, 'окно', 'окна', 'окон')}?</h3><p class="text-sm text-gray-500 mt-1">Проверьте размеры. После подтверждения они станут основанием для раскроя, заказ-наряда и монтажа.</p></div><button class="btn-ghost" onclick="refreshManagerMeasureModal('${jsQuote(oid)}')">Закрыть</button></div><ul class="manager-measure-confirm-list mt-4">${list}</ul>${more}${skipped}<div class="flex justify-end gap-2 mt-5"><button class="btn-ghost" onclick="refreshManagerMeasureModal('${jsQuote(oid)}')">Отмена</button><button class="btn-primary" onclick="managerConfirmAllWindowMeasurements('${jsQuote(oid)}')">✓ Подтвердить точные размеры</button></div></div></div>`;
+  render();
+}
+async function managerPersistVerifiedMeasurements(oid) {
+  save();
+  let persisted = true;
+  if (typeof ROLANPRO_CLOUD !== 'undefined' && ROLANPRO_CLOUD && typeof cloudReady !== 'undefined' && cloudReady) {
+    persisted = await cloudPersistConfirmed();
+    if (!persisted) {
+      cloudScheduleSave();
+      alert('Размеры подтверждены на этом устройстве, но сервер пока не ответил. Не закрывайте CRM до появления статуса «Сохранено».');
+    }
+  }
+  refreshManagerMeasureModal(oid);
+  return persisted;
+}
+async function managerConfirmAllWindowMeasurements(oid) {
+  const o = getOrder(oid);
+  if (!o) return false;
+  const ready = managerConfirmableWindows(o);
+  if (!ready.length) { alert('Нет окон с внесёнными размерами, которые ждут подтверждения.'); return false; }
   const at = new Date().toISOString();
   o.timeline = o.timeline || [];
   ready.forEach(({ win }) => markWindowMeasurementVerified(win));
   o.timeline.push({ at, key: 'measurement_verified', by: state.currentUserId, note: `Подтверждены точные размеры: ${ready.length} окон` });
   syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Точные размеры подтверждены — требуется проверить расчёт проекта');
-  save();
-  refreshManagerMeasureModal(oid);
+  return managerPersistVerifiedMeasurements(oid);
 }
-function managerConfirmWindowMeasurement(oid, rid, wid) {
+function openManagerConfirmWindowMeasurement(oid, rid, wid) {
   const o = getOrder(oid);
   const room = o?.measurements?.rooms?.find(item => item.id === rid);
   const w = room?.windows?.find(item => item.id === wid);
   if (!o || !room || !w) return;
-  if (windowMeasurementIsVerified(w)) {
-    alert('Точные размеры этого окна уже подтверждены. Если изменить ширину, высоту или количество, потребуется подтвердить их повторно.');
-    return;
-  }
   if (Number(w.width) <= 0 || Number(w.height) <= 0 || Number(w.qty || 1) <= 0 || !windowSizeEntered(w)) {
     alert('Сначала внесите точную ширину, высоту и количество.');
     return;
   }
   const dimensions = `${measureMmToInput(w.width)} × ${measureMmToInput(w.height)} ${db.settings.inputUnits === 'inches' ? 'in' : 'мм'} · ${Number(w.qty || 1)} шт.`;
-  if (!confirm(`Подтвердить как точный проверенный замер?\n\n${room.name || 'Помещение'} · ${w.name || 'Окно'}\n${dimensions}`)) return;
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)refreshManagerMeasureModal('${jsQuote(oid)}')"><div class="modal-content workspace-modal p-5" style="max-width:34rem" onclick="event.stopPropagation()"><div class="text-xs font-bold text-blue-700 uppercase">Точный замер</div><h3 class="text-xl font-black mt-1">Подтвердить размеры окна?</h3><div class="manager-measure-confirm-one mt-4"><b>${academyEsc(room.name || 'Помещение')} · ${academyEsc(w.name || 'Окно')}</b><span>${academyEsc(dimensions)}</span></div><p class="text-sm text-gray-500 mt-3">После подтверждения эти размеры используются для расчёта раскроя и допуска к монтажу.</p><div class="flex justify-end gap-2 mt-5"><button class="btn-ghost" onclick="refreshManagerMeasureModal('${jsQuote(oid)}')">Отмена</button><button class="btn-primary" onclick="managerConfirmWindowMeasurement('${jsQuote(oid)}','${jsQuote(rid)}','${jsQuote(wid)}')">✓ Подтвердить точные размеры</button></div></div></div>`;
+  render();
+}
+async function managerConfirmWindowMeasurement(oid, rid, wid) {
+  const o = getOrder(oid);
+  const room = o?.measurements?.rooms?.find(item => item.id === rid);
+  const w = room?.windows?.find(item => item.id === wid);
+  if (!o || !room || !w) return false;
+  if (windowMeasurementIsVerified(w)) {
+    alert('Точные размеры этого окна уже подтверждены. Если изменить ширину, высоту или количество, потребуется подтвердить их повторно.');
+    return false;
+  }
+  if (Number(w.width) <= 0 || Number(w.height) <= 0 || Number(w.qty || 1) <= 0 || !windowSizeEntered(w)) {
+    alert('Сначала внесите точную ширину, высоту и количество.');
+    return false;
+  }
+  const dimensions = `${measureMmToInput(w.width)} × ${measureMmToInput(w.height)} ${db.settings.inputUnits === 'inches' ? 'in' : 'мм'} · ${Number(w.qty || 1)} шт.`;
   markWindowMeasurementVerified(w);
   o.timeline = o.timeline || [];
   o.timeline.push({ at: w.measurementVerifiedAt, key: 'measurement_verified', by: state.currentUserId, note: `${room.name || 'Помещение'} · ${w.name || 'Окно'}: ${dimensions}` });
   syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Точные размеры подтверждены — требуется проверить расчёт проекта');
-  save();
-  refreshManagerMeasureModal(oid);
+  return managerPersistVerifiedMeasurements(oid);
 }
 function managerUpdateWin(oid, rid, wid, field, val) {
   const o = getOrder(oid);
