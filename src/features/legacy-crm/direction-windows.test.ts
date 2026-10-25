@@ -23,7 +23,8 @@ test('a direction opens in its own window: Услуги → Замер → Це�
   assert.match(win, /order-workspace-modal rp-dirwin/, 'the CRM frame, not a new design');
   assert.match(win, /← К проекту/);
   assert.match(stages, /\{ id: 'services', label: 'Услуги' \}, \{ id: 'measure', label: 'Замер' \}, \{ id: 'price', label: 'Цена' \}/);
-  assert.match(stages, /onclick="openProjectDirectionWindow\('\$\{o\.id\}','\$\{jsQuote\(direction\.key\)\}'\)"><span class="project-cashier-direction-icon">/, 'the direction tile opens it');
+  // The tile strip duplicated the direction cards (2026-10-24); the card opens the window.
+  assert.doesNotMatch(stages, /<div class="project-cashier-directions">\$\{directionCards\}/);
   assert.match(stages, /Открыть направление →/);
 });
 

@@ -30,6 +30,16 @@ Before doing any work:
 - The map links to the existing Measurement, Calculation / Proposal and Work-order workspaces. It does not create another project entity, measurement store, calculator or estimate total: `projectLines(o)` remains the one composition source, while every service keeps its own date, crew and direct expenses in the existing ledger below the map.
 - Verification: full suite 749/749, TypeScript, 121-page production build and `git diff --check` pass. GitHub PR/CI, merge, deploy and authenticated production smoke check remain.
 
+## 2026-10-24 handoff — measurement unblocked, film «add and order», services land on windows
+
+- Branch: `claude/measure-unblock-audit`, based on `main` after PR #377.
+- Owner, 2026-10-24: «замерщик элементарно не может закончить замер… выйти не может, просто сохранить»; «окно добавить плёнку выведено по умолчанию — а логика: при выборе плёнки, если нет на складе, добавить самому, и формируется заказ на закупку»; «услугу из списка можно добавить, но она не добавляется в проект, не считается»; «теги дублируют услуги».
+- Measurer dead end: the project card «Замер» opened the office window, which hides films/prices from the measurer and then demands a film to finish. `openManagerMeasureModal` now sends the measurer to his studio. Studio: «Сохранить и выйти» (saves the open window if it was changed, `measureStudioMarkDirty`), ✕ asks to save changes, «Завершить замер» saves the open window first. Office window: «Сохранить и выйти» in a footer that stays on screen on a phone.
+- Film: the room-level «Плёнка и склад» block no longer opens by default («Одна плёнка на всю комнату», folded). The window film list ends with «➕ Нет в списке — добавить плёнку и заказать…» (`openWindowManualFilmForm` / `saveWindowManualFilm`): catalog film «ожидает закупки», linked to the service, put on the window (or all windows of the service without film), draft purchase request for the project via the existing `createManualFilmDraft`; the window shows «нет на складе — заявка PUR-…».
+- Services: a per-sq-ft service added to a project whose windows already carry another service stayed «ждёт замера» at $0. The cashier now opens «<услуга> — на какие окна?» (`openOfferingWindowsPicker` / `saveOfferingWindows`); pending rows say «не стоит ни на одном окне — $0 · Выбрать окна».
+- Duplicates: direction tiles in «Касса проекта» repeated the direction cards below — removed (only «+ Добавить направление» stays). `orderPrice` (м² × price per м²) was still used by the projects list and reports ($468 for a $1 900 project) — now the project revenue; the list shows sq ft.
+- Verification: `measure-unblock.test.ts`; updated direction-windows and estimate-workflow tests; legacy suite passes (20 Prisma files fail locally only for the missing engine); TypeScript passes; harness walk: measurer save & exit, owner add-and-order film (PUR draft), Magnetron → window picker → window moved.
+
 ## 2026-10-24 handoff — field cabinets, Invoice, Stripe key on the server
 
 - Branch: `claude/field-cabinets-invoice`, based on `main` after PR #376.
