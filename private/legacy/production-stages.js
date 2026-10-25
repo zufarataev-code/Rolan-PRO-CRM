@@ -1610,6 +1610,42 @@ function premiumApplyServerProposalState(oid, server) {
   return changed;
 }
 
+// Owner, 2026-10-24: «и снова не могу назначить монтаж». R-261025-057 was paid in
+// full by Zelle; the CRM still asked to make and send a KP before installation.
+// Money received is the client's yes: the project goes on to installation.
+function projectPaidWithoutProposal(o) {
+  if (!o || !['measurement_done', 'proposal_sent'].includes(o.status) || o.paymentTerms === 'after_completion') return false;
+  const revenue = orderRevenue(o);
+  const paid = orderPaidTotal(o);
+  if (!(revenue > 0) || !(paid > 0)) return false;
+  return !!o.depositReceived || paid + 0.01 >= Math.min(companyDepositFor(revenue), revenue);
+}
+function projectPaidWithoutProposalAction(o) {
+  return { icon: '💵', title: 'Оплачено → к монтажу', sub: `Клиент уже оплатил ${fmtMoney(orderPaidTotal(o))}. КП не нужно: расчёт подтвердится, дальше — точные размеры, производство и монтаж.`, variant: 'primary', onclick: `projectAcceptPaidWithoutProposal('${o.id}')` };
+}
+function projectAcceptPaidWithoutProposal(oid) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser()) || !projectPaidWithoutProposal(o)) return;
+  const issues = typeof projectEstimateReadiness === 'function' ? projectEstimateReadiness(o) : [];
+  if (issues.length) { alert('Сначала поправьте расчёт: ' + issues.join(', ') + '.'); return; }
+  const at = new Date().toISOString();
+  o.timeline = o.timeline || [];
+  if (!projectEstimateIsApproved(o)) {
+    const internal = orderUserCanSeeInternalEconomics(o, currentUser());
+    o.projectEstimateApprovedAt = at;
+    o.projectEstimateApprovedBy = state.currentUserId;
+    o.projectEstimateUpdatedAt = at;
+    o.projectEstimateSnapshot = projectEstimateApprovalSnapshot(o, at, internal);
+    o.projectEstimateFingerprint = projectEstimatePriceFingerprint(o);
+    o.timeline.push({ at, key: 'project_estimate_approved', by: state.currentUserId, note: `Расчёт подтверждён оплатой: ${fmtMoney(orderRevenue(o))}` });
+  }
+  markOrderDepositReceived(o, orderPaidTotal(o));
+  o.timeline.push({ at, key: 'accepted_by_payment', by: state.currentUserId, note: `Клиент оплатил ${fmtMoney(orderPaidTotal(o))} без КП — проект принят` });
+  save();
+  changeStatus(oid, 'proposal_accepted', state.currentUserId, { skipWorkflowGuard: true, openWorkspace: false, openMeasurement: false, openPayment: false });
+  render();
+}
+
 function projectFeedHtml(o, c, u, ctx) {
   setTimeout(() => premiumSyncClientProposal(o.id), 0);
   const { canManage, canSeeMoney, primary, measureAction, recentTimeline } = ctx;
