@@ -30,7 +30,7 @@ Before doing any work:
 - The field measurement keeps the daily fields visible (room/opening, construction, size, material) and folds glass/facade, access notes, photos and direction-specific engineering checks into compact optional sections. No measurement data or technical gate was removed.
 - Measurement has one persistent action bar outside the scrolling form: `Сохранить`, `Сохранить и новое окно`, `Сохранить и выйти`, `Сохранить и завершить замер`. Save-and-new persists the current opening before clearing; exit and finish save without rebuilding the modal.
 - Film options in Measurement are limited to the selected service direction, blank imported catalog shells are hidden, duplicate labels are collapsed, and an already selected historical film remains readable.
-- Verification: the 154-test project/measurement/calculation/KP/installation selection and the full suite (835/835) pass; `git diff --check` passes. Local TypeScript and production build commands stalled silently in this temporary linked-dependency worktree and were stopped, so GitHub CI remains authoritative before merge. This branch is not deployed.
+- Verification: the 154-test project/measurement/calculation/KP/installation selection and the full suite (835/835) pass; `git diff --check` passes. GitHub `Test, typecheck, and build`, clean-database end-to-end gate and response checks all passed for implementation commit `2b49e68`. This branch is not deployed.
 
 ## 2026-10-21 handoff — approved project-card route map
 
