@@ -1,3 +1,4 @@
+import { effectiveGoogleAdsValidateOnly } from "./delivery-mode";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
@@ -282,7 +283,7 @@ export async function processNextCustomerMatchUpload() {
   const uploadEnabled = settings?.upload_enabled === true || envFlag("GOOGLE_ADS_UPLOAD_ENABLED", false);
   if (!uploadEnabled) return { status: "disabled" as const };
 
-  const validateOnly = (settings?.validate_only ?? true) || envFlag("GOOGLE_ADS_VALIDATE_ONLY", true);
+  const validateOnly = effectiveGoogleAdsValidateOnly(settings?.validate_only);
   const job = await claimNextCustomerMatchOutbox();
   if (!job) return { status: "idle" as const };
 
@@ -370,7 +371,8 @@ export async function processNextCustomerMatchUpload() {
   try {
     const accessToken = await getGoogleAccessToken(["https://www.googleapis.com/auth/datamanager"]);
     const response = await fetch(endpoint, {
-      method: "POST",
+      signal: AbortSignal.timeout(30_000),
+    method: "POST",
       headers: {
         authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",

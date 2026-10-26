@@ -1,0 +1,129 @@
+/** Full local CRM path; Google credentials/uploads stay disabled. Never run on production. */
+import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+import { after, before, test } from "node:test";
+import { Prisma, PrismaClient } from "@prisma/client";
+import { assertSafeE2eTarget, assertServerUsesTestDatabase } from "./guard";
+import { defaultGoogleAdsRange } from "../src/features/google-ads/campaign-report";
+
+const base = process.env.E2E_BASE_URL || "http://127.0.0.1:3000";
+assertSafeE2eTarget(base);
+const db = new PrismaClient();
+const tag = `ads-${Date.now()}`;
+const customer = String(Date.now());
+const campaign = "7654321";
+const range = defaultGoogleAdsRange();
+let cookie = "";
+let originalPayload: Prisma.JsonValue | null = null;
+let originalSettings: any = null;
+const leadIds: string[] = [];
+const dealIds: string[] = [];
+
+async function call(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
+  const response = await fetch(base + path, { method, headers: { "content-type": "application/json", cookie, ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const setCookie = response.headers.get("set-cookie");
+  if (setCookie) cookie = setCookie.split(";")[0];
+  const json = await response.json();
+  return { status: response.status, data: json.data ?? json, errors: json.errors };
+}
+
+before(async () => {
+  await assertServerUsesTestDatabase(base, db);
+  await db.user.updateMany({ where: { email: { in: ["owner@rolanpro.local", "manager@rolanpro.local"] } }, data: { must_change_password: false } });
+  assert.equal((await call("POST", "/api/v1/auth/login", { email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" })).status, 200);
+  originalPayload = (await db.legacyWorkspace.findUnique({ where: { workspace_id: "primary" } }))?.payload ?? null;
+  originalSettings = await db.googleAdsIntegrationSetting.findUnique({ where: { setting_key: "default" } });
+});
+after(async () => {
+  const events = await db.conversionEvent.findMany({ where: { lead_id: { in: leadIds } }, select: { conversion_event_id: true } });
+  const ids = events.map(event => event.conversion_event_id);
+  await db.conversionAdjustmentOutbox.deleteMany({ where: { conversion_adjustment: { conversion_event_id: { in: ids } } } });
+  await db.conversionAdjustment.deleteMany({ where: { conversion_event_id: { in: ids } } });
+  await db.conversionUploadOutbox.deleteMany({ where: { conversion_event_id: { in: ids } } });
+  await db.conversionEvent.deleteMany({ where: { conversion_event_id: { in: ids } } });
+  await db.proposal.deleteMany({ where: { deal_id: { in: dealIds } } });
+  await db.deal.deleteMany({ where: { deal_id: { in: dealIds } } });
+  await db.client.deleteMany({ where: { name: `Offline Ads ${tag}` } });
+  await db.acquisitionTouchpoint.deleteMany({ where: { lead_id: { in: leadIds } } });
+  await db.consentSnapshot.deleteMany({ where: { lead_id: { in: leadIds } } });
+  await db.lead.deleteMany({ where: { lead_id: { in: leadIds } } });
+  await db.googleAdsDailyCost.deleteMany({ where: { customer_id: customer } });
+  if (originalPayload) await db.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload: originalPayload as Prisma.InputJsonValue, revision: { increment: 1 } } });
+  if (!originalPayload) await db.legacyWorkspace.deleteMany({ where: { workspace_id: "primary" } });
+  if (originalSettings) await db.googleAdsIntegrationSetting.update({ where: { setting_key: "default" }, data: originalSettings });
+  else await db.googleAdsIntegrationSetting.deleteMany({ where: { setting_key: "default" } });
+  await db.$disconnect();
+});
+
+test("cost import → website attribution → paid job → owner ROI review → stable conversions/refund", async () => {
+  const keyResult = await call("POST", "/api/v1/settings/integration-keys", { integration: "google_ads" });
+  assert.equal(keyResult.status, 200);
+  const costs = { customer_id: customer, currency: "USD", rows: [{ date: range.endDate, campaign_id: campaign, campaign_name: tag, cost_micros: 100_000_000, clicks: 10, impressions: 100 }] };
+  const headers = { authorization: `Bearer ${keyResult.data.key}` };
+  assert.equal((await call("POST", "/api/public/google-ads/costs", costs, headers)).status, 200);
+  assert.equal((await call("POST", "/api/public/google-ads/costs", costs, headers)).status, 200);
+  assert.equal(await db.googleAdsDailyCost.count({ where: { customer_id: customer } }), 1, "daily overlapping imports upsert");
+  const settings = await call("PATCH", "/api/v1/integrations/google-ads/settings", { conversion_owner_customer_id: customer, converted_lead_action_id: "123", qualified_lead_action_id: "124", qualification_pipeline_status_code: "CONSULTATION_SCHEDULED", upload_enabled: false, validate_only: true });
+  assert.equal(settings.status, 200);
+  const submission = { submission_id: tag, name: "Offline Ads Test", phone: "+18055550199", attribution: { google_ads_customer_id: customer, google_ads_campaign_id: campaign, gclid: "offline-test-click", captured_at: `${range.endDate}T19:00:00Z`, consent: { ad_user_data: "GRANTED", ad_personalization: "UNKNOWN", source: "offline-e2e", audience_marketing_eligible: false } } };
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const secret = process.env.WEBSITE_LEAD_INGEST_SECRET;
+  assert.ok(secret, "CI must configure a test-only website ingest secret");
+  const signature = createHmac("sha256", secret).update(`${timestamp}.${JSON.stringify(submission)}`).digest("hex");
+  const website = await call("POST", "/api/v1/integrations/website/leads", submission, { "x-rolan-timestamp": timestamp, "x-rolan-signature": signature });
+  assert.equal(website.status, 200);
+  const leadId = website.data.lead_id;
+  const lead = await db.lead.findUniqueOrThrow({ where: { external_source_external_submission_id: { external_source: "rolanpro.com", external_submission_id: tag } } });
+  leadIds.push(lead.lead_id);
+  assert.equal(leadId, lead.lead_id);
+  const payload: any = structuredClone(originalPayload || { users: [], clients: [], orders: [], settings: {} });
+  payload.orders ||= [];
+  payload.orders.push({ id: tag, number: tag, canonicalLeadId: lead.lead_id, status: "completed", createdAt: `${range.endDate}T19:00:00Z`, depositReceived: true, paid: 1000, payments: [{ id: "test-payment", amount: 1000 }], measurements: { rooms: [{ windows: [{}] }] }, _inventoryDeducted: true, _inventoryMaterialCost: 100, payouts: [{ userId: "test-worker", amount: 100 }], extraExpenses: [{ id: "test-expense", amount: 30, actual: true }], projectEstimateSnapshot: { revenue: 1000 }, timeline: [{ key: "consultation_scheduled", at: `${range.endDate}T19:00:00Z` }, { key: "accepted_by_payment", at: `${range.endDate}T20:00:00Z` }] });
+  await db.legacyWorkspace.upsert({ where: { workspace_id: "primary" }, create: { workspace_id: "primary", payload, revision: 1 }, update: { payload, revision: { increment: 1 } } });
+  const reportPath = `/api/v1/integrations/google-ads/report?start_date=${range.endDate}&end_date=${range.endDate}&customer_id=${customer}`;
+  const report = await call("GET", reportPath);
+  assert.equal(report.status, 200);
+  assert.equal(report.data.campaigns[0].roi_percent, null);
+  const project = report.data.campaigns[0].projects[0];
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: tag, cost_fingerprint: "stale" })).status, 409);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: tag, cost_fingerprint: project.cost_fingerprint })).status, 200);
+  assert.equal((await call("GET", reportPath)).data.campaigns[0].roi_percent, "670.00");
+  await call("POST", "/api/v1/integrations/google-ads/sync-now");
+  await call("POST", "/api/v1/integrations/google-ads/sync-now");
+  assert.equal(await db.conversionEvent.count({ where: { lead_id: lead.lead_id, event_type: "converted_lead" } }), 1);
+  assert.equal(await db.conversionEvent.count({ where: { lead_id: lead.lead_id, event_type: "qualified_lead" } }), 1);
+  const unrelated = { ...submission, submission_id: tag + "-unrelated", attribution: { ...submission.attribution, gclid: "unrelated-later-click", google_ads_campaign_id: "999", captured_at: new Date().toISOString() } };
+  const unrelatedSignature = createHmac("sha256", secret).update(`${timestamp}.${JSON.stringify(unrelated)}`).digest("hex");
+  const unrelatedResult = await call("POST", "/api/v1/integrations/website/leads", unrelated, { "x-rolan-timestamp": timestamp, "x-rolan-signature": unrelatedSignature });
+  assert.equal(unrelatedResult.status, 200);
+  leadIds.push(unrelatedResult.data.lead_id);
+  const published = await call("POST", "/api/v1/legacy-crm/proposals/publish", {
+    token: "pp_" + Date.now(), legacy_order_id: tag, canonical_lead_id: lead.lead_id,
+    order_number: tag, site_type: "RESIDENTIAL", payment_due: 100,
+    client: { name: `Offline Ads ${tag}`, phone: submission.phone },
+    items: [{ service_code: "SOLAR_FILM", title_en: "Offline test film", quantity: 1, line_price: 1000 }],
+  });
+  assert.equal(published.status, 200, JSON.stringify(published.errors));
+  const canonical = await db.proposal.findUniqueOrThrow({ where: { proposal_id: published.data.proposal.proposal_id }, include: { deal: { include: { attribution_touchpoint: true } } } });
+  dealIds.push(canonical.deal_id);
+  assert.equal(canonical.deal.lead_id, lead.lead_id);
+  assert.equal(canonical.deal.attribution_touchpoint?.gclid, "offline-test-click", "another enquiry from the same phone must not steal attribution");
+  await call("POST", "/api/v1/integrations/google-ads/sync-now");
+  assert.equal(await db.conversionEvent.count({ where: { lead_id: lead.lead_id, event_type: "converted_lead" } }), 1, "publishing a canonical Deal after the manual sale retains its original conversion");
+  const saved = await db.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } });
+  const refunded: any = structuredClone(saved.payload);
+  refunded.finance ||= { transactions: [] };
+  refunded.finance.transactions ||= [];
+  refunded.finance.transactions.push({ id: tag + "-refund", orderId: tag, type: "expense", category: "refund", amount: 100 });
+  await db.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload: refunded, revision: { increment: 1 } } });
+  assert.equal((await call("GET", reportPath)).data.campaigns[0].roi_percent, "570.00");
+  await call("POST", "/api/v1/integrations/google-ads/sync-now");
+  await call("POST", "/api/v1/integrations/google-ads/sync-now");
+  const adjustment = await db.conversionAdjustment.findMany({ where: { conversion_event: { lead_id: lead.lead_id } } });
+  assert.equal(adjustment.length, 1);
+  assert.equal(adjustment[0].adjusted_value?.toFixed(2), "900.00");
+  assert.equal(await db.conversionUploadOutbox.count({ where: { conversion_event_id: { in: (await db.conversionEvent.findMany({ where: { lead_id: lead.lead_id } })).map(item => item.conversion_event_id) }, processing_status: { in: ["submitted", "confirmed"] } } }), 0, "no fixture may be uploaded to Google");
+  assert.equal((await call("POST", "/api/v1/auth/login", { email: "manager@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" })).status, 200);
+  assert.equal((await call("GET", reportPath)).status, 403);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: tag })).status, 403);
+});

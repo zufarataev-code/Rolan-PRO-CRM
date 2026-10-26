@@ -1,3 +1,4 @@
+import { effectiveGoogleAdsValidateOnly, googleAdsEnvironmentAllowsLive } from "@/features/google-ads/delivery-mode";
 import { getStoredServiceAccount } from "@/features/google-ads/credentials";
 import { NextRequest } from "next/server";
 
@@ -145,7 +146,8 @@ export async function GET(request: NextRequest) {
     configured: Boolean(settings),
     destination_configured: destinationConfigured,
     upload_enabled: settings?.upload_enabled ?? false,
-    validate_only: settings?.validate_only ?? true,
+    validate_only: effectiveGoogleAdsValidateOnly(settings?.validate_only),
+    environment_live_enabled: googleAdsEnvironmentAllowsLive(),
     identifiers: settings
       ? {
           cloud_project_id: settings.cloud_project_id,
@@ -199,7 +201,7 @@ export async function GET(request: NextRequest) {
       ) || Boolean(await getStoredServiceAccount()),
     },
     diagnostics_note:
-      (settings?.validate_only ?? true)
+      effectiveGoogleAdsValidateOnly(settings?.validate_only)
         ? "Validate-only requests are validated but not processed; live activation requires a separate explicit owner workflow."
         : "Live uploads are enabled; submitted requests may remain processing in Google before final diagnostics are available.",
   });

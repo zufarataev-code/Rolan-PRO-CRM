@@ -1,3 +1,4 @@
+import { reconcileLegacyGoogleAdsOutcomes } from "./legacy-outcomes";
 import { prisma } from "@/lib/db";
 
 import { processNextConversionAdjustmentUpload } from "./conversion-adjustment-uploader";
@@ -20,6 +21,7 @@ export async function runGoogleAdsSyncCycle({ limit = 25 } = {}) {
   if (running) return { skipped: "already_running" as const };
   running = true;
   try {
+    await reconcileLegacyGoogleAdsOutcomes();
     const settings = await prisma.googleAdsIntegrationSetting.findUnique({
       where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
       select: { upload_enabled: true, conversion_owner_customer_id: true },
@@ -36,7 +38,7 @@ export async function runGoogleAdsSyncCycle({ limit = 25 } = {}) {
     }
     for (let i = 0; i < limit; i += 1) {
       const result = await reconcileNextConversionRequestStatus();
-      if (result.status === "idle" || result.status === "processing" || result.status === "retry") break;
+      if (result.status === "idle") break;
       count.statuses += 1;
     }
     for (let i = 0; i < limit; i += 1) {

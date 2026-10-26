@@ -12,6 +12,15 @@ Before doing any work:
 4. Work from the latest `origin/main` on one dedicated branch.
 5. Do not rely on a previous chat's memory or local browser storage.
 
+## 2026-10-26 handoff — complete Google Ads attribution, campaign ROI and delivery
+
+- Branch `codex/google-ads-roi-integration-20261026`, initially based on `origin/main` `ac274c75a9154785abe2720c33421039848c5c75`. This is the owner-maintained GitHub CRM repository, separate from the RolanPro WordPress project; portable identity is recorded in `PROJECT.md`.
+- Extends the existing script costs/Data Manager/outboxes: stable customer/campaign and legacy-order attribution; canonical-lead preservation; CRM landing capture and independent ad-measurement consent; owner-reviewed form/phone evidence; server acquisition-cohort reporting with net job receipts, per-currency ROAS and reviewed direct-cost ROI.
+- Verified manual paid acceptance now reaches the existing conversion outbox. Qualifications no longer fire merely on proposal-link publication. Lead/deal qualification identity is shared; original IDs are retained. Refunds/cancellations create immutable corrections, whose uploads wait for the original conversion to be confirmed.
+- Fixes the effective live-mode gate, scope-specific OAuth caching, paid-touchpoint selection, destination-change validation reset, stale click handling and fair, bounded request-status polling. Existing CRM cost keys remain usable.
+- Initial independent Claude audit completed. Initial full unit suite: 910/910; final verification/review and PR CI are in progress. See `docs/GOOGLE_ADS_CRM_INTEGRATION.md` for exact report semantics, website/phone contracts and safe rollout.
+- Production, the WordPress site, Google campaign/bidding settings and live-upload activation are unchanged. Next action: complete final Claude review, tests/typecheck/build and disposable-database gate, then open the PR. Merge/deploy/provider acceptance remain separate owner decisions.
+
 ## Last verified state
 
 - Verified: 2026-08-25

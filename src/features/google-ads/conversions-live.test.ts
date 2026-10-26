@@ -24,9 +24,10 @@ test('the sale milestone and the qualification come from the working CRM', () =>
   const sale = read('src/features/sales/close-sale.ts');
   assert.match(sale, /await ensureClosedWonConversion\(tx, \{[\s\S]*?conversionValue: proposal\.selected_total_amount \?\? null,/);
   const publish = read('src/features/legacy-crm/publish-proposal.ts');
-  assert.match(publish, /pipelineStatusCode: "PROPOSAL_SENT",/);
+  assert.doesNotMatch(publish, /ensureQualifiedLeadConversion/);
+  assert.match(read("src/features/core/events.ts"), /pipelineStatusCode: "PROPOSAL_SENT"/);
   assert.match(publish, /attribution_touchpoint_id: touchpointId,/);
-  assert.match(publish, /async function findAcquisitionTouchpointForContact\(/);
+  assert.match(publish, /lead_id: sourceLead\?\.lead_id \?\? touchpoint\?\.lead_id/);
 });
 
 test('delivery runs by itself every 10 minutes and on demand; test mode until the owner confirms', () => {
@@ -35,7 +36,7 @@ test('delivery runs by itself every 10 minutes and on demand; test mode until th
   assert.match(cycle, /if \(!settings\?\.upload_enabled \|\| !settings\.conversion_owner_customer_id\) return \{ skipped: "not_enabled" as const \};/);
   assert.match(read("instrumentation.ts"), /if \(process\.env\.NEXT_RUNTIME === "nodejs"\) \{/);
   const live = read('src/features/google-ads/live-activation.ts');
-  assert.match(live, /GOOGLE_ADS_VALIDATE_ONLY\?\.trim\(\)\.toLowerCase\(\) === "true"/);
+  assert.match(live, /!googleAdsEnvironmentAllowsLive\(\)/);
   assert.match(live, /customer_id_confirmation_mismatch/);
   for (const route of ['credentials', 'sync-now']) {
     assert.match(read(`app/api/v1/integrations/google-ads/${route}/route.ts`), /requireRequestSession\(request, \[ROLE_CODES\.OWNER\]\)/);

@@ -27,6 +27,8 @@ type WebsiteLeadPayload = {
   email?: string | null;
   notes?: string | null;
   attribution?: {
+    google_ads_customer_id?: string | null;
+    google_ads_campaign_id?: string | null;
     gclid?: string | null;
     gbraid?: string | null;
     wbraid?: string | null;
@@ -75,6 +77,8 @@ function toAttributionInput(payload: WebsiteLeadPayload["attribution"]): Attribu
   if (!payload) return null;
 
   return {
+    googleAdsCustomerId: payload.google_ads_customer_id,
+    googleAdsCampaignId: payload.google_ads_campaign_id,
     gclid: payload.gclid,
     gbraid: payload.gbraid,
     wbraid: payload.wbraid,

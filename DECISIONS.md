@@ -2,6 +2,15 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-10-26 — Google Ads acquisition, cash reporting and verified delivery
+
+- Original account/campaign IDs and click IDs belong to the acquisition touchpoint; a project carries its canonical lead into the Deal. Another customer's/job's contact match or a later direct visit must not replace that source. Owner-reviewed call-tracking evidence may supply a missing original project attribution.
+- Campaign reports run on the server and separate accounts/currencies. The default acquisition cohort matches the script's previous 30 completed Pacific days. Its jobs' net receipts and actual direct costs accumulate afterwards; this is distinct from Google's conversion-date report and the signed/approved booked sale value uploaded for bidding.
+- Profitability uses existing job receipts, warehouse issues, payroll and expenses. Direct-cost ROI remains unknown until work/cost facts are complete and the owner reviews completeness. A fingerprint of those facts invalidates the review after costs change. This adds audit metadata, not another editable money ledger. Overhead and taxes are excluded explicitly.
+- The saved paid-without-online-proposal acceptance is a valid sale only with a paid deposit and approved positive amount. Stage labels alone never create a valueless sale. Repeated reconciliation and a later canonical Deal reuse the same business event; refunds/cancellations use immutable adjustments.
+- Google live delivery requires explicit false validation flags in both environment and database. Destination changes reset validation. Status-check failures back off the existing request instead of resending it, and cannot monopolize the queue. Unknown consent remains unknown; Customer Match retains its separate eligibility/terms gates.
+- This decision authorizes implementation for PR review only; it does not deploy, activate live conversion uploads, change bidding goals or grant provider access.
+
 ## 2026-10-25 — Service email needs an opt-out, not opt-in consent
 
 - Automatic client emails about the job (measurement booked, KP, payment, installation) go to every client with an email address unless the client asked not to get them (`emailOptOut`). Before this, a default-off «Согласие на Email» checkbox silently skipped 30 of 32 emails.

@@ -1,3 +1,4 @@
+import { defaultGoogleAdsRange } from "./campaign-report";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
@@ -26,7 +27,7 @@ export const MAX_SCRIPT_ROWS = 10_000;
 
 function int(value: unknown) {
   const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+  return (typeof value === "number" || typeof value === "string" && /^\d+$/.test(value)) && Number.isSafeInteger(n) && n >= 0 ? n : null;
 }
 
 /** Checks what the script sent; returns the clean payload or the first problem. */
@@ -45,7 +46,7 @@ export function parseScriptCostPayload(body: unknown, today = new Date()): { ok:
   for (const [index, item] of raw.rows.entries()) {
     const row = (item ?? {}) as Record<string, unknown>;
     const date = String(row.date ?? "");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < oldest || date > newest) return { ok: false, error: `rows[${index}].date must be YYYY-MM-DD within the last 400 days.` };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z")) || new Date(date + "T00:00:00Z").toISOString().slice(0, 10) !== date || date < oldest || date > newest) return { ok: false, error: `rows[${index}].date must be YYYY-MM-DD within the last 400 days.` };
     const campaignId = String(row.campaign_id ?? "").trim();
     if (!campaignId || campaignId.length > 64) return { ok: false, error: `rows[${index}].campaign_id is required.` };
     const costMicros = row.cost_micros !== undefined ? int(row.cost_micros) : int(Number(row.cost) * 1_000_000);
@@ -85,15 +86,17 @@ export async function saveScriptCosts(payload: ScriptCostPayload) {
 /** Spend, clicks and impressions per campaign over the last days, for the CRM screen. */
 export async function googleAdsSpendSummary(days = 30, today = new Date()) {
   const span = Math.min(Math.max(Math.round(days) || 30, 1), 366);
-  const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - (span - 1) * 86_400_000);
+  const range = defaultGoogleAdsRange(today, span);
+  const start = new Date(range.startDate + "T00:00:00Z");
+  const end = new Date(range.endDate + "T00:00:00Z");
   const rows = await prisma.googleAdsDailyCost.findMany({
-    where: { segments_date: { gte: start } },
-    select: { campaign_id: true, campaign_name: true, currency: true, cost_amount: true, clicks: true, impressions: true, imported_at: true, segments_date: true },
+    where: { segments_date: { gte: start, lte: end } },
+    select: { customer_id: true, campaign_id: true, campaign_name: true, currency: true, cost_amount: true, clicks: true, impressions: true, imported_at: true, segments_date: true },
   });
   const byCampaign = new Map<string, { campaign_id: string; campaign_name: string; currency: string; cost: number; clicks: number; impressions: number }>();
   let lastImportedAt: Date | null = null;
   for (const row of rows) {
-    const key = `${row.campaign_id}|${row.currency}`;
+    const key = `${row.customer_id}|${row.campaign_id}|${row.currency}`;
     const entry = byCampaign.get(key) ?? { campaign_id: row.campaign_id, campaign_name: row.campaign_name, currency: row.currency, cost: 0, clicks: 0, impressions: 0 };
     entry.cost += Number(row.cost_amount);
     entry.clicks += Number(row.clicks);
@@ -106,10 +109,10 @@ export async function googleAdsSpendSummary(days = 30, today = new Date()) {
   return {
     days: span,
     start_date: start.toISOString().slice(0, 10),
-    total_cost: Math.round(campaigns.reduce((s, c) => s + c.cost, 0) * 100) / 100,
+    total_cost: new Set(campaigns.map(c => c.currency)).size > 1 ? null : Math.round(campaigns.reduce((s, c) => s + c.cost, 0) * 100) / 100,
     total_clicks: campaigns.reduce((s, c) => s + c.clicks, 0),
     total_impressions: campaigns.reduce((s, c) => s + c.impressions, 0),
-    currency: campaigns[0]?.currency ?? "USD",
+    currency: new Set(campaigns.map(c => c.currency)).size > 1 ? null : campaigns[0]?.currency ?? "USD",
     campaigns,
     last_imported_at: lastImportedAt,
   };

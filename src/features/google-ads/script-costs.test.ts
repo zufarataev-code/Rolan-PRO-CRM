@@ -53,8 +53,9 @@ test('the CRM shows the key once inside a ready script and sets spend against Go
   assert.match(html, /\$\{typeof googleAdsCrmPanelHtml === 'function' \? googleAdsCrmPanelHtml\(\) : ''\}/);
   assert.match(stages, /FROM campaign WHERE segments\.date DURING LAST_30_DAYS/);
   assert.match(stages, /headers: \{ Authorization: 'Bearer ' \+ CRM_KEY \}/);
-  assert.match(stages, /function googleAdsCrmProjectsStats\(startDate\)/);
-  assert.match(stages, /ROAS \$\{roas\}/);
+  assert.match(stages, /googleAdsCampaignReportHtml\(g\?\.report\)/);
+  assert.doesNotMatch(stages, /function googleAdsCrmProjectsStats/);
+  assert.match(stages, /roi_percent/);
   // Composed into the page: function declarations only.
   const block = stages.slice(stages.indexOf('// ---------- GOOGLE ADS → CRM'));
   assert.doesNotMatch(block, /^(const|let) /m);

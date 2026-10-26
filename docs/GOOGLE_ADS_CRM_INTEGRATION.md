@@ -1,6 +1,153 @@
 # Google Ads + ROLANPRO CRM integration runbook
 
-Status: implementation branch `feat/google-ads-crm-integration`, PR #140. Keep the PR draft and keep live uploads disabled until the controlled connection checklist is complete.
+The original transport was introduced in PR #140. The campaign attribution,
+paid-job reporting and delivery completion is on
+`codex/google-ads-roi-integration-20261026`. Code review, merge, deployment and
+Google live acceptance are separate milestones. Keep live uploads disabled
+until the controlled connection checklist below is complete.
+
+## Campaign attribution and profitability (2026-10-26)
+
+The existing cost script continues to work without replacing its CRM key. It
+upserts campaign/day costs, clicks and impressions daily. Its rolling
+`LAST_30_DAYS` range ends yesterday. The owner report defaults to the same 30
+completed Pacific calendar days, including across daylight-saving changes.
+
+The owner workspace uses server calculations at
+`GET /api/v1/integrations/google-ads/report`. Optional `start_date`, `end_date`
+and `customer_id` select the acquisition cohort. Accounts and currencies are
+kept separate. When several accounts exist, configure the intended account or
+pass its ID; do not pool their spending. The legacy `/roas` endpoint remains a
+booked-conversion-value report, distinct from this collected-revenue report.
+
+For each campaign the CRM shows leads, won projects, cost per lead, receipts,
+closed-job revenue, ROAS and direct-cost ROI:
+
+- ROAS = net collected revenue for closed jobs / ad spend.
+- ROI = (that revenue - reviewed direct job costs - ad spend) / ad spend × 100.
+- Deposits on open jobs remain visible as receipts, not closed-job revenue.
+- Refunds use existing project-linked `expense/refund` finance records. Bank
+  allocations do not duplicate the job's payment receipts.
+- Costs come from the existing warehouse issue, stage payroll/accruals,
+  confirmed payouts, actual expenses and project-linked finance entries.
+  The report does not create another costing ledger. Company overhead, taxes
+  and advertising already in the denominator are excluded from direct costs.
+- ROI remains unknown while work/material/expense facts are incomplete or a
+  project awaits the owner's cost review. The owner confirms completeness
+  after checking the amount and source records. A source-fact fingerprint
+  invalidates that review when costs change. Missing costs never become a
+  silently assumed zero-profit calculation.
+- This is an acquisition-cohort report: leads/spend belong to the selected
+  dates; the same jobs' receipts and costs accumulate afterwards. Compare
+  equally mature cohorts. It is not Google's conversion-date attribution UI.
+
+### Required website setup
+
+1. Keep Google Ads auto-tagging enabled. Configure the final URL suffix with
+   the actual account ID and ValueTrack campaign ID, for example:
+   `google_ads_customer_id=1234567890&campaign_id={campaignid}&utm_source=google&utm_medium=cpc&utm_campaign={campaignid}`.
+   Preserve any existing tracking parameters instead of adding duplicate keys.
+2. Capture `gclid`, `gbraid`, `wbraid`, landing URL, UTM values, the customer ID,
+   campaign ID and capture time from the original paid visit. Keep the first
+   applicable paid acquisition through navigation according to the site's
+   consent/storage policy. A later direct visit must not erase it. The CRM
+   landing form captures its current URL; rolan-pro.com's separate site needs
+   its own navigation persistence and deployment.
+3. Pass this `attribution` object to the existing HMAC-signed website ingest:
+
+   ```json
+   {
+     "google_ads_customer_id": "1234567890",
+     "google_ads_campaign_id": "987654321",
+     "gclid": "original-click-id-if-present",
+     "landing_page": "https://example.com/?campaign_id=987654321",
+     "utm_source": "google",
+     "utm_medium": "cpc",
+     "captured_at": "2026-10-26T10:00:00-07:00",
+     "consent": {
+       "ad_user_data": "UNKNOWN",
+       "ad_personalization": "UNKNOWN",
+       "audience_marketing_eligible": false,
+       "source": "actual-form-and-policy-version"
+     }
+   }
+   ```
+
+   Do not generate a click ID or infer consent. Browser code never receives
+   `WEBSITE_LEAD_INGEST_SECRET`. The website server signs
+   `timestamp + "." + rawJSON` with HMAC-SHA256; send the hexadecimal signature
+   in `x-rolan-signature` and Unix seconds in `x-rolan-timestamp` to
+   `POST /api/v1/integrations/website/leads`. Retry the same `submission_id` on
+   uncertain delivery; the endpoint deduplicates it.
+4. The authenticated lead API accepts the same Google customer/campaign IDs.
+   The CRM-hosted public landing form also persists attribution and has a
+   separate optional ad-measurement consent checkbox; SMS permission is not
+   advertising permission.
+5. When a lead becomes a project, retain `canonicalLeadId`. Proposal publishing
+   verifies manager access and carries that original lead into the Deal.
+   Attribution is selected from that lead, never guessed from another job
+   sharing the same phone/email. Older records without a proven link remain
+   unattributed until the owner reviews evidence.
+
+### Phone calls and existing projects
+
+Use a call-tracking provider's verified campaign/click evidence. A phone
+number alone cannot identify an advertising campaign. In the Google Ads block,
+the owner can link an existing project to an imported campaign, select Phone
+or Website, and supply an original GCLID when available. This records one
+immutable original acquisition and preserves the original website click IDs
+when the lead already has them. It does not install dynamic-number insertion
+or invent attribution for Zadarma calls.
+
+Hashed contact uploads require recorded client consent. The owner must supply
+the consent evidence source to record `GRANTED`; otherwise it remains unknown.
+This is independent of Customer Match and never enrolls a person into an
+advertising audience. Without a click ID or permitted customer identifier,
+the outbox explains why delivery is suppressed.
+
+### Business outcomes and delivery
+
+Qualified Lead follows the explicitly selected stage; confirmed consultation
+is recommended. Publishing a proposal link alone does not qualify it. Lead
+and Deal paths share the same qualification identity, retaining existing
+production transaction IDs on retries.
+
+Signed agreement plus paid deposit keeps the existing sale gate. The working
+legacy CRM also recognizes its explicit saved `accepted_by_payment` fact,
+paid deposit and approved amount for sales completed without an online
+signature. Stage labels alone never manufacture a sale or lock its value to
+unknown. This is booked sale value for Google bidding, not paid-job profit.
+Repeated reconciliation does not create another sale when the project later
+gets a canonical Deal. Recorded refunds/cancellations produce immutable
+restatements/retractions; their uploads wait for original Google confirmation.
+Retractions are final; reopening a retracted sale needs operator review.
+
+The existing ten-minute worker and owner "send now" action reconcile these
+facts into the same durable outboxes. Live mode requires both DB
+`validate_only=false` and explicit server `GOOGLE_ADS_VALIDATE_ONLY=false`.
+Missing/malformed environment configuration remains test mode and the screen
+shows that effective state. Changing destination IDs resets DB validation.
+Pausing/resuming delivery is explicit. Status polling leases each request,
+backs off failures/processing, and continues to later requests. An uncertain
+status check never queues a duplicate upload. OAuth caching is scoped to the
+requested permissions; stale click identifiers are omitted after 90 days.
+
+### Verification and rollout
+
+- Run `npm test`, `npm run typecheck`, `npm run build`, and `npm run test:e2e`
+  against an explicitly disposable local database. The Google E2E test refuses
+  non-local/unmarked targets and keeps all Google delivery disabled.
+- Run migrations on a disposable database and confirm no schema drift. This
+  migration adds nullable attribution/legacy-link fields and indexes; it
+  preserves existing customers, projects, events and financial records.
+- After the owner's normal merge/deploy decision, verify website capture,
+  consent, a paid-job report and one reviewed cost record on the actual site.
+  Validate offline conversions before separately authorizing live delivery.
+- Confirm a small live request in Data Manager diagnostics and Google Ads;
+  HTTP 200/`requestId` is submission only, `confirmed` is processing success,
+  and actual matching/attribution still requires Google's destination UI.
+- This PR neither deploys the CRM/WordPress site nor changes campaigns,
+  bidding goals, budgets, consent terms or live-upload settings.
 
 ## Principles
 
@@ -164,7 +311,7 @@ There is no hard-coded `QUALIFIED` stage in the current CRM pipeline. The owner 
 
 Until that is configured, no Qualified Lead conversion is created.
 
-The qualified transaction ID is stable per deal, so a later stage transition cannot create a duplicate Qualified Lead event.
+Qualified transaction IDs are stable per original lead when present, with a deal/client fallback. Existing deal-based event IDs are reused, so a later stage transition does not create another qualification.
 
 ## Controlled connection checklist
 
@@ -204,7 +351,7 @@ Activation is rejected unless:
 - caller is OWNER
 - confirmation phrase is exact
 - confirmed Customer ID matches CRM settings
-- developer token + OAuth/service-account credentials are present
+- OAuth/service-account credentials are present (Data Manager does not require the separate Google Ads API developer token)
 - Converted Lead destination is configured
 - server env explicitly has `GOOGLE_ADS_VALIDATE_ONLY=false`
 
@@ -242,3 +389,5 @@ For Customer Match consent withdrawal, set desired state to REMOVED or run recon
 ## Website deployment note
 
 Website lead forwarding is developed separately in `AndyK888/rolan-pro` on `codex/google-ads-crm-ingest`. Its GitHub PR is intake/review only. The accepted website patch must be ported to the authoritative Gitea branch/worktree and pass the site's authoritative gates before deployment.
+
+Current Event, IngestEventsRequest and request-status field/status names were checked against the [official Data Manager v1 discovery schema](https://datamanager.googleapis.com/$discovery/rest?version=v1) on 2026-10-26. This is contract verification, not live account acceptance.

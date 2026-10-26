@@ -66,10 +66,13 @@ function hasGoogleClickIdentifier(touchpoint: { gclid: string | null; gbraid: st
 export async function getGoogleAdsRoasReport(startDate: string, endDate: string) {
   const range = validateRoasRange(startDate, endDate);
 
+  const settings = await prisma.googleAdsIntegrationSetting.findUnique({ where: { setting_key: "default" }, select: { conversion_owner_customer_id: true } });
+  const customerId = settings?.conversion_owner_customer_id;
   const [costRows, conversions] = await Promise.all([
     prisma.googleAdsDailyCost.findMany({
       where: {
         segments_date: { gte: range.start, lte: range.end },
+        ...(customerId ? { customer_id: customerId } : {}),
       },
       select: {
         customer_id: true,
@@ -83,6 +86,7 @@ export async function getGoogleAdsRoasReport(startDate: string, endDate: string)
       where: {
         event_type: GOOGLE_ADS_CONVERTED_LEAD_EVENT,
         occurred_at: { gte: range.start, lt: range.endExclusive },
+        ...(customerId ? { OR: [{ attribution_touchpoint: { google_ads_customer_id: customerId } }, { upload_outboxes: { some: { destination_account_id: customerId } } }] } : {}),
       },
       select: {
         conversion_event_id: true,

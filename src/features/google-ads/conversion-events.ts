@@ -1,3 +1,4 @@
+import { findAcquisitionTouchpoint } from "./attribution";
 import { Prisma } from "@prisma/client";
 
 export const GOOGLE_ADS_DEFAULT_SETTING_KEY = "default";
@@ -5,8 +6,8 @@ export const GOOGLE_ADS_QUALIFIED_LEAD_EVENT = "qualified_lead";
 export const GOOGLE_ADS_CONVERTED_LEAD_EVENT = "converted_lead";
 
 function qualifiedTransactionId(input: { dealId?: string | null; leadId?: string | null; clientId?: string | null }) {
-  if (input.dealId) return `crm-deal-${input.dealId}-qualified`;
   if (input.leadId) return `crm-lead-${input.leadId}-qualified`;
+  if (input.dealId) return `crm-deal-${input.dealId}-qualified`;
   if (input.clientId) return `crm-client-${input.clientId}-qualified`;
   throw new Error("A deal, lead, or client is required for a qualified-lead conversion.");
 }
@@ -42,15 +43,8 @@ async function resolveAttributionTouchpointId(
   if (input.attributionTouchpointId) return input.attributionTouchpointId;
   if (!input.leadId && !input.clientId) return null;
 
-  const touchpoint = await tx.acquisitionTouchpoint.findFirst({
-    where: {
-      OR: [
-        ...(input.leadId ? [{ lead_id: input.leadId }] : []),
-        ...(input.clientId ? [{ client_id: input.clientId }] : []),
-      ],
-    },
-    orderBy: [{ captured_at: "desc" }, { created_at: "desc" }],
-    select: { acquisition_touchpoint_id: true },
+  const touchpoint = await findAcquisitionTouchpoint(tx, {
+      ...(input.leadId ? { lead_id: input.leadId } : { client_id: input.clientId! }),
   });
   return touchpoint?.acquisition_touchpoint_id ?? null;
 }
@@ -82,7 +76,13 @@ export async function ensureQualifiedLeadConversion(
     };
   }
 
-  const transactionId = qualifiedTransactionId(input);
+  // Reuse older deal-based IDs already in production before using a lead ID.
+  const existing = input.leadId ? await tx.conversionEvent.findFirst({
+    where: { event_type: GOOGLE_ADS_QUALIFIED_LEAD_EVENT, OR: [{ lead_id: input.leadId }, ...(input.dealId ? [{ deal_id: input.dealId }] : [])] },
+    orderBy: { created_at: "asc" },
+    select: { transaction_id: true },
+  }) : null;
+  const transactionId = existing?.transaction_id ?? qualifiedTransactionId(input);
   const businessObjectType = input.dealId ? "deal" : input.leadId ? "lead" : "client";
   const businessObjectId = input.dealId ?? input.leadId ?? input.clientId;
   if (!businessObjectId) {
@@ -156,7 +156,8 @@ export async function ensureQualifiedLeadConversion(
 }
 
 export type ClosedWonConversionInput = {
-  dealId: string;
+  dealId?: string;
+  legacyOrderId?: string;
   leadId?: string | null;
   clientId?: string | null;
   attributionTouchpointId?: string | null;
@@ -175,7 +176,10 @@ export async function ensureClosedWonConversion(
   tx: Prisma.TransactionClient,
   input: ClosedWonConversionInput,
 ) {
-  const transactionId = saleTransactionId(input.dealId);
+  if (!input.dealId && !input.legacyOrderId) throw new Error("A deal or legacy project is required for a sale conversion.");
+  const legacyTransactionId = input.legacyOrderId ? `crm-project-${input.legacyOrderId}-sale` : null;
+  const prior = legacyTransactionId ? await tx.conversionEvent.findUnique({ where: { transaction_id: legacyTransactionId }, select: { transaction_id: true } }) : null;
+  const transactionId = prior?.transaction_id ?? (input.dealId ? saleTransactionId(input.dealId) : legacyTransactionId!);
   const settings = await tx.googleAdsIntegrationSetting.findUnique({
     where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
     select: {
@@ -194,9 +198,9 @@ export async function ensureClosedWonConversion(
     create: {
       lead_id: input.leadId ?? null,
       client_id: input.clientId ?? null,
-      deal_id: input.dealId,
-      business_object_type: "deal",
-      business_object_id: input.dealId,
+      deal_id: input.dealId ?? null,
+      business_object_type: input.dealId ? "deal" : "legacy_order",
+      business_object_id: input.dealId ?? input.legacyOrderId!,
       event_type: GOOGLE_ADS_CONVERTED_LEAD_EVENT,
       occurred_at: input.occurredAt,
       event_source: input.eventSource ?? "OTHER",

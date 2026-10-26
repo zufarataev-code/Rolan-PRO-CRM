@@ -1,8 +1,10 @@
+import { persistLeadAttribution } from "@/features/google-ads/attribution";
 import { prisma } from "@/lib/db";
 import { buildSiteLeadNotes } from "@/features/leads/site-lead-notes";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 
 type SiteLeadPayload = {
+  attribution?: Record<string, any> | null;
   name?: string;
   phone?: string;
   email?: string;
@@ -70,7 +72,8 @@ export async function POST(request: Request) {
     message,
   });
 
-  const lead = await prisma.lead.create({
+  const lead = await prisma.$transaction(async tx => {
+    const created = await tx.lead.create({
     data: {
       name,
       phone,
@@ -82,6 +85,18 @@ export async function POST(request: Request) {
     select: {
       lead_id: true,
     },
+  });
+    const attribution = body?.attribution;
+    if (attribution && typeof attribution === "object" && !Array.isArray(attribution)) {
+      await persistLeadAttribution(tx, created.lead_id, {
+        googleAdsCustomerId: attribution.google_ads_customer_id, googleAdsCampaignId: attribution.google_ads_campaign_id,
+        gclid: attribution.gclid, gbraid: attribution.gbraid, wbraid: attribution.wbraid,
+        landingPage: attribution.landing_page, utmSource: attribution.utm_source, utmMedium: attribution.utm_medium,
+        utmCampaign: attribution.utm_campaign, utmTerm: attribution.utm_term, utmContent: attribution.utm_content,
+        consent: { adUserData: attribution.consent?.ad_user_data === "GRANTED" ? "GRANTED" : "UNKNOWN", adPersonalization: "UNKNOWN", audienceMarketingEligible: false, source: "website_landing", policyVersion: "ads-measurement-v1" },
+      });
+    }
+    return created;
   });
 
   return apiSuccess({

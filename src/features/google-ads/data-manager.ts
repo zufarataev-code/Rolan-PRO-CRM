@@ -1,3 +1,4 @@
+import { effectiveGoogleAdsValidateOnly } from "./delivery-mode";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
@@ -211,7 +212,7 @@ async function claimNextOutbox() {
           include: {
             lead: { select: { email: true, phone: true } },
             client: { select: { email: true, phone: true } },
-            attribution_touchpoint: true,
+            attribution_touchpoint: { include: { lead: { select: { email: true, phone: true } }, client: { select: { email: true, phone: true } } } },
           },
         },
       },
@@ -239,13 +240,13 @@ export async function processNextConversionUpload() {
 
   // Live traffic requires two explicit switches: database validate_only=false
   // and GOOGLE_ADS_VALIDATE_ONLY=false. Missing configuration remains validation-only.
-  const validateOnly = (settings?.validate_only ?? true) || envFlag("GOOGLE_ADS_VALIDATE_ONLY", true);
+  const validateOnly = effectiveGoogleAdsValidateOnly(settings?.validate_only);
   const job = await claimNextOutbox();
   if (!job) return { status: "idle" as const };
 
   const event = job.conversion_event;
   const touchpoint = event.attribution_touchpoint;
-  const consentSnapshot = await loadLatestConsent(event.lead_id, event.client_id);
+  const consentSnapshot = await loadLatestConsent(event.lead_id ?? touchpoint?.lead_id ?? null, event.client_id ?? touchpoint?.client_id ?? null);
   const consent = consentSnapshot
     ? {
         adUserData: toGoogleConsentStatus(consentSnapshot.ad_user_data),
@@ -254,16 +255,17 @@ export async function processNextConversionUpload() {
     : null;
 
   const rawIdentifiers = dedupeIdentifiers([
-    ...buildHashedUserIdentifiers(event.lead?.email, event.lead?.phone),
-    ...buildHashedUserIdentifiers(event.client?.email, event.client?.phone),
+    ...buildHashedUserIdentifiers(event.lead?.email ?? touchpoint?.lead?.email, event.lead?.phone ?? touchpoint?.lead?.phone),
+    ...buildHashedUserIdentifiers(event.client?.email ?? touchpoint?.client?.email, event.client?.phone ?? touchpoint?.client?.phone),
   ]);
   const userIdentifiers = consentSnapshot?.ad_user_data === "GRANTED" ? rawIdentifiers : [];
 
+  const clickTooOld = Boolean(touchpoint && Date.now() - touchpoint.captured_at.getTime() > 90 * 86_400_000);
   const adIdentifiers = {
-    gclid: trimOrNull(touchpoint?.gclid),
-    gbraid: trimOrNull(touchpoint?.gbraid),
-    wbraid: trimOrNull(touchpoint?.wbraid),
-    sessionAttributes: readGoogleSessionAttributes(touchpoint?.session_attributes),
+    gclid: clickTooOld ? null : trimOrNull(touchpoint?.gclid),
+    gbraid: clickTooOld ? null : trimOrNull(touchpoint?.gbraid),
+    wbraid: clickTooOld ? null : trimOrNull(touchpoint?.wbraid),
+    sessionAttributes: clickTooOld ? null : readGoogleSessionAttributes(touchpoint?.session_attributes),
   };
   const hasAdIdentifier = Boolean(
     adIdentifiers.gclid || adIdentifiers.gbraid || adIdentifiers.wbraid || adIdentifiers.sessionAttributes,
@@ -275,7 +277,7 @@ export async function processNextConversionUpload() {
       data: {
         processing_status: "suppressed",
         last_error: {
-          code: "no_usable_identifiers",
+          code: clickTooOld ? "click_too_old" : "no_usable_identifiers",
           message: "No permitted Google click identifier or consented customer identifier is available.",
         },
       },
@@ -309,7 +311,8 @@ export async function processNextConversionUpload() {
     if (cloudProjectId) headers["x-goog-user-project"] = cloudProjectId;
 
     const response = await fetch(DATA_MANAGER_EVENTS_ENDPOINT, {
-      method: "POST",
+      signal: AbortSignal.timeout(30_000),
+    method: "POST",
       headers,
       body: JSON.stringify(requestBody),
     });

@@ -172,6 +172,7 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
     const saleAt = signedAt && paidAt ? (signedAt > paidAt ? signedAt : paidAt) : paidAt ?? signedAt ?? new Date();
     await ensureClosedWonConversion(tx, {
       dealId: proposal.deal_id,
+      legacyOrderId: proposal.deal.legacy_order_id ?? undefined,
       leadId: proposal.deal.lead_id ?? null,
       clientId: proposal.deal.client_id ?? null,
       attributionTouchpointId: proposal.deal.attribution_touchpoint_id ?? null,

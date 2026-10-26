@@ -199,6 +199,9 @@ export async function PUT(request: NextRequest) {
   if (solutionError) return apiError(400, "invalid_service_solution", solutionError);
   for (const order of (nextPayload as Record<string, any>).orders || []) {
     const previous = ((currentWorkspace.payload as Record<string, any>).orders || []).find((item: Record<string, any>) => item.id === order.id) || {};
+    if (!auth.session.roles.includes(ROLE_CODES.OWNER) && JSON.stringify(order.googleAdsCostsReview) !== JSON.stringify(previous.googleAdsCostsReview)) {
+      return apiError(403, "owner_cost_review_required", "Only the owner can confirm actual project costs.");
+    }
     settleProductionProject(previous, order, nextPayload as Record<string, any>, auth.session.user.user_id);
   }
 

@@ -431,6 +431,7 @@ model Client {
 }
 
 model Deal {
+  legacy_order_id String? @db.VarChar(120)
   deal_id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   deal_code                    String?           @unique @db.VarChar(40)
   lead_id                      String?           @db.Uuid
@@ -464,11 +465,15 @@ model Deal {
   @@index([client_id])
   @@index([assigned_manager_id])
   @@index([pipeline_status_id])
+  @@index([legacy_order_id])
   @@map("deals")
 }
 
 model AcquisitionTouchpoint {
   acquisition_touchpoint_id  String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  google_ads_customer_id     String?                    @db.VarChar(20)
+  google_ads_campaign_id     String?                    @db.VarChar(64)
+  legacy_order_id            String?                    @unique @db.VarChar(120)
   lead_id                    String?                    @db.Uuid
   client_id                  String?                    @db.Uuid
   gclid                      String?                    @db.Text
@@ -491,6 +496,7 @@ model AcquisitionTouchpoint {
   @@index([lead_id])
   @@index([client_id])
   @@index([captured_at])
+  @@index([google_ads_customer_id, google_ads_campaign_id, captured_at], map: "acquisition_touchpoints_google_ads_campaign_idx")
   @@map("acquisition_touchpoints")
 }
 

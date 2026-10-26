@@ -44,18 +44,29 @@ export function summarizeDataManagerRequestStatus(body: RequestStatusResponse | 
 }
 
 export async function reconcileNextConversionRequestStatus() {
+  const now = new Date();
   const job = await prisma.conversionUploadOutbox.findFirst({
     where: {
       processing_status: "submitted",
       request_id: { not: null },
+      next_retry_at: { lte: now },
     },
-    orderBy: [{ submitted_at: "asc" }, { updated_at: "asc" }],
+    orderBy: [{ next_retry_at: "asc" }, { submitted_at: "asc" }],
     select: {
       conversion_upload_outbox_id: true,
       request_id: true,
     },
   });
   if (!job?.request_id) return { status: "idle" as const };
+
+  // Lease the status check, not the upload: an uncertain request is never resent.
+  const claim = await prisma.conversionUploadOutbox.updateMany({
+    where: { conversion_upload_outbox_id: job.conversion_upload_outbox_id, processing_status: "submitted", next_retry_at: { lte: now } },
+    data: { next_retry_at: new Date(now.getTime() + 60_000) },
+  });
+  if (claim.count !== 1) return { status: "processing" as const };
+
+  try {
 
   const settings = await prisma.googleAdsIntegrationSetting.findUnique({
     where: { setting_key: "default" },
@@ -68,10 +79,19 @@ export async function reconcileNextConversionRequestStatus() {
 
   const url = new URL(REQUEST_STATUS_ENDPOINT);
   url.searchParams.set("requestId", job.request_id);
-  const response = await fetch(url, { headers });
+  const response = await fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
   const body = (await response.json().catch(() => null)) as RequestStatusResponse | null;
 
   if (!response.ok) {
+    const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+    await prisma.conversionUploadOutbox.update({
+      where: { conversion_upload_outbox_id: job.conversion_upload_outbox_id },
+      data: {
+        processing_status: retryable ? "submitted" : "needs_operator_action",
+        next_retry_at: new Date(now.getTime() + 5 * 60_000),
+        last_error: { code: "status_check_failed", http_status: response.status },
+      },
+    });
     return {
       status: response.status === 408 || response.status === 429 || response.status >= 500
         ? ("retry" as const)
@@ -117,4 +137,11 @@ export async function reconcileNextConversionRequestStatus() {
     requestId: job.request_id,
     destinationStatuses: summary.statuses,
   };
+  } catch {
+    await prisma.conversionUploadOutbox.update({
+      where: { conversion_upload_outbox_id: job.conversion_upload_outbox_id },
+      data: { next_retry_at: new Date(now.getTime() + 5 * 60_000), last_error: { code: "status_check_unavailable" } },
+    });
+    return { status: "retry" as const, outboxId: job.conversion_upload_outbox_id };
+  }
 }
