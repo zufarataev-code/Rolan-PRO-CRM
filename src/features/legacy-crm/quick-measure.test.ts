@@ -36,7 +36,8 @@ test('the quick window: rooms, glass sizes, socket and removal per room, Smart q
   assert.match(fn(stages, 'quickSetRoomAnswer'), /room\[field\] = yes \? 'yes' : 'no';/);
   const apply = fn(stages, 'quickApplyAnswers');
   assert.match(apply, /system\.electricianNeeded = room\.quickSocket === 'no'/);
-  assert.match(apply, /system\.powerBlockNeeded = answers\.block === 'ours'/);
+  assert.match(apply, /system\.powerBlockNeeded = answers\.block !== 'none'/);
+  assert.match(apply, /system\.controlMode = multi \? 'multi' : 'group'/);
   const issues = fn(stages, 'quickMeasureIssues');
   assert.match(issues, /ответьте: как управляем/);
   assert.match(issues, /розетка рядом — да или нет/);
@@ -68,4 +69,14 @@ test('Smart: the electrician comes first in «Назначить монтаж»'
 
 test('renders never call serviceOfferingCanEdit (it alerts the manager)', () => {
   for (const name of ['quickMeasureHtml', 'managerSmartRoomFieldsHtml']) assert.doesNotMatch(fn(stages, name), /serviceOfferingCanEdit\(\)/, name);
+});
+
+test('a glass row is size × quantity; the warehouse receives several equal rolls at once', () => {
+  assert.match(fn(stages, 'quickMeasureHtml'), /aria-label="Количество стёкол \$\{index \+ 1\}"/);
+  assert.match(fn(stages, 'quickSetDim'), /win\.qty = Math\.max\(1, parseInt\(value\) \|\| 1\); win\.actualQty = win\.qty;/);
+  assert.match(html, /<label for="ar-count">Количество рулонов \*<\/label>/);
+  const confirm = fn(html, 'confirmAddRoll');
+  assert.match(confirm, /const count = Math\.max\(1, Math\.min\(50, parseInt\(read\('ar-count'\), 10\) \|\| 1\)\);/);
+  assert.match(confirm, /for \(let n = 0; n < count; n \+= 1\) \{/);
+  assert.match(confirm, /rollCode = await reserveRollCode\(dateReceived\);/);
 });
