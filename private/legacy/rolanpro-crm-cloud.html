@@ -2024,6 +2024,16 @@
   .install-stripe { display:flex;justify-content:space-between;gap:8px;align-items:center;border-radius:6px;padding:3px 8px;font-size:12px;line-height:1.3;box-sizing:border-box; }
   .install-stripe span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600; }
   .install-stripe b { white-space:nowrap;font-weight:700; }
+  /* Date and time are required for every booking (Owner, 2026-10-25) */
+  .sched-dt { margin-top:12px; } .sched-dt-label { font-size:13px;font-weight:700;color:#334155;margin-bottom:6px; }
+  .sched-req { font-size:11px;font-weight:700;color:#B91C1C;background:#FEF2F2;border-radius:999px;padding:1px 8px;margin-left:4px;white-space:nowrap; }
+  .sched-dt-row { display:grid;grid-template-columns:1fr 1fr;gap:8px; } .sched-dt-row label { font-size:12px;color:#5A6577;display:flex;flex-direction:column;gap:4px; }
+  .sched-dt-row input { width:100%;min-width:0;box-sizing:border-box; }
+  .sched-dt-chips { display:flex;flex-wrap:wrap;gap:6px;margin-top:8px; }
+  .sched-chip { border:1px solid #CBD5E1;background:#fff;border-radius:999px;padding:6px 12px;font-weight:700;font-size:13px;color:#0F172A; }
+  .sched-chip.on { background:#0F172A;border-color:#0F172A;color:#fff; }
+  .sched-missing { border-color:#DC2626 !important;box-shadow:0 0 0 2px rgba(220,38,38,.15) !important; }
+  .sched-error { margin-top:6px;color:#B91C1C;font-size:13px;font-weight:700; }
   /* Ставки и расходы — one source of truth (Owner, 2026-10-25) */
   .rates-page { max-width:760px;display:flex;flex-direction:column;gap:12px; }
   .rates-hero { background:#0F172A;color:#fff;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:2px; }
@@ -18048,6 +18058,9 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   const entersInstallation = PROJECT_SCHEDULED_STATUSES.includes(newStatus) && !PROJECT_SCHEDULED_STATUSES.includes(o.status) && !CLOSED_PROJECT_STATUSES.includes(o.status);
   // Closing a project freezes its plan: every service needs its specialist and date then too.
   const closesInstallation = CLOSED_PROJECT_STATUSES.includes(newStatus) && !CLOSED_PROJECT_STATUSES.includes(o.status);
+  // Owner, 2026-10-25: a consultation or measurement status needs its date and time — open the booking instead.
+  if (newStatus === 'consultation_scheduled' && !o.consultationAt && !opts.skipScheduleGuard) { if (typeof scheduleConsultationPrompt === 'function') scheduleConsultationPrompt(o.id); return false; }
+  if (newStatus === 'measurement_scheduled' && !o.measurementAt && !opts.skipScheduleGuard) { if (typeof scheduleMeasurementPrompt === 'function') scheduleMeasurementPrompt(o.id); return false; }
   const restorePlan = entersInstallation || closesInstallation ? projectPlanSnapshot(o) : null;
   if ((entersInstallation || closesInstallation) && !ensureProjectServicesPlanned(o, { all: closesInstallation })) return false;
   const refuse = () => { if (restorePlan) restorePlan(); return false; };
@@ -31456,8 +31469,7 @@ function scheduleConsultationPrompt(oid) {
       <h3 class="font-semibold text-lg mb-3">📞 Назначить консультацию</h3>
       <label>${T('measurer')}</label>
       <select id="csch-measurer">${opts}</select>
-      <label class="mt-3">${T('date')} / ${T('time')}</label>
-      <input type="datetime-local" id="csch-dt" value="${datetimeLocalValue(o?.consultationAt)}">
+      ${scheduleDateTimeHtml('csch', o?.consultationAt, 'Когда консультация')}
       <p class="text-xs text-gray-500 mt-2">После сохранения событие попадёт в календарь, а клиент получит уведомление по доступным каналам.</p>
       <div class="flex gap-2 mt-4 justify-end">
         <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
@@ -31469,10 +31481,12 @@ function scheduleConsultationPrompt(oid) {
 }
 function confirmScheduleConsultation(oid) {
   const o = getOrder(oid);
+  // Owner, 2026-10-25: a consultation is never booked without its time.
+  const at = scheduleReadDateTime('csch', 'консультации');
+  if (!at) return;
   const measurerId = document.getElementById('csch-measurer').value;
   if (measurerId) o.measurerId = measurerId;
-  const dt = document.getElementById('csch-dt').value;
-  if (dt) o.consultationAt = new Date(dt).toISOString();
+  o.consultationAt = at;
   closeModal();
   changeStatus(oid, 'consultation_scheduled', state.currentUserId, { skipClientAuto: true }); // funnel unchanged: new → consultation_scheduled → measurement_scheduled → ...
   notifyClientEventScheduled(oid, 'consultation');
@@ -31488,8 +31502,7 @@ function scheduleMeasurementPrompt(oid) {
       <h3 class="font-semibold text-lg mb-3">${T('scheduleMeasurement')}</h3>
       <label>${T('measurer')}</label>
       <select id="msch-measurer">${opts}</select>
-      <label class="mt-3">${T('date')} / ${T('time')}</label>
-      <input type="datetime-local" id="msch-dt" value="${datetimeLocalValue(o?.measurementAt)}">
+      ${scheduleDateTimeHtml('msch', o?.measurementAt, 'Когда замер')}
       <p class="text-xs text-gray-500 mt-2">Замерщик увидит задачу без финансовых данных. Менеджер получит уведомление, когда замерщик примет заказ.</p>
       <div class="flex gap-2 mt-4 justify-end">
         <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
@@ -31501,10 +31514,11 @@ function scheduleMeasurementPrompt(oid) {
 }
 function confirmScheduleMeasurement(oid) {
   const o = getOrder(oid);
+  const at = scheduleReadDateTime('msch', 'замера');
+  if (!at) return;
   o.measurerId = document.getElementById('msch-measurer').value;
   delete o.measurementAcceptedAt;
-  const dt = document.getElementById('msch-dt').value;
-  if (dt) o.measurementAt = new Date(dt).toISOString();
+  o.measurementAt = at;
   closeModal();
   changeStatus(oid, 'measurement_scheduled', state.currentUserId, { skipClientAuto: true });
   notifyClientEventScheduled(oid, 'measure');
