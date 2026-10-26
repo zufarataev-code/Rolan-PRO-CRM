@@ -13720,6 +13720,7 @@ function renderWorkOrderHtml(order, printMode = false) {
   const notes = order.notes || '';
   const workPlan = orderWorkPlanRows(order);
   const smart = technicalSheetSmartSummary(order);
+  const technicalWarnings = orderInstallationTechnicalWarnings(order);
 
   const totalWindows = rows.reduce((s, x) => s + (Number(x.win.qty) || 1), 0);
 
@@ -13770,6 +13771,13 @@ function renderWorkOrderHtml(order, printMode = false) {
       <div class="wo-block wo-notes">
         <div class="wo-block-title">Особенности объекта</div>
         <div>${academyEsc(notes)}</div>
+      </div>` : ''}
+
+      ${technicalWarnings.length ? `
+      <div class="wo-block wo-technical-warning" style="padding:10px 12px;background:#fff7ed;border:2px solid #f97316;border-radius:8px;">
+        <div class="wo-block-title" style="color:#c2410c;">⚠ ОБЯЗАТЕЛЬНО УТОЧНИТЬ НА ОБЪЕКТЕ ДО НАЧАЛА РАБОТ</div>
+        <ul style="margin:6px 0 0 18px;padding:0;">${technicalWarnings.map(item => `<li>${academyEsc(item)}</li>`).join('')}</ul>
+        <div style="margin-top:7px;font-weight:700;color:#9a3412;">Замерщик или бригадир должен зафиксировать эти данные в CRM до монтажа плёнки.</div>
       </div>` : ''}
 
       <div class="wo-block">
@@ -13826,6 +13834,15 @@ function renderWorkOrderWindows(order, rows) {
   return rows.map((r, idx) => {
     const w = r.win;
     const cat = windowCatalog(w);
+    const solar = (w.measureScope || orderMeasureScope(order)) === 'solar_film';
+    const orientation = measureCompassLabel(w.orientation || '');
+    const side = w.side === 'in' ? 'изнутри' : w.side === 'out' ? 'снаружи' : '';
+    const technical = solar ? [
+      `Стекло: ${String(w.glassType || '').trim() || 'НЕ УКАЗАНО'}`,
+      `Фасад: ${w.orientation ? orientation : 'НЕ УКАЗАНО'}`,
+      `Сторона монтажа: ${side || 'НЕ УКАЗАНО'}`,
+      `Доступ: ${managerSolarAccessOption(w.access)?.label || 'НЕ УКАЗАНО'}`,
+    ] : [];
     return `
       <div class="wo-window">
         <div class="wo-window-head">
@@ -13838,7 +13855,7 @@ function renderWorkOrderWindows(order, rows) {
           <span>${academyEsc(measureWindowTypeShortName(winTypeInfo(w.winType)))}</span>
           ${w.qty > 1 ? `<span>×${w.qty}</span>` : ''}
           ${cat ? `<span class="wo-window-film">${academyEsc(cat.brand + ' ' + cat.model)}</span>` : '<span class="wo-window-film wo-missing">плёнка не выбрана</span>'}
-          ${w.side ? `<span>${academyEsc(w.side)}</span>` : ''}
+          ${technical.map(item => `<span class="${item.includes('НЕ УКАЗАНО') ? 'wo-missing' : ''}">${academyEsc(item)}</span>`).join('')}
         </div>
       </div>`;
   }).join('');
@@ -13898,6 +13915,8 @@ function workOrderPrintCss() {
     .wo-address-value { font-size: 16px; font-weight: 800; }
     .wo-contact { font-size: 13px; color: #475569; margin-top: 2px; }
     .wo-notes { padding: 8px 10px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; }
+    .wo-technical-warning { padding: 10px 12px; background: #fff7ed; border: 2px solid #f97316; border-radius: 8px; }
+    .wo-technical-warning ul { margin: 6px 0 0 18px; padding: 0; font-size: 12px; }
     .wo-work-row { padding: 6px 10px; margin-bottom: 4px; background: #f8fafc; }
     .wo-work-name { font-weight: 800; font-size: 13px; }
     .wo-work-meta { font-size: 11px; color: #64748b; }
@@ -16928,10 +16947,13 @@ function projectProductionReadiness(o, { requireReady = true } = {}) {
   if (!projectProposalAccepted(o)) issues.push('КП ещё не принято клиентом');
   if (!projectEstimateIsApproved(o)) issues.push('расчёт проекта не подтверждён');
   issues.push(...orderMeasurementVerificationIssues(o));
-  // Scheduling refuses windows without glass, side, facade or access: say so
-  // here, before the crew and dates are filled in (Owner's user test, 2026-10-23).
-  const technical = typeof orderTechnicalMeasurementIssues === 'function' ? orderTechnicalMeasurementIssues(o) : [];
-  if (technical.length) issues.push(`замерщик должен уточнить: ${technical.slice(0, 3).join('; ')}${technical.length > 3 ? ` и ещё ${technical.length - 3}` : ''}`);
+  // The manager may schedule an installation before on-site Solar details are
+  // known. Glass, facade, side and access go to the work order as warnings.
+  // Smart zone integrity / over-capacity remains a real engineering blocker.
+  const blockingTechnical = typeof orderInstallationBlockingTechnicalIssues === 'function'
+    ? orderInstallationBlockingTechnicalIssues(o)
+    : [];
+  issues.push(...blockingTechnical);
 
   const plan = calcFilmPlan(o);
   if (plan.unfit?.length) issues.push('есть детали, которые не помещаются на доступный рулон');
@@ -18059,6 +18081,19 @@ function orderTechnicalMeasurementIssues(o) {
   return [...managerSolarMeasurementIssues(o), ...managerSmartMeasurementIssues(o)];
 }
 
+/**
+ * On-site facts may be unknown to the manager when the customer accepts the
+ * proposal. They do not block the calendar, but must stay visible to the crew.
+ */
+function orderInstallationTechnicalWarnings(o) {
+  return managerSolarMeasurementIssues(o);
+}
+
+/** Smart topology and an overloaded controller cannot be waived by a manager. */
+function orderInstallationBlockingTechnicalIssues(o) {
+  return managerSmartMeasurementIssues(o);
+}
+
 function publishedPremiumProposalForOrder(orderId) {
   const proposal = getPremiumProposalByOrder(orderId);
   return proposal && (proposal.canonicalPublicUrl || ['Sent', 'Viewed', 'Accepted', 'Payment Pending', 'Deposit Paid', 'Paid in Full'].includes(proposal.status))
@@ -18084,7 +18119,7 @@ function orderWorkflowTransitionIssues(o, newStatus) {
     if (!publishedPremiumProposalForOrder(o.id)) issues.push('сначала сформируйте и отправьте КП');
   }
   if (newStatus === 'installation_scheduled') {
-    issues.push(...orderTechnicalMeasurementIssues(o));
+    issues.push(...orderInstallationBlockingTechnicalIssues(o));
     if (!(o.installerIds || []).length) issues.push('назначьте специалистов по установке');
     if (!o.installationAt) issues.push('укажите дату и время монтажа');
   }
@@ -27538,8 +27573,8 @@ function projectCardConfirmInstallation(oid) {
   if (missing.length && missing.length >= projectLines(o).length) return alert('Назначьте исполнителя и дату хотя бы одной услуги — остальные можно позже.');
   // (changeStatus checks the plan again for every way into installation.)
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
-  const technical = orderTechnicalMeasurementIssues(o);
-  if (technical.length) return alert('Нельзя назначить монтаж — замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
+  const blockingTechnical = orderInstallationBlockingTechnicalIssues(o);
+  if (blockingTechnical.length) return alert('Нельзя назначить монтаж — исправьте инженерную схему Smart:\n\n• ' + blockingTechnical.join('\n• '));
   if (!ensureProductionReadyForInstallation(o)) return;
   const previous = {
     serviceSchedules: o.serviceSchedules,
@@ -31144,7 +31179,7 @@ function completeManagerMeasurement(oid) {
   if (issues.length) { alert('Замер ещё не готов:\n\n• ' + issues.join('\n• ')); return; }
   const technical = orderTechnicalMeasurementIssues(o);
   if (technical.length) {
-    alert('Расчёт и КП можно делать по размерам клиента.\n\nДо назначения монтажа замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
+    alert('Расчёт, КП и дату монтажа можно оформить по внесённым размерам.\n\nДо начала работ на объекте нужно уточнить:\n\n• ' + technical.join('\n• '));
   }
   if (o.status === 'measurement_done') {
     invalidateProjectEstimate(o, 'Замер изменён — требуется повторный расчёт проекта');
@@ -31985,11 +32020,11 @@ function confirmScheduleInstallation(oid) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
-  // Check the surveyor's technical details before touching the order, so a
-  // refused schedule never leaves installers or dates behind.
-  const technical = orderTechnicalMeasurementIssues(o);
-  if (technical.length) {
-    alert('Нельзя назначить монтаж — замерщик должен уточнить:\n\n• ' + technical.join('\n• '));
+  // Only unsafe Smart topology blocks the schedule. Missing Solar facts are
+  // carried into the work order for the surveyor / crew to resolve on site.
+  const blockingTechnical = orderInstallationBlockingTechnicalIssues(o);
+  if (blockingTechnical.length) {
+    alert('Нельзя назначить монтаж — исправьте инженерную схему Smart:\n\n• ' + blockingTechnical.join('\n• '));
     return;
   }
   const previous = {

@@ -1439,3 +1439,11 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Responsive styling stacks pricing, cost and metrics cleanly on phones. Owner-only fields continue to be redacted from managers by the existing server view.
 - PR: #413 (`https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/413`). The first clean-database CI run exposed an outdated browser-test assumption that price changes auto-save on blur. The test now uses the explicit «Сохранить цены и затраты» action and verifies the server-persisted price.
 - Verification: focused pricing/service tests 82/82; full suite 896/896; the exact clean-database browser scenario passes at 390 px and 1440 px; `npm run typecheck` clean; production build successful (129 pages); `git diff --check` clean. Production is unchanged; next action is a green rerun of PR #413 CI. Merge/deploy remains a separate Owner decision.
+
+## 2026-10-26 handoff — Manager installation assignment carries field warnings into the work order (Codex)
+
+- Branch `codex/manager-installation-warnings-20261026`, based on `origin/main` `ab83968` after PR #413.
+- Removed the duplicated Solar technical gate from production readiness, status transition, the Project-card confirmation and the legacy fallback scheduler. Managers can now plan each service after the existing commercial, measurement-verification and production checks.
+- Missing Solar glass type, facade orientation, installation side and access/height remain visible as an orange warning in the assignment window and as a mandatory warning block in the work order. Every affected opening prints the known value or `НЕ УКАЗАНО`.
+- Smart zone mismatch and power loads requiring engineering remain blocking issues. The surveyor still cannot submit an on-site measurement while its technical fields are incomplete.
+- Focused installation/estimate/card tests pass 83/83; full suite passes 897/897; `npm run typecheck` is clean; production build succeeds with 129 routes; `git diff --check` is clean. Production is unchanged; deployment requires the Owner's separate explicit confirmation.
