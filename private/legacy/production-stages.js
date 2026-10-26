@@ -2555,7 +2555,7 @@ function ratesWorkServices() {
 }
 function ratesBusinessPlans(behavior) {
   return (db.opex || []).map((plan, index) => ({ plan, index }))
-    .filter(({ plan }) => !plan.retiredBy && plan.scope !== 'personal' && plan.category !== 'tax' && (behavior === 'variable' ? plan.costBehavior === 'variable' : plan.costBehavior !== 'variable'));
+    .filter(({ plan }) => !plan.retiredBy && !(plan.autoFrom === 'team' && plan.active === false) && plan.scope !== 'personal' && plan.category !== 'tax' && (behavior === 'variable' ? plan.costBehavior === 'variable' : plan.costBehavior !== 'variable'));
 }
 function ratesCostsSummary() {
   const people = activeUsers();
