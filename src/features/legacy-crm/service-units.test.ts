@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 
-import { canonicalFilmCategory, prepareServiceSolutions, serviceSolutionsForViewer } from './service-solutions';
+import { canonicalFilmCategory, canonicalServiceDirection, prepareServiceSolutions, serviceSolutionsForViewer } from './service-solutions';
 
-// Owner, 2026-10-05: five directions (privacy is its own); inside each, services
+// Owner, 2026-10-26: four directions; privacy is a Decorative subtype. Inside each, services
 // with their own price, material and installer pay; per sq ft a service needs
 // measured windows, per piece / zone / fixed sum / own unit it does not.
 const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
@@ -43,27 +43,40 @@ function loadServices(role = 'owner') {
   return { c: context, db };
 }
 
-test('privacy is the fifth direction with its own measurement scope, colour, code and films', () => {
+test('privacy is a Decorative subtype while historical privacy measurements stay readable', () => {
   const directions = html.slice(html.indexOf('const ORDER_PRIMARY_SERVICES = ['), html.indexOf('const ORDER_SERVICE_PALETTE'));
-  for (const id of ['smart_film', 'solar_film', 'protective_film', 'decorative_film', 'privacy_film']) assert.match(directions, new RegExp(`id: '${id}'`), id);
-  assert.match(directions, /id: 'privacy_film',[\s\S]*?catalogCategory: 'privacy'/);
-  assert.match(html, /key: 'privacy_film',[\s\S]*?catalogCategory: 'privacy'/);
+  for (const id of ['smart_film', 'solar_film', 'protective_film', 'decorative_film']) assert.match(directions, new RegExp(`id: '${id}'`), id);
+  assert.doesNotMatch(directions, /id: 'privacy_film'/);
+  assert.match(html, /key: 'privacy_film',[\s\S]*?legacy: true,[\s\S]*?catalogCategory: 'privacy'/);
+  assert.match(html, /function customerMeasureScopes\(\) \{ return MEASURE_SCOPES\.filter\(scope => !scope\.legacy\); \}/);
   // Colour comes from the entity colour code (window.RP_ENTITY), not from a local palette.
   assert.match(html, /function orderServicePalette\(serviceId\) \{\n {2}const t = rpDir\(serviceId\);/);
   assert.match(html, /privacy_film: 'PRIVACY_FILM'/);
-  // Owner, 2026-10-22: a sixth group of size-free works «Общее по объекту» — not a film direction.
-  assert.match(html, /const SERVICE_OFFERING_DIRECTIONS = \['smart', 'solar', 'protective', 'decorative', 'privacy', 'general'\];/);
+  // «Общее по объекту» is an internal size-free bucket, not a film direction.
+  assert.match(html, /const SERVICE_OFFERING_DIRECTIONS = \['smart', 'solar', 'protective', 'decorative', 'general'\];/);
   assert.match(html, /const ROLL_CATEGORY_KEYS = \['smart', 'solar', 'protective', 'decorative', 'privacy'\];/);
-  // Privacy films stop being decorative; frost stays decorative.
+  // The warehouse may keep privacy as a material category, but business logic groups it under Decorative.
   const aliases = html.slice(html.indexOf('function canonicalCatalogCategory(value)'), html.indexOf('function catalogMatchesCategory('));
   assert.match(aliases, /privacy: 'privacy', privacy_film: 'privacy', приватная: 'privacy'/);
   assert.match(aliases, /frost: 'decorative'/);
-  assert.doesNotMatch(aliases, /privacy: 'decorative'/);
+  assert.match(html, /return category === 'privacy' \? 'decorative' : category;/);
   assert.match(html, /if \(type === 'privacy_film'\) return 'privacy_film';\n {2}if \(type === 'decorative_film'\) return 'decorative_film';\n {2}if \(tags\.includes\('privacy'\)\) return 'privacy_film';/);
   assert.match(html, /if \(cat === 'privacy'\) return 'privacy_film';/);
   assert.equal(canonicalFilmCategory('privacy_film'), 'privacy');
   assert.equal(canonicalFilmCategory('Приватная'), 'privacy');
+  assert.equal(canonicalServiceDirection('privacy_film'), 'decorative');
   assert.equal(canonicalFilmCategory('solar_film'), 'solar');
+});
+
+test('the Decorative workspace contains legacy privacy services and new privacy entry points create Decorative services', () => {
+  const { c, db } = loadServices();
+  db.settings.catalog.push({ id: 'mirror', category: 'privacy' }, { id: 'frost', category: 'decorative' });
+  db.settings.serviceOfferings.push({ id: 'legacy-privacy', direction: 'privacy', name: 'One-way mirror', unit: 'sqft', active: true });
+  assert.deepEqual(Array.from(c.serviceOfferingsFor('decorative', { includeInactive: true, homeOnly: true }), (item: Row) => item.id), ['legacy-privacy']);
+  c.addServiceOffering('privacy');
+  const created = db.settings.serviceOfferings.find((item: Row) => item.id !== 'legacy-privacy');
+  assert.equal(created.direction, 'decorative');
+  assert.deepEqual(Array.from(c.serviceOfferingAllowedFilmIds(created)).sort(), ['frost', 'mirror']);
 });
 
 test('a service is priced per sq ft (sizes needed) or per piece, zone, fixed sum or own unit (no sizes)', () => {
@@ -151,7 +164,7 @@ test('a project of services without sizes skips measurement; the proposal lists 
 
 const base: Row = {
   settings: {
-    catalog: [{ id: 'mirror', category: 'privacy_film' }, { id: 'frost', category: 'decorative' }],
+    catalog: [{ id: 'mirror', category: 'privacy_film' }, { id: 'frost', category: 'decorative' }, { id: 'solar', category: 'solar' }],
     serviceOfferings: [
       { id: 'one-way', name: 'Односторонняя', direction: 'privacy', unit: 'sqft', pricePerSqft: 18, installerRatePerSqft: 3, filmIds: ['mirror'] },
       { id: 'zone', name: 'Подключение зоны', direction: 'smart', unit: 'zone', pricePerSqft: 100, installerRatePerSqft: 50, materialCostPerUnit: 12 },
@@ -161,13 +174,13 @@ const base: Row = {
   orders: [{ id: 'o', serviceType: 'smart_film', extraServices: [] }],
 };
 
-test('the server accepts privacy services, units and films of the CRM category spelling', () => {
+test('the server accepts historical privacy services as Decorative and both Decorative material subtypes', () => {
   assert.equal(prepareServiceSolutions(base, structuredClone(base), true), null);
   const wrongUnit: Row = structuredClone(base);
   wrongUnit.settings.serviceOfferings[1].unit = 'yard';
   assert.match(prepareServiceSolutions(base, wrongUnit, true)!, /единица/);
   const wrongFilm: Row = structuredClone(base);
-  wrongFilm.settings.serviceOfferings[0].filmIds = ['frost'];
+  wrongFilm.settings.serviceOfferings[0].filmIds = ['solar'];
   assert.match(prepareServiceSolutions(base, wrongFilm, true)!, /Материалы/);
   const badCost: Row = structuredClone(base);
   badCost.settings.serviceOfferings[1].materialCostPerUnit = -1;

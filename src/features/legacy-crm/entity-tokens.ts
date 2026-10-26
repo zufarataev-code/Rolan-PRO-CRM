@@ -28,8 +28,14 @@ export type EntityTone = {
   icon: string;
 };
 
-/** Legacy keys: catalog category = `solar`, order serviceType = `solar_film`. */
-export const DIRECTION_KEYS = ["solar", "protective", "smart", "decorative", "privacy"] as const;
+/**
+ * The four business directions of Rolan PRO.
+ *
+ * `privacy` is a catalog/solution subtype of Decorative, not a fifth
+ * direction. Old workspaces may still contain `privacy` and `privacy_film`;
+ * the alias table below deliberately resolves both to Decorative.
+ */
+export const DIRECTION_KEYS = ["solar", "protective", "smart", "decorative"] as const;
 export type DirectionKey = (typeof DIRECTION_KEYS)[number];
 
 export const DIRECTIONS: Record<DirectionKey, EntityTone> = {
@@ -49,10 +55,6 @@ export const DIRECTIONS: Record<DirectionKey, EntityTone> = {
     color: "#0F766E", tint: "#E3F6F2", deep: "#115E59", short: "Decor",
     icon: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M12 8l2.5 4L12 16l-2.5-4z"/>',
   },
-  privacy: {
-    color: "#475569", tint: "#E2E8F0", deep: "#334155", short: "Privacy",
-    icon: '<path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.1A9.8 9.8 0 0 1 12 5c5 0 9 4 10 7-.4 1.1-1.2 2.4-2.3 3.6M6.6 6.6C4.3 8 2.7 10 2 12c1 3 5 7 10 7 1.5 0 2.9-.3 4.1-.9"/>',
-  },
 };
 
 /** Direction aliases used across the legacy file. */
@@ -61,7 +63,7 @@ export const DIRECTION_ALIASES: Record<string, DirectionKey> = {
   protective: "protective", protective_film: "protective", safety: "protective", security: "protective",
   smart: "smart", smart_film: "smart", pdlc: "smart",
   decorative: "decorative", decorative_film: "decorative", decor: "decorative",
-  privacy: "privacy", privacy_film: "privacy", mirror: "privacy",
+  privacy: "decorative", privacy_film: "decorative", mirror: "decorative",
 };
 
 /** Add-on services — a flat row under the film on the касса. */

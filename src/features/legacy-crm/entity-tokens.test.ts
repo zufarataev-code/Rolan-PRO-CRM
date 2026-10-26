@@ -17,7 +17,7 @@ test('every direction, add-on and stock level has a full tone and an icon', () =
   for (const [key, t] of Object.entries(STOCK)) assert.ok(t.color && t.tint && t.deep, key);
 });
 
-test('one colour — one meaning: the five directions do not share a full colour', () => {
+test('one colour — one meaning: the four directions do not share a full colour', () => {
   const colours = DIRECTION_KEYS.map((k) => DIRECTIONS[k].color.toLowerCase());
   assert.equal(new Set(colours).size, colours.length);
 });
@@ -28,6 +28,8 @@ test('every legacy alias resolves to a declared direction', () => {
     assert.equal(DIRECTION_ALIASES[key], key);
     assert.equal(DIRECTION_ALIASES[`${key}_film`], key);
   }
+  assert.equal(DIRECTION_ALIASES.privacy, 'decorative');
+  assert.equal(DIRECTION_ALIASES.privacy_film, 'decorative');
 });
 
 test('the head snippet carries CSS variables and window.RP_ENTITY', () => {
@@ -42,7 +44,7 @@ test('the legacy palettes read window.RP_ENTITY instead of keeping their own cop
   assert.doesNotMatch(html, /const CAT_COLORS = \{/);
   assert.doesNotMatch(html, /smart_film: \{ color: '#0284c7'/);
   assert.doesNotMatch(html, /firstCat === 'solar'\) return \{ color: '#0891b2'/);
-  assert.match(html, /catalogCategory: 'privacy',\n {4}accent: rpDir\('privacy'\)\.color,/);
+  assert.doesNotMatch(html, /id: 'privacy_film',[\s\S]{0,300}title: 'Приватная плёнка'/);
   assert.match(html, /id: 'smart',[\s\S]{0,200}color: rpDir\('smart'\)\.color,/);
 });
 
@@ -53,6 +55,8 @@ test('rpDir resolves order and catalog keys to the same tone, unknown keys to ne
   assert.equal(context.rpDir('solar_film').color, DIRECTIONS.solar.color);
   assert.equal(context.rpDir('solar').color, DIRECTIONS.solar.color);
   assert.equal(context.rpDir('safety').color, DIRECTIONS.protective.color);
+  assert.equal(context.rpDir('privacy').color, DIRECTIONS.decorative.color);
+  assert.equal(context.rpDir('privacy_film').color, DIRECTIONS.decorative.color);
   assert.equal(context.rpDir('nope').short, 'Film');
   assert.deepEqual(context.orderServicePalette?.('smart_film') ?? { color: context.rpDir('smart_film').color }, { color: DIRECTIONS.smart.color, ...(context.orderServicePalette ? { bg: DIRECTIONS.smart.tint, deep: DIRECTIONS.smart.deep } : {}) });
   assert.match(context.rpStockBadge('out'), /нет/);

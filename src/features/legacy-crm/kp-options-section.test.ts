@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 
-// Owner, 2026-10-25: the Services home shows only five directions. A KP option
+// Owner, 2026-10-26: the Services home shows only four directions. A KP option
 // remains a normal service and is edited inside its own direction workspace.
 const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
 const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
@@ -32,9 +32,10 @@ test('options are listed across directions; status says when an option is not of
     { id: 'd', direction: 'smart', name: 'Монтаж', pricePerSqft: 9, unit: 'piece', sort: 0 },
   ];
   const ctx: Record<string, unknown> = {
-    SERVICE_OFFERING_DIRECTIONS: ['smart', 'solar', 'protective', 'decorative', 'privacy', 'general'],
+    SERVICE_OFFERING_DIRECTIONS: ['smart', 'solar', 'protective', 'decorative', 'general'],
     serviceOfferingsAll: () => offerings,
     serviceOfferingNeedsSizes: (item: { unit: string }) => item.unit === 'sqft',
+    canonicalServiceDirection: (value: string) => value === 'privacy' ? 'decorative' : value,
   };
   vm.createContext(ctx);
   vm.runInContext(fn(html, 'proposalOptionOfferings') + fn(html, 'proposalOptionStatus'), ctx);

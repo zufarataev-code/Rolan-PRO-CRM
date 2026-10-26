@@ -11,13 +11,13 @@ function between(from: string, to: string) {
   return html.slice(start, end);
 }
 
-test('Services home contains the five film directions and no mixed settings wall', () => {
+test('Services home contains the four business directions and no mixed settings wall', () => {
   const page = between('function renderCanonicalServicePricing()', 'async function loadCanonicalInstallerOperations(');
   const home = between('function renderServiceOfferingsSection()', 'function updateRemovalPrice(');
   assert.match(page, /return renderServiceOfferingsSection\(\);/);
   assert.match(home, /filmDirections\(\)\.map\(info =>/);
   assert.match(home, /data-service-direction-card=/);
-  assert.match(home, />5 направлений</);
+  assert.match(home, />4 направления</);
   assert.doesNotMatch(home, /SERVICE_OFFERING_DIRECTIONS\.map|general_works/);
   assert.doesNotMatch(page, /План продаж|Прайс быстрого калькулятора|Дополнительные работы/);
 });
