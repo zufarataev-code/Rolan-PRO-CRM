@@ -23,6 +23,15 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-25 handoff — «Назначить монтаж» window by service (PR #403)
+
+- Merged `f96b683`, deployed; prod loads `openInstallWindow` / `installStripesHtml`.
+- «Назначить монтаж» opens its own cashier-style window: services in order, each with installers, start/end, quick spans, note. One service can be scheduled now, others later. Entering installation needs ≥1 planned service, closing needs all (client + `service-solutions.ts`).
+- Calendar: a multi-day service shows on every day («Ceramic · день 1 из 2»). The real `calendarEventsForOrder` is in `production-stages.js` (it overrides the html copy).
+- Kanban: one labelled stripe per service — red film, grey silicone, blue electric; dashed = not scheduled (`installWorkKind` / `installWorkKindMeta`).
+- Tests: `install-window.test.ts`; local harness full cycle passes.
+- Open with owner: single source of truth «Ставки и расходы» proposed, awaiting his yes.
+
 ## 2026-10-25 handoff — focused service directory by five directions
 
 - Branch: `codex/service-direction-browser-release-20261025`, based on current `origin/main` `bb482558` after PR #401.
