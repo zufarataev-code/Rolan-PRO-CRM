@@ -723,3 +723,14 @@ Owner required the active CRM to behave as a real multi-service ERP project: one
 - A film direction, add-on service or stock state must keep the same colour and icon in every CRM workspace. Individual screens must not introduce their own competing palettes.
 - `src/features/legacy-crm/entity-tokens.ts` owns the tokens. The active legacy workspace consumes the same table through injected CSS custom properties and `window.RP_ENTITY` before its script executes.
 - Unknown or historical values render with the neutral fallback. Changing a canonical token must update every consumer through this shared source rather than by editing each screen separately.
+
+## 2026-10-25 — Smart equipment is calculated per room through the existing project cashier
+
+Owner clarified the Smart Film installation model: a physical panel/window is one independently measured zone, while power and control equipment belong to the room, not to each window.
+
+- Smart windows remain the source of measured area and physical zone quantity.
+- A room has one power block by default. Its capacity is selected from the room's total Smart Film load with a 20% reserve; capacity and customer price come from the existing Services/Price Book directory.
+- The room explicitly chooses either one command for every window or independent multi-zone control. Multi-zone equipment is added only for the second mode.
+- Zone connection, room power block, multi-zone control and electrician work reuse the existing `projectLines` cashier model. They are not calculated or stored in a second Smart-only calculator.
+- Proposal, project total, payroll/work scope and work order continue to read the same cashier rows. Missing or zero-price Price Book entries block Proposal readiness instead of inventing a price.
+- Silicone and other optional additions stay normal manually selected cashier services; they are not forced once per window.

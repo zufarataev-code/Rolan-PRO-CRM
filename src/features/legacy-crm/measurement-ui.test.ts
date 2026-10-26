@@ -99,25 +99,65 @@ test("one project supports separate measurements for multiple film services", ()
   assert.match(legacyCrm, /defaultCatalogByScope/);
 });
 
-test("Smart measurement creates zones, equipment and an installation scheme for the work order", () => {
+test("Smart measurement keeps zones on windows and one power system per room", () => {
   assert.match(legacyCrm, /function syncSmartWindowPlan\(win, roomName = ''\)/);
   assert.match(legacyCrm, /const qty = Math\.max\(1, parseInt\(win\.qty\) \|\| 1\)/);
   assert.match(legacyCrm, /\n    zones,/);
-  assert.match(legacyCrm, /siliconeRequired: current\.siliconeRequired !== false/);
+  assert.match(legacyCrm, /function smartRoomMetrics\(room\)/);
+  assert.match(legacyCrm, /function syncSmartRoomPlan\(room\)/);
+  assert.match(legacyCrm, /blocks: 1,/);
+  assert.match(legacyCrm, /Math\.ceil\(loadW \* 1\.2\)/);
   assert.match(legacyCrm, /function managerSmartWindowFieldsHtml/);
-  assert.match(legacyCrm, /Smart-комплект и подключение/);
-  assert.match(legacyCrm, /Зон подключения/);
-  assert.match(legacyCrm, /Количество зон равно количеству окон/);
-  assert.match(legacyCrm, /Блок питания/);
-  assert.match(legacyCrm, /Силикон, шт\./);
-  assert.match(legacyCrm, /Нужен электрик/);
+  assert.match(legacyCrm, /Зона окна/);
+  assert.match(legacyCrm, /Одна физическая Smart-панель — одна зона/);
+  const windowFields = legacyCrm.slice(
+    legacyCrm.indexOf("function managerSmartWindowFieldsHtml"),
+    legacyCrm.indexOf("function managerSmartRoomFieldsHtml"),
+  );
+  assert.doesNotMatch(windowFields, /Блок питания|Количество блоков|Силикон, шт\.|Нужен электрик/);
+  assert.match(legacyCrm, /function managerSmartRoomFieldsHtml/);
+  assert.match(legacyCrm, /1 блок на помещение/);
+  assert.match(legacyCrm, /Все окна вместе/);
+  assert.match(legacyCrm, /Каждая зона отдельно/);
+  assert.match(legacyCrm, /Что попадёт в действующую кассу и КП/);
+  assert.match(legacyCrm, /function syncSmartCashierServices\(o\)/);
+  assert.match(legacyCrm, /projectOfferingLine\(item\.offering, item\.qty, 'smart_film'\)/);
+  assert.match(legacyCrm, /!candidate\.smartAuto/);
   assert.match(legacyCrm, /function managerSmartMeasurementIssues/);
   assert.match(legacyCrm, /function renderSmartWorkOrderKit/);
   assert.match(legacyCrm, /Smart-плёнка<\/b><br>\$\{smart\.areaSqft\.toFixed\(2\)\} sqft/);
   assert.match(legacyCrm, /Электрические работы Smart/);
   assert.match(legacyCrm, /renderSmartWorkOrderKit\(order\)[\s\S]*?renderSmartRoomInstallationPlans\(order\)/);
   assert.match(legacyCrm, /SMART FILM INSTALLATION MAP/);
-  assert.match(legacyCrm, /POWER BLOCK/);
+  assert.match(legacyCrm, /ROOM POWER/);
+});
+
+test("Smart room sizing selects one capacity from total room load with reserve", () => {
+  const pick = (name: string) => legacyCrm.match(new RegExp(`function ${name}\\([^]*?\\n\\}`))?.[0] || "";
+  const factory = new Function(`
+    const ROLAN_SMART_POWER_SUPPLIES = ['Rolan Control 50W','Rolan Control 100W','Rolan Control 200W','Rolan Control 300W','Rolan Control 500W','Rolan Control 1000W'];
+    const windowActualAreaSqft = win => win.area;
+    const measureSmartLoad = win => win.load;
+    ${pick("smartPowerCapacity")}
+    ${pick("smartRecommendedPowerSupply")}
+    ${pick("smartWindowsInRoom")}
+    ${pick("smartWindowZoneCount")}
+    ${pick("smartRoomMetrics")}
+    return { smartRecommendedPowerSupply, smartRoomMetrics };
+  `);
+  const { smartRecommendedPowerSupply, smartRoomMetrics } = factory();
+  assert.equal(smartRecommendedPowerSupply(0), "");
+  assert.equal(smartRecommendedPowerSupply(51), "Rolan Control 100W");
+  assert.equal(smartRecommendedPowerSupply(1001), "");
+  const metrics = smartRoomMetrics({ windows: [
+    { measureScope: "smart_film", qty: 3, area: 30, load: 45 },
+    { measureScope: "smart_film", qty: 1, area: 10, load: 15 },
+    { measureScope: "solar_film", qty: 8, area: 80, load: 100 },
+  ] });
+  assert.equal(metrics.zones, 4);
+  assert.equal(metrics.areaSqft, 40);
+  assert.equal(metrics.requiredW, 72);
+  assert.equal(metrics.powerSupplyModel, "Rolan Control 100W");
 });
 
 test("measurement actions preserve the active scroll position across a full modal render", () => {

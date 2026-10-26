@@ -1398,3 +1398,12 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Context recommendations cover Smart zones/power/electrician, Safety/outside attachment/silicone and missing measurements. They only use active Price Book services and require explicit Add/Open or Dismiss; no automatic service or charge is created.
 - The Project calculation and Proposal use the same ordered service list and approved versioned snapshot. Customer Proposal data does not include material cost, specialist pay or direct expenses.
 - Verification: focused Project/production suite 53/53; full suite 724/724; `tsc --noEmit` clean; production build successful (121 pages). Production is unchanged; merge/deploy still require the Owner's explicit confirmation.
+
+## 2026-10-25 handoff — Smart room plan reuses the project cashier (Codex)
+
+- Branch `codex/smart-cashier-room-logic`, based on `main` `20bbcf9`.
+- Smart measurement is now compact: each measured window/panel contributes area and one or more physical zones, while the room owns one shared block, its automatically recommended capacity, the control mode and optional electrician details.
+- The two room control modes are explicit: all room windows together, or independent multi-zone control. Technical summaries and work-order diagrams now describe one block per Smart room instead of one block per window.
+- Smart technical quantities are synchronized into the existing cashier/project lines. Existing matching manual lines are adopted, unrelated manual services are preserved, and repeated synchronization is idempotent. Prices are always read from the Owner's current Services/Price Book directory; no fallback price is hardcoded.
+- Proposal readiness reports exactly which Smart cashier service or price is missing. Silicone and other optional additions remain ordinary manual cashier rows.
+- Verification: focused Smart/measurement/integrity/cashier/estimate suite 77/77; main inline script syntax clean; `git diff --check` clean. A full run reached 859 passing tests and no assertion failures; two unrelated long-running infrastructure files were cancelled after pending Promises did not settle. Standalone `tsc --noEmit` and `next build` again stalled locally without diagnostics or CPU progress and were stopped, so required GitHub CI remains the authoritative type/build gate. Production is unchanged and still requires Owner approval after CI.
