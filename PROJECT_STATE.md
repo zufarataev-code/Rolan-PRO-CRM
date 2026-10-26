@@ -23,6 +23,14 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-26 handoff — date and time required for every booking (PR #408)
+
+- Merged `ae13250`, deployed; prod loads `scheduleReadDateTime` / `installDateTimeHtml`.
+- Consultation and measurement modals: separate date + time fields with time chips (`scheduleDateTimeHtml` / `scheduleReadDateTime` in `production-stages.js`); nothing saved without both.
+- `changeStatus` to consultation_scheduled / measurement_scheduled without a time opens the booking (`opts.skipScheduleGuard` bypasses).
+- Install window: start/end as date + time (`installDraftPart`); duration chips no longer guess 9:00.
+- Tests: `schedule-time-required.test.ts`.
+
 ## 2026-10-25 handoff — «Ставки и расходы»: one source of truth (PR #406)
 
 - Merged `f998e20`, deployed. Owner-only view `ratesCosts` (sidebar 🧾, Settings «company-costs» and «pricing» lead here), code in `production-stages.js` (`renderRatesCosts`, `syncTeamSalaryPlans`).
