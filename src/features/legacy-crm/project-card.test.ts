@@ -232,7 +232,7 @@ test('server: a row may be planned step by step; «Монтаж назначен
   assert.equal(prepareServiceSolutions(base(), badDate, false), 'Некорректная дата услуги.');
   const scheduled = structuredClone(partial);
   scheduled.orders[0].status = 'installation_scheduled';
-  assert.equal(prepareServiceSolutions(partial, scheduled, false), 'Укажите дату и исполнителей каждой услуги.');
+  assert.equal(prepareServiceSolutions(partial, scheduled, false), 'Укажите дату и исполнителей хотя бы одной услуги.');
   const complete = structuredClone(partial);
   complete.orders[0].serviceSchedules = [{ id: 'line:z', installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] }];
   const done = structuredClone(complete);
@@ -306,9 +306,19 @@ test('every way into installation needs each service planned; an older project k
   const partial = project('proposal_accepted');
   partial.offeringIds = ['a1', 'zone'];
   partial.serviceSchedules = [{ id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] }];
-  assert.equal(c.ensureProjectServicesPlanned(partial), false);
-  assert.ok(calls.some(call => call.startsWith('alert:Назначьте исполнителя и дату каждой услуги в карточке проекта: Силикон, Подключение зоны')));
-  assert.equal(partial.installerIds, undefined, 'nothing is published');
+  // Owner, 2026-10-25: one planned service is enough to start; closing needs them all.
+  const closing = project('proposal_accepted');
+  closing.offeringIds = ['a1', 'zone'];
+  closing.serviceSchedules = [{ id: 'offering:a1', installationAt: '2026-10-14T16:00:00.000Z', installerIds: ['i1'] }];
+  assert.equal(c.ensureProjectServicesPlanned(closing, { all: true }), false);
+  assert.ok(calls.some(call => call.startsWith('alert:Назначьте исполнителя и дату каждой услуги: Силикон, Подключение зоны')));
+  assert.equal(closing.installerIds, undefined, 'nothing is published');
+  assert.equal(c.ensureProjectServicesPlanned(partial), true, 'one planned service starts the installation');
+  const none = project('proposal_accepted');
+  none.offeringIds = ['a1', 'zone'];
+  none.serviceSchedules = [{ id: 'offering:a1', installationAt: '', installerIds: [] }];
+  assert.equal(c.ensureProjectServicesPlanned(none), false);
+  assert.ok(calls.some(call => call.includes('хотя бы одной услуги')));
   assert.equal(c.ensureProjectServicesPlanned(project('proposal_accepted')), false, 'A3 still waits for the measurement');
   // A project without services is not blocked.
   assert.equal(c.ensureProjectServicesPlanned({ id: 'empty', status: 'proposal_accepted', measurements: { rooms: [] }, extraServices: [] }), true);
@@ -357,8 +367,9 @@ test('server: entering installation needs a complete plan for every service; imp
   const state = (fields: Row = {}): Row => ({ settings: { serviceOfferings: [] }, users, orders: [order(fields)] });
   const plan = (id: string) => ({ id, installationAt: '2026-10-15T16:00:00.000Z', installerIds: ['i1'] });
   const into = (schedules?: Row[]) => { const next = state({ status: 'installation_scheduled', ...(schedules ? { serviceSchedules: schedules } : {}) }); return prepareServiceSolutions(state(), next, false); };
-  assert.equal(into(), 'Укажите дату и исполнителей каждой услуги.', 'no plan at all');
-  assert.equal(into([plan('offering:a1')]), 'Укажите дату и исполнителей каждой услуги.', 'one service left out');
+  assert.equal(into(), 'Укажите дату и исполнителей хотя бы одной услуги.', 'no plan at all');
+  assert.equal(into([plan('offering:a1')]), null, 'one planned service starts the installation (Owner, 2026-10-25)');
+  assert.equal(into([{ id: 'offering:a1', installationAt: '', installerIds: [] }]), 'Укажите дату и исполнителей хотя бы одной услуги.');
   assert.equal(into([plan('offering:a1'), plan('line:z')]), null);
   const imported: Row = { settings: { serviceOfferings: [] }, users, orders: [] };
   const importedOrder = state({ status: 'installation_scheduled', measurements: { rooms: [{ windows: [{ id: 'w', measureScope: 'smart_film' }] }] } });
@@ -422,7 +433,7 @@ test('server: a service waiting for measurement stops installation; closing an i
   assert.equal(prepareServiceSolutions(plannedActive, plannedClosed, false), null);
   const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 1600);
   assert.match(status, /const closesInstallation = CLOSED_PROJECT_STATUSES\.includes\(newStatus\) && !CLOSED_PROJECT_STATUSES\.includes\(o\.status\);/);
-  assert.match(status, /if \(\(entersInstallation \|\| closesInstallation\) && !ensureProjectServicesPlanned\(o\)\) return false;/);
+  assert.match(status, /if \(\(entersInstallation \|\| closesInstallation\) && !ensureProjectServicesPlanned\(o, \{ all: closesInstallation \}\)\) return false;/);
 });
 
 test('a finished installation is read-only on the card; deleting a service drops its plan and the crew follows', () => {

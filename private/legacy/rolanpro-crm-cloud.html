@@ -1996,6 +1996,34 @@
   .project-direction-line.pending span:last-child { color:#b45309; }
   .rp-dirwin-row { position: relative; }
   .project-cashier-directions .project-cashier-direction.add { grid-column: 1 / -1; width: 100%; }
+  /* Owner, 2026-10-25: install window by service; stripes in calendar and kanban. */
+  .install-progress { height:6px;margin:0 16px 4px;border-radius:999px;background:#EEF1F5;overflow:hidden; }
+  .install-progress span { display:block;height:100%;background:#16A34A; }
+  .install-row { display:flex;flex-direction:column;gap:4px;width:100%;text-align:left;padding:12px 14px;margin-bottom:10px;background:#fff;border:1px solid #D9DEE6;border-left:6px solid var(--work-color);border-radius:12px;color:#141A26; }
+  .install-row.open { border-style:dashed;border-left-style:solid;border-color:#94A3B8;border-left-color:var(--work-color); }
+  .install-row-top { display:flex;justify-content:space-between;align-items:center;gap:8px; }
+  .install-row-top b { font-size:15px; }
+  .install-state { font-size:11px;font-weight:800;border-radius:999px;padding:3px 8px;white-space:nowrap; }
+  .install-row-meta { font-size:13px;color:#5A6577; }
+  .install-row-when { font-size:13px;font-weight:600; }
+  .install-row-who { font-size:13px; }
+  .install-row-go { font-size:13px;font-weight:600;color:#1D4ED8; }
+  .install-hint { background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:10px 12px;font-size:13px;color:#1E3A8A; }
+  .install-chips { display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px; }
+  .install-chip { display:flex;flex-direction:column;align-items:flex-start;min-height:44px;padding:8px 14px;border:1px solid #D9DEE6;border-radius:999px;background:#fff;font-weight:600;font-size:14px; }
+  .install-chip.on { background:#DBEAFE;border:1.5px solid #2563EB;color:#1E3A8A;font-weight:800; }
+  .install-chip small { font-size:11px;color:#B45309;font-weight:600; }
+  .install-dates { display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px; }
+  .install-dates input { width:100%;min-width:0;box-sizing:border-box; }
+  .install-dates label, .install-note { font-size:12px;color:#5A6577;display:flex;flex-direction:column;gap:4px; }
+  .install-quicks { display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px; }
+  .install-quick { font-size:12px;font-weight:600;border:1px solid #D9DEE6;border-radius:8px;padding:6px 10px;background:#fff; }
+  .install-foot { display:flex;flex-direction:column;gap:8px; }
+  .calendar-service-stripe { margin:4px 0;padding:3px 8px;border-radius:6px;background:var(--work-color);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+  .install-stripes { margin-top:8px;display:flex;flex-direction:column;gap:4px; }
+  .install-stripe { display:flex;justify-content:space-between;gap:8px;align-items:center;border-radius:6px;padding:3px 8px;font-size:12px;line-height:1.3;box-sizing:border-box; }
+  .install-stripe span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600; }
+  .install-stripe b { white-space:nowrap;font-weight:700; }
   .rp-dirwin-head .rp-dirwin-sum { font-size: inherit; margin-left: 0; color: inherit; }
   .rp-dirwin-remove { flex:none;width:36px;height:36px;margin-left:.4rem;border:1px solid #fecaca;border-radius:10px;background:#fff;color:#b91c1c;font-weight:800;line-height:1; }
   .rp-dirwin-toggle { display:flex;align-items:center;gap:.5rem;margin-top:1rem;padding:.7rem .8rem;border:1px solid #d9dee6;border-radius:12px;font-size:.9rem; }
@@ -17989,7 +18017,7 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   // Closing a project freezes its plan: every service needs its specialist and date then too.
   const closesInstallation = CLOSED_PROJECT_STATUSES.includes(newStatus) && !CLOSED_PROJECT_STATUSES.includes(o.status);
   const restorePlan = entersInstallation || closesInstallation ? projectPlanSnapshot(o) : null;
-  if ((entersInstallation || closesInstallation) && !ensureProjectServicesPlanned(o)) return false;
+  if ((entersInstallation || closesInstallation) && !ensureProjectServicesPlanned(o, { all: closesInstallation })) return false;
   const refuse = () => { if (restorePlan) restorePlan(); return false; };
   if (!opts.skipWorkflowGuard && !ensureOrderWorkflowTransition(o, newStatus, opts.openWorkspace !== false)) return refuse();
   if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return refuse();
@@ -18394,7 +18422,19 @@ function calendarEventsForOrder(o, type) {
       const dt = new Date(assignment.installationAt);
       if (!assignment.installationAt || Number.isNaN(dt.getTime())) return [];
       const scoped = { ...o, installerIds: assignment.installerIds || [], installationAt: assignment.installationAt };
-      return [{ id: `${o.id}_service_${group.id}`, o: scoped, kind: type, dt, info, note: group.name }];
+      // A service that runs several days shows on each of them (Owner, 2026-10-25).
+      const kind = typeof installWorkKind === 'function' ? installWorkKind(group) : 'film';
+      const end = typeof installPlanEnd === 'function' ? installPlanEnd(assignment) : null;
+      const dayKey = d => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+      const days = [new Date(dt)];
+      const cursor = new Date(dt);
+      while (end && days.length < 14) {
+        cursor.setDate(cursor.getDate() + 1);
+        cursor.setHours(dt.getHours(), dt.getMinutes(), 0, 0);
+        if (dayKey(cursor) > dayKey(end)) break;
+        days.push(new Date(cursor));
+      }
+      return days.map((day, index) => ({ id: `${o.id}_service_${group.id}${index ? `_${index}` : ''}`, o: scoped, kind: type, dt: day, info, note: group.name, service: { name: group.name, kind, end, day: index + 1, days: days.length } }));
     });
   }
   return calendarEventDatesForOrder(o, type).map((x, idx) => ({
@@ -18555,8 +18595,9 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'proposal_accepted') {
     const unplanned = projectCardUnplanned(o);
     // Opens the crew-and-date form directly (Owner, 2026-10-23: «нет возможности назначить монтаж»).
-    if (unplanned.length) return { icon: '👷', title: 'Назначить монтаж', sub: `Дата и исполнитель для каждой услуги: ${unplanned.map(line => line.name).join(', ')}.`, variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
-    return { icon: '🔧', title: 'Подтвердить монтаж', sub: 'Все услуги назначены — клиент и бригада увидят даты после подтверждения.', variant: 'primary', onclick: `projectCardConfirmInstallation('${o.id}')` };
+    const lines = projectLines(o);
+    if (unplanned.length >= lines.length) return { icon: '👷', title: 'Назначить монтаж', sub: 'Откроется окно: услуги по порядку, у каждой исполнители, начало и окончание. Можно назначить только известное сейчас.', variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
+    return { icon: '🔧', title: 'Подтвердить монтаж', sub: unplanned.length ? `Назначено ${lines.length - unplanned.length} из ${lines.length}. Не назначено: ${unplanned.map(line => line.name).join(', ')} — можно позже.` : 'Все услуги назначены — клиент и бригада увидят даты после подтверждения.', variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
   }
   if (['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'].includes(o.status)) {
     // Say when and who instead of «Заказ под контролем» (Owner, 2026-10-23).
@@ -18564,6 +18605,11 @@ function orderPrimaryNextAction(o) {
     const first = plans[0];
     const crew = first ? (first.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', ') : '';
     const stage = ({ installation_scheduled: 'Монтаж назначен', installation_accepted: 'Бригада приняла монтаж', installation_en_route: 'Бригада в пути', installation_in_progress: 'Монтаж идёт' })[o.status];
+    // The next service is planned when its time comes (Owner, 2026-10-25).
+    const unplannedNow = projectCardUnplanned(o);
+    const unplannedKeys = new Set(unplannedNow.map(line => line.key));
+    const openPlanned = projectLines(o).filter(line => !unplannedKeys.has(line.key) && projectServiceProgress(o, line.key).status !== 'done');
+    if (unplannedNow.length && !openPlanned.length && projectCardCanPlan(o)) return { icon: '👷', title: `Назначить: ${unplannedNow[0].name}`, sub: `Назначенные услуги выполнены. Осталось назначить: ${unplannedNow.map(line => line.name).join(', ')}.`, variant: 'primary', onclick: `openInstallWindow('${o.id}')` };
     return { icon: '🔧', title: stage, sub: first ? `${fmtDateTime(first.installationAt)}${crew ? ' · ' + crew : ''}. Бригада отмечает выполнение у себя; акт и оплата — после монтажа.` : 'Проверьте календарь и бригаду.', variant: 'soft', onclick: `scheduleInstallationPrompt('${o.id}')` };
   }
   if (o.status === 'installation_done') return { icon: '✍️', title: 'Подпись клиента под актом', sub: 'Клиент расписывается на экране — на месте или при встрече. Акт с подписью сохраняется в проекте.', variant: 'primary', onclick: `openActSignature('${o.id}')` };
@@ -21491,6 +21537,7 @@ function renderOrderKanbanCard(o) {
           <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
           ${urgency ? `<span class="kanban-chip ${urgency.cls}">${urgency.label}</span>` : ''}
         </div>
+        ${typeof installStripesHtml === 'function' ? installStripesHtml(o) : ''}
         <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
           <div>
             <div class="text-xs text-gray-500">Сумма</div>
@@ -27194,7 +27241,7 @@ function projectCardSetDate(oid, key, value) {
  * window or the kanban. An older project planned as a whole keeps its crew
  * and date, now written per service. Then the plan is published.
  */
-function ensureProjectServicesPlanned(o) {
+function ensureProjectServicesPlanned(o, { all = false } = {}) {
   const groups = projectServiceGroups(o);
   if (!groups.length) return true;
   const waiting = projectPendingSizedServices(o);
@@ -27207,8 +27254,12 @@ function ensureProjectServicesPlanned(o) {
     const plan = plans.find(item => item.id === group.id);
     return !plan || !plan.installationAt || !(plan.installerIds || []).length;
   });
-  if (missing.length) {
-    alert(`Назначьте исполнителя и дату каждой услуги в карточке проекта: ${missing.map(group => group.name).join(', ')}.`);
+  // Owner, 2026-10-25: «назначить сначала одну услугу, а когда подойдёт время —
+  // другую». Entering installation needs one planned service; closing needs all.
+  if (all ? missing.length : missing.length === groups.length) {
+    alert(all
+      ? `Назначьте исполнителя и дату каждой услуги: ${missing.map(group => group.name).join(', ')}.`
+      : 'Назначьте исполнителя и дату хотя бы одной услуги — остальные можно позже.');
     return false;
   }
   o.serviceSchedules = plans;
@@ -27240,7 +27291,7 @@ function projectCardConfirmInstallation(oid) {
   const waiting = projectPendingSizedServices(o);
   if (waiting.length) return alert(`Сначала внесите замер: ${waiting.map(offering => offering.name).join(', ')}.`);
   const missing = projectCardUnplanned(o);
-  if (missing.length) return alert(`Укажите исполнителя и дату: ${missing.map(line => line.name).join(', ')}.`);
+  if (missing.length && missing.length >= projectLines(o).length) return alert('Назначьте исполнителя и дату хотя бы одной услуги — остальные можно позже.');
   // (changeStatus checks the plan again for every way into installation.)
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
   const technical = orderTechnicalMeasurementIssues(o);
@@ -31664,6 +31715,8 @@ function scheduleInstallationPrompt(oid) {
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
   if (!ensureProductionReadyForInstallation(o)) return;
+  // Owner, 2026-10-25: one window, services in order, each planned on its own.
+  if (typeof openInstallWindow === 'function') return openInstallWindow(oid);
   const installers = usersByRole('installer');
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
@@ -40231,6 +40284,7 @@ function renderCalendarEventCard(ev, opts = {}) {
         <span class="calendar-event-time">${calendarTimeLabel(ev.dt)}</span>
       </div>
       <div class="calendar-event-title">${academyEsc(o.number)} · ${academyEsc(c?.name || 'Без клиента')}</div>
+      ${ev.service && typeof installWorkKindMeta === 'function' ? `<div class="calendar-service-stripe" style="--work-color:${installWorkKindMeta(ev.service.kind).color}">${academyEsc(ev.service.name)}${ev.service.days > 1 ? ` · день ${ev.service.day} из ${ev.service.days}` : ''}</div>` : ''}
       <div class="calendar-event-meta">${academyEsc(calendarEventPeople(ev))}</div>
       ${compact ? '' : `<div class="calendar-event-meta">${academyEsc(orderAddress(o, c) || 'адрес не указан')}</div>`}
       <div class="flex items-center gap-1 flex-wrap">

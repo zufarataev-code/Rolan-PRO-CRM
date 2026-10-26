@@ -385,6 +385,9 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       for (const plan of rows(order.serviceSchedules)) {
         if (typeof plan.id !== 'string' || seen.has(plan.id) || !/^\w[\w:-]{0,240}$/.test(plan.id) || !Array.isArray(plan.installerIds)) return 'Некорректные назначения услуг.';
         if (plan.installationAt !== undefined && plan.installationAt !== '' && (typeof plan.installationAt !== 'string' || Number.isNaN(Date.parse(plan.installationAt)))) return 'Некорректная дата услуги.';
+        // Owner, 2026-10-25: a service has a start and an end.
+        if (plan.endsAt !== undefined && plan.endsAt !== '' && (typeof plan.endsAt !== 'string' || Number.isNaN(Date.parse(plan.endsAt)) || (plan.installationAt && Date.parse(plan.endsAt) < Date.parse(String(plan.installationAt))))) return 'Окончание услуги раньше начала.';
+        if (plan.note !== undefined && (typeof plan.note !== 'string' || plan.note.length > 300)) return 'Некорректная заметка к услуге.';
         seen.add(plan.id);
         if (Array.isArray(order.serviceScopeApprovals) && !order.serviceScopeApprovals.some((entry:Row) => entry.serviceId === plan.id && entry.scope === serviceGroupScope(order,plan.id))
           && stableJson(plan) !== stableJson(rows(oldOrder.serviceSchedules).find(item => item.id === plan.id))) return 'Сначала согласуйте дополнительную услугу с клиентом.';
@@ -415,8 +418,15 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       if (Array.isArray(order.serviceScopeApprovals) && serviceGroupIds(order).some(id => !order.serviceScopeApprovals.some((entry:Row) => entry.serviceId === id && entry.scope === serviceGroupScope(order,id)))) return 'Сначала согласуйте дополнительные услуги с клиентом.';
       if (pendingSizedOfferings(order, offerings).length) return 'Сначала внесите замер всех услуг проекта.';
       const plans = projectPlans(order);
-      if (plans.some(plan => !complete(plan))) return 'Укажите дату и исполнителей каждой услуги.';
-      if (serviceGroupIds(order).some(id => !plans.some(plan => plan.id === id))) return 'Укажите дату и исполнителей каждой услуги.';
+      const ids = serviceGroupIds(order);
+      const planned = ids.length ? ids.filter(id => plans.some(plan => plan.id === id && complete(plan))) : plans.filter(plan => complete(plan)).map(plan => plan.id);
+      const needed = ids.length ? ids.length : plans.length;
+      // Owner, 2026-10-25: «назначить сначала одну услугу, а когда подойдёт
+      // время — другую». Entering installation needs one planned service;
+      // closing the project needs them all.
+      if (closesProject ? planned.length < needed : needed > 0 && planned.length === 0) {
+        return closesProject ? 'Укажите дату и исполнителей каждой услуги.' : 'Укажите дату и исполнителей хотя бы одной услуги.';
+      }
     }
     // An installation under way closes only when every service is done, so
     // one crew cannot close the work of another (Owner, 2026-10-10).
