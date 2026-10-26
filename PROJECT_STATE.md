@@ -14,6 +14,7 @@ Before doing any work:
 
 ## 2026-10-26 handoff — complete Google Ads attribution, campaign ROI and delivery
 
+- PR [#418](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/418) contains the integration and owner runbook; use its current checks for the published revision's CI result.
 - Branch `codex/google-ads-roi-integration-20261026`, rebased onto verified `origin/main` `5efb819d1ab78077b3343074922890607a7a61ec`. This is the owner-maintained GitHub CRM repository, separate from the RolanPro WordPress project; portable identity is recorded in `PROJECT.md`.
 - Extends the existing script costs/Data Manager/outboxes: stable customer/campaign and legacy-order attribution; canonical-lead preservation; CRM landing capture and independent ad-measurement consent; owner-reviewed form/phone evidence; server acquisition-cohort reporting with net job receipts, per-currency ROAS and reviewed direct-cost ROI.
 - Verified manual paid acceptance now reaches the existing conversion outbox. Qualifications no longer fire merely on proposal-link publication. Lead/deal qualification identity is shared; original IDs are retained. Refunds/cancellations create immutable corrections, whose uploads wait for the original conversion to be confirmed.
