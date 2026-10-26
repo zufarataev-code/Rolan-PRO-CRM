@@ -210,7 +210,9 @@ test('the price for removing old film is the owner\'s setting', () => {
   assert.deepEqual([fresh.extraServices[0].unitPrice, fresh.extraServices[0].price], [3, 30]);
   c.syncOrderWindowRemovalService(o);
   assert.equal(o.extraServices[0].unitPrice, 2.5, 'a saved line keeps its price');
-  assert.match(html, /onchange="updateRemovalPrice\(this\.value\)"/);
+  assert.match(html, /function updateRemovalPrice\(value\)/, 'the legacy price remains readable for existing projects');
+  const servicesHome = html.slice(html.indexOf('function renderServiceOfferingsSection()'), html.indexOf('function updateRemovalPrice('));
+  assert.doesNotMatch(servicesHome, /updateRemovalPrice/, 'the five-direction home no longer exposes a separate legacy setting');
 
   const current: Row = { settings: { serviceOfferings: [] }, orders: [] };
   const manager: Row = structuredClone(current);

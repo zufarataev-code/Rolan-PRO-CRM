@@ -17,8 +17,11 @@ function load(role = 'owner') {
   const calls: string[] = [];
   const layers: Row[] = [];
   const services = [
+    { id: 'smart_film', catalogCategory: 'smart', title: 'Смарт', short: 'Смарт', icon: '🪟' },
     { id: 'protective_film', catalogCategory: 'protective', title: 'Защитная', short: 'Защита', icon: '🛡' },
     { id: 'solar_film', catalogCategory: 'solar', title: 'Солнцезащитная', short: 'Солнце', icon: '☀' },
+    { id: 'decorative_film', catalogCategory: 'decorative', title: 'Декоративная', short: 'Декор', icon: '🎨' },
+    { id: 'privacy_film', catalogCategory: 'privacy', title: 'Приватная', short: 'Приватная', icon: '🔒' },
     { id: 'general_works', catalogCategory: 'general', title: 'Общее по объекту', short: 'Общее', icon: '🧰', general: true },
   ];
   const context: any = vm.createContext({

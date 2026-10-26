@@ -14,8 +14,8 @@ const service = readFileSync('src/features/proposals/service.ts', 'utf8');
 const fn = (src: string, name: string) => { const a = src.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return src.slice(a, src.indexOf('\n}\n', a)); };
 
 test('a directory service can be a KP option the client ticks, with a monthly price', () => {
-  assert.match(html, /updateServiceOffering\('\$\{offering\.id\}','proposalOptional',this\.checked,this\)"> Опция в КП — клиент отмечает сам/);
-  assert.match(html, /updateServiceOffering\('\$\{offering\.id\}','monthly',this\.checked,this\)"> Подписка: цена — в месяц/);
+  assert.match(html, /updateServiceOffering\('\$\{offering\.id\}','proposalOptional',this\.checked,this\)"> Клиент может добавить как опцию/);
+  assert.match(html, /updateServiceOffering\('\$\{offering\.id\}','monthly',this\.checked,this\)"> Подписка · цена в месяц/);
   const items = fn(stages, 'projectProposalOptionItems');
   assert.match(items, /is_optional: true,\s*client_selected: false,/);
   assert.match(items, /line_price: offering\.monthly \? 0 : price/);

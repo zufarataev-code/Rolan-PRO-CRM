@@ -60,7 +60,7 @@ test('draft services («Новая услуга» without a price) are left out 
   assert.deepEqual(c.serviceOfferingsFor('solar').map((o: Row) => o.id), ['a', 'c'], 'a priced default name is a real service');
   assert.deepEqual(c.serviceOfferingsFor('solar', { includeInactive: true }).map((o: Row) => o.id), ['a', 'b', 'c']);
   assert.deepEqual(c.serviceOfferingsFor('solar', { includeId: 'b' }).map((o: Row) => o.id), ['a', 'b', 'c'], 'an old project keeps its own line');
-  assert.match(html, /Черновик · не показывается в кассе/);
+  assert.match(html, /Черновик: заполните название и цену — до этого услуга не появится в проекте\./);
 });
 
 test('a published KP is «Отправлено» only after the manager shares it', () => {

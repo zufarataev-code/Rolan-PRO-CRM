@@ -3,21 +3,22 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 
-// Owner, 2026-10-24: «нужно сделать один раздел, где мы будем вносить эти услуги
-// и цены с возможностью менять» — all KP options of every direction in one list.
+// Owner, 2026-10-25: the Services home shows only five directions. A KP option
+// remains a normal service and is edited inside its own direction workspace.
 const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
 const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
 const fn = (src: string, name: string) => { const a = src.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return src.slice(a, src.indexOf('\n}\n', a) + 3); };
 
-test('one «Опции для КП» block sits above the directions and edits every field inline', () => {
+test('KP options are edited as services inside their direction, not in a global wall', () => {
   const section = fn(html, 'renderServiceOfferingsSection');
-  assert.ok(section.indexOf('${proposalOptionsSectionHtml(owner)}') < section.indexOf('${groups}'));
-  const block = fn(html, 'proposalOptionsSectionHtml');
-  for (const field of ['name', 'nameEn', 'direction', 'pricePerSqft', 'monthly', 'installerRatePerSqft', 'active']) {
+  const workspace = fn(html, 'renderServiceDirectionWorkspace');
+  const block = fn(html, 'serviceOfferingEditorHtml');
+  assert.doesNotMatch(section, /proposalOptionsSectionHtml|addProposalOption/);
+  assert.match(workspace, /serviceOfferingEditorHtml\(selected, owner\)/);
+  for (const field of ['name', 'nameEn', 'pricePerSqft', 'monthly', 'installerRatePerSqft', 'active']) {
     assert.match(block, new RegExp(`updateServiceOffering\\('\\$\\{offering\\.id\\}','${field}'`), field);
   }
-  assert.match(block, /onclick="addProposalOption\(\)">\+ Опция</);
-  assert.match(section, /\.filter\(item => !\(item\.proposalOptional && !serviceOfferingNeedsSizes\(item\)\)\)/, 'options are not repeated under directions');
+  assert.match(block, /Клиент может добавить как опцию/);
 });
 
 test('options are listed across directions; status says when an option is not offered', () => {

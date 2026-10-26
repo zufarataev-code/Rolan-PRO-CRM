@@ -49,13 +49,13 @@ test('the chosen client is one line; card details fold; one «Адрес объ�
   assert.match(html, /«\+ Услуга» → направление → услуга → плёнка \(можно «уточним на замере»\)/);
 });
 
-test('«Услуги и цены»: directions are the services; the old calculator price list is folded and named', () => {
+test('«Услуги и цены»: the first screen is only the five service directions', () => {
   const page = slice('function renderCanonicalServicePricing()', 'async function loadCanonicalInstallerOperations(');
-  const directions = page.indexOf('${renderServiceOfferingsSection()}');
-  const folded = page.indexOf('<details class="card border border-slate-200 bg-white canonical-calculator-price"');
-  assert.ok(directions > 0 && folded > directions);
-  assert.match(page, /Прайс быстрого калькулятора/);
-  assert.match(page, /В проекты, кассу и КП идут услуги из направлений выше\./);
-  assert.ok(page.indexOf('Допработы калькулятора') > folded && page.indexOf('</div></details>') > page.indexOf('Допработы калькулятора'));
-  assert.doesNotMatch(page, /<h2 class="text-xl font-black">Услуги<\/h2>/);
+  const directory = slice('function renderServiceOfferingsSection()', 'function updateRemovalPrice(');
+  assert.match(page, /return renderServiceOfferingsSection\(\);/);
+  assert.match(directory, /filmDirections\(\)\.map\(info =>/);
+  assert.match(directory, /data-service-direction-card=/);
+  assert.match(directory, /5 направлений/);
+  assert.match(directory, /openServiceDirectionDirectory/);
+  assert.doesNotMatch(page, /План продаж|Прайс быстрого калькулятора|Допработы калькулятора/);
 });
