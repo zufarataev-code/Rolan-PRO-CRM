@@ -91,6 +91,8 @@ closed-job revenue, ROAS and direct-cost ROI:
    advertising permission.
 5. When a lead becomes a project, retain `canonicalLeadId`. Proposal publishing
    verifies manager access and carries that original lead into the Deal.
+   A manager cannot replace a saved original lead or reuse a lead already bound
+   to another active/archived project; unused accessible leads remain valid.
    Attribution is selected from that lead, never guessed from another job
    sharing the same phone/email. Older records without a proven link remain
    unattributed until the owner reviews evidence.
@@ -126,6 +128,9 @@ unknown. This is booked sale value for Google bidding, not paid-job profit.
 Repeated reconciliation does not create another sale when the project later
 gets a canonical Deal. Recorded refunds/cancellations produce immutable
 restatements/retractions; their uploads wait for original Google confirmation.
+Corrections also reconcile for recorded consent-based sales without a click
+touchpoint. Older click captures missing a leaf-account ID remain in the legacy
+`/roas` report only when its cost feed identifies exactly one account.
 Retractions are final; reopening a retracted sale needs operator review.
 
 The existing ten-minute worker and owner "send now" action reconcile these

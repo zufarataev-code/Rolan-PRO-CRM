@@ -183,10 +183,15 @@ test("cost import → website attribution → paid job → owner ROI review → 
   const copiedLead = structuredClone(managerState.data.payload);
   copiedLead.orders.push({ id: tag + "-forged", number: tag + "-forged", status: "new", canonicalLeadId: lead.lead_id, createdAt: new Date().toISOString() });
   assert.equal((await call("PUT", "/api/v1/legacy-crm/state", { payload: copiedLead, revision: managerState.data.revision })).status, 403, "new projects cannot steal another manager's lead");
+  copiedLead.orders.at(-1).canonicalLeadId = phonePoint.lead_id;
+  assert.equal((await call("PUT", "/api/v1/legacy-crm/state", { payload: copiedLead, revision: managerState.data.revision })).status, 403, "an unassigned lead already bound to a project cannot be reused");
   managerState.data.payload.orders.find((item: any) => item.id === tag).googleAdsCostsReview = { fingerprint: "forged" };
   assert.equal((await call("PUT", "/api/v1/legacy-crm/state", { payload: managerState.data.payload, revision: managerState.data.revision })).status, 403);
 
   assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: tag })).status, 403);
+  copiedLead.orders.at(-1).canonicalLeadId = unrelatedResult.data.lead_id;
+  const unusedLeadProject = await call("PUT", "/api/v1/legacy-crm/state", { payload: copiedLead, revision: managerState.data.revision });
+  assert.equal(unusedLeadProject.status, 200, "a new project may use a genuinely unused accessible lead: " + JSON.stringify(unusedLeadProject.errors));
   await Promise.all([1, 2].map(() => db.$transaction(tx => ensureClosedWonConversion(tx, { legacyOrderId: tag + "-concurrent", leadId: lead.lead_id, occurredAt: new Date(), conversionValue: new Prisma.Decimal(100), currency: "USD" }))));
   assert.equal(await db.conversionEvent.count({ where: { transaction_id: `crm-project-${tag}-concurrent-sale` } }), 1, "simultaneous sale transactions share one project conversion");
 });

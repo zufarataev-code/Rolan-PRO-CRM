@@ -10,7 +10,7 @@ import {
   validateLegacyPayload,
 } from "@/features/legacy-crm/sanitize";
 import { LEGACY_WORKSPACE_VIEW_ROLES } from "@/features/legacy-crm/api";
-import { enforceProjectArchive } from "@/features/legacy-crm/project-archive";
+import { enforceProjectArchive, legacyProjectsIncludingArchive } from "@/features/legacy-crm/project-archive";
 import { applyEmployeeDirectory, loadDirectoryMembers } from "@/features/team/directory";
 import {
   createFieldWorkspace,
@@ -205,6 +205,7 @@ export async function PUT(request: NextRequest) {
     }
     if (!auth.session.roles.includes(ROLE_CODES.OWNER) && (order.canonicalLeadId ?? null) !== (previous.canonicalLeadId ?? null)) {
       if (previous.id || !auth.session.roles.includes(ROLE_CODES.MANAGER) || typeof order.canonicalLeadId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(order.canonicalLeadId)
+        || [...legacyProjectsIncludingArchive(currentWorkspace.payload as Record<string, unknown>), ...legacyProjectsIncludingArchive(nextPayload as Record<string, unknown>)].some(other => other.id !== order.id && other.canonicalLeadId === order.canonicalLeadId)
         || !await prisma.lead.findFirst({ where: { lead_id: order.canonicalLeadId, ...buildLeadScopeWhere(auth.session.user.user_id) }, select: { lead_id: true } })) {
         return apiError(403, "original_lead_protected", "The original project lead cannot be replaced; new projects require an accessible lead.");
       }
