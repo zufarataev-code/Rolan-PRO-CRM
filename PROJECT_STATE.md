@@ -1482,3 +1482,12 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Missing Solar glass type, facade orientation, installation side and access/height remain visible as an orange warning in the assignment window and as a mandatory warning block in the work order. Every affected opening prints the known value or `НЕ УКАЗАНО`.
 - Smart zone mismatch and power loads requiring engineering remain blocking issues. The surveyor still cannot submit an on-site measurement while its technical fields are incomplete.
 - Focused installation/estimate/card tests pass 83/83; full suite passes 897/897; `npm run typecheck` is clean; production build succeeds with 129 routes; `git diff --check` is clean. Production is unchanged; deployment requires the Owner's separate explicit confirmation.
+
+## 2026-10-26 handoff — canonical employee compensation plans (PR #422)
+
+- Branch `codex/employee-compensation-plans-20261026`, PR #422, based on current `origin/main`.
+- Added additive PostgreSQL models for one current employee compensation plan and selected piecework rates by Service Type / Service Add-on. Existing employees without a reviewed plan keep their historical legacy configuration until the Owner explicitly saves the canonical card.
+- The Owner's employee form now combines role/access and pay type. Salary, commission, fixed-per-job and piecework inputs are conditional. Piecework shows the four Rolan PRO directions and labor add-ons, with the company default and an optional personal override.
+- Server validation and saving are Owner-only and transactional. The active legacy CRM receives `payConfig` from the server for linked employees, so a workspace save can no longer become a competing payroll source.
+- Completed relational installer jobs resolve the employee/company rate on the server and snapshot the base service plus add-on lines, rate source, quantity and complexity into the immutable accrual.
+- Verification: full suite 907/907, `npm run typecheck`, production `npm run build` (129 routes), `git diff --check`, a fresh disposable PostgreSQL migration with zero schema drift, and the compact/mobile employee-card save flow all pass. Production is unchanged; merge/deploy requires a separate Owner confirmation.

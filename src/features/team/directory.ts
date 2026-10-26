@@ -1,5 +1,6 @@
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
+import { serializeCompensation } from "./compensation";
 
 /**
  * One employee directory (DECISIONS.md, 2026-09-29).
@@ -25,6 +26,7 @@ export type DirectoryMember = {
   roles: string[];
   isActive: boolean;
   legacyUserIds: string[];
+  compensation?: ReturnType<typeof serializeCompensation>;
 };
 
 type LegacyCard = Record<string, unknown> & { id: string };
@@ -95,6 +97,68 @@ export function legacyIdForUser(userId: string) {
   return `u_srv_${userId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 18)}`;
 }
 
+const LEGACY_PAY_TYPES = {
+  NONE: "none",
+  SALARY: "salary",
+  HOURLY: "hourly",
+  COMMISSION: "commission",
+  PIECEWORK: "per_sqft",
+  FIXED_PER_JOB: "fixed_per_job",
+} as const;
+
+const SERVICE_CATEGORY: Record<string, string> = {
+  SMART_FILM: "smart",
+  SOLAR_FILM: "solar",
+  SAFETY_FILM: "protective",
+  DECORATIVE_FILM: "decorative",
+};
+
+const ADDON_WORK_TYPE: Record<string, string> = {
+  WASHING: "washing",
+  REMOVAL: "removal",
+  SILICONE: "silicone",
+  EXTRA_ELECTRICAL: "electric",
+  ANCHORING: "custom",
+  OTHER: "custom",
+};
+
+export function legacyPayConfigFromCompensation(rawCompensation: DirectoryMember["compensation"]) {
+  const compensation = rawCompensation ?? serializeCompensation(null);
+  const ratesByServiceCode: Record<string, number> = {};
+  const ratesByAddonKey: Record<string, number> = {};
+  const ratesByCategory: Record<string, number> = {};
+  const ratesByWorkType: Record<string, number> = {};
+
+  for (const row of compensation.pieceRates) {
+    if (!row.isEnabled) continue;
+    const rate = row.personalRate ?? row.companyDefaultRate ?? 0;
+    if (row.serviceCode && !row.serviceAddonCode) {
+      ratesByServiceCode[row.serviceCode] = rate;
+      const category = SERVICE_CATEGORY[row.serviceCode];
+      if (category) ratesByCategory[category] = rate;
+    }
+    if (row.serviceCode && row.serviceAddonCode) {
+      ratesByAddonKey[`${row.serviceCode}:${row.serviceAddonCode}`] = rate;
+      const workType = ADDON_WORK_TYPE[row.serviceAddonCode];
+      if (workType) ratesByWorkType[workType] = rate;
+    }
+  }
+
+  return {
+    type: LEGACY_PAY_TYPES[compensation.payType] ?? "none",
+    monthlySalary: compensation.monthlySalary,
+    hourlyRate: compensation.hourlyRate,
+    commissionPct: compensation.commissionPercent,
+    fixedPerJob: compensation.fixedPerJob,
+    ratesByServiceCode,
+    ratesByAddonKey,
+    ratesByCategory,
+    ratesByWorkType,
+    ratePerSqft: Object.values(ratesByServiceCode)[0] ?? 0,
+    source: "SERVER_EMPLOYEE_COMPENSATION",
+  };
+}
+
 function newCard(id: string, member: DirectoryMember, role: string): LegacyCard {
   return {
     id,
@@ -104,13 +168,11 @@ function newCard(id: string, member: DirectoryMember, role: string): LegacyCard 
     role,
     title: LEGACY_TITLES[role] ?? "Employee",
     active: member.isActive,
+    serverUserId: member.userId,
     commissionPct: 0,
     hourlyRate: 0,
     lang: "ru",
-    payConfig:
-      role === "installer"
-        ? { type: "per_sqft", ratePerSqft: 0, ratesByCategory: {}, ratesByWorkType: {} }
-        : {},
+    payConfig: legacyPayConfigFromCompensation(member.compensation),
     pin: "",
     telegramChatId: "",
   };
@@ -172,6 +234,8 @@ export function applyEmployeeDirectory<T extends Record<string, unknown>>(
         role,
         title: LEGACY_TITLES[role] ?? card.title ?? "Employee",
         active: cardActive,
+        serverUserId: member.userId,
+        ...(member.compensation ? { payConfig: legacyPayConfigFromCompensation(member.compensation) } : {}),
       };
     }
   }
@@ -254,6 +318,16 @@ export async function loadDirectoryMembers(
         where: { is_active: true, role: { is_active: true } },
         include: { role: { select: { code: true } } },
       },
+      compensation_plan: {
+        include: {
+          piece_rates: {
+            include: {
+              service_type: true,
+              service_addon: { include: { service_type: true } },
+            },
+          },
+        },
+      },
     },
   });
 
@@ -297,6 +371,7 @@ export async function loadDirectoryMembers(
       roles,
       isActive: user.is_active,
       legacyUserIds,
+      compensation: user.compensation_plan ? serializeCompensation(user.compensation_plan) : undefined,
     });
   }
   return members;

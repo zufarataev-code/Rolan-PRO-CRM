@@ -5,6 +5,7 @@ import { listTeamMembers } from "@/features/team/service";
 import { getAppSession } from "@/lib/auth/app-session";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { PASSWORD_MIN_LENGTH } from "@/lib/auth/password-policy";
+import { listCompensationRateCatalog } from "@/features/team/compensation";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,11 @@ export const dynamic = "force-dynamic";
  * and "view as employee". Backed only by PostgreSQL; the legacy CRM derives
  * its employee cards from the same records.
  */
-export default async function LegacyCrmTeamPage() {
+export default async function LegacyCrmTeamPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string }>;
+}) {
   const session = await getAppSession();
 
   if (!session) {
@@ -31,7 +36,11 @@ export default async function LegacyCrmTeamPage() {
     redirect("/legacy-crm");
   }
 
-  const members = await listTeamMembers();
+  const [members, compensationCatalog, params] = await Promise.all([
+    listTeamMembers(),
+    listCompensationRateCatalog(),
+    searchParams,
+  ]);
 
   return (
     <TeamDirectory
@@ -45,7 +54,10 @@ export default async function LegacyCrmTeamPage() {
           isActive: member.isActive,
           mustChangePassword: member.mustChangePassword,
           lastLoginAt: member.lastLoginAt ? member.lastLoginAt.toISOString() : null,
+          compensation: member.compensation,
         }))}
+      compensationCatalog={compensationCatalog}
+      initialEditUserId={params.edit}
       ownUserId={session.user.user_id}
       minPasswordLength={PASSWORD_MIN_LENGTH}
     />

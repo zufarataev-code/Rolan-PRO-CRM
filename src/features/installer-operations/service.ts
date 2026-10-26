@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
+import { resolveEmployeePieceRate } from "@/features/team/compensation";
 
 type InstallerSession = {
   user: { user_id: string };
@@ -34,6 +35,7 @@ export async function recordInstallerPayrollAccrual(
         include: {
           service_type: true,
           complexity_level: true,
+          position_addons: { include: { service_addon: true } },
         },
       },
     },
@@ -44,11 +46,47 @@ export async function recordInstallerPayrollAccrual(
   const quantitySqft =
     jsonNumber(job.position.dynamic_fields, "actual_film_sqft") ||
     jsonNumber(job.position.dynamic_fields, "sqft");
-  const ratePerSqft =
+  const companyRatePerSqft =
     jsonNumber(job.position.dynamic_fields, "manual_installation_cost_per_sqft") ||
     toNumber(job.position.service_type.installation_cost_per_sqft);
   const multiplier = toNumber(job.position.complexity_level?.multiplier) || 1;
-  const amount = calculatePayrollAmount(quantitySqft, ratePerSqft, multiplier);
+  const baseRate = await resolveEmployeePieceRate(tx, job.installer_id, {
+    serviceTypeId: job.position.service_type_id,
+    companyDefaultRate: companyRatePerSqft,
+  });
+  const baseAmount = calculatePayrollAmount(quantitySqft, baseRate.rate, multiplier);
+  const addonItems = await Promise.all(job.position.position_addons.map(async (row) => {
+    const quantity = toNumber(row.quantity);
+    const resolved = await resolveEmployeePieceRate(tx, job.installer_id, {
+      serviceAddonId: row.service_addon_id,
+      companyDefaultRate: toNumber(row.service_addon.cost_price),
+    });
+    return {
+      kind: "SERVICE_ADDON",
+      service_addon_id: row.service_addon_id,
+      label: row.service_addon.name_ru,
+      unit_type: row.service_addon.unit_type,
+      quantity,
+      rate: resolved.rate,
+      rate_source: resolved.source,
+      complexity_multiplier: multiplier,
+      amount: calculatePayrollAmount(quantity, resolved.rate, multiplier),
+    };
+  }));
+  const amount = Number((baseAmount + addonItems.reduce((sum, row) => sum + row.amount, 0)).toFixed(2));
+  const lineItems = [{
+    kind: "SERVICE_TYPE",
+    service_type_id: job.position.service_type_id,
+    label: job.position.service_type.name_ru,
+    unit_type: job.position.service_type.unit_type,
+    quantity: quantitySqft,
+    rate: baseRate.rate,
+    rate_source: baseRate.source,
+    complexity_multiplier: multiplier,
+    amount: baseAmount,
+  }, ...addonItems];
+  const sources = new Set(lineItems.map((row) => row.rate_source));
+  const rateSource = sources.size === 1 ? lineItems[0].rate_source : "MIXED";
 
   return tx.installerPayrollAccrual.upsert({
     where: { installer_job_id: installerJobId },
@@ -58,9 +96,11 @@ export async function recordInstallerPayrollAccrual(
       project_id: job.project_id,
       service_name: job.position.service_type.name_ru,
       quantity_sqft: quantitySqft,
-      rate_per_sqft: ratePerSqft,
+      rate_per_sqft: baseRate.rate,
       complexity_multiplier: multiplier,
       amount,
+      rate_source: rateSource,
+      line_items: lineItems as Prisma.InputJsonValue,
       accrued_at: accruedAt,
     },
     update: {},

@@ -1030,6 +1030,36 @@ Purpose:
 
 - Load projects linked to the selected client.
 
+## Team and Compensation
+
+### `GET /api/v1/team`
+
+Owner-only. Returns the canonical server employee directory. Each member includes roles, access state and the current compensation plan with selected piece-rate targets.
+
+### `POST /api/v1/team`
+
+Owner-only. Creates the employee account, roles and compensation in one transaction.
+
+Additional write object:
+
+- `compensation.payType`
+- `compensation.monthlySalary`
+- `compensation.hourlyRate`
+- `compensation.commissionPercent`
+- `compensation.fixedPerJob`
+- `compensation.notes`
+- `compensation.pieceRates[]`: one `serviceTypeId` or `serviceAddonId`, nullable `personalRate`, `isEnabled`
+
+### `PATCH /api/v1/team/{userId}`
+
+Owner-only. Updates identity/roles/access and compensation atomically. Compensation validation rejects negative values, commission above 100%, duplicate work rows and inactive/unknown services.
+
+Payroll rule:
+
+- a null piecework `personalRate` resolves to the current company default
+- an explicit value resolves to the employee override
+- the resolved value is snapshotted when completed work creates its payroll accrual
+
 ## Settings
 
 ### `GET /api/v1/settings/bootstrap`

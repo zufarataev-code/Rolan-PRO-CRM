@@ -664,6 +664,47 @@ Suggested fields:
 - `role`
 - `status`
 
+### `Employee_Compensation_Plans`
+
+Stores the current Owner-approved compensation condition for one server `User`.
+
+Key fields:
+
+- `compensation_plan_id`
+- `user_id` unique
+- `pay_type`: `NONE`, `SALARY`, `HOURLY`, `COMMISSION`, `PIECEWORK`, `FIXED_PER_JOB`
+- `monthly_salary`
+- `hourly_rate`
+- `commission_percent`
+- `fixed_per_job`
+- `effective_from`
+- `notes`
+
+Rules:
+
+- customer pricing is not stored here
+- only the Owner may change a plan
+- a plan is the current rule; completed payroll rows retain immutable historical values
+
+### `Employee_Piece_Rates`
+
+Selects the directions and work services available in a piecework plan.
+
+Key fields:
+
+- `employee_piece_rate_id`
+- `compensation_plan_id`
+- exactly one of `service_type_id` or `service_addon_id`
+- `personal_rate` nullable: null uses the company default; a value is an employee-only override
+- `is_enabled`
+
+### `Installer_Payroll_Accruals` additions
+
+- `rate_source`: company default, employee override or mixed
+- `line_items`: immutable base-service and add-on quantity/rate/complexity snapshot
+
+The accrual is created only from accepted completed work. Editing the current plan does not recalculate an existing accrual.
+
 ## CRM Behavior
 
 The CRM should:

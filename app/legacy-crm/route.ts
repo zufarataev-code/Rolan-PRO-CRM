@@ -304,11 +304,12 @@ export async function GET(request: NextRequest) {
           overlay.remove();
           if (teamChanged) location.reload();
         };
-        window.openRolanProTeam = function openRolanProTeam() {
+        window.openRolanProTeam = function openRolanProTeam(editUserId) {
           document.getElementById('rolanpro-team-overlay')?.remove();
           const overlay = document.createElement('div');
           overlay.id = 'rolanpro-team-overlay';
-          overlay.innerHTML = '<iframe id="rolanpro-team-frame" title="Сотрудники" src="/legacy-crm/team?embed=1"></iframe>';
+          const edit = editUserId ? '&edit=' + encodeURIComponent(editUserId) : '';
+          overlay.innerHTML = '<iframe id="rolanpro-team-frame" title="Сотрудники" src="/legacy-crm/team?embed=1' + edit + '"></iframe>';
           overlay.addEventListener('click', (event) => { if (event.target === overlay) window.closeRolanProTeam(); });
           document.body.appendChild(overlay);
         };

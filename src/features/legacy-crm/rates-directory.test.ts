@@ -5,8 +5,8 @@ import vm from 'node:vm';
 
 // Owner, 2026-10-24: «единый справочник, где мы будем писать все ставки, чтобы у
 // нас был единый источник правды». Installer pay comes from the service in
-// «Услуги и цены» — one rate for every installer; company-wide rates sit in the
-// same directory.
+// «Услуги и цены» provide the company default. The employee card selects the
+// work and may store a personal exception without changing customer prices.
 
 const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
 type Row = Record<string, any>;
@@ -29,19 +29,21 @@ function rates(settings: Row, offerings: Row[]) {
     windowActualAreaSqft: (w: Row) => w.sqft,
     getCatalogItem: () => null,
     primaryServiceInfo: () => null,
-    canonicalServiceCodeForOrderService: () => '',
+    canonicalServiceCodeForOrderService: (serviceType: string) => ({ solar_film: 'SOLAR_FILM' } as Row)[serviceType] || '',
   });
   vm.runInContext(slice('function installerServiceCodeByCategory(category)', 'function syncLegacyInstallerServiceRate('), c);
   vm.runInContext(slice('function serviceOfferingInstallerRate(line)', '\n}\n') + '\n}\n', c);
-  vm.runInContext(slice('function windowServiceInstallerRate(w)', 'function orderQuickInstallerPayoutForUser('), c);
+  vm.runInContext(slice('function employeeServiceRate(user, serviceCode, companyRate)', 'function orderQuickInstallerPayoutForUser('), c);
   return c;
 }
 
-test('a window of a directory service pays that service rate, the same for every installer', () => {
+test('a window uses the company service rate unless the employee card has a personal exception', () => {
   const settings = { installerRates: { _defaults: { solar: 4.25 }, serviceTypes: { SOLAR_FILM: 4.25 } } };
   const c = rates(settings, [{ id: 'mag', installerRatePerSqft: 2.5 }, { id: 'a2', installerRatePerSqft: 0 }]);
   const expert = { payConfig: { type: 'per_sqft', ratePerSqft: 9, ratesByCategory: { solar: 9 } } };
-  assert.equal(c.installerRateForWindow(expert, { offeringId: 'mag', sqft: 40 }), 2.5, 'no personal override');
+  assert.equal(c.installerRateForWindow(expert, { offeringId: 'mag', serviceType: 'solar_film', sqft: 40 }), 2.5, 'legacy duplicate fields do not override the company rate');
+  const specialist = { payConfig: { type: 'per_sqft', source: 'SERVER_EMPLOYEE_COMPENSATION', ratesByServiceCode: { SOLAR_FILM: 5 } } };
+  assert.equal(c.installerRateForWindow(specialist, { offeringId: 'mag', serviceType: 'solar_film', sqft: 40 }), 5, 'the canonical employee exception wins');
   assert.equal(c.windowInstallerPayout({ offeringId: 'mag', sqft: 40 }), 100);
   assert.equal(c.installerRateForWindow(null, { offeringId: 'a2', sqft: 10 }), 0, 'an empty service rate is $0, not a hidden default');
   // A row made before the directory (no service) keeps the old direction rate.

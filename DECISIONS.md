@@ -767,3 +767,15 @@ Owner clarified that a manager has the dimensions needed to plan the calendar, b
 - A surveyor completing an on-site measurement is still responsible for these technical fields.
 - Smart zone integrity and controller over-capacity remain hard engineering blockers; a manager cannot waive them.
 - This changes no price, Proposal, stock, payroll or Project identity. The work order remains an output of the same Project rather than a parallel record.
+
+## 2026-10-26 — Employee compensation is configured on the employee; payroll stores the completed-work snapshot (Owner)
+
+Owner clarified the payroll source of truth: when a person is added to the team, the Owner selects the role and the way this person is paid. Customer prices and employee pay must never be the same editable field.
+
+- PostgreSQL `EmployeeCompensationPlan` is the authoritative current condition for one employee: no CRM accrual, monthly salary, hourly, percentage of paid Projects, fixed amount per completed job or piecework.
+- For piecework, the employee card selects the four business directions and optional work services. A selected row uses the company work rate from the service directory unless the Owner records an explicit personal override.
+- The Price Book remains the company default and the customer commercial source. An employee override changes payroll only; it never changes Proposal, invoice, manager price corridor, warehouse value or another employee's rate.
+- When installation is completed, `InstallerPayrollAccrual` stores the effective employee rate, source, quantity, complexity and add-on line items. Later edits to the employee or company rate cannot rewrite that historical accrual.
+- Until an existing employee is explicitly reviewed and saved in the new employee card, their historical legacy `payConfig` remains readable; the migration must not silently replace it with zero.
+- The legacy CRM receives canonical compensation from PostgreSQL for linked employees and cannot overwrite it through a workspace save. Owner edits open the one server-backed employee card; field employees may only read their own summary.
+- This decision supersedes the 2026-10-24 assumption that every installer must always use one identical rate. The company rate is still the default; personal exceptions are explicit, Owner-only and auditable.
