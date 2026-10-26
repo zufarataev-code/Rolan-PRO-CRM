@@ -76,9 +76,9 @@ test('each direction service owns installer pay; personal and duplicate rate fie
   assert.match(block, /Налог с прибыли проекта, %/);
   assert.match(block, /Комиссия: \$\{academyEsc\(u\.name\)\}, %/);
   assert.match(block, /u\.commissionPct = u\.payConfig\.commissionPct;/, 'one commission number');
-  const editor = slice('function serviceOfferingEditorHtml(offering, owner)', 'function renderServiceDirectionWorkspace(direction)');
-  assert.match(editor, /Монтажнику, \$ \/ \$\{academyEsc\(per\)\}/);
-  assert.match(editor, /updateServiceOffering\('\$\{offering\.id\}','installerRatePerSqft'/);
+  const editor = slice('function serviceOfferingPricingEditorHtml(offering, per, sized)', 'function renderServiceDirectionWorkspace(direction)');
+  assert.match(editor, /Оплата монтажнику, \$ \/ \$\{academyEsc\(per\)\}/);
+  assert.match(editor, /input\('installerRatePerSqft'/);
   assert.match(html, /перенесено из старых настроек — проверьте/i);
   assert.match(html, /не заполнено — монтажнику начислится \$0/i);
   assert.match(html, /if \(field === 'installerRatePerSqft'\) delete offering\.installerRateNeedsReview;/);
