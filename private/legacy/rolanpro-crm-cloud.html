@@ -3359,6 +3359,62 @@
     color: #64748b;
     font-size: .74rem;
   }
+  .manager-smart-zone {
+    margin: 0 .75rem .75rem;
+    padding: .65rem .75rem;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #f8fbff;
+  }
+  .manager-smart-zone > summary,
+  .manager-smart-technical > summary {
+    cursor: pointer;
+    list-style: none;
+    color: #1e3a5f;
+    font-size: .76rem;
+    font-weight: 950;
+  }
+  .manager-smart-zone > summary::-webkit-details-marker,
+  .manager-smart-technical > summary::-webkit-details-marker { display: none; }
+  .manager-smart-room-system {
+    margin: .85rem;
+    padding: 1rem;
+    border: 1px solid #93c5fd;
+    border-radius: 14px;
+    background: linear-gradient(145deg,#eff6ff 0%,#fff 55%);
+  }
+  .manager-smart-room-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .75rem;
+  }
+  .manager-smart-room-head span { color:#2563eb;font-size:.62rem;font-weight:950;letter-spacing:.08em; }
+  .manager-smart-room-head h4 { margin:.12rem 0 0;color:#0f172a;font-size:1.05rem;font-weight:950; }
+  .manager-smart-room-head > b { padding:.3rem .55rem;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:.7rem;white-space:nowrap; }
+  .manager-smart-metrics { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.55rem;margin-top:.8rem; }
+  .manager-smart-metrics > div { padding:.65rem;border:1px solid #dbeafe;border-radius:10px;background:#fff;min-width:0; }
+  .manager-smart-metrics small { display:block;color:#64748b;font-size:.62rem;font-weight:900;text-transform:uppercase; }
+  .manager-smart-metrics strong { display:block;margin-top:.18rem;color:#0f172a;font-size:.88rem;overflow-wrap:anywhere; }
+  .manager-smart-metrics .danger { border-color:#fca5a5;background:#fef2f2; }
+  .manager-smart-control-label { margin-top:.9rem;color:#334155;font-size:.7rem;font-weight:950;text-transform:uppercase; }
+  .manager-smart-control-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem;margin-top:.4rem; }
+  .manager-smart-control { display:grid;grid-template-columns:auto 1fr;gap:.1rem .5rem;min-height:80px;padding:.7rem;border:1.5px solid #cbd5e1;border-radius:10px;background:#fff;text-align:left; }
+  .manager-smart-control > span { grid-row:1 / span 2;display:grid;place-items:center;width:22px;height:22px;border:1px solid #cbd5e1;border-radius:50%;color:#fff;font-weight:900; }
+  .manager-smart-control b { color:#0f172a;font-size:.82rem; }
+  .manager-smart-control small { color:#64748b;font-size:.68rem;line-height:1.35; }
+  .manager-smart-control.active { border-color:#2563eb;background:#eff6ff;box-shadow:inset 0 0 0 1px #2563eb; }
+  .manager-smart-control.active > span { border-color:#2563eb;background:#2563eb; }
+  .manager-smart-technical { margin-top:.75rem;padding:.7rem;border-top:1px solid #dbeafe;border-bottom:1px solid #dbeafe; }
+  .manager-smart-cashier { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;margin-top:.8rem; }
+  .manager-smart-cashier-title { grid-column:1/-1;display:flex;justify-content:space-between;gap:.5rem;align-items:baseline; }
+  .manager-smart-cashier-title b { color:#0f172a;font-size:.76rem; }
+  .manager-smart-cashier-title span { color:#64748b;font-size:.64rem; }
+  .manager-smart-cashier-item { display:grid;gap:.15rem;padding:.55rem .65rem;border:1px solid #dbe4ef;border-left:4px solid #16a34a;border-radius:8px;background:#fff; }
+  .manager-smart-cashier-item span { color:#64748b;font-size:.62rem;font-weight:850;text-transform:uppercase; }
+  .manager-smart-cashier-item b { color:#0f172a;font-size:.72rem; }
+  .manager-smart-cashier-item.missing { border-color:#fcd34d;border-left-color:#f59e0b;background:#fffbeb; }
+  .manager-smart-cashier-note { grid-column:1/-1;color:#64748b;font-size:.66rem;line-height:1.4; }
   .manager-results-panel {
     border: 1px solid #dbe4ef;
     border-radius: 12px;
@@ -6506,6 +6562,11 @@
     .manager-window-fields {
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
+    .manager-smart-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .manager-smart-control-grid,
+    .manager-smart-cashier { grid-template-columns:1fr; }
+    .manager-smart-cashier-title,
+    .manager-smart-cashier-note { grid-column:1; }
     .manager-room-add-panel {
       margin: .6rem;
       padding: .65rem;
@@ -11284,6 +11345,10 @@ const ROLAN_SMART_POWER_SUPPLIES = [
   'Rolan Control 500W',
   'Rolan Control 1000W',
 ];
+const SMART_ROOM_CONTROL_MODES = [
+  { id: 'group', label: 'Все окна вместе', help: 'Один блок и одна команда включают все зоны помещения.' },
+  { id: 'multi', label: 'Каждая зона отдельно', help: 'Один блок помещения и мультизонное управление каждой зоной.' },
+];
 const ROLAN_SMART_CONTROL_OPTIONS = [
   { id:'wifi', label:'Wi-Fi' },
   { id:'multizone', label:'Мультизона' },
@@ -11838,6 +11903,32 @@ function measureSmartLoad(win) {
   const areaM2 = Array.isArray(win.panels) && win.panels.length ? measurePanelAreaSqft(win) * M2_PER_SQFT : measureAreaM2(win);
   return areaM2 * powerWm2;
 }
+function smartPowerCapacity(model = '') {
+  const match = String(model || '').match(/(\d+)\s*W\b/i);
+  return match ? Number(match[1]) : 0;
+}
+function smartRecommendedPowerSupply(requiredW = 0) {
+  const load = Math.max(0, Number(requiredW) || 0);
+  if (!load) return '';
+  return ROLAN_SMART_POWER_SUPPLIES.find(model => smartPowerCapacity(model) >= load) || '';
+}
+function smartWindowsInRoom(room) {
+  return (room?.windows || []).filter(win => (win.measureScope || '') === 'smart_film');
+}
+function smartWindowZoneCount(win) {
+  // One physical Smart panel is one controllable zone. A card may represent
+  // several equal panels through qty, so all of them count.
+  return Math.max(1, parseInt(win?.qty) || 1);
+}
+function smartRoomMetrics(room) {
+  const windows = smartWindowsInRoom(room);
+  const zones = windows.reduce((sum, win) => sum + smartWindowZoneCount(win), 0);
+  const areaSqft = windows.reduce((sum, win) => sum + windowActualAreaSqft(win), 0);
+  const loadW = windows.reduce((sum, win) => sum + measureSmartLoad(win), 0);
+  const requiredW = Math.ceil(loadW * 1.2);
+  const powerSupplyModel = smartRecommendedPowerSupply(requiredW);
+  return { windows, zones, areaSqft, loadW, requiredW, powerSupplyModel, capacityW: smartPowerCapacity(powerSupplyModel) };
+}
 function syncSmartWindowPlan(win, roomName = '') {
   if (!win || win.measureScope !== 'smart_film') return win;
   const current = win.smart || {};
@@ -11884,6 +11975,47 @@ function syncSmartWindowPlan(win, roomName = '') {
   win.filmZone = baseZone;
   win.zones = zones;
   return win;
+}
+/**
+ * Smart equipment belongs to the room, not to each window. Historical
+ * projects stored it on every window; the first value is migrated lazily and
+ * mirrored back only for old work-order renderers/exports.
+ */
+function syncSmartRoomPlan(room) {
+  const metrics = smartRoomMetrics(room);
+  if (!metrics.windows.length) {
+    if (room?.smartSystem) delete room.smartSystem;
+    return null;
+  }
+  metrics.windows.forEach(win => syncSmartWindowPlan(win, room?.name || ''));
+  const legacy = metrics.windows.find(win => win.smart)?.smart || {};
+  const current = room.smartSystem || {};
+  const inferredMode = String(current.controlMode || '').toLowerCase() === 'multi'
+    || /multi|мульти/i.test(String(current.controllerType || legacy.controllerType || '')) ? 'multi' : 'group';
+  const system = {
+    controlMode: inferredMode,
+    blocks: 1,
+    powerSupplyModel: metrics.powerSupplyModel,
+    capacityW: metrics.capacityW,
+    areaSqft: metrics.areaSqft,
+    zones: metrics.zones,
+    loadW: metrics.loadW,
+    requiredW: metrics.requiredW,
+    engineeringRequired: metrics.requiredW > 1000,
+    controllerType: inferredMode === 'multi' ? 'Multi-zone controller' : (current.controllerType || legacy.controllerType || 'Wall switch'),
+    blockPlacement: current.blockPlacement || legacy.blockPlacement || 'ceiling',
+    powerSupplyLocation: current.powerSupplyLocation || legacy.powerSupplyLocation || '',
+    wirePath: current.wirePath || legacy.wirePath || '',
+    electricianNeeded: typeof current.electricianNeeded === 'boolean' ? current.electricianNeeded : legacy.electricianNeeded !== false,
+    notes: current.notes || '',
+  };
+  room.smartSystem = system;
+  // Compatibility for old exports and technical templates. New totals always
+  // read room.smartSystem and therefore count exactly one block per room.
+  metrics.windows.forEach(win => {
+    win.smart = { ...win.smart, powerSupplyModel: system.powerSupplyModel, blocks: 1, controllerType: system.controllerType, blockPlacement: system.blockPlacement, powerSupplyLocation: system.powerSupplyLocation, wirePath: system.wirePath, electricianNeeded: system.electricianNeeded };
+  });
+  return system;
 }
 const US_ROOM_PRESETS = [
   'Living room', 'Family room', 'Kitchen', 'Dining room', 'Breakfast nook',
@@ -13249,21 +13381,21 @@ async function measureCaptureCompass() {
   }
 }
 function technicalSheetSmartSummary(order) {
-  const wins = measureAllWindows(order).filter(({ win }) => win.measureScope === 'smart_film' || canonicalCatalogCategory(windowCatalog(win)?.category) === 'smart');
-  wins.forEach(({ room, win }) => syncSmartWindowPlan(win, room?.name || ''));
-  const totalW = wins.reduce((sum, item) => sum + (Number(item.win.smart?.calculatedW) || measureSmartLoad(item.win)), 0);
-  const blocks = wins.reduce((sum, item) => sum + (parseInt(item.win.smart?.blocks) || 0), 0);
-  const zones = wins.reduce((sum, item) => sum + Math.max(1, parseInt(item.win.qty) || 1), 0);
-  const areaSqft = wins.reduce((sum, item) => sum + measurePanelAreaSqft(item.win), 0);
+  const rooms = smartProjectRooms(order);
+  const wins = rooms.flatMap(item => item.system ? smartWindowsInRoom(item.room).map(win => ({ room: item.room, win })) : []);
+  const totalW = rooms.reduce((sum, item) => sum + (Number(item.system.loadW) || 0), 0);
+  const blocks = rooms.length;
+  const zones = rooms.reduce((sum, item) => sum + item.system.zones, 0);
+  const areaSqft = rooms.reduce((sum, item) => sum + item.system.areaSqft, 0);
   const siliconeQty = wins.reduce((sum, item) => sum + (Number(item.win.smart?.siliconeQty) || 0), 0);
   const repeaters = wins.filter(item => smartNeedsRepeater(item.win.smart || {})).length;
-  const electricianRequired = wins.some(item => item.win.smart?.electricianNeeded);
+  const electricianRequired = rooms.some(item => item.system.electricianNeeded);
   const powerSupplies = {};
-  wins.forEach(({ win }) => {
-    const model = win.smart?.powerSupplyModel || 'Модель не выбрана';
-    powerSupplies[model] = (powerSupplies[model] || 0) + (parseInt(win.smart?.blocks) || 1);
+  rooms.forEach(({ system }) => {
+    const model = system.powerSupplyModel || 'Нужен инженерный расчёт';
+    powerSupplies[model] = (powerSupplies[model] || 0) + 1;
   });
-  return { windows: zones, zones, areaSqft, totalW, blocks, siliconeQty, repeaters, electricianRequired, powerSupplies };
+  return { windows: zones, rooms: rooms.length, zones, areaSqft, totalW, blocks, siliconeQty, repeaters, electricianRequired, powerSupplies };
 }
 function renderTechPanelChips(win) {
   const panels = measureWindowPanels(win);
@@ -13324,16 +13456,19 @@ function smartInstallationDiagramSvg(win, roomName = '') {
     <text x="${point.tx}" y="${point.ty}" text-anchor="middle" font-size="11" font-weight="900" fill="#c2410c">${academyEsc(pointLabel)}</text>
     <path d="M ${point.x} ${point.y} C 230 ${point.y}, 226 88, 276 88" fill="none" stroke="#2563eb" stroke-width="4" stroke-dasharray="8 5" marker-end="url(#smart-arrow-${academyEsc(win.id || 'window')})"/>
     <rect x="278" y="48" width="132" height="80" rx="12" fill="#0f172a" stroke="#334155" stroke-width="2"/>
-    <text x="344" y="72" text-anchor="middle" font-size="11" font-weight="900" fill="#93c5fd">POWER BLOCK</text>
+    <text x="344" y="72" text-anchor="middle" font-size="11" font-weight="900" fill="#93c5fd">ROOM POWER</text>
     <text x="344" y="92" text-anchor="middle" font-size="12" font-weight="800" fill="#fff">${academyEsc(blockLabel)}</text>
     <text x="344" y="111" text-anchor="middle" font-size="10" fill="#cbd5e1">${academyEsc(smart.controllerType || 'controller TBD')}</text>
     <text x="108" y="173" text-anchor="middle" font-size="11" font-weight="800" fill="#334155">${academyEsc(win.name || 'Window')} · ${academyEsc(smart.zone || roomName || 'Zone')}</text>
   </svg>`;
 }
 function renderSmartRoomInstallationPlans(order) {
-  const roomPlans = (order?.measurements?.rooms || []).map(room => ({
+  const roomPlans = (order?.measurements?.rooms || []).map(room => {
+    const system = syncSmartRoomPlan(room);
+    return {
     room,
-    windows: (room.windows || []).filter(win => win.measureScope === 'smart_film' || canonicalCatalogCategory(windowCatalog(win)?.category) === 'smart').flatMap(win => {
+    system,
+    windows: smartWindowsInRoom(room).flatMap(win => {
       syncSmartWindowPlan(win, room.name || '');
       const qty = Math.max(1, parseInt(win.qty) || 1);
       return Array.from({ length: qty }, (_, index) => ({
@@ -13341,10 +13476,10 @@ function renderSmartRoomInstallationPlans(order) {
         id: `${win.id}-zone-${index + 1}`,
         name: `${win.name || 'Window'}${qty > 1 ? ` · ${index + 1}` : ''}`,
         qty: 1,
-        smart: { ...win.smart, zone: win.smart?.zones?.[index]?.name || win.smart?.zone || room.name },
+        smart: { ...win.smart, ...system, zone: win.smart?.zones?.[index]?.name || win.smart?.zone || room.name },
       }));
     }),
-  })).filter(item => item.windows.length);
+  }; }).filter(item => item.system && item.windows.length);
   if (!roomPlans.length) return '';
   return `
     <section class="smart-install-plan">
@@ -13352,13 +13487,13 @@ function renderSmartRoomInstallationPlans(order) {
         <div><div class="text-xs font-bold text-blue-700">SMART FILM INSTALLATION MAP</div><h2>Монтажная схема по помещениям</h2></div>
         <div class="text-xs text-slate-500">Точка подключения → трасса → блок → управление</div>
       </div>
-      ${roomPlans.map(({ room, windows }, roomIndex) => `
+      ${roomPlans.map(({ room, system, windows }, roomIndex) => `
         <div class="smart-room-plan">
-          <div class="smart-room-title"><span>${roomIndex + 1}</span><b>${academyEsc(room.name || 'Room')}</b><small>${windows.length} зон(ы)</small></div>
+          <div class="smart-room-title"><span>${roomIndex + 1}</span><b>${academyEsc(room.name || 'Room')}</b><small>${windows.length} зон · 1 блок · ${system.controlMode === 'multi' ? 'раздельное управление' : 'все вместе'}</small></div>
           <div class="smart-room-diagrams">
             ${windows.map(win => `<div class="smart-room-diagram">
               ${smartInstallationDiagramSvg(win, room.name)}
-              <div class="smart-room-route"><b>Точка:</b> ${academyEsc(smartConnectionPointInfo(win.smart?.connectionPointSide || win.smart?.busbarSide).label)}${win.smart?.connectionPointDetail ? ` · ${academyEsc(win.smart.connectionPointDetail)}` : ''}<br><b>Блок:</b> ${academyEsc(win.smart?.powerSupplyModel || 'модель не выбрана')} · ${academyEsc(smartBlockPlacementInfo(win.smart?.blockPlacement).label)} · ${academyEsc(win.smart?.powerSupplyLocation || 'точное место не указано')}<br><b>Опции:</b> ${academyEsc((win.smart?.controlOptions || []).map(id => ROLAN_SMART_CONTROL_OPTIONS.find(option => option.id === id)?.label || id).join(', ') || 'нет')}<br><b>Трасса:</b> ${academyEsc(win.smart?.wirePath || 'не указана')}</div>
+              <div class="smart-room-route"><b>Точка зоны:</b> ${academyEsc(smartConnectionPointInfo(win.smart?.connectionPointSide || win.smart?.busbarSide).label)}${win.smart?.connectionPointDetail ? ` · ${academyEsc(win.smart.connectionPointDetail)}` : ''}<br><b>Общий блок помещения:</b> ${academyEsc(system.powerSupplyModel || 'нужен инженерный расчёт')} · ${academyEsc(smartBlockPlacementInfo(system.blockPlacement).label)} · ${academyEsc(system.powerSupplyLocation || 'точное место не указано')}<br><b>Управление:</b> ${system.controlMode === 'multi' ? 'каждая зона отдельно' : 'все окна вместе'}<br><b>Трасса:</b> ${academyEsc(system.wirePath || 'не указана')}</div>
             </div>`).join('')}
           </div>
         </div>`).join('')}
@@ -13371,9 +13506,9 @@ function renderSmartWorkOrderKit(order) {
     <div class="wo-block-title">Smart-комплектация</div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
       <div class="p-2 rounded border"><b>Smart-плёнка</b><br>${smart.areaSqft.toFixed(2)} sqft</div>
-      <div class="p-2 rounded border"><b>Зоны</b><br>${smart.zones} — по количеству окон</div>
-      <div class="p-2 rounded border"><b>Блоки питания</b><br>${smart.blocks}</div>
-      <div class="p-2 rounded border"><b>Силикон</b><br>${smart.siliconeQty} шт.</div>
+      <div class="p-2 rounded border"><b>Зоны</b><br>${smart.zones} — по физическим панелям</div>
+      <div class="p-2 rounded border"><b>Помещения</b><br>${smart.rooms}</div>
+      <div class="p-2 rounded border"><b>Блоки питания</b><br>${smart.blocks} — по одному на помещение</div>
     </div>
     <div class="text-sm mt-2"><b>Модели блоков:</b> ${academyEsc(Object.entries(smart.powerSupplies).map(([model, qty]) => `${model} × ${qty}`).join(' · '))}</div>
     <div class="text-sm mt-1"><b>Электрик:</b> ${smart.electricianRequired ? 'нужен' : 'не требуется'}</div>
@@ -25322,8 +25457,9 @@ function projectEstimateReadiness(o) {
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
   if ((o.extraServices || []).filter(s => !s.quickProjectLine && !s.includedBy).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
   if (o.paymentTerms === 'after_completion' && !o.paymentTermsConfirmedAt) issues.push('менеджер не подтвердил ответственность за оплату после выполнения');
+  issues.push(...smartCashierIssues(o));
   if (orderRevenue(o) <= 0) issues.push('сумма проекта равна нулю');
-  return issues;
+  return [...new Set(issues)];
 }
 
 function projectQuickLines(o) {
@@ -25524,6 +25660,138 @@ function projectOfferingLine(offering, qty = 1, serviceType = '') {
   return line;
 }
 
+// ---------- SMART → СУЩЕСТВУЮЩАЯ КАССА ----------
+// The measurement never invents prices. It only calculates quantities and
+// finds the matching owner-configured service in «Услуги и цены». Those normal
+// projectOfferingLine rows then feed the existing estimate, proposal, payroll
+// and work order exactly like a row added by the cashier.
+function smartOfferingRole(offering) {
+  if (!offering || serviceOfferingNeedsSizes(offering)) return '';
+  const name = String(offering.name || '').toLowerCase();
+  const unit = serviceOfferingUnit(offering);
+  if (/multi[\s-]?zone|мульти[\s-]?зон|мультиблок|multi controller/.test(name)) return 'multi';
+  if (/электр|electric/.test(name)) return 'electric';
+  if (/блок.*питан|питан.*блок|power\s*(supply|block)|transformer/.test(name)) return 'power';
+  if (unit === 'zone' || /подключ.*зон|зон.*подключ|zone connection/.test(name)) return 'zone';
+  return '';
+}
+function smartCashierOfferings() {
+  const all = [...serviceOfferingsFor('smart'), ...serviceOfferingsFor('general')];
+  return [...new Map(all.map(item => [item.id, item])).values()];
+}
+function smartCashierOffering(role, capacityW = 0) {
+  const matches = smartCashierOfferings().filter(item => smartOfferingRole(item) === role);
+  if (role !== 'power' || !capacityW) return matches[0] || null;
+  const exact = matches.find(item => {
+    const watts = smartPowerCapacity(item.name);
+    return watts > 0 && watts === Number(capacityW);
+  });
+  return exact || matches.find(item => !smartPowerCapacity(item.name)) || null;
+}
+function smartProjectRooms(o) {
+  return (o?.measurements?.rooms || []).map(room => ({ room, system: syncSmartRoomPlan(room) })).filter(item => item.system);
+}
+function smartCashierDesiredLines(o) {
+  const rooms = smartProjectRooms(o);
+  if (!rooms.length) return [];
+  const desired = [];
+  const add = (role, offering, qty, scopedRooms, extra = {}) => {
+    if (!offering || !(Number(qty) > 0)) return;
+    const key = `${role}:${offering.id}`;
+    const existing = desired.find(item => item.key === key);
+    if (existing) {
+      existing.qty += Number(qty) || 0;
+      existing.roomIds.push(...scopedRooms.map(item => item.room.id));
+      existing.capacities.push(...(extra.capacities || []));
+      return;
+    }
+    desired.push({ key, role, offering, qty: Number(qty) || 0, roomIds: scopedRooms.map(item => item.room.id), capacities: [...(extra.capacities || [])] });
+  };
+  const zoneOffering = smartCashierOffering('zone');
+  add('zone', zoneOffering, rooms.reduce((sum, item) => sum + item.system.zones, 0), rooms);
+  rooms.forEach(item => {
+    if (!item.system.capacityW) return;
+    const offering = smartCashierOffering('power', item.system.capacityW);
+    add('power', offering, 1, [item], { capacities: [item.system.capacityW] });
+  });
+  const multiRooms = rooms.filter(item => item.system.controlMode === 'multi');
+  add('multi', smartCashierOffering('multi'), multiRooms.length, multiRooms);
+  const electricRooms = rooms.filter(item => item.system.electricianNeeded);
+  const electric = smartCashierOffering('electric');
+  const electricQty = serviceOfferingUnit(electric) === 'fixed' ? (electricRooms.length ? 1 : 0) : electricRooms.length;
+  add('electric', electric, electricQty, electricRooms);
+  return desired;
+}
+function smartCashierIssues(o) {
+  const rooms = smartProjectRooms(o);
+  if (!rooms.length) return [];
+  const issues = [];
+  const requireOffering = (role, label, capacityW = 0) => {
+    const offering = smartCashierOffering(role, capacityW);
+    if (!offering) { issues.push(`в кассе Smart не настроена услуга «${label}»`); return; }
+    if (!(Number(offering.pricePerSqft) > 0)) issues.push(`в кассе Smart не указана цена: ${offering.name}`);
+  };
+  requireOffering('zone', 'Подключение зоны');
+  [...new Set(rooms.map(item => item.system.capacityW).filter(Boolean))].forEach(capacity => requireOffering('power', `Блок питания ${capacity}W`, capacity));
+  if (rooms.some(item => item.system.controlMode === 'multi')) requireOffering('multi', 'Мультизонное управление');
+  if (rooms.some(item => item.system.electricianNeeded)) requireOffering('electric', 'Электрические работы');
+  return [...new Set(issues)];
+}
+function syncSmartCashierServices(o) {
+  if (!o) return false;
+  o.extraServices = Array.isArray(o.extraServices) ? o.extraServices : [];
+  const desired = smartCashierDesiredLines(o);
+  const desiredKeys = new Set(desired.map(item => item.key));
+  const before = JSON.stringify({
+    extraServices: o.extraServices,
+    offeringIds: o.offeringIds || [],
+    offeringUnits: o.offeringUnits || {},
+    serviceTypes: o.serviceTypes || [],
+    serviceSchedules: o.serviceSchedules || [],
+  });
+  const obsoleteIds = new Set();
+  o.extraServices = o.extraServices.filter(line => {
+    if (!line.smartAuto || desiredKeys.has(line.smartKey)) return true;
+    if (projectServiceProgress(o, `line:${line.id}`).status === 'done') return true;
+    obsoleteIds.add(`line:${line.id}`);
+    return false;
+  });
+  if (obsoleteIds.size && Array.isArray(o.serviceSchedules)) o.serviceSchedules = o.serviceSchedules.filter(plan => !obsoleteIds.has(plan.id));
+  desired.forEach(item => {
+    let line = o.extraServices.find(candidate => candidate.smartAuto && candidate.smartKey === item.key);
+    // Migrate the same cashier row that an older project already added by
+    // hand, instead of displaying a duplicate beside it.
+    if (!line) line = o.extraServices.find(candidate => !candidate.smartAuto && !candidate.includedBy && !candidate.quickProjectLine && candidate.offeringId === item.offering.id);
+    if (!line) {
+      line = projectOfferingLine(item.offering, item.qty, 'smart_film');
+      o.extraServices.push(line);
+    }
+    line.smartAuto = true;
+    line.smartKey = item.key;
+    if (projectServiceProgress(o, `line:${line.id}`).status !== 'done') {
+      line.qty = item.qty;
+      line.price = Math.round((Number(line.unitPrice) || 0) * item.qty * 100) / 100;
+      line.smartRoomIds = [...new Set(item.roomIds)];
+      line.smartRole = item.role;
+      line.smartCapacities = [...new Set(item.capacities.filter(Boolean))];
+      const suffix = item.role === 'power' && line.smartCapacities.length ? ` · ${line.smartCapacities.join('/')}W` : '';
+      line.label = `${item.offering.name}${suffix}`;
+      line.offeringName = item.offering.name;
+      delete line.qtyManual;
+    }
+    o.offeringIds = [...new Set([...(o.offeringIds || []), item.offering.id])];
+    o.offeringUnits = { ...(o.offeringUnits || {}), [item.offering.id]: o.offeringUnits?.[item.offering.id] || serviceOfferingUnit(item.offering) };
+    if (!(o.serviceTypes || []).includes('smart_film')) o.serviceTypes = [...(o.serviceTypes || [o.serviceType].filter(Boolean)), 'smart_film'];
+  });
+  return before !== JSON.stringify({
+    extraServices: o.extraServices,
+    offeringIds: o.offeringIds || [],
+    offeringUnits: o.offeringUnits || {},
+    serviceTypes: o.serviceTypes || [],
+    serviceSchedules: o.serviceSchedules || [],
+  });
+}
+
 // A Project is a container of services. A service may include another service
 // at no customer charge (for example, protective film with silicone). The
 // included service remains an independent operational line with its own
@@ -25597,6 +25865,7 @@ function projectIncludedQty(o, parentId, child) {
   const parentLine = (o?.extraServices || []).find(line => line.offeringId === parentId && !line.includedBy && !line.quickProjectLine);
   if (unit === 'lft') return Math.round(windows.reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100;
   if (unit === 'piece') return windows.length ? windows.reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0) : Number(parentLine?.qty) || 1;
+  if (unit === 'zone') return windows.length ? windows.reduce((sum, win) => sum + smartWindowZoneCount(win), 0) : Number(parentLine?.qty) || 1;
   return 1;
 }
 
@@ -30246,22 +30515,55 @@ function managerSmartWindowFieldsHtml(oid, room, win) {
   syncSmartWindowPlan(win, room?.name || '');
   const smart = win.smart || {};
   const zones = smart.zones || [];
-  return `<details class="erp-intake-disclosure mt-3" open>
-    <summary>⚡ Smart-комплект и подключение · ${zones.length} зон(ы)</summary>
+  return `<details class="manager-smart-zone mt-3">
+    <summary>⚡ Зона окна · ${zones.length} ${projectPlural(zones.length, 'зона', 'зоны', 'зон')}</summary>
     <div class="manager-window-fields mt-3">
       <div class="manager-window-field wide"><label>Название зоны</label><input value="${academyEsc(smart.zone || '')}" onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','zone',this.value)"></div>
-      <div class="manager-window-field"><label>Зон подключения</label><input value="${zones.length}" readonly title="Количество зон равно количеству окон"></div>
-      <div class="manager-window-field wide"><label>Блок питания</label><select onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','powerSupplyModel',this.value)"><option value="">— выбрать модель —</option>${ROLAN_SMART_POWER_SUPPLIES.map(model => `<option value="${academyEsc(model)}" ${smart.powerSupplyModel === model ? 'selected' : ''}>${academyEsc(model)}</option>`).join('')}</select></div>
-      <div class="manager-window-field"><label>Количество блоков</label><input type="number" min="1" value="${smart.blocks || 1}" onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','blocks',this.value)"></div>
-      <div class="manager-window-field"><label>Силикон, шт.</label><input type="number" min="0" step="1" value="${smart.siliconeQty ?? zones.length}" onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','siliconeQty',this.value)"></div>
-      <div class="manager-window-field wide"><label>Место блока</label><select onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','blockPlacement',this.value)">${SMART_BLOCK_PLACEMENTS.map(item => `<option value="${item.id}" ${smart.blockPlacement === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
+      <div class="manager-window-field"><label>Количество зон</label><input value="${zones.length}" readonly title="Одна физическая Smart-панель — одна зона"></div>
       <div class="manager-window-field"><label>Точка подключения</label><select onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','connectionPointSide',this.value)">${SMART_CONNECTION_POINTS.map(item => `<option value="${item.id}" ${smart.connectionPointSide === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
-      <div class="manager-window-field wide"><label>Управление</label><select onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','controllerType',this.value)">${SMART_CONTROL_TYPES.map(item => `<option value="${academyEsc(item)}" ${smart.controllerType === item ? 'selected' : ''}>${academyEsc(item)}</option>`).join('')}</select></div>
-      <div class="manager-window-field wide"><label>Трасса провода</label><input value="${academyEsc(smart.wirePath || '')}" placeholder="Busbar → рама → блок → выключатель" onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','wirePath',this.value)"></div>
-      <label class="manager-window-field wide flex items-center gap-2"><input type="checkbox" ${smart.electricianNeeded ? 'checked' : ''} onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','electricianNeeded',this.checked)" style="width:18px;height:18px"> Нужен электрик</label>
+      <div class="manager-window-field wide"><label>Уточнение точки</label><input value="${academyEsc(smart.connectionPointDetail || '')}" placeholder="Например: сверху справа, вывод 12 in" onchange="managerUpdateSmartWin('${oid}','${room.id}','${win.id}','connectionPointDetail',this.value)"></div>
     </div>
-    <div class="text-xs text-blue-700 mt-2">CRM сформирует в заказ-наряде: ${zones.map(zone => academyEsc(zone.name)).join(' · ')} · панели · блок питания · силикон · схему подключения.</div>
   </details>`;
+}
+function managerSmartRoomFieldsHtml(oid, room) {
+  const system = syncSmartRoomPlan(room);
+  if (!system) return '';
+  const zoneOffering = smartCashierOffering('zone');
+  const powerOffering = system.capacityW ? smartCashierOffering('power', system.capacityW) : null;
+  const multiOffering = system.controlMode === 'multi' ? smartCashierOffering('multi') : null;
+  const electricOffering = system.electricianNeeded ? smartCashierOffering('electric') : null;
+  const cashierCard = (label, offering, qty) => `<div class="manager-smart-cashier-item ${offering && Number(offering.pricePerSqft) > 0 ? 'ready' : 'missing'}"><span>${academyEsc(label)}</span><b>${offering ? `${academyEsc(offering.name)} · ${qty} × ${fmtMoney(Number(offering.pricePerSqft) || 0)}` : 'Настройте в «Услуги и цены»'}</b></div>`;
+  return `<section class="manager-smart-room-system">
+    <div class="manager-smart-room-head"><div><span>SMART · СИСТЕМА ПОМЕЩЕНИЯ</span><h4>${academyEsc(room.name || 'Помещение')}</h4></div><b>1 блок на помещение</b></div>
+    <div class="manager-smart-metrics">
+      <div><small>Площадь Smart</small><strong>${system.areaSqft.toFixed(2)} sqft</strong></div>
+      <div><small>Физические зоны</small><strong>${system.zones}</strong></div>
+      <div><small>Нагрузка +20%</small><strong>${system.requiredW}W</strong></div>
+      <div class="${system.engineeringRequired ? 'danger' : ''}"><small>Блок подобран</small><strong>${academyEsc(system.powerSupplyModel || (system.requiredW ? 'Нужен инженерный расчёт' : 'После ввода размеров'))}</strong></div>
+    </div>
+    <div class="manager-smart-control-label">Как управляем помещением</div>
+    <div class="manager-smart-control-grid">
+      ${SMART_ROOM_CONTROL_MODES.map(mode => `<button type="button" class="manager-smart-control ${system.controlMode === mode.id ? 'active' : ''}" onclick="managerUpdateSmartRoom('${oid}','${room.id}','controlMode','${mode.id}')"><span>${system.controlMode === mode.id ? '✓' : ''}</span><b>${academyEsc(mode.label)}</b><small>${academyEsc(mode.help)}</small></button>`).join('')}
+    </div>
+    ${system.engineeringRequired ? '<div class="alert alert-warning mt-3">Расчётная нагрузка больше 1000W. CRM не подставляет случайный блок: разделите питание или подтвердите инженерное решение.</div>' : ''}
+    <details class="manager-smart-technical mt-3">
+      <summary>Монтаж блока и электрика</summary>
+      <div class="manager-window-fields mt-3">
+        <div class="manager-window-field"><label>Размещение блока</label><select onchange="managerUpdateSmartRoom('${oid}','${room.id}','blockPlacement',this.value)">${SMART_BLOCK_PLACEMENTS.map(item => `<option value="${item.id}" ${system.blockPlacement === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
+        <div class="manager-window-field"><label>Точное место</label><input value="${academyEsc(system.powerSupplyLocation || '')}" placeholder="Шкаф, потолок, серверная…" onchange="managerUpdateSmartRoom('${oid}','${room.id}','powerSupplyLocation',this.value)"></div>
+        <div class="manager-window-field wide"><label>Общая трасса</label><input value="${academyEsc(system.wirePath || '')}" placeholder="Окна → блок помещения → управление" onchange="managerUpdateSmartRoom('${oid}','${room.id}','wirePath',this.value)"></div>
+        <label class="manager-window-field wide flex items-center gap-2"><input type="checkbox" ${system.electricianNeeded ? 'checked' : ''} onchange="managerUpdateSmartRoom('${oid}','${room.id}','electricianNeeded',this.checked)" style="width:18px;height:18px"> Нужны электрические работы</label>
+      </div>
+    </details>
+    <div class="manager-smart-cashier">
+      <div class="manager-smart-cashier-title"><b>Что попадёт в действующую кассу и КП</b><span>Цены берутся только из «Услуги и цены»</span></div>
+      ${cashierCard('Подключение зон', zoneOffering, system.zones)}
+      ${cashierCard('Блок помещения', powerOffering, 1)}
+      ${system.controlMode === 'multi' ? cashierCard('Мультизонное управление', multiOffering, 1) : ''}
+      ${system.electricianNeeded ? cashierCard('Электрические работы', electricOffering, 1) : ''}
+      <div class="manager-smart-cashier-note">Силикон и другие дополнительные работы добавляются обычной строкой через кассу — CRM их не навязывает каждому окну.</div>
+    </div>
+  </section>`;
 }
 function managerWarehouseFilmItems(selectedId = '', category = '') {
   const ranked = db.settings.catalog
@@ -30464,6 +30766,7 @@ function renderManagerMeasureModal(oid) {
                     </article>`;
                   }).join('') : `<div class="rounded-lg border border-dashed p-6 text-center text-sm text-gray-500">Для услуги ${scope.icon} ${academyEsc(scope.short)} в этой комнате размеров пока нет. Выберите окно, дверь или skylight и нажмите «Добавить».</div>`}
                 </div>
+                ${activeScopeKey === 'smart_film' && serviceWindows.length ? managerSmartRoomFieldsHtml(oid, r) : ''}
                 <div class="manager-room-summary">
                   <span>${scope.icon} ${academyEsc(scope.short)}: <b>${serviceWindows.length} элементов · ${serviceWindows.reduce((sum,w)=>sum+windowActualAreaSqft(w),0).toFixed(2)} sqft</b></span>
                   <span>Все изменения сохраняются автоматически.</span>
@@ -30511,14 +30814,15 @@ function managerSolarMeasurementIssues(order) {
 }
 function managerSmartMeasurementIssues(order) {
   const issues = [];
-  measureAllWindows(order).forEach(({ room, win }) => {
-    if ((win.measureScope || orderMeasureScope(order)) !== 'smart_film') return;
-    syncSmartWindowPlan(win, room?.name || '');
-    const label = `${room?.name || 'Помещение'} · ${win.name || 'Окно'}`;
-    if (!win.smart?.powerSupplyModel) issues.push(`${label}: выберите блок питания`);
-    if (!String(win.smart?.wirePath || '').trim()) issues.push(`${label}: укажите трассу провода`);
-    if ((win.smart?.zones || []).length !== Math.max(1, parseInt(win.qty) || 1)) issues.push(`${label}: количество зон должно соответствовать количеству окон`);
-    if (win.smart?.siliconeRequired && Number(win.smart?.siliconeQty) <= 0) issues.push(`${label}: укажите количество силикона`);
+  (order?.measurements?.rooms || []).forEach(room => {
+    const windows = smartWindowsInRoom(room);
+    if (!windows.length) return;
+    const system = syncSmartRoomPlan(room);
+    windows.forEach(win => {
+      const label = `${room?.name || 'Помещение'} · ${win.name || 'Окно'}`;
+      if ((win.smart?.zones || []).length !== smartWindowZoneCount(win)) issues.push(`${label}: одна физическая панель должна соответствовать одной зоне`);
+    });
+    if (system?.engineeringRequired) issues.push(`${room?.name || 'Помещение'}: нагрузка ${system.requiredW}W выше доступного блока 1000W — нужен инженерный расчёт`);
   });
   return issues;
 }
@@ -30557,7 +30861,18 @@ function completeManagerMeasurement(oid) {
 }
 function projectSyncServicesFromWindows(oid) {
   const o = getOrder(oid);
-  if (o && orderUserCanSeeMoney(o, currentUser()) && syncProjectIncludedServices(o)) save();
+  if (!o) return;
+  const beforeRooms = JSON.stringify((o.measurements?.rooms || []).map(room => room.smartSystem || null));
+  (o.measurements?.rooms || []).forEach(syncSmartRoomPlan);
+  let changed = beforeRooms !== JSON.stringify((o.measurements?.rooms || []).map(room => room.smartSystem || null));
+  if (orderUserCanSeeMoney(o, currentUser())) {
+    changed = syncSmartCashierServices(o) || changed;
+    changed = syncProjectIncludedServices(o) || changed;
+  }
+  if (changed) {
+    projectEstimateMarkChanged(o, 'Smart-комплектация синхронизирована с кассой проекта');
+    save();
+  }
 }
 /** «Сохранить и следующее окно»: fields save as they change; a new window in the same room, scrolled into view. */
 function managerMeasureNextWindow(oid, rid) {
@@ -30864,7 +31179,24 @@ function managerUpdateSmartWin(oid, rid, wid, field, val) {
     win.zones = win.smart.zones;
   }
   win.smart.calculatedW = measureSmartLoad(win);
+  syncSmartRoomPlan(room);
   invalidateProjectEstimate(o, 'Изменена Smart-комплектация и схема подключения');
+  save();
+  refreshManagerMeasureModal(oid);
+}
+function managerUpdateSmartRoom(oid, rid, field, val) {
+  const o = getOrder(oid);
+  const room = o?.measurements?.rooms?.find(item => item.id === rid);
+  if (!o || !room || !smartWindowsInRoom(room).length) return;
+  const system = syncSmartRoomPlan(room);
+  if (!system) return;
+  if (field === 'controlMode') system.controlMode = val === 'multi' ? 'multi' : 'group';
+  else if (field === 'electricianNeeded') system.electricianNeeded = Boolean(val);
+  else if (['blockPlacement', 'powerSupplyLocation', 'wirePath', 'notes'].includes(field)) system[field] = String(val || '').trim();
+  else return;
+  room.smartSystem = system;
+  syncSmartRoomPlan(room);
+  invalidateProjectEstimate(o, 'Изменена Smart-система помещения');
   save();
   refreshManagerMeasureModal(oid);
 }
