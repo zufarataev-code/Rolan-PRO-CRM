@@ -57,8 +57,9 @@ async function main() {
       await newName.fill('QA custom solution'); await newName.press('Tab');
       const price=card.locator('input[type=number]').first();
       await price.fill('18'); await price.press('Tab');
-      await card.locator('summary').click();
-      await card.locator(`input[type=checkbox][onchange*="'film-a'"]`).check();
+      const filmChoice=card.locator(`input[type=checkbox][onchange*="'film-a'"]`);
+      await filmChoice.waitFor({state:'visible'});
+      await filmChoice.check();
       const confirmed=await page.evaluate(()=> (window as any).cloudPersistConfirmed());
       assert.equal(confirmed,true,'Solution edits must be acknowledged by the workspace API');
       const catalogState=(await (await context.request.get(base+'/api/v1/legacy-crm/state')).json()).data;
