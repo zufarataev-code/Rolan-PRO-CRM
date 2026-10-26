@@ -746,3 +746,14 @@ Owner rejected the ambiguous one-row form where list price, minimum, maximum, in
 - For a size-free service, the minimum customer price cannot be below known direct unit cost (material/equipment plus installer pay). The list price must stay inside any configured manager corridor.
 - For measured film, actual material cost continues to come from the selected warehouse lot and project consumption. The directory may preview labor margin, but it must say that film cost is still pending instead of presenting incomplete margin as final profit.
 - The project, Proposal, warehouse and payroll keep using the existing authoritative fields and formulas; this editor does not create a second calculator.
+
+## 2026-10-26 — Manager may schedule installation with unresolved on-site Solar facts (Owner)
+
+Owner clarified that a manager has the dimensions needed to plan the calendar, but often cannot know the glass type, facade orientation, inside/outside application side or access method before the field visit. Those facts must not make the installation button a dead end.
+
+- Accepted Proposal, approved estimate, exact verified dimensions, prepared material, at least one service date and its installation crew remain required before the Project enters `installation_scheduled`.
+- Missing Solar glass type, facade orientation, application side and access/height are warnings, not calendar blockers. The manager may assign each service its own crew and dates.
+- Every unresolved Solar fact is shown in the assignment window and printed prominently in the work order. Each affected opening says `НЕ УКАЗАНО`; the surveyor or crew lead must verify and record it before film installation starts.
+- A surveyor completing an on-site measurement is still responsible for these technical fields.
+- Smart zone integrity and controller over-capacity remain hard engineering blockers; a manager cannot waive them.
+- This changes no price, Proposal, stock, payroll or Project identity. The work order remains an output of the same Project rather than a parallel record.

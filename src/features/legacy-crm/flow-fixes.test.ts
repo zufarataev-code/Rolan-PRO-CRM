@@ -178,10 +178,11 @@ test('approval and production confirmation store the fingerprints the check comp
   assert.match(slice('function confirmProjectProductionReady(oid)', 'function scheduleInstallationPrompt('), /o\.productionFingerprint = projectProductionFingerprint\(o\);/);
 });
 
-test('production readiness lists the technical details scheduling would refuse', () => {
+test('production readiness blocks unsafe Smart topology, not on-site Solar facts', () => {
   const readiness = slice('function projectProductionReadiness(o', 'const plan = calcFilmPlan(o);');
-  assert.match(readiness, /orderTechnicalMeasurementIssues\(o\)/);
-  assert.match(readiness, /замерщик должен уточнить/);
+  assert.match(readiness, /orderInstallationBlockingTechnicalIssues/);
+  assert.doesNotMatch(readiness, /orderTechnicalMeasurementIssues\(o\)/);
+  assert.doesNotMatch(readiness, /замерщик должен уточнить/);
 });
 
 test('a service without linked films takes any film of its direction; linked films restrict, and only the owner links more', () => {

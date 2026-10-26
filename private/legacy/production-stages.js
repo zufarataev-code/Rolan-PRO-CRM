@@ -2330,6 +2330,14 @@ function installWindowHtml(o) {
   const w = state._installWindow || {};
   const rows = installWindowRows(o);
   const plannedCount = rows.filter(row => row.planned).length;
+  const technicalWarnings = typeof orderInstallationTechnicalWarnings === 'function'
+    ? orderInstallationTechnicalWarnings(o)
+    : [];
+  const warningBox = technicalWarnings.length ? `<div class="rp-dirwin-warn" style="background:#fff7ed;border-color:#fb923c;color:#9a3412">
+      <b>⚠ Монтаж можно назначить, но на объекте нужно уточнить:</b>
+      <ul style="margin:6px 0 0 18px">${technicalWarnings.slice(0, 5).map(item => `<li>${academyEsc(item)}</li>`).join('')}${technicalWarnings.length > 5 ? `<li>И ещё ${technicalWarnings.length - 5}</li>` : ''}</ul>
+      <div style="margin-top:6px">Это попадёт в заказ-наряд как обязательное уточнение до начала работ.</div>
+    </div>` : '';
   const head = (kicker, title, sub, back) => `<header class="order-workspace-modal-head rp-dirwin-head">
       <button type="button" class="workspace-back" onclick="${back}">${back.startsWith('closeInstallWindow') ? '← К проекту' : '← Все услуги'}</button>
       <div class="order-workspace-modal-heading"><div><div class="order-workspace-modal-kicker">${kicker}</div><h3>${title}</h3>${sub ? `<div class="text-xs text-gray-500">${sub}</div>` : ''}</div></div>
@@ -2351,6 +2359,7 @@ function installWindowHtml(o) {
     return shell(row.meta.color, `${head(`УСЛУГА ${row.index + 1} ИЗ ${rows.length} · ${academyEsc(row.meta.label)}`, academyEsc(row.group.name), `${academyEsc(o.number)} · ${academyEsc(getClient(o.clientId)?.name || '')}`, `openInstallWindow('${o.id}')`)}
       <div class="order-workspace-modal-body rp-dirwin-body">
         ${row.done ? '<div class="rp-dirwin-warn">Услуга выполнена — её даты и исполнители остаются как история.</div>' : ''}
+        ${warningBox}
         <div class="rp-dirwin-sub">Исполнители</div>
         <div class="install-chips">${chips}</div>
         ${installDateTimeHtml(d)}
@@ -2378,6 +2387,7 @@ function installWindowHtml(o) {
   return shell('#DC2626', `${head(`НАЗНАЧИТЬ МОНТАЖ · ${academyEsc(o.number)}`, academyEsc(getClient(o.clientId)?.name || 'Проект'), `Назначено ${plannedCount} из ${rows.length} · остальные можно назначить позже`, 'closeInstallWindow()')}
     <div class="install-progress"><span style="width:${rows.length ? Math.round(plannedCount / rows.length * 100) : 0}%"></span></div>
     <div class="order-workspace-modal-body rp-dirwin-body">
+      ${warningBox}
       <div class="rp-dirwin-sub">Услуги проекта по порядку</div>
       ${list || '<div class="rp-dirwin-empty">В проекте нет услуг.</div>'}
       <div class="install-hint">Назначайте то, что известно сейчас. Остальные услуги останутся «не назначено» — назначите, когда подойдёт время. Клиент получит сообщение о датах.</div>
