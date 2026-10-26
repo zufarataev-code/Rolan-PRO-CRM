@@ -2848,3 +2848,72 @@ function proposalWizardSummaryHtml(o, groups, total, deposit, client) {
     <div class="rp-kpsum-totals"><div><span>Итого</span><b>${fmtMoney(total)}</b></div><div><span>${o.paymentTerms === 'after_completion' ? 'При подписи' : 'Аванс при подписи'}</span><b>${fmtMoney(deposit)}</b></div><div><span>Условия</span><b>${terms}</b></div></div>
   </div>`;
 }
+
+// ---------- SMART ПРОЩЕ (Owner, 2026-10-26) ----------
+// «В смарте выбираешь услугу и окна — значит подключение зон: одно окно = одна
+// зона, это должно идти сразу. Электрика — только если требуется. Ты усложнил.»
+// The room card shows what joins the KP: zones (automatic, one per panel),
+// the power block and the electrician only when ticked. A service missing in
+// the price list never blocks the project: the owner creates it right here.
+function smartRoleDefaults(role, capacityW = 0) {
+  return ({
+    zone: { name: 'Подключение зоны', unit: 'zone' },
+    power: { name: capacityW ? `Блок питания ${capacityW}W` : 'Блок питания', unit: 'piece' },
+    multi: { name: 'Мультизонное управление', unit: 'piece' },
+    electric: { name: 'Электрические работы', unit: 'piece' },
+  })[role] || null;
+}
+function smartCreateOffering(oid, rid, role, capacityW = 0) {
+  if (typeof serviceOfferingCanEdit === 'function' && !serviceOfferingCanEdit()) return;
+  const base = smartRoleDefaults(role, Number(capacityW) || 0);
+  if (!base) return;
+  const input = document.getElementById(`smart-new-${rid}-${role}`);
+  const price = Math.max(0, Number(input?.value) || 0);
+  if (!(price > 0)) { input?.classList.add('sched-missing'); input?.focus?.(); return; }
+  db.settings.serviceOfferings = Array.isArray(db.settings.serviceOfferings) ? db.settings.serviceOfferings : [];
+  const sort = Math.max(0, ...serviceOfferingsAll().map(item => Number(item.sort) || 0)) + 1;
+  db.settings.serviceOfferings.push({ id: 'svc_' + uid(), direction: 'smart', name: base.name, unit: base.unit, pricePerSqft: price, installerRatePerSqft: 0, active: true, sort, createdFrom: 'smart-measure' });
+  const o = getOrder(oid);
+  if (o && typeof syncSmartCashierServices === 'function') syncSmartCashierServices(o);
+  if (o) invalidateProjectEstimate(o, `Создана услуга «${base.name}»`);
+  save();
+  refreshManagerMeasureModal(oid);
+}
+function managerSmartRoomFieldsHtml(oid, room) {
+  const system = syncSmartRoomPlan(room);
+  if (!system) return '';
+  const canCreate = typeof serviceOfferingCanEdit === 'function' && serviceOfferingCanEdit();
+  const row = (role, label, qty, capacityW = 0) => {
+    const offering = smartCashierOffering(role, capacityW);
+    const priced = offering && Number(offering.pricePerSqft) > 0;
+    if (priced) return `<div class="smart-kp-row ready"><span>${academyEsc(label)}</span><b>${academyEsc(offering.name)} · ${qty} × ${fmtMoney(Number(offering.pricePerSqft) || 0)} = ${fmtMoney(qty * (Number(offering.pricePerSqft) || 0))}</b></div>`;
+    if (offering) return `<div class="smart-kp-row missing"><span>${academyEsc(label)}</span><b>«${academyEsc(offering.name)}» без цены — укажите её в «Услугах и ценах»</b></div>`;
+    const name = smartRoleDefaults(role, capacityW)?.name || label;
+    return `<div class="smart-kp-row missing"><span>${academyEsc(label)} · ${qty}</span>${canCreate ? `<div class="smart-kp-create"><b>«${academyEsc(name)}» нет в прайсе</b><input id="smart-new-${room.id}-${role}" type="number" min="0" step="1" inputmode="decimal" placeholder="Цена, $"><button type="button" class="btn-primary" onclick="smartCreateOffering('${oid}','${room.id}','${role}',${Number(capacityW) || 0})">Создать услугу</button></div>` : `<b>«${academyEsc(name)}» нет в прайсе — в КП не войдёт. Попросите владельца добавить.</b>`}</div>`;
+  };
+  const toggle = (field, on, title, sub, next = String(!on)) => `<button type="button" class="smart-toggle ${on ? 'on' : ''}" aria-pressed="${on}" onclick="managerUpdateSmartRoom('${oid}','${room.id}','${field}',${next})"><span class="smart-toggle-box">${on ? '✓' : ''}</span><span><b>${title}</b><small>${sub}</small></span></button>`;
+  return `<section class="manager-smart-room-system">
+    <div class="manager-smart-room-head"><div><span>SMART · ${academyEsc(room.name || 'Помещение')}</span><h4>${system.zones} ${projectPlural(system.zones, 'зона', 'зоны', 'зон')} · 1 окно = 1 зона</h4></div><b>${system.areaSqft.toFixed(1)} sq ft</b></div>
+    <div class="smart-toggles">
+      ${toggle('electricianNeeded', system.electricianNeeded, '⚡ Нужен электрик', 'Только если требуется подключение к сети')}
+      ${toggle('powerBlockNeeded', system.powerBlockNeeded, '🔌 Нужен блок питания', system.powerSupplyModel ? `Подходит ${academyEsc(system.powerSupplyModel)} · ${system.requiredW}W` : 'После ввода размеров')}
+      ${toggle('controlMode', system.controlMode === 'multi', '🎛 Каждая зона отдельно', 'Мультизонное управление', system.controlMode === 'multi' ? "'group'" : "'multi'")}
+    </div>
+    ${system.powerBlockNeeded && system.engineeringRequired ? '<div class="alert alert-warning mt-3">Нагрузка больше 1000W — разделите питание или подтвердите инженерное решение.</div>' : ''}
+    <div class="smart-kp">
+      <div class="smart-kp-title">Попадёт в КП</div>
+      ${row('zone', 'Подключение зон', system.zones)}
+      ${system.powerBlockNeeded && system.capacityW ? row('power', 'Блок питания', 1, system.capacityW) : ''}
+      ${system.controlMode === 'multi' ? row('multi', 'Мультизона', 1) : ''}
+      ${system.electricianNeeded ? row('electric', 'Электрик', 1) : ''}
+    </div>
+    ${system.powerBlockNeeded || system.electricianNeeded ? `<details class="manager-smart-technical mt-3">
+      <summary>Где блок и как тянем провод</summary>
+      <div class="manager-window-fields mt-3">
+        <div class="manager-window-field"><label>Размещение блока</label><select onchange="managerUpdateSmartRoom('${oid}','${room.id}','blockPlacement',this.value)">${SMART_BLOCK_PLACEMENTS.map(item => `<option value="${item.id}" ${system.blockPlacement === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
+        <div class="manager-window-field"><label>Точное место</label><input value="${academyEsc(system.powerSupplyLocation || '')}" placeholder="Шкаф, потолок, серверная…" onchange="managerUpdateSmartRoom('${oid}','${room.id}','powerSupplyLocation',this.value)"></div>
+        <div class="manager-window-field wide"><label>Трасса</label><input value="${academyEsc(system.wirePath || '')}" placeholder="Окна → блок → управление" onchange="managerUpdateSmartRoom('${oid}','${room.id}','wirePath',this.value)"></div>
+      </div>
+    </details>` : ''}
+  </section>`;
+}
