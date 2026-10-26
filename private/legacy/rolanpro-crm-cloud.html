@@ -2024,6 +2024,16 @@
   .install-stripe { display:flex;justify-content:space-between;gap:8px;align-items:center;border-radius:6px;padding:3px 8px;font-size:12px;line-height:1.3;box-sizing:border-box; }
   .install-stripe span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600; }
   .install-stripe b { white-space:nowrap;font-weight:700; }
+  /* Smart room — simple (Owner, 2026-10-26) */
+  .smart-toggles { display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:10px; }
+  .smart-toggle { display:flex;gap:10px;align-items:flex-start;text-align:left;border:1.5px solid #CBD5E1;border-radius:10px;background:#fff;padding:10px 12px; }
+  .smart-toggle b { display:block;font-weight:800;color:#0F172A; } .smart-toggle small { display:block;color:#64748B;font-size:12px; }
+  .smart-toggle-box { flex:none;width:22px;height:22px;border:2px solid #94A3B8;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff; }
+  .smart-toggle.on { border-color:#7C3AED;background:#F5F3FF; } .smart-toggle.on .smart-toggle-box { background:#7C3AED;border-color:#7C3AED; }
+  .smart-kp { margin-top:12px;display:flex;flex-direction:column;gap:6px; } .smart-kp-title { font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:#334155; }
+  .smart-kp-row { display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;background:#fff;font-size:13px; }
+  .smart-kp-row.ready { border-color:#86EFAC;background:#F0FDF4; } .smart-kp-row.missing { border-color:#FCD34D;background:#FFFBEB; }
+  .smart-kp-create { display:flex;flex-wrap:wrap;gap:6px;align-items:center; } .smart-kp-create input { width:110px;min-height:40px;font-size:16px; } .smart-kp-create b { width:100%;font-size:12px;color:#92400E; }
   /* Manual price + «what the client gets» before sending (Owner, 2026-10-26) */
   .rp-price-row { display:grid !important;grid-template-columns:minmax(0,1fr) 120px auto;align-items:end;gap:.6rem; }
   @media (max-width:640px) { .rp-price-row { grid-template-columns:1fr auto; } .rp-price-main { grid-column:1 / -1; } }
@@ -12095,7 +12105,8 @@ function syncSmartWindowPlan(win, roomName = '') {
     connectionPointSide: current.connectionPointSide || current.busbarSide || 'top',
     connectionPointDetail: current.connectionPointDetail || '',
     busbarSide: current.connectionPointSide || current.busbarSide || 'top',
-    electricianNeeded: current.electricianNeeded !== false,
+    // Owner, 2026-10-26: an electrician only when someone ticks «нужен электрик».
+    electricianNeeded: current.electricianNeeded === true,
     siliconeRequired: current.siliconeRequired !== false,
     siliconeQty: Math.max(0, Number(current.siliconeQty ?? qty) || 0),
     wireLengthFt: Number(current.wireLengthFt) || null,
@@ -12141,7 +12152,9 @@ function syncSmartRoomPlan(room) {
     blockPlacement: current.blockPlacement || legacy.blockPlacement || 'ceiling',
     powerSupplyLocation: current.powerSupplyLocation || legacy.powerSupplyLocation || '',
     wirePath: current.wirePath || legacy.wirePath || '',
-    electricianNeeded: typeof current.electricianNeeded === 'boolean' ? current.electricianNeeded : legacy.electricianNeeded !== false,
+    electricianNeeded: typeof current.electricianNeeded === 'boolean' ? current.electricianNeeded : legacy.electricianNeeded === true,
+    // The power block is offered, never imposed: it joins the KP when ticked.
+    powerBlockNeeded: current.powerBlockNeeded === true,
     notes: current.notes || '',
   };
   room.smartSystem = system;
@@ -25645,7 +25658,8 @@ function projectEstimateReadiness(o) {
   if (windows.some(({ win }) => !windowCatalog(win))) issues.push('не выбрана плёнка для всех окон');
   if ((o.extraServices || []).filter(s => !s.quickProjectLine && !s.includedBy).some(s => !String(s.label || '').trim() || Number(s.price) <= 0)) issues.push('есть незаполненные дополнительные услуги');
   if (o.paymentTerms === 'after_completion' && !o.paymentTermsConfirmedAt) issues.push('менеджер не подтвердил ответственность за оплату после выполнения');
-  issues.push(...smartCashierIssues(o));
+  // Owner, 2026-10-26: a Smart service missing in the price list never blocks the
+  // project; the measurement shows it with «Создать услугу» right there.
   if (orderRevenue(o) <= 0) issues.push('сумма проекта равна нулю');
   return [...new Set(issues)];
 }
@@ -25906,7 +25920,7 @@ function smartCashierDesiredLines(o) {
   const zoneOffering = smartCashierOffering('zone');
   add('zone', zoneOffering, rooms.reduce((sum, item) => sum + item.system.zones, 0), rooms);
   rooms.forEach(item => {
-    if (!item.system.capacityW) return;
+    if (!item.system.capacityW || !item.system.powerBlockNeeded) return;
     const offering = smartCashierOffering('power', item.system.capacityW);
     add('power', offering, 1, [item], { capacities: [item.system.capacityW] });
   });
@@ -25928,7 +25942,7 @@ function smartCashierIssues(o) {
     if (!(Number(offering.pricePerSqft) > 0)) issues.push(`в кассе Smart не указана цена: ${offering.name}`);
   };
   requireOffering('zone', 'Подключение зоны');
-  [...new Set(rooms.map(item => item.system.capacityW).filter(Boolean))].forEach(capacity => requireOffering('power', `Блок питания ${capacity}W`, capacity));
+  [...new Set(rooms.filter(item => item.system.powerBlockNeeded).map(item => item.system.capacityW).filter(Boolean))].forEach(capacity => requireOffering('power', `Блок питания ${capacity}W`, capacity));
   if (rooms.some(item => item.system.controlMode === 'multi')) requireOffering('multi', 'Мультизонное управление');
   if (rooms.some(item => item.system.electricianNeeded)) requireOffering('electric', 'Электрические работы');
   return [...new Set(issues)];
@@ -31535,6 +31549,7 @@ function managerUpdateSmartRoom(oid, rid, field, val) {
   if (!system) return;
   if (field === 'controlMode') system.controlMode = val === 'multi' ? 'multi' : 'group';
   else if (field === 'electricianNeeded') system.electricianNeeded = Boolean(val);
+  else if (field === 'powerBlockNeeded') system.powerBlockNeeded = Boolean(val);
   else if (['blockPlacement', 'powerSupplyLocation', 'wirePath', 'notes'].includes(field)) system[field] = String(val || '').trim();
   else return;
   room.smartSystem = system;
