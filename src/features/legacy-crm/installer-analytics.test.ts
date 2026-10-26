@@ -142,7 +142,9 @@ test("the installer reaches analytics from the menu and from «Сегодня»"
 });
 
 test("the installer title is «Специалист по установке» everywhere", () => {
-  assert.doesNotMatch(html, /[Мм]онтажник/);
+  // Normal business labels such as «Монтажнику, $ / sqft» are allowed.
+  // Only the employee-role title must not regress to «Монтажник».
+  assert.doesNotMatch(html, />\s*[Мм]онтажник\s*</);
   // The provisioning workspace and the stored SMS templates too.
   for (const file of ["data/legacy-crm-empty.json", "demo/installer-demo.html", "demo/crm-demo.html"]) {
     assert.doesNotMatch(readFileSync(file, "utf8"), /[Мм]онтажник/, file);

@@ -5549,6 +5549,120 @@
     grid-template-columns: minmax(0, 1fr);
     gap: .85rem;
   }
+  /* === Services directory: five directions, one focused workspace === */
+  .service-direction-home {
+    max-width: 78rem;
+    margin: 0 auto;
+  }
+  .service-direction-intro {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.1rem;
+  }
+  .service-direction-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .9rem;
+  }
+  .service-direction-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .95rem;
+    min-height: 9rem;
+    padding: 1.15rem;
+    overflow: hidden;
+    text-align: left;
+    border: 1px solid color-mix(in srgb, var(--svc-color) 34%, #dbe4ef);
+    border-left: 6px solid var(--svc-color);
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--svc-bg), #fff 72%);
+    box-shadow: 0 8px 24px rgba(15,23,42,.06);
+    color: #0f172a;
+    cursor: pointer;
+    transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+  }
+  .service-direction-card:hover,
+  .service-direction-card:focus-visible {
+    transform: translateY(-2px);
+    border-color: var(--svc-color);
+    box-shadow: 0 14px 32px rgba(15,23,42,.11);
+    outline: none;
+  }
+  .service-direction-card-icon {
+    display: grid;
+    place-items: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--svc-color) 28%, #e2e8f0);
+    font-size: 1.55rem;
+  }
+  .service-direction-card h3 { margin: 0; font-size: 1.05rem; font-weight: 900; }
+  .service-direction-card p { margin: .28rem 0 0; color: #64748b; font-size: .8rem; line-height: 1.4; }
+  .service-direction-card-meta { margin-top: .65rem; display: flex; flex-wrap: wrap; gap: .4rem; }
+  .service-direction-card-arrow { color: var(--svc-color); font-size: 1.45rem; font-weight: 900; }
+  .service-directory-modal {
+    --workspace-color: var(--svc-color, #2563eb);
+    width: min(74rem, 96vw) !important;
+    max-width: 74rem !important;
+    height: min(92svh, 940px);
+    max-height: 92svh !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .service-directory-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.15rem;
+    border-bottom: 1px solid #e2e8f0;
+    border-top: 5px solid var(--svc-color);
+    background: #fff;
+  }
+  .service-directory-heading { display: flex; align-items: center; gap: .8rem; min-width: 0; }
+  .service-directory-heading-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 12px;
+    background: var(--svc-bg);
+    font-size: 1.35rem;
+  }
+  .service-directory-heading h3 { margin: .05rem 0 0; font-size: 1.25rem; font-weight: 950; line-height: 1.15; }
+  .service-directory-kicker { color: var(--svc-color); font-size: .68rem; font-weight: 950; letter-spacing: .08em; text-transform: uppercase; }
+  .service-directory-body { min-height: 0; overflow: auto; padding: 1rem 1.15rem calc(1rem + env(safe-area-inset-bottom)); background: #f8fafc; }
+  .service-directory-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-bottom: .85rem; }
+  .service-directory-list { display: grid; gap: .7rem; }
+  .service-directory-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: .8rem;
+    padding: .9rem 1rem;
+    border: 1px solid #dbe4ef;
+    border-left: 4px solid var(--svc-color);
+    border-radius: 12px;
+    background: #fff;
+  }
+  .service-directory-row.inactive { opacity: .62; }
+  .service-directory-row-title { font-weight: 900; color: #0f172a; overflow-wrap: anywhere; }
+  .service-directory-row-meta { margin-top: .2rem; color: #64748b; font-size: .76rem; }
+  .service-directory-row-price { min-width: 6.5rem; text-align: right; font-weight: 900; color: #0f172a; }
+  .service-directory-empty { padding: 2.25rem 1rem; border: 1px dashed #cbd5e1; border-radius: 12px; background: #fff; text-align: center; color: #64748b; }
+  .service-editor-panel { padding: 1rem; border: 1px solid #dbe4ef; border-radius: 14px; background: #fff; }
+  .service-editor-section + .service-editor-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; }
+  .service-editor-section-title { margin-bottom: .65rem; color: #334155; font-size: .76rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+  .service-editor-status { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .6rem; margin-top: 1rem; }
   @media (max-width: 1180px) {
     .app-topbar {
       grid-template-columns: auto minmax(180px, 1fr) auto;
@@ -5605,6 +5719,19 @@
       max-height: 100svh !important;
       border-radius: 0;
     }
+    .service-direction-intro { display: block; }
+    .service-direction-grid { grid-template-columns: minmax(0, 1fr); }
+    .service-direction-card { min-height: 7.5rem; padding: 1rem; }
+    .service-directory-modal { height: 100svh; max-height: 100svh !important; }
+    .service-directory-head { padding: max(.75rem, env(safe-area-inset-top)) .8rem .75rem; }
+    .service-directory-heading-icon { width: 2.4rem; height: 2.4rem; }
+    .service-directory-heading h3 { font-size: 1.05rem; }
+    .service-directory-body { padding: .8rem .75rem calc(5.5rem + env(safe-area-inset-bottom)); }
+    .service-directory-toolbar { align-items: stretch; flex-direction: column; }
+    .service-directory-toolbar .btn-primary { width: 100%; }
+    .service-directory-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .service-directory-row-price { grid-column: 1 / -1; grid-row: 2; min-width: 0; text-align: left; }
+    .service-directory-row .btn-ghost { grid-column: 2; grid-row: 1 / span 2; align-self: stretch; }
   }
   /* === Mobile tweaks === */
   @media (max-width: 768px) {
@@ -20013,51 +20140,7 @@ function companyRatesSetCommission(userId, value) {
 }
 
 function renderCanonicalServicePricing() {
-  const data = state.canonicalPricingData;
-  if (!data && !state.canonicalPricingLoading && !state.canonicalPricingError) setTimeout(() => loadCanonicalServicePricing(), 0);
-  if (state.canonicalPricingLoading || !data && !state.canonicalPricingError) return `<div class="card text-center py-12"><div class="text-3xl">⏳</div><div class="font-bold mt-3">Загружаем единый прайс…</div></div>`;
-  if (state.canonicalPricingError) return `<div class="card border border-red-200 bg-red-50"><div class="font-bold text-red-800">${academyEsc(state.canonicalPricingError)}</div><button class="btn-primary mt-3" onclick="state.canonicalPricingError='';loadCanonicalServicePricing(true)">Повторить</button></div>`;
-
-  const services = Array.isArray(data.services) ? data.services : [];
-  const addons = Array.isArray(data.addons) ? data.addons : [];
-  const owner = !!data.can_view_costs;
-  const planning = data.planning || {};
-  const assumptions = planning.assumptions || {};
-  const actual = planning.actual || {};
-  const signal = actual.signal === 'on_track' ? 'План выполнен' : actual.signal === 'attention' ? 'Почти у цели' : 'Нужны продажи';
-
-  const serviceCards = services.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:4px">
-    <summary class="cursor-pointer list-none flex items-center justify-between gap-3"><div><div class="font-black text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.service_code)} · ${academyEsc(row.unit_type)}</div></div><div class="flex items-center gap-3"><span class="font-black text-blue-700">${canonicalPricingMoney(row.base_price)}</span><span class="text-slate-400">Открыть ↓</span></div></summary>
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-5 pt-4 border-t border-slate-200">
-      ${canonicalPricingField(`cps-${row.service_type_id}-name`, 'Название', row.name_ru, 'text')}
-      ${canonicalPricingField(`cps-${row.service_type_id}-unit`, 'Единица: sqft, zone, item', row.unit_type, 'text')}
-      ${canonicalPricingField(`cps-${row.service_type_id}-base`, 'Цена клиенту, $', row.base_price)}
-      ${canonicalPricingField(`cps-${row.service_type_id}-min`, 'Минимальная цена, $', row.min_price)}
-      ${canonicalPricingField(`cps-${row.service_type_id}-block`, 'Блок клиенту, $', row.block_revenue_price)}
-    </div>
-    <p class="text-xs text-slate-500 mt-3">Только цена для «Калькулятора». Ставки монтажа — в услугах направлений выше.</p>
-    <div class="mt-4 flex flex-wrap items-center gap-3"><label class="tag"><input id="cps-${row.service_type_id}-active" type="checkbox" ${row.is_active ? 'checked' : ''}> Активна</label><button class="btn-primary" onclick="saveCanonicalService('${row.service_type_id}')">Сохранить услугу</button></div>
-  </details>`).join('');
-
-  const addonCards = addons.map(row => `<details class="card border border-slate-200 bg-white" style="border-radius:4px">
-    <summary class="cursor-pointer list-none flex items-center justify-between"><div><div class="font-bold text-slate-900">${academyEsc(row.name_ru)}</div><div class="text-xs text-slate-500">${academyEsc(row.addon_code)}</div></div><b class="text-blue-700">${canonicalPricingMoney(row.default_price)}</b></summary>
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-200">${canonicalPricingField(`cpa-${row.service_addon_id}-name`, 'Название', row.name_ru, 'text')}${canonicalPricingField(`cpa-${row.service_addon_id}-unit`, 'Единица', row.unit_type, 'text')}${canonicalPricingField(`cpa-${row.service_addon_id}-base`, 'Цена клиенту, $', row.default_price)}${canonicalPricingField(`cpa-${row.service_addon_id}-min`, 'Минимальная цена, $', row.min_price)}</div>
-    <div class="mt-4 flex gap-3"><label class="tag"><input id="cpa-${row.service_addon_id}-active" type="checkbox" ${row.is_active ? 'checked' : ''}> Активна</label><button class="btn-primary" onclick="saveCanonicalAddon('${row.service_addon_id}')">Сохранить</button></div>
-  </details>`).join('');
-
-  return `<div class="space-y-5">
-    ${state.canonicalPricingNotice ? `<div class="card border border-emerald-200 bg-emerald-50 text-emerald-800" style="border-radius:4px">✅ ${academyEsc(state.canonicalPricingNotice)}</div>` : ''}
-    <section class="card border border-slate-200 bg-white" style="border-radius:4px">
-      <div class="flex flex-wrap justify-between gap-4"><div><h2 class="text-xl font-black">План продаж</h2><p class="text-sm text-slate-500">Один расчёт для всей компании. Это прогноз, а не движение денег.</p></div><span class="tag bg-blue-50 text-blue-800">${academyEsc(signal)}</span></div>
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Безубыточность</div><b class="text-xl">${canonicalPricingMoney(planning.break_even?.revenue)}</b><div class="text-xs">${planning.break_even?.deals || 0} сделок / ${planning.break_even?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Цель с прибылью</div><b class="text-xl">${canonicalPricingMoney(planning.target?.revenue)}</b><div class="text-xs">${planning.target?.deals || 0} сделок / ${planning.target?.leads || 0} лидов</div></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">КП за месяц</div><b class="text-xl">${canonicalPricingMoney(actual.proposal_revenue)}</b></div><div class="p-3 border border-slate-200"><div class="text-xs text-slate-500">Прогресс</div><b class="text-xl">${Number(actual.progress_percent || 0).toFixed(0)}%</b></div></div>
-      ${owner ? `<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${canonicalPricingField('cp-plan-check', 'Средний чек, $', assumptions.average_deal_value)}${canonicalPricingField('cp-plan-conversion', 'Конверсия лид → сделка, %', assumptions.lead_to_deal_percent)}${canonicalPricingField('cp-plan-profit', 'Целевая прибыль / месяц, $', assumptions.target_profit_monthly)}</div><button class="btn-primary mt-4" onclick="saveCanonicalPlanning()">Сохранить план</button>` : '<p class="text-sm text-slate-500 mt-4">Менеджер видит цели по лидам и сделкам. Расходы и прибыль меняет владелец.</p>'}
-    </section>
-    ${renderServiceOfferingsSection()}
-    <details class="card border border-slate-200 bg-white canonical-calculator-price" style="border-radius:4px"><summary class="cursor-pointer list-none flex items-center justify-between gap-3"><div><h2 class="text-lg font-black">Прайс быстрого калькулятора</h2><p class="text-sm text-slate-500">Только для раздела «Калькулятор» — прикинуть цену по телефону. В проекты, кассу и КП идут услуги из направлений выше.</p></div><span class="text-slate-400 whitespace-nowrap">Открыть ↓</span></summary><div class="space-y-5 mt-4">
-    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between gap-3"><div><h2 class="text-xl font-black">Позиции калькулятора</h2><p class="text-sm text-slate-500">Карточки закрыты. Откройте только ту позицию, которую меняете.</p></div><span class="tag">${services.filter(x => x.is_active).length} активных</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить услугу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4">${canonicalPricingField('cp-new-service-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-service-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-service-unit', 'Единица', 'sqft', 'text')}${canonicalPricingField('cp-new-service-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-service-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalService()">Создать услугу</button></details><div class="space-y-3 mt-4">${serviceCards || '<div class="text-slate-500">Услуг пока нет</div>'}</div></section>
-    <section class="card border border-slate-200 bg-white" style="border-radius:4px"><div class="flex justify-between"><div><h2 class="text-xl font-black">Допработы калькулятора</h2><p class="text-sm text-slate-500">Подключение зон, демонтаж, силикон — только для быстрой прикидки.</p></div><span class="tag">${addons.length}</span></div><details class="mt-4"><summary class="btn-ghost inline-flex cursor-pointer">+ Добавить допработу</summary><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-4"><label><span class="text-xs font-semibold text-slate-500">Основная услуга</span><select id="cp-new-addon-service" class="mt-1 w-full border border-slate-300 bg-white px-3 py-2">${services.map(s => `<option value="${s.service_type_id}">${academyEsc(s.name_ru)}</option>`).join('')}</select></label>${canonicalPricingField('cp-new-addon-name', 'Название', '', 'text')}${canonicalPricingField('cp-new-addon-code', 'Код', '', 'text')}${canonicalPricingField('cp-new-addon-unit', 'Единица', 'item', 'text')}${canonicalPricingField('cp-new-addon-base', 'Цена клиенту, $', '')}${canonicalPricingField('cp-new-addon-min', 'Минимальная цена, $', '')}</div><button class="btn-primary mt-4" onclick="createCanonicalAddon()">Создать допработу</button></details><div class="space-y-3 mt-4">${addonCards || '<div class="text-slate-500">Дополнительных работ пока нет</div>'}</div></section>
-    </div></details>
-  </div>`;
+  return renderServiceOfferingsSection();
 }
 
 async function loadCanonicalInstallerOperations(force = false) {
@@ -25926,15 +26009,49 @@ function serviceOfferingCanEdit() {
 
 function renderServiceOfferingDirectory() {
   if (typeof preservePositionForNextRender === 'function') preservePositionForNextRender();
+  if (typeof state !== 'undefined' && state.servicePricingDirection) {
+    state.modal = renderServiceDirectionWorkspace(state.servicePricingDirection);
+  }
+  render();
+}
+
+function openServiceDirectionDirectory(direction) {
+  const info = filmDirections().find(item => canonicalCatalogCategory(item.catalogCategory) === direction);
+  if (!info) return;
+  state.servicePricingDirection = direction;
+  state.servicePricingOfferingId = null;
+  state.modal = renderServiceDirectionWorkspace(direction);
+  render();
+}
+
+function closeServiceDirectionDirectory() {
+  state.servicePricingDirection = null;
+  state.servicePricingOfferingId = null;
+  state.modal = null;
+  render();
+}
+
+function openServiceOfferingEditor(direction, offeringId = '') {
+  const offering = serviceOffering(offeringId);
+  if (!filmDirections().some(item => canonicalCatalogCategory(item.catalogCategory) === direction)) return;
+  if (offeringId && (!offering || offering.direction !== direction)) return;
+  state.servicePricingDirection = direction;
+  state.servicePricingOfferingId = offeringId || null;
+  state.modal = renderServiceDirectionWorkspace(direction);
   render();
 }
 
 function addServiceOffering(direction) {
-  if (!serviceOfferingCanEdit() || !SERVICE_OFFERING_DIRECTIONS.includes(direction)) return;
+  if (!serviceOfferingCanEdit() || !SERVICE_OFFERING_DIRECTIONS.includes(direction) || direction === 'general') return;
   const sort = serviceOfferingsFor(direction, { includeInactive: true }).length;
+  const offering = { id: 'svc_' + uid(), direction, name: 'Новая услуга', unit: 'sqft', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort };
   db.settings.serviceOfferings = serviceOfferingsAll();
-  db.settings.serviceOfferings.push({ id: 'svc_' + uid(), direction, name: 'Новая услуга', unit: direction === 'general' ? 'piece' : 'sqft', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort });
+  db.settings.serviceOfferings.push(offering);
   save();
+  if (typeof state !== 'undefined') {
+    state.servicePricingDirection = direction;
+    state.servicePricingOfferingId = offering.id;
+  }
   renderServiceOfferingDirectory();
 }
 
@@ -26120,7 +26237,7 @@ function serviceOfferingIncludesEditorHtml(offering) {
 function serviceOfferingDirectionsEditorHtml(offering) {
   if (serviceOfferingNeedsSizes(offering)) return '<div class="text-xs text-gray-500 mt-2">Услуга по замеру живёт в своём направлении: у него свои плёнки и свой замер.</div>';
   const chosen = new Set(serviceOfferingDirections(offering));
-  const others = SERVICE_OFFERING_DIRECTIONS.filter(key => key !== offering.direction);
+  const others = filmDirections().map(item => canonicalCatalogCategory(item.catalogCategory)).filter(key => key !== offering.direction);
   const label = key => ORDER_PRIMARY_SERVICES.find(entry => canonicalCatalogCategory(entry.catalogCategory) === key);
   return `<div class="mt-2" data-service-offering-directions="${offering.id}"><div class="text-xs font-bold text-slate-600">Также предлагать в направлениях</div><div class="flex flex-wrap gap-2 mt-1">${others.map(key => `<label class="tag" style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;${orderServiceCardStyle(label(key)?.id || '')}border-left:4px solid var(--svc-color)"><input style="width:auto" type="checkbox" ${chosen.has(key) ? 'checked' : ''} onchange="toggleServiceOfferingDirection('${offering.id}','${key}',this.checked,this)"> ${label(key)?.icon || ''} ${academyEsc(label(key)?.title || key)}</label>`).join('')}</div><div class="text-xs text-gray-500 mt-1">Здесь её домашнее направление: тут она редактируется. В кассе услуга появится под каждым отмеченным направлением и ляжет в проект под тем, где её выбрали.</div></div>`;
 }
@@ -26137,64 +26254,93 @@ function toggleServiceOfferingDirection(id, direction, checked, control = null) 
   renderServiceOfferingDirectory();
 }
 
-function renderServiceOfferingsSection() {
+function serviceOfferingEditorHtml(offering, owner) {
+  if (!offering) return '';
+  const direction = offering.direction;
+  const films = (db.settings.catalog || []).filter(item => !item.archived && canonicalCatalogCategory(item.category) === direction);
+  const linked = films.filter(item => serviceOfferingFilmIds(offering).includes(item.id));
+  const unit = serviceOfferingUnit(offering);
+  const per = serviceOfferingUnitShort(offering);
+  const sized = serviceOfferingNeedsSizes(offering);
+  const filmList = films.length
+    ? `<details open><summary class="cursor-pointer text-sm font-bold">Материалы услуги · <span data-service-offering-film-summary="${offering.id}">${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'не выбраны'}</span></summary><div class="mt-2 grid gap-1">${films.map(item => `<label class="text-sm"><input type="checkbox" style="width:auto" ${serviceOfferingFilmIds(offering).includes(item.id) ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(также: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label>`).join('')}</div></details>`
+    : '<div class="text-sm text-gray-500">На складе пока нет плёнок этого направления. Услугу можно сохранить и добавить материал позже.</div>';
+
+  if (!owner) return `<div class="service-editor-panel"><div class="flex justify-between gap-3"><div><h4 class="font-black text-lg">${academyEsc(offering.name)}</h4><div class="text-sm text-gray-500 mt-1">${academyEsc(SERVICE_OFFERING_UNITS.find(item => item.id === unit)?.label || per)}</div></div><b>${Number(offering.pricePerSqft) > 0 ? `${fmtMoney(Number(offering.pricePerSqft))} / ${academyEsc(per)}` : 'Цена не задана'}</b></div>${sized ? `<div class="service-editor-section">${filmList}</div>` : ''}</div>`;
+
+  return `<div data-service-offering-row="${offering.id}" class="service-editor-panel ${offering.active === false ? 'opacity-60' : ''}">
+    ${serviceOfferingIsDraft(offering) ? '<div class="text-sm font-bold mb-3" style="color:#92400e">Черновик: заполните название и цену — до этого услуга не появится в проекте.</div>' : ''}
+    <section class="service-editor-section">
+      <div class="service-editor-section-title">Название услуги</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div><label>Название в CRM</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value,this)"></div>
+        <div><label>Name for the client (EN) · КП, акт, invoice</label><input value="${academyEsc(offering.nameEn || '')}" placeholder="${academyEsc(serviceOfferingEnglishGuess(offering) || 'e.g. Structural Silicone')}" onchange="updateServiceOffering('${offering.id}','nameEn',this.value,this)"></div>
+      </div>
+    </section>
+    <section class="service-editor-section">
+      <div class="service-editor-section-title">Расчёт и оплата работы</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div class="md:col-span-2"><label>Как считается</label><select onchange="updateServiceOffering('${offering.id}','unit',this.value,this)">${serviceOfferingUnitsFor(direction).map(item => `<option value="${item.id}" ${unit === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
+        ${unit === 'custom' ? `<div class="md:col-span-2"><label>Своя единица · например, час или выезд</label><input value="${academyEsc(offering.unitLabel || '')}" maxlength="30" placeholder="ед." onchange="updateServiceOffering('${offering.id}','unitLabel',this.value,this)"></div>` : ''}
+        <div><label>Цена клиенту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" inputmode="decimal" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value,this)"></div>
+        <div><label>Минимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" inputmode="decimal" value="${Number(offering.minPricePerUnit) || ''}" placeholder="без минимума" onchange="updateServiceOffering('${offering.id}','minPricePerUnit',this.value,this)"></div>
+        <div><label>Максимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" inputmode="decimal" value="${Number(offering.maxPricePerUnit) || ''}" placeholder="без максимума" onchange="updateServiceOffering('${offering.id}','maxPricePerUnit',this.value,this)"></div>
+        <div><label>Монтажнику, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.25" inputmode="decimal" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="не заполнено" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value,this)">${offering.installerRateNeedsReview ? '<div class="text-xs mt-1" style="color:#92400e">Перенесено из старых настроек — проверьте.</div>' : !(Number(offering.installerRatePerSqft) > 0) && !serviceOfferingIsDraft(offering) ? '<div class="text-xs mt-1 text-red-700">Не заполнено — монтажнику начислится $0.</div>' : ''}</div>
+      </div>
+      <div class="text-xs mt-2 ${sized ? 'text-blue-700' : 'text-emerald-700'}">${sized ? 'Нужен замер: количество и материал берутся из окон проекта.' : unit === 'lft' ? 'Количество считается по периметру выбранных окон.' : 'Замер не обязателен: количество задаётся прямо в проекте.'}</div>
+    </section>
+    <section class="service-editor-section">
+      <div class="service-editor-section-title">Состав услуги</div>
+      ${sized ? filmList : `<label style="max-width:18rem">Материал, $ / ${academyEsc(per)}<input type="number" min="0" step="0.5" inputmode="decimal" value="${Number(offering.materialCostPerUnit) || ''}" placeholder="нет материала" onchange="updateServiceOffering('${offering.id}','materialCostPerUnit',this.value,this)"></label>`}
+      ${serviceOfferingIncludesEditorHtml(offering)}
+      ${serviceOfferingDirectionsEditorHtml(offering)}
+    </section>
+    ${sized ? '' : `<section class="service-editor-section"><div class="service-editor-section-title">Показывать в КП</div><div class="flex flex-wrap gap-2"><label class="tag" style="display:inline-flex;gap:6px;white-space:normal"><input style="width:auto" type="checkbox" ${offering.proposalOptional ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','proposalOptional',this.checked,this)"> Клиент может добавить как опцию</label><label class="tag" style="display:inline-flex;gap:6px;white-space:normal"><input style="width:auto" type="checkbox" ${offering.monthly ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','monthly',this.checked,this)"> Подписка · цена в месяц</label></div></section>`}
+    <div class="service-editor-status"><span class="text-xs text-gray-500">Все изменения сохраняются автоматически.</span><label class="tag" style="display:inline-flex;white-space:nowrap;gap:6px"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked,this)"> Активна</label></div>
+  </div>`;
+}
+
+function renderServiceDirectionWorkspace(direction) {
   const owner = currentUser()?.role === 'owner';
-  const money = value => (Number(value) > 0 ? `$${Number(value).toFixed(2)}` : '—');
-  const groups = SERVICE_OFFERING_DIRECTIONS.map(direction => {
-    const info = ORDER_PRIMARY_SERVICES.find(item => canonicalCatalogCategory(item.catalogCategory) === direction);
-    const films = (db.settings.catalog || []).filter(item => !item.archived && canonicalCatalogCategory(item.category) === direction);
-    const shared = serviceOfferingsFor(direction, { includeInactive: owner }).filter(item => item.direction !== direction);
-    const optionCount = serviceOfferingsFor(direction, { includeInactive: owner, homeOnly: true }).filter(item => item.proposalOptional && !serviceOfferingNeedsSizes(item)).length;
-    const rows = serviceOfferingsFor(direction, { includeInactive: owner, homeOnly: true }).filter(item => !(item.proposalOptional && !serviceOfferingNeedsSizes(item))).map(offering => {
-      const linked = films.filter(item => serviceOfferingFilmIds(offering).includes(item.id));
-      const filmList = films.length
-        ? `<details><summary class="cursor-pointer text-sm">Плёнки: <span data-service-offering-film-summary="${offering.id}">${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'выберите материалы услуги'}</span></summary><div class="mt-2 grid gap-1">${films.map(item => `<label class="text-sm"><input type="checkbox" ${serviceOfferingFilmIds(offering).includes(item.id) ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(сейчас: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label>`).join('')}</div></details>`
-        : '<div class="text-xs text-gray-500">На складе нет плёнок этого направления.</div>';
-      const unit = serviceOfferingUnit(offering);
-      const per = serviceOfferingUnitShort(offering);
-      const sized = serviceOfferingNeedsSizes(offering);
-      const material = sized
-        ? filmList
-        : `<label class="block" style="max-width:16rem">Материал, $ / ${academyEsc(per)}<input type="number" min="0" step="0.5" value="${Number(offering.materialCostPerUnit) || ''}" placeholder="нет материала" onchange="updateServiceOffering('${offering.id}','materialCostPerUnit',this.value,this)"></label>`;
-      return owner ? `<div data-service-offering-row="${offering.id}" class="p-3 border border-slate-200 ${offering.active === false ? 'opacity-60' : ''}">
-        ${serviceOfferingIsDraft(offering) ? '<div class="text-xs font-bold mb-2" style="color:#92400e">Черновик · не показывается в кассе, пока нет названия и цены</div>' : ''}
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-          <div class="md:col-span-2"><label>Услуга (название в CRM)</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value,this)"></div>
-          <div class="md:col-span-2"><label>Name for the client (EN) — КП, акт и счёт</label><input value="${academyEsc(offering.nameEn || '')}" placeholder="${academyEsc(serviceOfferingEnglishGuess(offering) || 'e.g. Structural Silicone')}" onchange="updateServiceOffering('${offering.id}','nameEn',this.value,this)"></div>
-          <div class="md:col-span-2"><label>Как считается</label><select onchange="updateServiceOffering('${offering.id}','unit',this.value,this)">${serviceOfferingUnitsFor(offering.direction).map(item => `<option value="${item.id}" ${unit === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
-          ${unit === 'custom' ? `<div class="md:col-span-2"><label>Единица (например, час или выезд)</label><input value="${academyEsc(offering.unitLabel || '')}" maxlength="30" placeholder="ед." onchange="updateServiceOffering('${offering.id}','unitLabel',this.value,this)"></div>` : ''}
-          <div><label>Цена клиенту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value,this)"></div>
-          <div><label>Минимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.minPricePerUnit) || ''}" placeholder="без минимума" onchange="updateServiceOffering('${offering.id}','minPricePerUnit',this.value,this)"></div>
-          <div><label>Максимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" value="${Number(offering.maxPricePerUnit) || ''}" placeholder="без максимума" onchange="updateServiceOffering('${offering.id}','maxPricePerUnit',this.value,this)"></div>
-          <div><label>Специалисту по установке, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.25" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="не заполнено" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value,this)">${offering.installerRateNeedsReview ? '<div class="text-xs mt-1" style="color:#92400e">перенесено из старых настроек — проверьте</div>' : !(Number(offering.installerRatePerSqft) > 0) && !serviceOfferingIsDraft(offering) ? '<div class="text-xs mt-1 text-red-700">не заполнено — монтаж $0</div>' : ''}</div>
-        </div>
-        ${sized ? '' : `<div class="mt-2 flex flex-wrap gap-2">
-          <label class="tag" style="display:inline-flex;gap:6px;white-space:normal"><input style="width:auto" type="checkbox" ${offering.proposalOptional ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','proposalOptional',this.checked,this)"> Опция в КП — клиент отмечает сам</label>
-          <label class="tag" style="display:inline-flex;gap:6px;white-space:normal"><input style="width:auto" type="checkbox" ${offering.monthly ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','monthly',this.checked,this)"> Подписка: цена — в месяц</label>
-        </div>`}
-        <div class="text-xs mt-2 ${sized ? 'text-blue-700' : 'text-emerald-700'}">${sized ? 'Нужен замер: цена и материал считаются по площади окон.' : unit === 'lft' ? 'По периметру окон: количество считается по замеру, его можно поправить вручную.' : 'Без размеров: в проекте указывается количество, замер для этой услуги не нужен.'}</div>
-        ${serviceOfferingIncludesEditorHtml(offering)}
-        ${serviceOfferingDirectionsEditorHtml(offering)}
-        <div class="mt-2 flex flex-wrap items-start justify-between gap-3"><div class="flex-1">${material}</div><label class="tag" style="display:inline-flex;white-space:nowrap;gap:6px"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked,this)"> Активна</label></div>
-      </div>` : `<div class="p-3 border border-slate-200"><div class="flex justify-between gap-3"><b>${academyEsc(offering.name)}</b><span>${money(offering.pricePerSqft)} / ${academyEsc(per)}</span></div>${sized ? `<div class="mt-1">${filmList}</div>` : '<div class="text-xs text-gray-500 mt-1">Без размеров — количество в проекте</div>'}</div>`;
-    }).join('');
-    return `<div class="mt-4">
-      <div class="flex items-center justify-between gap-3"><h3 class="font-black">${academyEsc(info ? `${info.icon} ${info.title}` : direction)}</h3>${owner ? `<button class="btn-ghost text-sm" onclick="addServiceOffering('${direction}')">+ Добавить услугу</button>` : ''}</div>
-      <div class="grid gap-2 mt-2">${rows || '<div class="text-sm text-gray-500">Услуг пока нет.</div>'}</div>
-      ${optionCount ? `<div class="text-xs text-gray-500 mt-2">Опций для КП в этом направлении: ${optionCount} — они в блоке «⭐ Опции для КП» выше.</div>` : ''}
-      ${shared.length ? `<div class="text-xs text-gray-500 mt-2" data-service-offering-shared="${academyEsc(direction)}">Также предлагаются здесь: ${shared.map(item => `${academyEsc(item.name)} <span class="text-gray-400">(из «${academyEsc(ORDER_PRIMARY_SERVICES.find(entry => canonicalCatalogCategory(entry.catalogCategory) === item.direction)?.title || item.direction)}»)</span>`).join(', ')}</div>` : ''}
+  const info = filmDirections().find(item => canonicalCatalogCategory(item.catalogCategory) === direction);
+  if (!info) return '';
+  const items = serviceOfferingsFor(direction, { includeInactive: owner, homeOnly: true });
+  const shared = serviceOfferingsFor(direction, { includeInactive: false }).filter(item => item.direction !== direction);
+  const selected = state.servicePricingOfferingId ? items.find(item => item.id === state.servicePricingOfferingId) : null;
+  const rows = items.map(offering => {
+    const per = serviceOfferingUnitShort(offering);
+    const flags = [serviceOfferingIsDraft(offering) ? 'Черновик' : '', offering.proposalOptional ? 'Опция КП' : '', offering.active === false ? 'Выключена' : ''].filter(Boolean);
+    return `<div class="service-directory-row ${offering.active === false ? 'inactive' : ''}" data-service-offering-row="${offering.id}">
+      <div><div class="service-directory-row-title">${academyEsc(offering.name)}</div><div class="service-directory-row-meta">${academyEsc(SERVICE_OFFERING_UNITS.find(item => item.id === serviceOfferingUnit(offering))?.label || per)}${flags.length ? ` · ${academyEsc(flags.join(' · '))}` : ''}</div></div>
+      <div class="service-directory-row-price">${Number(offering.pricePerSqft) > 0 ? `${fmtMoney(Number(offering.pricePerSqft))} / ${academyEsc(per)}` : 'Цена не задана'}</div>
+      <button type="button" class="btn-ghost text-sm" onclick="openServiceOfferingEditor('${direction}','${offering.id}')">${owner ? 'Изменить' : 'Открыть'} →</button>
     </div>`;
   }).join('');
-  return `<section class="card border border-slate-200 bg-white" style="border-radius:4px">
-    <h2 class="text-xl font-black">Услуги по направлениям</h2>
-    ${companyRatesBlockHtml(owner)}
-    <p class="text-sm text-slate-500">Проект — контейнер: в него добавляются услуги любых направлений, у каждой свой специалист и дата. Услуга за погонный фут (силикон, герметик) берёт количество из периметра окон. В услугу можно включить другие услуги бесплатно — например, защитную плёнку с силиконом: силикон встанет в проект отдельной строкой за $0 со своим выездом. Название услуги клиент видит в КП. Цена из справочника — ориентир: менеджер может изменить её в проекте внутри заданного владельцем диапазона. Услуга за кв. фут считается по замеру окон, её материал — плёнки со склада. Исполнителя каждой услуги выбирают в проекте при назначении монтажа. Дополнительная услуга для КП — тоже услуга из этого справочника: её добавляют в проект, и она попадает в выручку, материал, оплату специалисту и заказ-наряд.</p>
-    <div class="mt-3 p-3 border border-slate-200 flex flex-wrap items-end gap-3" data-removal-price>
-      <div><label>Снятие старой плёнки, $ / кв. фут клиенту</label>${owner ? `<input type="number" min="0" step="0.25" value="${removalPricePerSqft()}" onchange="updateRemovalPrice(this.value)">` : `<div class="font-black">${fmtMoney(removalPricePerSqft())}</div>`}</div>
-      <div class="text-xs text-gray-500 flex-1">Строка «Снятие старой плёнки» появляется в проекте сама, когда на замере у окна отмечено снятие. Новая цена применяется к новым строкам; сохранённые расчёты не меняются.</div>
-    </div>
-    ${proposalOptionsSectionHtml(owner)}
-    ${groups}
+  const body = selected
+    ? `<div class="service-directory-toolbar"><button type="button" class="btn-ghost" onclick="openServiceOfferingEditor('${direction}')">← К услугам направления</button><span class="tag">${academyEsc(info.title)}</span></div>${serviceOfferingEditorHtml(selected, owner)}`
+    : `<div class="service-directory-toolbar"><div><b>${items.length} ${projectPlural(items.length, 'услуга', 'услуги', 'услуг')}</b><div class="text-sm text-gray-500">Здесь находятся только услуги направления «${academyEsc(info.title)}».</div></div>${owner ? `<button type="button" class="btn-primary" onclick="addServiceOffering('${direction}')">+ Добавить услугу</button>` : ''}</div><div class="service-directory-list">${rows || `<div class="service-directory-empty"><div class="text-3xl mb-2">${academyEsc(info.icon)}</div><b>Услуг пока нет</b><div class="text-sm mt-1">Добавьте первую услугу этого направления.</div></div>`}</div>${shared.length ? `<details class="mt-4"><summary class="cursor-pointer text-sm text-gray-500">Также доступны здесь из других направлений · ${shared.length}</summary><div class="text-sm text-gray-600 mt-2">${shared.map(item => academyEsc(item.name)).join(' · ')}</div></details>` : ''}`;
+  return `<div class="modal-backdrop" onclick="if(event.target===this)closeServiceDirectionDirectory()"><div class="modal-content workspace-modal service-directory-modal" style="${orderServiceCardStyle(info.id)}" role="dialog" aria-modal="true" aria-label="Услуги направления ${academyEsc(info.title)}" onclick="event.stopPropagation()">
+    <header class="service-directory-head"><div class="service-directory-heading"><button type="button" class="workspace-back" onclick="closeServiceDirectionDirectory()" aria-label="Вернуться к направлениям">←</button><span class="service-directory-heading-icon">${academyEsc(info.icon)}</span><div><div class="service-directory-kicker">Направление</div><h3>${academyEsc(info.title)}</h3></div></div><button type="button" class="btn-ghost" onclick="closeServiceDirectionDirectory()">Закрыть</button></header>
+    <div class="service-directory-body" data-scroll-key="service-direction-directory">${body}</div>
+  </div></div>`;
+}
+
+function renderServiceOfferingsSection() {
+  const owner = currentUser()?.role === 'owner';
+  const cards = filmDirections().map(info => {
+    const direction = canonicalCatalogCategory(info.catalogCategory);
+    const items = serviceOfferingsFor(direction, { includeInactive: owner, homeOnly: true });
+    const active = items.filter(item => item.active !== false && !serviceOfferingIsDraft(item)).length;
+    const drafts = items.filter(serviceOfferingIsDraft).length;
+    return `<button type="button" class="service-direction-card" data-service-direction-card="${academyEsc(direction)}" style="${orderServiceCardStyle(info.id)}" onclick="openServiceDirectionDirectory('${direction}')" aria-label="Открыть направление ${academyEsc(info.title)}">
+      <span class="service-direction-card-icon">${academyEsc(info.icon)}</span>
+      <span><h3>${academyEsc(info.title)}</h3><p>${academyEsc(info.desc)}</p><span class="service-direction-card-meta"><span class="tag">${active} ${projectPlural(active, 'услуга', 'услуги', 'услуг')}</span>${owner && drafts ? `<span class="tag" style="color:#92400e;background:#fffbeb">${drafts} черн.</span>` : ''}</span></span>
+      <span class="service-direction-card-arrow">→</span>
+    </button>`;
+  }).join('');
+  return `<section class="service-direction-home">
+    <div class="service-direction-intro"><div><h2 class="text-2xl font-black">Направления услуг</h2><p class="text-sm text-slate-500 mt-1">Выберите направление. В отдельном окне откроются только его услуги, цены, материалы и ставка монтажника.</p></div><span class="tag">5 направлений</span></div>
+    <div class="service-direction-grid">${cards}</div>
   </section>`;
 }
 

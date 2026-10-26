@@ -371,7 +371,8 @@ test("the Services reference owns installer pay while material stays in Warehous
   // service directory is the only source, and the old list no longer rewrites it.
   assert.doesNotMatch(renderer, /cps-\$\{row\.service_type_id\}-installer/);
   assert.doesNotMatch(renderer, /cpa-\$\{row\.service_addon_id\}-cost/);
-  assert.match(renderer, /Ставки монтажа — в услугах направлений выше\./);
+  assert.match(renderer, /return renderServiceOfferingsSection\(\);/);
+  assert.match(source, /Монтажнику, \$ \/ \$\{academyEsc\(per\)\}/);
   assert.doesNotMatch(source, /patch\.installation_cost_per_sqft = canonicalPricingValue/);
   assert.match(source, /if \(!syncLegacyInstallerServiceRate\.enabled\) return false;/);
 });
@@ -634,5 +635,6 @@ test("owner service directory exposes manager min and max price corridor", () =>
   assert.match(source, /maxPricePerUnit/);
   assert.match(source, /Минимум менеджеру/);
   assert.match(source, /Максимум менеджеру/);
-  assert.match(source, /Цена из справочника — ориентир/);
+  assert.match(source, /Цена клиенту/);
+  assert.match(source, /Все изменения сохраняются автоматически/);
 });

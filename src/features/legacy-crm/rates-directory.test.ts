@@ -69,16 +69,18 @@ test('migration writes the rate a service was silently paid into the service and
   assert.equal(s._ratesDirectory20261024, true);
 });
 
-test('the directory shows company rates; personal and duplicate rate fields are gone', () => {
+test('each direction service owns installer pay; personal and duplicate rate fields are gone', () => {
   const block = slice('function companyRatesBlockHtml(owner)', 'function renderCanonicalServicePricing()');
   assert.match(block, /Аванс, % от проекта/);
   assert.match(block, /Аванс не больше, \$/);
   assert.match(block, /Налог с прибыли проекта, %/);
   assert.match(block, /Комиссия: \$\{academyEsc\(u\.name\)\}, %/);
   assert.match(block, /u\.commissionPct = u\.payConfig\.commissionPct;/, 'one commission number');
-  assert.match(html, /\$\{companyRatesBlockHtml\(owner\)\}/);
-  assert.match(html, /перенесено из старых настроек — проверьте/);
-  assert.match(html, /не заполнено — монтаж \$0/);
+  const editor = slice('function serviceOfferingEditorHtml(offering, owner)', 'function renderServiceDirectionWorkspace(direction)');
+  assert.match(editor, /Монтажнику, \$ \/ \$\{academyEsc\(per\)\}/);
+  assert.match(editor, /updateServiceOffering\('\$\{offering\.id\}','installerRatePerSqft'/);
+  assert.match(html, /перенесено из старых настроек — проверьте/i);
+  assert.match(html, /не заполнено — монтажнику начислится \$0/i);
   assert.match(html, /if \(field === 'installerRatePerSqft'\) delete offering\.installerRateNeedsReview;/);
   assert.doesNotMatch(html, /id="pc-ratePerSqft"|id="pc-rate-\$\{cat\}"/);
   assert.doesNotMatch(html, /updateCatalogItem\('\$\{c\.id\}','installerRatePerSqft'/, 'no rate per film in the warehouse');
