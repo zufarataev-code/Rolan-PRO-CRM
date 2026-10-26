@@ -13,11 +13,14 @@ test('KP options are edited as services inside their direction, not in a global 
   const section = fn(html, 'renderServiceOfferingsSection');
   const workspace = fn(html, 'renderServiceDirectionWorkspace');
   const block = fn(html, 'serviceOfferingEditorHtml');
+  const pricing = fn(html, 'serviceOfferingPricingEditorHtml');
   assert.doesNotMatch(section, /proposalOptionsSectionHtml|addProposalOption/);
   assert.match(workspace, /serviceOfferingEditorHtml\(selected, owner\)/);
-  for (const field of ['name', 'nameEn', 'pricePerSqft', 'monthly', 'installerRatePerSqft', 'active']) {
+  for (const field of ['name', 'nameEn', 'monthly', 'active']) {
     assert.match(block, new RegExp(`updateServiceOffering\\('\\$\\{offering\\.id\\}','${field}'`), field);
   }
+  for (const field of ['pricePerSqft', 'installerRatePerSqft']) assert.match(pricing, new RegExp(`input\\('${field}'`), field);
+  assert.match(pricing, /saveServiceOfferingPricing/);
   assert.match(block, /Клиент может добавить как опцию/);
 });
 

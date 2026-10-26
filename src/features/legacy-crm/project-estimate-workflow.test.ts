@@ -372,7 +372,7 @@ test("the Services reference owns installer pay while material stays in Warehous
   assert.doesNotMatch(renderer, /cps-\$\{row\.service_type_id\}-installer/);
   assert.doesNotMatch(renderer, /cpa-\$\{row\.service_addon_id\}-cost/);
   assert.match(renderer, /return renderServiceOfferingsSection\(\);/);
-  assert.match(source, /Монтажнику, \$ \/ \$\{academyEsc\(per\)\}/);
+  assert.match(source, /Оплата монтажнику, \$ \/ \$\{academyEsc\(per\)\}/);
   assert.doesNotMatch(source, /patch\.installation_cost_per_sqft = canonicalPricingValue/);
   assert.match(source, /if \(!syncLegacyInstallerServiceRate\.enabled\) return false;/);
 });
@@ -633,8 +633,8 @@ test("project card stores operational site access and parking details and work o
 test("owner service directory exposes manager min and max price corridor", () => {
   assert.match(source, /minPricePerUnit/);
   assert.match(source, /maxPricePerUnit/);
-  assert.match(source, /Минимум менеджеру/);
-  assert.match(source, /Максимум менеджеру/);
-  assert.match(source, /Цена клиенту/);
-  assert.match(source, /Все изменения сохраняются автоматически/);
+  assert.match(source, /Минимальная цена менеджера/);
+  assert.match(source, /Максимальная цена менеджера/);
+  assert.match(source, /Цена для клиента/);
+  assert.match(source, /Сохранить цены и затраты/);
 });

@@ -734,3 +734,15 @@ Owner clarified the Smart Film installation model: a physical panel/window is on
 - Zone connection, room power block, multi-zone control and electrician work reuse the existing `projectLines` cashier model. They are not calculated or stored in a second Smart-only calculator.
 - Proposal, project total, payroll/work scope and work order continue to read the same cashier rows. Missing or zero-price Price Book entries block Proposal readiness instead of inventing a price.
 - Silicone and other optional additions stay normal manually selected cashier services; they are not forced once per window.
+
+## 2026-10-26 — Customer price, manager corridor and service cost are separate concepts (Owner)
+
+Owner rejected the ambiguous one-row form where list price, minimum, maximum, installer pay and material cost looked like interchangeable numbers. The Price Book must make the commercial rule and internal economics visually and logically distinct.
+
+- `pricePerSqft` is the list/default customer price used when a service enters a Project and Proposal.
+- `minPricePerUnit` and `maxPricePerUnit` are the manager's permitted customer-price corridor, not manager compensation.
+- `installerRatePerSqft` is internal installer pay; `materialCostPerUnit` is internal material/equipment unit cost for services without measured warehouse film. These values remain Owner-only.
+- Financial price fields are edited and saved as one set so intermediate partial values do not create an accidental invalid configuration.
+- For a size-free service, the minimum customer price cannot be below known direct unit cost (material/equipment plus installer pay). The list price must stay inside any configured manager corridor.
+- For measured film, actual material cost continues to come from the selected warehouse lot and project consumption. The directory may preview labor margin, but it must say that film cost is still pending instead of presenting incomplete margin as final profit.
+- The project, Proposal, warehouse and payroll keep using the existing authoritative fields and formulas; this editor does not create a second calculator.

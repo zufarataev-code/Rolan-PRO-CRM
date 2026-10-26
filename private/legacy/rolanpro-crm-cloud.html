@@ -5805,6 +5805,46 @@
   .service-editor-section + .service-editor-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; }
   .service-editor-section-title { margin-bottom: .65rem; color: #334155; font-size: .76rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
   .service-editor-status { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .6rem; margin-top: 1rem; }
+  .service-pricing-architecture { display: grid; gap: .8rem; }
+  .service-pricing-customer,
+  .service-pricing-costs {
+    padding: 1rem;
+    border: 1px solid #dbe4ef;
+    border-radius: 12px;
+  }
+  .service-pricing-customer { border-left: 5px solid var(--svc-color); background: linear-gradient(135deg, var(--svc-bg), #fff 76%); }
+  .service-pricing-costs { border-left: 5px solid #0f172a; background: #f8fafc; }
+  .service-pricing-block-head { display: flex; align-items: flex-start; gap: .7rem; margin-bottom: .85rem; }
+  .service-pricing-block-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9px;
+    background: #fff;
+    box-shadow: inset 0 0 0 1px #dbe4ef;
+    font-weight: 950;
+  }
+  .service-pricing-block-title { color: #0f172a; font-weight: 950; }
+  .service-pricing-block-copy { margin-top: .12rem; color: #64748b; font-size: .76rem; line-height: 1.35; }
+  .service-pricing-list-price { max-width: 27rem; }
+  .service-pricing-list-price input { min-height: 3rem; font-size: 1.12rem; font-weight: 900; }
+  .service-pricing-corridor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; margin-top: .75rem; }
+  .service-pricing-field-help { margin-top: .3rem; color: #64748b; font-size: .7rem; line-height: 1.35; }
+  .service-pricing-readonly { min-height: 2.65rem; padding: .7rem .75rem; border: 1px dashed #94a3b8; border-radius: 8px; background: #fff; color: #334155; font-weight: 800; }
+  .service-pricing-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .55rem; }
+  .service-pricing-metric { min-width: 0; padding: .8rem; border: 1px solid #dbe4ef; border-radius: 10px; background: #fff; }
+  .service-pricing-metric span,
+  .service-pricing-metric small { display: block; color: #64748b; font-size: .68rem; line-height: 1.35; }
+  .service-pricing-metric strong { display: block; margin: .25rem 0 .15rem; color: #0f172a; font-size: 1.05rem; font-weight: 950; overflow-wrap: anywhere; }
+  .service-pricing-notice { padding: .75rem .85rem; border: 1px solid; border-radius: 10px; font-size: .78rem; font-weight: 750; line-height: 1.45; }
+  .service-pricing-notice.is-ok { border-color: #86efac; background: #f0fdf4; color: #166534; }
+  .service-pricing-notice.is-info { border-color: #93c5fd; background: #eff6ff; color: #1e40af; }
+  .service-pricing-notice.is-error { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
+  .service-pricing-actions { display: flex; align-items: center; justify-content: space-between; gap: .8rem; }
+  .service-pricing-actions > span { color: #64748b; font-size: .75rem; }
+  .service-pricing-actions .btn-primary:disabled { cursor: not-allowed; opacity: .45; }
   @media (max-width: 1180px) {
     .app-topbar {
       grid-template-columns: auto minmax(180px, 1fr) auto;
@@ -5874,6 +5914,10 @@
     .service-directory-row { grid-template-columns: minmax(0, 1fr) auto; }
     .service-directory-row-price { grid-column: 1 / -1; grid-row: 2; min-width: 0; text-align: left; }
     .service-directory-row .btn-ghost { grid-column: 2; grid-row: 1 / span 2; align-self: stretch; }
+    .service-pricing-corridor,
+    .service-pricing-metrics { grid-template-columns: minmax(0, 1fr); }
+    .service-pricing-actions { align-items: stretch; flex-direction: column; }
+    .service-pricing-actions .btn-primary { width: 100%; min-height: 3rem; }
   }
   /* === Mobile tweaks === */
   @media (max-width: 768px) {
@@ -26441,6 +26485,98 @@ function addServiceOffering(direction) {
   renderServiceOfferingDirectory();
 }
 
+/**
+ * Pricing preview for the directory editor. This is deliberately a preview
+ * over the same authoritative service fields used by projects and payroll;
+ * it does not introduce a second price or cost model in the browser.
+ */
+function serviceOfferingPricingMetrics(offering) {
+  const listPrice = Math.max(0, Number(offering?.pricePerSqft) || 0);
+  const minPrice = Math.max(0, Number(offering?.minPricePerUnit) || 0);
+  const maxPrice = Math.max(0, Number(offering?.maxPricePerUnit) || 0);
+  const installerCost = Math.max(0, Number(offering?.installerRatePerSqft) || 0);
+  const completeDirectCost = !serviceOfferingNeedsSizes(offering);
+  // Per-sq-ft film cost is picked from a warehouse lot in the project. A
+  // stale directory materialCostPerUnit must not pretend to be that cost.
+  const materialCost = completeDirectCost ? Math.max(0, Number(offering?.materialCostPerUnit) || 0) : 0;
+  const directCost = Math.round((installerCost + materialCost) * 100) / 100;
+  const listProfit = Math.round((listPrice - directCost) * 100) / 100;
+  const minProfit = minPrice > 0 ? Math.round((minPrice - directCost) * 100) / 100 : null;
+  const marginPct = listPrice > 0 ? Math.round(listProfit / listPrice * 1000) / 10 : null;
+  const issues = [];
+  if (minPrice > 0 && maxPrice > 0 && minPrice > maxPrice) issues.push('Минимальная цена выше максимальной.');
+  if (listPrice > 0 && minPrice > 0 && listPrice < minPrice) issues.push('Цена по прайсу ниже разрешённого минимума.');
+  if (listPrice > 0 && maxPrice > 0 && listPrice > maxPrice) issues.push('Цена по прайсу выше разрешённого максимума.');
+  if (completeDirectCost && minPrice > 0 && minPrice < directCost) issues.push(`Минимальная цена ниже прямых затрат (${fmtMoney(directCost)}).`);
+  return { listPrice, minPrice, maxPrice, installerCost, materialCost, directCost, listProfit, minProfit, marginPct, completeDirectCost, issues };
+}
+
+function serviceOfferingPricingDraftFromEditor(id) {
+  const offering = serviceOffering(id);
+  if (!offering || typeof document === 'undefined') return offering;
+  const root = document.querySelector(`[data-service-pricing-editor="${id}"]`);
+  if (!root) return offering;
+  const value = field => Math.max(0, Number(root.querySelector(`[data-service-price-field="${field}"]`)?.value) || 0);
+  return {
+    ...offering,
+    pricePerSqft: value('pricePerSqft'),
+    minPricePerUnit: value('minPricePerUnit'),
+    maxPricePerUnit: value('maxPricePerUnit'),
+    installerRatePerSqft: value('installerRatePerSqft'),
+    materialCostPerUnit: serviceOfferingNeedsSizes(offering) ? Number(offering.materialCostPerUnit) || 0 : value('materialCostPerUnit'),
+  };
+}
+
+function serviceOfferingPricingMetricText(metrics, key) {
+  if (key === 'directCost') return fmtMoney(metrics.directCost);
+  if (key === 'listProfit') return metrics.listPrice > 0 ? fmtMoney(metrics.listProfit) : '—';
+  if (key === 'marginPct') return metrics.marginPct === null ? '—' : `${metrics.marginPct}%`;
+  if (key === 'minProfit') return metrics.minProfit === null ? 'не задан' : fmtMoney(metrics.minProfit);
+  return '—';
+}
+
+function refreshServiceOfferingPricingPreview(id) {
+  if (typeof document === 'undefined') return;
+  const root = document.querySelector(`[data-service-pricing-editor="${id}"]`);
+  if (!root) return;
+  const metrics = serviceOfferingPricingMetrics(serviceOfferingPricingDraftFromEditor(id));
+  root.querySelectorAll('[data-service-price-metric]').forEach(node => {
+    node.textContent = serviceOfferingPricingMetricText(metrics, node.getAttribute('data-service-price-metric'));
+  });
+  const notice = root.querySelector('[data-service-price-notice]');
+  if (notice) {
+    notice.classList.toggle('is-error', metrics.issues.length > 0);
+    notice.classList.toggle('is-ok', metrics.issues.length === 0 && metrics.completeDirectCost);
+    notice.classList.toggle('is-info', metrics.issues.length === 0 && !metrics.completeDirectCost);
+    notice.textContent = metrics.issues.length
+      ? `Нельзя сохранить: ${metrics.issues.join(' ')}`
+      : metrics.completeDirectCost
+        ? 'Коридор цены покрывает прямые затраты. Постоянные расходы и налоги считаются в проекте.'
+        : 'Для плёнки это предварительная маржа: фактическая стоимость материала возьмётся со склада в расчёте проекта.';
+  }
+  const button = root.querySelector('[data-service-price-save]');
+  if (button) button.disabled = metrics.issues.length > 0;
+  const status = root.querySelector('[data-service-price-save-status]');
+  if (status) status.textContent = 'Есть несохранённые изменения';
+}
+
+function saveServiceOfferingPricing(id) {
+  if (!serviceOfferingCanEdit()) return;
+  const offering = serviceOffering(id);
+  const draft = serviceOfferingPricingDraftFromEditor(id);
+  if (!offering || !draft) return;
+  const metrics = serviceOfferingPricingMetrics(draft);
+  if (metrics.issues.length) return alert(metrics.issues.join('\n'));
+  for (const field of ['pricePerSqft', 'minPricePerUnit', 'maxPricePerUnit', 'installerRatePerSqft', 'materialCostPerUnit']) offering[field] = draft[field];
+  delete offering.installerRateNeedsReview;
+  offering.updatedAt = new Date().toISOString();
+  save();
+  refreshServiceOfferingPricingPreview(id);
+  const root = typeof document === 'undefined' ? null : document.querySelector(`[data-service-pricing-editor="${id}"]`);
+  const status = root?.querySelector('[data-service-price-save-status]');
+  if (status) status.textContent = 'Цены и затраты сохранены';
+}
+
 function updateServiceOffering(id, field, value, control = null) {
   if (!serviceOfferingCanEdit()) return;
   const offering = serviceOffering(id);
@@ -26640,6 +26776,44 @@ function toggleServiceOfferingDirection(id, direction, checked, control = null) 
   renderServiceOfferingDirectory();
 }
 
+function serviceOfferingPricingEditorHtml(offering, per, sized) {
+  const metrics = serviceOfferingPricingMetrics(offering);
+  const noticeClass = metrics.issues.length ? 'is-error' : sized ? 'is-info' : 'is-ok';
+  const noticeText = metrics.issues.length
+    ? `Нельзя сохранить: ${metrics.issues.join(' ')}`
+    : sized
+      ? 'Для плёнки это предварительная маржа: фактическая стоимость материала возьмётся со склада в расчёте проекта.'
+      : 'Коридор цены покрывает прямые затраты. Постоянные расходы и налоги считаются в проекте.';
+  const input = (field, value, placeholder, step = '0.5') => `<input data-service-price-field="${field}" type="number" min="0" step="${step}" inputmode="decimal" value="${Number(value) || ''}" placeholder="${placeholder}" oninput="refreshServiceOfferingPricingPreview('${offering.id}')">`;
+  return `<div class="service-pricing-architecture" data-service-pricing-editor="${offering.id}">
+    <div class="service-pricing-customer">
+      <div class="service-pricing-block-head"><span class="service-pricing-block-icon">$</span><div><div class="service-pricing-block-title">Цена для клиента</div><div class="service-pricing-block-copy">То, что видит менеджер и что попадает в КП.</div></div></div>
+      <div class="service-pricing-list-price"><label>Цена по прайсу, $ / ${academyEsc(per)}</label>${input('pricePerSqft', offering.pricePerSqft, 'не задана')}<div class="service-pricing-field-help">Подставляется в проект по умолчанию.</div></div>
+      <div class="service-pricing-corridor">
+        <div><label>Минимальная цена менеджера</label>${input('minPricePerUnit', offering.minPricePerUnit, 'без минимума')}<div class="service-pricing-field-help">Ниже продать нельзя.</div></div>
+        <div><label>Максимальная цена менеджера</label>${input('maxPricePerUnit', offering.maxPricePerUnit, 'без максимума')}<div class="service-pricing-field-help">Выше продать нельзя.</div></div>
+      </div>
+    </div>
+    <div class="service-pricing-costs">
+      <div class="service-pricing-block-head"><span class="service-pricing-block-icon">▣</span><div><div class="service-pricing-block-title">Внутренняя себестоимость</div><div class="service-pricing-block-copy">Видит только владелец. Клиенту и менеджеру не показывается.</div></div></div>
+      <div class="service-pricing-corridor">
+        ${sized
+          ? `<div class="service-pricing-stock-cost"><label>Материал</label><div class="service-pricing-readonly">Со склада · по факту проекта</div><div class="service-pricing-field-help">Стоимость плёнки считается по выбранному рулону и расходу.</div></div>`
+          : `<div><label>Материал / оборудование, $ / ${academyEsc(per)}</label>${input('materialCostPerUnit', offering.materialCostPerUnit, '0')}<div class="service-pricing-field-help">Закупочная стоимость одной единицы.</div></div>`}
+        <div><label>Оплата монтажнику, $ / ${academyEsc(per)}</label>${input('installerRatePerSqft', offering.installerRatePerSqft, '0', '0.25')}<div class="service-pricing-field-help">Начисляется исполнителю за единицу.</div>${offering.installerRateNeedsReview ? '<div class="text-xs mt-1" style="color:#92400e">Перенесено из старых настроек — проверьте.</div>' : !(Number(offering.installerRatePerSqft) > 0) && !serviceOfferingIsDraft(offering) ? '<div class="text-xs mt-1 text-red-700">Не заполнено — монтажнику начислится $0.</div>' : ''}</div>
+      </div>
+    </div>
+    <div class="service-pricing-metrics">
+      <div class="service-pricing-metric"><span>Прямые затраты</span><strong data-service-price-metric="directCost">${serviceOfferingPricingMetricText(metrics, 'directCost')}</strong><small>${sized ? 'пока без плёнки' : 'материал + монтаж'}</small></div>
+      <div class="service-pricing-metric"><span>Валовая прибыль по прайсу</span><strong data-service-price-metric="listProfit">${serviceOfferingPricingMetricText(metrics, 'listProfit')}</strong><small>на 1 ${academyEsc(per)}</small></div>
+      <div class="service-pricing-metric"><span>Маржа по прайсу</span><strong data-service-price-metric="marginPct">${serviceOfferingPricingMetricText(metrics, 'marginPct')}</strong><small>до постоянных расходов</small></div>
+      <div class="service-pricing-metric"><span>Прибыль на минимуме</span><strong data-service-price-metric="minProfit">${serviceOfferingPricingMetricText(metrics, 'minProfit')}</strong><small>защита от убыточной цены</small></div>
+    </div>
+    <div class="service-pricing-notice ${noticeClass}" data-service-price-notice>${academyEsc(noticeText)}</div>
+    <div class="service-pricing-actions"><span data-service-price-save-status>Измените поля и сохраните их вместе.</span><button type="button" class="btn-primary" data-service-price-save onclick="saveServiceOfferingPricing('${offering.id}')" ${metrics.issues.length ? 'disabled' : ''}>Сохранить цены и затраты</button></div>
+  </div>`;
+}
+
 function serviceOfferingEditorHtml(offering, owner) {
   if (!offering) return '';
   const direction = offering.direction;
@@ -26664,25 +26838,25 @@ function serviceOfferingEditorHtml(offering, owner) {
       </div>
     </section>
     <section class="service-editor-section">
-      <div class="service-editor-section-title">Расчёт и оплата работы</div>
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div class="service-editor-section-title">Единица расчёта</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div class="md:col-span-2"><label>Как считается</label><select onchange="updateServiceOffering('${offering.id}','unit',this.value,this)">${serviceOfferingUnitsFor(direction).map(item => `<option value="${item.id}" ${unit === item.id ? 'selected' : ''}>${academyEsc(item.label)}</option>`).join('')}</select></div>
         ${unit === 'custom' ? `<div class="md:col-span-2"><label>Своя единица · например, час или выезд</label><input value="${academyEsc(offering.unitLabel || '')}" maxlength="30" placeholder="ед." onchange="updateServiceOffering('${offering.id}','unitLabel',this.value,this)"></div>` : ''}
-        <div><label>Цена клиенту, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" inputmode="decimal" value="${Number(offering.pricePerSqft) || ''}" placeholder="не задана" onchange="updateServiceOffering('${offering.id}','pricePerSqft',this.value,this)"></div>
-        <div><label>Минимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" inputmode="decimal" value="${Number(offering.minPricePerUnit) || ''}" placeholder="без минимума" onchange="updateServiceOffering('${offering.id}','minPricePerUnit',this.value,this)"></div>
-        <div><label>Максимум менеджеру, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.5" inputmode="decimal" value="${Number(offering.maxPricePerUnit) || ''}" placeholder="без максимума" onchange="updateServiceOffering('${offering.id}','maxPricePerUnit',this.value,this)"></div>
-        <div><label>Монтажнику, $ / ${academyEsc(per)}</label><input type="number" min="0" step="0.25" inputmode="decimal" value="${Number(offering.installerRatePerSqft) || ''}" placeholder="не заполнено" onchange="updateServiceOffering('${offering.id}','installerRatePerSqft',this.value,this)">${offering.installerRateNeedsReview ? '<div class="text-xs mt-1" style="color:#92400e">Перенесено из старых настроек — проверьте.</div>' : !(Number(offering.installerRatePerSqft) > 0) && !serviceOfferingIsDraft(offering) ? '<div class="text-xs mt-1 text-red-700">Не заполнено — монтажнику начислится $0.</div>' : ''}</div>
       </div>
       <div class="text-xs mt-2 ${sized ? 'text-blue-700' : 'text-emerald-700'}">${sized ? 'Нужен замер: количество и материал берутся из окон проекта.' : unit === 'lft' ? 'Количество считается по периметру выбранных окон.' : 'Замер не обязателен: количество задаётся прямо в проекте.'}</div>
     </section>
     <section class="service-editor-section">
+      <div class="service-editor-section-title">Цена, коридор и себестоимость</div>
+      ${serviceOfferingPricingEditorHtml(offering, per, sized)}
+    </section>
+    <section class="service-editor-section">
       <div class="service-editor-section-title">Состав услуги</div>
-      ${sized ? filmList : `<label style="max-width:18rem">Материал, $ / ${academyEsc(per)}<input type="number" min="0" step="0.5" inputmode="decimal" value="${Number(offering.materialCostPerUnit) || ''}" placeholder="нет материала" onchange="updateServiceOffering('${offering.id}','materialCostPerUnit',this.value,this)"></label>`}
+      ${sized ? filmList : '<div class="text-sm text-gray-500">Стоимость материала или оборудования задаётся выше, во внутренней себестоимости.</div>'}
       ${serviceOfferingIncludesEditorHtml(offering)}
       ${serviceOfferingDirectionsEditorHtml(offering)}
     </section>
     ${sized ? '' : `<section class="service-editor-section"><div class="service-editor-section-title">Показывать в КП</div><div class="flex flex-wrap gap-2"><label class="tag" style="display:inline-flex;gap:6px;white-space:normal"><input style="width:auto" type="checkbox" ${offering.proposalOptional ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','proposalOptional',this.checked,this)"> Клиент может добавить как опцию</label><label class="tag" style="display:inline-flex;gap:6px;white-space:normal"><input style="width:auto" type="checkbox" ${offering.monthly ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','monthly',this.checked,this)"> Подписка · цена в месяц</label></div></section>`}
-    <div class="service-editor-status"><span class="text-xs text-gray-500">Все изменения сохраняются автоматически.</span><label class="tag" style="display:inline-flex;white-space:nowrap;gap:6px"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked,this)"> Активна</label></div>
+    <div class="service-editor-status"><span class="text-xs text-gray-500">Название, состав и статус сохраняются автоматически. Цены сохраняются одной кнопкой.</span><label class="tag" style="display:inline-flex;white-space:nowrap;gap:6px"><input style="width:auto" type="checkbox" ${offering.active !== false ? 'checked' : ''} onchange="updateServiceOffering('${offering.id}','active',this.checked,this)"> Активна</label></div>
   </div>`;
 }
 
