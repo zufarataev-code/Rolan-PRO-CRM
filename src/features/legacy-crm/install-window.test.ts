@@ -12,7 +12,9 @@ const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
 const fn = (src: string, name: string) => { const a = src.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return src.slice(a, src.indexOf('\n}\n', a) + 3); };
 
 test('«Назначить монтаж» opens the install window', () => {
-  assert.match(fn(html, 'scheduleInstallationPrompt'), /if \(typeof openInstallWindow === 'function'\) return openInstallWindow\(oid\);/);
+  const scheduler = fn(html, 'scheduleInstallationPrompt');
+  assert.match(scheduler, /if \(typeof openInstallWindow === 'function'\) return openInstallWindow\(oid\);/);
+  assert.ok(scheduler.indexOf("typeof openInstallWindow") < scheduler.indexOf('ensureProductionReadyForInstallation'), 'the draft planner opens before production gates');
   const win = fn(stages, 'installWindowHtml');
   assert.match(win, /Услуги проекта по порядку/i);
   assert.match(win, /Назначить эту услугу/);
@@ -20,6 +22,9 @@ test('«Назначить монтаж» opens the install window', () => {
   assert.match(win, /orderInstallationTechnicalWarnings/);
   assert.match(win, /Монтаж можно назначить/);
   assert.match(win, /Это попадёт в заказ-наряд/);
+  assert.match(win, /План можно сохранить уже сейчас/);
+  assert.match(win, /Проверить готовность и опубликовать/);
+  assert.match(fn(stages, 'installSaveService'), /План монтажа можно сохранять после принятия КП/);
 });
 
 test('work kind gives the stripe colour: film red, silicone grey', () => {
