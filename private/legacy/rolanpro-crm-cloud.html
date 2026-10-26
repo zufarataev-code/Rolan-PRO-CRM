@@ -2024,6 +2024,26 @@
   .install-stripe { display:flex;justify-content:space-between;gap:8px;align-items:center;border-radius:6px;padding:3px 8px;font-size:12px;line-height:1.3;box-sizing:border-box; }
   .install-stripe span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600; }
   .install-stripe b { white-space:nowrap;font-weight:700; }
+  /* Quick measurement (Owner, 2026-10-26) */
+  .measure-choice { display:flex;flex-direction:column;gap:6px;text-align:left;width:100%;background:#fff;border:2px solid var(--choice);border-radius:14px;padding:16px;margin-bottom:10px;color:#141A26; }
+  .measure-choice-top { display:flex;justify-content:space-between;align-items:center; } .measure-choice-top b { font-size:17px; } .measure-choice-top em { font-style:normal;font-size:11px;font-weight:800;color:var(--choice);border:1px solid var(--choice);border-radius:999px;padding:2px 8px; }
+  .measure-choice > span:not(.measure-choice-top) { font-size:14px;color:#334155; } .measure-choice strong { color:var(--choice);font-size:13px; }
+  .qm-room { background:#fff;border:1px solid #D9DEE6;border-left:6px solid #7C3AED;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;margin-bottom:10px; }
+  .qm-room-head { display:flex;align-items:center;gap:8px; } .qm-room-head b { font-size:15px;flex:1; } .qm-room-head span { font-size:12px;color:#5A6577; }
+  .qm-glass { display:grid;grid-template-columns:20px 1fr 1fr 70px 32px;gap:6px;align-items:center; } .qm-glass input { width:100%;min-width:0;box-sizing:border-box;min-height:42px;font-size:16px; }
+  .qm-glass.empty input { border-color:#FCD34D; } .qm-glass b { text-align:right;font-size:13px; } .qm-n { color:#5A6577;font-weight:700; }
+  .qm-x { border:1px solid #E2E8F0;background:#fff;border-radius:8px;min-height:32px;min-width:32px;color:#B91C1C; }
+  .qm-add { align-self:flex-start;border:0;background:none;color:#6D28D9;font-weight:800;padding:4px 0; }
+  .qm-scope { font-size:11px;font-weight:800;color:#5A6577;text-transform:uppercase; }
+  .qm-yn { display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;border-top:1px solid #EEF1F5;padding-top:8px; }
+  .qm-yn-btns { display:flex;border:1px solid #CBD5E1;border-radius:8px;overflow:hidden; } .qm-yn-btns button { border:0;background:#fff;padding:8px 14px;font-weight:800;color:#5A6577; } .qm-yn-btns button.on { background:#7C3AED;color:#fff; }
+  .qm-chips { display:flex;flex-wrap:wrap;gap:6px;align-items:center; } .qm-chips > span { font-size:12px;color:#5A6577; }
+  .qm-chips button { border:1.5px solid #CBD5E1;background:#fff;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:700;color:#334155; } .qm-chips button.on { border-color:#7C3AED;background:#F5F3FF;color:#6D28D9; }
+  .qm-new-room { border-left-color:#CBD5E1;border-style:dashed; } .qm-new-row { display:flex;gap:6px; } .qm-new-row input { flex:1;min-width:0; }
+  .qm-q { display:flex;flex-direction:column;gap:6px; } .qm-req { color:#B91C1C; }
+  .qm-line { display:flex;justify-content:space-between;gap:8px;font-size:13px; } .qm-order { font-size:12px;color:#1E3A8A;background:#EFF6FF;border-radius:8px;padding:6px 8px; }
+  .qm-totals { display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:6px;text-align:center;margin-bottom:6px; } .qm-totals div { background:#F5F3FF;border-radius:10px;padding:6px; } .qm-totals small { display:block;font-size:11px;color:#6D28D9; }
+  .qm-issues { font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:6px 8px;margin-bottom:6px; }
   /* Smart room — simple (Owner, 2026-10-26) */
   .smart-toggles { display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:10px; }
   .smart-toggle { display:flex;gap:10px;align-items:flex-start;text-align:left;border:1.5px solid #CBD5E1;border-radius:10px;background:#fff;padding:10px 12px; }
@@ -16951,7 +16971,7 @@ function projectProductionReadiness(o, { requireReady = true } = {}) {
   const issues = [];
   if (!projectProposalAccepted(o)) issues.push('КП ещё не принято клиентом');
   if (!projectEstimateIsApproved(o)) issues.push('расчёт проекта не подтверждён');
-  issues.push(...orderMeasurementVerificationIssues(o));
+  if (!o.clientSizesAcceptedAt) issues.push(...orderMeasurementVerificationIssues(o));
   // The manager may schedule an installation before on-site Solar details are
   // known. Glass, facade, side and access go to the work order as warnings.
   // Smart zone integrity / over-capacity remains a real engineering blocker.
@@ -16984,7 +17004,9 @@ function orderStatusRequiresVerifiedMeasurements(status) {
 function ensureVerifiedMeasurementsForStatus(o, status, openMeasurement = true) {
   if (!o || !orderStatusRequiresVerifiedMeasurements(status)) return true;
   const issues = orderMeasurementVerificationIssues(o);
-  if (!issues.length) return true;
+  if (!issues.length || o.clientSizesAcceptedAt) return true;
+  // Owner, 2026-10-26: the exact measurement does not block scheduling — one «по размерам клиента».
+  if (typeof projectAcceptClientSizes === 'function' && orderUserCanManage(currentUser())) return projectAcceptClientSizes(o.id, 'none');
   const preview = issues.slice(0, 4).join(', ');
   alert(`Перед назначением и выполнением монтажа нужны точные проверенные размеры всех окон. Не подтверждены: ${preview}${issues.length > 4 ? ` и ещё ${issues.length - 4}` : ''}.`);
   if (openMeasurement && orderUserCanManage(currentUser())) openManagerMeasureModal(o.id);
@@ -18736,7 +18758,8 @@ function orderPrimaryNextAction(o) {
   // The deposit is asked for right after acceptance (Owner, 2026-10-23); it
   // never blocks the work — «Без аванса» records who decided and why.
   if (o.status === 'proposal_accepted' && projectDepositExpected(o)) return { icon: '💰', title: 'Получить аванс', sub: o.kpOnline?.method ? `Клиент подписал КП и выбрал ${paymentMethodLabel(kpOnlinePaymentMethod(o.kpOnline.method))}. Проверьте поступление ${fmtMoney(orderExpectedDeposit(o))} и отметьте.` : `По КП аванс ${fmtMoney(orderExpectedDeposit(o))}. Отметьте поступление — или «Без аванса», если договорились иначе.`, variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
-  if (o.status === 'proposal_accepted' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
+  // Owner, 2026-10-26: client sizes do not stop the project — the measurer gets this step, the manager goes on to production.
+  if (o.status === 'proposal_accepted' && currentUser()?.role === 'measurer' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
   if (o.status === 'proposal_accepted' && !projectProductionPrepared(o)) return { icon: '🏭', title: 'Подготовить производство', sub: 'Проверить раскрой, материал и склад перед назначением бригады.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
   // The crew and date are chosen in each row of «Услуги проекта»; then the plan is confirmed there.
   if (o.status === 'proposal_accepted') {
@@ -31154,6 +31177,11 @@ function openManagerMeasureModal(oid) {
   // One measurement window for every role (Owner, 2026-10-24, the mock-up «Одно
   // окно замера»): the measurer gets the same window without prices and may
   // leave the film to the manager (completeManagerMeasurement).
+  // Owner, 2026-10-26: the manager enters the quick (client) measurement; the
+  // owner chooses on an empty project; the measurer always gets the full one.
+  const mode = typeof measureEntryMode === 'function' ? measureEntryMode(getOrder(oid)) : 'full';
+  if (mode === 'choose') { state.modal = measureChooserHtml(getOrder(oid)); render(); return; }
+  if (mode === 'quick') { quickRefresh(oid); return; }
   state.modal = renderManagerMeasureModal(oid);
   render();
 }
@@ -31179,7 +31207,7 @@ function managerSmartMeasurementIssues(order) {
       const label = `${room?.name || 'Помещение'} · ${win.name || 'Окно'}`;
       if ((win.smart?.zones || []).length !== smartWindowZoneCount(win)) issues.push(`${label}: одна физическая панель должна соответствовать одной зоне`);
     });
-    if (system?.engineeringRequired) issues.push(`${room?.name || 'Помещение'}: нагрузка ${system.requiredW}W выше доступного блока 1000W — нужен инженерный расчёт`);
+    if (system?.engineeringRequired && system.powerBlockNeeded) issues.push(`${room?.name || 'Помещение'}: нагрузка ${system.requiredW}W выше доступного блока 1000W — нужен инженерный расчёт`);
   });
   return issues;
 }
@@ -31989,6 +32017,7 @@ function openProjectProductionWorkspace(oid) {
           ${projectLines(o).length ? `<div class="mt-3"><div class="text-xs font-black uppercase text-gray-500 mb-2">Услуги проекта</div><div class="space-y-2">${projectLineScopeRows(o)}</div></div>` : ''}
           ${blockingIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Не готово:</b> ${blockingIssues.map(academyEsc).join(', ')}.${!projectEstimateIsApproved(o) && projectProposalAccepted(o) ? ` <button type="button" class="btn-primary text-xs" onclick="projectReapproveEstimateFromProduction('${o.id}')">Подтвердить расчёт ${fmtMoney(orderRevenue(o))}</button>` : ''}</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Проверка пройдена.</b> Можно подтвердить готовность производства.${Object.keys(usage).some(id => id !== '__no_catalog' && activeProjectFilmPurchaseRequest(o.id, id) && !filmPlanInventoryStatus(id, usage[id]).enough) ? ' Плёнка под заказ — дату монтажа ставьте после её поступления.' : ''}</div>`}
           <div class="order-clean-actions mt-3">
+            ${!o.clientSizesAcceptedAt && orderMeasurementVerificationIssues(o).length ? renderOrderActionCard({ icon: '✅', title: 'Продолжить по размерам клиента', sub: 'замерщик уточнит позже — не блокирует', onclick: `projectAcceptClientSizes('${o.id}')` }) : ''}
             ${renderOrderActionCard({ icon: '📐', title: 'Проверить точные размеры', sub: `${measureAllWindows(o).length} окон`, onclick: `openManagerMeasureModal('${o.id}')` })}
             ${renderOrderActionCard({ icon: '🎞', title: 'Открыть лист раскроя', sub: `${plan.pieces?.length || 0} деталей`, onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
             ${renderOrderActionCard({ icon: '📋', title: 'Открыть заказ-наряд', sub: 'материалы и задача бригады', onclick: `openWorkOrder('${o.id}')`, disabled: !measureAllWindows(o).length && !projectLines(o).length })}

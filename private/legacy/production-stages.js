@@ -2282,12 +2282,16 @@ function installPlanComplete(plan) {
 /** Services in order with their plan, kind and state. */
 function installWindowRows(o) {
   const plans = projectPlannedSchedules(o);
-  return projectServiceGroups(o).map((group, index) => {
+  const rows = projectServiceGroups(o).map(group => {
     const plan = plans.find(item => item.id === group.id) || { id: group.id, installationAt: '', installerIds: [] };
     const kind = installWorkKind(group);
     const done = projectServiceProgress(o, group.id).status === 'done';
-    return { group, plan, kind, meta: installWorkKindMeta(kind), index, done, planned: installPlanComplete(plan) };
+    return { group, plan, kind, meta: installWorkKindMeta(kind), done, planned: installPlanComplete(plan) };
   });
+  // Owner, 2026-10-26: Smart goes electrician first, then the film.
+  const smart = measureAllWindows(o).some(({ win }) => win.measureScope === 'smart_film');
+  const rank = row => (smart && row.kind === 'electric' ? 0 : 1);
+  return rows.map((row, i) => ({ row, i })).sort((a, b) => rank(a.row) - rank(b.row) || a.i - b.i).map(({ row }, index) => ({ ...row, index }));
 }
 function installRangeText(plan) {
   const start = plan?.installationAt ? new Date(plan.installationAt) : null;
@@ -2863,11 +2867,11 @@ function smartRoleDefaults(role, capacityW = 0) {
     electric: { name: 'Электрические работы', unit: 'piece' },
   })[role] || null;
 }
-function smartCreateOffering(oid, rid, role, capacityW = 0) {
+function smartCreateOffering(oid, rid, role, capacityW = 0, inputId = '') {
   if (typeof serviceOfferingCanEdit === 'function' && !serviceOfferingCanEdit()) return;
   const base = smartRoleDefaults(role, Number(capacityW) || 0);
   if (!base) return;
-  const input = document.getElementById(`smart-new-${rid}-${role}`);
+  const input = document.getElementById(inputId || `smart-new-${rid}-${role}`);
   const price = Math.max(0, Number(input?.value) || 0);
   if (!(price > 0)) { input?.classList.add('sched-missing'); input?.focus?.(); return; }
   db.settings.serviceOfferings = Array.isArray(db.settings.serviceOfferings) ? db.settings.serviceOfferings : [];
@@ -2877,12 +2881,12 @@ function smartCreateOffering(oid, rid, role, capacityW = 0) {
   if (o && typeof syncSmartCashierServices === 'function') syncSmartCashierServices(o);
   if (o) invalidateProjectEstimate(o, `Создана услуга «${base.name}»`);
   save();
-  refreshManagerMeasureModal(oid);
+  if (inputId) quickRefresh(oid); else refreshManagerMeasureModal(oid);
 }
 function managerSmartRoomFieldsHtml(oid, room) {
   const system = syncSmartRoomPlan(room);
   if (!system) return '';
-  const canCreate = typeof serviceOfferingCanEdit === 'function' && serviceOfferingCanEdit();
+  const canCreate = currentUser()?.role === 'owner'; // the directory check alerts, so a render asks the role directly
   const row = (role, label, qty, capacityW = 0) => {
     const offering = smartCashierOffering(role, capacityW);
     const priced = offering && Number(offering.pricePerSqft) > 0;
@@ -2916,4 +2920,325 @@ function managerSmartRoomFieldsHtml(oid, room) {
       </div>
     </details>` : ''}
   </section>`;
+}
+
+// ---------- ЗАМЕР В ДВА УРОВНЯ (Owner, 2026-10-26, макет 15–18) ----------
+// «Замерщик вносит замеры через модуль замера, а менеджер — только базовые,
+// чтобы можно было закрыть сделку: клиент прислал размеры — вносим комнаты,
+// площадь стёкол, нужна ли розетка, обязательные вопросы. Более детально —
+// на замере, и это не должно блокировать КП и назначение монтажа.»
+// The quick window writes the same rooms and windows as the full measurement
+// (sizes «от клиента»), so the measurer only adds to them later.
+function quickMeasureCanEdit(o) {
+  return !!o && orderUserCanSeeMoney(o, currentUser()) && !CLOSED_PROJECT_STATUSES.includes(o.status);
+}
+/** Which window opens: the manager always gets the quick one; the owner chooses on an empty project. */
+function measureEntryMode(o) {
+  const role = currentUser()?.role;
+  if (!o || role === 'measurer' || !orderNeedsMeasurements(o)) return 'full';
+  if (state._measureMode?.[o.id]) return state._measureMode[o.id];
+  if (role === 'manager') return 'quick';
+  const windows = measureAllWindows(o);
+  if (!windows.length) return 'choose';
+  return windows.every(({ win }) => win.quickMeasure) ? 'quick' : 'full';
+}
+function setMeasureMode(oid, mode) {
+  state._measureMode = state._measureMode || {};
+  state._measureMode[oid] = mode;
+  openManagerMeasureModal(oid);
+}
+function measureChooserHtml(o) {
+  const tile = (mode, color, title, badge, text, cta) => `<button type="button" class="measure-choice" style="--choice:${color}" onclick="setMeasureMode('${o.id}','${mode}')"><span class="measure-choice-top"><b>${title}</b><em>${badge}</em></span><span>${text}</span><strong>${cta}</strong></button>`;
+  return `<div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal order-workspace-modal rp-dirwin" style="--workspace-color:#7C3AED;--dir-color:#7C3AED" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Как вносим замер">
+      <header class="order-workspace-modal-head rp-dirwin-head"><button type="button" class="workspace-back" onclick="closeModal()">← К проекту</button><div class="order-workspace-modal-heading"><div><div class="order-workspace-modal-kicker">ЗАМЕР · ${academyEsc(o.number)}</div><h3>Как вносим замер?</h3></div></div></header>
+      <div class="order-workspace-modal-body rp-dirwin-body">
+        ${tile('quick', '#7C3AED', '⚡ Быстрый замер', 'МЕНЕДЖЕР', 'Размеры прислал клиент или постоянный клиент. Комнаты, стёкла, розетка — хватает, чтобы посчитать КП и закрыть сделку.', '≈ 2 минуты →')}
+        ${tile('full', '#0F766E', '📐 Полный замер', 'ЗАМЕРЩИК', 'На объекте: точные размеры, сторона подключения, место блока, трасса провода, фото. Дополняет быстрый замер — ничего не вводим заново.', 'На выезде →')}
+        <div class="rp-dirwin-hint">Точный замер не блокирует ни КП, ни назначение монтажа. Смарт: сначала электрик, потом монтаж плёнки.</div>
+      </div>
+    </div></div>`;
+}
+/** The service a new glass of a direction gets: the chosen chip, else the first one sold in the project. */
+function quickOffering(o, scope) {
+  const choices = projectSelectedSizedOfferings(o, scope);
+  const picked = state._quickOffering?.[`${o.id}:${scope}`];
+  return choices.find(item => item.id === picked) || choices[0] || null;
+}
+function quickPickOffering(oid, scope, offeringId) {
+  state._quickOffering = state._quickOffering || {};
+  state._quickOffering[`${oid}:${scope}`] = offeringId;
+  quickRefresh(oid);
+}
+function quickFilmFor(o, offering) {
+  const chosen = offering ? projectOfferingCatalogId(o, offering.id) : '';
+  if (chosen) return chosen;
+  const allowed = offering ? serviceOfferingAllowedFilmIds(offering) : [];
+  return allowed.find(id => { const film = getCatalogItem(id); return film && !film.archived; }) || '';
+}
+function quickRoom(o, rid) { return o?.measurements?.rooms?.find(room => room.id === rid) || null; }
+function quickAddRoom(oid, name) {
+  const o = getOrder(oid);
+  if (!quickMeasureCanEdit(o)) return;
+  const input = document.getElementById('qm-room-name');
+  const title = String(name || input?.value || '').trim() || `Комната ${(o.measurements?.rooms || []).length + 1}`;
+  o.measurements = o.measurements || { rooms: [] };
+  const room = { id: uid(), name: title, windows: [], defaultCatalogByScope: {} };
+  o.measurements.rooms.push(room);
+  orderMeasureScopes(o).forEach(scope => quickAddGlassTo(o, room, scope));
+  invalidateProjectEstimate(o, 'Быстрый замер: добавлена комната');
+  save();
+  quickRefresh(oid);
+}
+function quickAddGlassTo(o, room, scope) {
+  const offering = quickOffering(o, scope);
+  const win = managerWindowDefaults(o, room, { objectKind: 'window', scopeKey: scope, winType: normalizeMeasureWindowTypeForScope(scope, '') });
+  win.quickMeasure = true;
+  win.width = 0; win.height = 0; win.actualWidth = 0; win.actualHeight = 0;
+  win.sizePlaceholder = { width: true, height: true };
+  if (offering) {
+    applyWindowOffering(win, offering);
+    o.offeringIds = [...new Set([...(o.offeringIds || []), offering.id])];
+    o.offeringUnits = { ...(o.offeringUnits || {}), [offering.id]: o.offeringUnits?.[offering.id] || serviceOfferingUnit(offering) };
+  }
+  const film = getCatalogItem(quickFilmFor(o, offering));
+  if (film) { win.catalogId = film.id; win.filmType = catalogLabel(film); }
+  if (room.quickRemoval) { win.removalRequired = true; win.removal_required = true; }
+  room.windows = room.windows || [];
+  room.windows.push(win);
+  return win;
+}
+function quickAddGlass(oid, rid, scope) {
+  const o = getOrder(oid);
+  const room = quickRoom(o, rid);
+  if (!quickMeasureCanEdit(o) || !room) return;
+  quickAddGlassTo(o, room, scope);
+  invalidateProjectEstimate(o, 'Быстрый замер: добавлено стекло');
+  save();
+  quickRefresh(oid);
+}
+function quickSetDim(oid, rid, wid, field, value) {
+  const o = getOrder(oid);
+  const room = quickRoom(o, rid);
+  const win = room?.windows?.find(item => item.id === wid);
+  if (!quickMeasureCanEdit(o) || !win || !['width', 'height', 'qty'].includes(field)) return;
+  if (field === 'qty') win.qty = Math.max(1, parseInt(value) || 1);
+  else {
+    const mm = measureInputToMm(value);
+    win[field] = mm;
+    win[field === 'width' ? 'actualWidth' : 'actualHeight'] = mm;
+    if (win.sizePlaceholder) {
+      if (mm > 0) delete win.sizePlaceholder[field]; else win.sizePlaceholder[field] = true;
+      if (!win.sizePlaceholder.width && !win.sizePlaceholder.height) delete win.sizePlaceholder;
+    }
+  }
+  markWindowMeasurementUnverified(win);
+  syncWindowPanelsForType(win, win.measureScope || orderMeasureScope(o));
+  syncSmartWindowPlan(win, room.name || '');
+  syncOrderWindowRemovalService(o);
+  invalidateProjectEstimate(o, 'Быстрый замер: размеры от клиента');
+  save();
+  quickRefresh(oid);
+}
+function quickDeleteGlass(oid, rid, wid) {
+  const o = getOrder(oid);
+  const room = quickRoom(o, rid);
+  if (!quickMeasureCanEdit(o) || !room) return;
+  if (!projectKeepsDoneServices(o, () => { room.windows = (room.windows || []).filter(win => win.id !== wid); syncOrderWindowRemovalService(o); })) return quickRefresh(oid);
+  invalidateProjectEstimate(o, 'Быстрый замер: удалено стекло');
+  save();
+  quickRefresh(oid);
+}
+function quickDeleteRoom(oid, rid) {
+  const o = getOrder(oid);
+  if (!quickMeasureCanEdit(o) || !confirm('Удалить комнату и её стёкла?')) return;
+  if (!projectKeepsDoneServices(o, () => { o.measurements.rooms = (o.measurements.rooms || []).filter(room => room.id !== rid); syncOrderWindowRemovalService(o); })) return quickRefresh(oid);
+  invalidateProjectEstimate(o, 'Быстрый замер: удалена комната');
+  save();
+  quickRefresh(oid);
+}
+/** Yes/No of a room: «Розетка рядом?» (Smart) and «Снять старую плёнку?» — answerable before any glass. */
+function quickSetRoomAnswer(oid, rid, field, yes) {
+  const o = getOrder(oid);
+  const room = quickRoom(o, rid);
+  if (!quickMeasureCanEdit(o) || !room || !['quickSocket', 'quickRemoval'].includes(field)) return;
+  room[field] = yes ? 'yes' : 'no';
+  if (field === 'quickRemoval') {
+    (room.windows || []).forEach(win => { win.removalRequired = !!yes; win.removal_required = !!yes; });
+    syncOrderWindowRemovalService(o);
+  }
+  invalidateProjectEstimate(o, 'Быстрый замер: ответ по комнате');
+  save();
+  quickRefresh(oid);
+}
+function quickSetAnswer(oid, key, value) {
+  const o = getOrder(oid);
+  if (!quickMeasureCanEdit(o) || !['control', 'block', 'glass'].includes(key)) return;
+  o.quickAnswers = { ...(o.quickAnswers || {}), [key]: value };
+  invalidateProjectEstimate(o, 'Быстрый замер: обязательный вопрос');
+  save();
+  quickRefresh(oid);
+}
+/** The answers become the same room settings the full measurement edits. */
+function quickApplyAnswers(o) {
+  const answers = o.quickAnswers || {};
+  (o.measurements?.rooms || []).forEach(room => {
+    const smartWindows = smartWindowsInRoom(room);
+    if (smartWindows.length) {
+      syncSmartRoomPlan(room);
+      const system = room.smartSystem;
+      if (system) {
+        if (room.quickSocket) system.electricianNeeded = room.quickSocket === 'no';
+        if (answers.block) system.powerBlockNeeded = answers.block === 'ours';
+        if (answers.control) {
+          system.controlMode = answers.control === 'multi' ? 'multi' : 'group';
+          system.controllerType = ({ remote: 'Remote', switch: 'Wall switch', voice: 'Voice / Alexa', multi: 'Multi-zone controller' })[answers.control] || system.controllerType;
+        }
+        syncSmartRoomPlan(room);
+      }
+      if (answers.glass && answers.glass !== 'unknown') smartWindows.forEach(win => { if (!win.glassType || win.quickMeasure) win.glassType = answers.glass === 'single' ? 'Single pane' : 'Double pane / IGU'; });
+    }
+  });
+}
+function quickRefresh(oid) {
+  const o = getOrder(oid);
+  if (!o) return;
+  quickApplyAnswers(o);
+  projectSyncServicesFromWindows(oid);
+  save();
+  preservePositionForNextRender();
+  state.modal = quickMeasureHtml(o);
+  render();
+}
+function quickMeasureIssues(o) {
+  const issues = [];
+  const scopes = orderMeasureScopes(o);
+  const windows = measureAllWindows(o);
+  scopes.forEach(scope => {
+    if (!windows.some(({ win }) => (win.measureScope || orderMeasureScope(o)) === scope && windowSizeEntered(win) && windowActualAreaSqft(win) > 0)) issues.push(`внесите хотя бы одно стекло: ${measureScopeInfo(scope).short}`);
+  });
+  const empty = windows.filter(({ win }) => !windowSizeEntered(win) || !(windowActualAreaSqft(win) > 0));
+  if (empty.length) issues.push(`ширина и высота: ${empty.slice(0, 3).map(({ room, win }) => `${room.name || 'Комната'} · ${win.name || 'стекло'}`).join(', ')}${empty.length > 3 ? ` и ещё ${empty.length - 3}` : ''}`);
+  if (windows.some(({ win }) => !win.offeringId)) issues.push('в проекте нет услуги этого направления — добавьте её в «Услуги»');
+  if (windows.some(({ win }) => (win.measureScope || '') === 'smart_film')) {
+    const answers = o.quickAnswers || {};
+    if (!answers.control) issues.push('ответьте: как управляем');
+    if (!answers.block) issues.push('ответьте: блок питания');
+    if (!answers.glass) issues.push('ответьте: какое стекло');
+    (o.measurements?.rooms || []).filter(room => smartWindowsInRoom(room).length && !room.quickSocket).forEach(room => issues.push(`${room.name || 'Комната'}: розетка рядом — да или нет`));
+  }
+  return issues;
+}
+function quickMeasureHtml(o) {
+  const unitsIn = db.settings.inputUnits === 'inches';
+  const unit = unitsIn ? '″' : ' мм';
+  const scopes = orderMeasureScopes(o);
+  const smart = scopes.includes('smart_film');
+  const rooms = o.measurements?.rooms || [];
+  const windows = measureAllWindows(o);
+  const area = windows.reduce((sum, { win }) => sum + windowActualAreaSqft(win), 0);
+  const zones = windows.filter(({ win }) => win.measureScope === 'smart_film').reduce((sum, { win }) => sum + smartWindowZoneCount(win), 0);
+  const blocks = (o.quickAnswers?.block === 'ours') ? rooms.filter(room => smartWindowsInRoom(room).length).length : 0;
+  const yn = (oid, rid, field, value, label) => `<div class="qm-yn"><span>${label}</span><span class="qm-yn-btns"><button type="button" class="${value === 'yes' ? 'on' : ''}" onclick="quickSetRoomAnswer('${oid}','${rid}','${field}',true)">Да</button><button type="button" class="${value === 'no' ? 'on' : ''}" onclick="quickSetRoomAnswer('${oid}','${rid}','${field}',false)">Нет</button></span></div>`;
+  const glassRow = (room, win, index) => {
+    const w = windowSizeEntered(win) || !win.sizePlaceholder?.width ? measureMmToInput(win.width) : '';
+    const h = windowSizeEntered(win) || !win.sizePlaceholder?.height ? measureMmToInput(win.height) : '';
+    const sq = windowActualAreaSqft(win);
+    return `<div class="qm-glass ${windowSizeEntered(win) ? '' : 'empty'}">
+      <span class="qm-n">${index + 1}</span>
+      <input type="number" min="0" step="${unitsIn ? '0.25' : '1'}" inputmode="decimal" placeholder="Ширина${unit}" aria-label="Ширина стекла ${index + 1}" value="${Number(w) > 0 ? w : ''}" onchange="quickSetDim('${o.id}','${room.id}','${win.id}','width',this.value)">
+      <input type="number" min="0" step="${unitsIn ? '0.25' : '1'}" inputmode="decimal" placeholder="Высота${unit}" aria-label="Высота стекла ${index + 1}" value="${Number(h) > 0 ? h : ''}" onchange="quickSetDim('${o.id}','${room.id}','${win.id}','height',this.value)">
+      <b>${sq > 0 ? `${sq.toFixed(1)} sq ft` : '—'}</b>
+      <button type="button" class="qm-x" aria-label="Убрать стекло" onclick="quickDeleteGlass('${o.id}','${room.id}','${win.id}')">✕</button>
+    </div>`;
+  };
+  const scopeBlock = (room, scope) => {
+    const list = (room.windows || []).filter(win => (win.measureScope || orderMeasureScope(o)) === scope);
+    return `${scopes.length > 1 ? `<div class="qm-scope">${academyEsc(measureScopeInfo(scope).short)}</div>` : ''}
+      ${list.map((win, i) => glassRow(room, win, i)).join('')}
+      <button type="button" class="qm-add" onclick="quickAddGlass('${o.id}','${room.id}','${scope}')">+ стекло</button>`;
+  };
+  const roomCards = rooms.map(room => {
+    const list = room.windows || [];
+    const sq = list.reduce((sum, win) => sum + windowActualAreaSqft(win), 0);
+    return `<section class="qm-room">
+      <div class="qm-room-head"><b>${academyEsc(room.name || 'Комната')}</b><span>${list.length} ${projectPlural(list.length, 'стекло', 'стекла', 'стёкол')} · ${sq.toFixed(1)} sq ft</span><button type="button" class="qm-x" aria-label="Удалить комнату" onclick="quickDeleteRoom('${o.id}','${room.id}')">✕</button></div>
+      ${scopes.map(scope => scopeBlock(room, scope)).join('')}
+      ${smart ? yn(o.id, room.id, 'quickSocket', room.quickSocket, 'Розетка рядом с окнами?') : ''}
+      ${yn(o.id, room.id, 'quickRemoval', room.quickRemoval, 'Снять старую плёнку?')}
+    </section>`;
+  }).join('');
+  const offeringChips = scopes.map(scope => {
+    const choices = projectSelectedSizedOfferings(o, scope);
+    if (choices.length < 2) return '';
+    const current = quickOffering(o, scope);
+    return `<div class="qm-chips"><span>Новые стёкла — услуга:</span>${choices.map(item => `<button type="button" class="${current?.id === item.id ? 'on' : ''}" onclick="quickPickOffering('${o.id}','${scope}','${item.id}')">${academyEsc(item.name)}</button>`).join('')}</div>`;
+  }).join('');
+  const q = (key, title, options) => `<div class="qm-q"><b>${title} <span class="qm-req">*</span></b><div class="qm-chips">${options.map(([value, label]) => `<button type="button" class="${o.quickAnswers?.[key] === value ? 'on' : ''}" onclick="quickSetAnswer('${o.id}','${key}','${value}')">${o.quickAnswers?.[key] === value ? '✓ ' : ''}${label}</button>`).join('')}</div></div>`;
+  const questions = smart ? `<section class="qm-room qm-questions"><div class="qm-room-head"><b>Обязательные вопросы · Смарт</b><span>влияют на цену</span></div>
+      ${q('control', 'Как управляем?', [['remote', 'Пульт'], ['switch', 'Выключатель'], ['voice', 'Голос / Alexa'], ['multi', 'Каждая зона отдельно']])}
+      ${q('block', 'Блок питания', [['ours', 'Наш — 1 на комнату'], ['none', 'Не нужен']])}
+      ${q('glass', 'Стекло', [['single', 'Одинарное'], ['double', 'Стеклопакет'], ['unknown', 'Не знаю — уточнит замерщик']])}
+    </section>` : '';
+  const lines = projectLines(o).filter(line => !line.excluded);
+  const canCreate = currentUser()?.role === 'owner'; // the directory check alerts, so a render asks the role directly
+  const smartRooms = smart ? smartProjectRooms(o) : [];
+  const neededRoles = smart && smartRooms.length ? [
+    ['zone', 'Подключение зон', 0],
+    ...(smartRooms.some(item => item.system.electricianNeeded) ? [['electric', 'Электрик', 0]] : []),
+    ...(smartRooms.some(item => item.system.controlMode === 'multi') ? [['multi', 'Мультизона', 0]] : []),
+    ...[...new Set(smartRooms.filter(item => item.system.powerBlockNeeded && item.system.capacityW).map(item => item.system.capacityW))].map(w => ['power', 'Блок питания', w]),
+  ].filter(([role, , w]) => { const offering = smartCashierOffering(role, w); return !offering || !(Number(offering.pricePerSqft) > 0); }) : [];
+  const missing = neededRoles.map(([role, label, w]) => {
+    const name = smartRoleDefaults(role, w)?.name || label;
+    const id = `qm-new-${role}-${w || 0}`;
+    return `<div class="smart-kp-row missing"><span>${academyEsc(label)}</span>${canCreate ? `<div class="smart-kp-create"><b>«${academyEsc(name)}» нет в прайсе</b><input id="${id}" type="number" min="0" step="1" inputmode="decimal" placeholder="Цена, $"><button type="button" class="btn-primary" onclick="smartCreateOffering('${o.id}','','${role}',${Number(w) || 0},'${id}')">Создать услугу</button></div>` : `<b>«${academyEsc(name)}» нет в прайсе — в КП не войдёт</b>`}</div>`;
+  }).join('');
+  const kp = lines.length || missing ? `<section class="qm-room"><div class="qm-room-head"><b>Попадёт в КП</b><span>${fmtMoney(orderRevenue(o))}</span></div>${lines.map(line => `<div class="qm-line"><span>${academyEsc(line.name)} · ${academyEsc(projectLineQtyText(line))}</span><b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b></div>`).join('')}${missing}${smart ? '<div class="qm-order">Порядок монтажа: <b>1 · Электрик</b> → <b>2 · Монтаж смарт-плёнки</b></div>' : ''}</section>` : '';
+  const issues = quickMeasureIssues(o);
+  const presets = ['Гостиная', 'Спальня', 'Кухня', 'Офис', 'Ванная'];
+  return `<div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal order-workspace-modal rp-dirwin quick-measure" style="--workspace-color:#7C3AED;--dir-color:#7C3AED" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Быстрый замер" data-quick-measure>
+      <header class="order-workspace-modal-head rp-dirwin-head"><button type="button" class="workspace-back" onclick="closeModal()">← К проекту</button><div class="order-workspace-modal-heading"><div><div class="order-workspace-modal-kicker">БЫСТРЫЙ ЗАМЕР · ${academyEsc(o.number)}</div><h3>Комнаты и стёкла</h3><div class="text-xs text-gray-500">Размеры от клиента · замерщик уточнит, это не блокирует КП и монтаж</div></div></div></header>
+      <div class="order-workspace-modal-body rp-dirwin-body">
+        ${offeringChips}
+        ${roomCards || '<div class="rp-dirwin-empty">Добавьте первую комнату — ниже.</div>'}
+        <section class="qm-room qm-new-room"><div class="qm-chips">${presets.map(name => `<button type="button" onclick="quickAddRoom('${o.id}','${name}')">+ ${name}</button>`).join('')}</div>
+          <div class="qm-new-row"><input id="qm-room-name" placeholder="Или своё название"><button type="button" class="btn-ghost" onclick="quickAddRoom('${o.id}')">+ Комната</button></div></section>
+        ${questions}
+        ${kp}
+        ${currentUser()?.role === 'owner' ? `<button type="button" class="btn-ghost w-full" onclick="setMeasureMode('${o.id}','full')">📐 Открыть полный замер</button>` : ''}
+      </div>
+      <div class="rp-dirwin-foot">
+        <div class="qm-totals"><div><small>Комнат</small><b>${rooms.length}</b></div><div><small>${smart ? 'Стёкол = зон' : 'Стёкол'}</small><b>${smart ? zones : windows.length}</b></div><div><small>Площадь</small><b>${area.toFixed(1)} sq ft</b></div>${smart ? `<div><small>Блоков</small><b>${blocks}</b></div>` : ''}</div>
+        ${issues.length ? `<div class="qm-issues">Осталось: ${issues.map(academyEsc).join(' · ')}</div>` : ''}
+        <button type="button" class="btn-primary rp-dirwin-next" style="background:#7C3AED !important;border-color:#7C3AED !important;color:#fff !important" ${issues.length ? 'disabled' : ''} onclick="quickFinish('${o.id}')">Посчитать → КП</button>
+      </div>
+    </div></div>`;
+}
+function quickFinish(oid) {
+  const o = getOrder(oid);
+  if (!quickMeasureCanEdit(o)) return;
+  const issues = quickMeasureIssues(o);
+  if (issues.length) { alert('Осталось: ' + issues.join(', ')); return; }
+  o.quickMeasuredAt = new Date().toISOString();
+  o.quickMeasuredBy = state.currentUserId;
+  save();
+  closeModal();
+  completeManagerMeasurement(oid);
+}
+/** Client sizes do not block production and installation: one explicit «по размерам клиента». */
+function projectAcceptClientSizes(oid, reopen = 'production') {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanManage(currentUser())) return false;
+  const issues = orderMeasurementVerificationIssues(o);
+  if (!issues.length) return true;
+  if (!confirm(`Размеры от клиента ещё не уточнил замерщик (${issues.length}). Продолжить по размерам клиента? Замерщик уточнит позже — бригада увидит, какие размеры точные.`)) return false;
+  o.clientSizesAcceptedAt = new Date().toISOString();
+  o.clientSizesAcceptedBy = state.currentUserId;
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: o.clientSizesAcceptedAt, key: 'client_sizes_accepted', by: state.currentUserId, note: `Продолжили по размерам клиента: ${issues.length}` });
+  save();
+  if (reopen === 'production') openProjectProductionWorkspace(oid);
+  return true;
 }
