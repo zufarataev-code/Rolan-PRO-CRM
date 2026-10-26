@@ -23,6 +23,13 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-25 handoff — «Ставки и расходы»: one source of truth (PR #406)
+
+- Merged `f998e20`, deployed. Owner-only view `ratesCosts` (sidebar 🧾, Settings «company-costs» and «pricing» lead here), code in `production-stages.js` (`renderRatesCosts`, `syncTeamSalaryPlans`).
+- Homes: pay → employee `payConfig`; per-unit installer rate/material → `serviceOfferings` (same fields as «Услуги и цены»); fixed/variable payments → `db.opex`; percentages, fuel, consumables, helper → `pricingDefaults`.
+- Salaries mirrored into fixed costs as `opx_salary_<userId>` (`autoFrom: 'team'`) on every owner `save()`; legacy `opx_owner_salary` / `opx_measurer_salary` retired (`retiredBy: 'team'`, not deleted). Prod dry-run on a copy: monthly fixed $10,119.99 before and after.
+- Tests: `rates-costs.test.ts`.
+
 ## 2026-10-25 handoff — «Назначить монтаж» window by service (PR #403)
 
 - Merged `f96b683`, deployed; prod loads `openInstallWindow` / `installStripesHtml`.
@@ -30,7 +37,6 @@ Before doing any work:
 - Calendar: a multi-day service shows on every day («Ceramic · день 1 из 2»). The real `calendarEventsForOrder` is in `production-stages.js` (it overrides the html copy).
 - Kanban: one labelled stripe per service — red film, grey silicone, blue electric; dashed = not scheduled (`installWorkKind` / `installWorkKindMeta`).
 - Tests: `install-window.test.ts`; local harness full cycle passes.
-- Open with owner: single source of truth «Ставки и расходы» proposed, awaiting his yes.
 
 ## 2026-10-25 handoff — focused service directory by five directions
 
