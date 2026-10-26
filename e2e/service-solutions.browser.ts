@@ -47,7 +47,10 @@ async function main() {
       await page.goto(base+'/legacy-crm',{waitUntil:'networkidle'});
       await page.waitForFunction(()=>typeof (window as any).projectServiceScheduleHtml==='function');
       await page.goto(base+'/legacy-crm#/service-pricing',{waitUntil:'networkidle'});
-      await page.getByRole('heading',{name:'Услуги по направлениям',exact:true}).waitFor();
+      await page.getByRole('heading',{name:'Направления услуг',exact:true}).waitFor();
+      assert.equal(await page.locator('[data-service-direction-card]').count(),5,'The service directory must start with exactly five directions');
+      await page.locator('[data-service-direction-card="solar"]').click();
+      await page.getByRole('dialog',{name:/Услуги направления/}).waitFor();
       await page.locator(`[onclick="addServiceOffering('solar')"]`).click();
       const newName=page.locator('input[value="Новая услуга"]');
       const card=newName.locator('xpath=ancestor::div[@data-service-offering-row][1]');
