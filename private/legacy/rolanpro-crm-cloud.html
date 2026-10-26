@@ -39213,11 +39213,15 @@ async function generateStripeDepositLink(orderId) {
 }
 
 async function checkStripePayments() {
-  // Poll Stripe for paid sessions, mark deposits received
-  const orders = db.orders.filter(o => o.stripe?.paymentLinkId && !o.stripe?.paid);
+  // Poll Stripe for paid sessions from proposals/deposits and issued invoices.
+  const orders = db.orders.filter(o => (o.stripe?.paymentLinkId && !o.stripe?.paid) || (o.invoices || []).some(inv => inv.paymentLinkId && !inv.paidAt));
   if (!orders.length) { alert('Нет ожидающих платежей через Stripe'); return; }
+  const paymentLinkIds = [...new Set(orders.flatMap(o => [
+    o.stripe?.paymentLinkId,
+    ...(o.invoices || []).filter(inv => !inv.paidAt).map(inv => inv.paymentLinkId),
+  ]).filter(Boolean))];
   let paidByLink = {};
-  try { paidByLink = await stripeServerApi('/payment-status', { method: 'POST', body: JSON.stringify({ payment_link_ids: orders.map(o => o.stripe.paymentLinkId) }) }) || {}; }
+  try { paidByLink = await stripeServerApi('/payment-status', { method: 'POST', body: JSON.stringify({ payment_link_ids: paymentLinkIds }) }) || {}; }
   catch (e) { alert(e.message); return; }
   let confirmed = 0;
   for (const o of orders) {
@@ -39241,6 +39245,21 @@ async function checkStripePayments() {
             const calc = premiumProposalCalc(p);
             p.status = (o.paid || 0) >= (calc.total || 0) ? 'Paid in Full' : 'Deposit Paid';
           });
+        confirmed++;
+      }
+      for (const inv of (o.invoices || []).filter(item => item.paymentLinkId && !item.paidAt)) {
+        const invoiceSessionId = paidByLink[inv.paymentLinkId];
+        if (!invoiceSessionId) continue;
+        const paidAt = new Date().toISOString();
+        inv.paidAt = paidAt;
+        inv.paidSessionId = invoiceSessionId;
+        addOrderPayment(o.id, {
+          amount: Number(inv.amount) || 0,
+          method: 'card',
+          note: `Stripe · invoice ${inv.number} · session ${invoiceSessionId}`,
+        });
+        o.timeline = o.timeline || [];
+        o.timeline.push({ at: paidAt, key: 'invoice_paid', by: null, note: `Счёт ${inv.number} оплачен через Stripe: ${fmtMoney(inv.amount || 0)}` });
         confirmed++;
       }
     } catch (e) { console.warn('Stripe check failed for', o.number, e); }

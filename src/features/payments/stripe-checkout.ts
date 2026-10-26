@@ -16,6 +16,10 @@ export type StripeDepositCheckoutInput = {
 type StripeCheckoutSessionResponse = {
   id?: string;
   url?: string | null;
+  payment_status?: string;
+  amount_total?: number | null;
+  currency?: string | null;
+  metadata?: Record<string, string> | null;
   error?: {
     message?: string;
   };
@@ -40,7 +44,9 @@ export async function createStripeDepositCheckout(input: StripeDepositCheckoutIn
   const proposalUrl = `${appUrl}/proposal/${encodeURIComponent(input.accessToken)}`;
   const body = new URLSearchParams();
   body.set("mode", "payment");
-  body.set("success_url", `${proposalUrl}?payment=success`);
+  // Stripe replaces this placeholder after payment. The public return page
+  // verifies that exact session server-side before CRM records any money.
+  body.set("success_url", `${proposalUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`);
   body.set("cancel_url", `${proposalUrl}?payment=cancelled`);
   body.set("line_items[0][price_data][currency]", input.currency.toLowerCase());
   body.set("line_items[0][price_data][product_data][name]", "ROLANPRO project deposit");
@@ -88,6 +94,38 @@ export async function createStripeDepositCheckout(input: StripeDepositCheckoutIn
     checkoutSessionId: payload.id,
     checkoutUrl: payload.url,
     amountCents,
+  };
+}
+
+export async function getStripeCheckoutSession(checkoutSessionId: string) {
+  if (!/^cs_(?:test_|live_)?[A-Za-z0-9]+$/.test(checkoutSessionId)) {
+    return "invalid_session" as const;
+  }
+
+  const secretKey = await getStripeSecretKey();
+  if (!secretKey) return "not_configured" as const;
+
+  const response = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(checkoutSessionId)}`, {
+    headers: { Authorization: `Bearer ${secretKey}` },
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => null)) as StripeCheckoutSessionResponse | null;
+
+  if (!response.ok || !payload?.id) {
+    console.error("[Payments] Stripe checkout verification failed", {
+      status: response.status,
+      message: payload?.error?.message ?? "Unknown Stripe error",
+      checkoutSessionId,
+    });
+    return "processor_error" as const;
+  }
+
+  return {
+    checkoutSessionId: payload.id,
+    paymentStatus: payload.payment_status ?? null,
+    amountTotal: payload.amount_total ?? null,
+    currency: payload.currency?.toUpperCase() ?? null,
+    metadata: payload.metadata ?? {},
   };
 }
 

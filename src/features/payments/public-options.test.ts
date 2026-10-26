@@ -39,3 +39,25 @@ test("the card fee passed to the client is 3%; Zelle and bank transfer are free"
   assert.equal(calculatePaymentAmount(1000, PAYMENT_METHODS.PAYMENT_SYSTEM).payable_amount, 1030);
   assert.equal(calculatePaymentAmount(1000, PAYMENT_METHODS.ZELLE).payable_amount, 1000);
 });
+
+test("a Stripe checkout is accepted only when payment, proposal, deposit, amount and currency all match", async () => {
+  const { stripeCheckoutMatchesDeposit } = await import("./public-options");
+  const session = {
+    checkoutSessionId: "cs_test_paid123",
+    paymentStatus: "paid",
+    amountTotal: 10300,
+    currency: "USD",
+    metadata: { proposal_id: "proposal-1", deposit_id: "deposit-1" },
+  };
+  const expected = {
+    checkoutSessionId: "cs_test_paid123",
+    proposalId: "proposal-1",
+    depositId: "deposit-1",
+    amountCents: 10300,
+    currency: "USD",
+  };
+  assert.equal(stripeCheckoutMatchesDeposit(session, expected), true);
+  assert.equal(stripeCheckoutMatchesDeposit({ ...session, paymentStatus: "unpaid" }, expected), false);
+  assert.equal(stripeCheckoutMatchesDeposit({ ...session, amountTotal: 10299 }, expected), false);
+  assert.equal(stripeCheckoutMatchesDeposit({ ...session, metadata: { ...session.metadata, deposit_id: "other" } }, expected), false);
+});

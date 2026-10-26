@@ -1,19 +1,22 @@
 import { notFound } from "next/navigation";
 
 import { PublicProposalPackage } from "@/components/public-proposal-package";
-import { getPublicPaymentOptions } from "@/features/payments/public-options";
+import { getPublicPaymentOptions, reconcilePublicStripeCheckout } from "@/features/payments/public-options";
 import { getPublicProposal } from "@/features/proposals/service";
 
 type PageProps = {
   params: Promise<{
     accessToken: string;
   }>;
-  searchParams: Promise<{ lang?: string }>;
+  searchParams: Promise<{ lang?: string; payment?: string; session_id?: string }>;
 };
 
 export default async function PublicProposalPage({ params, searchParams }: PageProps) {
   const { accessToken } = await params;
-  const { lang } = await searchParams;
+  const { lang, payment, session_id: sessionId } = await searchParams;
+  if (payment === "success") {
+    await reconcilePublicStripeCheckout(accessToken, sessionId);
+  }
   const [proposal, paymentOptions] = await Promise.all([
     getPublicProposal(accessToken),
     getPublicPaymentOptions(accessToken),

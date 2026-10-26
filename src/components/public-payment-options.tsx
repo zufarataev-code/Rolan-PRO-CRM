@@ -67,6 +67,10 @@ export function PublicPaymentOptions({
 
   async function selectMethod(option: PaymentOption) {
     if (paid || !option.available) return;
+    if (option.method === "payment_system" && option.payment_link) {
+      window.location.assign(option.payment_link);
+      return;
+    }
     setSaving(option.method);
     setError(null);
     try {
@@ -82,6 +86,11 @@ export function PublicPaymentOptions({
         );
       }
       setData(payload.data);
+      if (option.method === "payment_system") {
+        const checkout = payload.data?.options?.find((item: PaymentOption) => item.method === "payment_system")?.payment_link;
+        if (!checkout) throw new Error(ru ? "Stripe не вернул ссылку на оплату. Попробуйте ещё раз." : "Stripe did not return a checkout link. Please try again.");
+        window.location.assign(checkout);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : (ru ? "Не удалось выбрать способ оплаты." : "Unable to select payment method."));
     } finally {
@@ -203,7 +212,9 @@ export function PublicPaymentOptions({
                       : !data.agreement_signed
                         ? (ru ? "Сначала подпишите КП" : "Sign proposal first")
                       : selected
-                        ? (ru ? "Выбрано" : "Selected")
+                        ? option.method === "payment_system"
+                          ? (ru ? "Продолжить оплату картой" : "Continue card payment")
+                          : (ru ? "Выбрано" : "Selected")
                         : ru
                           ? option.method === "payment_system" ? "Оплатить картой" : option.method === "bank_transfer" ? "Выбрать банковский перевод" : "Выбрать Zelle"
                           : `Choose ${option.label}`}

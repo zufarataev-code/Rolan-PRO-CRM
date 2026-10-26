@@ -76,7 +76,7 @@ function invoiceContext(order: Row, client: Row, settings: Row) {
   });
   vm.runInContext(slice(html, 'function localDateKey(value = new Date()) {', 'function taskDueDateKey('), c);
   vm.runInContext(slice(stages, 'function invoiceTerms() {', 'function invoiceFormValues()'), c);
-  vm.runInContext(slice(stages, 'function invoiceDocumentHtml(inv) {', 'function issueProjectInvoice(oid) {'), c);
+  vm.runInContext(slice(stages, 'function invoiceDocumentHtml(inv) {', 'async function issueProjectInvoice(oid) {'), c);
   return c;
 }
 
@@ -105,6 +105,11 @@ test('invoice: number, Net 15 for commercial, balance after payments, pay by tra
   assert.match(page, /\$11,000\.00/);
   assert.match(page, /no processing fee/);
   assert.match(page, /Print \/ Save as PDF/);
+  inv.paymentLinkUrl = 'https://checkout.stripe.com/c/pay/test';
+  const payable = c.invoiceDocumentHtml(inv);
+  assert.match(payable, /Pay \$11,330\.00 securely by card/);
+  assert.match(payable, /3% card processing fee of \$330\.00/);
+  assert.match(payable, /https:\/\/checkout\.stripe\.com\/c\/pay\/test/);
 });
 
 test('invoice entry: project money actions (only functions, composed into the page), settings say where the bank details go', () => {
@@ -112,6 +117,8 @@ test('invoice entry: project money actions (only functions, composed into the pa
   assert.match(html, /title: 'Счёт \(Invoice\)'/);
   assert.match(html, /onclick: `openProjectInvoice\('\$\{o\.id\}'\)`/);
   assert.match(stages, /впишите их сами в «Настройки → Как клиент платит → Банковский перевод»/);
+  assert.match(stages, /await createStripePaymentLink\(o, inv\.cardPayable/);
+  assert.match(stages, /paymentLinkUrl: inv\.paymentLinkUrl/);
   assert.match(html, /Банковский перевод \(ACH \/ wire\) — для счетов и коммерческих клиентов/);
   assert.match(html, /db\.settings\.clientPayments\.checkMailingAddress=this\.value\.trim\(\)/);
 });

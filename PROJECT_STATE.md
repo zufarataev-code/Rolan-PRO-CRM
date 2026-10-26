@@ -1389,3 +1389,12 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Context recommendations cover Smart zones/power/electrician, Safety/outside attachment/silicone and missing measurements. They only use active Price Book services and require explicit Add/Open or Dismiss; no automatic service or charge is created.
 - The Project calculation and Proposal use the same ordered service list and approved versioned snapshot. Customer Proposal data does not include material cost, specialist pay or direct expenses.
 - Verification: focused Project/production suite 53/53; full suite 724/724; `tsc --noEmit` clean; production build successful (121 pages). Production is unchanged; merge/deploy still require the Owner's explicit confirmation.
+
+## 2026-10-25 handoff — client card payment from Proposal and Invoice (Codex)
+
+- Branch `codex/client-invoice-payment-20261025`, based on current `origin/main`.
+- Public Proposal card payment is now one action: after Stripe creates the fee-aware Checkout Session, the browser opens it immediately instead of leaving a small secondary link under a misleading «Выбрано» state.
+- Stripe returns with its Checkout Session ID. The server retrieves that session directly from Stripe and records the deposit only when payment status, session ID, proposal, deposit, amount and currency all match the server-created checkout. A verified payment advances the canonical deposit workflow and creates the manager task/notification; the return URL alone can never mark money paid.
+- Project Invoice now creates/reuses its own Stripe Payment Link, shows a prominent English `Pay securely by card` action in the invoice, includes the same link in copied email text, and spells out the 3% card fee separately. ACH/wire, Zelle and check remain fee-free.
+- Invoice Payment Links participate in the existing Stripe status check. A paid invoice is recorded once in Project payments and chronology; `paidAt` prevents a second poll from duplicating revenue.
+- No live payment, email or production deployment was performed. Verification: payment/invoice/production composition tests 26/26; sequential full suite 858/858 after fixing its one discovered duplicate local identifier; `tsc --noEmit` clean; production build successful (124 pages); `git diff --check` clean.

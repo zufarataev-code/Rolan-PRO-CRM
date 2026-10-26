@@ -1,5 +1,6 @@
 import { calculatePaymentAmount, calculateSuggestedDeposit, isPaymentMethod, LEGACY_PAYMENT_SYSTEM_FEE_PERCENTS, PAYMENT_METHODS, PAYMENT_SYSTEM_FEE_PERCENT, type PaymentMethod } from "@/features/payments/policy";
-import { createStripeDepositCheckout, isStripeCheckoutConfigured } from "@/features/payments/stripe-checkout";
+import { onDepositPaid } from "@/features/core/events";
+import { createStripeDepositCheckout, getStripeCheckoutSession, isStripeCheckoutConfigured } from "@/features/payments/stripe-checkout";
 import { prisma } from "@/lib/db";
 
 function money(value: { toString(): string } | null | undefined) {
@@ -36,6 +37,27 @@ export function paymentInstructionsFromSettings(crm: Record<string, unknown>, en
     // The CRM settings field is «Банковский перевод» (achInstructions).
     bank_transfer_instructions: env.bank || text(crm.bankTransferInstructions) || (crm.achEnabled !== false ? text(crm.achInstructions) : "") || null,
   };
+}
+
+export function stripeCheckoutMatchesDeposit(input: {
+  checkoutSessionId: string;
+  paymentStatus: string | null;
+  amountTotal: number | null;
+  currency: string | null;
+  metadata: Record<string, string>;
+}, expected: {
+  checkoutSessionId: string;
+  proposalId: string;
+  depositId: string;
+  amountCents: number;
+  currency: string;
+}) {
+  return input.checkoutSessionId === expected.checkoutSessionId
+    && input.paymentStatus === "paid"
+    && input.amountTotal === expected.amountCents
+    && input.currency === expected.currency.toUpperCase()
+    && input.metadata.proposal_id === expected.proposalId
+    && input.metadata.deposit_id === expected.depositId;
 }
 
 function asRecord(value: unknown) {
@@ -280,4 +302,86 @@ export async function selectPublicPaymentMethod(accessToken: string, method: Pay
   });
 
   return getPublicPaymentOptions(accessToken);
+}
+
+/**
+ * Verify a public Checkout Session with Stripe and only then record the deposit.
+ * The return URL is never trusted by itself: proposal, deposit, amount and
+ * currency must all match the server-created checkout event.
+ */
+export async function reconcilePublicStripeCheckout(accessToken: string, returnedSessionId?: string | null) {
+  const proposal = await prisma.proposal.findUnique({
+    where: { access_token: accessToken },
+    select: {
+      proposal_id: true,
+      created_by: true,
+      deal_id: true,
+      currency: true,
+      agreement: { select: { status: true, signed_at: true } },
+      deposit: { select: { deposit_id: true, status: true, payment_method: true } },
+      deal: { select: { lead_id: true, assigned_manager_id: true } },
+      proposal_events: {
+        where: { event_key: "payment.checkout_created" },
+        orderBy: { created_at: "desc" },
+        take: 1,
+        select: { metadata: true },
+      },
+    },
+  });
+
+  if (!proposal?.deposit) return "not_found" as const;
+  if (proposal.deposit.status === "paid") return "paid" as const;
+  if (proposal.agreement?.status !== "signed" || !proposal.agreement.signed_at) return "agreement_not_signed" as const;
+  if (proposal.deposit.payment_method !== PAYMENT_METHODS.PAYMENT_SYSTEM) return "not_online_payment" as const;
+
+  const event = asRecord(proposal.proposal_events[0]?.metadata);
+  const checkoutSessionId = typeof event?.checkout_session_id === "string" ? event.checkout_session_id : "";
+  const amountCents = Number(event?.amount_cents);
+  if (!checkoutSessionId || !Number.isInteger(amountCents) || amountCents <= 0) return "checkout_not_found" as const;
+  if (returnedSessionId && returnedSessionId !== checkoutSessionId) return "session_mismatch" as const;
+
+  const session = await getStripeCheckoutSession(checkoutSessionId);
+  if (typeof session === "string") return session;
+  if (!stripeCheckoutMatchesDeposit(session, {
+    checkoutSessionId,
+    proposalId: proposal.proposal_id,
+    depositId: proposal.deposit.deposit_id,
+    amountCents,
+    currency: proposal.currency,
+  })) return session.paymentStatus === "paid" ? "verification_failed" as const : "pending" as const;
+
+  const paidAt = new Date();
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.deposit.updateMany({
+      where: { deposit_id: proposal.deposit!.deposit_id, status: { not: "paid" } },
+      data: { status: "paid", paid_at: paidAt, payment_reference: checkoutSessionId },
+    });
+    if (!result.count) return false;
+
+    await onDepositPaid(tx, {
+      actorUserId: proposal.created_by,
+      proposalId: proposal.proposal_id,
+      depositId: proposal.deposit!.deposit_id,
+      leadId: proposal.deal.lead_id,
+      dealId: proposal.deal_id,
+      managerUserId: proposal.deal.assigned_manager_id,
+    });
+    await tx.proposalEvent.create({
+      data: {
+        proposal_id: proposal.proposal_id,
+        actor_type: "system",
+        event_key: "deposit.paid",
+        message: "Stripe confirmed the public checkout payment.",
+        metadata: {
+          deposit_id: proposal.deposit!.deposit_id,
+          checkout_session_id: checkoutSessionId,
+          amount_cents: amountCents,
+          currency: proposal.currency,
+        },
+      },
+    });
+    return true;
+  });
+
+  return updated ? "paid" as const : "already_paid" as const;
 }
