@@ -2863,7 +2863,7 @@ function smartRoleDefaults(role, capacityW = 0) {
   return ({
     zone: { name: 'Подключение зоны', unit: 'zone' },
     power: { name: capacityW ? `Блок питания ${capacityW}W` : 'Блок питания', unit: 'piece' },
-    multi: { name: 'Мультизонное управление', unit: 'piece' },
+    multi: { name: 'Блок питания мультизона', unit: 'piece' },
     electric: { name: 'Электрические работы', unit: 'piece' },
   })[role] || null;
 }
@@ -2901,14 +2901,13 @@ function managerSmartRoomFieldsHtml(oid, room) {
     <div class="smart-toggles">
       ${toggle('electricianNeeded', system.electricianNeeded, '⚡ Нужен электрик', 'Только если требуется подключение к сети')}
       ${toggle('powerBlockNeeded', system.powerBlockNeeded, '🔌 Нужен блок питания', system.powerSupplyModel ? `Подходит ${academyEsc(system.powerSupplyModel)} · ${system.requiredW}W` : 'После ввода размеров')}
-      ${toggle('controlMode', system.controlMode === 'multi', '🎛 Каждая зона отдельно', 'Мультизонное управление', system.controlMode === 'multi' ? "'group'" : "'multi'")}
     </div>
+    ${system.powerBlockNeeded ? `<div class="qm-chips smart-block-type"><span>Тип блока:</span><button type="button" class="${system.controlMode !== 'multi' ? 'on' : ''}" onclick="managerUpdateSmartRoom('${oid}','${room.id}','controlMode','group')">Обычный${system.powerSupplyModel ? ` · ${academyEsc(system.powerSupplyModel)}` : ''}</button><button type="button" class="${system.controlMode === 'multi' ? 'on' : ''}" onclick="managerUpdateSmartRoom('${oid}','${room.id}','controlMode','multi')">Мультизона — каждая зона отдельно</button></div>` : ''}
     ${system.powerBlockNeeded && system.engineeringRequired ? '<div class="alert alert-warning mt-3">Нагрузка больше 1000W — разделите питание или подтвердите инженерное решение.</div>' : ''}
     <div class="smart-kp">
       <div class="smart-kp-title">Попадёт в КП</div>
       ${row('zone', 'Подключение зон', system.zones)}
-      ${system.powerBlockNeeded && system.capacityW ? row('power', 'Блок питания', 1, system.capacityW) : ''}
-      ${system.controlMode === 'multi' ? row('multi', 'Мультизона', 1) : ''}
+      ${system.powerBlockNeeded && system.controlMode === 'multi' ? row('multi', 'Блок питания · мультизона', 1) : system.powerBlockNeeded && system.capacityW ? row('power', 'Блок питания', 1, system.capacityW) : ''}
       ${system.electricianNeeded ? row('electric', 'Электрик', 1) : ''}
     </div>
     ${system.powerBlockNeeded || system.electricianNeeded ? `<details class="manager-smart-technical mt-3">
@@ -3022,7 +3021,7 @@ function quickSetDim(oid, rid, wid, field, value) {
   const room = quickRoom(o, rid);
   const win = room?.windows?.find(item => item.id === wid);
   if (!quickMeasureCanEdit(o) || !win || !['width', 'height', 'qty'].includes(field)) return;
-  if (field === 'qty') win.qty = Math.max(1, parseInt(value) || 1);
+  if (field === 'qty') { win.qty = Math.max(1, parseInt(value) || 1); win.actualQty = win.qty; }
   else {
     const mm = measureInputToMm(value);
     win[field] = mm;
@@ -3089,11 +3088,11 @@ function quickApplyAnswers(o) {
       const system = room.smartSystem;
       if (system) {
         if (room.quickSocket) system.electricianNeeded = room.quickSocket === 'no';
-        if (answers.block) system.powerBlockNeeded = answers.block === 'ours';
-        if (answers.control) {
-          system.controlMode = answers.control === 'multi' ? 'multi' : 'group';
-          system.controllerType = ({ remote: 'Remote', switch: 'Wall switch', voice: 'Voice / Alexa', multi: 'Multi-zone controller' })[answers.control] || system.controllerType;
-        }
+        // The multi-zone is a type of power block (Owner, 2026-10-26).
+        const multi = answers.block === 'multi' || answers.control === 'multi';
+        if (answers.block) system.powerBlockNeeded = answers.block !== 'none';
+        if (answers.block || answers.control) system.controlMode = multi ? 'multi' : 'group';
+        if (answers.control && answers.control !== 'multi') system.controllerType = ({ remote: 'Remote', switch: 'Wall switch', voice: 'Voice / Alexa' })[answers.control] || system.controllerType;
         syncSmartRoomPlan(room);
       }
       if (answers.glass && answers.glass !== 'unknown') smartWindows.forEach(win => { if (!win.glassType || win.quickMeasure) win.glassType = answers.glass === 'single' ? 'Single pane' : 'Double pane / IGU'; });
@@ -3137,8 +3136,10 @@ function quickMeasureHtml(o) {
   const rooms = o.measurements?.rooms || [];
   const windows = measureAllWindows(o);
   const area = windows.reduce((sum, { win }) => sum + windowActualAreaSqft(win), 0);
+  // Owner, 2026-10-26: a row is «размер × количество» — three equal glasses are one row with 3 шт.
+  const glassCount = list => list.reduce((sum, win) => sum + Math.max(1, parseInt(win.qty) || 1), 0);
   const zones = windows.filter(({ win }) => win.measureScope === 'smart_film').reduce((sum, { win }) => sum + smartWindowZoneCount(win), 0);
-  const blocks = (o.quickAnswers?.block === 'ours') ? rooms.filter(room => smartWindowsInRoom(room).length).length : 0;
+  const blocks = ['ours', 'multi'].includes(o.quickAnswers?.block) ? rooms.filter(room => smartWindowsInRoom(room).length).length : 0;
   const yn = (oid, rid, field, value, label) => `<div class="qm-yn"><span>${label}</span><span class="qm-yn-btns"><button type="button" class="${value === 'yes' ? 'on' : ''}" onclick="quickSetRoomAnswer('${oid}','${rid}','${field}',true)">Да</button><button type="button" class="${value === 'no' ? 'on' : ''}" onclick="quickSetRoomAnswer('${oid}','${rid}','${field}',false)">Нет</button></span></div>`;
   const glassRow = (room, win, index) => {
     const w = windowSizeEntered(win) || !win.sizePlaceholder?.width ? measureMmToInput(win.width) : '';
@@ -3148,6 +3149,7 @@ function quickMeasureHtml(o) {
       <span class="qm-n">${index + 1}</span>
       <input type="number" min="0" step="${unitsIn ? '0.25' : '1'}" inputmode="decimal" placeholder="Ширина${unit}" aria-label="Ширина стекла ${index + 1}" value="${Number(w) > 0 ? w : ''}" onchange="quickSetDim('${o.id}','${room.id}','${win.id}','width',this.value)">
       <input type="number" min="0" step="${unitsIn ? '0.25' : '1'}" inputmode="decimal" placeholder="Высота${unit}" aria-label="Высота стекла ${index + 1}" value="${Number(h) > 0 ? h : ''}" onchange="quickSetDim('${o.id}','${room.id}','${win.id}','height',this.value)">
+      <label class="qm-qty"><input type="number" min="1" step="1" inputmode="numeric" aria-label="Количество стёкол ${index + 1}" value="${Math.max(1, parseInt(win.qty) || 1)}" onchange="quickSetDim('${o.id}','${room.id}','${win.id}','qty',this.value)"><span>шт.</span></label>
       <b>${sq > 0 ? `${sq.toFixed(1)} sq ft` : '—'}</b>
       <button type="button" class="qm-x" aria-label="Убрать стекло" onclick="quickDeleteGlass('${o.id}','${room.id}','${win.id}')">✕</button>
     </div>`;
@@ -3162,7 +3164,7 @@ function quickMeasureHtml(o) {
     const list = room.windows || [];
     const sq = list.reduce((sum, win) => sum + windowActualAreaSqft(win), 0);
     return `<section class="qm-room">
-      <div class="qm-room-head"><b>${academyEsc(room.name || 'Комната')}</b><span>${list.length} ${projectPlural(list.length, 'стекло', 'стекла', 'стёкол')} · ${sq.toFixed(1)} sq ft</span><button type="button" class="qm-x" aria-label="Удалить комнату" onclick="quickDeleteRoom('${o.id}','${room.id}')">✕</button></div>
+      <div class="qm-room-head"><b>${academyEsc(room.name || 'Комната')}</b><span>${glassCount(list)} ${projectPlural(glassCount(list), 'стекло', 'стекла', 'стёкол')} · ${sq.toFixed(1)} sq ft</span><button type="button" class="qm-x" aria-label="Удалить комнату" onclick="quickDeleteRoom('${o.id}','${room.id}')">✕</button></div>
       ${scopes.map(scope => scopeBlock(room, scope)).join('')}
       ${smart ? yn(o.id, room.id, 'quickSocket', room.quickSocket, 'Розетка рядом с окнами?') : ''}
       ${yn(o.id, room.id, 'quickRemoval', room.quickRemoval, 'Снять старую плёнку?')}
@@ -3176,8 +3178,8 @@ function quickMeasureHtml(o) {
   }).join('');
   const q = (key, title, options) => `<div class="qm-q"><b>${title} <span class="qm-req">*</span></b><div class="qm-chips">${options.map(([value, label]) => `<button type="button" class="${o.quickAnswers?.[key] === value ? 'on' : ''}" onclick="quickSetAnswer('${o.id}','${key}','${value}')">${o.quickAnswers?.[key] === value ? '✓ ' : ''}${label}</button>`).join('')}</div></div>`;
   const questions = smart ? `<section class="qm-room qm-questions"><div class="qm-room-head"><b>Обязательные вопросы · Смарт</b><span>влияют на цену</span></div>
-      ${q('control', 'Как управляем?', [['remote', 'Пульт'], ['switch', 'Выключатель'], ['voice', 'Голос / Alexa'], ['multi', 'Каждая зона отдельно']])}
-      ${q('block', 'Блок питания', [['ours', 'Наш — 1 на комнату'], ['none', 'Не нужен']])}
+      ${q('control', 'Как управляем?', [['remote', 'Пульт'], ['switch', 'Выключатель'], ['voice', 'Голос / Alexa']])}
+      ${q('block', 'Блок питания · 1 на комнату', [['ours', 'Обычный'], ['multi', 'Мультизона — каждая зона отдельно'], ['none', 'Не нужен']])}
       ${q('glass', 'Стекло', [['single', 'Одинарное'], ['double', 'Стеклопакет'], ['unknown', 'Не знаю — уточнит замерщик']])}
     </section>` : '';
   const lines = projectLines(o).filter(line => !line.excluded);
@@ -3186,8 +3188,8 @@ function quickMeasureHtml(o) {
   const neededRoles = smart && smartRooms.length ? [
     ['zone', 'Подключение зон', 0],
     ...(smartRooms.some(item => item.system.electricianNeeded) ? [['electric', 'Электрик', 0]] : []),
-    ...(smartRooms.some(item => item.system.controlMode === 'multi') ? [['multi', 'Мультизона', 0]] : []),
-    ...[...new Set(smartRooms.filter(item => item.system.powerBlockNeeded && item.system.capacityW).map(item => item.system.capacityW))].map(w => ['power', 'Блок питания', w]),
+    ...(smartRooms.some(item => item.system.powerBlockNeeded && item.system.controlMode === 'multi') ? [['multi', 'Блок питания · мультизона', 0]] : []),
+    ...[...new Set(smartRooms.filter(item => item.system.powerBlockNeeded && item.system.controlMode !== 'multi' && item.system.capacityW).map(item => item.system.capacityW))].map(w => ['power', 'Блок питания', w]),
   ].filter(([role, , w]) => { const offering = smartCashierOffering(role, w); return !offering || !(Number(offering.pricePerSqft) > 0); }) : [];
   const missing = neededRoles.map(([role, label, w]) => {
     const name = smartRoleDefaults(role, w)?.name || label;
@@ -3210,7 +3212,7 @@ function quickMeasureHtml(o) {
         ${currentUser()?.role === 'owner' ? `<button type="button" class="btn-ghost w-full" onclick="setMeasureMode('${o.id}','full')">📐 Открыть полный замер</button>` : ''}
       </div>
       <div class="rp-dirwin-foot">
-        <div class="qm-totals"><div><small>Комнат</small><b>${rooms.length}</b></div><div><small>${smart ? 'Стёкол = зон' : 'Стёкол'}</small><b>${smart ? zones : windows.length}</b></div><div><small>Площадь</small><b>${area.toFixed(1)} sq ft</b></div>${smart ? `<div><small>Блоков</small><b>${blocks}</b></div>` : ''}</div>
+        <div class="qm-totals"><div><small>Комнат</small><b>${rooms.length}</b></div><div><small>${smart ? 'Стёкол = зон' : 'Стёкол'}</small><b>${smart ? zones : glassCount(windows.map(({ win }) => win))}</b></div><div><small>Площадь</small><b>${area.toFixed(1)} sq ft</b></div>${smart ? `<div><small>Блоков</small><b>${blocks}</b></div>` : ''}</div>
         ${issues.length ? `<div class="qm-issues">Осталось: ${issues.map(academyEsc).join(' · ')}</div>` : ''}
         <button type="button" class="btn-primary rp-dirwin-next" style="background:#7C3AED !important;border-color:#7C3AED !important;color:#fff !important" ${issues.length ? 'disabled' : ''} onclick="quickFinish('${o.id}')">Посчитать → КП</button>
       </div>

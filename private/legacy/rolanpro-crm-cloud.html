@@ -2030,7 +2030,9 @@
   .measure-choice > span:not(.measure-choice-top) { font-size:14px;color:#334155; } .measure-choice strong { color:var(--choice);font-size:13px; }
   .qm-room { background:#fff;border:1px solid #D9DEE6;border-left:6px solid #7C3AED;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;margin-bottom:10px; }
   .qm-room-head { display:flex;align-items:center;gap:8px; } .qm-room-head b { font-size:15px;flex:1; } .qm-room-head span { font-size:12px;color:#5A6577; }
-  .qm-glass { display:grid;grid-template-columns:20px 1fr 1fr 70px 32px;gap:6px;align-items:center; } .qm-glass input { width:100%;min-width:0;box-sizing:border-box;min-height:42px;font-size:16px; }
+  .qm-glass { display:grid;grid-template-columns:18px 1fr 1fr 64px 66px 32px;gap:5px;align-items:center; }
+  .qm-qty { display:flex;align-items:center;gap:2px; } .qm-qty input { text-align:center;padding-left:4px;padding-right:4px; } .qm-qty span { font-size:11px;color:#5A6577;white-space:nowrap; }
+  @media (max-width:420px) { .qm-glass { grid-template-columns:16px 1fr 1fr 58px 32px; } .qm-glass > b { grid-column:2 / 5;text-align:left;font-size:12px;color:#5A6577; } .qm-glass > .qm-x { grid-row:1;grid-column:5; } } .qm-glass input { width:100%;min-width:0;box-sizing:border-box;min-height:42px;font-size:16px; }
   .qm-glass.empty input { border-color:#FCD34D; } .qm-glass b { text-align:right;font-size:13px; } .qm-n { color:#5A6577;font-weight:700; }
   .qm-x { border:1px solid #E2E8F0;background:#fff;border-radius:8px;min-height:32px;min-width:32px;color:#B91C1C; }
   .qm-add { align-self:flex-start;border:0;background:none;color:#6D28D9;font-weight:800;padding:4px 0; }
@@ -25942,13 +25944,15 @@ function smartCashierDesiredLines(o) {
   };
   const zoneOffering = smartCashierOffering('zone');
   add('zone', zoneOffering, rooms.reduce((sum, item) => sum + item.system.zones, 0), rooms);
+  // Owner, 2026-10-26: «мультизона — это тип блока питания, не услуга»: a room's
+  // block is either the ordinary one (by capacity) or the multi-zone one.
   rooms.forEach(item => {
-    if (!item.system.capacityW || !item.system.powerBlockNeeded) return;
+    if (!item.system.powerBlockNeeded) return;
+    if (item.system.controlMode === 'multi') { add('multi', smartCashierOffering('multi'), 1, [item]); return; }
+    if (!item.system.capacityW) return;
     const offering = smartCashierOffering('power', item.system.capacityW);
     add('power', offering, 1, [item], { capacities: [item.system.capacityW] });
   });
-  const multiRooms = rooms.filter(item => item.system.controlMode === 'multi');
-  add('multi', smartCashierOffering('multi'), multiRooms.length, multiRooms);
   const electricRooms = rooms.filter(item => item.system.electricianNeeded);
   const electric = smartCashierOffering('electric');
   const electricQty = serviceOfferingUnit(electric) === 'fixed' ? (electricRooms.length ? 1 : 0) : electricRooms.length;
@@ -25965,8 +25969,8 @@ function smartCashierIssues(o) {
     if (!(Number(offering.pricePerSqft) > 0)) issues.push(`в кассе Smart не указана цена: ${offering.name}`);
   };
   requireOffering('zone', 'Подключение зоны');
-  [...new Set(rooms.filter(item => item.system.powerBlockNeeded).map(item => item.system.capacityW).filter(Boolean))].forEach(capacity => requireOffering('power', `Блок питания ${capacity}W`, capacity));
-  if (rooms.some(item => item.system.controlMode === 'multi')) requireOffering('multi', 'Мультизонное управление');
+  [...new Set(rooms.filter(item => item.system.powerBlockNeeded && item.system.controlMode !== 'multi').map(item => item.system.capacityW).filter(Boolean))].forEach(capacity => requireOffering('power', `Блок питания ${capacity}W`, capacity));
+  if (rooms.some(item => item.system.powerBlockNeeded && item.system.controlMode === 'multi')) requireOffering('multi', 'Блок питания мультизона');
   if (rooms.some(item => item.system.electricianNeeded)) requireOffering('electric', 'Электрические работы');
   return [...new Set(issues)];
 }
@@ -42516,7 +42520,8 @@ function refreshRollReceiptForm() {
   const area = mm2_to_sqft(width * length * 1000);
   const perSqft = rollCostPerSqft(cost, length, width);
   const preview = document.getElementById('ar-cost-preview');
-  if (preview) preview.textContent = perSqft > 0 ? `${fmtSqftPrice(perSqft)} / sq ft · площадь рулона ${area.toFixed(0)} sq ft` : 'Укажите длину и цену закупки — цена за sq ft посчитается сама';
+  const count = Math.max(1, Math.min(50, parseInt(document.getElementById('ar-count')?.value, 10) || 1));
+  if (preview) preview.textContent = perSqft > 0 ? `${fmtSqftPrice(perSqft)} / sq ft · площадь рулона ${area.toFixed(0)} sq ft${count > 1 ? ` · ${count} рулонов: ${(area * count).toFixed(0)} sq ft на ${fmtMoney(cost * count)}` : ''}` : 'Укажите длину и цену закупки — цена за sq ft посчитается сама';
   const code = document.getElementById('ar-code');
   if (code) code.value = `${nextRollCode(document.getElementById('ar-date')?.value)} (предварительно)`;
 }
@@ -42543,6 +42548,7 @@ function openAddRollModal(presetCatId, purchaseRequestId='') {
         <div><label for="ar-lot">Lot / партия</label><input id="ar-lot" placeholder="например 240315-A"></div>
         <div><label for="ar-width">Ширина</label><select id="ar-width" onchange="refreshRollReceiptForm()">${widths.map(w => `<option value="${Number(w)}" ${presetWidth === Number(w) ? 'selected' : ''}>${(Number(w) / 1000).toFixed(2)} м · ${(Number(w) / 25.4).toFixed(0)}"</option>`).join('')}</select></div>
         <div><label for="ar-len">Длина рулона (м) *</label><input id="ar-len" type="number" min="0.1" step="0.1" value="30" oninput="refreshRollReceiptForm()"></div>
+        <div><label for="ar-count">Количество рулонов *</label><input id="ar-count" type="number" min="1" max="50" step="1" value="1" inputmode="numeric" oninput="refreshRollReceiptForm()"><div class="text-xs text-gray-500 mt-1">Одинаковые рулоны — каждый получит свой код</div></div>
         <div><label for="ar-cost">Цена закупки рулона ($) *</label><input id="ar-cost" type="number" min="0.01" step="0.01" placeholder="500" oninput="refreshRollReceiptForm()"></div>
         <div><label for="ar-account">Счёт оплаты</label><select id="ar-account">${warehousePaymentAccountOptions()}</select></div>
         <div><label for="ar-reference">Invoice / документ</label><input id="ar-reference" placeholder="Номер invoice или чека"></div>
@@ -42629,32 +42635,47 @@ async function confirmAddRoll() {
 
   const button = document.getElementById('ar-submit');
   const formToken = document.getElementById('ar-form')?.value || '';
+  // Owner, 2026-10-26: several equal rolls in one receipt — each gets its own code.
+  const count = Math.max(1, Math.min(50, parseInt(read('ar-count'), 10) || 1));
+  if (state.rollReceiptSaving) return;
+  state.rollReceiptSaving = true;
   if (button) button.disabled = true;
-  let rollCode = '';
+  const film = { category, brand, model, shortName, filmType, vendorId };
+  const request = (db.purchaseRequests || []).find(x => x.id === requestId);
+  const codes = [];
+  let roll = null;
+  let catalog = null;
   try {
-    rollCode = await reserveRollCodeOnce(dateReceived);
-  } catch (error) {
-    return fail(`Не удалось получить код рулона: ${error.message}. Проверьте интернет и повторите.`);
+    for (let n = 0; n < count; n += 1) {
+      let rollCode = '';
+      try {
+        rollCode = await reserveRollCode(dateReceived);
+      } catch (error) {
+        if (codes.length) save();
+        return fail(`Не удалось получить код рулона${codes.length ? ` (принято ${codes.length} из ${count})` : ''}: ${error.message}. Проверьте интернет и повторите.`);
+      }
+      if (!rollCode || (!codes.length && !rollReceiptFormStillOpen('ar-form', formToken))) return;
+      catalog = catalog || rollReceiptPresetCatalog(getCatalogItem(presetId), film) || rollReceiptCatalog(category, brand, model, shortName, filmType, vendorId);
+      if (catalog.pendingPurchase) catalog.pendingPurchase = false;
+      roll = addInventoryRoll({
+        catalogId: catalog.id, vendorId, lotNumber, widthMm, originalLengthM: lengthM, costTotal,
+        dateReceived, location, rollCode,
+      });
+      recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(catalog),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,reason:`Приход рулона ${rollCode}`});
+      if (typeof recordWarehouseReceipt === 'function') recordWarehouseReceipt({kind:'film',inventoryId:roll.id,itemId:roll.id,itemName:catalogLabel(catalog),qty:1,unit:'рулон',unitCost:costTotal,total:costTotal,vendorId:roll.vendorId,accountId:read('ar-account')||'fin_unallocated',date:dateReceived,reference:read('ar-reference')});
+      codes.push(rollCode);
+    }
   } finally {
+    state.rollReceiptSaving = false;
     if (button) button.disabled = false;
   }
-  if (!rollCode || !rollReceiptFormStillOpen('ar-form', formToken)) return;
-
-  const film = { category, brand, model, shortName, filmType, vendorId };
-  const catalog = rollReceiptPresetCatalog(getCatalogItem(presetId), film) || rollReceiptCatalog(category, brand, model, shortName, filmType, vendorId);
-  if (catalog.pendingPurchase) catalog.pendingPurchase = false;
-  const roll = addInventoryRoll({
-    catalogId: catalog.id, vendorId, lotNumber, widthMm, originalLengthM: lengthM, costTotal,
-    dateReceived, location, rollCode,
-  });
-  const request = (db.purchaseRequests || []).find(x => x.id === requestId);
-  recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(catalog),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,reason:`Приход рулона ${rollCode}`});
-  if (typeof recordWarehouseReceipt === 'function') recordWarehouseReceipt({kind:'film',inventoryId:roll.id,itemId:roll.id,itemName:catalogLabel(catalog),qty:1,unit:'рулон',unitCost:costTotal,total:costTotal,vendorId:roll.vendorId,accountId:read('ar-account')||'fin_unallocated',date:dateReceived,reference:read('ar-reference')});
+  if (!roll) return;
+  const rollCode = codes.length > 1 ? `${codes[0]} … ${codes[codes.length - 1]} (${codes.length} рулонов)` : codes[0];
   if (request) { request.status = 'received'; request.updatedAt = new Date().toISOString(); }
   save();
   closeModal();
   render();
-  if (typeof cloudStatus === 'function') cloudStatus(`Рулон ${rollCode} принят · ${fmtSqftPrice(roll.costPerSqft)} / sq ft`, 'green');
+  if (typeof cloudStatus === 'function') cloudStatus(`${codes.length > 1 ? 'Рулоны' : 'Рулон'} ${rollCode} ${codes.length > 1 ? 'приняты' : 'принят'} · ${fmtSqftPrice(roll.costPerSqft)} / sq ft`, 'green');
 }
 
 function openFilmIssueModal(id){const r=db.inventory.find(x=>x.id===id);if(!r)return;const cat=getCatalogItem(r.catalogId);state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:34rem"><h3 class="font-semibold text-lg">Списание плёнки</h3><p class="text-sm text-gray-500 mb-4">${academyEsc(catalogLabel(cat))} · Lot ${academyEsc(r.lotNumber||'—')} · есть ${Number(r.remainingLengthM||0).toFixed(2)} м</p><div class="grid grid-cols-2 gap-3"><div><label>Длина, м</label><input id="fi-qty" type="number" min="0.01" step="0.01"></div><div><label>Проект / заказ</label><select id="fi-order"><option value="">Без проекта</option>${warehouseOrders().map(o=>`<option value="${o.id}">${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div><div class="col-span-2"><label>Причина</label><input id="fi-reason" placeholder="Образец, брак, ручное списание..."></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveFilmIssue('${id}')">Списать</button></div></div></div>`;render();}
