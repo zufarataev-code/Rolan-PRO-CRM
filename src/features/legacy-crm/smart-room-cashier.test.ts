@@ -28,7 +28,20 @@ test("Smart technical quantities reuse cashier lines and preserve unrelated manu
   const harness = build();
   const zone = { id: "zone", name: "Подключение зоны", unit: "zone", pricePerSqft: 100 };
   const power = { id: "power", name: "Установка блока питания", unit: "piece", pricePerSqft: 600 };
-  const order = {
+  type TestLine = Record<string, unknown> & {
+    id: string;
+    offeringId?: string;
+    price?: number;
+    qty?: number;
+    smartAuto?: boolean;
+  };
+  const order: {
+    serviceType: string;
+    serviceTypes: string[];
+    offeringIds: string[];
+    offeringUnits: Record<string, string>;
+    extraServices: TestLine[];
+  } = {
     serviceType: "smart_film",
     serviceTypes: ["smart_film"],
     offeringIds: [],
@@ -45,16 +58,17 @@ test("Smart technical quantities reuse cashier lines and preserve unrelated manu
   ]);
   assert.equal(harness.syncSmartCashierServices(order), true);
   assert.equal(order.extraServices.length, 3);
-  const zoneLine = order.extraServices.find((line: { offeringId?: string }) => line.offeringId === "zone");
+  const zoneLine = order.extraServices.find(line => line.offeringId === "zone");
+  assert.ok(zoneLine);
   assert.equal(zoneLine.id, "old-zone", "the existing cashier row is migrated, not duplicated");
   assert.equal(zoneLine.qty, 4);
   assert.equal(zoneLine.price, 400);
   assert.equal(zoneLine.smartAuto, true);
-  assert.equal(order.extraServices.find((line: { id: string }) => line.id === "manual")?.price, 50);
+  assert.equal(order.extraServices.find(line => line.id === "manual")?.price, 50);
   assert.equal(harness.syncSmartCashierServices(order), false, "a second sync is idempotent");
 
   harness.setDesired([]);
   assert.equal(harness.syncSmartCashierServices(order), true);
-  assert.deepEqual(order.extraServices.map((line: { id: string }) => line.id), ["manual"]);
+  assert.deepEqual(order.extraServices.map(line => line.id), ["manual"]);
 });
 
