@@ -1473,9 +1473,9 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Smart zone mismatch and power loads requiring engineering remain blocking issues. The surveyor still cannot submit an on-site measurement while its technical fields are incomplete.
 - Focused installation/estimate/card tests pass 83/83; full suite passes 897/897; `npm run typecheck` is clean; production build succeeds with 129 routes; `git diff --check` is clean. Production is unchanged; deployment requires the Owner's separate explicit confirmation.
 
-## 2026-10-26 handoff — canonical employee compensation plans (Codex)
+## 2026-10-26 handoff — canonical employee compensation plans (PR #422)
 
-- Branch `codex/employee-compensation-plans-20261026`, based on current `origin/main`.
+- Branch `codex/employee-compensation-plans-20261026`, PR #422, based on current `origin/main`.
 - Added additive PostgreSQL models for one current employee compensation plan and selected piecework rates by Service Type / Service Add-on. Existing employees without a reviewed plan keep their historical legacy configuration until the Owner explicitly saves the canonical card.
 - The Owner's employee form now combines role/access and pay type. Salary, commission, fixed-per-job and piecework inputs are conditional. Piecework shows the four Rolan PRO directions and labor add-ons, with the company default and an optional personal override.
 - Server validation and saving are Owner-only and transactional. The active legacy CRM receives `payConfig` from the server for linked employees, so a workspace save can no longer become a competing payroll source.
