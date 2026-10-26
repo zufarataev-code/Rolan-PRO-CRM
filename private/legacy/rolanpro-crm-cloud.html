@@ -26237,11 +26237,16 @@ function serviceCashierScope(c) {
 function serviceCashierLayer() {
   return typeof document !== 'undefined' ? document.getElementById('rp-cashier-layer') : null;
 }
-/** Directions of the owner's directory that have at least one active service. */
+/**
+ * The four customer-facing film directions are the stable first screen of the
+ * cashier. They must not disappear just because the owner has not filled that
+ * direction's services yet. «Общее по объекту» is additional and appears only
+ * when it has something that can be sold on its own.
+ */
 function serviceCashierDirections() {
   return ORDER_PRIMARY_SERVICES
     .map(direction => ({ direction, offerings: serviceOfferingsFor(serviceOfferingDirection(direction.id)) }))
-    .filter(item => item.offerings.length);
+    .filter(item => !item.direction.general || item.offerings.length);
 }
 /** Films the chosen service may be done with (its explicit links, not archived). */
 function serviceCashierFilms(offering) {
@@ -26414,7 +26419,9 @@ function serviceCashierHtml(c) {
     body = `<div class="rp-cashier-grid">${serviceCashierDirections().map(({ direction: dir, offerings }) => `<button type="button" class="rp-cashier-card rp-cashier-direction" style="${serviceCashierCardStyle(dir.id)}" onclick="serviceCashierPick('direction','${dir.id}')"><span class="rp-cashier-icon">${dir.icon || '•'}</span><span class="rp-cashier-title">${academyEsc(dir.title)}</span><span class="rp-cashier-meta">${offerings.length} ${offerings.length === 1 ? 'услуга' : offerings.length < 5 ? 'услуги' : 'услуг'}</span></button>`).join('')}</div>`;
   } else if (c.step === 'offering') {
     const items = serviceOfferingsFor(serviceOfferingDirection(c.directionId));
-    body = `<div class="rp-cashier-grid">${items.map(item => { const taken = inProject.has(item.id) && serviceOfferingNeedsSizes(item); return `<button type="button" class="rp-cashier-card ${taken ? 'taken' : ''}" style="${serviceCashierCardStyle(c.directionId)}" ${taken ? 'disabled' : `onclick="serviceCashierPick('offering','${jsQuote(item.id)}')"`}><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span>${taken ? '<span class="rp-cashier-badge">уже в проекте</span>' : ''}</button>`; }).join('')}</div>`;
+    body = items.length
+      ? `<div class="rp-cashier-grid">${items.map(item => { const taken = inProject.has(item.id) && serviceOfferingNeedsSizes(item); return `<button type="button" class="rp-cashier-card ${taken ? 'taken' : ''}" style="${serviceCashierCardStyle(c.directionId)}" ${taken ? 'disabled' : `onclick="serviceCashierPick('offering','${jsQuote(item.id)}')"`}><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span>${taken ? '<span class="rp-cashier-badge">уже в проекте</span>' : ''}</button>`; }).join('')}</div>`
+      : `<div class="service-directory-empty"><div class="text-3xl mb-2">${academyEsc(direction?.icon || '🎞')}</div><b>В направлении пока нет активных услуг</b><div class="text-sm mt-1">Сначала добавьте и заполните услугу в разделе «Услуги и цены».</div></div>`;
   } else if (c.step === 'material') {
     const films = serviceCashierFilms(offering);
     const groups = new Map();

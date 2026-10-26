@@ -23,6 +23,13 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-26 handoff — all four directions stay visible in the project cashier
+
+- Branch `codex/four-directions-visible`, based on `main` `ac274c7` after PR #412.
+- The new-project and existing-project cashier now always shows the four customer-facing film directions: Smart, Solar, Protective and Decorative. A direction no longer disappears because its Price Book has zero active services.
+- Opening an empty direction shows an explicit message to add and complete a service in «Услуги и цены». No placeholder service or price is invented. «Общее по объекту» remains an additional card only when it has a sellable service.
+- Verification: focused cashier/directory/intake tests 21/21, full suite 899/899, `npm run typecheck`, production `npm run build` (129 routes), and `git diff --check` pass.
+
 ## 2026-10-26 handoff — exactly four service directions
 
 - Branch `codex/four-service-directions`, based on `origin/main` `a4e34a2`.

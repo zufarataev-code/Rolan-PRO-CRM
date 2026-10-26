@@ -115,11 +115,26 @@ test('the picker is the cashier button; it opens on the first step only for peop
   assert.match(state.modal, /КАССА УСЛУГ · P-1/);
   assert.match(state.modal, /serviceCashierPick\('direction','protective_film'\)/);
   assert.match(state.modal, /serviceCashierPick\('direction','solar_film'\)/);
+  assert.match(state.modal, /serviceCashierPick\('direction','smart_film'\)/);
+  assert.match(state.modal, /serviceCashierPick\('direction','decorative_film'\)/);
   assert.doesNotMatch(state.modal, /Добавить в проект/, 'nothing to commit before a service is chosen');
 
   const installer = fixture('installer');
   installer.context.openServiceCashier('o', 'card');
   assert.equal(installer.context.serviceCashierState(), null, 'field roles cannot open the cashier even by hand');
+});
+
+test('all four film directions stay visible and an empty direction explains what is missing', () => {
+  const { context, state } = fixture();
+  context.openServiceCashier('o', 'card');
+  assert.deepEqual(
+    Array.from(context.serviceCashierDirections(), ({ direction, offerings }: Row) => [direction.id, offerings.length]),
+    [['smart_film', 0], ['protective_film', 3], ['solar_film', 1], ['decorative_film', 0]],
+  );
+  context.serviceCashierPick('direction', 'decorative_film');
+  assert.equal(context.serviceCashierState().step, 'offering');
+  assert.match(state.modal, /В направлении пока нет активных услуг/);
+  assert.match(state.modal, /Услуги и цены/);
 });
 
 test('direction → service → film → add-ons, with inactive and archived items left out', () => {
@@ -261,7 +276,7 @@ test('general works are offered as add-ons under any film direction and as their
   const wash = add({ name: 'Мойка окон', direction: 'general', unit: 'piece', pricePerSqft: 15 });
   const lift = add({ name: 'Аренда подъёмника', direction: 'general', unit: 'fixed', pricePerSqft: 450 });
   context.openServiceCashier('o', 'card');
-  assert.match(state.modal, /serviceCashierPick\('direction','general_works'\)/, 'the sixth card appears once it has services');
+  assert.match(state.modal, /serviceCashierPick\('direction','general_works'\)/, 'the additional card appears once it has services');
   context.serviceCashierPick('direction', 'protective_film');
   context.serviceCashierPick('offering', 'svc_A1 8 mil');
   context.serviceCashierPick('material', 'f_a1');
