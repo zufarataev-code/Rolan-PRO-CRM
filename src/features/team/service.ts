@@ -2,6 +2,11 @@ import { ROLE_CODES, type RoleCode } from "@/lib/auth/constants";
 import { hashPassword } from "@/lib/auth/password";
 import { PASSWORD_MIN_LENGTH } from "@/lib/auth/password-policy";
 import { prisma } from "@/lib/db";
+import {
+  type CompensationInput,
+  serializeCompensation,
+  saveCompensationPlan,
+} from "./compensation";
 
 /**
  * Управление сотрудниками.
@@ -22,6 +27,7 @@ export type TeamMemberInput = {
   password?: string;
   isActive?: boolean;
   legacyUserId?: string;
+  compensation?: CompensationInput;
 };
 
 export type TeamMember = {
@@ -33,6 +39,7 @@ export type TeamMember = {
   isActive: boolean;
   mustChangePassword: boolean;
   lastLoginAt: Date | null;
+  compensation: ReturnType<typeof serializeCompensation>;
 };
 
 function normalizeEmail(email: string) {
@@ -71,6 +78,16 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
       user_accesses: {
         include: { role: { select: { code: true } } },
       },
+      compensation_plan: {
+        include: {
+          piece_rates: {
+            include: {
+              service_type: true,
+              service_addon: { include: { service_type: true } },
+            },
+          },
+        },
+      },
     },
   });
 
@@ -83,6 +100,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
     isActive: user.is_active,
     mustChangePassword: user.must_change_password,
     lastLoginAt: user.last_login_at,
+    compensation: serializeCompensation(user.compensation_plan),
   }));
 }
 
@@ -131,18 +149,22 @@ export async function createTeamMember(input: TeamMemberInput) {
     );
   }
 
-  const user = await prisma.user.create({
-    data: {
-      email,
-      full_name: input.fullName.trim(),
-      password_hash: hashPassword(password),
-      must_change_password: true,
-      is_active: input.isActive ?? true,
-      legacy_user_ids: legacyUserId ? [legacyUserId] : [],
-      user_accesses: {
-        create: roles.map((role) => ({ role_id: role.role_id })),
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: {
+        email,
+        full_name: input.fullName.trim(),
+        password_hash: hashPassword(password),
+        must_change_password: true,
+        is_active: input.isActive ?? true,
+        legacy_user_ids: legacyUserId ? [legacyUserId] : [],
+        user_accesses: {
+          create: roles.map((role) => ({ role_id: role.role_id })),
+        },
       },
-    },
+    });
+    if (input.compensation) await saveCompensationPlan(tx, created.user_id, input.compensation);
+    return created;
   });
 
   return {
@@ -162,6 +184,7 @@ export async function updateTeamMember(
     roles?: RoleCode[];
     isActive?: boolean;
     legacyUserId?: string;
+    compensation?: CompensationInput;
   },
 ) {
   if (input.roles) {
@@ -253,7 +276,7 @@ export async function updateTeamMember(
       });
     }
 
-    return tx.user.update({
+    const savedUser = await tx.user.update({
       where: { user_id: userId },
       data: {
         email,
@@ -262,6 +285,8 @@ export async function updateTeamMember(
         legacy_user_ids: shouldLinkLegacyUser && legacyUserId ? { push: legacyUserId } : undefined,
       },
     });
+    if (input.compensation) await saveCompensationPlan(tx, userId, input.compensation);
+    return savedUser;
   });
 
   return { userId, email: updated.email, legacyUserIds: updated.legacy_user_ids };

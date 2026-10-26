@@ -7,6 +7,7 @@ import { createSessionToken, sessionCredentialFingerprint } from "@/lib/auth/ses
 import { prisma } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
+import type { CompensationInput } from "@/features/team/compensation";
 
 const TEAM_ADMIN_ROLES = [ROLE_CODES.OWNER];
 
@@ -31,6 +32,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     isActive?: boolean;
     password?: string;
     legacyUserId?: string;
+    compensation?: CompensationInput;
   } | null;
 
   if (!body) {
@@ -51,7 +53,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       body.fullName !== undefined ||
       body.roles !== undefined ||
       body.isActive !== undefined ||
-      body.legacyUserId !== undefined
+      body.legacyUserId !== undefined ||
+      body.compensation !== undefined
     ) {
       profileResult = await updateTeamMember(userId, {
         email: body.email,
@@ -59,6 +62,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         roles: body.roles,
         isActive: body.isActive,
         legacyUserId: body.legacyUserId,
+        compensation: body.compensation,
       });
     }
 

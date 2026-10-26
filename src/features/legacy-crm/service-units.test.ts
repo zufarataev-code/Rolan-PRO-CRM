@@ -134,7 +134,7 @@ test('the money of a service without sizes: revenue, material, installer pay per
   const extra = html.slice(html.indexOf('function orderExtraServicesCost(o) {'), html.indexOf('function orderRevenue(o) {'));
   assert.match(extra, /projectOfferingLines\(o\)\.reduce\(\(sum, line\) => sum \+ \(Number\(line\.qty\) \|\| 0\) \* serviceOfferingMaterialCost\(line\), 0\)/);
   const pay = html.slice(html.indexOf('function orderAdditionalWorkPayoutForUser('), html.indexOf('function orderInstallerPayoutForUser('));
-  assert.match(pay, /const rate = line\.offeringId \? serviceOfferingInstallerRate\(line\) : installerAdditionalWorkRate\(user, line\.type\);/);
+  assert.match(pay, /const rate = installerAdditionalWorkRate\(user, line\.type, line\);/);
   assert.match(pay, /const crew = projectServiceCrew\(o, line\);/, 'each service is paid to its own executors');
   // Only the quantity of a directory service is edited; its price follows.
   const update = html.slice(html.indexOf('function projectEstimateUpdateService('), html.indexOf('function projectEstimateDeleteService('));
@@ -316,7 +316,8 @@ test('measurement requires windows only for directions with a per-sq-ft service'
 test('privacy films pay the privacy rate; the material of services without sizes is listed in the cost', () => {
   assert.match(html, /if \(n\.includes\('privacy'\) \|\| n\.includes\('приват'\)\) return 'privacy';/);
   // Rows made before the service directory still pay their film's direction rate (2026-10-24).
-  assert.match(html, /return explicit != null \? Number\(explicit\) \|\| 0 : c \? installerServiceRateByCategory\(canonicalCatalogCategory\(c\.category\)\) : filmRate\(filmName\);/);
+  assert.match(html, /const companyRate = explicit != null \? Number\(explicit\) \|\| 0 : c \? installerServiceRateByCategory\(canonicalCatalogCategory\(c\.category\)\) : filmRate\(filmName\);/);
+  assert.match(html, /return employeeServiceRate\(user, serviceCode, companyRate\);/);
   assert.match(html, /\.\.\.\(pss\.extraServicesCost > 0 \? \[\['Материал услуг без размеров', pss\.extraServicesCost\]\] : \[\]\)/);
 });
 

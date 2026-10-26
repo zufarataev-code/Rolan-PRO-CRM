@@ -4,6 +4,7 @@ import { createTeamMember, listTeamMembers } from "@/features/team/service";
 import { ROLE_CODES, type RoleCode } from "@/lib/auth/constants";
 import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
+import type { CompensationInput } from "@/features/team/compensation";
 
 /** Заводить и просматривать сотрудников может только владелец. */
 const TEAM_ADMIN_ROLES = [ROLE_CODES.OWNER];
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
     roles?: RoleCode[];
     password?: string;
     legacyUserId?: string;
+    compensation?: CompensationInput;
   } | null;
 
   if (!body?.email || !body.fullName || !body.roles?.length || !body.password) {
@@ -44,6 +46,7 @@ export async function POST(request: NextRequest) {
       roles: body.roles,
       password: body.password,
       legacyUserId: body.legacyUserId,
+      compensation: body.compensation,
     });
 
     return apiSuccess(created);

@@ -176,8 +176,8 @@ export async function PUT(request: NextRequest) {
           auth.session.user.legacy_user_ids,
         ),
       );
-  // A browser can edit phone, photo or pay settings on a card, but never the
-  // employee's name, email, role or access — those are re-applied from PostgreSQL.
+  // A browser can edit legacy-only profile fields such as phone or photo, but
+  // never identity, access or compensation. Those are re-applied from PostgreSQL.
   const nextPayload = applyEmployeeDirectory(
     mergedPayload as Record<string, unknown>,
     await loadDirectoryMembers((mergedPayload as { users?: unknown }).users ?? []),

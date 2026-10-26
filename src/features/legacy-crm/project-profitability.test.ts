@@ -13,9 +13,10 @@ test("project calculator exposes one measured operational summary", () => {
   assert.match(source, /Резерв оплаты монтажа/);
 });
 
-test("installer labor pays the service rate from the directory; old rows keep the direction rate", () => {
-  assert.match(source, /function installerRateForWindow\(_user, w\) \{\n  return windowServiceInstallerRate\(w\);/);
-  assert.match(source, /function windowServiceInstallerRate\(w\) \{\n  if \(w\?\.offeringId \|\| w\?\.offeringInstallerRate != null\) return serviceOfferingInstallerRate\(w\);/);
+test("installer labor uses the employee plan, falling back to the company service rate", () => {
+  assert.match(source, /function installerRateForWindow\(_user, w\) \{\n  return windowServiceInstallerRate\(w, _user\);/);
+  assert.match(source, /function windowServiceInstallerRate\(w, user = null\)/);
+  assert.match(source, /return employeeServiceRate\(user, serviceCode, serviceOfferingInstallerRate\(w\)\);/);
   assert.match(source, /function installerServiceRateByCategory\(category\)/);
   assert.match(source, /installerRates\?\.serviceTypes\?\.\[serviceCode\]/);
   assert.match(source, /function orderInstallerPayoutForUser\(o, userId\)/);

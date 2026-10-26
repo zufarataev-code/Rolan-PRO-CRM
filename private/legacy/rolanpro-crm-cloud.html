@@ -17063,30 +17063,50 @@ function windowFilmCost(w) {
   const withWaste = sqft * (1 + (c.wastePct || 0) / 100);
   return withWaste * c.costPerSqft;
 }
-// ONE SOURCE OF INSTALLER RATES (Owner, 2026-10-24: «единый справочник… единый
-// источник правды»). A window or line of a directory service pays that service's
-// rate — the same for every installer, no personal overrides. Only rows made
-// before the directory (no service) fall back to the old direction rates.
-function windowServiceInstallerRate(w) {
-  if (w?.offeringId || w?.offeringInstallerRate != null) return serviceOfferingInstallerRate(w);
-  const c = windowCatalog(w);
+// Company rates live in the service directory. The employee compensation plan
+// selects which directions/services the person performs and may override a
+// company rate. That server-owned plan is the only personal-pay source.
+function employeeServiceRate(user, serviceCode, companyRate) {
+  const pc = user?.payConfig || {};
+  if (!user) return Math.max(0, Number(companyRate) || 0);
+  if (pc.type !== 'per_sqft') return 0;
+  const personal = pc.ratesByServiceCode || {};
+  if (Object.prototype.hasOwnProperty.call(personal, serviceCode)) return Math.max(0, Number(personal[serviceCode]) || 0);
+  return pc.source === 'SERVER_EMPLOYEE_COMPENSATION' ? 0 : Math.max(0, Number(companyRate) || 0);
+}
+function windowServiceInstallerRate(w, user = null) {
+  const catalog = windowCatalog(w);
+  const categorySource = catalog?.category || w?.serviceType || w?.filmType || '';
+  const category = catalog || w?.serviceType
+    ? canonicalCatalogCategory(categorySource)
+    : (typeof filmCategory === 'function' ? filmCategory(categorySource) : canonicalCatalogCategory(categorySource));
+  const serviceCode = (typeof canonicalServiceCodeForOrderService === 'function'
+    ? canonicalServiceCodeForOrderService(w?.serviceType)
+    : ({ solar_film: 'SOLAR_FILM', smart_film: 'SMART_FILM', safety_film: 'SAFETY_FILM', protective_film: 'SAFETY_FILM', decorative_film: 'DECORATIVE_FILM', privacy_film: 'PRIVACY_FILM' })[w?.serviceType])
+    || ({ solar: 'SOLAR_FILM', smart: 'SMART_FILM', protective: 'SAFETY_FILM', decorative: 'DECORATIVE_FILM', privacy: 'PRIVACY_FILM' })[category]
+    || '';
+  if (w?.offeringId || w?.offeringInstallerRate != null) {
+    return employeeServiceRate(user, serviceCode, serviceOfferingInstallerRate(w));
+  }
+  const c = catalog;
   const filmName = c ? `${c.brand} ${c.model}` : (w?.filmType || '');
   const explicit = db.settings.installerRates?.types?.[filmName];
-  return explicit != null ? Number(explicit) || 0 : c ? installerServiceRateByCategory(canonicalCatalogCategory(c.category)) : filmRate(filmName);
+  const companyRate = explicit != null ? Number(explicit) || 0 : c ? installerServiceRateByCategory(canonicalCatalogCategory(c.category)) : filmRate(filmName);
+  return employeeServiceRate(user, serviceCode, companyRate);
 }
 function windowInstallerPayout(w) {
   return windowActualAreaSqft(w) * windowServiceInstallerRate(w);
 }
 function installerRateForWindow(_user, w) {
-  return windowServiceInstallerRate(w);
+  return windowServiceInstallerRate(w, _user);
 }
 function installerRateForQuickLine(_user, line) {
-  if (line?.offeringId || line?.offeringInstallerRate != null) return serviceOfferingInstallerRate(line);
+  const serviceCode = canonicalServiceCodeForOrderService(line?.serviceType);
+  if (line?.offeringId || line?.offeringInstallerRate != null) return employeeServiceRate(_user, serviceCode, serviceOfferingInstallerRate(line));
   const catalog = getCatalogItem(line?.catalogId);
   const category = canonicalCatalogCategory(catalog?.category || primaryServiceInfo(line?.serviceType)?.catalogCategory || 'other');
-  const serviceCode = canonicalServiceCodeForOrderService(line?.serviceType);
   const serviceRate = Number(db.settings.installerRates?.serviceTypes?.[serviceCode]);
-  return serviceRate > 0 ? serviceRate : installerServiceRateByCategory(category);
+  return employeeServiceRate(_user, serviceCode, serviceRate > 0 ? serviceRate : installerServiceRateByCategory(category));
 }
 function orderQuickInstallerPayoutForUser(o, user) {
   return projectQuickLines(o)
@@ -17096,16 +17116,25 @@ function orderQuickInstallerPayoutForUser(o, user) {
       return sum + (Number(line.qty) || 0) * installerRateForQuickLine(user, line) / installerCount;
     }, 0);
 }
-function installerAdditionalWorkRate(_user, type) {
-  // Rows made before the directory only; directory services pay their own rate.
-  return Math.max(0, Number(db.settings.installerRates?.workTypes?.[type]) || 0);
+function installerAdditionalWorkRate(user, type, line = null) {
+  const companyRate = line?.offeringId ? serviceOfferingInstallerRate(line) : Math.max(0, Number(db.settings.installerRates?.workTypes?.[type]) || 0);
+  if (!user) return companyRate;
+  const pc = user.payConfig || {};
+  if (pc.type !== 'per_sqft') return 0;
+  const workRates = pc.ratesByWorkType || {};
+  if (Object.prototype.hasOwnProperty.call(workRates, type)) return Math.max(0, Number(workRates[type]) || 0);
+  if (pc.source === 'SERVER_EMPLOYEE_COMPENSATION') {
+    const serviceCode = canonicalServiceCodeForOrderService(line?.serviceType);
+    return Object.prototype.hasOwnProperty.call(pc.ratesByServiceCode || {}, serviceCode) ? companyRate : 0;
+  }
+  return companyRate;
 }
 function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
   return (o?.extraServices || []).filter(line => !line.quickProjectLine).reduce((sum, line) => {
     const crew = projectServiceCrew(o, line);
     if (user && !crew.includes(user.id)) return sum;
     // A service from the directory pays its own rate per unit; other rows the work-type rate.
-    const rate = line.offeringId ? serviceOfferingInstallerRate(line) : installerAdditionalWorkRate(user, line.type);
+    const rate = installerAdditionalWorkRate(user, line.type, line);
     return sum + (Number(line.qty) || 0) * rate / (user ? Math.max(1, crew.length) : installerCount);
   }, 0);
 }
@@ -20444,7 +20473,7 @@ function companyRatesBlockHtml(owner) {
   const num = (value, onchange, step = 1) => owner ? `<input type="number" min="0" step="${step}" value="${value ?? ''}" onchange="${onchange}">` : `<div class="font-black">${value ?? '—'}</div>`;
   return `<div class="mt-3 p-3 border border-slate-200" data-company-rates>
     <div class="font-black">Общие ставки компании</div>
-    <div class="text-xs text-gray-500">Единственное место для ставок, не привязанных к услуге. Ставка монтажа — в каждой услуге ниже, одна для всех специалистов по установке.</div>
+    <div class="text-xs text-gray-500">Здесь задаётся ставка компании по умолчанию. Выбор работ и персональное исключение задаются в «Сотрудники → Условия оплаты».</div>
     <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-2">
       ${field('Аванс, % от проекта', num(s.advancePct ?? 10, "db.settings.advancePct=Math.max(0, Number(this.value)||0); save(); render();"))}
       ${field('Аванс не больше, $', num(s.depositCapUsd ?? 1000, "db.settings.depositCapUsd=Math.max(0, Number(this.value)||0)||null; save(); render();", 50))}
@@ -41011,6 +41040,21 @@ function openUserPayConfig(userId) {
   if (!u) return;
   if (!u.payConfig) u.payConfig = {};
   const pc = u.payConfig;
+  if (currentUser()?.role === 'owner' && u.serverUserId && typeof window.openRolanProTeam === 'function') {
+    window.openRolanProTeam(u.serverUserId);
+    return;
+  }
+  if (currentUser()?.role !== 'owner') {
+    const summary = pc.type === 'salary' ? `${fmtMoney(pc.monthlySalary || 0)} / месяц`
+      : pc.type === 'hourly' ? `${fmtMoney(pc.hourlyRate || 0)} / час`
+      : pc.type === 'commission' ? `${Number(pc.commissionPct) || 0}% от оплаченных проектов`
+      : pc.type === 'fixed_per_job' ? `${fmtMoney(pc.fixedPerJob || 0)} / завершённую работу`
+      : pc.type === 'per_sqft' ? 'Сдельно по назначенным услугам'
+      : 'Начисление через CRM не настроено';
+    state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:32rem"><h3 class="font-semibold text-lg mb-1">💰 Зарплата: ${academyEsc(u.name)}</h3><p class="text-xs text-gray-500 mb-4">Условия задаёт владелец в карточке сотрудника.</p><div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 font-semibold text-emerald-800">${academyEsc(summary)}</div><div class="flex justify-end mt-5"><button class="btn-primary" onclick="closeModal()">Закрыть</button></div></div></div>`;
+    render();
+    return;
+  }
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6" style="max-width: 32rem;">
@@ -41034,7 +41078,7 @@ function openUserPayConfig(userId) {
       </div>
 
       <div id="pc-per_sqft" class="pc-section mt-3" style="display:${pc.type==='per_sqft'?'block':'none'}">
-        <p class="text-sm text-gray-700">Сдельно: ставка за монтаж берётся из услуги — «Ставки и расходы» → «За единицу работы» (то же поле, что в «Услуги и цены»). Одна для всех специалистов по установке. Персональных ставок нет.</p>
+        <p class="text-sm text-gray-700">Сдельно: ставка компании берётся из «Услуги и цены». В серверной карточке сотрудника можно выбрать разрешённые работы и задать персональное исключение.</p>
         <p class="text-xs text-gray-500 mt-1">Если на объекте несколько специалистов по установке, начисление по услуге делится поровну. Старший в бригаде получает надбавку к своей доле — отмечается в «Услуги и цены» → «Общие ставки компании».</p>
       </div>
 
@@ -41073,7 +41117,7 @@ function saveUserPayConfig(userId) {
   const pc = u.payConfig = u.payConfig || {};
   pc.type = document.getElementById('pc-type').value;
   pc.commissionPct = parseFloat(document.getElementById('pc-commissionPct')?.value) || 0;
-  pc.ratePerSqft = 0; // personal rates removed 2026-10-24: the service directory pays
+  pc.ratePerSqft = 0; // Historical unlinked cards only; linked employees are server-owned.
   pc.fixedPerJob = parseFloat(document.getElementById('pc-fixedPerJob')?.value) || 0;
   pc.monthlySalary = parseFloat(document.getElementById('pc-monthlySalary')?.value) || 0;
   pc.hourlyRate = parseFloat(document.getElementById('pc-hourlyRate')?.value) || 0;

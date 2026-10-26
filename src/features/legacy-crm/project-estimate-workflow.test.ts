@@ -357,7 +357,7 @@ test("project add-on rows contain customer price only and labor comes from confi
   assert.match(source, /ratesByWorkType/);
   // Personal rates are gone (2026-10-24): every directory service pays its own rate.
   assert.doesNotMatch(source, /id="pc-work-\$\{type\}"/);
-  assert.match(source, /Персональных ставок нет\./);
+  assert.match(source, /персональное исключение/i);
   assert.match(source, /function orderAdditionalWorkPayoutForUser\(o, user, installerCount = 1\)/);
   assert.match(source, /filmPayout \+ orderAdditionalWorkPayoutForUser/);
 });
