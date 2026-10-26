@@ -1621,6 +1621,17 @@ model StripeSettings {
   @@map("stripe_settings")
 }
 
+/// Google Cloud service account the owner pasted in CRM settings; the private key is encrypted.
+model GoogleAdsCredentials {
+  settings_id           String   @id @default("primary") @db.VarChar(20)
+  service_account_email String   @db.VarChar(255)
+  private_key_encrypted String   @db.Text
+  updated_by            String?  @db.Uuid
+  updated_at            DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("google_ads_credentials")
+}
+
 /// A CRM key an outside service sends with its requests (Google Ads script). Only the hash is kept.
 model IntegrationApiKey {
   key_id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

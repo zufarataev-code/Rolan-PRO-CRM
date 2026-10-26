@@ -2080,6 +2080,7 @@ function googleAdsCrmPanelHtml() {
     </div>
     <details class="mt-2"><summary class="text-xs cursor-pointer">Кампании · данные от ${academyEsc(lastImport)}</summary><div class="mt-2 space-y-1">${sum.campaigns.map(c => `<div class="flex justify-between gap-2 text-xs border-b py-1"><span>${academyEsc(c.campaign_name)}</span><span>${fmtMoney(c.cost)} · ${c.clicks} кл.</span></div>`).join('')}</div></details>
     <p class="text-xs text-gray-500 mt-2">Лид считается из Google, если в проекте источник «google». Ставьте его при создании проекта — тогда цена лида и окупаемость считаются точно.</p>` : connected ? '<p class="text-xs text-gray-500 mt-2">Данных пока нет: вставьте скрипт в Google Ads и нажмите там «Выполнить» — расходы появятся здесь.</p>' : ''}
+    ${googleAdsConversionsPanelHtml()}
   </div>`;
 }
 async function googleAdsCrmCreateKey() {
@@ -2116,4 +2117,118 @@ async function googleAdsCrmRevokeKey() {
   if (currentUser()?.role !== 'owner' || !confirm('Отключить ключ? Скрипт в Google Ads перестанет присылать расходы.')) return;
   await fetch('/api/v1/settings/integration-keys?integration=google_ads', { method: 'DELETE', credentials: 'same-origin' }).catch(() => null);
   loadGoogleAdsCrm(true);
+}
+
+// ---------- GOOGLE ADS: КОНВЕРСИИ ИЗ CRM (Owner, 2026-10-25, спецификация) ----------
+// «Вот что нужно делать» (Google Ads CRM integration spec): qualified leads and
+// sales with their value go from the CRM to Google Ads through Data Manager
+// API. The owner pastes the service-account key and the conversion IDs here;
+// the server sends every 10 minutes, test mode first, live after confirmation.
+async function loadGoogleAdsConversions(force = false) {
+  if (currentUser()?.role !== 'owner') return;
+  const s = state.googleAdsConv || {};
+  if (s.loading || (!force && s.loadedAt && Date.now() - s.loadedAt < 60000)) return;
+  state.googleAdsConv = { ...s, loading: true };
+  const get = async url => { const r = await fetch(url, { credentials: 'same-origin', cache: 'no-store' }); return r.ok ? (await r.json())?.data : null; };
+  try {
+    const [settings, status, access] = await Promise.all([get('/api/v1/integrations/google-ads/settings'), get('/api/v1/integrations/google-ads/status'), get('/api/v1/integrations/google-ads/credentials')]);
+    state.googleAdsConv = { settings, status, access, loadedAt: Date.now(), loading: false };
+  } catch (error) {
+    state.googleAdsConv = { ...s, loading: false, loadedAt: Date.now(), error: error?.message || String(error) };
+  }
+  render();
+}
+function googleAdsConversionsPanelHtml() {
+  if (currentUser()?.role !== 'owner') return '';
+  const g = state.googleAdsConv;
+  if (!g || (!g.loadedAt && !g.loading)) setTimeout(() => loadGoogleAdsConversions(), 0);
+  const st = g?.settings || {};
+  const access = g?.access || {};
+  const status = g?.status || {};
+  const outbox = status.conversions?.outbox || {};
+  const waiting = status.conversions?.awaiting_configuration || {};
+  const problems = status.conversions?.recent_problems || [];
+  const ids = st.conversion_owner_customer_id && st.converted_lead_action_id;
+  const live = st.upload_enabled && st.validate_only === false;
+  const step = (done, n, title, body) => `<div class="p-3 border bg-white mt-2" style="border-left:4px solid ${done ? '#16a34a' : '#d97706'}"><div class="text-sm font-semibold">${done ? '✓' : n} ${title}</div>${body}</div>`;
+  const field = (id, label, value, hint) => `<label class="block text-xs mt-2">${label}<input id="${id}" value="${academyEsc(value || '')}" placeholder="${academyEsc(hint || '')}" inputmode="numeric"></label>`;
+  const counts = Object.entries(outbox).map(([k, v]) => `${academyEsc(k)}: ${Number(v)}`).join(' · ') || 'пока пусто';
+  return `<div class="p-4 border border-slate-200 bg-slate-50 mt-3" data-google-ads-conversions>
+    <div class="font-semibold text-sm">🎯 Конверсии в Google Ads — квалифицированные лиды и продажи с суммой</div>
+    <p class="text-xs text-gray-600 mt-1">CRM сама отправляет в Google: «квалифицированный лид», когда КП отправлено клиенту, и «продажу» с суммой, когда клиент подписал КП и аванс получен. Google учится приводить таких клиентов, а не просто клики.</p>
+    ${g?.error ? `<p class="text-xs text-red-700 mt-1">${academyEsc(g.error)}</p>` : ''}
+    ${step(access.configured, '1', 'Доступ CRM к Google', access.configured
+      ? `<p class="text-xs text-gray-600 mt-1">Сервисный аккаунт: <code>${academyEsc(access.service_account_email || 'задан на сервере')}</code>. Он должен быть добавлен пользователем в Google Ads (Админ → Доступ и безопасность → «+», роль «Стандартный»).</p>${access.source === 'crm' ? `<button class="btn-ghost text-xs text-red-600 mt-1" onclick="googleAdsConvClearAccess()">Удалить ключ</button>` : ''}`
+      : `<ol class="text-xs list-decimal ml-4 mt-1 space-y-1"><li>console.cloud.google.com → создайте проект → «APIs & Services» → включите <b>Data Manager API</b>.</li><li>«IAM & Admin → Service Accounts» → создайте аккаунт → «Keys → Add key → JSON» — скачается файл.</li><li>Откройте файл, скопируйте всё содержимое и вставьте сюда.</li><li>В Google Ads: Админ → Доступ и безопасность → «+» → email сервисного аккаунта, роль «Стандартный».</li></ol>
+        <textarea id="gads-sa-json" rows="4" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"type": "service_account", ...}' autocomplete="off"></textarea>
+        <button class="btn-primary text-sm mt-1" onclick="googleAdsConvSaveAccess()">Сохранить доступ</button><p class="text-xs text-gray-500 mt-1">Ключ уходит прямо на сервер и хранится зашифрованным; в CRM и чате его больше не видно.</p>`)}
+    ${step(ids, '2', 'ID аккаунта и конверсий', `<p class="text-xs text-gray-600 mt-1">В Google Ads: Цели → Конверсии → «+ Новое действие» → «Импорт» → «CRM, файлы и другие источники» → «Отслеживать конверсии по кликам». Создайте два действия: <b>CRM – Qualified Lead</b> (категория «Квалифицированный лид», ценность одна, учитывать одну) и <b>CRM – Converted Lead</b> (категория «Конвертированный лид», ценность из CRM, учитывать каждую). Пока ставьте их «вторичными». ID действия — число в адресе страницы действия (ctId=…).</p>
+      ${field('gads-customer', 'Customer ID аккаунта Google Ads (123-456-7890)', st.conversion_owner_customer_id, '1234567890')}
+      ${field('gads-login', 'Login customer ID — только если вход через управляющий аккаунт (MCC)', st.login_customer_id, 'необязательно')}
+      ${field('gads-project', 'ID проекта Google Cloud', st.cloud_project_id, 'rolanpro-ads')}
+      ${field('gads-qualified', 'ID действия «CRM – Qualified Lead»', st.qualified_lead_action_id, 'число')}
+      ${field('gads-converted', 'ID действия «CRM – Converted Lead»', st.converted_lead_action_id, 'число')}
+      <label class="block text-xs mt-2">Когда лид считается квалифицированным<select id="gads-stage"><option value="" ${st.qualification_pipeline_status_code ? '' : 'selected'}>Не отправлять квалифицированных</option><option value="PROPOSAL_SENT" ${st.qualification_pipeline_status_code === 'PROPOSAL_SENT' ? 'selected' : ''}>КП отправлено клиенту</option></select></label>
+      <button class="btn-primary text-sm mt-2" onclick="googleAdsConvSaveSettings()">Сохранить</button>`)}
+    ${step(live, '3', live ? 'Живая отправка включена' : 'Тестовый режим → живая отправка', live
+      ? '<p class="text-xs text-gray-600 mt-1">Google принимает события. Смотрите «Конверсии» в Google Ads через 1–2 дня. Через 4 недели стабильных данных можно переводить кампании на «Максимум ценности конверсий».</p>'
+      : `<p class="text-xs text-gray-600 mt-1">Сейчас Google только проверяет события и ничего не записывает. Когда в «Состоянии» появятся «validated» без ошибок — включайте живую отправку.</p><button class="btn-ghost text-sm mt-1" ${access.configured && ids ? '' : 'disabled'} onclick="googleAdsConvGoLive()">Включить живую отправку</button>`)}
+    <div class="p-3 border bg-white mt-2"><div class="flex justify-between items-center gap-2"><div class="text-sm font-semibold">Состояние</div><div class="flex gap-2"><button class="btn-ghost text-xs" onclick="googleAdsConvSyncNow()">Отправить сейчас</button><button class="btn-ghost text-xs" onclick="loadGoogleAdsConversions(true)">Обновить</button></div></div>
+      <p class="text-xs text-gray-600 mt-1">Очередь: ${counts}.${Number(waiting.converted_lead) || Number(waiting.qualified_lead) ? ` Ждут настройки ID: продажи ${Number(waiting.converted_lead) || 0}, квалифицированные ${Number(waiting.qualified_lead) || 0}.` : ''} Отправка идёт сама каждые 10 минут.</p>
+      ${problems.length ? `<div class="text-xs text-red-700 mt-1">${problems.slice(0, 3).map(p => academyEsc(String(p.last_error?.message || p.processing_status || 'ошибка').slice(0, 140))).join('<br>')}</div>` : ''}
+    </div>
+  </div>`;
+}
+async function googleAdsConvRequest(url, method, body) {
+  const response = await fetch(url, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.errors?.[0]?.message || `Сервер ответил ${response.status}`);
+  return payload?.data;
+}
+async function googleAdsConvSaveAccess() {
+  const box = document.getElementById('gads-sa-json');
+  const json = box?.value || '';
+  if (!json.trim()) return alert('Вставьте содержимое JSON-файла ключа.');
+  try {
+    await googleAdsConvRequest('/api/v1/integrations/google-ads/credentials', 'PUT', { service_account_json: json });
+    if (box) box.value = '';
+    loadGoogleAdsConversions(true);
+  } catch (error) { if (box) box.value = ''; alert('Ключ не сохранён: ' + (error?.message || error)); }
+}
+async function googleAdsConvClearAccess() {
+  if (!confirm('Удалить ключ доступа к Google? Отправка конверсий остановится.')) return;
+  await googleAdsConvRequest('/api/v1/integrations/google-ads/credentials', 'DELETE').catch(error => alert(error.message));
+  loadGoogleAdsConversions(true);
+}
+async function googleAdsConvSaveSettings() {
+  const value = id => (document.getElementById(id)?.value || '').trim();
+  try {
+    await googleAdsConvRequest('/api/v1/integrations/google-ads/settings', 'PATCH', {
+      conversion_owner_customer_id: value('gads-customer') || null,
+      login_customer_id: value('gads-login') || null,
+      cloud_project_id: value('gads-project') || null,
+      qualified_lead_action_id: value('gads-qualified') || null,
+      converted_lead_action_id: value('gads-converted') || null,
+      qualification_pipeline_status_code: value('gads-stage') || null,
+      upload_enabled: true,
+    });
+    loadGoogleAdsConversions(true);
+  } catch (error) { alert('Не сохранено: ' + (error?.message || error)); }
+}
+async function googleAdsConvGoLive() {
+  const customer = state.googleAdsConv?.settings?.conversion_owner_customer_id || '';
+  const typed = prompt(`Включить живую отправку конверсий в Google Ads ${customer}? Введите Customer ID аккаунта для подтверждения.`, '');
+  if (typed === null) return;
+  try {
+    await googleAdsConvRequest('/api/v1/integrations/google-ads/live/activate', 'POST', { confirmation: 'ENABLE_LIVE_GOOGLE_ADS_UPLOADS', customer_id: typed });
+    loadGoogleAdsConversions(true);
+  } catch (error) { alert('Не включено: ' + (error?.message || error)); }
+}
+async function googleAdsConvSyncNow() {
+  try {
+    const result = await googleAdsConvRequest('/api/v1/integrations/google-ads/sync-now', 'POST');
+    const why = { not_enabled: 'сначала сохраните ID на шаге 2', no_credentials: 'сначала сохраните доступ на шаге 1', already_running: 'отправка уже идёт' };
+    alert(result?.skipped ? `Не отправлено: ${why[result.skipped] || result.skipped}.` : `Готово: отправлено ${result?.uploads || 0}, проверено статусов ${result?.statuses || 0}.`);
+    loadGoogleAdsConversions(true);
+  } catch (error) { alert('Ошибка отправки: ' + (error?.message || error)); }
 }

@@ -1,3 +1,4 @@
+import { getStoredServiceAccount } from "@/features/google-ads/credentials";
 import { NextRequest } from "next/server";
 
 import {
@@ -195,7 +196,7 @@ export async function GET(request: NextRequest) {
       service_account: Boolean(
         process.env.GOOGLE_ADS_SERVICE_ACCOUNT_EMAIL?.trim() &&
           process.env.GOOGLE_ADS_SERVICE_ACCOUNT_PRIVATE_KEY?.trim(),
-      ),
+      ) || Boolean(await getStoredServiceAccount()),
     },
     diagnostics_note:
       (settings?.validate_only ?? true)

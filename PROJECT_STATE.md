@@ -38,6 +38,16 @@ Before doing any work:
 - Verification: `src/features/legacy-crm/notification-sound.test.ts` (2 tests) passes; the rest of `npm test` matches main locally (env-dependent failures only).
 - Not done: system push notifications when the CRM tab is closed (needs Web Push).
 
+## 2026-10-25 handoff — Google Ads conversions from the working CRM (owner's spec PDF)
+
+- Spec «Google Ads CRM integration — Developer specification v1.0» (9 Sep 2026). Server modules already covered events/outbox/Data Manager/diagnostics/adjustments/Customer Match/cost; gaps closed here:
+  - `GoogleAdsCredentials` (migration 20261025180000): service-account JSON pasted by the owner, private key encrypted (bank crypto); `oauth.ts` falls back to it after env; `/api/v1/integrations/google-ads/credentials` (owner GET/PUT/DELETE).
+  - Lifecycle from the legacy CRM: `closeSaleIfReady` → `ensureClosedWonConversion` (value = signed selected total, time = later of signature/deposit); `publishLegacyProposal` → `ensureQualifiedLeadConversion` with `PROPOSAL_SENT` (fires only if the owner picks that stage) and new deals get the latest touchpoint by client or by a lead with the same email/phone.
+  - Delivery: `sync-cycle.ts` (reconcile → uploads → request status → adjustments → Customer Match), every 10 min via root `instrumentation.ts` (`GOOGLE_ADS_AUTO_SYNC=off` disables), owner «Отправить сейчас» = `/api/v1/integrations/google-ads/sync-now`.
+  - Live gate: blocked only when env `GOOGLE_ADS_VALIDATE_ONLY=true`; otherwise owner types the customer ID.
+  - CRM screen «🎯 Конверсии в Google Ads» (`googleAdsConversionsPanelHtml`) under the Google Ads block: access → IDs + qualification stage → test → live, status/outbox/problems.
+- Not covered: sales recorded without an online-signed KP (manual «Оплачено → к монтажу») produce no conversion; website gclid capture lives on rolan-pro.com (send gclid/gbraid/wbraid/consent to `/api/v1/integrations/website/leads`); refunds/adjustments still need the Google Ads API developer token.
+
 ## 2026-10-25 handoff — services by direction: tile on the card, add/remove in the window
 
 - PR #399 (42b9c14) merged and deployed; prod checked on R-261025-063: two direction tiles, card services block ~650 px instead of ~1050.

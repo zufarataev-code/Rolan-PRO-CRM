@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 
+import { ensureClosedWonConversion } from "@/features/google-ads/conversion-events";
 import { prisma } from "@/lib/db";
 
 type SaleGateLookup =
@@ -162,6 +163,24 @@ export async function closeSaleIfReady(input: CloseSaleInput) {
   const alreadyClosed = proposal.deal.pipeline_status.status_code === "CLOSED_WON";
 
   await prisma.$transaction(async (tx) => {
+    // Google Ads spec §4: the sale milestone (agreement signed + deposit paid)
+    // enqueues one converted-lead event with the signed value. The transaction
+    // ID is per deal, so a repeated webhook or a reopened deal never adds a
+    // second sale (Owner, 2026-10-25).
+    const signedAt = proposal.agreement?.signed_at ?? null;
+    const paidAt = proposal.deposit?.paid_at ?? null;
+    const saleAt = signedAt && paidAt ? (signedAt > paidAt ? signedAt : paidAt) : paidAt ?? signedAt ?? new Date();
+    await ensureClosedWonConversion(tx, {
+      dealId: proposal.deal_id,
+      leadId: proposal.deal.lead_id ?? null,
+      clientId: proposal.deal.client_id ?? null,
+      attributionTouchpointId: proposal.deal.attribution_touchpoint_id ?? null,
+      occurredAt: saleAt,
+      conversionValue: proposal.selected_total_amount ?? null,
+      currency: proposal.currency ?? "USD",
+      eventSource: "OTHER",
+    });
+
     if (!alreadyClosed) {
       await tx.deal.update({
         where: { deal_id: proposal.deal_id },

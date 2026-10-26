@@ -24,16 +24,9 @@ function normalizeGoogleId(value: string) {
   return value.replace(/[\s-]/g, "");
 }
 
-function hasGoogleCredentials() {
-  const refreshToken = Boolean(process.env.GOOGLE_ADS_OAUTH_REFRESH_TOKEN?.trim());
-  const oauthClient = Boolean(
-    process.env.GOOGLE_ADS_OAUTH_CLIENT_ID?.trim() && process.env.GOOGLE_ADS_OAUTH_CLIENT_SECRET?.trim(),
-  );
-  const serviceAccount = Boolean(
-    process.env.GOOGLE_ADS_SERVICE_ACCOUNT_EMAIL?.trim() &&
-      process.env.GOOGLE_ADS_SERVICE_ACCOUNT_PRIVATE_KEY?.trim(),
-  );
-  return (refreshToken && oauthClient) || serviceAccount;
+async function hasGoogleCredentials() {
+  const { hasAnyGoogleCredentials } = await import("./credentials");
+  return hasAnyGoogleCredentials();
 }
 
 export type ActivateGoogleAdsLiveInput = {
@@ -51,13 +44,15 @@ export async function activateGoogleAdsLiveUploads(input: ActivateGoogleAdsLiveI
   if (input.confirmation !== GOOGLE_ADS_LIVE_CONFIRMATION) {
     fail("live_confirmation_required", `confirmation must equal ${GOOGLE_ADS_LIVE_CONFIRMATION}.`);
   }
-  if (process.env.GOOGLE_ADS_VALIDATE_ONLY?.trim().toLowerCase() !== "false") {
+  // The server can still force test mode (GOOGLE_ADS_VALIDATE_ONLY=true); otherwise
+  // the owner's typed confirmation with the customer ID is the live switch.
+  if (process.env.GOOGLE_ADS_VALIDATE_ONLY?.trim().toLowerCase() === "true") {
     fail(
       "environment_live_gate_closed",
-      "GOOGLE_ADS_VALIDATE_ONLY must be explicitly set to false before live activation is permitted.",
+      "The server forces test mode (GOOGLE_ADS_VALIDATE_ONLY=true).",
     );
   }
-  if (!hasGoogleCredentials()) {
+  if (!(await hasGoogleCredentials())) {
     fail("google_credentials_incomplete", "Google Ads OAuth credentials must be configured first.");
   }
 

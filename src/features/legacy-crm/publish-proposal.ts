@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { ensureQualifiedLeadConversion } from "@/features/google-ads/conversion-events";
 
 import { prisma } from "@/lib/db";
 import { buildClientReuseWhere, getRecordManagerScope } from "@/features/sales/access";
@@ -193,10 +194,14 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
         },
       });
       clientId = client.client_id;
+      // Google Ads spec §3: the opportunity keeps the acquisition touchpoint
+      // (gclid/UTM) captured when this person first came in as a website lead.
+      const touchpointId = await findAcquisitionTouchpointForContact(tx, clientId, contact);
       const deal = await tx.deal.create({
         data: {
           deal_code: `LEG-${crypto.randomUUID().slice(0, 8)}`,
           client_id: clientId,
+          attribution_touchpoint_id: touchpointId,
           assigned_manager_id: session.user.user_id,
           pipeline_status_id: pipelineStatus.pipeline_status_id,
           title: snapshot.title,
@@ -316,6 +321,18 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
       where: { deal_id: dealId! },
       data: { estimated_value: total, pipeline_status_id: pipelineStatus.pipeline_status_id },
     });
+    // Qualified lead (spec §4): fires once per deal and only when the owner set
+    // the qualification stage to «КП отправлено» in Google Ads settings.
+    const dealRow = await tx.deal.findUnique({ where: { deal_id: dealId! }, select: { lead_id: true, attribution_touchpoint_id: true } });
+    await ensureQualifiedLeadConversion(tx, {
+      dealId: dealId!,
+      leadId: dealRow?.lead_id ?? null,
+      clientId: clientId ?? null,
+      attributionTouchpointId: dealRow?.attribution_touchpoint_id ?? null,
+      pipelineStatusCode: "PROPOSAL_SENT",
+      occurredAt: new Date(),
+      eventSource: "OTHER",
+    });
     return proposal;
   });
 
@@ -324,4 +341,25 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
     proposal_code: result.proposal_code,
     public_url: `${getEnv().appUrl.replace(/\/$/, "")}/proposal/${result.access_token}`,
   };
+}
+
+/** The latest website touchpoint of this person: by client, or by a lead with the same email or phone. */
+async function findAcquisitionTouchpointForContact(
+  tx: Prisma.TransactionClient,
+  clientId: string,
+  contact: { email?: string | null; phone?: string | null },
+) {
+  const email = String(contact.email || "").trim().toLowerCase();
+  const digits = String(contact.phone || "").replace(/\D/g, "");
+  const phones = digits ? Array.from(new Set([contact.phone || "", digits, `+${digits}`, digits.length === 10 ? `+1${digits}` : "", digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : ""].filter(Boolean))) : [];
+  const leadMatch = [
+    ...(email ? [{ email: { equals: email, mode: "insensitive" as const } }] : []),
+    ...(phones.length ? [{ phone: { in: phones } }] : []),
+  ];
+  const touchpoint = await tx.acquisitionTouchpoint.findFirst({
+    where: { OR: [{ client_id: clientId }, ...(leadMatch.length ? [{ lead: { OR: leadMatch } }] : [])] },
+    orderBy: [{ captured_at: "desc" }, { created_at: "desc" }],
+    select: { acquisition_touchpoint_id: true },
+  });
+  return touchpoint?.acquisition_touchpoint_id ?? null;
 }

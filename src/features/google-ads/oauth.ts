@@ -53,9 +53,11 @@ async function tokenFromRefreshToken() {
 }
 
 async function tokenFromServiceAccount(scopes: string[]) {
-  const email = process.env.GOOGLE_ADS_SERVICE_ACCOUNT_EMAIL?.trim();
-  const privateKey = process.env.GOOGLE_ADS_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, "\n").trim();
-  if (!email || !privateKey) return null;
+  // Server env first, then the key the owner saved in CRM settings.
+  const { resolveServiceAccount } = await import("./credentials");
+  const account = await resolveServiceAccount();
+  if (!account) return null;
+  const { email, privateKey } = account;
 
   const now = Math.floor(Date.now() / 1000);
   const header = base64UrlJson({ alg: "RS256", typ: "JWT" });
