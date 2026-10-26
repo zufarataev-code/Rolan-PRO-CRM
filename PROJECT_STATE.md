@@ -39,6 +39,16 @@ Before doing any work:
 - New-project, measurement, cashier, Proposal-option and Services/Price Book flows use the same canonical four-direction mapping.
 - Verification: full suite 895/895, `npm run typecheck`, production `npm run build`, and `git diff --check` pass. Production is unchanged; merge/deploy still require the Owner's explicit confirmation after PR review and CI.
 
+## 2026-10-26 handoff — two-level measurement (PR #419)
+
+- Merged `4c2f03e`, deployed (prod not re-checked in Chrome from this session). Mock-up: canvas boards 15–18.
+- `openManagerMeasureModal` routes by `measureEntryMode`: manager → quick, measurer → full, owner → chooser on an empty project (`setMeasureMode(oid,'full'|'quick')`).
+- Quick window `quickMeasureHtml` (production-stages.js): rooms, glass W×H, per-room socket (Smart → electrician) and old-film removal, Smart questions (control, block, glass) in `o.quickAnswers`, «Попадёт в КП» with «Создать услугу». Windows carry `quickMeasure: true`, sizes unverified.
+- Client sizes no longer block production/scheduling: `projectAcceptClientSizes` sets `clientSizesAcceptedAt` (one confirm); «Внести точные размеры» next action is the measurer's only.
+- Smart: electrician/power services first in the install window.
+- Fix: renders called `serviceOfferingCanEdit()` (alerts non-owners) — plain role check now.
+- Harness scripts must call `setMeasureMode(id,'full')` for the full window. Tests: `quick-measure.test.ts`.
+
 ## 2026-10-26 handoff — Smart made simple (PR #416)
 
 - Merged `69389f6`, deployed (prod not re-checked in Chrome from this session).
