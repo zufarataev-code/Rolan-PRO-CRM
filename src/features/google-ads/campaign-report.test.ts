@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { buildGoogleAdsCampaignReport, defaultGoogleAdsRange, googleAdsProjectMoney, type CampaignTouchpoint } from "./campaign-report";
 import { legacyGoogleAdsSale } from "./legacy-outcomes";
 import { captureGoogleAdsUrl } from "./browser-attribution";
+import { selectGoogleAdsReportCustomer } from "./roas";
 
 const cost = (customer_id = "123", currency = "USD") => ({ customer_id, campaign_id: "456", campaign_name: "Film", currency, cost_amount: new Prisma.Decimal(100), clicks: 10n, impressions: 100n });
 const point: CampaignTouchpoint = { acquisition_touchpoint_id: "touch-1", lead_id: "lead-1", legacy_order_id: null, google_ads_customer_id: "123", google_ads_campaign_id: "456", captured_at: new Date("2026-10-05T12:00:00Z") };
@@ -73,4 +74,35 @@ test("landing capture preserves click/campaign IDs without inventing consent", (
   assert.equal(captured.gclid, "click");
   assert.equal(captured.gbraid, "braid");
   assert.equal("consent" in captured, false);
+});
+
+test("bank payments require explicit reconciliation and overhead is excluded", () => {
+  const project = { ...order(), extraExpenses: [{ id: "contractor", type: "subcontractor", amount: 200, actual: true }] };
+  const bank = { id: "bank", orderId: project.id, category: "subcontractor", type: "expense", amount: 200 };
+  const workspace = { finance: { transactions: [bank, { orderId: project.id, category: "rent", type: "expense", amount: 900 }] } };
+  assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("expense_links_not_reviewed"));
+  Object.assign(bank, { projectExpenseId: "contractor" });
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "450.00", "material 100 + labor 150 + contractor 200 once");
+  assert.equal(googleAdsProjectMoney(project, workspace).unresolvedExpenseLinks.length, 0);
+  Object.assign(bank, { projectExpenseId: null });
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "650.00", "an explicitly separate bank expense remains an additional cost");
+});
+
+test("cancelled jobs can finalize sunk costs without completing abandoned work", () => {
+  const project = { ...order(), status: "cancelled", productionStages: [{ status: "scheduled", payroll: [] }], extraExpenses: [{ id: "unused", amount: 99, actual: false }], _inventoryDeducted: false };
+  assert.deepEqual(googleAdsProjectMoney(project, {}).issues, []);
+});
+
+test("archiving a job preserves financial history and does not duplicate an active stale copy", () => {
+  const project = order();
+  const result = buildGoogleAdsCampaignReport([cost()], [point], { orders: [project], archivedOrders: [project] }, "2026-10-01", "2026-10-25", "123");
+  assert.equal(result.campaigns[0].realized_revenue, "1000.00");
+  assert.equal(result.campaigns[0].projects.length, 1);
+});
+
+test("cross-account conversion owners do not hide a leaf account's spend", () => {
+  assert.equal(selectGoogleAdsReportCustomer(["123"], "999"), "123");
+  assert.equal(selectGoogleAdsReportCustomer(["123", "456"], "999"), null);
+  assert.equal(selectGoogleAdsReportCustomer(["1234567890"], null, "123-456-7890"), "1234567890");
+  assert.throws(() => selectGoogleAdsReportCustomer(["123"], null, "invalid"));
 });

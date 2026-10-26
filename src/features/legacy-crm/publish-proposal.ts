@@ -2,7 +2,7 @@ import { findAcquisitionTouchpoint } from "@/features/google-ads/attribution";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
-import { buildClientReuseWhere, getRecordManagerScope } from "@/features/sales/access";
+import { buildClientReuseWhere, buildLeadScopeWhere, getRecordManagerScope } from "@/features/sales/access";
 import { getEnv } from "@/lib/env";
 import {
   ClientIdentityConflictError,
@@ -12,7 +12,7 @@ import {
 } from "@/features/sales/client-identity";
 
 type SessionLike = {
-  user: { user_id: string };
+  user: { user_id: string; legacy_user_ids?: string[] };
   roles?: string[];
 };
 
@@ -198,11 +198,15 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
       clientId = client.client_id;
       // Google Ads spec §3: the opportunity keeps the acquisition touchpoint
       // (gclid/UTM) captured when this person first came in as a website lead.
-      const sourceLead = snapshot.canonicalLeadId ? await tx.lead.findFirst({
-        where: { lead_id: snapshot.canonicalLeadId, ...(managerId ? { assigned_manager_id: managerId } : {}) },
-        select: { lead_id: true },
+      const sourceWorkspace = await tx.legacyWorkspace.findUnique({ where: { workspace_id: "primary" }, select: { payload: true } });
+      const sourceProject = ((sourceWorkspace?.payload as any)?.orders || []).find((order: any) => order.id === snapshot.legacyOrderId);
+      if (sourceProject?.canonicalLeadId && snapshot.canonicalLeadId && sourceProject.canonicalLeadId !== snapshot.canonicalLeadId) throw new Error("The original project lead cannot be replaced.");
+      const sourceLeadId = sourceProject?.canonicalLeadId || snapshot.canonicalLeadId;
+      const ownsProject = sourceProject?.canonicalLeadId === sourceLeadId && (!managerId || [session.user.user_id, ...(session.user.legacy_user_ids || [])].includes(sourceProject.managerId));
+      const sourceLead = sourceLeadId ? await tx.lead.findFirst({
+        where: { lead_id: sourceLeadId, ...(ownsProject ? {} : buildLeadScopeWhere(managerId)) }, select: { lead_id: true },
       }) : null;
-      if (snapshot.canonicalLeadId && !sourceLead) throw new Error("The original lead is not accessible.");
+      if (sourceLeadId && !sourceLead) throw new Error("The original lead is not accessible.");
       const touchpoint = await findAcquisitionTouchpoint(tx, sourceLead
         ? { lead_id: sourceLead.lead_id }
         : { legacy_order_id: snapshot.legacyOrderId });

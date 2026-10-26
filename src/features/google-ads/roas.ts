@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
 import { GOOGLE_ADS_CONVERTED_LEAD_EVENT } from "./conversion-events";
+import { normalizeAdsId } from "./attribution";
 
 export class GoogleAdsRoasError extends Error {
   constructor(
@@ -16,6 +17,17 @@ export class GoogleAdsRoasError extends Error {
 
 function fail(code: string, message: string): never {
   throw new GoogleAdsRoasError(code, message);
+}
+
+export function selectGoogleAdsReportCustomer(accounts: string[], configured?: string | null, requested?: string | null) {
+  if (requested) {
+    const normalized = normalizeAdsId(requested, 20);
+    if (!normalized) fail("invalid_customer_id", "customer_id must be a numeric Google Ads account ID.");
+    return normalized;
+  }
+  const preferred = normalizeAdsId(configured, 20);
+  if (preferred && (!accounts.length || accounts.includes(preferred))) return preferred;
+  return accounts.length === 1 ? accounts[0] : null;
 }
 
 function parseIsoDate(value: string, field: string) {
@@ -63,11 +75,15 @@ function hasGoogleClickIdentifier(touchpoint: { gclid: string | null; gbraid: st
   return Boolean(touchpoint?.gclid || touchpoint?.gbraid || touchpoint?.wbraid);
 }
 
-export async function getGoogleAdsRoasReport(startDate: string, endDate: string) {
+export async function getGoogleAdsRoasReport(startDate: string, endDate: string, requestedCustomerId?: string | null) {
   const range = validateRoasRange(startDate, endDate);
 
-  const settings = await prisma.googleAdsIntegrationSetting.findUnique({ where: { setting_key: "default" }, select: { conversion_owner_customer_id: true } });
-  const customerId = settings?.conversion_owner_customer_id;
+  const [settings, accounts] = await Promise.all([
+    prisma.googleAdsIntegrationSetting.findUnique({ where: { setting_key: "default" }, select: { conversion_owner_customer_id: true } }),
+    prisma.googleAdsDailyCost.findMany({ where: { segments_date: { gte: range.start, lte: range.end } }, distinct: ["customer_id"], select: { customer_id: true } }),
+  ]);
+  const customerId = selectGoogleAdsReportCustomer(accounts.map(row => row.customer_id), settings?.conversion_owner_customer_id, requestedCustomerId);
+  if (!customerId && accounts.length > 1) fail("customer_required", "Choose customer_id; multiple advertising accounts cannot be combined.");
   const [costRows, conversions] = await Promise.all([
     prisma.googleAdsDailyCost.findMany({
       where: {
@@ -86,7 +102,12 @@ export async function getGoogleAdsRoasReport(startDate: string, endDate: string)
       where: {
         event_type: GOOGLE_ADS_CONVERTED_LEAD_EVENT,
         occurred_at: { gte: range.start, lt: range.endExclusive },
-        ...(customerId ? { OR: [{ attribution_touchpoint: { google_ads_customer_id: customerId } }, { upload_outboxes: { some: { destination_account_id: customerId } } }] } : {}),
+        ...(customerId ? { OR: [
+          { attribution_touchpoint: { google_ads_customer_id: customerId } },
+          { upload_outboxes: { some: { destination_account_id: customerId } } },
+          // Older click captures lack the leaf ID; include them only for an unambiguous single-account feed.
+          ...(accounts.length === 1 && accounts[0].customer_id === customerId ? [{ attribution_touchpoint: { google_ads_customer_id: null } }] : []),
+        ] } : {}),
       },
       select: {
         conversion_event_id: true,

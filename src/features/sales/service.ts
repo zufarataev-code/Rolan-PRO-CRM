@@ -887,6 +887,7 @@ export async function moveDealStage(input: MoveDealStageInput) {
 
       await ensureClosedWonConversion(tx, {
         dealId: deal.deal_id,
+        legacyOrderId: deal.legacy_order_id ?? undefined,
         leadId: deal.lead_id,
         clientId: deal.client_id,
         attributionTouchpointId: deal.attribution_touchpoint_id,

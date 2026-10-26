@@ -18,6 +18,8 @@ test('the Google Ads script payload is checked and normalised', () => {
   }
   const fromCost = parseScriptCostPayload({ customer_id: '1', rows: [{ date: '2026-10-20', campaign_id: 'a', cost: 5.5 }] }, today);
   assert.equal(fromCost.ok && fromCost.payload.rows[0].cost_micros, 5_500_000);
+  const cents = parseScriptCostPayload({ customer_id: '1', rows: [{ date: '2026-10-20', campaign_id: 'a', cost: 0.29 }] }, today);
+  assert.equal(cents.ok && cents.payload.rows[0].cost_micros, 290_000);
   assert.equal(parseScriptCostPayload({ customer_id: '1', rows: [{ date: '2024-01-01', campaign_id: 'a' }] }, today).ok, false, 'too old');
   assert.equal(parseScriptCostPayload({ customer_id: '', rows: [] }, today).ok, false);
   assert.equal(parseScriptCostPayload({ customer_id: '1', rows: [{ date: '2026-10-20', campaign_id: 'a', clicks: -1 }] }, today).ok, false);

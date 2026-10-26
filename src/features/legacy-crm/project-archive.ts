@@ -14,6 +14,11 @@ function records(value: unknown): JsonRecord[] {
 
 const idOf = (record: JsonRecord) => String(record.id ?? "");
 
+/** Archived jobs retain their original financial and acquisition history. */
+export function legacyProjectsIncludingArchive(payload: JsonRecord): JsonRecord[] {
+  return [...new Map([...records(payload.orders), ...records(payload.archivedOrders)].map(record => [idOf(record), record])).values()];
+}
+
 export function enforceProjectArchive<T extends JsonRecord>(current: JsonRecord, next: T, isOwner: boolean): T {
   const archive = records(isOwner ? next.archivedOrders : current.archivedOrders);
   const archivedIds = new Set(archive.map(idOf).filter(Boolean));

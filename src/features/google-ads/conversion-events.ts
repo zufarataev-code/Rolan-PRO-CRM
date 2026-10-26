@@ -177,8 +177,13 @@ export async function ensureClosedWonConversion(
   input: ClosedWonConversionInput,
 ) {
   if (!input.dealId && !input.legacyOrderId) throw new Error("A deal or legacy project is required for a sale conversion.");
-  const legacyTransactionId = input.legacyOrderId ? `crm-project-${input.legacyOrderId}-sale` : null;
-  const prior = legacyTransactionId ? await tx.conversionEvent.findUnique({ where: { transaction_id: legacyTransactionId }, select: { transaction_id: true } }) : null;
+  const legacyOrderId = input.legacyOrderId ?? (input.dealId ? (await tx.deal.findUnique({ where: { deal_id: input.dealId }, select: { legacy_order_id: true } }))?.legacy_order_id ?? undefined : undefined);
+  const legacyTransactionId = legacyOrderId ? `crm-project-${legacyOrderId}-sale` : null;
+  if (legacyOrderId) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`google-ads:sale:${legacyOrderId}`}))`;
+  const prior = legacyOrderId ? await tx.conversionEvent.findFirst({
+    where: { event_type: GOOGLE_ADS_CONVERTED_LEAD_EVENT, OR: [{ transaction_id: legacyTransactionId! }, { deal: { legacy_order_id: legacyOrderId } }] },
+    orderBy: { created_at: "asc" }, select: { transaction_id: true },
+  }) : null;
   const transactionId = prior?.transaction_id ?? (input.dealId ? saleTransactionId(input.dealId) : legacyTransactionId!);
   const settings = await tx.googleAdsIntegrationSetting.findUnique({
     where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },

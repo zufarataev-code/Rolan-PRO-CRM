@@ -21,7 +21,10 @@ export async function runGoogleAdsSyncCycle({ limit = 25 } = {}) {
   if (running) return { skipped: "already_running" as const };
   running = true;
   try {
-    await reconcileLegacyGoogleAdsOutcomes();
+    const legacy = await reconcileLegacyGoogleAdsOutcomes().catch(() => {
+      console.error("[google-ads] legacy reconciliation unavailable");
+      return { recorded: 0, failed: 1 };
+    });
     const settings = await prisma.googleAdsIntegrationSetting.findUnique({
       where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
       select: { upload_enabled: true, conversion_owner_customer_id: true },
@@ -51,7 +54,7 @@ export async function runGoogleAdsSyncCycle({ limit = 25 } = {}) {
       if (!result || result.status === "idle" || result.status === "disabled") break;
       count.audience += 1;
     }
-    return { skipped: null, reconciliation, ...count };
+    return { skipped: null, reconciliation, legacy, ...count };
   } finally {
     running = false;
   }

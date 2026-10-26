@@ -1,13 +1,14 @@
+import { legacyProjectsIncludingArchive } from "@/features/legacy-crm/project-archive";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { GoogleAdsRoasError, validateRoasRange } from "./roas";
+import { GoogleAdsRoasError, validateRoasRange, selectGoogleAdsReportCustomer } from "./roas";
 
 type Row = Record<string, any>;
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.filter(item => item && typeof item === "object") : [];
 const decimal = (value: unknown) => new Prisma.Decimal(typeof value === "number" && Number.isFinite(value) || typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value) ? String(value) : "0");
 const sum = (items: Row[], field: string) => items.reduce<Prisma.Decimal>((total, item) => total.plus(decimal(item[field])), new Prisma.Decimal(0));
-const completed = new Set(["installation_done", "act_signed", "payment_received", "completed", "review_received", "cancelled", "canceled", "lost", "archived"]);
+const completed = new Set(["installation_done", "act_signed", "payment_received", "completed", "review_received", "cancelled", "canceled", "lost"]);
 export const GOOGLE_ADS_REPORT_TIME_ZONE = "America/Los_Angeles";
 
 export function googleAdsDate(value: Date | string) {
@@ -34,23 +35,35 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   const otherPayroll = rows(order.payouts).filter(item => !stageWorkers.has(item.userId));
   const labor = Prisma.Decimal.max(sum(stagePayroll, "amount").plus(sum(otherPayroll, "amount")), sum(transactions.filter(item => item.category === "payroll"), "amount"));
   const expenses = rows(order.extraExpenses);
-  const directExpenses = Prisma.Decimal.max(sum(expenses.filter(item => item.actual === true || item.paid === true || item.paidAt), "amount"), sum(transactions.filter(item => item.category === "project_expense"), "amount"));
-  const cancelled = ["cancelled", "canceled", "lost", "archived"].includes(String(order.status));
+  const actualExpenses = expenses.filter(item => item.actual === true || item.paid === true || item.paidAt);
+  const directCategories = new Set(["project_expense", "subcontractor", "complaint", "delivery", "tools", "bank_fee", "other"]);
+  const directTransactions = transactions.filter(item => item.costBehavior !== "fixed" && directCategories.has(item.category));
+  const sourceExpenseIds = new Set(actualExpenses.map(item => item.id).filter(Boolean));
+  const unresolvedExpenseLinks = directTransactions.filter(item =>
+    item.projectExpenseId && !sourceExpenseIds.has(item.projectExpenseId)
+    || item.source !== "allocation" && !Object.hasOwn(item, "projectExpenseId") && actualExpenses.length > 0);
+  const allocations = directTransactions.filter(item => item.source === "allocation" && !Object.hasOwn(item, "projectExpenseId"));
+  const allocated = actualExpenses.reduce<Prisma.Decimal>((total, expense) => total.plus(Prisma.Decimal.max(
+    decimal(expense.amount), sum(directTransactions.filter(item => expense.id && item.projectExpenseId === expense.id), "amount"),
+  )), new Prisma.Decimal(0));
+  const standalone = directTransactions.filter(item => !allocations.includes(item) && !sourceExpenseIds.has(item.projectExpenseId));
+  const directExpenses = Prisma.Decimal.max(allocated, sum(allocations, "amount")).plus(sum(standalone, "amount"));
+  const cancelled = ["cancelled", "canceled", "lost"].includes(String(order.status));
   const hasFilm = rows(order.measurements?.rooms).some(room => rows(room.windows).length > 0)
     || rows(order.extraServices).some(item => item.quickProjectLine && item.unit === "sqft");
   const issues: string[] = [];
+  if (unresolvedExpenseLinks.length) issues.push("expense_links_not_reviewed");
   if (!completed.has(String(order.status))) issues.push("project_not_completed");
-  if (hasFilm && !cancelled && (order._inventoryDeducted !== true || !Number.isFinite(order._inventoryMaterialCost) || rows(order._inventoryLog).some(item => item.warning))) issues.push("material_cost_not_verified");
-  if (stages.some(stage => stage.status !== "done")) issues.push("work_not_completed");
-  if (expenses.some(item => !(item.actual === true || item.paid === true || item.paidAt))) issues.push("expenses_not_actual");
-  if ([...stagePayroll, ...otherPayroll, ...expenses, ...transactions].some(item => !Number.isFinite(Number(item.amount)))) issues.push("invalid_cost_records");
-  const otherCosts = sum(transactions.filter(item => !["payroll", "project_expense", "inventory_purchase", "refund", "marketing", "advertising", "tax", "owner_draw", "opex"].includes(item.category)), "amount");
+  if ((hasFilm && !cancelled || order._inventoryDeducted === true) && (order._inventoryDeducted !== true || !Number.isFinite(order._inventoryMaterialCost) || rows(order._inventoryLog).some(item => item.warning))) issues.push("material_cost_not_verified");
+  if (!cancelled && stages.some(stage => stage.status !== "done")) issues.push("work_not_completed");
+  if (!cancelled && expenses.some(item => !(item.actual === true || item.paid === true || item.paidAt))) issues.push("expenses_not_actual");
+  if ([...stagePayroll, ...otherPayroll, ...actualExpenses, ...directTransactions].some(item => !Number.isFinite(Number(item.amount)))) issues.push("invalid_cost_records");
   const material = decimal(order._inventoryMaterialCost);
   const parts = order._inventoryDeducted ? new Prisma.Decimal(0) : sum(transactions.filter(item => item.category === "inventory_purchase"), "amount");
-  const directCost = material.plus(parts).plus(labor).plus(directExpenses).plus(otherCosts);
+  const directCost = material.plus(parts).plus(labor).plus(directExpenses);
   // Confirm the source facts, not another editable money total. Later changes invalidate the review.
-  const fingerprint = createHash("sha256").update(JSON.stringify({ status: order.status, material: material.toString(), parts: parts.toString(), labor: labor.toString(), expenses: directExpenses.toString(), otherCosts: otherCosts.toString(), stages, sourceExpenses: expenses, payouts: order.payouts, inventory: order._inventoryLog, issues })).digest("hex");
-  return { received, directCost, fingerprint, issues, costsConfirmed: issues.length === 0 && order.googleAdsCostsReview?.fingerprint === fingerprint };
+  const fingerprint = createHash("sha256").update(JSON.stringify({ status: order.status, material: material.toString(), parts: parts.toString(), labor: labor.toString(), expenses: directExpenses.toString(), stages, sourceExpenses: expenses, bankExpenses: directTransactions, payouts: order.payouts, inventory: order._inventoryLog, issues })).digest("hex");
+  return { received, directCost, fingerprint, issues, unresolvedExpenseLinks: unresolvedExpenseLinks.map(item => ({ transaction_id: item.id, amount: decimal(item.amount).toFixed(2), category: item.category })), expenseChoices: actualExpenses.map(item => ({ expense_id: item.id, label: String(item.label || item.type || item.id), amount: decimal(item.amount).toFixed(2) })), costsConfirmed: issues.length === 0 && order.googleAdsCostsReview?.fingerprint === fingerprint };
 }
 
 type Cost = { customer_id: string; campaign_id: string; campaign_name: string | null; currency: string; cost_amount: Prisma.Decimal; clicks: bigint; impressions: bigint };
@@ -58,6 +71,7 @@ export type CampaignTouchpoint = { acquisition_touchpoint_id: string; lead_id: s
 
 /** Acquisition cohort: spend and leads in the selected dates, those jobs' receipts/costs as of now. */
 export function buildGoogleAdsCampaignReport(costs: Cost[], touchpoints: CampaignTouchpoint[], workspace: Row, startDate: string, endDate: string, customerId: string | null) {
+  const projects = legacyProjectsIncludingArchive(workspace) as Row[];
   const groups = new Map<string, Row>();
   const group = (account: string, campaign: string, currency: string) => {
     const key = `${account}|${campaign}|${currency}`;
@@ -81,7 +95,7 @@ export function buildGoogleAdsCampaignReport(costs: Cost[], touchpoints: Campaig
   const knownPoint = (point: CampaignTouchpoint | undefined) => point && point.google_ads_customer_id && point.google_ads_campaign_id && (!customerId || point.google_ads_customer_id === customerId) && inCohort(point);
   const claimedLeads = new Set<string>();
   let unattributedProjects = 0;
-  for (const order of rows(workspace.orders)) {
+  for (const order of projects) {
     const point = byOrder.get(order.id) ?? byLead.get(order.canonicalLeadId);
     if (!knownPoint(point)) {
       if ((!point || inCohort(point)) && (/google/i.test(String(order.leadSource || order.source || "")) || touchpoints.some(item => item.lead_id === order.canonicalLeadId && (item.gclid || item.gbraid || item.wbraid || item.google_ads_campaign_id || item.utm_source?.toLowerCase() === "google")))) unattributedProjects += 1;
@@ -93,13 +107,13 @@ export function buildGoogleAdsCampaignReport(costs: Cost[], touchpoints: Campaig
     row.leads.add(leadKey); claimedLeads.add(leadKey);
     const money = googleAdsProjectMoney(order, workspace);
     row.received = row.received.plus(money.received);
-    if (!["cancelled", "canceled", "lost", "archived"].includes(String(order.status)) && (order.depositReceived || completed.has(String(order.status)))) row.won += 1;
+    if (!["cancelled", "canceled", "lost"].includes(String(order.status)) && (order.depositReceived || completed.has(String(order.status)))) row.won += 1;
     if (completed.has(String(order.status))) {
       row.realized_revenue = row.realized_revenue.plus(money.received);
       row.direct_cost = row.direct_cost.plus(money.directCost);
       if (!money.costsConfirmed) row.pending_cost_reviews += 1;
     } else row.pending_cost_reviews += 1;
-    row.projects.push({ order_id: order.id, number: order.number || order.id, status: order.status, received: money.received.toFixed(2), direct_cost: money.directCost.toFixed(2), costs_confirmed: money.costsConfirmed, cost_fingerprint: money.fingerprint, issues: money.issues });
+    row.projects.push({ order_id: order.id, number: order.number || order.id, status: order.status, received: money.received.toFixed(2), direct_cost: money.directCost.toFixed(2), costs_confirmed: money.costsConfirmed, cost_fingerprint: money.fingerprint, issues: money.issues, expense_links: money.unresolvedExpenseLinks, expense_choices: money.expenseChoices });
   }
   for (const point of byLead.values()) {
     if (!knownPoint(point) || claimedLeads.has(point.lead_id!)) continue;
@@ -116,7 +130,7 @@ export function buildGoogleAdsCampaignReport(costs: Cost[], touchpoints: Campaig
       roas: row.ad_spend.gt(0) ? row.realized_revenue.div(row.ad_spend).toFixed(4) : null,
       roi_percent: row.ad_spend.gt(0) && !row.pending_cost_reviews ? row.realized_revenue.minus(row.direct_cost).minus(row.ad_spend).div(row.ad_spend).times(100).toFixed(2) : null,
     })).sort((a, b) => Number(b.ad_spend) - Number(a.ad_spend)),
-    projects_without_campaign: rows(workspace.orders).filter(order => !byOrder.has(order.id) && !byLead.has(order.canonicalLeadId)).map(order => ({ order_id: order.id, number: order.number || order.id })),
+    projects_without_campaign: projects.filter(order => !byOrder.has(order.id) && !byLead.has(order.canonicalLeadId)).map(order => ({ order_id: order.id, number: order.number || order.id })),
   };
 }
 
@@ -132,7 +146,7 @@ export async function getGoogleAdsCampaignReport(startDate?: string | null, endD
     prisma.googleAdsIntegrationSetting.findUnique({ where: { setting_key: "default" }, select: { conversion_owner_customer_id: true } }),
   ]);
   const accounts = [...new Set(costs.map(row => row.customer_id))];
-  const customer = requestedCustomerId || settings?.conversion_owner_customer_id || (accounts.length === 1 ? accounts[0] : null);
-  if (!customer && accounts.length > 1) throw new GoogleAdsRoasError("customer_required", "Choose a Google Ads customer_id; multiple accounts must not be combined.");
-  return buildGoogleAdsCampaignReport(costs, touchpoints, (workspace?.payload || {}) as Row, start, end, customer);
+  const customer = selectGoogleAdsReportCustomer(accounts, settings?.conversion_owner_customer_id, requestedCustomerId);
+  const selectionRequired = !customer && accounts.length > 1;
+  return { ...buildGoogleAdsCampaignReport(selectionRequired ? [] : costs, selectionRequired ? [] : touchpoints, (workspace?.payload || {}) as Row, start, end, customer), available_accounts: accounts.sort(), selection_required: selectionRequired };
 }

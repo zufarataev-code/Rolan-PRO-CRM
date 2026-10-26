@@ -2123,29 +2123,38 @@ async function googleAdsCrmRevokeKey() {
 // API. The owner pastes the service-account key and the conversion IDs here;
 // the server sends every 10 minutes, test mode first, live after confirmation.
 function googleAdsReportMoney(value, currency) {
+  if (!/^[A-Z]{3}$/.test(String(currency || 'USD'))) return new Intl.NumberFormat('ru-RU').format(Number(value) || 0) + ' (валюта не указана)';
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: currency || 'USD' }).format(Number(value) || 0);
 }
 function googleAdsCampaignReportHtml(report) {
   if (!report) return '';
   const esc = academyEsc;
-  const issue = key => ({ project_not_completed: 'Проект ещё не завершён', material_cost_not_verified: 'Нужно подтвердить списание и стоимость материала на складе', work_not_completed: 'Не все этапы завершены', expenses_not_actual: 'Есть неподтверждённые фактические расходы', invalid_cost_records: 'Нужно исправить неполные суммы затрат' }[key] || key);
+  const issue = key => ({ project_not_completed: 'Проект ещё не завершён', material_cost_not_verified: 'Нужно подтвердить списание и стоимость материала на складе', work_not_completed: 'Не все этапы завершены', expenses_not_actual: 'Есть неподтверждённые фактические расходы', invalid_cost_records: 'Нужно исправить неполные суммы затрат', expense_links_not_reviewed: 'Нужно связать банковские записи с расходами проекта' }[key] || key);
   return `<div class="mt-3" data-google-ads-profitability>
-    <div class="flex flex-wrap gap-2 items-end"><label class="text-xs">Лиды с<input type="date" id="gads-report-start" value="${esc(report.start_date)}"></label><label class="text-xs">по<input type="date" id="gads-report-end" value="${esc(report.end_date)}"></label><button class="btn-ghost text-sm" onclick="googleAdsReportRange()">Показать</button><button class="btn-ghost text-sm" onclick="googleAdsBindProject()">Привязать исходную кампанию проекта</button></div>
-    <p class="text-xs text-gray-600 mt-2">Когорты по дате первого привлечения · Pacific. Расходы за выбранные даты; оплаты этих проектов — на текущий момент. ROAS: полученные деньги за закрытые проекты / реклама. ROI учитывает подтверждённые прямые затраты; общие расходы компании и налоги не включены. Открытые проекты делают ROI предварительным.</p>
+    <div class="flex flex-wrap gap-2 items-end">${(report.available_accounts || []).length > 1 ? `<label class="text-xs">Аккаунт Google Ads<select id="gads-report-account"><option value="">Выберите аккаунт</option>${report.available_accounts.map(id => `<option value="${esc(id)}" ${id === report.customer_id ? 'selected' : ''}>${esc(id)}</option>`).join('')}</select></label>` : ''}<label class="text-xs">Лиды с<input type="date" id="gads-report-start" value="${esc(report.start_date)}"></label><label class="text-xs">по<input type="date" id="gads-report-end" value="${esc(report.end_date)}"></label><button class="btn-ghost text-sm" onclick="googleAdsReportRange()">Показать</button><button class="btn-ghost text-sm" onclick="googleAdsBindProject()">Привязать исходную кампанию проекта</button></div>
+    <p class="text-xs text-gray-600 mt-2">Когорты по дате первого привлечения · Pacific. Расходы за выбранные даты; оплаты этих проектов — на текущий момент. ROAS: полученные деньги за закрытые проекты / реклама. ROI учитывает подтверждённые прямые затраты; общие расходы компании и налоги не включены. Пока проект открыт или затраты не сверены, ROI не показывается.</p>
     ${report.unattributed_projects ? `<p class="text-xs text-amber-800 mt-2">Проектов Google без подтверждённой кампании: ${Number(report.unattributed_projects)}. Их выручка не распределяется по догадке.</p>` : ''}
     ${(report.campaigns || []).map(c => `<div class="p-3 border bg-white mt-2" style="min-width:0;overflow-wrap:anywhere">
       <div class="font-semibold text-sm">${esc(c.campaign_name)} <span class="text-xs text-gray-500">${esc(c.customer_id)} / ${esc(c.campaign_id)} · ${esc(c.currency)}</span></div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-sm"><div>Реклама<br><b>${googleAdsReportMoney(c.ad_spend, c.currency)}</b></div><div>Лиды / продажи<br><b>${Number(c.leads)} / ${Number(c.won)}</b></div><div>Оплаты закрытых проектов<br><b>${googleAdsReportMoney(c.realized_revenue, c.currency)}</b></div><div>ROAS / ROI<br><b>${c.roas == null ? '—' : esc(c.roas) + '×'} / ${c.roi_percent == null ? 'нужна сверка затрат' : esc(c.roi_percent) + '%'}</b></div></div>
       <p class="text-xs text-gray-500 mt-1">Цена лида ${c.cost_per_lead == null ? '—' : googleAdsReportMoney(c.cost_per_lead, c.currency)} · ${esc(c.clicks)} кликов · все полученные оплаты ${googleAdsReportMoney(c.received, c.currency)}${c.pending_cost_reviews ? ` · проектов до завершения / сверки: ${Number(c.pending_cost_reviews)}` : ''}</p>
-      ${(c.projects || []).length ? `<details class="mt-2"><summary class="text-xs cursor-pointer">Проверить проекты и фактические затраты</summary>${c.projects.map(p => `<div class="text-xs border-t py-2"><b>${esc(p.number)}</b> · получено ${googleAdsReportMoney(p.received, c.currency)} · прямые затраты ${googleAdsReportMoney(p.direct_cost, c.currency)}<div>${(p.issues || []).map(key => esc(issue(key))).join(' · ')}</div>${p.costs_confirmed ? '✓ Затраты сверены владельцем' : !(p.issues || []).length ? `<button class="btn-ghost text-xs" onclick="googleAdsConfirmProjectCosts('${esc(jsQuote(p.order_id))}','${esc(jsQuote(p.cost_fingerprint))}','${esc(jsQuote(p.direct_cost))}','${esc(jsQuote(c.currency))}')">Подтвердить полноту фактических затрат</button>` : ''}</div>`).join('')}</details>` : ''}
+      ${(c.projects || []).length ? `<details class="mt-2"><summary class="text-xs cursor-pointer">Проверить проекты и фактические затраты</summary>${c.projects.map(p => `<div class="text-xs border-t py-2"><b>${esc(p.number)}</b> · получено ${googleAdsReportMoney(p.received, c.currency)} · прямые затраты ${googleAdsReportMoney(p.direct_cost, c.currency)}<div>${(p.issues || []).map(key => esc(issue(key))).join(' · ')}</div>${(p.expense_links || []).map(t => `<label class="block mt-2">Банковский расход ${googleAdsReportMoney(t.amount, c.currency)} · ${esc(t.category)}<select onchange="googleAdsLinkExpense('${esc(jsQuote(p.order_id))}','${esc(jsQuote(t.transaction_id))}',this.value)"><option value="">Сверьте: это оплата существующего расхода?</option><option value="separate">Отдельный расход, не записанный выше</option>${(p.expense_choices || []).map(e => `<option value="${esc(e.expense_id)}">${esc(e.label)} · ${googleAdsReportMoney(e.amount, c.currency)}</option>`).join('')}</select></label>`).join('')}${p.costs_confirmed ? '✓ Затраты сверены владельцем' : !(p.issues || []).length ? `<button class="btn-ghost text-xs" onclick="googleAdsConfirmProjectCosts('${esc(jsQuote(p.order_id))}','${esc(jsQuote(p.cost_fingerprint))}','${esc(jsQuote(p.direct_cost))}','${esc(jsQuote(c.currency))}')">Подтвердить полноту фактических затрат</button>` : ''}</div>`).join('')}</details>` : ''}
     </div>`).join('') || '<p class="text-xs text-gray-500 mt-2">Нет данных за выбранный период.</p>'}
   </div>`;
 }
 function googleAdsReportRange() {
   const start = document.getElementById('gads-report-start')?.value || '';
   const end = document.getElementById('gads-report-end')?.value || '';
-  state.googleAdsCrm = { ...(state.googleAdsCrm || {}), filters: '?' + new URLSearchParams({ start_date: start, end_date: end }) };
+  const customer = document.getElementById('gads-report-account')?.value || state.googleAdsCrm?.report?.customer_id || '';
+  state.googleAdsCrm = { ...(state.googleAdsCrm || {}), filters: '?' + new URLSearchParams({ start_date: start, end_date: end, ...(customer ? { customer_id: customer } : {}) }) };
   loadGoogleAdsCrm(true);
+}
+async function googleAdsLinkExpense(orderId, transactionId, expenseId) {
+  if (!expenseId || currentUser()?.role !== 'owner') return;
+  try {
+    await googleAdsConvRequest('/api/v1/integrations/google-ads/project', 'POST', { operation: 'link_expense', order_id: orderId, transaction_id: transactionId, expense_id: expenseId === 'separate' ? null : expenseId });
+    loadGoogleAdsCrm(true);
+  } catch (error) { alert(error.message); }
 }
 async function googleAdsConfirmProjectCosts(orderId, fingerprint, amount, currency) {
   if (currentUser()?.role !== 'owner' || !confirm(`Подтвердить, что все прямые затраты проекта внесены и сверены: ${googleAdsReportMoney(amount, currency)}? Сверьте материалы, начисления, комиссии и расходы. Отсутствующие затраты завышают ROI.`)) return;

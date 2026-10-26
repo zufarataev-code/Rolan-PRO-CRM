@@ -1,6 +1,7 @@
+import { legacyProjectsIncludingArchive } from "@/features/legacy-crm/project-archive";
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
-import { findAcquisitionTouchpoint, normalizeAdsId, persistLeadAttribution } from "@/features/google-ads/attribution";
+import { normalizeAdsId, persistLeadAttribution } from "@/features/google-ads/attribution";
 import { googleAdsProjectMoney } from "@/features/google-ads/campaign-report";
 import { prisma } from "@/lib/db";
 import { ROLE_CODES } from "@/lib/auth/constants";
@@ -12,11 +13,20 @@ export async function POST(request: NextRequest) {
   const auth = await requireRequestSession(request, [ROLE_CODES.OWNER]);
   if (!auth.ok) return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Google Ads project review is owner-only.");
   const body = await request.json().catch(() => null);
-  if (!body || typeof body.order_id !== "string" || !["bind_campaign", "confirm_costs"].includes(body.operation)) return apiError(400, "invalid_payload", "An order_id and supported operation are required.");
+  if (!body || typeof body.order_id !== "string" || !["bind_campaign", "confirm_costs", "link_expense"].includes(body.operation)) return apiError(400, "invalid_payload", "An order_id and supported operation are required.");
   const workspace = await prisma.legacyWorkspace.findUnique({ where: { workspace_id: "primary" } });
   const payload = structuredClone(workspace?.payload || {}) as Record<string, any>;
-  const order = (payload.orders || []).find((item: Record<string, any>) => item.id === body.order_id);
+  const order = legacyProjectsIncludingArchive(payload).find(item => item.id === body.order_id) as Record<string, any> | undefined;
   if (!workspace || !order) return apiError(404, "project_not_found", "Project not found.");
+  if (body.operation === "link_expense") {
+    if (typeof body.transaction_id !== "string" || body.expense_id !== null && typeof body.expense_id !== "string") return apiError(400, "invalid_expense_link", "A bank entry and expense link are required.");
+    const transaction = (payload.finance?.transactions || []).find((item: Record<string, any>) => item.id === body.transaction_id && item.orderId === order.id && item.type === "expense");
+    const expense = (order.extraExpenses || []).find((item: Record<string, any>) => item.id === body.expense_id && (item.actual === true || item.paid === true || item.paidAt));
+    if (!transaction || body.expense_id !== null && !expense) return apiError(400, "invalid_expense_link", "Choose an existing project expense or explicitly mark this bank entry as separate.");
+    transaction.projectExpenseId = body.expense_id;
+    const saved = await prisma.legacyWorkspace.updateMany({ where: { workspace_id: "primary", revision: workspace.revision }, data: { payload, revision: { increment: 1 }, updated_by: auth.session.user.user_id } });
+    return saved.count === 1 ? apiSuccess({ linked: true }) : apiError(409, "revision_conflict", "CRM changed; refresh before linking costs.");
+  }
   if (body.operation === "confirm_costs") {
     const money = googleAdsProjectMoney(order, payload);
     if (money.issues.length) return apiError(400, "costs_incomplete", "Complete the recorded job, warehouse issue and actual expenses before reviewing costs.", { issues: money.issues });
@@ -32,10 +42,11 @@ export async function POST(request: NextRequest) {
   const campaign = await prisma.googleAdsDailyCost.findFirst({ where: { customer_id: customerId, campaign_id: campaignId } });
   if (!campaign) return apiError(400, "unknown_campaign", "Import this campaign's costs before linking a project.");
   const existing = await prisma.acquisitionTouchpoint.findUnique({ where: { legacy_order_id: order.id } });
-  if (existing) return apiError(409, "attribution_already_recorded", "Original acquisition is already recorded and cannot be silently reassigned.");
+  const originalLeadPoint = order.canonicalLeadId ? await prisma.acquisitionTouchpoint.findFirst({ where: { lead_id: order.canonicalLeadId, google_ads_customer_id: { not: null }, google_ads_campaign_id: { not: null } }, orderBy: { captured_at: "asc" } }) : null;
+  if (existing || originalLeadPoint) return apiError(409, "attribution_already_recorded", "Original acquisition is already recorded and cannot be silently reassigned.");
   const client = (payload.clients || []).find((item: Record<string, any>) => item.id === order.clientId);
-  const status = await prisma.pipelineStatus.findUnique({ where: { status_code: "NEW_LEAD" } });
-  if (!status) return apiError(503, "pipeline_not_configured", "NEW_LEAD is not configured.");
+  const status = await prisma.pipelineStatus.findUnique({ where: { status_code: "CONTACTED" } });
+  if (!status) return apiError(503, "pipeline_not_configured", "CONTACTED is not configured.");
   const capturedAt = new Date(order.createdAt);
   if (Number.isNaN(capturedAt.getTime())) return apiError(400, "acquisition_date_missing", "The original project creation date is required.");
   try {
@@ -46,15 +57,20 @@ export async function POST(request: NextRequest) {
         where: { external_source_external_submission_id: { external_source: "legacy_order", external_submission_id: order.id } }, update: {},
         create: { name: String(client?.name || order.number || order.id).slice(0, 160), phone: typeof client?.phone === "string" ? client.phone.slice(0, 40) : null, email: typeof client?.email === "string" ? client.email.slice(0, 191) : null, source: "google_ads", external_source: "legacy_order", external_submission_id: order.id, pipeline_status_id: status.pipeline_status_id, created_at: capturedAt },
       });
-      const original = await findAcquisitionTouchpoint(tx, { lead_id: lead.lead_id });
+      const original = await tx.acquisitionTouchpoint.findFirst({
+        where: { lead_id: lead.lead_id, OR: [{ gclid: { not: null } }, { gbraid: { not: null } }, { wbraid: { not: null } }] },
+        orderBy: { captured_at: "asc" },
+      });
       const capture = await persistLeadAttribution(tx, lead.lead_id, {
-        googleAdsCustomerId: customerId, googleAdsCampaignId: campaignId, capturedAt: original?.captured_at ?? capturedAt,
+        googleAdsCustomerId: customerId, googleAdsCampaignId: campaignId, capturedAt: original?.captured_at ?? lead.created_at,
         gclid: typeof body.gclid === "string" && body.gclid.trim() ? body.gclid : original?.gclid,
         gbraid: original?.gbraid, wbraid: original?.wbraid,
         utmSource: "google", utmMedium: "cpc", source: "owner_verified_project",
         sessionAttributes: { source_channel: body.source_channel === "PHONE" ? "PHONE" : "WEB" },
         consent: body.ad_user_data === "GRANTED" ? { adUserData: "GRANTED", adPersonalization: "UNKNOWN", audienceMarketingEligible: false, source: body.consent_evidence.slice(0, 100) } : null,
       });
+      order.canonicalLeadId = lead.lead_id;
+      await tx.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload } });
       await tx.acquisitionTouchpoint.update({ where: { acquisition_touchpoint_id: capture.acquisitionTouchpointId! }, data: { legacy_order_id: order.id } });
       return { acquisition_touchpoint_id: capture.acquisitionTouchpointId };
     });

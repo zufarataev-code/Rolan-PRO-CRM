@@ -30,11 +30,17 @@ closed-job revenue, ROAS and direct-cost ROI:
   allocations do not duplicate the job's payment receipts.
 - Costs come from the existing warehouse issue, stage payroll/accruals,
   confirmed payouts, actual expenses and project-linked finance entries.
+  Bank entries that might pay an existing project expense require the owner
+  to link that expense or explicitly mark the entry as additional. This prevents
+  double charging without guessing which two records represent the same cost.
   The report does not create another costing ledger. Company overhead, taxes
   and advertising already in the denominator are excluded from direct costs.
 - ROI remains unknown while work/material/expense facts are incomplete or a
   project awaits the owner's cost review. The owner confirms completeness
-  after checking the amount and source records. A source-fact fingerprint
+  after checking the amount and source records. Cancelled jobs may review only
+  their sunk actual costs without completing abandoned work. Archived jobs retain
+  their original financial history; archiving alone is not a sale retraction.
+  A source-fact fingerprint
   invalidates that review when costs change. Missing costs never become a
   silently assumed zero-profit calculation.
 - This is an acquisition-cohort report: leads/spend belong to the selected

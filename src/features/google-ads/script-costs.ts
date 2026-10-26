@@ -30,6 +30,11 @@ function int(value: unknown) {
   return (typeof value === "number" || typeof value === "string" && /^\d+$/.test(value)) && Number.isSafeInteger(n) && n >= 0 ? n : null;
 }
 
+function costToMicros(value: unknown) {
+  try { return int(new Prisma.Decimal(String(value)).times(1_000_000).toDecimalPlaces(0).toNumber()); }
+  catch { return null; }
+}
+
 /** Checks what the script sent; returns the clean payload or the first problem. */
 export function parseScriptCostPayload(body: unknown, today = new Date()): { ok: true; payload: ScriptCostPayload } | { ok: false; error: string } {
   if (!body || typeof body !== "object") return { ok: false, error: "JSON body is required." };
@@ -49,7 +54,7 @@ export function parseScriptCostPayload(body: unknown, today = new Date()): { ok:
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z")) || new Date(date + "T00:00:00Z").toISOString().slice(0, 10) !== date || date < oldest || date > newest) return { ok: false, error: `rows[${index}].date must be YYYY-MM-DD within the last 400 days.` };
     const campaignId = String(row.campaign_id ?? "").trim();
     if (!campaignId || campaignId.length > 64) return { ok: false, error: `rows[${index}].campaign_id is required.` };
-    const costMicros = row.cost_micros !== undefined ? int(row.cost_micros) : int(Number(row.cost) * 1_000_000);
+    const costMicros = row.cost_micros !== undefined ? int(row.cost_micros) : costToMicros(row.cost);
     const clicks = int(row.clicks ?? 0);
     const impressions = int(row.impressions ?? 0);
     if (costMicros === null || clicks === null || impressions === null) return { ok: false, error: `rows[${index}] has an invalid number.` };
