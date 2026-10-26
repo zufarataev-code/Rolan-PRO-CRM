@@ -925,7 +925,19 @@ function calendarEventsForOrder(o, type) {
       const dt = new Date(assignment.installationAt);
       if (!assignment.installationAt || Number.isNaN(dt.getTime())) return [];
       const scoped = { ...o, installerIds: assignment.installerIds || [], installationAt: assignment.installationAt };
-      return [{ id: `${o.id}_service_${group.id}`, o: scoped, kind: type, dt, info, note: group.name }];
+      // A service that runs several days shows on each of them (Owner, 2026-10-25).
+      const kind = typeof installWorkKind === 'function' ? installWorkKind(group) : 'film';
+      const end = typeof installPlanEnd === 'function' ? installPlanEnd(assignment) : null;
+      const dayKey = d => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+      const days = [new Date(dt)];
+      const cursor = new Date(dt);
+      while (end && days.length < 14) {
+        cursor.setDate(cursor.getDate() + 1);
+        cursor.setHours(dt.getHours(), dt.getMinutes(), 0, 0);
+        if (dayKey(cursor) > dayKey(end)) break;
+        days.push(new Date(cursor));
+      }
+      return days.map((day, index) => ({ id: `${o.id}_service_${group.id}${index ? `_${index}` : ''}`, o: scoped, kind: type, dt: day, info, note: group.name, service: { name: group.name, kind, end, day: index + 1, days: days.length } }));
     });
   }
   return calendarEventDatesForOrder(o, type).map((x, idx) => ({
@@ -2231,4 +2243,243 @@ async function googleAdsConvSyncNow() {
     alert(result?.skipped ? `Не отправлено: ${why[result.skipped] || result.skipped}.` : `Готово: отправлено ${result?.uploads || 0}, проверено статусов ${result?.statuses || 0}.`);
     loadGoogleAdsConversions(true);
   } catch (error) { alert('Ошибка отправки: ' + (error?.message || error)); }
+}
+
+// ---------- НАЗНАЧИТЬ МОНТАЖ ПО УСЛУГАМ (Owner, 2026-10-25, макет 12–14) ----------
+// «Назначить монтаж» opens its own window: the project's services in order,
+// each with its specialists, a start and an end. What is known now is planned
+// now; the rest stays «не назначено» and is planned when its time comes. The
+// calendar and the kanban show each service as a coloured stripe.
+function installWorkKind(group) {
+  const offering = serviceOffering(group?.lines?.[0]?.offeringId || '');
+  const text = `${group?.name || ''} ${offering?.name || ''}`.toLowerCase();
+  if (group?.windows?.length) return 'film';
+  if (/силикон|silicon|герметик|sealant/.test(text) || offering?.unit === 'lft') return 'silicone';
+  if (/блок|питан|электр|провод|power|wiring|electric/.test(text)) return 'electric';
+  if (/плёнк|пленк|film|монтаж/.test(text)) return 'film';
+  return 'other';
+}
+function installWorkKindMeta(kind) {
+  return ({
+    film: { color: '#DC2626', label: 'Монтаж плёнки' },
+    electric: { color: '#2563EB', label: 'Электрика' },
+    silicone: { color: '#6B7280', label: 'Силикон' },
+    other: { color: '#475569', label: 'Работа' },
+  })[kind] || { color: '#475569', label: 'Работа' };
+}
+/** The planned end: saved, else the start plus 8 hours. */
+function installPlanEnd(plan) {
+  const end = Date.parse(plan?.endsAt || '');
+  if (!Number.isNaN(end)) return new Date(end);
+  const start = Date.parse(plan?.installationAt || '');
+  return Number.isNaN(start) ? null : new Date(start + 8 * 3600 * 1000);
+}
+function installPlanComplete(plan) {
+  return !!plan?.installationAt && (plan.installerIds || []).length > 0;
+}
+/** Services in order with their plan, kind and state. */
+function installWindowRows(o) {
+  const plans = projectPlannedSchedules(o);
+  return projectServiceGroups(o).map((group, index) => {
+    const plan = plans.find(item => item.id === group.id) || { id: group.id, installationAt: '', installerIds: [] };
+    const kind = installWorkKind(group);
+    const done = projectServiceProgress(o, group.id).status === 'done';
+    return { group, plan, kind, meta: installWorkKindMeta(kind), index, done, planned: installPlanComplete(plan) };
+  });
+}
+function installRangeText(plan) {
+  const start = plan?.installationAt ? new Date(plan.installationAt) : null;
+  const end = installPlanEnd(plan);
+  if (!start || Number.isNaN(start.getTime())) return '';
+  const day = d => d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
+  const time = d => d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  if (!end) return `${day(start)} ${time(start)}`;
+  return start.toDateString() === end.toDateString() ? `${day(start)} ${time(start)}–${time(end)}` : `${day(start)} ${time(start)} → ${day(end)} ${time(end)}`;
+}
+function installCrewText(plan) {
+  return (plan?.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', ');
+}
+/** Other jobs of this specialist that overlap the given time. */
+function installBusyWith(userId, startIso, endIso, skipOrderId, skipKey) {
+  const start = Date.parse(startIso || '');
+  const end = Date.parse(endIso || '') || (start + 8 * 3600 * 1000);
+  if (Number.isNaN(start)) return [];
+  return (db.orders || []).flatMap(order => (order.serviceSchedules || [])
+    .filter(plan => (plan.installerIds || []).includes(userId) && !(order.id === skipOrderId && plan.id === skipKey) && !CLOSED_PROJECT_STATUSES.includes(order.status) && order.status !== 'cancelled')
+    .filter(plan => { const s = Date.parse(plan.installationAt || ''); const e = installPlanEnd(plan)?.getTime(); return !Number.isNaN(s) && e && s < end && e > start; })
+    .map(() => order.number));
+}
+function openInstallWindow(oid, key = '') {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  state._installWindow = { oid, key, draft: null };
+  if (key) {
+    const row = installWindowRows(o).find(item => item.group.id === key);
+    if (row) state._installWindow.draft = { installerIds: [...(row.plan.installerIds || [])], installationAt: row.plan.installationAt || '', endsAt: row.plan.endsAt || installPlanEnd(row.plan)?.toISOString() || '', note: row.plan.note || '' };
+  }
+  state.modal = installWindowHtml(o);
+  render();
+}
+function closeInstallWindow() {
+  state._installWindow = null;
+  closeModal();
+}
+function installWindowHtml(o) {
+  const w = state._installWindow || {};
+  const rows = installWindowRows(o);
+  const plannedCount = rows.filter(row => row.planned).length;
+  const head = (kicker, title, sub, back) => `<header class="order-workspace-modal-head rp-dirwin-head">
+      <button type="button" class="workspace-back" onclick="${back}">${back.startsWith('closeInstallWindow') ? '← К проекту' : '← Все услуги'}</button>
+      <div class="order-workspace-modal-heading"><div><div class="order-workspace-modal-kicker">${kicker}</div><h3>${title}</h3>${sub ? `<div class="text-xs text-gray-500">${sub}</div>` : ''}</div></div>
+    </header>`;
+  const shell = (color, inner) => `<div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeInstallWindow()">
+    <div class="modal-content workspace-modal order-workspace-modal rp-dirwin install-window" style="--workspace-color:${color};--dir-color:${color}" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Назначить монтаж">${inner}</div></div>`;
+  const row = rows.find(item => item.group.id === w.key);
+  if (row && w.draft) {
+    const d = w.draft;
+    const users = usersByRole('installer').filter(user => user.active !== false);
+    const local = iso => (iso ? datetimeLocalValue(iso) : '');
+    const prev = rows[row.index - 1];
+    const chips = users.map(user => {
+      const on = d.installerIds.includes(user.id);
+      const busy = installBusyWith(user.id, d.installationAt, d.endsAt, o.id, row.group.id);
+      return `<button type="button" class="install-chip ${on ? 'on' : ''}" aria-pressed="${on}" onclick="installDraftToggle('${user.id}')">${on ? '✓ ' : ''}${academyEsc(user.name)}${user.installerLevel === 'senior' ? ' ★' : ''}${busy.length ? `<small>занят: ${academyEsc(busy[0])}</small>` : ''}</button>`;
+    }).join('') || '<div class="text-sm text-gray-500">В команде нет специалистов по установке — добавьте их в «Команде».</div>';
+    const quick = [['4 часа', 4, 0], ['1 день', 0, 1], ['2 дня', 0, 2], ['3 дня', 0, 3]].map(([label, hours, days]) => `<button type="button" class="install-quick" onclick="installDraftDuration(${hours}, ${days})">${label}</button>`).join('')
+      + (prev?.planned ? `<button type="button" class="install-quick" onclick="installDraftAfterPrevious()">После услуги ${prev.index + 1}</button>` : '');
+    return shell(row.meta.color, `${head(`УСЛУГА ${row.index + 1} ИЗ ${rows.length} · ${academyEsc(row.meta.label)}`, academyEsc(row.group.name), `${academyEsc(o.number)} · ${academyEsc(getClient(o.clientId)?.name || '')}`, `openInstallWindow('${o.id}')`)}
+      <div class="order-workspace-modal-body rp-dirwin-body">
+        ${row.done ? '<div class="rp-dirwin-warn">Услуга выполнена — её даты и исполнители остаются как история.</div>' : ''}
+        <div class="rp-dirwin-sub">Исполнители</div>
+        <div class="install-chips">${chips}</div>
+        <div class="rp-dirwin-sub">Когда</div>
+        <div class="install-dates">
+          <label>Начало<input type="datetime-local" value="${local(d.installationAt)}" onchange="installDraftSet('installationAt', this.value)"></label>
+          <label>Окончание<input type="datetime-local" value="${local(d.endsAt)}" onchange="installDraftSet('endsAt', this.value)"></label>
+        </div>
+        <div class="install-quicks">${quick}</div>
+        <label class="install-note">Заметка бригаде<input value="${academyEsc(d.note || '')}" placeholder="доступ, парковка, что взять" onchange="installDraftSet('note', this.value)"></label>
+      </div>
+      <div class="rp-dirwin-foot install-foot">
+        ${row.done ? '' : `<button type="button" class="btn-primary rp-dirwin-next" style="background:${row.meta.color} !important;border-color:${row.meta.color} !important;color:#fff !important" onclick="installSaveService('${o.id}','${jsQuote(row.group.id)}')">Назначить эту услугу</button>`}
+        <button type="button" class="btn-ghost w-full" onclick="openInstallWindow('${o.id}')">Пока не назначать</button>
+        ${row.planned && !row.done && !PROJECT_SCHEDULED_STATUSES.includes(o.status) ? `<button type="button" class="btn-ghost w-full text-red-600" onclick="installClearService('${o.id}','${jsQuote(row.group.id)}')">Снять назначение</button>` : ''}
+      </div>`);
+  }
+  const list = rows.map(item => {
+    const state_ = item.done ? ['ВЫПОЛНЕНО', '#15803D', '#DCFCE7'] : item.planned ? ['НАЗНАЧЕНО', '#15803D', '#DCFCE7'] : ['НЕ НАЗНАЧЕНО', '#92400E', '#FEF3C7'];
+    return `<button type="button" class="install-row ${item.planned || item.done ? '' : 'open'}" style="--work-color:${item.meta.color}" onclick="openInstallWindow('${o.id}','${jsQuote(item.group.id)}')">
+      <span class="install-row-top"><b>${item.index + 1} · ${academyEsc(item.group.name)}</b><span class="install-state" style="color:${state_[1]};background:${state_[2]}">${state_[0]}</span></span>
+      <span class="install-row-meta">${academyEsc(item.meta.label)}${item.group.windows.length ? ` · ${item.group.windows.length} ${projectWindowsWord(item.group.windows.length)}` : ''}</span>
+      ${item.planned ? `<span class="install-row-when">📅 ${academyEsc(installRangeText(item.plan))}</span><span class="install-row-who">👷 ${academyEsc(installCrewText(item.plan))}</span>` : '<span class="install-row-go">Назначить исполнителя и даты →</span>'}
+    </button>`;
+  }).join('');
+  const draft = o.status === 'proposal_accepted';
+  const footer = draft
+    ? (plannedCount ? `<button type="button" class="btn-primary rp-dirwin-next" style="background:#0F2440 !important;border-color:#0F2440 !important;color:#fff !important" onclick="installConfirm('${o.id}')">Подтвердить монтаж: ${plannedCount} ${projectPlural(plannedCount, 'услуга', 'услуги', 'услуг')} в календарь</button>` : '<div class="text-sm text-gray-500 text-center">Назначьте хотя бы одну услугу — остальные можно позже.</div>')
+    : `<button type="button" class="btn-primary rp-dirwin-next" style="background:#0F2440 !important;border-color:#0F2440 !important;color:#fff !important" onclick="closeInstallWindow()">Готово</button>`;
+  return shell('#DC2626', `${head(`НАЗНАЧИТЬ МОНТАЖ · ${academyEsc(o.number)}`, academyEsc(getClient(o.clientId)?.name || 'Проект'), `Назначено ${plannedCount} из ${rows.length} · остальные можно назначить позже`, 'closeInstallWindow()')}
+    <div class="install-progress"><span style="width:${rows.length ? Math.round(plannedCount / rows.length * 100) : 0}%"></span></div>
+    <div class="order-workspace-modal-body rp-dirwin-body">
+      <div class="rp-dirwin-sub">Услуги проекта по порядку</div>
+      ${list || '<div class="rp-dirwin-empty">В проекте нет услуг.</div>'}
+      <div class="install-hint">Назначайте то, что известно сейчас. Остальные услуги останутся «не назначено» — назначите, когда подойдёт время. Клиент получит сообщение о датах.</div>
+    </div>
+    <div class="rp-dirwin-foot">${footer}</div>`);
+}
+function installRerender() {
+  const o = getOrder(state._installWindow?.oid);
+  if (!o) return;
+  preservePositionForNextRender();
+  state.modal = installWindowHtml(o);
+  render();
+}
+function installDraftToggle(userId) {
+  const d = state._installWindow?.draft;
+  if (!d) return;
+  d.installerIds = d.installerIds.includes(userId) ? d.installerIds.filter(id => id !== userId) : [...d.installerIds, userId];
+  installRerender();
+}
+function installDraftSet(field, value) {
+  const d = state._installWindow?.draft;
+  if (!d) return;
+  if (field === 'note') { d.note = String(value || '').slice(0, 300); return; }
+  const at = value ? new Date(value) : null;
+  d[field] = at && !Number.isNaN(at.getTime()) ? at.toISOString() : '';
+  if (field === 'installationAt' && d.installationAt && (!d.endsAt || Date.parse(d.endsAt) <= Date.parse(d.installationAt))) d.endsAt = new Date(Date.parse(d.installationAt) + 8 * 3600 * 1000).toISOString();
+  installRerender();
+}
+/** «4 часа» from the start; «2 дня» = the start day and the next one, 8 working hours each. */
+function installDraftDuration(hours, days = 0) {
+  const d = state._installWindow?.draft;
+  if (!d) return;
+  if (!d.installationAt) { const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(9, 0, 0, 0); d.installationAt = t.toISOString(); }
+  const start = Date.parse(d.installationAt);
+  const span = days > 0 ? (days - 1) * 24 * 3600 * 1000 + 8 * 3600 * 1000 : hours * 3600 * 1000;
+  d.endsAt = new Date(start + span).toISOString();
+  installRerender();
+}
+function installDraftAfterPrevious() {
+  const w = state._installWindow;
+  const o = getOrder(w?.oid);
+  const rows = o ? installWindowRows(o) : [];
+  const index = rows.findIndex(item => item.group.id === w.key);
+  const prev = rows[index - 1];
+  const end = prev ? installPlanEnd(prev.plan) : null;
+  if (!end || !w.draft) return;
+  const next = new Date(end);
+  next.setDate(next.getDate() + 1); next.setHours(9, 0, 0, 0);
+  w.draft.installationAt = next.toISOString();
+  w.draft.endsAt = new Date(next.getTime() + 8 * 3600 * 1000).toISOString();
+  installRerender();
+}
+function installSaveService(oid, key) {
+  const o = getOrder(oid);
+  const d = state._installWindow?.draft;
+  if (!o || !d || !projectCardCanPlan(o)) return;
+  if (!d.installerIds.length) return alert('Выберите хотя бы одного исполнителя.');
+  if (!d.installationAt) return alert('Укажите начало.');
+  const endsAt = d.endsAt && Date.parse(d.endsAt) > Date.parse(d.installationAt) ? d.endsAt : new Date(Date.parse(d.installationAt) + 8 * 3600 * 1000).toISOString();
+  const entry = projectCardSchedule(o, key);
+  const next = { ...entry, installerIds: [...d.installerIds], installationAt: d.installationAt, endsAt, note: d.note || '' };
+  if (!projectCardKeepsPlan(o, entry, next)) return;
+  const wasPlanned = installPlanComplete(entry);
+  Object.assign(entry, next);
+  projectCardSyncCrew(o);
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: new Date().toISOString(), key: 'service_planned', by: state.currentUserId, note: `${projectServiceGroups(o).find(group => group.id === key)?.name || 'Услуга'}: ${installRangeText(entry)} · ${installCrewText(entry)}` });
+  save();
+  // Once the project is scheduled, a newly planned service is the client's news too.
+  if (PROJECT_SCHEDULED_STATUSES.includes(o.status) && !wasPlanned && typeof notifyClientEventScheduled === 'function') notifyClientEventScheduled(oid, 'install');
+  openInstallWindow(oid);
+}
+function installClearService(oid, key) {
+  const o = getOrder(oid);
+  if (!o || !projectCardCanPlan(o) || PROJECT_SCHEDULED_STATUSES.includes(o.status)) return;
+  const entry = projectCardSchedule(o, key);
+  entry.installerIds = []; entry.installationAt = ''; delete entry.endsAt;
+  projectCardSyncCrew(o);
+  save();
+  openInstallWindow(oid);
+}
+/** «Подтвердить монтаж» with what is planned; the rest stays to plan later. */
+function installConfirm(oid) {
+  const o = getOrder(oid);
+  if (!o) return;
+  state._installWindow = null;
+  closeModal();
+  projectCardConfirmInstallation(oid);
+}
+/** Coloured stripes of a project's services for the kanban card. */
+function installStripesHtml(o) {
+  const rows = installWindowRows(o);
+  if (!rows.length || !['proposal_accepted', ...PROJECT_PLANNING_STATUSES, ...CLOSED_PROJECT_STATUSES].includes(o.status)) return '';
+  // One labelled colour stripe per service: «Монтаж плёнки · Ceramic · пн, 2 нояб.» red, «Силикон — не назначено» grey dashed.
+  const stripes = rows.map(row => {
+    const when = row.done ? '✓ готово' : row.planned ? installRangeText(row.plan).split(' ').slice(0, 3).join(' ') : 'не назначено';
+    const label = row.meta.label === row.group.name ? row.group.name : `${row.meta.label} · ${row.group.name}`;
+    const style = row.planned || row.done ? `background:${row.meta.color};color:#fff` : `border:1.5px dashed ${row.meta.color};color:#475569;background:#fff`;
+    return `<div class="install-stripe" style="${style}"><span>${academyEsc(label)}</span><b>${academyEsc(when)}</b></div>`;
+  }).join('');
+  return `<div class="install-stripes" data-install-stripes>${stripes}</div>`;
 }

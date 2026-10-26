@@ -161,7 +161,7 @@ test("accepted proposal must pass production preparation before installation wit
   assert.match(source, /disabled: !canManage \|\| !projectProposalAccepted\(o\) \|\| !projectProductionPrepared\(o\)/);
   // The crew-and-date form opens straight from the next step (Owner, 2026-10-23).
   assert.match(nextAction, /title: 'Назначить монтаж'[^\n]*onclick: `scheduleInstallationPrompt\('\$\{o\.id\}'\)`/);
-  assert.match(nextAction, /title: 'Подтвердить монтаж'[\s\S]*?onclick: `projectCardConfirmInstallation\('\$\{o\.id\}'\)`/);
+  assert.match(nextAction, /title: 'Подтвердить монтаж'[\s\S]*?onclick: `scheduleInstallationPrompt\('\$\{o\.id\}'\)`/);
   assert.match(source, /function confirmProjectProductionReady\(oid\)/);
   assert.match(source, /o\.productionReadyAt = new Date\(\)\.toISOString\(\)/);
   assert.match(scheduler, /ensureProductionReadyForInstallation\(o\)/);
