@@ -23,6 +23,14 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-26 handoff — manual price on the price sheet + pre-send KP summary (PR #410)
+
+- Merged `28b4c03`, deployed; prod loads `projectSetLinePrice` / `proposalWizardSummaryHtml`.
+- Direction window «Цена»: per-line unit price input, list price shown, «вручную» badge and «↺ прайс». One setter `projectSetLinePrice` (also behind `projectCardSetPrice`); owner min/max corridor still enforced.
+- Server `service-solutions.ts`: typed unit price accepted on a saved quantity line with honest type/flags; new lines and flag tampering keep the directory price.
+- KP wizard «Как увидит» starts with «Проверьте перед отправкой»: client contacts, lines with unit prices, total, deposit, terms.
+- Tests: `manual-price.test.ts`; service-units and project-card tests updated to the owner's new rule.
+
 ## 2026-10-26 handoff — date and time required for every booking (PR #408)
 
 - Merged `ae13250`, deployed; prod loads `scheduleReadDateTime` / `installDateTimeHtml`.
