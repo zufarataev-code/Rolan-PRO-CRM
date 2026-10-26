@@ -1389,3 +1389,11 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Context recommendations cover Smart zones/power/electrician, Safety/outside attachment/silicone and missing measurements. They only use active Price Book services and require explicit Add/Open or Dismiss; no automatic service or charge is created.
 - The Project calculation and Proposal use the same ordered service list and approved versioned snapshot. Customer Proposal data does not include material cost, specialist pay or direct expenses.
 - Verification: focused Project/production suite 53/53; full suite 724/724; `tsc --noEmit` clean; production build successful (121 pages). Production is unchanged; merge/deploy still require the Owner's explicit confirmation.
+
+## 2026-10-25 handoff — working client appointment change link (Codex)
+
+- Branch `codex/client-appointment-link-20261025`, based on `origin/main` `ada23a4f`.
+- Root cause: appointment emails advertised reschedule/cancel but linked to the legacy browser hash `#/client/{orderId}`. That route was not a public server-backed client page, so an external client could reach login or an empty workspace instead of the appointment.
+- Appointment notices now obtain a signed, one-year, order-scoped token from the authenticated server and link to `/appointment/{token}` on the same public origin. If a link cannot be created, the message no longer promises a broken action and tells the client to reply to the manager.
+- The public mobile page exposes only the current appointment, customer display name, project number and object address. It accepts one pending reschedule/cancel request; the server writes it atomically into `LegacyWorkspace`, the project timeline and the in-app inbox of the assigned manager and owners. It never exposes the CRM workspace or accepts automatic schedule changes.
+- Verification: public appointment + Project request access tests 12/12; full suite 858/858; `tsc --noEmit` clean; production build successful (125 pages); `git diff --check` clean. No production email was sent and production was not changed.

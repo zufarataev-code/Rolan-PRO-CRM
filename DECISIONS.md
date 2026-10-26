@@ -723,3 +723,9 @@ Owner required the active CRM to behave as a real multi-service ERP project: one
 - A film direction, add-on service or stock state must keep the same colour and icon in every CRM workspace. Individual screens must not introduce their own competing palettes.
 - `src/features/legacy-crm/entity-tokens.ts` owns the tokens. The active legacy workspace consumes the same table through injected CSS custom properties and `window.RP_ENTITY` before its script executes.
 - Unknown or historical values render with the neutral fallback. Changing a canonical token must update every consumer through this shared source rather than by editing each screen separately.
+
+## 2026-10-25 — Client appointment actions use a dedicated signed public page
+
+- A customer notification must never link to an internal legacy CRM hash route. Reschedule/cancel links use a server-signed, expiring token and a dedicated public page that exposes only the customer's active appointment.
+- A customer action creates a pending request; it never changes or cancels the appointment automatically. The assigned manager or Owner approves or declines it inside the Project so the calendar, status and audit timeline remain authoritative.
+- When the server cannot create a valid public link, the message must give a truthful reply-to-manager fallback instead of displaying a dead or placeholder URL.
