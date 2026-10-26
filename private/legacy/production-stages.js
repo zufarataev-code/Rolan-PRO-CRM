@@ -439,7 +439,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
     const unitPrice = line.kind === 'windows' ? (line.qty > 0 ? line.price / line.qty / coefficient : Number(line.windows[0]?.pricePerSqft) || 0) : line.kind === 'quantity' ? Number(source?.unitPrice) || 0 : Number(line.price) || 0;
     const priceUnit = line.kind === 'work' ? 'сумма' : `/ ${line.kind === 'windows' ? 'sq ft' : line.unitShort}${line.kind === 'windows' && coefficient !== 1 ? ` × ${coefficient} сложность` : ''}`;
-    const priceEditable = edit && line.kind !== 'included' && (line.kind === 'windows' || line.kind === 'work' || line.kind === 'quick' || (line.kind === 'quantity' && range));
+    const priceEditable = edit && line.kind !== 'included' && (line.kind === 'windows' || line.kind === 'work' || line.kind === 'quick' || line.kind === 'quantity');
     return `<div data-project-line="${academyEsc(line.key)}">
       <div class="project-service-row ${selected ? 'selected' : ''}">
         <div><div class="project-service-name">${line.kind === 'included' ? '↳ ' : projectCardServiceIcon(line) + ' '}${academyEsc(line.name)}</div><div class="project-service-meta">${academyEsc(projectLineNote(line))}</div></div>
@@ -1130,8 +1130,9 @@ function projectDirectionWindowHtml(o, directionKey, step) {
       <button type="button" class="btn-ghost w-full mt-2" onclick="projectDirectionWindowMeasure('${o.id}','${jsQuote(directionKey)}')">${windows.length ? 'Открыть замер этого направления' : '+ Внести окна этого направления'}</button>`;
   } else if (step === 'price') {
     const cost = direction.lines.reduce((sum, line) => sum + (Number(line.materialCost) || 0) + (Number(line.installerPay) || 0), 0);
-    body = `<p class="rp-dirwin-hint">Цена посчитана из услуг и замера этого направления.</p>
-      ${direction.lines.map(lineRow).join('')}${direction.pending.map(pendingRow).join('')}
+    // Owner, 2026-10-26: the manager sees the price sheet and types a price by hand.
+    body = `<p class="rp-dirwin-hint">${edit ? 'Цена из прайса — её можно поменять вручную: впишите цену за единицу, сумма пересчитается.' : 'Цена посчитана из услуг и замера этого направления.'}</p>
+      ${direction.lines.map(line => (edit && money ? projectPriceRowHtml(o, directionKey, line) : lineRow(line))).join('')}${direction.pending.map(pendingRow).join('')}
       ${money ? `<div class="rp-dirwin-total"><span>Итого направление</span><b>${fmtMoney(total)}</b></div>` : ''}
       ${owner && total > 0 ? `<div class="rp-dirwin-owner"><div class="rp-dirwin-group">Видит только владелец</div><div class="rp-dirwin-row"><div><b>Материал и специалисты по установке</b><span>по строкам направления</span></div><div class="rp-dirwin-num"><b>${fmtMoney(cost)}</b></div></div><div class="rp-dirwin-row"><div><b>Прямая маржа</b><span>без общих расходов проекта</span></div><div class="rp-dirwin-num"><b>${fmtMoney(total - cost)} · ${total ? Math.round((total - cost) / total * 100) : 0}%</b></div></div></div>` : ''}
       ${money ? `<button type="button" class="btn-ghost w-full mt-2" onclick="state._directionWindow=null;openProjectEstimateWorkspace('${o.id}')">Полный расчёт проекта и КП</button>` : ''}`;
@@ -1209,7 +1210,8 @@ function proposalWizardHtml(o, step) {
   let foot = '';
   if (step === 'preview' && ready) {
     const url = premiumProposalUrl(prop);
-    body = `<p class="rp-dirwin-hint">Так клиент увидит КП на телефоне. Язык и всё содержимое — как у клиента.</p>
+    body = `${proposalWizardSummaryHtml(o, groups, total, deposit, client)}
+      <p class="rp-dirwin-hint">Так клиент увидит КП на телефоне. Язык и всё содержимое — как у клиента.</p>
       <div class="rp-kpwin-frame"><iframe src="${academyEsc(url)}" title="КП глазами клиента" loading="lazy"></iframe></div>
       <a class="btn-ghost w-full mt-2 text-center" href="${academyEsc(url)}" target="_blank" rel="noopener">Открыть как клиент ↗</a>`;
     foot = `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="openProposalWizard('${o.id}','send')">Всё верно — отправить →</button>`;
@@ -1230,7 +1232,7 @@ function proposalWizardHtml(o, step) {
       const sum = direction.lines.filter(line => !line.excluded && line.kind !== 'included').reduce((s, line) => s + (Number(line.price) || 0), 0);
       return `<div class="rp-kpwin-dir" style="--dir-color:${academyEsc(tone.color)};--dir-tint:${academyEsc(tone.tint)};--dir-deep:${academyEsc(tone.deep)}">
         <div class="rp-kpwin-dir-head"><span class="rp-kpwin-dot"></span><b>${academyEsc(direction.title)}</b><span class="rp-kpwin-dir-sum">${fmtMoney(sum)}</span></div>
-        ${direction.lines.map(line => `<div class="rp-kpwin-line"><span>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)} · ${academyEsc(projectLineQtyText(line))}</span><span>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</span></div>`).join('')}
+        ${direction.lines.map(line => `<div class="rp-kpwin-line"><span>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)} · ${academyEsc(projectLineQtyText(line))}${projectLinePriceIsManual(o, line) ? ' · <b class="rp-price-manual">цена вручную</b>' : ''}</span><span>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</span></div>`).join('')}
         ${direction.pending.map(offering => `<div class="rp-kpwin-line warn"><span>${academyEsc(offering.name)}</span><span>нужен замер</span></div>`).join('')}
         <button type="button" class="rp-kpwin-edit" onclick="state._proposalWizard=null; openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')">Изменить направление</button>
       </div>`;
@@ -2744,4 +2746,95 @@ function installDraftPart(which, part, value) {
   d._parts[which] = parts;
   d[field] = '';
   installRerender();
+}
+
+// ---------- ЦЕНА ВРУЧНУЮ (Owner, 2026-10-26) ----------
+// «Менеджер видит лист расчёта, и у него должна быть возможность писать цену
+// вручную.» Every line of the «Цена» step has its unit price: per sq ft for
+// windows, per unit for a quantity service, the sum for other work. The list
+// price stays visible; a changed price is marked «вручную» and can be reset.
+// The owner's «минимум / максимум» in the directory still bounds the price.
+function projectLineUnitPrice(o, line) {
+  const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
+  if (line.kind === 'windows') return line.qty > 0 ? line.price / line.qty / coefficient : Number(line.windows?.[0]?.pricePerSqft) || 0;
+  if (line.kind === 'quantity') return Number(line.sources?.[0]?.unitPrice) || 0;
+  return Number(line.price) || 0;
+}
+/** The directory price of a line, or null when it has none (custom work). */
+function projectLineListPrice(line) {
+  const offering = serviceOffering(line.offeringId);
+  if (!offering || !['windows', 'quantity'].includes(line.kind)) return null;
+  return Number(offering.pricePerSqft) || 0;
+}
+function projectLinePriceIsManual(o, line) {
+  const list = projectLineListPrice(line);
+  return list != null && Math.abs(projectLineUnitPrice(o, line) - list) > 0.004;
+}
+function projectPriceRowHtml(o, directionKey, line) {
+  if (line.kind === 'included') return `<div class="rp-dirwin-row"><div><b>↳ ${academyEsc(line.name)}</b><span>${academyEsc(projectLineNote(line))}</span></div><div class="rp-dirwin-num">${academyEsc(projectLineQtyText(line))}<b>в пакете</b></div></div>`;
+  const unit = line.kind === 'windows' ? 'sq ft' : line.kind === 'work' ? '' : line.unitShort;
+  const list = projectLineListPrice(line);
+  const manual = projectLinePriceIsManual(o, line);
+  const range = projectServicePriceRange(serviceOffering(line.offeringId));
+  const bound = range ? `можно от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}` : '';
+  const value = Math.round(projectLineUnitPrice(o, line) * 100) / 100;
+  return `<div class="rp-dirwin-row rp-price-row ${manual ? 'manual' : ''}" data-price-line="${academyEsc(line.key)}">
+    <div class="rp-price-main"><b>${academyEsc(line.name)}</b><span>${academyEsc(projectLineQtyText(line))}${list != null ? ` · прайс ${fmtMoney(list)}${unit ? ' / ' + academyEsc(unit) : ''}` : ''}${bound ? ` · ${bound}` : ''}</span></div>
+    <label class="rp-price-input"><span>${unit ? `Цена, $ / ${academyEsc(unit)}` : 'Сумма, $'}</span><input type="number" min="0" step="0.25" inputmode="decimal" value="${value}" aria-label="Цена: ${academyEsc(line.name)}" onchange="projectDirectionSetPrice('${o.id}','${jsQuote(directionKey)}','${jsQuote(line.key)}',this.value)"></label>
+    <div class="rp-price-total"><b>${fmtMoney(line.price)}</b>${manual ? `<span class="rp-price-manual">вручную</span><button type="button" class="rp-price-reset" onclick="projectDirectionSetPrice('${o.id}','${jsQuote(directionKey)}','${jsQuote(line.key)}','${list}')">↺ прайс</button>` : ''}</div>
+  </div>`;
+}
+/** One price setter for the card and the direction window. Returns true when saved. */
+function projectSetLinePrice(oid, key, value) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
+  const line = projectLines(o).find(item => item.key === key);
+  if (!line || !['windows', 'quantity', 'work'].includes(line.kind)) return false;
+  const price = Math.max(0, parseFloat(value) || 0);
+  const offering = serviceOffering(line.offeringId);
+  const range = projectServicePriceRange(offering);
+  if (range && ((range.min > 0 && price < range.min) || (range.max > 0 && price > range.max))) {
+    alert(`Цена «${offering.name}»: от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}`);
+    return false;
+  }
+  const source = line.sources?.[0];
+  if (line.kind === 'windows') line.windows.forEach(win => { win.pricePerSqft = price; });
+  else if (line.kind === 'quantity' && source) {
+    source.unitPrice = price;
+    source.price = Math.round(price * (Number(source.qty) || 0) * 100) / 100;
+  } else if (source) source.price = price;
+  else return false;
+  projectEstimateMarkChanged(o, `Изменена цена «${line.name}»: ${fmtMoney(price)}`);
+  save();
+  return true;
+}
+function projectCardSetPrice(oid, key, value) {
+  projectSetLinePrice(oid, key, value);
+  preservePositionForNextRender(); render();
+}
+function projectDirectionSetPrice(oid, directionKey, key, value) {
+  projectSetLinePrice(oid, key, value);
+  openProjectDirectionWindow(oid, directionKey, 'price');
+}
+
+/** Owner, 2026-10-26: before sending, the manager sees everything the client gets — to whom, every line with its price, total, deposit and terms. */
+function proposalWizardSummaryHtml(o, groups, total, deposit, client) {
+  const unitText = line => {
+    if (line.kind === 'included') return 'в пакете';
+    const unit = line.kind === 'windows' ? 'sq ft' : line.kind === 'work' ? '' : line.unitShort;
+    return unit ? `${fmtMoney(projectLineUnitPrice(o, line))} / ${unit}` : 'сумма';
+  };
+  const lines = groups.flatMap(direction => direction.lines.filter(line => !line.excluded).map(line => `<div class="rp-kpsum-line">
+      <span><b>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</b><small>${academyEsc(direction.title)} · ${academyEsc(projectLineQtyText(line))} · ${academyEsc(unitText(line))}${projectLinePriceIsManual(o, line) ? ' · <em class="rp-price-manual">цена вручную</em>' : ''}</small></span>
+      <b>${line.kind === 'included' ? '$0' : fmtMoney(line.price)}</b></div>`)).join('');
+  const pending = groups.reduce((n, direction) => n + direction.pending.length, 0);
+  const terms = o.paymentTerms === 'after_completion' ? 'Оплата после выполнения' : 'Аванс до производства';
+  const contact = (label, value, missing) => `<div class="rp-kpsum-contact ${value ? '' : 'missing'}"><span>${label}</span><b>${academyEsc(value || missing)}</b></div>`;
+  return `<div class="rp-kpsum" data-kp-summary>
+    <div class="rp-kpsum-title">Проверьте перед отправкой — это получит клиент</div>
+    <div class="rp-kpsum-contacts">${contact('Клиент', client.name, 'без имени')}${contact('Телефон', client.phone, 'нет телефона')}${contact('Email', client.email, 'нет email')}</div>
+    <div class="rp-kpsum-lines">${lines || '<div class="rp-kpsum-empty">В КП нет позиций</div>'}</div>
+    ${pending ? `<div class="rp-dirwin-warn">Без замера: ${pending} — в КП не попадут.</div>` : ''}
+    <div class="rp-kpsum-totals"><div><span>Итого</span><b>${fmtMoney(total)}</b></div><div><span>${o.paymentTerms === 'after_completion' ? 'При подписи' : 'Аванс при подписи'}</span><b>${fmtMoney(deposit)}</b></div><div><span>Условия</span><b>${terms}</b></div></div>
+  </div>`;
 }

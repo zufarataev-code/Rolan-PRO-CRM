@@ -312,6 +312,8 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       // saved row that keeps its service is left as it was (older data).
       if (item.offeringId && extras.includes(item)) {
         const quick = old ? old.quickProjectLine === true : item.quickProjectLine === true;
+        // An honest edit of a saved quantity line keeps its type and flags; only then is its typed price accepted.
+        const honestLine = item.type === 'offering' && item.quickProjectLine !== true;
         if (old) {
           if (old.quickProjectLine === true) item.quickProjectLine = true;
           else delete item.quickProjectLine;
@@ -328,7 +330,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
           const min = Number(offering?.minPricePerUnit) || 0;
           const max = Number(offering?.maxPricePerUnit) || 0;
           const corridorAllowsOverride = min > 0 || max > 0;
-          const submittedUnitPrice = Number(item.unitPrice);
+          const submittedUnitPrice = item.unitPrice === undefined || item.unitPrice === null || item.unitPrice === '' ? NaN : Number(item.unitPrice);
           if (!sameService) {
             if (!offering || offering.active === false) return 'Услуга не найдена в справочнике.';
             if (!offering.unit || offering.unit === 'sqft') return 'Услуга за кв. фут считается по замеру окон, а не количеством.';
@@ -340,7 +342,9 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
           } else {
             item.unit = old.unit;
             item.unitLabel = old.unitLabel;
-            item.unitPrice = corridorAllowsOverride && Number.isFinite(submittedUnitPrice) && submittedUnitPrice >= 0
+            // Owner, 2026-10-26: on a saved line the manager types the price by
+            // hand; the owner's min/max corridor (checked below) still bounds it.
+            item.unitPrice = (corridorAllowsOverride || honestLine) && Number.isFinite(submittedUnitPrice) && submittedUnitPrice >= 0
               ? submittedUnitPrice
               : old.unitPrice;
           }
