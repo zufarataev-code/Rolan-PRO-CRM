@@ -2338,7 +2338,6 @@ function installWindowHtml(o) {
   if (row && w.draft) {
     const d = w.draft;
     const users = usersByRole('installer').filter(user => user.active !== false);
-    const local = iso => (iso ? datetimeLocalValue(iso) : '');
     const prev = rows[row.index - 1];
     const chips = users.map(user => {
       const on = d.installerIds.includes(user.id);
@@ -2352,11 +2351,7 @@ function installWindowHtml(o) {
         ${row.done ? '<div class="rp-dirwin-warn">Услуга выполнена — её даты и исполнители остаются как история.</div>' : ''}
         <div class="rp-dirwin-sub">Исполнители</div>
         <div class="install-chips">${chips}</div>
-        <div class="rp-dirwin-sub">Когда</div>
-        <div class="install-dates">
-          <label>Начало<input type="datetime-local" value="${local(d.installationAt)}" onchange="installDraftSet('installationAt', this.value)"></label>
-          <label>Окончание<input type="datetime-local" value="${local(d.endsAt)}" onchange="installDraftSet('endsAt', this.value)"></label>
-        </div>
+        ${installDateTimeHtml(d)}
         <div class="install-quicks">${quick}</div>
         <label class="install-note">Заметка бригаде<input value="${academyEsc(d.note || '')}" placeholder="доступ, парковка, что взять" onchange="installDraftSet('note', this.value)"></label>
       </div>
@@ -2404,6 +2399,7 @@ function installDraftSet(field, value) {
   const d = state._installWindow?.draft;
   if (!d) return;
   if (field === 'note') { d.note = String(value || '').slice(0, 300); return; }
+  if (d._parts) { delete d._parts[field === 'installationAt' ? 'start' : 'end']; if (field === 'installationAt') delete d._parts.end; }
   const at = value ? new Date(value) : null;
   d[field] = at && !Number.isNaN(at.getTime()) ? at.toISOString() : '';
   if (field === 'installationAt' && d.installationAt && (!d.endsAt || Date.parse(d.endsAt) <= Date.parse(d.installationAt))) d.endsAt = new Date(Date.parse(d.installationAt) + 8 * 3600 * 1000).toISOString();
@@ -2413,7 +2409,8 @@ function installDraftSet(field, value) {
 function installDraftDuration(hours, days = 0) {
   const d = state._installWindow?.draft;
   if (!d) return;
-  if (!d.installationAt) { const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(9, 0, 0, 0); d.installationAt = t.toISOString(); }
+  // Owner, 2026-10-25: the time is always chosen, never guessed.
+  if (!d.installationAt) return alert('Сначала укажите дату и время начала.');
   const start = Date.parse(d.installationAt);
   const span = days > 0 ? (days - 1) * 24 * 3600 * 1000 + 8 * 3600 * 1000 : hours * 3600 * 1000;
   d.endsAt = new Date(start + span).toISOString();
@@ -2438,7 +2435,7 @@ function installSaveService(oid, key) {
   const d = state._installWindow?.draft;
   if (!o || !d || !projectCardCanPlan(o)) return;
   if (!d.installerIds.length) return alert('Выберите хотя бы одного исполнителя.');
-  if (!d.installationAt) return alert('Укажите начало.');
+  if (!d.installationAt) return alert('Укажите дату и время начала — без времени монтаж не назначается.');
   const endsAt = d.endsAt && Date.parse(d.endsAt) > Date.parse(d.installationAt) ? d.endsAt : new Date(Date.parse(d.installationAt) + 8 * 3600 * 1000).toISOString();
   const entry = projectCardSchedule(o, key);
   const next = { ...entry, installerIds: [...d.installerIds], installationAt: d.installationAt, endsAt, note: d.note || '' };
@@ -2670,4 +2667,81 @@ function renderRatesCosts() {
     </div>
     <div class="rates-note">Одно место для всех ставок и расходов. Здесь и в «Команде», «Услугах и ценах», «Деньгах» — одни и те же цифры: меняете в одном месте — меняются везде.</div>
   </div>`;
+}
+
+// ---------- ДАТА И ВРЕМЯ ОБЯЗАТЕЛЬНЫ (Owner, 2026-10-25) ----------
+// «Когда назначается монтаж или консультация, обязательно нужно указать время.»
+// Date and time are two separate fields plus quick time chips; nothing is
+// saved, and no time is guessed, until both are chosen.
+function scheduleLocalParts(iso) {
+  const at = iso ? new Date(iso) : null;
+  if (!at || Number.isNaN(at.getTime())) return { date: '', time: '' };
+  const pad = n => String(n).padStart(2, '0');
+  return { date: `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`, time: `${pad(at.getHours())}:${pad(at.getMinutes())}` };
+}
+function scheduleTimeChips() { return ['08:00', '09:00', '10:00', '12:00', '14:00', '16:00']; }
+/** Date + time fields for a schedule modal; read them back with scheduleReadDateTime(id, what). */
+function scheduleDateTimeHtml(id, iso, label = 'Когда') {
+  const p = scheduleLocalParts(iso);
+  const chips = scheduleTimeChips().map(t => `<button type="button" class="sched-chip ${p.time === t ? 'on' : ''}" onclick="scheduleSetTimeChip('${id}','${t}')">${t}</button>`).join('');
+  return `<div class="sched-dt" data-sched-dt="${id}">
+    <div class="sched-dt-label">${label} <span class="sched-req">дата и время обязательны</span></div>
+    <div class="sched-dt-row"><label>Дата<input type="date" id="${id}-date" value="${p.date}" oninput="scheduleClearError('${id}')"></label><label>Время<input type="time" id="${id}-time" step="900" value="${p.time}" oninput="scheduleClearError('${id}')"></label></div>
+    <div class="sched-dt-chips">${chips}</div>
+    <div class="sched-error" id="${id}-error" hidden></div>
+  </div>`;
+}
+function scheduleSetTimeChip(id, time) {
+  const input = document.getElementById(id + '-time');
+  if (input) input.value = time;
+  document.querySelectorAll(`[data-sched-dt="${id}"] .sched-chip`).forEach(chip => chip.classList.toggle('on', chip.textContent === time));
+  scheduleClearError(id);
+}
+function scheduleClearError(id) {
+  const box = document.getElementById(id + '-error');
+  if (box) box.hidden = true;
+  ['date', 'time'].forEach(part => document.getElementById(`${id}-${part}`)?.classList.remove('sched-missing'));
+}
+/** The chosen moment as ISO, or null with the missing field marked red. */
+function scheduleReadDateTime(id, what = '') {
+  const date = document.getElementById(id + '-date')?.value || '';
+  const time = document.getElementById(id + '-time')?.value || '';
+  const at = date && time ? new Date(`${date}T${time}`) : null;
+  if (at && !Number.isNaN(at.getTime())) return at.toISOString();
+  const missing = !date && !time ? 'дату и время' : !date ? 'дату' : 'время';
+  const box = document.getElementById(id + '-error');
+  if (box) { box.textContent = `Укажите ${missing}${what ? ' ' + what : ''}.`; box.hidden = false; }
+  if (!date) document.getElementById(id + '-date')?.classList.add('sched-missing');
+  if (!time) document.getElementById(id + '-time')?.classList.add('sched-missing');
+  (document.getElementById(`${id}-${!date ? 'date' : 'time'}`))?.focus?.();
+  if (!box) alert(`Укажите ${missing}${what ? ' ' + what : ''}.`);
+  return null;
+}
+/** Start and end of a service in the install window: date + time each, chips for the start time. */
+function installDateTimeHtml(d) {
+  const part = (which, iso) => ({ ...scheduleLocalParts(iso), ...((d._parts || {})[which] || {}) });
+  const sp = part('start', d.installationAt);
+  const ep = part('end', d.endsAt);
+  const chips = scheduleTimeChips().map(t => `<button type="button" class="sched-chip ${sp.time === t ? 'on' : ''}" onclick="installDraftPart('start','time','${t}')">${t}</button>`).join('');
+  const hint = sp.date && !sp.time ? 'Выберите время начала' : !sp.date && sp.time ? 'Выберите дату начала' : '';
+  return `<div class="rp-dirwin-sub">Начало <span class="sched-req">дата и время обязательны</span></div>
+    <div class="sched-dt-row"><label>Дата<input type="date" class="${!sp.date && sp.time ? 'sched-missing' : ''}" value="${sp.date}" onchange="installDraftPart('start','date',this.value)"></label><label>Время<input type="time" step="900" class="${sp.date && !sp.time ? 'sched-missing' : ''}" value="${sp.time}" onchange="installDraftPart('start','time',this.value)"></label></div>
+    <div class="sched-dt-chips">${chips}</div>
+    ${hint ? `<div class="sched-error">${hint}</div>` : ''}
+    <div class="rp-dirwin-sub">Окончание</div>
+    <div class="sched-dt-row"><label>Дата<input type="date" value="${ep.date}" onchange="installDraftPart('end','date',this.value)"></label><label>Время<input type="time" step="900" value="${ep.time}" onchange="installDraftPart('end','time',this.value)"></label></div>`;
+}
+function installDraftPart(which, part, value) {
+  const d = state._installWindow?.draft;
+  if (!d) return;
+  const field = which === 'start' ? 'installationAt' : 'endsAt';
+  d._parts = d._parts || {};
+  const parts = { ...scheduleLocalParts(d[field]), ...(d._parts[which] || {}), [part]: String(value || '') };
+  if (parts.date && parts.time) {
+    delete d._parts[which];
+    return installDraftSet(field, `${parts.date}T${parts.time}`);
+  }
+  d._parts[which] = parts;
+  d[field] = '';
+  installRerender();
 }
