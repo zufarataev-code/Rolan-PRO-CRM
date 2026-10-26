@@ -23,6 +23,15 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-26 handoff — exactly four service directions
+
+- Branch `codex/four-service-directions`, based on `origin/main` `a4e34a2`.
+- Customer-facing CRM now has exactly four directions: Solar, Smart, Protective and Decorative. Privacy is no longer rendered or created as a fifth direction.
+- Frosted/mirror/privacy catalogue items remain valid product variants inside Decorative. The shared direction matcher lets Decorative services use both `decorative` and historical `privacy` materials without changing stock records.
+- Old `privacy` / `privacy_film` projects remain readable, while new services coming through a legacy privacy entry point are saved as Decorative. Historical production, payroll and warehouse codes are preserved.
+- New-project, measurement, cashier, Proposal-option and Services/Price Book flows use the same canonical four-direction mapping.
+- Verification: full suite 895/895, `npm run typecheck`, production `npm run build`, and `git diff --check` pass. Production is unchanged; merge/deploy still require the Owner's explicit confirmation after PR review and CI.
+
 ## 2026-10-26 handoff — manual price on the price sheet + pre-send KP summary (PR #410)
 
 - Merged `28b4c03`, deployed; prod loads `projectSetLinePrice` / `proposalWizardSummaryHtml`.

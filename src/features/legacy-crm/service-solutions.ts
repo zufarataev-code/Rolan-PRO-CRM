@@ -12,8 +12,10 @@ const stableJson = (value: unknown): string => JSON.stringify(value, (_key, item
 const rows = (x: unknown): Row[] => Array.isArray(x) ? x.map(object) : [];
 const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))];
 
-// «general» = «Общее по объекту» (Owner, 2026-10-22): works without a film, never per sq ft.
-export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'privacy', 'general'] as const;
+// Four customer-facing directions plus the internal bucket for object-wide
+// work. `privacy` remains accepted below as a historical alias of Decorative.
+export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'general'] as const;
+const LEGACY_SERVICE_DIRECTIONS = ['privacy'] as const;
 export const SERVICE_UNITS = ['sqft', 'lft', 'piece', 'zone', 'fixed', 'custom'] as const;
 // Project statuses for planning its services (Owner, 2026-10-09).
 const SCHEDULED_PROJECT_STATUSES = ['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'];
@@ -140,7 +142,18 @@ export function canonicalFilmCategory(value: unknown): string {
   return aliases[normalized] || normalized;
 }
 
-const DIRECTION_BY_SERVICE_TYPE: Row = { solar_film: 'solar', smart_film: 'smart', protective_film: 'protective', decorative_film: 'decorative', privacy_film: 'privacy', general_works: 'general' };
+/** Business direction; Privacy is a Decorative material/solution subtype. */
+export function canonicalServiceDirection(value: unknown): string {
+  const category = canonicalFilmCategory(value);
+  return category === 'privacy' ? 'decorative' : category;
+}
+
+/** Decorative services may use decorative and privacy catalog materials. */
+function filmBelongsToServiceDirection(film: Row, direction: unknown): boolean {
+  return canonicalServiceDirection(film.category) === canonicalServiceDirection(direction);
+}
+
+const DIRECTION_BY_SERVICE_TYPE: Row = { solar_film: 'solar', smart_film: 'smart', protective_film: 'protective', decorative_film: 'decorative', privacy_film: 'decorative', general_works: 'general' };
 
 /** Managers receive customer prices; the owner alone maintains solution definitions. */
 export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInstallerIds: readonly string[] = []): Row {
@@ -196,14 +209,14 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
   // had no linked films and saves were refused).
   const filmAllowed = (offering: Row, filmId: unknown) => {
     const film = films.find(value => value.id === filmId);
-    if (!film || canonicalFilmCategory(film.category) !== offering.direction) return false;
+    if (!film || !filmBelongsToServiceDirection(film, offering.direction)) return false;
     const linked = Array.isArray(offering.filmIds) ? offering.filmIds : [];
     return linked.length ? linked.includes(filmId) : true;
   };
   for (const offering of offerings) {
     if (typeof offering.id !== 'string' || !/^[\w-]{1,120}$/.test(offering.id) || ids.has(offering.id)) return 'Некорректный или повторный ID услуги.';
     ids.add(offering.id);
-    if (!(SERVICE_DIRECTIONS as readonly string[]).includes(offering.direction) || typeof offering.name !== 'string' || !offering.name.trim() || offering.name.length > 120) return 'Укажите направление и название услуги.';
+    if (![...SERVICE_DIRECTIONS, ...LEGACY_SERVICE_DIRECTIONS].includes(offering.direction) || typeof offering.name !== 'string' || !offering.name.trim() || offering.name.length > 120) return 'Укажите направление и название услуги.';
     for (const field of ['pricePerSqft','installerRatePerSqft','minPricePerUnit','maxPricePerUnit']) {
       if (offering[field] !== undefined && (typeof offering[field] !== 'number' || !Number.isFinite(offering[field]) || offering[field] < 0)) return 'Цена, диапазон и ставка услуги должны быть неотрицательными числами.';
     }
@@ -217,11 +230,11 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     if (offering.includes !== undefined && (!Array.isArray(offering.includes) || offering.includes.length > 20 || offering.includes.some((id: unknown) => typeof id !== 'string'))) return 'Некорректный состав услуги.';
     // Owner, 2026-10-22: a size-free service may also be offered in other directions.
     if (offering.directions !== undefined) {
-      if (!Array.isArray(offering.directions) || offering.directions.some((key: unknown) => !(SERVICE_DIRECTIONS as readonly string[]).includes(key as string))) return 'Некорректный список направлений услуги.';
+      if (!Array.isArray(offering.directions) || offering.directions.some((key: unknown) => ![...SERVICE_DIRECTIONS, ...LEGACY_SERVICE_DIRECTIONS].includes(key as never))) return 'Некорректный список направлений услуги.';
       if (offering.directions.length && (offering.unit === undefined || offering.unit === 'sqft')) return 'Услуга по замеру предлагается только в своём направлении.';
     }
-    // Film categories are compared as the CRM reads them («privacy_film», «Солнцезащитная»…).
-    if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id && canonicalFilmCategory(film.category) === offering.direction)))) return 'Материалы должны принадлежать направлению услуги.';
+    // Privacy film is a catalog subtype inside the Decorative direction.
+    if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id && filmBelongsToServiceDirection(film, offering.direction))))) return 'Материалы должны принадлежать направлению услуги.';
   }
   for (const offering of offerings) {
     for (const id of Array.isArray(offering.includes) ? offering.includes : []) {
@@ -361,8 +374,8 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       // Old signed/history selections survive archival or changed material lists.
       if (item.offeringId && (item.offeringId !== old?.offeringId || item.catalogId !== old?.catalogId)) {
         const direction = DIRECTION_BY_SERVICE_TYPE[item.measureScope || item.serviceType || order.serviceType];
-        const offeredIn = offering ? [offering.direction, ...(Array.isArray(offering.directions) && offering.unit && offering.unit !== 'sqft' ? offering.directions : [])] : [];
-        if (!offering || offering.active === false || !offeredIn.includes(direction)) return 'Услуга не соответствует направлению проекта.';
+        const offeredIn = offering ? [offering.direction, ...(Array.isArray(offering.directions) && offering.unit && offering.unit !== 'sqft' ? offering.directions : [])].map(canonicalServiceDirection) : [];
+        if (!offering || offering.active === false || !offeredIn.includes(canonicalServiceDirection(direction))) return 'Услуга не соответствует направлению проекта.';
         if (item.catalogId && !filmAllowed(offering, item.catalogId)) return 'Плёнка не подходит выбранной услуге: выберите плёнку её направления.';
       }
     }

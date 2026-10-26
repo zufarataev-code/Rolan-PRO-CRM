@@ -5691,7 +5691,7 @@
     grid-template-columns: minmax(0, 1fr);
     gap: .85rem;
   }
-  /* === Services directory: five directions, one focused workspace === */
+  /* === Services directory: four directions, one focused workspace === */
   .service-direction-home {
     max-width: 78rem;
     margin: 0 auto;
@@ -11071,6 +11071,7 @@ const MEASURE_SCOPES = [
   },
   {
     key: 'privacy_film',
+    legacy: true,
     icon: '🔒',
     title: 'Замер приватной пленки',
     short: 'Приватная',
@@ -11086,6 +11087,10 @@ const MEASURE_SCOPES = [
     ],
   },
 ];
+// Privacy used to be a fifth direction. Keep the scope readable for historical
+// projects, but never offer it when a user creates or extends a project: new
+// privacy work belongs to the Decorative direction.
+function customerMeasureScopes() { return MEASURE_SCOPES.filter(scope => !scope.legacy); }
 function measureScopeInfo(key) {
   return MEASURE_SCOPES.find(s => s.key === key) || MEASURE_SCOPES[0];
 }
@@ -11149,7 +11154,7 @@ function openManagerProjectServicesModal(oid) {
   if (!order) return;
   const selected = new Set(orderMeasureScopes(order));
   const used = new Set(measureAllWindows(order).map(item => item.win.measureScope || orderMeasureScope(order)));
-  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)refreshManagerMeasureModal('${oid}')"><div class="modal-content workspace-modal p-6" style="max-width:44rem" onclick="event.stopPropagation()"><div class="flex items-start justify-between gap-3"><div><div class="text-xs font-black text-blue-700">УСЛУГИ ПРОЕКТА</div><h3 class="text-xl font-black">Что делаем на этом объекте?</h3><div class="mt-2"><span class="tag bg-amber-100 text-amber-900">Лид пришёл: ${academyEsc(orderLeadIntentLabel(order))}</span></div><p class="text-sm text-gray-500 mt-2">Добавленные услуги не меняют исходное направление лида.</p></div><button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Назад</button></div><div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">${MEASURE_SCOPES.map(scope => `<label class="card flex items-start gap-3 cursor-pointer"><input class="manager-project-service" type="checkbox" value="${scope.key}" ${selected.has(scope.key)?'checked':''} ${used.has(scope.key)?'disabled':''} style="width:20px;height:20px;margin-top:2px"><span><span class="font-bold">${scope.icon} ${academyEsc(scope.short)}</span><span class="block text-xs text-gray-500 mt-1">${academyEsc(measureScopeCardDesc(scope.key))}</span>${used.has(scope.key)?'<span class="block text-xs text-blue-600 mt-1">Есть размеры — услуга сохранится</span>':''}</span></label>`).join('')}</div><div class="flex justify-end gap-2 mt-5"><button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Отмена</button><button class="btn-primary" onclick="saveManagerProjectServices('${oid}')">Сохранить услуги</button></div></div></div>`;
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)refreshManagerMeasureModal('${oid}')"><div class="modal-content workspace-modal p-6" style="max-width:44rem" onclick="event.stopPropagation()"><div class="flex items-start justify-between gap-3"><div><div class="text-xs font-black text-blue-700">УСЛУГИ ПРОЕКТА</div><h3 class="text-xl font-black">Что делаем на этом объекте?</h3><div class="mt-2"><span class="tag bg-amber-100 text-amber-900">Лид пришёл: ${academyEsc(orderLeadIntentLabel(order))}</span></div><p class="text-sm text-gray-500 mt-2">Добавленные услуги не меняют исходное направление лида.</p></div><button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Назад</button></div><div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">${customerMeasureScopes().map(scope => `<label class="card flex items-start gap-3 cursor-pointer"><input class="manager-project-service" type="checkbox" value="${scope.key}" ${selected.has(scope.key)?'checked':''} ${used.has(scope.key)?'disabled':''} style="width:20px;height:20px;margin-top:2px"><span><span class="font-bold">${scope.icon} ${academyEsc(scope.short)}</span><span class="block text-xs text-gray-500 mt-1">${academyEsc(measureScopeCardDesc(scope.key))}</span>${used.has(scope.key)?'<span class="block text-xs text-blue-600 mt-1">Есть размеры — услуга сохранится</span>':''}</span></label>`).join('')}</div><div class="flex justify-end gap-2 mt-5"><button class="btn-ghost" onclick="refreshManagerMeasureModal('${oid}')">Отмена</button><button class="btn-primary" onclick="saveManagerProjectServices('${oid}')">Сохранить услуги</button></div></div></div>`;
   render();
 }
 function saveManagerProjectServices(oid) {
@@ -12269,7 +12274,9 @@ function measureStudioScopeButtons(scopeKey, order = null) {
   // already measured window keeps its own direction visible.
   const own = measureStudioProjectScopes(order);
   const windowScopes = new Set((order?.measurements?.rooms || []).flatMap(room => room.windows || []).map(win => win.measureScope).filter(Boolean));
-  const scopes = measureStudioHasChosenServices(order) ? MEASURE_SCOPES.filter(s => own.includes(s.key) || windowScopes.has(s.key)) : MEASURE_SCOPES;
+  const scopes = measureStudioHasChosenServices(order)
+    ? MEASURE_SCOPES.filter(s => own.includes(s.key) || windowScopes.has(s.key))
+    : customerMeasureScopes();
   return `<div class="measure-scope-grid">
     ${scopes.map(s => `
       <button type="button" class="measure-scope-btn ${scopeKey === s.key ? 'active' : ''}" data-measure-scope="${s.key}" style="--scope-color:${s.accent}" onclick="measureStudioSetScope('${s.key}')">
@@ -15947,24 +15954,6 @@ const ORDER_PRIMARY_SERVICES = [
     ],
   },
   {
-    // The owner's fifth direction (2026-10-05): privacy films are their own
-    // direction with their own services, prices and materials, not decorative.
-    id: 'privacy_film',
-    icon: '🔒',
-    title: 'Приватная плёнка',
-    short: 'Приватная',
-    desc: 'Приватность: зеркальные, матовые и односторонние плёнки, вид днём и ночью.',
-    tag: 'privacy',
-    catalogCategory: 'privacy',
-    workflow: [
-      'Консультация: от кого закрываемся, днём или ночью, вид изнутри',
-      'Замер: стекло, сторона света, освещение внутри и снаружи',
-      'Подбор: зеркальность, матовость, светопропускание, образцы',
-      'Монтаж: подготовка стекла, установка, подрезка',
-      'Сдача: проверка приватности, уход, акт',
-    ],
-  },
-  {
     // Owner, 2026-10-22 (ТЗ кассы «Общее по объекту»): works sold with a project
     // that belong to the site, not to a film — removal of old film, washing,
     // electrician, equipment rental, a contractor. They have no film, no
@@ -16061,7 +16050,10 @@ function renderOrderBuilderPreview(serviceId = 'smart_film', variantId = 'standa
 }
 
 function primaryServiceInfo(id) {
-  return ORDER_PRIMARY_SERVICES.find(s => s.id === id) || ORDER_PRIMARY_SERVICES[0];
+  // Historical privacy projects keep their stored key, but use the current
+  // Decorative direction everywhere in the UI and in new calculations.
+  const canonicalId = id === 'privacy_film' ? 'decorative_film' : id;
+  return ORDER_PRIMARY_SERVICES.find(s => s.id === canonicalId) || ORDER_PRIMARY_SERVICES[0];
 }
 function orderServiceTypeLabel(type) {
   const svc = ORDER_PRIMARY_SERVICES.find(s => s.id === type);
@@ -25633,7 +25625,15 @@ function projectQuickRequiredSupplies(o, lines = projectQuickLines(o)) {
 // идёт в КП, у неё цена клиенту за sq ft и ставка специалисту за sq ft. Плёнки
 // склада привязываются к услугам (одна плёнка может подходить нескольким); материал проекта
 // по-прежнему считается по закупочной цене выбранной плёнки.
-const SERVICE_OFFERING_DIRECTIONS = ['smart', 'solar', 'protective', 'decorative', 'privacy', 'general'];
+const SERVICE_OFFERING_DIRECTIONS = ['smart', 'solar', 'protective', 'decorative', 'general'];
+/** Privacy is a catalog/solution subtype of Decorative, not a direction. */
+function canonicalServiceDirection(value) {
+  const category = canonicalCatalogCategory(value);
+  return category === 'privacy' ? 'decorative' : category;
+}
+function serviceDirectionAllowsFilm(direction, film) {
+  return !!film && canonicalServiceDirection(film.category) === canonicalServiceDirection(direction);
+}
 /** Units a service of a direction may use: «Общее по объекту» has no windows, so nothing per sq ft or per linear ft. */
 function serviceOfferingUnitsFor(direction) { return direction === 'general' ? SERVICE_OFFERING_UNITS.filter(unit => !['sqft', 'lft'].includes(unit.id)) : SERVICE_OFFERING_UNITS; }
 // The owner creates the real solutions; no invented starter products or prices.
@@ -25646,7 +25646,7 @@ function serviceOffering(id) {
 }
 
 function serviceOfferingDirection(serviceType) {
-  return canonicalCatalogCategory(primaryServiceInfo(serviceType)?.catalogCategory);
+  return canonicalServiceDirection(primaryServiceInfo(serviceType)?.catalogCategory);
 }
 
 /**
@@ -25658,7 +25658,7 @@ function serviceOfferingDirection(serviceType) {
  */
 function serviceOfferingDirections(offering) {
   const extra = !serviceOfferingNeedsSizes(offering) && Array.isArray(offering?.directions) ? offering.directions : [];
-  return [...new Set([offering?.direction, ...extra].filter(key => SERVICE_OFFERING_DIRECTIONS.includes(key)))];
+  return [...new Set([offering?.direction, ...extra].map(canonicalServiceDirection).filter(key => SERVICE_OFFERING_DIRECTIONS.includes(key)))];
 }
 function serviceOfferingInDirection(offering, direction) {
   return serviceOfferingDirections(offering).includes(direction);
@@ -25673,7 +25673,7 @@ function serviceOfferingsFor(direction, { includeId = '', includeInactive = fals
   // cashier and pickers never offer them (Owner's user test, 2026-10-23: six
   // empty «Новая услуга $0» stood first in the cashier).
   return serviceOfferingsAll()
-    .filter(item => (homeOnly ? item.direction === direction : serviceOfferingInDirection(item, direction)) && (includeInactive || item.id === includeId || (item.active !== false && !serviceOfferingIsDraft(item) && !(item.proposalOptional && !(Number(item.pricePerSqft) > 0)))))
+    .filter(item => (homeOnly ? canonicalServiceDirection(item.direction) === canonicalServiceDirection(direction) : serviceOfferingInDirection(item, direction)) && (includeInactive || item.id === includeId || (item.active !== false && !serviceOfferingIsDraft(item) && !(item.proposalOptional && !(Number(item.pricePerSqft) > 0)))))
     .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0) || String(a.name).localeCompare(String(b.name)));
 }
 /** The direction an offering is used under in this project (its windows or its line), else its home. */
@@ -25705,8 +25705,8 @@ function serviceOfferingFilmIds(offering) {
 function serviceOfferingAllowedFilmIds(offering) {
   const linked = serviceOfferingFilmIds(offering);
   if (linked.length || !offering) return linked;
-  const direction = offering.direction;
-  return (db.settings?.catalog || []).filter(film => !film.archived && canonicalCatalogCategory(film.category) === direction).map(film => film.id);
+  const direction = canonicalServiceDirection(offering.direction);
+  return (db.settings?.catalog || []).filter(film => !film.archived && serviceDirectionAllowsFilm(direction, film)).map(film => film.id);
 }
 
 // How a service is priced (Owner, 2026-10-05). Per sq ft it needs measured
@@ -26402,7 +26402,8 @@ function renderServiceOfferingDirectory() {
 }
 
 function openServiceDirectionDirectory(direction) {
-  const info = filmDirections().find(item => canonicalCatalogCategory(item.catalogCategory) === direction);
+  direction = canonicalServiceDirection(direction);
+  const info = filmDirections().find(item => canonicalServiceDirection(item.catalogCategory) === direction);
   if (!info) return;
   state.servicePricingDirection = direction;
   state.servicePricingOfferingId = null;
@@ -26419,8 +26420,8 @@ function closeServiceDirectionDirectory() {
 
 function openServiceOfferingEditor(direction, offeringId = '') {
   const offering = serviceOffering(offeringId);
-  if (!filmDirections().some(item => canonicalCatalogCategory(item.catalogCategory) === direction)) return;
-  if (offeringId && (!offering || offering.direction !== direction)) return;
+  if (!filmDirections().some(item => canonicalServiceDirection(item.catalogCategory) === canonicalServiceDirection(direction))) return;
+  if (offeringId && (!offering || canonicalServiceDirection(offering.direction) !== canonicalServiceDirection(direction))) return;
   state.servicePricingDirection = direction;
   state.servicePricingOfferingId = offeringId || null;
   state.modal = renderServiceDirectionWorkspace(direction);
@@ -26428,6 +26429,7 @@ function openServiceOfferingEditor(direction, offeringId = '') {
 }
 
 function addServiceOffering(direction) {
+  direction = canonicalServiceDirection(direction);
   if (!serviceOfferingCanEdit() || !SERVICE_OFFERING_DIRECTIONS.includes(direction) || direction === 'general') return;
   const sort = serviceOfferingsFor(direction, { includeInactive: true }).length;
   const offering = { id: 'svc_' + uid(), direction, name: 'Новая услуга', unit: 'sqft', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort };
@@ -26469,6 +26471,7 @@ function updateServiceOffering(id, field, value, control = null) {
   } else if (field === 'direction') {
     // Owner, 2026-10-24: options are edited in one list; the direction decides
     // in which projects the KP offers the option.
+    value = canonicalServiceDirection(value);
     if (!SERVICE_OFFERING_DIRECTIONS.includes(value) || serviceOfferingNeedsSizes(offering)) return;
     offering.direction = value;
     offering.directions = (offering.directions || []).filter(key => key !== value);
@@ -26494,13 +26497,13 @@ function updateServiceOffering(id, field, value, control = null) {
 
 /** Owner, 2026-10-24: «один раздел, где вносим эти услуги и цены с возможностью менять». */
 function serviceOfferingDirectionTitle(key) {
-  const info = ORDER_PRIMARY_SERVICES.find(entry => canonicalCatalogCategory(entry.catalogCategory) === key);
+  const info = ORDER_PRIMARY_SERVICES.find(entry => canonicalServiceDirection(entry.catalogCategory) === canonicalServiceDirection(key));
   return info ? `${info.icon} ${info.title}` : key;
 }
 function proposalOptionOfferings() {
   return serviceOfferingsAll()
     .filter(item => item.proposalOptional && !serviceOfferingNeedsSizes(item))
-    .sort((a, b) => SERVICE_OFFERING_DIRECTIONS.indexOf(a.direction) - SERVICE_OFFERING_DIRECTIONS.indexOf(b.direction) || (Number(a.sort) || 0) - (Number(b.sort) || 0));
+    .sort((a, b) => SERVICE_OFFERING_DIRECTIONS.indexOf(canonicalServiceDirection(a.direction)) - SERVICE_OFFERING_DIRECTIONS.indexOf(canonicalServiceDirection(b.direction)) || (Number(a.sort) || 0) - (Number(b.sort) || 0));
 }
 function proposalOptionStatus(offering) {
   if (offering.active === false) return { text: 'Выключена — в КП не попадает', color: '#64748b' };
@@ -26568,7 +26571,7 @@ function toggleServiceOfferingFilm(id, filmId, checked) {
   const offering = serviceOffering(id);
   const film = getCatalogItem(filmId);
   if (!offering || !film) return;
-  if (canonicalCatalogCategory(film.category) !== offering.direction) return;
+  if (!serviceDirectionAllowsFilm(offering.direction, film)) return;
   const ids = new Set(serviceOfferingFilmIds(offering));
   if (checked) ids.add(filmId); else ids.delete(filmId);
   offering.filmIds = [...ids];
@@ -26623,18 +26626,20 @@ function serviceOfferingIncludesEditorHtml(offering) {
 function serviceOfferingDirectionsEditorHtml(offering) {
   if (serviceOfferingNeedsSizes(offering)) return '<div class="text-xs text-gray-500 mt-2">Услуга по замеру живёт в своём направлении: у него свои плёнки и свой замер.</div>';
   const chosen = new Set(serviceOfferingDirections(offering));
-  const others = filmDirections().map(item => canonicalCatalogCategory(item.catalogCategory)).filter(key => key !== offering.direction);
-  const label = key => ORDER_PRIMARY_SERVICES.find(entry => canonicalCatalogCategory(entry.catalogCategory) === key);
+  const home = canonicalServiceDirection(offering.direction);
+  const others = filmDirections().map(item => canonicalServiceDirection(item.catalogCategory)).filter(key => key !== home);
+  const label = key => ORDER_PRIMARY_SERVICES.find(entry => canonicalServiceDirection(entry.catalogCategory) === key);
   return `<div class="mt-2" data-service-offering-directions="${offering.id}"><div class="text-xs font-bold text-slate-600">Также предлагать в направлениях</div><div class="flex flex-wrap gap-2 mt-1">${others.map(key => `<label class="tag" style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;${orderServiceCardStyle(label(key)?.id || '')}border-left:4px solid var(--svc-color)"><input style="width:auto" type="checkbox" ${chosen.has(key) ? 'checked' : ''} onchange="toggleServiceOfferingDirection('${offering.id}','${key}',this.checked,this)"> ${label(key)?.icon || ''} ${academyEsc(label(key)?.title || key)}</label>`).join('')}</div><div class="text-xs text-gray-500 mt-1">Здесь её домашнее направление: тут она редактируется. В кассе услуга появится под каждым отмеченным направлением и ляжет в проект под тем, где её выбрали.</div></div>`;
 }
 function toggleServiceOfferingDirection(id, direction, checked, control = null) {
   if (!serviceOfferingCanEdit()) return;
   const offering = serviceOffering(id);
-  if (!offering || !SERVICE_OFFERING_DIRECTIONS.includes(direction) || direction === offering.direction) return;
+  direction = canonicalServiceDirection(direction);
+  if (!offering || !SERVICE_OFFERING_DIRECTIONS.includes(direction) || direction === canonicalServiceDirection(offering.direction)) return;
   if (checked && serviceOfferingNeedsSizes(offering)) { if (control) control.checked = false; return alert('Услуга по замеру не может предлагаться в других направлениях: у каждого направления свои плёнки.'); }
   const ids = new Set(Array.isArray(offering.directions) ? offering.directions : []);
   if (checked) ids.add(direction); else ids.delete(direction);
-  offering.directions = [...ids].filter(key => key !== offering.direction);
+  offering.directions = [...ids].map(canonicalServiceDirection).filter(key => key !== canonicalServiceDirection(offering.direction));
   offering.updatedAt = new Date().toISOString();
   save();
   renderServiceOfferingDirectory();
@@ -26642,8 +26647,8 @@ function toggleServiceOfferingDirection(id, direction, checked, control = null) 
 
 function serviceOfferingEditorHtml(offering, owner) {
   if (!offering) return '';
-  const direction = offering.direction;
-  const films = (db.settings.catalog || []).filter(item => !item.archived && canonicalCatalogCategory(item.category) === direction);
+  const direction = canonicalServiceDirection(offering.direction);
+  const films = (db.settings.catalog || []).filter(item => !item.archived && serviceDirectionAllowsFilm(direction, item));
   const linked = films.filter(item => serviceOfferingFilmIds(offering).includes(item.id));
   const unit = serviceOfferingUnit(offering);
   const per = serviceOfferingUnitShort(offering);
@@ -26688,10 +26693,11 @@ function serviceOfferingEditorHtml(offering, owner) {
 
 function renderServiceDirectionWorkspace(direction) {
   const owner = currentUser()?.role === 'owner';
-  const info = filmDirections().find(item => canonicalCatalogCategory(item.catalogCategory) === direction);
+  direction = canonicalServiceDirection(direction);
+  const info = filmDirections().find(item => canonicalServiceDirection(item.catalogCategory) === direction);
   if (!info) return '';
   const items = serviceOfferingsFor(direction, { includeInactive: owner, homeOnly: true });
-  const shared = serviceOfferingsFor(direction, { includeInactive: false }).filter(item => item.direction !== direction);
+  const shared = serviceOfferingsFor(direction, { includeInactive: false }).filter(item => canonicalServiceDirection(item.direction) !== direction);
   const selected = state.servicePricingOfferingId ? items.find(item => item.id === state.servicePricingOfferingId) : null;
   const rows = items.map(offering => {
     const per = serviceOfferingUnitShort(offering);
@@ -26714,7 +26720,7 @@ function renderServiceDirectionWorkspace(direction) {
 function renderServiceOfferingsSection() {
   const owner = currentUser()?.role === 'owner';
   const cards = filmDirections().map(info => {
-    const direction = canonicalCatalogCategory(info.catalogCategory);
+    const direction = canonicalServiceDirection(info.catalogCategory);
     const items = serviceOfferingsFor(direction, { includeInactive: owner, homeOnly: true });
     const active = items.filter(item => item.active !== false && !serviceOfferingIsDraft(item)).length;
     const drafts = items.filter(serviceOfferingIsDraft).length;
@@ -26725,7 +26731,7 @@ function renderServiceOfferingsSection() {
     </button>`;
   }).join('');
   return `<section class="service-direction-home">
-    <div class="service-direction-intro"><div><h2 class="text-2xl font-black">Направления услуг</h2><p class="text-sm text-slate-500 mt-1">Выберите направление. В отдельном окне откроются только его услуги, цены, материалы и ставка монтажника.</p></div><span class="tag">5 направлений</span></div>
+    <div class="service-direction-intro"><div><h2 class="text-2xl font-black">Направления услуг</h2><p class="text-sm text-slate-500 mt-1">Выберите направление. В отдельном окне откроются только его услуги, цены, материалы и ставка монтажника. Приватные, матовые и зеркальные решения находятся внутри декоративного направления.</p></div><span class="tag">4 направления</span></div>
     <div class="service-direction-grid">${cards}</div>
   </section>`;
 }
@@ -26764,7 +26770,7 @@ function applyWindowOffering(win, offering) {
 function projectWindowLinkableFilms(o, win, linked = []) {
   const category = primaryServiceInfo(win.measureScope || o.serviceType)?.catalogCategory;
   const linkedIds = new Set(linked.map(film => film.id));
-  return (db.settings.catalog || []).filter(film => !film.archived && !linkedIds.has(film.id) && catalogMatchesCategory(film, category));
+  return (db.settings.catalog || []).filter(film => !film.archived && !linkedIds.has(film.id) && serviceDirectionAllowsFilm(category, film));
 }
 function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = false) {
   const o = getOrder(oid);
@@ -26774,7 +26780,7 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
   if (field === 'offeringId') {
     const offering = serviceOffering(value);
     const selectedOfferings = projectSelectedSizedOfferings(o, win.measureScope || o.serviceType);
-    if (value && (!offering || offering.active === false || !serviceOfferingNeedsSizes(offering) || offering.direction !== serviceOfferingDirection(win.measureScope || o.serviceType) || (selectedOfferings.length && !selectedOfferings.some(item => item.id === offering.id)))) return;
+    if (value && (!offering || offering.active === false || !serviceOfferingNeedsSizes(offering) || canonicalServiceDirection(offering.direction) !== serviceOfferingDirection(win.measureScope || o.serviceType) || (selectedOfferings.length && !selectedOfferings.some(item => item.id === offering.id)))) return;
     applyWindowOffering(win, offering);
     const catalogId = projectOfferingCatalogId(o, offering?.id);
     if (catalogId) { win.catalogId = catalogId; win.filmType = catalogLabel(getCatalogItem(catalogId)); }
@@ -26786,7 +26792,7 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
   } else if (field === 'catalogId') {
     const film = getCatalogItem(value);
     const offering = serviceOffering(win.offeringId);
-    if (!film || film.archived || !offering || !catalogMatchesCategory(film, primaryServiceInfo(win.measureScope || o.serviceType)?.catalogCategory)) return;
+    if (!film || film.archived || !offering || !serviceDirectionAllowsFilm(serviceOfferingDirection(win.measureScope || o.serviceType), film)) return;
     if (!serviceOfferingAllowedFilmIds(offering).includes(film.id)) {
       // Only the owner edits «Услуги и цены»; the film joins the service for every project.
       if (currentUser()?.role !== 'owner') return;
@@ -27949,7 +27955,7 @@ function readProjectServiceSchedule(o) {
 
 function projectQuickLineCatalog(serviceType, selectedCatalogId = '') {
   const category = primaryServiceInfo(serviceType)?.catalogCategory;
-  return (db.settings.catalog || []).filter(item => catalogCanBeSelected(item, selectedCatalogId) && catalogMatchesCategory(item, category) && (
+  return (db.settings.catalog || []).filter(item => catalogCanBeSelected(item, selectedCatalogId) && serviceDirectionAllowsFilm(category, item) && (
     item.id === selectedCatalogId || warehouseCatalogStockStats(item.id).availableSqft > 0
   ));
 }
@@ -28026,7 +28032,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   } else if (field === 'catalogId') {
     const catalog = getCatalogItem(value);
     const requiredCategory = primaryServiceInfo(line.serviceType)?.catalogCategory;
-    if (catalog && (!catalogCanBeSelected(catalog, line.catalogId) || !catalogMatchesCategory(catalog, requiredCategory) || (warehouseCatalogStockStats(catalog.id).availableSqft <= 0 && !catalog.pendingPurchase))) return;
+    if (catalog && (!catalogCanBeSelected(catalog, line.catalogId) || !serviceDirectionAllowsFilm(requiredCategory, catalog) || (warehouseCatalogStockStats(catalog.id).availableSqft <= 0 && !catalog.pendingPurchase))) return;
     if (catalog && line.offeringId && !serviceOfferingAllowedFilmIds(serviceOffering(line.offeringId)).includes(catalog.id)) return alert('Эта плёнка не подходит выбранной услуге.');
     line.catalogId = catalog?.id || '';
     if (catalog) {
@@ -28036,7 +28042,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     }
   } else if (field === 'offeringId') {
     const offering = serviceOffering(value);
-    if (value && (!offering || offering.active === false || offering.direction !== serviceOfferingDirection(line.serviceType))) return;
+    if (value && (!offering || offering.active === false || canonicalServiceDirection(offering.direction) !== serviceOfferingDirection(line.serviceType))) return;
     line.offeringId = offering?.id || '';
     line.offeringName = offering?.name || '';
     if (currentUser()?.role === 'owner') line.offeringInstallerRate = Number(offering?.installerRatePerSqft) || 0;
@@ -30095,8 +30101,8 @@ function defaultCatalogIdForOrder(o) {
   const activeScope = managerActiveMeasureScope(o);
   const scope = measureScopeInfo(activeScope);
   const scoped = o?.materialsByService?.[activeScope] || o?.orderBuilder?.materialsByService?.[activeScope];
-  if (scoped?.catalogId && db.settings.catalog.some(c => c.id === scoped.catalogId && catalogMatchesCategory(c, scope.catalogCategory))) return scoped.catalogId;
-  if (o?.materialCatalogId && db.settings.catalog.some(c => c.id === o.materialCatalogId && catalogMatchesCategory(c, scope.catalogCategory))) return o.materialCatalogId;
+  if (scoped?.catalogId && db.settings.catalog.some(c => c.id === scoped.catalogId && serviceDirectionAllowsFilm(scope.catalogCategory, c))) return scoped.catalogId;
+  if (o?.materialCatalogId && db.settings.catalog.some(c => c.id === o.materialCatalogId && serviceDirectionAllowsFilm(scope.catalogCategory, c))) return o.materialCatalogId;
   return '';
 }
 function managerRoomCatalogId(room, scopeKey = '') {
@@ -30347,7 +30353,7 @@ function managerWindowDefaults(o, room, opts = {}) {
   const activeOffering = managerActiveOffering(o);
   const catalogId = opts.catalogId || projectOfferingCatalogId(o, activeOffering?.id) || room?.defaultCatalogByScope?.[requestedScope] || managerRoomCatalogId(room, requestedScope) || '';
   const candidate = getCatalogItem(catalogId);
-  const cat = candidate && catalogMatchesCategory(candidate, primaryServiceInfo(requestedScope)?.catalogCategory) ? candidate : null;
+  const cat = candidate && serviceDirectionAllowsFilm(primaryServiceInfo(requestedScope)?.catalogCategory, candidate) ? candidate : null;
   const scopeKey = requestedScope;
   const objectKind = opts.objectKind || managerRoomAddKindValue(room?.id || '') || 'window';
   const winType = opts.winType || managerRoomAddTypeValue(room?.id || '', objectKind, scopeKey);
@@ -30378,8 +30384,8 @@ function managerWindowDefaults(o, room, opts = {}) {
     measurement_source: 'CUSTOMER',
     verificationStatus: 'UNVERIFIED',
   };
-  const offering = activeOffering || [o.offeringId || o.orderBuilder?.offeringId, ...(o.offeringIds || o.orderBuilder?.offeringIds || [])].map(serviceOffering).find(item => item && serviceOfferingNeedsSizes(item) && item.direction === serviceOfferingDirection(scopeKey));
-  if (offering && offering.active !== false && offering.direction === serviceOfferingDirection(scopeKey)) applyWindowOffering(win, offering);
+  const offering = activeOffering || [o.offeringId || o.orderBuilder?.offeringId, ...(o.offeringIds || o.orderBuilder?.offeringIds || [])].map(serviceOffering).find(item => item && serviceOfferingNeedsSizes(item) && canonicalServiceDirection(item.direction) === serviceOfferingDirection(scopeKey));
+  if (offering && offering.active !== false && canonicalServiceDirection(offering.direction) === serviceOfferingDirection(scopeKey)) applyWindowOffering(win, offering);
   if (cat && offering && serviceOfferingAllowedFilmIds(offering).includes(cat.id)) { win.catalogId = cat.id; win.filmType = catalogLabel(cat); }
   syncWindowPanelsForType(win, scopeKey);
   return syncSmartWindowPlan(win, room?.name || '');
@@ -32700,7 +32706,8 @@ function openOrderModal() {
 }
 
 function offeringServiceType(offering) {
-  return ORDER_PRIMARY_SERVICES.find(item => serviceOfferingDirection(item.id) === offering?.direction)?.id || '';
+  const direction = canonicalServiceDirection(offering?.direction);
+  return ORDER_PRIMARY_SERVICES.find(item => serviceOfferingDirection(item.id) === direction)?.id || '';
 }
 function newOrderSelectedOfferings() {
   const ids = [state._newOrderOfferingId, ...(state._newOrderExtraOfferingIds || [])];

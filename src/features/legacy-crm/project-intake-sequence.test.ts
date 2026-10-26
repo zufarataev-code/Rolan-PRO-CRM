@@ -40,6 +40,7 @@ function loadIntake(offerings: any[]) {
       querySelectorAll: (key: string) => gates.get(key) || [],
     },
     serviceOffering: (id: string) => offerings.find(offering => offering.id === id),
+    canonicalServiceDirection: (value: string) => value === 'privacy' ? 'decorative' : value,
     serviceOfferingDirection: (id: string) => id.split('_')[0],
     serviceOfferingsFor: (direction: string) => offerings.filter(offering => offering.direction === direction && offering.active !== false),
     serviceOfferingIncludes: () => [],
@@ -54,7 +55,7 @@ function loadIntake(offerings: any[]) {
     serviceOfferingUnitShort: (offering: any) => offering?.unit || 'sq ft',
     orderServiceCardStyle: () => '',
     isGeneralDirection: (id: string) => id === 'general_works',
-    SERVICE_OFFERING_DIRECTIONS: ['smart', 'solar', 'protective', 'decorative', 'privacy', 'general'],
+    SERVICE_OFFERING_DIRECTIONS: ['smart', 'solar', 'protective', 'decorative', 'general'],
     serviceOfferingDirections: (o: any) => [o?.direction, ...((!o?.unit || o.unit === 'sqft') ? [] : (o?.directions || []))].filter(Boolean),
     serviceOfferingInDirection: (o: any, d: string) => [o?.direction, ...((!o?.unit || o.unit === 'sqft') ? [] : (o?.directions || []))].includes(d),
     offeringServiceTypeIn: (o: any, st: string) => (st && [o?.direction, ...((!o?.unit || o.unit === 'sqft') ? [] : (o?.directions || []))].includes(st.split('_')[0]) ? st : (o?.direction === 'general' ? 'general_works' : o?.direction ? `${o.direction}_film` : '')),
@@ -132,7 +133,7 @@ test('saved project keeps the chosen services for measurement, estimate and prop
 test('multiple concrete services are deduplicated and inactive or unknown directions cannot enter intake', () => {
   const offerings = [{ id: 'a', direction: 'solar' }, { id: 'b', direction: 'solar' }, { id: 'c', direction: 'smart' }, { id: 'off', direction: 'smart', active: false }, { id: 'unknown', direction: 'unknown' }];
   const state: any = { _newOrderOfferingId: 'a', _newOrderExtraOfferingIds: ['a', 'b', 'c', 'c', 'off', 'unknown'] };
-  const context: any = vm.createContext({ state, Set, ORDER_PRIMARY_SERVICES: [{ id: 'solar_film' }, { id: 'smart_film' }], serviceOffering: (id: string) => offerings.find(offering => offering.id === id), serviceOfferingDirection: (id: string) => id.split('_')[0] });
+  const context: any = vm.createContext({ state, Set, ORDER_PRIMARY_SERVICES: [{ id: 'solar_film' }, { id: 'smart_film' }], serviceOffering: (id: string) => offerings.find(offering => offering.id === id), serviceOfferingDirection: (id: string) => id.split('_')[0], canonicalServiceDirection: (value: string) => value === 'privacy' ? 'decorative' : value });
   vm.runInContext(html.slice(html.indexOf('function offeringServiceType('), html.indexOf('function renderNewOrderOfferings(')), context);
   assert.deepEqual(Array.from(context.newOrderSelectedOfferings(), (offering: any) => offering.id), ['a', 'b', 'c']);
   assert.deepEqual(Array.from(context.newOrderSelectedOfferings(), (offering: any) => context.offeringServiceType(offering)), ['solar_film', 'solar_film', 'smart_film']);

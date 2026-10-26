@@ -324,7 +324,7 @@ test("quick project lines use warehouse film and never accept manual material or
   const renderer = source.slice(rendererStart, rendererEnd);
   assert.match(source, /function projectQuickLineCatalog\(serviceType, selectedCatalogId = ''\)/);
   assert.match(source, /catalogCanBeSelected\(item, selectedCatalogId\)/);
-  assert.match(source, /catalogMatchesCategory\(item, category\)/);
+  assert.match(source, /serviceDirectionAllowsFilm\(category, item\)/);
   assert.match(source, /warehouseCatalogStockStats\(item\.id\)\.availableSqft > 0/);
   assert.match(renderer, /Плёнка со склада/);
   assert.match(renderer, /Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников/);

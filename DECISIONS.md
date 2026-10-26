@@ -734,3 +734,13 @@ Owner clarified the Smart Film installation model: a physical panel/window is on
 - Zone connection, room power block, multi-zone control and electrician work reuse the existing `projectLines` cashier model. They are not calculated or stored in a second Smart-only calculator.
 - Proposal, project total, payroll/work scope and work order continue to read the same cashier rows. Missing or zero-price Price Book entries block Proposal readiness instead of inventing a price.
 - Silicone and other optional additions stay normal manually selected cashier services; they are not forced once per window.
+
+## 2026-10-26 — Rolan PRO has exactly four customer-facing directions (Owner)
+
+Owner corrected the service architecture: the business has exactly four directions — Solar, Smart, Protective and Decorative. Privacy is not a fifth business direction.
+
+- New projects, measurements and the «Услуги и цены» landing screen show exactly those four directions.
+- Frosted, mirror and other privacy solutions are services/material variants inside Decorative. Decorative services may therefore link both `decorative` and historical `privacy` catalogue materials.
+- General object work remains a project/service add-on and is not presented as a fifth film direction.
+- Historical `privacy` / `privacy_film` records, production codes and warehouse categories remain readable for compatibility; no customer, project, stock or payroll history is deleted or silently rewritten.
+- New records created through an old privacy entry point are canonicalized to Decorative, so the fifth direction cannot return through legacy UI paths.

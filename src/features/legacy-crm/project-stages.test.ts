@@ -37,6 +37,7 @@ function load(project: Row, role = 'manager') {
     academyEsc: (value: unknown) => String(value ?? ''),
     db: { proposals: [] },
     MEASURE_SCOPES: ['solar_film', 'smart_film', 'protective_film', 'decorative_film', 'privacy_film'].map(key => ({ key, short: key, icon: '', accent: '#000' })),
+    customerMeasureScopes: () => ['solar_film', 'smart_film', 'protective_film', 'decorative_film'].map(key => ({ key, short: key, icon: '', accent: '#000' })),
   });
   vm.runInContext(slice('function projectHasServices(o) {', 'function orderPrimaryNextAction(o) {'), context);
   vm.runInContext(slice('function renderOrderCleanProgress(o) {', 'function clientSocialHandle('), context);
@@ -102,7 +103,7 @@ test('field measurement offers the directions of this project\'s services', () =
   assert.match(own, /data-measure-scope="protective_film"/);
   assert.doesNotMatch(own, /data-measure-scope="solar_film"|data-measure-scope="smart_film"/);
   const legacy = c.measureStudioScopeButtons('solar_film', { id: 'l', status: 'new' });
-  assert.equal((legacy.match(/data-measure-scope=/g) || []).length, 5, 'a project without chosen services still offers every direction');
+  assert.equal((legacy.match(/data-measure-scope=/g) || []).length, 4, 'a project without chosen services offers the four business directions');
   assert.match(html, /\$\{measureStudioScopeButtons\(scopeKey, order\)\}/);
 });
 

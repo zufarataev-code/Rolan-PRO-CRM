@@ -48,7 +48,7 @@ async function main() {
       await page.waitForFunction(()=>typeof (window as any).projectServiceScheduleHtml==='function');
       await page.goto(base+'/legacy-crm#/service-pricing',{waitUntil:'networkidle'});
       await page.getByRole('heading',{name:'Направления услуг',exact:true}).waitFor();
-      assert.equal(await page.locator('[data-service-direction-card]').count(),5,'The service directory must start with exactly five directions');
+      assert.equal(await page.locator('[data-service-direction-card]').count(),4,'The service directory must start with exactly four directions');
       await page.locator('[data-service-direction-card="solar"]').click();
       await page.getByRole('dialog',{name:/Услуги направления/}).waitFor();
       await page.locator(`[onclick="addServiceOffering('solar')"]`).click();
