@@ -39,6 +39,15 @@ Before doing any work:
 - New-project, measurement, cashier, Proposal-option and Services/Price Book flows use the same canonical four-direction mapping.
 - Verification: full suite 895/895, `npm run typecheck`, production `npm run build`, and `git diff --check` pass. Production is unchanged; merge/deploy still require the Owner's explicit confirmation after PR review and CI.
 
+## 2026-10-26 handoff — Smart made simple (PR #416)
+
+- Merged `69389f6`, deployed (prod not re-checked in Chrome from this session).
+- Root cause of «не могу создать проект» for Smart: `projectEstimateReadiness` included `smartCashierIssues`, and the electrician was on by default, so a missing «Подключение зоны» / «Электрические работы» stopped every Smart estimate/KP. Removed from readiness.
+- Electrician default off; new room flag `powerBlockNeeded` (default off) gates the power-block line; zones stay automatic (1 panel = 1 zone).
+- `managerSmartRoomFieldsHtml` override in `production-stages.js`: three toggles + «Попадёт в КП»; missing service → price + «Создать услугу» (`smartCreateOffering`).
+- Existing rooms that already stored `electricianNeeded: true` keep it; untick in the room card.
+- Tests: `smart-simple.test.ts`.
+
 ## 2026-10-26 handoff — manual price on the price sheet + pre-send KP summary (PR #410)
 
 - Merged `28b4c03`, deployed; prod loads `projectSetLinePrice` / `proposalWizardSummaryHtml`.
