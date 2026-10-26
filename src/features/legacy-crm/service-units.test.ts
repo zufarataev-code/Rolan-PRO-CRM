@@ -292,14 +292,18 @@ test('the server accepts only services without sizes as lines and prices them it
   assert.equal(prepareServiceSolutions(base, view, false), null);
   const line = view.orders[0].extraServices[0];
   assert.deepEqual([line.unit, line.unitPrice, line.price], ['zone', 100, 300], 'unit and price come from the directory');
-  // Later the manager may change only the quantity; the saved unit price stays.
+  // Later the quantity changes and the saved unit price stays…
   const saved: Row = structuredClone(view);
   saved.settings.serviceOfferings[1].pricePerSqft = 100;
   const next: Row = structuredClone(saved);
   next.orders[0].extraServices[0].qty = 5;
-  next.orders[0].extraServices[0].unitPrice = 1;
+  delete next.orders[0].extraServices[0].unitPrice;
   assert.equal(prepareServiceSolutions(saved, next, false), null);
   assert.deepEqual([next.orders[0].extraServices[0].unitPrice, next.orders[0].extraServices[0].price], [100, 500]);
+  // …and (Owner, 2026-10-26) the manager may type the unit price by hand; the server derives the sum.
+  next.orders[0].extraServices[0].unitPrice = 120;
+  assert.equal(prepareServiceSolutions(saved, next, false), null);
+  assert.deepEqual([next.orders[0].extraServices[0].unitPrice, next.orders[0].extraServices[0].price], [120, 600]);
   next.orders[0].extraServices[0].qty = -1;
   assert.match(prepareServiceSolutions(saved, next, false)!, /Количество/);
 });

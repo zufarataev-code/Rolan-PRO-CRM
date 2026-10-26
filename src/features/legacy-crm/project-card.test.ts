@@ -100,7 +100,8 @@ test('while priced, the card shows services with quantity and price only; a per-
   assert.match(zone, /onchange="projectCardSetQty\('o','z',this\.value\)"/, 'the selected quantity is edited in its service panel');
   assert.match(out, /onchange="projectCardSetPrice\('o','offering:a1',this\.value\)"/, 'the per-sq-ft price of the windows is edited in the row');
   assert.match(out, /от \$12\.00 до \$20\.00/);
-  assert.doesNotMatch(zone, /projectCardSetPrice\('o','line:z'/, 'a price without a manager range follows the directory');
+  // Owner, 2026-10-26: the manager types any price by hand; a range, when set, only bounds it.
+  assert.match(zone, /projectCardSetPrice\('o','line:z'/, 'a quantity price is typed by hand');
   assert.match(out, /data-project-pending="a3"[\s\S]*ждёт замера[\s\S]*projectCardRemovePending\('o','a3'\)/);
   // Services are added through the cashier (Owner, 2026-10-19), which returns to the card.
   assert.match(out, /onclick="openProjectDirectionPicker\('o'\)">\+ Направление \/ услуга</);
