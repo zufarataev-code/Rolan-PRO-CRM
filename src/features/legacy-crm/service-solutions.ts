@@ -223,6 +223,21 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const minPrice = Number(offering.minPricePerUnit) || 0;
     const maxPrice = Number(offering.maxPricePerUnit) || 0;
     if (minPrice > 0 && maxPrice > 0 && minPrice > maxPrice) return 'Минимальная цена услуги не может быть выше максимальной.';
+    const currentOffering = currentOfferings.find(item => item.id === offering.id);
+    const pricingFields = ['pricePerSqft', 'minPricePerUnit', 'maxPricePerUnit', 'installerRatePerSqft', 'materialCostPerUnit', 'unit'];
+    const pricingChanged = !currentOffering || pricingFields.some(field => (currentOffering[field] ?? 0) !== (offering[field] ?? 0));
+    if (pricingChanged) {
+      const listPrice = Number(offering.pricePerSqft) || 0;
+      if (listPrice > 0 && minPrice > 0 && listPrice < minPrice) return 'Цена по прайсу не может быть ниже минимальной цены менеджера.';
+      if (listPrice > 0 && maxPrice > 0 && listPrice > maxPrice) return 'Цена по прайсу не может быть выше максимальной цены менеджера.';
+      // A measured film receives its actual material cost from the warehouse
+      // inside the project. For a size-free service both direct unit costs are
+      // known here, so the owner-defined floor must not create a guaranteed loss.
+      if (typeof offering.unit === 'string' && offering.unit !== 'sqft' && minPrice > 0) {
+        const directCost = (Number(offering.installerRatePerSqft) || 0) + (Number(offering.materialCostPerUnit) || 0);
+        if (minPrice < directCost) return 'Минимальная цена услуги не может быть ниже прямых затрат на материал и монтаж.';
+      }
+    }
     if (offering.unit !== undefined && !(SERVICE_UNITS as readonly string[]).includes(offering.unit)) return 'Неизвестная единица услуги.';
     if (offering.direction === 'general' && (offering.unit === undefined || offering.unit === 'sqft' || offering.unit === 'lft')) return 'Услуга «Общее по объекту» не считается по размерам окон.';
     if (offering.unitLabel !== undefined && (typeof offering.unitLabel !== 'string' || offering.unitLabel.length > 30)) return 'Название единицы — до 30 символов.';

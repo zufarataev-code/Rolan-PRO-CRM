@@ -35,12 +35,15 @@ test('a direction opens a separate responsive workspace scoped to its own servic
 
 test('adding and editing keep the canonical settings.serviceOfferings store', () => {
   const add = between('function addServiceOffering(direction)', 'function updateServiceOffering(');
+  const pricing = between('function serviceOfferingPricingEditorHtml(offering, per, sized)', 'function serviceOfferingEditorHtml(offering, owner)');
   const editor = between('function serviceOfferingEditorHtml(offering, owner)', 'function renderServiceDirectionWorkspace(direction)');
   assert.match(add, /db\.settings\.serviceOfferings = serviceOfferingsAll\(\)/);
   assert.match(add, /db\.settings\.serviceOfferings\.push\(offering\)/);
   assert.match(add, /state\.servicePricingOfferingId = offering\.id/);
-  assert.match(editor, /Цена клиенту/);
-  assert.match(editor, /Монтажнику/);
+  assert.match(editor, /serviceOfferingPricingEditorHtml\(offering, per, sized\)/);
+  assert.match(pricing, /Цена для клиента/);
+  assert.match(pricing, /Оплата монтажнику/);
+  assert.match(pricing, /Сохранить цены и затраты/);
   assert.match(editor, /serviceOfferingIncludesEditorHtml\(offering\)/);
   assert.match(editor, /serviceOfferingDirectionsEditorHtml\(offering\)/);
   assert.match(editor, /toggleServiceOfferingFilm/);

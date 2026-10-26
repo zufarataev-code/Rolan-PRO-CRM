@@ -187,6 +187,47 @@ test('the server accepts historical privacy services as Decorative and both Deco
   assert.match(prepareServiceSolutions(base, badCost, true)!, /материала/);
 });
 
+test('the service price editor separates customer price from owner costs and previews margin', () => {
+  const { c } = loadServices();
+  const metrics = c.serviceOfferingPricingMetrics({
+    unit: 'piece', pricePerSqft: 1000, minPricePerUnit: 700, maxPricePerUnit: 1500,
+    installerRatePerSqft: 350, materialCostPerUnit: 250,
+  });
+  assert.equal(metrics.directCost, 600);
+  assert.equal(metrics.listProfit, 400);
+  assert.equal(metrics.marginPct, 40);
+  assert.equal(metrics.minProfit, 100);
+  assert.deepEqual([...metrics.issues], []);
+
+  const loss = c.serviceOfferingPricingMetrics({
+    unit: 'piece', pricePerSqft: 1000, minPricePerUnit: 500, maxPricePerUnit: 1500,
+    installerRatePerSqft: 350, materialCostPerUnit: 250,
+  });
+  assert.match(loss.issues.join(' '), /ниже прямых затрат/);
+  assert.match(html, /Цена для клиента/);
+  assert.match(html, /Внутренняя себестоимость/);
+  assert.match(html, /data-service-price-save/);
+  assert.match(html, /Сохранить цены и затраты/);
+});
+
+test('the server rejects a loss-making service floor and a list price outside the manager corridor', () => {
+  const belowCost: Row = structuredClone(base);
+  Object.assign(belowCost.settings.serviceOfferings[1], { minPricePerUnit: 50, maxPricePerUnit: 130 });
+  assert.match(prepareServiceSolutions(base, belowCost, true)!, /ниже прямых затрат/);
+
+  const belowCorridor: Row = structuredClone(base);
+  Object.assign(belowCorridor.settings.serviceOfferings[1], { pricePerSqft: 70, minPricePerUnit: 80, maxPricePerUnit: 130 });
+  assert.match(prepareServiceSolutions(base, belowCorridor, true)!, /ниже минимальной цены менеджера/);
+
+  const aboveCorridor: Row = structuredClone(base);
+  Object.assign(aboveCorridor.settings.serviceOfferings[1], { pricePerSqft: 140, minPricePerUnit: 80, maxPricePerUnit: 130 });
+  assert.match(prepareServiceSolutions(base, aboveCorridor, true)!, /выше максимальной цены менеджера/);
+
+  const historical: Row = structuredClone(base);
+  Object.assign(historical.settings.serviceOfferings[1], { minPricePerUnit: 50, maxPricePerUnit: 130 });
+  assert.equal(prepareServiceSolutions(historical, structuredClone(historical), true), null, 'an unchanged old row remains readable until its pricing is edited');
+});
+
 // Owner, 2026-10-22: «Общее по объекту» — works without a film. The server must
 // accept them in the directory and as project lines, but never per sq ft.
 test('the server accepts general works without a film and refuses them per sq ft', () => {

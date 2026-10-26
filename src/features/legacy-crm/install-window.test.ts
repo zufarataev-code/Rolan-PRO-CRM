@@ -17,6 +17,9 @@ test('«Назначить монтаж» opens the install window', () => {
   assert.match(win, /Услуги проекта по порядку/i);
   assert.match(win, /Назначить эту услугу/);
   assert.match(win, /Пока не назначать/);
+  assert.match(win, /orderInstallationTechnicalWarnings/);
+  assert.match(win, /Монтаж можно назначить/);
+  assert.match(win, /Это попадёт в заказ-наряд/);
 });
 
 test('work kind gives the stripe colour: film red, silicone grey', () => {

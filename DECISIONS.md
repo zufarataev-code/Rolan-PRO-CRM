@@ -744,3 +744,26 @@ Owner corrected the service architecture: the business has exactly four directio
 - General object work remains a project/service add-on and is not presented as a fifth film direction.
 - Historical `privacy` / `privacy_film` records, production codes and warehouse categories remain readable for compatibility; no customer, project, stock or payroll history is deleted or silently rewritten.
 - New records created through an old privacy entry point are canonicalized to Decorative, so the fifth direction cannot return through legacy UI paths.
+
+## 2026-10-26 — Customer price, manager corridor and service cost are separate concepts (Owner)
+
+Owner rejected the ambiguous one-row form where list price, minimum, maximum, installer pay and material cost looked like interchangeable numbers. The Price Book must make the commercial rule and internal economics visually and logically distinct.
+
+- `pricePerSqft` is the list/default customer price used when a service enters a Project and Proposal.
+- `minPricePerUnit` and `maxPricePerUnit` are the manager's permitted customer-price corridor, not manager compensation.
+- `installerRatePerSqft` is internal installer pay; `materialCostPerUnit` is internal material/equipment unit cost for services without measured warehouse film. These values remain Owner-only.
+- Financial price fields are edited and saved as one set so intermediate partial values do not create an accidental invalid configuration.
+- For a size-free service, the minimum customer price cannot be below known direct unit cost (material/equipment plus installer pay). The list price must stay inside any configured manager corridor.
+- For measured film, actual material cost continues to come from the selected warehouse lot and project consumption. The directory may preview labor margin, but it must say that film cost is still pending instead of presenting incomplete margin as final profit.
+- The project, Proposal, warehouse and payroll keep using the existing authoritative fields and formulas; this editor does not create a second calculator.
+
+## 2026-10-26 — Manager may schedule installation with unresolved on-site Solar facts (Owner)
+
+Owner clarified that a manager has the dimensions needed to plan the calendar, but often cannot know the glass type, facade orientation, inside/outside application side or access method before the field visit. Those facts must not make the installation button a dead end.
+
+- Accepted Proposal, approved estimate, exact verified dimensions, prepared material, at least one service date and its installation crew remain required before the Project enters `installation_scheduled`.
+- Missing Solar glass type, facade orientation, application side and access/height are warnings, not calendar blockers. The manager may assign each service its own crew and dates.
+- Every unresolved Solar fact is shown in the assignment window and printed prominently in the work order. Each affected opening says `НЕ УКАЗАНО`; the surveyor or crew lead must verify and record it before film installation starts.
+- A surveyor completing an on-site measurement is still responsible for these technical fields.
+- Smart zone integrity and controller over-capacity remain hard engineering blockers; a manager cannot waive them.
+- This changes no price, Proposal, stock, payroll or Project identity. The work order remains an output of the same Project rather than a parallel record.

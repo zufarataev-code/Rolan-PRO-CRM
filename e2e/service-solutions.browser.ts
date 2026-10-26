@@ -56,7 +56,9 @@ async function main() {
       const card=newName.locator('xpath=ancestor::div[@data-service-offering-row][1]');
       await newName.fill('QA custom solution'); await newName.press('Tab');
       const price=card.locator('input[type=number]').first();
-      await price.fill('18'); await price.press('Tab');
+      await price.fill('18');
+      await card.locator('[data-service-price-save]').click();
+      await card.locator('[data-service-price-save-status]').getByText('Цены и затраты сохранены',{exact:true}).waitFor();
       const filmChoice=card.locator(`input[type=checkbox][onchange*="'film-a'"]`);
       await filmChoice.waitFor({state:'visible'});
       await filmChoice.check();

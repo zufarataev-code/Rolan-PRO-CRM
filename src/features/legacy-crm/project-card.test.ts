@@ -176,7 +176,7 @@ test('a quick line planned in its row keeps its own crew and start date for pay'
   // Confirming publishes the plan: the quick line gets its crew and start date.
   c.ensureVerifiedMeasurementsForStatus = () => true;
   c.ensurePaidForStatus = () => true;
-  c.orderTechnicalMeasurementIssues = () => [];
+  c.orderInstallationBlockingTechnicalIssues = () => [];
   c.ensureProductionReadyForInstallation = () => true;
   c.refreshManualFilmNeededBy = () => undefined;
   c.notifyClientEventScheduled = () => undefined;
@@ -219,7 +219,7 @@ test('card edits reuse the estimate edits and stay on the card', () => {
   // The calendar keeps a draft plan to itself until the installation is confirmed.
   assert.match(html, /if \(type === 'install' && o\.status === 'proposal_accepted' && o\.serviceSchedules\?\.length\) return \[\];/);
   const confirm = html.slice(html.indexOf('function projectCardConfirmInstallation(oid) {'), html.indexOf('function projectCardCrewPicker('));
-  for (const guard of ['projectPendingSizedServices(o)', 'projectCardUnplanned(o)', "ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')", 'orderTechnicalMeasurementIssues(o)', 'ensureProductionReadyForInstallation(o)', "changeStatus(oid, 'installation_scheduled'"]) assert.ok(confirm.includes(guard), guard);
+  for (const guard of ['projectPendingSizedServices(o)', 'projectCardUnplanned(o)', "ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')", 'orderInstallationBlockingTechnicalIssues(o)', 'ensureProductionReadyForInstallation(o)', "changeStatus(oid, 'installation_scheduled'"]) assert.ok(confirm.includes(guard), guard);
 });
 
 test('server: a row may be planned step by step; «Монтаж назначен» needs every specialist and date', () => {

@@ -372,7 +372,7 @@ test("the Services reference owns installer pay while material stays in Warehous
   assert.doesNotMatch(renderer, /cps-\$\{row\.service_type_id\}-installer/);
   assert.doesNotMatch(renderer, /cpa-\$\{row\.service_addon_id\}-cost/);
   assert.match(renderer, /return renderServiceOfferingsSection\(\);/);
-  assert.match(source, /Монтажнику, \$ \/ \$\{academyEsc\(per\)\}/);
+  assert.match(source, /Оплата монтажнику, \$ \/ \$\{academyEsc\(per\)\}/);
   assert.doesNotMatch(source, /patch\.installation_cost_per_sqft = canonicalPricingValue/);
   assert.match(source, /if \(!syncLegacyInstallerServiceRate\.enabled\) return false;/);
 });
@@ -514,9 +514,11 @@ test("kanban cannot bypass the client-to-measurement-to-proposal-to-installation
   assert.doesNotMatch(kanbanMove, /changeStatus\(orderId, targetStatus[^\n]+\n\s*return true/);
 });
 
-test("a manager can price from customer dimensions; technical survey details gate installation", () => {
+test("a manager can schedule from verified dimensions; on-site Solar facts warn while unsafe Smart facts block", () => {
   const readiness = source.match(/function orderMeasurementCompletionIssues\(o, \{ film = true \} = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
   const technical = source.match(/function orderTechnicalMeasurementIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const warnings = source.match(/function orderInstallationTechnicalWarnings\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const blockers = source.match(/function orderInstallationBlockingTechnicalIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const completion = source.match(/function completeManagerMeasurement\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   const transitions = source.match(/function orderWorkflowTransitionIssues\(o, newStatus\) \{[\s\S]*?\n\}/)?.[0] || "";
 
@@ -525,21 +527,38 @@ test("a manager can price from customer dimensions; technical survey details gat
   assert.match(readiness, /!windowCatalog\(win\)/);
   assert.doesNotMatch(readiness, /managerSmartMeasurementIssues|managerSolarMeasurementIssues/);
 
-  // Facade side, inside/outside, access, glass type and Smart wiring are
-  // confirmed by the surveyor and block installation scheduling.
+  // The surveyor still owns every technical field, but Solar facts are warnings
+  // in the work order while unsafe Smart topology remains a hard gate.
   assert.match(technical, /managerSolarMeasurementIssues\(o\)/);
   assert.match(technical, /managerSmartMeasurementIssues\(o\)/);
-  assert.match(transitions, /newStatus === 'installation_scheduled'[\s\S]*orderTechnicalMeasurementIssues\(o\)/);
+  assert.match(warnings, /managerSolarMeasurementIssues\(o\)/);
+  assert.doesNotMatch(warnings, /managerSmartMeasurementIssues/);
+  assert.match(blockers, /managerSmartMeasurementIssues\(o\)/);
+  assert.doesNotMatch(blockers, /managerSolarMeasurementIssues/);
+  assert.match(transitions, /newStatus === 'installation_scheduled'[\s\S]*orderInstallationBlockingTechnicalIssues\(o\)/);
+  assert.doesNotMatch(transitions, /newStatus === 'installation_scheduled'[\s\S]*orderTechnicalMeasurementIssues\(o\)/);
 
   // The manager is told what the surveyor still has to confirm, without being blocked.
   assert.match(completion, /orderMeasurementCompletionIssues\(o\)/);
   assert.match(completion, /orderTechnicalMeasurementIssues\(o\)/);
-  assert.match(completion, /До назначения монтажа замерщик должен уточнить/);
+  assert.match(completion, /До начала работ на объекте нужно уточнить/);
 
   // A refused installation schedule must not leave installers or dates on the order.
   const schedule = source.match(/function confirmScheduleInstallation\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.ok(schedule.indexOf("orderTechnicalMeasurementIssues(o)") < schedule.indexOf("o.serviceSchedules = schedules"));
+  assert.ok(schedule.indexOf("orderInstallationBlockingTechnicalIssues(o)") < schedule.indexOf("o.serviceSchedules = schedules"));
   assert.match(schedule, /o\.installerIds = previous\.installerIds/);
+});
+
+test("the work order exposes every unresolved Solar fact instead of silently hiding it", () => {
+  const workOrder = source.match(/function renderWorkOrderHtml\(order, printMode = false\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const windows = source.match(/function renderWorkOrderWindows\(order, rows\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(workOrder, /orderInstallationTechnicalWarnings\(order\)/);
+  assert.match(workOrder, /ОБЯЗАТЕЛЬНО УТОЧНИТЬ НА ОБЪЕКТЕ/);
+  assert.match(windows, /Стекло:/);
+  assert.match(windows, /Фасад:/);
+  assert.match(windows, /Сторона монтажа:/);
+  assert.match(windows, /Доступ:/);
+  assert.match(windows, /НЕ УКАЗАНО/);
 });
 
 test("published proposals synchronize the order stage milestone", () => {
@@ -633,8 +652,8 @@ test("project card stores operational site access and parking details and work o
 test("owner service directory exposes manager min and max price corridor", () => {
   assert.match(source, /minPricePerUnit/);
   assert.match(source, /maxPricePerUnit/);
-  assert.match(source, /Минимум менеджеру/);
-  assert.match(source, /Максимум менеджеру/);
-  assert.match(source, /Цена клиенту/);
-  assert.match(source, /Все изменения сохраняются автоматически/);
+  assert.match(source, /Минимальная цена менеджера/);
+  assert.match(source, /Максимальная цена менеджера/);
+  assert.match(source, /Цена для клиента/);
+  assert.match(source, /Сохранить цены и затраты/);
 });
