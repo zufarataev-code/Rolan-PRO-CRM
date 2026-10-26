@@ -2483,3 +2483,191 @@ function installStripesHtml(o) {
   }).join('');
   return `<div class="install-stripes" data-install-stripes>${stripes}</div>`;
 }
+
+// ---------- СТАВКИ И РАСХОДЫ — ОДИН ИСТОЧНИК ПРАВДЫ (Owner, 2026-10-25) ----------
+// «Один источник правды, где пишем ставки и зарплаты, постоянные и переменные
+// расходы». Every number has one home and this section edits that home:
+// people's pay lives in the employee (payConfig), the per-unit installer rate
+// and material in the service, fixed and variable payments in db.opex, the
+// percentages in pricingDefaults. Salaries are mirrored into fixed costs
+// automatically (opx_salary_<userId>), so break-even always sees them.
+function ratesMonthlySalary(user) {
+  const pc = user?.payConfig || {};
+  return Math.max(0, Number(pc.monthlySalary) || Math.round((Number(pc.weeklySalary) || 0) * 4.33) || 0);
+}
+/** Mirrors every salaried employee into the fixed costs; retires the old owner/measurer plans. */
+function syncTeamSalaryPlans() {
+  if (!db || !Array.isArray(db.users)) return false;
+  try { if (currentUser()?.role !== 'owner') return false; } catch (_) { return false; }
+  db.opex = Array.isArray(db.opex) ? db.opex : [];
+  let changed = false;
+  const set = (plan, values) => Object.entries(values).forEach(([key, value]) => { if (plan[key] !== value) { plan[key] = value; changed = true; } });
+  [['opx_owner_salary', 'owner'], ['opx_measurer_salary', 'measurer']].forEach(([id, role]) => {
+    const plan = db.opex.find(item => item.id === id);
+    if (!plan || plan.retiredBy) return;
+    const people = (db.users || []).filter(user => user && user.active !== false && user.role === role);
+    if (people.length !== 1) return; // nobody or several people: it stays a manual plan
+    const user = people[0];
+    user.payConfig = user.payConfig || {};
+    if ((user.payConfig.type !== 'salary' || !(ratesMonthlySalary(user) > 0)) && plan.active !== false && Number(plan.amount) > 0) {
+      user.payConfig.type = 'salary';
+      user.payConfig.monthlySalary = Number(plan.amount) || 0;
+    }
+    set(plan, { active: false, retiredBy: 'team', retiredAt: plan.retiredAt || new Date().toISOString(), userId: user.id });
+  });
+  db.users.forEach(user => {
+    if (!user?.id) return;
+    const amount = user.payConfig?.type === 'salary' ? ratesMonthlySalary(user) : 0;
+    const id = 'opx_salary_' + user.id;
+    let plan = db.opex.find(item => item.id === id);
+    if (!plan && !(amount > 0 && user.active !== false)) return;
+    if (!plan) { plan = { id, addedAt: new Date().toISOString() }; db.opex.push(plan); changed = true; }
+    set(plan, { name: `Оклад — ${user.name || 'сотрудник'}`, amount, frequency: 'monthly', category: 'payroll', scope: 'business', costBehavior: 'fixed', active: amount > 0 && user.active !== false, autoFrom: 'team', userId: user.id });
+  });
+  return changed;
+}
+function ratesPayText(user) {
+  const pc = user?.payConfig || {};
+  if (pc.type === 'salary') return { text: `Оклад ${fmtMoney(ratesMonthlySalary(user))} / мес`, ok: ratesMonthlySalary(user) > 0 };
+  if (pc.type === 'commission') return { text: `${Number(pc.commissionPct) || 0}% от выручки проекта`, ok: Number(pc.commissionPct) > 0 };
+  if (pc.type === 'per_sqft') return { text: 'Сдельно — ставка из услуги', ok: true };
+  if (pc.type === 'fixed_per_job') return { text: `${fmtMoney(Number(pc.fixedPerJob) || 0)} за заказ`, ok: Number(pc.fixedPerJob) > 0 };
+  if (pc.type === 'hourly') return { text: `${fmtMoney(Number(pc.hourlyRate) || 0)} / час`, ok: Number(pc.hourlyRate) > 0 };
+  if (pc.type === 'none') return { text: 'Не оплачивается через CRM', ok: true };
+  return { text: 'Оплата не настроена', ok: false };
+}
+/** Services with their own rate: active, filled in, edited in their home direction. */
+function ratesWorkServices() {
+  return serviceOfferingsAll().filter(item => item.active !== false && !serviceOfferingIsDraft(item));
+}
+function ratesBusinessPlans(behavior) {
+  return (db.opex || []).map((plan, index) => ({ plan, index }))
+    .filter(({ plan }) => !plan.retiredBy && plan.scope !== 'personal' && plan.category !== 'tax' && (behavior === 'variable' ? plan.costBehavior === 'variable' : plan.costBehavior !== 'variable'));
+}
+function ratesCostsSummary() {
+  const people = activeUsers();
+  const salaried = people.filter(user => user.payConfig?.type === 'salary');
+  const services = ratesWorkServices();
+  const pd = db.settings.pricingDefaults || {};
+  return {
+    people: people.length,
+    unpaid: people.filter(user => !ratesPayText(user).ok).length,
+    salaries: salaried.reduce((sum, user) => sum + ratesMonthlySalary(user), 0),
+    services: services.length,
+    noRate: services.filter(item => !(Number(item.installerRatePerSqft) > 0)).length,
+    fixed: companyFixedMonthlyBurn(),
+    fixedCount: ratesBusinessPlans('fixed').filter(({ plan }) => plan.active !== false).length,
+    managerPct: Number(pd.managerPct) || 0,
+    marketingPct: Number(pd.marketingPct) || 0,
+  };
+}
+function openRatesTab(tab = '') {
+  state.ratesTab = tab;
+  if (state.view !== 'ratesCosts') state.view = 'ratesCosts';
+  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) {}
+  render();
+}
+function ratesSetDefault(field, value) {
+  if (currentUser()?.role !== 'owner') return;
+  db.settings.pricingDefaults = db.settings.pricingDefaults || {};
+  db.settings.pricingDefaults[field] = Math.max(0, Number(value) || 0);
+  save();
+}
+function ratesSetCommission(userId, value) {
+  const user = getUser(userId);
+  if (!user || currentUser()?.role !== 'owner') return;
+  user.payConfig = user.payConfig || {};
+  user.payConfig.type = 'commission';
+  user.payConfig.commissionPct = Math.max(0, Number(value) || 0);
+  save();
+}
+function ratesUpdateOffering(id, field, value, control) {
+  updateServiceOffering(id, field, value, control);
+  if (field === 'installerRatePerSqft') control?.closest('.rates-row')?.classList.toggle('rates-row-missing', !(Number(serviceOffering(id)?.installerRatePerSqft) > 0));
+}
+function ratesHeadHtml(icon, title, sub) {
+  return `<div class="rates-head"><button type="button" class="rates-back" onclick="openRatesTab('')">← Ставки и расходы</button><div class="rates-head-title"><span>${icon}</span><div><h2>${title}</h2><p>${sub}</p></div></div></div>`;
+}
+function ratesPlanRowHtml({ plan, index }) {
+  const auto = plan.autoFrom === 'team';
+  const open = auto ? `openUserPayConfig('${plan.userId}')` : `financeOpenPlanModal(${index},'${plan.costBehavior === 'variable' ? 'company-variable' : 'company-fixed'}')`;
+  const freq = ({ daily: 'каждый день', weekly: 'каждую неделю', monthly: 'каждый месяц', quarterly: 'каждый квартал', yearly: 'каждый год' })[plan.frequency] || 'каждый месяц';
+  return `<button type="button" class="rates-row ${plan.active === false ? 'rates-row-off' : ''}" onclick="${open}"><div class="rates-row-main"><b>${academyEsc(plan.name || 'Без названия')}</b><small>${auto ? '👷 из «Люди и оплата» — меняется у сотрудника' : `${academyEsc(financeCategoryLabel(plan.category))} · ${freq}${plan.active === false ? ' · выключен' : ''}`}</small></div><div class="rates-row-sum">${fmtMoney(opexMonthly({ ...plan, active: true }))}<small>в месяц</small></div></button>`;
+}
+function renderRatesCosts() {
+  if (currentUser()?.role !== 'owner') return '<div class="card">Доступ только владельцу</div>';
+  if (syncTeamSalaryPlans()) save();
+  const sum = ratesCostsSummary();
+  const tab = state.ratesTab || '';
+  const pd = db.settings.pricingDefaults || {};
+  if (tab === 'people') {
+    const rows = activeUsers().map(user => {
+      const pay = ratesPayText(user);
+      return `<button type="button" class="rates-row ${pay.ok ? '' : 'rates-row-missing'}" onclick="openUserPayConfig('${user.id}')"><div class="rates-row-main"><b>${academyEsc(user.name || '—')}</b><small>${academyEsc(({ owner: 'Владелец', manager: 'Менеджер', installer: 'Монтажник', measurer: 'Замерщик' })[user.role] || T(user.role))}</small></div><div class="rates-row-sum">${academyEsc(pay.text)}<small>изменить →</small></div></button>`;
+    }).join('') || '<div class="rates-empty">В команде пока никого — добавьте сотрудников в «Команде».</div>';
+    return `<div class="rates-page">${ratesHeadHtml('👷', 'Люди и оплата', 'Оклад, процент, фикс за заказ или сдельно — у каждого сотрудника одна запись')}
+      <div class="rates-list">${rows}</div>
+      <div class="rates-note">Оклады сами попадают в «Постоянные расходы»: сейчас <b>${fmtMoney(sum.salaries)}</b> в месяц. Сдельная оплата монтажника — ставка услуги во вкладке <button type="button" class="rates-link" onclick="openRatesTab('work')">«За единицу работы»</button>.</div></div>`;
+  }
+  if (tab === 'work') {
+    const groups = SERVICE_OFFERING_DIRECTIONS.map(direction => {
+      const items = ratesWorkServices().filter(item => item.direction === direction);
+      if (!items.length) return '';
+      const rows = items.map(item => {
+        const per = serviceOfferingUnitShort(item);
+        const sized = serviceOfferingNeedsSizes(item);
+        const missing = !(Number(item.installerRatePerSqft) > 0);
+        return `<div class="rates-row rates-row-edit ${missing ? 'rates-row-missing' : ''}"><div class="rates-row-main"><b>${academyEsc(item.name)}</b><small>клиенту ${fmtMoney(Number(item.pricePerSqft) || 0)} / ${academyEsc(per)}</small></div>
+          <label>Монтажнику, $ / ${academyEsc(per)}<input type="number" min="0" step="0.25" inputmode="decimal" value="${Number(item.installerRatePerSqft) || ''}" placeholder="0" onchange="ratesUpdateOffering('${item.id}','installerRatePerSqft',this.value,this)"></label>
+          ${sized ? '<label>Материал<span class="rates-muted">по плёнке со склада</span></label>' : `<label>Материал, $ / ${academyEsc(per)}<input type="number" min="0" step="0.5" inputmode="decimal" value="${Number(item.materialCostPerUnit) || ''}" placeholder="0" onchange="ratesUpdateOffering('${item.id}','materialCostPerUnit',this.value,this)"></label>`}</div>`;
+      }).join('');
+      return `<div class="rates-group"><div class="rates-group-title">${serviceOfferingDirectionTitle(direction)}</div>${rows}</div>`;
+    }).join('') || '<div class="rates-empty">Услуг пока нет — добавьте их в «Услуги и цены».</div>';
+    return `<div class="rates-page">${ratesHeadHtml('🔧', 'За единицу работы', 'Сколько платим монтажнику и сколько стоит материал за sq ft, штуку или зону')}
+      ${sum.noRate ? `<div class="rates-warn">Без ставки монтажнику: ${sum.noRate} — по ним начислится $0.</div>` : ''}
+      ${groups}
+      <div class="rates-note">Это те же поля, что в «Услуги и цены» — меняете здесь или там, значение одно. Если на объекте несколько монтажников, сумма по услуге делится поровну.</div></div>`;
+  }
+  if (tab === 'fixed') {
+    const analysis = breakEvenAnalysis();
+    const plans = ratesBusinessPlans('fixed');
+    return `<div class="rates-page">${ratesHeadHtml('🏠', 'Постоянные расходы', 'Платим каждый месяц, даже без заказов: аренда, страховка, сервисы, оклады')}
+      <div class="rates-kpis"><div><small>В месяц</small><b>${fmtMoney(analysis.burn)}</b></div><div><small>В день</small><b>${fmtMoney(analysis.burn / 30)}</b></div><div><small>Заказов / мес. до нуля</small><b>${analysis.ordersToBreakEven > 0 ? analysis.ordersToBreakEven.toFixed(1) : '—'}</b></div><div><small>sq ft / мес. до нуля</small><b>${analysis.sqftToBreakEven > 0 ? Math.ceil(analysis.sqftToBreakEven).toLocaleString() : '—'}</b></div></div>
+      <div class="rates-list">${plans.map(ratesPlanRowHtml).join('') || '<div class="rates-empty">Добавьте аренду, страховку, сервисы и другие обязательные платежи.</div>'}</div>
+      <button type="button" class="btn-primary rates-add" onclick="financeOpenPlanModal(-1,'company-fixed')">+ Постоянный расход</button>
+      <div class="rates-note">Это управленческий план, а не списание денег со счёта. Оклады меняются у сотрудника во вкладке <button type="button" class="rates-link" onclick="openRatesTab('people')">«Люди и оплата»</button>.</div></div>`;
+  }
+  if (tab === 'variable') {
+    const managers = activeUsers(['manager']);
+    const plans = ratesBusinessPlans('variable');
+    const field = (label, key, step, hint = '') => `<label class="rates-field">${label}<input type="number" min="0" step="${step}" inputmode="decimal" value="${Number(pd[key]) || 0}" onchange="ratesSetDefault('${key}',this.value)">${hint ? `<small>${hint}</small>` : ''}</label>`;
+    return `<div class="rates-page">${ratesHeadHtml('📦', 'Переменные расходы', 'Растут вместе с продажами: проценты, бензин, расходники, хелпер')}
+      <div class="rates-group"><div class="rates-group-title">От выручки</div>
+        ${managers.map(user => `<label class="rates-field">Комиссия — ${academyEsc(user.name)}, %<input type="number" min="0" step="0.5" inputmode="decimal" value="${user.payConfig?.type === 'commission' ? Number(user.payConfig.commissionPct) || 0 : ''}" placeholder="не на проценте" onchange="ratesSetCommission('${user.id}',this.value)"></label>`).join('')}
+        ${field('Комиссия менеджера по умолчанию, %', 'managerPct', '0.5', 'Для проектов без назначенного менеджера.')}
+        ${field('Реклама, % от выручки прошлого месяца', 'marketingPct', '0.5')}
+        ${typeof companyAdBudgetHint === 'function' ? companyAdBudgetHint() : ''}
+      </div>
+      <div class="rates-group"><div class="rates-group-title">На каждый проект</div>
+        ${field('Бензин, $ / км', 'gasPerKm', '0.05')}
+        ${field('Расходники, $ / sq ft', 'consumablesPerSqft', '0.05')}
+        ${field('Хелпер, $ / заказ', 'helperPerJob', '5')}
+        <div class="rates-note">Монтажник и материал — во вкладке <button type="button" class="rates-link" onclick="openRatesTab('work')">«За единицу работы»</button>.</div>
+      </div>
+      <div class="rates-group"><div class="rates-group-title">Регулярные переменные платежи</div>
+        <div class="rates-list">${plans.map(ratesPlanRowHtml).join('') || '<div class="rates-empty">Нет — например, комиссия платёжной системы или подписка, которая растёт с заказами.</div>'}</div>
+        <button type="button" class="btn-ghost rates-add" onclick="financeOpenPlanModal(-1,'company-variable')">+ Переменный платёж</button>
+      </div></div>`;
+  }
+  const tile = (key, icon, title, value, sub, warn = '') => `<button type="button" class="rates-tile ${warn ? 'rates-tile-warn' : ''}" onclick="openRatesTab('${key}')"><span class="rates-tile-icon">${icon}</span><span class="rates-tile-title">${title}</span><b>${value}</b><small>${warn || sub}</small><span class="rates-tile-go">→</span></button>`;
+  return `<div class="rates-page">
+    <div class="rates-hero"><small>Нужно покрыть в месяц</small><b>${fmtMoney(sum.fixed)}</b><span>постоянные расходы вместе с окладами · переменные считаются в каждом проекте</span></div>
+    <div class="rates-tiles">
+      ${tile('people', '👷', 'Люди и оплата', `${sum.people} чел.`, `оклады ${fmtMoney(sum.salaries)} / мес`, sum.unpaid ? `не настроено: ${sum.unpaid}` : '')}
+      ${tile('work', '🔧', 'За единицу работы', `${sum.services} услуг`, 'ставка монтажнику и материал', sum.noRate ? `без ставки: ${sum.noRate}` : '')}
+      ${tile('fixed', '🏠', 'Постоянные расходы', fmtMoney(sum.fixed), `${sum.fixedCount} платежей в месяц`)}
+      ${tile('variable', '📦', 'Переменные расходы', `${sum.managerPct}% · ${sum.marketingPct}%`, 'менеджер · реклама · бензин · расходники')}
+    </div>
+    <div class="rates-note">Одно место для всех ставок и расходов. Здесь и в «Команде», «Услугах и ценах», «Деньгах» — одни и те же цифры: меняете в одном месте — меняются везде.</div>
+  </div>`;
+}

@@ -2024,6 +2024,36 @@
   .install-stripe { display:flex;justify-content:space-between;gap:8px;align-items:center;border-radius:6px;padding:3px 8px;font-size:12px;line-height:1.3;box-sizing:border-box; }
   .install-stripe span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600; }
   .install-stripe b { white-space:nowrap;font-weight:700; }
+  /* Ставки и расходы — one source of truth (Owner, 2026-10-25) */
+  .rates-page { max-width:760px;display:flex;flex-direction:column;gap:12px; }
+  .rates-hero { background:#0F172A;color:#fff;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:2px; }
+  .rates-hero small { color:#CBD5E1;font-size:12px; } .rates-hero b { font-size:30px;font-weight:900;line-height:1.1; } .rates-hero span { color:#CBD5E1;font-size:12px; }
+  .rates-tiles { display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px; }
+  .rates-tile { position:relative;text-align:left;background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px 36px 14px 14px;display:flex;flex-direction:column;gap:2px;min-height:112px;cursor:pointer; }
+  .rates-tile:hover { border-color:#94A3B8; } .rates-tile-icon { font-size:22px; } .rates-tile-title { font-weight:800;color:#0F172A; }
+  .rates-tile b { font-size:20px;font-weight:900;color:#0F172A; } .rates-tile small { color:#64748B;font-size:12px; }
+  .rates-tile-warn { border-color:#FCA5A5;background:#FEF2F2; } .rates-tile-warn small { color:#B91C1C;font-weight:700; }
+  .rates-tile-go { position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#94A3B8;font-size:18px; }
+  .rates-head { display:flex;flex-direction:column;gap:8px; } .rates-back { align-self:flex-start;border:1px solid #CBD5E1;background:#fff;border-radius:8px;padding:6px 12px;font-weight:700; }
+  .rates-head-title { display:flex;gap:10px;align-items:center; } .rates-head-title span { font-size:26px; } .rates-head-title h2 { font-size:20px;font-weight:900;margin:0; } .rates-head-title p { margin:0;color:#64748B;font-size:13px; }
+  .rates-list, .rates-group { display:flex;flex-direction:column;gap:6px; }
+  .rates-group { background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px; } .rates-group-title { font-weight:800;color:#334155;font-size:13px;text-transform:uppercase;letter-spacing:.03em; }
+  .rates-row { display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;width:100%;box-sizing:border-box; }
+  button.rates-row { cursor:pointer; } button.rates-row:hover { border-color:#94A3B8; }
+  .rates-row-main { display:flex;flex-direction:column;min-width:0; } .rates-row-main b { font-weight:700;color:#0F172A; } .rates-row-main small { color:#64748B;font-size:12px; }
+  .rates-row-sum { text-align:right;font-weight:800;white-space:nowrap;display:flex;flex-direction:column; } .rates-row-sum small { color:#94A3B8;font-weight:600;font-size:11px; }
+  .rates-row-missing { border-color:#FCA5A5;background:#FEF2F2; } .rates-row-off { opacity:.55; }
+  .rates-row-edit { display:grid;grid-template-columns:minmax(0,1fr) 130px 130px;align-items:end; }
+  @media (max-width:640px) { .rates-row-edit { grid-template-columns:1fr 1fr; } .rates-row-edit .rates-row-main { grid-column:1 / -1; } }
+  .rates-row-edit label, .rates-field { display:flex;flex-direction:column;gap:3px;font-size:12px;color:#475569; }
+  .rates-field { flex:none; } .rates-field small { color:#94A3B8; }
+  .rates-row-edit input, .rates-field input { width:100%;min-width:0;box-sizing:border-box; }
+  .rates-muted { color:#94A3B8;font-size:12px;padding:6px 0;line-height:1.2; }
+  .rates-kpis { display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px; } .rates-kpis div { background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:10px; } .rates-kpis small { display:block;color:#64748B;font-size:12px; } .rates-kpis b { font-size:18px;font-weight:900; }
+  .rates-note { font-size:12px;color:#64748B;line-height:1.45; } .rates-link { color:#1D4ED8;font-weight:700;text-decoration:underline;background:none;border:0;padding:0; }
+  .rates-warn { background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px; }
+  .rates-empty { border:1px dashed #CBD5E1;border-radius:10px;padding:14px;text-align:center;color:#64748B;font-size:13px; }
+  .rates-add { align-self:flex-start; }
   .rp-dirwin-head .rp-dirwin-sum { font-size: inherit; margin-left: 0; color: inherit; }
   .rp-dirwin-remove { flex:none;width:36px;height:36px;margin-left:.4rem;border:1px solid #fecaca;border-radius:10px;background:#fff;color:#b91c1c;font-weight:800;line-height:1; }
   .rp-dirwin-toggle { display:flex;align-items:center;gap:.5rem;margin-top:1rem;padding:.7rem .8rem;border:1px solid #d9dee6;border-radius:12px;font-size:.9rem; }
@@ -17484,6 +17514,8 @@ function orderDebt(o) {
 function save() {
   if (db?.purchaseRequests && db?.vendors && db?.settings?.catalog) ensureAutoDraftPurchaseRequests();
   projectMonthRevenueCache = null;
+  // Owner, 2026-10-25: salaries live in the employee; fixed costs mirror them.
+  if (typeof syncTeamSalaryPlans === 'function') syncTeamSalaryPlans();
   localStorage.setItem('rolanpro_crm', JSON.stringify(db));
   if (ROLANPRO_CLOUD && cloudReady) {
     cloudScheduleSave();
@@ -19120,6 +19152,8 @@ function selectAppView(key) {
     return;
   }
   if (key === 'settings' && user?.role !== 'owner') return;
+  if (key === 'ratesCosts' && user?.role !== 'owner') return;
+  if (key === 'ratesCosts' && state.view !== 'ratesCosts') state.ratesTab = state.ratesTab || '';
   state.view = key;
   if (key !== 'settings') state.settingsSection = null;
   state.ordersKanbanFullscreen = false;
@@ -19198,6 +19232,7 @@ function renderAppShell() {
     ['orders', T('orders'), '🏗'],
     ['proposals', 'КП', '📄'],
     ['servicePricing', 'Услуги и цены', '💲'],
+    ...(role === 'owner' ? [['ratesCosts', 'Ставки и расходы', '🧾']] : []),
     ['calendar', T('calendar'), '📅'],
     ['installerOps', 'Специалисты по установке сейчас', '📍'],
     ['tasks', 'Задачи', '✅'],
@@ -19359,6 +19394,7 @@ function headerTitle() {
     case 'canonicalProjects': return state.canonicalProjectId ? '📐 Конструктор замеров' : '📐 Проверенные замеры';
     case 'proposals': return '📄 Коммерческие предложения';
     case 'servicePricing': return '💲 Услуги и цены';
+    case 'ratesCosts': return '🧾 Ставки и расходы';
     case 'installerOps': return '📍 Специалисты по установке сейчас';
     case 'workday': return '⏱ Рабочий день';
     case 'analytics': return '📈 Аналитика по объектам';
@@ -19392,6 +19428,7 @@ function headerSubtitle() {
     case 'canonicalProjects': return 'Точные замеры и услуги внутри существующего проекта';
     case 'proposals': return 'Кому отправлено, кто посмотрел и к какому заказу относится КП';
     case 'servicePricing': return 'Единый прайс, ставки специалистов по установке и план продаж — внутри основной CRM';
+    case 'ratesCosts': return 'Одно место для зарплат, ставок за работу, постоянных и переменных расходов';
     case 'installerOps': return 'Активные смены, объекты и последнее добровольно переданное местоположение';
     case 'workday': return 'Смена, часы, пробег и личные начисления в одной истории';
     case 'analytics': return 'Сданные объекты, метраж и заработок — без цен клиента';
@@ -19420,6 +19457,7 @@ function renderView() {
       case 'canonicalProjects': return renderCanonicalProjects();
       case 'proposals': return renderProposalsRegistry();
       case 'servicePricing': return renderCanonicalServicePricing();
+      case 'ratesCosts': return u.role === 'owner' ? renderRatesCosts() : `<div class="card">Доступ только владельцу</div>`;
       case 'installerOps': return renderCanonicalInstallerOperations();
       case 'calendar': return renderCalendar();
       case 'academy': return renderAcademy();
@@ -23372,14 +23410,14 @@ function settingsSections() {
   return [
     { key: 'team-access', icon: '🔐', title: 'Доступ сотрудников', description: 'Email, пароль, роли и отключение доступа', destination: 'team' },
     { key: 'company', icon: '🏢', title: T('company'), description: 'Название компании, валюта и базовые суммы' },
-    { key: 'company-costs', icon: '🎯', title: 'Постоянные расходы и безубыточность', description: 'Аренда, страховка, сервисы и минимальный объём продаж' },
+    { key: 'company-costs', icon: '🧾', title: 'Ставки и расходы', description: 'Зарплаты, ставки за работу, постоянные и переменные расходы — в одном месте', destination: 'ratesCosts', tab: '' },
     { key: 'telegram', icon: '✈️', title: T('telegramConfigure'), description: 'Telegram-бот и Chat ID сотрудников' },
     { key: 'communication', icon: '💬', title: 'Автосвязь с клиентами', description: 'Каналы, автоматические сообщения и AI-продавец' },
     { key: 'integrations', icon: '🔌', title: 'Интеграции', description: 'Google Voice, Gmail, Maps, лиды и внешние сервисы' },
     { key: 'catalog', icon: '🎞', title: T('catalog'), description: 'Плёнки, поставщики, цены и выплаты специалистам по установке' },
     { key: 'complexity', icon: '🪜', title: `${T('complexity')} — ${T('coefficient')}`, description: 'Коэффициенты сложности и стоимость аренды' },
     { key: 'client-payments', icon: '💵', title: 'Как клиент платит', description: 'Доступные способы и приоритет оплаты' },
-    { key: 'pricing', icon: '📊', title: T('pricingDefaults'), description: 'Проценты, топливо, расходники и помощники' },
+    { key: 'pricing', icon: '📊', title: T('pricingDefaults'), description: 'Проценты, топливо, расходники и помощники — в «Ставках и расходах»', destination: 'ratesCosts', tab: 'variable' },
     { key: 'service-pricing', icon: '💲', title: 'Услуги, цены и план продаж', description: 'Единый прайс, ставки работ и точка безубыточности', destination: 'servicePricing' },
     { key: 'units', icon: '📏', title: T('units'), description: 'Единицы измерения размеров стекла' },
     { key: 'office', icon: '📍', title: 'Офис и карта', description: 'Адрес компании, центр карты и Google Reviews' },
@@ -23405,6 +23443,7 @@ function openSettingsSection(key) {
   }
   if (section.destination) {
     state.settingsSection = null;
+    if (section.tab != null) state.ratesTab = section.tab;
     selectAppView(section.destination);
     return;
   }
@@ -37231,14 +37270,16 @@ function renderFinancePlans() {
   if (!plans.length) return `<div class="card empty-state"><div class="icon">📅</div><div class="font-semibold">Регулярных платежей пока нет</div><div class="text-sm text-gray-500 mt-1">Добавьте аренду, страховку, сервисы и другие обязательства.</div><button class="btn-primary mt-4" onclick="financeOpenPlanModal()">+ Добавить платёж</button></div>`;
   return `<div class="space-y-3">
     <div class="card flex items-center justify-between gap-3 flex-wrap"><div><div class="text-sm text-gray-500">Плановая нагрузка в месяц</div><div class="text-2xl font-black text-slate-900">${fmtMoney(totalMonthlyBurn())}</div><div class="text-xs text-gray-500 mt-1">Это план. Остаток счёта изменится только после записи реальной оплаты.</div></div><button class="btn-primary" onclick="financeOpenPlanModal()">+ Добавить платёж</button></div>
-    ${plans.map((plan,index) => `<div class="card ${plan.active?'':'opacity-50'}"><div class="flex items-center justify-between gap-4 flex-wrap"><div class="flex items-center gap-3 min-w-0"><input type="checkbox" ${plan.active?'checked':''} onchange="db.opex[${index}].active=this.checked;save();render();" style="width:20px;height:20px"><div class="min-w-0"><div class="font-semibold text-slate-900">${academyEsc(plan.name || 'Без названия')}</div><div class="text-xs text-gray-500 mt-1">${academyEsc(financeCategoryLabel(plan.category))} · ${frequencyLabel[plan.frequency] || 'каждый месяц'}${plan.day ? ` · ${plan.day}-го числа` : ''} · ${plan.scope === 'personal' ? 'личное' : 'бизнес'}</div></div></div><div class="flex items-center gap-3"><div class="text-right"><div class="font-black text-lg">${fmtMoney(opexMonthly(plan))}</div><div class="text-xs text-gray-500">в месяц</div></div><button class="btn-ghost" onclick="financeOpenPlanModal(${index})">Изменить</button></div></div></div>`).join('')}
+    ${plans.map((plan,index) => plan.retiredBy ? '' : `<div class="card ${plan.active?'':'opacity-50'}"><div class="flex items-center justify-between gap-4 flex-wrap"><div class="flex items-center gap-3 min-w-0"><input type="checkbox" ${plan.active?'checked':''} onchange="db.opex[${index}].active=this.checked;save();render();" style="width:20px;height:20px"><div class="min-w-0"><div class="font-semibold text-slate-900">${academyEsc(plan.name || 'Без названия')}</div><div class="text-xs text-gray-500 mt-1">${academyEsc(financeCategoryLabel(plan.category))} · ${frequencyLabel[plan.frequency] || 'каждый месяц'}${plan.day ? ` · ${plan.day}-го числа` : ''} · ${plan.scope === 'personal' ? 'личное' : 'бизнес'}</div></div></div><div class="flex items-center gap-3"><div class="text-right"><div class="font-black text-lg">${fmtMoney(opexMonthly(plan))}</div><div class="text-xs text-gray-500">в месяц</div></div><button class="btn-ghost" onclick="financeOpenPlanModal(${index})">Изменить</button></div></div></div>`).join('')}
   </div>`;
 }
 
 function financeOpenPlanModal(index = -1) {
   const preset = arguments[1] || '';
   const existing = index >= 0 ? db.opex[index] : null;
-  const plan = existing || { name:'', amount:0, frequency:'monthly', category:'other', scope:'business', costBehavior:'fixed', day:1, tags:[], active:true };
+  // A salary is edited at the employee: the plan is only its mirror.
+  if (existing?.autoFrom === 'team' && existing.userId && typeof openUserPayConfig === 'function') return openUserPayConfig(existing.userId);
+  const plan = existing || { name:'', amount:0, frequency:'monthly', category:'other', scope:'business', costBehavior: preset === 'company-variable' ? 'variable' : 'fixed', day:1, tags:[], active:true };
   const companyFixed = preset === 'company-fixed';
   const categoryOptions = FINANCE_CATEGORY_OPTIONS
     .filter(([key]) => !['client_payment','inventory_purchase','project_expense','payroll','refund','owner_draw'].includes(key))
@@ -40391,7 +40432,7 @@ function openUserPayConfig(userId) {
       </div>
 
       <div id="pc-per_sqft" class="pc-section mt-3" style="display:${pc.type==='per_sqft'?'block':'none'}">
-        <p class="text-sm text-gray-700">Сдельно: ставка за монтаж берётся из услуги в «Услуги и цены» — одна для всех специалистов по установке. Персональных ставок нет.</p>
+        <p class="text-sm text-gray-700">Сдельно: ставка за монтаж берётся из услуги — «Ставки и расходы» → «За единицу работы» (то же поле, что в «Услуги и цены»). Одна для всех специалистов по установке. Персональных ставок нет.</p>
         <p class="text-xs text-gray-500 mt-1">Если на объекте несколько специалистов по установке, начисление по услуге делится поровну. Старший в бригаде получает надбавку к своей доле — отмечается в «Услуги и цены» → «Общие ставки компании».</p>
       </div>
 
