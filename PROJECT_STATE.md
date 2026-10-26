@@ -39,6 +39,14 @@ Before doing any work:
 - New-project, measurement, cashier, Proposal-option and Services/Price Book flows use the same canonical four-direction mapping.
 - Verification: full suite 895/895, `npm run typecheck`, production `npm run build`, and `git diff --check` pass. Production is unchanged; merge/deploy still require the Owner's explicit confirmation after PR review and CI.
 
+## 2026-10-26 handoff — glass quantity, several rolls per receipt, multi-zone as block type (PR #423)
+
+- Merged `687b9fa`, deployed. Also merged #421 (archived employees' salary mirrors hidden from cost lists).
+- Quick measure: each glass row has «шт.» (`win.qty`/`actualQty`); totals and zones count pieces.
+- Warehouse `confirmAddRoll`: «Количество рулонов» (1–50) → N rolls, each with its own `reserveRollCode`, movement and expense; guarded by `state.rollReceiptSaving`.
+- Smart: multi-zone is a power block type. `smartCashierDesiredLines` adds `multi` («Блок питания мультизона») instead of the ordinary block for multi rooms; no separate multi service. Quick block question: Обычный / Мультизона / Не нужен.
+- Open with owner: where Alan still appears (screenshot asked); proposal to measure and clean the legacy JSON state (awaiting yes).
+
 ## 2026-10-26 handoff — two-level measurement (PR #419)
 
 - Merged `4c2f03e`, deployed (prod not re-checked in Chrome from this session). Mock-up: canvas boards 15–18.
