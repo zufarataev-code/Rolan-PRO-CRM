@@ -33,7 +33,7 @@ test('delivery runs by itself every 10 minutes and on demand; test mode until th
   const cycle = read('src/features/google-ads/sync-cycle.ts');
   assert.match(cycle, /const TEN_MINUTES = 10 \* 60 \* 1000;/);
   assert.match(cycle, /if \(!settings\?\.upload_enabled \|\| !settings\.conversion_owner_customer_id\) return \{ skipped: "not_enabled" as const \};/);
-  assert.match(read('instrumentation.ts'), /startGoogleAdsSyncScheduler\(\);/);
+  assert.match(read("instrumentation.ts"), /if \(process\.env\.NEXT_RUNTIME === "nodejs"\) \{/);
   const live = read('src/features/google-ads/live-activation.ts');
   assert.match(live, /GOOGLE_ADS_VALIDATE_ONLY\?\.trim\(\)\.toLowerCase\(\) === "true"/);
   assert.match(live, /customer_id_confirmation_mismatch/);
