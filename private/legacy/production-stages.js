@@ -1242,6 +1242,7 @@ function proposalWizardHtml(o, step) {
       <a class="rp-kpwin-channel" href="${smsLink(client.phone, msg)}" onclick="premiumMarkProposalSent('${prop.token}','SMS')"><b>SMS</b><span>${client.smsConsent ? 'согласие есть' : 'нет согласия на SMS — лучше WhatsApp'}</span></a>
       ${client.email ? `<button type="button" class="rp-kpwin-channel" onclick="premiumSendCanonicalProposal('${prop.token}')"><b>Email</b><span>${academyEsc(client.email)}</span></button>` : '<div class="rp-kpwin-channel off"><b>Email</b><span>у клиента нет email</span></div>'}
       <button type="button" class="rp-kpwin-channel" onclick="navigator.clipboard.writeText('${jsQuote(url)}'); premiumMarkProposalSent('${prop.token}','ссылка скопирована')"><b>Скопировать ссылку</b><span>отправить другим способом</span></button>
+      ${!['Accepted', 'Payment Pending', 'Deposit Paid', 'Paid in Full'].includes(prop.status) ? `<button type="button" class="rp-kpwin-channel rp-kpwin-agreed" onclick="projectAcceptProposalOffline('${o.id}')"><b>🤝 Клиент уже согласен</b><span>договор, звонок или переписка — сразу «КП принято»</span></button>` : ''}
       <button type="button" class="btn-ghost w-full mt-2" onclick="state._proposalWizard=null; openPremiumProposalManagerModal('${prop.token}')">Все настройки КП: оплата, версии</button>`;
     foot = `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="closeProposalWizard()">✓ Готово — к проекту</button>`;
   } else {
@@ -3321,4 +3322,26 @@ function projectAcceptClientSizes(oid, reopen = 'production') {
   save();
   if (reopen === 'production') openProjectProductionWorkspace(oid);
   return true;
+}
+
+// ---------- КЛИЕНТ УЖЕ СОГЛАСЕН (Owner, 2026-10-27) ----------
+// «Я внёс замер, сформировал КП, у нас был договор — а монтаж не назначить»:
+// a formed KP stayed «не отправлено», so the project stood at «Замер». An offline
+// agreement (contract, call, message) marks the KP sent and accepted in one step.
+function projectAcceptProposalOffline(oid) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const prop = getPremiumProposalByOrder(oid);
+  if (!prop || !prop.publishedAt) { alert('Сначала сформируйте КП.'); return; }
+  if (!confirm('Клиент уже согласился (договор, звонок, переписка)?\n\nКП отметится отправленным и принятым. Подписанное КП нельзя будет изменить — только новой версией.')) return;
+  if (prop.status === 'Draft' && !premiumProposalLocked(prop)) {
+    prop.status = 'Sent';
+    prop.sentAt = new Date().toISOString();
+    o.proposalSentAt = o.proposalSentAt || prop.sentAt;
+    o.timeline = o.timeline || [];
+    o.timeline.push({ at: prop.sentAt, key: 'premium_proposal_sent', by: state.currentUserId, note: 'КП согласовано с клиентом напрямую (договор)' });
+  }
+  if (['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done'].includes(o.status)) o.status = 'proposal_sent';
+  if (typeof closeProposalWizard === 'function') closeProposalWizard(); else closeModal();
+  changeStatus(oid, 'proposal_accepted');
 }
