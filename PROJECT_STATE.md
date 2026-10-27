@@ -67,6 +67,13 @@ Before doing any work:
 - New-project, measurement, cashier, Proposal-option and Services/Price Book flows use the same canonical four-direction mapping.
 - Verification: full suite 895/895, `npm run typecheck`, production `npm run build`, and `git diff --check` pass. Production is unchanged; merge/deploy still require the Owner's explicit confirmation after PR review and CI.
 
+## 2026-10-27 handoff — one measurement window + «Режим внедрения» (PR #431)
+
+- Merged `d796c45`, deployed. Separate quick measurement window removed (supersedes #419's quick window; `projectAcceptClientSizes` stays).
+- Measurement window: «Поля:» chips (`measureFieldsBarHtml`, per user in localStorage) hide direction / glass & access / notes & photos / Smart zone via `mm-hide-*` classes; measurer default all, others basics.
+- Import mode `db.settings.importMode.on` (owner only; Settings «Режим внедрения», banner while on): `changeStatus` skips all stage guards, stock deduction and notifications; measurement completion and estimate readiness never block; server `prepareServiceSolutions` skips its stage checks while stored on (a manager cannot flip the flag).
+- Tests: quick-measure.test.ts (rewritten), import-mode-server.test.ts.
+
 ## 2026-10-27 handoff — «Клиент уже согласен» (PR #429)
 
 - Merged `addba35`, deployed. KP wizard send step: «🤝 Клиент уже согласен» → `projectAcceptProposalOffline` marks a published KP Sent (timeline «согласовано напрямую») and moves the project to `proposal_accepted`.
