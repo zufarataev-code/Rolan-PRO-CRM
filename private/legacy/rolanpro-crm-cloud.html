@@ -1682,6 +1682,32 @@
   .project-feed-chips { display:flex; gap:8px; flex-wrap:wrap; }
   .project-feed-doc { border:1px solid #D9DEE6; background:#fff; border-radius:999px; padding:8px 12px; font-size:13px; font-weight:600; min-height:40px; }
   .project-feed-doc.muted { border-style:dashed; color:#8A94A6; font-weight:500; }
+  /* Касса проекта (Owner, 2026-10-26): four direction tiles, room tiles, bottom receipt */
+  .project-cashier-directions.four { grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+  .project-cashier-directions.four .project-cashier-direction { --direction-tint:#eff6ff; --direction-deep:#1d4ed8; grid-template-columns:1fr; justify-items:center; text-align:center; gap:4px; min-height:84px; padding:10px 6px; border:1px solid transparent; border-left-width:1px; border-radius:12px; background:var(--direction-tint); color:var(--direction-deep); }
+  .project-cashier-directions.four .project-cashier-direction .project-cashier-direction-icon { background:transparent; color:currentColor; width:auto; height:auto; }
+  .project-cashier-directions.four .project-cashier-direction > span:not(.project-cashier-direction-icon):not(.project-cashier-primary) b { font-size:.72rem; white-space:normal; line-height:1.1; color:inherit; }
+  .project-cashier-directions.four .project-cashier-direction > span:not(.project-cashier-direction-icon):not(.project-cashier-primary) > span { color:inherit; opacity:.8; font-size:.6rem; }
+  .project-cashier-directions.four .project-cashier-direction.on { background:var(--direction-color); color:#fff; }
+  .project-cashier-directions.four .project-cashier-direction.add { border-style:dashed; border-color:color-mix(in srgb,var(--direction-color) 40%,#fff); }
+  .project-cashier-directions.four .project-cashier-direction:hover, .project-cashier-directions.four .project-cashier-direction:focus-visible { box-shadow:none; border-color:var(--direction-color); }
+  .project-cashier-directions.four .project-cashier-primary { color:#fff!important; opacity:.9; }
+  .project-cashier-flow { grid-template-columns:1fr; }
+  @media (max-width:520px) { .project-cashier-directions.four { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  .project-room-tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+  .project-room-tile { display:flex; flex-direction:column; gap:3px; align-items:flex-start; text-align:left; min-height:72px; padding:10px 12px; border:1px solid #D9DEE6; border-radius:12px; background:#F4F5F7; color:#141A26; cursor:pointer; }
+  .project-room-tile:hover, .project-room-tile:focus-visible { border-color:#C9A24A; background:#FFF9EA; outline:none; }
+  .project-room-tile.add { border-style:dashed; background:#fff; color:#5A6577; justify-content:center; }
+  .project-room-tile-name { font-size:13px; font-weight:700; }
+  .project-room-tile-meta { font-size:11px; color:#5A6577; font-variant-numeric:tabular-nums; }
+  .project-room-tile-chip { font-size:11px; font-weight:700; color:#CA8A04; }
+  .project-room-tile.full .project-room-tile-chip { color:#15803D; }
+  .project-feed-check { display:flex; justify-content:space-between; align-items:center; gap:12px; background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:12px 14px; box-shadow:0 -6px 24px rgba(15,36,64,.08); }
+  .project-feed-check-kicker { font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#5A6577; }
+  .project-feed-check-total { font-size:22px; line-height:26px; font-weight:800; color:#141A26; font-variant-numeric:tabular-nums; }
+  .project-feed-check-total small { display:block; font-size:11px; font-weight:400; color:#5A6577; }
+  .project-feed-check .project-feed-btn { flex:0 0 auto; min-width:150px; }
+  @media (max-width:720px) { .project-feed-check { position:sticky; bottom:8px; z-index:4; } }
   .project-command-hero .project-command-hero-actions { display:none; }
   /* inside the feed the services list carries no second heading and no second measurement row */
   .project-feed-services .project-service-ledger-title, .project-feed-services .project-service-ledger-sub, .project-feed-services .project-cashier-flow { display:none !important; }

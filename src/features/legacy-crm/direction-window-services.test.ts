@@ -15,7 +15,14 @@ test('the card shows one tile per direction; before production its lines open th
   assert.match(card, /\$\{production \? directionLines\.map\(row\)\.join\(''\) \+ direction\.pending\.map\(pendingRow\)\.join\(''\) : directionLines\.map\(compactRow\)/);
   assert.doesNotMatch(card, /projectDirectionOfferingPickerHtml\(o,direction\.key\)/, 'no second add button on the card');
   assert.doesNotMatch(card, /> В расчёте<\/label>/, 'the include switch lives in the window');
-  assert.match(fn(stages, 'projectCashierMapHtml'), /<b>Добавить направление<\/b><span>выберите — откроется его окно, там услуги<\/span>/);
+  // Owner, 2026-10-26: the card opens on the four direction tiles of the cashier;
+  // a direction not in the project is a tinted «+ добавить» tile that opens its window.
+  const map = fn(stages, 'projectCashierMapHtml');
+  assert.match(map, /PROJECT_CASHIER_DIRECTION_ORDER\.map\(key =>/);
+  assert.match(map, /class="project-cashier-direction add"[^>]*onclick="openProjectDirectionWindow\('\$\{o\.id\}','\$\{jsQuote\(key\)\}','services'\)"/);
+  assert.match(map, /<span>\+ добавить<\/span>/);
+  assert.doesNotMatch(map, /openProjectDirectionPicker/, 'no picker between the tile and the window');
+  assert.doesNotMatch(map, /project-cashier-flow-actions/, 'the three duplicate buttons are gone');
 });
 
 test('in the window every service has ✕, the include switch and the add list', () => {

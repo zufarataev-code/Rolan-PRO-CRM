@@ -51,9 +51,8 @@ test('the project card groups services by direction and keeps per-service planni
 
 test('the project card carries the approved cashier → measurement → work-order map without a parallel calculation',()=>{
   assert.match(html,/data-project-cashier-map/);
-  assert.match(html,/Касса проекта · направления и услуги/);
-  assert.match(html,/Добавить направление/);
-  assert.match(html,/openProjectDirectionPicker\('\$\{o\.id\}'\)/); // a direction first, then its window (2026-10-24)
+  assert.match(html,/project-cashier-directions four/); // the four direction tiles of the cashier (Owner, 2026-10-26)
+  assert.match(html,/openProjectDirectionWindow\('\$\{o\.id\}','\$\{jsQuote\(key\)\}','services'\)/); // a tap on a direction opens its window; no picker between
   assert.match(html,/openManagerMeasureModal\('\$\{o\.id\}'\)/);
   assert.match(html,/openProjectEstimateWorkspace\('\$\{o\.id\}'\)/);
   assert.match(html,/openWorkOrder\('\$\{o\.id\}'\)/);

@@ -23,6 +23,15 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-26 handoff — opened project reads as the cashier (branch `claude/project-card-cashier`)
+
+- Owner, 2026-10-26: «раздел проект очень запутан — сделать понятным, как касса; не ломать всё, а слетать плавно». Prototype he tested: Artifact «Проект · касса RolanPRO».
+- The feed keeps its section order (tests unchanged). Inside «Услуги», `projectCashierMapHtml` now renders the four customer-facing direction tiles (`PROJECT_CASHIER_DIRECTION_ORDER`: Smart, Solar, Protective, Decorative): a direction in the project is filled with its `rpDir` colour and shows services · windows · sum; one not in the project is a tinted «+ добавить» tile. Either tap opens `openProjectDirectionWindow(oid, key, 'services')` — the picker modal between the tile and the window is no longer used from the card. The three duplicate buttons (Замер / Расчёт / Заказ-наряд) under the map are gone; the facts row (rooms · windows · sq ft) stays.
+- «Замер» section: rooms are tiles (`.project-room-tile`) — name, windows, sq ft, chip «базовый» (any `win.quickMeasure`) or «полный ✓»; a tap and «+ Помещение» open the same `measureAction` window.
+- Receipt `projectFeedCheckHtml` at the end of the feed for money roles: total, line count, «без замера» count, and one button — «Собрать КП» / «Открыть КП» / «Монтаж» once the KP is signed. Sticky at the bottom on phones (≤720px).
+- Not touched: direction window, measurement windows, KP wizard, work order, data model. No state changes.
+- Verification: focused tests 23/23 (`project-cashier-card.test.ts` new; `direction-window-services` and `production-ui` updated to the new tiles); full suite 822 pass / 26 fail vs 820 / 28 on untouched main (env-dependent failures only, same set); `tsc` error count identical to main (585, env). Production build and phone smoke check still pending; merge/deploy after the owner's look.
+
 ## 2026-10-26 handoff — all four directions stay visible in the project cashier
 
 - Branch `codex/four-directions-visible`, based on `main` `ac274c7` after PR #412.
