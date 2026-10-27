@@ -10,8 +10,9 @@ const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
 const fn = (src: string, name: string) => { const a = src.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return src.slice(a, src.indexOf('\n}\n', a) + 3); };
 
 test('the four directions are always on the card, filled when in the project', () => {
-  assert.match(stages, /const PROJECT_CASHIER_DIRECTION_ORDER = \['smart_film', 'solar_film', 'protective_film', 'decorative_film'\];/);
   const map = fn(stages, 'projectCashierMapHtml');
+  assert.match(map, /const directionOrder = \['smart_film', 'solar_film', 'protective_film', 'decorative_film'\];/);
+  assert.match(map, /directionOrder\.map\(key =>/);
   assert.match(map, /class="project-cashier-direction on \$\{excluded \? 'excluded' : ''\}"/);
   assert.match(map, /if \(!\(money && edit\)\) return '';/, 'field roles see no add tiles');
   assert.match(map, /<div class="project-cashier-directions four">\$\{tiles\}<\/div>/);
@@ -35,5 +36,6 @@ test('the receipt shows the total with one next button, only for money roles', (
   assert.match(check, /projectFeedBtn\(proposal \? 'Открыть КП' : 'Собрать КП', `openProposalWizard\('\$\{o\.id\}'\)`, 'primary'\)/);
   assert.match(check, /projectFeedBtn\('Монтаж', "projectCardOpenWorkspace\('schedule'\)", 'primary'\)/);
   assert.match(check, /fmtMoney\(orderRevenue\(o\)\)/);
-  assert.match(html, /@media \(max-width:720px\) \{ \.project-feed-check \{ position:sticky; bottom:8px;/);
+  assert.match(html, /@media \(max-width:720px\) \{ \.project-feed-check \{ display:flex; position:sticky; bottom:8px;/);
+  assert.match(html, /\.project-feed-check \{ display:none;/, 'desktop does not repeat the total from the project header');
 });

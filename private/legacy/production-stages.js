@@ -392,9 +392,10 @@ function projectCardFocusDirection(oid, directionKey) {
   render();
   requestAnimationFrame(() => document.querySelector(`[data-project-direction="${CSS.escape(directionKey)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
-/** The four customer-facing directions in the order the owner names them. */
-const PROJECT_CASHIER_DIRECTION_ORDER = ['smart_film', 'solar_film', 'protective_film', 'decorative_film'];
 function projectCashierMapHtml(o, directions, { money = false, edit = false } = {}) {
+  // Keep the order local: production-stages.js is composed into the legacy page
+  // as functions only, so top-level constants disappear in the production build.
+  const directionOrder = ['smart_film', 'solar_film', 'protective_film', 'decorative_film'];
   const included = directions.filter(direction => !projectDirectionExcluded(o, direction.key));
   const primaryKey = included[0]?.key || '';
   // Owner, 2026-10-26 («как касса: карточки, тап, итог собирается сам»): the
@@ -404,7 +405,7 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   // where services are added and removed — no picker in between. Directions
   // outside the four (general works) stay as their cards below.
   const byKey = new Map(directions.map(direction => [direction.key, direction]));
-  const tiles = PROJECT_CASHIER_DIRECTION_ORDER.map(key => {
+  const tiles = directionOrder.map(key => {
     const service = ORDER_PRIMARY_SERVICES.find(item => item.id === key);
     if (!service) return '';
     const direction = byKey.get(key);
@@ -1593,13 +1594,12 @@ function saveOfferingWindows(oid, offeringId, returnTo = 'card') {
 }
 
 // ---------- ЛЕНТА ПРОЕКТА (Owner, 2026-10-24: approved mock-up «Лента проекта») ----------
-// One page, sections in the order the work goes, each with a short summary and
-// ONE button — as in TintWiz: Визиты → Клиент и объект → Услуги → Замер →
-// Плёнка и закупка → КП → Оплата и счёт → Монтаж → Документы → История. The
-// buttons open the same workspaces as before (projectCardOpenWorkspace etc.).
-function projectFeedSection(num, title, body, { chip = '', button = '', id = '' } = {}) {
+// One project page. The stage bar and «Следующий шаг» already explain the
+// sequence, therefore the content below is grouped by business object instead
+// of repeating the funnel with numbered technical sections.
+function projectFeedSection(title, body, { chip = '', button = '', id = '' } = {}) {
   return `<section class="project-feed-section" ${id ? `data-project-feed="${id}"` : ''}>
-    <div class="project-feed-head"><h3><span class="project-feed-num">${num}</span>${academyEsc(title)}</h3>${chip}</div>
+    <div class="project-feed-head"><h3>${academyEsc(title)}</h3>${chip}</div>
     <div class="project-feed-body">${body}</div>
     ${button ? `<div class="project-feed-actions">${button}</div>` : ''}
   </section>`;
@@ -1792,23 +1792,25 @@ function projectFeedHtml(o, c, u, ctx) {
   const invoices = Array.isArray(o.invoices) ? o.invoices : [];
   const groups = projectServiceGroups(o);
 
-  const visits = events.length
-    ? events.map(ev => projectFeedRow(`${ev.icon} ${academyEsc(ev.title)}`, `${new Date(ev.at) < new Date() ? '✓ ' : ''}${fmtDateTime(ev.at)}`)).join('')
-    : '<div class="project-feed-empty">Визитов пока нет</div>';
-  const clientBody = `${projectFeedRow(academyEsc([c?.phone, c?.email].filter(Boolean).join(' · ') || 'контакты не заполнены'))}${projectFeedRow(`<span class="quiet">${academyEsc([orderSiteType(o) === 'COMMERCIAL' ? 'Commercial' : 'Residential', projectSiteSummary(o, c)].filter(Boolean).join(' · ') || 'доступ и парковка не заполнены')}</span>`)}`;
+  const contactText = [c?.phone, c?.email].filter(Boolean).join(' · ') || 'контакты не заполнены';
+  const objectText = [orderSiteType(o) === 'COMMERCIAL' ? 'Commercial' : 'Residential', projectSiteSummary(o, c)].filter(Boolean).join(' · ') || 'объект не заполнен';
+  const projectContext = `<div class="project-feed-context" data-project-feed="context"><div class="project-feed-context-copy"><b>Клиент и объект</b><span>${academyEsc(contactText)}</span><span>${academyEsc(objectText)}</span></div><div class="project-feed-context-actions">${projectFeedBtn(canManage ? 'Клиент' : 'Открыть', "projectCardOpenWorkspace('client')")}${canManage ? projectFeedBtn('Объект', "projectCardOpenWorkspace('site')") : ''}</div></div>`;
   // Owner, 2026-10-26: rooms are tiles like the cashier — name, windows, sq ft,
   // and whether the sizes are still the client's (базовый) or the measurer's
   // (полный). A tap opens the one measurement window; «+ Помещение» too.
   const roomTile = room => { const rw = (room.windows || []); const sq = rw.reduce((sum, win) => sum + (windowActualAreaSqft(win) || 0), 0); const full = rw.length && rw.every(win => !win.quickMeasure); return `<button type="button" class="project-room-tile ${full ? 'full' : ''}" onclick="${measureAction}"><span class="project-room-tile-name">${academyEsc(room.name || 'Помещение')}</span><span class="project-room-tile-meta">${rw.length} ${projectWindowsWord(rw.length)} · ${sq.toFixed(1)} sq ft</span><span class="project-room-tile-chip">${rw.length ? (full ? 'полный ✓' : 'базовый') : 'без окон'}</span></button>`; };
-  const measureBody = rooms.length
+  const measurementEvent = events.find(ev => ev.type === 'measure');
+  const measurementEventRow = measurementEvent ? projectFeedRow('Выезд замерщика', `${new Date(measurementEvent.at) < new Date() ? '✓ ' : ''}${fmtDateTime(measurementEvent.at)}`) : '';
+  const measureBody = measurementEventRow + (rooms.length
     ? `<div class="project-room-tiles">${rooms.map(roomTile).join('')}${canManage ? `<button type="button" class="project-room-tile add" onclick="${measureAction}"><span class="project-room-tile-name">+ Помещение</span><span class="project-room-tile-meta">или размеры с рулетки</span></button>` : ''}</div>` + projectFeedRow('Всего', `${windows.length} ${projectWindowsWord(windows.length)} · ${orderActualAreaSqft(o).toFixed(1)} sq ft`, 'total')
-    : `<div class="project-feed-empty">${orderNeedsMeasurements(o) ? 'Замера ещё нет' : 'Замер не нужен: услуги без размеров'}</div>`;
+    : `<div class="project-feed-empty">${orderNeedsMeasurements(o) ? 'Размеры ещё не внесены' : 'Для выбранных услуг размеры не нужны'}</div>`);
   const measureChip = !windows.length ? '' : orderMeasurementVerificationIssues(o).length ? projectFeedChip('размеры клиента', 'warn') : projectFeedChip('точные размеры', 'good');
   const filmRows = projectFeedFilmRows(o);
   const proposalStatus = proposal ? (proposal.status || 'Draft') : '';
   const proposalChip = !proposal ? projectFeedChip('не собрано') : ['Accepted', 'Deposit Paid', 'Paid in Full'].includes(proposalStatus) ? projectFeedChip('подписано', 'good') : ['Sent', 'Viewed'].includes(proposalStatus) ? projectFeedChip(proposalStatus === 'Viewed' ? 'клиент смотрел' : 'отправлено', 'info') : projectFeedChip('черновик');
   const paid = Math.max(orderPaidTotal(o), Number(o.paid) || 0);
-  const payBody = `${projectFeedRow('Аванс', o.depositReceived ? `✓ ${fmtMoney(orderExpectedDeposit(o) || 0)}` : fmtMoney(orderExpectedDeposit(o) || companyDepositFor(orderRevenue(o))))}${projectFeedRow('Оплачено', fmtMoney(paid))}${projectFeedRow('Остаток', fmtMoney(orderDebt(o)), orderDebt(o) > 0 ? 'total' : '')}${invoices.length ? projectFeedRow(`Счета: ${invoices.map(inv => academyEsc(inv.number)).join(', ')}`, '') : ''}`;
+  const proposalBody = (proposal ? projectFeedRow(`КП ${academyEsc(proposal.number || '')}`, fmtMoney(premiumProposalCalc(proposal)?.total || orderRevenue(o))) : '<div class="project-feed-empty">КП ещё не собрано</div>') + (projectProposalOptionalOfferings(o).length ? projectFeedRow(`<span class="quiet">Опции для клиента: ${projectProposalOptionalOfferings(o).map(item => academyEsc(item.offering.name)).join(', ')}</span>`) : '') + ((o.kpClientOptions || []).length ? projectFeedRow(`Клиент выбрал: ${o.kpClientOptions.map(item => academyEsc(item.title)).join(', ')}`, '') : '');
+  const payBody = `${proposalBody}<div class="project-feed-divider"></div>${projectFeedRow('Аванс', o.depositReceived ? `✓ ${fmtMoney(orderExpectedDeposit(o) || 0)}` : fmtMoney(orderExpectedDeposit(o) || companyDepositFor(orderRevenue(o))))}${projectFeedRow('Оплачено', fmtMoney(paid))}${projectFeedRow('Остаток', fmtMoney(orderDebt(o)), orderDebt(o) > 0 ? 'total' : '')}${invoices.length ? projectFeedRow(`Invoice: ${invoices.map(inv => academyEsc(inv.number)).join(', ')}`, '') : ''}`;
   const installBody = groups.length
     ? groups.map(group => { const plan = projectServiceAssignment(o, group); const crew = (plan?.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', '); return projectFeedRow(academyEsc(group.name), plan?.installationAt ? `${fmtDateTime(plan.installationAt)}${crew ? ' · ' + academyEsc(crew) : ''}` : '<span class="quiet">не назначено</span>'); }).join('')
     : '<div class="project-feed-empty">Сначала добавьте услуги</div>';
@@ -1820,20 +1822,15 @@ function projectFeedHtml(o, c, u, ctx) {
     </div>`;
   const history = recentTimeline.slice(0, 3).map(ev => `<div class="project-feed-row quiet"><span>${fmtDateTime(ev.at)} · ${academyEsc(T(ev.key))}${ev.note ? ' — ' + academyEsc(String(ev.note).slice(0, 60)) : ''}</span></div>`).join('') || '<div class="project-feed-empty">История пока пустая</div>';
 
-  let n = 0;
-  const next = () => ++n;
   return `<div class="project-feed">
     ${primary ? `<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг</div>${renderOrderActionCard(primary)}</div>` : ''}
-    ${projectFeedSection(next(), 'Визиты', visits, { id: 'visits', chip: events.some(ev => new Date(ev.at) >= new Date()) ? projectFeedChip('запланировано', 'info') : '', button: canManage ? projectFeedBtn('Назначить визит', "projectCardOpenWorkspace('schedule')") : '' })}
-    ${projectFeedSection(next(), 'Клиент и объект', clientBody, { id: 'client', button: projectFeedBtn(canManage ? 'Изменить' : 'Открыть', "projectCardOpenWorkspace('client')") })}
-    ${lines.length || projectPendingSizedServices(o).length || canManage ? `<div class="project-feed-services" data-project-feed="services"><div class="project-feed-head"><h3><span class="project-feed-num">${next()}</span>Услуги</h3>${money ? `<b>${fmtMoney(orderRevenue(o))}</b>` : ''}</div>${renderProjectCardServices(o, { money, economics: ctx.canSeeInternalEconomics, manage: canManage })}</div>` : ''}
-    ${projectFeedSection(next(), 'Замер', measureBody, { id: 'measure', chip: measureChip, button: projectFeedBtn('Открыть замер', measureAction, windows.length ? 'ghost' : 'primary') })}
-    ${money && filmRows.length ? projectFeedSection(next(), 'Плёнка и закупка', filmRows.join(''), { id: 'film', button: projectFeedBtn('Открыть закупку', 'openProjectPurchaseRequests()') }) : ''}
-    ${money ? projectFeedSection(next(), 'КП', (proposal ? projectFeedRow(`КП ${academyEsc(proposal.number || '')}`, fmtMoney(premiumProposalCalc(proposal)?.total || orderRevenue(o))) : '<div class="project-feed-empty">Соберите КП, когда услуги посчитаны</div>') + (projectProposalOptionalOfferings(o).length ? projectFeedRow(`<span class="quiet">Опции на выбор клиента: ${projectProposalOptionalOfferings(o).map(item => academyEsc(item.offering.name)).join(', ')}</span>`) : '') + ((o.kpClientOptions || []).length ? projectFeedRow(`Клиент выбрал: ${o.kpClientOptions.map(item => academyEsc(item.title)).join(', ')}`, '') : ''), { id: 'kp', chip: proposalChip, button: projectFeedBtn(proposal ? 'Открыть КП' : 'Собрать КП', `openProposalWizard('${o.id}')`, proposal ? 'ghost' : 'primary') + (proposal?.canonicalProposalId && proposal.status !== 'Draft' ? projectFeedBtn('Забрать выбор клиента', `premiumApplyClientOptions('${o.id}')`) : '') }) : ''}
-    ${money ? projectFeedSection(next(), 'Оплата и счёт', payBody, { id: 'pay', button: `${projectFeedBtn('Счёт (Invoice)', `openProjectInvoice('${o.id}')`)}${orderDebt(o) > 0.01 ? projectFeedBtn('Отметить оплату', `openPaymentModal('${o.id}',{kind:'final'})`) : ''}` }) : ''}
-    ${projectFeedSection(next(), 'Монтаж', installBody, { id: 'install', button: canManage ? projectFeedBtn('Назначить монтаж', "projectCardOpenWorkspace('schedule')") : '' })}
-    ${projectFeedSection(next(), 'Документы', docs, { id: 'docs' })}
-    ${projectFeedSection(next(), 'История и файлы', history, { id: 'history', button: projectFeedBtn('Вся история и фото', "projectCardOpenWorkspace('history')") })}
+    ${projectContext}
+    ${lines.length || projectPendingSizedServices(o).length || canManage ? `<div class="project-feed-services" data-project-feed="services"><div class="project-feed-head"><h3>Состав проекта</h3>${money ? `<b>${fmtMoney(orderRevenue(o))}</b>` : ''}</div>${renderProjectCardServices(o, { money, economics: ctx.canSeeInternalEconomics, manage: canManage })}</div>` : ''}
+    ${projectFeedSection('Замер', measureBody, { id: 'measure', chip: measureChip, button: projectFeedBtn(windows.length ? 'Проверить размеры' : 'Внести размеры', measureAction, windows.length ? 'ghost' : 'primary') })}
+    ${money && filmRows.length ? projectFeedSection('Материалы', filmRows.join(''), { id: 'film', button: projectFeedBtn('Склад и закупка', 'openProjectPurchaseRequests()') }) : ''}
+    ${money ? projectFeedSection('КП и оплата', payBody, { id: 'commercial', chip: proposalChip, button: `${projectFeedBtn(proposal ? 'Открыть КП' : 'Собрать КП', `openProposalWizard('${o.id}')`, proposal ? 'ghost' : 'primary')}${proposal?.canonicalProposalId && proposal.status !== 'Draft' ? projectFeedBtn('Забрать выбор клиента', `premiumApplyClientOptions('${o.id}')`) : ''}${projectFeedBtn('Invoice', `openProjectInvoice('${o.id}')`)}${orderDebt(o) > 0.01 ? projectFeedBtn('Отметить оплату', `openPaymentModal('${o.id}',{kind:'final'})`) : ''}` }) : ''}
+    ${projectFeedSection('Монтаж', installBody, { id: 'install', button: canManage ? projectFeedBtn('Назначить монтаж', "projectCardOpenWorkspace('schedule')") : '' })}
+    ${projectFeedSection('Документы и история', `${docs}<div class="project-feed-divider"></div>${history}`, { id: 'docs-history', button: projectFeedBtn('Все фото и события', "projectCardOpenWorkspace('history')") })}
     ${money && (lines.length || projectPendingSizedServices(o).length) ? projectFeedCheckHtml(o, lines, proposal) : ''}
   </div>`;
 }

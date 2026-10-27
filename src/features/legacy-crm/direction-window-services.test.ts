@@ -18,7 +18,7 @@ test('the card shows one tile per direction; before production its lines open th
   // Owner, 2026-10-26: the card opens on the four direction tiles of the cashier;
   // a direction not in the project is a tinted «+ добавить» tile that opens its window.
   const map = fn(stages, 'projectCashierMapHtml');
-  assert.match(map, /PROJECT_CASHIER_DIRECTION_ORDER\.map\(key =>/);
+  assert.match(map, /directionOrder\.map\(key =>/);
   assert.match(map, /class="project-cashier-direction add"[^>]*onclick="openProjectDirectionWindow\('\$\{o\.id\}','\$\{jsQuote\(key\)\}','services'\)"/);
   assert.match(map, /<span>\+ добавить<\/span>/);
   assert.doesNotMatch(map, /openProjectDirectionPicker/, 'no picker between the tile and the window');
