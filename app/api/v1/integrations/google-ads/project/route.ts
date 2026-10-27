@@ -2,6 +2,7 @@ import { legacyProjectsIncludingArchive } from "@/features/legacy-crm/project-ar
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { normalizeAdsId, persistLeadAttribution } from "@/features/google-ads/attribution";
+import { linkProjectConversionAttribution } from "@/features/google-ads/conversion-events";
 import { googleAdsProjectMoney } from "@/features/google-ads/campaign-report";
 import { prisma } from "@/lib/db";
 import { ROLE_CODES } from "@/lib/auth/constants";
@@ -42,8 +43,7 @@ export async function POST(request: NextRequest) {
   const campaign = await prisma.googleAdsDailyCost.findFirst({ where: { customer_id: customerId, campaign_id: campaignId } });
   if (!campaign) return apiError(400, "unknown_campaign", "Import this campaign's costs before linking a project.");
   const existing = await prisma.acquisitionTouchpoint.findUnique({ where: { legacy_order_id: order.id } });
-  const originalLeadPoint = order.canonicalLeadId ? await prisma.acquisitionTouchpoint.findFirst({ where: { lead_id: order.canonicalLeadId, google_ads_customer_id: { not: null }, google_ads_campaign_id: { not: null } }, orderBy: { captured_at: "asc" } }) : null;
-  if (existing || originalLeadPoint) return apiError(409, "attribution_already_recorded", "Original acquisition is already recorded and cannot be silently reassigned.");
+  if (existing) return apiError(409, "attribution_already_recorded", "Original acquisition is already recorded and cannot be silently reassigned.");
   const client = (payload.clients || []).find((item: Record<string, any>) => item.id === order.clientId);
   const status = await prisma.pipelineStatus.findUnique({ where: { status_code: "CONTACTED" } });
   if (!status) return apiError(503, "pipeline_not_configured", "CONTACTED is not configured.");
@@ -53,17 +53,28 @@ export async function POST(request: NextRequest) {
     const result = await prisma.$transaction(async tx => {
       const claim = await tx.legacyWorkspace.updateMany({ where: { workspace_id: "primary", revision: workspace.revision }, data: { revision: { increment: 1 } } });
       if (claim.count !== 1) throw new Error("attribution_revision_conflict");
-      const lead = order.canonicalLeadId ? await tx.lead.findUniqueOrThrow({ where: { lead_id: order.canonicalLeadId } }) : await tx.lead.upsert({
+      const deals = await tx.deal.findMany({ where: { legacy_order_id: order.id }, select: { lead_id: true, attribution_touchpoint: { select: { lead_id: true } }, conversion_events: { select: { lead_id: true, attribution_touchpoint: { select: { lead_id: true } } } } } });
+      const projectEvents = await tx.conversionEvent.findMany({ where: { business_object_type: "legacy_order", business_object_id: order.id }, select: { lead_id: true, attribution_touchpoint: { select: { lead_id: true } } } });
+      const knownLeadIds = [
+        order.canonicalLeadId,
+        ...deals.flatMap(deal => [deal.lead_id, deal.attribution_touchpoint?.lead_id, ...deal.conversion_events.flatMap(event => [event.lead_id, event.attribution_touchpoint?.lead_id])]),
+        ...projectEvents.flatMap(event => [event.lead_id, event.attribution_touchpoint?.lead_id]),
+      ];
+      const leadIds = [...new Set(knownLeadIds.filter((id): id is string => typeof id === "string" && !!id))];
+      if (leadIds.length > 1) throw new Error("attribution_lead_conflict");
+      const lead = leadIds[0] ? await tx.lead.findUniqueOrThrow({ where: { lead_id: leadIds[0] } }) : await tx.lead.upsert({
         where: { external_source_external_submission_id: { external_source: "legacy_order", external_submission_id: order.id } }, update: {},
         create: { name: String(client?.name || order.number || order.id).slice(0, 160), phone: typeof client?.phone === "string" ? client.phone.slice(0, 40) : null, email: typeof client?.email === "string" ? client.email.slice(0, 191) : null, source: "google_ads", external_source: "legacy_order", external_submission_id: order.id, pipeline_status_id: status.pipeline_status_id, created_at: capturedAt },
       });
+      const originalLeadPoint = await tx.acquisitionTouchpoint.findFirst({ where: { lead_id: lead.lead_id, google_ads_customer_id: { not: null }, google_ads_campaign_id: { not: null } }, orderBy: { captured_at: "asc" } });
+      if (originalLeadPoint) throw new Error("attribution_already_recorded");
       const original = await tx.acquisitionTouchpoint.findFirst({
         where: { lead_id: lead.lead_id, OR: [{ gclid: { not: null } }, { gbraid: { not: null } }, { wbraid: { not: null } }] },
         orderBy: { captured_at: "asc" },
       });
       const capture = await persistLeadAttribution(tx, lead.lead_id, {
         googleAdsCustomerId: customerId, googleAdsCampaignId: campaignId, capturedAt: original?.captured_at ?? lead.created_at,
-        gclid: typeof body.gclid === "string" && body.gclid.trim() ? body.gclid : original?.gclid,
+        gclid: original?.gclid ?? (typeof body.gclid === "string" && body.gclid.trim() ? body.gclid : null),
         gbraid: original?.gbraid, wbraid: original?.wbraid,
         utmSource: "google", utmMedium: "cpc", source: "owner_verified_project",
         sessionAttributes: { source_channel: body.source_channel === "PHONE" ? "PHONE" : "WEB" },
@@ -72,11 +83,14 @@ export async function POST(request: NextRequest) {
       order.canonicalLeadId = lead.lead_id;
       await tx.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload } });
       await tx.acquisitionTouchpoint.update({ where: { acquisition_touchpoint_id: capture.acquisitionTouchpointId! }, data: { legacy_order_id: order.id } });
+      await linkProjectConversionAttribution(tx, { legacyOrderId: order.id, leadId: lead.lead_id, attributionTouchpointId: capture.acquisitionTouchpointId! });
       return { acquisition_touchpoint_id: capture.acquisitionTouchpointId };
     });
     return apiSuccess(result);
   } catch (error) {
     if (error instanceof Error && error.message === "attribution_revision_conflict") return apiError(409, "revision_conflict", "CRM changed; refresh before linking attribution.");
+    if (error instanceof Error && error.message === "attribution_lead_conflict") return apiError(409, "original_lead_conflict", "Existing project records disagree about the original lead; review them before linking attribution.");
+    if (error instanceof Error && error.message === "attribution_already_recorded") return apiError(409, "attribution_already_recorded", "Original acquisition is already recorded and cannot be silently reassigned.");
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return apiError(409, "attribution_already_recorded", "Original acquisition was already recorded.");
     throw error;
   }

@@ -6,6 +6,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { assertSafeE2eTarget, assertServerUsesTestDatabase } from "./guard";
 import { defaultGoogleAdsRange } from "../src/features/google-ads/campaign-report";
 import { ensureClosedWonConversion } from "../src/features/google-ads/conversion-events";
+import { createConversionAdjustment } from "../src/features/google-ads/conversion-adjustments";
 
 const base = process.env.E2E_BASE_URL || "http://127.0.0.1:3000";
 assertSafeE2eTarget(base);
@@ -19,6 +20,7 @@ let originalPayload: Prisma.JsonValue | null = null;
 let originalSettings: any = null;
 const leadIds: string[] = [];
 const dealIds: string[] = [];
+const conversionEventIds: string[] = [];
 
 async function call(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
   const response = await fetch(base + path, { method, headers: { "content-type": "application/json", cookie, ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -36,7 +38,7 @@ before(async () => {
   originalSettings = await db.googleAdsIntegrationSetting.findUnique({ where: { setting_key: "default" } });
 });
 after(async () => {
-  const events = await db.conversionEvent.findMany({ where: { lead_id: { in: leadIds } }, select: { conversion_event_id: true } });
+  const events = await db.conversionEvent.findMany({ where: { OR: [{ lead_id: { in: leadIds } }, { conversion_event_id: { in: conversionEventIds } }] }, select: { conversion_event_id: true } });
   const ids = events.map(event => event.conversion_event_id);
   await db.conversionAdjustmentOutbox.deleteMany({ where: { conversion_adjustment: { conversion_event_id: { in: ids } } } });
   await db.conversionAdjustment.deleteMany({ where: { conversion_event_id: { in: ids } } });
@@ -194,4 +196,83 @@ test("cost import → website attribution → paid job → owner ROI review → 
   assert.equal(unusedLeadProject.status, 200, "a new project may use a genuinely unused accessible lead: " + JSON.stringify(unusedLeadProject.errors));
   await Promise.all([1, 2].map(() => db.$transaction(tx => ensureClosedWonConversion(tx, { legacyOrderId: tag + "-concurrent", leadId: lead.lead_id, occurredAt: new Date(), conversionValue: new Prisma.Decimal(100), currency: "USD" }))));
   assert.equal(await db.conversionEvent.count({ where: { transaction_id: `crm-project-${tag}-concurrent-sale` } }), 1, "simultaneous sale transactions share one project conversion");
+});
+
+test("a correction saved before Google configuration receives one stable delivery later", async () => {
+  assert.equal((await call("POST", "/api/v1/auth/login", { email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" })).status, 200);
+  await db.googleAdsIntegrationSetting.upsert({ where: { setting_key: "default" }, create: { setting_key: "default" }, update: { conversion_owner_customer_id: null, converted_lead_action_id: null, upload_enabled: false, validate_only: true } });
+  const status = await db.pipelineStatus.findUniqueOrThrow({ where: { status_code: "CONTACTED" } });
+  const lead = await db.lead.create({ data: { name: "Offline configuration test", source: "google_ads", pipeline_status_id: status.pipeline_status_id } });
+  leadIds.push(lead.lead_id);
+  const saleInput = { legacyOrderId: tag + "-before-configuration", leadId: lead.lead_id, occurredAt: new Date(), conversionValue: new Prisma.Decimal(1000), currency: "USD" };
+  await db.$transaction(tx => ensureClosedWonConversion(tx, saleInput));
+  const sale = await db.conversionEvent.findUniqueOrThrow({ where: { transaction_id: `crm-project-${saleInput.legacyOrderId}-sale` } });
+  conversionEventIds.push(sale.conversion_event_id);
+  const correctionInput = { conversionEventId: sale.conversion_event_id, financialReferenceId: tag + "-before-configuration-refund", adjustmentType: "RESTATEMENT", adjustedValue: "900", currency: "USD", occurredAt: new Date() };
+  await db.$transaction(tx => createConversionAdjustment(tx, correctionInput));
+  const correction = await db.conversionAdjustment.findFirstOrThrow({ where: { financial_reference_id: correctionInput.financialReferenceId } });
+  assert.equal(await db.conversionAdjustmentOutbox.count({ where: { conversion_adjustment_id: correction.conversion_adjustment_id } }), 0);
+  await db.googleAdsIntegrationSetting.update({ where: { setting_key: "default" }, data: { conversion_owner_customer_id: customer, converted_lead_action_id: "123" } });
+  await db.$transaction(tx => ensureClosedWonConversion(tx, saleInput));
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/adjustments/process")).status, 200);
+  const deliveries = await db.conversionAdjustmentOutbox.findMany({ where: { conversion_adjustment_id: correction.conversion_adjustment_id } });
+  assert.equal(deliveries.length, 1, "the external processing route repairs pre-configuration corrections even while uploads are paused");
+  assert.equal(deliveries[0].processing_status, "queued");
+  assert.equal(deliveries[0].destination_account_id, customer);
+  await db.googleAdsIntegrationSetting.update({ where: { setting_key: "default" }, data: { conversion_owner_customer_id: "9998887776", converted_lead_action_id: "456" } });
+  await db.$transaction(tx => createConversionAdjustment(tx, correctionInput));
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/adjustments/process")).status, 200);
+  const repeated = await db.conversionAdjustmentOutbox.findMany({ where: { conversion_adjustment_id: correction.conversion_adjustment_id } });
+  assert.equal(repeated.length, 1, "replay must not retarget an existing correction when settings change");
+  assert.equal(repeated[0].conversion_adjustment_outbox_id, deliveries[0].conversion_adjustment_outbox_id);
+  assert.equal(repeated[0].destination_account_id, customer);
+  assert.equal((await db.conversionEvent.findUniqueOrThrow({ where: { conversion_event_id: sale.conversion_event_id } })).conversion_value?.toFixed(2), "1000.00");
+  assert.equal((await db.conversionAdjustment.findUniqueOrThrow({ where: { conversion_adjustment_id: correction.conversion_adjustment_id } })).adjusted_value?.toFixed(2), "900.00");
+});
+
+test("late campaign evidence repairs a prior sale without replacing or duplicating it", async () => {
+  assert.equal((await call("POST", "/api/v1/auth/login", { email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" })).status, 200);
+  await db.googleAdsIntegrationSetting.upsert({ where: { setting_key: "default" }, create: { setting_key: "default", conversion_owner_customer_id: customer, converted_lead_action_id: "123" }, update: { conversion_owner_customer_id: customer, converted_lead_action_id: "123", upload_enabled: false, validate_only: true } });
+  await db.googleAdsDailyCost.upsert({ where: { customer_id_segments_date_campaign_id: { customer_id: customer, segments_date: new Date(range.endDate), campaign_id: campaign } }, create: { customer_id: customer, segments_date: new Date(range.endDate), campaign_id: campaign, campaign_name: tag, currency: "USD" }, update: {} });
+  const workspace = await db.legacyWorkspace.findUnique({ where: { workspace_id: "primary" } });
+  const payload: any = structuredClone(workspace?.payload || { users: [], clients: [], orders: [], settings: {} });
+  payload.clients ||= [];
+  payload.orders ||= [];
+  const orderId = tag + "-late-binding";
+  payload.clients.push({ id: orderId + "-client", name: `Offline Ads ${tag}`, phone: "+18055550197" });
+  payload.orders.push({ id: orderId, number: orderId, clientId: orderId + "-client", status: "completed", createdAt: `${range.endDate}T19:00:00Z`, depositReceived: true, paid: 1000, payments: [{ id: orderId + "-payment", amount: 1000 }] });
+  await db.legacyWorkspace.upsert({ where: { workspace_id: "primary" }, create: { workspace_id: "primary", payload, revision: 1 }, update: { payload, revision: { increment: 1 } } });
+  const published = await call("POST", "/api/v1/legacy-crm/proposals/publish", { token: "pp_" + Date.now() + "1", legacy_order_id: orderId, order_number: orderId, site_type: "RESIDENTIAL", payment_due: 100, client: { name: `Offline Ads ${tag}`, phone: "+18055550197" }, items: [{ service_code: "SOLAR_FILM", title_en: "Offline test film", quantity: 1, line_price: 1000 }] });
+  assert.equal(published.status, 200, JSON.stringify(published.errors));
+  const proposal = await db.proposal.findUniqueOrThrow({ where: { proposal_id: published.data.proposal.proposal_id }, include: { deal: true } });
+  dealIds.push(proposal.deal_id);
+  assert.equal(proposal.deal.lead_id, null);
+  await db.$transaction(tx => ensureClosedWonConversion(tx, { dealId: proposal.deal_id, clientId: proposal.deal.client_id, occurredAt: new Date(), conversionValue: new Prisma.Decimal(1000), currency: "USD" }));
+  const original = await db.conversionEvent.findFirstOrThrow({ where: { deal_id: proposal.deal_id, event_type: "converted_lead" } });
+  conversionEventIds.push(original.conversion_event_id);
+  assert.equal(original.attribution_touchpoint_id, null);
+  const outbox = await db.conversionUploadOutbox.findFirstOrThrow({ where: { conversion_event_id: original.conversion_event_id } });
+  await db.conversionUploadOutbox.update({ where: { conversion_upload_outbox_id: outbox.conversion_upload_outbox_id }, data: { processing_status: "suppressed", last_error: { code: "no_usable_identifiers" }, request_id: null, submitted_at: null } });
+  const bound = await call("POST", "/api/v1/integrations/google-ads/project", { operation: "bind_campaign", order_id: orderId, customer_id: customer, campaign_id: campaign, gclid: "offline-late-binding-click" });
+  assert.equal(bound.status, 200, JSON.stringify(bound.errors));
+  const point = await db.acquisitionTouchpoint.findUniqueOrThrow({ where: { legacy_order_id: orderId } });
+  assert.ok(point.lead_id);
+  leadIds.push(point.lead_id!);
+  const repaired = await db.conversionEvent.findUniqueOrThrow({ where: { conversion_event_id: original.conversion_event_id } });
+  const repairedDeal = await db.deal.findUniqueOrThrow({ where: { deal_id: proposal.deal_id } });
+  assert.equal(repaired.lead_id, point.lead_id);
+  assert.equal(repaired.attribution_touchpoint_id, point.acquisition_touchpoint_id);
+  assert.equal(repairedDeal.lead_id, point.lead_id);
+  assert.equal(repairedDeal.attribution_touchpoint_id, point.acquisition_touchpoint_id);
+  assert.equal(repaired.transaction_id, original.transaction_id);
+  assert.equal(repaired.conversion_value?.toFixed(2), "1000.00");
+  assert.equal(repaired.occurred_at.toISOString(), original.occurred_at.toISOString());
+  const queued = await db.conversionUploadOutbox.findUniqueOrThrow({ where: { conversion_upload_outbox_id: outbox.conversion_upload_outbox_id } });
+  assert.equal(queued.processing_status, "queued");
+  assert.equal(queued.request_id, null);
+  assert.equal(await db.consentSnapshot.count({ where: { lead_id: point.lead_id } }), 0, "late binding must not manufacture consent");
+  await call("POST", "/api/v1/integrations/google-ads/sync-now");
+  assert.equal(await db.conversionEvent.count({ where: { deal_id: proposal.deal_id, event_type: "converted_lead" } }), 1);
+  assert.equal(await db.conversionUploadOutbox.count({ where: { conversion_event_id: original.conversion_event_id } }), 1);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "bind_campaign", order_id: orderId, customer_id: customer, campaign_id: campaign, gclid: "another-click" })).status, 409);
 });

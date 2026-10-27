@@ -133,6 +133,15 @@ touchpoint. Older click captures missing a leaf-account ID remain in the legacy
 `/roas` report only when its cost feed identifies exactly one account.
 Retractions are final; reopening a retracted sale needs operator review.
 
+Corrections recorded before destination setup receive missing delivery rows
+after configuration, through both the native worker and the owner adjustment
+processor. Replays retain the original financial facts and any existing delivery
+destination; changing settings does not resend a correction to another account.
+Late owner campaign binding also fills missing Deal/Event attribution links and
+retries only identifier-suppressed deliveries that were never submitted. It keeps
+the original sale's transaction ID, value and time, and preserves established
+lead/acquisition evidence.
+
 The existing ten-minute worker and owner "send now" action reconcile these
 facts into the same durable outboxes. Live mode requires both DB
 `validate_only=false` and explicit server `GOOGLE_ADS_VALIDATE_ONLY=false`.

@@ -271,3 +271,48 @@ export function buildQualifiedLeadTransactionId(input: string | { dealId?: strin
 export function buildClosedWonTransactionId(dealId: string) {
   return saleTransactionId(dealId);
 }
+
+/** Late owner evidence fills missing links without recreating the recorded outcome. */
+export async function linkProjectConversionAttribution(
+  tx: Prisma.TransactionClient,
+  input: { legacyOrderId: string; leadId: string; attributionTouchpointId: string },
+) {
+  const compatibleLead = (leadId: string | null | undefined) => !leadId || leadId === input.leadId;
+  const deals = await tx.deal.findMany({
+    where: { legacy_order_id: input.legacyOrderId },
+    select: { deal_id: true, lead_id: true, attribution_touchpoint_id: true, attribution_touchpoint: { select: { lead_id: true } } },
+  });
+  for (const deal of deals) {
+    if (!compatibleLead(deal.lead_id) || !compatibleLead(deal.attribution_touchpoint?.lead_id)) continue;
+    if (deal.lead_id && deal.attribution_touchpoint_id) continue;
+    await tx.deal.updateMany({
+      where: { deal_id: deal.deal_id, lead_id: deal.lead_id, attribution_touchpoint_id: deal.attribution_touchpoint_id },
+      data: { ...(!deal.lead_id ? { lead_id: input.leadId } : {}), ...(!deal.attribution_touchpoint_id ? { attribution_touchpoint_id: input.attributionTouchpointId } : {}) },
+    });
+  }
+
+  const events = await tx.conversionEvent.findMany({
+    where: { event_type: { in: [GOOGLE_ADS_QUALIFIED_LEAD_EVENT, GOOGLE_ADS_CONVERTED_LEAD_EVENT] }, OR: [
+      { deal: { legacy_order_id: input.legacyOrderId } },
+      { business_object_type: "legacy_order", business_object_id: input.legacyOrderId },
+      { deal_id: null, business_object_type: "lead", business_object_id: input.leadId, lead_id: input.leadId },
+    ] },
+    select: { conversion_event_id: true, lead_id: true, attribution_touchpoint_id: true, attribution_touchpoint: { select: { lead_id: true } }, deal: { select: { lead_id: true, attribution_touchpoint_id: true, attribution_touchpoint: { select: { lead_id: true } } } } },
+  });
+  const eventIds: string[] = [];
+  for (const event of events) {
+    if (![event.lead_id, event.attribution_touchpoint?.lead_id, event.deal?.lead_id, event.deal?.attribution_touchpoint?.lead_id].every(compatibleLead)) continue;
+    if (!event.lead_id || !event.attribution_touchpoint_id) {
+      const linked = await tx.conversionEvent.updateMany({
+        where: { conversion_event_id: event.conversion_event_id, lead_id: event.lead_id, attribution_touchpoint_id: event.attribution_touchpoint_id },
+        data: { ...(!event.lead_id ? { lead_id: input.leadId } : {}), ...(!event.attribution_touchpoint_id ? { attribution_touchpoint_id: event.deal?.attribution_touchpoint_id ?? input.attributionTouchpointId } : {}) },
+      });
+      if (!linked.count) continue;
+    }
+    eventIds.push(event.conversion_event_id);
+  }
+  await tx.conversionUploadOutbox.updateMany({
+    where: { conversion_event_id: { in: eventIds }, processing_status: "suppressed", submitted_at: null, request_id: null, last_error: { path: ["code"], equals: "no_usable_identifiers" } },
+    data: { processing_status: "queued", next_retry_at: new Date(), last_error: Prisma.JsonNull },
+  });
+}

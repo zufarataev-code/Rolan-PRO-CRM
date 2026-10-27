@@ -2,6 +2,7 @@ import { reconcileLegacyGoogleAdsOutcomes } from "./legacy-outcomes";
 import { prisma } from "@/lib/db";
 
 import { processNextConversionAdjustmentUpload } from "./conversion-adjustment-uploader";
+import { reconcileConversionAdjustmentOutbox } from "./conversion-adjustments";
 import { GOOGLE_ADS_DEFAULT_SETTING_KEY } from "./conversion-events";
 import { hasAnyGoogleCredentials } from "./credentials";
 import { processNextConversionUpload } from "./data-manager";
@@ -33,6 +34,7 @@ export async function runGoogleAdsSyncCycle({ limit = 25 } = {}) {
     if (!(await hasAnyGoogleCredentials())) return { skipped: "no_credentials" as const };
 
     const reconciliation = await reconcileConversionOutbox(100);
+    await reconcileConversionAdjustmentOutbox(100);
     const count = { uploads: 0, statuses: 0, adjustments: 0, audience: 0 };
     for (let i = 0; i < limit; i += 1) {
       const result = await processNextConversionUpload();
