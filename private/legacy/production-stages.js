@@ -1792,9 +1792,9 @@ function projectFeedHtml(o, c, u, ctx) {
   const invoices = Array.isArray(o.invoices) ? o.invoices : [];
   const groups = projectServiceGroups(o);
 
-  const contactText = [c?.phone, c?.email].filter(Boolean).join(' · ') || 'контакты не заполнены';
-  const objectText = [orderSiteType(o) === 'COMMERCIAL' ? 'Commercial' : 'Residential', projectSiteSummary(o, c)].filter(Boolean).join(' · ') || 'объект не заполнен';
-  const projectContext = `<div class="project-feed-context" data-project-feed="context"><div class="project-feed-context-copy"><b>Клиент и объект</b><span>${academyEsc(contactText)}</span><span>${academyEsc(objectText)}</span></div><div class="project-feed-context-actions">${projectFeedBtn(canManage ? 'Клиент' : 'Открыть', "projectCardOpenWorkspace('client')")}${canManage ? projectFeedBtn('Объект', "projectCardOpenWorkspace('site')") : ''}</div></div>`;
+  // Owner, 2026-10-26: «клиент и адрес объекта заводятся в карточке клиента, в
+  // шапке адрес уже виден — зачем лишний шум». The client/site block is gone; the
+  // client name in the command header links to the client card instead.
   // Owner, 2026-10-26: rooms are tiles like the cashier — name, windows, sq ft,
   // and whether the sizes are still the client's (базовый) or the measurer's
   // (полный). A tap opens the one measurement window; «+ Помещение» too.
@@ -1824,7 +1824,7 @@ function projectFeedHtml(o, c, u, ctx) {
 
   return `<div class="project-feed">
     ${primary ? `<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг</div>${renderOrderActionCard(primary)}</div>` : ''}
-    ${projectContext}
+    ${money ? projectCardGateChecklist(o, { canManage, owner: u?.role === 'owner' }) : ''}
     ${lines.length || projectPendingSizedServices(o).length || canManage ? `<div class="project-feed-services" data-project-feed="services"><div class="project-feed-head"><h3>Состав проекта</h3>${money ? `<b>${fmtMoney(orderRevenue(o))}</b>` : ''}</div>${renderProjectCardServices(o, { money, economics: ctx.canSeeInternalEconomics, manage: canManage })}</div>` : ''}
     ${projectFeedSection('Замер', measureBody, { id: 'measure', chip: measureChip, button: projectFeedBtn(windows.length ? 'Проверить размеры' : 'Внести размеры', measureAction, windows.length ? 'ghost' : 'primary') })}
     ${money && filmRows.length ? projectFeedSection('Материалы', filmRows.join(''), { id: 'film', button: projectFeedBtn('Склад и закупка', 'openProjectPurchaseRequests()') }) : ''}
@@ -1844,6 +1844,54 @@ function projectFeedCheckHtml(o, lines, proposal) {
     ? projectFeedBtn('Монтаж', "projectCardOpenWorkspace('schedule')", 'primary')
     : projectFeedBtn(proposal ? 'Открыть КП' : 'Собрать КП', `openProposalWizard('${o.id}')`, 'primary');
   return `<div class="project-feed-check" data-project-feed="check"><div><div class="project-feed-check-kicker">Чек проекта</div><div class="project-feed-check-total">${fmtMoney(orderRevenue(o))}<small>${count} ${projectPlural(count, 'позиция', 'позиции', 'позиций')}${pending ? ` · ${pending} без замера` : ''}</small></div></div>${button}</div>`;
+}
+// ---------- ЧЕК-ЛИСТ «ДО МОНТАЖА» + РАЗБЛОКИРОВКА ВЛАДЕЛЬЦУ (Owner, 2026-10-26) ----------
+// «Не могу начать монтаж, вечно что-то блокирует». The chain КП→аванс→размеры is
+// right, but the card never said in one place what is left. This checklist shows
+// the four steps before installation and, for the owner, a «Начать монтаж всё
+// равно» button that records a risk and bypasses the gates (system warns, does
+// not hold). Once the project is scheduled or closed, the checklist disappears.
+function projectInstallGateSteps(o) {
+  const proposal = getPremiumProposalByOrder(o.id);
+  const status = proposal ? (proposal.status || 'Draft') : '';
+  const kpSigned = ['Accepted', 'Deposit Paid', 'Paid in Full'].includes(status);
+  const deposit = !!o.depositReceived || (orderPaidTotal(o) > 0 && orderPaidTotal(o) >= (orderExpectedDeposit(o) || 0));
+  const sizesOk = !orderMeasurementVerificationIssues(o).length || !!o.clientSizesAcceptedAt;
+  return [
+    { k: 'services', t: 'Услуги и замер добавлены', done: projectLines(o).length > 0, sub: '' },
+    { k: 'kp', t: 'КП собрано и принято клиентом', done: kpSigned, sub: 'клиент подтверждает онлайн' },
+    { k: 'deposit', t: 'Аванс получен', done: deposit, sub: 'после принятия КП' },
+    { k: 'sizes', t: 'Точные размеры подтверждены', done: sizesOk, sub: 'или «по размерам клиента»' },
+  ];
+}
+function projectCardGateChecklist(o, { canManage = false, owner = false } = {}) {
+  if (!o || !canManage) return '';
+  if (PROJECT_SCHEDULED_STATUSES.includes(o.status) || CLOSED_PROJECT_STATUSES.includes(o.status)) return '';
+  const steps = projectInstallGateSteps(o);
+  const left = steps.filter(step => !step.done).length;
+  if (!left) return ''; // всё готово — обычная кнопка «Назначить монтаж» уже доступна
+  let activeMarked = false;
+  const rows = steps.map((step, index) => {
+    let cls = 'done', mk = '✓';
+    if (!step.done) { if (!activeMarked) { cls = 'todo'; activeMarked = true; } else cls = 'wait'; mk = String(index + 1); }
+    return `<div class="gate-step ${cls}"><span class="gate-mk">${mk}</span><span class="gate-x">${academyEsc(step.t)}${step.sub ? ` <small>${academyEsc(step.sub)}</small>` : ''}</span></div>`;
+  }).join('');
+  const forced = o.installationForced
+    ? `<div class="gate-forced">⚠ Монтаж запущен владельцем без полной готовности — в заказ-наряде это помечено как риск.</div>`
+    : owner
+      ? `<div class="gate-owner"><button type="button" class="project-feed-btn gate-force" onclick="projectForceInstallation('${o.id}')">Начать монтаж всё равно →</button><div class="gate-owner-note">Доступно владельцу. Система предупредит, но не остановит.</div></div>`
+      : '';
+  return `<div class="project-feed-gate" data-project-feed="gate"><div class="project-feed-gate-head"><span>До монтажа осталось</span><span class="project-feed-gate-cnt">${steps.length - left} из ${steps.length}</span></div><div class="project-feed-gate-list">${rows}</div>${forced}</div>`;
+}
+function projectForceInstallation(oid) {
+  const o = getOrder(oid);
+  if (!o || currentUser()?.role !== 'owner') return;
+  if (!confirm('Начать монтаж без принятого КП, аванса или точных размеров?\n\nВ заказ-наряде это отметится как риск, ответственность на владельце. Продолжить?')) return;
+  o.installationForced = { at: new Date().toISOString(), by: state.currentUserId };
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: o.installationForced.at, key: 'installation_forced', by: state.currentUserId, note: 'Монтаж начат без полной готовности — решение владельца' });
+  save();
+  scheduleInstallationPrompt(oid);
 }
 
 // ---------- ОПЦИИ В КП: КЛИЕНТ ОТМЕЧАЕТ САМ (Owner, 2026-10-24) ----------
