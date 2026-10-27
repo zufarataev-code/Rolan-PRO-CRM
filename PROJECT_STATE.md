@@ -43,6 +43,14 @@ Before doing any work:
 - Verification: focused feed/cashier/gate/production-ui tests pass (`install-gate-checklist.test.ts` new; `project-feed.test.ts` updated for the removed block + header client link); full suite 825 pass / 25 fail — same env-dependent set (google-ads, gmail, twilio, plaid, installer-operations). Build and a prod phone look pending; merge/deploy after the owner's review and after PR #426.
 - Still open (next layers the owner approved): site-contact field on замер/монтаж + work order; collapsible groups if he still wants fewer visible sections.
 
+## 2026-10-26 handoff — cashier material step is no longer a dead end (branch `claude/cashier-material-forward`)
+
+- Owner tested on prod and reported: on «Новый проект → Касса услуг → Материал» a picked material seemed to vanish, there was no save button, the window had no way forward, and «where you need to add and save, there is nothing».
+- Root cause: in `serviceCashierHtml` the footer only showed «Добавить в проект», and only on the `addons` step (`canCommit`). On the `material` step the only way forward was tapping a specific film card or the «уточним на замере» link — which, in fold mode (>8 films), sits at the top and scrolls out of view. So a chosen film never reached the commit step and the step read as a trap.
+- Fix: the footer now always carries a forward action. On `material` it shows «Далее →» (carrying the chosen `catalogId`) or «Далее — уточним на замере →» when none is picked, both calling `serviceCashierPick('material', c.catalogId || '')`; on `addons` it still commits with «Добавить в проект». One edit in `serviceCashierHtml` (`private/legacy/rolanpro-crm-cloud.html`); the top/bottom skip link and every pick path are unchanged.
+- Verified persistence of the other add paths while here: `addCatalogItem`, warehouse film-link and the measurement/estimate film-link (`offering.filmIds`) all call `save()` — no lost-write bug found there.
+- Verification: cashier/mobile/measure tests 24/24 (`service-cashier.test.ts` asserts the forward button on the material step); full suite unchanged vs main (env-dependent failures only). Build and a prod phone look still pending; merge/deploy after the owner's review.
+
 ## 2026-10-26 handoff — all four directions stay visible in the project cashier
 
 - Branch `codex/four-directions-visible`, based on `main` `ac274c7` after PR #412.
