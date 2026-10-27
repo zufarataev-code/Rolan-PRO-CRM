@@ -11,38 +11,6 @@ const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
 const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
 const fn = (src: string, name: string) => { const a = src.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return src.slice(a, src.indexOf('\n}\n', a) + 3); };
 
-function mode(role: string, windows: any[], measureMode: Record<string, string> = {}) {
-  const ctx: any = { state: { _measureMode: measureMode }, currentUser: () => ({ role }), orderNeedsMeasurements: () => true, measureAllWindows: () => windows.map(win => ({ win })) };
-  vm.createContext(ctx);
-  vm.runInContext(fn(stages, 'measureEntryMode'), ctx);
-  return vm.runInContext("measureEntryMode({ id: 'o' })", ctx);
-}
-
-test('who gets which measurement window', () => {
-  assert.equal(mode('manager', []), 'quick');
-  assert.equal(mode('manager', [{ id: 'w' }]), 'quick', 'the manager enters only the basic measurement');
-  assert.equal(mode('measurer', []), 'full');
-  assert.equal(mode('owner', []), 'choose');
-  assert.equal(mode('owner', [{ quickMeasure: true }]), 'quick');
-  assert.equal(mode('owner', [{ quickMeasure: true }, {}]), 'full');
-  assert.equal(mode('owner', [], { o: 'full' }), 'full');
-  assert.match(fn(html, 'openManagerMeasureModal'), /if \(mode === 'choose'\) \{ state\.modal = measureChooserHtml\(getOrder\(oid\)\); render\(\); return; \}/);
-  assert.match(fn(html, 'openManagerMeasureModal'), /if \(mode === 'quick'\) \{ quickRefresh\(oid\); return; \}/);
-});
-
-test('the quick window: rooms, glass sizes, socket and removal per room, Smart questions, what joins the KP', () => {
-  const html_ = fn(stages, 'quickMeasureHtml');
-  for (const text of ['Розетка рядом с окнами?', 'Снять старую плёнку?', 'Как управляем?', 'Блок питания', 'Стекло', 'Попадёт в КП', 'Стёкол = зон', 'Посчитать → КП', '1 · Электрик', 'не блокирует КП и монтаж']) assert.ok(html_.includes(text), text);
-  assert.match(fn(stages, 'quickSetRoomAnswer'), /room\[field\] = yes \? 'yes' : 'no';/);
-  const apply = fn(stages, 'quickApplyAnswers');
-  assert.match(apply, /system\.electricianNeeded = room\.quickSocket === 'no'/);
-  assert.match(apply, /system\.powerBlockNeeded = answers\.block !== 'none'/);
-  assert.match(apply, /system\.controlMode = multi \? 'multi' : 'group'/);
-  const issues = fn(stages, 'quickMeasureIssues');
-  assert.match(issues, /ответьте: как управляем/);
-  assert.match(issues, /розетка рядом — да или нет/);
-  assert.match(fn(stages, 'quickAddGlassTo'), /win\.quickMeasure = true;/);
-});
 
 test('client sizes do not block production or scheduling: one explicit «по размерам клиента»', () => {
   assert.match(fn(html, 'ensureVerifiedMeasurementsForStatus'), /if \(!issues\.length \|\| o\.clientSizesAcceptedAt\) return true;/);
@@ -68,15 +36,37 @@ test('Smart: the electrician comes first in «Назначить монтаж»'
 });
 
 test('renders never call serviceOfferingCanEdit (it alerts the manager)', () => {
-  for (const name of ['quickMeasureHtml', 'managerSmartRoomFieldsHtml']) assert.doesNotMatch(fn(stages, name), /serviceOfferingCanEdit\(\)/, name);
+  assert.doesNotMatch(fn(stages, 'managerSmartRoomFieldsHtml'), /serviceOfferingCanEdit\(\)/);
 });
 
-test('a glass row is size × quantity; the warehouse receives several equal rolls at once', () => {
-  assert.match(fn(stages, 'quickMeasureHtml'), /aria-label="Количество стёкол \$\{index \+ 1\}"/);
-  assert.match(fn(stages, 'quickSetDim'), /win\.qty = Math\.max\(1, parseInt\(value\) \|\| 1\); win\.actualQty = win\.qty;/);
+test('the warehouse receives several equal rolls at once', () => {
   assert.match(html, /<label for="ar-count">Количество рулонов \*<\/label>/);
   const confirm = fn(html, 'confirmAddRoll');
   assert.match(confirm, /const count = Math\.max\(1, Math\.min\(50, parseInt\(read\('ar-count'\), 10\) \|\| 1\)\);/);
   assert.match(confirm, /for \(let n = 0; n < count; n \+= 1\) \{/);
   assert.match(confirm, /rollCode = await reserveRollCode\(dateReceived\);/);
+});
+
+test('one measurement window: no separate quick window; each person picks the extra fields', () => {
+  assert.doesNotMatch(stages, /function quickMeasureHtml\(|function measureEntryMode\(/);
+  assert.doesNotMatch(fn(html, 'openManagerMeasureModal'), /quickRefresh|measureChooserHtml/);
+  const bar = fn(stages, 'measureFieldsBarHtml');
+  assert.match(bar, /✓ Размеры и количество/);
+  for (const label of ['Направление плёнки', 'Стекло и доступ', 'Примечания и фото', 'Smart: зона и подключение']) assert.ok(fn(stages, 'measureFieldGroups').includes(label), label);
+  assert.match(fn(stages, 'measureFieldPrefs'), /currentUser\(\)\?\.role === 'measurer' \? measureFieldGroups\(\)\.map/);
+  assert.match(html, /\.mm-hide-tech \.manager-window-technical/);
+  assert.match(html, /manager-measure-modal \$\{typeof measureHiddenClasses === 'function' \? measureHiddenClasses\(\) : ''\}/);
+});
+
+test('import mode: old projects go to any stage without checks or client messages', () => {
+  const cs = fn(html, 'changeStatus');
+  assert.match(cs, /if \(importing\) opts = \{ \.\.\.opts, skipWorkflowGuard: true, skipPaymentGuard: true, skipScheduleGuard: true, skipClientAuto: true, importing: true \};/);
+  assert.match(cs, /if \(!opts\.importing && \(entersInstallation \|\| closesInstallation\) && !ensureProjectServicesPlanned/);
+  assert.match(cs, /if \(!opts\.importing && !ensureVerifiedMeasurementsForStatus/);
+  assert.match(cs, /if \(!opts\.importing && \(closesInstallation \|\| newStatus === 'installation_done'\)/, 'no stock deduction for old projects');
+  assert.match(fn(html, 'notifyClientEventScheduled'), /crmImportMode\(\)\) return;/);
+  assert.match(fn(html, 'autoNotifyClient'), /crmImportMode\(\)\) return;/);
+  assert.match(fn(html, 'projectEstimateReadiness'), /crmImportMode\(\)\) return \[\];/);
+  assert.match(fn(stages, 'setCrmImportMode'), /if \(currentUser\(\)\?\.role !== 'owner'\) return;/);
+  assert.match(html, /key: 'import-mode', icon: '🗂', title: 'Режим внедрения'/);
 });

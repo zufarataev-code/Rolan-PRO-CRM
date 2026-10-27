@@ -169,5 +169,5 @@ test('window card shows a chip per window-level service with its measure and tic
   const card = html.slice(html.indexOf('<label>Площадь, sqft</label>'), html.indexOf('<div class="manager-window-notes">'));
   assert.ok(card.indexOf('managerWindowServiceChipsHtml(oid, r.id, w, o)') !== -1);
   assert.ok(card.indexOf('managerWindowServiceChipsHtml(oid, r.id, w, o)') < card.indexOf('<details class="manager-window-technical">'));
-  assert.match(html, /\$\{managerMeasureProgressHtml\(o, activeScopeKey\)\}\s*\$\{managerWindowServicesBarHtml\(oid, o\)\}/);
+  assert.match(html, /\$\{managerMeasureProgressHtml\(o, activeScopeKey\)\}[\s\S]{0,200}\$\{managerWindowServicesBarHtml\(oid, o\)\}/);
 });

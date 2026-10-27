@@ -321,7 +321,7 @@ test('when two crews finish at once, the merged save closes the project; its fil
   assert.match(html, /const claimedFollowUps = projectClaimServiceFollowUps\(\);/);
   // A field specialist's own close is announced the same way, not from their CRM.
   const change = html.slice(html.indexOf('function changeStatus('), html.indexOf('function acceptMeasurementTask('));
-  assert.match(change, /if \(!\(closesInstallation && !orderUserCanManage\(currentUser\(\)\)\)\) \{\n    notifyStatusChange\(o\);/);
+  assert.match(change, /if \((?:!opts\.importing && )?!\(closesInstallation && !orderUserCanManage\(currentUser\(\)\)\)\) \{\n    notifyStatusChange\(o\);/);
 });
 
 test('a project closed through its services: one manager CRM claims its write-off and notices, runs them once the claim is saved', async () => {
