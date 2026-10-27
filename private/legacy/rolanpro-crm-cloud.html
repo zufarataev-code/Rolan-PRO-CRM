@@ -26549,11 +26549,20 @@ function serviceCashierHtml(c) {
       </div>`;
   }
   const canCommit = c.step === 'addons' && !!offering;
+  // The footer always offers a forward action, so the window is never a dead end
+  // (Owner, 2026-10-26: «окно открыл — выйти невозможно, сохранить нечем»). On the
+  // material step «Далее →» carries the chosen film, or moves on with «уточним на
+  // замере» when none is picked; on the add-ons step it commits to the project.
+  const forward = canCommit
+    ? `<button type="button" class="btn-primary rp-cashier-commit" onclick="serviceCashierCommit()">Добавить в проект</button>`
+    : c.step === 'material'
+      ? `<button type="button" class="btn-primary rp-cashier-commit" onclick="serviceCashierPick('material','${jsQuote(c.catalogId || '')}')">${c.catalogId ? 'Далее →' : 'Далее — уточним на замере →'}</button>`
+      : '';
   return `<div class="modal-backdrop" onclick="if(event.target===this)closeServiceCashier()"><div class="modal-content workspace-modal rp-cashier" style="max-width:52rem;${direction ? serviceCashierCardStyle(direction.id) : ''}" role="dialog" aria-modal="true" aria-label="Касса услуг" onclick="event.stopPropagation()">
     <div class="rp-cashier-head"><div><div class="rp-cashier-kicker">КАССА УСЛУГ · ${academyEsc(o.number || '')}</div><h3>${academyEsc(titles[c.step])}</h3></div><button type="button" class="btn-ghost" onclick="closeServiceCashier()">Закрыть</button></div>
     <div class="rp-cashier-crumbs">${crumbs}</div>
     <div class="rp-cashier-body">${body}</div>
-    <div class="rp-cashier-foot">${stepIndex > 0 ? `<button type="button" class="btn-ghost" onclick="serviceCashierPick('step','${steps[stepIndex - 1]}')">← Назад</button>` : '<span></span>'}${canCommit ? `<button type="button" class="btn-primary rp-cashier-commit" onclick="serviceCashierCommit()">Добавить в проект</button>` : ''}</div>
+    <div class="rp-cashier-foot">${stepIndex > 0 ? `<button type="button" class="btn-ghost" onclick="serviceCashierPick('step','${steps[stepIndex - 1]}')">← Назад</button>` : '<span></span>'}${forward}</div>
   </div></div>`;
 }
 
