@@ -1663,12 +1663,35 @@
   .project-feed-next { background:#fff; border:2px solid #C9A24A; border-radius:14px; padding:12px; }
   .project-feed-next-kicker { font-size:11px; font-weight:800; letter-spacing:.08em; color:#8A6D1E; text-transform:uppercase; margin-bottom:6px; }
   .project-feed-next .order-action-card { width:100%; }
+  /* Чек-лист «до монтажа» + разблокировка владельцу (Owner, 2026-10-26) */
+  .project-feed-gate { background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:12px 14px; }
+  .project-feed-gate-head { display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:800; color:#10213b; }
+  .project-feed-gate-cnt { font-size:11px; font-weight:700; color:#5A6577; }
+  .project-feed-gate-list { display:flex; flex-direction:column; gap:7px; margin:10px 0 2px; }
+  .gate-step { display:flex; align-items:center; gap:9px; font-size:13px; color:#10213b; }
+  .gate-step .gate-mk { width:20px; height:20px; border-radius:50%; flex:none; display:grid; place-items:center; font-size:12px; font-weight:800; }
+  .gate-step .gate-x { flex:1; } .gate-step .gate-x small { color:#5A6577; font-size:11px; }
+  .gate-step.done { color:#5A6577; } .gate-step.done .gate-mk { background:#EAF7EE; color:#16A34A; }
+  .gate-step.todo .gate-mk { background:#FBF2DC; color:#CA8A04; }
+  .gate-step.wait .gate-mk { background:#EEF1F5; color:#94A3B8; }
+  .gate-owner { border-top:1px dashed #D9DEE6; padding-top:10px; margin-top:8px; }
+  .gate-owner .gate-force { width:100%; border-color:#CA8A04; color:#8A6D1E; background:#FBF2DC; }
+  .gate-owner-note { font-size:11px; color:#5A6577; text-align:center; margin-top:6px; }
+  .gate-forced { border-top:1px dashed #D9DEE6; padding-top:10px; margin-top:8px; font-size:12px; color:#8A6D1E; }
+  .project-command-client { background:none; border:0; padding:0; margin:0; font:inherit; color:inherit; cursor:pointer; text-align:left; }
+  .project-command-client:hover { color:#167ca6; }
+  .project-command-client-go { color:#C9A24A; font-weight:700; }
+  .project-feed-context { background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .project-feed-context-copy { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .project-feed-context-copy b { font-size:14px; color:#10213b; }
+  .project-feed-context-copy span { font-size:12px; color:#5A6577; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .project-feed-context-actions { display:flex; gap:6px; flex:0 0 auto; }
+  .project-feed-context-actions .project-feed-btn { min-height:40px; min-width:auto; flex:0 0 auto; }
   .project-feed-section, .project-feed-services { background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
   .project-feed-services { padding:12px 0 0; }
   .project-feed-services > .project-feed-head { padding:0 14px; }
   .project-feed-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .project-feed-head h3 { margin:0; font-size:15px; font-weight:800; color:#10213b; display:flex; align-items:center; gap:8px; }
-  .project-feed-num { display:inline-flex; width:22px; height:22px; border-radius:11px; background:#EEF1F5; color:#3B4659; font-size:12px; font-weight:800; align-items:center; justify-content:center; }
   .project-feed-chip { font-size:11px; font-weight:800; border-radius:999px; padding:2px 8px; background:#EEF1F5; color:#5A6577; white-space:nowrap; }
   .project-feed-chip.good { background:#E7F6EC; color:#15803D; } .project-feed-chip.warn { background:#FEF3C7; color:#92400E; } .project-feed-chip.info { background:#E8EEFC; color:#1D4ED8; }
   .project-feed-body { display:flex; flex-direction:column; gap:4px; }
@@ -1677,11 +1700,38 @@
   .project-feed-row .quiet, .project-feed-row.quiet { color:#5A6577; }
   .project-feed-row .good { color:#15803D; font-weight:700; } .project-feed-row .warn { color:#B45309; font-weight:700; } .project-feed-row .bad { color:#B91C1C; font-weight:700; }
   .project-feed-empty { font-size:13px; color:#5A6577; }
+  .project-feed-divider { height:1px; background:#E8ECF1; margin:6px 0; }
   .project-feed-actions { display:flex; gap:8px; flex-wrap:wrap; }
   .project-feed-btn { flex:1 1 140px; min-height:44px; justify-content:center; }
   .project-feed-chips { display:flex; gap:8px; flex-wrap:wrap; }
   .project-feed-doc { border:1px solid #D9DEE6; background:#fff; border-radius:999px; padding:8px 12px; font-size:13px; font-weight:600; min-height:40px; }
   .project-feed-doc.muted { border-style:dashed; color:#8A94A6; font-weight:500; }
+  /* Касса проекта (Owner, 2026-10-26): four direction tiles, room tiles, bottom receipt */
+  .project-cashier-directions.four { grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+  .project-cashier-directions.four .project-cashier-direction { --direction-tint:#eff6ff; --direction-deep:#1d4ed8; grid-template-columns:1fr; justify-items:center; text-align:center; gap:4px; min-height:84px; padding:10px 6px; border:1px solid transparent; border-left-width:1px; border-radius:12px; background:var(--direction-tint); color:var(--direction-deep); }
+  .project-cashier-directions.four .project-cashier-direction .project-cashier-direction-icon { background:transparent; color:currentColor; width:auto; height:auto; }
+  .project-cashier-directions.four .project-cashier-direction > span:not(.project-cashier-direction-icon):not(.project-cashier-primary) b { font-size:.72rem; white-space:normal; line-height:1.1; color:inherit; }
+  .project-cashier-directions.four .project-cashier-direction > span:not(.project-cashier-direction-icon):not(.project-cashier-primary) > span { color:inherit; opacity:.8; font-size:.6rem; }
+  .project-cashier-directions.four .project-cashier-direction.on { background:var(--direction-color); color:#fff; }
+  .project-cashier-directions.four .project-cashier-direction.add { border-style:dashed; border-color:color-mix(in srgb,var(--direction-color) 40%,#fff); }
+  .project-cashier-directions.four .project-cashier-direction:hover, .project-cashier-directions.four .project-cashier-direction:focus-visible { box-shadow:none; border-color:var(--direction-color); }
+  .project-cashier-directions.four .project-cashier-primary { color:#fff!important; opacity:.9; }
+  .project-cashier-flow { grid-template-columns:1fr; }
+  @media (max-width:520px) { .project-cashier-directions.four { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  .project-room-tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+  .project-room-tile { display:flex; flex-direction:column; gap:3px; align-items:flex-start; text-align:left; min-height:72px; padding:10px 12px; border:1px solid #D9DEE6; border-radius:12px; background:#F4F5F7; color:#141A26; cursor:pointer; }
+  .project-room-tile:hover, .project-room-tile:focus-visible { border-color:#C9A24A; background:#FFF9EA; outline:none; }
+  .project-room-tile.add { border-style:dashed; background:#fff; color:#5A6577; justify-content:center; }
+  .project-room-tile-name { font-size:13px; font-weight:700; }
+  .project-room-tile-meta { font-size:11px; color:#5A6577; font-variant-numeric:tabular-nums; }
+  .project-room-tile-chip { font-size:11px; font-weight:700; color:#CA8A04; }
+  .project-room-tile.full .project-room-tile-chip { color:#15803D; }
+  .project-feed-check { display:none; justify-content:space-between; align-items:center; gap:12px; background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:12px 14px; box-shadow:0 -6px 24px rgba(15,36,64,.08); }
+  .project-feed-check-kicker { font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#5A6577; }
+  .project-feed-check-total { font-size:22px; line-height:26px; font-weight:800; color:#141A26; font-variant-numeric:tabular-nums; }
+  .project-feed-check-total small { display:block; font-size:11px; font-weight:400; color:#5A6577; }
+  .project-feed-check .project-feed-btn { flex:0 0 auto; min-width:150px; }
+  @media (max-width:720px) { .project-feed-check { display:flex; position:sticky; bottom:8px; z-index:4; } .project-feed-context { align-items:flex-start; flex-direction:column; } .project-feed-context-actions { width:100%; } .project-feed-context-actions .project-feed-btn { flex:1 1 0; } }
   .project-command-hero .project-command-hero-actions { display:none; }
   /* inside the feed the services list carries no second heading and no second measurement row */
   .project-feed-services .project-service-ledger-title, .project-feed-services .project-service-ledger-sub, .project-feed-services .project-cashier-flow { display:none !important; }
@@ -2024,6 +2074,15 @@
   .install-stripe { display:flex;justify-content:space-between;gap:8px;align-items:center;border-radius:6px;padding:3px 8px;font-size:12px;line-height:1.3;box-sizing:border-box; }
   .install-stripe span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600; }
   .install-stripe b { white-space:nowrap;font-weight:700; }
+  .crm-import-banner { display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:#FEF3C7;border:1px solid #F59E0B;color:#78350F;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px; }
+  .crm-import-banner button { border:1px solid #B45309;background:#fff;color:#78350F;border-radius:8px;padding:5px 12px;font-weight:800; }
+  .crm-import-panel { display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap; } .crm-import-panel p { margin:4px 0 0;font-size:13px;color:#5A6577;max-width:34rem; }
+  .rp-kpwin-agreed { border-color:#16A34A !important;background:#F0FDF4 !important; } .rp-kpwin-agreed b { color:#15803D; }
+  /* Field chips (smart block type, measurement field picker) */
+  .qm-chips { display:flex;flex-wrap:wrap;gap:6px;align-items:center; } .qm-chips > span { font-size:12px;color:#5A6577; }
+  .qm-chips button { border:1.5px solid #CBD5E1;background:#fff;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:700;color:#334155; } .qm-chips button.on { border-color:#7C3AED;background:#F5F3FF;color:#6D28D9; }
+  .mm-fields-bar { padding:6px 0; } .mm-fields-bar button { border-radius:999px !important;padding:5px 10px !important;font-size:12px !important;min-height:0 !important; } .mm-fields-bar button:disabled { opacity:1;cursor:default; }
+  .mm-hide-direction .mm-opt-direction, .mm-hide-tech .manager-window-technical, .mm-hide-notes .manager-window-notes, .mm-hide-smart .manager-smart-zone, .mm-hide-smart .manager-smart-technical { display:none !important; }
   /* Smart room — simple (Owner, 2026-10-26) */
   .smart-toggles { display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:10px; }
   .smart-toggle { display:flex;gap:10px;align-items:flex-start;text-align:left;border:1.5px solid #CBD5E1;border-radius:10px;background:#fff;padding:10px 12px; }
@@ -7594,6 +7653,7 @@ const I18N = {
     measurement_done: 'Замер выполнен',
     proposal_sent: 'КП отправлено',
     proposal_accepted: 'КП принято',
+    installation_forced: 'Монтаж начат без полной готовности (владелец)',
     installation_scheduled: 'Монтаж назначен',
     installation_accepted: '✓ Специалист по установке принял',
     installation_en_route: '🚗 Бригада выехала',
@@ -8019,6 +8079,7 @@ const I18N = {
     measurement_done: 'Measurement done',
     proposal_sent: 'Proposal sent',
     proposal_accepted: 'Proposal accepted',
+    installation_forced: 'Installation started before full readiness (owner)',
     installation_scheduled: 'Installation scheduled',
     installation_accepted: '✓ Installer accepted',
     installation_en_route: '🚗 Crew en route',
@@ -16951,7 +17012,7 @@ function projectProductionReadiness(o, { requireReady = true } = {}) {
   const issues = [];
   if (!projectProposalAccepted(o)) issues.push('КП ещё не принято клиентом');
   if (!projectEstimateIsApproved(o)) issues.push('расчёт проекта не подтверждён');
-  issues.push(...orderMeasurementVerificationIssues(o));
+  if (!o.clientSizesAcceptedAt) issues.push(...orderMeasurementVerificationIssues(o));
   // The manager may schedule an installation before on-site Solar details are
   // known. Glass, facade, side and access go to the work order as warnings.
   // Smart zone integrity / over-capacity remains a real engineering blocker.
@@ -16983,14 +17044,20 @@ function orderStatusRequiresVerifiedMeasurements(status) {
 }
 function ensureVerifiedMeasurementsForStatus(o, status, openMeasurement = true) {
   if (!o || !orderStatusRequiresVerifiedMeasurements(status)) return true;
+  // Owner's explicit «Начать монтаж всё равно» (projectForceInstallation) bypasses
+  // the readiness gates; the risk is recorded on the order and in the work order.
+  if (o.installationForced) return true;
   const issues = orderMeasurementVerificationIssues(o);
-  if (!issues.length) return true;
+  if (!issues.length || o.clientSizesAcceptedAt) return true;
+  // Owner, 2026-10-26: the exact measurement does not block scheduling — one «по размерам клиента».
+  if (typeof projectAcceptClientSizes === 'function' && orderUserCanManage(currentUser())) return projectAcceptClientSizes(o.id, 'none');
   const preview = issues.slice(0, 4).join(', ');
   alert(`Перед назначением и выполнением монтажа нужны точные проверенные размеры всех окон. Не подтверждены: ${preview}${issues.length > 4 ? ` и ещё ${issues.length - 4}` : ''}.`);
   if (openMeasurement && orderUserCanManage(currentUser())) openManagerMeasureModal(o.id);
   return false;
 }
 function ensureProductionReadyForInstallation(o) {
+  if (o.installationForced) return true;
   const issues = projectProductionReadiness(o);
   if (!issues.length) return true;
   alert(`До назначения монтажа завершите подготовку производства: ${issues.join(', ')}.`);
@@ -18059,6 +18126,7 @@ function orderArea(o) { return (o.measurements?.rooms || []).reduce((s, r) => s 
 function orderPrice(o) { return orderRevenue(o); }
 
 function orderMeasurementCompletionIssues(o, { film = true } = {}) {
+  if (typeof crmImportMode === 'function' && crmImportMode()) return [];
   const issues = [];
   const windows = measureAllWindows(o);
   if (!windows.length) return orderNeedsMeasurements(o) ? ['добавьте хотя бы одно окно или панель'] : [];
@@ -18154,6 +18222,9 @@ function ensureOrderWorkflowTransition(o, newStatus, openWorkspace = true) {
 function changeStatus(orderId, newStatus, by, opts = {}) {
   const o = getOrder(orderId);
   if (!o) return false;
+  // Owner, 2026-10-27: «режим внедрения» — old projects are entered without step checks or client messages.
+  const importing = typeof crmImportMode === 'function' && crmImportMode();
+  if (importing) opts = { ...opts, skipWorkflowGuard: true, skipPaymentGuard: true, skipScheduleGuard: true, skipClientAuto: true, importing: true };
   // Entering installation needs every service planned. The plan is published
   // first (the project crew and date the later checks read) and taken back if
   // any check refuses.
@@ -18164,17 +18235,17 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   if (newStatus === 'consultation_scheduled' && !o.consultationAt && !opts.skipScheduleGuard) { if (typeof scheduleConsultationPrompt === 'function') scheduleConsultationPrompt(o.id); return false; }
   if (newStatus === 'measurement_scheduled' && !o.measurementAt && !opts.skipScheduleGuard) { if (typeof scheduleMeasurementPrompt === 'function') scheduleMeasurementPrompt(o.id); return false; }
   const restorePlan = entersInstallation || closesInstallation ? projectPlanSnapshot(o) : null;
-  if ((entersInstallation || closesInstallation) && !ensureProjectServicesPlanned(o, { all: closesInstallation })) return false;
+  if (!opts.importing && (entersInstallation || closesInstallation) && !ensureProjectServicesPlanned(o, { all: closesInstallation })) return false;
   const refuse = () => { if (restorePlan) restorePlan(); return false; };
   if (!opts.skipWorkflowGuard && !ensureOrderWorkflowTransition(o, newStatus, opts.openWorkspace !== false)) return refuse();
-  if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return refuse();
-  if (newStatus === 'installation_scheduled' && !ensureProductionReadyForInstallation(o)) return refuse();
+  if (!opts.importing && !ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return refuse();
+  if (!opts.importing && newStatus === 'installation_scheduled' && !ensureProductionReadyForInstallation(o)) return refuse();
   if (!opts.skipPaymentGuard && !ensurePaidForStatus(o, newStatus, opts.openPayment !== false)) return refuse();
   if (o.status === newStatus && !opts.force) {
     render();
     return true;
   }
-  if ((closesInstallation || newStatus === 'installation_done') && ['owner', 'manager'].includes(currentUser()?.role)) {
+  if (!opts.importing && (closesInstallation || newStatus === 'installation_done') && ['owner', 'manager'].includes(currentUser()?.role)) {
     try {
       const issue = autoDeductInventoryForOrder(o);
       if (!issue.ok) {
@@ -18227,7 +18298,7 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   save();
   // A field specialist's close is announced by the owner/manager CRM: the
   // server marks it, and that CRM sends the notices once (projectClaimServiceFollowUps).
-  if (!(closesInstallation && !orderUserCanManage(currentUser()))) {
+  if (!opts.importing && !(closesInstallation && !orderUserCanManage(currentUser()))) {
     notifyStatusChange(o);
     if (!opts.skipClientAuto) autoNotifyClient(o, newStatus);
   }
@@ -18273,6 +18344,7 @@ function acceptMeasurementTask(orderId, openStudio = false) {
 
 // ---------- AUTO-NOTIFY CLIENT ON STATUS CHANGE ----------
 async function autoNotifyClient(o, statusKey) {
+  if (typeof crmImportMode === 'function' && crmImportMode()) return;
   const c = getClient(o.clientId);
   if (!c) { console.log('[AutoNotify]', o.number, statusKey, '→ skip: no client'); return; }
   if (communicationSettings().autoOnStatus === false) return;
@@ -18642,6 +18714,7 @@ async function sendClientOperationalMessage(o, subject, body, timelineKey, opts 
   await dispatchClientCommunication(o, subject, body, timelineKey, { ...opts, kind: 'operational' });
 }
 function notifyClientEventScheduled(orderId, type) {
+  if (typeof crmImportMode === 'function' && crmImportMode()) return;
   const o = getOrder(orderId);
   const c = getClient(o?.clientId);
   const info = orderEventInfo(type);
@@ -18713,7 +18786,7 @@ function projectServicesNextAction(o) {
 function projectProposalNextAction(o) {
   const published = (db.proposals || []).some(prop => prop.orderId === o.id && prop.status === 'Draft' && prop.publishedAt);
   return published
-    ? { icon: '📨', title: 'Отправить КП клиенту', sub: 'Ссылка на КП готова, но клиенту ещё не отправлена: WhatsApp, SMS, email или скопировать ссылку.', variant: 'primary', onclick: `openProposalWizard('${o.id}','send')` }
+    ? { icon: '📨', title: 'Отправить КП клиенту', sub: 'Ссылка на КП готова: WhatsApp, SMS, email — или «Клиент уже согласен», если договор уже есть.', variant: 'primary', onclick: `openProposalWizard('${o.id}','send')` }
     : { icon: '📄', title: 'Сформировать КП', sub: 'Расчёт подтверждён — можно подготовить предложение клиенту.', variant: 'primary', onclick: `openProposalWizard('${o.id}')` };
 }
 function orderPrimaryNextAction(o) {
@@ -18736,8 +18809,13 @@ function orderPrimaryNextAction(o) {
   // The deposit is asked for right after acceptance (Owner, 2026-10-23); it
   // never blocks the work — «Без аванса» records who decided and why.
   if (o.status === 'proposal_accepted' && projectDepositExpected(o)) return { icon: '💰', title: 'Получить аванс', sub: o.kpOnline?.method ? `Клиент подписал КП и выбрал ${paymentMethodLabel(kpOnlinePaymentMethod(o.kpOnline.method))}. Проверьте поступление ${fmtMoney(orderExpectedDeposit(o))} и отметьте.` : `По КП аванс ${fmtMoney(orderExpectedDeposit(o))}. Отметьте поступление — или «Без аванса», если договорились иначе.`, variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
-  if (o.status === 'proposal_accepted' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
-  if (o.status === 'proposal_accepted' && !projectProductionPrepared(o)) return { icon: '🏭', title: 'Подготовить производство', sub: 'Проверить раскрой, материал и склад перед назначением бригады.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
+  // Owner, 2026-10-26: client sizes do not stop the project — the measurer gets this step, the manager goes on to production.
+  if (o.status === 'proposal_accepted' && currentUser()?.role === 'measurer' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
+  if (o.status === 'proposal_accepted' && !projectProductionPrepared(o)) {
+    const planned = projectLines(o).some(line => line.installationAt && line.installerIds.length);
+    if (!planned) return { icon: '👷', title: 'Запланировать монтаж', sub: 'Выберите исполнителей и даты по услугам. План сохранится; в календарь он попадёт после проверки производства.', variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
+    return { icon: '🏭', title: 'Подготовить производство', sub: 'План монтажа сохранён. Проверьте раскрой, материал и склад, затем опубликуйте даты.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
+  }
   // The crew and date are chosen in each row of «Услуги проекта»; then the plan is confirmed there.
   if (o.status === 'proposal_accepted') {
     const unplanned = projectCardUnplanned(o);
@@ -19608,6 +19686,7 @@ function renderAppShell() {
       </header>
 
       <div class="app-content">
+        ${typeof crmImportBannerHtml === 'function' ? crmImportBannerHtml() : ''}
         ${renderView()}
       </div>
     </main>
@@ -23660,6 +23739,7 @@ function settingsSections() {
   return [
     { key: 'team-access', icon: '🔐', title: 'Доступ сотрудников', description: 'Email, пароль, роли и отключение доступа', destination: 'team' },
     { key: 'company', icon: '🏢', title: T('company'), description: 'Название компании, валюта и базовые суммы' },
+    { key: 'import-mode', icon: '🗂', title: 'Режим внедрения', description: 'Перенос старых заказов задним числом: без проверок этапов и без сообщений клиентам' },
     { key: 'company-costs', icon: '🧾', title: 'Ставки и расходы', description: 'Зарплаты, ставки за работу, постоянные и переменные расходы — в одном месте', destination: 'ratesCosts', tab: '' },
     { key: 'telegram', icon: '✈️', title: T('telegramConfigure'), description: 'Telegram-бот и Chat ID сотрудников' },
     { key: 'communication', icon: '💬', title: 'Автосвязь с клиентами', description: 'Каналы, автоматические сообщения и AI-продавец' },
@@ -23849,6 +23929,8 @@ function renderSettings() {
     </div>
 
     ${renderCompanyFixedExpenseSettings()}
+
+    <div ${settingsPanelAttrs('import-mode')}>${typeof crmImportModePanelHtml === 'function' ? crmImportModePanelHtml() : ''}</div>
 
     <div ${settingsPanelAttrs('telegram')}>
       <h3 class="font-semibold mb-1">${T('telegramConfigure')}</h3>
@@ -25346,8 +25428,8 @@ function orderPassportActions(o, ctx) {
       onclick: `openProjectProductionWorkspace('${o.id}')`, disabled: !done.proposal },
 
     { key: 'install', icon: '▣', title: 'Монтаж',
-      sub: o.installationAt ? fmtDateTime(o.installationAt) : 'запланировать',
-      onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.proposal || !done.production },
+      sub: o.installationAt ? fmtDateTime(o.installationAt) : done.production ? 'назначить исполнителей и даты' : 'запланировать; публикация после проверки производства',
+      onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.proposal },
 
     { key: 'workorder', icon: '📋', title: 'Заказ-наряд',
       sub: ctx.hasMeasurements ? 'размеры, раскрой, адрес, фото' : projectLines(o).length ? 'услуги, количество, адрес' : 'после замера',
@@ -25646,6 +25728,7 @@ function projectEstimateUpdateTaxProfile(oid, field, value) {
 }
 
 function projectEstimateReadiness(o) {
+  if (typeof crmImportMode === 'function' && crmImportMode()) return [];
   const issues = [];
   const windows = measureAllWindows(o);
   if (!windows.length && orderNeedsMeasurements(o)) issues.push('не внесены помещения и размеры');
@@ -25919,13 +26002,15 @@ function smartCashierDesiredLines(o) {
   };
   const zoneOffering = smartCashierOffering('zone');
   add('zone', zoneOffering, rooms.reduce((sum, item) => sum + item.system.zones, 0), rooms);
+  // Owner, 2026-10-26: «мультизона — это тип блока питания, не услуга»: a room's
+  // block is either the ordinary one (by capacity) or the multi-zone one.
   rooms.forEach(item => {
-    if (!item.system.capacityW || !item.system.powerBlockNeeded) return;
+    if (!item.system.powerBlockNeeded) return;
+    if (item.system.controlMode === 'multi') { add('multi', smartCashierOffering('multi'), 1, [item]); return; }
+    if (!item.system.capacityW) return;
     const offering = smartCashierOffering('power', item.system.capacityW);
     add('power', offering, 1, [item], { capacities: [item.system.capacityW] });
   });
-  const multiRooms = rooms.filter(item => item.system.controlMode === 'multi');
-  add('multi', smartCashierOffering('multi'), multiRooms.length, multiRooms);
   const electricRooms = rooms.filter(item => item.system.electricianNeeded);
   const electric = smartCashierOffering('electric');
   const electricQty = serviceOfferingUnit(electric) === 'fixed' ? (electricRooms.length ? 1 : 0) : electricRooms.length;
@@ -25942,8 +26027,8 @@ function smartCashierIssues(o) {
     if (!(Number(offering.pricePerSqft) > 0)) issues.push(`в кассе Smart не указана цена: ${offering.name}`);
   };
   requireOffering('zone', 'Подключение зоны');
-  [...new Set(rooms.filter(item => item.system.powerBlockNeeded).map(item => item.system.capacityW).filter(Boolean))].forEach(capacity => requireOffering('power', `Блок питания ${capacity}W`, capacity));
-  if (rooms.some(item => item.system.controlMode === 'multi')) requireOffering('multi', 'Мультизонное управление');
+  [...new Set(rooms.filter(item => item.system.powerBlockNeeded && item.system.controlMode !== 'multi').map(item => item.system.capacityW).filter(Boolean))].forEach(capacity => requireOffering('power', `Блок питания ${capacity}W`, capacity));
+  if (rooms.some(item => item.system.powerBlockNeeded && item.system.controlMode === 'multi')) requireOffering('multi', 'Блок питания мультизона');
   if (rooms.some(item => item.system.electricianNeeded)) requireOffering('electric', 'Электрические работы');
   return [...new Set(issues)];
 }
@@ -26466,11 +26551,20 @@ function serviceCashierHtml(c) {
       </div>`;
   }
   const canCommit = c.step === 'addons' && !!offering;
+  // The footer always offers a forward action, so the window is never a dead end
+  // (Owner, 2026-10-26: «окно открыл — выйти невозможно, сохранить нечем»). On the
+  // material step «Далее →» carries the chosen film, or moves on with «уточним на
+  // замере» when none is picked; on the add-ons step it commits to the project.
+  const forward = canCommit
+    ? `<button type="button" class="btn-primary rp-cashier-commit" onclick="serviceCashierCommit()">Добавить в проект</button>`
+    : c.step === 'material'
+      ? `<button type="button" class="btn-primary rp-cashier-commit" onclick="serviceCashierPick('material','${jsQuote(c.catalogId || '')}')">${c.catalogId ? 'Далее →' : 'Далее — уточним на замере →'}</button>`
+      : '';
   return `<div class="modal-backdrop" onclick="if(event.target===this)closeServiceCashier()"><div class="modal-content workspace-modal rp-cashier" style="max-width:52rem;${direction ? serviceCashierCardStyle(direction.id) : ''}" role="dialog" aria-modal="true" aria-label="Касса услуг" onclick="event.stopPropagation()">
     <div class="rp-cashier-head"><div><div class="rp-cashier-kicker">КАССА УСЛУГ · ${academyEsc(o.number || '')}</div><h3>${academyEsc(titles[c.step])}</h3></div><button type="button" class="btn-ghost" onclick="closeServiceCashier()">Закрыть</button></div>
     <div class="rp-cashier-crumbs">${crumbs}</div>
     <div class="rp-cashier-body">${body}</div>
-    <div class="rp-cashier-foot">${stepIndex > 0 ? `<button type="button" class="btn-ghost" onclick="serviceCashierPick('step','${steps[stepIndex - 1]}')">← Назад</button>` : '<span></span>'}${canCommit ? `<button type="button" class="btn-primary rp-cashier-commit" onclick="serviceCashierCommit()">Добавить в проект</button>` : ''}</div>
+    <div class="rp-cashier-foot">${stepIndex > 0 ? `<button type="button" class="btn-ghost" onclick="serviceCashierPick('step','${steps[stepIndex - 1]}')">← Назад</button>` : '<span></span>'}${forward}</div>
   </div></div>`;
 }
 
@@ -27763,6 +27857,7 @@ function projectServiceDoneWarnings(o, lines, now = new Date()) {
   return warnings;
 }
 function projectConfirmServicesDone(o, lines) {
+  if (typeof crmImportMode === 'function' && crmImportMode()) return true;
   const warnings = projectServiceDoneWarnings(o, lines);
   return !warnings.length || confirm(`Проверьте перед закрытием:\n\n• ${warnings.join('\n• ')}\n\nВсё равно отметить выполненным?`);
 }
@@ -28144,7 +28239,7 @@ function renderProjectCommandHeader(o, c, primary, { money = false, pendingReque
   const address = orderAddress(o, c) || 'адрес объекта не указан';
   const manager = getUser(o.managerId || o.ownerId)?.name || 'ответственный не назначен';
   return `<section class="project-command-hero">
-    <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${academyEsc(c?.name || 'Проект без клиента')}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div></div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
+    <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${c ? `<button type="button" class="project-command-client" onclick="projectCardOpenWorkspace('client')">${academyEsc(c.name || 'Клиент')} <span class="project-command-client-go">›</span></button>` : 'Проект без клиента'}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div></div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
     <div class="project-command-facts">${money ? `<div class="project-command-fact"><span>Сумма</span><strong>${fmtMoney(orderRevenue(o))}</strong></div><div class="project-command-fact"><span>Оплачено</span><strong>${fmtMoney(Math.max(orderPaidTotal(o), Number(o.paid) || 0))}</strong></div><div class="project-command-fact"><span>Остаток</span><strong>${fmtMoney(orderDebt(o))}</strong></div>` : `<div class="project-command-fact"><span>Запросы клиента</span><strong>${pendingRequests.length || 'нет'}</strong></div><div class="project-command-fact"><span>Статус</span><strong>${academyEsc(T(o.status))}</strong></div>`}</div>${o.actSignature ? `<div class="project-command-signed">✍️ Акт подписан клиентом: <b>${academyEsc(o.actSignature.name)}</b> · ${fmtDateTime(o.actSignature.signedAt)} <button type="button" class="btn-ghost text-xs" onclick="openSignedActDocument('${o.id}')">Открыть акт</button></div>` : ''}
     ${renderOrderCleanProgress(o)}
   </section>`;
@@ -29398,7 +29493,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ${renderOrderActionCard({ icon: '📞', title: 'Консультация', sub: o.consultationAt ? fmtDateTime(o.consultationAt) : 'назначить', onclick: `scheduleConsultationPrompt('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '📐', title: 'Замер', sub: o.measurementAt ? fmtDateTime(o.measurementAt) : 'назначить', onclick: `scheduleMeasurementPrompt('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '🏭', title: o.productionReadyAt ? 'Производство готово' : projectProductionPrepared(o) ? 'Производство не нужно' : 'Подготовка производства', sub: o.productionReadyAt ? fmtDateTime(o.productionReadyAt) : projectProductionPrepared(o) ? 'нет плёнки для раскроя' : 'раскрой, материал и склад', onclick: `openProjectProductionWorkspace('${o.id}')`, disabled: !canManage || !['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done','act_signed','payment_received','completed','review_received'].includes(o.status), variant: projectProductionPrepared(o) ? 'success' : 'warning' })}
-      ${renderOrderActionCard({ icon: unverifiedMeasurements.length ? '📐' : '🔧', title: unverifiedMeasurements.length ? 'Сначала точные размеры' : 'Монтаж', sub: unverifiedMeasurements.length ? `${unverifiedMeasurements.length} окон не подтверждено` : (o.installationAt ? fmtDateTime(o.installationAt) : projectProposalAccepted(o) && projectProductionPrepared(o) ? 'назначить' : !projectProposalAccepted(o) ? 'сначала примите КП' : 'назначить после производства'), onclick: unverifiedMeasurements.length ? `openManagerMeasureModal('${o.id}')` : `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage || !projectProposalAccepted(o) || !projectProductionPrepared(o), variant: unverifiedMeasurements.length || !projectProposalAccepted(o) || !projectProductionPrepared(o) ? 'warning' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🔧', title: 'Монтаж', sub: o.installationAt ? fmtDateTime(o.installationAt) : !projectProposalAccepted(o) ? 'сначала примите КП' : unverifiedMeasurements.length ? `можно запланировать · уточнить на объекте: ${unverifiedMeasurements.length}` : projectProductionPrepared(o) ? 'назначить исполнителей и даты' : 'можно запланировать · публикация после производства', onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage || !projectProposalAccepted(o), variant: !projectProposalAccepted(o) || unverifiedMeasurements.length || !projectProductionPrepared(o) ? 'warning' : 'soft' })}
       ${renderOrderActionCard({ icon: '👷', title: 'Команда', sub: installers.length ? installers.join(', ') : 'назначить', onclick: `openAssignTeam('${o.id}')`, disabled: !canManage })}
       `}
     </div>`;
@@ -29450,7 +29545,6 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     <div class="order-clean-shell">
       ${renderProjectCommandHeader(o, c, primary, { money: canSeeMoney, pendingRequests, nextEvent })}
       ${projectFeedHtml(o, c, u, { canManage, canSeeMoney, canSeeInternalEconomics, primary, measureAction, recentTimeline })}
-      ${recentTimeline.length ? `<section class="project-command-card"><div class="project-command-card-head"><div><div class="project-command-card-title">Последние события</div><div class="project-command-card-sub">Единая хронология проекта</div></div><button class="btn-ghost text-xs" onclick="projectCardOpenWorkspace('history')">Вся история</button></div><div class="project-command-card-body project-command-timeline">${recentTimeline.map(ev => `<div class="project-command-timeline-row"><span>${fmtDateTime(ev.at)}</span><b>${academyEsc(T(ev.key))}${ev.note ? ` · ${academyEsc(ev.note).slice(0, 90)}` : ''}</b></div>`).join('')}</div></section>` : ''}
       <!-- next step lives at the top of the feed (2026-10-24) -->
       <div class="order-workspace-grid project-workspace-templates" aria-hidden="true">
         ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
@@ -31000,7 +31094,7 @@ function renderManagerMeasureModal(oid) {
   const roomTerms = roomTermsForOrder(o);
   return `
   <div class="modal-backdrop manager-measure-backdrop" onclick="if(event.target===this) closeModal()">
-    <div class="modal-content workspace-modal manager-measure-modal" data-scroll-key="measure-modal" role="dialog" aria-modal="true" aria-label="Замер объекта" onclick="event.stopPropagation()">
+    <div class="modal-content workspace-modal manager-measure-modal ${typeof measureHiddenClasses === 'function' ? measureHiddenClasses() : ''}" data-scroll-key="measure-modal" role="dialog" aria-modal="true" aria-label="Замер объекта" onclick="event.stopPropagation()">
       <div class="manager-measure-header">
         <div class="manager-measure-titlebar">
           <div>
@@ -31020,6 +31114,7 @@ function renderManagerMeasureModal(oid) {
         <div class="manager-measure-services" data-scroll-key="measure-services"><span class="text-xs font-bold text-slate-600">Услуга:</span>${projectScopes.map(key => { const item = measureScopeInfo(key); return `<button class="btn-ghost text-sm ${key===activeScopeKey?'bg-blue-50 text-blue-700':''}" onclick="managerSelectMeasureScope('${oid}','${key}')">${item.icon} ${academyEsc(item.short)} · ${measureAllWindows(o).filter(x => (x.win.measureScope || orderMeasureScope(o))===key).length}</button>`; }).join('')}<button class="btn-ghost text-sm" onclick="openManagerProjectServicesModal('${oid}')">+ Добавить услугу</button></div>
         ${projectSelectedSizedOfferings(o, activeScopeKey).length > 1 ? `<div class="manager-measure-services"><span class="text-xs font-bold text-slate-600">Конкретная услуга новых окон:</span>${projectSelectedSizedOfferings(o, activeScopeKey).map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<button class="btn-ghost text-sm ${managerActiveOffering(o)?.id === offering.id ? 'bg-blue-50 text-blue-700' : ''}" onclick="managerSelectOffering('${oid}','${offering.id}')">${academyEsc(offering.name)}${film ? ` · ${academyEsc(catalogFilmModel(film) || catalogFilmName(film))}` : ''}</button>`; }).join('')}</div>` : ''}
         ${managerMeasureProgressHtml(o, activeScopeKey)}
+        ${typeof measureFieldsBarHtml === 'function' ? measureFieldsBarHtml(oid) : ''}
         ${managerWindowServicesBarHtml(oid, o)}
       </div>
       <div class="manager-measure-body" data-scroll-key="measure-body">
@@ -31099,8 +31194,8 @@ function renderManagerMeasureModal(oid) {
                         ${projectWindowSolutionHtml(o, r, w, true)}
                         <div>${managerWindowTypeCompactHtml(oid, r.id, w, scopeKey)}</div>
                         <div class="manager-window-fields">
-                          <div class="manager-window-field"><label>Направление плёнки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','filmDirection',this.value)">${managerFilmDirectionOptionsHtml(w.filmDirection || '')}</select></div>
-                          <div class="manager-window-field"><label>Количество панелей</label><input id="mm-qty-${w.id}" aria-label="Количество панелей" type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></div>
+                          <div class="manager-window-field mm-opt-direction"><label>Направление плёнки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','filmDirection',this.value)">${managerFilmDirectionOptionsHtml(w.filmDirection || '')}</select></div>
+                          <div class="manager-window-field"><label>Количество</label><input id="mm-qty-${w.id}" aria-label="Количество панелей" type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></div>
                           <div class="manager-window-field"><label>Ширина (${inUnits ? 'in' : 'мм'})</label><input id="mm-width-${w.id}" aria-label="Ширина" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" ${w.sizePlaceholder?.width ? `value="" placeholder="${measureMmToInput(w.width || 0)}" class="manager-size-placeholder"` : `value="${measureMmToInput(w.width || 0)}"`} onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></div>
                           <div class="manager-window-field"><label>Высота (${inUnits ? 'in' : 'мм'})</label><input id="mm-height-${w.id}" aria-label="Высота" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" ${w.sizePlaceholder?.height ? `value="" placeholder="${measureMmToInput(w.height || 0)}" class="manager-size-placeholder"` : `value="${measureMmToInput(w.height || 0)}"`} onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></div>
                           <div class="manager-window-field readonly"><label>Площадь, sqft</label><input aria-label="Площадь" value="${windowSizeEntered(w) ? windowActualAreaSqft(w).toFixed(2) : '—'}" readonly></div>
@@ -31179,7 +31274,7 @@ function managerSmartMeasurementIssues(order) {
       const label = `${room?.name || 'Помещение'} · ${win.name || 'Окно'}`;
       if ((win.smart?.zones || []).length !== smartWindowZoneCount(win)) issues.push(`${label}: одна физическая панель должна соответствовать одной зоне`);
     });
-    if (system?.engineeringRequired) issues.push(`${room?.name || 'Помещение'}: нагрузка ${system.requiredW}W выше доступного блока 1000W — нужен инженерный расчёт`);
+    if (system?.engineeringRequired && system.powerBlockNeeded) issues.push(`${room?.name || 'Помещение'}: нагрузка ${system.requiredW}W выше доступного блока 1000W — нужен инженерный расчёт`);
   });
   return issues;
 }
@@ -31204,7 +31299,7 @@ function completeManagerMeasurement(oid) {
   }
   const issues = orderMeasurementCompletionIssues(o);
   if (issues.length) { alert('Замер ещё не готов:\n\n• ' + issues.join('\n• ')); return; }
-  const technical = orderTechnicalMeasurementIssues(o);
+  const technical = typeof measureFieldPrefs === 'function' && !measureFieldPrefs().has('tech') ? [] : orderTechnicalMeasurementIssues(o);
   if (technical.length) {
     alert('Расчёт, КП и дату монтажа можно оформить по внесённым размерам.\n\nДо начала работ на объекте нужно уточнить:\n\n• ' + technical.join('\n• '));
   }
@@ -31989,6 +32084,7 @@ function openProjectProductionWorkspace(oid) {
           ${projectLines(o).length ? `<div class="mt-3"><div class="text-xs font-black uppercase text-gray-500 mb-2">Услуги проекта</div><div class="space-y-2">${projectLineScopeRows(o)}</div></div>` : ''}
           ${blockingIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Не готово:</b> ${blockingIssues.map(academyEsc).join(', ')}.${!projectEstimateIsApproved(o) && projectProposalAccepted(o) ? ` <button type="button" class="btn-primary text-xs" onclick="projectReapproveEstimateFromProduction('${o.id}')">Подтвердить расчёт ${fmtMoney(orderRevenue(o))}</button>` : ''}</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Проверка пройдена.</b> Можно подтвердить готовность производства.${Object.keys(usage).some(id => id !== '__no_catalog' && activeProjectFilmPurchaseRequest(o.id, id) && !filmPlanInventoryStatus(id, usage[id]).enough) ? ' Плёнка под заказ — дату монтажа ставьте после её поступления.' : ''}</div>`}
           <div class="order-clean-actions mt-3">
+            ${!o.clientSizesAcceptedAt && orderMeasurementVerificationIssues(o).length ? renderOrderActionCard({ icon: '✅', title: 'Продолжить по размерам клиента', sub: 'замерщик уточнит позже — не блокирует', onclick: `projectAcceptClientSizes('${o.id}')` }) : ''}
             ${renderOrderActionCard({ icon: '📐', title: 'Проверить точные размеры', sub: `${measureAllWindows(o).length} окон`, onclick: `openManagerMeasureModal('${o.id}')` })}
             ${renderOrderActionCard({ icon: '🎞', title: 'Открыть лист раскроя', sub: `${plan.pieces?.length || 0} деталей`, onclick: `openCutSheet('${o.id}')`, disabled: !plan.pieces?.length })}
             ${renderOrderActionCard({ icon: '📋', title: 'Открыть заказ-наряд', sub: 'материалы и задача бригады', onclick: `openWorkOrder('${o.id}')`, disabled: !measureAllWindows(o).length && !projectLines(o).length })}
@@ -32021,10 +32117,13 @@ function confirmProjectProductionReady(oid) {
 function scheduleInstallationPrompt(oid) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  // Owner, 2026-10-25: one window, services in order, each planned on its own.
+  // Planning is a draft: missing field facts or production preparation must not
+  // prevent the manager from choosing a crew and dates. The strict checks run
+  // only when the manager publishes the plan to the calendar and work order.
+  if (typeof openInstallWindow === 'function') return openInstallWindow(oid);
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
   if (!ensureProductionReadyForInstallation(o)) return;
-  // Owner, 2026-10-25: one window, services in order, each planned on its own.
-  if (typeof openInstallWindow === 'function') return openInstallWindow(oid);
   const installers = usersByRole('installer');
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
@@ -37873,7 +37972,7 @@ function renderFinancePlans() {
   if (!plans.length) return `<div class="card empty-state"><div class="icon">📅</div><div class="font-semibold">Регулярных платежей пока нет</div><div class="text-sm text-gray-500 mt-1">Добавьте аренду, страховку, сервисы и другие обязательства.</div><button class="btn-primary mt-4" onclick="financeOpenPlanModal()">+ Добавить платёж</button></div>`;
   return `<div class="space-y-3">
     <div class="card flex items-center justify-between gap-3 flex-wrap"><div><div class="text-sm text-gray-500">Плановая нагрузка в месяц</div><div class="text-2xl font-black text-slate-900">${fmtMoney(totalMonthlyBurn())}</div><div class="text-xs text-gray-500 mt-1">Это план. Остаток счёта изменится только после записи реальной оплаты.</div></div><button class="btn-primary" onclick="financeOpenPlanModal()">+ Добавить платёж</button></div>
-    ${plans.map((plan,index) => plan.retiredBy ? '' : `<div class="card ${plan.active?'':'opacity-50'}"><div class="flex items-center justify-between gap-4 flex-wrap"><div class="flex items-center gap-3 min-w-0"><input type="checkbox" ${plan.active?'checked':''} onchange="db.opex[${index}].active=this.checked;save();render();" style="width:20px;height:20px"><div class="min-w-0"><div class="font-semibold text-slate-900">${academyEsc(plan.name || 'Без названия')}</div><div class="text-xs text-gray-500 mt-1">${academyEsc(financeCategoryLabel(plan.category))} · ${frequencyLabel[plan.frequency] || 'каждый месяц'}${plan.day ? ` · ${plan.day}-го числа` : ''} · ${plan.scope === 'personal' ? 'личное' : 'бизнес'}</div></div></div><div class="flex items-center gap-3"><div class="text-right"><div class="font-black text-lg">${fmtMoney(opexMonthly(plan))}</div><div class="text-xs text-gray-500">в месяц</div></div><button class="btn-ghost" onclick="financeOpenPlanModal(${index})">Изменить</button></div></div></div>`).join('')}
+    ${plans.map((plan,index) => plan.retiredBy || (plan.autoFrom === 'team' && plan.active === false) ? '' : `<div class="card ${plan.active?'':'opacity-50'}"><div class="flex items-center justify-between gap-4 flex-wrap"><div class="flex items-center gap-3 min-w-0"><input type="checkbox" ${plan.active?'checked':''} onchange="db.opex[${index}].active=this.checked;save();render();" style="width:20px;height:20px"><div class="min-w-0"><div class="font-semibold text-slate-900">${academyEsc(plan.name || 'Без названия')}</div><div class="text-xs text-gray-500 mt-1">${academyEsc(financeCategoryLabel(plan.category))} · ${frequencyLabel[plan.frequency] || 'каждый месяц'}${plan.day ? ` · ${plan.day}-го числа` : ''} · ${plan.scope === 'personal' ? 'личное' : 'бизнес'}</div></div></div><div class="flex items-center gap-3"><div class="text-right"><div class="font-black text-lg">${fmtMoney(opexMonthly(plan))}</div><div class="text-xs text-gray-500">в месяц</div></div><button class="btn-ghost" onclick="financeOpenPlanModal(${index})">Изменить</button></div></div></div>`).join('')}
   </div>`;
 }
 
@@ -42488,7 +42587,8 @@ function refreshRollReceiptForm() {
   const area = mm2_to_sqft(width * length * 1000);
   const perSqft = rollCostPerSqft(cost, length, width);
   const preview = document.getElementById('ar-cost-preview');
-  if (preview) preview.textContent = perSqft > 0 ? `${fmtSqftPrice(perSqft)} / sq ft · площадь рулона ${area.toFixed(0)} sq ft` : 'Укажите длину и цену закупки — цена за sq ft посчитается сама';
+  const count = Math.max(1, Math.min(50, parseInt(document.getElementById('ar-count')?.value, 10) || 1));
+  if (preview) preview.textContent = perSqft > 0 ? `${fmtSqftPrice(perSqft)} / sq ft · площадь рулона ${area.toFixed(0)} sq ft${count > 1 ? ` · ${count} рулонов: ${(area * count).toFixed(0)} sq ft на ${fmtMoney(cost * count)}` : ''}` : 'Укажите длину и цену закупки — цена за sq ft посчитается сама';
   const code = document.getElementById('ar-code');
   if (code) code.value = `${nextRollCode(document.getElementById('ar-date')?.value)} (предварительно)`;
 }
@@ -42515,6 +42615,7 @@ function openAddRollModal(presetCatId, purchaseRequestId='') {
         <div><label for="ar-lot">Lot / партия</label><input id="ar-lot" placeholder="например 240315-A"></div>
         <div><label for="ar-width">Ширина</label><select id="ar-width" onchange="refreshRollReceiptForm()">${widths.map(w => `<option value="${Number(w)}" ${presetWidth === Number(w) ? 'selected' : ''}>${(Number(w) / 1000).toFixed(2)} м · ${(Number(w) / 25.4).toFixed(0)}"</option>`).join('')}</select></div>
         <div><label for="ar-len">Длина рулона (м) *</label><input id="ar-len" type="number" min="0.1" step="0.1" value="30" oninput="refreshRollReceiptForm()"></div>
+        <div><label for="ar-count">Количество рулонов *</label><input id="ar-count" type="number" min="1" max="50" step="1" value="1" inputmode="numeric" oninput="refreshRollReceiptForm()"><div class="text-xs text-gray-500 mt-1">Одинаковые рулоны — каждый получит свой код</div></div>
         <div><label for="ar-cost">Цена закупки рулона ($) *</label><input id="ar-cost" type="number" min="0.01" step="0.01" placeholder="500" oninput="refreshRollReceiptForm()"></div>
         <div><label for="ar-account">Счёт оплаты</label><select id="ar-account">${warehousePaymentAccountOptions()}</select></div>
         <div><label for="ar-reference">Invoice / документ</label><input id="ar-reference" placeholder="Номер invoice или чека"></div>
@@ -42601,32 +42702,47 @@ async function confirmAddRoll() {
 
   const button = document.getElementById('ar-submit');
   const formToken = document.getElementById('ar-form')?.value || '';
+  // Owner, 2026-10-26: several equal rolls in one receipt — each gets its own code.
+  const count = Math.max(1, Math.min(50, parseInt(read('ar-count'), 10) || 1));
+  if (state.rollReceiptSaving) return;
+  state.rollReceiptSaving = true;
   if (button) button.disabled = true;
-  let rollCode = '';
+  const film = { category, brand, model, shortName, filmType, vendorId };
+  const request = (db.purchaseRequests || []).find(x => x.id === requestId);
+  const codes = [];
+  let roll = null;
+  let catalog = null;
   try {
-    rollCode = await reserveRollCodeOnce(dateReceived);
-  } catch (error) {
-    return fail(`Не удалось получить код рулона: ${error.message}. Проверьте интернет и повторите.`);
+    for (let n = 0; n < count; n += 1) {
+      let rollCode = '';
+      try {
+        rollCode = await reserveRollCode(dateReceived);
+      } catch (error) {
+        if (codes.length) save();
+        return fail(`Не удалось получить код рулона${codes.length ? ` (принято ${codes.length} из ${count})` : ''}: ${error.message}. Проверьте интернет и повторите.`);
+      }
+      if (!rollCode || (!codes.length && !rollReceiptFormStillOpen('ar-form', formToken))) return;
+      catalog = catalog || rollReceiptPresetCatalog(getCatalogItem(presetId), film) || rollReceiptCatalog(category, brand, model, shortName, filmType, vendorId);
+      if (catalog.pendingPurchase) catalog.pendingPurchase = false;
+      roll = addInventoryRoll({
+        catalogId: catalog.id, vendorId, lotNumber, widthMm, originalLengthM: lengthM, costTotal,
+        dateReceived, location, rollCode,
+      });
+      recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(catalog),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,reason:`Приход рулона ${rollCode}`});
+      if (typeof recordWarehouseReceipt === 'function') recordWarehouseReceipt({kind:'film',inventoryId:roll.id,itemId:roll.id,itemName:catalogLabel(catalog),qty:1,unit:'рулон',unitCost:costTotal,total:costTotal,vendorId:roll.vendorId,accountId:read('ar-account')||'fin_unallocated',date:dateReceived,reference:read('ar-reference')});
+      codes.push(rollCode);
+    }
   } finally {
+    state.rollReceiptSaving = false;
     if (button) button.disabled = false;
   }
-  if (!rollCode || !rollReceiptFormStillOpen('ar-form', formToken)) return;
-
-  const film = { category, brand, model, shortName, filmType, vendorId };
-  const catalog = rollReceiptPresetCatalog(getCatalogItem(presetId), film) || rollReceiptCatalog(category, brand, model, shortName, filmType, vendorId);
-  if (catalog.pendingPurchase) catalog.pendingPurchase = false;
-  const roll = addInventoryRoll({
-    catalogId: catalog.id, vendorId, lotNumber, widthMm, originalLengthM: lengthM, costTotal,
-    dateReceived, location, rollCode,
-  });
-  const request = (db.purchaseRequests || []).find(x => x.id === requestId);
-  recordInventoryMovement({kind:'film',itemId:roll.id,itemName:catalogLabel(catalog),direction:'receipt',qty:roll.originalLengthM,unit:'м',vendorId:roll.vendorId,purchaseRequestId:requestId,orderId:request?.orderId||null,reason:`Приход рулона ${rollCode}`});
-  if (typeof recordWarehouseReceipt === 'function') recordWarehouseReceipt({kind:'film',inventoryId:roll.id,itemId:roll.id,itemName:catalogLabel(catalog),qty:1,unit:'рулон',unitCost:costTotal,total:costTotal,vendorId:roll.vendorId,accountId:read('ar-account')||'fin_unallocated',date:dateReceived,reference:read('ar-reference')});
+  if (!roll) return;
+  const rollCode = codes.length > 1 ? `${codes[0]} … ${codes[codes.length - 1]} (${codes.length} рулонов)` : codes[0];
   if (request) { request.status = 'received'; request.updatedAt = new Date().toISOString(); }
   save();
   closeModal();
   render();
-  if (typeof cloudStatus === 'function') cloudStatus(`Рулон ${rollCode} принят · ${fmtSqftPrice(roll.costPerSqft)} / sq ft`, 'green');
+  if (typeof cloudStatus === 'function') cloudStatus(`${codes.length > 1 ? 'Рулоны' : 'Рулон'} ${rollCode} ${codes.length > 1 ? 'приняты' : 'принят'} · ${fmtSqftPrice(roll.costPerSqft)} / sq ft`, 'green');
 }
 
 function openFilmIssueModal(id){const r=db.inventory.find(x=>x.id===id);if(!r)return;const cat=getCatalogItem(r.catalogId);state.modal=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:34rem"><h3 class="font-semibold text-lg">Списание плёнки</h3><p class="text-sm text-gray-500 mb-4">${academyEsc(catalogLabel(cat))} · Lot ${academyEsc(r.lotNumber||'—')} · есть ${Number(r.remainingLengthM||0).toFixed(2)} м</p><div class="grid grid-cols-2 gap-3"><div><label>Длина, м</label><input id="fi-qty" type="number" min="0.01" step="0.01"></div><div><label>Проект / заказ</label><select id="fi-order"><option value="">Без проекта</option>${warehouseOrders().map(o=>`<option value="${o.id}">${academyEsc(warehouseOrderLabel(o))}</option>`).join('')}</select></div><div class="col-span-2"><label>Причина</label><input id="fi-reason" placeholder="Образец, брак, ручное списание..."></div></div><div class="flex gap-2 justify-end mt-5"><button class="btn-ghost" onclick="closeModal()">Отмена</button><button class="btn-primary" onclick="saveFilmIssue('${id}')">Списать</button></div></div></div>`;render();}

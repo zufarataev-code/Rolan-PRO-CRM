@@ -152,7 +152,10 @@ test("brand, model, length and purchase price are required", async () => {
 });
 
 test("every way of receiving a roll reserves its code; the roll table shows code and price per sq ft", () => {
-  assert.equal(html.match(/rollCode = await reserveRollCodeOnce\(dateReceived\)/g)?.length, 3);
+  assert.equal(html.match(/rollCode = await reserveRollCodeOnce\(dateReceived\)/g)?.length, 2);
+  // Owner, 2026-10-26: the main receipt takes several equal rolls — one reserved code per roll, guarded by rollReceiptSaving.
+  assert.match(html, /if \(state\.rollReceiptSaving\) return;\n  state\.rollReceiptSaving = true;/);
+  assert.match(html, /rollCode = await reserveRollCode\(dateReceived\);/);
   assert.equal(html.match(/location: 'Warehouse', rollCode \}\);/g)?.length, 2);
   assert.match(html, /<th class="text-left p-2">Код<\/th><th class="text-left p-2">Lot #<\/th>/);
   assert.match(html, /<th class="text-left p-2">Закупка \/ sq ft<\/th>/);

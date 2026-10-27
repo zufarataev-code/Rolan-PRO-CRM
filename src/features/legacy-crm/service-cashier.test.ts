@@ -152,6 +152,11 @@ test('direction → service → film → add-ons, with inactive and archived ite
   assert.match(state.modal, /Guard A1|A1</);
   assert.doesNotMatch(state.modal, /A1X/, 'archived film is not offered');
   assert.match(state.modal, /Материал уточним на замере/);
+  // The material step is never a dead end: the footer always offers a way forward
+  // (Owner, 2026-10-26: «окно открыл — выйти невозможно»). With no film picked it
+  // reads «уточним на замере»; once a film is chosen the footer says «Далее →».
+  assert.match(state.modal, /Далее — уточним на замере →/);
+  assert.doesNotMatch(state.modal, /Добавить в проект/, 'material step moves forward, it does not commit yet');
 
   context.serviceCashierPick('material', 'f_a1');
   assert.equal(context.serviceCashierState().step, 'addons');

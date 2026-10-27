@@ -778,3 +778,13 @@ Owner clarified that a manager has the dimensions needed to plan the calendar, b
 - A surveyor completing an on-site measurement is still responsible for these technical fields.
 - Smart zone integrity and controller over-capacity remain hard engineering blockers; a manager cannot waive them.
 - This changes no price, Proposal, stock, payroll or Project identity. The work order remains an output of the same Project rather than a parallel record.
+
+## 2026-10-26 — Installation planning and publication are separate steps (Owner)
+
+Owner requires the manager to reserve an installer and dates as soon as the client accepts the Proposal. Production preparation and remaining field verification must not erase or prevent that operational plan.
+
+- An accepted Proposal unlocks the per-service installation planner. Each Project service keeps its own crew, start and end time.
+- Saving a service assignment creates an internal draft only. It does not publish a customer appointment, add a live calendar visit or move the Project to `installation_scheduled`.
+- The planner lists all unresolved readiness items and preserves the saved assignment while the manager completes production, stock, exact-measurement and Smart engineering checks.
+- Final publication remains strict: the existing readiness checks must pass before dates reach the calendar/work order and before the Project enters the installation stage.
+- This is one Project and one service plan throughout; no parallel order, duplicate calendar record or second financial calculation is created.

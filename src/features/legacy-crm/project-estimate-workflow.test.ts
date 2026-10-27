@@ -123,7 +123,7 @@ test("manager can quote from customer dimensions but installation requires verif
   assert.match(source, /По ним разрешено рассчитать проект и выпустить КП/);
   assert.match(source, /function orderStatusRequiresVerifiedMeasurements\(status\)/);
   assert.match(source, /'installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'/);
-  assert.match(source, /if \(!ensureVerifiedMeasurementsForStatus\(o, newStatus/);
+  assert.match(source, /if \((?:!opts\.importing && )?!ensureVerifiedMeasurementsForStatus\(o, newStatus/);
 });
 
 test("a new project opens as its card, measurement is an action, and there is no quick-entry button", () => {
@@ -138,18 +138,19 @@ test("a new project opens as its card, measurement is an action, and there is no
   assert.match(passport, /disabled: !ctx\.canManage \|\| !\(ctx\.hasMeasurements \|\| !orderNeedsMeasurements\(o\)\)/);
 });
 
-test("accepted proposal must pass production preparation before installation without a deposit gate", () => {
+test("accepted proposal can be planned before production; publishing still checks readiness", () => {
   const nextAction = source.match(/function orderPrimaryNextAction\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const scheduler = source.match(/function scheduleInstallationPrompt\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(source, /function projectProductionReadiness\(o, \{ requireReady = true \} = \{\}\)/);
   assert.match(source, /КП ещё не принято клиентом/);
   assert.doesNotMatch(source, /аванс ещё не получен/);
   assert.match(source, /недостаточно материала/);
+  assert.match(nextAction, /title: 'Запланировать монтаж'/);
   assert.match(nextAction, /title: 'Подготовить производство'/);
   // Only film to cut needs preparing; then the crew is planned in the card's service rows and confirmed there.
   assert.match(source, /function projectProductionPrepared\(o\) \{\n  return !!o\?\.productionReadyAt \|\| !measureAllWindows\(o\)\.length;\n\}/);
   assert.match(source, /function projectProposalAccepted\(o\) \{\n  return PROJECT_PROPOSAL_ACCEPTED_STATUSES\.includes\(o\?\.status\) && orderPaymentReadyForProduction\(o\);\n\}/);
-  assert.match(nextAction, /o\.status === 'proposal_accepted' && !projectProductionPrepared\(o\)\) return \{ icon: '🏭', title: 'Подготовить производство'/);
+  assert.match(nextAction, /o\.status === 'proposal_accepted' && !projectProductionPrepared\(o\)/);
   assert.match(source, /if \(requireReady && !projectProductionPrepared\(o\)\) issues\.push\('подготовка производства не подтверждена'\)/);
   // Every entry to installation reads the same rule: the schedule section, the stage bar, the dashboard and the readiness flags.
   assert.doesNotMatch(source, /disabled: !canManage \|\| !o\.productionReadyAt/);
@@ -157,14 +158,14 @@ test("accepted proposal must pass production preparation before installation wit
   assert.match(source, /next: projectProductionPrepared\(o\) \? 'Назначить монтаж' : 'Подготовить производство'/);
   assert.match(source, /production: projectProductionPrepared\(o\),/);
   assert.match(source, /proposal: projectProposalAccepted\(o\),/);
-  assert.match(source, /onclick: `scheduleInstallationPrompt\('\$\{o\.id\}'\)`, disabled: !done\.proposal \|\| !done\.production/);
-  assert.match(source, /disabled: !canManage \|\| !projectProposalAccepted\(o\) \|\| !projectProductionPrepared\(o\)/);
+  assert.match(source, /onclick: `scheduleInstallationPrompt\('\$\{o\.id\}'\)`, disabled: !done\.proposal/);
+  assert.match(source, /disabled: !canManage \|\| !projectProposalAccepted\(o\)/);
   // The crew-and-date form opens straight from the next step (Owner, 2026-10-23).
   assert.match(nextAction, /title: 'Назначить монтаж'[^\n]*onclick: `scheduleInstallationPrompt\('\$\{o\.id\}'\)`/);
   assert.match(nextAction, /title: 'Подтвердить монтаж'[\s\S]*?onclick: `scheduleInstallationPrompt\('\$\{o\.id\}'\)`/);
   assert.match(source, /function confirmProjectProductionReady\(oid\)/);
   assert.match(source, /o\.productionReadyAt = new Date\(\)\.toISOString\(\)/);
-  assert.match(scheduler, /ensureProductionReadyForInstallation\(o\)/);
+  assert.ok(scheduler.indexOf('openInstallWindow') < scheduler.indexOf('ensureProductionReadyForInstallation'), 'draft planner opens before readiness checks');
   assert.match(source, /'Производство','stepInstallation'/);
 });
 

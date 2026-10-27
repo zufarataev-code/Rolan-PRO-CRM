@@ -393,26 +393,44 @@ function projectCardFocusDirection(oid, directionKey) {
   requestAnimationFrame(() => document.querySelector(`[data-project-direction="${CSS.escape(directionKey)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
 function projectCashierMapHtml(o, directions, { money = false, edit = false } = {}) {
+  // Keep the order local: production-stages.js is composed into the legacy page
+  // as functions only, so top-level constants disappear in the production build.
+  const directionOrder = ['smart_film', 'solar_film', 'protective_film', 'decorative_film'];
   const included = directions.filter(direction => !projectDirectionExcluded(o, direction.key));
   const primaryKey = included[0]?.key || '';
-  // Owner, 2026-10-24 («теги, которые дублируют услуги»): direction tiles here
-  // repeated the direction cards right below; each direction is shown once, as
-  // its card, and its tile opens nothing new. Only «+ Добавить направление» stays.
-  const directionCards = directions.map(direction => {
-    const token = typeof rpDir === 'function' ? rpDir(direction.key) : null;
-    const color = token?.color || '#2563eb';
+  // Owner, 2026-10-26 («как касса: карточки, тап, итог собирается сам»): the
+  // project opens on the same four direction tiles as the new-project cashier.
+  // A direction in the project is filled with its colour; one not in the project
+  // is a tinted «+ добавить» tile. Either tap opens the direction's own window,
+  // where services are added and removed — no picker in between. Directions
+  // outside the four (general works) stay as their cards below.
+  const byKey = new Map(directions.map(direction => [direction.key, direction]));
+  const tiles = directionOrder.map(key => {
+    const service = ORDER_PRIMARY_SERVICES.find(item => item.id === key);
+    if (!service) return '';
+    const direction = byKey.get(key);
+    const token = typeof rpDir === 'function' ? rpDir(key) : null;
+    const color = token?.color || '#2563eb', tint = token?.tint || '#eff6ff', deep = token?.deep || color;
+    const icon = typeof rpDirIcon === 'function' ? rpDirIcon(key, 18) : service.icon;
+    if (!direction) {
+      if (!(money && edit)) return '';
+      return `<button type="button" class="project-cashier-direction add" style="--direction-color:${academyEsc(color)};--direction-tint:${academyEsc(tint)};--direction-deep:${academyEsc(deep)}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(key)}','services')" aria-label="Добавить направление ${academyEsc(service.title)}"><span class="project-cashier-direction-icon">${icon}</span><span><b>${academyEsc(service.short || service.title)}</b><span>+ добавить</span></span></button>`;
+    }
     const count = direction.lines.length + direction.pending.length;
     const total = direction.lines.filter(line => !line.excluded).reduce((sum, line) => sum + (Number(line.price) || 0), 0);
     const excluded = projectDirectionExcluded(o, direction.key);
-    return `<button type="button" class="project-cashier-direction ${excluded ? 'excluded' : ''}" style="--direction-color:${academyEsc(color)}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')"><span class="project-cashier-direction-icon">${direction.icon}</span><span><b>${academyEsc(direction.title)}</b><span>${count} ${projectPlural(count, 'услуга', 'услуги', 'услуг')}${money ? ` · ${fmtMoney(total)}` : ''}${excluded ? ' · вне расчёта' : ''}</span></span>${direction.key === primaryKey ? '<span class="project-cashier-primary">основное</span>' : ''}</button>`;
+    const windows = measureAllWindows(o).filter(({ win }) => projectDirectionKeyFromScope(win.measureScope || orderMeasureScope(o), win.offeringId) === key).length;
+    return `<button type="button" class="project-cashier-direction on ${excluded ? 'excluded' : ''}" style="--direction-color:${academyEsc(color)};--direction-tint:${academyEsc(tint)};--direction-deep:${academyEsc(deep)}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')" aria-label="Открыть направление ${academyEsc(direction.title)}"><span class="project-cashier-direction-icon">${icon}</span><span><b>${academyEsc(service.short || direction.title)}</b><span>${count} ${projectPlural(count, 'услуга', 'услуги', 'услуг')}${windows ? ` · ${windows} ок.` : ''}${money && total ? ` · ${fmtMoney(total)}` : ''}${excluded ? ' · вне расчёта' : ''}</span></span>${direction.key === primaryKey && included.length > 1 ? '<span class="project-cashier-primary">основное</span>' : ''}</button>`;
   }).join('');
   const rooms = o.measurements?.rooms?.length || 0;
   const windows = measureAllWindows(o).length;
   const area = orderActualAreaSqft(o);
+  // The three buttons that stood here (Замер, Расчёт / КП, Заказ-наряд) repeated
+  // the feed sections below; only the facts stay, so the square footage is
+  // always in view (Owner, 2026-10-26: «нет метража, сто кнопок»).
   return `<div class="project-cashier-map" data-project-cashier-map>
-    <!-- Касса проекта · направления и услуги: heading dropped 2026-10-24, «Состав проекта» above says it -->
-    <div class="project-cashier-directions">${money && edit ? `<button type="button" class="project-cashier-direction add" onclick="openProjectDirectionPicker('${o.id}')"><span class="project-cashier-direction-icon">+</span><span><b>Добавить направление</b><span>выберите — откроется его окно, там услуги</span></span></button>` : ''}</div>
-    <div class="project-cashier-flow"><div class="project-cashier-flow-facts"><span><b>${rooms}</b> ${projectPlural(rooms, 'помещение', 'помещения', 'помещений')}</span><span><b>${windows}</b> ${projectWindowsWord(windows)}</span><span><b>${area.toFixed(2)}</b> sq ft</span><span>Размеры общие, направления назначаются услугам и окнам</span></div><div class="project-cashier-flow-actions"><button type="button" class="btn-ghost" onclick="openManagerMeasureModal('${o.id}')">Замер</button>${money ? `<button type="button" class="btn-ghost" onclick="openProjectEstimateWorkspace('${o.id}')">Расчёт / КП</button>` : ''}<button type="button" class="btn-ghost" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button></div></div>
+    <div class="project-cashier-directions four">${tiles}</div>
+    <div class="project-cashier-flow"><div class="project-cashier-flow-facts"><span><b>${rooms}</b> ${projectPlural(rooms, 'помещение', 'помещения', 'помещений')}</span><span><b>${windows}</b> ${projectWindowsWord(windows)}</span><span><b>${area.toFixed(1)}</b> sq ft</span></div></div>
   </div>`;
 }
 
@@ -1224,6 +1242,7 @@ function proposalWizardHtml(o, step) {
       <a class="rp-kpwin-channel" href="${smsLink(client.phone, msg)}" onclick="premiumMarkProposalSent('${prop.token}','SMS')"><b>SMS</b><span>${client.smsConsent ? 'согласие есть' : 'нет согласия на SMS — лучше WhatsApp'}</span></a>
       ${client.email ? `<button type="button" class="rp-kpwin-channel" onclick="premiumSendCanonicalProposal('${prop.token}')"><b>Email</b><span>${academyEsc(client.email)}</span></button>` : '<div class="rp-kpwin-channel off"><b>Email</b><span>у клиента нет email</span></div>'}
       <button type="button" class="rp-kpwin-channel" onclick="navigator.clipboard.writeText('${jsQuote(url)}'); premiumMarkProposalSent('${prop.token}','ссылка скопирована')"><b>Скопировать ссылку</b><span>отправить другим способом</span></button>
+      ${!['Accepted', 'Payment Pending', 'Deposit Paid', 'Paid in Full'].includes(prop.status) ? `<button type="button" class="rp-kpwin-channel rp-kpwin-agreed" onclick="projectAcceptProposalOffline('${o.id}')"><b>🤝 Клиент уже согласен</b><span>договор, звонок или переписка — сразу «КП принято»</span></button>` : ''}
       <button type="button" class="btn-ghost w-full mt-2" onclick="state._proposalWizard=null; openPremiumProposalManagerModal('${prop.token}')">Все настройки КП: оплата, версии</button>`;
     foot = `<button type="button" class="btn-primary rp-dirwin-next" style="background:var(--dir-color) !important;border-color:var(--dir-color) !important;color:#fff !important" onclick="closeProposalWizard()">✓ Готово — к проекту</button>`;
   } else {
@@ -1576,13 +1595,12 @@ function saveOfferingWindows(oid, offeringId, returnTo = 'card') {
 }
 
 // ---------- ЛЕНТА ПРОЕКТА (Owner, 2026-10-24: approved mock-up «Лента проекта») ----------
-// One page, sections in the order the work goes, each with a short summary and
-// ONE button — as in TintWiz: Визиты → Клиент и объект → Услуги → Замер →
-// Плёнка и закупка → КП → Оплата и счёт → Монтаж → Документы → История. The
-// buttons open the same workspaces as before (projectCardOpenWorkspace etc.).
-function projectFeedSection(num, title, body, { chip = '', button = '', id = '' } = {}) {
+// One project page. The stage bar and «Следующий шаг» already explain the
+// sequence, therefore the content below is grouped by business object instead
+// of repeating the funnel with numbered technical sections.
+function projectFeedSection(title, body, { chip = '', button = '', id = '' } = {}) {
   return `<section class="project-feed-section" ${id ? `data-project-feed="${id}"` : ''}>
-    <div class="project-feed-head"><h3><span class="project-feed-num">${num}</span>${academyEsc(title)}</h3>${chip}</div>
+    <div class="project-feed-head"><h3>${academyEsc(title)}</h3>${chip}</div>
     <div class="project-feed-body">${body}</div>
     ${button ? `<div class="project-feed-actions">${button}</div>` : ''}
   </section>`;
@@ -1775,19 +1793,25 @@ function projectFeedHtml(o, c, u, ctx) {
   const invoices = Array.isArray(o.invoices) ? o.invoices : [];
   const groups = projectServiceGroups(o);
 
-  const visits = events.length
-    ? events.map(ev => projectFeedRow(`${ev.icon} ${academyEsc(ev.title)}`, `${new Date(ev.at) < new Date() ? '✓ ' : ''}${fmtDateTime(ev.at)}`)).join('')
-    : '<div class="project-feed-empty">Визитов пока нет</div>';
-  const clientBody = `${projectFeedRow(academyEsc([c?.phone, c?.email].filter(Boolean).join(' · ') || 'контакты не заполнены'))}${projectFeedRow(`<span class="quiet">${academyEsc([orderSiteType(o) === 'COMMERCIAL' ? 'Commercial' : 'Residential', projectSiteSummary(o, c)].filter(Boolean).join(' · ') || 'доступ и парковка не заполнены')}</span>`)}`;
-  const measureBody = rooms.length
-    ? rooms.map(room => { const rw = (room.windows || []); const sq = rw.reduce((sum, win) => sum + (windowActualAreaSqft(win) || 0), 0); return projectFeedRow(`${academyEsc(room.name || 'Помещение')} · ${rw.length} ${projectWindowsWord(rw.length)}`, `${sq.toFixed(1)} sq ft`); }).join('') + projectFeedRow('Всего', `${windows.length} ${projectWindowsWord(windows.length)} · ${orderActualAreaSqft(o).toFixed(1)} sq ft`, 'total')
-    : `<div class="project-feed-empty">${orderNeedsMeasurements(o) ? 'Замера ещё нет' : 'Замер не нужен: услуги без размеров'}</div>`;
+  // Owner, 2026-10-26: «клиент и адрес объекта заводятся в карточке клиента, в
+  // шапке адрес уже виден — зачем лишний шум». The client/site block is gone; the
+  // client name in the command header links to the client card instead.
+  // Owner, 2026-10-26: rooms are tiles like the cashier — name, windows, sq ft,
+  // and whether the sizes are still the client's (базовый) or the measurer's
+  // (полный). A tap opens the one measurement window; «+ Помещение» too.
+  const roomTile = room => { const rw = (room.windows || []); const sq = rw.reduce((sum, win) => sum + (windowActualAreaSqft(win) || 0), 0); const full = rw.length && rw.every(win => !win.quickMeasure); return `<button type="button" class="project-room-tile ${full ? 'full' : ''}" onclick="${measureAction}"><span class="project-room-tile-name">${academyEsc(room.name || 'Помещение')}</span><span class="project-room-tile-meta">${rw.length} ${projectWindowsWord(rw.length)} · ${sq.toFixed(1)} sq ft</span><span class="project-room-tile-chip">${rw.length ? (full ? 'полный ✓' : 'базовый') : 'без окон'}</span></button>`; };
+  const measurementEvent = events.find(ev => ev.type === 'measure');
+  const measurementEventRow = measurementEvent ? projectFeedRow('Выезд замерщика', `${new Date(measurementEvent.at) < new Date() ? '✓ ' : ''}${fmtDateTime(measurementEvent.at)}`) : '';
+  const measureBody = measurementEventRow + (rooms.length
+    ? `<div class="project-room-tiles">${rooms.map(roomTile).join('')}${canManage ? `<button type="button" class="project-room-tile add" onclick="${measureAction}"><span class="project-room-tile-name">+ Помещение</span><span class="project-room-tile-meta">или размеры с рулетки</span></button>` : ''}</div>` + projectFeedRow('Всего', `${windows.length} ${projectWindowsWord(windows.length)} · ${orderActualAreaSqft(o).toFixed(1)} sq ft`, 'total')
+    : `<div class="project-feed-empty">${orderNeedsMeasurements(o) ? 'Размеры ещё не внесены' : 'Для выбранных услуг размеры не нужны'}</div>`);
   const measureChip = !windows.length ? '' : orderMeasurementVerificationIssues(o).length ? projectFeedChip('размеры клиента', 'warn') : projectFeedChip('точные размеры', 'good');
   const filmRows = projectFeedFilmRows(o);
   const proposalStatus = proposal ? (proposal.status || 'Draft') : '';
   const proposalChip = !proposal ? projectFeedChip('не собрано') : ['Accepted', 'Deposit Paid', 'Paid in Full'].includes(proposalStatus) ? projectFeedChip('подписано', 'good') : ['Sent', 'Viewed'].includes(proposalStatus) ? projectFeedChip(proposalStatus === 'Viewed' ? 'клиент смотрел' : 'отправлено', 'info') : projectFeedChip('черновик');
   const paid = Math.max(orderPaidTotal(o), Number(o.paid) || 0);
-  const payBody = `${projectFeedRow('Аванс', o.depositReceived ? `✓ ${fmtMoney(orderExpectedDeposit(o) || 0)}` : fmtMoney(orderExpectedDeposit(o) || companyDepositFor(orderRevenue(o))))}${projectFeedRow('Оплачено', fmtMoney(paid))}${projectFeedRow('Остаток', fmtMoney(orderDebt(o)), orderDebt(o) > 0 ? 'total' : '')}${invoices.length ? projectFeedRow(`Счета: ${invoices.map(inv => academyEsc(inv.number)).join(', ')}`, '') : ''}`;
+  const proposalBody = (proposal ? projectFeedRow(`КП ${academyEsc(proposal.number || '')}`, fmtMoney(premiumProposalCalc(proposal)?.total || orderRevenue(o))) : '<div class="project-feed-empty">КП ещё не собрано</div>') + (projectProposalOptionalOfferings(o).length ? projectFeedRow(`<span class="quiet">Опции для клиента: ${projectProposalOptionalOfferings(o).map(item => academyEsc(item.offering.name)).join(', ')}</span>`) : '') + ((o.kpClientOptions || []).length ? projectFeedRow(`Клиент выбрал: ${o.kpClientOptions.map(item => academyEsc(item.title)).join(', ')}`, '') : '');
+  const payBody = `${proposalBody}<div class="project-feed-divider"></div>${projectFeedRow('Аванс', o.depositReceived ? `✓ ${fmtMoney(orderExpectedDeposit(o) || 0)}` : fmtMoney(orderExpectedDeposit(o) || companyDepositFor(orderRevenue(o))))}${projectFeedRow('Оплачено', fmtMoney(paid))}${projectFeedRow('Остаток', fmtMoney(orderDebt(o)), orderDebt(o) > 0 ? 'total' : '')}${invoices.length ? projectFeedRow(`Invoice: ${invoices.map(inv => academyEsc(inv.number)).join(', ')}`, '') : ''}`;
   const installBody = groups.length
     ? groups.map(group => { const plan = projectServiceAssignment(o, group); const crew = (plan?.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', '); return projectFeedRow(academyEsc(group.name), plan?.installationAt ? `${fmtDateTime(plan.installationAt)}${crew ? ' · ' + academyEsc(crew) : ''}` : '<span class="quiet">не назначено</span>'); }).join('')
     : '<div class="project-feed-empty">Сначала добавьте услуги</div>';
@@ -1799,21 +1823,76 @@ function projectFeedHtml(o, c, u, ctx) {
     </div>`;
   const history = recentTimeline.slice(0, 3).map(ev => `<div class="project-feed-row quiet"><span>${fmtDateTime(ev.at)} · ${academyEsc(T(ev.key))}${ev.note ? ' — ' + academyEsc(String(ev.note).slice(0, 60)) : ''}</span></div>`).join('') || '<div class="project-feed-empty">История пока пустая</div>';
 
-  let n = 0;
-  const next = () => ++n;
   return `<div class="project-feed">
     ${primary ? `<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг</div>${renderOrderActionCard(primary)}</div>` : ''}
-    ${projectFeedSection(next(), 'Визиты', visits, { id: 'visits', chip: events.some(ev => new Date(ev.at) >= new Date()) ? projectFeedChip('запланировано', 'info') : '', button: canManage ? projectFeedBtn('Назначить визит', "projectCardOpenWorkspace('schedule')") : '' })}
-    ${projectFeedSection(next(), 'Клиент и объект', clientBody, { id: 'client', button: projectFeedBtn(canManage ? 'Изменить' : 'Открыть', "projectCardOpenWorkspace('client')") })}
-    ${lines.length || projectPendingSizedServices(o).length || canManage ? `<div class="project-feed-services" data-project-feed="services"><div class="project-feed-head"><h3><span class="project-feed-num">${next()}</span>Услуги</h3>${money ? `<b>${fmtMoney(orderRevenue(o))}</b>` : ''}</div>${renderProjectCardServices(o, { money, economics: ctx.canSeeInternalEconomics, manage: canManage })}</div>` : ''}
-    ${projectFeedSection(next(), 'Замер', measureBody, { id: 'measure', chip: measureChip, button: projectFeedBtn('Открыть замер', measureAction, windows.length ? 'ghost' : 'primary') })}
-    ${money && filmRows.length ? projectFeedSection(next(), 'Плёнка и закупка', filmRows.join(''), { id: 'film', button: projectFeedBtn('Открыть закупку', 'openProjectPurchaseRequests()') }) : ''}
-    ${money ? projectFeedSection(next(), 'КП', (proposal ? projectFeedRow(`КП ${academyEsc(proposal.number || '')}`, fmtMoney(premiumProposalCalc(proposal)?.total || orderRevenue(o))) : '<div class="project-feed-empty">Соберите КП, когда услуги посчитаны</div>') + (projectProposalOptionalOfferings(o).length ? projectFeedRow(`<span class="quiet">Опции на выбор клиента: ${projectProposalOptionalOfferings(o).map(item => academyEsc(item.offering.name)).join(', ')}</span>`) : '') + ((o.kpClientOptions || []).length ? projectFeedRow(`Клиент выбрал: ${o.kpClientOptions.map(item => academyEsc(item.title)).join(', ')}`, '') : ''), { id: 'kp', chip: proposalChip, button: projectFeedBtn(proposal ? 'Открыть КП' : 'Собрать КП', `openProposalWizard('${o.id}')`, proposal ? 'ghost' : 'primary') + (proposal?.canonicalProposalId && proposal.status !== 'Draft' ? projectFeedBtn('Забрать выбор клиента', `premiumApplyClientOptions('${o.id}')`) : '') }) : ''}
-    ${money ? projectFeedSection(next(), 'Оплата и счёт', payBody, { id: 'pay', button: `${projectFeedBtn('Счёт (Invoice)', `openProjectInvoice('${o.id}')`)}${orderDebt(o) > 0.01 ? projectFeedBtn('Отметить оплату', `openPaymentModal('${o.id}',{kind:'final'})`) : ''}` }) : ''}
-    ${projectFeedSection(next(), 'Монтаж', installBody, { id: 'install', button: canManage ? projectFeedBtn('Назначить монтаж', "projectCardOpenWorkspace('schedule')") : '' })}
-    ${projectFeedSection(next(), 'Документы', docs, { id: 'docs' })}
-    ${projectFeedSection(next(), 'История и файлы', history, { id: 'history', button: projectFeedBtn('Вся история и фото', "projectCardOpenWorkspace('history')") })}
+    ${money ? projectCardGateChecklist(o, { canManage, owner: u?.role === 'owner' }) : ''}
+    ${lines.length || projectPendingSizedServices(o).length || canManage ? `<div class="project-feed-services" data-project-feed="services"><div class="project-feed-head"><h3>Состав проекта</h3>${money ? `<b>${fmtMoney(orderRevenue(o))}</b>` : ''}</div>${renderProjectCardServices(o, { money, economics: ctx.canSeeInternalEconomics, manage: canManage })}</div>` : ''}
+    ${projectFeedSection('Замер', measureBody, { id: 'measure', chip: measureChip, button: projectFeedBtn(windows.length ? 'Проверить размеры' : 'Внести размеры', measureAction, windows.length ? 'ghost' : 'primary') })}
+    ${money && filmRows.length ? projectFeedSection('Материалы', filmRows.join(''), { id: 'film', button: projectFeedBtn('Склад и закупка', 'openProjectPurchaseRequests()') }) : ''}
+    ${money ? projectFeedSection('КП и оплата', payBody, { id: 'commercial', chip: proposalChip, button: `${projectFeedBtn(proposal ? 'Открыть КП' : 'Собрать КП', `openProposalWizard('${o.id}')`, proposal ? 'ghost' : 'primary')}${proposal?.canonicalProposalId && proposal.status !== 'Draft' ? projectFeedBtn('Забрать выбор клиента', `premiumApplyClientOptions('${o.id}')`) : ''}${projectFeedBtn('Invoice', `openProjectInvoice('${o.id}')`)}${orderDebt(o) > 0.01 ? projectFeedBtn('Отметить оплату', `openPaymentModal('${o.id}',{kind:'final'})`) : ''}` }) : ''}
+    ${projectFeedSection('Монтаж', installBody, { id: 'install', button: canManage ? projectFeedBtn('Назначить монтаж', "projectCardOpenWorkspace('schedule')") : '' })}
+    ${projectFeedSection('Документы и история', `${docs}<div class="project-feed-divider"></div>${history}`, { id: 'docs-history', button: projectFeedBtn('Все фото и события', "projectCardOpenWorkspace('history')") })}
+    ${money && (lines.length || projectPendingSizedServices(o).length) ? projectFeedCheckHtml(o, lines, proposal) : ''}
   </div>`;
+}
+/** The cashier receipt: total and the one next button, pinned to the bottom on a phone (Owner, 2026-10-26). */
+function projectFeedCheckHtml(o, lines, proposal) {
+  const count = lines.filter(line => !line.excluded && line.kind !== 'included').length;
+  const pending = projectPendingSizedServices(o).length;
+  const status = proposal ? (proposal.status || 'Draft') : '';
+  const signed = ['Accepted', 'Deposit Paid', 'Paid in Full'].includes(status);
+  const button = signed
+    ? projectFeedBtn('Монтаж', "projectCardOpenWorkspace('schedule')", 'primary')
+    : projectFeedBtn(proposal ? 'Открыть КП' : 'Собрать КП', `openProposalWizard('${o.id}')`, 'primary');
+  return `<div class="project-feed-check" data-project-feed="check"><div><div class="project-feed-check-kicker">Чек проекта</div><div class="project-feed-check-total">${fmtMoney(orderRevenue(o))}<small>${count} ${projectPlural(count, 'позиция', 'позиции', 'позиций')}${pending ? ` · ${pending} без замера` : ''}</small></div></div>${button}</div>`;
+}
+// ---------- ЧЕК-ЛИСТ «ДО МОНТАЖА» + РАЗБЛОКИРОВКА ВЛАДЕЛЬЦУ (Owner, 2026-10-26) ----------
+// «Не могу начать монтаж, вечно что-то блокирует». The chain КП→аванс→размеры is
+// right, but the card never said in one place what is left. This checklist shows
+// the four steps before installation and, for the owner, a «Начать монтаж всё
+// равно» button that records a risk and bypasses the gates (system warns, does
+// not hold). Once the project is scheduled or closed, the checklist disappears.
+function projectInstallGateSteps(o) {
+  const proposal = getPremiumProposalByOrder(o.id);
+  const status = proposal ? (proposal.status || 'Draft') : '';
+  const kpSigned = ['Accepted', 'Deposit Paid', 'Paid in Full'].includes(status);
+  const deposit = !!o.depositReceived || (orderPaidTotal(o) > 0 && orderPaidTotal(o) >= (orderExpectedDeposit(o) || 0));
+  const sizesOk = !orderMeasurementVerificationIssues(o).length || !!o.clientSizesAcceptedAt;
+  return [
+    { k: 'services', t: 'Услуги и замер добавлены', done: projectLines(o).length > 0, sub: '' },
+    { k: 'kp', t: 'КП собрано и принято клиентом', done: kpSigned, sub: 'клиент подтверждает онлайн' },
+    { k: 'deposit', t: 'Аванс получен', done: deposit, sub: 'после принятия КП' },
+    { k: 'sizes', t: 'Точные размеры подтверждены', done: sizesOk, sub: 'или «по размерам клиента»' },
+  ];
+}
+function projectCardGateChecklist(o, { canManage = false, owner = false } = {}) {
+  if (!o || !canManage) return '';
+  if (PROJECT_SCHEDULED_STATUSES.includes(o.status) || CLOSED_PROJECT_STATUSES.includes(o.status)) return '';
+  const steps = projectInstallGateSteps(o);
+  const left = steps.filter(step => !step.done).length;
+  if (!left) return ''; // всё готово — обычная кнопка «Назначить монтаж» уже доступна
+  let activeMarked = false;
+  const rows = steps.map((step, index) => {
+    let cls = 'done', mk = '✓';
+    if (!step.done) { if (!activeMarked) { cls = 'todo'; activeMarked = true; } else cls = 'wait'; mk = String(index + 1); }
+    return `<div class="gate-step ${cls}"><span class="gate-mk">${mk}</span><span class="gate-x">${academyEsc(step.t)}${step.sub ? ` <small>${academyEsc(step.sub)}</small>` : ''}</span></div>`;
+  }).join('');
+  const forced = o.installationForced
+    ? `<div class="gate-forced">⚠ Монтаж запущен владельцем без полной готовности — в заказ-наряде это помечено как риск.</div>`
+    : owner
+      ? `<div class="gate-owner"><button type="button" class="project-feed-btn gate-force" onclick="projectForceInstallation('${o.id}')">Начать монтаж всё равно →</button><div class="gate-owner-note">Доступно владельцу. Система предупредит, но не остановит.</div></div>`
+      : '';
+  return `<div class="project-feed-gate" data-project-feed="gate"><div class="project-feed-gate-head"><span>До монтажа осталось</span><span class="project-feed-gate-cnt">${steps.length - left} из ${steps.length}</span></div><div class="project-feed-gate-list">${rows}</div>${forced}</div>`;
+}
+function projectForceInstallation(oid) {
+  const o = getOrder(oid);
+  if (!o || currentUser()?.role !== 'owner') return;
+  if (!confirm('Начать монтаж без принятого КП, аванса или точных размеров?\n\nВ заказ-наряде это отметится как риск, ответственность на владельце. Продолжить?')) return;
+  o.installationForced = { at: new Date().toISOString(), by: state.currentUserId };
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: o.installationForced.at, key: 'installation_forced', by: state.currentUserId, note: 'Монтаж начат без полной готовности — решение владельца' });
+  save();
+  scheduleInstallationPrompt(oid);
 }
 
 // ---------- ОПЦИИ В КП: КЛИЕНТ ОТМЕЧАЕТ САМ (Owner, 2026-10-24) ----------
@@ -2338,12 +2417,16 @@ function installPlanComplete(plan) {
 /** Services in order with their plan, kind and state. */
 function installWindowRows(o) {
   const plans = projectPlannedSchedules(o);
-  return projectServiceGroups(o).map((group, index) => {
+  const rows = projectServiceGroups(o).map(group => {
     const plan = plans.find(item => item.id === group.id) || { id: group.id, installationAt: '', installerIds: [] };
     const kind = installWorkKind(group);
     const done = projectServiceProgress(o, group.id).status === 'done';
-    return { group, plan, kind, meta: installWorkKindMeta(kind), index, done, planned: installPlanComplete(plan) };
+    return { group, plan, kind, meta: installWorkKindMeta(kind), done, planned: installPlanComplete(plan) };
   });
+  // Owner, 2026-10-26: Smart goes electrician first, then the film.
+  const smart = measureAllWindows(o).some(({ win }) => win.measureScope === 'smart_film');
+  const rank = row => (smart && row.kind === 'electric' ? 0 : 1);
+  return rows.map((row, i) => ({ row, i })).sort((a, b) => rank(a.row) - rank(b.row) || a.i - b.i).map(({ row }, index) => ({ ...row, index }));
 }
 function installRangeText(plan) {
   const start = plan?.installationAt ? new Date(plan.installationAt) : null;
@@ -2386,6 +2469,14 @@ function installWindowHtml(o) {
   const w = state._installWindow || {};
   const rows = installWindowRows(o);
   const plannedCount = rows.filter(row => row.planned).length;
+  const readinessIssues = o.status === 'proposal_accepted' && typeof projectProductionReadiness === 'function'
+    ? projectProductionReadiness(o)
+    : [];
+  const readinessBox = readinessIssues.length ? `<div class="rp-dirwin-warn" style="background:#eff6ff;border-color:#60a5fa;color:#1e3a8a">
+      <b>План можно сохранить уже сейчас.</b>
+      <div style="margin-top:6px">До публикации дат в календарь нужно: ${readinessIssues.slice(0, 5).map(academyEsc).join('; ')}${readinessIssues.length > 5 ? `; и ещё ${readinessIssues.length - 5}` : ''}.</div>
+      <div style="margin-top:6px">Исполнитель и даты не потеряются — закончите проверку и вернитесь к подтверждению.</div>
+    </div>` : '';
   const technicalWarnings = typeof orderInstallationTechnicalWarnings === 'function'
     ? orderInstallationTechnicalWarnings(o)
     : [];
@@ -2415,6 +2506,7 @@ function installWindowHtml(o) {
     return shell(row.meta.color, `${head(`УСЛУГА ${row.index + 1} ИЗ ${rows.length} · ${academyEsc(row.meta.label)}`, academyEsc(row.group.name), `${academyEsc(o.number)} · ${academyEsc(getClient(o.clientId)?.name || '')}`, `openInstallWindow('${o.id}')`)}
       <div class="order-workspace-modal-body rp-dirwin-body">
         ${row.done ? '<div class="rp-dirwin-warn">Услуга выполнена — её даты и исполнители остаются как история.</div>' : ''}
+        ${readinessBox}
         ${warningBox}
         <div class="rp-dirwin-sub">Исполнители</div>
         <div class="install-chips">${chips}</div>
@@ -2438,11 +2530,12 @@ function installWindowHtml(o) {
   }).join('');
   const draft = o.status === 'proposal_accepted';
   const footer = draft
-    ? (plannedCount ? `<button type="button" class="btn-primary rp-dirwin-next" style="background:#0F2440 !important;border-color:#0F2440 !important;color:#fff !important" onclick="installConfirm('${o.id}')">Подтвердить монтаж: ${plannedCount} ${projectPlural(plannedCount, 'услуга', 'услуги', 'услуг')} в календарь</button>` : '<div class="text-sm text-gray-500 text-center">Назначьте хотя бы одну услугу — остальные можно позже.</div>')
+    ? (plannedCount ? `<button type="button" class="btn-primary rp-dirwin-next" style="background:#0F2440 !important;border-color:#0F2440 !important;color:#fff !important" onclick="installConfirm('${o.id}')">${readinessIssues.length ? 'Проверить готовность и опубликовать' : 'Опубликовать монтаж'}: ${plannedCount} ${projectPlural(plannedCount, 'услуга', 'услуги', 'услуг')}</button>` : '<div class="text-sm text-gray-500 text-center">Назначьте хотя бы одну услугу — остальные можно позже.</div>')
     : `<button type="button" class="btn-primary rp-dirwin-next" style="background:#0F2440 !important;border-color:#0F2440 !important;color:#fff !important" onclick="closeInstallWindow()">Готово</button>`;
   return shell('#DC2626', `${head(`НАЗНАЧИТЬ МОНТАЖ · ${academyEsc(o.number)}`, academyEsc(getClient(o.clientId)?.name || 'Проект'), `Назначено ${plannedCount} из ${rows.length} · остальные можно назначить позже`, 'closeInstallWindow()')}
     <div class="install-progress"><span style="width:${rows.length ? Math.round(plannedCount / rows.length * 100) : 0}%"></span></div>
     <div class="order-workspace-modal-body rp-dirwin-body">
+      ${readinessBox}
       ${warningBox}
       <div class="rp-dirwin-sub">Услуги проекта по порядку</div>
       ${list || '<div class="rp-dirwin-empty">В проекте нет услуг.</div>'}
@@ -2501,7 +2594,8 @@ function installDraftAfterPrevious() {
 function installSaveService(oid, key) {
   const o = getOrder(oid);
   const d = state._installWindow?.draft;
-  if (!o || !d || !projectCardCanPlan(o)) return;
+  if (!o || !d) return;
+  if (!projectCardCanPlan(o)) return alert('План монтажа можно сохранять после принятия КП. До этого завершите расчёт и согласование с клиентом.');
   if (!d.installerIds.length) return alert('Выберите хотя бы одного исполнителя.');
   if (!d.installationAt) return alert('Укажите дату и время начала — без времени монтаж не назначается.');
   const endsAt = d.endsAt && Date.parse(d.endsAt) > Date.parse(d.installationAt) ? d.endsAt : new Date(Date.parse(d.installationAt) + 8 * 3600 * 1000).toISOString();
@@ -2607,7 +2701,7 @@ function ratesWorkServices() {
 }
 function ratesBusinessPlans(behavior) {
   return (db.opex || []).map((plan, index) => ({ plan, index }))
-    .filter(({ plan }) => !plan.retiredBy && plan.scope !== 'personal' && plan.category !== 'tax' && (behavior === 'variable' ? plan.costBehavior === 'variable' : plan.costBehavior !== 'variable'));
+    .filter(({ plan }) => !plan.retiredBy && !(plan.autoFrom === 'team' && plan.active === false) && plan.scope !== 'personal' && plan.category !== 'tax' && (behavior === 'variable' ? plan.costBehavior === 'variable' : plan.costBehavior !== 'variable'));
 }
 function ratesCostsSummary() {
   const people = activeUsers();
@@ -2915,15 +3009,15 @@ function smartRoleDefaults(role, capacityW = 0) {
   return ({
     zone: { name: 'Подключение зоны', unit: 'zone' },
     power: { name: capacityW ? `Блок питания ${capacityW}W` : 'Блок питания', unit: 'piece' },
-    multi: { name: 'Мультизонное управление', unit: 'piece' },
+    multi: { name: 'Блок питания мультизона', unit: 'piece' },
     electric: { name: 'Электрические работы', unit: 'piece' },
   })[role] || null;
 }
-function smartCreateOffering(oid, rid, role, capacityW = 0) {
+function smartCreateOffering(oid, rid, role, capacityW = 0, inputId = '') {
   if (typeof serviceOfferingCanEdit === 'function' && !serviceOfferingCanEdit()) return;
   const base = smartRoleDefaults(role, Number(capacityW) || 0);
   if (!base) return;
-  const input = document.getElementById(`smart-new-${rid}-${role}`);
+  const input = document.getElementById(inputId || `smart-new-${rid}-${role}`);
   const price = Math.max(0, Number(input?.value) || 0);
   if (!(price > 0)) { input?.classList.add('sched-missing'); input?.focus?.(); return; }
   db.settings.serviceOfferings = Array.isArray(db.settings.serviceOfferings) ? db.settings.serviceOfferings : [];
@@ -2938,7 +3032,7 @@ function smartCreateOffering(oid, rid, role, capacityW = 0) {
 function managerSmartRoomFieldsHtml(oid, room) {
   const system = syncSmartRoomPlan(room);
   if (!system) return '';
-  const canCreate = typeof serviceOfferingCanEdit === 'function' && serviceOfferingCanEdit();
+  const canCreate = currentUser()?.role === 'owner'; // the directory check alerts, so a render asks the role directly
   const row = (role, label, qty, capacityW = 0) => {
     const offering = smartCashierOffering(role, capacityW);
     const priced = offering && Number(offering.pricePerSqft) > 0;
@@ -2953,14 +3047,13 @@ function managerSmartRoomFieldsHtml(oid, room) {
     <div class="smart-toggles">
       ${toggle('electricianNeeded', system.electricianNeeded, '⚡ Нужен электрик', 'Только если требуется подключение к сети')}
       ${toggle('powerBlockNeeded', system.powerBlockNeeded, '🔌 Нужен блок питания', system.powerSupplyModel ? `Подходит ${academyEsc(system.powerSupplyModel)} · ${system.requiredW}W` : 'После ввода размеров')}
-      ${toggle('controlMode', system.controlMode === 'multi', '🎛 Каждая зона отдельно', 'Мультизонное управление', system.controlMode === 'multi' ? "'group'" : "'multi'")}
     </div>
+    ${system.powerBlockNeeded ? `<div class="qm-chips smart-block-type"><span>Тип блока:</span><button type="button" class="${system.controlMode !== 'multi' ? 'on' : ''}" onclick="managerUpdateSmartRoom('${oid}','${room.id}','controlMode','group')">Обычный${system.powerSupplyModel ? ` · ${academyEsc(system.powerSupplyModel)}` : ''}</button><button type="button" class="${system.controlMode === 'multi' ? 'on' : ''}" onclick="managerUpdateSmartRoom('${oid}','${room.id}','controlMode','multi')">Мультизона — каждая зона отдельно</button></div>` : ''}
     ${system.powerBlockNeeded && system.engineeringRequired ? '<div class="alert alert-warning mt-3">Нагрузка больше 1000W — разделите питание или подтвердите инженерное решение.</div>' : ''}
     <div class="smart-kp">
       <div class="smart-kp-title">Попадёт в КП</div>
       ${row('zone', 'Подключение зон', system.zones)}
-      ${system.powerBlockNeeded && system.capacityW ? row('power', 'Блок питания', 1, system.capacityW) : ''}
-      ${system.controlMode === 'multi' ? row('multi', 'Мультизона', 1) : ''}
+      ${system.powerBlockNeeded && system.controlMode === 'multi' ? row('multi', 'Блок питания · мультизона', 1) : system.powerBlockNeeded && system.capacityW ? row('power', 'Блок питания', 1, system.capacityW) : ''}
       ${system.electricianNeeded ? row('electric', 'Электрик', 1) : ''}
     </div>
     ${system.powerBlockNeeded || system.electricianNeeded ? `<details class="manager-smart-technical mt-3">
@@ -2972,4 +3065,101 @@ function managerSmartRoomFieldsHtml(oid, room) {
       </div>
     </details>` : ''}
   </section>`;
+}
+
+// ---------- ЗАМЕР: ОДНО ОКНО (Owner, 2026-10-27) ----------
+// «Быстрый замер не нужен отдельным окном — пусть будет одно окно, но с
+// возможностью выбирать поля, которые знает менеджер.» The separate quick window
+// was removed; the measurement window shows only the fields each person picks.
+/** Client sizes do not block production and installation: one explicit «по размерам клиента». */
+function projectAcceptClientSizes(oid, reopen = 'production') {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanManage(currentUser())) return false;
+  const issues = orderMeasurementVerificationIssues(o);
+  if (!issues.length) return true;
+  if (!confirm(`Размеры от клиента ещё не уточнил замерщик (${issues.length}). Продолжить по размерам клиента? Замерщик уточнит позже — бригада увидит, какие размеры точные.`)) return false;
+  o.clientSizesAcceptedAt = new Date().toISOString();
+  o.clientSizesAcceptedBy = state.currentUserId;
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: o.clientSizesAcceptedAt, key: 'client_sizes_accepted', by: state.currentUserId, note: `Продолжили по размерам клиента: ${issues.length}` });
+  save();
+  if (reopen === 'production') openProjectProductionWorkspace(oid);
+  return true;
+}
+
+// ---------- КЛИЕНТ УЖЕ СОГЛАСЕН (Owner, 2026-10-27) ----------
+// «Я внёс замер, сформировал КП, у нас был договор — а монтаж не назначить»:
+// a formed KP stayed «не отправлено», so the project stood at «Замер». An offline
+// agreement (contract, call, message) marks the KP sent and accepted in one step.
+function projectAcceptProposalOffline(oid) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const prop = getPremiumProposalByOrder(oid);
+  if (!prop || !prop.publishedAt) { alert('Сначала сформируйте КП.'); return; }
+  if (!confirm('Клиент уже согласился (договор, звонок, переписка)?\n\nКП отметится отправленным и принятым. Подписанное КП нельзя будет изменить — только новой версией.')) return;
+  if (prop.status === 'Draft' && !premiumProposalLocked(prop)) {
+    prop.status = 'Sent';
+    prop.sentAt = new Date().toISOString();
+    o.proposalSentAt = o.proposalSentAt || prop.sentAt;
+    o.timeline = o.timeline || [];
+    o.timeline.push({ at: prop.sentAt, key: 'premium_proposal_sent', by: state.currentUserId, note: 'КП согласовано с клиентом напрямую (договор)' });
+  }
+  if (['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done'].includes(o.status)) o.status = 'proposal_sent';
+  if (typeof closeProposalWizard === 'function') closeProposalWizard(); else closeModal();
+  changeStatus(oid, 'proposal_accepted');
+}
+
+// ---------- ПОЛЯ ЗАМЕРА ПО ВЫБОРУ (Owner, 2026-10-27) ----------
+// One measurement window; each person picks which extra fields to see. Sizes,
+// quantity, service and film are always there; the rest is optional (the
+// measurer sees everything by default, the manager only the basics).
+function measureFieldGroups() {
+  return [['direction', 'Направление плёнки'], ['tech', 'Стекло и доступ'], ['notes', 'Примечания и фото'], ['smart', 'Smart: зона и подключение']];
+}
+function measureFieldPrefsKey() { return 'rp_measure_fields_' + (currentUser()?.id || ''); }
+function measureFieldPrefs() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(measureFieldPrefsKey()) || 'null'); } catch (_) { saved = null; }
+  if (Array.isArray(saved)) return new Set(saved);
+  return new Set(currentUser()?.role === 'measurer' ? measureFieldGroups().map(([key]) => key) : []);
+}
+function measureToggleField(oid, key) {
+  const on = measureFieldPrefs();
+  if (on.has(key)) on.delete(key); else on.add(key);
+  try { localStorage.setItem(measureFieldPrefsKey(), JSON.stringify([...on])); } catch (_) {}
+  refreshManagerMeasureModal(oid);
+}
+function measureHiddenClasses() {
+  const on = measureFieldPrefs();
+  return measureFieldGroups().filter(([key]) => !on.has(key)).map(([key]) => 'mm-hide-' + key).join(' ');
+}
+function measureFieldsBarHtml(oid) {
+  const on = measureFieldPrefs();
+  return `<div class="qm-chips mm-fields-bar"><span>Поля:</span><button type="button" class="on" disabled>✓ Размеры и количество</button>${measureFieldGroups().map(([key, label]) => `<button type="button" class="${on.has(key) ? 'on' : ''}" aria-pressed="${on.has(key)}" onclick="measureToggleField('${oid}','${key}')">${on.has(key) ? '✓ ' : '+ '}${label}</button>`).join('')}</div>`;
+}
+
+// ---------- РЕЖИМ ВНЕДРЕНИЯ (Owner, 2026-10-27) ----------
+// «Мы должны сейчас внедрить CRM и внести задним числом заказы, а CRM мешает».
+// While the owner keeps it on, the owner and the manager move projects to any
+// stage without the step checks (KP, deposit, exact sizes, production,
+// planned services, booking time), no messages go to clients, and closing an
+// old project does not take film from today's stock.
+function crmImportMode() {
+  try { return db?.settings?.importMode?.on === true && ['owner', 'manager'].includes(currentUser()?.role); } catch (_) { return false; }
+}
+function setCrmImportMode(on) {
+  if (currentUser()?.role !== 'owner') return;
+  if (on && !confirm('Включить режим внедрения?\n\nПока он включён: проекты можно переводить на любой этап без проверок, клиентам ничего не отправляется, склад при закрытии старых проектов не списывается.\n\nВыключите, когда перенесёте старые заказы.')) return;
+  db.settings.importMode = { on: !!on, at: new Date().toISOString(), by: state.currentUserId };
+  save();
+  render();
+}
+function crmImportBannerHtml() {
+  if (!crmImportMode()) return '';
+  const owner = currentUser()?.role === 'owner';
+  return `<div class="crm-import-banner" role="status"><span>🗂 <b>Режим внедрения:</b> этапы без проверок, клиентам ничего не отправляется, склад не списывается.</span>${owner ? '<button type="button" onclick="setCrmImportMode(false)">Выключить</button>' : ''}</div>`;
+}
+function crmImportModePanelHtml() {
+  const on = db?.settings?.importMode?.on === true;
+  return `<div class="crm-import-panel"><div><b>🗂 Режим внедрения — перенос старых заказов</b><p>Для ввода заказов задним числом: любой этап без проверок КП, аванса, размеров и производства; клиентам не уходят SMS и письма; склад при закрытии не списывается. Включите на время переноса и выключите после.</p></div><button type="button" class="${on ? 'btn-ghost' : 'btn-primary'}" onclick="setCrmImportMode(${!on})">${on ? 'Выключить' : 'Включить'}</button></div>`;
 }

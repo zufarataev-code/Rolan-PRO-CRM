@@ -37,6 +37,34 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-26 handoff — opened project reads as the cashier (branch `claude/project-card-cashier`)
+
+- Owner, 2026-10-26: «раздел проект очень запутан — сделать понятным, как касса; не ломать всё, а слетать плавно». Prototype he tested: Artifact «Проект · касса RolanPRO».
+- The card no longer repeats the funnel as numbered technical blocks. Generic «Визиты» is removed: the measurement date belongs to «Замер», while per-service dates and installers stay in «Монтаж». Client/object data is one compact context strip with explicit «Клиент» and «Объект» edit actions, not a workflow stage. Visible modules are now: «Состав проекта» → «Замер» → conditional «Материалы» → «КП и оплата» → «Монтаж» → «Документы и история». The duplicate «Последние события» card below the feed is removed.
+- Inside «Состав проекта», `projectCashierMapHtml` renders the four customer-facing direction tiles (Smart, Solar, Protective, Decorative): a direction in the project is filled with its `rpDir` colour and shows services · windows · sum; one not in the project is a tinted «+ добавить» tile. Either tap opens `openProjectDirectionWindow(oid, key, 'services')` — the picker modal between the tile and the window is no longer used from the card. The three duplicate buttons (Замер / Расчёт / Заказ-наряд) under the map are gone; the facts row (rooms · windows · sq ft) stays.
+- «Замер» section: rooms are tiles (`.project-room-tile`) — name, windows, sq ft, chip «базовый» (any `win.quickMeasure`) or «полный ✓»; a tap and «+ Помещение» open the same `measureAction` window.
+- Receipt `projectFeedCheckHtml` is mobile-only (≤720px): total, line count, «без замера» count, and one button — «Собрать КП» / «Открыть КП» / «Монтаж» once the KP is signed. Desktop already has totals in the hero, so the receipt is hidden there.
+- Fixed the production composer crash: `production-stages.js` is function-only, therefore the four-direction order is local to `projectCashierMapHtml` instead of a lost top-level constant.
+- Not touched: direction window, measurement windows, KP wizard, work order, data model. No state changes.
+- Verification: focused project/card tests 16/16; full suite 912/912; `npm run typecheck`; production `npm run build` (129 routes); `git diff --check`. The protected database E2E was not run locally because no disposable PostgreSQL was provisioned; CI owns that gate. Production is unchanged; PR review, merge and deployment still require the owner's explicit confirmation.
+
+## 2026-10-26 handoff — card gate-checklist + owner install override, client block removed (branch `claude/project-card-gate-checklist`)
+
+- Owner, tested on prod, frustrated: project card confusing with «тысяча повторяющихся сущностей», and «не могу начать монтаж, вечно что-то блокирует». He asked for an expert redesign, approved a mock-up first (Artifact «Карточка проекта RolanPRO»), and gave three decisions: (1) монтаж — show a checklist «что осталось» + owner «Начать монтаж всё равно»; (2) дубли — fewer sections; (3) approach — mock-up then code.
+- This branch stacks on `claude/project-card-cashier` (PR #426, the card «Simplify into one working flow») and adds the two approved deltas the simplify did not cover:
+  - **Removed the «Клиент и объект» block** from `projectFeedHtml` (Owner: client + site address live in the client card, address is already in the header — «зачем лишний шум»). The client name in `renderProjectCommandHeader` is now a button linking to the client card (`.project-command-client`). Site contact on the object is a later layer: default = client, overridable when creating a замер/монтаж, shown to the field specialist in the work order.
+  - **«До монтажа» checklist** (`projectCardGateChecklist` / `projectInstallGateSteps`): four real steps — услуги+замер, КП принято, аванс, точные размеры — with «осталось N из M». Shown for money roles, above «Состав», only before installation/closed and while something is unfinished. For the owner it carries **«Начать монтаж всё равно»** → `projectForceInstallation`: owner-only, confirm, sets `o.installationForced` + timeline `installation_forced`, then `scheduleInstallationPrompt`. Both gates (`ensureVerifiedMeasurementsForStatus`, `ensureProductionReadyForInstallation`) honour the flag; once forced the button becomes a risk note.
+- Verification: focused feed/cashier/gate/production-ui tests pass (`install-gate-checklist.test.ts` new; `project-feed.test.ts` updated for the removed block + header client link); full suite 825 pass / 25 fail — same env-dependent set (google-ads, gmail, twilio, plaid, installer-operations). Build and a prod phone look pending; merge/deploy after the owner's review and after PR #426.
+- Still open (next layers the owner approved): site-contact field on замер/монтаж + work order; collapsible groups if he still wants fewer visible sections.
+
+## 2026-10-26 handoff — cashier material step is no longer a dead end (branch `claude/cashier-material-forward`)
+
+- Owner tested on prod and reported: on «Новый проект → Касса услуг → Материал» a picked material seemed to vanish, there was no save button, the window had no way forward, and «where you need to add and save, there is nothing».
+- Root cause: in `serviceCashierHtml` the footer only showed «Добавить в проект», and only on the `addons` step (`canCommit`). On the `material` step the only way forward was tapping a specific film card or the «уточним на замере» link — which, in fold mode (>8 films), sits at the top and scrolls out of view. So a chosen film never reached the commit step and the step read as a trap.
+- Fix: the footer now always carries a forward action. On `material` it shows «Далее →» (carrying the chosen `catalogId`) or «Далее — уточним на замере →» when none is picked, both calling `serviceCashierPick('material', c.catalogId || '')`; on `addons` it still commits with «Добавить в проект». One edit in `serviceCashierHtml` (`private/legacy/rolanpro-crm-cloud.html`); the top/bottom skip link and every pick path are unchanged.
+- Verified persistence of the other add paths while here: `addCatalogItem`, warehouse film-link and the measurement/estimate film-link (`offering.filmIds`) all call `save()` — no lost-write bug found there.
+- Verification: cashier/mobile/measure tests 24/24 (`service-cashier.test.ts` asserts the forward button on the material step); full suite unchanged vs main (env-dependent failures only). Build and a prod phone look still pending; merge/deploy after the owner's review.
+
 ## 2026-10-26 handoff — all four directions stay visible in the project cashier
 
 - Branch `codex/four-directions-visible`, based on `main` `ac274c7` after PR #412.
@@ -52,6 +80,41 @@ Before doing any work:
 - Old `privacy` / `privacy_film` projects remain readable, while new services coming through a legacy privacy entry point are saved as Decorative. Historical production, payroll and warehouse codes are preserved.
 - New-project, measurement, cashier, Proposal-option and Services/Price Book flows use the same canonical four-direction mapping.
 - Verification: full suite 895/895, `npm run typecheck`, production `npm run build`, and `git diff --check` pass. Production is unchanged; merge/deploy still require the Owner's explicit confirmation after PR review and CI.
+
+## 2026-10-27 handoff — Codex PR #424 released (owner's yes)
+
+- Merged `5b36859`, deployed. Checked on top of #431 locally: full suite unchanged; harness flow «Запланировать монтаж» → plan saved as draft → «Подготовить производство» → «Подтвердить монтаж» → installation_scheduled.
+- Harness scripts that click «Подготовить производство» right after the deposit must follow the next action now (plan first).
+
+## 2026-10-27 handoff — one measurement window + «Режим внедрения» (PR #431)
+
+- Merged `d796c45`, deployed. Separate quick measurement window removed (supersedes #419's quick window; `projectAcceptClientSizes` stays).
+- Measurement window: «Поля:» chips (`measureFieldsBarHtml`, per user in localStorage) hide direction / glass & access / notes & photos / Smart zone via `mm-hide-*` classes; measurer default all, others basics.
+- Import mode `db.settings.importMode.on` (owner only; Settings «Режим внедрения», banner while on): `changeStatus` skips all stage guards, stock deduction and notifications; measurement completion and estimate readiness never block; server `prepareServiceSolutions` skips its stage checks while stored on (a manager cannot flip the flag).
+- Tests: quick-measure.test.ts (rewritten), import-mode-server.test.ts.
+
+## 2026-10-27 handoff — «Клиент уже согласен» (PR #429)
+
+- Merged `addba35`, deployed. KP wizard send step: «🤝 Клиент уже согласен» → `projectAcceptProposalOffline` marks a published KP Sent (timeline «согласовано напрямую») and moves the project to `proposal_accepted`.
+- Cause: a formed but unsent KP kept the project at «Замер»; «КП принято» needed `proposal_sent`.
+
+## 2026-10-26 handoff — glass quantity, several rolls per receipt, multi-zone as block type (PR #423)
+
+- Merged `687b9fa`, deployed. Also merged #421 (archived employees' salary mirrors hidden from cost lists).
+- Quick measure: each glass row has «шт.» (`win.qty`/`actualQty`); totals and zones count pieces.
+- Warehouse `confirmAddRoll`: «Количество рулонов» (1–50) → N rolls, each with its own `reserveRollCode`, movement and expense; guarded by `state.rollReceiptSaving`.
+- Smart: multi-zone is a power block type. `smartCashierDesiredLines` adds `multi` («Блок питания мультизона») instead of the ordinary block for multi rooms; no separate multi service. Quick block question: Обычный / Мультизона / Не нужен.
+- Open with owner: where Alan still appears (screenshot asked); proposal to measure and clean the legacy JSON state (awaiting yes).
+
+## 2026-10-26 handoff — two-level measurement (PR #419)
+
+- Merged `4c2f03e`, deployed (prod not re-checked in Chrome from this session). Mock-up: canvas boards 15–18.
+- `openManagerMeasureModal` routes by `measureEntryMode`: manager → quick, measurer → full, owner → chooser on an empty project (`setMeasureMode(oid,'full'|'quick')`).
+- Quick window `quickMeasureHtml` (production-stages.js): rooms, glass W×H, per-room socket (Smart → electrician) and old-film removal, Smart questions (control, block, glass) in `o.quickAnswers`, «Попадёт в КП» with «Создать услугу». Windows carry `quickMeasure: true`, sizes unverified.
+- Client sizes no longer block production/scheduling: `projectAcceptClientSizes` sets `clientSizesAcceptedAt` (one confirm); «Внести точные размеры» next action is the measurer's only.
+- Smart: electrician/power services first in the install window.
+- Fix: renders called `serviceOfferingCanEdit()` (alerts non-owners) — plain role check now.
+- Harness scripts must call `setMeasureMode(id,'full')` for the full window. Tests: `quick-measure.test.ts`.
 
 ## 2026-10-26 handoff — Smart made simple (PR #416)
 
@@ -1486,3 +1549,12 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Missing Solar glass type, facade orientation, installation side and access/height remain visible as an orange warning in the assignment window and as a mandatory warning block in the work order. Every affected opening prints the known value or `НЕ УКАЗАНО`.
 - Smart zone mismatch and power loads requiring engineering remain blocking issues. The surveyor still cannot submit an on-site measurement while its technical fields are incomplete.
 - Focused installation/estimate/card tests pass 83/83; full suite passes 897/897; `npm run typecheck` is clean; production build succeeds with 129 routes; `git diff --check` is clean. Production is unchanged; deployment requires the Owner's separate explicit confirmation.
+
+## 2026-10-26 handoff — Installation planning is saved before production publication (Codex)
+
+- Branch `codex/fix-install-assignment-20261026`, based on `origin/main` `160ee5e`.
+- After an accepted Proposal, the Project card now opens the per-service installation planner immediately. The manager can save each service's crew, start and end time even when exact field facts or production preparation remain incomplete.
+- A saved plan stays an internal draft. The CRM shows every readiness issue and keeps the dates and crew, while the existing strict production, measurement and Smart engineering checks still block publication to the calendar and the `installation_scheduled` status.
+- The main next action first offers «Запланировать монтаж». Once at least one service has a plan, it points to production preparation and then returns to final publication.
+- Verified locally in the browser at desktop and 390 px: an accepted Project with an unverified opening and no prepared film saved an installer and date, displayed the service as assigned and recorded `service_planned` without falsely publishing the installation.
+- Verification: focused tests 75/75; full suite 907/907; `npm run typecheck` clean; production build successful with 129 routes; `git diff --check` clean. Production is unchanged; release still requires the Owner's separate explicit confirmation.

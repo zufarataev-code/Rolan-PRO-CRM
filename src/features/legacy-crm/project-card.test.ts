@@ -432,9 +432,9 @@ test('server: a service waiting for measurement stops installation; closing an i
   plannedClosed.orders[0].status = 'installation_done';
   plannedClosed.orders[0].serviceProgress = { 'offering:a1': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' }, 'line:z': { status: 'done', doneAt: '2026-10-15T20:00:00.000Z' } };
   assert.equal(prepareServiceSolutions(plannedActive, plannedClosed, false), null);
-  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 1600);
+  const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {') + 2600);
   assert.match(status, /const closesInstallation = CLOSED_PROJECT_STATUSES\.includes\(newStatus\) && !CLOSED_PROJECT_STATUSES\.includes\(o\.status\);/);
-  assert.match(status, /if \(\(entersInstallation \|\| closesInstallation\) && !ensureProjectServicesPlanned\(o, \{ all: closesInstallation \}\)\) return false;/);
+  assert.match(status, /if \((?:!opts\.importing && )?\(entersInstallation \|\| closesInstallation\) && !ensureProjectServicesPlanned\(o, \{ all: closesInstallation \}\)\) return false;/);
 });
 
 test('a finished installation is read-only on the card; deleting a service drops its plan and the crew follows', () => {
