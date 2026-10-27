@@ -30,6 +30,8 @@ closed-job revenue, ROAS and direct-cost ROI:
   allocations do not duplicate the job's payment receipts.
 - Costs come from the existing warehouse issue, stage payroll/accruals,
   confirmed payouts, actual expenses and project-linked finance entries.
+  Payroll payments offset accruals for the same worker and stage only; fixed
+  and separate unstaged payments remain costs even for a staged worker.
   Bank entries that might pay an existing project expense require the owner
   to link that expense or explicitly mark the entry as additional. This prevents
   double charging without guessing which two records represent the same cost.
@@ -128,10 +130,12 @@ unknown. This is booked sale value for Google bidding, not paid-job profit.
 Repeated reconciliation does not create another sale when the project later
 gets a canonical Deal. Recorded refunds/cancellations produce immutable
 restatements/retractions; their uploads wait for original Google confirmation.
+Removing the last erroneous refund appends a restoring restatement to the
+original sale value; prior corrections and unrelated manual restatements remain.
 Corrections also reconcile for recorded consent-based sales without a click
 touchpoint. Older click captures missing a leaf-account ID remain in the legacy
 `/roas` report only when its cost feed identifies exactly one account.
-Retractions are final; reopening a retracted sale needs operator review.
+Retractions are final, including backdated retractions; reopening a retracted sale needs operator review.
 
 Corrections recorded before destination setup receive missing delivery rows
 after configuration, through both the native worker and the owner adjustment
@@ -222,7 +226,10 @@ A live request is impossible through the normal settings endpoint because it rej
 
 Keep all values server-side. Never use `NEXT_PUBLIC_*` for these values.
 
-- `GOOGLE_ADS_DEVELOPER_TOKEN`
+- Enable Google Ads API access on the Cloud project used by the OAuth/service-account
+  credentials, with an access level that permits the intended production operations.
+  `GOOGLE_ADS_DEVELOPER_TOKEN` is an optional legacy value: [Google sunset developer
+  tokens on September 9, 2026](https://developers.google.com/google-ads/api/docs/api-policy/developer-token).
 - OAuth refresh-token path:
   - `GOOGLE_ADS_OAUTH_CLIENT_ID`
   - `GOOGLE_ADS_OAUTH_CLIENT_SECRET`
@@ -320,7 +327,7 @@ ROAS uses only CRM conversions whose selected attribution touchpoint contains `g
 
 - no correction -> original conversion value
 - latest RESTATEMENT -> adjusted final value
-- latest RETRACTION -> zero
+- any RETRACTION -> zero, including a backdated one
 - unknown revenue stays unknown and is reported, not silently converted to zero
 
 Multi-currency results are reported separately; no implicit FX conversion is performed.
@@ -338,9 +345,10 @@ Qualified transaction IDs are stable per original lead when present, with a deal
 Do not perform live activation until all items are complete.
 
 1. Identify the real ROLANPRO Google Ads Customer ID and optional manager Customer ID.
-2. Confirm the Google Ads API developer token is approved for the account hierarchy being used.
+2. Verify the credential's Google Cloud project has Google Ads API enabled and the required production access; a legacy developer token is no longer required.
 3. Configure OAuth refresh-token credentials (preferred for the owner account) or a service account with appropriate access.
-4. Identify/create the Qualified Lead and Converted Lead conversion actions.
+4. Identify/create the Qualified Lead and Converted Lead conversion actions in the actual conversion-owner account. Confirm the sale action supports adjustments and test a refund on its actual matching path; [Google restricts adjustment action types and identifiers](https://developers.google.com/google-ads/api/docs/conversions/upload-adjustments), including no WBRAID adjustments.
+   Review account and campaign goals with the owner: decide which CRM outcome should drive bidding and which signals stay secondary. Check existing primary form/call actions and repeated lead-to-sale signals before enabling them together, so one customer journey does not unintentionally count as multiple bidding successes.
 5. Decide the CRM stage that means `Qualified Lead`; persist it explicitly.
 6. If Customer Match is required, identify/create the audience list and confirm the Customer Match Terms in Google Ads. Only then set the CRM terms flag.
 7. Set `upload_enabled=true` while keeping both DB and env validation flags true.

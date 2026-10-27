@@ -30,10 +30,13 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   const payments = rows(order.payments);
   const received = (payments.length ? sum(payments, "amount") : decimal(order.paid)).minus(refunds);
   const stages = rows(order.productionStages);
-  const stagePayroll = stages.flatMap(stage => rows(stage.payroll));
-  const stageWorkers = new Set(stagePayroll.map(item => item.userId));
-  const otherPayroll = rows(order.payouts).filter(item => !stageWorkers.has(item.userId));
-  const labor = Prisma.Decimal.max(sum(stagePayroll, "amount").plus(sum(otherPayroll, "amount")), sum(transactions.filter(item => item.category === "payroll"), "amount"));
+  const stagePayroll: Row[] = stages.flatMap(stage => rows(stage.payroll).map(item => ({ ...item, stageId: stage.id || null })));
+  const payouts = rows(order.payouts);
+  const unpaidPayroll = stagePayroll.reduce<Prisma.Decimal>((total, item) => {
+    const paid = sum(payouts.filter(payout => payout.userId === item.userId && (payout.stageId || null) === item.stageId), "amount");
+    return total.plus(Prisma.Decimal.max(0, decimal(item.amount).minus(paid)));
+  }, new Prisma.Decimal(0));
+  const labor = Prisma.Decimal.max(sum(payouts, "amount").plus(unpaidPayroll), sum(transactions.filter(item => item.category === "payroll"), "amount"));
   const expenses = rows(order.extraExpenses);
   const actualExpenses = expenses.filter(item => item.actual === true || item.paid === true || item.paidAt);
   const directCategories = new Set(["project_expense", "subcontractor", "complaint", "delivery", "tools", "bank_fee", "other"]);
@@ -57,7 +60,7 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   if ((hasFilm && !cancelled || order._inventoryDeducted === true) && (order._inventoryDeducted !== true || !Number.isFinite(order._inventoryMaterialCost) || rows(order._inventoryLog).some(item => item.warning))) issues.push("material_cost_not_verified");
   if (!cancelled && stages.some(stage => stage.status !== "done")) issues.push("work_not_completed");
   if (!cancelled && expenses.some(item => !(item.actual === true || item.paid === true || item.paidAt))) issues.push("expenses_not_actual");
-  if ([...stagePayroll, ...otherPayroll, ...actualExpenses, ...directTransactions].some(item => !Number.isFinite(Number(item.amount)))) issues.push("invalid_cost_records");
+  if ([...stagePayroll, ...payouts, ...actualExpenses, ...directTransactions].some(item => !Number.isFinite(Number(item.amount)))) issues.push("invalid_cost_records");
   const material = decimal(order._inventoryMaterialCost);
   const parts = order._inventoryDeducted ? new Prisma.Decimal(0) : sum(transactions.filter(item => item.category === "inventory_purchase"), "amount");
   const directCost = material.plus(parts).plus(labor).plus(directExpenses);

@@ -369,6 +369,8 @@ This file records durable decisions. Current activity, blockers, and next steps 
 
 ## 2026-09-24 — Google Ads learns only from verified CRM outcomes
 
+Amended by the 2026-10-26 decision above: verified paid offline acceptance also qualifies as a sale; original lead attribution is preserved and live delivery requires both explicit validation gates.
+
 - CRM sends server-side first-party conversion events through Google Data Manager; no Google credential, OAuth token, or customer identifier is stored in browser code.
 - `CONSULTATION_SCHEDULED` is the recommended Qualified Lead milestone for Rolan PRO. A confirmed consultation may create this signal from a Lead before a Deal exists; a bot statement without a PostgreSQL consultation never qualifies.
 - Converted Lead remains the canonical `CLOSED_WON` outcome and uses the CRM sale value only after the signed-agreement and paid-deposit gate.
@@ -530,6 +532,8 @@ Owner decision in chat on 2026-10-02 («давай» to the proposed order). Ame
 - Supersedes: equal split of fixed costs (`fixedPool / projectCount`) and the flat «Рекламный резерв» of 10% of each project's revenue.
 - Migration: moves with the payment stage, together with the monthly money report and the bank feeds (real ad spend can then replace the budget).
 ## 2026-10-02 — Projects are deleted into an archive, by the owner only (Owner)
+
+2026-10-26 financial-history exception: Google Ads reporting and outcome reconciliation include archived jobs; archiving alone does not remove their financial history or retract a sale.
 
 Owner decision in chat on 2026-10-02: «удаление проектов только у меня как у админа — удалять в архив, чтобы потом можно было восстановить». Amends item 1 of "2026-09-29 — CRM core consolidation" like the earlier exceptions: projects live in the legacy payload today.
 

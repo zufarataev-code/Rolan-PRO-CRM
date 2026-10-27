@@ -8,7 +8,7 @@ import { selectGoogleAdsReportCustomer } from "./roas";
 
 const cost = (customer_id = "123", currency = "USD") => ({ customer_id, campaign_id: "456", campaign_name: "Film", currency, cost_amount: new Prisma.Decimal(100), clicks: 10n, impressions: 100n });
 const point: CampaignTouchpoint = { acquisition_touchpoint_id: "touch-1", lead_id: "lead-1", legacy_order_id: null, google_ads_customer_id: "123", google_ads_campaign_id: "456", captured_at: new Date("2026-10-05T12:00:00Z") };
-const order = () => ({ id: "order-1", canonicalLeadId: "lead-1", number: "R-1", status: "completed", depositReceived: true, payments: [{ amount: 200 }, { amount: 800 }], measurements: { rooms: [{ windows: [{}] }] }, _inventoryDeducted: true, _inventoryMaterialCost: 100, productionStages: [{ status: "done", payroll: [{ userId: "installer", amount: 150 }] }], payouts: [{ userId: "installer", amount: 150 }], extraExpenses: [{ amount: 50, actual: true }] });
+const order = () => ({ id: "order-1", canonicalLeadId: "lead-1", number: "R-1", status: "completed", depositReceived: true, payments: [{ amount: 200 }, { amount: 800 }], measurements: { rooms: [{ windows: [{}] }] }, _inventoryDeducted: true, _inventoryMaterialCost: 100, productionStages: [{ id: "stage-1", status: "done", payroll: [{ userId: "installer", amount: 150 }] }], payouts: [{ userId: "installer", stageId: "stage-1", amount: 150, paid: true }], extraExpenses: [{ amount: 50, actual: true }] });
 
 test("campaign ROI uses net receipts and existing costs exactly once, and requires an owner cost review", () => {
   const project = order();
@@ -23,6 +23,29 @@ test("campaign ROI uses net receipts and existing costs exactly once, and requir
   assert.equal(report().campaigns[0].roi_percent, "500.00");
   project._inventoryMaterialCost = 120;
   assert.equal(report().campaigns[0].roi_percent, null, "a later cost change invalidates the owner's review");
+});
+
+test("a fixed installer payment counts despite their zero-valued stage payroll snapshot", () => {
+  const project = { ...order(), _inventoryMaterialCost: 0, extraExpenses: [], productionStages: [{ id: "fixed-stage", status: "done", payroll: [{ userId: "fixed-installer", amount: 0 }] }], payouts: [{ userId: "fixed-installer", stageId: null, type: "fixed_per_job", amount: 200, paid: true }] };
+  assert.equal(googleAdsProjectMoney(project, {}).directCost.toFixed(2), "200.00");
+  Object.assign(project, { googleAdsCostsReview: { fingerprint: googleAdsProjectMoney(project, {}).fingerprint } });
+  const report = buildGoogleAdsCampaignReport([cost()], [point], { orders: [project] }, "2026-10-01", "2026-10-25", "123");
+  assert.equal(report.campaigns[0].roi_percent, "700.00");
+});
+
+test("labor matches payments to worker and stage while retaining separate unstaged work", () => {
+  const project = { ...order(), _inventoryMaterialCost: 0, extraExpenses: [], productionStages: [
+    { id: "first", status: "done", payroll: [{ userId: "installer", amount: 150 }] },
+    { id: "second", status: "done", payroll: [{ userId: "installer", amount: 100 }] },
+  ], payouts: [
+    { userId: "installer", stageId: "first", amount: 75, paid: true },
+    { userId: "installer", stageId: "first", amount: 75, paid: true },
+    { userId: "installer", stageId: "second", amount: 40, paid: true },
+    { userId: "installer", stageId: null, amount: 60, paid: true },
+  ] };
+  assert.equal(googleAdsProjectMoney(project, {}).directCost.toFixed(2), "310.00", "count each stage's accrual once plus the unstaged payment");
+  project.payouts.push({ userId: "installer", stageId: "second", amount: 80, paid: true });
+  assert.equal(googleAdsProjectMoney(project, {}).directCost.toFixed(2), "330.00", "payments above an accrual still count as actual labor cost");
 });
 
 test("a deposit is cash received but not completed-job revenue or profit", () => {

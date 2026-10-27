@@ -117,7 +117,8 @@ export async function getGoogleAdsRoasReport(startDate: string, endDate: string,
           select: { gclid: true, gbraid: true, wbraid: true },
         },
         adjustments: {
-          orderBy: [{ occurred_at: "desc" }, { created_at: "desc" }],
+          // Retractions are terminal even when their occurrence was backdated.
+          orderBy: [{ adjustment_type: "desc" }, { occurred_at: "desc" }, { created_at: "desc" }],
           take: 1,
           select: { adjustment_type: true, adjusted_value: true },
         },

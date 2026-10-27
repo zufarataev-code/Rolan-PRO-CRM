@@ -159,6 +159,15 @@ test("cost import → website attribution → paid job → owner ROI review → 
   await call("POST", "/api/v1/integrations/google-ads/sync-now");
   const noClickAdjustment = await db.conversionAdjustment.findFirstOrThrow({ where: { conversion_event: { lead_id: lead.lead_id } }, orderBy: { created_at: "desc" } });
   assert.equal(noClickAdjustment.adjusted_value?.toFixed(2), "850.00", "consent-based sales without click attribution still receive refund corrections");
+  const refundRemovalState = await call("GET", "/api/v1/legacy-crm/state");
+  refundRemovalState.data.payload.finance.transactions = refundRemovalState.data.payload.finance.transactions.filter((item: any) => item.id !== tag + "-refund" && item.id !== tag + "-refund-2");
+  const refundRemovalResult = await call("PUT", "/api/v1/legacy-crm/state", { payload: refundRemovalState.data.payload, revision: refundRemovalState.data.revision });
+  assert.equal(refundRemovalResult.status, 200, JSON.stringify(refundRemovalResult.errors));
+  await call("POST", "/api/v1/integrations/google-ads/sync-now");
+  await call("POST", "/api/v1/integrations/google-ads/sync-now");
+  const restored = await db.conversionAdjustment.findMany({ where: { conversion_event: { lead_id: lead.lead_id } }, orderBy: [{ occurred_at: "asc" }, { created_at: "asc" }] });
+  assert.deepEqual(restored.map(item => item.adjusted_value?.toFixed(2)), ["900.00", "850.00", "1000.00"], "removing refunds appends one restoring correction and retains immutable history");
+  assert.equal((await db.conversionEvent.findFirstOrThrow({ where: { lead_id: lead.lead_id, event_type: "converted_lead" } })).conversion_value?.toFixed(2), "1000.00", "the original sale value is never rewritten");
   const beforePhone = await db.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } });
   const phonePayload: any = structuredClone(beforePhone.payload);
   phonePayload.clients.push({ id: tag + "-client", name: "Offline phone test", phone: "+18055550198" });
@@ -180,7 +189,7 @@ test("cost import → website attribution → paid job → owner ROI review → 
   const changedLead = structuredClone(managerState.data.payload);
   changedLead.orders.find((item: any) => item.id === tag).canonicalLeadId = phonePoint.lead_id;
   const changedLeadResult = await call("PUT", "/api/v1/legacy-crm/state", { payload: changedLead, revision: managerState.data.revision });
-  assert.equal(changedLeadResult.status, 403);
+  assert.equal(changedLeadResult.status, 403, JSON.stringify(changedLeadResult.errors));
   assert.equal(changedLeadResult.errors[0].code, "original_lead_protected");
   const copiedLead = structuredClone(managerState.data.payload);
   copiedLead.orders.push({ id: tag + "-forged", number: tag + "-forged", status: "new", canonicalLeadId: lead.lead_id, createdAt: new Date().toISOString() });
@@ -275,4 +284,9 @@ test("late campaign evidence repairs a prior sale without replacing or duplicati
   assert.equal(await db.conversionEvent.count({ where: { deal_id: proposal.deal_id, event_type: "converted_lead" } }), 1);
   assert.equal(await db.conversionUploadOutbox.count({ where: { conversion_event_id: original.conversion_event_id } }), 1);
   assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "bind_campaign", order_id: orderId, customer_id: customer, campaign_id: campaign, gclid: "another-click" })).status, 409);
+  await db.$transaction(tx => createConversionAdjustment(tx, { conversionEventId: original.conversion_event_id, financialReferenceId: orderId + "-restatement", adjustmentType: "RESTATEMENT", adjustedValue: "900", currency: "USD", occurredAt: new Date() }));
+  await db.$transaction(tx => createConversionAdjustment(tx, { conversionEventId: original.conversion_event_id, financialReferenceId: orderId + "-backdated-retraction", adjustmentType: "RETRACTION", occurredAt: new Date(original.occurred_at.getTime() + 1) }));
+  const retractedRoas = await call("GET", `/api/v1/integrations/google-ads/roas?start_date=${range.endDate}&end_date=${new Date().toISOString().slice(0, 10)}&customer_id=${customer}`);
+  assert.equal(retractedRoas.status, 200);
+  assert.equal(retractedRoas.data.by_currency.find((row: any) => row.currency === "USD").attributed_revenue, "0.00", "a terminal retraction wins even when backdated before a restatement");
 });

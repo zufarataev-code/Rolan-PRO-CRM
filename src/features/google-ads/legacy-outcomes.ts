@@ -50,10 +50,12 @@ export async function reconcileLegacyGoogleAdsOutcomes() {
         const refunds: Row[] = (Array.isArray(payload.finance?.transactions) ? payload.finance.transactions : []).filter((item: Row) => item.orderId === order.id && item.type === "expense" && item.category === "refund");
         const refunded = refunds.reduce<Prisma.Decimal>((total, item) => total.plus(new Prisma.Decimal(Math.abs(Number(item.amount) || 0))), new Prisma.Decimal(0));
         const cancelled = ["cancelled", "canceled", "lost"].includes(order.status);
-        if (!cancelled && !refunded.gt(0)) return;
+        // Retractions are terminal even when their occurrence was backdated.
+        const latest = await tx.conversionAdjustment.findFirst({ where: { conversion_event_id: original.conversion_event_id }, orderBy: [{ adjustment_type: "desc" }, { occurred_at: "desc" }, { created_at: "desc" }] });
+        const refundRemoved = !refunded.gt(0) && latest?.financial_reference_id.startsWith(`legacy-project-${order.id}-revision-`);
+        if (!cancelled && !refunded.gt(0) && !refundRemoved) return;
         const remaining = Prisma.Decimal.max(0, original.conversion_value.minus(refunded));
         const retract = cancelled || remaining.eq(0);
-        const latest = await tx.conversionAdjustment.findFirst({ where: { conversion_event_id: original.conversion_event_id }, orderBy: [{ occurred_at: "desc" }, { created_at: "desc" }] });
         if (latest?.adjustment_type === "RETRACTION" || (!retract && latest?.adjustment_type === "RESTATEMENT" && latest.adjusted_value?.eq(remaining))) return;
         const revision = await tx.conversionAdjustment.count({ where: { conversion_event_id: original.conversion_event_id } });
         await createConversionAdjustment(tx, {
@@ -61,7 +63,7 @@ export async function reconcileLegacyGoogleAdsOutcomes() {
           financialReferenceId: `legacy-project-${order.id}-revision-${revision + 1}`,
           adjustmentType: retract ? "RETRACTION" : "RESTATEMENT",
           ...(retract ? {} : { adjustedValue: remaining }),
-          currency: original.currency, occurredAt: new Date(), reason: cancelled ? "Project cancelled in CRM" : "Recorded customer refunds",
+          currency: original.currency, occurredAt: new Date(), reason: cancelled ? "Project cancelled in CRM" : refundRemoved ? "Customer refund removed in CRM" : "Recorded customer refunds",
         });
       });
     } catch (error) {
