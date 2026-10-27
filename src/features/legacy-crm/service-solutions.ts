@@ -182,6 +182,11 @@ export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInsta
 export function prepareServiceSolutions(current: Row, next: Row, owner: boolean): string | null {
   const currentOfferings = rows(object(current.settings).serviceOfferings);
   const settings = object(next.settings);
+  // Owner, 2026-10-27: «режим внедрения» — old projects are entered backdated,
+  // so the stage checks below are skipped while it is on. Only the owner turns
+  // it on; a manager benefits only once it is already saved on.
+  const importing = object(object(current.settings).importMode).on === true || (owner && object(settings.importMode).on === true);
+  if (!owner && stableJson(object(current.settings).importMode) !== stableJson(settings.importMode)) settings.importMode = object(current.settings).importMode;
   if (!owner) {
     // Restore server-owned rates before comparing. Redacted reads must round-trip.
     const submitted = rows(settings.serviceOfferings).map(offering => {
@@ -432,7 +437,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const schedulesChanged = stableJson(order.serviceSchedules) !== stableJson(oldOrder.serviceSchedules);
     // Production assignments are operational decisions after client approval,
     // even when the browser submits only a partial draft and keeps the status.
-    if (schedulesChanged && rows(order.serviceSchedules).length && oldOrder.id !== undefined
+    if (!importing && schedulesChanged && rows(order.serviceSchedules).length && oldOrder.id !== undefined
       && !['proposal_accepted', ...SCHEDULED_PROJECT_STATUSES, ...CLOSED_PROJECT_STATUSES].includes(String(oldOrder.status))) {
       return 'Исполнителей и даты назначают после принятия КП.';
     }
@@ -446,7 +451,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     // complete then too (a service added after scheduling may still be planned
     // step by step until then).
     const closesProject = CLOSED_PROJECT_STATUSES.includes(String(order.status)) && !CLOSED_PROJECT_STATUSES.includes(String(oldOrder.status));
-    if ((entersInstallation || closesProject) && oldOrder.id !== undefined) {
+    if (!importing && (entersInstallation || closesProject) && oldOrder.id !== undefined) {
       if (Array.isArray(order.serviceScopeApprovals) && serviceGroupIds(order).some(id => !order.serviceScopeApprovals.some((entry:Row) => entry.serviceId === id && entry.scope === serviceGroupScope(order,id)))) return 'Сначала согласуйте дополнительные услуги с клиентом.';
       if (pendingSizedOfferings(order, offerings).length) return 'Сначала внесите замер всех услуг проекта.';
       const plans = projectPlans(order);
@@ -462,7 +467,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     }
     // An installation under way closes only when every service is done, so
     // one crew cannot close the work of another (Owner, 2026-10-10).
-    if (closesProject && oldOrder.id !== undefined && SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status))) {
+    if (!importing && closesProject && oldOrder.id !== undefined && SCHEDULED_PROJECT_STATUSES.includes(String(oldOrder.status))) {
       const progress = object(order.serviceProgress);
       if (serviceGroupIds(order).some(id => object(progress[id]).status !== 'done')) return 'Сначала отметьте выполненными все услуги проекта.';
     }

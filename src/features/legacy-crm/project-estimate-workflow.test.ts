@@ -123,7 +123,7 @@ test("manager can quote from customer dimensions but installation requires verif
   assert.match(source, /По ним разрешено рассчитать проект и выпустить КП/);
   assert.match(source, /function orderStatusRequiresVerifiedMeasurements\(status\)/);
   assert.match(source, /'installation_scheduled','installation_accepted','installation_en_route','installation_in_progress'/);
-  assert.match(source, /if \(!ensureVerifiedMeasurementsForStatus\(o, newStatus/);
+  assert.match(source, /if \((?:!opts\.importing && )?!ensureVerifiedMeasurementsForStatus\(o, newStatus/);
 });
 
 test("a new project opens as its card, measurement is an action, and there is no quick-entry button", () => {

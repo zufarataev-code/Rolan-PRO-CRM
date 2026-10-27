@@ -2074,29 +2074,15 @@
   .install-stripe { display:flex;justify-content:space-between;gap:8px;align-items:center;border-radius:6px;padding:3px 8px;font-size:12px;line-height:1.3;box-sizing:border-box; }
   .install-stripe span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600; }
   .install-stripe b { white-space:nowrap;font-weight:700; }
+  .crm-import-banner { display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:#FEF3C7;border:1px solid #F59E0B;color:#78350F;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px; }
+  .crm-import-banner button { border:1px solid #B45309;background:#fff;color:#78350F;border-radius:8px;padding:5px 12px;font-weight:800; }
+  .crm-import-panel { display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap; } .crm-import-panel p { margin:4px 0 0;font-size:13px;color:#5A6577;max-width:34rem; }
   .rp-kpwin-agreed { border-color:#16A34A !important;background:#F0FDF4 !important; } .rp-kpwin-agreed b { color:#15803D; }
-  /* Quick measurement (Owner, 2026-10-26) */
-  .measure-choice { display:flex;flex-direction:column;gap:6px;text-align:left;width:100%;background:#fff;border:2px solid var(--choice);border-radius:14px;padding:16px;margin-bottom:10px;color:#141A26; }
-  .measure-choice-top { display:flex;justify-content:space-between;align-items:center; } .measure-choice-top b { font-size:17px; } .measure-choice-top em { font-style:normal;font-size:11px;font-weight:800;color:var(--choice);border:1px solid var(--choice);border-radius:999px;padding:2px 8px; }
-  .measure-choice > span:not(.measure-choice-top) { font-size:14px;color:#334155; } .measure-choice strong { color:var(--choice);font-size:13px; }
-  .qm-room { background:#fff;border:1px solid #D9DEE6;border-left:6px solid #7C3AED;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;margin-bottom:10px; }
-  .qm-room-head { display:flex;align-items:center;gap:8px; } .qm-room-head b { font-size:15px;flex:1; } .qm-room-head span { font-size:12px;color:#5A6577; }
-  .qm-glass { display:grid;grid-template-columns:18px 1fr 1fr 64px 66px 32px;gap:5px;align-items:center; }
-  .qm-qty { display:flex;align-items:center;gap:2px; } .qm-qty input { text-align:center;padding-left:4px;padding-right:4px; } .qm-qty span { font-size:11px;color:#5A6577;white-space:nowrap; }
-  @media (max-width:420px) { .qm-glass { grid-template-columns:16px 1fr 1fr 58px 32px; } .qm-glass > b { grid-column:2 / 5;text-align:left;font-size:12px;color:#5A6577; } .qm-glass > .qm-x { grid-row:1;grid-column:5; } } .qm-glass input { width:100%;min-width:0;box-sizing:border-box;min-height:42px;font-size:16px; }
-  .qm-glass.empty input { border-color:#FCD34D; } .qm-glass b { text-align:right;font-size:13px; } .qm-n { color:#5A6577;font-weight:700; }
-  .qm-x { border:1px solid #E2E8F0;background:#fff;border-radius:8px;min-height:32px;min-width:32px;color:#B91C1C; }
-  .qm-add { align-self:flex-start;border:0;background:none;color:#6D28D9;font-weight:800;padding:4px 0; }
-  .qm-scope { font-size:11px;font-weight:800;color:#5A6577;text-transform:uppercase; }
-  .qm-yn { display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;border-top:1px solid #EEF1F5;padding-top:8px; }
-  .qm-yn-btns { display:flex;border:1px solid #CBD5E1;border-radius:8px;overflow:hidden; } .qm-yn-btns button { border:0;background:#fff;padding:8px 14px;font-weight:800;color:#5A6577; } .qm-yn-btns button.on { background:#7C3AED;color:#fff; }
+  /* Field chips (smart block type, measurement field picker) */
   .qm-chips { display:flex;flex-wrap:wrap;gap:6px;align-items:center; } .qm-chips > span { font-size:12px;color:#5A6577; }
   .qm-chips button { border:1.5px solid #CBD5E1;background:#fff;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:700;color:#334155; } .qm-chips button.on { border-color:#7C3AED;background:#F5F3FF;color:#6D28D9; }
-  .qm-new-room { border-left-color:#CBD5E1;border-style:dashed; } .qm-new-row { display:flex;gap:6px; } .qm-new-row input { flex:1;min-width:0; }
-  .qm-q { display:flex;flex-direction:column;gap:6px; } .qm-req { color:#B91C1C; }
-  .qm-line { display:flex;justify-content:space-between;gap:8px;font-size:13px; } .qm-order { font-size:12px;color:#1E3A8A;background:#EFF6FF;border-radius:8px;padding:6px 8px; }
-  .qm-totals { display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:6px;text-align:center;margin-bottom:6px; } .qm-totals div { background:#F5F3FF;border-radius:10px;padding:6px; } .qm-totals small { display:block;font-size:11px;color:#6D28D9; }
-  .qm-issues { font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:6px 8px;margin-bottom:6px; }
+  .mm-fields-bar { padding:6px 0; } .mm-fields-bar button { border-radius:999px !important;padding:5px 10px !important;font-size:12px !important;min-height:0 !important; } .mm-fields-bar button:disabled { opacity:1;cursor:default; }
+  .mm-hide-direction .mm-opt-direction, .mm-hide-tech .manager-window-technical, .mm-hide-notes .manager-window-notes, .mm-hide-smart .manager-smart-zone, .mm-hide-smart .manager-smart-technical { display:none !important; }
   /* Smart room — simple (Owner, 2026-10-26) */
   .smart-toggles { display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:10px; }
   .smart-toggle { display:flex;gap:10px;align-items:flex-start;text-align:left;border:1.5px solid #CBD5E1;border-radius:10px;background:#fff;padding:10px 12px; }
@@ -18140,6 +18126,7 @@ function orderArea(o) { return (o.measurements?.rooms || []).reduce((s, r) => s 
 function orderPrice(o) { return orderRevenue(o); }
 
 function orderMeasurementCompletionIssues(o, { film = true } = {}) {
+  if (typeof crmImportMode === 'function' && crmImportMode()) return [];
   const issues = [];
   const windows = measureAllWindows(o);
   if (!windows.length) return orderNeedsMeasurements(o) ? ['добавьте хотя бы одно окно или панель'] : [];
@@ -18235,6 +18222,9 @@ function ensureOrderWorkflowTransition(o, newStatus, openWorkspace = true) {
 function changeStatus(orderId, newStatus, by, opts = {}) {
   const o = getOrder(orderId);
   if (!o) return false;
+  // Owner, 2026-10-27: «режим внедрения» — old projects are entered without step checks or client messages.
+  const importing = typeof crmImportMode === 'function' && crmImportMode();
+  if (importing) opts = { ...opts, skipWorkflowGuard: true, skipPaymentGuard: true, skipScheduleGuard: true, skipClientAuto: true, importing: true };
   // Entering installation needs every service planned. The plan is published
   // first (the project crew and date the later checks read) and taken back if
   // any check refuses.
@@ -18245,17 +18235,17 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   if (newStatus === 'consultation_scheduled' && !o.consultationAt && !opts.skipScheduleGuard) { if (typeof scheduleConsultationPrompt === 'function') scheduleConsultationPrompt(o.id); return false; }
   if (newStatus === 'measurement_scheduled' && !o.measurementAt && !opts.skipScheduleGuard) { if (typeof scheduleMeasurementPrompt === 'function') scheduleMeasurementPrompt(o.id); return false; }
   const restorePlan = entersInstallation || closesInstallation ? projectPlanSnapshot(o) : null;
-  if ((entersInstallation || closesInstallation) && !ensureProjectServicesPlanned(o, { all: closesInstallation })) return false;
+  if (!opts.importing && (entersInstallation || closesInstallation) && !ensureProjectServicesPlanned(o, { all: closesInstallation })) return false;
   const refuse = () => { if (restorePlan) restorePlan(); return false; };
   if (!opts.skipWorkflowGuard && !ensureOrderWorkflowTransition(o, newStatus, opts.openWorkspace !== false)) return refuse();
-  if (!ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return refuse();
-  if (newStatus === 'installation_scheduled' && !ensureProductionReadyForInstallation(o)) return refuse();
+  if (!opts.importing && !ensureVerifiedMeasurementsForStatus(o, newStatus, opts.openMeasurement !== false)) return refuse();
+  if (!opts.importing && newStatus === 'installation_scheduled' && !ensureProductionReadyForInstallation(o)) return refuse();
   if (!opts.skipPaymentGuard && !ensurePaidForStatus(o, newStatus, opts.openPayment !== false)) return refuse();
   if (o.status === newStatus && !opts.force) {
     render();
     return true;
   }
-  if ((closesInstallation || newStatus === 'installation_done') && ['owner', 'manager'].includes(currentUser()?.role)) {
+  if (!opts.importing && (closesInstallation || newStatus === 'installation_done') && ['owner', 'manager'].includes(currentUser()?.role)) {
     try {
       const issue = autoDeductInventoryForOrder(o);
       if (!issue.ok) {
@@ -18308,7 +18298,7 @@ function changeStatus(orderId, newStatus, by, opts = {}) {
   save();
   // A field specialist's close is announced by the owner/manager CRM: the
   // server marks it, and that CRM sends the notices once (projectClaimServiceFollowUps).
-  if (!(closesInstallation && !orderUserCanManage(currentUser()))) {
+  if (!opts.importing && !(closesInstallation && !orderUserCanManage(currentUser()))) {
     notifyStatusChange(o);
     if (!opts.skipClientAuto) autoNotifyClient(o, newStatus);
   }
@@ -18354,6 +18344,7 @@ function acceptMeasurementTask(orderId, openStudio = false) {
 
 // ---------- AUTO-NOTIFY CLIENT ON STATUS CHANGE ----------
 async function autoNotifyClient(o, statusKey) {
+  if (typeof crmImportMode === 'function' && crmImportMode()) return;
   const c = getClient(o.clientId);
   if (!c) { console.log('[AutoNotify]', o.number, statusKey, '→ skip: no client'); return; }
   if (communicationSettings().autoOnStatus === false) return;
@@ -18723,6 +18714,7 @@ async function sendClientOperationalMessage(o, subject, body, timelineKey, opts 
   await dispatchClientCommunication(o, subject, body, timelineKey, { ...opts, kind: 'operational' });
 }
 function notifyClientEventScheduled(orderId, type) {
+  if (typeof crmImportMode === 'function' && crmImportMode()) return;
   const o = getOrder(orderId);
   const c = getClient(o?.clientId);
   const info = orderEventInfo(type);
@@ -19690,6 +19682,7 @@ function renderAppShell() {
       </header>
 
       <div class="app-content">
+        ${typeof crmImportBannerHtml === 'function' ? crmImportBannerHtml() : ''}
         ${renderView()}
       </div>
     </main>
@@ -23742,6 +23735,7 @@ function settingsSections() {
   return [
     { key: 'team-access', icon: '🔐', title: 'Доступ сотрудников', description: 'Email, пароль, роли и отключение доступа', destination: 'team' },
     { key: 'company', icon: '🏢', title: T('company'), description: 'Название компании, валюта и базовые суммы' },
+    { key: 'import-mode', icon: '🗂', title: 'Режим внедрения', description: 'Перенос старых заказов задним числом: без проверок этапов и без сообщений клиентам' },
     { key: 'company-costs', icon: '🧾', title: 'Ставки и расходы', description: 'Зарплаты, ставки за работу, постоянные и переменные расходы — в одном месте', destination: 'ratesCosts', tab: '' },
     { key: 'telegram', icon: '✈️', title: T('telegramConfigure'), description: 'Telegram-бот и Chat ID сотрудников' },
     { key: 'communication', icon: '💬', title: 'Автосвязь с клиентами', description: 'Каналы, автоматические сообщения и AI-продавец' },
@@ -23931,6 +23925,8 @@ function renderSettings() {
     </div>
 
     ${renderCompanyFixedExpenseSettings()}
+
+    <div ${settingsPanelAttrs('import-mode')}>${typeof crmImportModePanelHtml === 'function' ? crmImportModePanelHtml() : ''}</div>
 
     <div ${settingsPanelAttrs('telegram')}>
       <h3 class="font-semibold mb-1">${T('telegramConfigure')}</h3>
@@ -25728,6 +25724,7 @@ function projectEstimateUpdateTaxProfile(oid, field, value) {
 }
 
 function projectEstimateReadiness(o) {
+  if (typeof crmImportMode === 'function' && crmImportMode()) return [];
   const issues = [];
   const windows = measureAllWindows(o);
   if (!windows.length && orderNeedsMeasurements(o)) issues.push('не внесены помещения и размеры');
@@ -27856,6 +27853,7 @@ function projectServiceDoneWarnings(o, lines, now = new Date()) {
   return warnings;
 }
 function projectConfirmServicesDone(o, lines) {
+  if (typeof crmImportMode === 'function' && crmImportMode()) return true;
   const warnings = projectServiceDoneWarnings(o, lines);
   return !warnings.length || confirm(`Проверьте перед закрытием:\n\n• ${warnings.join('\n• ')}\n\nВсё равно отметить выполненным?`);
 }
@@ -31092,7 +31090,7 @@ function renderManagerMeasureModal(oid) {
   const roomTerms = roomTermsForOrder(o);
   return `
   <div class="modal-backdrop manager-measure-backdrop" onclick="if(event.target===this) closeModal()">
-    <div class="modal-content workspace-modal manager-measure-modal" data-scroll-key="measure-modal" role="dialog" aria-modal="true" aria-label="Замер объекта" onclick="event.stopPropagation()">
+    <div class="modal-content workspace-modal manager-measure-modal ${typeof measureHiddenClasses === 'function' ? measureHiddenClasses() : ''}" data-scroll-key="measure-modal" role="dialog" aria-modal="true" aria-label="Замер объекта" onclick="event.stopPropagation()">
       <div class="manager-measure-header">
         <div class="manager-measure-titlebar">
           <div>
@@ -31112,6 +31110,7 @@ function renderManagerMeasureModal(oid) {
         <div class="manager-measure-services" data-scroll-key="measure-services"><span class="text-xs font-bold text-slate-600">Услуга:</span>${projectScopes.map(key => { const item = measureScopeInfo(key); return `<button class="btn-ghost text-sm ${key===activeScopeKey?'bg-blue-50 text-blue-700':''}" onclick="managerSelectMeasureScope('${oid}','${key}')">${item.icon} ${academyEsc(item.short)} · ${measureAllWindows(o).filter(x => (x.win.measureScope || orderMeasureScope(o))===key).length}</button>`; }).join('')}<button class="btn-ghost text-sm" onclick="openManagerProjectServicesModal('${oid}')">+ Добавить услугу</button></div>
         ${projectSelectedSizedOfferings(o, activeScopeKey).length > 1 ? `<div class="manager-measure-services"><span class="text-xs font-bold text-slate-600">Конкретная услуга новых окон:</span>${projectSelectedSizedOfferings(o, activeScopeKey).map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<button class="btn-ghost text-sm ${managerActiveOffering(o)?.id === offering.id ? 'bg-blue-50 text-blue-700' : ''}" onclick="managerSelectOffering('${oid}','${offering.id}')">${academyEsc(offering.name)}${film ? ` · ${academyEsc(catalogFilmModel(film) || catalogFilmName(film))}` : ''}</button>`; }).join('')}</div>` : ''}
         ${managerMeasureProgressHtml(o, activeScopeKey)}
+        ${typeof measureFieldsBarHtml === 'function' ? measureFieldsBarHtml(oid) : ''}
         ${managerWindowServicesBarHtml(oid, o)}
       </div>
       <div class="manager-measure-body" data-scroll-key="measure-body">
@@ -31191,8 +31190,8 @@ function renderManagerMeasureModal(oid) {
                         ${projectWindowSolutionHtml(o, r, w, true)}
                         <div>${managerWindowTypeCompactHtml(oid, r.id, w, scopeKey)}</div>
                         <div class="manager-window-fields">
-                          <div class="manager-window-field"><label>Направление плёнки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','filmDirection',this.value)">${managerFilmDirectionOptionsHtml(w.filmDirection || '')}</select></div>
-                          <div class="manager-window-field"><label>Количество панелей</label><input id="mm-qty-${w.id}" aria-label="Количество панелей" type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></div>
+                          <div class="manager-window-field mm-opt-direction"><label>Направление плёнки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','filmDirection',this.value)">${managerFilmDirectionOptionsHtml(w.filmDirection || '')}</select></div>
+                          <div class="manager-window-field"><label>Количество</label><input id="mm-qty-${w.id}" aria-label="Количество панелей" type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"></div>
                           <div class="manager-window-field"><label>Ширина (${inUnits ? 'in' : 'мм'})</label><input id="mm-width-${w.id}" aria-label="Ширина" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" ${w.sizePlaceholder?.width ? `value="" placeholder="${measureMmToInput(w.width || 0)}" class="manager-size-placeholder"` : `value="${measureMmToInput(w.width || 0)}"`} onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></div>
                           <div class="manager-window-field"><label>Высота (${inUnits ? 'in' : 'мм'})</label><input id="mm-height-${w.id}" aria-label="Высота" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" ${w.sizePlaceholder?.height ? `value="" placeholder="${measureMmToInput(w.height || 0)}" class="manager-size-placeholder"` : `value="${measureMmToInput(w.height || 0)}"`} onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></div>
                           <div class="manager-window-field readonly"><label>Площадь, sqft</label><input aria-label="Площадь" value="${windowSizeEntered(w) ? windowActualAreaSqft(w).toFixed(2) : '—'}" readonly></div>
@@ -31246,11 +31245,6 @@ function openManagerMeasureModal(oid) {
   // One measurement window for every role (Owner, 2026-10-24, the mock-up «Одно
   // окно замера»): the measurer gets the same window without prices and may
   // leave the film to the manager (completeManagerMeasurement).
-  // Owner, 2026-10-26: the manager enters the quick (client) measurement; the
-  // owner chooses on an empty project; the measurer always gets the full one.
-  const mode = typeof measureEntryMode === 'function' ? measureEntryMode(getOrder(oid)) : 'full';
-  if (mode === 'choose') { state.modal = measureChooserHtml(getOrder(oid)); render(); return; }
-  if (mode === 'quick') { quickRefresh(oid); return; }
   state.modal = renderManagerMeasureModal(oid);
   render();
 }
@@ -31301,7 +31295,7 @@ function completeManagerMeasurement(oid) {
   }
   const issues = orderMeasurementCompletionIssues(o);
   if (issues.length) { alert('Замер ещё не готов:\n\n• ' + issues.join('\n• ')); return; }
-  const technical = orderTechnicalMeasurementIssues(o);
+  const technical = typeof measureFieldPrefs === 'function' && !measureFieldPrefs().has('tech') ? [] : orderTechnicalMeasurementIssues(o);
   if (technical.length) {
     alert('Расчёт, КП и дату монтажа можно оформить по внесённым размерам.\n\nДо начала работ на объекте нужно уточнить:\n\n• ' + technical.join('\n• '));
   }

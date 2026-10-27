@@ -37,5 +37,5 @@ test('the multi-zone is a type of power block, not a separate service', () => {
   assert.match(desired, /if \(item\.system\.controlMode === 'multi'\) \{ add\('multi', smartCashierOffering\('multi'\), 1, \[item\]\); return; \}/);
   assert.doesNotMatch(desired, /multiRooms/);
   assert.equal(fn(stages, 'smartRoleDefaults').includes("multi: { name: 'Блок питания мультизона', unit: 'piece' }"), true);
-  assert.match(fn(stages, 'quickMeasureHtml'), /\['multi', 'Мультизона — каждая зона отдельно'\]/);
+  assert.match(fn(stages, 'managerSmartRoomFieldsHtml'), /Мультизона — каждая зона отдельно/);
 });
