@@ -370,26 +370,41 @@ The endpoint then sets DB `upload_enabled=true`, `validate_only=false`, and requ
 
 ## Recommended production cadence
 
-The repository exposes one protected sync endpoint, but scheduling remains an infrastructure setting. Do not claim these jobs are automated until production scheduling is explicitly configured with `GOOGLE_ADS_SYNC_SECRET`.
+The application already has a ten-minute process-local worker for conversion
+reconciliation, uploads, request-status checks, adjustments and Customer Match
+uploads. `GOOGLE_ADS_AUTO_SYNC=off` disables its timer. Verify that this worker
+starts and remains active in the production runtime; code registration alone
+does not prove production liveness. It requires configured credentials and
+enabled CRM delivery settings. The first timed pass occurs after ten minutes.
 
-Once the real Ads account timezone is known, schedule:
+The built-in worker does not need `GOOGLE_ADS_SYNC_SECRET`. That secret belongs
+to the optional externally scheduled protected endpoint, which handles only
+conversion reconciliation, uploads and status checks. An external replacement
+must also arrange adjustment processing and, if used, Customer Match processing.
 
-- every 15 minutes: call the protected sync endpoint for conversion reconciliation, processing, and request-status checks
-- every 15 minutes: adjustment processor
-- every 15 minutes: Customer Match processor
-- nightly: Customer Match reconciliation
-- daily, after the Google Ads account day has closed: import the previous account-local date of cost data
-- daily: review retry/operator-action counts and re-import recent cost days to absorb late Ads reporting corrections
+Keep these separate operational tasks:
+
+- daily, after the account-local day closes: run the Google Ads cost script or
+  a configured API import; neither cost path is run by the ten-minute worker
+- daily: review retry/operator-action counts and refresh recent cost days to
+  absorb late reporting corrections; the script's rolling 30-day import does this
+- if optional Customer Match is used: reconcile desired memberships separately,
+  for example nightly; the worker processes uploads rather than membership rules
 
 Cost imports are idempotent upserts by `customer + date + campaign`.
 
 ## Incident / rollback
 
-To stop outbound activity immediately:
+To pause new outbound processing:
 
-1. set DB `upload_enabled=false` through owner settings, and/or
-2. set server `GOOGLE_ADS_UPLOAD_ENABLED=false`, and
-3. set `GOOGLE_ADS_VALIDATE_ONLY=true`.
+1. set DB `upload_enabled=false` through owner settings; an explicit stored
+   pause takes precedence over the legacy `GOOGLE_ADS_UPLOAD_ENABLED` fallback
+2. also set server `GOOGLE_ADS_UPLOAD_ENABLED=false` (or unset it), and
+3. set `GOOGLE_ADS_VALIDATE_ONLY=true` and apply environment changes to the
+   running processes as an independent gate against live mutations.
+
+An already-in-flight request may finish. Validation mode can still send test
+requests; it does not mean there is no network traffic.
 
 Do not delete business events or outbox history to stop delivery.
 
@@ -399,6 +414,25 @@ For Customer Match consent withdrawal, set desired state to REMOVED or run recon
 
 ## Website deployment note
 
-Website lead forwarding is developed separately in `AndyK888/rolan-pro` on `codex/google-ads-crm-ingest`. Its GitHub PR is intake/review only. The accepted website patch must be ported to the authoritative Gitea branch/worktree and pass the site's authoritative gates before deployment.
+Website lead capture and forwarding are a separate implementation dependency.
+The historical [website prototype PR #1](https://github.com/AndyK888/rolan-pro/pull/1)
+is still a draft. The website has migrated to GitLab; use the authoritative
+repository and review workflow recorded in the website's own `PROJECT.md`.
+Its GitHub copy is backup-only. Do not deploy the prototype unchanged.
+
+The website change must satisfy the contract above: persist the original paid
+visit through navigation and later organic UTM visits; capture and forward the
+explicit account/campaign IDs, original landing URL/time and supported click
+IDs; preserve actual consent evidence; and retain failed submissions for safe,
+idempotent replay. The old prototype omits the explicit IDs and original
+landing/time, can replace paid attribution on later UTM visits, and only retries
+delivery synchronously. Port and complete it in a reviewed website merge request.
+
+Existing `utm_campaign=rp_residential_{campaignid}` (and analogous commercial/
+smart labels) is a label, not a substitute for the explicit numeric ID fields.
+Keep existing UTMs and add the real `google_ads_customer_id` plus
+`campaign_id={campaignid}` to effective Google Ads tracking, including PMax.
+Verify form and phone outcomes separately. The CRM PR does not create Google
+conversion actions or change the campaign goals used for bidding.
 
 Current Event, IngestEventsRequest and request-status field/status names were checked against the [official Data Manager v1 discovery schema](https://datamanager.googleapis.com/$discovery/rest?version=v1) on 2026-10-26. This is contract verification, not live account acceptance.

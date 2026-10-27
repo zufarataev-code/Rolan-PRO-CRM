@@ -6,6 +6,44 @@ import { getGoogleAccessToken, clearGoogleAccessTokenCache } from "./oauth";
 import { reconcileNextConversionRequestStatus } from "./request-status";
 import { findAcquisitionTouchpoint } from "./attribution";
 import { buildQualifiedLeadTransactionId } from "./conversion-events";
+import { processNextConversionUpload } from "./data-manager";
+import { processNextConversionAdjustmentUpload } from "./conversion-adjustment-uploader";
+import { processNextCustomerMatchUpload } from "./customer-match-uploader";
+
+test("every upload worker honors a stored pause before the environment fallback", async t => {
+  const previous = process.env.GOOGLE_ADS_UPLOAD_ENABLED;
+  t.after(() => { previous === undefined ? delete process.env.GOOGLE_ADS_UPLOAD_ENABLED : process.env.GOOGLE_ADS_UPLOAD_ENABLED = previous; });
+  const replace = (model: any, method: string, implementation: any) => {
+    const original = model[method];
+    model[method] = implementation;
+    t.after(() => { model[method] = original; });
+  };
+  let settings: { upload_enabled?: boolean } | null = null;
+  replace(prisma.googleAdsIntegrationSetting, "findUnique", async () => settings);
+  const network = t.mock.method(globalThis, "fetch", async () => { throw new Error("This test must stay offline."); });
+  for (const [worker, outbox] of [
+    [processNextConversionUpload, prisma.conversionUploadOutbox],
+    [processNextConversionAdjustmentUpload, prisma.conversionAdjustmentOutbox],
+    [processNextCustomerMatchUpload, prisma.customerMatchOutbox],
+  ] as const) {
+    let claims = 0;
+    replace(outbox, "findMany", async () => { claims += 1; return []; });
+    for (const [stored, environment, enabled] of [
+      [false, "true", false],
+      [true, "false", true],
+      [undefined, "true", true],
+      [undefined, "false", false],
+      [undefined, "malformed", false],
+    ] as const) {
+      settings = stored === undefined ? null : { upload_enabled: stored };
+      process.env.GOOGLE_ADS_UPLOAD_ENABLED = environment;
+      const before = claims;
+      assert.equal((await worker()).status, enabled ? "idle" : "disabled", worker.name);
+      assert.equal(claims - before, enabled ? 1 : 0, "a paused worker must not claim an outbox row");
+    }
+  }
+  assert.equal(network.mock.callCount(), 0);
+});
 
 test("live mode requires both explicit switches; unset and malformed environment values stay safe", () => {
   for (const value of ["", "true", "FALSE_typo"]) {

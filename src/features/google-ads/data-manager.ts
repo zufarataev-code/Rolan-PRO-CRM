@@ -1,4 +1,4 @@
-import { effectiveGoogleAdsValidateOnly } from "./delivery-mode";
+import { effectiveGoogleAdsUploadEnabled, effectiveGoogleAdsValidateOnly } from "./delivery-mode";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
@@ -41,13 +41,6 @@ type DataManagerSuccess = {
   requestId?: string;
   fieldWarnings?: unknown[];
 };
-
-function envFlag(name: string, fallback: boolean) {
-  const value = process.env[name]?.trim().toLowerCase();
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return fallback;
-}
 
 function trimOrNull(value: string | null | undefined) {
   const trimmed = value?.trim() ?? "";
@@ -233,8 +226,7 @@ export async function processNextConversionUpload() {
     },
   });
 
-  const uploadEnabled = settings?.upload_enabled === true || envFlag("GOOGLE_ADS_UPLOAD_ENABLED", false);
-  if (!uploadEnabled) {
+  if (!effectiveGoogleAdsUploadEnabled(settings?.upload_enabled)) {
     return { status: "disabled" as const };
   }
 
