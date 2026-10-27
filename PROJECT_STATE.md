@@ -67,6 +67,11 @@ Before doing any work:
 - New-project, measurement, cashier, Proposal-option and Services/Price Book flows use the same canonical four-direction mapping.
 - Verification: full suite 895/895, `npm run typecheck`, production `npm run build`, and `git diff --check` pass. Production is unchanged; merge/deploy still require the Owner's explicit confirmation after PR review and CI.
 
+## 2026-10-27 handoff — Codex PR #424 released (owner's yes)
+
+- Merged `5b36859`, deployed. Checked on top of #431 locally: full suite unchanged; harness flow «Запланировать монтаж» → plan saved as draft → «Подготовить производство» → «Подтвердить монтаж» → installation_scheduled.
+- Harness scripts that click «Подготовить производство» right after the deposit must follow the next action now (plan first).
+
 ## 2026-10-27 handoff — one measurement window + «Режим внедрения» (PR #431)
 
 - Merged `d796c45`, deployed. Separate quick measurement window removed (supersedes #419's quick window; `projectAcceptClientSizes` stays).
@@ -78,7 +83,6 @@ Before doing any work:
 
 - Merged `addba35`, deployed. KP wizard send step: «🤝 Клиент уже согласен» → `projectAcceptProposalOffline` marks a published KP Sent (timeline «согласовано напрямую») and moves the project to `proposal_accepted`.
 - Cause: a formed but unsent KP kept the project at «Замер»; «КП принято» needed `proposal_sent`.
-- Open with owner: release of Codex PR #424 (install planning before production) — mergeable, CI green, awaiting his yes.
 
 ## 2026-10-26 handoff — glass quantity, several rolls per receipt, multi-zone as block type (PR #423)
 
