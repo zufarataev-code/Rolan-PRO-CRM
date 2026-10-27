@@ -1663,6 +1663,24 @@
   .project-feed-next { background:#fff; border:2px solid #C9A24A; border-radius:14px; padding:12px; }
   .project-feed-next-kicker { font-size:11px; font-weight:800; letter-spacing:.08em; color:#8A6D1E; text-transform:uppercase; margin-bottom:6px; }
   .project-feed-next .order-action-card { width:100%; }
+  /* Чек-лист «до монтажа» + разблокировка владельцу (Owner, 2026-10-26) */
+  .project-feed-gate { background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:12px 14px; }
+  .project-feed-gate-head { display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:800; color:#10213b; }
+  .project-feed-gate-cnt { font-size:11px; font-weight:700; color:#5A6577; }
+  .project-feed-gate-list { display:flex; flex-direction:column; gap:7px; margin:10px 0 2px; }
+  .gate-step { display:flex; align-items:center; gap:9px; font-size:13px; color:#10213b; }
+  .gate-step .gate-mk { width:20px; height:20px; border-radius:50%; flex:none; display:grid; place-items:center; font-size:12px; font-weight:800; }
+  .gate-step .gate-x { flex:1; } .gate-step .gate-x small { color:#5A6577; font-size:11px; }
+  .gate-step.done { color:#5A6577; } .gate-step.done .gate-mk { background:#EAF7EE; color:#16A34A; }
+  .gate-step.todo .gate-mk { background:#FBF2DC; color:#CA8A04; }
+  .gate-step.wait .gate-mk { background:#EEF1F5; color:#94A3B8; }
+  .gate-owner { border-top:1px dashed #D9DEE6; padding-top:10px; margin-top:8px; }
+  .gate-owner .gate-force { width:100%; border-color:#CA8A04; color:#8A6D1E; background:#FBF2DC; }
+  .gate-owner-note { font-size:11px; color:#5A6577; text-align:center; margin-top:6px; }
+  .gate-forced { border-top:1px dashed #D9DEE6; padding-top:10px; margin-top:8px; font-size:12px; color:#8A6D1E; }
+  .project-command-client { background:none; border:0; padding:0; margin:0; font:inherit; color:inherit; cursor:pointer; text-align:left; }
+  .project-command-client:hover { color:#167ca6; }
+  .project-command-client-go { color:#C9A24A; font-weight:700; }
   .project-feed-context { background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .project-feed-context-copy { display:flex; flex-direction:column; gap:2px; min-width:0; }
   .project-feed-context-copy b { font-size:14px; color:#10213b; }
@@ -7648,6 +7666,7 @@ const I18N = {
     measurement_done: 'Замер выполнен',
     proposal_sent: 'КП отправлено',
     proposal_accepted: 'КП принято',
+    installation_forced: 'Монтаж начат без полной готовности (владелец)',
     installation_scheduled: 'Монтаж назначен',
     installation_accepted: '✓ Специалист по установке принял',
     installation_en_route: '🚗 Бригада выехала',
@@ -8073,6 +8092,7 @@ const I18N = {
     measurement_done: 'Measurement done',
     proposal_sent: 'Proposal sent',
     proposal_accepted: 'Proposal accepted',
+    installation_forced: 'Installation started before full readiness (owner)',
     installation_scheduled: 'Installation scheduled',
     installation_accepted: '✓ Installer accepted',
     installation_en_route: '🚗 Crew en route',
@@ -17037,6 +17057,9 @@ function orderStatusRequiresVerifiedMeasurements(status) {
 }
 function ensureVerifiedMeasurementsForStatus(o, status, openMeasurement = true) {
   if (!o || !orderStatusRequiresVerifiedMeasurements(status)) return true;
+  // Owner's explicit «Начать монтаж всё равно» (projectForceInstallation) bypasses
+  // the readiness gates; the risk is recorded on the order and in the work order.
+  if (o.installationForced) return true;
   const issues = orderMeasurementVerificationIssues(o);
   if (!issues.length || o.clientSizesAcceptedAt) return true;
   // Owner, 2026-10-26: the exact measurement does not block scheduling — one «по размерам клиента».
@@ -17047,6 +17070,7 @@ function ensureVerifiedMeasurementsForStatus(o, status, openMeasurement = true) 
   return false;
 }
 function ensureProductionReadyForInstallation(o) {
+  if (o.installationForced) return true;
   const issues = projectProductionReadiness(o);
   if (!issues.length) return true;
   alert(`До назначения монтажа завершите подготовку производства: ${issues.join(', ')}.`);
@@ -28203,7 +28227,7 @@ function renderProjectCommandHeader(o, c, primary, { money = false, pendingReque
   const address = orderAddress(o, c) || 'адрес объекта не указан';
   const manager = getUser(o.managerId || o.ownerId)?.name || 'ответственный не назначен';
   return `<section class="project-command-hero">
-    <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${academyEsc(c?.name || 'Проект без клиента')}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div></div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
+    <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${c ? `<button type="button" class="project-command-client" onclick="projectCardOpenWorkspace('client')">${academyEsc(c.name || 'Клиент')} <span class="project-command-client-go">›</span></button>` : 'Проект без клиента'}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div></div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
     <div class="project-command-facts">${money ? `<div class="project-command-fact"><span>Сумма</span><strong>${fmtMoney(orderRevenue(o))}</strong></div><div class="project-command-fact"><span>Оплачено</span><strong>${fmtMoney(Math.max(orderPaidTotal(o), Number(o.paid) || 0))}</strong></div><div class="project-command-fact"><span>Остаток</span><strong>${fmtMoney(orderDebt(o))}</strong></div>` : `<div class="project-command-fact"><span>Запросы клиента</span><strong>${pendingRequests.length || 'нет'}</strong></div><div class="project-command-fact"><span>Статус</span><strong>${academyEsc(T(o.status))}</strong></div>`}</div>${o.actSignature ? `<div class="project-command-signed">✍️ Акт подписан клиентом: <b>${academyEsc(o.actSignature.name)}</b> · ${fmtDateTime(o.actSignature.signedAt)} <button type="button" class="btn-ghost text-xs" onclick="openSignedActDocument('${o.id}')">Открыть акт</button></div>` : ''}
     ${renderOrderCleanProgress(o)}
   </section>`;

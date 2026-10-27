@@ -34,6 +34,15 @@ Before doing any work:
 - Not touched: direction window, measurement windows, KP wizard, work order, data model. No state changes.
 - Verification: focused project/card tests 16/16; full suite 912/912; `npm run typecheck`; production `npm run build` (129 routes); `git diff --check`. The protected database E2E was not run locally because no disposable PostgreSQL was provisioned; CI owns that gate. Production is unchanged; PR review, merge and deployment still require the owner's explicit confirmation.
 
+## 2026-10-26 handoff — card gate-checklist + owner install override, client block removed (branch `claude/project-card-gate-checklist`)
+
+- Owner, tested on prod, frustrated: project card confusing with «тысяча повторяющихся сущностей», and «не могу начать монтаж, вечно что-то блокирует». He asked for an expert redesign, approved a mock-up first (Artifact «Карточка проекта RolanPRO»), and gave three decisions: (1) монтаж — show a checklist «что осталось» + owner «Начать монтаж всё равно»; (2) дубли — fewer sections; (3) approach — mock-up then code.
+- This branch stacks on `claude/project-card-cashier` (PR #426, the card «Simplify into one working flow») and adds the two approved deltas the simplify did not cover:
+  - **Removed the «Клиент и объект» block** from `projectFeedHtml` (Owner: client + site address live in the client card, address is already in the header — «зачем лишний шум»). The client name in `renderProjectCommandHeader` is now a button linking to the client card (`.project-command-client`). Site contact on the object is a later layer: default = client, overridable when creating a замер/монтаж, shown to the field specialist in the work order.
+  - **«До монтажа» checklist** (`projectCardGateChecklist` / `projectInstallGateSteps`): four real steps — услуги+замер, КП принято, аванс, точные размеры — with «осталось N из M». Shown for money roles, above «Состав», only before installation/closed and while something is unfinished. For the owner it carries **«Начать монтаж всё равно»** → `projectForceInstallation`: owner-only, confirm, sets `o.installationForced` + timeline `installation_forced`, then `scheduleInstallationPrompt`. Both gates (`ensureVerifiedMeasurementsForStatus`, `ensureProductionReadyForInstallation`) honour the flag; once forced the button becomes a risk note.
+- Verification: focused feed/cashier/gate/production-ui tests pass (`install-gate-checklist.test.ts` new; `project-feed.test.ts` updated for the removed block + header client link); full suite 825 pass / 25 fail — same env-dependent set (google-ads, gmail, twilio, plaid, installer-operations). Build and a prod phone look pending; merge/deploy after the owner's review and after PR #426.
+- Still open (next layers the owner approved): site-contact field on замер/монтаж + work order; collapsible groups if he still wants fewer visible sections.
+
 ## 2026-10-26 handoff — all four directions stay visible in the project cashier
 
 - Branch `codex/four-directions-visible`, based on `main` `ac274c7` after PR #412.

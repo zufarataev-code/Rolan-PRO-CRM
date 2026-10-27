@@ -9,16 +9,18 @@ const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
 
 test('the project card is one compact feed without duplicate stages', () => {
   const feed = stages.slice(stages.indexOf('function projectFeedHtml('), stages.indexOf('\n}\n', stages.indexOf('function projectFeedHtml(')));
-  const order = ['${projectContext}', '>Состав проекта</h3>', "projectFeedSection('Замер'", "projectFeedSection('Материалы'", "projectFeedSection('КП и оплата'", "projectFeedSection('Монтаж'", "projectFeedSection('Документы и история'"];
+  const order = ['>Состав проекта</h3>', "projectFeedSection('Замер'", "projectFeedSection('Материалы'", "projectFeedSection('КП и оплата'", "projectFeedSection('Монтаж'", "projectFeedSection('Документы и история'"];
   let last = -1;
   for (const name of order) { const at = feed.indexOf(name); assert.ok(at > last, `${name} after the previous section`); last = at; }
   assert.match(feed, /<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг<\/div>/);
   assert.match(feed, /projectFeedBtn\('Invoice', `openProjectInvoice\('\$\{o\.id\}'\)`\)/);
   assert.match(feed, /projectFeedBtn\('Склад и закупка', 'openProjectPurchaseRequests\(\)'\)/);
   assert.doesNotMatch(feed, /'Визиты'|Назначить визит|next\(\)|project-feed-num/);
-  assert.match(feed, /data-project-feed="context"/);
-  assert.match(feed, /projectCardOpenWorkspace\('client'\)/);
-  assert.match(feed, /projectCardOpenWorkspace\('site'\)/);
+  // Owner, 2026-10-26: the «Клиент и объект» block is gone from the card; the
+  // client name in the command header links to the client card instead.
+  assert.doesNotMatch(feed, /data-project-feed="context"/);
+  assert.doesNotMatch(feed, /projectCardOpenWorkspace\('site'\)/);
+  assert.match(html, /class="project-command-client" onclick="projectCardOpenWorkspace\('client'\)"/);
   assert.match(html, /\$\{projectFeedHtml\(o, c, u, \{ canManage, canSeeMoney, canSeeInternalEconomics, primary, measureAction, recentTimeline \}\)\}/);
   assert.doesNotMatch(html.slice(html.indexOf('function renderOrderCleanDetails('), html.indexOf('function renderInstallerTechnicalWorkspace(')), /\$\{renderProjectCommandNav\(|<div class="project-command-mobile-action">/);
   assert.doesNotMatch(html.slice(html.indexOf('function renderOrderCleanDetails('), html.indexOf('function renderInstallerTechnicalWorkspace(')), />Последние события</);
