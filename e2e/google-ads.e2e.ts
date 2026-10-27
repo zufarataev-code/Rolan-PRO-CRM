@@ -97,6 +97,26 @@ test("cost import → website attribution → paid job → owner ROI review → 
   assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: tag, cost_fingerprint: "stale" })).status, 409);
   assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: tag, cost_fingerprint: project.cost_fingerprint })).status, 200);
   assert.equal((await call("GET", reportPath)).data.campaigns[0].roi_percent, "670.00");
+  const materialState = await db.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } });
+  const materialPayload: any = structuredClone(materialState.payload);
+  materialPayload.finance.transactions.push(
+    { id: tag + "-equipment", orderId: tag, type: "expense", category: "inventory_purchase", amount: 50, projectExpenseId: null },
+    { id: tag + "-film-invoice", orderId: tag, type: "expense", category: "inventory_purchase", amount: 100, projectExpenseId: null },
+  );
+  await db.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload: materialPayload, revision: { increment: 1 } } });
+  const unreviewedMaterials = (await call("GET", reportPath)).data.campaigns[0];
+  assert.equal(unreviewedMaterials.direct_cost, "380.00", "purchases remain costs until any warehouse overlap is explicitly reviewed");
+  assert.equal(unreviewedMaterials.roi_percent, null);
+  assert.equal(unreviewedMaterials.projects[0].expense_links.length, 2);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: tag, cost_fingerprint: unreviewedMaterials.projects[0].cost_fingerprint })).status, 400);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "link_expense", order_id: tag, transaction_id: tag + "-bank-expense", expense_id: null, inventory_cost_treatment: "warehouse" })).status, 400, "only material purchases can reconcile against warehouse consumption");
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "link_expense", order_id: tag, transaction_id: tag + "-equipment", expense_id: null })).status, 200);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "link_expense", order_id: tag, transaction_id: tag + "-film-invoice", expense_id: null, inventory_cost_treatment: "warehouse" })).status, 200);
+  const reviewedMaterials = (await call("GET", reportPath)).data.campaigns[0];
+  assert.equal(reviewedMaterials.direct_cost, "280.00", "equipment remains a cost and the linked film invoice does not duplicate warehouse consumption");
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: tag, cost_fingerprint: project.cost_fingerprint })).status, 409);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: tag, cost_fingerprint: reviewedMaterials.projects[0].cost_fingerprint })).status, 200);
+  assert.equal((await call("GET", reportPath)).data.campaigns[0].roi_percent, "620.00");
   await call("POST", "/api/v1/integrations/google-ads/sync-now");
   await call("POST", "/api/v1/integrations/google-ads/sync-now");
   assert.equal(await db.conversionEvent.count({ where: { lead_id: lead.lead_id, event_type: "converted_lead" } }), 1);
@@ -134,7 +154,7 @@ test("cost import → website attribution → paid job → owner ROI review → 
   refunded.finance.transactions ||= [];
   refunded.finance.transactions.push({ id: tag + "-refund", orderId: tag, type: "expense", category: "refund", amount: 100 });
   await db.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload: refunded, revision: { increment: 1 } } });
-  assert.equal((await call("GET", reportPath)).data.campaigns[0].roi_percent, "570.00");
+  assert.equal((await call("GET", reportPath)).data.campaigns[0].roi_percent, "520.00");
   await call("POST", "/api/v1/integrations/google-ads/sync-now");
   await call("POST", "/api/v1/integrations/google-ads/sync-now");
   const adjustment = await db.conversionAdjustment.findMany({ where: { conversion_event: { lead_id: lead.lead_id } } });

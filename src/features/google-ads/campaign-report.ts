@@ -39,17 +39,26 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   const labor = Prisma.Decimal.max(sum(payouts, "amount").plus(unpaidPayroll), sum(transactions.filter(item => item.category === "payroll"), "amount"));
   const expenses = rows(order.extraExpenses);
   const actualExpenses = expenses.filter(item => item.actual === true || item.paid === true || item.paidAt);
-  const directCategories = new Set(["project_expense", "subcontractor", "complaint", "delivery", "tools", "bank_fee", "other"]);
-  const directTransactions = transactions.filter(item => item.costBehavior !== "fixed" && directCategories.has(item.category));
+  const material = decimal(order._inventoryMaterialCost);
+  const warehouseAvailable = order._inventoryDeducted === true && Number.isFinite(order._inventoryMaterialCost) && material.gt(0);
+  const issuedRollIds = new Set(rows(order._inventoryLog).filter(item => item.rollId && !item.warning && Number.isFinite(item.materialCost) && item.materialCost > 0).map(item => item.rollId));
+  // A stock receipt buys the whole roll; this project bears only its issued film cost.
+  const stockReceipt = (item: Row) => warehouseAvailable && item.category === "inventory_purchase" && !item.projectExpenseId && item.inventoryCostTreatment !== "separate" && issuedRollIds.has(item.inventoryId);
+  const warehouseLinked = (item: Row) => warehouseAvailable && item.category === "inventory_purchase" && item.inventoryCostTreatment === "warehouse" && item.projectExpenseId === null;
+  const directCategories = new Set(["inventory_purchase", "project_expense", "subcontractor", "complaint", "delivery", "tools", "bank_fee", "other"]);
+  const directTransactions = transactions.filter(item => (item.category === "inventory_purchase" || item.costBehavior !== "fixed") && directCategories.has(item.category));
+  const warehousePayments = directTransactions.filter(item => warehouseLinked(item) && !stockReceipt(item));
+  const expenseTransactions = directTransactions.filter(item => !warehouseLinked(item) && !stockReceipt(item));
   const sourceExpenseIds = new Set(actualExpenses.map(item => item.id).filter(Boolean));
-  const unresolvedExpenseLinks = directTransactions.filter(item =>
+  const unresolvedExpenseLinks = directTransactions.filter(item => !stockReceipt(item) && (
     item.projectExpenseId && !sourceExpenseIds.has(item.projectExpenseId)
-    || item.source !== "allocation" && !Object.hasOwn(item, "projectExpenseId") && actualExpenses.length > 0);
-  const allocations = directTransactions.filter(item => item.source === "allocation" && !Object.hasOwn(item, "projectExpenseId"));
+    || item.category === "inventory_purchase" && warehouseAvailable && !sourceExpenseIds.has(item.projectExpenseId) && !warehouseLinked(item) && !(item.inventoryCostTreatment === "separate" && item.projectExpenseId === null)
+    || item.source !== "allocation" && !Object.hasOwn(item, "projectExpenseId") && actualExpenses.length > 0));
+  const allocations = expenseTransactions.filter(item => item.source === "allocation" && !Object.hasOwn(item, "projectExpenseId"));
   const allocated = actualExpenses.reduce<Prisma.Decimal>((total, expense) => total.plus(Prisma.Decimal.max(
-    decimal(expense.amount), sum(directTransactions.filter(item => expense.id && item.projectExpenseId === expense.id), "amount"),
+    decimal(expense.amount), sum(expenseTransactions.filter(item => expense.id && item.projectExpenseId === expense.id), "amount"),
   )), new Prisma.Decimal(0));
-  const standalone = directTransactions.filter(item => !allocations.includes(item) && !sourceExpenseIds.has(item.projectExpenseId));
+  const standalone = expenseTransactions.filter(item => !allocations.includes(item) && !sourceExpenseIds.has(item.projectExpenseId));
   const directExpenses = Prisma.Decimal.max(allocated, sum(allocations, "amount")).plus(sum(standalone, "amount"));
   const cancelled = ["cancelled", "canceled", "lost"].includes(String(order.status));
   const hasFilm = rows(order.measurements?.rooms).some(room => rows(room.windows).length > 0)
@@ -61,12 +70,11 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   if (!cancelled && stages.some(stage => stage.status !== "done")) issues.push("work_not_completed");
   if (!cancelled && expenses.some(item => !(item.actual === true || item.paid === true || item.paidAt))) issues.push("expenses_not_actual");
   if ([...stagePayroll, ...payouts, ...actualExpenses, ...directTransactions].some(item => !Number.isFinite(Number(item.amount)))) issues.push("invalid_cost_records");
-  const material = decimal(order._inventoryMaterialCost);
-  const parts = order._inventoryDeducted ? new Prisma.Decimal(0) : sum(transactions.filter(item => item.category === "inventory_purchase"), "amount");
+  const parts = Prisma.Decimal.max(0, sum(warehousePayments, "amount").minus(material));
   const directCost = material.plus(parts).plus(labor).plus(directExpenses);
   // Confirm the source facts, not another editable money total. Later changes invalidate the review.
   const fingerprint = createHash("sha256").update(JSON.stringify({ status: order.status, material: material.toString(), parts: parts.toString(), labor: labor.toString(), expenses: directExpenses.toString(), stages, sourceExpenses: expenses, bankExpenses: directTransactions, payouts: order.payouts, inventory: order._inventoryLog, issues })).digest("hex");
-  return { received, directCost, fingerprint, issues, unresolvedExpenseLinks: unresolvedExpenseLinks.map(item => ({ transaction_id: item.id, amount: decimal(item.amount).toFixed(2), category: item.category })), expenseChoices: actualExpenses.map(item => ({ expense_id: item.id, label: String(item.label || item.type || item.id), amount: decimal(item.amount).toFixed(2) })), costsConfirmed: issues.length === 0 && order.googleAdsCostsReview?.fingerprint === fingerprint };
+  return { received, directCost, fingerprint, issues, unresolvedExpenseLinks: unresolvedExpenseLinks.map(item => ({ transaction_id: item.id, amount: decimal(item.amount).toFixed(2), category: item.category, warehouse_available: warehouseAvailable && item.category === "inventory_purchase" })), expenseChoices: actualExpenses.map(item => ({ expense_id: item.id, label: String(item.label || item.type || item.id), amount: decimal(item.amount).toFixed(2) })), costsConfirmed: issues.length === 0 && order.googleAdsCostsReview?.fingerprint === fingerprint };
 }
 
 type Cost = { customer_id: string; campaign_id: string; campaign_name: string | null; currency: string; cost_amount: Prisma.Decimal; clicks: bigint; impressions: bigint };

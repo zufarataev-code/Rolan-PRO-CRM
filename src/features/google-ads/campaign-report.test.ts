@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import vm from "node:vm";
 import { Prisma } from "@prisma/client";
 import { buildGoogleAdsCampaignReport, defaultGoogleAdsRange, googleAdsProjectMoney, type CampaignTouchpoint } from "./campaign-report";
 import { legacyGoogleAdsSale } from "./legacy-outcomes";
@@ -109,6 +111,77 @@ test("bank payments require explicit reconciliation and overhead is excluded", (
   assert.equal(googleAdsProjectMoney(project, workspace).unresolvedExpenseLinks.length, 0);
   Object.assign(bank, { projectExpenseId: null });
   assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "650.00", "an explicitly separate bank expense remains an additional cost");
+});
+
+test("inventory payments need review beside warehouse film costs and retain separate equipment", () => {
+  const project = order();
+  const equipment = { id: "equipment", orderId: project.id, category: "inventory_purchase", type: "expense", amount: 50, projectExpenseId: null };
+  const film = { id: "film", orderId: project.id, category: "inventory_purchase", type: "expense", amount: 100, projectExpenseId: null };
+  const workspace = { finance: { transactions: [equipment, film] } };
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "450.00", "unreviewed purchases remain visible instead of being dropped");
+  assert.equal(googleAdsProjectMoney(project, workspace).unresolvedExpenseLinks.length, 2);
+  Object.assign(equipment, { inventoryCostTreatment: "separate" });
+  Object.assign(film, { inventoryCostTreatment: "warehouse" });
+  const reviewed = googleAdsProjectMoney(project, workspace);
+  assert.equal(reviewed.directCost.toFixed(2), "350.00", "warehouse film is counted once and separate equipment remains");
+  assert.deepEqual(reviewed.issues, []);
+  Object.assign(project, { googleAdsCostsReview: { fingerprint: reviewed.fingerprint } });
+  assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, true);
+  film.amount = 90;
+  const edited = googleAdsProjectMoney(project, workspace);
+  assert.equal(edited.directCost.toFixed(2), "350.00");
+  assert.equal(edited.costsConfirmed, false, "editing a covered payment invalidates review even when the total is unchanged");
+});
+
+test("warehouse payment installments share one material allowance and retain payment excess", () => {
+  const project = { ...order(), extraExpenses: [] };
+  const warehouse = { orderId: project.id, category: "inventory_purchase", type: "expense", projectExpenseId: null, inventoryCostTreatment: "warehouse" };
+  const workspace = { finance: { transactions: [{ ...warehouse, id: "part-1", amount: 60 }, { ...warehouse, id: "part-2", amount: 70 }] } };
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "280.00", "material 100 plus payment excess 30 plus labor 150");
+});
+
+test("a proven roll receipt uses only consumed film cost while separate equipment remains a project cost", () => {
+  const project = { ...order(), productionStages: [], payouts: [], extraExpenses: [{ id: "transport", amount: 30, actual: true }], _inventoryLog: [{ rollId: "roll-1", materialCost: 100 }] };
+  const workspace = { finance: { transactions: [
+    { id: "roll-purchase", orderId: project.id, category: "inventory_purchase", type: "expense", inventoryId: "roll-1", amount: 1000 },
+    { id: "equipment", orderId: project.id, category: "inventory_purchase", type: "expense", inventoryCostTreatment: "separate", amount: 75, projectExpenseId: null },
+  ] } };
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "205.00", "count consumed film 100, equipment 75 and transport 30; exclude unconsumed stock");
+  assert.deepEqual(googleAdsProjectMoney(project, workspace).issues, []);
+  Object.assign(workspace.finance.transactions[0], { inventoryCostTreatment: "separate", projectExpenseId: null });
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "1205.00", "an explicit separate-cost review overrides stock matching");
+  Object.assign(workspace.finance.transactions[0], { inventoryCostTreatment: "expense", projectExpenseId: "transport" });
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "1175.00", "an explicit actual expense link overrides stock matching and counts that expense once");
+  Object.assign(workspace.finance.transactions[0], { inventoryId: "unrelated-roll", inventoryCostTreatment: undefined, projectExpenseId: null });
+  assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("expense_links_not_reviewed"));
+});
+
+test("inventory purchases without warehouse issue and linked actual expenses remain counted once", () => {
+  const project = { ...order(), measurements: { rooms: [] }, _inventoryDeducted: false, _inventoryMaterialCost: 0, extraExpenses: [{ id: "equipment", amount: 200, actual: true }] };
+  const purchase = { id: "purchase", orderId: project.id, category: "inventory_purchase", type: "expense", costBehavior: "fixed", amount: 200, projectExpenseId: "equipment" };
+  const workspace = { finance: { transactions: [purchase] } };
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "350.00", "actual equipment expense and its purchase payment are one cost");
+  assert.deepEqual(googleAdsProjectMoney(project, workspace).issues, []);
+  Object.assign(purchase, { projectExpenseId: null });
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "550.00", "ordinary separate purchases remain costs without a warehouse issue");
+});
+
+test("the existing expense picker offers warehouse review and sends distinct owner choices", async () => {
+  const source = readFileSync("private/legacy/production-stages.js", "utf8");
+  const requests: any[] = [];
+  const context = vm.createContext({ academyEsc: String, jsQuote: String, financeCategoryLabel: String, currentUser: () => ({ role: "owner" }), googleAdsConvRequest: async (_url: string, _method: string, body: unknown) => { requests.push(body); }, loadGoogleAdsCrm: () => {}, alert: (message: string) => { throw new Error(message); } });
+  for (const name of ["googleAdsReportMoney", "googleAdsCampaignReportHtml", "googleAdsLinkExpense"]) {
+    const start = source.indexOf(`function ${name}(`);
+    vm.runInContext(source.slice(source.lastIndexOf("\n", start) + 1, source.indexOf("\n}", start) + 2), context);
+  }
+  const payment = { transaction_id: "purchase", amount: "100", category: "inventory_purchase", warehouse_available: true };
+  const report = { campaigns: [{ currency: "USD", projects: [{ order_id: "order-1", expense_links: [payment] }] }] };
+  assert.match(context.googleAdsCampaignReportHtml(report), /value="warehouse"/);
+  payment.warehouse_available = false;
+  assert.doesNotMatch(context.googleAdsCampaignReportHtml(report), /value="warehouse"/);
+  for (const choice of ["warehouse", "separate", "equipment-expense"]) await context.googleAdsLinkExpense("order-1", "purchase", choice);
+  const base = { operation: "link_expense", order_id: "order-1", transaction_id: "purchase" };
+  assert.deepEqual(JSON.parse(JSON.stringify(requests)), [{ ...base, expense_id: null, inventory_cost_treatment: "warehouse" }, { ...base, expense_id: null }, { ...base, expense_id: "equipment-expense" }]);
 });
 
 test("cancelled jobs can finalize sunk costs without completing abandoned work", () => {

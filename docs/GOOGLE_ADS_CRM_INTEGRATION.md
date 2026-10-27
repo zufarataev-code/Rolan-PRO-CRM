@@ -32,6 +32,14 @@ closed-job revenue, ROAS and direct-cost ROI:
   confirmed payouts, actual expenses and project-linked finance entries.
   Payroll payments offset accruals for the same worker and stage only; fixed
   and separate unstaged payments remain costs even for a staged worker.
+  Project material/equipment purchases remain costs after warehouse film is
+  consumed. Reconcile each potentially overlapping purchase as warehouse film,
+  a linked actual project expense, or a separate purchase; a default empty
+  expense link is not proof of overlap. A stock receipt proven by its existing
+  inventory ID to fund a priced, warning-free film issue uses the consumed
+  material cost rather than charging the whole unconsumed roll to the job.
+  Other payments explicitly marked as covering warehouse cost share only
+  that recorded cost, and any excess remains a cost.
   Bank entries that might pay an existing project expense require the owner
   to link that expense or explicitly mark the entry as additional. This prevents
   double charging without guessing which two records represent the same cost.
