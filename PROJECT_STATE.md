@@ -1531,3 +1531,12 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Missing Solar glass type, facade orientation, installation side and access/height remain visible as an orange warning in the assignment window and as a mandatory warning block in the work order. Every affected opening prints the known value or `НЕ УКАЗАНО`.
 - Smart zone mismatch and power loads requiring engineering remain blocking issues. The surveyor still cannot submit an on-site measurement while its technical fields are incomplete.
 - Focused installation/estimate/card tests pass 83/83; full suite passes 897/897; `npm run typecheck` is clean; production build succeeds with 129 routes; `git diff --check` is clean. Production is unchanged; deployment requires the Owner's separate explicit confirmation.
+
+## 2026-10-26 handoff — Installation planning is saved before production publication (Codex)
+
+- Branch `codex/fix-install-assignment-20261026`, based on `origin/main` `160ee5e`.
+- After an accepted Proposal, the Project card now opens the per-service installation planner immediately. The manager can save each service's crew, start and end time even when exact field facts or production preparation remain incomplete.
+- A saved plan stays an internal draft. The CRM shows every readiness issue and keeps the dates and crew, while the existing strict production, measurement and Smart engineering checks still block publication to the calendar and the `installation_scheduled` status.
+- The main next action first offers «Запланировать монтаж». Once at least one service has a plan, it points to production preparation and then returns to final publication.
+- Verified locally in the browser at desktop and 390 px: an accepted Project with an unverified opening and no prepared film saved an installer and date, displayed the service as assigned and recorded `service_planned` without falsely publishing the installation.
+- Verification: focused tests 75/75; full suite 907/907; `npm run typecheck` clean; production build successful with 129 routes; `git diff --check` clean. Production is unchanged; release still requires the Owner's separate explicit confirmation.

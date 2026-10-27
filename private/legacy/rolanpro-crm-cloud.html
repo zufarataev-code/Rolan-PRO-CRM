@@ -18811,7 +18811,11 @@ function orderPrimaryNextAction(o) {
   if (o.status === 'proposal_accepted' && projectDepositExpected(o)) return { icon: '💰', title: 'Получить аванс', sub: o.kpOnline?.method ? `Клиент подписал КП и выбрал ${paymentMethodLabel(kpOnlinePaymentMethod(o.kpOnline.method))}. Проверьте поступление ${fmtMoney(orderExpectedDeposit(o))} и отметьте.` : `По КП аванс ${fmtMoney(orderExpectedDeposit(o))}. Отметьте поступление — или «Без аванса», если договорились иначе.`, variant: 'warning', onclick: `markDepositReceived('${o.id}')` };
   // Owner, 2026-10-26: client sizes do not stop the project — the measurer gets this step, the manager goes on to production.
   if (o.status === 'proposal_accepted' && currentUser()?.role === 'measurer' && orderMeasurementVerificationIssues(o).length) return { icon: '📐', title: 'Внести точные размеры', sub: 'КП рассчитано по данным клиента. До монтажа подтвердите каждое окно.', variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
-  if (o.status === 'proposal_accepted' && !projectProductionPrepared(o)) return { icon: '🏭', title: 'Подготовить производство', sub: 'Проверить раскрой, материал и склад перед назначением бригады.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
+  if (o.status === 'proposal_accepted' && !projectProductionPrepared(o)) {
+    const planned = projectLines(o).some(line => line.installationAt && line.installerIds.length);
+    if (!planned) return { icon: '👷', title: 'Запланировать монтаж', sub: 'Выберите исполнителей и даты по услугам. План сохранится; в календарь он попадёт после проверки производства.', variant: 'primary', onclick: `scheduleInstallationPrompt('${o.id}')` };
+    return { icon: '🏭', title: 'Подготовить производство', sub: 'План монтажа сохранён. Проверьте раскрой, материал и склад, затем опубликуйте даты.', variant: 'primary', onclick: `openProjectProductionWorkspace('${o.id}')` };
+  }
   // The crew and date are chosen in each row of «Услуги проекта»; then the plan is confirmed there.
   if (o.status === 'proposal_accepted') {
     const unplanned = projectCardUnplanned(o);
@@ -25424,8 +25428,8 @@ function orderPassportActions(o, ctx) {
       onclick: `openProjectProductionWorkspace('${o.id}')`, disabled: !done.proposal },
 
     { key: 'install', icon: '▣', title: 'Монтаж',
-      sub: o.installationAt ? fmtDateTime(o.installationAt) : 'запланировать',
-      onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.proposal || !done.production },
+      sub: o.installationAt ? fmtDateTime(o.installationAt) : done.production ? 'назначить исполнителей и даты' : 'запланировать; публикация после проверки производства',
+      onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !done.proposal },
 
     { key: 'workorder', icon: '📋', title: 'Заказ-наряд',
       sub: ctx.hasMeasurements ? 'размеры, раскрой, адрес, фото' : projectLines(o).length ? 'услуги, количество, адрес' : 'после замера',
@@ -29489,7 +29493,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
       ${renderOrderActionCard({ icon: '📞', title: 'Консультация', sub: o.consultationAt ? fmtDateTime(o.consultationAt) : 'назначить', onclick: `scheduleConsultationPrompt('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '📐', title: 'Замер', sub: o.measurementAt ? fmtDateTime(o.measurementAt) : 'назначить', onclick: `scheduleMeasurementPrompt('${o.id}')`, disabled: !canManage })}
       ${renderOrderActionCard({ icon: '🏭', title: o.productionReadyAt ? 'Производство готово' : projectProductionPrepared(o) ? 'Производство не нужно' : 'Подготовка производства', sub: o.productionReadyAt ? fmtDateTime(o.productionReadyAt) : projectProductionPrepared(o) ? 'нет плёнки для раскроя' : 'раскрой, материал и склад', onclick: `openProjectProductionWorkspace('${o.id}')`, disabled: !canManage || !['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done','act_signed','payment_received','completed','review_received'].includes(o.status), variant: projectProductionPrepared(o) ? 'success' : 'warning' })}
-      ${renderOrderActionCard({ icon: unverifiedMeasurements.length ? '📐' : '🔧', title: unverifiedMeasurements.length ? 'Сначала точные размеры' : 'Монтаж', sub: unverifiedMeasurements.length ? `${unverifiedMeasurements.length} окон не подтверждено` : (o.installationAt ? fmtDateTime(o.installationAt) : projectProposalAccepted(o) && projectProductionPrepared(o) ? 'назначить' : !projectProposalAccepted(o) ? 'сначала примите КП' : 'назначить после производства'), onclick: unverifiedMeasurements.length ? `openManagerMeasureModal('${o.id}')` : `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage || !projectProposalAccepted(o) || !projectProductionPrepared(o), variant: unverifiedMeasurements.length || !projectProposalAccepted(o) || !projectProductionPrepared(o) ? 'warning' : 'soft' })}
+      ${renderOrderActionCard({ icon: '🔧', title: 'Монтаж', sub: o.installationAt ? fmtDateTime(o.installationAt) : !projectProposalAccepted(o) ? 'сначала примите КП' : unverifiedMeasurements.length ? `можно запланировать · уточнить на объекте: ${unverifiedMeasurements.length}` : projectProductionPrepared(o) ? 'назначить исполнителей и даты' : 'можно запланировать · публикация после производства', onclick: `scheduleInstallationPrompt('${o.id}')`, disabled: !canManage || !projectProposalAccepted(o), variant: !projectProposalAccepted(o) || unverifiedMeasurements.length || !projectProductionPrepared(o) ? 'warning' : 'soft' })}
       ${renderOrderActionCard({ icon: '👷', title: 'Команда', sub: installers.length ? installers.join(', ') : 'назначить', onclick: `openAssignTeam('${o.id}')`, disabled: !canManage })}
       `}
     </div>`;
@@ -32113,10 +32117,13 @@ function confirmProjectProductionReady(oid) {
 function scheduleInstallationPrompt(oid) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  // Owner, 2026-10-25: one window, services in order, each planned on its own.
+  // Planning is a draft: missing field facts or production preparation must not
+  // prevent the manager from choosing a crew and dates. The strict checks run
+  // only when the manager publishes the plan to the calendar and work order.
+  if (typeof openInstallWindow === 'function') return openInstallWindow(oid);
   if (!ensureVerifiedMeasurementsForStatus(o, 'installation_scheduled')) return;
   if (!ensureProductionReadyForInstallation(o)) return;
-  // Owner, 2026-10-25: one window, services in order, each planned on its own.
-  if (typeof openInstallWindow === 'function') return openInstallWindow(oid);
   const installers = usersByRole('installer');
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">

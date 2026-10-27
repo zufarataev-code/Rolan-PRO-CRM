@@ -2413,6 +2413,14 @@ function installWindowHtml(o) {
   const w = state._installWindow || {};
   const rows = installWindowRows(o);
   const plannedCount = rows.filter(row => row.planned).length;
+  const readinessIssues = o.status === 'proposal_accepted' && typeof projectProductionReadiness === 'function'
+    ? projectProductionReadiness(o)
+    : [];
+  const readinessBox = readinessIssues.length ? `<div class="rp-dirwin-warn" style="background:#eff6ff;border-color:#60a5fa;color:#1e3a8a">
+      <b>План можно сохранить уже сейчас.</b>
+      <div style="margin-top:6px">До публикации дат в календарь нужно: ${readinessIssues.slice(0, 5).map(academyEsc).join('; ')}${readinessIssues.length > 5 ? `; и ещё ${readinessIssues.length - 5}` : ''}.</div>
+      <div style="margin-top:6px">Исполнитель и даты не потеряются — закончите проверку и вернитесь к подтверждению.</div>
+    </div>` : '';
   const technicalWarnings = typeof orderInstallationTechnicalWarnings === 'function'
     ? orderInstallationTechnicalWarnings(o)
     : [];
@@ -2442,6 +2450,7 @@ function installWindowHtml(o) {
     return shell(row.meta.color, `${head(`УСЛУГА ${row.index + 1} ИЗ ${rows.length} · ${academyEsc(row.meta.label)}`, academyEsc(row.group.name), `${academyEsc(o.number)} · ${academyEsc(getClient(o.clientId)?.name || '')}`, `openInstallWindow('${o.id}')`)}
       <div class="order-workspace-modal-body rp-dirwin-body">
         ${row.done ? '<div class="rp-dirwin-warn">Услуга выполнена — её даты и исполнители остаются как история.</div>' : ''}
+        ${readinessBox}
         ${warningBox}
         <div class="rp-dirwin-sub">Исполнители</div>
         <div class="install-chips">${chips}</div>
@@ -2465,11 +2474,12 @@ function installWindowHtml(o) {
   }).join('');
   const draft = o.status === 'proposal_accepted';
   const footer = draft
-    ? (plannedCount ? `<button type="button" class="btn-primary rp-dirwin-next" style="background:#0F2440 !important;border-color:#0F2440 !important;color:#fff !important" onclick="installConfirm('${o.id}')">Подтвердить монтаж: ${plannedCount} ${projectPlural(plannedCount, 'услуга', 'услуги', 'услуг')} в календарь</button>` : '<div class="text-sm text-gray-500 text-center">Назначьте хотя бы одну услугу — остальные можно позже.</div>')
+    ? (plannedCount ? `<button type="button" class="btn-primary rp-dirwin-next" style="background:#0F2440 !important;border-color:#0F2440 !important;color:#fff !important" onclick="installConfirm('${o.id}')">${readinessIssues.length ? 'Проверить готовность и опубликовать' : 'Опубликовать монтаж'}: ${plannedCount} ${projectPlural(plannedCount, 'услуга', 'услуги', 'услуг')}</button>` : '<div class="text-sm text-gray-500 text-center">Назначьте хотя бы одну услугу — остальные можно позже.</div>')
     : `<button type="button" class="btn-primary rp-dirwin-next" style="background:#0F2440 !important;border-color:#0F2440 !important;color:#fff !important" onclick="closeInstallWindow()">Готово</button>`;
   return shell('#DC2626', `${head(`НАЗНАЧИТЬ МОНТАЖ · ${academyEsc(o.number)}`, academyEsc(getClient(o.clientId)?.name || 'Проект'), `Назначено ${plannedCount} из ${rows.length} · остальные можно назначить позже`, 'closeInstallWindow()')}
     <div class="install-progress"><span style="width:${rows.length ? Math.round(plannedCount / rows.length * 100) : 0}%"></span></div>
     <div class="order-workspace-modal-body rp-dirwin-body">
+      ${readinessBox}
       ${warningBox}
       <div class="rp-dirwin-sub">Услуги проекта по порядку</div>
       ${list || '<div class="rp-dirwin-empty">В проекте нет услуг.</div>'}
@@ -2528,7 +2538,8 @@ function installDraftAfterPrevious() {
 function installSaveService(oid, key) {
   const o = getOrder(oid);
   const d = state._installWindow?.draft;
-  if (!o || !d || !projectCardCanPlan(o)) return;
+  if (!o || !d) return;
+  if (!projectCardCanPlan(o)) return alert('План монтажа можно сохранять после принятия КП. До этого завершите расчёт и согласование с клиентом.');
   if (!d.installerIds.length) return alert('Выберите хотя бы одного исполнителя.');
   if (!d.installationAt) return alert('Укажите дату и время начала — без времени монтаж не назначается.');
   const endsAt = d.endsAt && Date.parse(d.endsAt) > Date.parse(d.installationAt) ? d.endsAt : new Date(Date.parse(d.installationAt) + 8 * 3600 * 1000).toISOString();
