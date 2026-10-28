@@ -47,4 +47,7 @@ test('adding and editing keep the canonical settings.serviceOfferings store', ()
   assert.match(editor, /serviceOfferingIncludesEditorHtml\(offering\)/);
   assert.match(editor, /serviceOfferingDirectionsEditorHtml\(offering\)/);
   assert.match(editor, /toggleServiceOfferingFilm/);
+  assert.match(editor, /setServiceOfferingDefaultFilm/);
+  assert.match(editor, /Сохранить материалы/);
+  assert.match(editor, /data-service-offering-film-save-status/);
 });

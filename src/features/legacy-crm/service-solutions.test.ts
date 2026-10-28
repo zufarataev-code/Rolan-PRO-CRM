@@ -19,6 +19,8 @@ test('owner creates real solutions, a film can serve multiple solutions, cross-d
   c.toggleServiceOfferingFilm('svc_id1','other',true);
   assert.deepEqual(Array.from(db.settings.serviceOfferings[0].filmIds),['film']);
   assert.deepEqual(Array.from(db.settings.serviceOfferings[1].filmIds),['film']);
+  assert.equal(db.settings.serviceOfferings[0].defaultFilmId, 'film');
+  assert.equal(db.settings.serviceOfferings[1].defaultFilmId, 'film');
   setRole('manager'); c.addServiceOffering('solar'); assert.equal(c.serviceOfferingsAll().length,2);
 });
 test('solution price/name is copied into measured scope without changing old estimates on catalog edits',()=>{
