@@ -35,7 +35,7 @@ export async function reconcileLegacyGoogleAdsOutcomes() {
         if (point) {
           const deal = await tx.deal.findFirst({ where: { legacy_order_id: order.id }, orderBy: { created_at: "asc" } });
           for (const [stage, key] of [["CONSULTATION_SCHEDULED", "consultation_scheduled"], ["PROPOSAL_SENT", "proposal_sent"]]) {
-            const fact = (Array.isArray(order.timeline) ? order.timeline : []).find((item: Row) => item.key === key);
+            const fact = (Array.isArray(order.timeline) ? order.timeline : []).find((item: Row) => item.key === key || (key === "proposal_sent" && item.key === "premium_proposal_sent"));
             const at = new Date(fact?.at || "");
             if (!Number.isNaN(at.getTime())) await ensureQualifiedLeadConversion(tx, { dealId: deal?.deal_id, leadId: point.lead_id, clientId: point.client_id, attributionTouchpointId: point.acquisition_touchpoint_id, pipelineStatusCode: stage, occurredAt: at, eventSource: "OTHER" });
           }

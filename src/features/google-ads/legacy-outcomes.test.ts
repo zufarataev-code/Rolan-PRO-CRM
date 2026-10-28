@@ -4,6 +4,63 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { reconcileLegacyGoogleAdsOutcomes } from "./legacy-outcomes";
 
+test("actual proposal sharing qualifies once, while publishing its link does not", async t => {
+  const replace = (model: any, method: string, implementation: any) => {
+    const original = model[method];
+    model[method] = implementation;
+    t.after(() => { model[method] = original; });
+  };
+  const order = { id: "shared-proposal", timeline: [{ key: "premium_proposal_published", at: "2026-10-01T10:00:00Z" }] };
+  const point = { legacy_order_id: order.id, lead_id: "lead-1", client_id: "client-1", acquisition_touchpoint_id: "touchpoint-1" };
+  const events: any[] = [], outboxes: any[] = [];
+  const tx = {
+    $executeRaw: async () => 1,
+    deal: { findFirst: async () => null },
+    googleAdsIntegrationSetting: { findUnique: async () => ({
+      conversion_owner_customer_id: "1234567890", qualified_lead_action_id: "123",
+      qualification_rules: { pipeline_status_code: "PROPOSAL_SENT" }, rule_version: "v1",
+    }) },
+    conversionEvent: {
+      findFirst: async ({ where }: any) => where.event_type === "qualified_lead" ? events[0] ?? null : null,
+      upsert: async ({ create, update }: any) => {
+        assert.deepEqual(update, {}, "existing outcome facts stay immutable");
+        const existing = events.find(event => event.transaction_id === create.transaction_id);
+        if (existing) return existing;
+        const event = { ...create, conversion_event_id: "qualified-1" };
+        events.push(event);
+        return event;
+      },
+    },
+    conversionUploadOutbox: { upsert: async ({ create, update }: any) => {
+      assert.deepEqual(update, {}, "existing delivery history stays immutable");
+      const existing = outboxes.find(row => row.transaction_id === create.transaction_id);
+      if (existing) return existing;
+      outboxes.push(create);
+      return create;
+    } },
+  };
+  replace(prisma.legacyWorkspace, "findUnique", async () => ({ payload: { orders: [order] } }));
+  replace(prisma.acquisitionTouchpoint, "findMany", async () => [point]);
+  replace(prisma, "$transaction", async (callback: any) => callback(tx));
+  const network = t.mock.method(globalThis, "fetch", async () => { throw new Error("This test must stay offline."); });
+  assert.equal((await reconcileLegacyGoogleAdsOutcomes()).failed, 0);
+  assert.equal(events.length, 0, "a prepared public link is not evidence of sharing");
+  order.timeline.push({ key: "premium_proposal_sent", at: "2026-10-01T11:00:00Z" });
+  assert.equal((await reconcileLegacyGoogleAdsOutcomes()).failed, 0);
+  const recorded = structuredClone({ event: events[0], outbox: outboxes[0] });
+  assert.equal((await reconcileLegacyGoogleAdsOutcomes()).failed, 0);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].event_type, "qualified_lead");
+  assert.equal(events[0].occurred_at.toISOString(), "2026-10-01T11:00:00.000Z");
+  assert.equal(outboxes.length, 1);
+  order.timeline.push({ key: "proposal_sent", at: "2026-10-01T12:00:00Z" });
+  assert.equal((await reconcileLegacyGoogleAdsOutcomes()).failed, 0);
+  assert.equal(events.length, 1, "the ordinary sharing event reuses the same outcome");
+  assert.equal(outboxes.length, 1);
+  assert.deepEqual({ event: events[0], outbox: outboxes[0] }, recorded);
+  assert.equal(network.mock.callCount(), 0);
+});
+
 function fixture(t: TestContext) {
   const replace = (model: any, method: string, implementation: any) => {
     const original = model[method];
@@ -69,8 +126,8 @@ test("removing the last refund appends one restoration without rewriting prior c
   assert.equal(adjustments[2].financial_reference_id, "legacy-project-refund-project-revision-3");
   assert.equal(adjustments[2].reason, "Customer refund removed in CRM");
   assert.ok(adjustments[2].occurred_at >= adjustments[1].occurred_at);
-  await reconcileLegacyGoogleAdsOutcomes();
-  await reconcileLegacyGoogleAdsOutcomes();
+  assert.deepEqual(await reconcileLegacyGoogleAdsOutcomes(), { recorded: 0, failed: 0 });
+  assert.deepEqual(await reconcileLegacyGoogleAdsOutcomes(), { recorded: 0, failed: 0 });
   assert.equal(adjustments.length, 3, "repeated sync does not append another restoration");
   assert.equal(outboxes.length, 3);
   assert.deepEqual(adjustments.slice(0, 2), [first, second]);
@@ -98,7 +155,7 @@ test("cancellation still retracts once and removing refunds never revives a retr
   const retraction = { ...adjustments[0] };
   order.status = "completed";
   payload.finance.transactions = [];
-  await reconcileLegacyGoogleAdsOutcomes();
+  assert.deepEqual(await reconcileLegacyGoogleAdsOutcomes(), { recorded: 0, failed: 0 });
   assert.deepEqual(adjustments, [retraction]);
   assert.equal(outboxes.length, 1);
 });
@@ -111,7 +168,7 @@ test("a backdated owner retraction behind a later legacy restatement prevents re
   );
   const saved = adjustments.map(item => ({ ...item }));
   assert.equal((await reconcileLegacyGoogleAdsOutcomes()).failed, 0);
-  await reconcileLegacyGoogleAdsOutcomes();
+  assert.deepEqual(await reconcileLegacyGoogleAdsOutcomes(), { recorded: 0, failed: 0 });
   payload.finance.transactions = [{ orderId: order.id, type: "expense", category: "refund", amount: 50 }];
   assert.equal((await reconcileLegacyGoogleAdsOutcomes()).failed, 0);
   assert.deepEqual(adjustments, saved, "neither zero nor partial refunds revive a terminal retraction");
