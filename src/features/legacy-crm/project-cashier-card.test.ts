@@ -9,13 +9,19 @@ const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
 const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
 const fn = (src: string, name: string) => { const a = src.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return src.slice(a, src.indexOf('\n}\n', a) + 3); };
 
-test('the four directions are always on the card, filled when in the project', () => {
+test('only the directions in the project are tiles; the rest hide behind «+ Добавить направление»', () => {
   const map = fn(stages, 'projectCashierMapHtml');
   assert.match(map, /const directionOrder = \['smart_film', 'solar_film', 'protective_film', 'decorative_film'\];/);
   assert.match(map, /directionOrder\.map\(key =>/);
   assert.match(map, /class="project-cashier-direction on \$\{excluded \? 'excluded' : ''\}"/);
   assert.match(map, /if \(!\(money && edit\)\) return '';/, 'field roles see no add tiles');
-  assert.match(map, /<div class="project-cashier-directions four">\$\{tiles\}<\/div>/);
+  // Owner, 2026-10-28: «убрать ненужные окна по направлениям — лишний шум».
+  assert.match(map, /\$\{active \? `<div class="project-cashier-directions four count-\$\{Math\.min\(active, 4\)\}">\$\{tiles\}<\/div>` : ''\}\$\{addHtml\}/);
+  assert.match(map, /missing\.push\(`<button type="button" class="project-cashier-direction add"/);
+  assert.match(map, /const adding = !active \|\| state\.projectCashierAdding\?\.\[o\.id\] === true;/, 'an empty project shows the choices at once');
+  assert.match(map, /\+ Добавить направление/);
+  assert.match(fn(stages, 'projectCashierToggleAdd'), /state\.projectCashierAdding = /);
+  assert.doesNotMatch(html, /\.project-cashier-direction\.add \{ grid-column: 1 \/ -1/, 'no full-width empty tiles');
   assert.match(html, /\.project-cashier-directions\.four \{ grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(html, /\.project-cashier-directions\.four \.project-cashier-direction\.on \{ background:var\(--direction-color\); color:#fff; \}/);
 });

@@ -2045,7 +2045,17 @@
   .project-direction-line span:last-child { color:#5a6577;white-space:nowrap; }
   .project-direction-line.pending span:last-child { color:#b45309; }
   .rp-dirwin-row { position: relative; }
-  .project-cashier-directions .project-cashier-direction.add { grid-column: 1 / -1; width: 100%; }
+  .project-cashier-directions.four.count-1 { grid-template-columns:minmax(0,1fr); }
+  .project-cashier-directions.four.count-2 { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .project-cashier-directions.four.count-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .project-cashier-directions.four.count-1 .project-cashier-direction { min-height:64px; grid-template-columns:auto minmax(0,1fr); justify-items:start; text-align:left; padding:10px 14px; }
+  .project-cashier-add-toggle { margin-top:8px; padding:6px 2px; border:0; background:none; color:#167ca6; font-size:.78rem; font-weight:700; cursor:pointer; }
+  .project-cashier-add-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; align-items:center; }
+  .project-cashier-add-row .project-cashier-direction.add { display:inline-flex; align-items:center; gap:6px; min-height:0; padding:6px 12px; border:1px dashed color-mix(in srgb,var(--direction-color) 45%,#fff); border-radius:999px; background:var(--direction-tint,#eff6ff); color:var(--direction-deep,#1d4ed8); font-size:.75rem; }
+  .project-cashier-add-row .project-cashier-direction.add .project-cashier-direction-icon { width:auto; height:auto; background:transparent; color:currentColor; }
+  .project-cashier-add-row .project-cashier-direction.add b { font-size:.75rem; }
+  .project-cashier-add-row .project-cashier-direction.add b + span { display:none!important; }
+  .project-cashier-add-cancel { border:0; background:none; color:#718096; font-size:.75rem; cursor:pointer; }
   /* Owner, 2026-10-25: install window by service; stripes in calendar and kanban. */
   .install-progress { height:6px;margin:0 16px 4px;border-radius:999px;background:#EEF1F5;overflow:hidden; }
   .install-progress span { display:block;height:100%;background:#16A34A; }
