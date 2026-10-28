@@ -1,4 +1,5 @@
 import { legacyProjectsIncludingArchive } from "@/features/legacy-crm/project-archive";
+import { canonicalServiceDirection } from "@/features/legacy-crm/service-solutions";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -56,7 +57,15 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   const labor = Prisma.Decimal.max(sum(payouts, "amount").plus(unpaidPayroll), sum(transactions.filter(item => item.category === "payroll"), "amount"));
   const expenses = rows(order.extraExpenses);
   const actualExpenses = expenses.filter(item => item.actual === true || item.paid === true || item.paidAt);
-  const serviceMaterials = (cancelled ? [] : rows(order.extraServices)).filter(item => item.offeringId && !item.quickProjectLine && item.unit && item.unit !== "sqft").map(item => ({
+  const directionKeys: Record<string, string> = { solar: "solar_film", smart: "smart_film", protective: "protective_film", decorative: "decorative_film", general: "general_works" };
+  const included = (item: Row, scope: unknown) => {
+    const selectedScope = scope || order.serviceType || "solar_film";
+    const fallback = selectedScope === "general_works" ? "general" : canonicalServiceDirection(selectedScope);
+    const offering = rows(workspace.settings?.serviceOfferings).find(offering => offering.id === item.offeringId);
+    const direction = directionKeys[canonicalServiceDirection(offering?.direction || fallback)] || directionKeys[fallback] || "smart_film";
+    return !Array.isArray(order.excludedProjectDirections) || !order.excludedProjectDirections.includes(direction);
+  };
+  const serviceMaterials = (cancelled ? [] : rows(order.extraServices)).filter(item => item.offeringId && !item.quickProjectLine && item.unit && item.unit !== "sqft" && included(item, item.serviceType)).map(item => ({
     id: item.id, offeringId: item.offeringId, unit: item.unit, qty: item.qty,
     unitCost: item.offeringMaterialCost ?? rows(workspace.settings?.serviceOfferings).find(offering => offering.id === item.offeringId)?.materialCostPerUnit,
   }));
@@ -87,10 +96,11 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   )), new Prisma.Decimal(0));
   const standalone = expenseTransactions.filter(item => !allocations.includes(item) && !sourceExpenseIds.has(item.projectExpenseId));
   const directExpenses = Prisma.Decimal.max(allocated, sum(allocations, "amount")).plus(sum(standalone, "amount"));
-  const hasFilm = rows(order.measurements?.rooms).some(room => rows(room.windows).length > 0)
-    || rows(order.extraServices).some(item => item.quickProjectLine && item.unit === "sqft");
+  const hasFilm = rows(order.measurements?.rooms).some(room => rows(room.windows).some(win => included(win, win.measureScope)))
+    || rows(order.extraServices).some(item => item.quickProjectLine && item.unit === "sqft" && included(item, item.serviceType));
   const issues: string[] = [];
   if (payrollReviewUserIds.length && order.googleAdsPayrollReview?.basis !== payrollReviewBasis) issues.push("payroll_not_settled");
+  if (order.installationDoneAt && rows(workspace.users).some(user => user.id !== order.managerId && user.payConfig?.type === "commission" && Number(user.payConfig.commissionPct) > 0 && Array.isArray(order.installerIds) && order.installerIds.includes(user.id))) issues.push("unsupported_installer_commission");
   if (serviceMaterials.some(item => [item.qty, item.unitCost].some(value => !(typeof value === "number" && Number.isFinite(value) && value >= 0 || typeof value === "string" && /^\d+(\.\d+)?$/.test(value))))) issues.push("material_cost_not_verified");
   if (unresolvedExpenseLinks.length) issues.push("expense_links_not_reviewed");
   if (!completed.has(String(order.status))) issues.push("project_not_completed");

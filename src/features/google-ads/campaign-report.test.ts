@@ -119,6 +119,14 @@ test("fully staged work needs no unstaged review; an uncovered quantity line doe
   assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("payroll_not_settled"));
 });
 
+test("installer commission cannot be confirmed through the manager-only commission payroll path", () => {
+  const project = { ...order(), installerIds: ["installer"], installationDoneAt: "2026-10-10" };
+  const workspace = { users: [{ id: "installer", role: "installer", payConfig: { type: "commission", commissionPct: 10 } }] };
+  assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("unsupported_installer_commission"));
+  Object.assign(project, { googleAdsCostsReview: { fingerprint: googleAdsProjectMoney(project, workspace).fingerprint } });
+  assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, false);
+});
+
 test("owner settlement control uses existing payroll and refuses unpaid or partial balances, including archives", async () => {
   const source = readFileSync("private/legacy/production-stages.js", "utf8");
   const project = { id: "order-1", payouts: [] as any[] };
@@ -206,6 +214,24 @@ test("quantity-service materials count once and their source costs invalidate re
   assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("material_cost_not_verified"));
   project.extraServices[0].offeringMaterialCost = 0;
   assert.deepEqual(googleAdsProjectMoney(project, workspace).issues, [], "an explicit zero is different from a missing unit cost");
+});
+
+test("unused directions exclude quoted components and film requirements but retain sunk costs", () => {
+  const project: any = { ...order(), _inventoryDeducted: false, _inventoryMaterialCost: 0, productionStages: [], payouts: [{ userId: "worker", amount: 50, paid: true }], extraExpenses: [{ amount: 30, actual: true }], excludedProjectDirections: ["smart_film", "decorative_film", "general_works"],
+    measurements: { rooms: [{ windows: [{ measureScope: "privacy_film" }] }] },
+    extraServices: [
+      { id: "controllers", offeringId: "controller", serviceType: "solar_film", unit: "piece", qty: 2, offeringMaterialCost: 75 },
+      { id: "general", offeringId: "general", serviceType: "general_works", unit: "piece", qty: 1, offeringMaterialCost: 90 },
+      { id: "included", offeringId: "solar", serviceType: "solar_film", unit: "piece", qty: 1, offeringMaterialCost: 20 },
+    ] };
+  const workspace = { settings: { serviceOfferings: [{ id: "controller", direction: "smart" }] }, finance: { transactions: [{ orderId: project.id, type: "expense", category: "inventory_purchase", inventoryCostTreatment: "separate", projectExpenseId: null, amount: 100 }] } };
+  const money = googleAdsProjectMoney(project, workspace);
+  assert.equal(money.directCost.toFixed(2), "200.00", "only included components 20 plus recorded labor 50, actual expense 30 and purchase 100");
+  assert.deepEqual(money.issues, [], "unused film needs no fictitious warehouse issue");
+  project.googleAdsCostsReview = { fingerprint: money.fingerprint };
+  project.excludedProjectDirections = ["decorative_film", "general_works"];
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "350.00");
+  assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, false);
 });
 
 test("quantity-service purchase payments require review and share the recorded material allowance", () => {

@@ -41,6 +41,12 @@ closed-job revenue, ROAS and direct-cost ROI:
   partial balances; it creates no payment or new money total. The server records
   only the owner's attestation against a source fingerprint. Changed job, rate,
   crew, payment or pricing facts reopen that gate, including on archived jobs.
+  The existing payroll only accrues commission for the assigned manager; an
+  installer-only commission configuration therefore blocks ROI until the owner
+  reconciles it into a supported pay arrangement. It cannot be cleared as a zero
+  commission by the manager-only calculation. Excluded directions contribute no
+  unused quoted component cost or fictitious film-issue requirement; separately
+  recorded actual purchases, expenses and earned labor remain costs.
   Project material/equipment purchases remain costs after warehouse film is
   consumed. Reconcile each potentially overlapping purchase as warehouse film,
   a linked actual project expense, or a separate purchase; a default empty
