@@ -392,6 +392,11 @@ function projectCardFocusDirection(oid, directionKey) {
   render();
   requestAnimationFrame(() => document.querySelector(`[data-project-direction="${CSS.escape(directionKey)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
+function projectCashierToggleAdd(oid) {
+  state.projectCashierAdding = { ...(state.projectCashierAdding || {}), [oid]: !(state.projectCashierAdding?.[oid] === true) };
+  preservePositionForNextRender();
+  render();
+}
 function projectCashierMapHtml(o, directions, { money = false, edit = false } = {}) {
   // Keep the order local: production-stages.js is composed into the legacy page
   // as functions only, so top-level constants disappear in the production build.
@@ -405,6 +410,10 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   // where services are added and removed — no picker in between. Directions
   // outside the four (general works) stay as their cards below.
   const byKey = new Map(directions.map(direction => [direction.key, direction]));
+  // Owner, 2026-10-28: «нужно убрать другие ненужные окна по направлениям, это
+  // создаёт лишний шум; изменить состав — через кнопку». Only the directions in
+  // the project are tiles; the rest hide behind «+ Добавить направление».
+  const missing = [];
   const tiles = directionOrder.map(key => {
     const service = ORDER_PRIMARY_SERVICES.find(item => item.id === key);
     if (!service) return '';
@@ -414,7 +423,8 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
     const icon = typeof rpDirIcon === 'function' ? rpDirIcon(key, 18) : service.icon;
     if (!direction) {
       if (!(money && edit)) return '';
-      return `<button type="button" class="project-cashier-direction add" style="--direction-color:${academyEsc(color)};--direction-tint:${academyEsc(tint)};--direction-deep:${academyEsc(deep)}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(key)}','services')" aria-label="Добавить направление ${academyEsc(service.title)}"><span class="project-cashier-direction-icon">${icon}</span><span><b>${academyEsc(service.short || service.title)}</b><span>+ добавить</span></span></button>`;
+      missing.push(`<button type="button" class="project-cashier-direction add" style="--direction-color:${academyEsc(color)};--direction-tint:${academyEsc(tint)};--direction-deep:${academyEsc(deep)}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(key)}','services')" aria-label="Добавить направление ${academyEsc(service.title)}"><span class="project-cashier-direction-icon">${icon}</span><span><b>${academyEsc(service.short || service.title)}</b><span>+ добавить</span></span></button>`);
+      return '';
     }
     const count = direction.lines.length + direction.pending.length;
     const total = direction.lines.filter(line => !line.excluded).reduce((sum, line) => sum + (Number(line.price) || 0), 0);
@@ -422,6 +432,11 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
     const windows = measureAllWindows(o).filter(({ win }) => projectDirectionKeyFromScope(win.measureScope || orderMeasureScope(o), win.offeringId) === key).length;
     return `<button type="button" class="project-cashier-direction on ${excluded ? 'excluded' : ''}" style="--direction-color:${academyEsc(color)};--direction-tint:${academyEsc(tint)};--direction-deep:${academyEsc(deep)}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')" aria-label="Открыть направление ${academyEsc(direction.title)}"><span class="project-cashier-direction-icon">${icon}</span><span><b>${academyEsc(service.short || direction.title)}</b><span>${count} ${projectPlural(count, 'услуга', 'услуги', 'услуг')}${windows ? ` · ${windows} ок.` : ''}${money && total ? ` · ${fmtMoney(total)}` : ''}${excluded ? ' · вне расчёта' : ''}</span></span>${direction.key === primaryKey && included.length > 1 ? '<span class="project-cashier-primary">основное</span>' : ''}</button>`;
   }).join('');
+  const active = (tiles.match(/project-cashier-direction on/g) || []).length;
+  const adding = !active || state.projectCashierAdding?.[o.id] === true;
+  const addHtml = !missing.length ? '' : adding
+    ? `<div class="project-cashier-add-row">${missing.join('')}${active ? `<button type="button" class="project-cashier-add-cancel" onclick="projectCashierToggleAdd('${o.id}')">Отмена</button>` : ''}</div>`
+    : `<button type="button" class="project-cashier-add-toggle" onclick="projectCashierToggleAdd('${o.id}')">+ Добавить направление</button>`;
   const rooms = o.measurements?.rooms?.length || 0;
   const windows = measureAllWindows(o).length;
   const area = orderActualAreaSqft(o);
@@ -429,7 +444,7 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   // the feed sections below; only the facts stay, so the square footage is
   // always in view (Owner, 2026-10-26: «нет метража, сто кнопок»).
   return `<div class="project-cashier-map" data-project-cashier-map>
-    <div class="project-cashier-directions four">${tiles}</div>
+    ${active ? `<div class="project-cashier-directions four count-${Math.min(active, 4)}">${tiles}</div>` : ''}${addHtml}
     <div class="project-cashier-flow"><div class="project-cashier-flow-facts"><span><b>${rooms}</b> ${projectPlural(rooms, 'помещение', 'помещения', 'помещений')}</span><span><b>${windows}</b> ${projectWindowsWord(windows)}</span><span><b>${area.toFixed(1)}</b> sq ft</span></div></div>
   </div>`;
 }

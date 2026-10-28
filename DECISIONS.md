@@ -792,3 +792,13 @@ Owner requires the manager to reserve an installer and dates as soon as the clie
 - The planner lists all unresolved readiness items and preserves the saved assignment while the manager completes production, stock, exact-measurement and Smart engineering checks.
 - Final publication remains strict: the existing readiness checks must pass before dates reach the calendar/work order and before the Project enters the installation stage.
 - This is one Project and one service plan throughout; no parallel order, duplicate calendar record or second financial calculation is created.
+
+## 2026-10-28 — A service owns one reusable default material selection (Owner)
+
+Owner requires the material attached in «Услуги и цены» to remain saved and to stop forcing the manager to repeat the same selection in every new Project.
+
+- Linked films define which materials are allowed for the service. One of those linked films may be marked as the service default.
+- Linking the first film makes it the default automatically. If an older service has exactly one active linked film, the CRM treats it as the default without rewriting historical data.
+- A new Project line starts with the service default film. The manager may override it for that Project without changing the directory default.
+- Saving a material link or default must use confirmed server persistence and show a visible saved/error state; a browser-only selection is not considered saved.
+- The server must reject a default film that is not linked to the same service or belongs to an incompatible direction.

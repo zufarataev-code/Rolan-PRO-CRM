@@ -42,6 +42,12 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-28 handoff — project composition shows only used directions (PR #435)
+
+- Owner: «в составе проекта убрать ненужные окна по направлениям — лишний шум; изменить состав через кнопку».
+- `projectCashierMapHtml` (production-stages.js) renders tiles only for directions in the project (`count-N` grid); missing ones are chips behind «+ Добавить направление» (`projectCashierToggleAdd`, `state.projectCashierAdding[oid]`). Empty project shows chips at once.
+- Test: `project-cashier-card.test.ts`. Deployed `3d4d8c8`.
+
 ## 2026-10-26 handoff — opened project reads as the cashier (branch `claude/project-card-cashier`)
 
 - Owner, 2026-10-26: «раздел проект очень запутан — сделать понятным, как касса; не ломать всё, а слетать плавно». Prototype he tested: Artifact «Проект · касса RolanPRO».
@@ -1565,3 +1571,12 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - The main next action first offers «Запланировать монтаж». Once at least one service has a plan, it points to production preparation and then returns to final publication.
 - Verified locally in the browser at desktop and 390 px: an accepted Project with an unverified opening and no prepared film saved an installer and date, displayed the service as assigned and recorded `service_planned` without falsely publishing the installation.
 - Verification: focused tests 75/75; full suite 907/907; `npm run typecheck` clean; production build successful with 129 routes; `git diff --check` clean. Production is unchanged; release still requires the Owner's separate explicit confirmation.
+
+## 2026-10-28 handoff — Service material selection persists and becomes the project default (Codex)
+
+- Branch `codex/fix-service-material-persistence-20261028`, based on `origin/main` `2e8eec0`.
+- The Owner service editor now saves linked films through the normal server persistence path and displays an explicit saving/saved/error state instead of silently updating only the current browser view.
+- Every service may have one default linked film. The first linked film becomes the default automatically; when several films are linked, the Owner can choose the default explicitly. Historical services with exactly one active linked film receive the same default behavior without a data migration.
+- Adding that service to a new Project automatically fills its saved default film. The manager can still open the completed material step and override the film for the particular Project; the service directory is not modified by that override.
+- The server rejects a default film that is not linked to the service or belongs to another direction, preventing invalid directory states.
+- Verification: focused material/cashier/directory tests 52/52; full suite 920/920; `npm run typecheck` clean; production build successful with 129 routes; `git diff --check` clean. Production is unchanged; release requires the Owner's separate explicit confirmation.

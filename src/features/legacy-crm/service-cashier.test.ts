@@ -93,11 +93,12 @@ function fixture(role = 'owner') {
   const { db, add } = t;
   db.settings.catalog.push(
     { id: 'f_a1', productName: 'MAGNITRONIC Guard', modelCode: 'A1', model: 'Guard A1', category: 'protective', vlt: 88, archived: false },
+    { id: 'f_a1b', productName: 'MAGNITRONIC Guard', modelCode: 'A1B', model: 'Guard A1B', category: 'protective', vlt: 72, archived: false },
     { id: 'f_a1x', productName: 'MAGNITRONIC Guard', modelCode: 'A1X', model: 'Guard A1X', category: 'protective', archived: true },
   );
   const silicone = add({ name: 'Силикон', unit: 'lft', pricePerSqft: 3.5 });
   const high = add({ name: 'Высотные работы', unit: 'zone', pricePerSqft: 120 });
-  const a1 = add({ name: 'A1 8 mil', unit: 'sqft', pricePerSqft: 14, includes: [silicone.id], filmIds: ['f_a1', 'f_a1x'] });
+  const a1 = add({ name: 'A1 8 mil', unit: 'sqft', pricePerSqft: 14, includes: [silicone.id], filmIds: ['f_a1', 'f_a1b', 'f_a1x'] });
   add({ name: 'Солнце SP35', direction: 'solar', unit: 'sqft', pricePerSqft: 9 });
   add({ name: 'Выключена', unit: 'piece', pricePerSqft: 1, active: false });
   const order: Row = { id: 'o', number: 'P-1', status: 'new', serviceType: 'protective_film', serviceTypes: ['protective_film'], extraServices: [], measurements: { rooms: [{ id: 'r', windows: [windowRow('w1'), windowRow('w2')] }] } };
@@ -169,6 +170,18 @@ test('direction → service → film → add-ons, with inactive and archived ite
   assert.deepEqual([...context.serviceCashierState().addonIds], ['svc_Высотные работы']);
   context.serviceCashierPick('addon', 'svc_Высотные работы');
   assert.deepEqual([...context.serviceCashierState().addonIds], []);
+});
+
+test('a saved default material is reused and may still be changed from the completed Material crumb', () => {
+  const { context, state, a1 } = fixture();
+  a1.defaultFilmId = 'f_a1';
+  context.openServiceCashier('o', 'card');
+  context.serviceCashierPick('direction', 'protective_film');
+  context.serviceCashierPick('offering', a1.id);
+  assert.equal(context.serviceCashierState().step, 'addons', 'the manager is not forced to select the same material again');
+  assert.equal(context.serviceCashierState().catalogId, 'f_a1');
+  assert.match(state.modal, /Guard A1/);
+  assert.match(state.modal, /serviceCashierPick\('step','material'\)/, 'the default can be overridden for an exceptional project');
 });
 
 test('a size-free service skips the material step; going back clears the later choices', () => {

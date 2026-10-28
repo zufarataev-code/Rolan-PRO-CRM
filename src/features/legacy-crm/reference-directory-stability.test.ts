@@ -22,9 +22,10 @@ test("ordinary service directory edits save without rebuilding the CRM", () => {
 
 test("film links update their open summary without closing and reopening the directory", () => {
   const toggle = functionSource("toggleServiceOfferingFilm", "renderServiceOfferingsSection");
-  assert.match(toggle, /save\(\);\s*refreshServiceOfferingFilmSummary\(id\);/);
+  assert.match(toggle, /persistServiceOfferingFilms\(id\);\s*refreshServiceOfferingFilmSummary\(id\);\s*refreshServiceOfferingFilmControls\(id\);/);
   assert.doesNotMatch(toggle, /render\(\)/);
   assert.match(source, /data-service-offering-film-summary="\$\{offering\.id\}"/);
+  assert.match(source, /data-service-offering-film-save-status="\$\{offering\.id\}"/);
 });
 
 test("catalog cell edits keep the table in place", () => {
