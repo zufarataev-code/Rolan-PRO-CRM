@@ -12,8 +12,9 @@ Before doing any work:
 4. Work from the latest `origin/main` on one dedicated branch.
 5. Do not rely on a previous chat's memory or local browser storage.
 
-## 2026-10-28 follow-up — unpaid fixed-job payroll in campaign ROI
+## 2026-10-28 follow-up — payroll completeness in campaign ROI
 
+- A broader Claude review also identified earned commission and unstaged per-square-foot obligations without immutable stage amounts. ROI remains unknown until a separate OWNER settlement attestation uses the existing payroll calculator to verify full payment. The server accepts no money total, retains optimistic revision/fingerprint protection and invalidates the attestation after source changes. Manager state writes cannot change it. Archive review uses the same calculator with an optional isolated order list, without changing ordinary payroll calls. Local verification: 973/973 unit tests, TypeScript and production build pass. The guarded PostgreSQL/API regression and final independent Claude review are pending exact-head CI/review.
 - PR #418 also accrues fixed installer/measurer job pay at the existing installation/measurement completion event, matching active payroll even for inactive staff. Partial and final payments offset the same unstaged obligation; paid and unpaid costs are retained on cancelled jobs. Changed pay inputs invalidate owner cost confirmation. No new ledger, schema or dependency.
 - Regression tests exercise the active payroll producer, zero stage snapshots, no/partial/full payment, rate changes, measurer cancellation and unearned/unassigned work. Local verification: 970/970 unit tests, TypeScript and production build pass. Independent read-only Claude review found no blockers; exact-head CI and deployment remain pending. This branch is not deployed.
 

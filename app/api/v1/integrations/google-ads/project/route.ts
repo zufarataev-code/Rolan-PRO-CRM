@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   const auth = await requireRequestSession(request, [ROLE_CODES.OWNER]);
   if (!auth.ok) return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Google Ads project review is owner-only.");
   const body = await request.json().catch(() => null);
-  if (!body || typeof body.order_id !== "string" || !["bind_campaign", "confirm_costs", "link_expense"].includes(body.operation)) return apiError(400, "invalid_payload", "An order_id and supported operation are required.");
+  if (!body || typeof body.order_id !== "string" || !["bind_campaign", "confirm_costs", "confirm_payroll", "link_expense"].includes(body.operation)) return apiError(400, "invalid_payload", "An order_id and supported operation are required.");
   const workspace = await prisma.legacyWorkspace.findUnique({ where: { workspace_id: "primary" } });
   const payload = structuredClone(workspace?.payload || {}) as Record<string, any>;
   const order = legacyProjectsIncludingArchive(payload).find(item => item.id === body.order_id) as Record<string, any> | undefined;
@@ -31,6 +31,14 @@ export async function POST(request: NextRequest) {
     if (transaction.category === "inventory_purchase") transaction.inventoryCostTreatment = treatment ?? (body.expense_id === null ? "separate" : "expense");
     const saved = await prisma.legacyWorkspace.updateMany({ where: { workspace_id: "primary", revision: workspace.revision }, data: { payload, revision: { increment: 1 }, updated_by: auth.session.user.user_id } });
     return saved.count === 1 ? apiSuccess({ linked: true }) : apiError(409, "revision_conflict", "CRM changed; refresh before linking costs.");
+  }
+  if (body.operation === "confirm_payroll") {
+    const money = googleAdsProjectMoney(order, payload);
+    if (body.confirmation !== "PAYROLL_SETTLED" || !money.payrollReviewUserIds.length) return apiError(400, "payroll_review_required", "The owner must review settlement in the existing payroll module.");
+    if (body.cost_fingerprint !== money.fingerprint) return apiError(409, "costs_changed", "Payroll source facts changed; refresh before reviewing settlement.");
+    order.googleAdsPayrollReview = { basis: money.payrollReviewBasis, reviewed_at: new Date().toISOString(), reviewed_by: auth.session.user.user_id };
+    const saved = await prisma.legacyWorkspace.updateMany({ where: { workspace_id: "primary", revision: workspace.revision }, data: { payload, revision: { increment: 1 }, updated_by: auth.session.user.user_id } });
+    return saved.count === 1 ? apiSuccess({ reviewed: true }) : apiError(409, "revision_conflict", "CRM changed; refresh before reviewing payroll.");
   }
   if (body.operation === "confirm_costs") {
     const money = googleAdsProjectMoney(order, payload);

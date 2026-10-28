@@ -38,6 +38,16 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
     : Array.isArray(order.installerIds) && order.installerIds.includes(user.id) && order.installationDoneAt
   )).map(user => ({ userId: user.id, stageId: null, amount: user.payConfig.fixedPerJob }));
   const payouts = rows(order.payouts);
+  const stagedServices = new Set(stages.map(stage => stage.serviceId));
+  const unstagedWork = rows(order.measurements?.rooms).some(room => rows(room.windows).some(win => !stagedServices.has(win.offeringId ? `offering:${win.offeringId}` : `direction:${win.measureScope || order.serviceType || "solar_film"}`)))
+    || rows(order.extraServices).some(line => !stagedServices.has(`line:${line.id}`));
+  const payrollReviewUserIds = rows(workspace.users).filter(user => user.payConfig?.type === "commission"
+    ? user.id === order.managerId && order.paidAt && Number(user.payConfig.commissionPct) > 0
+    : user.payConfig?.type === "per_sqft" && unstagedWork && order.installationDoneAt && Array.isArray(order.installerIds) && order.installerIds.includes(user.id)
+  ).map(user => user.id);
+  // Dynamic legacy pay needs an owner's settlement review, not a second pricing calculator.
+  const { googleAdsPayrollReview: _payrollReview, googleAdsCostsReview: _costReview, timeline: _timeline, ...payrollOrder } = order;
+  const payrollReviewBasis = createHash("sha256").update(JSON.stringify({ order: payrollOrder, users: rows(workspace.users).filter(user => payrollReviewUserIds.includes(user.id)).map(user => ({ id: user.id, role: user.role, payConfig: user.payConfig })), settings: workspace.settings }, (_key, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)).digest("hex");
   const unpaidPayroll = [...stagePayroll, ...jobPayroll].reduce<Prisma.Decimal>((total, item) => {
     const paid = sum(payouts.filter(payout => payout.userId === item.userId && (payout.stageId || null) === item.stageId), "amount");
     return total.plus(Prisma.Decimal.max(0, decimal(item.amount).minus(paid)));
@@ -79,6 +89,7 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   const hasFilm = rows(order.measurements?.rooms).some(room => rows(room.windows).length > 0)
     || rows(order.extraServices).some(item => item.quickProjectLine && item.unit === "sqft");
   const issues: string[] = [];
+  if (payrollReviewUserIds.length && order.googleAdsPayrollReview?.basis !== payrollReviewBasis) issues.push("payroll_not_settled");
   if (serviceMaterials.some(item => [item.qty, item.unitCost].some(value => !(typeof value === "number" && Number.isFinite(value) && value >= 0 || typeof value === "string" && /^\d+(\.\d+)?$/.test(value))))) issues.push("material_cost_not_verified");
   if (unresolvedExpenseLinks.length) issues.push("expense_links_not_reviewed");
   if (!completed.has(String(order.status))) issues.push("project_not_completed");
@@ -89,8 +100,8 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   const parts = Prisma.Decimal.max(0, sum(warehousePayments, "amount").minus(warehouseMaterial)).plus(Prisma.Decimal.max(0, sum(servicePayments, "amount").minus(serviceMaterial)));
   const directCost = material.plus(parts).plus(labor).plus(directExpenses);
   // Confirm the source facts, not another editable money total. Later changes invalidate the review.
-  const fingerprint = createHash("sha256").update(JSON.stringify({ status: order.status, material: material.toString(), serviceMaterials, parts: parts.toString(), labor: labor.toString(), expenses: directExpenses.toString(), stages, jobPayroll, sourceExpenses: expenses, bankExpenses: directTransactions, payouts: order.payouts, inventory: order._inventoryLog, issues })).digest("hex");
-  return { received, directCost, fingerprint, issues, materialCoverage, unresolvedExpenseLinks: unresolvedExpenseLinks.map(item => ({ transaction_id: item.id, amount: decimal(item.amount).toFixed(2), category: item.category, warehouse_available: materialCoverage.warehouse && item.category === "inventory_purchase", service_material_available: materialCoverage.service_material && item.category === "inventory_purchase" })), expenseChoices: actualExpenses.map(item => ({ expense_id: item.id, label: String(item.label || item.type || item.id), amount: decimal(item.amount).toFixed(2) })), costsConfirmed: issues.length === 0 && order.googleAdsCostsReview?.fingerprint === fingerprint };
+  const fingerprint = createHash("sha256").update(JSON.stringify({ status: order.status, material: material.toString(), serviceMaterials, parts: parts.toString(), labor: labor.toString(), expenses: directExpenses.toString(), stages, jobPayroll, payrollReviewBasis, sourceExpenses: expenses, bankExpenses: directTransactions, payouts: order.payouts, inventory: order._inventoryLog, issues })).digest("hex");
+  return { received, directCost, fingerprint, issues, payrollReviewBasis, payrollReviewUserIds, materialCoverage, unresolvedExpenseLinks: unresolvedExpenseLinks.map(item => ({ transaction_id: item.id, amount: decimal(item.amount).toFixed(2), category: item.category, warehouse_available: materialCoverage.warehouse && item.category === "inventory_purchase", service_material_available: materialCoverage.service_material && item.category === "inventory_purchase" })), expenseChoices: actualExpenses.map(item => ({ expense_id: item.id, label: String(item.label || item.type || item.id), amount: decimal(item.amount).toFixed(2) })), costsConfirmed: issues.length === 0 && order.googleAdsCostsReview?.fingerprint === fingerprint };
 }
 
 type Cost = { customer_id: string; campaign_id: string; campaign_name: string | null; currency: string; cost_amount: Prisma.Decimal; clicks: bigint; impressions: bigint };
@@ -140,7 +151,7 @@ export function buildGoogleAdsCampaignReport(costs: Cost[], touchpoints: Campaig
       row.direct_cost = row.direct_cost.plus(money.directCost);
       if (!money.costsConfirmed) row.pending_cost_reviews += 1;
     } else row.pending_cost_reviews += 1;
-    row.projects.push({ order_id: order.id, number: order.number || order.id, status: order.status, received: money.received.toFixed(2), direct_cost: money.directCost.toFixed(2), costs_confirmed: money.costsConfirmed, cost_fingerprint: money.fingerprint, issues: money.issues, expense_links: money.unresolvedExpenseLinks, expense_choices: money.expenseChoices });
+    row.projects.push({ order_id: order.id, number: order.number || order.id, status: order.status, received: money.received.toFixed(2), direct_cost: money.directCost.toFixed(2), costs_confirmed: money.costsConfirmed, cost_fingerprint: money.fingerprint, issues: money.issues, payroll_review_user_ids: money.payrollReviewUserIds, expense_links: money.unresolvedExpenseLinks, expense_choices: money.expenseChoices });
   }
   for (const point of byLead.values()) {
     if (!knownPoint(point) || claimedLeads.has(point.lead_id!)) continue;

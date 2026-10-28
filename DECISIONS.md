@@ -2,6 +2,10 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-10-28 — Dynamic payroll settlement before ROI confirmation
+
+- Earned commissions and unstaged per-square-foot obligations keep campaign ROI unknown until the OWNER separately reviews their settlement in the existing payroll module. The report does not introduce another pricing formula or editable payroll ledger. Its control reuses the active payroll calculator, refuses outstanding balances, and records only owner attestation metadata against current source facts. Later job, pay configuration or pricing changes invalidate that attestation and the cost review. Fixed-per-job obligations accrue directly from existing completion events and reconcile against the same worker's unstaged payments.
+
 ## 2026-10-26 — Google Ads acquisition, cash reporting and verified delivery
 
 - Original account/campaign IDs and click IDs belong to the acquisition touchpoint; a project carries its canonical lead into the Deal. Another customer's/job's contact match or a later direct visit must not replace that source. Managers cannot replace an established lead or reuse a lead bound to another active/archived project. Owner-reviewed call-tracking evidence may supply a missing original project attribution.

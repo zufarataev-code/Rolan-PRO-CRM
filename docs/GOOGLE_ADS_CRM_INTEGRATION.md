@@ -35,6 +35,12 @@ closed-job revenue, ROAS and direct-cost ROI:
   installer/measurer job pay accrues on the existing installation/measurement
   completion event, including unpaid or partially paid obligations; later
   payments settle that accrual once, and pay-source changes invalidate review.
+  Earned manager commissions and unstaged per-square-foot work require a separate
+  OWNER settlement review in the existing payroll module before cost confirmation.
+  The review control uses that module's current calculator and rejects unpaid or
+  partial balances; it creates no payment or new money total. The server records
+  only the owner's attestation against a source fingerprint. Changed job, rate,
+  crew, payment or pricing facts reopen that gate, including on archived jobs.
   Project material/equipment purchases remain costs after warehouse film is
   consumed. Reconcile each potentially overlapping purchase as warehouse film,
   a linked actual project expense, or a separate purchase; a default empty

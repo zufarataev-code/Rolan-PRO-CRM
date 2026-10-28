@@ -200,7 +200,7 @@ export async function PUT(request: NextRequest) {
   if (solutionError) return apiError(400, "invalid_service_solution", solutionError);
   for (const order of (nextPayload as Record<string, any>).orders || []) {
     const previous = ((currentWorkspace.payload as Record<string, any>).orders || []).find((item: Record<string, any>) => item.id === order.id) || {};
-    if (!auth.session.roles.includes(ROLE_CODES.OWNER) && JSON.stringify(order.googleAdsCostsReview) !== JSON.stringify(previous.googleAdsCostsReview)) {
+    if (!auth.session.roles.includes(ROLE_CODES.OWNER) && (JSON.stringify(order.googleAdsCostsReview) !== JSON.stringify(previous.googleAdsCostsReview) || JSON.stringify(order.googleAdsPayrollReview) !== JSON.stringify(previous.googleAdsPayrollReview))) {
       return apiError(403, "owner_cost_review_required", "Only the owner can confirm actual project costs.");
     }
     if (!auth.session.roles.includes(ROLE_CODES.OWNER) && (order.canonicalLeadId ?? null) !== (previous.canonicalLeadId ?? null)) {

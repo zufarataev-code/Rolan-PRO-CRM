@@ -82,6 +82,68 @@ test("labor matches payments to worker and stage while retaining separate unstag
   assert.equal(googleAdsProjectMoney(project, {}).directCost.toFixed(2), "330.00", "payments above an accrual still count as actual labor cost");
 });
 
+test("dynamic payroll requires a separate settlement review and source changes reopen it", () => {
+  const project: any = { ...order(), managerId: "manager", paidAt: "2026-10-10", installationDoneAt: "2026-10-10", installerIds: ["piece-worker"], productionStages: [], payouts: [], extraExpenses: [] };
+  const workspace = { orders: [project], users: [
+    { id: "manager", role: "manager", payConfig: { type: "commission", commissionPct: 10 } },
+    { id: "piece-worker", role: "installer", payConfig: { type: "per_sqft", ratePerSqft: 2 } },
+  ], settings: { complexityCoefs: { standard: 1 } } };
+  let money = googleAdsProjectMoney(project, workspace);
+  assert.deepEqual(money.payrollReviewUserIds, ["manager", "piece-worker"]);
+  assert.ok(money.issues.includes("payroll_not_settled"));
+  project.payouts.push({ userId: "manager", amount: 50, paid: true, stageId: null });
+  assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("payroll_not_settled"), "a partial payout cannot silently clear the gate");
+  project.payouts.push({ userId: "manager", amount: 50, paid: true, stageId: null }, { userId: "piece-worker", amount: 100, paid: true, stageId: null });
+  money = googleAdsProjectMoney(project, workspace);
+  project.googleAdsPayrollReview = { basis: money.payrollReviewBasis };
+  money = googleAdsProjectMoney(project, workspace);
+  assert.deepEqual(money.issues, []);
+  project.googleAdsCostsReview = { fingerprint: money.fingerprint };
+  assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, true);
+  workspace.users[0].payConfig.commissionPct = 15;
+  assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("payroll_not_settled"));
+  assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, false);
+  workspace.users[0].payConfig.commissionPct = 10;
+  workspace.settings.complexityCoefs.standard = 2;
+  assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("payroll_not_settled"));
+});
+
+test("fully staged work needs no unstaged review; an uncovered quantity line does", () => {
+  const project: any = { ...order(), serviceType: "solar_film", installationDoneAt: "2026-10-10", installerIds: ["installer"], productionStages: [{ ...order().productionStages[0], serviceId: "direction:solar_film" }] };
+  const workspace = { users: [{ id: "installer", payConfig: { type: "per_sqft", ratePerSqft: 2 } }] };
+  assert.deepEqual(googleAdsProjectMoney(project, workspace).payrollReviewUserIds, []);
+  project.extraServices = [{ id: "controller", unit: "piece", qty: 1 }];
+  assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("payroll_not_settled"));
+});
+
+test("owner settlement control uses existing payroll and refuses unpaid or partial balances, including archives", async () => {
+  const source = readFileSync("private/legacy/production-stages.js", "utf8");
+  const project = { id: "order-1", payouts: [] as any[] };
+  const calls: any[] = [], alerts: string[] = [];
+  let earned = 100;
+  const context = vm.createContext({
+    db: { archivedOrders: [project] }, state: { googleAdsCrm: { report: { campaigns: [{ projects: [{ order_id: project.id, payroll_review_user_ids: ["manager"] }] }] } } },
+    currentUser: () => ({ role: "owner" }), getOrder: () => null,
+    calcUserPayoutForPeriod: (_user: string, _start: Date, _end: Date, orders: any[]) => { assert.equal(orders[0], project); return { breakdown: [{ orderId: project.id, amount: earned }] }; },
+    confirm: () => true, alert: (message: string) => alerts.push(message),
+    googleAdsConvRequest: async (...args: any[]) => calls.push(args), loadGoogleAdsCrm: () => {},
+  });
+  vm.runInContext(source.slice(source.indexOf("async function googleAdsConfirmProjectPayroll("), source.indexOf("async function googleAdsConfirmProjectCosts(")), context);
+  await context.googleAdsConfirmProjectPayroll(project.id, "fingerprint");
+  project.payouts.push({ userId: "manager", amount: 50, paid: true });
+  await context.googleAdsConfirmProjectPayroll(project.id, "fingerprint");
+  assert.equal(calls.length, 0);
+  assert.equal(alerts.length, 2);
+  project.payouts.push({ userId: "manager", amount: 50, paid: true });
+  await context.googleAdsConfirmProjectPayroll(project.id, "fingerprint");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][2].confirmation, "PAYROLL_SETTLED");
+  earned = 150;
+  await context.googleAdsConfirmProjectPayroll(project.id, "fingerprint");
+  assert.equal(calls.length, 1, "a later rate increase must be settled before review");
+  assert.equal(project.payouts.length, 2, "review never creates a payment");
+});
+
 test("a deposit is cash received but not completed-job revenue or profit", () => {
   const project = { ...order(), status: "proposal_accepted" };
   const result = buildGoogleAdsCampaignReport([cost()], [point], { orders: [project] }, "2026-10-01", "2026-10-25", "123").campaigns[0];

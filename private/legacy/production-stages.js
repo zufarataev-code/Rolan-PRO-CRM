@@ -129,7 +129,7 @@ function orderInstallerPayoutForUser(o, userId) {
   return (filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * installerSeniorFactor(user);
 }
 
-function calcUserPayoutForPeriod(userId, startDate, endDate) {
+function calcUserPayoutForPeriod(userId, startDate, endDate, orders = db.orders) {
   const u = getUser(userId);
   if (!u || !u.payConfig) return { total: 0, breakdown: [] };
   const pc = u.payConfig;
@@ -142,7 +142,7 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
     return { total, breakdown };
   }
   // Commission / per-sqft / fixed-per-job — based on orders in period
-  db.orders.forEach(original => {
+  orders.forEach(original => {
     let o = original;
     if (pc.type === 'per_sqft' && projectStages(o).length) {
       projectStages(o).filter(s => s.status === 'done' && (s.installerIds || []).includes(userId) && new Date(s.doneAt) >= startDate && new Date(s.doneAt) <= endDate).forEach(s => {
@@ -2223,7 +2223,7 @@ function googleAdsReportMoney(value, currency) {
 function googleAdsCampaignReportHtml(report) {
   if (!report) return '';
   const esc = academyEsc;
-  const issue = key => ({ project_not_completed: 'Проект ещё не завершён', material_cost_not_verified: 'Нужно проверить списание плёнки и себестоимость комплектующих', work_not_completed: 'Не все этапы завершены', expenses_not_actual: 'Есть неподтверждённые фактические расходы', invalid_cost_records: 'Нужно исправить неполные суммы затрат', expense_links_not_reviewed: 'Нужно сверить оплаты с учтённым материалом и расходами проекта' }[key] || key);
+  const issue = key => ({ project_not_completed: 'Проект ещё не завершён', material_cost_not_verified: 'Нужно проверить списание плёнки и себестоимость комплектующих', work_not_completed: 'Не все этапы завершены', expenses_not_actual: 'Есть неподтверждённые фактические расходы', invalid_cost_records: 'Нужно исправить неполные суммы затрат', payroll_not_settled: 'Нужно сверить выплату комиссии и работ без этапов в разделе «Зарплата»', expense_links_not_reviewed: 'Нужно сверить оплаты с учтённым материалом и расходами проекта' }[key] || key);
   return `<div class="mt-3" data-google-ads-profitability>
     <div class="flex flex-wrap gap-2 items-end">${(report.available_accounts || []).length > 1 ? `<label class="text-xs">Аккаунт Google Ads<select id="gads-report-account"><option value="">Выберите аккаунт</option>${report.available_accounts.map(id => `<option value="${esc(id)}" ${id === report.customer_id ? 'selected' : ''}>${esc(id)}</option>`).join('')}</select></label>` : ''}<label class="text-xs">Лиды с<input type="date" id="gads-report-start" value="${esc(report.start_date)}"></label><label class="text-xs">по<input type="date" id="gads-report-end" value="${esc(report.end_date)}"></label><button class="btn-ghost text-sm" onclick="googleAdsReportRange()">Показать</button><button class="btn-ghost text-sm" onclick="googleAdsBindProject()">Привязать исходную кампанию проекта</button></div>
     <p class="text-xs text-gray-600 mt-2">Когорты по дате первого привлечения · Pacific. Расходы за выбранные даты; оплаты этих проектов — на текущий момент. ROAS: полученные деньги за закрытые проекты / реклама. ROI учитывает подтверждённые прямые затраты; общие расходы компании и налоги не включены. Пока проект открыт или затраты не сверены, ROI не показывается.</p>
@@ -2232,7 +2232,7 @@ function googleAdsCampaignReportHtml(report) {
       <div class="font-semibold text-sm">${esc(c.campaign_name)} <span class="text-xs text-gray-500">${esc(c.customer_id)} / ${esc(c.campaign_id)} · ${esc(c.currency)}</span></div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-sm"><div>Реклама<br><b>${googleAdsReportMoney(c.ad_spend, c.currency)}</b></div><div>Лиды / продажи<br><b>${Number(c.leads)} / ${Number(c.won)}</b></div><div>Оплаты закрытых проектов<br><b>${googleAdsReportMoney(c.realized_revenue, c.currency)}</b></div><div>ROAS / ROI<br><b>${c.roas == null ? '—' : esc(c.roas) + '×'} / ${c.roi_percent == null ? 'нужна сверка затрат' : esc(c.roi_percent) + '%'}</b></div></div>
       <p class="text-xs text-gray-500 mt-1">Цена лида ${c.cost_per_lead == null ? '—' : googleAdsReportMoney(c.cost_per_lead, c.currency)} · ${esc(c.clicks)} кликов · все полученные оплаты ${googleAdsReportMoney(c.received, c.currency)}${c.pending_cost_reviews ? ` · проектов до завершения / сверки: ${Number(c.pending_cost_reviews)}` : ''}</p>
-      ${(c.projects || []).length ? `<details class="mt-2"><summary class="text-xs cursor-pointer">Проверить проекты и фактические затраты</summary>${c.projects.map(p => `<div class="text-xs border-t py-2"><b>${esc(p.number)}</b> · получено ${googleAdsReportMoney(p.received, c.currency)} · прямые затраты ${googleAdsReportMoney(p.direct_cost, c.currency)}<div>${(p.issues || []).map(key => esc(issue(key))).join(' · ')}</div>${(p.expense_links || []).map(t => `<label class="block mt-2">Банковский расход ${googleAdsReportMoney(t.amount, c.currency)} · ${esc(financeCategoryLabel(t.category))}<select onchange="googleAdsLinkExpense('${esc(jsQuote(p.order_id))}','${esc(jsQuote(t.transaction_id))}',this.value)"><option value="">Сверьте, где учтена эта оплата</option>${t.warehouse_available ? '<option value="warehouse">Оплата списанной плёнки (превышение добавится к затратам)</option>' : ''}${t.service_material_available ? '<option value="service_material">Оплата учтённых комплектующих (превышение добавится к затратам)</option>' : ''}<option value="separate">Отдельный расход, не записанный выше</option>${(p.expense_choices || []).map(e => `<option value="${esc(e.expense_id)}">${esc(e.label)} · ${googleAdsReportMoney(e.amount, c.currency)}</option>`).join('')}</select></label>`).join('')}${p.costs_confirmed ? '✓ Затраты сверены владельцем' : !(p.issues || []).length ? `<button class="btn-ghost text-xs" onclick="googleAdsConfirmProjectCosts('${esc(jsQuote(p.order_id))}','${esc(jsQuote(p.cost_fingerprint))}','${esc(jsQuote(p.direct_cost))}','${esc(jsQuote(c.currency))}')">Подтвердить полноту фактических затрат</button>` : ''}</div>`).join('')}</details>` : ''}
+      ${(c.projects || []).length ? `<details class="mt-2"><summary class="text-xs cursor-pointer">Проверить проекты и фактические затраты</summary>${c.projects.map(p => `<div class="text-xs border-t py-2"><b>${esc(p.number)}</b> · получено ${googleAdsReportMoney(p.received, c.currency)} · прямые затраты ${googleAdsReportMoney(p.direct_cost, c.currency)}<div>${(p.issues || []).map(key => esc(issue(key))).join(' · ')}</div>${(p.expense_links || []).map(t => `<label class="block mt-2">Банковский расход ${googleAdsReportMoney(t.amount, c.currency)} · ${esc(financeCategoryLabel(t.category))}<select onchange="googleAdsLinkExpense('${esc(jsQuote(p.order_id))}','${esc(jsQuote(t.transaction_id))}',this.value)"><option value="">Сверьте, где учтена эта оплата</option>${t.warehouse_available ? '<option value="warehouse">Оплата списанной плёнки (превышение добавится к затратам)</option>' : ''}${t.service_material_available ? '<option value="service_material">Оплата учтённых комплектующих (превышение добавится к затратам)</option>' : ''}<option value="separate">Отдельный расход, не записанный выше</option>${(p.expense_choices || []).map(e => `<option value="${esc(e.expense_id)}">${esc(e.label)} · ${googleAdsReportMoney(e.amount, c.currency)}</option>`).join('')}</select></label>`).join('')}${(p.issues || []).includes('payroll_not_settled') ? `<button class="btn-ghost text-xs" onclick="googleAdsConfirmProjectPayroll('${esc(jsQuote(p.order_id))}','${esc(jsQuote(p.cost_fingerprint))}')">Сверить выплату начислений</button>` : ''}${p.costs_confirmed ? '✓ Затраты сверены владельцем' : !(p.issues || []).length ? `<button class="btn-ghost text-xs" onclick="googleAdsConfirmProjectCosts('${esc(jsQuote(p.order_id))}','${esc(jsQuote(p.cost_fingerprint))}','${esc(jsQuote(p.direct_cost))}','${esc(jsQuote(c.currency))}')">Подтвердить полноту фактических затрат</button>` : ''}</div>`).join('')}</details>` : ''}
     </div>`).join('') || '<p class="text-xs text-gray-500 mt-2">Нет данных за выбранный период.</p>'}
   </div>`;
 }
@@ -2247,6 +2247,24 @@ async function googleAdsLinkExpense(orderId, transactionId, expenseId) {
   if (!expenseId || currentUser()?.role !== 'owner') return;
   try {
     await googleAdsConvRequest('/api/v1/integrations/google-ads/project', 'POST', { operation: 'link_expense', order_id: orderId, transaction_id: transactionId, expense_id: ['separate', 'warehouse', 'service_material'].includes(expenseId) ? null : expenseId, ...(['warehouse', 'service_material'].includes(expenseId) ? { inventory_cost_treatment: expenseId } : {}) });
+    loadGoogleAdsCrm(true);
+  } catch (error) { alert(error.message); }
+}
+async function googleAdsConfirmProjectPayroll(orderId, fingerprint) {
+  if (currentUser()?.role !== 'owner') return;
+  const project = (state.googleAdsCrm?.report?.campaigns || []).flatMap(c => c.projects || []).find(p => p.order_id === orderId);
+  const order = getOrder(orderId) || (db.archivedOrders || []).find(o => o.id === orderId);
+  if (!project || !order || !project.payroll_review_user_ids?.length) return;
+  const unsettled = project.payroll_review_user_ids.some(userId => {
+    const earned = calcUserPayoutForPeriod(userId, new Date(0), new Date('9999-12-31'), [order]).breakdown
+      .filter(b => b.orderId === orderId && !b.stageId).reduce((sum, b) => sum + Number(b.amount), 0);
+    const paid = (order.payouts || []).filter(p => p.userId === userId && p.paid === true && !p.stageId).reduce((sum, p) => sum + Number(p.amount), 0);
+    return !Number.isFinite(earned) || !Number.isFinite(paid) || paid + 0.005 < earned;
+  });
+  if (unsettled) return alert('Есть невыплаченные начисления. Сверьте и завершите выплату в разделе «Зарплата», затем обновите отчёт.');
+  if (!confirm('Подтвердить: комиссия и работы без этапов полностью начислены и выплачены в разделе «Зарплата», данные проекта и ставки актуальны? Это отдельная проверка владельца, без создания новых сумм или выплат.')) return;
+  try {
+    await googleAdsConvRequest('/api/v1/integrations/google-ads/project', 'POST', { operation: 'confirm_payroll', order_id: orderId, cost_fingerprint: fingerprint, confirmation: 'PAYROLL_SETTLED' });
     loadGoogleAdsCrm(true);
   } catch (error) { alert(error.message); }
 }

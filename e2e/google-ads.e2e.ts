@@ -216,6 +216,10 @@ test("cost import → website attribution → paid job → owner ROI review → 
   assert.equal((await call("PUT", "/api/v1/legacy-crm/state", { payload: copiedLead, revision: managerState.data.revision })).status, 403, "new projects cannot steal another manager's lead");
   copiedLead.orders.at(-1).canonicalLeadId = phonePoint.lead_id;
   assert.equal((await call("PUT", "/api/v1/legacy-crm/state", { payload: copiedLead, revision: managerState.data.revision })).status, 403, "an unassigned lead already bound to a project cannot be reused");
+  const forgedPayroll = structuredClone(managerState.data.payload);
+  forgedPayroll.orders.find((item: any) => item.id === tag).googleAdsPayrollReview = { basis: "forged" };
+  assert.equal((await call("PUT", "/api/v1/legacy-crm/state", { payload: forgedPayroll, revision: managerState.data.revision })).status, 403);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_payroll", order_id: tag, confirmation: "PAYROLL_SETTLED" })).status, 403);
   managerState.data.payload.orders.find((item: any) => item.id === tag).googleAdsCostsReview = { fingerprint: "forged" };
   assert.equal((await call("PUT", "/api/v1/legacy-crm/state", { payload: managerState.data.payload, revision: managerState.data.revision })).status, 403);
 
@@ -269,6 +273,39 @@ test("quantity materials and variable project expenses use the owner-reviewed ma
   await db.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload: next, revision: { increment: 1 } } });
   assert.equal((await project()).costs_confirmed, false, "cost-source changes invalidate review even when purchase coverage keeps the total unchanged");
   assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: orderId, cost_fingerprint: reviewed.cost_fingerprint })).status, 409);
+});
+
+test("dynamic payroll blocks ROI until owner settlement review, then reopens after rate changes", async () => {
+  assert.equal((await call("POST", "/api/v1/auth/login", { email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" })).status, 200);
+  const orderId = tag + "-payroll", userId = orderId + "-manager";
+  const status = await db.pipelineStatus.findUniqueOrThrow({ where: { status_code: "CONTACTED" } });
+  const lead = await db.lead.create({ data: { name: "Offline payroll cost test", source: "google_ads", pipeline_status_id: status.pipeline_status_id } });
+  leadIds.push(lead.lead_id);
+  await db.acquisitionTouchpoint.create({ data: { lead_id: lead.lead_id, legacy_order_id: orderId, google_ads_customer_id: customer, google_ads_campaign_id: campaign, captured_at: new Date(`${range.endDate}T18:00:00Z`) } });
+  const workspace = await db.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } });
+  const payload: any = structuredClone(workspace.payload);
+  payload.users ||= [];
+  payload.users.push({ id: userId, role: "manager", payConfig: { type: "commission", commissionPct: 10 } });
+  payload.orders.push({ id: orderId, number: orderId, canonicalLeadId: lead.lead_id, status: "completed", managerId: userId, paidAt: new Date().toISOString(), payments: [{ amount: 1000 }], payouts: [{ userId, amount: 100, paid: true, stageId: null }] });
+  await db.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload, revision: { increment: 1 } } });
+  const path = `/api/v1/integrations/google-ads/report?start_date=${range.startDate}&end_date=${range.endDate}&customer_id=${customer}`;
+  const project = async () => (await call("GET", path)).data.campaigns.flatMap((row: any) => row.projects).find((row: any) => row.order_id === orderId);
+  const unreviewed = await project();
+  assert.ok(unreviewed.issues.includes("payroll_not_settled"));
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: orderId, cost_fingerprint: unreviewed.cost_fingerprint })).status, 400);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_payroll", order_id: orderId, cost_fingerprint: unreviewed.cost_fingerprint })).status, 400);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_payroll", order_id: orderId, cost_fingerprint: "stale", confirmation: "PAYROLL_SETTLED" })).status, 409);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_payroll", order_id: orderId, cost_fingerprint: unreviewed.cost_fingerprint, confirmation: "PAYROLL_SETTLED" })).status, 200);
+  const reviewed = await project();
+  assert.deepEqual(reviewed.issues, []);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: orderId, cost_fingerprint: reviewed.cost_fingerprint })).status, 200);
+  assert.equal((await project()).costs_confirmed, true);
+  const current = await db.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } });
+  const next: any = structuredClone(current.payload);
+  next.users.find((row: any) => row.id === userId).payConfig.commissionPct = 15;
+  await db.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload: next, revision: { increment: 1 } } });
+  assert.ok((await project()).issues.includes("payroll_not_settled"));
+  assert.equal((await project()).costs_confirmed, false);
 });
 
 test("a correction saved before Google configuration receives one stable delivery later", async () => {
