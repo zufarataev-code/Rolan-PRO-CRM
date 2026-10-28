@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const report = await getGoogleAdsRoasReport(startDate, endDate);
+    const report = await getGoogleAdsRoasReport(startDate, endDate, request.nextUrl.searchParams.get("customer_id"));
     return apiSuccess({
       start_date: report.startDate,
       end_date: report.endDate,

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { captureGoogleAdsUrl } from "@/features/google-ads/browser-attribution";
 import { useState, useTransition, type FormEvent } from "react";
 
 import styles from "@/components/marketing/landing.module.css";
@@ -82,7 +83,7 @@ export function LeadCaptureForm({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, attribution: { ...captureGoogleAdsUrl(window.location.href), consent: { ad_user_data: new FormData(form).get("adsMeasurementConsent") === "on" ? "GRANTED" : "UNKNOWN", ad_personalization: "UNKNOWN", audience_marketing_eligible: false, source: "website_landing", policy_version: "ads-measurement-v1" } } }),
       });
 
       const result = (await response.json().catch(() => null)) as
@@ -259,6 +260,10 @@ export function LeadCaptureForm({
         ) : null}
       </div>
 
+      <label className={styles.smsConsentBox}>
+        <input name="adsMeasurementConsent" type="checkbox" />
+        <span>Allow RolanPRO to use my contact details to measure advertising results with Google Ads (optional).</span>
+      </label>
       <label className={styles.smsConsentBox}>
         <input name="smsConsent" type="checkbox" />
         <span>{copy.smsConsentLabel}</span>

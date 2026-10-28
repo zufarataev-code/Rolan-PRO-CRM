@@ -6,13 +6,13 @@ const DEFAULT_SCOPES = [
   "https://www.googleapis.com/auth/adwords",
 ];
 
-let tokenCache: { accessToken: string; expiresAt: number } | null = null;
+const tokenCache = new Map<string, { accessToken: string; expiresAt: number }>();
 
 function base64UrlJson(value: unknown) {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
 
-async function parseTokenResponse(response: Response) {
+async function parseTokenResponse(response: Response, cacheKey: string) {
   const body = (await response.json().catch(() => null)) as
     | { access_token?: string; expires_in?: number; error?: string; error_description?: string }
     | null;
@@ -24,14 +24,15 @@ async function parseTokenResponse(response: Response) {
   }
 
   const ttlSeconds = Math.max(60, Number(body.expires_in ?? 3600));
-  tokenCache = {
+  const cached = {
     accessToken: body.access_token,
     expiresAt: Date.now() + (ttlSeconds - 60) * 1000,
   };
-  return tokenCache.accessToken;
+  tokenCache.set(cacheKey, cached);
+  return cached.accessToken;
 }
 
-async function tokenFromRefreshToken() {
+async function tokenFromRefreshToken(cacheKey: string) {
   const clientId = process.env.GOOGLE_ADS_OAUTH_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_ADS_OAUTH_CLIENT_SECRET?.trim();
   const refreshToken = process.env.GOOGLE_ADS_OAUTH_REFRESH_TOKEN?.trim();
@@ -45,14 +46,15 @@ async function tokenFromRefreshToken() {
   });
 
   const response = await fetch(TOKEN_ENDPOINT, {
+    signal: AbortSignal.timeout(30_000),
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: form,
   });
-  return parseTokenResponse(response);
+  return parseTokenResponse(response, cacheKey);
 }
 
-async function tokenFromServiceAccount(scopes: string[]) {
+async function tokenFromServiceAccount(scopes: string[], cacheKey: string) {
   // Server env first, then the key the owner saved in CRM settings.
   const { resolveServiceAccount } = await import("./credentials");
   const account = await resolveServiceAccount();
@@ -79,20 +81,23 @@ async function tokenFromServiceAccount(scopes: string[]) {
     assertion: `${unsigned}.${signature}`,
   });
   const response = await fetch(TOKEN_ENDPOINT, {
+    signal: AbortSignal.timeout(30_000),
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: form,
   });
-  return parseTokenResponse(response);
+  return parseTokenResponse(response, cacheKey);
 }
 
 export async function getGoogleAccessToken(scopes = DEFAULT_SCOPES) {
-  if (tokenCache && tokenCache.expiresAt > Date.now()) return tokenCache.accessToken;
+  const cacheKey = [...new Set(scopes)].sort().join(" ");
+  const cached = tokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.accessToken;
 
-  const refreshTokenAccess = await tokenFromRefreshToken();
+  const refreshTokenAccess = await tokenFromRefreshToken(cacheKey);
   if (refreshTokenAccess) return refreshTokenAccess;
 
-  const serviceAccountAccess = await tokenFromServiceAccount(scopes);
+  const serviceAccountAccess = await tokenFromServiceAccount(scopes, cacheKey);
   if (serviceAccountAccess) return serviceAccountAccess;
 
   throw new Error(
@@ -101,5 +106,5 @@ export async function getGoogleAccessToken(scopes = DEFAULT_SCOPES) {
 }
 
 export function clearGoogleAccessTokenCache() {
-  tokenCache = null;
+  tokenCache.clear();
 }

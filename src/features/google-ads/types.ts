@@ -18,6 +18,8 @@ export interface GoogleAdsSettings {
 }
 
 export interface AttributionCaptureInput {
+  googleAdsCustomerId?: string | null;
+  googleAdsCampaignId?: string | null;
   leadId?: string | null;
   dealId?: string | null;
   clientId?: string | null;

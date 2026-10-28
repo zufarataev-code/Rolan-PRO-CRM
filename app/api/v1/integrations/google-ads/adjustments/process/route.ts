@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { processNextConversionAdjustmentUpload } from "@/features/google-ads/conversion-adjustment-uploader";
+import { reconcileConversionAdjustmentOutbox } from "@/features/google-ads/conversion-adjustments";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as { limit?: number } | null;
   const requested = Number.isFinite(body?.limit) ? Math.trunc(body?.limit ?? 1) : 1;
   const limit = Math.max(1, Math.min(MAX_BATCH, requested));
+  await reconcileConversionAdjustmentOutbox(100);
   const results: Array<Awaited<ReturnType<typeof processNextConversionAdjustmentUpload>>> = [];
 
   for (let index = 0; index < limit; index += 1) {

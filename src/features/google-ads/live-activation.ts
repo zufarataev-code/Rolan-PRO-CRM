@@ -1,3 +1,4 @@
+import { googleAdsEnvironmentAllowsLive } from "./delivery-mode";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
@@ -46,10 +47,10 @@ export async function activateGoogleAdsLiveUploads(input: ActivateGoogleAdsLiveI
   }
   // The server can still force test mode (GOOGLE_ADS_VALIDATE_ONLY=true); otherwise
   // the owner's typed confirmation with the customer ID is the live switch.
-  if (process.env.GOOGLE_ADS_VALIDATE_ONLY?.trim().toLowerCase() === "true") {
+  if (!googleAdsEnvironmentAllowsLive()) {
     fail(
       "environment_live_gate_closed",
-      "The server forces test mode (GOOGLE_ADS_VALIDATE_ONLY=true).",
+      "The server must explicitly set GOOGLE_ADS_VALIDATE_ONLY=false before live activation.",
     );
   }
   if (!(await hasGoogleCredentials())) {

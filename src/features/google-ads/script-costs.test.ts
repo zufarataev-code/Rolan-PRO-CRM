@@ -18,6 +18,8 @@ test('the Google Ads script payload is checked and normalised', () => {
   }
   const fromCost = parseScriptCostPayload({ customer_id: '1', rows: [{ date: '2026-10-20', campaign_id: 'a', cost: 5.5 }] }, today);
   assert.equal(fromCost.ok && fromCost.payload.rows[0].cost_micros, 5_500_000);
+  const cents = parseScriptCostPayload({ customer_id: '1', rows: [{ date: '2026-10-20', campaign_id: 'a', cost: 0.29 }] }, today);
+  assert.equal(cents.ok && cents.payload.rows[0].cost_micros, 290_000);
   assert.equal(parseScriptCostPayload({ customer_id: '1', rows: [{ date: '2024-01-01', campaign_id: 'a' }] }, today).ok, false, 'too old');
   assert.equal(parseScriptCostPayload({ customer_id: '', rows: [] }, today).ok, false);
   assert.equal(parseScriptCostPayload({ customer_id: '1', rows: [{ date: '2026-10-20', campaign_id: 'a', clicks: -1 }] }, today).ok, false);
@@ -53,8 +55,9 @@ test('the CRM shows the key once inside a ready script and sets spend against Go
   assert.match(html, /\$\{typeof googleAdsCrmPanelHtml === 'function' \? googleAdsCrmPanelHtml\(\) : ''\}/);
   assert.match(stages, /FROM campaign WHERE segments\.date DURING LAST_30_DAYS/);
   assert.match(stages, /headers: \{ Authorization: 'Bearer ' \+ CRM_KEY \}/);
-  assert.match(stages, /function googleAdsCrmProjectsStats\(startDate\)/);
-  assert.match(stages, /ROAS \$\{roas\}/);
+  assert.match(stages, /googleAdsCampaignReportHtml\(g\?\.report\)/);
+  assert.doesNotMatch(stages, /function googleAdsCrmProjectsStats/);
+  assert.match(stages, /roi_percent/);
   // Composed into the page: function declarations only.
   const block = stages.slice(stages.indexOf('// ---------- GOOGLE ADS → CRM'));
   assert.doesNotMatch(block, /^(const|let) /m);

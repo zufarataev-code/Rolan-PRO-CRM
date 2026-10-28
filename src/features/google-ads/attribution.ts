@@ -7,13 +7,13 @@ const UTM_MAX_LENGTH = 255;
 const META_MAX_LENGTH = 100;
 
 function cleanText(value: string | null | undefined, maxLength: number) {
-  const normalized = value?.trim() ?? "";
+  const normalized = typeof value === "string" ? value.trim() : "";
   if (!normalized) return null;
   return normalized.slice(0, maxLength);
 }
 
 function cleanJsonObject(value: Record<string, unknown> | null | undefined) {
-  if (!value || Array.isArray(value)) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value;
 }
 
@@ -23,7 +23,7 @@ function normalizeDate(value: Date | null | undefined, fallback: Date) {
 }
 
 export function normalizeConsentState(value: ConsentState | string | null | undefined): ConsentState {
-  const normalized = value?.trim().toUpperCase();
+  const normalized = typeof value === "string" ? value.trim().toUpperCase() : "UNKNOWN";
   if (normalized === "GRANTED" || normalized === "DENIED") return normalized;
   return "UNKNOWN";
 }
@@ -44,6 +44,8 @@ export function normalizeAttributionCapture(
     requestedAudienceEligibility && adUserData === "GRANTED" && adPersonalization === "GRANTED";
 
   return {
+    googleAdsCustomerId: normalizeAdsId(input.googleAdsCustomerId, 20),
+    googleAdsCampaignId: normalizeAdsId(input.googleAdsCampaignId, 64),
     leadId: cleanText(input.leadId, META_MAX_LENGTH),
     dealId: cleanText(input.dealId, META_MAX_LENGTH),
     clientId: cleanText(input.clientId, META_MAX_LENGTH),
@@ -75,6 +77,7 @@ export function hasAttributionData(
   capture: NonNullable<ReturnType<typeof normalizeAttributionCapture>>,
 ) {
   return Boolean(
+    capture.googleAdsCampaignId ||
     capture.gclid ||
       capture.gbraid ||
       capture.wbraid ||
@@ -107,6 +110,8 @@ export async function persistLeadAttribution(
     const touchpoint = await tx.acquisitionTouchpoint.create({
       data: {
         lead_id: leadId,
+        google_ads_customer_id: capture.googleAdsCustomerId,
+        google_ads_campaign_id: capture.googleAdsCampaignId,
         gclid: capture.gclid,
         gbraid: capture.gbraid,
         wbraid: capture.wbraid,
@@ -141,4 +146,19 @@ export async function persistLeadAttribution(
   }
 
   return { acquisitionTouchpointId, consentSnapshotId };
+}
+
+export function normalizeAdsId(value: unknown, maxLength = 64) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replace(/[\s-]/g, "");
+  return new RegExp(`^\\d{1,${maxLength}}$`).test(normalized) ? normalized : null;
+}
+
+/** A later direct visit must not displace a usable paid acquisition. */
+export async function findAcquisitionTouchpoint(tx: Prisma.TransactionClient, where: Prisma.AcquisitionTouchpointWhereInput) {
+  const paid = await tx.acquisitionTouchpoint.findFirst({
+    where: { AND: [where, { OR: [{ gclid: { not: null } }, { gbraid: { not: null } }, { wbraid: { not: null } }, { google_ads_campaign_id: { not: null } }] }] },
+    orderBy: [{ captured_at: "desc" }, { created_at: "desc" }],
+  });
+  return paid ?? tx.acquisitionTouchpoint.findFirst({ where, orderBy: [{ captured_at: "desc" }, { created_at: "desc" }] });
 }

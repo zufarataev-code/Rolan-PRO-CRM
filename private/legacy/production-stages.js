@@ -129,7 +129,7 @@ function orderInstallerPayoutForUser(o, userId) {
   return (filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * installerSeniorFactor(user);
 }
 
-function calcUserPayoutForPeriod(userId, startDate, endDate) {
+function calcUserPayoutForPeriod(userId, startDate, endDate, orders = db.orders) {
   const u = getUser(userId);
   if (!u || !u.payConfig) return { total: 0, breakdown: [] };
   const pc = u.payConfig;
@@ -142,7 +142,7 @@ function calcUserPayoutForPeriod(userId, startDate, endDate) {
     return { total, breakdown };
   }
   // Commission / per-sqft / fixed-per-job — based on orders in period
-  db.orders.forEach(original => {
+  orders.forEach(original => {
     let o = original;
     if (pc.type === 'per_sqft' && projectStages(o).length) {
       projectStages(o).filter(s => s.status === 'done' && (s.installerIds || []).includes(userId) && new Date(s.doneAt) >= startDate && new Date(s.doneAt) <= endDate).forEach(s => {
@@ -2122,6 +2122,7 @@ function googleAdsCrmScriptText(key) {
     '    payload: JSON.stringify({ customer_id: account.getCustomerId(), currency: account.getCurrencyCode(), rows: rows }),',
     '    muteHttpExceptions: true',
     '  });',
+    "  if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) throw new Error('CRM HTTP ' + response.getResponseCode() + ': ' + response.getContentText());",
     "  Logger.log('CRM ответила ' + response.getResponseCode() + ': ' + response.getContentText());",
     '}',
     '',
@@ -2133,27 +2134,20 @@ async function loadGoogleAdsCrm(force = false) {
   if (s.loading || (!force && s.loadedAt && Date.now() - s.loadedAt < 60000)) return;
   state.googleAdsCrm = { ...s, loading: true };
   try {
-    const [keyRes, sumRes] = await Promise.all([
+    const filters = s.filters || '';
+    const [keyRes, sumRes, reportRes] = await Promise.all([
       fetch('/api/v1/settings/integration-keys?integration=google_ads', { credentials: 'same-origin', cache: 'no-store' }),
       fetch('/api/v1/integrations/google-ads/summary?days=30', { credentials: 'same-origin', cache: 'no-store' }),
+      fetch('/api/v1/integrations/google-ads/report' + filters, { credentials: 'same-origin', cache: 'no-store' }),
     ]);
     const key = keyRes.ok ? (await keyRes.json())?.data : null;
     const summary = sumRes.ok ? (await sumRes.json())?.data : null;
-    state.googleAdsCrm = { key, summary, loadedAt: Date.now(), loading: false, error: !keyRes.ok || !sumRes.ok ? `Сервер ответил ${keyRes.status}/${sumRes.status}` : '' };
+    const reportPayload = await reportRes.json().catch(() => null);
+    state.googleAdsCrm = { ...s, key, summary, report: reportRes.ok ? reportPayload?.data : null, loadedAt: Date.now(), loading: false, error: !reportRes.ok ? reportPayload?.errors?.[0]?.message || `Отчёт: ${reportRes.status}` : !keyRes.ok || !sumRes.ok ? `Сервер ответил ${keyRes.status}/${sumRes.status}` : '' };
   } catch (error) {
     state.googleAdsCrm = { ...s, loading: false, loadedAt: Date.now(), error: error?.message || String(error) };
   }
   render();
-}
-/** Projects that came from Google over the same days, from the CRM's own records. */
-function googleAdsCrmProjectsStats(startDate) {
-  const from = String(startDate || '');
-  const fromGoogle = o => /google/i.test(String(o.leadSource || o.marketing?.source || o.source || ''));
-  const leads = (db.orders || []).filter(o => fromGoogle(o) && String(o.createdAt || '').slice(0, 10) >= from && o.status !== 'cancelled');
-  const won = leads.filter(o => o.depositReceived || ['proposal_accepted', 'installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress', 'installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'].includes(o.status));
-  const revenue = won.reduce((sum, o) => sum + (Number(orderRevenue(o)) || 0), 0);
-  const paid = won.reduce((sum, o) => sum + (Number(orderPaidTotal(o)) || 0), 0);
-  return { leads: leads.length, won: won.length, revenue, paid };
 }
 function googleAdsCrmPanelHtml() {
   if (currentUser()?.role !== 'owner') return '';
@@ -2161,10 +2155,6 @@ function googleAdsCrmPanelHtml() {
   if (!g || (!g.loadedAt && !g.loading)) setTimeout(() => loadGoogleAdsCrm(), 0);
   const key = g?.key;
   const sum = g?.summary;
-  const stats = googleAdsCrmProjectsStats(sum?.start_date);
-  const spend = Number(sum?.total_cost) || 0;
-  const per = (value, count) => (count > 0 && value > 0 ? fmtMoney(value / count) : '—');
-  const roas = spend > 0 && stats.revenue > 0 ? `${(stats.revenue / spend).toFixed(1)}×` : '—';
   const connected = key?.active;
   const lastImport = sum?.last_imported_at ? new Date(sum.last_imported_at).toLocaleString('ru-RU') : '';
   return `<div class="p-4 border ${connected && lastImport ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}" data-google-ads-crm>
@@ -2180,14 +2170,8 @@ function googleAdsCrmPanelHtml() {
         <button class="btn-ghost text-sm" onclick="loadGoogleAdsCrm(true)">Обновить</button>
       </div>
     </div>
-    ${sum && (sum.campaigns || []).length ? `<div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-sm">
-      <div class="p-2 border bg-white"><div class="text-xs text-gray-500">Расход за ${sum.days} дн.</div><b>${fmtMoney(spend)}</b><div class="text-xs text-gray-500">${Number(sum.total_clicks || 0)} кликов</div></div>
-      <div class="p-2 border bg-white"><div class="text-xs text-gray-500">Лиды из Google в CRM</div><b>${stats.leads}</b><div class="text-xs text-gray-500">цена лида ${per(spend, stats.leads)}</div></div>
-      <div class="p-2 border bg-white"><div class="text-xs text-gray-500">Проекты из Google</div><b>${stats.won}</b><div class="text-xs text-gray-500">цена проекта ${per(spend, stats.won)}</div></div>
-      <div class="p-2 border bg-white"><div class="text-xs text-gray-500">Выручка / окупаемость</div><b>${fmtMoney(stats.revenue)}</b><div class="text-xs text-gray-500">ROAS ${roas}</div></div>
-    </div>
-    <details class="mt-2"><summary class="text-xs cursor-pointer">Кампании · данные от ${academyEsc(lastImport)}</summary><div class="mt-2 space-y-1">${sum.campaigns.map(c => `<div class="flex justify-between gap-2 text-xs border-b py-1"><span>${academyEsc(c.campaign_name)}</span><span>${fmtMoney(c.cost)} · ${c.clicks} кл.</span></div>`).join('')}</div></details>
-    <p class="text-xs text-gray-500 mt-2">Лид считается из Google, если в проекте источник «google». Ставьте его при создании проекта — тогда цена лида и окупаемость считаются точно.</p>` : connected ? '<p class="text-xs text-gray-500 mt-2">Данных пока нет: вставьте скрипт в Google Ads и нажмите там «Выполнить» — расходы появятся здесь.</p>' : ''}
+    ${googleAdsCampaignReportHtml(g?.report)}
+    ${lastImport ? `<p class="text-xs text-gray-500 mt-2">Расходы обновлены: ${academyEsc(lastImport)}</p>` : '<p class="text-xs text-gray-500 mt-2">Ожидаем первый импорт расходов из Google Ads.</p>'}
     ${googleAdsConversionsPanelHtml()}
   </div>`;
 }
@@ -2232,6 +2216,96 @@ async function googleAdsCrmRevokeKey() {
 // sales with their value go from the CRM to Google Ads through Data Manager
 // API. The owner pastes the service-account key and the conversion IDs here;
 // the server sends every 10 minutes, test mode first, live after confirmation.
+function googleAdsReportMoney(value, currency) {
+  if (!/^[A-Z]{3}$/.test(String(currency || 'USD'))) return new Intl.NumberFormat('ru-RU').format(Number(value) || 0) + ' (валюта не указана)';
+  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: currency || 'USD' }).format(Number(value) || 0);
+}
+function googleAdsCampaignReportHtml(report) {
+  if (!report) return '';
+  const esc = academyEsc;
+  const issue = key => ({ project_not_completed: 'Проект ещё не завершён', material_cost_not_verified: 'Нужно проверить списание плёнки и себестоимость комплектующих', work_not_completed: 'Не все этапы завершены', expenses_not_actual: 'Есть неподтверждённые фактические расходы', invalid_cost_records: 'Нужно исправить неполные суммы затрат', payroll_not_settled: 'Нужно сверить выплату комиссии и работ без этапов в разделе «Зарплата»', unsupported_installer_commission: 'Комиссия монтажника не начисляется действующим расчётом зарплаты. Владелец должен сверить обязательство и настроить поддерживаемую схему оплаты', expense_links_not_reviewed: 'Нужно сверить оплаты с учтённым материалом и расходами проекта' }[key] || key);
+  return `<div class="mt-3" data-google-ads-profitability>
+    <div class="flex flex-wrap gap-2 items-end">${(report.available_accounts || []).length > 1 ? `<label class="text-xs">Аккаунт Google Ads<select id="gads-report-account"><option value="">Выберите аккаунт</option>${report.available_accounts.map(id => `<option value="${esc(id)}" ${id === report.customer_id ? 'selected' : ''}>${esc(id)}</option>`).join('')}</select></label>` : ''}<label class="text-xs">Лиды с<input type="date" id="gads-report-start" value="${esc(report.start_date)}"></label><label class="text-xs">по<input type="date" id="gads-report-end" value="${esc(report.end_date)}"></label><button class="btn-ghost text-sm" onclick="googleAdsReportRange()">Показать</button><button class="btn-ghost text-sm" onclick="googleAdsBindProject()">Привязать исходную кампанию проекта</button></div>
+    <p class="text-xs text-gray-600 mt-2">Когорты по дате первого привлечения · Pacific. Расходы за выбранные даты; оплаты этих проектов — на текущий момент. ROAS: полученные деньги за закрытые проекты / реклама. ROI учитывает подтверждённые прямые затраты; общие расходы компании и налоги не включены. Пока проект открыт или затраты не сверены, ROI не показывается.</p>
+    ${report.unattributed_projects ? `<p class="text-xs text-amber-800 mt-2">Проектов Google без подтверждённой кампании: ${Number(report.unattributed_projects)}. Их выручка не распределяется по догадке.</p>` : ''}
+    ${(report.campaigns || []).map(c => `<div class="p-3 border bg-white mt-2" style="min-width:0;overflow-wrap:anywhere">
+      <div class="font-semibold text-sm">${esc(c.campaign_name)} <span class="text-xs text-gray-500">${esc(c.customer_id)} / ${esc(c.campaign_id)} · ${esc(c.currency)}</span></div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-sm"><div>Реклама<br><b>${googleAdsReportMoney(c.ad_spend, c.currency)}</b></div><div>Лиды / продажи<br><b>${Number(c.leads)} / ${Number(c.won)}</b></div><div>Оплаты закрытых проектов<br><b>${googleAdsReportMoney(c.realized_revenue, c.currency)}</b></div><div>ROAS / ROI<br><b>${c.roas == null ? '—' : esc(c.roas) + '×'} / ${c.roi_percent == null ? 'нужна сверка затрат' : esc(c.roi_percent) + '%'}</b></div></div>
+      <p class="text-xs text-gray-500 mt-1">Цена лида ${c.cost_per_lead == null ? '—' : googleAdsReportMoney(c.cost_per_lead, c.currency)} · ${esc(c.clicks)} кликов · все полученные оплаты ${googleAdsReportMoney(c.received, c.currency)}${c.pending_cost_reviews ? ` · проектов до завершения / сверки: ${Number(c.pending_cost_reviews)}` : ''}</p>
+      ${(c.projects || []).length ? `<details class="mt-2"><summary class="text-xs cursor-pointer">Проверить проекты и фактические затраты</summary>${c.projects.map(p => `<div class="text-xs border-t py-2"><b>${esc(p.number)}</b> · получено ${googleAdsReportMoney(p.received, c.currency)} · прямые затраты ${googleAdsReportMoney(p.direct_cost, c.currency)}<div>${(p.issues || []).map(key => esc(issue(key))).join(' · ')}</div>${(p.expense_links || []).map(t => `<label class="block mt-2">Банковский расход ${googleAdsReportMoney(t.amount, c.currency)} · ${esc(financeCategoryLabel(t.category))}<select onchange="googleAdsLinkExpense('${esc(jsQuote(p.order_id))}','${esc(jsQuote(t.transaction_id))}',this.value)"><option value="">Сверьте, где учтена эта оплата</option>${t.warehouse_available ? '<option value="warehouse">Оплата списанной плёнки (превышение добавится к затратам)</option>' : ''}${t.service_material_available ? '<option value="service_material">Оплата учтённых комплектующих (превышение добавится к затратам)</option>' : ''}<option value="separate">Отдельный расход, не записанный выше</option>${(p.expense_choices || []).map(e => `<option value="${esc(e.expense_id)}">${esc(e.label)} · ${googleAdsReportMoney(e.amount, c.currency)}</option>`).join('')}</select></label>`).join('')}${(p.issues || []).includes('payroll_not_settled') ? `<button class="btn-ghost text-xs" onclick="googleAdsConfirmProjectPayroll('${esc(jsQuote(p.order_id))}','${esc(jsQuote(p.cost_fingerprint))}')">Сверить выплату начислений</button>` : ''}${p.costs_confirmed ? '✓ Затраты сверены владельцем' : !(p.issues || []).length ? `<button class="btn-ghost text-xs" onclick="googleAdsConfirmProjectCosts('${esc(jsQuote(p.order_id))}','${esc(jsQuote(p.cost_fingerprint))}','${esc(jsQuote(p.direct_cost))}','${esc(jsQuote(c.currency))}')">Подтвердить полноту фактических затрат</button>` : ''}</div>`).join('')}</details>` : ''}
+    </div>`).join('') || '<p class="text-xs text-gray-500 mt-2">Нет данных за выбранный период.</p>'}
+  </div>`;
+}
+function googleAdsReportRange() {
+  const start = document.getElementById('gads-report-start')?.value || '';
+  const end = document.getElementById('gads-report-end')?.value || '';
+  const customer = document.getElementById('gads-report-account')?.value || state.googleAdsCrm?.report?.customer_id || '';
+  state.googleAdsCrm = { ...(state.googleAdsCrm || {}), filters: '?' + new URLSearchParams({ start_date: start, end_date: end, ...(customer ? { customer_id: customer } : {}) }) };
+  loadGoogleAdsCrm(true);
+}
+async function googleAdsLinkExpense(orderId, transactionId, expenseId) {
+  if (!expenseId || currentUser()?.role !== 'owner') return;
+  try {
+    await googleAdsConvRequest('/api/v1/integrations/google-ads/project', 'POST', { operation: 'link_expense', order_id: orderId, transaction_id: transactionId, expense_id: ['separate', 'warehouse', 'service_material'].includes(expenseId) ? null : expenseId, ...(['warehouse', 'service_material'].includes(expenseId) ? { inventory_cost_treatment: expenseId } : {}) });
+    loadGoogleAdsCrm(true);
+  } catch (error) { alert(error.message); }
+}
+async function googleAdsConfirmProjectPayroll(orderId, fingerprint) {
+  if (currentUser()?.role !== 'owner') return;
+  const project = (state.googleAdsCrm?.report?.campaigns || []).flatMap(c => c.projects || []).find(p => p.order_id === orderId);
+  const order = getOrder(orderId) || (db.archivedOrders || []).find(o => o.id === orderId);
+  if (!project || !order || !project.payroll_review_user_ids?.length) return;
+  const unsettled = project.payroll_review_user_ids.some(userId => {
+    const earned = calcUserPayoutForPeriod(userId, new Date(0), new Date('9999-12-31'), [order]).breakdown
+      .filter(b => b.orderId === orderId && !b.stageId).reduce((sum, b) => sum + Number(b.amount), 0);
+    const paid = (order.payouts || []).filter(p => p.userId === userId && p.paid === true && !p.stageId).reduce((sum, p) => sum + Number(p.amount), 0);
+    return !Number.isFinite(earned) || !Number.isFinite(paid) || paid + 0.005 < earned;
+  });
+  if (unsettled) return alert('Есть невыплаченные начисления. Сверьте и завершите выплату в разделе «Зарплата», затем обновите отчёт.');
+  if (!confirm('Подтвердить: комиссия и работы без этапов полностью начислены и выплачены в разделе «Зарплата», данные проекта и ставки актуальны? Это отдельная проверка владельца, без создания новых сумм или выплат.')) return;
+  try {
+    await googleAdsConvRequest('/api/v1/integrations/google-ads/project', 'POST', { operation: 'confirm_payroll', order_id: orderId, cost_fingerprint: fingerprint, confirmation: 'PAYROLL_SETTLED' });
+    loadGoogleAdsCrm(true);
+  } catch (error) { alert(error.message); }
+}
+async function googleAdsConfirmProjectCosts(orderId, fingerprint, amount, currency) {
+  if (currentUser()?.role !== 'owner' || !confirm(`Подтвердить, что все прямые затраты проекта внесены и сверены: ${googleAdsReportMoney(amount, currency)}? Сверьте материалы, начисления, комиссии и расходы. Отсутствующие затраты завышают ROI.`)) return;
+  try {
+    await googleAdsConvRequest('/api/v1/integrations/google-ads/project', 'POST', { operation: 'confirm_costs', order_id: orderId, cost_fingerprint: fingerprint });
+    loadGoogleAdsCrm(true);
+  } catch (error) { alert(error.message); }
+}
+function googleAdsBindProject() {
+  if (currentUser()?.role !== 'owner') return;
+  const report = state.googleAdsCrm?.report || {};
+  const campaigns = report.campaigns || [];
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-5" style="max-width:38rem"><h3 class="font-semibold">Исходная кампания Google Ads</h3>
+    <p class="text-xs text-gray-600 mt-2">Выберите кампанию по проверенным данным формы или коллтрекинга. Телефон сам по себе не определяет рекламный источник. Исходная привязка сохраняется один раз.</p>
+    <label class="block text-sm mt-2">Проект<select id="gads-bind-project">${(report.projects_without_campaign || []).map(p => `<option value="${academyEsc(p.order_id)}">${academyEsc(p.number)}</option>`).join('')}</select></label>
+    <label class="block text-sm mt-2">Кампания<select id="gads-bind-campaign">${campaigns.map(c => `<option value="${academyEsc(c.customer_id + '|' + c.campaign_id)}">${academyEsc(c.campaign_name)} · ${academyEsc(c.customer_id)}</option>`).join('')}</select></label>
+    <label class="block text-sm mt-2">Канал<select id="gads-bind-channel"><option value="WEB">Форма сайта</option><option value="PHONE">Телефонный звонок</option></select></label>
+    <label class="block text-sm mt-2">GCLID, если передан коллтрекингом / формой<input id="gads-bind-gclid" autocomplete="off"></label>
+    <label class="block text-sm mt-2"><input id="gads-bind-consent" type="checkbox"> Есть записанное согласие клиента на передачу контактных данных Google Ads для измерения рекламы</label>
+    <label class="block text-sm mt-2">Где записано согласие<input id="gads-bind-evidence" placeholder="Форма и версия текста / запись согласия"></label>
+    <p class="text-xs text-gray-500 mt-2">Без согласия CRM не передаёт хешированные контакты. Эта отметка не даёт согласия на рекламные аудитории.</p>
+    <div class="flex gap-2 mt-3"><button class="btn-primary" onclick="googleAdsSaveProjectBinding()">Сохранить привязку</button><button class="btn-ghost" onclick="closeModal()">Отмена</button></div></div></div>`;
+  render();
+}
+async function googleAdsSaveProjectBinding() {
+  const value = id => document.getElementById(id)?.value || '';
+  const parts = value('gads-bind-campaign').split('|');
+  try {
+    await googleAdsConvRequest('/api/v1/integrations/google-ads/project', 'POST', { operation: 'bind_campaign', order_id: value('gads-bind-project'), customer_id: parts[0], campaign_id: parts[1], gclid: value('gads-bind-gclid'), source_channel: value('gads-bind-channel'), ad_user_data: document.getElementById('gads-bind-consent')?.checked ? 'GRANTED' : 'UNKNOWN', consent_evidence: value('gads-bind-evidence') });
+    closeModal(); loadGoogleAdsCrm(true);
+  } catch (error) { alert(error.message); }
+}
+async function googleAdsConvToggleDelivery() {
+  try {
+    const enabled = state.googleAdsConv?.settings?.upload_enabled === true;
+    await googleAdsConvRequest('/api/v1/integrations/google-ads/settings', 'PATCH', { upload_enabled: !enabled, ...(!enabled ? { validate_only: true } : {}) });
+    loadGoogleAdsConversions(true);
+  } catch (error) { alert(error.message); }
+}
 async function loadGoogleAdsConversions(force = false) {
   if (currentUser()?.role !== 'owner') return;
   const s = state.googleAdsConv || {};
@@ -2257,18 +2331,18 @@ function googleAdsConversionsPanelHtml() {
   const waiting = status.conversions?.awaiting_configuration || {};
   const problems = status.conversions?.recent_problems || [];
   const ids = st.conversion_owner_customer_id && st.converted_lead_action_id;
-  const live = st.upload_enabled && st.validate_only === false;
+  const live = status.upload_enabled && status.validate_only === false;
   const step = (done, n, title, body) => `<div class="p-3 border bg-white mt-2" style="border-left:4px solid ${done ? '#16a34a' : '#d97706'}"><div class="text-sm font-semibold">${done ? '✓' : n} ${title}</div>${body}</div>`;
   const field = (id, label, value, hint) => `<label class="block text-xs mt-2">${label}<input id="${id}" value="${academyEsc(value || '')}" placeholder="${academyEsc(hint || '')}" inputmode="numeric"></label>`;
   const counts = Object.entries(outbox).map(([k, v]) => `${academyEsc(k)}: ${Number(v)}`).join(' · ') || 'пока пусто';
   return `<div class="p-4 border border-slate-200 bg-slate-50 mt-3" data-google-ads-conversions>
     <div class="font-semibold text-sm">🎯 Конверсии в Google Ads — квалифицированные лиды и продажи с суммой</div>
-    <p class="text-xs text-gray-600 mt-1">CRM сама отправляет в Google: «квалифицированный лид», когда КП отправлено клиенту, и «продажу» с суммой, когда клиент подписал КП и аванс получен. Google учится приводить таких клиентов, а не просто клики.</p>
+    <p class="text-xs text-gray-600 mt-1">CRM отправляет квалифицированный лид на выбранном ниже этапе и подтверждённую продажу с суммой. Продажа фиксируется после подписи и аванса либо после сохранённого принятия проекта по оплате. Google учится приводить таких клиентов, а не просто клики.</p>
     ${g?.error ? `<p class="text-xs text-red-700 mt-1">${academyEsc(g.error)}</p>` : ''}
     ${step(access.configured, '1', 'Доступ CRM к Google', access.configured
       ? `<p class="text-xs text-gray-600 mt-1">Сервисный аккаунт: <code>${academyEsc(access.service_account_email || 'задан на сервере')}</code>. Он должен быть добавлен пользователем в Google Ads (Админ → Доступ и безопасность → «+», роль «Стандартный»).</p>${access.source === 'crm' ? `<button class="btn-ghost text-xs text-red-600 mt-1" onclick="googleAdsConvClearAccess()">Удалить ключ</button>` : ''}`
-      : `<ol class="text-xs list-decimal ml-4 mt-1 space-y-1"><li>console.cloud.google.com → создайте проект → «APIs & Services» → включите <b>Data Manager API</b>.</li><li>«IAM & Admin → Service Accounts» → создайте аккаунт → «Keys → Add key → JSON» — скачается файл.</li><li>Откройте файл, скопируйте всё содержимое и вставьте сюда.</li><li>В Google Ads: Админ → Доступ и безопасность → «+» → email сервисного аккаунта, роль «Стандартный».</li></ol>
-        <textarea id="gads-sa-json" rows="4" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"type": "service_account", ...}' autocomplete="off"></textarea>
+      : `<ol class="text-xs list-decimal ml-4 mt-1 space-y-1"><li>console.cloud.google.com → создайте проект → «APIs & Services» → включите <b>Data Manager API</b>.</li><li>«IAM & Admin → Service Accounts» → создайте аккаунт → «Keys → Add key → JSON» — скачается файл.</li><li>Выберите скачанный JSON-файл ниже. Содержимое ключа не показывается.</li><li>В Google Ads: Админ → Доступ и безопасность → «+» → email сервисного аккаунта, роль «Стандартный».</li></ol>
+        <label class="block text-xs mt-2">JSON-файл ключа (до 64 КБ)<input id="gads-sa-file" type="file" accept=".json,application/json"></label>
         <button class="btn-primary text-sm mt-1" onclick="googleAdsConvSaveAccess()">Сохранить доступ</button><p class="text-xs text-gray-500 mt-1">Ключ уходит прямо на сервер и хранится зашифрованным; в CRM и чате его больше не видно.</p>`)}
     ${step(ids, '2', 'ID аккаунта и конверсий', `<p class="text-xs text-gray-600 mt-1">В Google Ads: Цели → Конверсии → «+ Новое действие» → «Импорт» → «CRM, файлы и другие источники» → «Отслеживать конверсии по кликам». Создайте два действия: <b>CRM – Qualified Lead</b> (категория «Квалифицированный лид», ценность одна, учитывать одну) и <b>CRM – Converted Lead</b> (категория «Конвертированный лид», ценность из CRM, учитывать каждую). Пока ставьте их «вторичными». ID действия — число в адресе страницы действия (ctId=…).</p>
       ${field('gads-customer', 'Customer ID аккаунта Google Ads (123-456-7890)', st.conversion_owner_customer_id, '1234567890')}
@@ -2276,12 +2350,12 @@ function googleAdsConversionsPanelHtml() {
       ${field('gads-project', 'ID проекта Google Cloud', st.cloud_project_id, 'rolanpro-ads')}
       ${field('gads-qualified', 'ID действия «CRM – Qualified Lead»', st.qualified_lead_action_id, 'число')}
       ${field('gads-converted', 'ID действия «CRM – Converted Lead»', st.converted_lead_action_id, 'число')}
-      <label class="block text-xs mt-2">Когда лид считается квалифицированным<select id="gads-stage"><option value="" ${st.qualification_pipeline_status_code ? '' : 'selected'}>Не отправлять квалифицированных</option><option value="PROPOSAL_SENT" ${st.qualification_pipeline_status_code === 'PROPOSAL_SENT' ? 'selected' : ''}>КП отправлено клиенту</option></select></label>
+      <label class="block text-xs mt-2">Когда лид считается квалифицированным<select id="gads-stage"><option value="" ${st.qualification_pipeline_status_code ? '' : 'selected'}>Не отправлять квалифицированных</option><option value="CONSULTATION_SCHEDULED" ${st.qualification_pipeline_status_code === 'CONSULTATION_SCHEDULED' ? 'selected' : ''}>Консультация назначена</option><option value="PROPOSAL_SENT" ${st.qualification_pipeline_status_code === 'PROPOSAL_SENT' ? 'selected' : ''}>КП отправлено клиенту</option></select></label>
       <button class="btn-primary text-sm mt-2" onclick="googleAdsConvSaveSettings()">Сохранить</button>`)}
     ${step(live, '3', live ? 'Живая отправка включена' : 'Тестовый режим → живая отправка', live
       ? '<p class="text-xs text-gray-600 mt-1">Google принимает события. Смотрите «Конверсии» в Google Ads через 1–2 дня. Через 4 недели стабильных данных можно переводить кампании на «Максимум ценности конверсий».</p>'
-      : `<p class="text-xs text-gray-600 mt-1">Сейчас Google только проверяет события и ничего не записывает. Когда в «Состоянии» появятся «validated» без ошибок — включайте живую отправку.</p><button class="btn-ghost text-sm mt-1" ${access.configured && ids ? '' : 'disabled'} onclick="googleAdsConvGoLive()">Включить живую отправку</button>`)}
-    <div class="p-3 border bg-white mt-2"><div class="flex justify-between items-center gap-2"><div class="text-sm font-semibold">Состояние</div><div class="flex gap-2"><button class="btn-ghost text-xs" onclick="googleAdsConvSyncNow()">Отправить сейчас</button><button class="btn-ghost text-xs" onclick="loadGoogleAdsConversions(true)">Обновить</button></div></div>
+      : `<p class="text-xs text-gray-600 mt-1">Сейчас Google только проверяет события и ничего не записывает. Для живой отправки владелец сервера должен разрешить её в конфигурации. Когда в «Состоянии» появятся «validated» без ошибок — включайте живую отправку.</p><button class="btn-ghost text-sm mt-1" ${access.configured && ids && status.environment_live_enabled ? '' : 'disabled'} onclick="googleAdsConvGoLive()">Включить живую отправку</button>`)}
+    <div class="p-3 border bg-white mt-2"><div class="flex justify-between items-center gap-2"><div class="text-sm font-semibold">Состояние</div><div class="flex gap-2"><button class="btn-ghost text-xs" onclick="googleAdsConvToggleDelivery()">${st.upload_enabled ? 'Приостановить отправку' : 'Включить проверку'}</button><button class="btn-ghost text-xs" onclick="googleAdsConvSyncNow()">Отправить сейчас</button><button class="btn-ghost text-xs" onclick="loadGoogleAdsConversions(true)">Обновить</button></div></div>
       <p class="text-xs text-gray-600 mt-1">Очередь: ${counts}.${Number(waiting.converted_lead) || Number(waiting.qualified_lead) ? ` Ждут настройки ID: продажи ${Number(waiting.converted_lead) || 0}, квалифицированные ${Number(waiting.qualified_lead) || 0}.` : ''} Отправка идёт сама каждые 10 минут.</p>
       ${problems.length ? `<div class="text-xs text-red-700 mt-1">${problems.slice(0, 3).map(p => academyEsc(String(p.last_error?.message || p.processing_status || 'ошибка').slice(0, 140))).join('<br>')}</div>` : ''}
     </div>
@@ -2294,14 +2368,20 @@ async function googleAdsConvRequest(url, method, body) {
   return payload?.data;
 }
 async function googleAdsConvSaveAccess() {
-  const box = document.getElementById('gads-sa-json');
-  const json = box?.value || '';
-  if (!json.trim()) return alert('Вставьте содержимое JSON-файла ключа.');
+  const box = document.getElementById('gads-sa-file');
+  let file = null;
+  let json = null;
   try {
+    if (currentUser()?.role !== 'owner') return;
+    file = box?.files?.[0];
+    if (!file) return alert('Выберите JSON-файл ключа.');
+    if (file.size <= 0 || file.size > 64 * 1024) return alert('Выберите JSON-файл ключа размером до 64 КБ.');
+    json = JSON.parse(await file.text());
+    if (!json || typeof json !== 'object' || Array.isArray(json)) return alert('Выберите корректный JSON-файл ключа.');
     await googleAdsConvRequest('/api/v1/integrations/google-ads/credentials', 'PUT', { service_account_json: json });
-    if (box) box.value = '';
     loadGoogleAdsConversions(true);
-  } catch (error) { if (box) box.value = ''; alert('Ключ не сохранён: ' + (error?.message || error)); }
+  } catch { alert('Ключ не сохранён. Проверьте JSON-файл и повторите попытку.'); }
+  finally { file = null; json = null; if (box) box.value = ''; }
 }
 async function googleAdsConvClearAccess() {
   if (!confirm('Удалить ключ доступа к Google? Отправка конверсий остановится.')) return;
@@ -2318,7 +2398,6 @@ async function googleAdsConvSaveSettings() {
       qualified_lead_action_id: value('gads-qualified') || null,
       converted_lead_action_id: value('gads-converted') || null,
       qualification_pipeline_status_code: value('gads-stage') || null,
-      upload_enabled: true,
     });
     loadGoogleAdsConversions(true);
   } catch (error) { alert('Не сохранено: ' + (error?.message || error)); }
@@ -2335,7 +2414,7 @@ async function googleAdsConvGoLive() {
 async function googleAdsConvSyncNow() {
   try {
     const result = await googleAdsConvRequest('/api/v1/integrations/google-ads/sync-now', 'POST');
-    const why = { not_enabled: 'сначала сохраните ID на шаге 2', no_credentials: 'сначала сохраните доступ на шаге 1', already_running: 'отправка уже идёт' };
+    const why = { not_enabled: 'отправка приостановлена — включите проверку или заполните ID на шаге 2', no_credentials: 'сначала сохраните доступ на шаге 1', already_running: 'отправка уже идёт' };
     alert(result?.skipped ? `Не отправлено: ${why[result.skipped] || result.skipped}.` : `Готово: отправлено ${result?.uploads || 0}, проверено статусов ${result?.statuses || 0}.`);
     loadGoogleAdsConversions(true);
   } catch (error) { alert('Ошибка отправки: ' + (error?.message || error)); }

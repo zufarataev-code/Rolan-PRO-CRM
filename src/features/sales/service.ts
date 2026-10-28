@@ -882,10 +882,12 @@ export async function moveDealStage(input: MoveDealStageInput) {
 
       const hasSignedAgreement = proposal?.agreement?.status === "signed" && Boolean(proposal.agreement.signed_at);
       const hasPaidDeposit = proposal?.deposit?.status === "paid" && Boolean(proposal.deposit.paid_at);
-      const conversionValue = hasSignedAgreement && hasPaidDeposit ? proposal?.selected_total_amount ?? null : null;
+      if (hasSignedAgreement && hasPaidDeposit) {
+        const conversionValue = proposal?.selected_total_amount ?? null;
 
       await ensureClosedWonConversion(tx, {
         dealId: deal.deal_id,
+        legacyOrderId: deal.legacy_order_id ?? undefined,
         leadId: deal.lead_id,
         clientId: deal.client_id,
         attributionTouchpointId: deal.attribution_touchpoint_id,
@@ -894,6 +896,7 @@ export async function moveDealStage(input: MoveDealStageInput) {
         currency: proposal?.currency ?? "USD",
         eventSource: "OTHER",
       });
+      }
     }
 
     if (!isTerminalStage && input.nextAction) {

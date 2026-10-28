@@ -549,6 +549,13 @@ export async function onProposalSent(
     },
   });
 
+  const deal = await tx.deal.findUnique({ where: { deal_id: input.dealId }, select: { lead_id: true, client_id: true, attribution_touchpoint_id: true } });
+  await ensureQualifiedLeadConversion(tx, {
+    dealId: input.dealId, leadId: deal?.lead_id ?? input.leadId ?? null, clientId: deal?.client_id ?? null,
+    attributionTouchpointId: deal?.attribution_touchpoint_id ?? null,
+    pipelineStatusCode: "PROPOSAL_SENT", occurredAt: new Date(), eventSource: "OTHER",
+  });
+
   await ensureFollowUp(tx, {
     leadId: input.leadId ?? null,
     dealId: input.dealId,

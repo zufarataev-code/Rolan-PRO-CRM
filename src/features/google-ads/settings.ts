@@ -109,10 +109,16 @@ export async function patchGoogleAdsSettings(input: GoogleAdsSettingsPatch) {
       );
     }
 
+    const destinationChanged = Boolean(current && (
+      (conversionOwnerCustomerId !== undefined && conversionOwnerCustomerId !== current.conversion_owner_customer_id) ||
+      (loginCustomerId !== undefined && loginCustomerId !== current.login_customer_id) ||
+      (qualifiedLeadActionId !== undefined && qualifiedLeadActionId !== current.qualified_lead_action_id) ||
+      (convertedLeadActionId !== undefined && convertedLeadActionId !== current.converted_lead_action_id)
+    ));
     const data: Prisma.GoogleAdsIntegrationSettingUncheckedCreateInput = {
       setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY,
       upload_enabled: uploadEnabled ?? current?.upload_enabled ?? false,
-      validate_only: validateOnly ?? current?.validate_only ?? true,
+      validate_only: destinationChanged ? true : validateOnly ?? current?.validate_only ?? true,
       cloud_project_id: cloudProjectId !== undefined ? cloudProjectId : current?.cloud_project_id ?? null,
       conversion_owner_customer_id:
         conversionOwnerCustomerId !== undefined
@@ -146,10 +152,17 @@ export async function patchGoogleAdsSettings(input: GoogleAdsSettingsPatch) {
       customer_match_terms_accepted: nextTermsAccepted,
     };
 
+    const update: Prisma.GoogleAdsIntegrationSettingUncheckedUpdateInput = { ...data };
+    // An ordinary settings edit must not replay a mode read before a concurrent
+    // pause or validation reset. Explicit choices and required validation resets
+    // are the only operations that update those mode columns.
+    if (uploadEnabled === undefined) delete update.upload_enabled;
+    if (validateOnly === undefined && !destinationChanged) delete update.validate_only;
+
     return tx.googleAdsIntegrationSetting.upsert({
       where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
       create: data,
-      update: data,
+      update,
     });
   });
 }

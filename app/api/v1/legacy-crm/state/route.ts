@@ -10,7 +10,7 @@ import {
   validateLegacyPayload,
 } from "@/features/legacy-crm/sanitize";
 import { LEGACY_WORKSPACE_VIEW_ROLES } from "@/features/legacy-crm/api";
-import { enforceProjectArchive } from "@/features/legacy-crm/project-archive";
+import { enforceProjectArchive, legacyProjectsIncludingArchive } from "@/features/legacy-crm/project-archive";
 import { applyEmployeeDirectory, loadDirectoryMembers } from "@/features/team/directory";
 import {
   createFieldWorkspace,
@@ -26,6 +26,7 @@ import { prepareServiceSolutions, serviceSolutionsForViewer } from "@/features/l
 import { validateProjectDirectExpenses } from "@/features/legacy-crm/project-direct-expenses";
 import { prepareProductionStages, settleProductionProject } from "@/features/legacy-crm/production-stages";
 import { prepareServiceScopeApprovals } from "@/features/legacy-crm/service-scope-approvals";
+import { buildLeadScopeWhere } from "@/features/sales/access";
 
 const WORKSPACE_ID = "primary";
 
@@ -199,6 +200,16 @@ export async function PUT(request: NextRequest) {
   if (solutionError) return apiError(400, "invalid_service_solution", solutionError);
   for (const order of (nextPayload as Record<string, any>).orders || []) {
     const previous = ((currentWorkspace.payload as Record<string, any>).orders || []).find((item: Record<string, any>) => item.id === order.id) || {};
+    if (!auth.session.roles.includes(ROLE_CODES.OWNER) && (JSON.stringify(order.googleAdsCostsReview) !== JSON.stringify(previous.googleAdsCostsReview) || JSON.stringify(order.googleAdsPayrollReview) !== JSON.stringify(previous.googleAdsPayrollReview))) {
+      return apiError(403, "owner_cost_review_required", "Only the owner can confirm actual project costs.");
+    }
+    if (!auth.session.roles.includes(ROLE_CODES.OWNER) && (order.canonicalLeadId ?? null) !== (previous.canonicalLeadId ?? null)) {
+      if (previous.id || !auth.session.roles.includes(ROLE_CODES.MANAGER) || typeof order.canonicalLeadId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(order.canonicalLeadId)
+        || [...legacyProjectsIncludingArchive(currentWorkspace.payload as Record<string, unknown>), ...legacyProjectsIncludingArchive(nextPayload as Record<string, unknown>)].some(other => other.id !== order.id && other.canonicalLeadId === order.canonicalLeadId)
+        || !await prisma.lead.findFirst({ where: { lead_id: order.canonicalLeadId, ...buildLeadScopeWhere(auth.session.user.user_id) }, select: { lead_id: true } })) {
+        return apiError(403, "original_lead_protected", "The original project lead cannot be replaced; new projects require an accessible lead.");
+      }
+    }
     settleProductionProject(previous, order, nextPayload as Record<string, any>, auth.session.user.user_id);
   }
 

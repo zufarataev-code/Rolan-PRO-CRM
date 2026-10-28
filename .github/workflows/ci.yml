@@ -72,6 +72,8 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/rolanpro_ci
       AUTH_SECRET: ci-only-auth-secret-that-is-longer-than-thirty-two-characters
       ENABLE_DEMO_LOGIN: "false"
+      WEBSITE_LEAD_INGEST_SECRET: ci-only-website-ingest-secret-not-for-production
+      GOOGLE_ADS_AUTO_SYNC: "off"
       APP_URL: http://127.0.0.1:3000
       E2E_BASE_URL: http://127.0.0.1:3000
       # Disposable CI database only; the E2E guard refuses anything non-local.

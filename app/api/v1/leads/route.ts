@@ -12,6 +12,8 @@ import { persistLeadAttribution } from "@/features/google-ads/attribution";
 import type { AttributionCaptureInput, ConsentState } from "@/features/google-ads/types";
 
 type ApiAttributionInput = {
+  google_ads_customer_id?: string | null;
+  google_ads_campaign_id?: string | null;
   gclid?: string | null;
   gbraid?: string | null;
   wbraid?: string | null;
@@ -43,6 +45,8 @@ function toAttributionCaptureInput(input: ApiAttributionInput | null | undefined
   if (!input) return null;
 
   return {
+    googleAdsCustomerId: input.google_ads_customer_id,
+    googleAdsCampaignId: input.google_ads_campaign_id,
     gclid: input.gclid,
     gbraid: input.gbraid,
     wbraid: input.wbraid,

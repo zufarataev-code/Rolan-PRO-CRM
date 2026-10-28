@@ -1,3 +1,4 @@
+import { effectiveGoogleAdsUploadEnabled, effectiveGoogleAdsValidateOnly } from "./delivery-mode";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
@@ -25,13 +26,6 @@ type GoogleAdsAdjustmentResponse = {
   results?: unknown[];
   jobId?: string;
 };
-
-function envFlag(name: string, fallback: boolean) {
-  const value = process.env[name]?.trim().toLowerCase();
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return fallback;
-}
 
 function trimOrNull(value: string | null | undefined) {
   const trimmed = value?.trim() ?? "";
@@ -137,6 +131,7 @@ async function claimNextAdjustmentOutbox() {
   const now = new Date();
   const staleBefore = new Date(now.getTime() - STALE_SUBMISSION_MS);
   const claimableWhere = {
+    conversion_adjustment: { conversion_event: { upload_outboxes: { some: { processing_status: "confirmed" } } } },
     OR: [
       {
         processing_status: { in: ["queued", "retry"] },
@@ -189,11 +184,10 @@ export async function processNextConversionAdjustmentUpload() {
     },
   });
 
-  const uploadEnabled = settings?.upload_enabled === true || envFlag("GOOGLE_ADS_UPLOAD_ENABLED", false);
-  if (!uploadEnabled) return { status: "disabled" as const };
+  if (!effectiveGoogleAdsUploadEnabled(settings?.upload_enabled)) return { status: "disabled" as const };
 
   // Live execution requires BOTH database and environment validation switches to be false.
-  const validateOnly = (settings?.validate_only ?? true) || envFlag("GOOGLE_ADS_VALIDATE_ONLY", true);
+  const validateOnly = effectiveGoogleAdsValidateOnly(settings?.validate_only);
   const job = await claimNextAdjustmentOutbox();
   if (!job) return { status: "idle" as const };
 
@@ -240,7 +234,8 @@ export async function processNextConversionAdjustmentUpload() {
     if (loginCustomerId) headers["login-customer-id"] = normalizeNumericGoogleId(loginCustomerId);
 
     const response = await fetch(endpoint, {
-      method: "POST",
+      signal: AbortSignal.timeout(30_000),
+    method: "POST",
       headers,
       body: JSON.stringify(requestBody),
     });

@@ -1,3 +1,4 @@
+import { findAcquisitionTouchpoint } from "./attribution";
 import { Prisma } from "@prisma/client";
 
 export const GOOGLE_ADS_DEFAULT_SETTING_KEY = "default";
@@ -5,8 +6,8 @@ export const GOOGLE_ADS_QUALIFIED_LEAD_EVENT = "qualified_lead";
 export const GOOGLE_ADS_CONVERTED_LEAD_EVENT = "converted_lead";
 
 function qualifiedTransactionId(input: { dealId?: string | null; leadId?: string | null; clientId?: string | null }) {
-  if (input.dealId) return `crm-deal-${input.dealId}-qualified`;
   if (input.leadId) return `crm-lead-${input.leadId}-qualified`;
+  if (input.dealId) return `crm-deal-${input.dealId}-qualified`;
   if (input.clientId) return `crm-client-${input.clientId}-qualified`;
   throw new Error("A deal, lead, or client is required for a qualified-lead conversion.");
 }
@@ -42,15 +43,8 @@ async function resolveAttributionTouchpointId(
   if (input.attributionTouchpointId) return input.attributionTouchpointId;
   if (!input.leadId && !input.clientId) return null;
 
-  const touchpoint = await tx.acquisitionTouchpoint.findFirst({
-    where: {
-      OR: [
-        ...(input.leadId ? [{ lead_id: input.leadId }] : []),
-        ...(input.clientId ? [{ client_id: input.clientId }] : []),
-      ],
-    },
-    orderBy: [{ captured_at: "desc" }, { created_at: "desc" }],
-    select: { acquisition_touchpoint_id: true },
+  const touchpoint = await findAcquisitionTouchpoint(tx, {
+      ...(input.leadId ? { lead_id: input.leadId } : { client_id: input.clientId! }),
   });
   return touchpoint?.acquisition_touchpoint_id ?? null;
 }
@@ -82,7 +76,13 @@ export async function ensureQualifiedLeadConversion(
     };
   }
 
-  const transactionId = qualifiedTransactionId(input);
+  // Reuse older deal-based IDs already in production before using a lead ID.
+  const existing = input.leadId ? await tx.conversionEvent.findFirst({
+    where: { event_type: GOOGLE_ADS_QUALIFIED_LEAD_EVENT, OR: [{ lead_id: input.leadId }, ...(input.dealId ? [{ deal_id: input.dealId }] : [])] },
+    orderBy: { created_at: "asc" },
+    select: { transaction_id: true },
+  }) : null;
+  const transactionId = existing?.transaction_id ?? qualifiedTransactionId(input);
   const businessObjectType = input.dealId ? "deal" : input.leadId ? "lead" : "client";
   const businessObjectId = input.dealId ?? input.leadId ?? input.clientId;
   if (!businessObjectId) {
@@ -156,7 +156,8 @@ export async function ensureQualifiedLeadConversion(
 }
 
 export type ClosedWonConversionInput = {
-  dealId: string;
+  dealId?: string;
+  legacyOrderId?: string;
   leadId?: string | null;
   clientId?: string | null;
   attributionTouchpointId?: string | null;
@@ -175,7 +176,15 @@ export async function ensureClosedWonConversion(
   tx: Prisma.TransactionClient,
   input: ClosedWonConversionInput,
 ) {
-  const transactionId = saleTransactionId(input.dealId);
+  if (!input.dealId && !input.legacyOrderId) throw new Error("A deal or legacy project is required for a sale conversion.");
+  const legacyOrderId = input.legacyOrderId ?? (input.dealId ? (await tx.deal.findUnique({ where: { deal_id: input.dealId }, select: { legacy_order_id: true } }))?.legacy_order_id ?? undefined : undefined);
+  const legacyTransactionId = legacyOrderId ? `crm-project-${legacyOrderId}-sale` : null;
+  if (legacyOrderId) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`google-ads:sale:${legacyOrderId}`}))`;
+  const prior = legacyOrderId ? await tx.conversionEvent.findFirst({
+    where: { event_type: GOOGLE_ADS_CONVERTED_LEAD_EVENT, OR: [{ transaction_id: legacyTransactionId! }, { deal: { legacy_order_id: legacyOrderId } }] },
+    orderBy: { created_at: "asc" }, select: { transaction_id: true },
+  }) : null;
+  const transactionId = prior?.transaction_id ?? (input.dealId ? saleTransactionId(input.dealId) : legacyTransactionId!);
   const settings = await tx.googleAdsIntegrationSetting.findUnique({
     where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
     select: {
@@ -194,9 +203,9 @@ export async function ensureClosedWonConversion(
     create: {
       lead_id: input.leadId ?? null,
       client_id: input.clientId ?? null,
-      deal_id: input.dealId,
-      business_object_type: "deal",
-      business_object_id: input.dealId,
+      deal_id: input.dealId ?? null,
+      business_object_type: input.dealId ? "deal" : "legacy_order",
+      business_object_id: input.dealId ?? input.legacyOrderId!,
       event_type: GOOGLE_ADS_CONVERTED_LEAD_EVENT,
       occurred_at: input.occurredAt,
       event_source: input.eventSource ?? "OTHER",
@@ -261,4 +270,49 @@ export function buildQualifiedLeadTransactionId(input: string | { dealId?: strin
 
 export function buildClosedWonTransactionId(dealId: string) {
   return saleTransactionId(dealId);
+}
+
+/** Late owner evidence fills missing links without recreating the recorded outcome. */
+export async function linkProjectConversionAttribution(
+  tx: Prisma.TransactionClient,
+  input: { legacyOrderId: string; leadId: string; attributionTouchpointId: string },
+) {
+  const compatibleLead = (leadId: string | null | undefined) => !leadId || leadId === input.leadId;
+  const deals = await tx.deal.findMany({
+    where: { legacy_order_id: input.legacyOrderId },
+    select: { deal_id: true, lead_id: true, attribution_touchpoint_id: true, attribution_touchpoint: { select: { lead_id: true } } },
+  });
+  for (const deal of deals) {
+    if (!compatibleLead(deal.lead_id) || !compatibleLead(deal.attribution_touchpoint?.lead_id)) continue;
+    if (deal.lead_id && deal.attribution_touchpoint_id) continue;
+    await tx.deal.updateMany({
+      where: { deal_id: deal.deal_id, lead_id: deal.lead_id, attribution_touchpoint_id: deal.attribution_touchpoint_id },
+      data: { ...(!deal.lead_id ? { lead_id: input.leadId } : {}), ...(!deal.attribution_touchpoint_id ? { attribution_touchpoint_id: input.attributionTouchpointId } : {}) },
+    });
+  }
+
+  const events = await tx.conversionEvent.findMany({
+    where: { event_type: { in: [GOOGLE_ADS_QUALIFIED_LEAD_EVENT, GOOGLE_ADS_CONVERTED_LEAD_EVENT] }, OR: [
+      { deal: { legacy_order_id: input.legacyOrderId } },
+      { business_object_type: "legacy_order", business_object_id: input.legacyOrderId },
+      { deal_id: null, business_object_type: "lead", business_object_id: input.leadId, lead_id: input.leadId },
+    ] },
+    select: { conversion_event_id: true, lead_id: true, attribution_touchpoint_id: true, attribution_touchpoint: { select: { lead_id: true } }, deal: { select: { lead_id: true, attribution_touchpoint_id: true, attribution_touchpoint: { select: { lead_id: true } } } } },
+  });
+  const eventIds: string[] = [];
+  for (const event of events) {
+    if (![event.lead_id, event.attribution_touchpoint?.lead_id, event.deal?.lead_id, event.deal?.attribution_touchpoint?.lead_id].every(compatibleLead)) continue;
+    if (!event.lead_id || !event.attribution_touchpoint_id) {
+      const linked = await tx.conversionEvent.updateMany({
+        where: { conversion_event_id: event.conversion_event_id, lead_id: event.lead_id, attribution_touchpoint_id: event.attribution_touchpoint_id },
+        data: { ...(!event.lead_id ? { lead_id: input.leadId } : {}), ...(!event.attribution_touchpoint_id ? { attribution_touchpoint_id: event.deal?.attribution_touchpoint_id ?? input.attributionTouchpointId } : {}) },
+      });
+      if (!linked.count) continue;
+    }
+    eventIds.push(event.conversion_event_id);
+  }
+  await tx.conversionUploadOutbox.updateMany({
+    where: { conversion_event_id: { in: eventIds }, processing_status: "suppressed", submitted_at: null, request_id: null, last_error: { path: ["code"], equals: "no_usable_identifiers" } },
+    data: { processing_status: "queued", next_retry_at: new Date(), last_error: Prisma.JsonNull },
+  });
 }

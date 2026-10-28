@@ -2,6 +2,21 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-10-28 — Dynamic payroll settlement before ROI confirmation
+
+- Earned commissions and unstaged per-square-foot obligations keep campaign ROI unknown until the OWNER separately reviews their settlement in the existing payroll module. The report does not introduce another pricing formula or editable payroll ledger. Its control reuses the active payroll calculator, refuses outstanding balances, and records only owner attestation metadata against current source facts. Later job, pay configuration or pricing changes invalidate that attestation and the cost review. Fixed-per-job obligations accrue directly from existing completion events and reconcile against the same worker's unstaged payments.
+
+## 2026-10-26 — Google Ads acquisition, cash reporting and verified delivery
+
+- Original account/campaign IDs and click IDs belong to the acquisition touchpoint; a project carries its canonical lead into the Deal. Another customer's/job's contact match or a later direct visit must not replace that source. Managers cannot replace an established lead or reuse a lead bound to another active/archived project. Owner-reviewed call-tracking evidence may supply a missing original project attribution.
+- Campaign reports run on the server and separate accounts/currencies. The default acquisition cohort matches the script's previous 30 completed Pacific days. Its jobs' net receipts and actual direct costs accumulate afterwards; this is distinct from Google's conversion-date report and the signed/approved booked sale value uploaded for bidding.
+- Profitability uses existing job receipts, warehouse issues, payroll and expenses. Direct-cost ROI remains unknown until work/cost facts are complete and the owner reviews completeness. A fingerprint of those facts invalidates the review after costs change. Ambiguous bank payments require an explicit link to an existing expense or designation as a separate cost. This adds audit metadata, not another editable money ledger. Overhead and taxes are excluded explicitly. Archived projects preserve their financial history; archiving alone never retracts a sale.
+- The saved paid-without-online-proposal acceptance is a valid sale only with a paid deposit and approved positive amount. Stage labels alone never create a valueless sale. Repeated reconciliation and a later canonical Deal reuse the same business event; refunds/cancellations use immutable adjustments.
+- Late configuration must reconcile delivery for already recorded corrections. A correction keeps its first saved delivery destination across retries and settings changes. Verified owner attribution may fill missing links on an existing outcome and retry never-submitted identifier suppression, without replacing original provenance or creating another sale.
+- Google live delivery requires explicit false validation flags in both environment and database. Destination changes reset validation. Status-check failures back off the existing request instead of resending it, and cannot monopolize the queue. Unknown consent remains unknown; Customer Match retains its separate eligibility/terms gates.
+- An explicit stored CRM upload setting takes precedence over the legacy environment upload fallback in every outbound worker. Owner pause must stop new queued uploads even when the environment upload flag is true; only absent settings use the fallback. In-flight requests are not recalled.
+- This decision authorizes implementation for PR review only; it does not deploy, activate live conversion uploads, change bidding goals or grant provider access.
+
 ## 2026-10-25 — Service email needs an opt-out, not opt-in consent
 
 - Automatic client emails about the job (measurement booked, KP, payment, installation) go to every client with an email address unless the client asked not to get them (`emailOptOut`). Before this, a default-off «Согласие на Email» checkbox silently skipped 30 of 32 emails.
@@ -358,6 +373,8 @@ This file records durable decisions. Current activity, blockers, and next steps 
 
 ## 2026-09-24 — Google Ads learns only from verified CRM outcomes
 
+Amended by the 2026-10-26 decision above: verified paid offline acceptance also qualifies as a sale; original lead attribution is preserved and live delivery requires both explicit validation gates.
+
 - CRM sends server-side first-party conversion events through Google Data Manager; no Google credential, OAuth token, or customer identifier is stored in browser code.
 - `CONSULTATION_SCHEDULED` is the recommended Qualified Lead milestone for Rolan PRO. A confirmed consultation may create this signal from a Lead before a Deal exists; a bot statement without a PostgreSQL consultation never qualifies.
 - Converted Lead remains the canonical `CLOSED_WON` outcome and uses the CRM sale value only after the signed-agreement and paid-deposit gate.
@@ -519,6 +536,8 @@ Owner decision in chat on 2026-10-02 («давай» to the proposed order). Ame
 - Supersedes: equal split of fixed costs (`fixedPool / projectCount`) and the flat «Рекламный резерв» of 10% of each project's revenue.
 - Migration: moves with the payment stage, together with the monthly money report and the bank feeds (real ad spend can then replace the budget).
 ## 2026-10-02 — Projects are deleted into an archive, by the owner only (Owner)
+
+2026-10-26 financial-history exception: Google Ads reporting and outcome reconciliation include archived jobs; archiving alone does not remove their financial history or retract a sale.
 
 Owner decision in chat on 2026-10-02: «удаление проектов только у меня как у админа — удалять в архив, чтобы потом можно было восстановить». Amends item 1 of "2026-09-29 — CRM core consolidation" like the earlier exceptions: projects live in the legacy payload today.
 

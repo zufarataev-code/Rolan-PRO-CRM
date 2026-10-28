@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/db";
 
 import {
   GOOGLE_ADS_CONVERTED_LEAD_EVENT,
@@ -139,6 +140,7 @@ export async function createConversionAdjustment(
   }
 
   const normalized = normalizeConversionAdjustmentDraft(input);
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`google-ads:adjustment:${input.conversionEventId.trim()}`}))`;
   const event = await tx.conversionEvent.findUnique({
     where: { conversion_event_id: input.conversionEventId.trim() },
     select: {
@@ -199,6 +201,12 @@ export async function createConversionAdjustment(
       },
     }));
 
+  const existingOutbox = await tx.conversionAdjustmentOutbox.findFirst({
+    where: { conversion_adjustment_id: adjustment.conversion_adjustment_id },
+    orderBy: { created_at: "asc" },
+  });
+  if (existingOutbox) return { adjustment, outbox: existingOutbox, deliveryState: "queued" as const };
+
   const settings = await tx.googleAdsIntegrationSetting.findUnique({
     where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
     select: {
@@ -239,4 +247,36 @@ export async function createConversionAdjustment(
     outbox,
     deliveryState: "queued" as const,
   };
+}
+
+/** Replay saved corrections after destination setup without creating another financial fact. */
+export async function reconcileConversionAdjustmentOutbox(limit = 100) {
+  const settings = await prisma.googleAdsIntegrationSetting.findUnique({
+    where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
+    select: { conversion_owner_customer_id: true, converted_lead_action_id: true },
+  });
+  if (!settings?.conversion_owner_customer_id || !settings.converted_lead_action_id) {
+    return { status: "awaiting_configuration" as const, scanned: 0, created: 0 };
+  }
+  const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+  const adjustments = await prisma.conversionAdjustment.findMany({
+    where: { upload_outboxes: { none: {} } },
+    orderBy: [{ occurred_at: "asc" }, { created_at: "asc" }],
+    take: boundedLimit,
+  });
+  let created = 0;
+  for (const adjustment of adjustments) {
+    const result = await prisma.$transaction(tx => createConversionAdjustment(tx, {
+      conversionEventId: adjustment.conversion_event_id,
+      financialReferenceId: adjustment.financial_reference_id,
+      adjustmentType: adjustment.adjustment_type,
+      adjustedValue: adjustment.adjusted_value,
+      currency: adjustment.currency,
+      reason: adjustment.reason,
+      occurredAt: adjustment.occurred_at,
+      createdByUserId: adjustment.created_by_user_id,
+    }));
+    if (result.outbox) created += 1;
+  }
+  return { status: adjustments.length === boundedLimit ? "more_available" as const : "complete" as const, scanned: adjustments.length, created };
 }

@@ -37341,6 +37341,7 @@ function premiumCanonicalSnapshot(prop) {
   return {
     token: prop.token,
     legacy_order_id: order.id,
+    canonical_lead_id: order.canonicalLeadId || null,
     order_number: order.number,
     site_type: orderSiteType(order) || null,
     lead_source: orderLeadSource(order),

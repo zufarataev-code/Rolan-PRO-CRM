@@ -1,6 +1,8 @@
+import { reconcileLegacyGoogleAdsOutcomes } from "./legacy-outcomes";
 import { prisma } from "@/lib/db";
 
 import { processNextConversionAdjustmentUpload } from "./conversion-adjustment-uploader";
+import { reconcileConversionAdjustmentOutbox } from "./conversion-adjustments";
 import { GOOGLE_ADS_DEFAULT_SETTING_KEY } from "./conversion-events";
 import { hasAnyGoogleCredentials } from "./credentials";
 import { processNextConversionUpload } from "./data-manager";
@@ -20,6 +22,10 @@ export async function runGoogleAdsSyncCycle({ limit = 25 } = {}) {
   if (running) return { skipped: "already_running" as const };
   running = true;
   try {
+    const legacy = await reconcileLegacyGoogleAdsOutcomes().catch(() => {
+      console.error("[google-ads] legacy reconciliation unavailable");
+      return { recorded: 0, failed: 1 };
+    });
     const settings = await prisma.googleAdsIntegrationSetting.findUnique({
       where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
       select: { upload_enabled: true, conversion_owner_customer_id: true },
@@ -28,6 +34,7 @@ export async function runGoogleAdsSyncCycle({ limit = 25 } = {}) {
     if (!(await hasAnyGoogleCredentials())) return { skipped: "no_credentials" as const };
 
     const reconciliation = await reconcileConversionOutbox(100);
+    await reconcileConversionAdjustmentOutbox(100);
     const count = { uploads: 0, statuses: 0, adjustments: 0, audience: 0 };
     for (let i = 0; i < limit; i += 1) {
       const result = await processNextConversionUpload();
@@ -36,7 +43,7 @@ export async function runGoogleAdsSyncCycle({ limit = 25 } = {}) {
     }
     for (let i = 0; i < limit; i += 1) {
       const result = await reconcileNextConversionRequestStatus();
-      if (result.status === "idle" || result.status === "processing" || result.status === "retry") break;
+      if (result.status === "idle") break;
       count.statuses += 1;
     }
     for (let i = 0; i < limit; i += 1) {
@@ -49,7 +56,7 @@ export async function runGoogleAdsSyncCycle({ limit = 25 } = {}) {
       if (!result || result.status === "idle" || result.status === "disabled") break;
       count.audience += 1;
     }
-    return { skipped: null, reconciliation, ...count };
+    return { skipped: null, reconciliation, legacy, ...count };
   } finally {
     running = false;
   }
