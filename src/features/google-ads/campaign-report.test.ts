@@ -35,6 +35,38 @@ test("a fixed installer payment counts despite their zero-valued stage payroll s
   assert.equal(report.campaigns[0].roi_percent, "700.00");
 });
 
+test("completed fixed job obligations count before payment and reconcile partial payouts", () => {
+  const project: any = { ...order(), _inventoryMaterialCost: 0, extraExpenses: [], installationDoneAt: "2026-10-10", installerIds: ["fixed-installer"], productionStages: [{ id: "fixed-stage", status: "done", payroll: [{ userId: "fixed-installer", amount: 0 }] }], payouts: [] };
+  const user = { id: "fixed-installer", role: "installer", active: false, payConfig: { type: "fixed_per_job", fixedPerJob: 200 } };
+  const workspace = { orders: [project], users: [user] };
+  const source = readFileSync("private/legacy/production-stages.js", "utf8");
+  const context = vm.createContext({ db: workspace, getUser: () => user, projectStages: (value: any) => value.productionStages });
+  vm.runInContext(source.slice(source.indexOf("function calcUserPayoutForPeriod("), source.indexOf("function markPayoutPaid(")), context);
+  assert.equal(vm.runInContext("calcUserPayoutForPeriod('fixed-installer', new Date('2026-10-01'), new Date('2026-10-25')).total", context), 200);
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "200.00");
+  project.payouts.push({ userId: user.id, stageId: null, type: "fixed_per_job", amount: 75, paid: true });
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "200.00");
+  project.payouts.push({ userId: user.id, stageId: null, type: "fixed_per_job", amount: 125, paid: true });
+  const paid = googleAdsProjectMoney(project, workspace);
+  assert.equal(paid.directCost.toFixed(2), "200.00", "settlement replaces the accrual without doubling it");
+  project.googleAdsCostsReview = { fingerprint: paid.fingerprint };
+  user.payConfig.fixedPerJob = 250;
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "250.00");
+  assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, false);
+});
+
+test("a measurer's completed fixed job remains a cost on cancellation; unearned work does not", () => {
+  const project: any = { ...order(), status: "cancelled", _inventoryMaterialCost: 0, extraExpenses: [], productionStages: [], payouts: [], measurerId: "measurer", measurementDoneAt: "2026-10-10", installerIds: ["installer"] };
+  const workspace = { users: [
+    { id: "measurer", role: "measurer", payConfig: { type: "fixed_per_job", fixedPerJob: 80 } },
+    { id: "installer", role: "installer", payConfig: { type: "fixed_per_job", fixedPerJob: 200 } },
+    { id: "unassigned", role: "installer", payConfig: { type: "fixed_per_job", fixedPerJob: 300 } },
+  ] };
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "80.00");
+  project.measurementDoneAt = null;
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "0.00");
+});
+
 test("labor matches payments to worker and stage while retaining separate unstaged work", () => {
   const project = { ...order(), _inventoryMaterialCost: 0, extraExpenses: [], productionStages: [
     { id: "first", status: "done", payroll: [{ userId: "installer", amount: 150 }] },

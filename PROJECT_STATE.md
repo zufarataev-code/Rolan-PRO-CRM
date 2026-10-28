@@ -12,6 +12,11 @@ Before doing any work:
 4. Work from the latest `origin/main` on one dedicated branch.
 5. Do not rely on a previous chat's memory or local browser storage.
 
+## 2026-10-28 follow-up — unpaid fixed-job payroll in campaign ROI
+
+- PR #418 also accrues fixed installer/measurer job pay at the existing installation/measurement completion event, matching active payroll even for inactive staff. Partial and final payments offset the same unstaged obligation; paid and unpaid costs are retained on cancelled jobs. Changed pay inputs invalidate owner cost confirmation. No new ledger, schema or dependency.
+- Regression tests exercise the active payroll producer, zero stage snapshots, no/partial/full payment, rate changes, measurer cancellation and unearned/unassigned work. Local verification: 970/970 unit tests, TypeScript and production build pass. Independent read-only Claude review found no blockers; exact-head CI and deployment remain pending. This branch is not deployed.
+
 ## 2026-10-26 handoff — complete Google Ads attribution, campaign ROI and delivery
 
 - PR [#418](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/418) contains the integration and owner runbook; use its current checks for the published revision's CI result.

@@ -32,8 +32,13 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   const received = (payments.length ? sum(payments, "amount") : decimal(order.paid)).minus(refunds);
   const stages = rows(order.productionStages);
   const stagePayroll: Row[] = stages.flatMap(stage => rows(stage.payroll).map(item => ({ ...item, stageId: stage.id || null })));
+  // Fixed job pay accrues at completion even when its stage snapshot is zero.
+  const jobPayroll = rows(workspace.users).filter(user => user.payConfig?.type === "fixed_per_job" && (user.role === "measurer"
+    ? user.id === order.measurerId && order.measurementDoneAt
+    : Array.isArray(order.installerIds) && order.installerIds.includes(user.id) && order.installationDoneAt
+  )).map(user => ({ userId: user.id, stageId: null, amount: user.payConfig.fixedPerJob }));
   const payouts = rows(order.payouts);
-  const unpaidPayroll = stagePayroll.reduce<Prisma.Decimal>((total, item) => {
+  const unpaidPayroll = [...stagePayroll, ...jobPayroll].reduce<Prisma.Decimal>((total, item) => {
     const paid = sum(payouts.filter(payout => payout.userId === item.userId && (payout.stageId || null) === item.stageId), "amount");
     return total.plus(Prisma.Decimal.max(0, decimal(item.amount).minus(paid)));
   }, new Prisma.Decimal(0));
@@ -80,11 +85,11 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   if ((hasFilm && !cancelled || order._inventoryDeducted === true) && (order._inventoryDeducted !== true || !Number.isFinite(order._inventoryMaterialCost) || rows(order._inventoryLog).some(item => item.warning))) issues.push("material_cost_not_verified");
   if (!cancelled && stages.some(stage => stage.status !== "done")) issues.push("work_not_completed");
   if (!cancelled && expenses.some(item => !(item.actual === true || item.paid === true || item.paidAt))) issues.push("expenses_not_actual");
-  if ([...stagePayroll, ...payouts, ...actualExpenses, ...directTransactions].some(item => !Number.isFinite(Number(item.amount)))) issues.push("invalid_cost_records");
+  if ([...stagePayroll, ...jobPayroll, ...payouts, ...actualExpenses, ...directTransactions].some(item => !Number.isFinite(Number(item.amount)))) issues.push("invalid_cost_records");
   const parts = Prisma.Decimal.max(0, sum(warehousePayments, "amount").minus(warehouseMaterial)).plus(Prisma.Decimal.max(0, sum(servicePayments, "amount").minus(serviceMaterial)));
   const directCost = material.plus(parts).plus(labor).plus(directExpenses);
   // Confirm the source facts, not another editable money total. Later changes invalidate the review.
-  const fingerprint = createHash("sha256").update(JSON.stringify({ status: order.status, material: material.toString(), serviceMaterials, parts: parts.toString(), labor: labor.toString(), expenses: directExpenses.toString(), stages, sourceExpenses: expenses, bankExpenses: directTransactions, payouts: order.payouts, inventory: order._inventoryLog, issues })).digest("hex");
+  const fingerprint = createHash("sha256").update(JSON.stringify({ status: order.status, material: material.toString(), serviceMaterials, parts: parts.toString(), labor: labor.toString(), expenses: directExpenses.toString(), stages, jobPayroll, sourceExpenses: expenses, bankExpenses: directTransactions, payouts: order.payouts, inventory: order._inventoryLog, issues })).digest("hex");
   return { received, directCost, fingerprint, issues, materialCoverage, unresolvedExpenseLinks: unresolvedExpenseLinks.map(item => ({ transaction_id: item.id, amount: decimal(item.amount).toFixed(2), category: item.category, warehouse_available: materialCoverage.warehouse && item.category === "inventory_purchase", service_material_available: materialCoverage.service_material && item.category === "inventory_purchase" })), expenseChoices: actualExpenses.map(item => ({ expense_id: item.id, label: String(item.label || item.type || item.id), amount: decimal(item.amount).toFixed(2) })), costsConfirmed: issues.length === 0 && order.googleAdsCostsReview?.fingerprint === fingerprint };
 }
 

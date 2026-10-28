@@ -31,7 +31,10 @@ closed-job revenue, ROAS and direct-cost ROI:
 - Costs come from the existing warehouse issue, stage payroll/accruals,
   confirmed payouts, actual expenses and project-linked finance entries.
   Payroll payments offset accruals for the same worker and stage only; fixed
-  and separate unstaged payments remain costs even for a staged worker.
+  and separate unstaged payments remain costs even for a staged worker. Fixed
+  installer/measurer job pay accrues on the existing installation/measurement
+  completion event, including unpaid or partially paid obligations; later
+  payments settle that accrual once, and pay-source changes invalidate review.
   Project material/equipment purchases remain costs after warehouse film is
   consumed. Reconcile each potentially overlapping purchase as warehouse film,
   a linked actual project expense, or a separate purchase; a default empty
