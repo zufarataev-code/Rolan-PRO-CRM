@@ -152,10 +152,17 @@ export async function patchGoogleAdsSettings(input: GoogleAdsSettingsPatch) {
       customer_match_terms_accepted: nextTermsAccepted,
     };
 
+    const update: Prisma.GoogleAdsIntegrationSettingUncheckedUpdateInput = { ...data };
+    // An ordinary settings edit must not replay a mode read before a concurrent
+    // pause or validation reset. Explicit choices and required validation resets
+    // are the only operations that update those mode columns.
+    if (uploadEnabled === undefined) delete update.upload_enabled;
+    if (validateOnly === undefined && !destinationChanged) delete update.validate_only;
+
     return tx.googleAdsIntegrationSetting.upsert({
       where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
       create: data,
-      update: data,
+      update,
     });
   });
 }

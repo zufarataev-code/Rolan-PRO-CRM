@@ -2308,8 +2308,8 @@ function googleAdsConversionsPanelHtml() {
     ${g?.error ? `<p class="text-xs text-red-700 mt-1">${academyEsc(g.error)}</p>` : ''}
     ${step(access.configured, '1', 'Доступ CRM к Google', access.configured
       ? `<p class="text-xs text-gray-600 mt-1">Сервисный аккаунт: <code>${academyEsc(access.service_account_email || 'задан на сервере')}</code>. Он должен быть добавлен пользователем в Google Ads (Админ → Доступ и безопасность → «+», роль «Стандартный»).</p>${access.source === 'crm' ? `<button class="btn-ghost text-xs text-red-600 mt-1" onclick="googleAdsConvClearAccess()">Удалить ключ</button>` : ''}`
-      : `<ol class="text-xs list-decimal ml-4 mt-1 space-y-1"><li>console.cloud.google.com → создайте проект → «APIs & Services» → включите <b>Data Manager API</b>.</li><li>«IAM & Admin → Service Accounts» → создайте аккаунт → «Keys → Add key → JSON» — скачается файл.</li><li>Откройте файл, скопируйте всё содержимое и вставьте сюда.</li><li>В Google Ads: Админ → Доступ и безопасность → «+» → email сервисного аккаунта, роль «Стандартный».</li></ol>
-        <textarea id="gads-sa-json" rows="4" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"type": "service_account", ...}' autocomplete="off"></textarea>
+      : `<ol class="text-xs list-decimal ml-4 mt-1 space-y-1"><li>console.cloud.google.com → создайте проект → «APIs & Services» → включите <b>Data Manager API</b>.</li><li>«IAM & Admin → Service Accounts» → создайте аккаунт → «Keys → Add key → JSON» — скачается файл.</li><li>Выберите скачанный JSON-файл ниже. Содержимое ключа не показывается.</li><li>В Google Ads: Админ → Доступ и безопасность → «+» → email сервисного аккаунта, роль «Стандартный».</li></ol>
+        <label class="block text-xs mt-2">JSON-файл ключа (до 64 КБ)<input id="gads-sa-file" type="file" accept=".json,application/json"></label>
         <button class="btn-primary text-sm mt-1" onclick="googleAdsConvSaveAccess()">Сохранить доступ</button><p class="text-xs text-gray-500 mt-1">Ключ уходит прямо на сервер и хранится зашифрованным; в CRM и чате его больше не видно.</p>`)}
     ${step(ids, '2', 'ID аккаунта и конверсий', `<p class="text-xs text-gray-600 mt-1">В Google Ads: Цели → Конверсии → «+ Новое действие» → «Импорт» → «CRM, файлы и другие источники» → «Отслеживать конверсии по кликам». Создайте два действия: <b>CRM – Qualified Lead</b> (категория «Квалифицированный лид», ценность одна, учитывать одну) и <b>CRM – Converted Lead</b> (категория «Конвертированный лид», ценность из CRM, учитывать каждую). Пока ставьте их «вторичными». ID действия — число в адресе страницы действия (ctId=…).</p>
       ${field('gads-customer', 'Customer ID аккаунта Google Ads (123-456-7890)', st.conversion_owner_customer_id, '1234567890')}
@@ -2335,14 +2335,20 @@ async function googleAdsConvRequest(url, method, body) {
   return payload?.data;
 }
 async function googleAdsConvSaveAccess() {
-  const box = document.getElementById('gads-sa-json');
-  const json = box?.value || '';
-  if (!json.trim()) return alert('Вставьте содержимое JSON-файла ключа.');
+  const box = document.getElementById('gads-sa-file');
+  let file = null;
+  let json = null;
   try {
+    if (currentUser()?.role !== 'owner') return;
+    file = box?.files?.[0];
+    if (!file) return alert('Выберите JSON-файл ключа.');
+    if (file.size <= 0 || file.size > 64 * 1024) return alert('Выберите JSON-файл ключа размером до 64 КБ.');
+    json = JSON.parse(await file.text());
+    if (!json || typeof json !== 'object' || Array.isArray(json)) return alert('Выберите корректный JSON-файл ключа.');
     await googleAdsConvRequest('/api/v1/integrations/google-ads/credentials', 'PUT', { service_account_json: json });
-    if (box) box.value = '';
     loadGoogleAdsConversions(true);
-  } catch (error) { if (box) box.value = ''; alert('Ключ не сохранён: ' + (error?.message || error)); }
+  } catch { alert('Ключ не сохранён. Проверьте JSON-файл и повторите попытку.'); }
+  finally { file = null; json = null; if (box) box.value = ''; }
 }
 async function googleAdsConvClearAccess() {
   if (!confirm('Удалить ключ доступа к Google? Отправка конверсий остановится.')) return;
@@ -2359,7 +2365,6 @@ async function googleAdsConvSaveSettings() {
       qualified_lead_action_id: value('gads-qualified') || null,
       converted_lead_action_id: value('gads-converted') || null,
       qualification_pipeline_status_code: value('gads-stage') || null,
-      upload_enabled: state.googleAdsConv?.settings?.upload_enabled === true,
     });
     loadGoogleAdsConversions(true);
   } catch (error) { alert('Не сохранено: ' + (error?.message || error)); }
@@ -2376,7 +2381,7 @@ async function googleAdsConvGoLive() {
 async function googleAdsConvSyncNow() {
   try {
     const result = await googleAdsConvRequest('/api/v1/integrations/google-ads/sync-now', 'POST');
-    const why = { not_enabled: 'сначала сохраните ID на шаге 2', no_credentials: 'сначала сохраните доступ на шаге 1', already_running: 'отправка уже идёт' };
+    const why = { not_enabled: 'отправка приостановлена — включите проверку или заполните ID на шаге 2', no_credentials: 'сначала сохраните доступ на шаге 1', already_running: 'отправка уже идёт' };
     alert(result?.skipped ? `Не отправлено: ${why[result.skipped] || result.skipped}.` : `Готово: отправлено ${result?.uploads || 0}, проверено статусов ${result?.statuses || 0}.`);
     loadGoogleAdsConversions(true);
   } catch (error) { alert('Ошибка отправки: ' + (error?.message || error)); }

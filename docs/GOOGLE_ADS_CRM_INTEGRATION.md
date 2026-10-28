@@ -247,16 +247,43 @@ Keep all values server-side. Never use `NEXT_PUBLIC_*` for these values.
   - `GOOGLE_ADS_SERVICE_ACCOUNT_PRIVATE_KEY`
 - `GOOGLE_ADS_VALIDATE_ONLY=true` during connection and validation
 
+Instead of environment service-account credentials, an authenticated OWNER can
+select the downloaded JSON key in Settings → Integrations → Google Ads. The file
+picker accepts files up to 64 KiB, sends the parsed object directly to the OWNER
+credentials endpoint, and clears the selection and temporary key references on
+success or failure. It never renders the key text or saves it in browser/workspace
+storage. The server encrypts the private key using the existing secret-encryption
+mechanism; credential reads return only presence/source/account metadata, never
+the key. Use a dedicated service account with access to the intended Google Ads
+account. OAuth refresh-token credentials remain a supported alternative.
+
 Account/action/list identifiers are stored in `GoogleAdsIntegrationSetting`, not exposed as secrets.
 
 ## Owner endpoints
 
 All normal integration endpoints below require an authenticated OWNER session.
 
+### Encrypted service-account credentials
+
+- `GET /api/v1/integrations/google-ads/credentials` — safe presence/source summary
+- `PUT /api/v1/integrations/google-ads/credentials` — `service_account_json` as a
+  JSON object or JSON string, validated and encrypted on the server
+- `DELETE /api/v1/integrations/google-ads/credentials` — remove the saved CRM key
+
+Environment credentials take precedence; deleting the saved CRM key does not
+remove credentials configured in the server environment. None of these calls
+activates uploads or processes queued events.
+
 ### Settings
 
 - `GET /api/v1/integrations/google-ads/settings`
 - `PATCH /api/v1/integrations/google-ads/settings`
+
+Ordinary ID/settings saves preserve the current database upload mode, including a
+pause made from another tab; they do not replay cached upload or validation flags.
+New configurations remain paused and validate-only. Use the separate Pause / Enable
+validation controls to change delivery. A changed account/action destination still
+forces validation, and live activation remains a separate controlled action.
 
 Configure:
 
