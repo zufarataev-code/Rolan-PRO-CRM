@@ -46,8 +46,9 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
     : user.payConfig?.type === "per_sqft" && unstagedWork && order.installationDoneAt && Array.isArray(order.installerIds) && order.installerIds.includes(user.id)
   ).map(user => user.id);
   // Dynamic legacy pay needs an owner's settlement review, not a second pricing calculator.
-  const { googleAdsPayrollReview: _payrollReview, googleAdsCostsReview: _costReview, timeline: _timeline, ...payrollOrder } = order;
-  const payrollReviewBasis = createHash("sha256").update(JSON.stringify({ order: payrollOrder, users: rows(workspace.users).filter(user => payrollReviewUserIds.includes(user.id)).map(user => ({ id: user.id, role: user.role, payConfig: user.payConfig })), settings: workspace.settings }, (_key, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)).digest("hex");
+  const payrollOrder = Object.fromEntries(["status", "managerId", "installerIds", "paidAt", "installationDoneAt", "payments", "paid", "extraServices", "measurements", "productionStages", "serviceType", "serviceTypes", "offeringIds", "excludedProjectDirections", "serviceScopeApprovals", "complexity", "priceOverridePerSqft", "serviceSchedules"].map(key => [key, order[key]]));
+  const payrollSettings = Object.fromEntries(["catalog", "complexityCoefs", "installerRates", "serviceOfferings", "seniorInstallerBonusPct"].map(key => [key, workspace.settings?.[key]]));
+  const payrollReviewBasis = payrollReviewUserIds.length ? createHash("sha256").update(JSON.stringify({ order: payrollOrder, users: rows(workspace.users).filter(user => payrollReviewUserIds.includes(user.id)).map(user => ({ id: user.id, role: user.role, installerLevel: user.installerLevel, payConfig: user.payConfig })), settings: payrollSettings }, (_key, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)).digest("hex") : null;
   const unpaidPayroll = [...stagePayroll, ...jobPayroll].reduce<Prisma.Decimal>((total, item) => {
     const paid = sum(payouts.filter(payout => payout.userId === item.userId && (payout.stageId || null) === item.stageId), "amount");
     return total.plus(Prisma.Decimal.max(0, decimal(item.amount).minus(paid)));

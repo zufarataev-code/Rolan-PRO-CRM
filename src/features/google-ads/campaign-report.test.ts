@@ -100,6 +100,9 @@ test("dynamic payroll requires a separate settlement review and source changes r
   assert.deepEqual(money.issues, []);
   project.googleAdsCostsReview = { fingerprint: money.fingerprint };
   assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, true);
+  Object.assign(workspace.settings, { smsReadIds: ["read-message"], academyProgress: { user: 1 }, importMode: true });
+  Object.assign(project, { notes: "A new internal note", siteInfo: { updatedAt: "2026-10-28" } });
+  assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, true, "communication and UI changes do not reopen payroll review");
   workspace.users[0].payConfig.commissionPct = 15;
   assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("payroll_not_settled"));
   assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, false);
