@@ -23,6 +23,12 @@ Before doing any work:
 
 > Live repository state has advanced significantly since this old verified snapshot. Always re-check `main`, PRs, and Actions before acting. A current task update is recorded below.
 
+## 2026-10-28 handoff — project composition shows only used directions (PR #435)
+
+- Owner: «в составе проекта убрать ненужные окна по направлениям — лишний шум; изменить состав через кнопку».
+- `projectCashierMapHtml` (production-stages.js) renders tiles only for directions in the project (`count-N` grid); missing ones are chips behind «+ Добавить направление» (`projectCashierToggleAdd`, `state.projectCashierAdding[oid]`). Empty project shows chips at once.
+- Test: `project-cashier-card.test.ts`. Deployed `3d4d8c8`.
+
 ## 2026-10-26 handoff — opened project reads as the cashier (branch `claude/project-card-cashier`)
 
 - Owner, 2026-10-26: «раздел проект очень запутан — сделать понятным, как касса; не ломать всё, а слетать плавно». Prototype he tested: Artifact «Проект · касса RolanPRO».
