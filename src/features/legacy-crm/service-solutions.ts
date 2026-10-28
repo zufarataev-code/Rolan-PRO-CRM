@@ -255,6 +255,10 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     }
     // Privacy film is a catalog subtype inside the Decorative direction.
     if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id && filmBelongsToServiceDirection(film, offering.direction))))) return 'Материалы должны принадлежать направлению услуги.';
+    if (offering.defaultFilmId !== undefined && offering.defaultFilmId !== '') {
+      if (typeof offering.defaultFilmId !== 'string' || !Array.isArray(offering.filmIds) || !offering.filmIds.includes(offering.defaultFilmId)) return 'Основной материал должен быть закреплён за услугой.';
+      if (!films.some(film => film.id === offering.defaultFilmId && filmBelongsToServiceDirection(film, offering.direction))) return 'Основной материал должен принадлежать направлению услуги.';
+    }
   }
   for (const offering of offerings) {
     for (const id of Array.isArray(offering.includes) ? offering.includes : []) {

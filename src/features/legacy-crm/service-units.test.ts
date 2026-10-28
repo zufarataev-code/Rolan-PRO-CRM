@@ -187,6 +187,21 @@ test('the server accepts historical privacy services as Decorative and both Deco
   assert.match(prepareServiceSolutions(base, badCost, true)!, /материала/);
 });
 
+test('the server persists only a default material that is linked to the same service', () => {
+  const valid: Row = structuredClone(base);
+  valid.settings.serviceOfferings[0].defaultFilmId = 'mirror';
+  assert.equal(prepareServiceSolutions(base, valid, true), null);
+
+  const unlinked: Row = structuredClone(base);
+  unlinked.settings.serviceOfferings[0].defaultFilmId = 'frost';
+  assert.match(prepareServiceSolutions(base, unlinked, true)!, /Основной материал должен быть закреплён/);
+
+  const wrongDirection: Row = structuredClone(base);
+  wrongDirection.settings.serviceOfferings[0].filmIds.push('solar');
+  wrongDirection.settings.serviceOfferings[0].defaultFilmId = 'solar';
+  assert.match(prepareServiceSolutions(base, wrongDirection, true)!, /Материалы должны принадлежать направлению/);
+});
+
 test('the service price editor separates customer price from owner costs and previews margin', () => {
   const { c } = loadServices();
   const metrics = c.serviceOfferingPricingMetrics({
