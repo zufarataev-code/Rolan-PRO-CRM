@@ -227,6 +227,50 @@ test("cost import → website attribution → paid job → owner ROI review → 
   assert.equal(await db.conversionEvent.count({ where: { transaction_id: `crm-project-${tag}-concurrent-sale` } }), 1, "simultaneous sale transactions share one project conversion");
 });
 
+test("quantity materials and variable project expenses use the owner-reviewed material allowance", async () => {
+  assert.equal((await call("POST", "/api/v1/auth/login", { email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" })).status, 200);
+  const orderId = tag + "-quantity";
+  const status = await db.pipelineStatus.findUniqueOrThrow({ where: { status_code: "CONTACTED" } });
+  const lead = await db.lead.create({ data: { name: "Offline quantity cost test", source: "google_ads", pipeline_status_id: status.pipeline_status_id } });
+  leadIds.push(lead.lead_id);
+  await db.acquisitionTouchpoint.create({ data: { lead_id: lead.lead_id, legacy_order_id: orderId, google_ads_customer_id: customer, google_ads_campaign_id: campaign, captured_at: new Date(`${range.endDate}T18:00:00Z`) } });
+  const workspace = await db.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } });
+  const payload: any = structuredClone(workspace.payload);
+  payload.orders.push({ id: orderId, number: orderId, canonicalLeadId: lead.lead_id, status: "completed", depositReceived: true, payments: [{ amount: 1000 }],
+    _inventoryDeducted: false, _inventoryMaterialCost: 0, productionStages: [], payouts: [],
+    extraServices: [{ id: "controllers", offeringId: orderId, unit: "piece", qty: 2, offeringMaterialCost: 75 }],
+    extraExpenses: [{ id: orderId + "-rental", amount: 200, actual: true }],
+  });
+  payload.finance ||= { transactions: [] };
+  payload.finance.transactions ||= [];
+  payload.finance.transactions.push(
+    { id: orderId + "-purchase", orderId, type: "expense", category: "inventory_purchase", amount: 200 },
+    { id: orderId + "-vehicle", orderId, type: "expense", category: "vehicle", costBehavior: "variable", amount: 100 },
+    { id: orderId + "-rent", orderId, type: "expense", category: "rent", costBehavior: "variable", amount: 200, projectExpenseId: orderId + "-rental" },
+  );
+  await db.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload, revision: { increment: 1 } } });
+  const reportPath = `/api/v1/integrations/google-ads/report?start_date=${range.startDate}&end_date=${range.endDate}&customer_id=${customer}`;
+  const project = async () => (await call("GET", reportPath)).data.campaigns.flatMap((row: any) => row.projects).find((row: any) => row.order_id === orderId);
+  const unreviewed = await project();
+  assert.equal(unreviewed.direct_cost, "650.00");
+  assert.equal(unreviewed.expense_links.length, 2);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: orderId, cost_fingerprint: unreviewed.cost_fingerprint })).status, 400);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "link_expense", order_id: orderId, transaction_id: orderId + "-purchase", expense_id: null, inventory_cost_treatment: "warehouse" })).status, 400, "component-only jobs cannot claim warehouse film coverage");
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "link_expense", order_id: orderId, transaction_id: orderId + "-purchase", expense_id: null, inventory_cost_treatment: "service_material" })).status, 200, "quantity materials can be reconciled through the existing owner choice");
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "link_expense", order_id: orderId, transaction_id: orderId + "-vehicle", expense_id: null })).status, 200);
+  const reviewed = await project();
+  assert.equal(reviewed.direct_cost, "500.00", "material 150 plus purchase excess 50, variable vehicle 100 and rental 200 once");
+  assert.deepEqual(reviewed.issues, []);
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: orderId, cost_fingerprint: reviewed.cost_fingerprint })).status, 200);
+  assert.equal((await project()).costs_confirmed, true);
+  const changed = await db.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } });
+  const next: any = structuredClone(changed.payload);
+  next.orders.find((row: any) => row.id === orderId).extraServices[0].offeringMaterialCost = 80;
+  await db.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload: next, revision: { increment: 1 } } });
+  assert.equal((await project()).costs_confirmed, false, "cost-source changes invalidate review even when purchase coverage keeps the total unchanged");
+  assert.equal((await call("POST", "/api/v1/integrations/google-ads/project", { operation: "confirm_costs", order_id: orderId, cost_fingerprint: reviewed.cost_fingerprint })).status, 409);
+});
+
 test("a correction saved before Google configuration receives one stable delivery later", async () => {
   assert.equal((await call("POST", "/api/v1/auth/login", { email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" })).status, 200);
   await db.googleAdsIntegrationSetting.upsert({ where: { setting_key: "default" }, create: { setting_key: "default" }, update: { conversion_owner_customer_id: null, converted_lead_action_id: null, upload_enabled: false, validate_only: true } });

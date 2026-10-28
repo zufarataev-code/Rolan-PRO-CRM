@@ -33,6 +33,8 @@ Before doing any work:
 
 - New review of `548e70d` on 2026-10-28 found that actual WhatsApp/SMS/copy-link proposal sharing records `premium_proposal_sent`, which legacy qualification did not recognize. The bounded fix recognizes that saved fact while continuing to exclude link publication. Its regression fails against the prior code and passes with the fix, proving one stable event/outbox across repeated reconciliation and ordinary sharing. The owner selected `PROPOSAL_SENT` as the qualification rule. Publish this reviewed follow-up and recheck exact-head CI before release.
 
+- Review follow-up on 2026-10-28 includes quantity-service component costs and project-linked variable vehicle/rental expenses. Component snapshots use the existing service-directory fallback; missing/invalid costs block confirmation and changes invalidate the review. Film and component payments have separate explicit material allowances in the existing owner expense picker/API; payment excess remains cost, roll receipts cannot override an explicit component choice, and cancelled/lost quotes retain sunk actual costs without charging unused quoted components. The new unit regressions reproduced both omissions before the fix. Current focused tests pass; a guarded PostgreSQL owner/API regression was added and must pass CI. Independent Claude follow-up found no concrete blocker. No release or provider upload has occurred for this follow-up.
+
 ## Last verified state
 
 - Verified: 2026-08-25

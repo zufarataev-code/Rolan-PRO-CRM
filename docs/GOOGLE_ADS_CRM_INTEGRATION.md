@@ -38,8 +38,15 @@ closed-job revenue, ROAS and direct-cost ROI:
   expense link is not proof of overlap. A stock receipt proven by its existing
   inventory ID to fund a priced, warning-free film issue uses the consumed
   material cost rather than charging the whole unconsumed roll to the job.
-  Other payments explicitly marked as covering warehouse cost share only
-  that recorded cost, and any excess remains a cost.
+  Quantity services also contribute quantity times their saved per-unit material
+  cost, using the existing service-directory fallback when no snapshot exists.
+  Missing or invalid unit costs prevent cost confirmation; source changes
+  invalidate the review. Other payments explicitly marked as covering recorded
+  material share one allowance per material type: issued film or quantity-service
+  components. A component payment cannot consume the film allowance; payment excess
+  remains a cost. Cancelled/lost quotes do not charge unconsumed service components;
+  recorded purchases and other sunk actual costs remain. Project-linked vehicle/rental expenses marked
+  variable follow the same explicit expense reconciliation as other direct costs.
   Bank entries that might pay an existing project expense require the owner
   to link that expense or explicitly mark the entry as additional. This prevents
   double charging without guessing which two records represent the same cost.

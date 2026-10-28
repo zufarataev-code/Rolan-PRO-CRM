@@ -85,6 +85,70 @@ test("unfinished work and missing material costs remain unknown", () => {
   assert.ok(googleAdsProjectMoney(project, {}).issues.includes("expenses_not_actual"));
 });
 
+test("quantity-service materials count once and their source costs invalidate review", () => {
+  const project: any = { ...order(), measurements: { rooms: [] }, _inventoryDeducted: false, _inventoryMaterialCost: 0, productionStages: [], payouts: [], extraExpenses: [], extraServices: [
+    { id: "controllers", offeringId: "controller", unit: "piece", qty: 2, offeringMaterialCost: 75 },
+    { id: "film", offeringId: "film", unit: "sqft", qty: 10, offeringMaterialCost: 999 },
+    { id: "quick", offeringId: "film", quickProjectLine: true, unit: "piece", qty: 10, offeringMaterialCost: 999 },
+  ] };
+  const workspace = { orders: [project], settings: { serviceOfferings: [{ id: "controller", materialCostPerUnit: 80 }] } };
+  let money = googleAdsProjectMoney(project, workspace);
+  assert.equal(money.directCost.toFixed(2), "150.00");
+  assert.deepEqual(money.issues, []);
+  project.googleAdsCostsReview = { fingerprint: money.fingerprint };
+  assert.equal(buildGoogleAdsCampaignReport([cost()], [point], workspace, "2026-10-01", "2026-10-25", "123").campaigns[0].roi_percent, "750.00");
+  project.extraServices[0].offeringMaterialCost = 80;
+  assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, false);
+  delete project.extraServices[0].offeringMaterialCost;
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "160.00", "the existing service-directory fallback remains available");
+  workspace.settings.serviceOfferings = [];
+  assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("material_cost_not_verified"));
+  project.extraServices[0].offeringMaterialCost = -1;
+  assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("material_cost_not_verified"));
+  project.extraServices[0].offeringMaterialCost = "not-a-cost";
+  assert.ok(googleAdsProjectMoney(project, workspace).issues.includes("material_cost_not_verified"));
+  project.extraServices[0].offeringMaterialCost = 0;
+  assert.deepEqual(googleAdsProjectMoney(project, workspace).issues, [], "an explicit zero is different from a missing unit cost");
+});
+
+test("quantity-service purchase payments require review and share the recorded material allowance", () => {
+  const project = { ...order(), measurements: { rooms: [] }, _inventoryDeducted: false, _inventoryMaterialCost: 0, productionStages: [], payouts: [], extraExpenses: [], extraServices: [{ id: "controllers", offeringId: "controller", unit: "piece", qty: 2, offeringMaterialCost: 75 }] };
+  const purchase: any = { id: "purchase", orderId: project.id, category: "inventory_purchase", type: "expense", amount: 200, projectExpenseId: null };
+  const workspace = { finance: { transactions: [purchase] } };
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "350.00");
+  assert.equal(googleAdsProjectMoney(project, workspace).unresolvedExpenseLinks.length, 1);
+  Object.assign(purchase, { inventoryCostTreatment: "service_material" });
+  const reviewed = googleAdsProjectMoney(project, workspace);
+  assert.equal(reviewed.directCost.toFixed(2), "200.00", "retain the payment excess without counting the same components twice");
+  assert.deepEqual(reviewed.issues, []);
+  const mixed = { ...project, _inventoryDeducted: true, _inventoryMaterialCost: 100, _inventoryLog: [{ rollId: "roll-1", materialCost: 100 }] };
+  workspace.finance.transactions.push({ id: "roll-purchase", orderId: project.id, category: "inventory_purchase", type: "expense", amount: 1000, inventoryId: "roll-1" });
+  assert.equal(googleAdsProjectMoney(mixed, workspace).directCost.toFixed(2), "300.00", "component payments cannot consume an unrelated film allowance");
+  purchase.inventoryId = "roll-1";
+  mixed.extraServices[0].offeringMaterialCost = 0;
+  assert.equal(googleAdsProjectMoney(mixed, workspace).directCost.toFixed(2), "300.00", "an explicit component choice never turns into a roll receipt when its coverage disappears");
+});
+
+test("project-specific variable vehicle and rental expenses stay in direct-cost reconciliation", () => {
+  const project = order();
+  const vehicle: any = { id: "vehicle", orderId: project.id, type: "expense", category: "vehicle", costBehavior: "variable", amount: 100 };
+  const rental: any = { id: "rent", orderId: project.id, type: "expense", category: "rent", costBehavior: "variable", amount: 200 };
+  const workspace = { finance: { transactions: [vehicle, rental,
+    { ...vehicle, id: "fixed", costBehavior: "fixed", amount: 999 },
+    { ...rental, id: "overhead", costBehavior: undefined, amount: 999 },
+    { ...vehicle, id: "personal", scope: "personal", amount: 999 },
+    { ...vehicle, id: "other-job", orderId: "other", amount: 999 },
+  ] } };
+  assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "600.00");
+  assert.equal(googleAdsProjectMoney(project, workspace).unresolvedExpenseLinks.length, 2);
+  vehicle.projectExpenseId = null; rental.projectExpenseId = null;
+  const reviewed = googleAdsProjectMoney(project, workspace);
+  assert.deepEqual(reviewed.issues, []);
+  Object.assign(project, { googleAdsCostsReview: { fingerprint: reviewed.fingerprint } });
+  vehicle.amount = 110;
+  assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, false);
+});
+
 test("a manual sale requires the saved acceptance fact, deposit and approved value", () => {
   const project = { ...order(), projectEstimateSnapshot: { revenue: 2500 }, timeline: [{ key: "accepted_by_payment", at: "2026-10-20T10:00:00Z" }] };
   assert.equal(legacyGoogleAdsSale(project)?.conversionValue.toString(), "2500");
@@ -174,19 +238,28 @@ test("the existing expense picker offers warehouse review and sends distinct own
     const start = source.indexOf(`function ${name}(`);
     vm.runInContext(source.slice(source.lastIndexOf("\n", start) + 1, source.indexOf("\n}", start) + 2), context);
   }
-  const payment = { transaction_id: "purchase", amount: "100", category: "inventory_purchase", warehouse_available: true };
+  const payment = { transaction_id: "purchase", amount: "100", category: "inventory_purchase", warehouse_available: true, service_material_available: false };
   const report = { campaigns: [{ currency: "USD", projects: [{ order_id: "order-1", expense_links: [payment] }] }] };
   assert.match(context.googleAdsCampaignReportHtml(report), /value="warehouse"/);
   payment.warehouse_available = false;
   assert.doesNotMatch(context.googleAdsCampaignReportHtml(report), /value="warehouse"/);
-  for (const choice of ["warehouse", "separate", "equipment-expense"]) await context.googleAdsLinkExpense("order-1", "purchase", choice);
+  payment.service_material_available = true;
+  assert.match(context.googleAdsCampaignReportHtml(report), /value="service_material"/);
+  for (const choice of ["warehouse", "service_material", "separate", "equipment-expense"]) await context.googleAdsLinkExpense("order-1", "purchase", choice);
   const base = { operation: "link_expense", order_id: "order-1", transaction_id: "purchase" };
-  assert.deepEqual(JSON.parse(JSON.stringify(requests)), [{ ...base, expense_id: null, inventory_cost_treatment: "warehouse" }, { ...base, expense_id: null }, { ...base, expense_id: "equipment-expense" }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(requests)), [{ ...base, expense_id: null, inventory_cost_treatment: "warehouse" }, { ...base, expense_id: null, inventory_cost_treatment: "service_material" }, { ...base, expense_id: null }, { ...base, expense_id: "equipment-expense" }]);
 });
 
 test("cancelled jobs can finalize sunk costs without completing abandoned work", () => {
-  const project = { ...order(), status: "cancelled", productionStages: [{ status: "scheduled", payroll: [] }], extraExpenses: [{ id: "unused", amount: 99, actual: false }], _inventoryDeducted: false };
-  assert.deepEqual(googleAdsProjectMoney(project, {}).issues, []);
+  const project = { ...order(), status: "cancelled", productionStages: [{ status: "scheduled", payroll: [] }], extraExpenses: [{ id: "unused", amount: 99, actual: false }], _inventoryDeducted: false, _inventoryMaterialCost: 0,
+    extraServices: [{ offeringId: "quoted", unit: "piece", qty: 2, offeringMaterialCost: 75 }, { offeringId: "unpriced", unit: "piece", qty: 1 }],
+  };
+  for (const status of ["cancelled", "canceled", "lost"]) {
+    project.status = status;
+    const money = googleAdsProjectMoney(project, {});
+    assert.deepEqual(money.issues, []);
+    assert.equal(money.directCost.toFixed(2), "150.00", "keep paid labor but exclude unconsumed quoted components");
+  }
 });
 
 test("archiving a job preserves financial history and does not duplicate an active stale copy", () => {

@@ -21,14 +21,14 @@ export async function POST(request: NextRequest) {
   if (!workspace || !order) return apiError(404, "project_not_found", "Project not found.");
   if (body.operation === "link_expense") {
     if (typeof body.transaction_id !== "string" || body.expense_id !== null && typeof body.expense_id !== "string") return apiError(400, "invalid_expense_link", "A bank entry and expense link are required.");
-    if (body.inventory_cost_treatment !== undefined && body.inventory_cost_treatment !== "warehouse") return apiError(400, "invalid_expense_link", "Choose the existing expense, a separate cost, or warehouse material.");
+    if (body.inventory_cost_treatment !== undefined && !["warehouse", "service_material"].includes(body.inventory_cost_treatment)) return apiError(400, "invalid_expense_link", "Choose the existing expense, a separate cost, warehouse film or service components.");
     const transaction = (payload.finance?.transactions || []).find((item: Record<string, any>) => item.id === body.transaction_id && item.orderId === order.id && item.type === "expense");
     const expense = (order.extraExpenses || []).find((item: Record<string, any>) => item.id === body.expense_id && (item.actual === true || item.paid === true || item.paidAt));
     if (!transaction || body.expense_id !== null && !expense) return apiError(400, "invalid_expense_link", "Choose an existing project expense or explicitly mark this bank entry as separate.");
-    const warehouse = body.inventory_cost_treatment === "warehouse";
-    if (warehouse && (transaction.category !== "inventory_purchase" || body.expense_id !== null || order._inventoryDeducted !== true || !Number.isFinite(order._inventoryMaterialCost) || order._inventoryMaterialCost <= 0)) return apiError(400, "invalid_expense_link", "Warehouse linking requires an inventory purchase and verified material issue cost.");
+    const treatment = body.inventory_cost_treatment as "warehouse" | "service_material" | undefined;
+    if (treatment && (transaction.category !== "inventory_purchase" || body.expense_id !== null || !googleAdsProjectMoney(order, payload).materialCoverage[treatment])) return apiError(400, "invalid_expense_link", "Material linking requires an inventory purchase and recorded cost for the selected material.");
     transaction.projectExpenseId = body.expense_id;
-    if (transaction.category === "inventory_purchase") transaction.inventoryCostTreatment = warehouse ? "warehouse" : body.expense_id === null ? "separate" : "expense";
+    if (transaction.category === "inventory_purchase") transaction.inventoryCostTreatment = treatment ?? (body.expense_id === null ? "separate" : "expense");
     const saved = await prisma.legacyWorkspace.updateMany({ where: { workspace_id: "primary", revision: workspace.revision }, data: { payload, revision: { increment: 1 }, updated_by: auth.session.user.user_id } });
     return saved.count === 1 ? apiSuccess({ linked: true }) : apiError(409, "revision_conflict", "CRM changed; refresh before linking costs.");
   }
