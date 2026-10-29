@@ -81,6 +81,16 @@ test("only the owner sees a JSON file picker rather than editable key text", () 
   assert.equal(harness({ role: "manager" }).context.googleAdsConversionsPanelHtml(), "");
 });
 
+test("live-mode copy distinguishes enabled delivery from Google acceptance and bidding decisions", () => {
+  const h = harness();
+  h.context.state.googleAdsConv.status = { upload_enabled: true, validate_only: false, conversions: { outbox: {} } };
+  const html = h.context.googleAdsConversionsPanelHtml();
+  assert.match(html, /Живая отправка разрешена/);
+  assert.match(html, /Приём и сопоставление проверяйте/);
+  assert.match(html, /отдельного решения владельца/);
+  assert.doesNotMatch(html, /Google принимает события|Через 4 недели/);
+});
+
 test("a JSON file goes only to the encrypted owner credential endpoint and is cleared", async () => {
   let reads = 0;
   const h = harness({ file: { size: 1024, text: async () => { reads += 1; return JSON.stringify(fakeKey); } } });

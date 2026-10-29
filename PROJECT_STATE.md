@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-10-29 — Website quote corrections and callback follow-ups
+
+- Task owner: Codex, branch `codex/website-quote-followups-20261029`, from released main `5199c42`. Initial quote POST already imports and displays submitted context. This follow-up adds signed PATCH to the same website endpoint for later contact corrections, quote edits and callback requests on that original lead.
+- ActivityLog stores immutable event/revision receipts and observed contact before-images; a narrow expression-index migration enforces uniqueness. Ordered replay and payload conflicts are explicit. No acquisition, consent, staff note, assignment, status, appointment or sale is changed. Office-only history appears in the canonical New Leads inbox and converted project card through the scoped leads API; polling updates its own history slot without replacing editable project fields.
+- Protocol agreed with the separate WordPress redesign implementation; see `docs/WEBSITE_LEAD_FOLLOWUPS.md`. Deploy this receiver before enabling the website PATCH publisher. No production deployment or runtime/provider/customer-data mutation by this branch.
+- Local verification: 980/980 unit tests, TypeScript and production build (131 routes) pass; focused validator/rendering checks and diff checks pass. Guarded PostgreSQL/API and authenticated 390/1440px browser cases are added to required CI; their fresh published-head result and independent review remain required before release. The Mac internal data volume ran out of temporary-log space; this task's disposable temp/log files moved to the external workspace without deleting unrelated files.
+
 ## Start here
 
 Before doing any work:

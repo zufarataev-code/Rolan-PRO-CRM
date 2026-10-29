@@ -2,6 +2,12 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-10-29 — Website follow-ups stay on the original lead
+
+- The owner requested complete quote delivery, including customer corrections and callback requests after the first website submission. Original POST identity and acquisition remain immutable. Signed PATCH follow-ups use stable event UUIDs and ordered per-submission revisions, with durable receipts in the existing ActivityLog; no second lead, project or money ledger is created.
+- Contact changes are allowlisted; existing staff notes, consent, acquisition, assignment and pipeline stage are preserved. Customer history is projected separately into the existing role-scoped lead inbox and converted project card. A requested callback does not schedule an appointment or qualify a sale. Missing initial delivery and revision gaps retry; conflicting immutable events require review.
+- Protocol and rollout order are documented in `docs/WEBSITE_LEAD_FOLLOWUPS.md`. This implementation is for normal PR review; it does not deploy or change production records/provider state.
+
 ## 2026-10-28 — Dynamic payroll settlement before ROI confirmation
 
 - Earned commissions and unstaged per-square-foot obligations keep campaign ROI unknown until the OWNER separately reviews their settlement in the existing payroll module. The report does not introduce another pricing formula or editable payroll ledger. Its control reuses the active payroll calculator, refuses outstanding balances, and records only owner attestation metadata against current source facts. Later job, pay configuration or pricing changes invalidate that attestation and the cost review. Fixed-per-job obligations accrue directly from existing completion events and reconcile against the same worker's unstaged payments.

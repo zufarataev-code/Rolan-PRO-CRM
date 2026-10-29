@@ -7,11 +7,28 @@ import { persistLeadAttribution } from "@/features/google-ads/attribution";
 import { normalizeLeadIdentity } from "@/features/sales/lead-identity";
 import type { AttributionCaptureInput, ConsentState } from "@/features/google-ads/types";
 import { prisma } from "@/lib/db";
+import { applyWebsiteUpdate, WebsiteUpdateError } from "@/features/integrations/website-lead-updates";
 
 const EXTERNAL_SOURCE = "rolanpro.com";
 const SIGNATURE_HEADER = "x-rolan-signature";
 const TIMESTAMP_HEADER = "x-rolan-timestamp";
 const MAX_CLOCK_SKEW_SECONDS = 300;
+
+export async function PATCH(request: NextRequest) {
+  const secret = process.env.WEBSITE_LEAD_INGEST_SECRET?.trim();
+  if (!secret) return error(503, "integration_not_configured", "Website lead ingestion is not configured.");
+  const rawBody = await request.text();
+  if (!verifySignature(rawBody, request.headers.get(TIMESTAMP_HEADER), request.headers.get(SIGNATURE_HEADER), secret)) return error(401, "invalid_signature", "Website lead signature is invalid or expired.");
+  let body: unknown;
+  try { body = JSON.parse(rawBody); } catch { return error(400, "invalid_json", "Request body must be valid JSON."); }
+  try { return NextResponse.json(await applyWebsiteUpdate(body)); }
+  catch (cause) {
+    if (cause instanceof WebsiteUpdateError) return NextResponse.json({ ok: false, error: { code: cause.code, message: cause.message }, ...(cause.currentRevision !== undefined ? { current_revision: cause.currentRevision } : {}) }, { status: cause.status });
+    // Do not log customer payloads, contact values or database exception details.
+    console.error("website_lead_update_failed");
+    return error(500, "lead_update_failed", "Website update could not be accepted by CRM.");
+  }
+}
 
 type WebsiteLeadPayload = {
   submission_id?: string;
