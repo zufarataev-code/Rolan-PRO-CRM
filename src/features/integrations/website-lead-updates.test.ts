@@ -13,6 +13,7 @@ test("callback-only updates accept empty contacts and normalize timezone/key ord
   const b = normalizeWebsiteUpdate({ ...event, contact: { name: "Customer", email: "customer@example.com" } });
   assert.equal(websiteUpdateFingerprint(a), websiteUpdateFingerprint(b));
   assert.equal(a.contact.email, "customer@example.com");
+  assert.equal(normalizeWebsiteUpdate({ ...event, contact: { name: "  Customer\n  Name  " } }).contact.name, "Customer Name");
 });
 test("rejects malformed, oversized, clearing and unsupported business/consent fields", () => {
   for (const input of [null, [], { ...event, revision: 0 }, { ...event, revision: 1.5 }, { ...event, revision: 2147483648 }, { ...event, event_id: "not-uuid" }, { ...event, occurred_at: "yesterday" }, { ...event, occurred_at: "2026-10-29T12:00:00" }, { ...event, contact: { email: "" } }, { ...event, contact: { phone: "<script>" } }, { ...event, contact: { name: "n".repeat(161) } }, { ...event, follow_up: { kind: "quote_updated", message: "m".repeat(16001) } }, { ...event, attribution: {} }, { ...event, notes: "replace human notes" }, { ...event, contact: { pipeline_status_code: "CLOSED_WON" } }]) {

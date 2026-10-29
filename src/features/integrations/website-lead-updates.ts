@@ -31,7 +31,7 @@ export function normalizeWebsiteUpdate(input: unknown) {
   const contactInput = body.contact === undefined ? {} : object(body.contact);
   keys(contactInput, ["name", "phone", "email"]);
   const contact: { name?: string; phone?: string; email?: string } = {};
-  if (contactInput.name !== undefined) contact.name = text(contactInput.name, "name", 160);
+  if (contactInput.name !== undefined) contact.name = text(contactInput.name, "name", 160).replace(/\s+/g, " ");
   if (contactInput.phone !== undefined) {
     contact.phone = text(contactInput.phone, "phone", 40);
     if (!/^[0-9+().\s#xX-]{3,40}$/.test(contact.phone)) invalid("invalid_phone", "phone is invalid.");
@@ -70,13 +70,24 @@ export async function applyWebsiteUpdate(input: unknown) {
     if (update.revision <= currentRevision) throw new WebsiteUpdateError("revision_conflict", "This revision already belongs to another event.", 409, currentRevision);
     if (update.revision !== currentRevision + 1) throw new WebsiteUpdateError("revision_gap", "An earlier website update must arrive first.", 409, currentRevision);
     // No business-stage, note, assignment, acquisition or consent write is permitted here.
-    if (Object.keys(update.contact).length) await tx.lead.update({ where: { lead_id: lead.lead_id }, data: { ...update.contact, ...(update.contact.name && lead.customer_type !== "B2B" ? { first_name: null, last_name: null } : {}) } });
+    if (Object.keys(update.contact).length) {
+      const { name, ...contact } = update.contact;
+      let identity: { name?: string; first_name?: string | null; last_name?: string | null } = {};
+      if (name && lead.customer_type === "B2B") {
+        // contact.name is the person, never the company's display name. Use
+        // the same first-token/remainder convention as clientIdentityFromLead.
+        const parts = name.split(" "), firstName = parts[0], lastName = parts.slice(1).join(" ");
+        if (firstName.length > 80 || lastName.length > 80) invalid("invalid_name", "Business contact name parts must be at most 80 characters.");
+        identity = { first_name: firstName, last_name: lastName || null };
+      } else if (name) identity = { name, first_name: null, last_name: null };
+      await tx.lead.update({ where: { lead_id: lead.lead_id }, data: { ...contact, ...identity } });
+    }
     const title = update.follow_up.kind === "callback_requested" ? "Запрос обратного звонка с сайта" : "Уточнение заявки с сайта";
     const contactText = Object.entries(update.contact).map(([key, value]) => `${key}: ${value}`).join("\n");
     await tx.activityLog.create({ data: {
       entity_type: "lead", entity_id: lead.lead_id, action_key: WEBSITE_UPDATE_ACTION,
       message: [title, contactText, update.follow_up.message].filter(Boolean).join("\n"),
-      metadata: { provider: "website", external_source: SOURCE, submission_id: update.submission_id, event_key: eventKey, event_id: update.event_id, payload_hash: hash, revision: update.revision, occurred_at: update.occurred_at, kind: update.follow_up.kind, before_image_source: "observed_before_update", before_contact: { name: lead.name, phone: lead.phone, email: lead.email }, contact: update.contact } as Prisma.InputJsonValue,
+      metadata: { provider: "website", external_source: SOURCE, submission_id: update.submission_id, event_key: eventKey, event_id: update.event_id, payload_hash: hash, revision: update.revision, occurred_at: update.occurred_at, kind: update.follow_up.kind, before_image_source: "observed_before_update", before_contact: { name: lead.name, first_name: lead.first_name, last_name: lead.last_name, phone: lead.phone, email: lead.email }, contact: update.contact } as Prisma.InputJsonValue,
     } });
     return { ok: true, lead_id: lead.lead_id, event_id: update.event_id, revision: update.revision, current_revision: update.revision, duplicate: false, applied: true };
   });

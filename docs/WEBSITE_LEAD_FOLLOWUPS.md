@@ -54,7 +54,11 @@ with event and lead/revision uniqueness and transaction locks. It preserves curr
 contact before-images labeled `observed_before_update`; these are not a claim to
 have recovered the historic initial website payload. Original notes remain unchanged.
 Changed B2C display names clear redundant old name parts so later contact creation
-uses the corrected full name. No linked client/contact or project is overwritten.
+uses the corrected full name. Names collapse internal whitespace as on initial
+intake. For B2B, `contact.name` corrects the representative using the existing
+first-token/remainder convention (80 characters per part); the company display
+name, company identity and representative title are preserved. No linked
+client/contact or project is overwritten.
 
 The existing scoped leads API exposes only display history, not receipt metadata.
 Office users see the history in New Leads and the original lead's project card after
