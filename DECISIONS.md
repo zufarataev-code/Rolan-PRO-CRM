@@ -2,6 +2,12 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-10-29 — Owner-authorized live uploads may stay enabled with an empty queue
+
+- After access and destination preparation, the owner explicitly requested enabling uploads and completing the integration. An empty conversion queue alone is not a reason to keep authorized live delivery paused: the existing consent, attribution, milestone, destination and retry gates continue to govern future genuine events, with both environment and stored settings explicitly in live mode.
+- Never fabricate enquiries, attribution, business milestones or conversion events to demonstrate delivery. Live enablement, natural worker activity, Google acceptance and Google matching are separate evidence states; record an unexercised provider path accurately while allowing genuine eligible events to arrive.
+- This activation does not enable Customer Match or change campaign goals, budgets or bidding. The owner reviews real outcomes and stage deduplication separately before any bidding-goal change. Earlier implementation-only and paused snapshots remain dated history; this later explicit owner authorization governs the live-mode choice.
+
 ## 2026-10-29 — Website follow-ups stay on the original lead
 
 - The owner requested complete quote delivery, including customer corrections and callback requests after the first website submission. Original POST identity and acquisition remain immutable. Signed PATCH follow-ups use stable event UUIDs and ordered per-submission revisions, with durable receipts in the existing ActivityLog; no second lead, project or money ledger is created.
