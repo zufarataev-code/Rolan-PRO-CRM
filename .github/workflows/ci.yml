@@ -148,6 +148,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Website follow-ups phone and desktop
+        env:
+          E2E_PLAYWRIGHT_MODULE: /tmp/rolanpro-browser/node_modules/playwright
+        run: node --import tsx e2e/website-followups.browser.ts
+
+      - name: Website follow-up screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-followups-screenshots
+          path: test-results/website-followups/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Application log on failure
         if: failure()
         run: tail -200 next.log || true

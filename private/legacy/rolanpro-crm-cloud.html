@@ -23373,6 +23373,13 @@ const LEAD_SOURCES = {
   'ai-chat':{ label: 'ИИ-чат',    icon: '🤖', cls: 'bg-purple-50 text-purple-700', crmSource: 'direct' },
 };
 const CANONICAL_OPEN_LEAD_STATUSES = new Set(['NEW_LEAD', 'LEAD', 'CONSULTATION_SCHEDULED']);
+function websiteLeadUpdatesHtml(leadId) {
+  if (!['owner', 'manager'].includes(currentUser()?.role)) return '';
+  const lead = canonicalLeads.find(item => item.lead_id === leadId);
+  const updates = lead?.website_updates || [];
+  if (!updates.length) return '';
+  return `<section data-website-updates class="card mt-2" style="min-width:0;overflow-wrap:anywhere"><div class="font-semibold text-sm">Уточнения клиента с сайта</div>${updates.map(update => `<div class="text-sm mt-2" style="white-space:pre-wrap">${academyEsc(fmtDateTime(update.occurred_at))} · #${Number(update.revision)}\n${academyEsc(update.message)}</div>`).join('')}</section>`;
+}
 function canonicalMessengerLeadRows() {
   return canonicalLeads
     // Website leads arrive in PostgreSQL (/api/v1/integrations/website/leads) and
@@ -23399,11 +23406,13 @@ function canonicalMessengerLeadRows() {
         message: consultation?.location_address || lead.notes || '',
         receivedAt: lead.created_at,
         canonical: true,
+        websiteUpdatesHtml: websiteLeadUpdatesHtml(lead.lead_id),
         consultation,
       };
     });
 }
 async function fetchCanonicalLeads(options = {}) {
+  const previous = JSON.stringify(canonicalLeads);
   try {
     const response = await fetch('/api/v1/leads', { cache: 'no-store' });
     if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -23414,11 +23423,18 @@ async function fetchCanonicalLeads(options = {}) {
     console.warn('[Cloud CRM] canonical leads unavailable', error);
   }
   if (options.renderIfVisible && state.view === 'leads') render();
+  if (options.renderIfVisible && state.view === 'orderDetails' && !state.modal && previous !== JSON.stringify(canonicalLeads)) {
+    // Update customer history in place: an incoming enquiry must not redraw the
+    // Project card while its manager is editing an unrelated inline field.
+    const host = document.querySelector('[data-project-website-updates]');
+    const leadId = getOrder(state.openOrderId)?.canonicalLeadId;
+    if (host && leadId && host.dataset.projectWebsiteUpdates === leadId) host.innerHTML = websiteLeadUpdatesHtml(leadId);
+  }
 }
 function startCanonicalLeadsPolling() {
   if (canonicalLeadsPollTimer) clearInterval(canonicalLeadsPollTimer);
   canonicalLeadsPollTimer = setInterval(() => {
-    if (state.view === 'leads') fetchCanonicalLeads({ renderIfVisible: true });
+    if (state.view === 'leads' || (state.view === 'orderDetails' && !state.modal && ['owner', 'manager'].includes(currentUser()?.role) && getOrder(state.openOrderId)?.canonicalLeadId)) fetchCanonicalLeads({ renderIfVisible: true });
   }, 10000);
 }
 function renderLeadsView() {
@@ -23456,6 +23472,7 @@ function renderLeadsView() {
               ${l.claimedAt && Date.now() - new Date(l.claimedAt).getTime() < 10 * 60 * 1000 ? `<div class="text-xs text-amber-700 mt-1">⏳ Проект по заявке уже оформляется</div>` : ''}
               ${l.companyName ? `<div class="text-sm text-gray-700 mt-1">🏢 ${academyEsc([clientCompanyTypeLabel(l.companyType), [l.firstName, l.lastName].filter(Boolean).join(' '), l.contactTitle].filter(Boolean).join(' · '))}</div>` : ''}
               ${l.message ? `<div class="text-sm text-gray-600 mt-1 bg-gray-50 rounded p-2">${academyEsc(l.message)}</div>` : ''}
+              ${l.websiteUpdatesHtml || ''}
               ${l.consultation ? `<div class="text-xs text-gray-500 mt-2">📅 ${fmtDateTime(l.consultation.scheduled_start_at)} · ${academyEsc(l.consultation.assigned_consultant?.full_name || 'Не назначен')}</div>` : ''}
             </div>
             <div class="flex flex-col gap-2">

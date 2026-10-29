@@ -7,6 +7,7 @@ import {
 } from "@/features/google-ads/conversion-events";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { buildClientAccessWhere, buildDealAccessWhere, buildLeadScopeWhere } from "@/features/sales/access";
+import { websiteUpdateHistory } from "@/features/integrations/website-lead-updates";
 
 function toNumber(value: { toString(): string } | null | undefined) {
   return value ? Number(value.toString()) : 0;
@@ -587,7 +588,8 @@ export async function listLeads(managerId?: string) {
     },
   });
 
-  return leads.map(serializeLead);
+  const history = await websiteUpdateHistory(leads.filter(lead => lead.source === "website").map(lead => lead.lead_id));
+  return leads.map(lead => ({ ...serializeLead(lead), website_updates: history.get(lead.lead_id) || [] }));
 }
 
 export async function listClients(managerId?: string) {
