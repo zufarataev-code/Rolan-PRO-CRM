@@ -126,7 +126,7 @@ export function serviceGroupName(order: Row, id: string, payload: Row): string {
   return DIRECTION_TITLES[key] || DIRECTION_TITLES.solar_film;
 }
 /** Owner-only economics of a service: the installer rate and the material cost per unit. */
-const OWNER_OFFERING_FIELDS = ['installerRatePerSqft', 'materialCostPerUnit'] as const;
+const OWNER_OFFERING_FIELDS = ['installerRatePerSqft', 'installerDayMinimum', 'materialCostPerUnit'] as const;
 
 /** The CRM's film category for a catalog value (mirrors canonicalCatalogCategory in the legacy page). */
 export function canonicalFilmCategory(value: unknown): string {
@@ -222,7 +222,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     if (typeof offering.id !== 'string' || !/^[\w-]{1,120}$/.test(offering.id) || ids.has(offering.id)) return 'Некорректный или повторный ID услуги.';
     ids.add(offering.id);
     if (![...SERVICE_DIRECTIONS, ...LEGACY_SERVICE_DIRECTIONS].includes(offering.direction) || typeof offering.name !== 'string' || !offering.name.trim() || offering.name.length > 120) return 'Укажите направление и название услуги.';
-    for (const field of ['pricePerSqft','installerRatePerSqft','minPricePerUnit','maxPricePerUnit']) {
+    for (const field of ['pricePerSqft','installerRatePerSqft','installerDayMinimum','minPricePerUnit','maxPricePerUnit']) {
       if (offering[field] !== undefined && (typeof offering[field] !== 'number' || !Number.isFinite(offering[field]) || offering[field] < 0)) return 'Цена, диапазон и ставка услуги должны быть неотрицательными числами.';
     }
     const minPrice = Number(offering.minPricePerUnit) || 0;
