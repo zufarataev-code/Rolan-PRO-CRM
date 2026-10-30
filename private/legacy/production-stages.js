@@ -7,6 +7,7 @@ function projectStageEmployeeAmount(o, stage, userId) {
   if (!(stage.installerIds || []).includes(userId) || getUser(userId)?.payConfig?.type !== 'per_sqft') return 0;
   const scoped=projectStageUnstagedOrder(o,true,stage.serviceId);
   scoped.installerIds=stage.installerIds;
+  scoped._stageScope=true;
   scoped.serviceSchedules=[{id:stage.serviceId,installerIds:stage.installerIds,installationAt:stage.startsAt}];
   const base = orderInstallerPayoutForUser(scoped,userId);
   return Math.round(base * Number(stage.laborSharePct || 0)) / 100;
@@ -121,12 +122,19 @@ function orderInstallerPayoutForUser(o, userId) {
   if (pc.type === 'fixed_per_job') return Math.max(0, Number(pc.fixedPerJob) || 0);
   if (pc.type === 'commission') return orderRevenue(o) * Math.max(0, Number(pc.commissionPct) || 0) / 100 / installerIds.length;
   if (pc.type !== 'per_sqft') return 0;
+  const k = typeof installerComplexityFactor === 'function' ? installerComplexityFactor(o) : 1;
   const filmPayout = !measureAllWindows(o).length ? orderQuickInstallerPayoutForUser(o, user) : measureAllWindows(o).reduce((sum, { win }) => {
     const crew = projectServiceCrew(o, win);
     if (!crew.includes(userId)) return sum;
-    return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / Math.max(1, crew.length);
+    return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) * k / Math.max(1, crew.length);
   }, 0);
-  return (filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * installerSeniorFactor(user);
+  let base = filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length);
+  // A stage is a share of its service budget; the visit minimum and the road
+  // are paid once, on the project (Owner, 2026-10-30).
+  if (o._stageScope) return base * installerSeniorFactor(user);
+  const extra = typeof installerVisitExtras === 'function' ? installerVisitExtras(o) : { topUp: 0, travel: { perPerson: 0 } };
+  base += extra.topUp / installerIds.length;
+  return base * installerSeniorFactor(user) + extra.travel.perPerson;
 }
 
 function calcUserPayoutForPeriod(userId, startDate, endDate, orders = db.orders) {
@@ -169,7 +177,9 @@ function calcUserPayoutForPeriod(userId, startDate, endDate, orders = db.orders)
     } else if (pc.type === 'per_sqft') {
       const installersCount = (o.installerIds||[]).length || 1;
       amount = orderInstallerPayoutForUser(o, u.id);
-      label = `${orderActualAreaSqft(o).toFixed(1)} sqft × ставки${installersCount>1?' ÷'+installersCount:''}`;
+      const extra = typeof installerVisitExtras === 'function' ? installerVisitExtras(o) : { topUp: 0, travel: { perPerson: 0 } };
+      const k = typeof installerComplexityFactor === 'function' ? installerComplexityFactor(o) : 1;
+      label = `${orderActualAreaSqft(o).toFixed(1)} sqft × ставки${k !== 1 ? ' ×' + k : ''}${installersCount>1?' ÷'+installersCount:''}${extra.topUp > 0 ? ' · минимум за выезд' : ''}${extra.travel.perPerson > 0 ? ` · дорога ${extra.travel.hours} ч × ${extra.travel.trips}` : ''}`;
     } else if (pc.type === 'fixed_per_job') {
       amount = pc.fixedPerJob || 0;
       label = `Фикс $${pc.fixedPerJob}`;
@@ -742,10 +752,10 @@ function orderInstallerPayoutBreakdown(o) {
   if (!installerIds.length) {
     const windows = measureAllWindows(o);
     const total = windows.length
-      ? windows.reduce((sum, { win }) => sum + windowInstallerPayout(win), 0)
+      ? windows.reduce((sum, { win }) => sum + windowInstallerPayout(win), 0) * installerComplexityFactor(o)
       : projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => {
           return sum + (Number(line.qty) || 0) * installerRateForQuickLine(null, line);
-        }, 0);
+        }, 0) * installerComplexityFactor(o);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
     return { total: total + work, byInstaller: [], source: 'REFERENCE_DEFAULT' };
   }
@@ -2499,6 +2509,7 @@ function openInstallWindow(oid, key = '') {
   }
   state.modal = installWindowHtml(o);
   render();
+  if (!key) projectTravelRefresh(oid);
 }
 function closeInstallWindow() {
   state._installWindow = null;
@@ -2578,6 +2589,7 @@ function installWindowHtml(o) {
       ${warningBox}
       <div class="rp-dirwin-sub">Услуги проекта по порядку</div>
       ${list || '<div class="rp-dirwin-empty">В проекте нет услуг.</div>'}
+      ${installTravelHtml(o)}
       <div class="install-hint">Назначайте то, что известно сейчас. Остальные услуги останутся «не назначено» — назначите, когда подойдёт время. Клиент получит сообщение о датах.</div>
     </div>
     <div class="rp-dirwin-foot">${footer}</div>`);
@@ -2805,6 +2817,7 @@ function renderRatesCosts() {
     }).join('') || '<div class="rates-empty">В команде пока никого — добавьте сотрудников в «Команде».</div>';
     return `<div class="rates-page">${ratesHeadHtml('👷', 'Люди и оплата', 'Оклад, процент, фикс за заказ или сдельно — у каждого сотрудника одна запись')}
       <div class="rates-list">${rows}</div>
+      ${ratesPayRulesHtml()}
       <div class="rates-note">Оклады сами попадают в «Постоянные расходы»: сейчас <b>${fmtMoney(sum.salaries)}</b> в месяц. Сдельная оплата монтажника — ставка услуги во вкладке <button type="button" class="rates-link" onclick="openRatesTab('work')">«За единицу работы»</button>.</div></div>`;
   }
   if (tab === 'work') {
@@ -2817,6 +2830,7 @@ function renderRatesCosts() {
         const missing = !(Number(item.installerRatePerSqft) > 0);
         return `<div class="rates-row rates-row-edit ${missing ? 'rates-row-missing' : ''}"><div class="rates-row-main"><b>${academyEsc(item.name)}</b><small>клиенту ${fmtMoney(Number(item.pricePerSqft) || 0)} / ${academyEsc(per)}</small></div>
           <label>Монтажнику, $ / ${academyEsc(per)}<input type="number" min="0" step="0.25" inputmode="decimal" value="${Number(item.installerRatePerSqft) || ''}" placeholder="0" onchange="ratesUpdateOffering('${item.id}','installerRatePerSqft',this.value,this)"></label>
+          ${sized ? '' : `<label>Минимум за день, $<input type="number" min="0" step="10" inputmode="decimal" value="${Number(item.installerDayMinimum) || ''}" placeholder="нет" onchange="ratesUpdateOffering('${item.id}','installerDayMinimum',this.value,this)"></label>`}
           ${sized ? '<label>Материал<span class="rates-muted">по плёнке со склада</span></label>' : `<label>Материал, $ / ${academyEsc(per)}<input type="number" min="0" step="0.5" inputmode="decimal" value="${Number(item.materialCostPerUnit) || ''}" placeholder="0" onchange="ratesUpdateOffering('${item.id}','materialCostPerUnit',this.value,this)"></label>`}</div>`;
       }).join('');
       return `<div class="rates-group"><div class="rates-group-title">${serviceOfferingDirectionTitle(direction)}</div>${rows}</div>`;
@@ -2824,7 +2838,7 @@ function renderRatesCosts() {
     return `<div class="rates-page">${ratesHeadHtml('🔧', 'За единицу работы', 'Сколько платим монтажнику и сколько стоит материал за sq ft, штуку или зону')}
       ${sum.noRate ? `<div class="rates-warn">Без ставки монтажнику: ${sum.noRate} — по ним начислится $0.</div>` : ''}
       ${groups}
-      <div class="rates-note">Это те же поля, что в «Услуги и цены» — меняете здесь или там, значение одно. Если на объекте несколько монтажников, сумма по услуге делится поровну.</div></div>`;
+      <div class="rates-note">Это те же поля, что в «Услуги и цены» — меняете здесь или там, значение одно. Если на объекте несколько монтажников, сумма по услуге делится поровну. «Минимум за день» — для работ вроде силикона: ставка за единицу или минимум за каждый день работы, что больше.</div></div>`;
   }
   if (tab === 'fixed') {
     const analysis = breakEvenAnalysis();
@@ -3201,4 +3215,166 @@ function crmImportBannerHtml() {
 function crmImportModePanelHtml() {
   const on = db?.settings?.importMode?.on === true;
   return `<div class="crm-import-panel"><div><b>🗂 Режим внедрения — перенос старых заказов</b><p>Для ввода заказов задним числом: любой этап без проверок КП, аванса, размеров и производства; клиентам не уходят SMS и письма; склад при закрытии не списывается. Включите на время переноса и выключите после.</p></div><button type="button" class="${on ? 'btn-ghost' : 'btn-primary'}" onclick="setCrmImportMode(${!on})">${on ? 'Выключить' : 'Включить'}</button></div>`;
+}
+
+/* ЗАРПЛАТА МОНТАЖНИКОВ (Owner, 2026-10-30): «смарт $5, защитка $3, солнцезащитная
+ * $2.5, за сложность коэффициенты; силикон $1.5 за фут или $200 за день — что
+ * больше; подключение зоны $50, блок $400; делится поровну на бригаду, старшему
+ * +10%; минимум $200 бригаде за выезд; дальше 30 миль от офиса — $20 за час
+ * дороги». Ставки — у услуг («За единицу работы»), правила — в «Люди и оплата».
+ * Дорогу CRM считает сама по адресу (туда и обратно), менеджер может поправить. */
+function installerPayRules() {
+  const r = db.settings?.installerPayRules || {};
+  const num = (v, d) => { const n = Number(v); return v !== '' && v != null && Number.isFinite(n) && n >= 0 ? n : d; };
+  return { minimumPerVisit: num(r.minimumPerVisit, 200), travelFreeMiles: num(r.travelFreeMiles, 30), travelPerHour: num(r.travelPerHour, 20) };
+}
+function installerComplexityFactor(o) {
+  const k = Number(db.settings?.complexityCoefs?.[o?.complexity || 'standard']);
+  return Number.isFinite(k) && k > 0 ? k : 1;
+}
+function installPlanDayKeys(plan) {
+  const start = new Date(plan?.installationAt || '');
+  if (Number.isNaN(start.getTime())) return [];
+  const end = installPlanEnd(plan) || start;
+  const key = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const keys = [key(start)];
+  const cursor = new Date(start);
+  while (keys.length < 14) {
+    cursor.setDate(cursor.getDate() + 1);
+    cursor.setHours(0, 0, 0, 0);
+    if (cursor >= end) break;
+    keys.push(key(cursor));
+  }
+  return keys;
+}
+/** Days the service of this window or line is on site (1 when not planned). */
+function installServiceDays(o, item) {
+  const group = projectServiceGroups(o).find(g => g.windows.includes(item) || g.lines.includes(item));
+  return group ? Math.max(1, installPlanDayKeys(projectServiceAssignment(o, group)).length) : 1;
+}
+/** Trips to the object: the distinct installation days, at least one. */
+function installTripCount(o) {
+  const keys = new Set(projectServiceGroups(o).flatMap(group => installPlanDayKeys(projectServiceAssignment(o, group))));
+  if (!keys.size) installPlanDayKeys({ installationAt: o?.installationAt }).forEach(k => keys.add(k));
+  return Math.max(1, keys.size);
+}
+/** Whole-crew pay of a work line: units × rate, or the service's day minimum × days. */
+function installerWorkLinePay(o, line) {
+  const rate = line.offeringId ? serviceOfferingInstallerRate(line) : installerAdditionalWorkRate(null, line.type);
+  const pay = (Number(line.qty) || 0) * rate;
+  const dayMin = Number(serviceOffering(line.offeringId)?.installerDayMinimum) || 0;
+  return dayMin > 0 && pay > 0 ? Math.max(pay, dayMin * installServiceDays(o, line)) : pay;
+}
+function orderAdditionalWorkPayoutForUser(o, user, installerCount = 1) {
+  return (o?.extraServices || []).filter(line => !line.quickProjectLine).reduce((sum, line) => {
+    const crew = projectServiceCrew(o, line);
+    if (user && !crew.includes(user.id)) return sum;
+    return sum + installerWorkLinePay(o, line) / (user ? Math.max(1, crew.length) : installerCount);
+  }, 0);
+}
+function orderQuickInstallerPayoutForUser(o, user) {
+  const k = installerComplexityFactor(o);
+  return projectQuickLines(o)
+    .filter(line => line.unit === 'sqft' && (line.installerIds || []).includes(user?.id))
+    .reduce((sum, line) => {
+      const installerCount = Math.max(1, new Set(line.installerIds || []).size);
+      return sum + (Number(line.qty) || 0) * installerRateForQuickLine(user, line) * k / installerCount;
+    }, 0);
+}
+/** The crew's pay for the work, before the senior bonus and the road. */
+function orderInstallerBrigadeBase(o) {
+  const k = installerComplexityFactor(o);
+  const film = measureAllWindows(o).length
+    ? measureAllWindows(o).reduce((sum, { win }) => sum + windowActualAreaSqft(win) * installerRateForWindow(null, win), 0)
+    : projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => sum + (Number(line.qty) || 0) * installerRateForQuickLine(null, line), 0);
+  return film * k + orderAdditionalWorkPayoutForUser(o, null, 1);
+}
+/** Road: hours there and back from the saved route, or the hours a manager typed. */
+function installerTravel(o) {
+  const rules = installerPayRules();
+  const t = o?.travel || {};
+  const miles = t.miles == null || t.miles === '' ? NaN : Number(t.miles);
+  const manual = t.hours !== undefined && t.hours !== null && t.hours !== '';
+  const hours = manual ? Math.max(0, Number(t.hours) || 0) : (Number(t.minutes) > 0 ? Math.round(Number(t.minutes) * 2 / 30) / 2 : 0);
+  const far = Number.isFinite(miles) && miles > rules.travelFreeMiles;
+  const paid = hours > 0 && (manual || far);
+  const trips = installTripCount(o);
+  return { miles: Number.isFinite(miles) ? miles : null, minutes: Number(t.minutes) || 0, hours, manual, far, trips, paid, perPerson: paid ? hours * rules.travelPerHour * trips : 0 };
+}
+/** Minimum top-up for the crew and the road per person. */
+function installerVisitExtras(o) {
+  const crew = [...new Set((o?.installerIds || []).filter(Boolean))];
+  const travel = installerTravel(o);
+  if (!crew.length) return { topUp: 0, travel: { ...travel, perPerson: 0 } };
+  const floor = installerPayRules().minimumPerVisit * installTripCount(o);
+  return { topUp: Math.max(0, floor - orderInstallerBrigadeBase(o)), travel };
+}
+/** Road distance and drive time from the office, counted once per address. */
+async function projectTravelRefresh(oid, force = false) {
+  const o = getOrder(oid);
+  if (!o || typeof geocodeAddress !== 'function') return;
+  const address = orderAddress(o, calendarClientForOrder(o));
+  if (!address) return;
+  if (!force && o.travel?.address === address && (o.travel.miles != null || o.travel.failed)) return;
+  const done = (fields) => {
+    const keepHours = o.travel?.address === address && o.travel?.hours != null ? { hours: o.travel.hours } : {};
+    o.travel = { ...keepHours, address, at: new Date().toISOString(), ...fields };
+    save();
+    if (state._installWindow?.oid === oid && !state._installWindow?.key) installRerender();
+  };
+  try {
+    const from = await geocodeAddress(db.settings?.officeAddress || '');
+    const to = await geocodeAddress(address);
+    if (!from || from.notFound || !to || to.notFound) return done({ failed: true });
+    const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false`);
+    const route = r.ok ? (await r.json())?.routes?.[0] : null;
+    if (!route) return done({ failed: true });
+    done({ miles: Math.round(route.distance / 1609.344 * 10) / 10, minutes: Math.round(route.duration / 60), failed: false });
+  } catch (_) { done({ failed: true }); }
+}
+function projectTravelSetHours(oid, value) {
+  const o = getOrder(oid);
+  if (!o || !['owner', 'manager'].includes(currentUser()?.role)) return;
+  o.travel = { ...(o.travel || {}) };
+  if (value === '' || value == null) delete o.travel.hours;
+  else o.travel.hours = Math.max(0, Math.round((Number(value) || 0) * 2) / 2);
+  save();
+  installRerender();
+}
+function installTravelHtml(o) {
+  const t = installerTravel(o);
+  const rules = installerPayRules();
+  const money = orderUserCanSeeMoney(o, currentUser());
+  const where = t.miles != null ? `${t.miles} ${projectPlural(Math.round(t.miles), 'миля', 'мили', 'миль')} от офиса${t.minutes ? ` · ~${t.minutes} мин в одну сторону` : ''}` : o.travel?.failed ? 'Маршрут по адресу не посчитался' : 'Считаем маршрут от офиса…';
+  const verdict = t.paid
+    ? `Оплачиваем дорогу: <b>${t.hours} ч</b> туда-обратно${t.trips > 1 ? ` × ${t.trips} выезда` : ''}${money ? ` = <b>${fmtMoney(t.perPerson)}</b> каждому` : ''}`
+    : t.miles != null && !t.far ? `До ${rules.travelFreeMiles} миль дорога не оплачивается` : `Если объект дальше ${rules.travelFreeMiles} миль — впишите часы дороги`;
+  return `<div class="install-travel">
+    <div class="install-travel-top">🚗 ${academyEsc(where)}</div>
+    <div class="install-travel-pay">${verdict}</div>
+    <label class="install-travel-edit">Часы дороги туда-обратно<input type="number" min="0" step="0.5" inputmode="decimal" value="${t.manual ? t.hours : ''}" placeholder="${t.hours || 'авто'}" onchange="projectTravelSetHours('${o.id}', this.value)"></label>
+  </div>`;
+}
+function ratesSetPayRule(key, value) {
+  if (currentUser()?.role !== 'owner' || !['minimumPerVisit', 'travelFreeMiles', 'travelPerHour'].includes(key)) return;
+  db.settings.installerPayRules = { ...installerPayRules(), [key]: Math.max(0, Number(value) || 0) };
+  save();
+}
+function ratesSetSeniorPct(value) {
+  if (currentUser()?.role !== 'owner') return;
+  db.settings.seniorInstallerBonusPct = Math.max(0, Math.min(100, Number(value) || 0));
+  save();
+}
+function ratesPayRulesHtml() {
+  const r = installerPayRules();
+  const coefs = db.settings?.complexityCoefs || {};
+  const field = (label, key, step, hint) => `<label class="rates-field">${label}<input type="number" min="0" step="${step}" inputmode="decimal" value="${r[key]}" onchange="ratesSetPayRule('${key}',this.value)">${hint ? `<small>${hint}</small>` : ''}</label>`;
+  const coefText = ['ladder', 'tower', 'alpinism'].map(k => `${T('complexity' + k.charAt(0).toUpperCase() + k.slice(1))} ×${Number(coefs[k] ?? 1)}`).join(' · ');
+  return `<div class="rates-group"><div class="rates-group-title">Правила для монтажников</div>
+    <label class="rates-field">Старшему в бригаде, % сверху<input type="number" min="0" max="100" step="1" inputmode="decimal" value="${Number(db.settings?.seniorInstallerBonusPct ?? 10)}" onchange="ratesSetSeniorPct(this.value)"><small>Бригада делит сумму поровну, старший получает свою долю плюс этот процент.</small></label>
+    ${field('Минимум бригаде за выезд, $', 'minimumPerVisit', '10', 'Если по ставкам вышло меньше — доплачиваем до минимума и делим поровну.')}
+    ${field('Дорога оплачивается дальше, миль от офиса', 'travelFreeMiles', '1', 'Расстояние CRM считает сама по адресу объекта.')}
+    ${field('Дорога, $ за час каждому', 'travelPerHour', '1', 'Часы туда и обратно за каждый день выезда. Менеджер может поправить в окне монтажа.')}
+    <div class="rates-note">Сложность объекта умножает оплату за плёнку (sq ft): ${academyEsc(coefText)}. Коэффициенты те же, что в цене для клиента. Силикон, зоны и блоки — по своей ставке.</div>
+  </div>`;
 }

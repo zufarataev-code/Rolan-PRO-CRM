@@ -278,7 +278,7 @@ function safeSettings(settings: JsonObject, roles: readonly string[]) {
     // Installer work rates (service and additional-work rates the owner sets in
     // «Услуги и цены») — the installer's own pay basis, not client prices.
     // Without them the installer's earnings and analytics fell back to defaults.
-    ...(roles.includes(ROLE_CODES.INSTALLER) ? ["installerRates"] : []),
+    ...(roles.includes(ROLE_CODES.INSTALLER) ? ["installerRates", "installerPayRules", "seniorInstallerBonusPct"] : []),
   ];
   return Object.fromEntries(
     allowed

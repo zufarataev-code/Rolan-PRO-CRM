@@ -109,7 +109,8 @@ test('senior installer: equal split, the senior gets +10% of his half (1000 → 
   assert.equal(c.orderInstallerPayoutForUser(order, 'sr'), 550);
   const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
   assert.match(stages, /\* installerSeniorFactor\(getUser\(userId\)\) \+ orderInstallerPayoutForUser\(projectStageUnstagedOrder\(o\),userId\)/);
-  assert.match(stages, /\(filmPayout \+ orderAdditionalWorkPayoutForUser\(o, user, installerIds\.length\)\) \* installerSeniorFactor\(user\)/);
+  assert.match(stages, /let base = filmPayout \+ orderAdditionalWorkPayoutForUser\(o, user, installerIds\.length\);/);
+  assert.match(stages, /return base \* installerSeniorFactor\(user\) \+ extra\.travel\.perPerson;/, 'the senior bonus is on the work, not on the road');
   assert.match(html, /Надбавка старшему в бригаде, %/);
   assert.match(html, /if \(s\.seniorInstallerBonusPct == null\) s\.seniorInstallerBonusPct = 10;/);
 });

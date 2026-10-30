@@ -2057,6 +2057,10 @@
   .project-cashier-add-row .project-cashier-direction.add b + span { display:none!important; }
   .project-cashier-add-cancel { border:0; background:none; color:#718096; font-size:.75rem; cursor:pointer; }
   /* Owner, 2026-10-25: install window by service; stripes in calendar and kanban. */
+  .install-travel { margin:12px 0 4px;padding:12px 14px;border:1px solid #D9DEE6;border-radius:12px;background:#F8FAFC;display:grid;gap:6px;font-size:.85rem;color:#141A26; }
+  .install-travel-pay { color:#334155; }
+  .install-travel-edit { display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.78rem;color:#64748B; }
+  .install-travel-edit input { width:90px;min-height:40px;text-align:right; }
   .install-progress { height:6px;margin:0 16px 4px;border-radius:999px;background:#EEF1F5;overflow:hidden; }
   .install-progress span { display:block;height:100%;background:#16A34A; }
   .install-row { display:flex;flex-direction:column;gap:4px;width:100%;text-align:left;padding:12px 14px;margin-bottom:10px;background:#fff;border:1px solid #D9DEE6;border-left:6px solid var(--work-color);border-radius:12px;color:#141A26; }
@@ -2151,7 +2155,8 @@
   .rates-row-sum { text-align:right;font-weight:800;white-space:nowrap;display:flex;flex-direction:column; } .rates-row-sum small { color:#94A3B8;font-weight:600;font-size:11px; }
   .rates-row-missing { border-color:#FCA5A5;background:#FEF2F2; } .rates-row-off { opacity:.55; }
   .rates-row-edit { display:grid;grid-template-columns:minmax(0,1fr) 130px 130px;align-items:end; }
-  @media (max-width:640px) { .rates-row-edit { grid-template-columns:1fr 1fr; } .rates-row-edit .rates-row-main { grid-column:1 / -1; } }
+  .rates-row-edit:has(> label:nth-of-type(3)) { grid-template-columns:minmax(0,1fr) 130px 130px 130px; }
+  @media (max-width:640px) { .rates-row-edit, .rates-row-edit:has(> label:nth-of-type(3)) { grid-template-columns:1fr 1fr; } .rates-row-edit .rates-row-main { grid-column:1 / -1; } }
   .rates-row-edit label, .rates-field { display:flex;flex-direction:column;gap:3px;font-size:12px;color:#475569; }
   .rates-field { flex:none; } .rates-field small { color:#94A3B8; }
   .rates-row-edit input, .rates-field input { width:100%;min-width:0;box-sizing:border-box; }
@@ -26789,7 +26794,7 @@ function updateServiceOffering(id, field, value, control = null) {
     // Owner, 2026-10-24: the KP offers extras the client ticks himself (voice
     // control, wall switch, a second remote, a 10-year warranty at $5/month).
     offering[field] = !!value;
-  } else if (['pricePerSqft','installerRatePerSqft','materialCostPerUnit','minPricePerUnit','maxPricePerUnit'].includes(field)) {
+  } else if (['pricePerSqft','installerRatePerSqft','installerDayMinimum','materialCostPerUnit','minPricePerUnit','maxPricePerUnit'].includes(field)) {
     const nextValue = Math.max(0, Number(value) || 0);
     if (field === 'minPricePerUnit' && Number(offering.maxPricePerUnit) > 0 && nextValue > offering.maxPricePerUnit) return alert('Минимальная цена не может быть выше максимальной.');
     if (field === 'maxPricePerUnit' && Number(offering.minPricePerUnit) > 0 && nextValue < offering.minPricePerUnit) return alert('Максимальная цена не может быть ниже минимальной.');
@@ -27310,7 +27315,7 @@ function projectLines(o) {
         qty: Math.round(sum(win => windowActualAreaSqft(win)) * 100) / 100,
         price: sum(win => windowRetailPrice(win, complexity, o.priceOverridePerSqft)),
         materialCost: sum(win => windowFilmCost(win)),
-        installerPay: sum(win => windowInstallerPayout(win)),
+        installerPay: sum(win => windowInstallerPayout(win)) * (typeof installerComplexityFactor === 'function' ? installerComplexityFactor(o) : 1),
       };
     }
     const line = group.lines[0] || {};
@@ -27322,12 +27327,12 @@ function projectLines(o) {
     if (kind === 'quick') {
       const catalog = getCatalogItem(line.catalogId);
       if (line.unit === 'sqft' && line.catalogId) materialCost = qty * (1 + (Number(catalog?.wastePct) || 0) / 100) * warehouseCatalogCostPerSqft(line.catalogId);
-      if (line.unit === 'sqft') installerPay = qty * installerRateForQuickLine(null, line);
+      if (line.unit === 'sqft') installerPay = qty * installerRateForQuickLine(null, line) * (typeof installerComplexityFactor === 'function' ? installerComplexityFactor(o) : 1);
     } else {
       // The same rates as orderAdditionalWorkPayoutForUser: a directory service
       // pays its own rate per unit, any other row the work-type rate.
       if (isOffering) materialCost = qty * serviceOfferingMaterialCost(line);
-      installerPay = qty * (line.offeringId ? serviceOfferingInstallerRate(line) : installerAdditionalWorkRate(null, line.type));
+      installerPay = typeof installerWorkLinePay === 'function' ? installerWorkLinePay(o, line) : qty * (line.offeringId ? serviceOfferingInstallerRate(line) : installerAdditionalWorkRate(null, line.type));
     }
     return {
       ...base,
