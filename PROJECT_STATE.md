@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-10-30 handoff — installer pay rules (PR #439)
+
+- Owner: rates per service, × complexity for film, silicone «$1.5/ft или $200/день — что больше», equal split + senior 10%, $200 crew minimum per visit, road $20/h each beyond 30 miles.
+- production-stages.js: `installerPayRules` (`db.settings.installerPayRules`, defaults 200/30/20), `installerComplexityFactor`, `installerWorkLinePay` (offering `installerDayMinimum` × service days), `installerVisitExtras` (top-up + `installerTravel`), `projectTravelRefresh` (Nominatim + OSRM → `o.travel {miles, minutes, hours?}`, on opening the install window), `installTravelHtml`, `ratesPayRulesHtml`. `orderInstallerPayoutForUser` adds top-up/road except for stage scopes (`_stageScope`).
+- Server: `installerDayMinimum` is owner-only; installers get `installerPayRules`/`seniorInstallerBonusPct`.
+- Test: `installer-pay-rules.test.ts`. Deployed `5f0703c`. Owner still enters the actual rates (smart 5, protective 3, solar 2.5, zone 50, block 400, silicone 1.5 + day 200, Danil 5%).
+
 ## 2026-10-29 — Google Ads live delivery and website receiver deployed
 
 - Task owner: Codex; documentation-only PR [#438](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/438), branch `codex/google-ads-live-handoff-20261029`, based on verified `main` `9dd1ef36a0b5d9c4d57a9a256e4fa66c896e4113`. PR [#437](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/437) is merged and its signed, ordered website follow-up receiver is deployed at that commit. The receipt migration and both unique indexes were independently verified in production; signed empty PATCH returned `400 invalid_submission_id` without creating data.
