@@ -209,7 +209,7 @@ test("dimension entry waits for focus transfer before rebuilding the measurement
   assert.equal(restoredFocus, "", "the old width field must not be restored synchronously");
   document.activeElement = { id: "mm-height-w1" };
   assert.ok(scheduled);
-  scheduled!();
+  (scheduled as unknown as () => void)();
   assert.equal(restoredFocus, "mm-height-w1", "the refresh captures the field focused after the transition");
 });
 
