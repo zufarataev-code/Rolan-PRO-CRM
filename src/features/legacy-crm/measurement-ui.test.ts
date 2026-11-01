@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import vm from "node:vm";
 
 const legacyCrm = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 
@@ -171,6 +172,45 @@ test("measurement actions preserve the active scroll position across a full moda
   assert.match(legacyCrm, /function restoreRenderPositionStable\(snapshot\)[\s\S]*?requestAnimationFrame\(\(\) => restoreRenderPosition\(snapshot\)\)/);
   assert.match(legacyCrm, /\.manager-measure-modal \{[\s\S]*?overflow-anchor: none/);
   assert.match(legacyCrm, /\.manager-measure-body \{[\s\S]*?overflow-anchor: none/);
+});
+
+test("dimension entry waits for focus transfer before rebuilding the measurement workspace", () => {
+  assert.match(legacyCrm, /data-measure-order-id="\$\{academyEsc\(oid\)\}"/);
+  assert.match(
+    legacyCrm,
+    /function refreshManagerMeasureModalAfterFieldChange\(oid\) \{[\s\S]*?setTimeout\(\(\) => \{[\s\S]*?modal\.dataset\.measureOrderId !== orderId[\s\S]*?refreshManagerMeasureModal\(orderId\);[\s\S]*?\}, 0\);/,
+  );
+  assert.match(
+    legacyCrm,
+    /function managerUpdateWinDim\(oid, rid, wid, field, val\) \{[\s\S]*?save\(\);\s*refreshManagerMeasureModalAfterFieldChange\(oid\);/,
+  );
+  assert.match(
+    legacyCrm,
+    /function managerUpdateWin\(oid, rid, wid, field, val\) \{[\s\S]*?if \(field === 'qty'\) refreshManagerMeasureModalAfterFieldChange\(oid\);/,
+  );
+
+  const start = legacyCrm.indexOf("let __managerMeasureFieldRefreshTimer = null;");
+  const end = legacyCrm.indexOf("function managerAddRoomFromForm", start);
+  assert.ok(start >= 0 && end > start);
+  let scheduled: (() => void) | null = null;
+  let restoredFocus = "";
+  const document = {
+    activeElement: { id: "mm-width-w1" },
+    querySelector: () => ({ dataset: { measureOrderId: "o1" } }),
+  };
+  const context = vm.createContext({
+    document,
+    clearTimeout: () => undefined,
+    setTimeout: (callback: () => void) => { scheduled = callback; return 1; },
+    refreshManagerMeasureModal: () => { restoredFocus = document.activeElement.id; },
+  });
+  vm.runInContext(legacyCrm.slice(start, end), context);
+  context.refreshManagerMeasureModalAfterFieldChange("o1");
+  assert.equal(restoredFocus, "", "the old width field must not be restored synchronously");
+  document.activeElement = { id: "mm-height-w1" };
+  assert.ok(scheduled);
+  scheduled!();
+  assert.equal(restoredFocus, "mm-height-w1", "the refresh captures the field focused after the transition");
 });
 
 test("dense desktop workspaces override the compact generic dialog width", () => {
