@@ -18575,16 +18575,13 @@ async function notifyStatusChange(order, options = {}) {
 }
 
 function clientPortalUrl(orderId) {
-  // If admin set a public URL in Settings, use it (so emails work outside this PC)
-  const publicUrl = db.settings?.publicBaseUrl?.trim();
-  if (publicUrl) {
-    return publicUrl.replace(/\/+$/, '') + '#/client/' + orderId;
-  }
-  // Fallback: current location (only works when CRM is hosted, not file://)
-  const base = (location.protocol === 'file:')
-    ? '' // empty string — the link in email won't open, but we won't insert garbage
-    : location.origin + location.pathname;
-  return base ? `${base}#/client/${orderId}` : '';
+  // Owner, 2026-11-01: «ссылка ведёт клиента внутрь CRM». /legacy-crm needs a
+  // staff login, so a client opening the old cabinet link landed on the employee sign-in
+  // and could neither pay nor move a visit. The client's page is the published
+  // proposal link: payment, and the visit with «Перенести / Отменить».
+  const proposal = typeof getPremiumProposalByOrder === 'function' ? getPremiumProposalByOrder(orderId) : null;
+  if (!proposal?.canonicalPublicUrl && !proposal?.canonicalProposalId) return '';
+  return typeof premiumProposalUrl === 'function' ? premiumProposalUrl(proposal) : (proposal.canonicalPublicUrl || '');
 }
 
 // ---------- ORDER OPERATING EVENTS ----------
