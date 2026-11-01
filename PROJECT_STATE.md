@@ -2,12 +2,6 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
-## 2026-11-01 handoff — visible Project service cascade (branch `codex/project-service-cascade-20261101`)
-
-- Owner approved the project-creation visual with **direction → category → service → material**. The active cashier previously skipped the category and showed one flat service grid, even though service/material links already existed.
-- The existing `settings.serviceOfferings` remains the single directory. Each service may now keep a `category`; old rows are classified deterministically. The cashier exposes non-empty category cards, scopes services to the chosen category and then uses the existing compatible-film picker. «Материал уточним на замере», multiple services per Project, add-ons and all existing project calculations are preserved.
-- «Услуги и цены» shows and edits the service's cashier category. The server accepts only the known category keys. Verification is green: `pnpm test` (**993/993**), `pnpm typecheck`, and `pnpm build`. PR and release are pending. Production has not changed.
-
 ## 2026-11-01 handoff — client link → proposal page, visit reschedule/cancel (PR #441)
 
 - Cause: `clientPortalUrl` built `/legacy-crm#/client/<id>` (staff-only) → clients hit the employee login, could not pay or move a visit.

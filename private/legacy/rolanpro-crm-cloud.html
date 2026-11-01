@@ -1531,17 +1531,6 @@
   .rp-cashier-body { padding:.4rem 1.25rem 1rem;max-height:min(62vh,640px);overflow:auto; }
   .rp-cashier-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:.6rem; }
   .rp-cashier-grid.compact { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
-  .rp-cashier-stage-copy { margin:0 0 .7rem;color:#64748b;font-size:.8rem;line-height:1.45; }
-  .rp-cashier-category-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem;margin-bottom:1rem; }
-  .rp-cashier-category { min-height:72px;padding:.7rem .75rem;border:1.5px solid #dbe4ef;border-radius:6px;background:#fff;color:#10213b;text-align:left;cursor:pointer; }
-  .rp-cashier-category:hover { border-color:var(--svc-color); }
-  .rp-cashier-category.selected { border-color:var(--svc-color);background:var(--svc-bg);box-shadow:inset 0 0 0 1px var(--svc-color); }
-  .rp-cashier-category strong { display:block;font-size:.86rem;line-height:1.25; }
-  .rp-cashier-category span { display:block;margin-top:.25rem;color:#64748b;font-size:.7rem;line-height:1.3; }
-  .rp-cashier-category strong .rp-cashier-category-count { display:inline;margin:0 0 0 .2rem;color:var(--svc-color);font-weight:900; }
-  .rp-cashier-service-head { display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin:.15rem 0 .55rem; }
-  .rp-cashier-service-head strong { color:#10213b;font-size:.92rem; }
-  .rp-cashier-service-head span { color:#64748b;font-size:.72rem; }
   .rp-cashier-card { position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:.3rem;text-align:left;padding:.85rem .9rem;min-height:84px;border:1.5px solid #dbe4ef;border-left:5px solid var(--svc-color);border-radius:4px;background:#fff;color:#10213b;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s; }
   .rp-cashier-card:hover:not(:disabled) { transform:translateY(-1px);box-shadow:0 8px 20px rgba(15,35,61,.08);border-color:var(--svc-color); }
   .rp-cashier-card.selected { background:var(--svc-bg);border-color:var(--svc-color);box-shadow:inset 0 0 0 1px var(--svc-color); }
@@ -1576,7 +1565,6 @@
   .rp-intake-service-empty { font-size:.85rem;color:#64748b;padding:.5rem 0; }
   @media (max-width: 640px) {
     .rp-cashier-grid, .rp-cashier-grid.compact { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .rp-cashier-category-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .rp-cashier-card { min-height:72px;padding:.7rem .75rem; }
     .rp-cashier-body { max-height:min(66vh,560px);padding:.3rem .9rem .8rem; }
     .rp-cashier-head, .rp-cashier-crumbs, .rp-cashier-foot { padding-left:.9rem;padding-right:.9rem; }
@@ -25893,64 +25881,6 @@ function serviceOfferingsFor(direction, { includeId = '', includeInactive = fals
     .filter(item => (homeOnly ? canonicalServiceDirection(item.direction) === canonicalServiceDirection(direction) : serviceOfferingInDirection(item, direction)) && (includeInactive || item.id === includeId || (item.active !== false && !serviceOfferingIsDraft(item) && !(item.proposalOptional && !(Number(item.pricePerSqft) > 0)))))
     .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0) || String(a.name).localeCompare(String(b.name)));
 }
-
-// Visible shelf inside every direction. It is presentation metadata on the
-// same service record, not a second service directory: direction → category →
-// service → compatible material. Historical services without `category` are
-// classified by their unit/name so they remain available without migration.
-const SERVICE_OFFERING_CATEGORIES = {
-  smart: [
-    { id: 'film', title: 'Плёнка', hint: 'Smart Film и демонтаж плёнки' },
-    { id: 'control', title: 'Управление и питание', hint: 'Блоки, зоны, пульты и автоматика' },
-    { id: 'electrical', title: 'Электрика', hint: 'Проводка и электрическое подключение' },
-    { id: 'preparation', title: 'Подготовка и доступ', hint: 'Очистка, демонтаж и высотные работы' },
-  ],
-  solar: [
-    { id: 'film', title: 'Плёнка', hint: 'Основной монтаж солнцезащитной плёнки' },
-    { id: 'preparation', title: 'Подготовка стекла', hint: 'Очистка и демонтаж старой плёнки' },
-    { id: 'access', title: 'Доступ', hint: 'Лестница, вышка и высотные работы' },
-  ],
-  protective: [
-    { id: 'film', title: 'Плёнка', hint: 'Толщина и уровень защиты' },
-    { id: 'anchoring', title: 'Крепление', hint: 'Силикон и второй этап монтажа' },
-    { id: 'preparation', title: 'Подготовка стекла', hint: 'Очистка и демонтаж старой плёнки' },
-    { id: 'access', title: 'Доступ', hint: 'Лестница, вышка и высотные работы' },
-  ],
-  decorative: [
-    { id: 'film', title: 'Плёнка', hint: 'Фактура, приватность и основной монтаж' },
-    { id: 'custom', title: 'Индивидуальный дизайн', hint: 'Печать, плоттерная резка и макет' },
-    { id: 'preparation', title: 'Подготовка стекла', hint: 'Очистка и демонтаж старой плёнки' },
-    { id: 'access', title: 'Доступ', hint: 'Лестница, вышка и высотные работы' },
-  ],
-  general: [
-    { id: 'general', title: 'Общее по объекту', hint: 'Доставка, аренда, подрядчики и другие работы' },
-  ],
-};
-function serviceOfferingCategoryDefinitions(direction) {
-  return SERVICE_OFFERING_CATEGORIES[canonicalServiceDirection(direction)] || SERVICE_OFFERING_CATEGORIES.general;
-}
-function serviceOfferingCategory(offering, direction = offering?.direction) {
-  const definitions = serviceOfferingCategoryDefinitions(direction);
-  if (definitions.some(item => item.id === offering?.category)) return offering.category;
-  const name = String(offering?.name || '').toLowerCase().replace(/ё/g, 'е');
-  if (canonicalServiceDirection(direction) === 'general') return 'general';
-  if (/высот|лестниц|вышк|подъем|подъём|лифт|tower|ladder|lift|access/.test(name)) return definitions.some(item => item.id === 'access') ? 'access' : 'preparation';
-  if (/демонт|снят|удален|удалён|очист|мойк|подготов|remov|clean|prep/.test(name)) return 'preparation';
-  if (canonicalServiceDirection(direction) === 'protective' && /силикон|гермет|креплен|креплён|анкер|seal|anchor/.test(name)) return 'anchoring';
-  if (/силикон|гермет|seal/.test(name)) return 'preparation';
-  if (canonicalServiceDirection(direction) === 'smart') {
-    if (/электр|провод|кабел|розет|wire|cable|electric/.test(name)) return 'electrical';
-    if (/блок|питан|зон|контрол|пульт|выключ|автомат|power|zone|controller|remote|switch/.test(name) || ['piece', 'zone'].includes(serviceOfferingUnit(offering))) return 'control';
-  }
-  if (canonicalServiceDirection(direction) === 'decorative' && /печат|резк|макет|дизайн|print|plotter|custom/.test(name)) return 'custom';
-  return 'film';
-}
-function serviceOfferingCategoriesFor(direction, offerings = serviceOfferingsFor(direction)) {
-  return serviceOfferingCategoryDefinitions(direction).map(category => ({
-    ...category,
-    offerings: offerings.filter(offering => serviceOfferingCategory(offering, direction) === category.id),
-  })).filter(category => category.offerings.length);
-}
 /** The direction an offering is used under in this project (its windows or its line), else its home. */
 function projectOfferingServiceType(o, offeringId) {
   const win = (o?.measurements?.rooms || []).flatMap(room => room.windows || []).find(item => item.offeringId === offeringId);
@@ -26493,7 +26423,7 @@ function openServiceCashier(oid, returnTo = 'card') {
     const o = getOrder(oid);
     if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return;
   }
-  state._serviceCashier = { oid: mode === 'intake' ? '' : oid, returnTo: mode, step: 'direction', directionId: '', categoryId: '', offeringId: '', catalogId: '', addonIds: [] };
+  state._serviceCashier = { oid: mode === 'intake' ? '' : oid, returnTo: mode, step: 'direction', directionId: '', offeringId: '', catalogId: '', addonIds: [] };
   renderServiceCashier();
 }
 function serviceCashierReturn(oid, returnTo) {
@@ -26529,19 +26459,13 @@ function serviceCashierPick(field, value) {
   if (!c) return;
   if (field === 'direction') {
     if (!serviceCashierDirections().some(item => item.direction.id === value)) return;
-    const categoryId = serviceOfferingCategoriesFor(serviceOfferingDirection(value))[0]?.id || '';
-    Object.assign(c, { directionId: value, categoryId, offeringId: '', catalogId: '', addonIds: [], step: 'offering' });
-  } else if (field === 'category') {
-    const category = serviceOfferingCategoriesFor(serviceOfferingDirection(c.directionId)).find(item => item.id === value);
-    if (!category) return;
-    Object.assign(c, { categoryId: category.id, offeringId: '', catalogId: '', addonIds: [], step: 'offering' });
+    Object.assign(c, { directionId: value, offeringId: '', catalogId: '', addonIds: [], step: 'offering' });
   } else if (field === 'offering') {
     const offering = serviceOffering(value);
     if (!offering || offering.active === false || !serviceOfferingInDirection(offering, serviceOfferingDirection(c.directionId))) return;
-    const categoryId = serviceOfferingCategory(offering, serviceOfferingDirection(c.directionId));
     const o = serviceCashierScope(c);
     const catalogId = projectOfferingCatalogId(o, value) || serviceOfferingDefaultFilmId(offering);
-    Object.assign(c, { categoryId, offeringId: value, catalogId, addonIds: [] });
+    Object.assign(c, { offeringId: value, catalogId, addonIds: [] });
     // A saved default belongs to the service, so the manager need not choose
     // the same material in every project. The completed Material crumb remains
     // available to override it for an exceptional job.
@@ -26561,7 +26485,7 @@ function serviceCashierPick(field, value) {
     const index = steps.indexOf(value);
     if (index === -1) return;
     // Going back keeps the choices below untouched; they are re-made on the way forward.
-    if (value === 'direction') Object.assign(c, { directionId: '', categoryId: '', offeringId: '', catalogId: '', addonIds: [] });
+    if (value === 'direction') Object.assign(c, { directionId: '', offeringId: '', catalogId: '', addonIds: [] });
     else if (value === 'offering') Object.assign(c, { offeringId: '', catalogId: '', addonIds: [] });
     else if (value === 'material') Object.assign(c, { addonIds: [] });
     c.step = value;
@@ -26628,7 +26552,7 @@ function serviceCashierHtml(c) {
   const direction = ORDER_PRIMARY_SERVICES.find(item => item.id === c.directionId) || null;
   const offering = serviceOffering(c.offeringId);
   const steps = serviceCashierSteps(offering);
-  const titles = { direction: 'Направление', offering: 'Категория и услуга', material: 'Материал', addons: 'Допы и итог' };
+  const titles = { direction: 'Направление', offering: 'Услуга', material: 'Материал', addons: 'Допы и итог' };
   const stepIndex = steps.indexOf(c.step);
   const crumbs = steps.map((step, index) => {
     const done = index < stepIndex;
@@ -26640,14 +26564,9 @@ function serviceCashierHtml(c) {
   if (c.step === 'direction') {
     body = `<div class="rp-cashier-grid">${serviceCashierDirections().map(({ direction: dir, offerings }) => `<button type="button" class="rp-cashier-card rp-cashier-direction" style="${serviceCashierCardStyle(dir.id)}" onclick="serviceCashierPick('direction','${dir.id}')"><span class="rp-cashier-icon">${dir.icon || '•'}</span><span class="rp-cashier-title">${academyEsc(dir.title)}</span><span class="rp-cashier-meta">${offerings.length} ${offerings.length === 1 ? 'услуга' : offerings.length < 5 ? 'услуги' : 'услуг'}</span></button>`).join('')}</div>`;
   } else if (c.step === 'offering') {
-    const categories = serviceOfferingCategoriesFor(serviceOfferingDirection(c.directionId));
-    const selectedCategory = categories.find(item => item.id === c.categoryId) || categories[0] || null;
-    const items = selectedCategory?.offerings || [];
-    body = categories.length
-      ? `<p class="rp-cashier-stage-copy">Сначала выберите понятную категорию. Ниже появятся только её услуги; после услуги CRM покажет только совместимые материалы.</p>
-        <div class="rp-cashier-category-grid">${categories.map(category => `<button type="button" class="rp-cashier-category ${category.id === selectedCategory?.id ? 'selected' : ''}" aria-pressed="${category.id === selectedCategory?.id}" onclick="serviceCashierPick('category','${category.id}')"><strong>${academyEsc(category.title)} <span class="rp-cashier-category-count">${category.offerings.length}</span></strong><span>${academyEsc(category.hint)}</span></button>`).join('')}</div>
-        <div class="rp-cashier-service-head"><strong>Услуги · ${academyEsc(selectedCategory?.title || '')}</strong><span>${items.length} ${items.length === 1 ? 'услуга' : items.length < 5 ? 'услуги' : 'услуг'}</span></div>
-        <div class="rp-cashier-grid">${items.map(item => { const taken = inProject.has(item.id) && serviceOfferingNeedsSizes(item); return `<button type="button" class="rp-cashier-card ${taken ? 'taken' : ''}" style="${serviceCashierCardStyle(c.directionId)}" ${taken ? 'disabled' : `onclick="serviceCashierPick('offering','${jsQuote(item.id)}')"`}><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span>${taken ? '<span class="rp-cashier-badge">уже в проекте</span>' : ''}</button>`; }).join('')}</div>`
+    const items = serviceOfferingsFor(serviceOfferingDirection(c.directionId));
+    body = items.length
+      ? `<div class="rp-cashier-grid">${items.map(item => { const taken = inProject.has(item.id) && serviceOfferingNeedsSizes(item); return `<button type="button" class="rp-cashier-card ${taken ? 'taken' : ''}" style="${serviceCashierCardStyle(c.directionId)}" ${taken ? 'disabled' : `onclick="serviceCashierPick('offering','${jsQuote(item.id)}')"`}><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span>${taken ? '<span class="rp-cashier-badge">уже в проекте</span>' : ''}</button>`; }).join('')}</div>`
       : `<div class="service-directory-empty"><div class="text-3xl mb-2">${academyEsc(direction?.icon || '🎞')}</div><b>В направлении пока нет активных услуг</b><div class="text-sm mt-1">Сначала добавьте и заполните услугу в разделе «Услуги и цены».</div></div>`;
   } else if (c.step === 'material') {
     const films = serviceCashierFilms(offering);
@@ -26754,7 +26673,7 @@ function addServiceOffering(direction) {
   direction = canonicalServiceDirection(direction);
   if (!serviceOfferingCanEdit() || !SERVICE_OFFERING_DIRECTIONS.includes(direction) || direction === 'general') return;
   const sort = serviceOfferingsFor(direction, { includeInactive: true }).length;
-  const offering = { id: 'svc_' + uid(), direction, category: 'film', name: 'Новая услуга', unit: 'sqft', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort };
+  const offering = { id: 'svc_' + uid(), direction, name: 'Новая услуга', unit: 'sqft', pricePerSqft: 0, installerRatePerSqft: 0, active: true, sort };
   db.settings.serviceOfferings = serviceOfferingsAll();
   db.settings.serviceOfferings.push(offering);
   save();
@@ -26888,16 +26807,12 @@ function updateServiceOffering(id, field, value, control = null) {
     value = canonicalServiceDirection(value);
     if (!SERVICE_OFFERING_DIRECTIONS.includes(value) || serviceOfferingNeedsSizes(offering)) return;
     offering.direction = value;
-    offering.category = serviceOfferingCategoryDefinitions(value)[0]?.id || 'general';
     offering.directions = (offering.directions || []).filter(key => key !== value);
     offering.filmIds = [];
     offering.defaultFilmId = '';
     if (!serviceOfferingUnitsFor(value).some(unit => unit.id === offering.unit)) offering.unit = 'piece';
   } else if (field === 'unitLabel') {
     offering.unitLabel = String(value || '').trim().slice(0, 30);
-  } else if (field === 'category') {
-    if (!serviceOfferingCategoryDefinitions(offering.direction).some(item => item.id === value)) return;
-    offering.category = value;
   } else if (field === 'active') {
     offering.active = !!value;
     control?.closest('[data-service-offering-row]')?.classList.toggle('opacity-60', !offering.active);
@@ -26907,7 +26822,7 @@ function updateServiceOffering(id, field, value, control = null) {
   // The control already contains the saved value. Rebuilding the entire CRM
   // here made the directory jump after every edit. Only changing the unit
   // changes the fields that must be displayed.
-  if (field === 'unit' || field === 'direction' || field === 'category' || field === 'proposalOptional') {
+  if (field === 'unit' || field === 'direction' || field === 'proposalOptional') {
     renderServiceOfferingDirectory();
   } else if (control?.closest('[data-kp-option-row]')) {
     refreshProposalOptionRowStatus(id);
@@ -27171,13 +27086,11 @@ function serviceOfferingEditorHtml(offering, owner) {
   const unit = serviceOfferingUnit(offering);
   const per = serviceOfferingUnitShort(offering);
   const sized = serviceOfferingNeedsSizes(offering);
-  const category = serviceOfferingCategory(offering, direction);
-  const categoryInfo = serviceOfferingCategoryDefinitions(direction).find(item => item.id === category);
   const filmList = films.length
     ? `<details open><summary class="cursor-pointer text-sm font-bold">Материалы услуги · <span data-service-offering-film-summary="${offering.id}">${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'не выбраны'}</span></summary><div class="mt-2 grid gap-1">${films.map(item => { const selected = serviceOfferingFilmIds(offering).includes(item.id); return `<div class="flex flex-wrap items-center justify-between gap-2"><label class="text-sm"><input type="checkbox" style="width:auto" ${selected ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(также: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label><label class="text-xs" data-service-default-film-choice="${offering.id}" style="display:${selected ? 'inline-flex' : 'none'};align-items:center;gap:5px"><input type="radio" name="service-default-film-${offering.id}" data-film-id="${item.id}" style="width:auto" ${defaultFilmId === item.id ? 'checked' : ''} ${owner && selected ? '' : 'disabled'} onchange="setServiceOfferingDefaultFilm('${offering.id}','${item.id}')"> по умолчанию</label></div>`; }).join('')}</div><div class="flex flex-wrap items-center justify-between gap-2 mt-2"><span class="text-xs text-gray-500" data-service-offering-film-save-status="${offering.id}">${defaultFilmId ? `В новый проект подставится: ${academyEsc(catalogLabel(getCatalogItem(defaultFilmId)))}` : linked.length > 1 ? 'Выберите основной материал — он будет подставляться в проект автоматически.' : 'Выберите материал услуги.'}</span>${owner ? `<button type="button" class="btn-ghost text-xs" onclick="persistServiceOfferingFilms('${offering.id}')">Сохранить материалы</button>` : ''}</div></details>`
     : '<div class="text-sm text-gray-500">На складе пока нет плёнок этого направления. Услугу можно сохранить и добавить материал позже.</div>';
 
-  if (!owner) return `<div class="service-editor-panel"><div class="flex justify-between gap-3"><div><h4 class="font-black text-lg">${academyEsc(offering.name)}</h4><div class="text-sm text-gray-500 mt-1">${academyEsc(categoryInfo?.title || 'Услуга')} · ${academyEsc(SERVICE_OFFERING_UNITS.find(item => item.id === unit)?.label || per)}</div></div><b>${Number(offering.pricePerSqft) > 0 ? `${fmtMoney(Number(offering.pricePerSqft))} / ${academyEsc(per)}` : 'Цена не задана'}</b></div>${sized ? `<div class="service-editor-section">${filmList}</div>` : ''}</div>`;
+  if (!owner) return `<div class="service-editor-panel"><div class="flex justify-between gap-3"><div><h4 class="font-black text-lg">${academyEsc(offering.name)}</h4><div class="text-sm text-gray-500 mt-1">${academyEsc(SERVICE_OFFERING_UNITS.find(item => item.id === unit)?.label || per)}</div></div><b>${Number(offering.pricePerSqft) > 0 ? `${fmtMoney(Number(offering.pricePerSqft))} / ${academyEsc(per)}` : 'Цена не задана'}</b></div>${sized ? `<div class="service-editor-section">${filmList}</div>` : ''}</div>`;
 
   return `<div data-service-offering-row="${offering.id}" class="service-editor-panel ${offering.active === false ? 'opacity-60' : ''}">
     ${serviceOfferingIsDraft(offering) ? '<div class="text-sm font-bold mb-3" style="color:#92400e">Черновик: заполните название и цену — до этого услуга не появится в проекте.</div>' : ''}
@@ -27187,12 +27100,6 @@ function serviceOfferingEditorHtml(offering, owner) {
         <div><label>Название в CRM</label><input value="${academyEsc(offering.name)}" onchange="updateServiceOffering('${offering.id}','name',this.value,this)"></div>
         <div><label>Name for the client (EN) · КП, акт, invoice</label><input value="${academyEsc(offering.nameEn || '')}" placeholder="${academyEsc(serviceOfferingEnglishGuess(offering) || 'e.g. Structural Silicone')}" onchange="updateServiceOffering('${offering.id}','nameEn',this.value,this)"></div>
       </div>
-    </section>
-    <section class="service-editor-section">
-      <div class="service-editor-section-title">Место в кассе проекта</div>
-      <label>Категория внутри направления</label>
-      <select onchange="updateServiceOffering('${offering.id}','category',this.value,this)">${serviceOfferingCategoryDefinitions(direction).map(item => `<option value="${item.id}" ${category === item.id ? 'selected' : ''}>${academyEsc(item.title)} — ${academyEsc(item.hint)}</option>`).join('')}</select>
-      <div class="text-xs text-gray-500 mt-2">Менеджер увидит: направление → эта категория → услуга → только привязанные материалы.</div>
     </section>
     <section class="service-editor-section">
       <div class="service-editor-section-title">Единица расчёта</div>
@@ -27227,10 +27134,9 @@ function renderServiceDirectionWorkspace(direction) {
   const selected = state.servicePricingOfferingId ? items.find(item => item.id === state.servicePricingOfferingId) : null;
   const rows = items.map(offering => {
     const per = serviceOfferingUnitShort(offering);
-    const category = serviceOfferingCategoryDefinitions(direction).find(item => item.id === serviceOfferingCategory(offering, direction));
     const flags = [serviceOfferingIsDraft(offering) ? 'Черновик' : '', offering.proposalOptional ? 'Опция КП' : '', offering.active === false ? 'Выключена' : ''].filter(Boolean);
     return `<div class="service-directory-row ${offering.active === false ? 'inactive' : ''}" data-service-offering-row="${offering.id}">
-      <div><div class="service-directory-row-title">${academyEsc(offering.name)}</div><div class="service-directory-row-meta">${academyEsc(category?.title || 'Услуга')} · ${academyEsc(SERVICE_OFFERING_UNITS.find(item => item.id === serviceOfferingUnit(offering))?.label || per)}${flags.length ? ` · ${academyEsc(flags.join(' · '))}` : ''}</div></div>
+      <div><div class="service-directory-row-title">${academyEsc(offering.name)}</div><div class="service-directory-row-meta">${academyEsc(SERVICE_OFFERING_UNITS.find(item => item.id === serviceOfferingUnit(offering))?.label || per)}${flags.length ? ` · ${academyEsc(flags.join(' · '))}` : ''}</div></div>
       <div class="service-directory-row-price">${Number(offering.pricePerSqft) > 0 ? `${fmtMoney(Number(offering.pricePerSqft))} / ${academyEsc(per)}` : 'Цена не задана'}</div>
       <button type="button" class="btn-ghost text-sm" onclick="openServiceOfferingEditor('${direction}','${offering.id}')">${owner ? 'Изменить' : 'Открыть'} →</button>
     </div>`;

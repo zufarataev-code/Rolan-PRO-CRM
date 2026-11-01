@@ -2,12 +2,6 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
-## 2026-11-01 — Project services use one visible cascade, not a flat picker
-
-- Creating or extending a Project uses the existing service directory and one visible hierarchy: **direction → category → service → compatible material**. Categories are presentation metadata on `settings.serviceOfferings`, not a second catalog and not a second pricing model.
-- The four customer directions stay the first choice. Inside each direction the cashier shows only non-empty categories, then only that category's active services. After a service is chosen, material remains restricted by the service's existing film links; «Материал уточним на замере» remains valid.
-- Historical services without a saved category remain usable and receive a deterministic category from their direction, unit and name. The Owner can set the category explicitly in «Услуги и цены». All project totals, measurement, proposal, warehouse and payroll paths continue to consume the same offering/material IDs.
-
 ## 2026-10-29 — Owner-authorized live uploads may stay enabled with an empty queue
 
 - After access and destination preparation, the owner explicitly requested enabling uploads and completing the integration. An empty conversion queue alone is not a reason to keep authorized live delivery paused: the existing consent, attribution, milestone, destination and retry gates continue to govern future genuine events, with both environment and stored settings explicitly in live mode.
