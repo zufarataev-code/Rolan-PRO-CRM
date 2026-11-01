@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 // Owner, 2026-10-24, from the phone: no way back from the calculation and the KP,
-// cashier steps stacked as full-width buttons, a long film list, a project form
+// cashier steps stacked as full-width buttons, hidden film/add-on choices, a project form
 // where it is hard to see what comes from where, and a second «Услуги» list on
 // «Услуги и цены» that looked like a duplicate of the directions.
 
@@ -27,11 +27,11 @@ test('on a phone the cashier steps are one row and the cashier keeps its own lay
   assert.equal((mobile.match(/\.rp-cashier, \.rp-dirwin, \[data-rp-keep-layout\]/g) || []).length, 4, 'toolbar, stack, action-row and generic passes skip the cashier');
 });
 
-test('a long film list folds by series and «уточним на замере» comes first', () => {
-  const material = slice("} else if (c.step === 'material') {", "} else {");
-  assert.match(material, /const fold = films\.length > 8;/);
-  assert.match(material, /<details class="rp-cashier-group rp-cashier-fold" \$\{list\.some\(film => film\.id === c\.catalogId\) \? 'open' : ''\}>/);
-  assert.ok(material.indexOf('${skip}') < material.indexOf('[...groups.entries()]'), 'skip button above the series');
+test('film models and add-ons share one responsive final grid without a hidden material step', () => {
+  assert.match(html, /const SERVICE_CASHIER_STEPS = \['direction', 'offering', 'addons'\];/);
+  assert.doesNotMatch(html, /c\.step === 'material'/);
+  assert.match(html, /rp-cashier-grid compact">\$\{films\.map\(filmCard\)\.join\(''\)\}\$\{unknownFilmCard\}\$\{addons\.map\(addonCard\)\.join\(''\)\}/);
+  assert.match(html, /все варианты находятся рядом, без отдельного скрытого шага/);
 });
 
 test('the calculation footer is one compact row on a phone', () => {
@@ -46,7 +46,7 @@ test('the chosen client is one line; card details fold; one «Адрес объ�
   assert.match(panel, /Адрес объекта <span class="order-required">\*<\/span>/);
   assert.match(panel, /addresses\.length > 1 \? `<select id="no-client-address"/, 'a select only when there is a choice');
   assert.match(panel, /warnings\.filter\(w => !\/старым форматом\/\.test\(w\)\)/);
-  assert.match(html, /«\+ Услуга» → направление → услуга → плёнка \(можно «уточним на замере»\)/);
+  assert.match(html, /«\+ Услуга» → направление → линейка → плёнка и допы рядом \(можно «уточнить на замере»\)/);
 });
 
 test('«Услуги и цены»: the first screen is only the four service directions', () => {

@@ -1539,6 +1539,10 @@
   .rp-cashier-icon { font-size:1.5rem;line-height:1; }
   .rp-cashier-title { font-weight:800;font-size:.95rem;line-height:1.2; }
   .rp-cashier-meta { font-size:.74rem;color:#64748b;line-height:1.3; }
+  .rp-cashier-kind { font-size:.62rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:var(--svc-color); }
+  .rp-cashier-card.material { border-left-width:2px; }
+  .rp-cashier-card.material .rp-cashier-check { border-radius:50%; }
+  .rp-cashier-selection-note { margin:0 0 .65rem;color:#64748b;font-size:.78rem;line-height:1.45; }
   .rp-cashier-badge { position:absolute;top:.5rem;right:.5rem;font-size:.66rem;font-weight:800;color:var(--svc-color);background:var(--svc-bg);border-radius:3px;padding:.1rem .4rem; }
   .rp-cashier-check { position:absolute;top:.55rem;right:.6rem;display:grid;place-items:center;width:1.4rem;height:1.4rem;border-radius:3px;border:1.5px solid var(--svc-color);color:var(--svc-color);font-weight:900;font-size:.85rem;background:#fff; }
   .rp-cashier-card.selected .rp-cashier-check { background:var(--svc-color);color:#fff; }
@@ -26350,11 +26354,11 @@ function projectAddOfferingLine(oid, offeringId, serviceType = '') {
 }
 // ---------- КАССА УСЛУГ ----------
 // Owner, 2026-10-19: services are added to a project like dishes at a
-// restaurant till — cards, not a dropdown. Direction → service → material →
-// add-ons → «в проект». The cashier only chooses; the project is changed by
+// restaurant till — cards, not a dropdown. Direction → film line / primary
+// service → film and add-ons on one screen → «в проект». The cashier only chooses; the project is changed by
 // the existing projectAddOfferingLine / offeringCatalogIds paths, so estimate,
 // proposal, included services and work orders see exactly what they saw before.
-const SERVICE_CASHIER_STEPS = ['direction', 'offering', 'material', 'addons'];
+const SERVICE_CASHIER_STEPS = ['direction', 'offering', 'addons'];
 
 function serviceCashierState() {
   return state._serviceCashier || null;
@@ -26379,6 +26383,12 @@ function serviceCashierScope(c) {
 function serviceCashierLayer() {
   return typeof document !== 'undefined' ? document.getElementById('rp-cashier-layer') : null;
 }
+/** The first shelf is the sellable line/category. Size-free work belongs beside its film as an add-on. */
+function serviceCashierPrimaryOfferings(direction) {
+  const items = serviceOfferingsFor(direction);
+  const sized = items.filter(serviceOfferingNeedsSizes);
+  return sized.length ? sized : items;
+}
 /**
  * The four customer-facing film directions are the stable first screen of the
  * cashier. They must not disappear just because the owner has not filled that
@@ -26387,12 +26397,31 @@ function serviceCashierLayer() {
  */
 function serviceCashierDirections() {
   return ORDER_PRIMARY_SERVICES
-    .map(direction => ({ direction, offerings: serviceOfferingsFor(serviceOfferingDirection(direction.id)) }))
+    .map(direction => ({ direction, offerings: serviceCashierPrimaryOfferings(serviceOfferingDirection(direction.id)) }))
     .filter(item => !item.direction.general || item.offerings.length);
 }
-/** Films the chosen service may be done with (its explicit links, not archived). */
+function serviceCashierFilmFamilyKey(value) {
+  const text = String(value || '').toLowerCase().replace(/ё/g, 'е');
+  if (/magnit|magnet|магнит/.test(text)) return 'magnitronic';
+  if (/ceram|керами/.test(text)) return 'ceramic';
+  if (/silver|сереб/.test(text)) return 'silver';
+  if (/mirror|зеркал/.test(text)) return 'mirror';
+  if (/neutral|нейтрал/.test(text)) return 'neutral';
+  if (/vision/.test(text)) return 'vision';
+  return '';
+}
+/**
+ * Films of the chosen line. Explicit links win. For historical lines such as
+ * «Magnetron» with an empty link list, the existing catalog family is inferred
+ * for display (SP-5%, SP-15%…), while the backend's direction guard remains the authority.
+ */
 function serviceCashierFilms(offering) {
-  return serviceOfferingAllowedFilmIds(offering).map(getCatalogItem).filter(film => film && !film.archived);
+  const films = serviceOfferingAllowedFilmIds(offering).map(getCatalogItem).filter(film => film && !film.archived);
+  if (serviceOfferingFilmIds(offering).length) return films;
+  const family = serviceCashierFilmFamilyKey(offering?.name);
+  if (!family) return films;
+  const matched = films.filter(film => serviceCashierFilmFamilyKey([film.brand, film.series, film.productName, film.model, film.modelCode, film.filmCategory].join(' ')) === family);
+  return matched.length ? matched : films;
 }
 /** Size-free services of the same direction that can ride along, minus what the service already includes. */
 function serviceCashierAddons(o, offering, directionId = '') {
@@ -26408,11 +26437,8 @@ function serviceCashierAddons(o, offering, directionId = '') {
   return [...own, ...general]
     .filter(item => item.id !== offering.id && !serviceOfferingNeedsSizes(item) && !included.has(item.id) && !inProject.has(item.id));
 }
-function serviceCashierHasMaterialStep(offering) {
-  return !!offering && serviceOfferingNeedsSizes(offering) && serviceCashierFilms(offering).length > 0;
-}
 function serviceCashierSteps(offering) {
-  return SERVICE_CASHIER_STEPS.filter(step => step !== 'material' || serviceCashierHasMaterialStep(offering));
+  return SERVICE_CASHIER_STEPS;
 }
 
 function openServiceCashier(oid, returnTo = 'card') {
@@ -26462,19 +26488,15 @@ function serviceCashierPick(field, value) {
     Object.assign(c, { directionId: value, offeringId: '', catalogId: '', addonIds: [], step: 'offering' });
   } else if (field === 'offering') {
     const offering = serviceOffering(value);
-    if (!offering || offering.active === false || !serviceOfferingInDirection(offering, serviceOfferingDirection(c.directionId))) return;
+    if (!offering || offering.active === false || !serviceCashierPrimaryOfferings(serviceOfferingDirection(c.directionId)).some(item => item.id === value)) return;
     const o = serviceCashierScope(c);
     const catalogId = projectOfferingCatalogId(o, value) || serviceOfferingDefaultFilmId(offering);
     Object.assign(c, { offeringId: value, catalogId, addonIds: [] });
-    // A saved default belongs to the service, so the manager need not choose
-    // the same material in every project. The completed Material crumb remains
-    // available to override it for an exceptional job.
-    c.step = serviceCashierHasMaterialStep(offering) && !catalogId ? 'material' : 'addons';
+    c.step = 'addons';
   } else if (field === 'material') {
     const offering = serviceOffering(c.offeringId);
     if (value && !serviceCashierFilms(offering).some(film => film.id === value)) return;
     c.catalogId = value || '';
-    c.step = 'addons';
   } else if (field === 'addon') {
     const offering = serviceOffering(c.offeringId);
     const o = serviceCashierScope(c);
@@ -26487,7 +26509,6 @@ function serviceCashierPick(field, value) {
     // Going back keeps the choices below untouched; they are re-made on the way forward.
     if (value === 'direction') Object.assign(c, { directionId: '', offeringId: '', catalogId: '', addonIds: [] });
     else if (value === 'offering') Object.assign(c, { offeringId: '', catalogId: '', addonIds: [] });
-    else if (value === 'material') Object.assign(c, { addonIds: [] });
     c.step = value;
   } else return;
   renderServiceCashier();
@@ -26552,42 +26573,33 @@ function serviceCashierHtml(c) {
   const direction = ORDER_PRIMARY_SERVICES.find(item => item.id === c.directionId) || null;
   const offering = serviceOffering(c.offeringId);
   const steps = serviceCashierSteps(offering);
-  const titles = { direction: 'Направление', offering: 'Услуга', material: 'Материал', addons: 'Допы и итог' };
+  const titles = { direction: 'Направление', offering: 'Линейка / услуга', addons: 'Плёнка и допы' };
   const stepIndex = steps.indexOf(c.step);
   const crumbs = steps.map((step, index) => {
     const done = index < stepIndex;
-    const label = step === 'direction' && direction ? direction.short : step === 'offering' && offering ? offering.name : step === 'material' && c.catalogId && getCatalogItem(c.catalogId) ? catalogFilmName(getCatalogItem(c.catalogId)) || catalogLabel(getCatalogItem(c.catalogId)) : titles[step];
+    const label = step === 'direction' && direction ? direction.short : step === 'offering' && offering ? offering.name : titles[step];
     return `<button type="button" class="rp-cashier-crumb ${index === stepIndex ? 'current' : ''} ${done ? 'done' : ''}" ${done ? `onclick="serviceCashierPick('step','${step}')"` : 'disabled'}><span class="rp-cashier-crumb-n">${index + 1}</span>${academyEsc(label)}</button>`;
   }).join('<span class="rp-cashier-crumb-sep">›</span>');
   const inProject = new Set([o.offeringId, ...(o.offeringIds || [])].filter(Boolean));
   let body = '';
   if (c.step === 'direction') {
-    body = `<div class="rp-cashier-grid">${serviceCashierDirections().map(({ direction: dir, offerings }) => `<button type="button" class="rp-cashier-card rp-cashier-direction" style="${serviceCashierCardStyle(dir.id)}" onclick="serviceCashierPick('direction','${dir.id}')"><span class="rp-cashier-icon">${dir.icon || '•'}</span><span class="rp-cashier-title">${academyEsc(dir.title)}</span><span class="rp-cashier-meta">${offerings.length} ${offerings.length === 1 ? 'услуга' : offerings.length < 5 ? 'услуги' : 'услуг'}</span></button>`).join('')}</div>`;
+    body = `<div class="rp-cashier-grid">${serviceCashierDirections().map(({ direction: dir, offerings }) => `<button type="button" class="rp-cashier-card rp-cashier-direction" style="${serviceCashierCardStyle(dir.id)}" onclick="serviceCashierPick('direction','${dir.id}')"><span class="rp-cashier-icon">${dir.icon || '•'}</span><span class="rp-cashier-title">${academyEsc(dir.title)}</span><span class="rp-cashier-meta">${offerings.length} ${offerings.length === 1 ? 'линейка' : offerings.length < 5 ? 'линейки' : 'линеек / услуг'}</span></button>`).join('')}</div>`;
   } else if (c.step === 'offering') {
-    const items = serviceOfferingsFor(serviceOfferingDirection(c.directionId));
+    const items = serviceCashierPrimaryOfferings(serviceOfferingDirection(c.directionId));
     body = items.length
-      ? `<div class="rp-cashier-grid">${items.map(item => { const taken = inProject.has(item.id) && serviceOfferingNeedsSizes(item); return `<button type="button" class="rp-cashier-card ${taken ? 'taken' : ''}" style="${serviceCashierCardStyle(c.directionId)}" ${taken ? 'disabled' : `onclick="serviceCashierPick('offering','${jsQuote(item.id)}')"`}><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span>${taken ? '<span class="rp-cashier-badge">уже в проекте</span>' : ''}</button>`; }).join('')}</div>`
+      ? `<p class="rp-cashier-selection-note">Выберите линейку плёнки или основную работу. Материалы этой линейки и дополнительные работы откроются вместе на следующем экране.</p><div class="rp-cashier-grid">${items.map(item => { const taken = inProject.has(item.id) && serviceOfferingNeedsSizes(item); return `<button type="button" class="rp-cashier-card ${taken ? 'taken' : ''}" style="${serviceCashierCardStyle(c.directionId)}" ${taken ? 'disabled' : `onclick="serviceCashierPick('offering','${jsQuote(item.id)}')"`}><span class="rp-cashier-kind">Линейка / услуга</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span>${taken ? '<span class="rp-cashier-badge">уже в проекте</span>' : ''}</button>`; }).join('')}</div>`
       : `<div class="service-directory-empty"><div class="text-3xl mb-2">${academyEsc(direction?.icon || '🎞')}</div><b>В направлении пока нет активных услуг</b><div class="text-sm mt-1">Сначала добавьте и заполните услугу в разделе «Услуги и цены».</div></div>`;
-  } else if (c.step === 'material') {
-    const films = serviceCashierFilms(offering);
-    const groups = new Map();
-    films.forEach(film => { const key = catalogFilmName(film) || film.brand || 'Плёнка'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(film); });
-    // A long direction list (service without linked films) folds by series, and «уточним на замере» comes first (Owner, 2026-10-24).
-    const fold = films.length > 8;
-    const skip = `<button type="button" class="rp-cashier-skip" onclick="serviceCashierPick('material','')">Материал уточним на замере →</button>`;
-    body = `${fold ? `<div class="rp-cashier-meta" style="margin:.1rem 0 .5rem">${films.length} плёнок направления. Откройте серию или выберите на замере.</div>${skip}` : ''}${[...groups.entries()].map(([name, list]) => fold
-      ? `<details class="rp-cashier-group rp-cashier-fold" ${list.some(film => film.id === c.catalogId) ? 'open' : ''}><summary class="rp-cashier-group-title">${academyEsc(name)} · ${list.length}</summary><div class="rp-cashier-grid compact">${list.map(film => `<button type="button" class="rp-cashier-card ${film.id === c.catalogId ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" onclick="serviceCashierPick('material','${jsQuote(film.id)}')"><span class="rp-cashier-title">${academyEsc(catalogFilmModel(film) || catalogLabel(film))}</span><span class="rp-cashier-meta">${academyEsc([film.vlt ? `VLT ${film.vlt}%` : '', film.tser ? `TSER ${film.tser}%` : ''].filter(Boolean).join(' · ') || catalogFilmCategory(film) || '')}</span></button>`).join('')}</div></details>`
-      : `<div class="rp-cashier-group"><div class="rp-cashier-group-title">${academyEsc(name)}</div><div class="rp-cashier-grid compact">${list.map(film => `<button type="button" class="rp-cashier-card ${film.id === c.catalogId ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" onclick="serviceCashierPick('material','${jsQuote(film.id)}')"><span class="rp-cashier-title">${academyEsc(catalogFilmModel(film) || catalogLabel(film))}</span><span class="rp-cashier-meta">${academyEsc([film.vlt ? `VLT ${film.vlt}%` : '', film.tser ? `TSER ${film.tser}%` : ''].filter(Boolean).join(' · ') || catalogFilmCategory(film) || '')}</span></button>`).join('')}</div></div>`).join('')}${fold ? '' : skip}`;
   } else {
+    const films = serviceCashierFilms(offering);
     const addons = serviceCashierAddons(o, offering, c.directionId);
     const film = c.catalogId ? getCatalogItem(c.catalogId) : null;
     const chosen = addons.filter(item => c.addonIds.includes(item.id));
     const includes = serviceOfferingIncludes(offering);
-    const addonCard = item => `<button type="button" class="rp-cashier-card rp-cashier-addon ${c.addonIds.includes(item.id) ? 'selected' : ''}" style="${serviceCashierCardStyle(item.direction === 'general' ? 'general_works' : c.directionId)}" aria-pressed="${c.addonIds.includes(item.id)}" onclick="serviceCashierPick('addon','${jsQuote(item.id)}')"><span class="rp-cashier-check">${c.addonIds.includes(item.id) ? '✓' : '+'}</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span></button>`;
-    const soldIn = serviceOfferingDirection(c.directionId);
-    const ownAddons = addons.filter(item => serviceOfferingInDirection(item, soldIn));
-    const generalAddons = addons.filter(item => !serviceOfferingInDirection(item, soldIn));
-    body = `${ownAddons.length ? `<div class="rp-cashier-group"><div class="rp-cashier-group-title">Дополнительно к услуге</div><div class="rp-cashier-grid compact">${ownAddons.map(addonCard).join('')}</div></div>` : ''}${generalAddons.length ? `<div class="rp-cashier-group"><div class="rp-cashier-group-title">🧰 Общее по объекту</div><div class="rp-cashier-grid compact">${generalAddons.map(addonCard).join('')}</div></div>` : ''}
+    const filmCard = item => `<button type="button" class="rp-cashier-card material ${item.id === c.catalogId ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${item.id === c.catalogId}" onclick="serviceCashierPick('material','${jsQuote(item.id)}')"><span class="rp-cashier-check">${item.id === c.catalogId ? '✓' : ''}</span><span class="rp-cashier-kind">Плёнка</span><span class="rp-cashier-title">${academyEsc(catalogFilmModel(item) || catalogLabel(item))}</span><span class="rp-cashier-meta">${academyEsc([item.vlt ? `VLT ${item.vlt}%` : '', item.tser ? `TSER ${item.tser}%` : ''].filter(Boolean).join(' · ') || catalogFilmCategory(item) || '')}</span></button>`;
+    const unknownFilmCard = serviceOfferingNeedsSizes(offering) ? `<button type="button" class="rp-cashier-card material ${!c.catalogId ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${!c.catalogId}" onclick="serviceCashierPick('material','')"><span class="rp-cashier-check">${!c.catalogId ? '✓' : ''}</span><span class="rp-cashier-kind">Плёнка</span><span class="rp-cashier-title">Уточнить на замере</span><span class="rp-cashier-meta">Замерщик выберет точную модель на объекте</span></button>` : '';
+    const addonCard = item => `<button type="button" class="rp-cashier-card rp-cashier-addon ${c.addonIds.includes(item.id) ? 'selected' : ''}" style="${serviceCashierCardStyle(item.direction === 'general' ? 'general_works' : c.directionId)}" aria-pressed="${c.addonIds.includes(item.id)}" onclick="serviceCashierPick('addon','${jsQuote(item.id)}')"><span class="rp-cashier-check">${c.addonIds.includes(item.id) ? '✓' : '+'}</span><span class="rp-cashier-kind">Доп. работа</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span></button>`;
+    body = `<p class="rp-cashier-selection-note">Выберите одну плёнку. Дополнительных работ можно выбрать несколько — все варианты находятся рядом, без отдельного скрытого шага.</p>
+      <div class="rp-cashier-group"><div class="rp-cashier-group-title">${academyEsc(offering?.name || 'Услуга')} · плёнка и дополнительные работы</div><div class="rp-cashier-grid compact">${films.map(filmCard).join('')}${unknownFilmCard}${addons.map(addonCard).join('')}</div></div>
       <div class="rp-cashier-summary" style="${serviceCashierCardStyle(c.directionId)}">
         <div class="rp-cashier-summary-title">В проект ${academyEsc(o.number || '')}</div>
         <div class="rp-cashier-summary-line"><b>${academyEsc(offering.name)}</b><span>${serviceCashierOfferingMeta(offering)}</span></div>
@@ -26599,14 +26611,9 @@ function serviceCashierHtml(c) {
   }
   const canCommit = c.step === 'addons' && !!offering;
   // The footer always offers a forward action, so the window is never a dead end
-  // (Owner, 2026-10-26: «окно открыл — выйти невозможно, сохранить нечем»). On the
-  // material step «Далее →» carries the chosen film, or moves on with «уточним на
-  // замере» when none is picked; on the add-ons step it commits to the project.
-  const forward = canCommit
-    ? `<button type="button" class="btn-primary rp-cashier-commit" onclick="serviceCashierCommit()">Добавить в проект</button>`
-    : c.step === 'material'
-      ? `<button type="button" class="btn-primary rp-cashier-commit" onclick="serviceCashierPick('material','${jsQuote(c.catalogId || '')}')">${c.catalogId ? 'Далее →' : 'Далее — уточним на замере →'}</button>`
-      : '';
+  // (Owner, 2026-10-26: «окно открыл — выйти невозможно, сохранить нечем»).
+  // The combined film/add-ons screen commits directly; there is no hidden material step.
+  const forward = canCommit ? `<button type="button" class="btn-primary rp-cashier-commit" onclick="serviceCashierCommit()">Добавить в проект</button>` : '';
   return `<div class="modal-backdrop" onclick="if(event.target===this)closeServiceCashier()"><div class="modal-content workspace-modal rp-cashier" style="max-width:52rem;${direction ? serviceCashierCardStyle(direction.id) : ''}" role="dialog" aria-modal="true" aria-label="Касса услуг" onclick="event.stopPropagation()">
     <div class="rp-cashier-head"><div><div class="rp-cashier-kicker">КАССА УСЛУГ · ${academyEsc(o.number || '')}</div><h3>${academyEsc(titles[c.step])}</h3></div><button type="button" class="btn-ghost" onclick="closeServiceCashier()">Закрыть</button></div>
     <div class="rp-cashier-crumbs">${crumbs}</div>
@@ -33101,7 +33108,7 @@ function openOrderModal() {
               <div class="erp-intake-card-head">
                 <div>
                   <div class="erp-intake-card-title"><span class="erp-intake-step">3</span> Услуги проекта <span class="order-required">*</span></div>
-                  <div class="text-sm text-gray-500 mt-1">Что делаем у клиента. «+ Услуга» → направление → услуга → плёнка (можно «уточним на замере»). Цены и размеры посчитаются после замера.</div>
+                  <div class="text-sm text-gray-500 mt-1">Что делаем у клиента. «+ Услуга» → направление → линейка → плёнка и допы рядом (можно «уточнить на замере»). Цены и размеры посчитаются после замера.</div>
                 </div>
               </div>
               <div id="no-offerings" class="mt-2"></div>

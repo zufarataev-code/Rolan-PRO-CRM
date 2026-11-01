@@ -4,7 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 // Касса услуг (Owner, 2026-10-19): services enter a project as cards —
-// direction → service → material → add-ons — and land through the same
+// direction → film line / primary service → film and add-ons on one screen — and land through the same
 // projectAddOfferingLine path the dropdown used, so nothing downstream changes.
 
 const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
@@ -130,7 +130,7 @@ test('all four film directions stay visible and an empty direction explains what
   context.openServiceCashier('o', 'card');
   assert.deepEqual(
     Array.from(context.serviceCashierDirections(), ({ direction, offerings }: Row) => [direction.id, offerings.length]),
-    [['smart_film', 0], ['protective_film', 3], ['solar_film', 1], ['decorative_film', 0]],
+    [['smart_film', 0], ['protective_film', 1], ['solar_film', 1], ['decorative_film', 0]],
   );
   context.serviceCashierPick('direction', 'decorative_film');
   assert.equal(context.serviceCashierState().step, 'offering');
@@ -138,30 +138,28 @@ test('all four film directions stay visible and an empty direction explains what
   assert.match(state.modal, /Услуги и цены/);
 });
 
-test('direction → service → film → add-ons, with inactive and archived items left out', () => {
+test('direction → film line → film and add-ons in one grid, with inactive and archived items left out', () => {
   const { context, state } = fixture();
   context.openServiceCashier('o', 'card');
   context.serviceCashierPick('direction', 'protective_film');
   assert.equal(context.serviceCashierState().step, 'offering');
   assert.match(state.modal, /A1 8 mil/);
   assert.match(state.modal, /входит: Силикон/);
+  assert.doesNotMatch(state.modal, /Высотные работы/, 'size-free work is an add-on, not a film line');
   assert.doesNotMatch(state.modal, /Выключена/);
   assert.doesNotMatch(state.modal, /Солнце SP35/, 'another direction is not on this screen');
 
   context.serviceCashierPick('offering', 'svc_A1 8 mil');
-  assert.equal(context.serviceCashierState().step, 'material', 'a per-sq-ft service with linked films asks for the film');
+  assert.equal(context.serviceCashierState().step, 'addons');
   assert.match(state.modal, /Guard A1|A1</);
   assert.doesNotMatch(state.modal, /A1X/, 'archived film is not offered');
-  assert.match(state.modal, /Материал уточним на замере/);
-  // The material step is never a dead end: the footer always offers a way forward
-  // (Owner, 2026-10-26: «окно открыл — выйти невозможно»). With no film picked it
-  // reads «уточним на замере»; once a film is chosen the footer says «Далее →».
-  assert.match(state.modal, /Далее — уточним на замере →/);
-  assert.doesNotMatch(state.modal, /Добавить в проект/, 'material step moves forward, it does not commit yet');
+  assert.match(state.modal, /Уточнить на замере/);
+  assert.match(state.modal, /Высотные работы/, 'a size-free service is beside the films as an add-on');
+  assert.match(state.modal, /Добавить в проект/);
 
   context.serviceCashierPick('material', 'f_a1');
-  assert.equal(context.serviceCashierState().step, 'addons');
-  assert.match(state.modal, /Высотные работы/, 'a size-free service of the direction is an add-on');
+  assert.equal(context.serviceCashierState().step, 'addons', 'choosing a film stays on the combined screen');
+  assert.equal(context.serviceCashierState().catalogId, 'f_a1');
   assert.doesNotMatch(state.modal, /serviceCashierPick\('addon','svc_Силикон'\)/, 'an included component is not offered twice');
   assert.match(state.modal, /↳ Силикон<\/span><span>в пакете/);
   assert.match(state.modal, /Добавить в проект/);
@@ -172,7 +170,31 @@ test('direction → service → film → add-ons, with inactive and archived ite
   assert.deepEqual([...context.serviceCashierState().addonIds], []);
 });
 
-test('a saved default material is reused and may still be changed from the completed Material crumb', () => {
+test('Magnetron opens the existing Magnitronic SP range and silicone beside it, not every solar film', () => {
+  const { context, db, state, add, silicone } = fixture();
+  db.settings.catalog.push(
+    { id: 'sp05', brand: 'Rolan PRO', series: 'Magnitronic Solar Prime', productName: 'Magnitronic Solar Prime', model: 'Magnitronic Solar Prime SP-5%', modelCode: 'SP-5%', category: 'solar', vlt: 5.7, archived: false },
+    { id: 'sp15', brand: 'Rolan PRO', series: 'Magnitronic Solar Prime', productName: 'Magnitronic Solar Prime', model: 'Magnitronic Solar Prime SP-15%', modelCode: 'SP-15%', category: 'solar', vlt: 14, archived: false },
+    { id: 'cer15', brand: 'Other', series: 'Ceramic', productName: 'Ceramic', model: 'Ceramic 15', modelCode: '15', category: 'solar', archived: false },
+  );
+  const magnetron = add({ name: 'Magnetron', direction: 'solar', unit: 'sqft', pricePerSqft: 15, filmIds: [] });
+  silicone.directions = ['solar'];
+
+  context.openServiceCashier('o', 'card');
+  context.serviceCashierPick('direction', 'solar_film');
+  assert.match(state.modal, /Magnetron/);
+  assert.doesNotMatch(state.modal, /onclick="serviceCashierPick\('offering','svc_Силикон'\)"/, 'silicone is not presented as a film line');
+
+  context.serviceCashierPick('offering', magnetron.id);
+  assert.equal(context.serviceCashierState().step, 'addons');
+  assert.match(state.modal, /SP-5%/);
+  assert.match(state.modal, /SP-15%/);
+  assert.doesNotMatch(state.modal, /Ceramic 15/, 'another solar family is not mixed into Magnetron');
+  assert.match(state.modal, new RegExp(`serviceCashierPick\\('addon','${silicone.id}'\\)`));
+  assert.match(state.modal, /rp-cashier-grid compact[\s\S]*SP-5%[\s\S]*SP-15%[\s\S]*Силикон/, 'films and silicone are in one choice grid');
+});
+
+test('a saved default material is selected but every compatible film stays visible beside the add-ons', () => {
   const { context, state, a1 } = fixture();
   a1.defaultFilmId = 'f_a1';
   context.openServiceCashier('o', 'card');
@@ -181,14 +203,16 @@ test('a saved default material is reused and may still be changed from the compl
   assert.equal(context.serviceCashierState().step, 'addons', 'the manager is not forced to select the same material again');
   assert.equal(context.serviceCashierState().catalogId, 'f_a1');
   assert.match(state.modal, /Guard A1/);
-  assert.match(state.modal, /serviceCashierPick\('step','material'\)/, 'the default can be overridden for an exceptional project');
+  assert.match(state.modal, /Guard A1B|A1B/, 'another compatible film can be selected immediately');
+  assert.match(state.modal, /serviceCashierPick\('material','f_a1b'\)/);
 });
 
-test('a size-free service skips the material step; going back clears the later choices', () => {
-  const { context } = fixture();
+test('a size-free standalone service has the same final screen; going back clears the later choices', () => {
+  const { context, add } = fixture();
+  const lift = add({ name: 'Аренда подъёмника', direction: 'general', unit: 'fixed', pricePerSqft: 450 });
   context.openServiceCashier('o', 'card');
-  context.serviceCashierPick('direction', 'protective_film');
-  context.serviceCashierPick('offering', 'svc_Высотные работы');
+  context.serviceCashierPick('direction', 'general_works');
+  context.serviceCashierPick('offering', lift.id);
   assert.equal(context.serviceCashierState().step, 'addons');
   context.serviceCashierPick('step', 'direction');
   const c = context.serviceCashierState();
@@ -217,15 +241,16 @@ test('commit puts the service, its film, its package and the add-ons into the pr
 });
 
 test('from the estimate workspace the cashier returns to the estimate; closing returns without changes', () => {
-  const { context, order, calls } = fixture();
+  const { context, order, calls, add } = fixture();
+  const lift = add({ name: 'Аренда подъёмника', direction: 'general', unit: 'fixed', pricePerSqft: 450 });
   context.openServiceCashier('o', 'estimate');
   context.closeServiceCashier();
   assert.deepEqual(calls.filter(call => call.startsWith('estimate')), ['estimate:o']);
   assert.equal(order.extraServices.length, 0);
   calls.length = 0;
   context.openServiceCashier('o', 'estimate');
-  context.serviceCashierPick('direction', 'protective_film');
-  context.serviceCashierPick('offering', 'svc_Высотные работы');
+  context.serviceCashierPick('direction', 'general_works');
+  context.serviceCashierPick('offering', lift.id);
   context.serviceCashierCommit();
   assert.equal(order.extraServices.length, 1);
   assert.ok(!calls.includes('refresh:card'), 'the estimate path does not pin the edit to the card');
@@ -243,7 +268,7 @@ test('a closed project and a service already measured are not offered again', ()
   context.serviceCashierPick('direction', 'protective_film');
   assert.match(state.modal, /уже в проекте/);
   context.serviceCashierPick('offering', a1.id);
-  assert.equal(context.serviceCashierState().step, 'material', 'the guard is in the UI; the data path itself stays idempotent');
+  assert.equal(context.serviceCashierState().step, 'addons', 'the guard is in the UI; the data path itself stays idempotent');
 });
 
 test('in the new-project form the cashier sits on its own layer, reads the intake state and commits through toggleNewOrderOffering', () => {
@@ -297,9 +322,8 @@ test('general works are offered as add-ons under any film direction and as their
   assert.match(state.modal, /serviceCashierPick\('direction','general_works'\)/, 'the additional card appears once it has services');
   context.serviceCashierPick('direction', 'protective_film');
   context.serviceCashierPick('offering', 'svc_A1 8 mil');
-  context.serviceCashierPick('material', 'f_a1');
-  assert.match(state.modal, /🧰 Общее по объекту[\s\S]*Аренда подъёмника[\s\S]*Мойка окон/, 'general works are a separate add-on group');
-  assert.match(state.modal, /Высотные работы/, 'own-direction add-ons stay');
+  assert.match(state.modal, /Доп\. работа[\s\S]*Аренда подъёмника[\s\S]*Мойка окон/, 'general works are cards beside the other choices');
+  assert.match(state.modal, /Высотные работы/, 'own-direction add-ons stay in the same grid');
   context.serviceCashierPick('addon', wash.id);
   assert.deepEqual([...context.serviceCashierState().addonIds], [wash.id]);
 
@@ -309,9 +333,9 @@ test('general works are offered as add-ons under any film direction and as their
   context.serviceCashierPick('direction', 'general_works');
   assert.match(state.modal, /Мойка окон/);
   context.serviceCashierPick('offering', lift.id);
-  assert.equal(context.serviceCashierState().step, 'addons', 'no film step for general works');
-  assert.match(state.modal, /Дополнительно к услуге[\s\S]*Мойка окон/);
-  assert.doesNotMatch(state.modal, /rp-cashier-group-title">🧰/, 'no second general group when the direction itself is general');
+  assert.equal(context.serviceCashierState().step, 'addons', 'general work opens the same combined final screen');
+  assert.match(state.modal, /Аренда подъёмника · плёнка и дополнительные работы[\s\S]*Мойка окон/);
+  assert.doesNotMatch(state.modal, /rp-cashier-kind">Плёнка/, 'a size-free general service has no material choice');
 });
 
 test('a general service never takes sizes: its units exclude sq ft and lin ft', () => {
@@ -333,9 +357,9 @@ test('a size-free service shared into other directions is offered under each and
 
   context.openServiceCashier('o', 'card');
   context.serviceCashierPick('direction', 'solar_film');
-  assert.match(state.modal, /Силикон по кромке/, 'the shared service is a card under solar');
+  assert.doesNotMatch(state.modal, /Силикон по кромке/, 'the shared service is not confused with a film line');
   context.serviceCashierPick('offering', 'svc_Солнце SP35');
-  assert.match(state.modal, /Дополнительно к услуге[\s\S]*Силикон по кромке/, 'and an add-on under a solar film');
+  assert.match(state.modal, /Доп\. работа[\s\S]*Силикон по кромке/, 'it is an add-on beside the solar film choices');
   context.serviceCashierPick('addon', silicone.id);
   context.serviceCashierCommit();
   const line = order.extraServices.find((item: Row) => item.offeringId === silicone.id);

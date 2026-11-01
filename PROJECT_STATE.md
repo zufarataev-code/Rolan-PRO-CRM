@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-01 handoff — film line → models + add-ons in one cashier screen (PR #444)
+
+- Owner corrected the approved visual: `Magnetron`/Magnitronic is the line/category, while SP-5%, SP-15%, SP-20%, SP-35%, SP-50% and SP-70% are the selectable films. Silicone must sit beside those film cards, not behind another step.
+- Branch `codex/project-service-cascade-20261101` now uses three steps: direction → film line / primary service → one combined film-and-add-ons grid. Size-free work is hidden from the film-line shelf when sized services exist, but remains available as add-ons or standalone under «Общее по объекту». Historical `Magnetron` rows with no film links infer the existing Magnitronic family for display; explicit links still win.
+- Existing offering, catalog and project IDs continue through the same commit path, so measurement, proposal, warehouse, payroll and project totals keep their current calculations. Verification is green: `pnpm test` (**992/992**), `pnpm typecheck`, `pnpm build`, and `git diff --check`. CI and release are pending. Production has not changed.
+
 ## 2026-11-01 handoff — client link → proposal page, visit reschedule/cancel (PR #441)
 
 - Cause: `clientPortalUrl` built `/legacy-crm#/client/<id>` (staff-only) → clients hit the employee login, could not pay or move a visit.
