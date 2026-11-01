@@ -4,7 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 // Касса услуг (Owner, 2026-10-19): services enter a project as cards —
-// direction → service → material → add-ons — and land through the same
+// direction → category → service → material → add-ons — and land through the same
 // projectAddOfferingLine path the dropdown used, so nothing downstream changes.
 
 const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
@@ -172,6 +172,26 @@ test('direction → service → film → add-ons, with inactive and archived ite
   assert.deepEqual([...context.serviceCashierState().addonIds], []);
 });
 
+test('a direction is split into visible categories before its services, without duplicating the directory', () => {
+  const { context, state } = fixture();
+  context.openServiceCashier('o', 'card');
+  context.serviceCashierPick('direction', 'protective_film');
+
+  assert.equal(context.serviceCashierState().categoryId, 'film');
+  assert.match(state.modal, /Категория и услуга/);
+  assert.match(state.modal, /Плёнка/);
+  assert.match(state.modal, /Крепление/);
+  assert.match(state.modal, /Доступ/);
+  assert.match(state.modal, /A1 8 mil/);
+  assert.doesNotMatch(state.modal, /onclick="serviceCashierPick\('offering','svc_Силикон'\)"/, 'another category is not mixed into the service list');
+
+  context.serviceCashierPick('category', 'anchoring');
+  assert.equal(context.serviceCashierState().categoryId, 'anchoring');
+  assert.match(state.modal, /Услуги · Крепление/);
+  assert.match(state.modal, /onclick="serviceCashierPick\('offering','svc_Силикон'\)"/);
+  assert.doesNotMatch(state.modal, /onclick="serviceCashierPick\('offering','svc_A1 8 mil'\)"/);
+});
+
 test('a saved default material is reused and may still be changed from the completed Material crumb', () => {
   const { context, state, a1 } = fixture();
   a1.defaultFilmId = 'f_a1';
@@ -333,7 +353,10 @@ test('a size-free service shared into other directions is offered under each and
 
   context.openServiceCashier('o', 'card');
   context.serviceCashierPick('direction', 'solar_film');
-  assert.match(state.modal, /Силикон по кромке/, 'the shared service is a card under solar');
+  assert.match(state.modal, /Подготовка стекла/, 'the shared service category is visible under solar');
+  context.serviceCashierPick('category', 'preparation');
+  assert.match(state.modal, /Силикон по кромке/, 'the shared service is a card in its solar category');
+  context.serviceCashierPick('category', 'film');
   context.serviceCashierPick('offering', 'svc_Солнце SP35');
   assert.match(state.modal, /Дополнительно к услуге[\s\S]*Силикон по кромке/, 'and an add-on under a solar film');
   context.serviceCashierPick('addon', silicone.id);

@@ -185,6 +185,24 @@ test('the server accepts historical privacy services as Decorative and both Deco
   const badCost: Row = structuredClone(base);
   badCost.settings.serviceOfferings[1].materialCostPerUnit = -1;
   assert.match(prepareServiceSolutions(base, badCost, true)!, /материала/);
+  const badCategory: Row = structuredClone(base);
+  badCategory.settings.serviceOfferings[1].category = 'random-wall';
+  assert.match(prepareServiceSolutions(base, badCategory, true)!, /категория услуги/);
+});
+
+test('service categories are stored on the same service and old rows receive a deterministic cashier category', () => {
+  const { c, db } = loadServices();
+  c.addServiceOffering('smart');
+  const film = db.settings.serviceOfferings[0];
+  assert.equal(film.category, 'film');
+  Object.assign(film, { name: 'Подключение зоны', unit: 'zone' });
+  delete film.category;
+  assert.equal(c.serviceOfferingCategory(film, 'smart'), 'control');
+  c.updateServiceOffering(film.id, 'category', 'electrical');
+  assert.equal(film.category, 'electrical');
+  c.updateServiceOffering(film.id, 'category', 'unknown');
+  assert.equal(film.category, 'electrical', 'unknown categories are ignored');
+  assert.match(html, /Категория внутри направления/);
 });
 
 test('the server persists only a default material that is linked to the same service', () => {

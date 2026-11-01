@@ -17,6 +17,14 @@ const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(orde
 export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'general'] as const;
 const LEGACY_SERVICE_DIRECTIONS = ['privacy'] as const;
 export const SERVICE_UNITS = ['sqft', 'lft', 'piece', 'zone', 'fixed', 'custom'] as const;
+export const SERVICE_CATEGORIES = ['film', 'control', 'electrical', 'preparation', 'access', 'anchoring', 'custom', 'general'] as const;
+const SERVICE_CATEGORIES_BY_DIRECTION: Record<string, readonly string[]> = {
+  smart: ['film', 'control', 'electrical', 'preparation'],
+  solar: ['film', 'preparation', 'access'],
+  protective: ['film', 'anchoring', 'preparation', 'access'],
+  decorative: ['film', 'custom', 'preparation', 'access'],
+  general: ['general'],
+};
 // Project statuses for planning its services (Owner, 2026-10-09).
 const SCHEDULED_PROJECT_STATUSES = ['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'];
 const CLOSED_PROJECT_STATUSES = ['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'];
@@ -244,6 +252,8 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       }
     }
     if (offering.unit !== undefined && !(SERVICE_UNITS as readonly string[]).includes(offering.unit)) return 'Неизвестная единица услуги.';
+    if (offering.category !== undefined && (!(SERVICE_CATEGORIES as readonly string[]).includes(offering.category)
+      || !SERVICE_CATEGORIES_BY_DIRECTION[canonicalServiceDirection(offering.direction)]?.includes(offering.category))) return 'Неизвестная категория услуги.';
     if (offering.direction === 'general' && (offering.unit === undefined || offering.unit === 'sqft' || offering.unit === 'lft')) return 'Услуга «Общее по объекту» не считается по размерам окон.';
     if (offering.unitLabel !== undefined && (typeof offering.unitLabel !== 'string' || offering.unitLabel.length > 30)) return 'Название единицы — до 30 символов.';
     if (offering.materialCostPerUnit !== undefined && (typeof offering.materialCostPerUnit !== 'number' || !Number.isFinite(offering.materialCostPerUnit) || offering.materialCostPerUnit < 0)) return 'Стоимость материала услуги должна быть неотрицательным числом.';
