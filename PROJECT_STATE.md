@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-01 handoff — client link → proposal page, visit reschedule/cancel (PR #441)
+
+- Cause: `clientPortalUrl` built `/legacy-crm#/client/<id>` (staff-only) → clients hit the employee login, could not pay or move a visit.
+- Now `clientPortalUrl` = the order's published proposal URL (or empty). Proposal page shows `PublicVisitCard` (next consultation/measurement/confirmed installation) with «Перенести / Отменить» → `POST /api/public/proposals/[token]/visit` → legacy order `clientRequests` + timeline + notifications (FOR UPDATE, revision+1). Manager resolves in the CRM as before.
+- Logic `src/features/proposals/client-visit-core.ts`, test `client-visit.test.ts`. Deployed `4c11c83`.
+- Open: the account cabinet `#/account/…` is still inside `/legacy-crm` (same login problem); clients without a published KP get no link. Owner's payment complaint still needs the specific project.
+
 ## 2026-10-30 handoff — installer pay rules (PR #439)
 
 - Owner: rates per service, × complexity for film, silicone «$1.5/ft или $200/день — что больше», equal split + senior 10%, $200 crew minimum per visit, road $20/h each beyond 30 miles.
