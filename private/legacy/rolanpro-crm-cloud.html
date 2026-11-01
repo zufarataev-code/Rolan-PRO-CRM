@@ -31203,7 +31203,7 @@ function renderManagerMeasureModal(oid) {
   const roomTerms = roomTermsForOrder(o);
   return `
   <div class="modal-backdrop manager-measure-backdrop" onclick="if(event.target===this) closeModal()">
-    <div class="modal-content workspace-modal manager-measure-modal ${typeof measureHiddenClasses === 'function' ? measureHiddenClasses() : ''}" data-scroll-key="measure-modal" role="dialog" aria-modal="true" aria-label="Замер объекта" onclick="event.stopPropagation()">
+    <div class="modal-content workspace-modal manager-measure-modal ${typeof measureHiddenClasses === 'function' ? measureHiddenClasses() : ''}" data-scroll-key="measure-modal" data-measure-order-id="${academyEsc(oid)}" role="dialog" aria-modal="true" aria-label="Замер объекта" onclick="event.stopPropagation()">
       <div class="manager-measure-header">
         <div class="manager-measure-titlebar">
           <div>
@@ -31467,6 +31467,20 @@ function refreshManagerMeasureModal(oid) {
   state.modal = renderManagerMeasureModal(oid);
   render();
 }
+let __managerMeasureFieldRefreshTimer = null;
+function refreshManagerMeasureModalAfterFieldChange(oid) {
+  if (__managerMeasureFieldRefreshTimer) clearTimeout(__managerMeasureFieldRefreshTimer);
+  const orderId = String(oid || '');
+  __managerMeasureFieldRefreshTimer = setTimeout(() => {
+    __managerMeasureFieldRefreshTimer = null;
+    const modal = document.querySelector('.manager-measure-modal');
+    if (!modal || modal.dataset.measureOrderId !== orderId) return;
+    // `change` fires while focus is still leaving the previous input. Waiting
+    // one task lets the browser focus the next field before we capture and
+    // restore the measurement workspace, preventing the mobile viewport jump.
+    refreshManagerMeasureModal(orderId);
+  }, 0);
+}
 function managerAddRoomFromForm(oid) {
   const o = getOrder(oid);
   if (!o) return;
@@ -31722,7 +31736,8 @@ function managerUpdateWin(oid, rid, wid, field, val) {
   if (windowRemovalRequired(w)) syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменены данные замера');
   save();
-  refreshManagerMeasureModal(oid);
+  if (field === 'qty') refreshManagerMeasureModalAfterFieldChange(oid);
+  else refreshManagerMeasureModal(oid);
 }
 function managerUpdateSmartWin(oid, rid, wid, field, val) {
   const o = getOrder(oid);
@@ -31813,7 +31828,7 @@ function managerUpdateWinDim(oid, rid, wid, field, val) {
   syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменены размеры окна');
   save();
-  refreshManagerMeasureModal(oid);
+  refreshManagerMeasureModalAfterFieldChange(oid);
 }
 function managerSetWinCatalog(oid, rid, wid, catalogId) {
   const o = getOrder(oid);
