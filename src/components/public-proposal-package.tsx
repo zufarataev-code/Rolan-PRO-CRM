@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ClientProposalView } from "@/components/client-proposal-view";
 import { PublicPaymentOptions } from "@/components/public-payment-options";
+import { PublicVisitCard } from "@/components/public-visit-card";
 import { PublicWarrantySummary } from "@/components/public-warranty-summary";
 
 type Language = "en" | "ru";
@@ -47,6 +48,7 @@ export function PublicProposalPackage({
         </div>
       </div>
 
+      <PublicVisitCard accessToken={accessToken} language={language} />
       <ClientProposalView
         key={language}
         initialProposal={proposal}
