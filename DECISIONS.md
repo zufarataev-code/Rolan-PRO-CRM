@@ -2,6 +2,12 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-01 — Project cashier treats the service as the film line and combines film + add-ons
+
+- The visible project cascade is **direction → film line / primary service → compatible film and add-ons on one screen**. A generic intermediate shelf such as «Плёнка / Подготовка / Доступ» is not part of the business model.
+- Size-free work such as silicone, access, removal and electrical work is not presented as a film line when that direction has sized film services. It appears beside the compatible film models as a selectable add-on. General work may still be sold alone under «Общее по объекту».
+- Explicit service-to-film links remain authoritative. For historical empty links, the cashier may narrow an existing catalog family by the service name (for example `Magnetron` → Magnitronic Solar Prime SP-5%, SP-15%, SP-20%, SP-35%, SP-50%, SP-70%); it does not create another catalog, price, material or payroll formula.
+
 ## 2026-10-29 — Owner-authorized live uploads may stay enabled with an empty queue
 
 - After access and destination preparation, the owner explicitly requested enabling uploads and completing the integration. An empty conversion queue alone is not a reason to keep authorized live delivery paused: the existing consent, attribution, milestone, destination and retry gates continue to govern future genuine events, with both environment and stored settings explicitly in live mode.
