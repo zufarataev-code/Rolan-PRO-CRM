@@ -52,7 +52,7 @@ jobs:
 
   clean-build-e2e:
     name: Clean database build and end-to-end gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:
