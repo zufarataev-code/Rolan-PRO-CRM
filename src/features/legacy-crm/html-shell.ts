@@ -283,7 +283,7 @@ export function replaceLegacyBootstrapLogin(html: string) {
 
   const loadingShell = `<div id="app" aria-busy="true">
   <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;color:#334155;font:700 16px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-    Загрузка ROLANPRO CRM…
+    Загрузка Rolan PRO CRM…
   </div>
 </div>`;
 

@@ -2,6 +2,12 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-03 — Canonical product name is Rolan PRO CRM
+
+- The canonical display name in the browser, sign-in screen, installed PWA and user-facing system copy is **Rolan PRO CRM**. Historical spellings `RolanPRO CRM` and `ROLANPRO CRM` remain aliases only; the company name is always written `Rolan PRO`.
+- The English descriptor is **Window Film Business Software**. It may accompany the browser title and metadata, while the compact interface name remains `Rolan PRO CRM`.
+- The CRM is a protected staff system and is not made publicly indexable merely to improve naming. Search-engine blocking remains required because employee pages, proposal links and project information are not public marketing content. Discoverability means a stable URL, recognizable browser/PWA name and bookmark/history search; public SEO belongs to the separate Rolan PRO website.
+
 ## 2026-11-01 — Project cashier treats the service as the film line and combines film + add-ons
 
 - The visible project cascade is **direction → film line / primary service → compatible film and add-ons on one screen**. A generic intermediate shelf such as «Плёнка / Подготовка / Доступ» is not part of the business model.

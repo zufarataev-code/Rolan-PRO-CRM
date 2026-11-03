@@ -162,11 +162,11 @@ export async function requestPasswordReset(rawEmail: string) {
   try {
     await sendPrimaryGmail({
       to: user.email,
-      subject: "ROLANPRO CRM — восстановление пароля",
+      subject: "Rolan PRO CRM — восстановление пароля",
       body: [
         `Здравствуйте, ${user.full_name}.`,
         "",
-        "Получен запрос на восстановление пароля для ROLANPRO CRM.",
+        "Получен запрос на восстановление пароля для Rolan PRO CRM.",
         "Откройте ссылку ниже и задайте новый пароль:",
         link,
         "",

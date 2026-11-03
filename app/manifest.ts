@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Rolan PRO CRM",
-    short_name: "Rolan PRO",
-    description: "Рабочая CRM сотрудников Rolan PRO",
+    short_name: "Rolan PRO CRM",
+    description: "Window Film Business Software for Rolan PRO",
     start_url: "/",
     scope: "/",
     display: "standalone",

@@ -6,8 +6,9 @@ import "./proposal-premium.css";
 import { PwaRegistration } from "@/components/pwa-registration";
 
 export const metadata: Metadata = {
+  applicationName: "Rolan PRO CRM",
   title: "Rolan PRO CRM",
-  description: "Рабочая CRM сотрудников Rolan PRO",
+  description: "Window Film Business Software for Rolan PRO",
   manifest: "/manifest.webmanifest",
   robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } },
   appleWebApp: { capable: true, title: "Rolan PRO", statusBarStyle: "black-translucent" },

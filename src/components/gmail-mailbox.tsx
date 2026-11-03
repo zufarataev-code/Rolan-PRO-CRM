@@ -282,7 +282,7 @@ export function GmailMailbox({ canConnect, homeHref }: { canConnect: boolean; ho
       <header className={styles.topbar}>
         <div className={styles.brandArea}>
           <button type="button" className={styles.roundButton} onClick={() => setSidebarOpen((value) => !value)} aria-label="Главное меню"><Menu /></button>
-          <Link href={homeHref} className={styles.brand} aria-label="Вернуться в ROLANPRO CRM">
+          <Link href={homeHref} className={styles.brand} aria-label="Вернуться в Rolan PRO CRM">
             <Image src="/landing/rolan-logo.webp" alt="ROLANPRO" width={112} height={38} priority />
             <span>Почта</span>
           </Link>

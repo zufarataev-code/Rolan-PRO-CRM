@@ -68,7 +68,7 @@ export function AuthLoginForm() {
   return (
     <main className={styles.shell}>
       <section className={styles.card}>
-        <h1 className={styles.brand}>ROLANPRO CRM</h1>
+        <h1 className={styles.brand}>Rolan PRO CRM</h1>
         <p className={styles.subtitle}>Единый вход для команды</p>
         <form className={styles.form} onSubmit={submit}>
           <label className={styles.label}>

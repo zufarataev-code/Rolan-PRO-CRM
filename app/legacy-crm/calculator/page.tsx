@@ -66,7 +66,7 @@ export default async function LegacyCrmCalculatorPage({ searchParams }: PageProp
             }}
           >
             <div>
-              <div className="page-kicker">ROLANPRO CRM</div>
+              <div className="page-kicker">Rolan PRO CRM</div>
               <h1 className="detail-heading" style={{ margin: "4px 0" }}>Быстрый калькулятор</h1>
             </div>
             <a href="/legacy-crm" className="soft-button">Назад в CRM</a>

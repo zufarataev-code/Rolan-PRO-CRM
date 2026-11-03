@@ -255,7 +255,7 @@ export default async function ManagerDashboardPage() {
           <div className="ops-hero">
             <div className="hero-command">
               <div className="hero-tag-row">
-                <span className="brand-tag brand-tag-live">ROLANPRO CRM</span>
+                <span className="brand-tag brand-tag-live">Rolan PRO CRM</span>
                 <span className="brand-tag">Active buttons</span>
                 <span className="brand-tag">Live analytics</span>
                 <span className={`brand-tag${attentionDeals > 0 ? " brand-tag-hot" : ""}`}>

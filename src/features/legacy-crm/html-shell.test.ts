@@ -10,7 +10,7 @@ test("server removes the embedded PIN login before serving legacy CRM", () => {
 <div id="app"><input id="login-pin"><button>Войти</button></div>
 <script>cloudBoot()</script></body>`);
 
-  assert.match(result, /Загрузка ROLANPRO CRM/);
+  assert.match(result, /Загрузка Rolan PRO CRM/);
   assert.match(result, /cloudBoot\(\)/);
   assert.doesNotMatch(result, /login-pin/);
 });
@@ -29,7 +29,7 @@ test("real legacy CRM is served without its pre-rendered PIN screen", () => {
   const scriptStart = result.indexOf("\n<script>", appStart);
   const bootstrapShell = result.slice(appStart, scriptStart);
 
-  assert.match(bootstrapShell, /Загрузка ROLANPRO CRM/);
+  assert.match(bootstrapShell, /Загрузка Rolan PRO CRM/);
   assert.doesNotMatch(bootstrapShell, /login-pin|Быстрый вход|Demo PINs/);
   assert.doesNotMatch(result, /pin: '0000'|pin: '1111'|pin: '2111'|pin: '3111'/);
 });
