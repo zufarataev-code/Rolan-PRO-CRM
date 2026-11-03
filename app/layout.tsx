@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: "Rolan PRO CRM",
   description: "Рабочая CRM сотрудников Rolan PRO",
   manifest: "/manifest.webmanifest",
+  robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } },
   appleWebApp: { capable: true, title: "Rolan PRO", statusBarStyle: "black-translucent" },
   icons: {
     icon: [
