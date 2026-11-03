@@ -2104,7 +2104,7 @@ function googleAdsCrmScriptText(key) {
   // Built line by line: a «}» alone on a line would end this function for the page composer.
   const url = `${location.origin}/api/public/google-ads/costs`;
   return [
-    '// RolanPRO CRM — расходы Google Ads в CRM. Расписание: ежедневно.',
+    '// Rolan PRO CRM — расходы Google Ads в CRM. Расписание: ежедневно.',
     `var CRM_URL = '${url}';`,
     `var CRM_KEY = '${key}';`,
     '',

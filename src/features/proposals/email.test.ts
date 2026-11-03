@@ -13,7 +13,7 @@ test("proposal email uses the public client URL and explains PDF download", () =
 
   assert.match(email.subject, /PRP-100/);
   assert.match(email.body, /https:\/\/crm\.example\.com\/proposal\/public-token/);
-  assert.match(email.body, /does not require access to the ROLANPRO CRM/);
+  assert.match(email.body, /does not require access to Rolan PRO CRM/);
   assert.match(email.body, /Download proposal/);
   assert.doesNotMatch(email.body, /legacy-crm/);
 });

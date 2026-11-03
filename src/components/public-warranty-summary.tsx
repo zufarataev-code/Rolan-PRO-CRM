@@ -31,7 +31,7 @@ export function PublicWarrantySummary({ language = "en" }: { language?: "en" | "
           <p>
             {ru
               ? "Итоговый гарантийный документ и инструкция по уходу сохраняются в проекте CRM вместе с продуктом, датой монтажа и объёмом гарантийного покрытия."
-              : "The final warranty record and care instructions are tied to the completed project so the installed product, installation date and covered scope remain traceable in ROLANPRO CRM."}
+              : "The final warranty record and care instructions are tied to the completed project so the installed product, installation date and covered scope remain traceable in Rolan PRO CRM."}
           </p>
         </div>
       </div>

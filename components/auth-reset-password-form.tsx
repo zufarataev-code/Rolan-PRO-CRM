@@ -62,7 +62,7 @@ export function AuthResetPasswordForm({ token }: { token: string }) {
     <main className={styles.shell}>
       <section className={styles.card}>
         <h1 className={styles.brand}>Новый пароль</h1>
-        <p className={styles.subtitle}>Создайте новый пароль для входа в ROLANPRO CRM.</p>
+        <p className={styles.subtitle}>Создайте новый пароль для входа в Rolan PRO CRM.</p>
         <form className={styles.form} onSubmit={submit}>
           <label className={styles.label}>
             Новый пароль

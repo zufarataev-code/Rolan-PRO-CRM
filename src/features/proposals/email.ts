@@ -22,7 +22,7 @@ export function buildProposalEmail(input: ProposalEmailInput) {
       "",
       "Preferred payment methods are Zelle or bank transfer. If you choose online payment processing, the applicable processing fee is shown before payment.",
       "",
-      "This secure client page does not require access to the ROLANPRO CRM. You can also use Download proposal to save a PDF copy.",
+      "This secure client page does not require access to Rolan PRO CRM. You can also use Download proposal to save a PDF copy.",
       "",
       "If the link does not open, copy the full address above into your browser.",
       "",
