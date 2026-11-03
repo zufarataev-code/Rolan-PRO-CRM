@@ -16,7 +16,7 @@ concurrency:
 jobs:
   verify:
     name: Test, typecheck, and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/rolanpro_ci
@@ -52,7 +52,7 @@ jobs:
 
   clean-build-e2e:
     name: Clean database build and end-to-end gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:
