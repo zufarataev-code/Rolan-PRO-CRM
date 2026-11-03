@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-03 handoff — search privacy, CI runner pin, server diagnose (PRs #446, #448)
+
+- #446: `X-Robots-Tag: noindex` on every response (`next.config.ts`), `app/robots.ts` disallows all, root metadata noindex. CI pinned to `ubuntu-24.04` (Playwright has no Chromium for ubuntu-latest = 26.04).
+- #448: manual read-only workflow `Server diagnose` (load, memory, ports, app/nginx local + external response, watcher log).
+- Finding: the droplet has 2 GB RAM; each release runs `npm ci` + build on the server, swap fills, HTTPS stops answering for a few minutes → «Wait for server deployment» times out although the release activates. Recommendation to the owner: 4 GB droplet or build in CI. Production verified serving `cab0f8b`.
+
 ## 2026-11-01 handoff — film line → models + add-ons in one cashier screen (PR #444)
 
 - Owner corrected the approved visual: `Magnetron`/Magnitronic is the line/category, while SP-5%, SP-15%, SP-20%, SP-35%, SP-50% and SP-70% are the selectable films. Silicone must sit beside those film cards, not behind another step.
