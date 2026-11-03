@@ -1,0 +1,44 @@
+name: Server diagnose
+
+# Read-only health snapshot of the production server, run by hand when the
+# site stops answering (2026-11-03: HTTPS timed out while port 3000 was healthy).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Configure SSH
+        env:
+          PRODUCTION_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          PRODUCTION_SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$PRODUCTION_SSH_KEY" > "$HOME/.ssh/rolanpro_production"
+          chmod 600 "$HOME/.ssh/rolanpro_production"
+          printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+      - name: Snapshot
+        run: |
+          ssh -i "$HOME/.ssh/rolanpro_production" -o BatchMode=yes -o IdentitiesOnly=yes runcloud@143.110.136.211 'bash -s' <<'REMOTE'
+          echo "== uptime"; uptime
+          echo "== memory"; free -m
+          echo "== disk"; df -h / /home 2>/dev/null
+          echo "== listening"; ss -tln 2>/dev/null | grep -E ':(80|443|3000|5433) ' || true
+          echo "== top cpu"; ps -eo pid,pcpu,pmem,etime,comm --sort=-pcpu | head -12
+          echo "== active release"; head -n 1 /home/runcloud/.rolanpro-crm-active-release 2>/dev/null
+          echo "== app :3000"; curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 10 http://127.0.0.1:3000/ || echo fail
+          echo "== nginx :443 local"; curl -sk -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 10 --resolve rolanpro-crm.143-110-136-211.sslip.io:443:127.0.0.1 https://rolanpro-crm.143-110-136-211.sslip.io/ || echo fail
+          echo "== nginx :80 local"; curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 10 -H 'Host: rolanpro-crm.143-110-136-211.sslip.io' http://127.0.0.1/ || echo fail
+          echo "== nginx processes"; pgrep -a nginx | head -5 || echo none
+          echo "== watcher log tail"; ls -t /home/runcloud/logs/*rolanpro* 2>/dev/null | head -3; tail -n 30 "$(ls -t /home/runcloud/logs/*rolanpro* 2>/dev/null | head -1)" 2>/dev/null || true
+          REMOTE
+      - name: From the internet
+        run: curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 20 https://rolanpro-crm.143-110-136-211.sslip.io/ || echo "external fail"
