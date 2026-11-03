@@ -2164,6 +2164,11 @@ function googleAdsCrmPanelHtml() {
   if (currentUser()?.role !== 'owner') return '';
   const g = state.googleAdsCrm;
   if (!g || (!g.loadedAt && !g.loading)) setTimeout(() => loadGoogleAdsCrm(), 0);
+  if (!g?.loadedAt || g.loading || g.error) return `<div class="p-4 border border-slate-200 bg-white" data-google-ads-crm>
+    <p role="${g?.error ? 'alert' : 'status'}" class="text-xs">${g?.error ? academyEsc(g.error) : 'Загружаем расходы Google Ads…'}</p>
+    ${g?.error ? '<button class="btn-ghost text-sm mt-2" onclick="loadGoogleAdsCrm(true)">Повторить проверку</button>' : ''}
+    ${googleAdsConversionsPanelHtml()}
+  </div>`;
   const key = g?.key;
   const sum = g?.summary;
   const connected = key?.active;
@@ -2322,7 +2327,14 @@ async function loadGoogleAdsConversions(force = false) {
   const s = state.googleAdsConv || {};
   if (s.loading || (!force && s.loadedAt && Date.now() - s.loadedAt < 60000)) return;
   state.googleAdsConv = { ...s, loading: true };
-  const get = async url => { const r = await fetch(url, { credentials: 'same-origin', cache: 'no-store' }); return r.ok ? (await r.json())?.data : null; };
+  const get = async url => {
+    const r = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) throw new Error('Не удалось загрузить состояние Google Ads (HTTP ' + r.status + ').');
+    const payload = await r.json().catch(() => null);
+    if (!payload?.data || typeof payload.data !== 'object' || Array.isArray(payload.data) || typeof payload.data.configured !== 'boolean') throw new Error('Не удалось прочитать состояние Google Ads.');
+    if (!url.endsWith('/credentials') && (typeof payload.data.upload_enabled !== 'boolean' || typeof payload.data.validate_only !== 'boolean')) throw new Error('Не удалось прочитать режим отправки Google Ads.');
+    return payload.data;
+  };
   try {
     const [settings, status, access] = await Promise.all([get('/api/v1/integrations/google-ads/settings'), get('/api/v1/integrations/google-ads/status'), get('/api/v1/integrations/google-ads/credentials')]);
     state.googleAdsConv = { settings, status, access, loadedAt: Date.now(), loading: false };
@@ -2335,6 +2347,10 @@ function googleAdsConversionsPanelHtml() {
   if (currentUser()?.role !== 'owner') return '';
   const g = state.googleAdsConv;
   if (!g || (!g.loadedAt && !g.loading)) setTimeout(() => loadGoogleAdsConversions(), 0);
+  if (!g?.loadedAt || g.loading || g.error) return `<div class="p-4 border border-slate-200 bg-slate-50 mt-3" data-google-ads-conversions>
+    <p role="${g?.error ? 'alert' : 'status'}" class="text-xs">${g?.error ? academyEsc(g.error) : 'Загружаем состояние Google Ads…'}</p>
+    ${g?.error ? '<button class="btn-ghost text-sm mt-2" onclick="loadGoogleAdsConversions(true)">Повторить проверку</button>' : ''}
+  </div>`;
   const st = g?.settings || {};
   const access = g?.access || {};
   const status = g?.status || {};

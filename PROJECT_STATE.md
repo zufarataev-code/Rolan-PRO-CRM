@@ -2,6 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-02 — Google Ads diagnostics loading and failed reads
+
+- Task owner: Codex; draft [PR #445](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/445), branch codex/google-ads-diagnostics-load-errors-20261102, based on main b983d6e97b945329bffe8d59f9ca9f947679ef95. Opening owner Integrations previously displayed disconnected, validation-only and empty-queue defaults before its reads finished. Failed conversion diagnostics GETs also silently replaced cached facts with null.
+- Cost and conversion panels now show loading or a read-only retry error until their diagnostic reads succeed; they remain independent. Conversion reads reject HTTP failures and malformed configuration/mode fields, preserve cached settings internally on failure, and clear the error after recovery. Error response bodies are not read by that loader.
+- Owner checks, credential/key write handlers, delivery mode controls, qualification and worker behavior retain their existing contracts. This repair changes diagnostics presentation, not business facts or Google delivery settings.
+- Verification: the unchanged implementation reproduced four focused failures; the fixed handler suite passes 19/19, complete unit suite 998/998, TypeScript and production build pass. Actual tools-disabled Claude Opus 5.5 base review found no blockers; its empty-cost setup question is covered by source verification and a passing regression. The final one-line mode-field/test delta was source-reviewed and tested, but its two bounded Claude checks timed out without a verdict (180s, then 90s).
+- Published-head CI on b8ba96d: run 41512346184 passed the unit/typecheck/build job; the clean database job passed migrations, zero-drift checks, build and lifecycle tests, then browser tooling failed because ubuntu-latest selected Ubuntu 26.04, unsupported by pinned Playwright 1.56.1. Pin only clean-build-e2e to supported ubuntu-24.04; preserve every migration, lifecycle, phone/desktop browser and artifact gate, timeout and package version. Local workflow syntax and semantic-diff checks pass; the next exact-head CI run must validate this runner correction.
+- Release status: draft, not merged or deployed. Next: exact-head CI and final delta review before Ready and any authorized merge/deployment. Production/customer/provider data are not included in this handoff.
+
 ## 2026-11-01 handoff — film line → models + add-ons in one cashier screen (PR #444)
 
 - Owner corrected the approved visual: `Magnetron`/Magnitronic is the line/category, while SP-5%, SP-15%, SP-20%, SP-35%, SP-50% and SP-70% are the selectable films. Silicone must sit beside those film cards, not behind another step.

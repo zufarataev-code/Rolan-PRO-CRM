@@ -8,6 +8,12 @@ import { patchGoogleAdsSettings } from "./settings";
 const source = readFileSync("private/legacy/production-stages.js", "utf8");
 const fakeKey = { type: "service_account", client_email: "offline@example.iam.gserviceaccount.com", private_key: "OFFLINE-PRIVATE-KEY-FIXTURE" };
 
+function serveHandler(context: vm.Context, name: string) {
+  const start = source.indexOf("function " + name + "(");
+  assert.ok(start > 0, "served handler " + name + " exists");
+  vm.runInContext(source.slice(source.lastIndexOf("\n", start) + 1, source.indexOf("\n}", start) + 2), context);
+}
+
 type SelectedFile = { size: number; text: () => Promise<string> };
 
 function harness(options: { role?: string; settings?: Record<string, unknown>; file?: SelectedFile; failRequest?: boolean; settingsPatch?: (body: any) => Promise<unknown> } = {}) {
@@ -35,6 +41,8 @@ function harness(options: { role?: string; settings?: Record<string, unknown>; f
   const storage = { setItem: (...args: unknown[]) => { storageWrites.push(args); } };
   const context: any = vm.createContext({
     state,
+    setTimeout: () => 0,
+    render: () => {},
     document: { getElementById: (id: string) => id === "gads-sa-file" ? input : fields[id] ?? null },
     currentUser: () => ({ role: options.role ?? "owner" }),
     academyEsc: (value: unknown) => String(value ?? ""),
@@ -55,9 +63,7 @@ function harness(options: { role?: string; settings?: Record<string, unknown>; f
     },
   });
   for (const name of ["googleAdsConversionsPanelHtml", "googleAdsConvRequest", "googleAdsConvSaveAccess", "googleAdsConvSaveSettings", "googleAdsConvToggleDelivery"]) {
-    const start = source.indexOf(`function ${name}(`);
-    assert.ok(start > 0, `served handler ${name} exists`);
-    vm.runInContext(source.slice(source.lastIndexOf("\n", start) + 1, source.indexOf("\n}", start) + 2), context);
+    serveHandler(context, name);
   }
   return { context, state, input, requests, alerts, domWrites, logs, storageWrites, refreshes: () => refreshes };
 }
@@ -89,6 +95,103 @@ test("live-mode copy distinguishes enabled delivery from Google acceptance and b
   assert.match(html, /Приём и сопоставление проверяйте/);
   assert.match(html, /отдельного решения владельца/);
   assert.doesNotMatch(html, /Google принимает события|Через 4 недели/);
+});
+
+
+test("diagnostics loading never masquerades as an unconfigured or validation-only setup", () => {
+  const h = harness();
+  h.context.state.googleAdsConv = undefined;
+  const html = h.context.googleAdsConversionsPanelHtml();
+  assert.match(html, /role="status"/);
+  assert.match(html, /Загружаем состояние Google Ads/);
+  assert.doesNotMatch(html, /gads-sa-file|Сейчас Google только проверяет|Очередь: пока пусто|googleAdsConvGoLive/);
+});
+
+test("cost loading and failed reads keep conversion diagnostics independent without key actions", () => {
+  const h = harness();
+  serveHandler(h.context, "googleAdsCrmPanelHtml");
+  h.context.googleAdsCampaignReportHtml = () => "";
+  h.context.googleAdsConversionsPanelHtml = () => '<div data-google-ads-conversions>Independent diagnostics</div>';
+  for (const value of [undefined, { loading: true }, { loadedAt: 1, error: "HTTP 403" }]) {
+    h.context.state.googleAdsCrm = value;
+    const html = h.context.googleAdsCrmPanelHtml();
+    assert.match(html, /data-google-ads-conversions/);
+    assert.doesNotMatch(html, /Не подключено|googleAdsCrmCreateKey|googleAdsCrmRevokeKey/);
+    assert.match(html, value?.error ? /role="alert"/ : /role="status"/);
+  }
+});
+
+test("a successful empty cost read still offers first-time key creation", async () => {
+  const h = harness();
+  serveHandler(h.context, "loadGoogleAdsCrm");
+  serveHandler(h.context, "googleAdsCrmPanelHtml");
+  h.context.googleAdsCampaignReportHtml = () => "";
+  h.context.googleAdsConversionsPanelHtml = () => '<div data-google-ads-conversions>Independent diagnostics</div>';
+  h.context.fetch = async (url: string) => ({ ok: true, status: 200, json: async () => ({ data: url.includes("integration-keys") ? { active: false } : { campaigns: [], last_imported_at: null } }) });
+  await h.context.loadGoogleAdsCrm(true);
+  const html = h.context.googleAdsCrmPanelHtml();
+  assert.match(html, /googleAdsCrmCreateKey/);
+  assert.match(html, /Создать ключ и скрипт/);
+  assert.doesNotMatch(html, /googleAdsCrmRevokeKey|role="alert"|role="status"/);
+});
+
+test("failed diagnostic GETs retain cached facts and expose only a safe retry state", async () => {
+  const endpoints = ["settings", "status", "credentials"];
+  for (const endpoint of endpoints) for (const status of [401, 403, 500, ...(endpoint === "credentials" ? [] : [200])]) {
+    const settings = { upload_enabled: true, validate_only: false };
+    const h = harness({ settings });
+    serveHandler(h.context, "loadGoogleAdsConversions");
+    let errorBodyRead = false;
+    h.context.fetch = async (url: string, init: { method?: string; credentials?: string }) => {
+      assert.equal(init.credentials, "same-origin");
+      assert.equal(init.method, undefined);
+      const failed = url.endsWith("/" + endpoint);
+      return { ok: !failed || status === 200, status: failed ? status : 200, json: async () => {
+        if (failed) {
+          errorBodyRead = true;
+          return status === 200 ? { data: { configured: true } } : { errors: [{ message: fakeKey.private_key }] };
+        }
+        return { data: url.endsWith("/credentials") ? { configured: true } : { configured: true, upload_enabled: true, validate_only: false } };
+      } };
+    };
+    await h.context.loadGoogleAdsConversions(true);
+    assert.equal(errorBodyRead, status === 200);
+    assert.equal(h.state.googleAdsConv.settings, settings);
+    assert.match(h.context.state.googleAdsConv.error, status === 200 ? /Не удалось прочитать режим/ : new RegExp("HTTP " + status));
+    const html = h.context.googleAdsConversionsPanelHtml();
+    assert.match(html, /role="alert"/);
+    assert.match(html, /loadGoogleAdsConversions\(true\)/);
+    assert.doesNotMatch(html, /gads-sa-file|googleAdsConvGoLive|googleAdsConvToggleDelivery|OFFLINE-PRIVATE-KEY-FIXTURE|Живая отправка включена|Тестовый режим/);
+  }
+});
+
+test("malformed diagnostic data is unknown, and a successful retry restores verified live settings", async () => {
+  const h = harness({ settings: { upload_enabled: true, validate_only: false } });
+  serveHandler(h.context, "loadGoogleAdsConversions");
+  const settings = { configured: true, conversion_owner_customer_id: "6421176143", converted_lead_action_id: "7877145046", qualification_pipeline_status_code: "PROPOSAL_SENT", upload_enabled: true, validate_only: false };
+  const data: Record<string, unknown> = { settings, status: { configured: true, upload_enabled: true, validate_only: false, conversions: { outbox: {} } }, credentials: { configured: true } };
+  let responseData: unknown = null;
+  h.context.fetch = async (url: string) => ({ ok: true, status: 200, json: async () => ({ data: responseData === "ready" ? data[url.split("/").at(-1)!] : responseData }) });
+  for (const malformed of [null, [], {}]) {
+    responseData = malformed;
+    await h.context.loadGoogleAdsConversions(true);
+    assert.match(h.context.googleAdsConversionsPanelHtml(), /role="alert"/);
+    assert.doesNotMatch(h.context.googleAdsConversionsPanelHtml(), /gads-sa-file|Очередь: пока пусто/);
+  }
+  responseData = "ready";
+  await h.context.loadGoogleAdsConversions(true);
+  assert.equal(h.context.state.googleAdsConv.error, undefined);
+  assert.equal(h.context.state.googleAdsConv.settings, settings);
+  assert.match(h.context.googleAdsConversionsPanelHtml(), /Живая отправка включена/);
+  assert.match(h.context.googleAdsConversionsPanelHtml(), /value="PROPOSAL_SENT" selected/);
+});
+
+test("non-owner diagnostics cannot issue a GET", async () => {
+  const h = harness({ role: "manager" });
+  serveHandler(h.context, "loadGoogleAdsConversions");
+  h.context.fetch = () => { throw new Error("Unexpected non-owner request"); };
+  await h.context.loadGoogleAdsConversions(true);
+  assert.equal(h.context.googleAdsConversionsPanelHtml(), "");
 });
 
 test("a JSON file goes only to the encrypted owner credential endpoint and is cleared", async () => {
