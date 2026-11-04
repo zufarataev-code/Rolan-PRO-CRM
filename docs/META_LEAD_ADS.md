@@ -15,11 +15,12 @@ Keep these values only in protected server configuration, never in the UI or Git
 - `META_LEAD_ADS_APP_SECRET`: secret of the exact app signing the webhook.
 - `META_LEAD_ADS_VERIFY_TOKEN`: random verification string, at least 32 characters.
 - `META_LEAD_ADS_PAGE_ACCESS_TOKEN`: Page token for that same app with
-  `leads_retrieval` and the Page's lead access. Subscription also requires
-  `pages_manage_metadata` and an authorized Page advertiser.
+  `leads_retrieval`, `pages_manage_metadata`, `pages_show_list`,
+  `pages_read_engagement`, `pages_manage_ads`, `ads_management` and the Page's
+  lead access. Subscription requires an authorized Page advertiser.
 - `META_LEAD_ADS_PAGE_ID`: `140034465868291` (Rolan&PRO).
 - `META_LEAD_ADS_FORM_IDS`: comma-separated, explicitly approved form IDs.
-  Add only the created quote form, not every historical form on the Page.
+  Use `1126644350232479` — the created quote form, not historical forms on the Page.
   Its fields are single-value name/email/phone/ZIP and single-select service.
   Multiline and multi-select forms need parser changes before being allowlisted.
 
