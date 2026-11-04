@@ -23530,7 +23530,7 @@ function renderLeadsView() {
             <div class="flex flex-col gap-2">
               ${l.canonical && l.consultation
                 ? `<button class="btn-primary text-sm" onclick="openCanonicalConsultationCard('${academyEsc(jsQuote(l.consultation.consultation_id))}')">Открыть запись</button>`
-                : l.canonical && ['website', 'callrail'].includes(l.source)
+                : l.canonical && ['website', 'callrail', 'meta_lead_ads'].includes(l.source)
                   ? `<button class="btn-primary text-sm" onclick="convertLead('${academyEsc(jsQuote(l.id))}')">➕ Создать проект</button>
                      ${l.phone ? `<a class="btn-ghost text-sm text-center" href="tel:${academyEsc(l.phone)}">📞 Позвонить</a>` : ''}
                      <button class="btn-ghost text-xs text-gray-400" onclick="dismissLead('${academyEsc(jsQuote(l.id))}')">Спам / отклонить</button>`
