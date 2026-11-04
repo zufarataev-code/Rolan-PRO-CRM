@@ -5,6 +5,9 @@ import { after, before, test } from "node:test";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { assertSafeE2eTarget, assertServerUsesTestDatabase } from "./guard";
 import { reconcileLegacyGoogleAdsOutcomes } from "../src/features/google-ads/legacy-outcomes";
+import { onProposalSent } from "../src/features/core/events";
+import { closeSaleIfReady } from "../src/features/sales/close-sale";
+import { prisma as runtimeDb } from "../src/lib/db";
 
 const base = process.env.E2E_BASE_URL || "http://127.0.0.1:3000";
 assertSafeE2eTarget(base);
@@ -13,6 +16,8 @@ const company = process.env.CALLRAIL_COMPANY_ID!;
 const key = process.env.CALLRAIL_WEBHOOK_SIGNING_KEY!;
 const tag = String(Date.now());
 const ids: string[] = [];
+const dealIds: string[] = [];
+const clientIds: string[] = [];
 let cookie = "";
 let originalWorkspace: Prisma.JsonValue | null = null;
 let originalSettings: any = null;
@@ -34,7 +39,10 @@ before(async () => {
 after(async () => {
   await db.conversionUploadOutbox.deleteMany({ where: { conversion_event: { lead_id: { in: ids } } } });
   await db.conversionEvent.deleteMany({ where: { lead_id: { in: ids } } });
-  await db.activityLog.deleteMany({ where: { action_key: "integration.callrail.call", entity_id: { in: ids } } });
+  await db.activityLog.deleteMany({ where: { entity_id: { in: [...ids, ...dealIds] } } });
+  await db.followUp.deleteMany({ where: { deal_id: { in: dealIds } } });
+  await db.deal.deleteMany({ where: { deal_id: { in: dealIds } } });
+  await db.client.deleteMany({ where: { client_id: { in: clientIds } } });
   await db.acquisitionTouchpoint.deleteMany({ where: { lead_id: { in: ids } } });
   await db.consentSnapshot.deleteMany({ where: { lead_id: { in: ids } } });
   await db.lead.deleteMany({ where: { lead_id: { in: ids } } });
@@ -43,6 +51,7 @@ after(async () => {
   if (originalSettings) await db.googleAdsIntegrationSetting.update({ where: { setting_key: "default" }, data: originalSettings });
   else await db.googleAdsIntegrationSetting.deleteMany({ where: { setting_key: "default" } });
   await db.$disconnect();
+  await runtimeDb.$disconnect();
 });
 test("signed calls deduplicate concurrently, preserve original source, and create no qualification", async () => {
   const call = fixture("first");
@@ -120,4 +129,24 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   assert.equal(events.length, 2);
   assert.ok(events.every(event => event.event_source === "PHONE" && event.attribution_touchpoint_id === qualified.attribution_touchpoint_id));
   assert.equal(await db.conversionUploadOutbox.count({ where: { conversion_event_id: { in: events.map(event => event.conversion_event_id) } } }), 2);
+  // The real proposal/payment producers run before the legacy reconciler in the
+  // active UI. Their first immutable events must already have PHONE as source.
+  const nativeCall = await send(fixture("native-producers", "+12025550177"));
+  ids.push(nativeCall.body.lead_id);
+  const owner = await db.user.findUniqueOrThrow({ where: { email: "owner@rolanpro.local" } });
+  const point = await db.acquisitionTouchpoint.findFirstOrThrow({ where: { lead_id: nativeCall.body.lead_id } });
+  const client = await db.client.create({ data: { name: "Offline CallRail native fixture" } });
+  clientIds.push(client.client_id);
+  const deal = await db.deal.create({ data: { title: "Offline CallRail native fixture", lead_id: nativeCall.body.lead_id, client_id: client.client_id, attribution_touchpoint_id: point.acquisition_touchpoint_id, pipeline_status_id: status.pipeline_status_id, legacy_order_id: `native-callrail-${tag}` } });
+  dealIds.push(deal.deal_id);
+  const proposal = await db.proposal.create({ data: { deal_id: deal.deal_id, client_id: client.client_id, created_by: owner.user_id, title: "Offline fixture", access_token: `offline-callrail-${tag}`, selected_total_amount: 1000 } });
+  await db.$transaction(tx => onProposalSent(tx, { actorUserId: owner.user_id, proposalId: proposal.proposal_id, dealId: deal.deal_id, leadId: nativeCall.body.lead_id }));
+  assert.equal((await db.conversionEvent.findFirstOrThrow({ where: { lead_id: nativeCall.body.lead_id, event_type: "qualified_lead" } })).event_source, "PHONE");
+  await db.agreement.create({ data: { proposal_id: proposal.proposal_id, status: "signed", signed_at: new Date(), accepted_terms: true } });
+  await db.deposit.create({ data: { proposal_id: proposal.proposal_id, status: "paid", paid_at: new Date(), amount: 100 } });
+  assert.equal((await closeSaleIfReady({ proposalId: proposal.proposal_id, actorUserId: owner.user_id })).ready, true);
+  assert.equal((await closeSaleIfReady({ proposalId: proposal.proposal_id, actorUserId: owner.user_id })).ready, true);
+  const synchronous = await db.conversionEvent.findMany({ where: { lead_id: nativeCall.body.lead_id } });
+  assert.equal(synchronous.length, 2);
+  assert.ok(synchronous.every(event => event.event_source === "PHONE" && event.attribution_touchpoint_id === point.acquisition_touchpoint_id));
 });
