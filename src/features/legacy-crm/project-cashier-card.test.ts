@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 // Owner, 2026-10-26: «раздел проект очень запутан — сделать понятным, как касса».
-// The opened project keeps the feed order but reads as the cashier: four direction
+// The opened project keeps the feed order but reads as the cashier: five direction
 // tiles on top, rooms as tiles, one receipt with the total and the next button.
 const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
 const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
@@ -11,7 +11,7 @@ const fn = (src: string, name: string) => { const a = src.indexOf(`function ${na
 
 test('only the directions in the project are tiles; the rest hide behind «+ Добавить направление»', () => {
   const map = fn(stages, 'projectCashierMapHtml');
-  assert.match(map, /const directionOrder = \['smart_film', 'solar_film', 'protective_film', 'decorative_film'\];/);
+  assert.match(map, /const directionOrder = \['smart_film', 'solar_film', 'protective_film', 'decorative_film', 'privacy_film'\];/);
   assert.match(map, /directionOrder\.map\(key =>/);
   assert.match(map, /class="project-cashier-direction on \$\{excluded \? 'excluded' : ''\}"/);
   assert.match(map, /if \(!\(money && edit\)\) return '';/, 'field roles see no add tiles');

@@ -5808,7 +5808,7 @@
     grid-template-columns: minmax(0, 1fr);
     gap: .85rem;
   }
-  /* === Services directory: four directions, one focused workspace === */
+  /* === Services directory: five directions, one focused workspace === */
   .service-direction-home {
     max-width: 78rem;
     margin: 0 auto;
@@ -11236,7 +11236,6 @@ const MEASURE_SCOPES = [
   },
   {
     key: 'privacy_film',
-    legacy: true,
     icon: '🔒',
     title: 'Замер приватной пленки',
     short: 'Приватная',
@@ -11252,10 +11251,8 @@ const MEASURE_SCOPES = [
     ],
   },
 ];
-// Privacy used to be a fifth direction. Keep the scope readable for historical
-// projects, but never offer it when a user creates or extends a project: new
-// privacy work belongs to the Decorative direction.
-function customerMeasureScopes() { return MEASURE_SCOPES.filter(scope => !scope.legacy); }
+// Privacy is a full customer-facing direction with its own measurement scope.
+function customerMeasureScopes() { return MEASURE_SCOPES; }
 function measureScopeInfo(key) {
   return MEASURE_SCOPES.find(s => s.key === key) || MEASURE_SCOPES[0];
 }
@@ -16141,6 +16138,22 @@ const ORDER_PRIMARY_SERVICES = [
     ],
   },
   {
+    id: 'privacy_film',
+    icon: '🔒',
+    title: 'Приватная плёнка',
+    short: 'Приватная',
+    desc: 'Приватность: зеркальные, матовые и односторонние плёнки, вид днём и ночью.',
+    tag: 'privacy',
+    catalogCategory: 'privacy',
+    workflow: [
+      'Консультация: от кого закрываемся, днём или ночью, вид изнутри',
+      'Замер: стекло, сторона света, освещение внутри и снаружи',
+      'Подбор: зеркальность, матовость, светопропускание, образцы',
+      'Монтаж: подготовка стекла, установка, подрезка',
+      'Сдача: проверка приватности, уход, акт',
+    ],
+  },
+  {
     // Owner, 2026-10-22 (ТЗ кассы «Общее по объекту»): works sold with a project
     // that belong to the site, not to a film — removal of old film, washing,
     // electrician, equipment rental, a contractor. They have no film, no
@@ -16237,10 +16250,7 @@ function renderOrderBuilderPreview(serviceId = 'smart_film', variantId = 'standa
 }
 
 function primaryServiceInfo(id) {
-  // Historical privacy projects keep their stored key, but use the current
-  // Decorative direction everywhere in the UI and in new calculations.
-  const canonicalId = id === 'privacy_film' ? 'decorative_film' : id;
-  return ORDER_PRIMARY_SERVICES.find(s => s.id === canonicalId) || ORDER_PRIMARY_SERVICES[0];
+  return ORDER_PRIMARY_SERVICES.find(s => s.id === id) || ORDER_PRIMARY_SERVICES[0];
 }
 function orderServiceTypeLabel(type) {
   const svc = ORDER_PRIMARY_SERVICES.find(s => s.id === type);
@@ -25881,11 +25891,10 @@ function projectQuickRequiredSupplies(o, lines = projectQuickLines(o)) {
 // идёт в КП, у неё цена клиенту за sq ft и ставка специалисту за sq ft. Плёнки
 // склада привязываются к услугам (одна плёнка может подходить нескольким); материал проекта
 // по-прежнему считается по закупочной цене выбранной плёнки.
-const SERVICE_OFFERING_DIRECTIONS = ['smart', 'solar', 'protective', 'decorative', 'general'];
-/** Privacy is a catalog/solution subtype of Decorative, not a direction. */
+const SERVICE_OFFERING_DIRECTIONS = ['smart', 'solar', 'protective', 'decorative', 'privacy', 'general'];
+/** A service direction has the same canonical category as its film material. */
 function canonicalServiceDirection(value) {
-  const category = canonicalCatalogCategory(value);
-  return category === 'privacy' ? 'decorative' : category;
+  return canonicalCatalogCategory(value);
 }
 function serviceDirectionAllowsFilm(direction, film) {
   return !!film && canonicalServiceDirection(film.category) === canonicalServiceDirection(direction);
@@ -27218,7 +27227,7 @@ function renderServiceOfferingsSection() {
     </button>`;
   }).join('');
   return `<section class="service-direction-home">
-    <div class="service-direction-intro"><div><h2 class="text-2xl font-black">Направления услуг</h2><p class="text-sm text-slate-500 mt-1">Выберите направление. В отдельном окне откроются только его услуги, цены, материалы и ставка монтажника. Приватные, матовые и зеркальные решения находятся внутри декоративного направления.</p></div><span class="tag">4 направления</span></div>
+    <div class="service-direction-intro"><div><h2 class="text-2xl font-black">Направления услуг</h2><p class="text-sm text-slate-500 mt-1">Выберите направление. В отдельном окне откроются только его услуги, цены, материалы и ставка монтажника. Приватная плёнка вынесена в своё направление.</p></div><span class="tag">5 направлений</span></div>
     <div class="service-direction-grid">${cards}</div>
   </section>`;
 }

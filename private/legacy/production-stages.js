@@ -410,15 +410,15 @@ function projectCashierToggleAdd(oid) {
 function projectCashierMapHtml(o, directions, { money = false, edit = false } = {}) {
   // Keep the order local: production-stages.js is composed into the legacy page
   // as functions only, so top-level constants disappear in the production build.
-  const directionOrder = ['smart_film', 'solar_film', 'protective_film', 'decorative_film'];
+  const directionOrder = ['smart_film', 'solar_film', 'protective_film', 'decorative_film', 'privacy_film'];
   const included = directions.filter(direction => !projectDirectionExcluded(o, direction.key));
   const primaryKey = included[0]?.key || '';
   // Owner, 2026-10-26 («как касса: карточки, тап, итог собирается сам»): the
-  // project opens on the same four direction tiles as the new-project cashier.
+  // project opens on the same five direction tiles as the new-project cashier.
   // A direction in the project is filled with its colour; one not in the project
   // is a tinted «+ добавить» tile. Either tap opens the direction's own window,
   // where services are added and removed — no picker in between. Directions
-  // outside the four (general works) stay as their cards below.
+  // outside the five (general works) stay as their cards below.
   const byKey = new Map(directions.map(direction => [direction.key, direction]));
   // Owner, 2026-10-28: «нужно убрать другие ненужные окна по направлениям, это
   // создаёт лишний шум; изменить состав — через кнопку». Only the directions in

@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 import { canonicalFilmCategory, canonicalServiceDirection, prepareServiceSolutions, serviceSolutionsForViewer } from './service-solutions';
 
-// Owner, 2026-10-26: four directions; privacy is a Decorative subtype. Inside each, services
+// Owner, 2026-11-03: five directions; Privacy is independent from Decorative. Inside each, services
 // with their own price, material and installer pay; per sq ft a service needs
 // measured windows, per piece / zone / fixed sum / own unit it does not.
 const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
@@ -43,40 +43,41 @@ function loadServices(role = 'owner') {
   return { c: context, db };
 }
 
-test('privacy is a Decorative subtype while historical privacy measurements stay readable', () => {
+test('privacy is a full fifth direction with its own materials and measurement scope', () => {
   const directions = html.slice(html.indexOf('const ORDER_PRIMARY_SERVICES = ['), html.indexOf('const ORDER_SERVICE_PALETTE'));
-  for (const id of ['smart_film', 'solar_film', 'protective_film', 'decorative_film']) assert.match(directions, new RegExp(`id: '${id}'`), id);
-  assert.doesNotMatch(directions, /id: 'privacy_film'/);
-  assert.match(html, /key: 'privacy_film',[\s\S]*?legacy: true,[\s\S]*?catalogCategory: 'privacy'/);
-  assert.match(html, /function customerMeasureScopes\(\) \{ return MEASURE_SCOPES\.filter\(scope => !scope\.legacy\); \}/);
+  for (const id of ['smart_film', 'solar_film', 'protective_film', 'decorative_film', 'privacy_film']) assert.match(directions, new RegExp(`id: '${id}'`), id);
+  assert.match(html, /key: 'privacy_film',[\s\S]*?catalogCategory: 'privacy'/);
+  assert.doesNotMatch(html, /key: 'privacy_film',[\s\S]{0,120}?legacy: true/);
+  assert.match(html, /function customerMeasureScopes\(\) \{ return MEASURE_SCOPES; \}/);
   // Colour comes from the entity colour code (window.RP_ENTITY), not from a local palette.
   assert.match(html, /function orderServicePalette\(serviceId\) \{\n {2}const t = rpDir\(serviceId\);/);
   assert.match(html, /privacy_film: 'PRIVACY_FILM'/);
   // «Общее по объекту» is an internal size-free bucket, not a film direction.
-  assert.match(html, /const SERVICE_OFFERING_DIRECTIONS = \['smart', 'solar', 'protective', 'decorative', 'general'\];/);
+  assert.match(html, /const SERVICE_OFFERING_DIRECTIONS = \['smart', 'solar', 'protective', 'decorative', 'privacy', 'general'\];/);
   assert.match(html, /const ROLL_CATEGORY_KEYS = \['smart', 'solar', 'protective', 'decorative', 'privacy'\];/);
-  // The warehouse may keep privacy as a material category, but business logic groups it under Decorative.
+  // Privacy remains its own material and business category.
   const aliases = html.slice(html.indexOf('function canonicalCatalogCategory(value)'), html.indexOf('function catalogMatchesCategory('));
   assert.match(aliases, /privacy: 'privacy', privacy_film: 'privacy', приватная: 'privacy'/);
   assert.match(aliases, /frost: 'decorative'/);
-  assert.match(html, /return category === 'privacy' \? 'decorative' : category;/);
+  assert.match(html, /function canonicalServiceDirection\(value\) \{\n {2}return canonicalCatalogCategory\(value\);/);
   assert.match(html, /if \(type === 'privacy_film'\) return 'privacy_film';\n {2}if \(type === 'decorative_film'\) return 'decorative_film';\n {2}if \(tags\.includes\('privacy'\)\) return 'privacy_film';/);
   assert.match(html, /if \(cat === 'privacy'\) return 'privacy_film';/);
   assert.equal(canonicalFilmCategory('privacy_film'), 'privacy');
   assert.equal(canonicalFilmCategory('Приватная'), 'privacy');
-  assert.equal(canonicalServiceDirection('privacy_film'), 'decorative');
+  assert.equal(canonicalServiceDirection('privacy_film'), 'privacy');
   assert.equal(canonicalFilmCategory('solar_film'), 'solar');
 });
 
-test('the Decorative workspace contains legacy privacy services and new privacy entry points create Decorative services', () => {
+test('the Privacy workspace contains privacy services and only privacy materials', () => {
   const { c, db } = loadServices();
   db.settings.catalog.push({ id: 'mirror', category: 'privacy' }, { id: 'frost', category: 'decorative' });
   db.settings.serviceOfferings.push({ id: 'legacy-privacy', direction: 'privacy', name: 'One-way mirror', unit: 'sqft', active: true });
-  assert.deepEqual(Array.from(c.serviceOfferingsFor('decorative', { includeInactive: true, homeOnly: true }), (item: Row) => item.id), ['legacy-privacy']);
+  assert.deepEqual(Array.from(c.serviceOfferingsFor('privacy', { includeInactive: true, homeOnly: true }), (item: Row) => item.id), ['legacy-privacy']);
+  assert.deepEqual(Array.from(c.serviceOfferingsFor('decorative', { includeInactive: true, homeOnly: true }), (item: Row) => item.id), []);
   c.addServiceOffering('privacy');
   const created = db.settings.serviceOfferings.find((item: Row) => item.id !== 'legacy-privacy');
-  assert.equal(created.direction, 'decorative');
-  assert.deepEqual(Array.from(c.serviceOfferingAllowedFilmIds(created)).sort(), ['frost', 'mirror']);
+  assert.equal(created.direction, 'privacy');
+  assert.deepEqual(Array.from(c.serviceOfferingAllowedFilmIds(created)).sort(), ['mirror']);
 });
 
 test('a service is priced per sq ft (sizes needed) or per piece, zone, fixed sum or own unit (no sizes)', () => {
@@ -174,7 +175,7 @@ const base: Row = {
   orders: [{ id: 'o', serviceType: 'smart_film', extraServices: [] }],
 };
 
-test('the server accepts historical privacy services as Decorative and both Decorative material subtypes', () => {
+test('the server accepts Privacy services only with Privacy materials', () => {
   assert.equal(prepareServiceSolutions(base, structuredClone(base), true), null);
   const wrongUnit: Row = structuredClone(base);
   wrongUnit.settings.serviceOfferings[1].unit = 'yard';
@@ -185,6 +186,16 @@ test('the server accepts historical privacy services as Decorative and both Deco
   const badCost: Row = structuredClone(base);
   badCost.settings.serviceOfferings[1].materialCostPerUnit = -1;
   assert.match(prepareServiceSolutions(base, badCost, true)!, /материала/);
+});
+
+test('an unchanged Decorative-to-Privacy link from the temporary four-direction period stays writable but cannot grow', () => {
+  const legacy: Row = structuredClone(base);
+  legacy.settings.catalog.push({ id: 'mirror-two', category: 'privacy' });
+  legacy.settings.serviceOfferings[0] = { ...legacy.settings.serviceOfferings[0], direction: 'decorative', filmIds: ['mirror'] };
+  assert.equal(prepareServiceSolutions(legacy, structuredClone(legacy), true), null);
+  const expanded: Row = structuredClone(legacy);
+  expanded.settings.serviceOfferings[0].filmIds.push('mirror-two');
+  assert.match(prepareServiceSolutions(legacy, expanded, true)!, /Материалы/);
 });
 
 test('the server persists only a default material that is linked to the same service', () => {

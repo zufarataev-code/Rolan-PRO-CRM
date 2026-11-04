@@ -850,3 +850,13 @@ This decision supersedes the one-row/one-order presentation of the November quic
 - Completion remains Owner-only. The Owner reviews all rows and records the actual amount paid. A fully paid Project becomes `completed`; a completed job with an outstanding balance becomes `act_signed` and stays visible in receivables.
 - Historical completion does not send retroactive client notices and does not issue today's Warehouse stock. Revenue, material cost, supplies, direct expenses, payroll, debt and margin continue through the existing Project/PSS/payroll formulas; no second calculator or import entity is created.
 - Draft creation is not a financial event. Payroll, profitability and monthly completed-job analytics begin only after the Owner closes the historical Project.
+
+## 2026-11-03 — Privacy Film is a fifth customer-facing direction (Owner)
+
+This decision supersedes the 2026-10-26 four-direction grouping. Rolan PRO has five customer-facing film directions in CRM: Smart, Solar, Protective, Decorative and **Privacy Film**.
+
+- `privacy_film` is a first-class direction with catalog category `privacy`, production code `PRIVACY_FILM`, its own colour token, measurement scope, Services/Price Book workspace, Project tile, estimate grouping and Proposal lines.
+- Privacy services may use only Privacy catalog materials. Decorative services may use only Decorative catalog materials; the UI does not mix the two directories.
+- Existing records created during the temporary period when Privacy was grouped under Decorative remain readable and writable. The server accepts an unchanged saved cross-category link, but it cannot be extended with another incompatible material.
+- «Общее по объекту» remains an internal size-free service bucket and does not count as a film direction.
+- No Project, warehouse, payroll or Proposal history is deleted or silently rewritten.

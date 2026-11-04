@@ -57,7 +57,7 @@ export function googleAdsProjectMoney(order: Row, workspace: Row) {
   const labor = Prisma.Decimal.max(sum(payouts, "amount").plus(unpaidPayroll), sum(transactions.filter(item => item.category === "payroll"), "amount"));
   const expenses = rows(order.extraExpenses);
   const actualExpenses = expenses.filter(item => item.actual === true || item.paid === true || item.paidAt);
-  const directionKeys: Record<string, string> = { solar: "solar_film", smart: "smart_film", protective: "protective_film", decorative: "decorative_film", general: "general_works" };
+  const directionKeys: Record<string, string> = { solar: "solar_film", smart: "smart_film", protective: "protective_film", decorative: "decorative_film", privacy: "privacy_film", general: "general_works" };
   const included = (item: Row, scope: unknown) => {
     const selectedScope = scope || order.serviceType || "solar_film";
     const fallback = selectedScope === "general_works" ? "general" : canonicalServiceDirection(selectedScope);

@@ -1687,3 +1687,10 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - The canonical editor remains the source for multiple service rows, per-service materials, sqft, customer totals, dates, installers and supplies, plus shared direct expenses. Rinat and Nurik are not hard-coded; they will appear when their active installer employee cards and payroll schemes exist.
 - Owner closure now records the actual paid amount. Full payment closes the Project; partial/no payment records the completed work at `act_signed` and leaves the debt in receivables.
 - No new Project, payroll, warehouse, customer-notification or calculation pipeline was introduced. Local verification is still required before any PR or production release; production is unchanged.
+
+## 2026-11-03 — Privacy Film restored as the fifth direction (local implementation)
+
+- Owner explicitly restored **Privacy Film** as a separate customer-facing direction. This supersedes the 2026-10-26 four-direction grouping without rewriting historical data.
+- The shared direction source now contains Smart, Solar, Protective, Decorative and Privacy. Privacy has its own colour, project/cashier tile, Services/Price Book workspace, measurement scope, material boundary, estimate grouping, Proposal code and Google Ads project-cost classification.
+- New Privacy services link only Privacy catalog films; Decorative services no longer receive Privacy films. A saved Decorative-to-Privacy link from the temporary four-direction period remains valid only unchanged so ordinary workspace writes do not break old projects.
+- Focused Privacy/directory/project tests pass. Full suite, typecheck and production build are required before release. Production is unchanged and publication still requires the Owner's explicit confirmation.
