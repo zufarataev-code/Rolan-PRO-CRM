@@ -2,6 +2,14 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-04 — Direct Meta Lead Ads intake (in progress)
+
+- Task owner: Codex, branch `codex/meta-lead-ads-20261104`, based on latest `origin/main` `2d48a72`.
+- Scope: direct signed Meta Lead Ads webhook into canonical NEW_LEAD inbox, with Page/form scope, provider attribution and retry deduplication. User chose direct CRM delivery instead of Zapier. No production test leads or conversions; all seven Meta campaigns remain paused.
+- Implemented signed 128-KiB-bounded webhook, scoped Graph retrieval, transaction/unique-ID deduplication, original answers/attribution and the existing inbox source mapping. No schema/dependency change. Deployment can sync all five protected settings atomically; absent settings retain current runtime config. Runbook: `docs/META_LEAD_ADS.md`.
+- Verification: 1,011 full unit tests passed, new deployment-secret quoting/partial-config test passed, production build passed, form-allowlist mutation was caught. Final TypeScript readback passed; published-head disposable-database CI remains pending. Local Docker daemon is unavailable; no production test data was written. Independent read-only review found no code blockers for this fixed single-select form.
+- Provider: separate **RolanPro Lead Sync** app `1727591805631700` created in verified Rolan Pro portfolio after explicit Terms approval. App publication, Page/form subscription, protected runtime credentials and genuine lead delivery are not yet established. Do not reuse MCP or owner Messenger app.
+
 ## 2026-11-04 — CallRail website calls (in progress)
 
 - Task owner: Codex, PR [#454](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/454), branch `codex/callrail-crm-20261104`, based on `654de8a`.
