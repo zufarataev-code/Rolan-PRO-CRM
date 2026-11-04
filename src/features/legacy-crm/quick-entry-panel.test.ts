@@ -40,3 +40,12 @@ test('the panel re-renders without losing typed values', () => {
   assert.match(fn(stages, 'quickEntrySet'), /quickEntryReadForm\(\)/);
   assert.match(fn(stages, 'quickEntryReadForm'), /data-qe-installer/);
 });
+
+test('material belongs to the service, as in the cashier: default film and package parts follow the chosen service', () => {
+  assert.match(fn(stages, 'quickEntrySet'), /f\.film = offering \? serviceOfferingDefaultFilmId\(offering\) \|\| '' : '';/);
+  const films = fn(stages, 'quickEntryFilmsFor');
+  assert.match(films, /if \(!offering\) return \[\];/, 'no service — no film list');
+  assert.match(films, /serviceOfferingAllowedFilmIds\(offering\)/);
+  const commit = fn(stages, 'quickEntryCommit');
+  assert.match(commit, /serviceOfferingIncludes\(offering\)\.forEach\(child => \{[\s\S]*part\.includedBy = offering\.id; part\.unitPrice = 0; part\.price = 0;/, 'A1 brings its silicone as a package line');
+});

@@ -3436,8 +3436,8 @@ function quickEntryFilmsFor(dir, offeringId) {
   const offering = serviceOffering(offeringId);
   const allowed = offering ? serviceOfferingAllowedFilmIds(offering) : [];
   const stock = projectQuickLineCatalog(dir);
-  const list = allowed.length ? allowed.map(getCatalogItem).filter(f => f && !f.archived) : stock;
-  return list;
+  if (!offering) return [];
+  return allowed.length ? allowed.map(getCatalogItem).filter(f => f && !f.archived) : stock;
 }
 /** Читает форму из DOM в state, чтобы перерисовка (смена направления) не теряла ввод. */
 function quickEntryReadForm() {
@@ -3455,8 +3455,9 @@ function quickEntrySet(field, value) {
   f[field] = value;
   if (field === 'dir') { f.offering = ''; f.film = ''; f.filmManual = ''; }
   if (field === 'offering') {
-    f.film = '';
+    // Материал принадлежит услуге, как в кассе: A1 → её плёнка 12 mil, силикон в пакете.
     const offering = serviceOffering(value);
+    f.film = offering ? serviceOfferingDefaultFilmId(offering) || '' : '';
     const range = offering ? projectServicePriceRange(offering) : null;
     const unit = Number(offering?.pricePerSqft) || Number(range?.min) || 0;
     if (unit && Number(f.qty) > 0 && !(Number(f.price) > 0)) f.price = String(Math.round(unit * Number(f.qty)));
@@ -3599,6 +3600,14 @@ function quickEntryCommit() {
     quickEntry: true, quickEntryAt: now, quickEntryBy: state.currentUserId,
   };
   if (address) stampOrderAddress(o, address);
+  // Что входит в услугу (силикон в A1 и т.п.) — отдельной строкой «в пакете», как делает касса.
+  serviceOfferingIncludes(offering).forEach(child => {
+    const part = projectOfferingLine(child, 1, f.dir);
+    part.includedBy = offering.id; part.unitPrice = 0; part.price = 0;
+    o.extraServices.push(part);
+    o.offeringIds = [...new Set([...o.offeringIds, child.id])];
+    o.offeringUnits[child.id] = serviceOfferingUnit(child);
+  });
   projectQuickSyncProjectInstallers(o);
   db.orders.push(o);
   quickEntryComplete(o, { date, paid, method: f.method || 'zelle' });
@@ -3680,7 +3689,7 @@ function renderQuickEntry() {
     <div class="qe-grid qe-grid-b">
       <label>Направление<select id="qe-dir" onchange="quickEntrySet('dir', this.value)">${dirs.map(d => opt(d.id, d.title, f.dir)).join('')}</select></label>
       <label>Услуга<select id="qe-offering" onchange="quickEntrySet('offering', this.value)"><option value="">${offerings.length ? 'Выберите услугу' : 'В направлении нет услуг — добавьте в «Услуги и цены»'}</option>${offerings.map(item => opt(item.id, `${item.name} · ${fmtMoney(Number(item.pricePerSqft) || 0)}/${serviceOfferingNeedsSizes(item) ? 'sq ft' : serviceOfferingUnitShort(item)}`, f.offering)).join('')}</select></label>
-      <label>Плёнка<select id="qe-film" onchange="quickEntrySet('film', this.value)"><option value="">не указана</option>${films.map(film => { const st = warehouseCatalogStockStats(film.id); return opt(film.id, `${catalogLabel(film)}${st.availableSqft > 0 ? ` · ${st.availableSqft.toFixed(0)} sq ft на складе` : ' · под заказ'}`, f.film); }).join('')}${opt('__manual', 'Другая — вписать название', f.film)}</select></label>
+      <label>${offering ? `Материал услуги${serviceOfferingIncludes(offering).length ? ` · в пакете: ${academyEsc(serviceOfferingIncludes(offering).map(c => c.name).join(', '))}` : ''}` : 'Материал'}<select id="qe-film" onchange="quickEntrySet('film', this.value)" ${offering ? '' : 'disabled'}><option value="">${offering ? 'не указана' : 'сначала услуга'}</option>${films.map(film => { const st = warehouseCatalogStockStats(film.id); return opt(film.id, `${catalogLabel(film)}${st.availableSqft > 0 ? ` · ${st.availableSqft.toFixed(0)} sq ft на складе` : ' · под заказ'}`, f.film); }).join('')}${opt('__manual', 'Другая — вписать название', f.film)}</select></label>
       ${f.film === '__manual' ? `<label>Название плёнки<input id="qe-filmManual" value="${academyEsc(f.filmManual)}" placeholder="например, 3M Prestige 70"></label>` : ''}
       <label>sq ft / шт<input id="qe-qty" type="number" min="0" step="0.1" value="${academyEsc(f.qty)}" onchange="quickEntrySet('qty', this.value)"></label>
       <label>Сумма клиенту, $<input id="qe-price" type="number" min="0" step="1" value="${academyEsc(f.price)}" onchange="quickEntrySet('price', this.value)"><span class="qe-hint">${unitHint}</span></label>
