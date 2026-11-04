@@ -78,7 +78,7 @@ test("all client forms use the shared identity block, and website leads show in 
     assert.match(html, new RegExp(`readClientIdentityFields\\('${prefix}'\\)`));
   }
   assert.doesNotMatch(html, /id="nc-name"|id="oc-name"|id="client-contact-name"/);
-  assert.match(html, /\['facebook_messenger', 'website'\]\.includes\(lead\?\.source\)/);
+  assert.match(html, /\['facebook_messenger', 'website', 'callrail'\]\.includes\(lead\?\.source\)/);
   assert.match(html, /markLeadProcessed\(leadId, 'CLOSED_LOST'\)/);
   assert.match(html, /pipeline_status_code: statusCode/);
 });

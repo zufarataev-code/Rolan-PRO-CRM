@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-04 — CallRail website calls (in progress)
+
+- Task owner: Codex, branch `codex/callrail-crm-20261104`, based on `654de8a`.
+- Added signed/company-scoped Post-Call intake, retry/concurrency receipts, caller matching, New Leads and project call history. Original source/consent/stage remain intact; proposal/sale outcomes retain PHONE source. See `docs/CALLRAIL.md`.
+- CallRail trial website pool and native Ads connection are configured. Website loader, CRM receiver deployment, signed provider delivery and Google matching remain separate rollout gates. No genuine call or qualification/sale has yet been verified by this branch.
+- Initial 1,004 unit tests, TypeScript and build passed. Claude CLI Opus 5.5 review requested changes to repeat-caller handling, shared-number review, campaign fallback and PHONE outcome coverage; those fixes are being checked. CI and final Claude readback are pending. No receiver release claim.
+
 ## 2026-11-03 handoff — search privacy, CI runner pin, server diagnose (PRs #446, #448)
 
 - #446: `X-Robots-Tag: noindex` on every response (`next.config.ts`), `app/robots.ts` disallows all, root metadata noindex. CI pinned to `ubuntu-24.04` (Playwright has no Chromium for ubuntu-latest = 26.04).

@@ -73,6 +73,8 @@ jobs:
       AUTH_SECRET: ci-only-auth-secret-that-is-longer-than-thirty-two-characters
       ENABLE_DEMO_LOGIN: "false"
       WEBSITE_LEAD_INGEST_SECRET: ci-only-website-ingest-secret-not-for-production
+      CALLRAIL_WEBHOOK_SIGNING_KEY: ci-only-callrail-signing-key-not-for-production
+      CALLRAIL_COMPANY_ID: "900000001"
       GOOGLE_ADS_AUTO_SYNC: "off"
       APP_URL: http://127.0.0.1:3000
       E2E_BASE_URL: http://127.0.0.1:3000
