@@ -144,8 +144,12 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   assert.equal((await db.conversionEvent.findFirstOrThrow({ where: { lead_id: nativeCall.body.lead_id, event_type: "qualified_lead" } })).event_source, "PHONE");
   await db.agreement.create({ data: { proposal_id: proposal.proposal_id, status: "signed", signed_at: new Date(), accepted_terms: true } });
   await db.deposit.create({ data: { proposal_id: proposal.proposal_id, status: "paid", paid_at: new Date(), amount: 100 } });
-  assert.equal((await closeSaleIfReady({ proposalId: proposal.proposal_id, actorUserId: owner.user_id })).ready, true);
-  assert.equal((await closeSaleIfReady({ proposalId: proposal.proposal_id, actorUserId: owner.user_id })).ready, true);
+  const closed = await closeSaleIfReady({ proposalId: proposal.proposal_id, actorUserId: owner.user_id });
+  assert.ok(closed);
+  assert.equal(closed.ready, true);
+  const replayed = await closeSaleIfReady({ proposalId: proposal.proposal_id, actorUserId: owner.user_id });
+  assert.ok(replayed);
+  assert.equal(replayed.ready, true);
   const synchronous = await db.conversionEvent.findMany({ where: { lead_id: nativeCall.body.lead_id } });
   assert.equal(synchronous.length, 2);
   assert.ok(synchronous.every(event => event.event_source === "PHONE" && event.attribution_touchpoint_id === point.acquisition_touchpoint_id));
