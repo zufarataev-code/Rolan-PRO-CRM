@@ -58,7 +58,7 @@ test("recent calls remain in the office inbox after an enquiry is handled or dis
   const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
   const start = source.indexOf("function callrailRecentCallsHtml(");
   const body = source.slice(start, source.indexOf("\n}", start) + 2);
-  const context: any = vm.createContext({ canonicalLeads: [{ name: "Handled <caller>", phone: null, pipeline_status: { status_code: "CONTACTED" }, callrail_calls: [{ occurred_at: "2026-11-01", message: "missed · Google Ads" }] }], academyEsc: (v: string) => v.replace(/</g, "&lt;").replace(/>/g, "&gt;") });
+  const context: any = vm.createContext({ currentUser: () => ({ role: "manager" }), canonicalLeads: [{ name: "Handled <caller>", phone: null, pipeline_status: { status_code: "CONTACTED" }, callrail_calls: [{ occurred_at: "2026-11-01", message: "missed · Google Ads" }] }], academyEsc: (v: string) => v.replace(/</g, "&lt;").replace(/>/g, "&gt;") });
   vm.runInContext(body, context);
   assert.match(context.callrailRecentCallsHtml(), /data-callrail-recent/);
   assert.match(context.callrailRecentCallsHtml(), /missed · Google Ads/);

@@ -23481,6 +23481,7 @@ function startCanonicalLeadsPolling() {
   }, 10000);
 }
 function callrailRecentCallsHtml() {
+  if (!['owner', 'manager'].includes(currentUser()?.role)) return '';
   const calls = canonicalLeads.flatMap(lead => (lead.callrail_calls || []).map(call => ({ ...call, lead })));
   calls.sort((a, b) => new Date(b.occurred_at) - new Date(a.occurred_at));
   if (!calls.length) return '';
