@@ -174,10 +174,10 @@ Before doing any work:
 - Verified persistence of the other add paths while here: `addCatalogItem`, warehouse film-link and the measurement/estimate film-link (`offering.filmIds`) all call `save()` — no lost-write bug found there.
 - Verification: cashier/mobile/measure tests 24/24 (`service-cashier.test.ts` asserts the forward button on the material step); full suite unchanged vs main (env-dependent failures only). Build and a prod phone look still pending; merge/deploy after the owner's review.
 
-## 2026-10-26 handoff — all four directions stay visible in the project cashier
+## 2026-10-26 handoff — all five directions stay visible in the project cashier
 
 - Branch `codex/four-directions-visible`, based on `main` `ac274c7` after PR #412.
-- The new-project and existing-project cashier now always shows the four customer-facing film directions: Smart, Solar, Protective and Decorative. A direction no longer disappears because its Price Book has zero active services.
+- The new-project and existing-project cashier now always shows the five customer-facing film directions: Smart, Solar, Protective, Decorative and Privacy. A direction no longer disappears because its Price Book has zero active services.
 - Opening an empty direction shows an explicit message to add and complete a service in «Услуги и цены». No placeholder service or price is invented. «Общее по объекту» remains an additional card only when it has a sellable service.
 - Verification: focused cashier/directory/intake tests 21/21, full suite 899/899, `npm run typecheck`, production `npm run build` (129 routes), and `git diff --check` pass.
 
