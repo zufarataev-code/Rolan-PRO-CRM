@@ -1185,6 +1185,7 @@ function projectDirectionWindowHtml(o, directionKey, step) {
       ${direction.lines.map(lineRow).join('')}${direction.pending.map(pendingRow).join('')}
       ${!direction.lines.length && !direction.pending.length ? '<div class="rp-dirwin-empty">Услуг пока нет — добавьте ниже.</div>' : ''}
       ${edit ? projectDirectionAddHtml(o, directionKey) : ''}
+      ${edit ? projectDirectionMoveHtml(o, directionKey) : ''}
       ${edit && money ? `<label class="rp-dirwin-toggle"><input type="checkbox" ${excludedDir ? '' : 'checked'} onchange="projectToggleDirectionIncluded('${o.id}','${jsQuote(directionKey)}',this.checked); openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','services')"> Направление входит в расчёт и КП</label>` : ''}`;
   }
   const next = index < steps.length - 1
@@ -3776,4 +3777,71 @@ function renderQuickEntry() {
       </aside>
     </div>
   </div>`;
+}
+
+// ---------- ПЕРЕНОС НАПРАВЛЕНИЯ ПРОЕКТА (Owner, 2026-11-03) ----------
+// «Ошибочно ввёл проект как солнцезащитный, внёс размеры, а по факту это
+// защитная — и нет возможности удалить или сменить». Размеры окон — труд
+// замерщика, они остаются; меняется направление: окна переходят в новое,
+// услуги старого направления снимаются (у нового свои), материал подбирается
+// заново. Кнопка живёт в окне направления, пока проект не закрыт.
+function projectDirectionMoveTargets(o, fromKey) {
+  const have = new Set(projectDirectionGroups(o).map(direction => direction.key));
+  return ORDER_PRIMARY_SERVICES.filter(service => !service.general && service.id !== fromKey && !have.has(service.id));
+}
+function projectDirectionMoveHtml(o, fromKey) {
+  const targets = projectDirectionMoveTargets(o, fromKey);
+  if (!targets.length) return '';
+  const from = ORDER_PRIMARY_SERVICES.find(service => service.id === fromKey);
+  return `<details class="rp-dirwin-move"><summary>Ошиблись направлением? Перенести «${academyEsc(from?.title || fromKey)}» в другое…</summary>
+    <p class="rp-dirwin-hint">Размеры окон и помещения останутся. Услуги и плёнка этого направления снимутся — у нового направления свои, выберите их заново.</p>
+    <div class="rp-dirwin-move-row">${targets.map(service => { const tone = typeof rpDir === 'function' ? rpDir(service.id) : { color: '#2563eb', tint: '#eff6ff' }; return `<button type="button" class="rp-dirwin-pick" style="border-left:4px solid ${academyEsc(tone.color)}" onclick="projectDirectionMove('${o.id}','${jsQuote(fromKey)}','${jsQuote(service.id)}')"><b>${service.icon || ''} ${academyEsc(service.title)}</b><span>перенести сюда</span></button>`; }).join('')}</div>
+  </details>`;
+}
+function projectDirectionMove(oid, fromKey, toKey) {
+  const o = getOrder(oid);
+  const to = ORDER_PRIMARY_SERVICES.find(service => service.id === toKey);
+  // Старые заказы могут не нести направление на окнах: тогда их направление — направление проекта.
+  const defaultScope = orderMeasureScope(o);
+  fromKey = fromKey || defaultScope;
+  if (!o || !to || fromKey === toKey || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return;
+  const windows = measureAllWindows(o).filter(({ win }) => (win.measureScope || defaultScope) === fromKey);
+  const fromTitle = ORDER_PRIMARY_SERVICES.find(service => service.id === fromKey)?.title || fromKey;
+  if (!confirm(`Перенести «${fromTitle}» в «${to.title}»? ${windows.length ? `${windows.length} ${projectWindowsWord(windows.length)} с размерами перейдут в новое направление, ` : ''}услуги и плёнка старого направления снимутся.`)) return;
+  projectCardEdit(() => {
+    windows.forEach(({ room, win }) => {
+      win.measureScope = toKey;
+      win.offeringId = ''; win.catalogId = ''; win.filmType = '';
+      if (typeof normalizeMeasureWindowTypeForScope === 'function') win.winType = normalizeMeasureWindowTypeForScope(toKey, win.winType);
+      if (typeof syncWindowPanelsForType === 'function') syncWindowPanelsForType(win, toKey);
+      if (room?.defaultCatalogByScope) delete room.defaultCatalogByScope[fromKey];
+    });
+    const fromDir = serviceOfferingDirection(fromKey);
+    const gone = new Set();
+    o.extraServices = (o.extraServices || []).filter(line => {
+      const dirKey = line.serviceType || o.serviceType;
+      if (line.quickProjectLine) { if (dirKey === fromKey) { line.serviceType = toKey; line.offeringId = ''; line.offeringName = ''; line.catalogId = ''; line.manualFilmName = ''; line.label = to.title; } return true; }
+      const offering = serviceOffering(line.offeringId);
+      const own = dirKey === fromKey && (!offering || serviceOfferingDirection(dirKey) === fromDir);
+      if (own) { if (line.offeringId) gone.add(line.offeringId); return false; }
+      return true;
+    });
+    o.offeringIds = (o.offeringIds || []).filter(id => !gone.has(id) && !(serviceOffering(id) && serviceOffering(id).direction === fromDir && serviceOfferingNeedsSizes(serviceOffering(id))));
+    if (o.offeringId && (gone.has(o.offeringId) || serviceOffering(o.offeringId)?.direction === fromDir)) { o.offeringId = ''; o.offeringName = ''; }
+    o.serviceTypes = [...new Set((o.serviceTypes || [o.serviceType]).map(key => key === fromKey ? toKey : key).filter(Boolean))];
+    if (!o.serviceTypes.includes(toKey)) o.serviceTypes.push(toKey);
+    if (o.serviceType === fromKey) { o.serviceType = toKey; o.serviceCategory = to.catalogCategory; o.serviceWorkflow = [...(to.workflow || [])]; }
+    o.leadIntentServiceType = o.leadIntentServiceType === fromKey ? toKey : o.leadIntentServiceType;
+    o.excludedProjectDirections = (o.excludedProjectDirections || []).filter(key => key !== fromKey && key !== toKey);
+    if (o.serviceProgress) delete o.serviceProgress[fromKey];
+    syncProjectIncludedServices(o);
+    if (typeof projectPrunePlans === 'function') projectPrunePlans(o);
+    if (typeof projectCardSyncCrew === 'function') projectCardSyncCrew(o);
+    projectEstimateMarkChanged(o, `Направление «${fromTitle}» перенесено в «${to.title}»`);
+    o.timeline = o.timeline || [];
+    o.timeline.push({ at: new Date().toISOString(), key: 'direction_moved', by: state.currentUserId, note: `${fromTitle} → ${to.title}${windows.length ? ` · ${windows.length} ${projectWindowsWord(windows.length)} с размерами` : ''}` });
+    save();
+  });
+  state._directionWindow = { oid, key: toKey, step: 'services', pick: '' };
+  openProjectDirectionWindow(oid, toKey, 'services');
 }
