@@ -64,6 +64,8 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   assert.equal((await db.consentSnapshot.findFirst({ where: { lead_id: leadId } }))?.ad_user_data, "UNKNOWN");
   assert.equal(await db.conversionEvent.count({ where: { lead_id: leadId } }), 0);
   const contacted = await db.pipelineStatus.findUniqueOrThrow({ where: { status_code: "CONTACTED" } });
+  const initialProject = { id: `callrail-${tag}`, canonicalLeadId: leadId };
+  await db.legacyWorkspace.upsert({ where: { workspace_id: "primary" }, create: { workspace_id: "primary", payload: { orders: [initialProject] }, revision: 1 }, update: { payload: { orders: [initialProject] }, revision: { increment: 1 } } });
   await db.lead.update({ where: { lead_id: leadId }, data: { pipeline_status_id: contacted.pipeline_status_id } });
   assert.equal((await send(fixture("handled-repeat"))).body.lead_id, leadId, "handled callers retain their original project and attribution");
   const status = await db.pipelineStatus.findUniqueOrThrow({ where: { status_code: "NEW_LEAD" } });
@@ -84,6 +86,17 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   assert.notEqual(review.body.lead_id, shared.lead_id);
   assert.equal((await send(fixture("shared-repeat", "+12025550199"))).body.lead_id, review.body.lead_id);
   assert.match((await db.lead.findUniqueOrThrow({ where: { lead_id: review.body.lead_id } })).notes!, /Общий номер/);
+  assert.equal(await db.acquisitionTouchpoint.count({ where: { lead_id: review.body.lead_id } }), 0, "unresolved shared identity cannot claim a new ad click");
+  const lost = await db.pipelineStatus.findUniqueOrThrow({ where: { status_code: "CLOSED_LOST" } });
+  await db.lead.update({ where: { lead_id: review.body.lead_id }, data: { pipeline_status_id: lost.pipeline_status_id } });
+  const nextReview = await send(fixture("resolved-review", "+12025550199"));
+  ids.push(nextReview.body.lead_id);
+  assert.notEqual(nextReview.body.lead_id, review.body.lead_id, "dismissed review does not swallow future calls");
+  const dismissed = await db.lead.create({ data: { name: "Dismissed fixture", phone: "+12025550188", source: "website", pipeline_status_id: lost.pipeline_status_id } });
+  ids.push(dismissed.lead_id);
+  const renewed = await send(fixture("renewed-enquiry", "+12025550188"));
+  ids.push(renewed.body.lead_id);
+  assert.notEqual(renewed.body.lead_id, dismissed.lead_id, "a dismissed enquiry without a project leaves a fresh call visible");
   const login = await fetch(base + "/api/v1/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" }) });
   assert.equal(login.status, 200);
   cookie = login.headers.get("set-cookie")!.split(";")[0];

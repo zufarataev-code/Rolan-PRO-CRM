@@ -23480,6 +23480,12 @@ function startCanonicalLeadsPolling() {
     if (state.view === 'leads' || (state.view === 'orderDetails' && !state.modal && ['owner', 'manager'].includes(currentUser()?.role) && getOrder(state.openOrderId)?.canonicalLeadId)) fetchCanonicalLeads({ renderIfVisible: true });
   }, 10000);
 }
+function callrailRecentCallsHtml() {
+  const calls = canonicalLeads.flatMap(lead => (lead.callrail_calls || []).map(call => ({ ...call, lead })));
+  calls.sort((a, b) => new Date(b.occurred_at) - new Date(a.occurred_at));
+  if (!calls.length) return '';
+  return `<section class="card mb-4" data-callrail-recent><h3 class="font-semibold mb-2">Последние звонки · CallRail</h3>${calls.slice(0, 20).map(call => `<div class="text-sm py-2 border-t" style="overflow-wrap:anywhere"><b>${academyEsc(call.lead.name)}</b>${call.lead.phone ? ` · <a href="tel:${academyEsc(call.lead.phone)}">${academyEsc(call.lead.phone)}</a>` : ''}<div>${academyEsc(call.message)}</div></div>`).join('')}</section>`;
+}
 function renderLeadsView() {
   const i = db.settings.integrations || {};
   const externalEnabled = Boolean(i.leadBackendUrl && i.leadBackendKey);
@@ -23489,6 +23495,7 @@ function renderLeadsView() {
   const canonicalRows = canonicalMessengerLeadRows();
   const leads = externalLeads === null ? canonicalRows : [...canonicalRows, ...externalLeads];
   return `
+  ${callrailRecentCallsHtml()}
   <div class="flex items-center justify-between mb-4">
     <div class="text-sm text-gray-500">${externalLeads === null && !canonicalLeadsRefreshedAt ? 'Загружаем заявки…' : `Активных лидов: <b>${leads.length}</b>`}</div>
     <button class="btn-ghost text-sm" onclick="fetchCanonicalLeads({renderIfVisible:true});${externalEnabled ? 'fetchLeads(true);' : ''}">🔄 Обновить</button>

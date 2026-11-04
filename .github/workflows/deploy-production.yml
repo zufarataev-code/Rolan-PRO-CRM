@@ -92,7 +92,10 @@ jobs:
             cat <<'REMOTE'
           env_file=/home/runcloud/.rolanpro-crm.env.production.local
           test -f "$env_file"
+          if grep -qx "CALLRAIL_WEBHOOK_SIGNING_KEY=$callrail_key" "$env_file" && grep -qx "CALLRAIL_COMPANY_ID=$callrail_company" "$env_file"; then exit 0; fi
           cp -p "$env_file" "$env_file.callrail-backup-$(date -u +%Y%m%dT%H%M%SZ)"
+          chmod 600 "$env_file".callrail-backup-*
+          ls -1t "$env_file".callrail-backup-* | tail -n +4 | xargs -r rm -f
           temporary_file="$(mktemp /home/runcloud/.rolanpro-crm.env.production.local.XXXXXX)"
           trap 'rm -f "$temporary_file"' EXIT
           awk '!/^CALLRAIL_(WEBHOOK_SIGNING_KEY|COMPANY_ID)=/' "$env_file" > "$temporary_file"

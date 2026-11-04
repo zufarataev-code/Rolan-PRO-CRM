@@ -22,16 +22,21 @@ stored by this importer.
 
 Each company/call ID has one receipt. Transaction locks serialize retries and
 calls from the same phone. A single existing canonical lead, including an
-already-handled one, keeps the activity on its original project. Its contact,
+already-handled one with a linked project, keeps the activity on that project. Its contact,
 source, attribution, consent, assignment, notes and pipeline stage are preserved.
-Multiple matching leads use one visibly flagged review enquiry until staff
-resolves the identity. A legacy client with no canonical lead is shown by the
+Multiple matching leads use one visibly flagged open review enquiry without
+claiming acquisition until staff resolves the identity. Dismissed enquiries
+without a project and resolved review enquiries cannot hide a new call: it
+creates a fresh enquiry. A legacy client with no canonical lead is shown by the
 existing contact-match UI before a manager creates a project.
 
 New enquiries appear in **New Leads** with the CallRail badge, source and call
 details. Creating a project preserves `canonicalLeadId` and `leadSource`; the
 same authorized call history appears on its project card. Caller ID names are
 provider labels; staff should confirm the person's identity.
+The latest 20 authorized calls also remain visible at the top of New Leads,
+including calls attached to handled projects, so missed callbacks do not vanish
+with the lead's closed status.
 
 For new leads, genuine provider click IDs and matching landing-page campaign
 parameters enter the existing acquisition ledger with `source_channel=PHONE`.
