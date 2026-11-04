@@ -2,13 +2,14 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
-## 2026-11-04 — CallRail genuine-call delivery diagnosis (in progress)
+## 2026-11-04 — CallRail genuine-call delivery repair (in progress)
 
-- Task owner: Codex, branch `codex/callrail-provider-id-20261104`, based on `origin/main` `4ac9fe1`; preserves the independently merged Meta intake.
-- PR #454 receiver is deployed; signed incomplete requests reach validation and unsigned requests are rejected. Production WordPress now uses the existing managed CallRail loader, with the native footer suppressed; GTM version 10 pauses only the old Google forwarding initializer. Number/tel swapping and original-number fallback with the provider script blocked were verified. Source default-on/storage changes in website MRs !49/!50 still await their full exact-head checks and deployment; staging tracking/Critical CSS stay off.
-- A genuine owner-authorized missed call appears in CallRail as Direct, and the owner reports a sales callback. CRM receipt remains unverified. The dashboard numeric company ID and the documented API `COM…` identity are distinct; verify actual delivery status before changing runtime scope or claiming a root cause.
-- This branch adds a manual, read-only ingress-status snapshot to the existing Server diagnose workflow. It emits only timestamps/statuses for the CallRail route, not IPs, caller data, headers, bodies or credentials. YAML, shell, Python and bounded route/status parsing checks pass. Review and published diagnostic execution are pending; no application code/runtime change or credential grant is included.
-- Next: inspect actual HTTP delivery evidence, apply only a verified correction, and follow the same genuine call into CRM. Never manufacture an enquiry, qualification, sale or Google click to validate it.
+- Task owner: Codex, PR #456, branch `codex/callrail-provider-id-20261104`, based on `origin/main` `4ac9fe1`; preserves independently merged Meta intake.
+- A genuine owner-authorized missed call appears in CallRail as Direct; the owner confirmed the sales rep called back and had been busy. Provider Webhooks is active but records one delivery failure. The read-only production ingress diagnostic ran successfully on this branch and found no matching provider request. CRM receipt is not proved, and the original transport failure cause is unknown. Do not change the numeric legacy webhook company ID based on generic COM API IDs.
+- Adds a minimal fixed-destination Cloudflare relay at `https://rolan-pro.com/integrations/callrail`, retaining original signed bytes and CRM HMAC/company authentication. Body is bounded to 128 KiB, headers are isolated, redirects are not followed, and caller data is neither stored nor logged. No new dependency, secret, schema or campaign change. Deployment/rollback: `integrations/callrail-worker/README.md`.
+- Verification: four focused relay tests, 1,016 full unit tests and TypeScript pass. Claude CLI Opus 5.5 found no code blockers. Build and exact-head published CI/review remain pending. Relay is not deployed and provider Post-Call URL is unchanged.
+- Production website MR !49 passed its exact-head checks and merged at `8766bfc`; reviewed source rollout is underway. Redesign MR !50 still awaits runner capacity; tracking/Critical CSS remain off on staging. Existing managed loader, number/tel swapping and blocked-provider fallback were independently verified earlier; GTM v10 pauses only the old Google forwarding initializer.
+- Next: finish CI/review; deploy relay from merged main, verify unsigned 401 and signed incomplete 400 without creating records, update only provider Post-Call URL, and follow a genuine signed call into CRM. Do not manufacture clicks, enquiries, consent, qualification or sales. Google matching still requires actual paid acquisition and later genuine business milestones.
 
 ## 2026-11-04 — Direct Meta Lead Ads intake (in progress)
 

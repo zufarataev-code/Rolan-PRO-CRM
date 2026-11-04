@@ -4,6 +4,10 @@ CallRail sends **Post-Call** JSON to `/api/webhooks/callrail`. Do not register
 Pre-Call, Outbound, SMS or Call Modified events at this endpoint. CallRail can
 delay Post-Call for up to 20 minutes. Recording is not needed.
 
+For the branded ingress endpoint and its deployment/rollback checks, see
+[`integrations/callrail-worker`](../integrations/callrail-worker/README.md).
+The relay preserves the signed bytes; receiver authentication stays unchanged.
+
 Set server-only `CALLRAIL_WEBHOOK_SIGNING_KEY` from Webhooks > Advanced settings
 and `CALLRAIL_COMPANY_ID` to the **numeric company ID in the CallRail dashboard
 URL** (the `company_id` field of its legacy-compatible webhook, not a `COM…`
