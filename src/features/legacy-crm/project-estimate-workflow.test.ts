@@ -236,22 +236,23 @@ test("quick service adds stock supplies and includes their purchase cost", () =>
   assert.match(consumables, /projectQuickSupplyCost\(o\)/);
 });
 
-test("owner can close a completed legacy project directly from quick entry", () => {
+test("owner can close a completed legacy project with its actual payment", () => {
   const closer = source.match(/function closeQuickProjectAsCompleted\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
   const renderer = source.slice(rendererStart, rendererEnd);
-  assert.match(renderer, /Закрытие проекта из старой CRM/);
-  assert.match(renderer, /Дата полной оплаты/);
+  assert.match(renderer, /Проверка и закрытие/);
+  assert.match(renderer, /Оплачено клиентом/);
+  assert.match(renderer, /Дата оплаты/);
   assert.match(renderer, /Способ оплаты/);
-  assert.match(renderer, /Закрыть как выполненный и оплаченный/);
+  assert.match(renderer, /Закрыть выполненный проект/);
   assert.match(completionIssues, /ignoredHistoricalStockIssues/);
   assert.match(completionIssues, /warehouseCatalogCostPerSqft\(line\.catalogId\) <= 0/);
   assert.match(closer, /currentUser\(\)\?\.role !== 'owner'/);
-  assert.match(closer, /o\.status = 'completed'/);
+  assert.match(closer, /o\.status = full \? 'completed' : 'act_signed'/);
   assert.match(closer, /o\.installationDoneAt = o\.installationDoneAt \|\| endAt/);
-  assert.match(closer, /o\.paidAt = paidAt/);
+  assert.match(closer, /o\.paidAt = full \? paidAt : null/);
   assert.match(closer, /payments\.push\(/);
   assert.match(closer, /o\.projectEstimateSnapshot =/);
   assert.match(closer, /quickProjectImportedCompleted = true/);

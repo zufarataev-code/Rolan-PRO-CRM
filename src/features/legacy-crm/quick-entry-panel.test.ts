@@ -10,21 +10,19 @@ const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
 const fn = (src: string, name: string) => { const a = src.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return src.slice(a, src.indexOf('\n}\n', a) + 3); };
 
 test('the panel is a view of its own for owner and manager', () => {
-  assert.match(html, /\['quickEntry', 'Быстрый ввод', '⚡'\]/);
+  assert.match(html, /\['quickEntry', 'Выполненные проекты', '⚡'\]/);
   assert.match(html, /case 'quickEntry': return renderQuickEntry\(\);/);
   assert.match(fn(stages, 'quickEntryCanUse'), /\['owner', 'manager'\]\.includes/);
 });
 
-test('one row creates a real project with a quick line and closes it through the normal fields', () => {
-  const commit = fn(stages, 'quickEntryCommit');
-  for (const required of ['дата работ', 'имя клиента', 'услуга', 'объём (sq ft / шт)', 'сумма клиенту', 'хотя бы один исполнитель', 'менеджер']) assert.ok(commit.includes(required), required);
-  assert.match(commit, /quickProjectLine: true/);
-  assert.match(commit, /leadSource: f\.source/);
-  assert.match(commit, /projectQuickSyncProjectInstallers\(o\)/, 'line installers become project installers, so payroll sees them');
-  assert.match(commit, /quickEntryComplete\(o, \{ date, paid, method/);
-  const complete = fn(stages, 'quickEntryComplete');
-  assert.match(complete, /o\.status = full \? 'completed' : 'act_signed'/, 'partial payment leaves the project awaiting payment');
-  assert.match(complete, /projectEstimateApprovalSnapshot\(o, recordedAt, true\)/);
+test('historical entry first creates one draft project, then opens the canonical multi-service editor', () => {
+  const create = fn(stages, 'quickEntryCreateDraft');
+  for (const required of ['дата проекта', 'имя клиента', 'менеджер', 'замерщик']) assert.ok(create.includes(required), required);
+  assert.match(create, /extraServices: \[\], extraExpenses: \[\]/, 'the header does not invent a first service');
+  assert.match(create, /measurerId: f\.measurer/);
+  assert.match(create, /quickEntryDraft: true/);
+  assert.match(create, /openQuickProjectEntry\(o\.id\)/, 'the existing project editor owns services, expenses and closing');
+  assert.doesNotMatch(create, /quickEntryComplete\(/, 'creating the header must not close the project automatically');
 });
 
 test('rates come only from the directories: the panel reads orderPSS and calcUserPayoutForPeriod', () => {
@@ -36,16 +34,30 @@ test('rates come only from the directories: the panel reads orderPSS and calcUse
   assert.match(fn(stages, 'quickEntryPeople'), /calcUserPayoutForPeriod\(u\.id, start, end\)/);
 });
 
-test('the panel re-renders without losing typed values', () => {
-  assert.match(fn(stages, 'quickEntrySet'), /quickEntryReadForm\(\)/);
-  assert.match(fn(stages, 'quickEntryReadForm'), /data-qe-installer/);
+test('the project header reads all facts before creating the draft', () => {
+  const read = fn(stages, 'quickEntryReadForm');
+  for (const field of ['date', 'manager', 'client', 'phone', 'street', 'city', 'source', 'site', 'measurer', 'notes']) assert.ok(read.includes(`'${field}'`), field);
 });
 
-test('material belongs to the service, as in the cashier: default film and package parts follow the chosen service', () => {
-  assert.match(fn(stages, 'quickEntrySet'), /f\.film = offering \? serviceOfferingDefaultFilmId\(offering\) \|\| '' : '';/);
-  const films = fn(stages, 'quickEntryFilmsFor');
-  assert.match(films, /if \(!offering\) return \[\];/, 'no service — no film list');
-  assert.match(films, /serviceOfferingAllowedFilmIds\(offering\)/);
-  const commit = fn(stages, 'quickEntryCommit');
-  assert.match(commit, /serviceOfferingIncludes\(offering\)\.forEach\(child => \{[\s\S]*part\.includedBy = offering\.id; part\.unitPrice = 0; part\.price = 0;/, 'A1 brings its silicone as a package line');
+test('owner can be the surveyor without duplicating the employee card', () => {
+  assert.match(fn(stages, 'quickEntryMeasurers'), /\['measurer', 'owner'\]\.includes/);
+  assert.match(stages, /Замерщик<select id="qe-measurer"/);
+});
+
+test('canonical editor supports many services with their own dates, crew, supplies and direct expenses', () => {
+  assert.match(fn(html, 'renderQuickProjectEntry'), /Можно добавить несколько услуг/);
+  assert.match(fn(html, 'renderQuickProjectEntry'), /projectEstimateAddQuickLine/);
+  assert.match(fn(html, 'renderQuickProjectEntry'), /Начало работ/);
+  assert.match(fn(html, 'renderQuickProjectEntry'), /projectQuickToggleInstaller/);
+  assert.match(fn(html, 'renderQuickProjectEntry'), /projectQuickAddSupply/);
+  assert.match(fn(html, 'renderQuickProjectEntry'), /projectQuickAddExpense/);
+  assert.match(fn(html, 'closeQuickProjectAsCompleted'), /o\.status = full \? 'completed' : 'act_signed'/, 'partial payment leaves debt visible');
+  assert.match(fn(html, 'closeQuickProjectAsCompleted'), /projectEstimateApprovalSnapshot\(o, recordedAt, true\)/);
+});
+
+test('historical services are the only source of their directions and a closed import is immutable', () => {
+  const sync = fn(html, 'projectEstimateSyncQuickServices');
+  assert.match(sync, /const leadService = o\.quickEntry \? '' : orderLeadIntentServiceId\(o\)/);
+  assert.match(sync, /\[leadService, \.\.\.measuredServices, \.\.\.quickServices\]/);
+  assert.match(fn(html, 'quickProjectUpdateHeader'), /o\.quickProjectImportedCompleted/);
 });

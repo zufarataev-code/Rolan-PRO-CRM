@@ -839,3 +839,14 @@ Owner requires the material attached in «Услуги и цены» to remain s
 - A new Project line starts with the service default film. The manager may override it for that Project without changing the directory default.
 - Saving a material link or default must use confirmed server persistence and show a visible saved/error state; a browser-only selection is not considered saved.
 - The server must reject a default film that is not linked to the same service or belongs to an incompatible direction.
+
+## 2026-11-03 — Historical intake is one Project with many service facts (Owner)
+
+This decision supersedes the one-row/one-order presentation of the November quick-entry prototype. It does not restore Quick Entry as a path for new live Projects.
+
+- «Выполненные проекты» first creates one historical Project header: client, object, source, manager and surveyor. It then opens the existing canonical Project import editor instead of immediately marking the job complete.
+- One historical Project may contain any number of service rows. Every row owns its direction/service, material, quantity, customer total, start/end dates, installers and supplies. Shared direct expenses remain Project-level facts.
+- The employee directory is the only source of people. An active Owner may be selected as the surveyor without creating a duplicate employee card; Rinat, Nurik and future installers appear after they are added as active installers with a payroll scheme.
+- Completion remains Owner-only. The Owner reviews all rows and records the actual amount paid. A fully paid Project becomes `completed`; a completed job with an outstanding balance becomes `act_signed` and stays visible in receivables.
+- Historical completion does not send retroactive client notices and does not issue today's Warehouse stock. Revenue, material cost, supplies, direct expenses, payroll, debt and margin continue through the existing Project/PSS/payroll formulas; no second calculator or import entity is created.
+- Draft creation is not a financial event. Payroll, profitability and monthly completed-job analytics begin only after the Owner closes the historical Project.

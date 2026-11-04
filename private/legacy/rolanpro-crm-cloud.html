@@ -19606,7 +19606,7 @@ function renderAppShell() {
     ['leads', 'Новые лиды', '📥'],
     ['coldcalls', 'Холодные звонки', '📞'],
     ['orders', T('orders'), '🏗'],
-    ['quickEntry', 'Быстрый ввод', '⚡'],
+    ['quickEntry', 'Выполненные проекты', '⚡'],
     ['proposals', 'КП', '📄'],
     ['servicePricing', 'Услуги и цены', '💲'],
     ...(role === 'owner' ? [['ratesCosts', 'Ставки и расходы', '🧾']] : []),
@@ -19784,7 +19784,7 @@ function headerTitle() {
     case 'academy': return '🧭 Академия и процессы';
     case 'leads': return '📥 Новые лиды';
     case 'coldcalls': return '📞 Холодные звонки';
-    case 'quickEntry': return '⚡ Быстрый ввод заказов';
+    case 'quickEntry': return '⚡ Выполненные проекты';
     case 'payroll': return '💰 Зарплата';
     case 'accounting': return '💵 Деньги';
     case 'reports': return T('reports');
@@ -19815,7 +19815,7 @@ function headerSubtitle() {
     case 'clients': return 'Клиенты, адреса объектов, B2B/B2C и постоянные аккаунты';
     case 'coldcalls': return 'Поиск компаний, журнал обзвона, повторные звонки и перевод в B2B';
     case 'inventory': return 'Плёнка, расходники, остатки, приход и списание';
-    case 'quickEntry': return 'Заказы задним числом одной строкой: услуга, плёнка, исполнитель, лид — зарплаты и аналитика считаются сразу';
+    case 'quickEntry': return 'Проекты задним числом: несколько услуг, свои даты и исполнители — зарплата и аналитика считаются после проверки';
     case 'payroll': return 'Начисления, периоды, выплаты и задолженность по зарплате';
     case 'accounting': return 'Деньги компании из заказов, склада, зарплаты и фактических операций';
     case 'paymentsdue': return 'Zelle, переводы, чеки и наличные — отметить поступление';
@@ -28478,7 +28478,11 @@ function projectEstimateSyncQuickLine(line, changedField = '') {
 function projectEstimateSyncQuickServices(o) {
   const measuredServices = measureAllWindows(o).map(({ win }) => win.measureScope || win.serviceType).filter(Boolean);
   const quickServices = projectQuickLines(o).map(line => line.serviceType).filter(Boolean);
-  o.serviceTypes = [...new Set([orderLeadIntentServiceId(o), ...measuredServices, ...quickServices].filter(Boolean))];
+  // Historical drafts do not have a lead intent. Their directions must come only
+  // from the services the owner actually enters, otherwise the seed direction
+  // (used only to render the first empty row) leaks into reports and proposals.
+  const leadService = o.quickEntry ? '' : orderLeadIntentServiceId(o);
+  o.serviceTypes = [...new Set([leadService, ...measuredServices, ...quickServices].filter(Boolean))];
   o.serviceType = o.serviceTypes[0] || o.serviceType || 'smart_film';
 }
 
@@ -29174,34 +29178,38 @@ function closeQuickProjectAsCompleted(oid) {
   const range = projectQuickDateRange(o);
   const paidDate = projectQuickDateValue(document.getElementById('quick-close-paid-date')?.value || range.endDate);
   const method = document.getElementById('quick-close-payment-method')?.value || 'zelle';
-  if (!paidDate) { alert('Укажите дату полной оплаты.'); return; }
   const revenue = orderRevenue(o);
-  if (!confirm(`Закрыть ${o.number} как выполненный и полностью оплаченный на ${fmtMoney(revenue)}?`)) return;
+  const requestedPaid = Math.min(revenue, Math.max(0, Number(document.getElementById('quick-close-paid-amount')?.value) || 0));
+  if (requestedPaid > 0 && !paidDate) { alert('Укажите дату оплаты.'); return; }
+  const willBePaidInFull = requestedPaid >= revenue - 0.5;
+  if (!confirm(`Закрыть ${o.number} как выполненный? Оплачено ${fmtMoney(requestedPaid)} из ${fmtMoney(revenue)}${willBePaidInFull ? '' : `, долг ${fmtMoney(revenue - requestedPaid)}`}.`)) return;
 
   const recordedAt = new Date().toISOString();
   const startAt = `${range.startDate}T12:00:00.000Z`;
   const endAt = `${range.endDate}T12:00:00.000Z`;
-  const paidAt = `${paidDate}T12:00:00.000Z`;
+  const paidAt = paidDate ? `${paidDate}T12:00:00.000Z` : null;
   const existingLegacyPaid = Math.max(0, Number(o.paid) || 0);
   const payments = orderPayments(o);
   if (!payments.length && existingLegacyPaid > 0) {
     payments.push({ id: 'pay_' + uid(), amount: Math.min(existingLegacyPaid, revenue), date: paidDate, method, note: 'Оплата из старой CRM', recordedBy: state.currentUserId || null, recordedAt });
   }
-  const remaining = Math.max(0, revenue - orderPaidTotal(o));
-  if (remaining > 0) {
-    payments.push({ id: 'pay_' + uid(), amount: remaining, date: paidDate, method, note: 'Полная оплата при переносе проекта', recordedBy: state.currentUserId || null, recordedAt });
+  const remainingToRecord = Math.max(0, requestedPaid - orderPaidTotal(o));
+  if (remainingToRecord > 0) {
+    payments.push({ id: 'pay_' + uid(), amount: remainingToRecord, date: paidDate, method, note: 'Фактическая оплата при переносе проекта', recordedBy: state.currentUserId || null, recordedAt });
   }
   syncOrderPaid(o);
   o.paid = orderPaidTotal(o);
-  o.depositReceived = true;
-  o.depositReceivedAt = o.depositReceivedAt || paidAt;
+  const full = o.paid >= revenue - 0.5;
+  o.depositReceived = o.paid > 0;
+  o.depositReceivedAt = o.paid > 0 ? (o.depositReceivedAt || paidAt) : null;
   o.installationAt = o.installationAt || startAt;
   o.installationDoneAt = o.installationDoneAt || endAt;
   o.actSignedAt = o.actSignedAt || endAt;
-  o.paidAt = paidAt;
+  o.paidAt = full ? paidAt : null;
   // Every line already has its specialists and dates (projectQuickCompletionIssues): they become its plan.
   if (!o.serviceSchedules?.length) o.serviceSchedules = projectPlannedSchedules(o);
-  o.status = 'completed';
+  o.status = full ? 'completed' : 'act_signed';
+  o.quickEntryDraft = false;
   o.quickProjectImportedCompleted = true;
   o.quickProjectImportedCompletedAt = recordedAt;
   o.quickProjectImportedCompletedBy = state.currentUserId;
@@ -29211,15 +29219,36 @@ function closeQuickProjectAsCompleted(oid) {
   o.projectEstimateSnapshot = projectEstimateApprovalSnapshot(o, recordedAt, true);
   o.timeline = o.timeline || [];
   o.timeline.push({ at: recordedAt, key: 'project_estimate_approved', by: state.currentUserId, note: `Импортированный расчёт подтверждён: ${fmtMoney(revenue)}` });
-  o.timeline.push({ at: paidAt, key: 'payment_received', by: state.currentUserId, note: `Полная оплата ${fmtMoney(revenue)} · перенос из старой CRM` });
-  o.timeline.push({ at: endAt, key: 'completed', by: state.currentUserId, note: 'Выполненный проект перенесён из старой CRM' });
+  if (o.paid > 0) o.timeline.push({ at: paidAt, key: 'payment_received', by: state.currentUserId, note: `${full ? 'Полная' : 'Частичная'} оплата ${fmtMoney(o.paid)} · перенос из старой CRM` });
+  o.timeline.push({ at: endAt, key: full ? 'completed' : 'act_signed', by: state.currentUserId, note: full ? 'Выполненный и оплаченный проект перенесён из старой CRM' : `Выполненный проект перенесён из старой CRM · долг ${fmtMoney(revenue - o.paid)}` });
   save(); closeModal(); openOrder(oid);
+}
+
+function quickProjectUpdateHeader(oid, field, value) {
+  const o = getOrder(oid);
+  if (!o || o.quickProjectImportedCompleted || !orderUserCanSeeMoney(o, currentUser())) return;
+  if (field === 'managerId') {
+    const user = getUser(value);
+    if (!user || user.active === false || !['manager', 'owner'].includes(user.role)) return;
+    o.managerId = user.id;
+  } else if (field === 'measurerId') {
+    const user = getUser(value);
+    if (!user || user.active === false || !['measurer', 'owner'].includes(user.role)) return;
+    o.measurerId = user.id;
+  } else if (field === 'notes') {
+    o.notes = String(value || '').trim();
+  } else return;
+  projectEstimateMarkChanged(o, 'Обновлены ответственные исторического проекта');
+  save(); refreshQuickProjectEntry(oid);
 }
 
 function renderQuickProjectEntry(o) {
   const quickLines = projectQuickLines(o);
   const availableInstallers = usersByRole('installer');
   const availableSupplies = ensureSupplies();
+  const availableManagers = db.users.filter(user => user.active !== false && ['manager', 'owner'].includes(user.role));
+  const availableMeasurers = db.users.filter(user => user.active !== false && ['measurer', 'owner'].includes(user.role));
+  const client = getClient(o.clientId);
   const rows = quickLines.map(line => {
     const catalog = projectQuickLineFilms(line);
     const offerings = serviceOfferingsFor(serviceOfferingDirection(line.serviceType), { includeId: line.offeringId });
@@ -29254,6 +29283,15 @@ function renderQuickProjectEntry(o) {
     <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectQuickDeleteExpense('${o.id}','${expense.id}')">Удалить</button></td>
   </tr>`).join('');
   return `
+    <section class="project-estimate-section">
+      <div class="project-estimate-section-head"><div><h4>Проект и ответственные</h4><div class="text-xs text-gray-500">Один проект хранит все услуги. Монтажники и даты назначаются отдельно для каждой услуги ниже.</div></div><span class="tag bg-blue-50 text-blue-700">${academyEsc(o.number)}</span></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <div class="project-estimate-quick-card"><span>Клиент и объект</span><strong>${academyEsc(client?.name || 'Без клиента')}</strong><div class="text-xs text-gray-500">${academyEsc(orderAddress(o, client) || 'Адрес не указан')}</div></div>
+        <div><label>Менеджер</label><select onchange="quickProjectUpdateHeader('${o.id}','managerId',this.value)">${availableManagers.map(user => `<option value="${user.id}" ${o.managerId===user.id?'selected':''}>${academyEsc(user.name)}</option>`).join('')}</select></div>
+        <div><label>Замерщик</label><select onchange="quickProjectUpdateHeader('${o.id}','measurerId',this.value)"><option value="">Не указан</option>${availableMeasurers.map(user => `<option value="${user.id}" ${o.measurerId===user.id?'selected':''}>${academyEsc(user.name)}${user.role==='owner'?' · владелец':''}</option>`).join('')}</select></div>
+        <div><label>Заметка</label><input value="${academyEsc(o.notes || '')}" onchange="quickProjectUpdateHeader('${o.id}','notes',this.value)" placeholder="Что важно по этому проекту"></div>
+      </div>
+    </section>
     <div class="project-estimate-summary">
       <div class="project-estimate-kpi"><span>Услуг</span><strong>${quickLines.length}</strong></div>
       <div class="project-estimate-kpi"><span>Предварительный объём</span><strong>${totalSqft.toFixed(2)} sqft</strong></div>
@@ -29269,18 +29307,20 @@ function renderQuickProjectEntry(o) {
       <div class="project-estimate-section-head"><div><h4>Прямые расходы проекта</h4><div class="text-xs text-gray-500">Доставка, разовая закупка, помощник, субподрядчик и другие фактические расходы.</div></div><button class="btn-ghost text-sm" onclick="projectQuickAddExpense('${o.id}')">+ Добавить расход</button></div>
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead><tbody>${quickExpenseRows || '<tr><td colspan="4" class="text-gray-500">Прямых расходов нет.</td></tr>'}</tbody></table></div>
     </section>` : ''}
-    ${currentUser()?.role === 'owner' ? `<details class="quick-production-details">
+    ${currentUser()?.role === 'owner' ? `<details class="quick-production-details" ${o.quickEntry ? 'open' : ''}>
       <summary>Только для переноса уже завершённого проекта из старой CRM</summary>
       <div class="quick-production-details-body">
         <div class="grid gap-2">${productionRows}</div>
         <section class="project-estimate-section">
-          <div class="project-estimate-section-head"><div><h4>Закрытие проекта из старой CRM</h4><div class="text-xs text-gray-500">Фиксирует выполнение, полную оплату, зарплату, себестоимость и прибыль без ввода размеров окон.</div></div>${o.status === 'completed' ? '<span class="status-badge bg-emerald-100 text-emerald-800">Завершён</span>' : ''}</div>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-            <div><label>Дата полной оплаты</label><input id="quick-close-paid-date" type="date" value="${projectQuickDateValue(o.paidAt?.slice?.(0,10)) || quickRange.endDate || new Date().toISOString().slice(0,10)}"></div>
+          <div class="project-estimate-section-head"><div><h4>Проверка и закрытие</h4><div class="text-xs text-gray-500">Фиксирует выполнение, фактическую оплату, зарплату, себестоимость и прибыль. Если оплачено не всё, проект останется в ожидании оплаты.</div></div>${o.quickProjectImportedCompleted ? '<span class="status-badge bg-emerald-100 text-emerald-800">Перенесён</span>' : ''}</div>
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3">
+            <div><label>Оплачено клиентом, $</label><input id="quick-close-paid-amount" type="number" min="0" max="${Number(total || 0)}" step="0.01" value="${Number(o.paid || total || 0)}"></div>
+            <div><label>Дата оплаты</label><input id="quick-close-paid-date" type="date" value="${projectQuickDateValue(o.paidAt?.slice?.(0,10)) || quickRange.endDate || new Date().toISOString().slice(0,10)}"></div>
             <div><label>Способ оплаты</label><select id="quick-close-payment-method">${PAYMENT_METHODS.map(item => `<option value="${item.id}">${item.label}</option>`).join('')}</select></div>
-            <div class="flex items-end"><button class="btn-primary w-full" onclick="closeQuickProjectAsCompleted('${o.id}')" ${completionIssues.length || o.status === 'completed' ? 'disabled' : ''}>✓ Закрыть как выполненный и оплаченный</button></div>
+            <div class="flex items-end"><button class="btn-primary w-full" onclick="closeQuickProjectAsCompleted('${o.id}')" ${completionIssues.length || o.quickProjectImportedCompleted ? 'disabled' : ''}>✓ Закрыть выполненный проект</button></div>
           </div>
-          ${completionIssues.length && o.status !== 'completed' ? `<div class="text-xs text-amber-700 mt-2">Нужно заполнить: ${academyEsc(completionIssues.join(', '))}.</div>` : ''}
+          ${!availableInstallers.length ? '<div class="text-xs text-amber-700 mt-2">Сначала добавьте Рината и Нурика в «Сотрудники» с ролью «Монтажник» и схемой оплаты — после этого они появятся у каждой услуги.</div>' : ''}
+          ${completionIssues.length && !o.quickProjectImportedCompleted ? `<div class="text-xs text-amber-700 mt-2">Нужно заполнить: ${academyEsc(completionIssues.join(', '))}.</div>` : ''}
         </section>
       </div>
     </details>` : ''}
@@ -29319,13 +29359,13 @@ function refreshProjectEstimateWorkspace(oid) {
 function openQuickProjectEntry(oid) {
   const o = getOrder(oid);
   if (!o) return;
-  if (!orderUserCanSeeMoney(o, currentUser())) { alert('Быстрый ввод доступен только владельцу и назначенному менеджеру.'); return; }
+  if (!orderUserCanSeeMoney(o, currentUser())) { alert('Перенос проекта доступен только владельцу и назначенному менеджеру.'); return; }
   state.modal = `
     <div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeModal()">
       <div class="modal-content workspace-modal order-workspace-modal order-workspace-modal-wide" style="--workspace-color:#2563eb" onclick="event.stopPropagation()">
         <header class="order-workspace-modal-head">
-          <div class="order-workspace-modal-heading"><span class="order-workspace-modal-icon">⚡</span><div><div class="order-workspace-modal-kicker">${academyEsc(o.number)}</div><h3>Быстрый ввод проекта</h3></div></div>
-          <button type="button" class="order-workspace-close" onclick="closeModal()" aria-label="Закрыть быстрый ввод проекта">×</button>
+          <div class="order-workspace-modal-heading"><span class="order-workspace-modal-icon">⚡</span><div><div class="order-workspace-modal-kicker">${academyEsc(o.number)}</div><h3>Выполненный проект</h3></div></div>
+          <button type="button" class="order-workspace-close" onclick="closeModal()" aria-label="Закрыть перенос проекта">×</button>
         </header>
         <div class="order-workspace-modal-body" data-workspace="quick-project">${renderQuickProjectEntry(o)}</div>
       </div>

@@ -1679,3 +1679,11 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 - Adding that service to a new Project automatically fills its saved default film. The manager can still open the completed material step and override the film for the particular Project; the service directory is not modified by that override.
 - The server rejects a default film that is not linked to the service or belongs to another direction, preventing invalid directory states.
 - Verification: focused material/cashier/directory tests 52/52; full suite 920/920; `npm run typecheck` clean; production build successful with 129 routes; `git diff --check` clean. Production is unchanged; release requires the Owner's separate explicit confirmation.
+
+## 2026-11-03 — Historical completed-Project intake (local implementation)
+
+- Continued from the November quick-entry prototype but removed its one-service immediate-close behavior. The sidebar now creates only a client/object/responsibility draft and opens the established multi-service historical Project editor.
+- The draft stores the assigned manager and surveyor. Active Owners are valid surveyors, so Zуфар can be recorded as the field measurer without duplicating his employee account.
+- The canonical editor remains the source for multiple service rows, per-service materials, sqft, customer totals, dates, installers and supplies, plus shared direct expenses. Rinat and Nurik are not hard-coded; they will appear when their active installer employee cards and payroll schemes exist.
+- Owner closure now records the actual paid amount. Full payment closes the Project; partial/no payment records the completed work at `act_signed` and leaves the debt in receivables.
+- No new Project, payroll, warehouse, customer-notification or calculation pipeline was introduced. Local verification is still required before any PR or production release; production is unchanged.
