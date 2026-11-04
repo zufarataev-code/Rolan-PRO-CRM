@@ -2,6 +2,14 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-04 — CallRail genuine-call delivery diagnosis (in progress)
+
+- Task owner: Codex, branch `codex/callrail-provider-id-20261104`, based on `origin/main` `4ac9fe1`; preserves the independently merged Meta intake.
+- PR #454 receiver is deployed; signed incomplete requests reach validation and unsigned requests are rejected. Production WordPress now uses the existing managed CallRail loader, with the native footer suppressed; GTM version 10 pauses only the old Google forwarding initializer. Number/tel swapping and original-number fallback with the provider script blocked were verified. Source default-on/storage changes in website MRs !49/!50 still await their full exact-head checks and deployment; staging tracking/Critical CSS stay off.
+- A genuine owner-authorized missed call appears in CallRail as Direct, and the owner reports a sales callback. CRM receipt remains unverified. The dashboard numeric company ID and the documented API `COM…` identity are distinct; verify actual delivery status before changing runtime scope or claiming a root cause.
+- This branch adds a manual, read-only ingress-status snapshot to the existing Server diagnose workflow. It emits only timestamps/statuses for the CallRail route, not IPs, caller data, headers, bodies or credentials. YAML, shell, Python and bounded route/status parsing checks pass. Review and published diagnostic execution are pending; no application code/runtime change or credential grant is included.
+- Next: inspect actual HTTP delivery evidence, apply only a verified correction, and follow the same genuine call into CRM. Never manufacture an enquiry, qualification, sale or Google click to validate it.
+
 ## 2026-11-04 — Direct Meta Lead Ads intake (in progress)
 
 - Task owner: Codex, branch `codex/meta-lead-ads-20261104`, based on latest `origin/main` `2d48a72`.

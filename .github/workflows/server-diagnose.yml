@@ -40,5 +40,40 @@ jobs:
           echo "== nginx processes"; pgrep -a nginx | head -5 || echo none
           echo "== watcher log tail"; ls -t /home/runcloud/logs/*rolanpro* 2>/dev/null | head -3; tail -n 30 "$(ls -t /home/runcloud/logs/*rolanpro* 2>/dev/null | head -1)" 2>/dev/null || true
           REMOTE
+      - name: CallRail ingress status (no caller data)
+        run: |
+          ssh -i "$HOME/.ssh/rolanpro_production" -o BatchMode=yes -o IdentitiesOnly=yes runcloud@143.110.136.211 'bash -s' <<'REMOTE'
+          timeout 60 sudo -n /usr/bin/python3 -I - <<'PYTHON'
+          import collections, datetime, json, os, re, stat
+          from pathlib import Path
+          roots = [Path('/var/log/nginx'), Path('/var/log/nginx-rc'), Path('/home/runcloud/logs')]
+          pattern = re.compile(r'\[(\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4})\][^"\n]*"(?:POST|GET) /api/webhooks/callrail(?:\?[^" ]*)? HTTP/[0-9.]+" ([1-5]\d{2})')
+          hits, readable = [], 0
+          paths = sorted({p for root in roots if root.exists() for glob in ('*access*.log', '*/*access*.log') for p in root.glob(glob)})
+          # shortcut: sample 30 fixed-depth 256-KiB log tails; expand if the vhost log is outside this sample.
+          for path in paths[:30]:
+              try:
+                  fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                  with os.fdopen(fd, 'rb') as stream:
+                      info = os.fstat(stream.fileno())
+                      if not stat.S_ISREG(info.st_mode):
+                          continue
+                      stream.seek(max(0, info.st_size - 262144))
+                      lines = stream.read().decode('utf8', errors='replace').splitlines()
+                  readable += 1
+              except OSError:
+                  continue
+              for line in lines:
+                  match = pattern.search(line)
+                  if match:
+                      try:
+                          time = datetime.datetime.strptime(match[1], '%d/%b/%Y:%H:%M:%S %z').astimezone(datetime.timezone.utc).isoformat()
+                      except ValueError:
+                          continue
+                      hits.append({'time': time, 'status': int(match[2])})
+          hits.sort(key=lambda hit: hit['time'])
+          print(json.dumps({'readable_access_logs': readable, 'log_sample_truncated': len(paths) > 30, 'callrail_hits': hits[-30:], 'sample_statuses': dict(collections.Counter(h['status'] for h in hits))}))
+          PYTHON
+          REMOTE
       - name: From the internet
         run: curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 20 https://rolanpro-crm.143-110-136-211.sslip.io/ || echo "external fail"
