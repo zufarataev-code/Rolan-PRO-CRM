@@ -8,6 +8,7 @@ import {
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { buildClientAccessWhere, buildDealAccessWhere, buildLeadScopeWhere } from "@/features/sales/access";
 import { websiteUpdateHistory } from "@/features/integrations/website-lead-updates";
+import { callrailHistory } from "@/features/integrations/callrail";
 
 function toNumber(value: { toString(): string } | null | undefined) {
   return value ? Number(value.toString()) : 0;
@@ -589,7 +590,8 @@ export async function listLeads(managerId?: string) {
   });
 
   const history = await websiteUpdateHistory(leads.filter(lead => lead.source === "website").map(lead => lead.lead_id));
-  return leads.map(lead => ({ ...serializeLead(lead), website_updates: history.get(lead.lead_id) || [] }));
+  const calls = await callrailHistory(leads.map(lead => lead.lead_id));
+  return leads.map(lead => ({ ...serializeLead(lead), website_updates: history.get(lead.lead_id) || [], callrail_calls: calls.get(lead.lead_id) || [] }));
 }
 
 export async function listClients(managerId?: string) {

@@ -16,6 +16,7 @@ test("actual proposal sharing qualifies once, while publishing its link does not
   const tx = {
     $executeRaw: async () => 1,
     deal: { findFirst: async () => null },
+    acquisitionTouchpoint: { findUnique: async () => point },
     googleAdsIntegrationSetting: { findUnique: async () => ({
       conversion_owner_customer_id: "1234567890", qualified_lead_action_id: "123",
       qualification_rules: { pipeline_status_code: "PROPOSAL_SENT" }, rule_version: "v1",

@@ -32,21 +32,22 @@ export type QualifiedLeadConversionInput = {
   eventSource?: string;
 };
 
-async function resolveAttributionTouchpointId(
+async function resolveConversionAttribution(
   tx: Prisma.TransactionClient,
   input: {
     attributionTouchpointId?: string | null;
     leadId?: string | null;
     clientId?: string | null;
+    eventSource?: string;
   },
 ) {
-  if (input.attributionTouchpointId) return input.attributionTouchpointId;
-  if (!input.leadId && !input.clientId) return null;
-
-  const touchpoint = await findAcquisitionTouchpoint(tx, {
+  const touchpoint = input.attributionTouchpointId
+    ? await tx.acquisitionTouchpoint.findUnique({ where: { acquisition_touchpoint_id: input.attributionTouchpointId } })
+    : input.leadId || input.clientId ? await findAcquisitionTouchpoint(tx, {
       ...(input.leadId ? { lead_id: input.leadId } : { client_id: input.clientId! }),
-  });
-  return touchpoint?.acquisition_touchpoint_id ?? null;
+    }) : null;
+  const attributes = touchpoint?.session_attributes as Record<string, unknown> | null;
+  return { attributionTouchpointId: input.attributionTouchpointId ?? touchpoint?.acquisition_touchpoint_id ?? null, eventSource: attributes?.source_channel === "PHONE" ? "PHONE" : input.eventSource ?? "OTHER" };
 }
 
 /**
@@ -88,7 +89,7 @@ export async function ensureQualifiedLeadConversion(
   if (!businessObjectId) {
     throw new Error("A deal, lead, or client is required for a qualified-lead conversion.");
   }
-  const attributionTouchpointId = await resolveAttributionTouchpointId(tx, input);
+  const { attributionTouchpointId, eventSource } = await resolveConversionAttribution(tx, input);
   const event = await tx.conversionEvent.upsert({
     where: { transaction_id: transactionId },
     update: {},
@@ -100,7 +101,7 @@ export async function ensureQualifiedLeadConversion(
       business_object_id: businessObjectId,
       event_type: GOOGLE_ADS_QUALIFIED_LEAD_EVENT,
       occurred_at: input.occurredAt,
-      event_source: input.eventSource ?? "OTHER",
+      event_source: eventSource,
       conversion_value: null,
       currency: "USD",
       attribution_touchpoint_id: attributionTouchpointId,
@@ -196,7 +197,7 @@ export async function ensureClosedWonConversion(
     },
   });
 
-  const attributionTouchpointId = await resolveAttributionTouchpointId(tx, input);
+  const { attributionTouchpointId, eventSource } = await resolveConversionAttribution(tx, input);
   const event = await tx.conversionEvent.upsert({
     where: { transaction_id: transactionId },
     update: {},
@@ -208,7 +209,7 @@ export async function ensureClosedWonConversion(
       business_object_id: input.dealId ?? input.legacyOrderId!,
       event_type: GOOGLE_ADS_CONVERTED_LEAD_EVENT,
       occurred_at: input.occurredAt,
-      event_source: input.eventSource ?? "OTHER",
+      event_source: eventSource,
       conversion_value: input.conversionValue,
       currency: input.currency.toUpperCase().slice(0, 3) || "USD",
       attribution_touchpoint_id: attributionTouchpointId,

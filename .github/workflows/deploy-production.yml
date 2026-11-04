@@ -77,6 +77,35 @@ jobs:
             runcloud@143.110.136.211 \
             'bash -s'
 
+      - name: Sync protected CallRail webhook configuration
+        env:
+          CALLRAIL_WEBHOOK_SIGNING_KEY: ${{ secrets.CALLRAIL_WEBHOOK_SIGNING_KEY }}
+          CALLRAIL_COMPANY_ID: ${{ secrets.CALLRAIL_COMPANY_ID }}
+        run: |
+          set -euo pipefail
+          [[ "$CALLRAIL_WEBHOOK_SIGNING_KEY" =~ ^[a-f0-9]{32}$ ]]
+          [[ "$CALLRAIL_COMPANY_ID" =~ ^[0-9]+$ ]]
+          {
+            printf 'set -euo pipefail\n'
+            printf 'callrail_key=%q\n' "$CALLRAIL_WEBHOOK_SIGNING_KEY"
+            printf 'callrail_company=%q\n' "$CALLRAIL_COMPANY_ID"
+            cat <<'REMOTE'
+          env_file=/home/runcloud/.rolanpro-crm.env.production.local
+          test -f "$env_file"
+          if grep -qx "CALLRAIL_WEBHOOK_SIGNING_KEY=$callrail_key" "$env_file" && grep -qx "CALLRAIL_COMPANY_ID=$callrail_company" "$env_file"; then exit 0; fi
+          cp -p "$env_file" "$env_file.callrail-backup-$(date -u +%Y%m%dT%H%M%SZ)"
+          chmod 600 "$env_file".callrail-backup-*
+          ls -1t "$env_file".callrail-backup-* | tail -n +4 | xargs -r rm -f
+          temporary_file="$(mktemp /home/runcloud/.rolanpro-crm.env.production.local.XXXXXX)"
+          trap 'rm -f "$temporary_file"' EXIT
+          awk '!/^CALLRAIL_(WEBHOOK_SIGNING_KEY|COMPANY_ID)=/' "$env_file" > "$temporary_file"
+          printf 'CALLRAIL_WEBHOOK_SIGNING_KEY=%q\nCALLRAIL_COMPANY_ID=%q\n' "$callrail_key" "$callrail_company" >> "$temporary_file"
+          chmod 600 "$temporary_file"
+          mv "$temporary_file" "$env_file"
+          trap - EXIT
+          REMOTE
+          } | ssh -i "$HOME/.ssh/rolanpro_production" -o BatchMode=yes -o IdentitiesOnly=yes runcloud@143.110.136.211 'bash -s'
+
       - name: Advance production to verified main commit
         env:
           EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}

@@ -16391,6 +16391,7 @@ function sourceDisplayLabel(value) {
     referral: T('sourceRef'),
     repeat: T('sourceRepeat'),
     yelp: 'Yelp',
+    callrail: 'Звонок · CallRail',
     other: T('sourceOther'),
   };
   return labels[raw] || raw;
@@ -23411,6 +23412,7 @@ const LEAD_SOURCES = {
   website:  { label: 'Сайт',      icon: '🌐', cls: 'bg-blue-50 text-blue-700',   crmSource: 'direct' },
   facebook: { label: 'Facebook',  icon: '📘', cls: 'bg-indigo-50 text-indigo-700', crmSource: 'facebook' },
   facebook_messenger: { label: 'Messenger', icon: '💬', cls: 'bg-blue-50 text-blue-700', crmSource: 'facebook' },
+  callrail: { label: 'Звонок · CallRail', icon: '📞', cls: 'bg-emerald-50 text-emerald-700', crmSource: 'callrail' },
   'ai-chat':{ label: 'ИИ-чат',    icon: '🤖', cls: 'bg-purple-50 text-purple-700', crmSource: 'direct' },
 };
 const CANONICAL_OPEN_LEAD_STATUSES = new Set(['NEW_LEAD', 'LEAD', 'CONSULTATION_SCHEDULED']);
@@ -23418,14 +23420,14 @@ function websiteLeadUpdatesHtml(leadId) {
   if (!['owner', 'manager'].includes(currentUser()?.role)) return '';
   const lead = canonicalLeads.find(item => item.lead_id === leadId);
   const updates = lead?.website_updates || [];
-  if (!updates.length) return '';
-  return `<section data-website-updates class="card mt-2" style="min-width:0;overflow-wrap:anywhere"><div class="font-semibold text-sm">Уточнения клиента с сайта</div>${updates.map(update => `<div class="text-sm mt-2" style="white-space:pre-wrap">${academyEsc(fmtDateTime(update.occurred_at))} · #${Number(update.revision)}\n${academyEsc(update.message)}</div>`).join('')}</section>`;
+  const calls = lead?.callrail_calls || [];
+  return (updates.length ? `<section data-website-updates class="card mt-2" style="min-width:0;overflow-wrap:anywhere"><div class="font-semibold text-sm">Уточнения клиента с сайта</div>${updates.map(update => `<div class="text-sm mt-2" style="white-space:pre-wrap">${academyEsc(fmtDateTime(update.occurred_at))} · #${Number(update.revision)}\n${academyEsc(update.message)}</div>`).join('')}</section>` : '') + (calls.length ? `<section data-callrail-calls class="card mt-2" style="min-width:0;overflow-wrap:anywhere"><div class="font-semibold text-sm">Звонки · CallRail</div>${calls.map(call => `<div class="text-sm mt-2" style="white-space:pre-wrap">${academyEsc(call.message)}</div>`).join('')}</section>` : '');
 }
 function canonicalMessengerLeadRows() {
   return canonicalLeads
     // Website leads arrive in PostgreSQL (/api/v1/integrations/website/leads) and
     // must be visible here next to Messenger leads.
-    .filter(lead => ['facebook_messenger', 'website'].includes(lead?.source) && CANONICAL_OPEN_LEAD_STATUSES.has(lead?.pipeline_status?.status_code))
+    .filter(lead => ['facebook_messenger', 'website', 'callrail'].includes(lead?.source) && CANONICAL_OPEN_LEAD_STATUSES.has(lead?.pipeline_status?.status_code))
     .map(lead => {
       const consultation = canonicalConsultations
         .filter(item => item?.lead?.lead_id === lead.lead_id && !['cancelled', 'canceled', 'deleted'].includes(item?.status))
@@ -23478,6 +23480,13 @@ function startCanonicalLeadsPolling() {
     if (state.view === 'leads' || (state.view === 'orderDetails' && !state.modal && ['owner', 'manager'].includes(currentUser()?.role) && getOrder(state.openOrderId)?.canonicalLeadId)) fetchCanonicalLeads({ renderIfVisible: true });
   }, 10000);
 }
+function callrailRecentCallsHtml() {
+  if (!['owner', 'manager'].includes(currentUser()?.role)) return '';
+  const calls = canonicalLeads.flatMap(lead => (lead.callrail_calls || []).map(call => ({ ...call, lead })));
+  calls.sort((a, b) => new Date(b.occurred_at) - new Date(a.occurred_at));
+  if (!calls.length) return '';
+  return `<section class="card mb-4" data-callrail-recent><h3 class="font-semibold mb-2">Последние звонки · CallRail</h3>${calls.slice(0, 20).map(call => `<div class="text-sm py-2 border-t" style="overflow-wrap:anywhere"><b>${academyEsc(call.lead.name)}</b>${call.lead.phone ? ` · <a href="tel:${academyEsc(call.lead.phone)}">${academyEsc(call.lead.phone)}</a>` : ''}<div>${academyEsc(call.message)}</div></div>`).join('')}</section>`;
+}
 function renderLeadsView() {
   const i = db.settings.integrations || {};
   const externalEnabled = Boolean(i.leadBackendUrl && i.leadBackendKey);
@@ -23487,12 +23496,13 @@ function renderLeadsView() {
   const canonicalRows = canonicalMessengerLeadRows();
   const leads = externalLeads === null ? canonicalRows : [...canonicalRows, ...externalLeads];
   return `
+  ${callrailRecentCallsHtml()}
   <div class="flex items-center justify-between mb-4">
     <div class="text-sm text-gray-500">${externalLeads === null && !canonicalLeadsRefreshedAt ? 'Загружаем заявки…' : `Активных лидов: <b>${leads.length}</b>`}</div>
     <button class="btn-ghost text-sm" onclick="fetchCanonicalLeads({renderIfVisible:true});${externalEnabled ? 'fetchLeads(true);' : ''}">🔄 Обновить</button>
   </div>
   ${externalLeads === null && !canonicalLeadsRefreshedAt ? `<div class="card text-center text-gray-400 py-8">⏳ Загрузка…</div>`
-    : leads.length === 0 ? `<div class="card"><div class="empty-state"><div class="icon">🎉</div><div>Все заявки обработаны!</div><div class="text-sm text-gray-500 mt-1">Новые лиды с сайта, Facebook и ИИ-чата появятся здесь автоматически.</div></div></div>`
+    : leads.length === 0 ? `<div class="card"><div class="empty-state"><div class="icon">🎉</div><div>Все заявки обработаны!</div><div class="text-sm text-gray-500 mt-1">Новые лиды с сайта, звонков CallRail, Facebook и ИИ-чата появятся здесь автоматически.</div></div></div>`
     : `<div class="space-y-3">${leads.map(l => {
         const src = LEAD_SOURCES[l.source] || { label: l.source, icon: '📩', cls: 'bg-gray-100 text-gray-600' };
         const existing = existingClientByContact(l.phone, l.email);
@@ -23519,7 +23529,7 @@ function renderLeadsView() {
             <div class="flex flex-col gap-2">
               ${l.canonical && l.consultation
                 ? `<button class="btn-primary text-sm" onclick="openCanonicalConsultationCard('${academyEsc(jsQuote(l.consultation.consultation_id))}')">Открыть запись</button>`
-                : l.canonical && l.source === 'website'
+                : l.canonical && ['website', 'callrail'].includes(l.source)
                   ? `<button class="btn-primary text-sm" onclick="convertLead('${academyEsc(jsQuote(l.id))}')">➕ Создать проект</button>
                      ${l.phone ? `<a class="btn-ghost text-sm text-center" href="tel:${academyEsc(l.phone)}">📞 Позвонить</a>` : ''}
                      <button class="btn-ghost text-xs text-gray-400" onclick="dismissLead('${academyEsc(jsQuote(l.id))}')">Спам / отклонить</button>`
@@ -23669,6 +23679,7 @@ async function convertLeadOnce(leadId) {
   const o = {
     id: 'o' + uid(), number: num, clientId: client.id,
     ...(canonical ? { canonicalLeadId: leadId } : {}),
+    leadSource: src.crmSource || l.source || 'other',
     status: 'new', managerId: currentUser().id,
     measurerId: null, installerIds: [],
     createdAt: new Date().toISOString(),

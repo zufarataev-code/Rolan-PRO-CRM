@@ -2,6 +2,14 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-04 — CallRail website calls (in progress)
+
+- Task owner: Codex, PR [#454](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/454), branch `codex/callrail-crm-20261104`, based on `654de8a`.
+- Added signed/company-scoped Post-Call intake, retry/concurrency receipts, caller matching, New Leads and project call history. Original source/consent/stage remain intact; proposal/sale outcomes retain PHONE source. See `docs/CALLRAIL.md`.
+- CallRail trial website pool and native Ads connection are configured. Website loader, CRM receiver deployment, signed provider delivery and Google matching remain separate rollout gates. No genuine call or qualification/sale has yet been verified by this branch.
+- At `37d7df5`, 1,005 unit tests, TypeScript, build, clean-database migrations, API/lifecycle and desktop/phone browser CI [41891291419](https://github.com/zufarataev-code/Rolan-PRO-CRM/actions/runs/41891291419) passed. Claude CLI Opus 5.5 re-reviewed the caller/ambiguity/history/attribution fixes and found no remaining code blockers. A later automated PR review identified synchronous proposal/payment producers creating immutable OTHER-source events; the shared conversion helper now derives PHONE from acquisition for all producers, with unit and real producer E2E regressions. That final delta requires its own CI and Claude readback before release.
+- Native CallRail Phone Call action `7889855964` and existing CRM Qualified/Converted actions remain Secondary, independently confirmed through Ads API. Enhanced conversions, text and form imports in CallRail are off. Website MR [!49](https://gitlab.taila64eb.ts.net/pwi/rolan-pro/-/merge_requests/49) implements the owner's default-on tracking policy and storage/DOM-ready checks; it does not establish website deployment. Next: complete final source checks, deploy the receiver, prove signed validation without creating an enquiry, then enable Post-Call and follow a genuine call and later actual proposal/sale. No receiver release or Google acceptance claim yet.
+
 ## 2026-11-03 handoff — search privacy, CI runner pin, server diagnose (PRs #446, #448)
 
 - #446: `X-Robots-Tag: noindex` on every response (`next.config.ts`), `app/robots.ts` disallows all, root metadata noindex. CI pinned to `ubuntu-24.04` (Playwright has no Chromium for ubuntu-latest = 26.04).
