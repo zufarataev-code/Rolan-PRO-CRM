@@ -106,6 +106,43 @@ jobs:
           REMOTE
           } | ssh -i "$HOME/.ssh/rolanpro_production" -o BatchMode=yes -o IdentitiesOnly=yes runcloud@143.110.136.211 'bash -s'
 
+      - name: Sync protected Meta Lead Ads configuration when supplied
+        env:
+          META_LEAD_ADS_APP_SECRET: ${{ secrets.META_LEAD_ADS_APP_SECRET }}
+          META_LEAD_ADS_VERIFY_TOKEN: ${{ secrets.META_LEAD_ADS_VERIFY_TOKEN }}
+          META_LEAD_ADS_PAGE_ACCESS_TOKEN: ${{ secrets.META_LEAD_ADS_PAGE_ACCESS_TOKEN }}
+          META_LEAD_ADS_PAGE_ID: ${{ secrets.META_LEAD_ADS_PAGE_ID }}
+          META_LEAD_ADS_FORM_IDS: ${{ secrets.META_LEAD_ADS_FORM_IDS }}
+        run: |
+          set -euo pipefail
+          names=(META_LEAD_ADS_APP_SECRET META_LEAD_ADS_VERIFY_TOKEN META_LEAD_ADS_PAGE_ACCESS_TOKEN META_LEAD_ADS_PAGE_ID META_LEAD_ADS_FORM_IDS)
+          supplied=0
+          for name in "${names[@]}"; do if [ -n "${!name:-}" ]; then supplied=$((supplied + 1)); fi; done
+          if [ "$supplied" -eq 0 ]; then echo 'Meta Lead Ads secrets not supplied; retaining server configuration.'; exit 0; fi
+          [ "$supplied" -eq 5 ]
+          [[ "$META_LEAD_ADS_APP_SECRET" =~ ^[a-f0-9]{32}$ ]]
+          [ "${#META_LEAD_ADS_VERIFY_TOKEN}" -ge 32 ]
+          [[ "$META_LEAD_ADS_PAGE_ID" =~ ^[0-9]+$ ]]
+          [[ "$META_LEAD_ADS_FORM_IDS" =~ ^[0-9]+(,[0-9]+)*$ ]]
+          {
+            printf 'set -euo pipefail\n'
+            for name in "${names[@]}"; do printf '%s=%q\n' "$name" "${!name}"; done
+            cat <<'REMOTE'
+          env_file=/home/runcloud/.rolanpro-crm.env.production.local
+          test -f "$env_file"
+          temporary_file="$(mktemp /home/runcloud/.rolanpro-crm.env.production.local.XXXXXX)"
+          trap 'rm -f "$temporary_file"' EXIT
+          awk '!/^META_LEAD_ADS_(APP_SECRET|VERIFY_TOKEN|PAGE_ACCESS_TOKEN|PAGE_ID|FORM_IDS)=/' "$env_file" > "$temporary_file"
+          for name in META_LEAD_ADS_APP_SECRET META_LEAD_ADS_VERIFY_TOKEN META_LEAD_ADS_PAGE_ACCESS_TOKEN META_LEAD_ADS_PAGE_ID META_LEAD_ADS_FORM_IDS; do printf '%s=%q\n' "$name" "${!name}" >> "$temporary_file"; done
+          chmod 600 "$temporary_file"
+          if cmp -s "$env_file" "$temporary_file"; then exit 0; fi
+          cp -p "$env_file" "$env_file.meta-backup-$(date -u +%Y%m%dT%H%M%SZ)"
+          chmod 600 "$env_file".meta-backup-*
+          mv "$temporary_file" "$env_file"
+          trap - EXIT
+          REMOTE
+          } | ssh -i "$HOME/.ssh/rolanpro_production" -o BatchMode=yes -o IdentitiesOnly=yes runcloud@143.110.136.211 'bash -s'
+
       - name: Advance production to verified main commit
         env:
           EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}

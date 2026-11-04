@@ -23412,6 +23412,7 @@ const LEAD_SOURCES = {
   website:  { label: 'Сайт',      icon: '🌐', cls: 'bg-blue-50 text-blue-700',   crmSource: 'direct' },
   facebook: { label: 'Facebook',  icon: '📘', cls: 'bg-indigo-50 text-indigo-700', crmSource: 'facebook' },
   facebook_messenger: { label: 'Messenger', icon: '💬', cls: 'bg-blue-50 text-blue-700', crmSource: 'facebook' },
+  meta_lead_ads: { label: 'Meta · Lead Ads', icon: '📘', cls: 'bg-indigo-50 text-indigo-700', crmSource: 'facebook' },
   callrail: { label: 'Звонок · CallRail', icon: '📞', cls: 'bg-emerald-50 text-emerald-700', crmSource: 'callrail' },
   'ai-chat':{ label: 'ИИ-чат',    icon: '🤖', cls: 'bg-purple-50 text-purple-700', crmSource: 'direct' },
 };
@@ -23427,7 +23428,7 @@ function canonicalMessengerLeadRows() {
   return canonicalLeads
     // Website leads arrive in PostgreSQL (/api/v1/integrations/website/leads) and
     // must be visible here next to Messenger leads.
-    .filter(lead => ['facebook_messenger', 'website', 'callrail'].includes(lead?.source) && CANONICAL_OPEN_LEAD_STATUSES.has(lead?.pipeline_status?.status_code))
+    .filter(lead => ['facebook_messenger', 'website', 'callrail', 'meta_lead_ads'].includes(lead?.source) && CANONICAL_OPEN_LEAD_STATUSES.has(lead?.pipeline_status?.status_code))
     .map(lead => {
       const consultation = canonicalConsultations
         .filter(item => item?.lead?.lead_id === lead.lead_id && !['cancelled', 'canceled', 'deleted'].includes(item?.status))

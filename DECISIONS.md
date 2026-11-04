@@ -2,6 +2,12 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-04 — Dedicated Meta instant form delivery into canonical leads
+
+- The user chose direct Meta → RolanPRO CRM delivery without Zapier and a separate app named **RolanPro Lead Sync**. Do not reuse PWI Ads MCP or the owner’s Messenger app for this connection.
+- Receive signed, Page/form-scoped `leadgen` notifications; retrieve answers with a server-only Page token. Reuse PostgreSQL Lead, ActivityLog and the acquisition ledger with stable provider identity, transaction deduplication and the existing New Leads inbox. No parallel lead store or new CRM shell.
+- Preserve original service answers and ad attribution. Form receipt alone creates no booking, qualification, SMS, conversion or advertising-consent grant. All campaigns stay paused while media is pending.
+
 ## 2026-11-01 — Project cashier treats the service as the film line and combines film + add-ons
 
 - The visible project cascade is **direction → film line / primary service → compatible film and add-ons on one screen**. A generic intermediate shelf such as «Плёнка / Подготовка / Доступ» is not part of the business model.
