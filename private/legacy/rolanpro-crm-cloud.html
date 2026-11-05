@@ -29339,7 +29339,7 @@ function renderQuickProjectEntry(o) {
   const historicalClosePanel = canCloseHistoricalProject ? `<section class="project-estimate-section">
     <div class="project-estimate-section-head"><div><h4>Проверка и закрытие</h4><div class="text-xs text-gray-500">Фиксирует выполнение, фактическую оплату, зарплату, себестоимость и прибыль. Если оплачено не всё, проект останется в ожидании оплаты.</div></div>${o.quickProjectImportedCompleted ? '<span class="status-badge bg-emerald-100 text-emerald-800">Перенесён</span>' : ''}</div>
     <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3">
-      <div><label>Оплачено клиентом, $</label><input id="quick-close-paid-amount" type="number" min="0" max="${Number(total || 0)}" step="0.01" value="${Number(o.paid || total || 0)}"></div>
+      <div><label>Оплачено клиентом, $</label><input id="quick-close-paid-amount" type="number" min="0" max="${Number(total || 0)}" step="0.01" value="${Number.isFinite(Number(o.paid)) ? Math.max(0, Number(o.paid)) : 0}"></div>
       <div><label>Дата оплаты</label><input id="quick-close-paid-date" type="date" value="${projectQuickDateValue(o.paidAt?.slice?.(0,10)) || quickRange.endDate || new Date().toISOString().slice(0,10)}"></div>
       <div><label>Способ оплаты</label><select id="quick-close-payment-method">${PAYMENT_METHODS.map(item => `<option value="${item.id}">${item.label}</option>`).join('')}</select></div>
       <div class="flex items-end"><button class="btn-primary w-full" onclick="closeQuickProjectAsCompleted('${o.id}')" ${completionIssues.length || o.quickProjectImportedCompleted ? 'disabled' : ''}>✓ Закрыть выполненный проект</button></div>

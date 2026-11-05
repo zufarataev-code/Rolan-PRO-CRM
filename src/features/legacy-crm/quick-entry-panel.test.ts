@@ -22,6 +22,8 @@ test('historical entry first creates one draft project, then opens the canonical
   assert.doesNotMatch(create, /problems\.push\('замерщик'\)/, 'an unknown historical surveyor is allowed');
   assert.match(create, /extraServices: \[\], extraExpenses: \[\]/, 'the header does not invent a first service');
   assert.match(create, /measurerId: f\.measurer \|\| null/);
+  assert.match(create, /actor\?\.role === 'owner' \? f\.manager : actor\?\.id/, 'a manager cannot create an inaccessible draft for another manager');
+  assert.match(create, /managerId,/);
   assert.match(create, /quickEntryDraft: true/);
   assert.match(create, /openQuickProjectEntry\(o\.id\)/, 'the existing project editor owns services, expenses and closing');
   assert.doesNotMatch(create, /quickEntryComplete\(/, 'creating the header must not close the project automatically');
@@ -60,6 +62,12 @@ test('a new historical draft defaults to the current office user instead of the 
   assert.equal(context.result.manager, 'creator');
 });
 
+test('manager creation UI is locked to the current manager', () => {
+  const renderer = fn(stages, 'renderQuickEntry');
+  assert.match(renderer, /managerChoices = owner \? managers : managers\.filter\(user => user\.id === currentUser\(\)\?\.id\)/);
+  assert.match(renderer, /Менеджер создаёт исторический проект только на себя/);
+});
+
 test('canonical editor supports many services with their own dates, crew, supplies and direct expenses', () => {
   const renderer = fn(html, 'renderQuickProjectEntry');
   assert.match(renderer, /Можно добавить несколько услуг/);
@@ -71,6 +79,7 @@ test('canonical editor supports many services with their own dates, crew, suppli
   assert.match(renderer, /\['owner', 'manager'\]\.includes\(quickRole\)/, 'owner and manager can fill dates, crew and supplies');
   assert.match(renderer, /canCloseHistoricalProject = quickRole === 'owner'/, 'only the owner confirms money and closes the import');
   assert.match(renderer, /canReassignHistoricalManager = quickRole === 'owner'/, 'only the owner can reassign the project manager');
+  assert.match(renderer, /Number\.isFinite\(Number\(o\.paid\)\) \? Math\.max\(0, Number\(o\.paid\)\) : 0/, 'an unpaid import must remain at zero instead of looking fully paid');
   assert.match(fn(html, 'closeQuickProjectAsCompleted'), /o\.status = full \? 'completed' : 'act_signed'/, 'partial payment leaves debt visible');
   assert.match(fn(html, 'closeQuickProjectAsCompleted'), /projectEstimateApprovalSnapshot\(o, recordedAt, true\)/);
 });

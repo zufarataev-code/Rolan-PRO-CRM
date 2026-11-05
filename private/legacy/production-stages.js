@@ -3541,12 +3541,14 @@ function quickEntryFindOrCreateClient(f) {
 function quickEntryCreateDraft() {
   if (!quickEntryCanUse()) return;
   const f = quickEntryReadForm();
+  const actor = currentUser();
+  const managerId = actor?.role === 'owner' ? f.manager : actor?.id;
   const date = projectQuickDateValue(f.date);
   const problems = [];
   if (!date) problems.push('дата проекта');
   if (!String(f.client || '').trim()) problems.push('имя клиента');
   if (!String(f.phone || '').trim() && !String(f.street || '').trim()) problems.push('телефон или адрес');
-  if (!f.manager) problems.push('менеджер');
+  if (!managerId) problems.push('менеджер');
   if (problems.length) { alert('Заполните: ' + problems.join(', ') + '.'); return; }
   const found = quickEntryFindOrCreateClient(f);
   if (!found) return;
@@ -3555,7 +3557,7 @@ function quickEntryCreateDraft() {
   const at = `${date}T12:00:00.000Z`;
   const num = 'R-' + date.slice(2).replace(/-/g, '') + '-' + String(projectNumberSequence()).padStart(3, '0');
   const o = {
-    id: 'o' + uid(), number: num, clientId: client.id, status: 'new', managerId: f.manager, measurerId: f.measurer || null, installerIds: [],
+    id: 'o' + uid(), number: num, clientId: client.id, status: 'new', managerId, measurerId: f.measurer || null, installerIds: [],
     createdAt: at, pricePerM2: db.settings.pricePerM2, complexity: 'standard', distanceKm: 0, marketing: 0, paid: 0,
     paymentTerms: 'deposit_before_work', paymentTermsConfirmedAt: at, paymentTermsConfirmedBy: state.currentUserId,
     measurements: { rooms: [] }, siteType: normalizeOrderSiteType(f.site) || 'RESIDENTIAL',
@@ -3572,7 +3574,7 @@ function quickEntryCreateDraft() {
   db.orders.push(o);
   save();
   const s = quickEntryState();
-  s.form = quickEntryDefaultForm({ date: f.date, manager: f.manager, measurer: f.measurer, method: f.method });
+  s.form = quickEntryDefaultForm({ date: f.date, manager: managerId, measurer: f.measurer, method: f.method });
   s.notice = `${o.number} · ${client.name} — черновик создан`;
   openQuickProjectEntry(o.id);
 }
@@ -3588,6 +3590,7 @@ function renderQuickEntry() {
   const owner = currentUser()?.role === 'owner';
   const months = []; for (let i = 0; i < 12; i++) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); months.push(quickEntryMonthKey(d)); }
   const managers = quickEntryManagers();
+  const managerChoices = owner ? managers : managers.filter(user => user.id === currentUser()?.id);
   const measurers = quickEntryMeasurers();
   const opt = (value, label, current) => `<option value="${academyEsc(value)}" ${String(value) === String(current) ? 'selected' : ''}>${academyEsc(label)}</option>`;
   const form = `<section class="qe-form" onkeydown="if(event.key==='Enter'&&event.target.tagName==='INPUT'){event.preventDefault();quickEntryCreateDraft();}" style="--qe-color:#2563eb;--qe-tint:#eff6ff">
@@ -3602,7 +3605,7 @@ function renderQuickEntry() {
       <label>Объект<select id="qe-site">${opt('RESIDENTIAL', 'Жилой', f.site)}${opt('COMMERCIAL', 'Коммерческий', f.site)}</select></label>
     </div>
     <div class="qe-grid qe-grid-c">
-      <label>Менеджер<select id="qe-manager">${managers.map(u => opt(u.id, `${u.name}${u.payConfig?.type === 'commission' ? ` · ${u.payConfig.commissionPct || 0} %` : u.payConfig?.type === 'salary' ? ' · оклад' : ''}`, f.manager)).join('')}</select></label>
+      <label>Менеджер<select id="qe-manager" ${owner?'':'disabled title="Менеджер создаёт исторический проект только на себя"'}>${managerChoices.map(u => opt(u.id, `${u.name}${u.payConfig?.type === 'commission' ? ` · ${u.payConfig.commissionPct || 0} %` : u.payConfig?.type === 'salary' ? ' · оклад' : ''}`, owner ? f.manager : currentUser()?.id)).join('')}</select></label>
       <label>Замерщик<select id="qe-measurer"><option value="">Выберите</option>${measurers.map(u => opt(u.id, `${u.name}${u.role === 'owner' ? ' · владелец' : ''}`, f.measurer)).join('')}</select></label>
       <label>Заметка<input id="qe-notes" value="${academyEsc(f.notes)}" placeholder="необязательно"></label>
       <button type="button" class="btn-primary qe-commit" onclick="quickEntryCreateDraft()">Создать черновик и заполнить услуги →</button>
