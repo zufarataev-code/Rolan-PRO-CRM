@@ -9998,7 +9998,7 @@ function totalAnnualBurn() { return totalMonthlyBurn() * 12; }
 
 // Net profit for given period (start/end dates)
 function netProfitForPeriod(startDate, endDate) {
-  const orders = db.orders.filter(o => {
+  const orders = financialOrders().filter(o => {
     const d = o.paidAt || o.installationDoneAt;
     if (!d) return false;
     const dt = new Date(d);
@@ -10014,8 +10014,8 @@ function netProfitForPeriod(startDate, endDate) {
 function breakEvenAnalysis() {
   const burn = companyFixedMonthlyBurn();
   const usable = order => orderActualAreaSqft(order) > 0 && orderRevenue(order) > 0;
-  const completed = db.orders.filter(order => order.installationDoneAt && usable(order));
-  const planned = db.orders.filter(usable);
+  const completed = financialOrders().filter(order => order.installationDoneAt && usable(order));
+  const planned = financialOrders().filter(usable);
   const sample = completed.length ? completed : planned;
   const basis = completed.length ? 'completed' : (planned.length ? 'planned' : 'none');
   if (!sample.length) return { burn, avgMarginPerSqft: 0, avgOrderMargin: 0, sqftToBreakEven: 0, ordersToBreakEven: 0, sampleCount: 0, basis };
@@ -17302,6 +17302,13 @@ function orderExtraServicesCost(o) {
 function orderRevenue(o) {
   return orderFilmRevenue(o) + orderExtraServicesRevenue(o);
 }
+/** Historical imports become company money only after the owner closes them. */
+function orderIncludedInFinancialReports(o) {
+  return !o?.quickEntryDraft || o?.quickProjectImportedCompleted === true;
+}
+function financialOrders(orders = db.orders || []) {
+  return (orders || []).filter(orderIncludedInFinancialReports);
+}
 function orderInstallerPayout(o) {
   return orderInstallerPayoutBreakdown(o).total;
 }
@@ -17369,7 +17376,7 @@ function projectMonthRevenueMap() {
   if (projectMonthRevenueCache) return projectMonthRevenueCache;
   const totals = {};
   const ids = new Set();
-  (db.orders || []).forEach(order => {
+  (db.orders || []).filter(order => !order?.quickEntryDraft || order?.quickProjectImportedCompleted === true).forEach(order => {
     if (!projectProfitIsActual(order)) return;
     ids.add(order.id);
     const revenue = orderRevenue(order);
@@ -17464,6 +17471,7 @@ function projectProfitDate(o) {
 function projectProfitMonthOrders(o) {
   const date = projectProfitDate(o);
   const orders = (db.orders || []).filter(order => {
+    if (order?.quickEntryDraft && order?.quickProjectImportedCompleted !== true) return false;
     if (!projectProfitIsActual(order) || orderRevenue(order) <= 0) return false;
     const candidate = projectProfitDate(order);
     return candidate.getFullYear() === date.getFullYear() && candidate.getMonth() === date.getMonth();
@@ -17637,7 +17645,7 @@ function deleteOrderPayment(orderId, paymentId) {
  */
 /** What the client still owes: price minus every recorded payment (or the legacy `o.paid`). */
 function orderAmountDue(o) {
-  if (!o) return 0;
+  if (!o || (o.quickEntryDraft && o.quickProjectImportedCompleted !== true)) return 0;
   const paid = Math.max(orderPaidTotal(o), Number(o.paid) || 0);
   return Math.max(0, Math.round((orderRevenue(o) - paid) * 100) / 100);
 }
@@ -17807,7 +17815,7 @@ function kpOnlinePaymentMethod(method) {
  */
 function renderPaymentsDue() {
   const canRecord = currentUser()?.role === 'owner';
-  const orders = db.orders
+  const orders = financialOrders()
     .filter(o => !['cancelled'].includes(o.status))
     .map(o => ({ o, revenue: orderRevenue(o), paid: orderPaidTotal(o) }))
     .filter(x => x.revenue > 0 && x.paid < x.revenue - 0.01)
@@ -17867,6 +17875,7 @@ function renderPaymentsDue() {
 }
 
 function orderDebt(o) {
+  if (o?.quickEntryDraft && o?.quickProjectImportedCompleted !== true) return 0;
   const payments = Array.isArray(o?.payments) ? o.payments : [];
   if (payments.length) {
     return Math.max(0, orderRevenue(o) - orderPaidTotal(o));
@@ -20864,7 +20873,7 @@ function renderOwnerPanel() {
   const u = currentUser();
   if (u.role !== 'owner') return '';
   // Full company P&L
-  const allOrders = db.orders;
+  const allOrders = financialOrders();
   const paidOrders = allOrders.filter(o => o.paidAt || (o.paid && o.paid > 0));
   const totalRevenue = allOrders.reduce((s,o) => s + orderRevenue(o), 0);
   const totalPaid = allOrders.reduce((s,o) => s + (o.paid || 0), 0);
@@ -21340,7 +21349,7 @@ function pulsePeriodRange(period, now = new Date()) {
 // Presentation aggregates only: monetary values reuse the existing orderRevenue
 // calculation. This is the value of paid projects, not a bank cash-flow report.
 function pulseBusinessSnapshot(user, period, now = new Date()) {
-  const orders = visibleOrdersForUser(user);
+  const orders = visibleOrdersForUser(user).filter(order => !order?.quickEntryDraft || order?.quickProjectImportedCompleted === true);
   const { start, end } = pulsePeriodRange(period, now);
   const within = value => {
     if (!value) return false;
@@ -22192,7 +22201,7 @@ function renderClients() {
 
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
     ${filtered.length === 0 ? `<div class="empty-state col-span-full"><div class="icon">👥</div><div>Не найдено</div></div>` : filtered.map(c => {
-      const clientOrders = orders.filter(o => o.clientId === c.id);
+      const clientOrders = financialOrders(orders.filter(o => o.clientId === c.id));
       const refBy = c.referredBy ? getClient(c.referredBy) : null;
       const accountType = clientAccountType(c);
       const relationship = clientRelationshipType(c);
@@ -33482,7 +33491,7 @@ function renderOrderClientSelection(c) {
   const selectedAddress = clientAddressById(c, state._newOrderAddressId);
   const missing = existingClientOrderMissingFields(c, selectedAddress);
   const warnings = existingClientOrderWarnings(c, selectedAddress);
-  const orders = db.orders.filter(o => o.clientId === c.id);
+  const orders = financialOrders(db.orders).filter(o => o.clientId === c.id);
   const debt = orders.reduce((s,o)=>s+orderDebt(o),0);
   // Owner, 2026-10-24 (phone): «сложно понять что откуда». One compact client line, the
   // card data folded, and one clear «Адрес объекта» — no repeated tiles and no format lecture.
@@ -38305,7 +38314,7 @@ function renderAccountingOverloadedBackup() {
   const filteredRows = financeFilteredRows(periodRows);
   const income = periodRows.filter(r => r.type === 'income').reduce((s,r) => s + r.amount, 0);
   const expense = periodRows.filter(r => r.type === 'expense').reduce((s,r) => s + r.amount, 0);
-  const completedProjectProfit = (db.orders || []).filter(order => {
+  const completedProjectProfit = financialOrders().filter(order => {
     const completedAt = order.installationDoneAt || order.actSignedAt || order.paidAt;
     return completedAt && (range.mode === 'all' || financeRowInPeriod({ date: completedAt }, range));
   }).reduce((sum, order) => sum + orderMargin(order), 0);
@@ -38382,7 +38391,7 @@ function renderAccounting() {
   }).reduce((sum, order) => sum + orderMargin(order), 0);
   const operatingExpense = periodRows.filter(row => row.type === 'expense' && (row.scope || 'business') === 'business' && !['inventory_purchase','project_expense','payroll','owner_draw'].includes(row.category)).reduce((sum,row) => sum + row.amount, 0);
   const operatingProfit = completedProjectProfit - operatingExpense;
-  const debt = (db.orders || []).reduce((sum,order) => sum + orderDebt(order), 0);
+  const debt = financialOrders().reduce((sum,order) => sum + orderDebt(order), 0);
   const payrollOwed = financePayrollOwed();
   const accounts = financeData().accounts.filter(account => account.active !== false && account.id !== 'fin_unallocated');
   const accountTotal = accounts.reduce((sum,account) => sum + financeAccountBalance(account.id), 0);
@@ -38438,7 +38447,7 @@ function renderFinanceRows(rows) {
 }
 
 function renderFinanceProjects(range) {
-  const orders = (db.orders || []).filter(o => {
+  const orders = financialOrders().filter(o => {
     const d = financeDate(o.paidAt || o.installationDoneAt || o.createdAt);
     return range.mode === 'all' || (d >= range.start && d <= range.end);
   }).sort((a,b) => orderRevenue(b)-orderRevenue(a));
@@ -38457,7 +38466,7 @@ function renderReports() {
   const isOwner = me.role === 'owner';
   // Managers only see what they personally handled (their own orders) — full company
   // financials (opex, marketing spend, cash flow) stay owner-only.
-  const orders = isOwner ? db.orders : db.orders.filter(o => o.managerId === me.id);
+  const orders = financialOrders(isOwner ? db.orders : db.orders.filter(o => o.managerId === me.id));
   const myClientIds = new Set(orders.map(o => o.clientId));
   const myClients = isOwner ? db.clients : db.clients.filter(c => myClientIds.has(c.id));
 
@@ -39031,7 +39040,7 @@ function calendarAreaStats(periodStart, periodEnd, dayObj = null) {
   const ids = new Set(calItemsInRange(start, end).map(it => it.o.id));
   if (!ids.size) return [];
   const groups = {};
-  db.orders.filter(o => ids.has(o.id)).forEach(o => {
+  financialOrders().filter(o => ids.has(o.id)).forEach(o => {
     const c = calendarClientForOrder(o);
     const key = orderAreaBucket(o, c);
     if (!groups[key]) groups[key] = { key, orders: 0, revenue: 0, margin: 0, debt: 0 };
@@ -39387,10 +39396,11 @@ async function callClaude(messages, opts) {
 
 // Build a compact summary of CRM state for AI context
 function aiCrmContext() {
-  const orders = db.orders.length;
+  const reportingOrders = financialOrders();
+  const orders = reportingOrders.length;
   const clients = db.clients.length;
-  const active = db.orders.filter(o => !['completed','review_received'].includes(o.status)).length;
-  const revenue = db.orders.reduce((s,o) => s + (o.paid || 0), 0);
+  const active = reportingOrders.filter(o => !['completed','review_received'].includes(o.status)).length;
+  const revenue = reportingOrders.reduce((s,o) => s + (o.paid || 0), 0);
   const films = db.settings.catalog.length;
   return `CRM state: ${orders} orders, ${clients} clients, ${active} active, $${revenue.toFixed(0)} paid revenue. ${films} films in catalog. Today: ${new Date().toISOString().slice(0,10)}.`;
 }
@@ -43035,7 +43045,8 @@ function buildCashDashboard() {
   // AR aging buckets
   const buckets = { '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
   const debtorsByBucket = { '0-30': [], '31-60': [], '61-90': [], '90+': [] };
-  db.orders.forEach(o => {
+  const reportingOrders = financialOrders();
+  reportingOrders.forEach(o => {
     const debt = orderDebt(o);
     if (debt <= 0) return;
     const refDate = o.proposalAcceptedAt || o.installationDoneAt || o.installationAt || o.createdAt;
@@ -43049,21 +43060,21 @@ function buildCashDashboard() {
     debtorsByBucket[bucket].push({ order: o, debt, ageDays, client: getClient(o.clientId) });
   });
   // Pending installer payouts (jobs done but not yet paid out)
-  const pendingPayouts = db.orders
+  const pendingPayouts = reportingOrders
     .filter(o => o.installationDoneAt && !o.installerPaidOut)
     .reduce((s,o) => s + orderInstallerPayout(o), 0);
   // Predicted next 30 days inflow: deposits scheduled + balance due on completed
   const next30 = new Date(today.getTime() + 30 * dayMs);
-  const predictedIn = db.orders
+  const predictedIn = reportingOrders
     .filter(o => {
       const d = o.installationAt ? new Date(o.installationAt) : null;
       return d && d >= today && d <= next30 && !o.depositReceived;
     })
     .reduce((s,o) => s + (companyDepositFor(orderRevenue(o))), 0);
   // Total cash in (paid)
-  const totalIn = db.orders.reduce((s,o) => s + (o.paid || 0), 0);
+  const totalIn = reportingOrders.reduce((s,o) => s + (o.paid || 0), 0);
   // Total cash out (PSS spent on completed)
-  const totalOut = db.orders.filter(o => o.paidAt || (o.paid && o.paid > 0))
+  const totalOut = reportingOrders.filter(o => o.paidAt || (o.paid && o.paid > 0))
     .reduce((s,o) => s + orderPSS(o).total, 0);
   return { buckets, debtorsByBucket, pendingPayouts, predictedIn, totalIn, totalOut, currentCash: totalIn - totalOut };
 }
@@ -43071,7 +43082,7 @@ function buildCashDashboard() {
 // ---------- PRODUCT P&L ----------
 function buildProductPnL() {
   const products = {};
-  db.orders.forEach(o => {
+  financialOrders().forEach(o => {
     (o.measurements?.rooms || []).forEach(r => (r.windows || []).forEach(w => {
       const cat = windowCatalog(w);
       const id = cat?.id || 'unknown';
@@ -43100,7 +43111,7 @@ function buildMarketingRoi() {
     sources[src].leads++;
     sources[src].customers.add(c.id);
   });
-  db.orders.forEach(o => {
+  financialOrders().forEach(o => {
     const c = getClient(o.clientId);
     const src = c?.source || 'direct';
     if (!sources[src]) sources[src] = { source: src, leads: 0, won: 0, revenue: 0, marketingSpend: 0, customers: new Set() };
@@ -43122,7 +43133,7 @@ function buildLeadIntentStats(referenceDate = new Date()) {
   const year = referenceDate.getFullYear();
   const month = referenceDate.getMonth();
   const groups = {};
-  db.orders.forEach(order => {
+  financialOrders().forEach(order => {
     const createdAt = new Date(order.createdAt || 0);
     if (!Number.isFinite(createdAt.getTime()) || createdAt.getFullYear() !== year || createdAt.getMonth() !== month) return;
     const serviceId = orderLeadIntentServiceId(order) || 'unknown';

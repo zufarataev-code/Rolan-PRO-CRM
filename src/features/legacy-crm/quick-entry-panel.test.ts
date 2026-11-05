@@ -84,6 +84,28 @@ test('canonical editor supports many services with their own dates, crew, suppli
   assert.match(fn(html, 'closeQuickProjectAsCompleted'), /projectEstimateApprovalSnapshot\(o, recordedAt, true\)/);
 });
 
+test('unfinished historical imports stay out of every financial rollup until owner closure', () => {
+  const draft = { id: 'draft', quickEntryDraft: true, quickProjectImportedCompleted: false, paid: 0 };
+  const closed = { id: 'closed', quickEntryDraft: false, quickProjectImportedCompleted: true, paid: 25 };
+  const context: any = vm.createContext({
+    db: { orders: [draft, closed] },
+    orderPaidTotal: (order: any) => Number(order.paid) || 0,
+    orderRevenue: () => 100,
+  });
+  vm.runInContext(`${fn(html, 'orderIncludedInFinancialReports')}; ${fn(html, 'financialOrders')}; ${fn(html, 'orderDebt')}; result = { ids: financialOrders().map(o => o.id), draftDebt: orderDebt(db.orders[0]), closedDebt: orderDebt(db.orders[1]) };`, context);
+  assert.deepEqual(Array.from(context.result.ids), ['closed']);
+  assert.equal(context.result.draftDebt, 0);
+  assert.equal(context.result.closedDebt, 75);
+
+  assert.match(fn(html, 'renderOwnerPanel'), /const allOrders = financialOrders\(\)/);
+  assert.match(fn(html, 'renderAccounting'), /financialOrders\(\)/);
+  assert.match(fn(html, 'renderFinanceProjects'), /financialOrders\(\)/);
+  assert.match(fn(html, 'renderReports'), /financialOrders\(/);
+  assert.match(fn(html, 'buildCashDashboard'), /const reportingOrders = financialOrders\(\)/);
+  assert.match(fn(html, 'buildProductPnL'), /financialOrders\(\)\.forEach/);
+  assert.match(fn(html, 'buildMarketingRoi'), /financialOrders\(\)\.forEach/);
+});
+
 test('a manager cannot reassign a historical project and lose access to it', () => {
   const order = { id: 'o', quickProjectImportedCompleted: false, managerId: 'manager-a' };
   let saved = false;
