@@ -552,7 +552,17 @@ test('server: an owner can close only a persisted historical draft with a concre
 
   const managerFlagBypass = structuredClone(current);
   Object.assign(managerFlagBypass.orders[0], { quickEntryDraft: false, quickProjectImportedCompleted: true });
-  assert.equal(prepareServiceSolutions(current, managerFlagBypass, false), 'Завершить перенос исторического проекта может только владелец.');
+  assert.equal(prepareServiceSolutions(current, managerFlagBypass, false), 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.');
+
+  const closedCurrent = structuredClone(next);
+  const reopenClosed = structuredClone(closedCurrent);
+  Object.assign(reopenClosed.orders[0], { status: 'new', quickEntryDraft: true, quickProjectImportedCompleted: false });
+  assert.equal(prepareServiceSolutions(closedCurrent, reopenClosed, false), 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.');
+
+  const ordinaryCurrent: Row = { settings, users, orders: [{ id: 'ordinary', status: 'new', measurements: { rooms: [] }, extraServices: [] }] };
+  const forgeImport = structuredClone(ordinaryCurrent);
+  Object.assign(forgeImport.orders[0], { quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false });
+  assert.equal(prepareServiceSolutions(ordinaryCurrent, forgeImport, false), 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.');
 });
 
 

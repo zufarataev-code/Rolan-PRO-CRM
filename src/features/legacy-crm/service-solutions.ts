@@ -302,12 +302,19 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       && CLOSED_PROJECT_STATUSES.includes(String(order.status));
     const historicalImportDraft = oldOrder.id !== undefined
       && oldOrder.quickEntry === true && oldOrder.quickEntryDraft === true && oldOrder.quickProjectImportedCompleted !== true;
+    const historicalMarkersChanged = oldOrder.id !== undefined && (
+      order.quickEntry !== oldOrder.quickEntry
+      || order.quickEntryDraft !== oldOrder.quickEntryDraft
+      || order.quickProjectImportedCompleted !== oldOrder.quickProjectImportedCompleted
+    );
+    // Once an order exists, only the dedicated owner close transition may
+    // change its historical-import markers. Otherwise a crafted workspace
+    // save could turn a closed import back into an unfinished draft (or turn
+    // an ordinary project into an import) and hide it from operational views.
+    if (historicalMarkersChanged && !historicalImportClosing) {
+      return 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.';
+    }
     if (historicalImportDraft && !historicalImportClosing) {
-      if (order.quickEntry !== oldOrder.quickEntry
-        || order.quickEntryDraft !== oldOrder.quickEntryDraft
-        || order.quickProjectImportedCompleted !== oldOrder.quickProjectImportedCompleted) {
-        return 'Завершить перенос исторического проекта может только владелец.';
-      }
       if (liveFunnelFields.some(field => stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
         return 'Сначала завершите перенос исторического проекта. Черновик не участвует в рабочей воронке.';
       }

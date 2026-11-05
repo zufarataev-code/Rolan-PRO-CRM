@@ -24808,11 +24808,14 @@ function orderMeasuredSqft(o) {
   return measureAllWindows(o).reduce((sum, { win }) => sum + (windowActualAreaSqft(win) || 0), 0);
 }
 function measurerTaskOpen(o) { return o.status === 'measurement_scheduled' && !o.measurementDoneAt; }
+function measurerVisibleOrders(userId) {
+  return db.orders.filter(o => o.measurerId === userId && !orderIsHistoricalDraft(o));
+}
 function renderMeasurerDashboard() {
   const u = currentUser();
   const now = new Date();
   const todayKey = localDateKey();
-  const assigned = db.orders.filter(o => o.measurerId === u.id);
+  const assigned = measurerVisibleOrders(u.id);
   const open = assigned.filter(measurerTaskOpen).sort((a,b) => (a.measurementAt||'9999').localeCompare(b.measurementAt||'9999'));
   const todayTasks = open.filter(o => o.measurementAt && localDateKey(o.measurementAt) === todayKey);
   const nextTask = open.find(o => o.measurementAt && localDateKey(o.measurementAt) >= todayKey) || open[0] || null;
@@ -24857,7 +24860,7 @@ function renderMeasurerDashboard() {
 }
 function renderMeasurerTasks() {
   const u = currentUser();
-  const mine = db.orders.filter(o => o.measurerId === u.id);
+  const mine = measurerVisibleOrders(u.id);
   // Open measurements first, by date; done ones after, newest first.
   const open = mine.filter(measurerTaskOpen).sort((a,b) => (a.measurementAt||'9999').localeCompare(b.measurementAt||'9999'));
   const done = mine.filter(o => !measurerTaskOpen(o)).sort((a,b) => String(b.measurementDoneAt || b.createdAt || '').localeCompare(String(a.measurementDoneAt || a.createdAt || '')));
@@ -24866,8 +24869,8 @@ function renderMeasurerTasks() {
 }
 function buildMeasurerRouteBar(u) {
   const today = localDateKey();
-  const todays = db.orders
-    .filter(o => o.measurerId === u.id && o.measurementAt && localDateKey(o.measurementAt) === today && !o.measurementDoneAt)
+  const todays = measurerVisibleOrders(u.id)
+    .filter(o => o.measurementAt && localDateKey(o.measurementAt) === today && !o.measurementDoneAt)
     .sort((a,b) => a.measurementAt.localeCompare(b.measurementAt));
   const addrs = todays.map(o => orderAddress(o, getClient(o.clientId))).filter(Boolean);
   if (!addrs.length) return '';

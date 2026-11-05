@@ -143,6 +143,20 @@ test('unfinished historical imports stay out of installer work and pay views', (
   }
 });
 
+test('unfinished historical imports stay out of surveyor work and route views', () => {
+  const draft = { id: 'draft', measurerId: 'measurer', quickEntryDraft: true, quickProjectImportedCompleted: false };
+  const closed = { id: 'closed', measurerId: 'measurer', quickEntryDraft: false, quickProjectImportedCompleted: true };
+  const context: any = vm.createContext({
+    db: { orders: [draft, closed] },
+    orderIsHistoricalDraft: (order: any) => order.quickEntryDraft === true && order.quickProjectImportedCompleted !== true,
+  });
+  vm.runInContext(`${fn(html, 'measurerVisibleOrders')}; result = measurerVisibleOrders('measurer').map(order => order.id);`, context);
+  assert.deepEqual(Array.from(context.result), ['closed']);
+  assert.match(fn(html, 'renderMeasurerDashboard'), /measurerVisibleOrders\(u\.id\)/);
+  assert.match(fn(html, 'renderMeasurerTasks'), /measurerVisibleOrders\(u\.id\)/);
+  assert.match(fn(html, 'buildMeasurerRouteBar'), /measurerVisibleOrders\(u\.id\)/);
+});
+
 test('unfinished historical imports cannot leak into the live project funnel', () => {
   assert.match(fn(html, 'renderOrders'), /visibleOrdersForUser\(u\)[\s\S]*\.filter\(order => !orderIsHistoricalDraft\(order\)\)/);
   assert.match(fn(html, 'kanbanMoveOrder'), /if \(orderIsHistoricalDraft\(o\)\)[\s\S]*openQuickProjectEntry\(o\.id\)[\s\S]*return false/);

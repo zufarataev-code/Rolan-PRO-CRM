@@ -24,7 +24,7 @@ test("surveyor today view uses assigned work and resumes the canonical measureme
   );
 
   assert.match(dashboard, /field-day-hero/);
-  assert.match(dashboard, /o\.measurerId === u\.id/);
+  assert.match(dashboard, /const assigned = measurerVisibleOrders\(u\.id\)/);
   // One button: accept, start or continue — the same step as on the card.
   assert.match(dashboard, /const nextAction = nextTask \? measurerOrderPrimaryAction\(nextTask\) : null;/);
   assert.match(dashboard, /onclick="\$\{nextAction\.onclick\}"/);
