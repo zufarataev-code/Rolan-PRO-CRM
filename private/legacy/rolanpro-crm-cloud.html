@@ -26337,14 +26337,18 @@ function projectParentOfferingIds(o) {
   return [...new Set(ids.filter(Boolean))];
 }
 
-function projectIncludedQty(o, parentId, child) {
+function projectIncludedQty(o, parentId, child, parentLineId = '') {
   const unit = serviceOfferingUnit(child);
   const windows = projectWindowsForService(o, child.id, parentId);
-  const parentLine = (o?.extraServices || []).find(line => line.offeringId === parentId && !line.includedBy);
+  const parentLine = parentLineId
+    ? (o?.extraServices || []).find(line => line.id === parentLineId && line.offeringId === parentId && !line.includedBy)
+    : (o?.extraServices || []).find(line => line.offeringId === parentId && !line.includedBy);
   // A historical import has the completed service total but no panes. Keep the
   // packaged component explicit and editable instead of silently dropping its
   // material and labor from the project's actual economics.
-  const historicalQty = parentLine?.quickProjectLine ? Math.max(0, Number(parentLine.qty) || 0) : 0;
+  const historicalQty = parentLine && (o?.quickEntry || parentLine.quickProjectLine)
+    ? Math.max(0, Number(parentLine.qty) || 0)
+    : 0;
   if (unit === 'lft') return windows.length ? Math.round(windows.reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100 : historicalQty;
   if (unit === 'piece') return windows.length ? windows.reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0) : Number(parentLine?.qty) || 1;
   if (unit === 'zone') return windows.length ? windows.reduce((sum, win) => sum + smartWindowZoneCount(win), 0) : Number(parentLine?.qty) || 1;
@@ -26368,8 +26372,15 @@ function syncProjectIncludedServices(o) {
   }
   const parents = projectParentOfferingIds(o);
   const lines = Array.isArray(o.extraServices) ? o.extraServices : [];
-  const removed = lines.filter(line => line.includedBy && !parents.includes(line.includedBy));
-  const kept = lines.filter(line => !line.includedBy || parents.includes(line.includedBy));
+  const historicalParents = (o?.quickEntry
+    ? (o.extraServices || []).filter(line => !line.includedBy && (line.quickProjectLine === true || line.type === 'offering'))
+    : projectQuickLines(o)).filter(line => line.offeringId && !line.includedBy);
+  const historicalParentLineIds = new Set(historicalParents.map(line => line.id));
+  const includedParentExists = line => line.quickIncludedByLineId
+    ? historicalParentLineIds.has(line.quickIncludedByLineId)
+    : parents.includes(line.includedBy);
+  const removed = lines.filter(line => line.includedBy && !includedParentExists(line));
+  const kept = lines.filter(line => !line.includedBy || includedParentExists(line));
   if (kept.length !== lines.length) changed = true;
   o.extraServices = kept;
   if (removed.length) {
@@ -26386,16 +26397,25 @@ function syncProjectIncludedServices(o) {
     }
   }
   parents.forEach(parentId => {
-    // A component follows the direction its parent is sold under (silicone inside
-    // smart film is smart work), when the component may be offered there.
-    const parentDirection = projectOfferingServiceType(o, parentId);
-    serviceOfferingIncludes(serviceOffering(parentId)).forEach(child => {
-      if (o.extraServices.some(line => line.includedBy === parentId && line.offeringId === child.id)) return;
-      const line = projectOfferingLine(child, projectIncludedQty(o, parentId, child), parentDirection);
+    const repeatedHistoricalParents = historicalParents.filter(line => line.offeringId === parentId);
+    const parentRows = repeatedHistoricalParents.length ? repeatedHistoricalParents : [null];
+    parentRows.forEach((historicalParent, parentIndex) => serviceOfferingIncludes(serviceOffering(parentId)).forEach(child => {
+      let existing = o.extraServices.find(line => line.includedBy === parentId && line.offeringId === child.id
+        && (historicalParent ? line.quickIncludedByLineId === historicalParent.id : !line.quickIncludedByLineId));
+      // Upgrade the one unkeyed component written by an older CRM. With
+      // repeated parents only the first occurrence may claim it.
+      if (!existing && historicalParent && parentIndex === 0) {
+        existing = o.extraServices.find(line => line.includedBy === parentId && line.offeringId === child.id && !line.quickIncludedByLineId);
+        if (existing) { existing.quickIncludedByLineId = historicalParent.id; changed = true; }
+      }
+      if (existing) return;
+      // A component follows the exact historical parent row: repeated services
+      // may have different quantities, dates and crews.
+      const parentDirection = historicalParent?.serviceType || projectOfferingServiceType(o, parentId);
+      const line = projectOfferingLine(child, projectIncludedQty(o, parentId, child, historicalParent?.id || ''), parentDirection);
       line.includedBy = parentId;
       line.unitPrice = 0;
       line.price = 0;
-      const historicalParent = (o.extraServices || []).find(item => item.quickProjectLine && !item.includedBy && item.offeringId === parentId);
       if (historicalParent) {
         line.quickIncludedByLineId = historicalParent.id;
         line.startDate = projectQuickDateValue(historicalParent.startDate);
@@ -26408,7 +26428,7 @@ function syncProjectIncludedServices(o) {
       const direction = line.serviceType;
       if (direction && !(o.serviceTypes || []).includes(direction)) o.serviceTypes = [...(o.serviceTypes || [o.serviceType].filter(Boolean)), direction];
       changed = true;
-    });
+    }));
   });
   const allWindows = (o.measurements?.rooms || []).flatMap(room => room.windows || []);
   o.extraServices.forEach(line => {
@@ -26416,7 +26436,7 @@ function syncProjectIncludedServices(o) {
     let qty = null;
     if (line.includedBy) {
       const child = serviceOffering(line.offeringId) || { id: line.offeringId, unit: line.unit };
-      qty = projectIncludedQty(o, line.includedBy, child);
+      qty = projectIncludedQty(o, line.includedBy, child, line.quickIncludedByLineId || '');
     } else if (line.unit === 'lft' && allWindows.length) {
       qty = Math.round(projectWindowsForService(o, line.offeringId).reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100;
     } else if (line.unit === 'lft' && !allWindows.length && orderNeedsMeasurements(o)) {
@@ -26427,8 +26447,12 @@ function syncProjectIncludedServices(o) {
       qty = projectWindowsForService(o, line.offeringId).reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0);
     }
     if (qty === null) return;
-    const historicalParent = line.includedBy ? (o.extraServices || []).find(item => item.quickProjectLine && !item.includedBy && item.offeringId === line.includedBy) : null;
+    const matchingHistoricalParents = line.includedBy ? historicalParents.filter(item => item.offeringId === line.includedBy) : [];
+    const historicalParent = line.quickIncludedByLineId
+      ? matchingHistoricalParents.find(item => item.id === line.quickIncludedByLineId)
+      : matchingHistoricalParents.length === 1 ? matchingHistoricalParents[0] : null;
     if (historicalParent) {
+      if (!line.quickIncludedByLineId) changed = true;
       line.quickIncludedByLineId = historicalParent.id;
       line.startDate = projectQuickDateValue(historicalParent.startDate);
       line.endDate = projectQuickDateValue(historicalParent.endDate);

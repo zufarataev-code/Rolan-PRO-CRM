@@ -314,7 +314,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       for (const parent of historicalServiceRows.filter(line => typeof line.offeringId === 'string')) {
         const offering = offerings.find(item => item.id === parent.offeringId);
         for (const childId of Array.isArray(offering?.includes) ? offering.includes : []) {
-          if (!extras.some(line => line.offeringId === childId && line.includedBy === parent.offeringId)) {
+          if (!extras.some(line => line.offeringId === childId && line.includedBy === parent.offeringId && line.quickIncludedByLineId === parent.id)) {
             return 'Пакетная услуга исторического проекта должна содержать все включённые работы.';
           }
         }
@@ -341,10 +341,15 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows)).map(win => win.offeringId),
       ...extras.filter(line => line.offeringId && !line.includedBy).map(line => line.offeringId),
     ].filter((id): id is string => typeof id === 'string' && !!id));
+    const parentLinesById = new Map(extras.filter(line => line.offeringId && !line.includedBy && typeof line.id === 'string').map(line => [line.id, line]));
     // An included component cannot be removed or repointed independently while
     // its parent service remains in the project. Restore it from the saved
     // record; removing the parent still removes the component normally.
-    for (const oldLine of rows(oldOrder.extraServices).filter(line => typeof line.includedBy === 'string' && parentIds.has(line.includedBy))) {
+    for (const oldLine of rows(oldOrder.extraServices).filter(line => {
+      if (typeof line.includedBy !== 'string') return false;
+      if (typeof line.quickIncludedByLineId !== 'string') return parentIds.has(line.includedBy);
+      return parentLinesById.get(line.quickIncludedByLineId)?.offeringId === line.includedBy;
+    })) {
       let submitted = extras.find(line => line.id === oldLine.id);
       if (!submitted) {
         submitted = structuredClone(oldLine);
@@ -356,6 +361,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       submitted.type = oldLine.type;
       submitted.unit = oldLine.unit;
       submitted.unitLabel = oldLine.unitLabel;
+      if (typeof oldLine.quickIncludedByLineId === 'string') submitted.quickIncludedByLineId = oldLine.quickIncludedByLineId;
       submitted.unitPrice = 0;
       submitted.price = 0;
     }
@@ -367,7 +373,10 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       if (extras.includes(item) && item.includedBy !== undefined) {
         const parent = offerings.find(value => value.id === item.includedBy);
         const wasIncluded = !!old && old.includedBy === item.includedBy && old.offeringId === item.offeringId;
-        included = typeof item.includedBy === 'string' && parentIds.has(item.includedBy) && !!item.offeringId
+        const includedParentExists = typeof item.quickIncludedByLineId === 'string'
+          ? parentLinesById.get(item.quickIncludedByLineId)?.offeringId === item.includedBy
+          : parentIds.has(item.includedBy);
+        included = typeof item.includedBy === 'string' && includedParentExists && !!item.offeringId
           && (wasIncluded || (Array.isArray(parent?.includes) && parent.includes.includes(item.offeringId)));
         if (!included) delete item.includedBy;
       }

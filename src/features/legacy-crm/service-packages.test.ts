@@ -111,6 +111,28 @@ test('a historical quick service materializes its packaged work with the same ac
   assert.deepEqual(JSON.parse(JSON.stringify([component.qty, component.endDate, component.installerIds])), [240, '2026-01-15', ['i2']]);
 });
 
+test('repeated historical package services keep separate components, dates and crews', () => {
+  const { context, db, add } = load();
+  const silicone = add({ name: 'Силикон', unit: 'lft', pricePerSqft: 3.5, installerRatePerSqft: 1, materialCostPerUnit: 0.4 });
+  const a1 = add({ name: 'A1 8 mil', unit: 'sqft', pricePerSqft: 14, includes: [silicone.id] });
+  const first: Row = { id: 'quick-a1-first', quickProjectLine: true, serviceType: 'protective_film', offeringId: a1.id, qty: 120, unit: 'sqft', startDate: '2026-01-10', endDate: '2026-01-12', installerIds: ['i1'] };
+  const second: Row = { id: 'quick-a1-second', quickProjectLine: true, serviceType: 'protective_film', offeringId: a1.id, qty: 80, unit: 'sqft', startDate: '2026-02-05', endDate: '2026-02-06', installerIds: ['i2'] };
+  const order: Row = { id: 'o', quickEntry: true, serviceType: 'protective_film', serviceTypes: ['protective_film'], extraServices: [first, second], measurements: { rooms: [] } };
+  db.orders.push(order);
+
+  assert.equal(context.syncProjectIncludedServices(order), true);
+  const components = order.extraServices.filter((line: Row) => line.includedBy === a1.id).sort((a: Row, b: Row) => a.quickIncludedByLineId.localeCompare(b.quickIncludedByLineId));
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(components.map((line: Row) => [line.quickIncludedByLineId, line.qty, line.endDate, line.installerIds]))),
+    [[first.id, 120, '2026-01-12', ['i1']], [second.id, 80, '2026-02-06', ['i2']]],
+  );
+
+  order.extraServices = order.extraServices.filter((line: Row) => line.id !== first.id);
+  context.syncProjectIncludedServices(order);
+  const remaining = order.extraServices.filter((line: Row) => line.includedBy === a1.id);
+  assert.deepEqual(JSON.parse(JSON.stringify(remaining.map((line: Row) => line.quickIncludedByLineId))), [second.id]);
+});
+
 test('linear-foot work sold alone follows all windows and an included line cannot be deleted in the UI', () => {
   const { context, db, add } = load();
   const silicone = add({ name: 'Силикон', unit: 'lft', pricePerSqft: 3.5 });
@@ -207,6 +229,18 @@ test('server requires package components when a historical quick project is clos
   assert.equal(prepareServiceSolutions(current, complete, true), null);
 });
 
+test('server requires one package component for every repeated historical parent row', () => {
+  const current = base();
+  Object.assign(current.orders[0], { status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false, measurements: { rooms: [] } });
+  const first = { id: 'quick-a1-first', quickProjectLine: true, offeringId: 'a1', serviceType: 'protective_film', unit: 'sqft', qty: 120 };
+  const second = { id: 'quick-a1-second', quickProjectLine: true, offeringId: 'a1', serviceType: 'protective_film', unit: 'sqft', qty: 80 };
+  current.orders[0].extraServices = [first, second];
+  const closing = structuredClone(current);
+  Object.assign(closing.orders[0], { status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true });
+  closing.orders[0].extraServices.push(includedLine({ id: 'silicone-first', quickIncludedByLineId: first.id }));
+  assert.equal(prepareServiceSolutions(current, closing, true), 'Пакетная услуга исторического проекта должна содержать все включённые работы.');
+});
+
 test('server restores an included line deleted or repointed without removing its parent', () => {
   const saved = base();
   saved.orders[0].extraServices = [includedLine()];
@@ -228,6 +262,21 @@ test('server restores an included line deleted or repointed without removing its
   parentRemoved.orders[0].extraServices = [];
   assert.equal(prepareServiceSolutions(saved, parentRemoved, false), null);
   assert.deepEqual(parentRemoved.orders[0].extraServices, []);
+});
+
+test('server does not restore the component of one removed repeated historical parent', () => {
+  const saved = base();
+  Object.assign(saved.orders[0], { status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false, measurements: { rooms: [] } });
+  const first = { id: 'quick-a1-first', quickProjectLine: true, offeringId: 'a1', serviceType: 'protective_film', unit: 'sqft', qty: 120 };
+  const second = { id: 'quick-a1-second', quickProjectLine: true, offeringId: 'a1', serviceType: 'protective_film', unit: 'sqft', qty: 80 };
+  const firstChild = includedLine({ id: 'silicone-first', quickIncludedByLineId: first.id });
+  const secondChild = includedLine({ id: 'silicone-second', quickIncludedByLineId: second.id });
+  saved.orders[0].extraServices = [first, second, firstChild, secondChild];
+  const next = structuredClone(saved);
+  next.orders[0].extraServices = next.orders[0].extraServices.filter((line: Row) => ![first.id, firstChild.id].includes(line.id));
+
+  assert.equal(prepareServiceSolutions(saved, next, false), null);
+  assert.deepEqual(next.orders[0].extraServices.map((line: Row) => line.id).sort(), [second.id, secondChild.id].sort());
 });
 
 test('readiness exempts included lines and proposals show them without billing twice', () => {
