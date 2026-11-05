@@ -10299,7 +10299,21 @@ function warehouseCatalogStockStats(catalogId) {
 }
 function warehouseCatalogCostPerSqft(catalogId) {
   const stats = warehouseCatalogStockStats(catalogId);
-  return stats.pricedSqft > 0 ? stats.remainingValue / stats.pricedSqft : 0;
+  if (stats.pricedSqft > 0) return stats.remainingValue / stats.pricedSqft;
+  // A completed historical project may refer to a fully consumed old roll.
+  // Its purchase cost remains valid evidence even though today's balance is 0.
+  const history = inventoryByCatalogId(catalogId).reduce((totals, roll) => {
+    const originalM = Math.max(0, Number(roll.originalLengthM) || 0);
+    const widthMm = Math.max(0, Number(roll.widthMm) || 0);
+    const lotCost = Math.max(0, Number(roll.costTotal) || 0);
+    if (originalM > 0 && widthMm > 0 && lotCost > 0) {
+      totals.sqft += mm2_to_sqft(widthMm * originalM * 1000);
+      totals.cost += lotCost;
+    }
+    return totals;
+  }, { sqft: 0, cost: 0 });
+  if (history.sqft > 0) return history.cost / history.sqft;
+  return Math.max(0, Number(getCatalogItem(catalogId)?.costPerSqft) || 0);
 }
 function lowStockItems() {
   const summary = inventorySummary();
@@ -32744,7 +32758,7 @@ function renderClientAccountPortal() {
     return `<div class="min-h-screen grid place-items-center bg-slate-100 p-5"><div class="card max-w-lg text-center"><div class="text-4xl mb-3">🔒</div><h1 class="text-2xl font-black">Доступ к кабинету закрыт</h1><p class="text-gray-500 mt-2">Ссылка недействительна или доступ был отозван. Попросите менеджера RolanPRO создать новую ссылку.</p></div></div>`;
   }
   normalizeClientAddresses(c);
-  const orders = db.orders.filter(o => o.clientId === c.id).sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
+  const orders = db.orders.filter(o => o.clientId === c.id && !orderIsHistoricalDraft(o)).sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
   const active = orders.filter(o => !['completed','review_received'].includes(o.status));
   const completed = orders.filter(o => ['completed','review_received'].includes(o.status));
   const paid = orders.reduce((s,o)=>s+(Number(o.paid)||0),0);

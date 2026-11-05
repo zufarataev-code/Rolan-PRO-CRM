@@ -284,6 +284,11 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const historicalImportDraft = oldOrder.id !== undefined
       && oldOrder.quickEntry === true && oldOrder.quickEntryDraft === true && oldOrder.quickProjectImportedCompleted !== true;
     if (historicalImportDraft && !historicalImportClosing) {
+      if (order.quickEntry !== oldOrder.quickEntry
+        || order.quickEntryDraft !== oldOrder.quickEntryDraft
+        || order.quickProjectImportedCompleted !== oldOrder.quickProjectImportedCompleted) {
+        return 'Завершить перенос исторического проекта может только владелец.';
+      }
       const liveFunnelFields = [
         'status', 'consultationAt', 'measurementAt', 'measurementAcceptedAt', 'measurementDoneAt',
         'projectEstimateApprovedAt', 'proposalSentAt', 'proposalAcceptedAt', 'productionReadyAt',

@@ -15,6 +15,8 @@ test('quick project cost is derived from priced warehouse stock and employee rat
   assert.match(html, /function warehouseCatalogStockStats\(catalogId\)/);
   assert.match(html, /stats\.remainingValue \+= lotCost \* remainingM \/ originalM/);
   assert.match(html, /function warehouseCatalogCostPerSqft\(catalogId\)/);
+  assert.match(html, /const history = inventoryByCatalogId\(catalogId\)\.reduce/, 'a fully consumed historical roll retains its purchase-cost evidence');
+  assert.match(html, /getCatalogItem\(catalogId\)\?\.costPerSqft/, 'catalog cost is the final historical fallback');
   assert.match(html, /function projectQuickRequiredSqftByCatalog\(o, lines = projectQuickLines\(o\)\)/);
   assert.match(html, /demand\[line\.catalogId\] = \(demand\[line\.catalogId\] \|\| 0\) \+ requiredSqft/);
   assert.match(html, /function orderQuickLineMaterialCost\(o\)/);

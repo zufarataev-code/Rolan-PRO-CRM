@@ -549,6 +549,10 @@ test('server: an owner can close only a persisted historical draft with a concre
   const proposalBypass = structuredClone(current);
   proposalBypass.orders[0].proposalSentAt = '2026-11-05T18:00:00.000Z';
   assert.equal(prepareServiceSolutions(current, proposalBypass, true), 'Сначала завершите перенос исторического проекта. Черновик не участвует в рабочей воронке.');
+
+  const managerFlagBypass = structuredClone(current);
+  Object.assign(managerFlagBypass.orders[0], { quickEntryDraft: false, quickProjectImportedCompleted: true });
+  assert.equal(prepareServiceSolutions(current, managerFlagBypass, false), 'Завершить перенос исторического проекта может только владелец.');
 });
 
 

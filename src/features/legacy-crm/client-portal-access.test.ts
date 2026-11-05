@@ -24,4 +24,5 @@ test("the portal exposes customer-safe chronology, not internal economics", () =
   const end = html.indexOf("function togglePortalNewAddressFields", start);
   const portal = html.slice(start, end);
   assert.doesNotMatch(portal, /materialCost|installerCost|profit|margin|payroll|себестоим|марж/i);
+  assert.match(portal, /o\.clientId === c\.id && !orderIsHistoricalDraft\(o\)/, "unfinished historical imports stay private until owner closure");
 });
