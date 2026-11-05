@@ -14,7 +14,7 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 
 ## 2026-11-04 handoff — Privacy direction + reliable Services entry (PR #458)
 
-- Task owner: Codex, PR [#458](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/458), branch `codex/historical-project-entry-20261103`, rebased onto current `origin/main` `ada1a7c`. The already-merged quick-entry/direction work was dropped during the rebase, while the historical-project intake and Privacy work were replayed cleanly.
+- Task owner: Codex, PR [#458](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/458), branch `codex/historical-project-entry-20261103`, rebased onto current `origin/main` `c01029e`. The already-merged quick-entry/direction work was dropped during the rebase, while the historical-project intake and Privacy work were replayed cleanly.
 - `privacy_film` is a first-class fifth direction across the service directory, project cashier, measurement, proposal, warehouse/category mapping and calculations. It remains visible even with zero configured services; opening it shows its own empty workspace instead of folding it into Decorative.
 - `selectAppView('servicePricing')` now opens «Услуги и цены» immediately, clears any stale modal/direction editor and renders even when `file://` or a repeated `#/service-pricing` hash emits no `hashchange` event.
 - Runtime regressions cover the direct menu entry, five direction cards and opening an empty Privacy workspace. Verification: focused 28/28; full `pnpm test` 1018/1018; `pnpm build` (134 routes); `pnpm typecheck`; `git diff --check`.
