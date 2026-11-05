@@ -164,7 +164,7 @@ function historicalProjectInstallerAccruals(o, user) {
       const end = endValue ? new Date(`${endValue}T12:00:00.000Z`) : start;
       if (!start || Number.isNaN(start.getTime()) || !end || Number.isNaN(end.getTime())) return;
       const cursor = new Date(start);
-      for (let day = 0; day < 14 && cursor <= end; day += 1) {
+      while (cursor <= end) {
         visitDates.add(cursor.toISOString().slice(0, 10));
         cursor.setUTCDate(cursor.getUTCDate() + 1);
       }
