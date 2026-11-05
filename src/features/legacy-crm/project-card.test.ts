@@ -527,9 +527,9 @@ test('server: an owner can close only a persisted historical draft with a concre
     id: 'historical', managerId: 'manager-a', status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false,
     serviceType: 'protective_film', offeringIds: offeringId ? [offeringId] : [], offeringUnits: offeringId ? { [offeringId]: 'sqft' } : {},
     measurements: { rooms: [] },
-    extraServices: [{ id: 'line', quickProjectLine: true, offeringId, catalogId: 'film', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film', installerIds: ['i1'], startDate: '2026-09-01', endDate: '2026-09-03' }],
+    extraServices: [{ id: 'line', quickProjectLine: true, offeringId, catalogId: 'film', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film', installerIds: ['i1'], startDate: '2026-09-01', endDate: '2026-09-03', supplyItems: [{ supplyId: 'solution', qty: 2 }] }],
   });
-  const current: Row = { settings, users, orders: [order()] };
+  const current: Row = { settings, users, supplies: [{ id: 'solution', costPerUnit: 3 }], orders: [order()] };
   const next = structuredClone(current);
   Object.assign(next.orders[0], {
     status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true,
@@ -537,6 +537,7 @@ test('server: an owner can close only a persisted historical draft with a concre
   });
   assert.equal(prepareServiceSolutions(current, next, true), null, 'the owner-authorized historical transition does not need global import mode');
   assert.equal(next.orders[0]._historicalMaterialCost, 55, 'server freezes 10 sq ft + 10% waste at the current $5 purchase cost');
+  assert.equal(next.orders[0]._historicalSupplyCost, 6, 'server freezes two supply units at the current $3 warehouse average');
   assert.equal(next.orders[0].serviceSchedules[0].endsAt, '2026-09-03T17:00:00', 'the historical service keeps its full multi-day range');
   const forgedInventoryClose = structuredClone(next);
   Object.assign(forgedInventoryClose.orders[0], { _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [] });

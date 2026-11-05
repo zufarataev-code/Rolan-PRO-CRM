@@ -39,6 +39,12 @@ test('completed historical material cost is frozen instead of following later wa
   assert.ok(productionCost.indexOf('_historicalMaterialCost') < productionCost.indexOf('_inventoryMaterialCost'));
 });
 
+test('completed historical supply cost is frozen instead of following later warehouse receipts', () => {
+  const cost = fn(html, 'projectQuickSupplyCost');
+  assert.match(cost, /quickProjectImportedCompleted === true && Number\.isFinite\(o\._historicalSupplyCost\)/);
+  assert.ok(cost.indexOf('_historicalSupplyCost') < cost.indexOf('ensureSupplies'));
+});
+
 test('historical service plans preserve both the start and end dates', () => {
   const assignment = fn(html, 'projectServiceAssignment');
   const plans = fn(html, 'projectPlannedSchedules');

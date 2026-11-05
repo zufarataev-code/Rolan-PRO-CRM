@@ -11,7 +11,7 @@ const stableJson = (value: unknown): string => JSON.stringify(value, (_key, item
     : item);
 const rows = (x: unknown): Row[] => Array.isArray(x) ? x.map(object) : [];
 const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))];
-const HISTORICAL_INVENTORY_FIELDS = ['_inventoryDeducted', '_inventoryMaterialCost', '_inventoryLog', '_historicalMaterialCost'] as const;
+const HISTORICAL_INVENTORY_FIELDS = ['_inventoryDeducted', '_inventoryMaterialCost', '_inventoryLog', '_historicalMaterialCost', '_historicalSupplyCost'] as const;
 
 /**
  * Historical projects do not consume today's stock, but their P&L still needs
@@ -58,6 +58,18 @@ function historicalMaterialCostSnapshot(order: Row, payload: Row): number {
       const sqft = Math.max(0, Number(line.qty) || 0) * (1 + Math.max(0, Number(film?.wastePct) || 0) / 100);
       return sum + sqft * costPerSqft(line.catalogId);
     }, 0);
+  return Number(total.toFixed(4));
+}
+
+/** Supply prices are mutable warehouse averages, so historical usage is frozen too. */
+function historicalSupplyCostSnapshot(order: Row, payload: Row): number {
+  const supplies = rows(payload.supplies);
+  const total = rows(order.extraServices)
+    .filter(line => !line.includedBy && (line.quickProjectLine === true || line.type === 'offering'))
+    .reduce((lineTotal, line) => lineTotal + rows(line.supplyItems).reduce((itemTotal, item) => {
+      const supply = supplies.find(candidate => candidate.id === item.supplyId);
+      return itemTotal + Math.max(0, Number(item.qty) || 0) * Math.max(0, Number(supply?.costPerUnit) || 0);
+    }, 0), 0);
   return Number(total.toFixed(4));
 }
 
@@ -397,7 +409,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
     const historicalImportExisting = oldOrder.id !== undefined
       && (oldOrder.quickEntry === true || oldOrder.quickEntryDraft === true || oldOrder.quickProjectImportedCompleted === true);
     if (historicalImportExisting && HISTORICAL_INVENTORY_FIELDS.some(field =>
-      !(historicalImportClosing && field === '_historicalMaterialCost')
+      !(historicalImportClosing && ['_historicalMaterialCost', '_historicalSupplyCost'].includes(field))
       && stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
       return 'Складскую себестоимость исторического проекта рассчитывает только система.';
     }
@@ -449,6 +461,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
         }
       }
       order._historicalMaterialCost = historicalMaterialCostSnapshot(order, next);
+      order._historicalSupplyCost = historicalSupplyCostSnapshot(order, next);
     }
     const selectedMaterials = object(order.offeringCatalogIds);
     const selectedOfferingIds = new Set([order.offeringId, ...(Array.isArray(order.offeringIds) ? order.offeringIds : [])].filter((id): id is string => typeof id === 'string' && !!id));

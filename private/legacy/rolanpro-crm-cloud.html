@@ -28892,6 +28892,7 @@ function projectQuickDeleteSupply(oid, lineId, itemId) {
 }
 
 function projectQuickSupplyCost(o) {
+  if (o?.quickProjectImportedCompleted === true && Number.isFinite(o._historicalSupplyCost)) return Math.max(0, Number(o._historicalSupplyCost));
   return projectHistoricalEntryLines(o).reduce((total, line) => total + (line.supplyItems || []).reduce((sum, item) => {
     const supply = ensureSupplies().find(candidate => candidate.id === item.supplyId);
     return sum + (Number(item.qty) || 0) * (Number(supply?.costPerUnit) || 0);
