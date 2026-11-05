@@ -25852,6 +25852,7 @@ function projectQuickToggleInstaller(oid, lineId, userId, enabled) {
   const selected = new Set(Array.isArray(line.installerIds) ? line.installerIds : []);
   if (enabled) selected.add(userId); else selected.delete(userId);
   line.installerIds = [...selected];
+  syncProjectIncludedServices(o);
   projectQuickSyncProjectInstallers(o);
   projectEstimateMarkChanged(o, 'Изменены исполнители услуги');
   save(); refreshQuickProjectEntry(oid);
@@ -26325,15 +26326,19 @@ function projectWindowServiceLines(o) {
 /** Services that currently exist in project scope and can own package lines. */
 function projectParentOfferingIds(o) {
   const ids = (o?.measurements?.rooms || []).flatMap(room => room.windows || []).map(win => win.offeringId);
-  (o?.extraServices || []).forEach(line => { if (line.offeringId && !line.includedBy && !line.quickProjectLine) ids.push(line.offeringId); });
+  (o?.extraServices || []).forEach(line => { if (line.offeringId && !line.includedBy) ids.push(line.offeringId); });
   return [...new Set(ids.filter(Boolean))];
 }
 
 function projectIncludedQty(o, parentId, child) {
   const unit = serviceOfferingUnit(child);
   const windows = projectWindowsForService(o, child.id, parentId);
-  const parentLine = (o?.extraServices || []).find(line => line.offeringId === parentId && !line.includedBy && !line.quickProjectLine);
-  if (unit === 'lft') return Math.round(windows.reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100;
+  const parentLine = (o?.extraServices || []).find(line => line.offeringId === parentId && !line.includedBy);
+  // A historical import has the completed service total but no panes. Keep the
+  // packaged component explicit and editable instead of silently dropping its
+  // material and labor from the project's actual economics.
+  const historicalQty = parentLine?.quickProjectLine ? Math.max(0, Number(parentLine.qty) || 0) : 0;
+  if (unit === 'lft') return windows.length ? Math.round(windows.reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100 : historicalQty;
   if (unit === 'piece') return windows.length ? windows.reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0) : Number(parentLine?.qty) || 1;
   if (unit === 'zone') return windows.length ? windows.reduce((sum, win) => sum + smartWindowZoneCount(win), 0) : Number(parentLine?.qty) || 1;
   return 1;
@@ -26383,6 +26388,13 @@ function syncProjectIncludedServices(o) {
       line.includedBy = parentId;
       line.unitPrice = 0;
       line.price = 0;
+      const historicalParent = (o.extraServices || []).find(item => item.quickProjectLine && !item.includedBy && item.offeringId === parentId);
+      if (historicalParent) {
+        line.quickIncludedByLineId = historicalParent.id;
+        line.startDate = projectQuickDateValue(historicalParent.startDate);
+        line.endDate = projectQuickDateValue(historicalParent.endDate);
+        line.installerIds = [...new Set(historicalParent.installerIds || [])];
+      }
       o.extraServices.push(line);
       o.offeringIds = [...new Set([...(o.offeringIds || []), child.id])];
       o.offeringUnits = { ...(o.offeringUnits || {}), [child.id]: o.offeringUnits?.[child.id] || serviceOfferingUnit(child) };
@@ -26408,6 +26420,13 @@ function syncProjectIncludedServices(o) {
       qty = projectWindowsForService(o, line.offeringId).reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0);
     }
     if (qty === null) return;
+    const historicalParent = line.includedBy ? (o.extraServices || []).find(item => item.quickProjectLine && !item.includedBy && item.offeringId === line.includedBy) : null;
+    if (historicalParent) {
+      line.quickIncludedByLineId = historicalParent.id;
+      line.startDate = projectQuickDateValue(historicalParent.startDate);
+      line.endDate = projectQuickDateValue(historicalParent.endDate);
+      line.installerIds = [...new Set(historicalParent.installerIds || [])];
+    }
     const price = line.includedBy ? 0 : Math.round((Number(line.unitPrice) || 0) * qty * 100) / 100;
     if (Number(line.qty) !== qty || Number(line.price) !== price) {
       line.qty = qty;
@@ -28653,6 +28672,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     line.label = String(value || '').trim();
   }
   projectEstimateSyncQuickLine(line, field);
+  syncProjectIncludedServices(o);
   projectEstimateSyncQuickServices(o);
   // A film's purchase follows every project line that uses it (Owner, 2026-10-01).
   const filmChanged = previousCatalogId !== (line.catalogId || '');
@@ -28672,6 +28692,7 @@ function projectEstimateDeleteQuickLine(oid, lineId) {
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   const removedCatalogId = projectQuickLines(o).find(line => line.id === lineId)?.catalogId || '';
   o.extraServices = (o.extraServices || []).filter(line => line.id !== lineId);
+  syncProjectIncludedServices(o);
   if (removedCatalogId && !o.quickEntryDraft) reconcileManualFilmPurchase(o, removedCatalogId, 'позиция удалена из проекта');
   projectEstimateSyncQuickServices(o);
   projectEstimateMarkChanged(o, 'Удалена быстрая позиция проекта');

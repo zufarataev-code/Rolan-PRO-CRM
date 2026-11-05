@@ -146,6 +146,31 @@ test('two completed stages accrue in their own weeks and payment cannot count ei
   assert.equal(payload.payrollPayments.length,2);
   assert.deepEqual(JSON.parse(JSON.stringify(o.payouts.map((p:Row)=>p.stageId))),['a','b']);
 });
+test('historical services accrue and settle in each service completion period',()=>{
+  const payload:Row={settings:{},users:[{id:'i1',role:'installer',name:'Installer',payConfig:{type:'per_sqft'}}],payrollPayments:[],orders:[]};
+  const order:Row={id:'old',number:'R-OLD',quickProjectImportedCompleted:true,installerIds:['i1'],installationDoneAt:'2026-02-20T12:00:00.000Z',payouts:[]};
+  payload.orders.push(order);
+  const lines=[
+    {key:'line:jan',name:'January service',qty:100,unitShort:'sq ft',installerPay:100,installerIds:['i1'],installationAt:'2026-01-12T12:00:00.000Z',sources:[{endDate:'2026-01-12'}]},
+    {key:'line:feb',name:'February service',qty:200,unitShort:'sq ft',installerPay:200,installerIds:['i1'],installationAt:'2026-02-20T12:00:00.000Z',sources:[{endDate:'2026-02-20'}]},
+  ];
+  const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));
+  const source=(name:string)=>{const start=html.indexOf(`function ${name}(`);return html.slice(start,html.indexOf('\n}',start)+2);};
+  const c=vm.createContext({db:payload,state:{currentUserId:'owner'},getOrder:()=>order,getUser:(id:string)=>payload.users.find((u:Row)=>u.id===id),
+    projectQuickLines:()=>[{id:'jan'},{id:'feb'}],projectLines:()=>lines,projectStages:()=>[],projectQuickDateValue:(value:string)=>value,
+    projectLineQtyText:(line:Row)=>`${line.qty} ${line.unitShort}`,installerSeniorFactor:()=>1,orderInstallerPayoutForUser:()=>300,
+    financeDate:(value:string)=>new Date(value),fmtMoney:String,uid:()=>String(payload.payrollPayments.length+order.payouts.length),save:()=>{},render:()=>{},confirm:()=>true,alert:()=>{},
+  });
+  vm.runInContext(['historicalProjectInstallerAccruals','calcUserPayoutForPeriod','payrollPeriodAllocatedAmount','payrollPaidForPeriod','markPayoutPaid'].map(source).join('\n'),c);
+  const january=[new Date('2026-01-01T00:00:00Z'),new Date('2026-01-31T23:59:59Z')];
+  const february=[new Date('2026-02-01T00:00:00Z'),new Date('2026-02-28T23:59:59Z')];
+  assert.deepEqual(JSON.parse(JSON.stringify(c.calcUserPayoutForPeriod('i1',...january))),{total:100,breakdown:[{kind:'per_sqft',orderId:'old',orderNumber:'R-OLD',accrualId:'line:jan',label:'January service · 100 sq ft',amount:100,date:'2026-01-12T12:00:00.000Z',paid:false}]});
+  assert.equal(c.calcUserPayoutForPeriod('i1',...february).total,200);
+  c.markPayoutPaid('i1',january[0].toISOString(),january[1].toISOString());
+  c.markPayoutPaid('i1',february[0].toISOString(),february[1].toISOString());
+  assert.deepEqual(payload.payrollPayments.map((payment:Row)=>payment.amount),[100,200]);
+  assert.deepEqual(order.payouts.map((payment:Row)=>payment.accrualId),['line:jan','line:feb']);
+});
 test('an unassigned internal stage retains a labor reserve; an external stage uses its invoice instead',()=>{
   const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));const start=html.indexOf('function projectStageReferenceAmount(');
   const c=vm.createContext({db:{settings:{complexityCoefs:{standard:1}}},projectLines:()=>[{key:'service',unit:'sqft',installerPay:300}]});

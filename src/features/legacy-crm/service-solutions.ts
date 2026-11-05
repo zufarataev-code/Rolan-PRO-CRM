@@ -301,6 +301,17 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     if (historicalImportClosing && rows(order.extraServices).some(line => line.quickProjectLine === true && !line.offeringId)) {
       return 'Выберите конкретную услугу для каждой позиции исторического проекта.';
     }
+    if (historicalImportClosing) {
+      const extras = rows(order.extraServices);
+      for (const parent of extras.filter(line => line.quickProjectLine === true && typeof line.offeringId === 'string')) {
+        const offering = offerings.find(item => item.id === parent.offeringId);
+        for (const childId of Array.isArray(offering?.includes) ? offering.includes : []) {
+          if (!extras.some(line => line.offeringId === childId && line.includedBy === parent.offeringId)) {
+            return 'Пакетная услуга исторического проекта должна содержать все включённые работы.';
+          }
+        }
+      }
+    }
     const selectedMaterials = object(order.offeringCatalogIds);
     const selectedOfferingIds = new Set([order.offeringId, ...(Array.isArray(order.offeringIds) ? order.offeringIds : [])].filter((id): id is string => typeof id === 'string' && !!id));
     for (const [offeringId, filmId] of Object.entries(selectedMaterials)) {
@@ -320,7 +331,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const extras = rows(extraValues);
     const parentIds = new Set([
       ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows)).map(win => win.offeringId),
-      ...extras.filter(line => line.offeringId && !line.includedBy && line.quickProjectLine !== true).map(line => line.offeringId),
+      ...extras.filter(line => line.offeringId && !line.includedBy).map(line => line.offeringId),
     ].filter((id): id is string => typeof id === 'string' && !!id));
     // An included component cannot be removed or repointed independently while
     // its parent service remains in the project. Restore it from the saved

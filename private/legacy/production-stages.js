@@ -137,6 +137,47 @@ function orderInstallerPayoutForUser(o, userId) {
   return base * installerSeniorFactor(user) + extra.travel.perPerson;
 }
 
+/**
+ * A completed historical import is a container of independently completed
+ * services.  Payroll must follow the completion date and crew of each service,
+ * not the latest date copied to the order header when the import is closed.
+ */
+function historicalProjectInstallerAccruals(o, user) {
+  const pc = user?.payConfig || {};
+  if (!o?.quickProjectImportedCompleted || !projectQuickLines(o).length || user?.role === 'measurer' || !['per_sqft', 'fixed_per_job'].includes(pc.type)) return [];
+  const lines = projectLines(o).filter(line => (line.installerIds || []).includes(user.id));
+  const accruals = lines.map(line => {
+    const sourceDates = (line.sources || []).map(source => projectQuickDateValue(source?.endDate)).filter(Boolean).sort();
+    const completedOn = sourceDates[sourceDates.length - 1] || '';
+    const date = completedOn ? `${completedOn}T12:00:00.000Z` : line.installationAt || o.installationDoneAt || '';
+    const crewCount = Math.max(1, new Set(line.installerIds || []).size);
+    const amount = pc.type === 'fixed_per_job'
+      ? Math.max(0, Number(pc.fixedPerJob) || 0)
+      : Math.max(0, Number(line.installerPay) || 0) / crewCount * installerSeniorFactor(user);
+    return {
+      kind: pc.type,
+      orderId: o.id,
+      orderNumber: o.number,
+      accrualId: line.key,
+      label: pc.type === 'fixed_per_job' ? `${line.name} · фикс $${Number(pc.fixedPerJob) || 0}` : `${line.name} · ${projectLineQtyText(line)}`,
+      amount,
+      date,
+    };
+  }).filter(item => item.date && item.amount > 0);
+  if (pc.type === 'per_sqft' && accruals.length) {
+    // Preserve the existing project total: the visit minimum and travel are
+    // paid once and belong to the last completed service of the project.
+    const currentTotal = orderInstallerPayoutForUser(o, user.id);
+    const lineTotal = accruals.reduce((sum, item) => sum + item.amount, 0);
+    const remainder = currentTotal - lineTotal;
+    if (Math.abs(remainder) > 0.001) {
+      accruals.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      accruals[accruals.length - 1].amount = Math.max(0, accruals[accruals.length - 1].amount + remainder);
+    }
+  }
+  return accruals;
+}
+
 function calcUserPayoutForPeriod(userId, startDate, endDate, orders = db.orders) {
   const u = getUser(userId);
   if (!u || !u.payConfig) return { total: 0, breakdown: [] };
@@ -158,6 +199,17 @@ function calcUserPayoutForPeriod(userId, startDate, endDate, orders = db.orders)
         if (amount > 0) { breakdown.push({kind:'per_sqft',orderId:o.id,orderNumber:o.number,stageId:s.id,label:s.title,amount,date:s.doneAt}); total += amount; }
       });
       o = projectStageUnstagedOrder(o);
+    }
+    const historicalAccruals = typeof historicalProjectInstallerAccruals === 'function' ? historicalProjectInstallerAccruals(o, u) : [];
+    if (historicalAccruals.length) {
+      historicalAccruals.forEach(item => {
+        const dt = new Date(item.date);
+        if (dt < startDate || dt > endDate) return;
+        const paid = (original.payouts || []).filter(p => p.userId === u.id && p.paid && (p.accrualId || null) === item.accrualId).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        breakdown.push({ ...item, paid: paid >= item.amount });
+        total += item.amount;
+      });
+      return;
     }
     let trigger, dateField;
     if (pc.type === 'commission') { trigger = (u.id === o.managerId); dateField = o.paidAt; }
@@ -210,8 +262,8 @@ function markPayoutPaid(userId, startISO, endISO) {
         return { ...x, amount: Number(Math.max(0, x.amount - payrollPaidForPeriod(userId, first, last)).toFixed(2)) };
       });
     }
-    const alreadyPaid = b.orderId ? (getOrder(b.orderId)?.payouts || []).filter(p => p.userId === userId && p.paid && (p.stageId || null) === (b.stageId || null)).reduce((sum, p) => sum + (Number(p.amount) || 0), 0) : payrollPaidForPeriod(userId, start, end);
-    return { stageId: b.stageId || null, orderId: b.orderId || null, kind: b.kind, amount: Math.max(0, b.amount - alreadyPaid), date: b.date || null, periodStart: startISO, periodEnd: endISO };
+    const alreadyPaid = b.orderId ? (getOrder(b.orderId)?.payouts || []).filter(p => p.userId === userId && p.paid && (p.stageId || null) === (b.stageId || null) && (p.accrualId || null) === (b.accrualId || null)).reduce((sum, p) => sum + (Number(p.amount) || 0), 0) : payrollPaidForPeriod(userId, start, end);
+    return { stageId: b.stageId || null, accrualId: b.accrualId || null, orderId: b.orderId || null, kind: b.kind, amount: Math.max(0, b.amount - alreadyPaid), date: b.date || null, periodStart: startISO, periodEnd: endISO };
   }).filter(x => x.amount > 0);
   if (Math.abs(allocations.reduce((sum, x) => sum + x.amount, 0) - amountDue) > 0.01) {
     return alert('Выплата не записана: исторические суммы не совпадают с начислениями. Сверьте выплаты сотрудника.');
@@ -224,13 +276,13 @@ function markPayoutPaid(userId, startISO, endISO) {
   });
   calc.breakdown.forEach(b => {
     if (!b.orderId) return;
-    const allocation = allocations.find(x => x.orderId === b.orderId && (x.stageId || null) === (b.stageId || null));
+    const allocation = allocations.find(x => x.orderId === b.orderId && (x.stageId || null) === (b.stageId || null) && (x.accrualId || null) === (b.accrualId || null));
     if (!allocation) return;
     const o = getOrder(b.orderId);
     if (!o) return;
     o.payouts = o.payouts || [];
     o.payouts.push({
-      id: uid(), userId, stageId: b.stageId || null, amount: allocation.amount, accruedAt: b.date,
+      id: uid(), userId, stageId: b.stageId || null, accrualId: b.accrualId || null, amount: allocation.amount, accruedAt: b.date,
       type: b.kind, label: b.label,
       paid: true, paidAt, paymentBatchId,
     });
