@@ -26715,8 +26715,8 @@ function serviceCashierHtml(c) {
   </div></div>`;
 }
 
-function projectQuickLineFilms(line) {
-  const films = projectQuickLineCatalog(line.serviceType, line.catalogId, line.offeringId);
+function projectQuickLineFilms(line, { allowOutOfStock = false } = {}) {
+  const films = projectQuickLineCatalog(line.serviceType, line.catalogId, line.offeringId, allowOutOfStock);
   if (!line.offeringId) return films;
   const allowed = serviceOfferingAllowedFilmIds(serviceOffering(line.offeringId));
   return films.filter(item => allowed.includes(item.id) || item.id === line.catalogId);
@@ -28491,11 +28491,11 @@ function readProjectServiceSchedule(o) {
   });
 }
 
-function projectQuickLineCatalog(serviceType, selectedCatalogId = '', offeringId = '') {
+function projectQuickLineCatalog(serviceType, selectedCatalogId = '', offeringId = '', allowOutOfStock = false) {
   const category = primaryServiceInfo(serviceType)?.catalogCategory;
   const offering = serviceOffering(offeringId);
   return (db.settings.catalog || []).filter(item => catalogCanBeSelected(item, selectedCatalogId) && (offering ? projectOfferingAllowsFilm(offering, item, selectedCatalogId) : serviceDirectionAllowsFilm(category, item)) && (
-    item.id === selectedCatalogId || warehouseCatalogStockStats(item.id).availableSqft > 0
+    allowOutOfStock || item.id === selectedCatalogId || warehouseCatalogStockStats(item.id).availableSqft > 0
   ));
 }
 
@@ -28577,7 +28577,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     const requiredCategory = primaryServiceInfo(line.serviceType)?.catalogCategory;
     const offering = serviceOffering(line.offeringId);
     const directionAllows = catalog && (offering ? projectOfferingAllowsFilm(offering, catalog, line.catalogId) : serviceDirectionAllowsFilm(requiredCategory, catalog));
-    if (catalog && (!catalogCanBeSelected(catalog, line.catalogId) || !directionAllows || (warehouseCatalogStockStats(catalog.id).availableSqft <= 0 && !catalog.pendingPurchase))) return;
+    if (catalog && (!catalogCanBeSelected(catalog, line.catalogId) || !directionAllows || (!o.quickEntryDraft && warehouseCatalogStockStats(catalog.id).availableSqft <= 0 && !catalog.pendingPurchase))) return;
     if (catalog && line.offeringId && !serviceOfferingAllowedFilmIds(serviceOffering(line.offeringId)).includes(catalog.id) && catalog.id !== line.catalogId) return alert('Эта плёнка не подходит выбранной услуге.');
     line.catalogId = catalog?.id || '';
     if (catalog) {
@@ -28621,9 +28621,13 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   projectEstimateSyncQuickServices(o);
   // A film's purchase follows every project line that uses it (Owner, 2026-10-01).
   const filmChanged = previousCatalogId !== (line.catalogId || '');
-  if (filmChanged && previousCatalogId) reconcileManualFilmPurchase(o, previousCatalogId, 'в проекте выбрана другая плёнка');
-  if (line.catalogId && (filmChanged || field === 'qty')) reconcileManualFilmPurchase(o, line.catalogId, 'метраж в проекте обнулён');
-  if (field === 'startDate') refreshManualFilmNeededBy(o);
+  // Historical imports describe material that was already consumed. They must
+  // never create or modify today's purchase requests or warehouse demand.
+  if (!o.quickEntryDraft) {
+    if (filmChanged && previousCatalogId) reconcileManualFilmPurchase(o, previousCatalogId, 'в проекте выбрана другая плёнка');
+    if (line.catalogId && (filmChanged || field === 'qty')) reconcileManualFilmPurchase(o, line.catalogId, 'метраж в проекте обнулён');
+    if (field === 'startDate') refreshManualFilmNeededBy(o);
+  }
   projectEstimateMarkChanged(o, 'Изменена быстрая позиция проекта');
   save(); refreshQuickProjectEntry(oid);
 }
@@ -28633,7 +28637,7 @@ function projectEstimateDeleteQuickLine(oid, lineId) {
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   const removedCatalogId = projectQuickLines(o).find(line => line.id === lineId)?.catalogId || '';
   o.extraServices = (o.extraServices || []).filter(line => line.id !== lineId);
-  if (removedCatalogId) reconcileManualFilmPurchase(o, removedCatalogId, 'позиция удалена из проекта');
+  if (removedCatalogId && !o.quickEntryDraft) reconcileManualFilmPurchase(o, removedCatalogId, 'позиция удалена из проекта');
   projectEstimateSyncQuickServices(o);
   projectEstimateMarkChanged(o, 'Удалена быстрая позиция проекта');
   save(); refreshQuickProjectEntry(oid);
@@ -29316,7 +29320,7 @@ function renderQuickProjectEntry(o) {
   const availableMeasurers = db.users.filter(user => user.active !== false && ['measurer', 'owner'].includes(user.role));
   const client = getClient(o.clientId);
   const rows = quickLines.map(line => {
-    const catalog = projectQuickLineFilms(line);
+    const catalog = projectQuickLineFilms(line, { allowOutOfStock: o.quickEntryDraft });
     const offerings = serviceOfferingsFor(serviceOfferingDirection(line.serviceType), { includeId: line.offeringId });
     const offering = serviceOffering(line.offeringId);
     const selectedStock = line.catalogId ? warehouseCatalogStockStats(line.catalogId) : null;
@@ -29339,7 +29343,6 @@ function renderQuickProjectEntry(o) {
   const totalSqft = projectQuickSqft(o);
   const total = quickLines.reduce((sum, line) => sum + Number(line.price || 0), 0);
   const quickRange = projectQuickDateRange(o);
-  const proposalIssues = projectEstimateReadiness(o);
   const completionIssues = projectQuickCompletionIssues(o);
   const quickExpenseTypes = ['gas','delivery','material_purchase','helper','subcontractor','electric','tools','rental','permit','other'];
   const quickExpenseRows = (o.extraExpenses || []).map(expense => `<tr>
@@ -29385,8 +29388,7 @@ function renderQuickProjectEntry(o) {
       <div class="project-estimate-section-head"><div><h4>Услуги проекта</h4><div class="text-xs text-gray-500">Без комнат и размеров окон: укажите общий метраж и цену проекта. Цена за sqft рассчитается автоматически. Можно добавить несколько услуг.</div></div><button class="btn-primary text-sm" onclick="projectEstimateAddQuickLine('${o.id}')">+ Добавить услугу</button></div>
       <div class="project-estimate-table-wrap"><table class="project-estimate-table project-estimate-table--quick"><thead><tr><th>Направление / услуга</th><th>Плёнка со склада</th><th>Метраж, sqft</th><th>Цена клиенту</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="text-gray-500">Добавьте первую услугу проекта.</td></tr>'}</tbody></table></div>
     </section>
-    <div class="order-clean-note mt-3" style="border-color:#bfdbfe;background:#eff6ff;color:#1e40af"><b>Монтаж позже.</b> Бригада и дата монтажа назначаются после принятия КП — в карточке проекта через действие «Монтаж».</div>
-    ${proposalIssues.length ? `<div class="order-clean-note mt-3" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><b>Чтобы сформировать КП:</b> ${academyEsc(proposalIssues.join(', '))}.</div>` : `<div class="order-clean-note mt-3" style="border-color:#86efac;background:#f0fdf4;color:#166534"><b>Для КП данных достаточно.</b> Можно переходить к проверке расчёта.</div>`}
+    <div class="order-clean-note mt-3" style="border-color:#bfdbfe;background:#eff6ff;color:#1e40af"><b>Это перенос факта.</b> Клиенту не создаётся и не отправляется новое КП. Укажите реальные даты и исполнителей уже выполненных услуг ниже.</div>
     ${currentUser()?.role === 'owner' ? `<section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>Прямые расходы проекта</h4><div class="text-xs text-gray-500">Доставка, разовая закупка, помощник, субподрядчик и другие фактические расходы.</div></div><button class="btn-ghost text-sm" onclick="projectQuickAddExpense('${o.id}')">+ Добавить расход</button></div>
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead><tbody>${quickExpenseRows || '<tr><td colspan="4" class="text-gray-500">Прямых расходов нет.</td></tr>'}</tbody></table></div>
@@ -29394,7 +29396,7 @@ function renderQuickProjectEntry(o) {
     ${historicalProductionPanel}
     <div class="project-estimate-footer">
       <div class="text-xs text-gray-500">Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников.</div>
-      <div class="flex gap-2 flex-wrap"><button class="btn-ghost" onclick="closeModal()">Сохранить и закрыть</button><button class="btn-primary" onclick="openProjectEstimateWorkspace('${o.id}')">Проверить расчёт и сформировать КП →</button></div>
+      <div class="flex gap-2 flex-wrap"><button class="btn-primary" onclick="closeModal()">Сохранить и закрыть</button></div>
     </div>`;
 }
 

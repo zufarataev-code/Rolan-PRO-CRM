@@ -160,10 +160,11 @@ test("choosing another film keeps the old draft only while another line needs it
   assert.match(String(db.purchaseRequests[0].note), /Отменено: в проекте выбрана другая плёнка/);
 });
 
-test("every quick line change and deletion reconciles the film purchase", () => {
+test("live quick line changes reconcile purchases while historical imports leave today's warehouse alone", () => {
+  assert.match(html, /if \(!o\.quickEntryDraft\) \{/);
   assert.match(html, /if \(filmChanged && previousCatalogId\) reconcileManualFilmPurchase\(o, previousCatalogId, 'в проекте выбрана другая плёнка'\);/);
   assert.match(html, /if \(line\.catalogId && \(filmChanged \|\| field === 'qty'\)\) reconcileManualFilmPurchase\(o, line\.catalogId, 'метраж в проекте обнулён'\);/);
-  assert.match(html, /if \(removedCatalogId\) reconcileManualFilmPurchase\(o, removedCatalogId, 'позиция удалена из проекта'\);/);
+  assert.match(html, /if \(removedCatalogId && !o\.quickEntryDraft\) reconcileManualFilmPurchase\(o, removedCatalogId, 'позиция удалена из проекта'\);/);
 });
 
 test("the draft's deadline follows line dates, also when scheduling fills them", () => {

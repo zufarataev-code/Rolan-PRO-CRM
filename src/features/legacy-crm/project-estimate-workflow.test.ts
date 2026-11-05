@@ -169,7 +169,7 @@ test("accepted proposal can be planned before production; publishing still check
   assert.match(source, /'Производство','stepInstallation'/);
 });
 
-test("quick project entry derives sqft price and defers installers to Montage", () => {
+test("historical project entry derives sqft price and records completed production", () => {
   const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
@@ -181,7 +181,7 @@ test("quick project entry derives sqft price and defers installers to Montage", 
   assert.match(renderer, /projectEstimateUpdateQuickLine\('[^']+','[^']+','price',this\.value\)/);
   assert.doesNotMatch(renderer, /data-label="Исполнители"/);
   assert.doesNotMatch(renderer, /\+ Новый сотрудник/);
-  assert.match(renderer, /Монтаж позже/);
+  assert.match(renderer, /Это перенос факта/);
   assert.match(renderer, /Только для переноса уже завершённого проекта из старой CRM/);
   assert.match(schedule, /line\.installerIds = \[\.\.\.assignment\.installerIds\]/);
   assert.match(schedule, /line\.startDate = projectQuickDateValue\(datetimeLocalValue\(assignment\.installationAt\)/);
@@ -324,7 +324,7 @@ test("quick project lines use warehouse film and never accept manual material or
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
   const renderer = source.slice(rendererStart, rendererEnd);
-  assert.match(source, /function projectQuickLineCatalog\(serviceType, selectedCatalogId = '', offeringId = ''\)/);
+  assert.match(source, /function projectQuickLineCatalog\(serviceType, selectedCatalogId = '', offeringId = '', allowOutOfStock = false\)/);
   assert.match(source, /catalogCanBeSelected\(item, selectedCatalogId\)/);
   assert.match(source, /offering \? projectOfferingAllowsFilm\(offering, item, selectedCatalogId\) : serviceDirectionAllowsFilm\(category, item\)/);
   assert.match(source, /warehouseCatalogStockStats\(item\.id\)\.availableSqft > 0/);
@@ -421,8 +421,7 @@ test("proposal readiness does not require installation scheduling", () => {
   assert.doesNotMatch(readiness, /installerIds|startDate|endDate/);
   assert.match(completionIssues, /installerIds/);
   assert.match(completionIssues, /startDate/);
-  assert.match(source, /Монтаж позже[\s\S]*?Бригада и дата монтажа назначаются после принятия КП/);
-  assert.match(source, /Для КП данных достаточно[\s\S]*?Можно переходить к проверке расчёта/);
+  assert.match(source, /Подтвердить расчёт и сформировать КП/);
 });
 
 test("proposal readiness reports exact missing commercial fields", () => {

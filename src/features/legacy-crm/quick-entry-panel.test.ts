@@ -80,10 +80,22 @@ test('canonical editor supports many services with their own dates, crew, suppli
   assert.match(renderer, /canCloseHistoricalProject = quickRole === 'owner'/, 'only the owner confirms money and closes the import');
   assert.match(renderer, /canReassignHistoricalManager = quickRole === 'owner'/, 'only the owner can reassign the project manager');
   assert.match(renderer, /Number\.isFinite\(Number\(o\.paid\)\) \? Math\.max\(0, Number\(o\.paid\)\) : 0/, 'an unpaid import must remain at zero instead of looking fully paid');
+  assert.match(renderer, /projectQuickLineFilms\(line, \{ allowOutOfStock: o\.quickEntryDraft \}\)/, 'a historical material remains selectable even when current stock is zero');
+  assert.doesNotMatch(renderer, /openProjectEstimateWorkspace/, 'a historical import cannot enter the client proposal flow');
+  assert.doesNotMatch(renderer, /сформировать КП/, 'the import UI must not advertise a retroactive proposal');
   const close = fn(html, 'closeQuickProjectAsCompleted');
   assert.match(close, /o\.status = full \? 'completed' : 'act_signed'/, 'partial payment leaves debt visible');
   assert.match(close, /o\.measurementDoneAt = o\.measurementDoneAt \|\| startAt/, 'a completed import accrues fixed-per-job surveyor payroll');
   assert.match(close, /projectEstimateApprovalSnapshot\(o, recordedAt, true\)/);
+});
+
+test('historical material selection never creates current warehouse demand', () => {
+  const update = fn(html, 'projectEstimateUpdateQuickLine');
+  const remove = fn(html, 'projectEstimateDeleteQuickLine');
+  assert.match(fn(html, 'projectQuickLineCatalog'), /allowOutOfStock \|\| item\.id === selectedCatalogId/);
+  assert.match(update, /!o\.quickEntryDraft && warehouseCatalogStockStats\(catalog\.id\)\.availableSqft <= 0/);
+  assert.match(update, /if \(!o\.quickEntryDraft\) \{[\s\S]*reconcileManualFilmPurchase/);
+  assert.match(remove, /removedCatalogId && !o\.quickEntryDraft/);
 });
 
 test('unfinished historical imports stay out of every financial rollup until owner closure', () => {
