@@ -17,9 +17,13 @@ environment file and atomically updates only these two assignments. Never put
 the signing key in the webhook URL, a browser, workspace JSON, logs or Git.
 
 The endpoint verifies `Signature = base64(HMAC-SHA1(key, raw request bytes))`,
-checks the company, and ignores outbound and provider-marked spam calls. Every
-other completed inbound call, including a missed call or voicemail, is retained
-as an enquiry/activity. Neither duration nor CallRail's AI/good-lead label
+checks the company, and ignores outbound calls. Every
+completed inbound call, including a missed call or voicemail, is retained
+as an enquiry/activity. Provider-marked spam is flagged for manager review,
+never silently discarded. Managers can use **Spam / dismiss** to close an
+unwanted enquiry without deleting its call history. Enriching client details
+does not qualify it; the configured actual proposal-sent milestone does.
+Neither duration nor CallRail's AI/good-lead label
 qualifies or sells it. Unknown/withheld numbers remain visible without inventing
 a contact phone. No recordings, transcripts, IP addresses or raw payloads are
 stored by this importer.

@@ -54,15 +54,19 @@ after(async () => {
   await runtimeDb.$disconnect();
 });
 test("signed calls deduplicate concurrently, preserve original source, and create no qualification", async () => {
-  const call = fixture("first");
+  const call = { ...fixture("first"), answered: false, duration: 0, spam: true };
   assert.equal((await send(call, "invalid")).status, 401);
   assert.equal((await send({ ...call, company_id: "another" })).status, 403);
   assert.equal((await send({ ...call, direction: "outbound" })).body.ignored, true);
-  assert.equal((await send({ ...call, spam: true })).body.ignored, true);
   const results = await Promise.all([send(call), send(call)]);
   for (const result of results) assert.equal(result.status, 200);
   const leadId = results[0].body.lead_id;
   ids.push(leadId);
+  const missed = await db.lead.findUniqueOrThrow({ where: { lead_id: leadId }, include: { pipeline_status: true } });
+  assert.equal(missed.pipeline_status.status_code, "NEW_LEAD");
+  assert.match(missed.notes!, /CallRail пометил как спам/);
+  await db.lead.update({ where: { lead_id: leadId }, data: { name: "Enriched offline caller", email: "caller@example.invalid" } });
+  assert.equal(await db.conversionEvent.count({ where: { lead_id: leadId } }), 0, "contact enrichment alone is not qualification");
   assert.equal(results[1].body.lead_id, leadId);
   assert.equal(results.filter(item => item.body.duplicate).length, 1);
   const second = await send(fixture("repeat"));

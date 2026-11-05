@@ -14,9 +14,8 @@ test("CallRail verifies the exact raw body and rejects missing, malformed or alt
   assert.equal(verifyCallrailSignature(raw + " ", signature, key), false);
   assert.equal(verifyCallrailSignature(raw, signature, "other-key"), false);
 });
-test("only the configured company's inbound, nonspam completed calls are enquiries", () => {
+test("only the configured company's inbound completed calls are enquiries", () => {
   assert.equal(normalizeCallrailCall({ ...call, direction: "outbound" }, "456"), null);
-  assert.equal(normalizeCallrailCall({ ...call, spam: true }, "456"), null);
   assert.throws(() => normalizeCallrailCall(call, "other"), CallrailError);
   for (const change of [{ id: "" }, { duration: -1 }, { duration: null }, { duration: "" }, { answered: undefined }, { start_time: "tomorrow" }, { start_time: "2099-01-01T00:00:00Z" }]) {
     assert.throws(() => normalizeCallrailCall({ ...call, ...change }, "456"), CallrailError);
@@ -25,6 +24,16 @@ test("only the configured company's inbound, nonspam completed calls are enquiri
   assert.equal(result.phone, "+12025550123");
   assert.equal(result.attribution.consent?.adUserData, "UNKNOWN");
   assert.equal(normalizeCallrailCall({ ...call, customer_phone_number: "anonymous" }, "456")?.phone, null);
+});
+test("missed and provider-spam calls remain enquiries for manager review without granting consent", () => {
+  for (const spam of [true, "true", false]) {
+    const result = normalizeCallrailCall({ ...call, answered: false, duration: 0, spam }, "456")!;
+    assert.ok(result);
+    assert.equal(result.answered, false);
+    assert.equal(result.duration, 0);
+    assert.equal(result.spam, spam !== false);
+    assert.equal(result.attribution.consent?.adUserData, "UNKNOWN");
+  }
 });
 test("campaign attribution is joined to the actual click, never an unrelated first touch", () => {
   const first = { landing: "https://rolan-pro.com/?gclid=first&campaign_id=11&utm_source=google", event_date: "2026-10-20T10:00:00Z" };
