@@ -321,7 +321,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       // The owner confirms the real payment only in the dedicated close action.
       // Managers may fill services and production facts, but a crafted
       // workspace save must never preload money into the unfinished import.
-      for (const field of ['paid', 'payments', 'depositReceived']) {
+      for (const field of ['paid', 'payments', 'depositReceived', 'payouts']) {
         if (Object.prototype.hasOwnProperty.call(oldOrder, field)) order[field] = oldOrder[field];
         else delete order[field];
       }

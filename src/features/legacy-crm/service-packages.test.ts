@@ -144,6 +144,25 @@ test('repeated historical package services keep separate components, dates and c
   assert.deepEqual(JSON.parse(JSON.stringify(remaining.map((line: Row) => line.quickIncludedByLineId))), [second.id]);
 });
 
+test('changing a historical parent service removes the previous package component', () => {
+  const { context, db, add } = load();
+  const silicone = add({ name: 'Силикон', unit: 'lft' });
+  const controller = add({ name: 'Контроллер', unit: 'piece' });
+  const a1 = add({ name: 'A1 8 mil', unit: 'sqft', includes: [silicone.id] });
+  const a2 = add({ name: 'A2 14 mil', unit: 'sqft', includes: [controller.id] });
+  const parent: Row = { id: 'quick-parent', quickProjectLine: true, serviceType: 'protective_film', offeringId: a1.id, qty: 100, unit: 'sqft', startDate: '2026-01-10', installerIds: ['i1'] };
+  const order: Row = { id: 'o', quickEntry: true, serviceType: 'protective_film', serviceTypes: ['protective_film'], extraServices: [parent], measurements: { rooms: [] } };
+  db.orders.push(order);
+
+  context.syncProjectIncludedServices(order);
+  assert.deepEqual(order.extraServices.filter((line: Row) => line.includedBy).map((line: Row) => line.offeringId), [silicone.id]);
+
+  parent.offeringId = a2.id;
+  context.syncProjectIncludedServices(order);
+  const components = order.extraServices.filter((line: Row) => line.includedBy);
+  assert.deepEqual(JSON.parse(JSON.stringify(components.map((line: Row) => [line.offeringId, line.includedBy, line.quickIncludedByLineId]))), [[controller.id, a2.id, parent.id]]);
+});
+
 test('linear-foot work sold alone follows all windows and an included line cannot be deleted in the UI', () => {
   const { context, db, add } = load();
   const silicone = add({ name: 'Силикон', unit: 'lft', pricePerSqft: 3.5 });

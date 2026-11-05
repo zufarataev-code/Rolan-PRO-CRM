@@ -26383,9 +26383,9 @@ function syncProjectIncludedServices(o) {
   const historicalParents = (o?.quickEntry
     ? (o.extraServices || []).filter(line => !line.includedBy && (line.quickProjectLine === true || line.type === 'offering'))
     : projectQuickLines(o)).filter(line => line.offeringId && !line.includedBy);
-  const historicalParentLineIds = new Set(historicalParents.map(line => line.id));
+  const historicalParentByLineId = new Map(historicalParents.map(line => [line.id, line]));
   const includedParentExists = line => line.quickIncludedByLineId
-    ? historicalParentLineIds.has(line.quickIncludedByLineId)
+    ? historicalParentByLineId.get(line.quickIncludedByLineId)?.offeringId === line.includedBy
     : parents.includes(line.includedBy);
   const removed = lines.filter(line => line.includedBy && !includedParentExists(line));
   const kept = lines.filter(line => !line.includedBy || includedParentExists(line));
