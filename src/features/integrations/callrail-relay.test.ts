@@ -21,13 +21,15 @@ test("CallRail relay preserves signed bytes and forwards only to the fixed recei
     assert.ok(init.signal);
     return new Response('{"ok":false,"error":"invalid_call"}', { status: 400, headers: { "Set-Cookie": "must-not-cross=1" } });
   });
-  const req = new Request(endpoint + "?contact=must-not-forward", { method: "POST", headers: { Signature: signature, Cookie: "private=1", Authorization: "must-not-cross" }, body: raw });
-  const res = await worker.fetch(req);
-  assert.equal(res.status, 400);
-  assert.equal(res.headers.get("set-cookie"), null);
-  assert.equal(res.headers.get("cache-control"), "no-store");
-  assert.deepEqual(await res.json(), { ok: false, error: "invalid_call" });
-  assert.equal(calls, 1);
+  for (const host of ["rolan-pro.com", "callrail.rolan-pro.com"]) {
+    const req = new Request(`https://${host}/integrations/callrail?contact=must-not-forward`, { method: "POST", headers: { Signature: signature, Cookie: "private=1", Authorization: "must-not-cross" }, body: raw });
+    const res = await worker.fetch(req);
+    assert.equal(res.status, 400);
+    assert.equal(res.headers.get("set-cookie"), null);
+    assert.equal(res.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await res.json(), { ok: false, error: "invalid_call" });
+  }
+  assert.equal(calls, 2);
 });
 test("wrong host/path, unsupported methods and unsigned input never reach CRM", async (t) => {
   let calls = 0;
@@ -35,6 +37,8 @@ test("wrong host/path, unsupported methods and unsigned input never reach CRM", 
   for (const [req, status] of [
     [new Request("https://other.example/integrations/callrail"), 404],
     [new Request("http://rolan-pro.com/integrations/callrail"), 404],
+    [new Request("http://callrail.rolan-pro.com/integrations/callrail"), 404],
+    [new Request("https://callrail.rolan-pro.com/other"), 404],
     [new Request(endpoint + "/other"), 404],
     [new Request(endpoint), 405],
     [request(raw, { Signature: "invalid" }), 401],

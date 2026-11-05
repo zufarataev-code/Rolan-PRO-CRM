@@ -2,6 +2,15 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-04 — Dedicated signed CallRail ingress
+
+Use a dedicated Cloudflare Worker custom domain for CallRail callbacks so a
+website-origin route cannot silently consume the POST. Forward original bytes
+to the existing HMAC/company-authenticated CRM receiver, with the same fixed
+host/path/body bounds and no caller-data logging or storage in the relay. A
+scoped BIC exception may admit non-browser POSTs at that path; it never replaces
+CRM authentication. Keep the apex handler only as a guarded compatibility path.
+
 ## 2026-11-04 — Dedicated Meta instant form delivery into canonical leads
 
 - The user chose direct Meta → RolanPRO CRM delivery without Zapier and a separate app named **RolanPro Lead Sync**. Do not reuse PWI Ads MCP or the owner’s Messenger app for this connection.
