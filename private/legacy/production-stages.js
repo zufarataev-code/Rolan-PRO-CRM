@@ -3411,8 +3411,9 @@ function quickEntryState() {
 }
 function quickEntryDefaultForm(keep = {}) {
   const managers = quickEntryManagers();
+  const currentOfficeUser = managers.find(user => user.id === currentUser()?.id);
   return {
-    date: keep.date || localDateKey(), manager: keep.manager || managers[0]?.id || '', method: keep.method || 'zelle',
+    date: keep.date || localDateKey(), manager: keep.manager || currentOfficeUser?.id || managers[0]?.id || '', method: keep.method || 'zelle',
     client: '', phone: '', street: '', city: '', source: 'google', site: 'RESIDENTIAL',
     measurer: keep.measurer || '', notes: '',
   };
@@ -3460,8 +3461,9 @@ function quickEntryOrders(month = quickEntryState().month) {
 }
 function quickEntryDraftOrders() {
   // A historical draft may be older than the twelve-month analytics picker.
-  // Keep every unfinished import reachable until the manager completes it.
-  return (db.orders || []).filter(o => o.quickEntryDraft && !o.quickProjectImportedCompleted)
+  // Keep every unfinished import reachable until the manager completes it,
+  // but never reveal another manager's project in the continuation list.
+  return visibleOrdersForUser().filter(o => o.quickEntryDraft && !o.quickProjectImportedCompleted)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 /** Что CRM насчитала по заказу и что в этом подозрительно. */

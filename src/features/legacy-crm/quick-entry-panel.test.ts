@@ -45,6 +45,20 @@ test('owner can be the surveyor without duplicating the employee card', () => {
   assert.match(stages, /Замерщик<select id="qe-measurer"/);
 });
 
+test('a new historical draft defaults to the current office user instead of the first manager', () => {
+  const users = [
+    { id: 'first', role: 'manager', active: true },
+    { id: 'creator', role: 'manager', active: true },
+  ];
+  const context: any = vm.createContext({
+    db: { users },
+    currentUser: () => users[1],
+    localDateKey: () => '2026-11-04',
+  });
+  vm.runInContext(`${fn(stages, 'quickEntryManagers')}; ${fn(stages, 'quickEntryDefaultForm')}; result = quickEntryDefaultForm();`, context);
+  assert.equal(context.result.manager, 'creator');
+});
+
 test('canonical editor supports many services with their own dates, crew, supplies and direct expenses', () => {
   const renderer = fn(html, 'renderQuickProjectEntry');
   assert.match(renderer, /Можно добавить несколько услуг/);
@@ -71,10 +85,11 @@ test('unfinished historical drafts stay reachable regardless of age', () => {
     orders: [
       { id: 'old', quickEntryDraft: true, createdAt: '2020-01-01T00:00:00.000Z' },
       { id: 'new', quickEntryDraft: true, createdAt: '2026-11-01T00:00:00.000Z' },
+      { id: 'other-manager', quickEntryDraft: true, createdAt: '2026-11-03T00:00:00.000Z' },
       { id: 'done', quickEntryDraft: false, quickProjectImportedCompleted: true, createdAt: '2026-11-02T00:00:00.000Z' },
     ],
   };
-  const context: any = vm.createContext({ db });
+  const context: any = vm.createContext({ db, visibleOrdersForUser: () => db.orders.filter(order => order.id !== 'other-manager') });
   vm.runInContext(`${fn(stages, 'quickEntryDraftOrders')}; result = quickEntryDraftOrders();`, context);
   assert.deepEqual(Array.from(context.result, (order: any) => order.id), ['new', 'old']);
 });
