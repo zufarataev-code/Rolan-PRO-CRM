@@ -30,13 +30,13 @@ export function normalizeCallrailCall(input: unknown, companyId: string, now = n
   const callId = id(body.id);
   const start = text(body.start_time, 64);
   const duration = typeof body.duration === "number" || (typeof body.duration === "string" && /^\d+$/.test(body.duration)) ? Number(body.duration) : NaN;
-  if (!callId || !/^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(start) || !Number.isFinite(Date.parse(start)) || Date.parse(start) > now.getTime() + 300_000 || !Number.isInteger(duration) || duration < 0 || duration > 604800 || typeof body.answered !== "boolean") {
-    throw new CallrailError("invalid_call", "A completed call ID, start time, duration and answered flag are required.");
+  if (!callId || !/^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(start) || !Number.isFinite(Date.parse(start)) || Date.parse(start) > now.getTime() + 300_000 || !Number.isInteger(duration) || duration < 0 || duration > 604800 || (body.answered !== null && typeof body.answered !== "boolean")) {
+    throw new CallrailError("invalid_call", "A completed call ID, start time, duration and boolean or null answer status are required.");
   }
   const rawPhone = text(body.customer_phone_number, 40);
   const phone = /^[+\d(). -]+$/.test(rawPhone) ? normalizePhoneE164(rawPhone) : null;
   const source = text(body.source_name) || "Unknown";
-  const callType = text(body.call_type, 60) || (body.answered ? "answered" : "unanswered");
+  const callType = text(body.call_type, 60) || (body.answered === null ? "unknown" : body.answered ? "answered" : "unanswered");
   const metadata = { call_key: `${companyId}:${callId}`, call_id: callId, company_id: companyId, started_at: new Date(start).toISOString(), duration, answered: body.answered, spam: body.spam === true || body.spam === "true", call_type: callType, source, tracking_phone_number: text(body.tracking_phone_number, 40), campaign: text(body.campaign) };
 
   // CallRail's top-level GCLID can differ from its first-touch campaign. Join

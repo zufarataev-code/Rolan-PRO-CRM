@@ -35,6 +35,18 @@ test("missed and provider-spam calls remain enquiries for manager review without
     assert.equal(result.attribution.consent?.adUserData, "UNKNOWN");
   }
 });
+test("completed missed calls preserve CallRail's unknown answered status", () => {
+  const input = { ...call, state: "completed", answered: null, duration: 64 };
+  const result = normalizeCallrailCall(input, "456")!;
+  assert.equal(result.answered, null);
+  assert.equal(result.call_type, "unknown");
+  assert.equal(result.duration, 64);
+  assert.equal(result.attribution.consent?.adUserData, "UNKNOWN");
+  assert.equal(normalizeCallrailCall({ ...input, call_type: "missed" }, "456")?.call_type, "missed");
+  for (const change of [{ duration: null }, { duration: undefined }, { answered: undefined }, { answered: "false" }]) {
+    assert.throws(() => normalizeCallrailCall({ ...input, ...change }, "456"), CallrailError);
+  }
+});
 test("campaign attribution is joined to the actual click, never an unrelated first touch", () => {
   const first = { landing: "https://rolan-pro.com/?gclid=first&campaign_id=11&utm_source=google", event_date: "2026-10-20T10:00:00Z" };
   const last = { landing: "https://rolan-pro.com/?gclid=last&campaign_id=22&utm_source=google", event_date: "2026-10-30T10:00:00Z" };
