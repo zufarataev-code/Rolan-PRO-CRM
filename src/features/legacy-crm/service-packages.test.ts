@@ -300,7 +300,7 @@ test('server restores an included line deleted or repointed without removing its
 
 test('server does not restore the component of one removed repeated historical parent', () => {
   const saved = base();
-  Object.assign(saved.orders[0], { status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false, measurements: { rooms: [] } });
+  Object.assign(saved.orders[0], { managerId: 'manager-a', status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false, measurements: { rooms: [] } });
   const first = { id: 'quick-a1-first', quickProjectLine: true, offeringId: 'a1', serviceType: 'protective_film', unit: 'sqft', qty: 120 };
   const second = { id: 'quick-a1-second', quickProjectLine: true, offeringId: 'a1', serviceType: 'protective_film', unit: 'sqft', qty: 80 };
   const firstChild = includedLine({ id: 'silicone-first', quickIncludedByLineId: first.id });
@@ -309,7 +309,7 @@ test('server does not restore the component of one removed repeated historical p
   const next = structuredClone(saved);
   next.orders[0].extraServices = next.orders[0].extraServices.filter((line: Row) => ![first.id, firstChild.id].includes(line.id));
 
-  assert.equal(prepareServiceSolutions(saved, next, false), null);
+  assert.equal(prepareServiceSolutions(saved, next, false, ['manager-a']), null);
   assert.deepEqual(next.orders[0].extraServices.map((line: Row) => line.id).sort(), [second.id, secondChild.id].sort());
 });
 

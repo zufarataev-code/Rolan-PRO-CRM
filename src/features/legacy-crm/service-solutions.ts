@@ -12,6 +12,20 @@ const stableJson = (value: unknown): string => JSON.stringify(value, (_key, item
 const rows = (x: unknown): Row[] => Array.isArray(x) ? x.map(object) : [];
 const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))];
 
+/**
+ * Facts entered through the historical-project workspace. They determine
+ * revenue, direct cost, payroll and production history, so another manager
+ * cannot edit them and a completed import is owner-corrected only.
+ */
+const historicalProjectFacts = (order: Row) => Object.fromEntries([
+  'managerId', 'clientId', 'measurerId', 'historicalMeasurementDate', 'status', 'createdAt',
+  'serviceType', 'offeringId', 'offeringIds', 'offeringCatalogIds', 'offeringUnits',
+  'measurements', 'extraServices', 'extraExpenses', 'serviceSchedules', 'serviceProgress',
+  'installerIds', 'installationAt', 'installationDoneAt', 'complexity', 'distanceKm',
+  'paid', 'payments', 'depositReceived', 'payouts', 'quickEntry', 'quickEntryDraft',
+  'quickProjectImportedCompleted',
+].filter(field => Object.prototype.hasOwnProperty.call(order, field)).map(field => [field, order[field]]));
+
 // Five customer-facing directions plus the internal bucket for object-wide work.
 export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'privacy', 'general'] as const;
 export const SERVICE_UNITS = ['sqft', 'lft', 'piece', 'zone', 'fixed', 'custom'] as const;
@@ -176,7 +190,7 @@ export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInsta
   return copy;
 }
 
-export function prepareServiceSolutions(current: Row, next: Row, owner: boolean): string | null {
+export function prepareServiceSolutions(current: Row, next: Row, owner: boolean, managerIds: readonly string[] = []): string | null {
   const currentOfferings = rows(object(current.settings).serviceOfferings);
   const settings = object(next.settings);
   // Owner, 2026-10-27: «режим внедрения» — old projects are entered backdated,
@@ -294,6 +308,9 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const newHistoricalImport = oldOrder.id === undefined
       && (order.quickEntry === true || order.quickEntryDraft === true || order.quickProjectImportedCompleted === true);
     if (newHistoricalImport) {
+      if (!owner && !managerIds.includes(String(order.managerId))) {
+        return 'Менеджер создаёт исторический проект только на себя.';
+      }
       if (order.quickEntry !== true || order.quickEntryDraft !== true
         || order.quickProjectImportedCompleted === true || order.status !== 'new') {
         return 'Новый исторический проект сначала создаётся черновиком; завершить перенос может только владелец.';
@@ -315,6 +332,8 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       && CLOSED_PROJECT_STATUSES.includes(String(order.status));
     const historicalImportDraft = oldOrder.id !== undefined
       && oldOrder.quickEntry === true && oldOrder.quickEntryDraft === true && oldOrder.quickProjectImportedCompleted !== true;
+    const historicalImportExisting = oldOrder.id !== undefined
+      && (oldOrder.quickEntry === true || oldOrder.quickEntryDraft === true || oldOrder.quickProjectImportedCompleted === true);
     const historicalMarkersChanged = oldOrder.id !== undefined && (
       order.quickEntry !== oldOrder.quickEntry
       || order.quickEntryDraft !== oldOrder.quickEntryDraft
@@ -668,6 +687,18 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     if (Array.isArray(order.serviceSchedules) && order.serviceSchedules.length && SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) {
       order.installerIds = [...new Set(rows(order.serviceSchedules).flatMap(plan => Array.isArray(plan.installerIds) ? plan.installerIds : []))];
       order.installationAt = rows(order.serviceSchedules).map(plan => plan.installationAt).filter(value => typeof value === 'string' && value !== '').sort()[0];
+    }
+    if (!owner && historicalImportExisting
+      && stableJson(historicalProjectFacts(order)) !== stableJson(historicalProjectFacts(oldOrder))) {
+      if (!managerIds.includes(String(oldOrder.managerId))) {
+        return 'Исторический проект может менять только назначенный менеджер.';
+      }
+      if (order.managerId !== oldOrder.managerId) {
+        return 'Ответственного менеджера исторического проекта меняет только владелец.';
+      }
+      if (oldOrder.quickProjectImportedCompleted === true) {
+        return 'Завершённый исторический проект может исправлять только владелец.';
+      }
     }
   }
   return null;

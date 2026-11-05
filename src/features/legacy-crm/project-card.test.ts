@@ -521,7 +521,7 @@ test('server: an owner can close only a persisted historical draft with a concre
   const settings = { serviceOfferings: [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }] };
   const users = [{ id: 'i1', role: 'installer' }];
   const order = (offeringId = 'a1'): Row => ({
-    id: 'historical', status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false,
+    id: 'historical', managerId: 'manager-a', status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false,
     serviceType: 'protective_film', offeringIds: offeringId ? [offeringId] : [], offeringUnits: offeringId ? { [offeringId]: 'sqft' } : {},
     measurements: { rooms: [] },
     extraServices: [{ id: 'line', quickProjectLine: true, offeringId, unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film', installerIds: ['i1'], startDate: '2026-09-01' }],
@@ -552,12 +552,12 @@ test('server: an owner can close only a persisted historical draft with a concre
 
   const payoutBypass = structuredClone(current);
   payoutBypass.orders[0].payouts = [{ id: 'forged', userId: 'i1', amount: 500, paid: true }];
-  assert.equal(prepareServiceSolutions(current, payoutBypass, false), null);
+  assert.equal(prepareServiceSolutions(current, payoutBypass, false, ['manager-a']), null);
   assert.equal(Object.prototype.hasOwnProperty.call(payoutBypass.orders[0], 'payouts'), false);
 
   const forgedNewDraft: Row = { settings, users, orders: [order()] };
   forgedNewDraft.orders[0].payouts = [{ id: 'forged-new', userId: 'i1', amount: 750, paid: true }];
-  assert.equal(prepareServiceSolutions({ settings, users, orders: [] }, forgedNewDraft, false), null);
+  assert.equal(prepareServiceSolutions({ settings, users, orders: [] }, forgedNewDraft, false, ['manager-a']), null);
   assert.deepEqual(forgedNewDraft.orders[0].payouts, [], 'a new historical draft cannot preload payroll cash');
 
   const managerFlagBypass = structuredClone(current);
@@ -573,6 +573,40 @@ test('server: an owner can close only a persisted historical draft with a concre
   const forgeImport = structuredClone(ordinaryCurrent);
   Object.assign(forgeImport.orders[0], { quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false });
   assert.equal(prepareServiceSolutions(ordinaryCurrent, forgeImport, false), 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.');
+});
+
+test('server: managers own only their historical drafts and completed imports are owner-corrected', () => {
+  const settings = { serviceOfferings: [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }] };
+  const users = [{ id: 'i1', role: 'installer' }];
+  const draft: Row = {
+    id: 'historical', managerId: 'manager-a', status: 'new', quickEntry: true, quickEntryDraft: true,
+    quickProjectImportedCompleted: false, serviceType: 'protective_film', offeringIds: ['a1'],
+    offeringUnits: { a1: 'sqft' }, measurements: { rooms: [] },
+    extraServices: [{ id: 'line', quickProjectLine: true, offeringId: 'a1', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film' }],
+  };
+  const current: Row = { settings, users, orders: [draft] };
+
+  const newForColleague: Row = { settings, users, orders: [{ ...structuredClone(draft), id: 'new', managerId: 'manager-b' }] };
+  assert.equal(
+    prepareServiceSolutions({ settings, users, orders: [] }, newForColleague, false, ['manager-a']),
+    'Менеджер создаёт исторический проект только на себя.',
+  );
+
+  assert.equal(prepareServiceSolutions(current, structuredClone(current), false, ['manager-b']), null, 'unchanged rows owned by colleagues round-trip');
+  const colleagueEdit = structuredClone(current);
+  colleagueEdit.orders[0].extraServices[0].qty = 20;
+  assert.equal(prepareServiceSolutions(current, colleagueEdit, false, ['manager-b']), 'Исторический проект может менять только назначенный менеджер.');
+
+  const ownEdit = structuredClone(current);
+  ownEdit.orders[0].extraServices[0].qty = 20;
+  assert.equal(prepareServiceSolutions(current, ownEdit, false, ['manager-a']), null, 'the assigned manager may prepare their unfinished import');
+
+  const completedCurrent = structuredClone(current);
+  Object.assign(completedCurrent.orders[0], { status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true });
+  const managerCorrection = structuredClone(completedCurrent);
+  managerCorrection.orders[0].extraServices[0].qty = 25;
+  assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, false, ['manager-a']), 'Завершённый исторический проект может исправлять только владелец.');
+  assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, true), null, 'the owner keeps an explicit correction path');
 });
 
 

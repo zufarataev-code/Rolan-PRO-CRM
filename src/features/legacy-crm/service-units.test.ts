@@ -242,10 +242,10 @@ test('a newly created historical import is accepted only as an unpaid draft', ()
   current.orders = [];
   const submitted: Row = structuredClone(base);
   Object.assign(submitted.orders[0], {
-    status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false,
+    managerId: 'manager-a', status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false,
     paid: 900, payments: [{ id: 'forged', amount: 900 }], depositReceived: true,
   });
-  assert.equal(prepareServiceSolutions(current, submitted, false), null);
+  assert.equal(prepareServiceSolutions(current, submitted, false, ['manager-a']), null);
   assert.equal(submitted.orders[0].paid, 0);
   assert.deepEqual(submitted.orders[0].payments, []);
   assert.equal(submitted.orders[0].depositReceived, false);
