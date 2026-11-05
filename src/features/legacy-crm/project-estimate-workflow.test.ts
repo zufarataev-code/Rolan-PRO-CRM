@@ -242,7 +242,8 @@ test("quick service adds stock supplies and includes their purchase cost", () =>
 });
 
 test("owner can close a completed legacy project with its actual payment", () => {
-  const closer = source.match(/function closeQuickProjectAsCompleted\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
+  // The button handler reads the form and confirms; closeQuickProjectAsCompletedWith does the closing (shared with the one-screen quick entry).
+  const closer = (source.match(/function closeQuickProjectAsCompleted\(oid\) \{[\s\S]*?\n\}/)?.[0] || "") + (source.match(/function closeQuickProjectAsCompletedWith\([\s\S]*?\n\}/)?.[0] || "");
   const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);

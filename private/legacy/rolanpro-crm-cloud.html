@@ -29432,7 +29432,8 @@ function projectQuickCompletionIssues(o) {
     const index = issues.indexOf(issue);
     if (index >= 0) issues.splice(index, 1);
   });
-  if (quickLines.some(line => !Array.isArray(line.installerIds) || !line.installerIds.length)) {
+  // Owner, 2026-11-05: услугу мог делать наёмный специалист (электрик) — он записан прямым расходом строки.
+  if (quickLines.some(line => (!Array.isArray(line.installerIds) || !line.installerIds.length) && !(o.extraExpenses || []).some(expense => expense.type === 'subcontractor' && expense.lineId === line.id))) {
     issues.push('у каждой услуги нужен исполнитель');
   }
   if (o.measurerId && !projectQuickDateValue(o.historicalMeasurementDate)) {
@@ -29466,6 +29467,19 @@ function closeQuickProjectAsCompleted(oid) {
   if (requestedPaid > 0 && !paidDate) { alert('Укажите дату оплаты.'); return; }
   const willBePaidInFull = requestedPaid >= revenue - 0.5;
   if (!confirm(`Закрыть ${o.number} как выполненный? Оплачено ${fmtMoney(requestedPaid)} из ${fmtMoney(revenue)}${willBePaidInFull ? '' : `, долг ${fmtMoney(revenue - requestedPaid)}`}.`)) return;
+  closeQuickProjectAsCompletedWith(o, { requestedPaid, paidDate, method });
+  closeModal(); openOrder(oid);
+}
+/**
+ * Закрытие исторического проекта по уже проверенным фактам (projectQuickCompletionIssues).
+ * Тот же код для кнопки в редакторе и для панели быстрого ввода в одно окно (Owner, 2026-11-05).
+ */
+function closeQuickProjectAsCompletedWith(o, { requestedPaid = 0, paidDate = '', method = 'zelle' } = {}) {
+  if (!o || currentUser()?.role !== 'owner') return;
+  const range = projectQuickDateRange(o);
+  const revenue = orderRevenue(o);
+  paidDate = projectQuickDateValue(paidDate || range.endDate);
+  requestedPaid = Math.min(revenue, Math.max(0, Number(requestedPaid) || 0));
 
   const recordedAt = new Date().toISOString();
   const startAt = `${range.startDate}T12:00:00.000Z`;
@@ -29509,7 +29523,7 @@ function closeQuickProjectAsCompleted(oid) {
   o.timeline.push({ at: recordedAt, key: 'project_estimate_approved', by: state.currentUserId, note: `Импортированный расчёт подтверждён: ${fmtMoney(revenue)}` });
   if (o.paid > 0) o.timeline.push({ at: paidAt, key: 'payment_received', by: state.currentUserId, note: `${full ? 'Полная' : 'Частичная'} оплата ${fmtMoney(o.paid)} · перенос из старой CRM` });
   o.timeline.push({ at: endAt, key: full ? 'completed' : 'act_signed', by: state.currentUserId, note: full ? 'Выполненный и оплаченный проект перенесён из старой CRM' : `Выполненный проект перенесён из старой CRM · долг ${fmtMoney(revenue - o.paid)}` });
-  save(); closeModal(); openOrder(oid);
+  save();
 }
 
 function quickProjectUpdateHeader(oid, field, value) {

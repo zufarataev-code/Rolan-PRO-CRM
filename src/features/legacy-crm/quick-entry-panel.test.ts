@@ -17,7 +17,7 @@ test('the panel is a view of its own for owner and manager', () => {
 });
 
 test('historical entry first creates one draft project, then opens the canonical multi-service editor', () => {
-  const create = fn(stages, 'quickEntryCreateDraft');
+  const create = fn(stages, 'quickEntryCreateDraft') + fn(stages, 'quickEntryNewOrder');
   for (const required of ['дата проекта', 'имя клиента', 'менеджер']) assert.ok(create.includes(required), required);
   assert.doesNotMatch(create, /problems\.push\('замерщик'\)/, 'an unknown historical surveyor is allowed');
   assert.match(create, /extraServices: \[\], extraExpenses: \[\]/, 'the header does not invent a first service');
@@ -81,8 +81,10 @@ test('a new historical draft defaults to the current office user instead of the 
     db: { users },
     currentUser: () => users[1],
     localDateKey: () => '2026-11-04',
+    filmDirections: () => [{ id: 'solar_film' }],
+    uid: () => 'k1',
   });
-  vm.runInContext(`${fn(stages, 'quickEntryManagers')}; ${fn(stages, 'quickEntryDefaultForm')}; result = quickEntryDefaultForm();`, context);
+  vm.runInContext(`${fn(stages, 'quickEntryManagers')}; ${fn(stages, 'quickEntryNewLine')}; ${fn(stages, 'quickEntryDefaultForm')}; result = quickEntryDefaultForm();`, context);
   assert.equal(context.result.manager, 'creator');
 });
 
@@ -116,7 +118,7 @@ test('canonical editor supports many services with their own dates, crew, suppli
   assert.match(fn(html, 'projectQuickCompletionIssues'), /line\.unit === 'sqft' && !line\.catalogId/, 'only a film service requires warehouse film');
   assert.doesNotMatch(renderer, /openProjectEstimateWorkspace/, 'a historical import cannot enter the client proposal flow');
   assert.doesNotMatch(renderer, /сформировать КП/, 'the import UI must not advertise a retroactive proposal');
-  const close = fn(html, 'closeQuickProjectAsCompleted');
+  const close = fn(html, 'closeQuickProjectAsCompletedWith');
   assert.match(close, /o\.status = full \? 'completed' : 'act_signed'/, 'partial payment leaves debt visible');
   assert.match(close, /const measurementDate = projectQuickDateValue\(o\.historicalMeasurementDate\)/);
   assert.match(close, /o\.measurementDoneAt = o\.measurerId \? \(o\.measurementDoneAt \|\| measurementAt\) : null/, 'fixed-per-job surveyor payroll uses the actual survey date, not installation');
@@ -266,4 +268,31 @@ test('the historical-project actual survey date can be corrected independently',
   });
   vm.runInContext(`${fn(html, 'quickProjectUpdateHeader')}; quickProjectUpdateHeader('o', 'historicalMeasurementDate', '2026-09-15');`, context);
   assert.equal(order.historicalMeasurementDate, '2026-09-15');
+});
+
+
+// Owner, 2026-11-04/05: the section stays ONE window — services with «+ услуга», each
+// with its own date, crew (or a hired specialist) and supplies — and commits through
+// the same historical model as the editor (draft order → completion checks → close).
+test('one-screen entry: many services in the form, committed through the historical model', () => {
+  assert.match(fn(stages, 'quickEntryDefaultForm'), /lines: \[quickEntryNewLine\(keep\)\]/);
+  assert.match(fn(stages, 'quickEntryNewLine'), /installers: \[\], hired: '', hiredName: '', supplies: \[\]/);
+  assert.match(fn(stages, 'quickEntryAddLine'), /lines\.push\(quickEntryNewLine\(\{ date: last\?\.date, dir: last\?\.dir \}\)\)/, '«+ услуга» keeps the last date and direction');
+  assert.match(fn(stages, 'renderQuickEntry'), /onclick="quickEntryAddLine\(\)">\+ Добавить услугу/);
+  const commit = fn(stages, 'quickEntryCommit');
+  for (const required of ['имя клиента', 'менеджер', 'дата работ', 'услуга`', 'плёнка`', 'объём (sq ft / шт)', 'сумма клиенту', 'хотя бы один исполнитель или наёмный']) assert.ok(commit.includes(required), required);
+  assert.match(commit, /quickEntryNewOrder\(f, client, address, \{ managerId, date: firstDate, measurementDate \}\)/, 'same order skeleton as the draft path');
+  assert.match(commit, /type: 'subcontractor'/, 'a hired specialist is a direct project expense tied to its line');
+  assert.match(commit, /line\.hiredExpenseId = expense\.id/);
+  assert.match(commit, /projectQuickSyncProjectInstallers\(o\)/, 'line installers become project installers, so payroll sees them');
+  assert.match(commit, /const issues = projectQuickCompletionIssues\(o\);/, 'the editor\'s completion checks guard the one-screen path too');
+  assert.match(commit, /closeQuickProjectAsCompletedWith\(o, \{ requestedPaid: paid, paidDate: lastDate, method/, 'closing is the editor\'s own code');
+  assert.match(commit, /if \(actor\?\.role !== 'owner'\)[\s\S]*черновик сохранён, закроет владелец/, 'a manager leaves a draft for the owner');
+  const build = fn(stages, 'quickEntryBuildLine');
+  assert.match(build, /if \(serviceOfferingNeedsSizes\(offering\)\)[\s\S]*quickProjectLine: true[\s\S]*\} else \{[\s\S]*projectOfferingLine\(offering, qty, src\.dir\)/, 'film services become quick lines, size-free ones directory lines');
+  assert.match(build, /startDate: date, endDate: date, installerIds: installers, supplyItems/);
+  assert.match(fn(html, 'projectQuickCompletionIssues'), /expense\.type === 'subcontractor' && expense\.lineId === line\.id/, 'a hired specialist satisfies the installer rule');
+  const calc = fn(stages, 'quickEntryLineCalc');
+  assert.match(calc, /installerRateForQuickLine\(null, ref\)/, 'line preview uses the service rate');
+  assert.match(calc, /warehouseCatalogCostPerSqft\(catalogId, true\)/);
 });
