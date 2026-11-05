@@ -560,6 +560,13 @@ test('server: an owner can close only a persisted historical draft with a concre
   assert.equal(prepareServiceSolutions({ settings, users, orders: [] }, forgedNewDraft, false, ['manager-a']), null);
   assert.deepEqual(forgedNewDraft.orders[0].payouts, [], 'a new historical draft cannot preload payroll cash');
 
+  const forgedInventoryDraft: Row = { settings, users, orders: [order()] };
+  Object.assign(forgedInventoryDraft.orders[0], { _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [] });
+  assert.equal(
+    prepareServiceSolutions({ settings, users, orders: [] }, forgedInventoryDraft, false, ['manager-a']),
+    'Складскую себестоимость исторического проекта рассчитывает только система.',
+  );
+
   const managerFlagBypass = structuredClone(current);
   Object.assign(managerFlagBypass.orders[0], { quickEntryDraft: false, quickProjectImportedCompleted: true });
   assert.equal(prepareServiceSolutions(current, managerFlagBypass, false), 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.');
@@ -601,12 +608,48 @@ test('server: managers own only their historical drafts and completed imports ar
   ownEdit.orders[0].extraServices[0].qty = 20;
   assert.equal(prepareServiceSolutions(current, ownEdit, false, ['manager-a']), null, 'the assigned manager may prepare their unfinished import');
 
+  const forgedDraftInventory = structuredClone(current);
+  Object.assign(forgedDraftInventory.orders[0], { _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [] });
+  assert.equal(
+    prepareServiceSolutions(current, forgedDraftInventory, false, ['manager-a']),
+    'Складскую себестоимость исторического проекта рассчитывает только система.',
+  );
+
   const completedCurrent = structuredClone(current);
   Object.assign(completedCurrent.orders[0], { status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true });
   const managerCorrection = structuredClone(completedCurrent);
   managerCorrection.orders[0].extraServices[0].qty = 25;
   assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, false, ['manager-a']), 'Завершённый исторический проект может исправлять только владелец.');
   assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, true), null, 'the owner keeps an explicit correction path');
+
+  const forgedCompletedInventory = structuredClone(completedCurrent);
+  Object.assign(forgedCompletedInventory.orders[0], { _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [] });
+  assert.equal(
+    prepareServiceSolutions(completedCurrent, forgedCompletedInventory, false, ['manager-a']),
+    'Складскую себестоимость исторического проекта рассчитывает только система.',
+  );
+});
+
+test('server: the owner close action cannot submit a forged warehouse-cost snapshot', () => {
+  const settings = { serviceOfferings: [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }] };
+  const users = [{ id: 'i1', role: 'installer' }];
+  const draft: Row = {
+    id: 'historical', managerId: 'manager-a', status: 'new', quickEntry: true, quickEntryDraft: true,
+    quickProjectImportedCompleted: false, serviceType: 'protective_film', offeringIds: ['a1'],
+    offeringUnits: { a1: 'sqft' }, measurements: { rooms: [] },
+    extraServices: [{ id: 'line', quickProjectLine: true, offeringId: 'a1', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film', installerIds: ['i1'], startDate: '2026-09-01' }],
+  };
+  const current: Row = { settings, users, orders: [draft] };
+  const closing = structuredClone(current);
+  Object.assign(closing.orders[0], {
+    status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true,
+    serviceSchedules: [{ id: 'line:line', installerIds: ['i1'], installationAt: '2026-09-01T12:00:00.000Z' }],
+    _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [],
+  });
+  assert.equal(
+    prepareServiceSolutions(current, closing, true),
+    'Складскую себестоимость исторического проекта рассчитывает только система.',
+  );
 });
 
 

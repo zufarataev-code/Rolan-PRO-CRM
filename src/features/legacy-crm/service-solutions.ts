@@ -11,6 +11,7 @@ const stableJson = (value: unknown): string => JSON.stringify(value, (_key, item
     : item);
 const rows = (x: unknown): Row[] => Array.isArray(x) ? x.map(object) : [];
 const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))];
+const HISTORICAL_INVENTORY_FIELDS = ['_inventoryDeducted', '_inventoryMaterialCost', '_inventoryLog'] as const;
 
 /**
  * Facts entered through the historical-project workspace. They determine
@@ -21,9 +22,12 @@ const historicalProjectFacts = (order: Row) => Object.fromEntries([
   'managerId', 'clientId', 'measurerId', 'historicalMeasurementDate', 'status', 'createdAt',
   'serviceType', 'offeringId', 'offeringIds', 'offeringCatalogIds', 'offeringUnits',
   'measurements', 'extraServices', 'extraExpenses', 'serviceSchedules', 'serviceProgress',
-  'installerIds', 'installationAt', 'installationDoneAt', 'complexity', 'distanceKm',
-  'paid', 'payments', 'depositReceived', 'payouts', 'quickEntry', 'quickEntryDraft',
-  'quickProjectImportedCompleted',
+  'installerIds', 'installationAt', 'installationDoneAt', 'measurementDoneAt', 'actSignedAt',
+  'complexity', 'distanceKm', 'paid', 'paidAt', 'payments', 'depositReceived',
+  'depositReceivedAt', 'payouts', 'projectEstimateApprovedAt', 'projectEstimateApprovedBy',
+  'projectEstimateUpdatedAt', 'projectEstimateSnapshot', 'timeline', 'quickEntry', 'quickEntryDraft',
+  'quickProjectImportedCompleted', 'quickProjectImportedCompletedAt', 'quickProjectImportedCompletedBy',
+  ...HISTORICAL_INVENTORY_FIELDS,
 ].filter(field => Object.prototype.hasOwnProperty.call(order, field)).map(field => [field, order[field]]));
 
 // Five customer-facing directions plus the internal bucket for object-wide work.
@@ -318,6 +322,9 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
       if (liveFunnelFields.slice(1).some(field => order[field] !== undefined && order[field] !== null && order[field] !== false && order[field] !== '')) {
         return 'Новый исторический черновик не может содержать этапы рабочей воронки.';
       }
+      if (HISTORICAL_INVENTORY_FIELDS.some(field => Object.prototype.hasOwnProperty.call(order, field))) {
+        return 'Складскую себестоимость исторического проекта рассчитывает только система.';
+      }
       order.paid = 0;
       order.payments = [];
       order.depositReceived = false;
@@ -334,6 +341,10 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
       && oldOrder.quickEntry === true && oldOrder.quickEntryDraft === true && oldOrder.quickProjectImportedCompleted !== true;
     const historicalImportExisting = oldOrder.id !== undefined
       && (oldOrder.quickEntry === true || oldOrder.quickEntryDraft === true || oldOrder.quickProjectImportedCompleted === true);
+    if (historicalImportExisting && HISTORICAL_INVENTORY_FIELDS.some(field =>
+      stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
+      return 'Складскую себестоимость исторического проекта рассчитывает только система.';
+    }
     const historicalMarkersChanged = oldOrder.id !== undefined && (
       order.quickEntry !== oldOrder.quickEntry
       || order.quickEntryDraft !== oldOrder.quickEntryDraft
