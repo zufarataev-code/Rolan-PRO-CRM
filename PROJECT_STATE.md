@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-04 — CallRail webhook call identifier compatibility (in progress)
+
+- Task owner: Codex, branch `codex/callrail-webhook-identifiers-20261104`, based on verified `origin/main` and active production release `76312df` (merged PR #462).
+- The genuine completed-call callback was authenticated and rejected as `invalid_call`: protected diagnostics show `id: undefined`, with a string start/duration and boolean answered flag. No caller values were logged. The provider webhook does not supply the API `id` field expected by the normalizer.
+- Accept the fixed call-identifier fields `call_id` or `resource_id` when API `id` is absent, with the same identifier validation and company-scoped durable receipt key. Preserve API-id precedence. Add failing-before-fix alias tests and a signed disposable E2E fixture that deduplicates across field aliases. Type-only diagnostics include the two fixed alias names so a remaining mismatch can be distinguished without exposing values. All 1,022 unit tests, TypeScript and production build pass; independent Claude CLI review reports NO_FINDINGS. Published-head CI, release and genuine acceptance remain pending; the diagnostic has not yet proved which alias this callback supplies.
+- PR #462 passed branch CI 41954205998 and merged-main CI 41954729494. Release 41955073538 has the known final health-curl timeout, but active SHA and a deliberately incomplete signed probe independently prove the new protected diagnostic is running. Staging MR !50 remains deployed, noindex, with no external tracking loader or generated Critical CSS.
+
 ## 2026-11-04 — Safe CallRail rejection diagnosis (in progress)
 
 - Task owner: Codex, branch `codex/callrail-rejection-diagnostics-20261104`, based on verified `origin/main` and active production release `68826e5` (merged PR #461).

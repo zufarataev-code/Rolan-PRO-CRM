@@ -8,10 +8,10 @@ import { CallrailError, callrailPayloadTypes, normalizeCallrailCall, verifyCallr
 const call = { id: 123, company_id: 456, direction: "inbound", start_time: "2026-11-01T10:00:00-08:00", duration: "63", answered: true, customer_phone_number: "(202) 555-0123", source_name: "Google Ads" };
 test("CallRail rejection diagnostics expose only fixed field types, never caller values", () => {
   assert.deepEqual(callrailPayloadTypes({ ...call, answered: null, note: "private note", signature: "private key" }), {
-    id: "number", start_time: "string", duration: "string", answered: "null",
+    id: "number", call_id: "undefined", resource_id: "undefined", start_time: "string", duration: "string", answered: "null",
   });
   for (const input of [null, "private body", [call]]) assert.deepEqual(callrailPayloadTypes(input), {
-    id: "undefined", start_time: "undefined", duration: "undefined", answered: "undefined",
+    id: "undefined", call_id: "undefined", resource_id: "undefined", start_time: "undefined", duration: "undefined", answered: "undefined",
   });
 });
 test("CallRail verifies the exact raw body and rejects missing, malformed or altered signatures", () => {
@@ -54,6 +54,17 @@ test("completed missed calls preserve CallRail's unknown answered status", () =>
   for (const change of [{ duration: null }, { duration: undefined }, { answered: undefined }, { answered: "false" }]) {
     assert.throws(() => normalizeCallrailCall({ ...input, ...change }, "456"), CallrailError);
   }
+});
+test("CallRail webhook identifiers retain stable receipts without requiring an API id field", () => {
+  for (const field of ["call_id", "resource_id"]) {
+    const result = normalizeCallrailCall({ ...call, id: undefined, [field]: "CAL-offline-fixture" }, "456")!;
+    assert.equal(result.call_id, "CAL-offline-fixture");
+    assert.equal(result.call_key, "456:CAL-offline-fixture");
+    assert.equal(normalizeCallrailCall({ ...call, [field]: "CAL-other" }, "456")?.call_key, "456:123");
+    assert.throws(() => normalizeCallrailCall({ ...call, id: undefined, [field]: "invalid/id" }, "456"), CallrailError);
+  }
+  assert.equal(normalizeCallrailCall({ ...call, id: undefined, call_id: "CAL-primary", resource_id: "CAL-secondary" }, "456")?.call_id, "CAL-primary");
+  assert.throws(() => normalizeCallrailCall({ ...call, id: "invalid/id", call_id: "CAL-valid" }, "456"), CallrailError);
 });
 test("campaign attribution is joined to the actual click, never an unrelated first touch", () => {
   const first = { landing: "https://rolan-pro.com/?gclid=first&campaign_id=11&utm_source=google", event_date: "2026-10-20T10:00:00Z" };
