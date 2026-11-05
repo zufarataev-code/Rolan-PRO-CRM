@@ -19530,7 +19530,16 @@ function selectAppView(key) {
     return;
   }
   if (key === 'servicePricing' && (user?.role === 'owner' || user?.role === 'manager')) {
+    // Open the directory immediately as well as keeping the canonical hash.
+    // A standalone local file and a repeated click on the same hash do not
+    // always emit `hashchange`; the owner must never get a dead menu item.
+    state.view = 'servicePricing';
+    state.modal = null;
+    state.servicePricingDirection = null;
+    state.servicePricingOfferingId = null;
+    state.mobileSidebarOpen = false;
     location.hash = '#/service-pricing';
+    render();
     return;
   }
   if (key === 'canonicalProjects' && (user?.role === 'owner' || user?.role === 'manager' || user?.role === 'measurer')) {
