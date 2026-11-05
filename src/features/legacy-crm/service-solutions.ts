@@ -274,6 +274,25 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
   }
   for (const order of rows(next.orders)) {
     const oldOrder = rows(current.orders).find(item=>item.id===order.id) || {};
+    const liveFunnelFields = [
+      'status', 'consultationAt', 'measurementAt', 'measurementAcceptedAt', 'measurementDoneAt',
+      'projectEstimateApprovedAt', 'proposalSentAt', 'proposalAcceptedAt', 'productionReadyAt',
+      'installationAt', 'installationDoneAt', 'actSignedAt', 'depositReceivedAt', 'paidAt',
+    ];
+    const newHistoricalImport = oldOrder.id === undefined
+      && (order.quickEntry === true || order.quickEntryDraft === true || order.quickProjectImportedCompleted === true);
+    if (newHistoricalImport) {
+      if (order.quickEntry !== true || order.quickEntryDraft !== true
+        || order.quickProjectImportedCompleted === true || order.status !== 'new') {
+        return 'Новый исторический проект сначала создаётся черновиком; завершить перенос может только владелец.';
+      }
+      if (liveFunnelFields.slice(1).some(field => order[field] !== undefined && order[field] !== null && order[field] !== false && order[field] !== '')) {
+        return 'Новый исторический черновик не может содержать этапы рабочей воронки.';
+      }
+      order.paid = 0;
+      order.payments = [];
+      order.depositReceived = false;
+    }
     // The dedicated historical-entry screen is an explicit owner-authorized
     // transition. It may close only a persisted historical draft; it does not
     // turn on the broad global import mode or weaken ordinary project stages.
@@ -289,11 +308,6 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         || order.quickProjectImportedCompleted !== oldOrder.quickProjectImportedCompleted) {
         return 'Завершить перенос исторического проекта может только владелец.';
       }
-      const liveFunnelFields = [
-        'status', 'consultationAt', 'measurementAt', 'measurementAcceptedAt', 'measurementDoneAt',
-        'projectEstimateApprovedAt', 'proposalSentAt', 'proposalAcceptedAt', 'productionReadyAt',
-        'installationAt', 'installationDoneAt', 'actSignedAt', 'depositReceivedAt', 'paidAt',
-      ];
       if (liveFunnelFields.some(field => stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
         return 'Сначала завершите перенос исторического проекта. Черновик не участвует в рабочей воронке.';
       }
@@ -314,9 +328,11 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       for (const parent of historicalServiceRows.filter(line => typeof line.offeringId === 'string')) {
         const offering = offerings.find(item => item.id === parent.offeringId);
         for (const childId of Array.isArray(offering?.includes) ? offering.includes : []) {
-          if (!extras.some(line => line.offeringId === childId && line.includedBy === parent.offeringId && line.quickIncludedByLineId === parent.id)) {
+          const component = extras.find(line => line.offeringId === childId && line.includedBy === parent.offeringId && line.quickIncludedByLineId === parent.id);
+          if (!component) {
             return 'Пакетная услуга исторического проекта должна содержать все включённые работы.';
           }
+          if (!(Number(component.qty) > 0)) return 'Укажите фактическое количество каждой включённой работы исторического проекта.';
         }
       }
     }

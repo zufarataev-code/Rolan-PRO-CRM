@@ -26343,15 +26343,14 @@ function projectIncludedQty(o, parentId, child, parentLineId = '') {
   const parentLine = parentLineId
     ? (o?.extraServices || []).find(line => line.id === parentLineId && line.offeringId === parentId && !line.includedBy)
     : (o?.extraServices || []).find(line => line.offeringId === parentId && !line.includedBy);
-  // A historical import has the completed service total but no panes. Keep the
-  // packaged component explicit and editable instead of silently dropping its
-  // material and labor from the project's actual economics.
-  const historicalQty = parentLine && (o?.quickEntry || parentLine.quickProjectLine)
-    ? Math.max(0, Number(parentLine.qty) || 0)
-    : 0;
-  if (unit === 'lft') return windows.length ? Math.round(windows.reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100 : historicalQty;
-  if (unit === 'piece') return windows.length ? windows.reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0) : Number(parentLine?.qty) || 1;
-  if (unit === 'zone') return windows.length ? windows.reduce((sum, win) => sum + smartWindowZoneCount(win), 0) : Number(parentLine?.qty) || 1;
+  // A historical parent total may be sqft while an included component is lin ft,
+  // pieces or zones. Never copy one unit into another: lin ft must be entered as
+  // an actual fact; countable work starts at one and remains editable.
+  const historicalParent = parentLine && (o?.quickEntry || parentLine.quickProjectLine);
+  if (!windows.length && historicalParent) return unit === 'lft' ? 0 : 1;
+  if (unit === 'lft') return windows.length ? Math.round(windows.reduce((sum, win) => sum + windowPerimeterLinearFt(win), 0) * 100) / 100 : 0;
+  if (unit === 'piece') return windows.length ? windows.reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0) : 1;
+  if (unit === 'zone') return windows.length ? windows.reduce((sum, win) => sum + smartWindowZoneCount(win), 0) : 1;
   return 1;
 }
 
@@ -26432,7 +26431,21 @@ function syncProjectIncludedServices(o) {
   });
   const allWindows = (o.measurements?.rooms || []).flatMap(room => room.windows || []);
   o.extraServices.forEach(line => {
-    if (!line.offeringId || line.quickProjectLine || line.qtyManual) return;
+    if (!line.offeringId || line.quickProjectLine) return;
+    const matchingHistoricalParents = line.includedBy ? historicalParents.filter(item => item.offeringId === line.includedBy) : [];
+    const historicalParent = line.quickIncludedByLineId
+      ? matchingHistoricalParents.find(item => item.id === line.quickIncludedByLineId)
+      : matchingHistoricalParents.length === 1 ? matchingHistoricalParents[0] : null;
+    if (historicalParent) {
+      if (!line.quickIncludedByLineId) changed = true;
+      line.quickIncludedByLineId = historicalParent.id;
+      line.startDate = projectQuickDateValue(historicalParent.startDate);
+      line.endDate = projectQuickDateValue(historicalParent.endDate);
+      line.installerIds = [...new Set(historicalParent.installerIds || [])];
+    }
+    // Manual quantity belongs to the component, but its schedule and crew still
+    // follow the exact package row above.
+    if (line.qtyManual) return;
     let qty = null;
     if (line.includedBy) {
       const child = serviceOffering(line.offeringId) || { id: line.offeringId, unit: line.unit };
@@ -26447,17 +26460,6 @@ function syncProjectIncludedServices(o) {
       qty = projectWindowsForService(o, line.offeringId).reduce((sum, win) => sum + (Number(win.actualQty) > 0 ? Number(win.actualQty) : Number(win.qty) || 1), 0);
     }
     if (qty === null) return;
-    const matchingHistoricalParents = line.includedBy ? historicalParents.filter(item => item.offeringId === line.includedBy) : [];
-    const historicalParent = line.quickIncludedByLineId
-      ? matchingHistoricalParents.find(item => item.id === line.quickIncludedByLineId)
-      : matchingHistoricalParents.length === 1 ? matchingHistoricalParents[0] : null;
-    if (historicalParent) {
-      if (!line.quickIncludedByLineId) changed = true;
-      line.quickIncludedByLineId = historicalParent.id;
-      line.startDate = projectQuickDateValue(historicalParent.startDate);
-      line.endDate = projectQuickDateValue(historicalParent.endDate);
-      line.installerIds = [...new Set(historicalParent.installerIds || [])];
-    }
     const price = line.includedBy ? 0 : Math.round((Number(line.unitPrice) || 0) * qty * 100) / 100;
     if (Number(line.qty) !== qty || Number(line.price) !== price) {
       line.qty = qty;
@@ -28783,6 +28785,18 @@ function projectQuickUpdateSupply(oid, lineId, itemId, field, value) {
   save(); refreshQuickProjectEntry(oid);
 }
 
+function projectQuickUpdateIncludedQty(oid, lineId, value) {
+  const o = getOrder(oid);
+  const line = (o?.extraServices || []).find(item => item.id === lineId && item.includedBy && item.quickIncludedByLineId);
+  if (!o || !line || !orderUserCanSeeMoney(o, currentUser())) return;
+  line.qty = Math.max(0, Number(value) || 0);
+  line.qtyManual = true;
+  line.unitPrice = 0;
+  line.price = 0;
+  projectEstimateMarkChanged(o, 'Указано фактическое количество включённой работы');
+  save(); refreshQuickProjectEntry(oid);
+}
+
 function projectQuickDeleteSupply(oid, lineId, itemId) {
   const o = getOrder(oid);
   const line = projectHistoricalEntryLines(o).find(item => item.id === lineId);
@@ -29310,6 +29324,8 @@ function projectQuickCompletionIssues(o) {
     'на складе недостаточно расходников',
   ]);
   const quickLines = projectHistoricalEntryLines(o);
+  const quickLineIds = new Set(quickLines.map(line => line.id));
+  const includedLines = (o.extraServices || []).filter(line => line.includedBy && quickLineIds.has(line.quickIncludedByLineId));
   const quickStockDemand = projectQuickRequiredSqftByCatalog(o, quickLines);
   const quickSupplyDemand = projectQuickRequiredSupplies(o, quickLines);
   const issues = [];
@@ -29319,6 +29335,7 @@ function projectQuickCompletionIssues(o) {
   if (quickLines.some(line => line.unit === 'sqft' && !line.catalogId && !projectQuickManualFilmName(line))) issues.push('не выбрана плёнка');
   if (quickLines.some(line => !String(line.label || '').trim())) issues.push('не указано название позиции');
   if (quickLines.some(line => Number(line.qty) <= 0)) issues.push('не указано количество или метраж');
+  if (includedLines.some(line => Number(line.qty) <= 0)) issues.push('не указано фактическое количество включённой работы');
   if (quickLines.some(line => Number(line.price) <= 0)) issues.push('не указана цена клиенту');
   if (quickLines.some(line => line.catalogId && warehouseCatalogStockStats(line.catalogId).availableSqft <= 0)) issues.push('выбранной плёнки нет на складе');
   if (Object.entries(quickStockDemand).some(([catalogId, requiredSqft]) => warehouseCatalogStockStats(catalogId).pricedSqft < requiredSqft)) issues.push('на складе недостаточно плёнки с указанной закупочной ценой');
@@ -29450,15 +29467,19 @@ function renderQuickProjectEntry(o) {
       <td data-label="Цена клиенту"><input type="number" min="0" step="1" value="${Number(line.price || 0)}" placeholder="Общая сумма" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','price',this.value)"><div class="quick-commercial-price">${Number(line.qty) > 0 && Number(line.price) > 0 ? `${fmtMoney(line.unitPrice)} / ${academyEsc(serviceOfferingUnitShort(line))}` : 'Цена за единицу появится автоматически'}</div></td>
     </tr>`;
   }).join('');
-  const productionRows = quickLines.map(line => `<div class="card">
+  const productionRows = quickLines.map(line => {
+    const includedLines = (o.extraServices || []).filter(item => item.includedBy && item.quickIncludedByLineId === line.id);
+    return `<div class="card">
     <div class="font-bold text-sm">${academyEsc(primaryServiceInfo(line.serviceType)?.title || line.label || 'Услуга')}</div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
       <div><label>Начало работ</label><input type="date" value="${projectQuickDateValue(line.startDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','startDate',this.value)"></div>
       <div><label>Окончание работ</label><input type="date" min="${projectQuickDateValue(line.startDate)}" value="${projectQuickDateValue(line.endDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','endDate',this.value)"></div>
     </div>
     <div class="mt-2"><label>Исполнители старого проекта</label><div class="project-estimate-assignees">${availableInstallers.map(user => `<label class="project-estimate-assignee"><input type="checkbox" ${(line.installerIds || []).includes(user.id) ? 'checked' : ''} onchange="projectQuickToggleInstaller('${o.id}','${line.id}','${user.id}',this.checked)">${teamAvatarHtml(user,24)}<span>${academyEsc(user.name)}</span></label>`).join('') || '<span class="text-xs text-gray-500">Нет специалистов по установке</span>'}</div></div>
+    ${includedLines.length ? `<div class="mt-2"><label>Входит в пакет — фактическое количество</label><div class="space-y-1">${includedLines.map(item => `<div class="flex gap-2 items-center"><span class="text-sm" style="flex:1">${academyEsc(item.label || serviceOffering(item.offeringId)?.name || 'Включённая работа')}</span><input aria-label="Фактическое количество включённой работы" type="number" min="0" step="0.01" value="${Number(item.qty || 0)}" onchange="projectQuickUpdateIncludedQty('${o.id}','${item.id}',this.value)" style="width:100px"><span class="text-xs text-gray-500">${academyEsc(serviceOfferingUnitShort(item))}</span></div>`).join('')}</div><div class="text-xs text-gray-500 mt-1">Например, площадь плёнки не равна погонным футам силикона. Укажите реальный объём выполненной работы.</div></div>` : ''}
     <div class="mt-2"><label>Расходники</label><div class="space-y-1">${(line.supplyItems || []).map(item => { const supply = availableSupplies.find(candidate => candidate.id === item.supplyId); return `<div class="flex gap-1 items-center"><select onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','supplyId',this.value)"><option value="">Выберите</option>${availableSupplies.map(option => `<option value="${option.id}" ${item.supplyId===option.id?'selected':''}>${academyEsc(option.name)} · ${Number(option.qty||0)} ${supplyUnitLabel(option.unit)}</option>`).join('')}</select><input aria-label="Количество расходника" type="number" min="0" step="0.01" value="${Number(item.qty||0)}" onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','qty',this.value)" style="width:76px"><button class="btn-ghost text-red-600" onclick="projectQuickDeleteSupply('${o.id}','${line.id}','${item.id}')">×</button>${supply && canCloseHistoricalProject ? `<span class="text-xs text-gray-500">${fmtMoney((Number(item.qty)||0)*(Number(supply.costPerUnit)||0))}</span>` : ''}</div>`; }).join('')}</div><div class="flex gap-1 mt-1"><button class="btn-ghost text-xs" onclick="projectQuickAddSupply('${o.id}','${line.id}')">+ Со склада</button><button class="btn-ghost text-xs" onclick="openQuickProjectSupplyForm('${o.id}','${line.id}')">+ Новый расходник</button></div></div>
-  </div>`).join('');
+  </div>`;
+  }).join('');
   const totalSqft = projectQuickSqft(o);
   const total = quickLines.reduce((sum, line) => sum + Number(line.price || 0), 0);
   const quickRange = projectQuickDateRange(o);

@@ -102,13 +102,15 @@ test('a historical quick service materializes its packaged work with the same ac
   const component = order.extraServices.find((line: Row) => line.includedBy === a1.id);
   assert.deepEqual(
     JSON.parse(JSON.stringify([component.offeringId, component.qty, component.price, component.quickIncludedByLineId, component.startDate, component.endDate, component.installerIds])),
-    [silicone.id, 200, 0, parent.id, '2026-01-10', '2026-01-12', ['i1']],
+    [silicone.id, 0, 0, parent.id, '2026-01-10', '2026-01-12', ['i1']],
   );
+  component.qty = 45;
+  component.qtyManual = true;
   parent.qty = 240;
   parent.endDate = '2026-01-15';
   parent.installerIds = ['i2'];
   context.syncProjectIncludedServices(order);
-  assert.deepEqual(JSON.parse(JSON.stringify([component.qty, component.endDate, component.installerIds])), [240, '2026-01-15', ['i2']]);
+  assert.deepEqual(JSON.parse(JSON.stringify([component.qty, component.endDate, component.installerIds])), [45, '2026-01-15', ['i2']]);
 });
 
 test('repeated historical package services keep separate components, dates and crews', () => {
@@ -124,8 +126,17 @@ test('repeated historical package services keep separate components, dates and c
   const components = order.extraServices.filter((line: Row) => line.includedBy === a1.id).sort((a: Row, b: Row) => a.quickIncludedByLineId.localeCompare(b.quickIncludedByLineId));
   assert.deepEqual(
     JSON.parse(JSON.stringify(components.map((line: Row) => [line.quickIncludedByLineId, line.qty, line.endDate, line.installerIds]))),
-    [[first.id, 120, '2026-01-12', ['i1']], [second.id, 80, '2026-02-06', ['i2']]],
+    [[first.id, 0, '2026-01-12', ['i1']], [second.id, 0, '2026-02-06', ['i2']]],
   );
+
+  components[0].qty = 35;
+  components[0].qtyManual = true;
+  components[1].qty = 22;
+  components[1].qtyManual = true;
+  second.endDate = '2026-02-08';
+  second.installerIds = ['i3'];
+  context.syncProjectIncludedServices(order);
+  assert.deepEqual(JSON.parse(JSON.stringify([components[0].qty, components[1].qty, components[1].endDate, components[1].installerIds])), [35, 22, '2026-02-08', ['i3']]);
 
   order.extraServices = order.extraServices.filter((line: Row) => line.id !== first.id);
   context.syncProjectIncludedServices(order);
@@ -227,6 +238,10 @@ test('server requires package components when a historical quick project is clos
     { id: 'line:l', installationAt: '2026-01-10T12:00:00.000Z', installerIds: ['i1'] },
   ];
   assert.equal(prepareServiceSolutions(current, complete, true), null);
+
+  const zeroQuantity = structuredClone(complete);
+  zeroQuantity.orders[0].extraServices.find((line: Row) => line.includedBy).qty = 0;
+  assert.equal(prepareServiceSolutions(current, zeroQuantity, true), 'Укажите фактическое количество каждой включённой работы исторического проекта.');
 });
 
 test('server requires one package component for every repeated historical parent row', () => {

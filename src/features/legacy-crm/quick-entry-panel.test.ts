@@ -75,12 +75,15 @@ test('canonical editor supports many services with their own dates, crew, suppli
   assert.match(renderer, /Начало работ/);
   assert.match(renderer, /projectQuickToggleInstaller/);
   assert.match(renderer, /projectQuickAddSupply/);
+  assert.match(renderer, /projectQuickUpdateIncludedQty/);
+  assert.match(renderer, /Входит в пакет — фактическое количество/);
   assert.match(renderer, /projectQuickAddExpense/);
   assert.match(renderer, /\['owner', 'manager'\]\.includes\(quickRole\)/, 'owner and manager can fill dates, crew and supplies');
   assert.match(renderer, /canCloseHistoricalProject = quickRole === 'owner'/, 'only the owner confirms money and closes the import');
   assert.match(renderer, /canReassignHistoricalManager = quickRole === 'owner'/, 'only the owner can reassign the project manager');
   assert.match(renderer, /Number\.isFinite\(Number\(o\.paid\)\) \? Math\.max\(0, Number\(o\.paid\)\) : 0/, 'an unpaid import must remain at zero instead of looking fully paid');
   assert.match(fn(html, 'projectQuickCompletionIssues'), /quickLines\.some\(line => !line\.offeringId\)/, 'every imported row must choose a concrete service');
+  assert.match(fn(html, 'projectQuickCompletionIssues'), /includedLines\.some\(line => Number\(line\.qty\) <= 0\)/, 'every included historical job requires its actual unit quantity');
   assert.match(renderer, /line\.unit === 'sqft' \? projectQuickLineFilms\(line, \{ allowOutOfStock: o\.quickEntryDraft \}\)/, 'a historical film remains selectable even when current stock is zero');
   assert.match(renderer, /projectHistoricalEntryLines\(o\)/, 'film and size-free services share the historical editor');
   const updater = fn(html, 'projectEstimateUpdateQuickLine');

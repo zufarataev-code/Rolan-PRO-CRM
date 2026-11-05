@@ -235,6 +235,34 @@ test('an unfinished historical draft cannot preload client payments before owner
   assert.equal(submitted.orders[0].depositReceived, false);
 });
 
+test('a newly created historical import is accepted only as an unpaid draft', () => {
+  const current: Row = structuredClone(base);
+  current.orders = [];
+  const submitted: Row = structuredClone(base);
+  Object.assign(submitted.orders[0], {
+    status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false,
+    paid: 900, payments: [{ id: 'forged', amount: 900 }], depositReceived: true,
+  });
+  assert.equal(prepareServiceSolutions(current, submitted, false), null);
+  assert.equal(submitted.orders[0].paid, 0);
+  assert.deepEqual(submitted.orders[0].payments, []);
+  assert.equal(submitted.orders[0].depositReceived, false);
+});
+
+test('a new workspace row cannot forge an already completed historical import', () => {
+  const current: Row = structuredClone(base);
+  current.orders = [];
+  const submitted: Row = structuredClone(base);
+  Object.assign(submitted.orders[0], {
+    status: 'completed', quickEntry: true, quickEntryDraft: false, quickProjectImportedCompleted: true,
+    paid: 900, payments: [{ id: 'forged', amount: 900 }], depositReceived: true,
+  });
+  assert.equal(
+    prepareServiceSolutions(current, submitted, true),
+    'Новый исторический проект сначала создаётся черновиком; завершить перенос может только владелец.',
+  );
+});
+
 test('an unchanged Decorative-to-Privacy link from the temporary four-direction period stays writable but cannot grow', () => {
   const legacy: Row = structuredClone(base);
   legacy.settings.catalog.push({ id: 'mirror-two', category: 'privacy' });
