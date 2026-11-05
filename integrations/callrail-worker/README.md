@@ -41,7 +41,8 @@ signed incomplete payload containing the configured `company_id` and
 `{}` instead returns 403 `wrong_company`, because company scope is checked first. Then
 configure only JSON Post-Call and verify a genuine call appears in CRM.
 Use the exact path without a trailing slash. A failed
-upstream request returns 502; CRM errors retain their status for provider retry.
+upstream request returns 502; CRM errors retain their status rather than reporting
+false success. CallRail does not automatically retry failed webhooks.
 
 Rollback: restore the prior direct Post-Call URL
 `https://rolanpro-crm.143-110-136-211.sslip.io/api/webhooks/callrail` (this may
@@ -60,3 +61,7 @@ WordPress fallback. Confirm a genuine call before claiming delivery.
 If a genuine delivery fails, check the actual POST in Cloudflare Security Events
 and the CRM's safe ingress-status diagnostic before changing configuration.
 Signed probes and an Active badge alone do not establish provider delivery.
+For a signed request rejected by CRM, its protected application log records only
+`callrail_rejected`, the reason, and fixed field types (or invalid JSON byte count).
+It never records caller values, body, signature or headers. Keep Worker payload
+logging disabled; a failed genuine call still needs provider-supported recovery.
