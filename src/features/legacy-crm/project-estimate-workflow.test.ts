@@ -253,7 +253,7 @@ test("owner can close a completed legacy project with its actual payment", () =>
   assert.match(renderer, /Способ оплаты/);
   assert.match(renderer, /Закрыть выполненный проект/);
   assert.match(completionIssues, /ignoredHistoricalStockIssues/);
-  assert.match(completionIssues, /warehouseCatalogCostPerSqft\(line\.catalogId\) <= 0/);
+  assert.match(completionIssues, /warehouseCatalogCostPerSqft\(line\.catalogId, o\?\.quickEntry === true\) <= 0/);
   assert.match(closer, /currentUser\(\)\?\.role !== 'owner'/);
   assert.match(closer, /o\.status = full \? 'completed' : 'act_signed'/);
   assert.match(closer, /o\.installationDoneAt = o\.installationDoneAt \|\| endAt/);

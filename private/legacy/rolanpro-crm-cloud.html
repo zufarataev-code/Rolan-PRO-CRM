@@ -10297,9 +10297,12 @@ function warehouseCatalogStockStats(catalogId) {
     return stats;
   }, { rolls: 0, lengthM: 0, availableSqft: 0, pricedSqft: 0, remainingValue: 0, unpricedRolls: 0 });
 }
-function warehouseCatalogCostPerSqft(catalogId) {
+function warehouseCatalogCostPerSqft(catalogId, allowHistoricalEvidence = false) {
   const stats = warehouseCatalogStockStats(catalogId);
   if (stats.pricedSqft > 0) return stats.remainingValue / stats.pricedSqft;
+  // Current work must stop on unpriced stock. Old depleted rolls and the
+  // catalog's legacy fallback are evidence only for an imported old project.
+  if (!allowHistoricalEvidence) return 0;
   // A completed historical project may refer to a fully consumed old roll.
   // Its purchase cost remains valid evidence even though today's balance is 0.
   const history = inventoryByCatalogId(catalogId).reduce((totals, roll) => {
@@ -24928,9 +24931,12 @@ function renderMeasurerList(tasks) {
 // Owner, 2026-10-24: the installer's «Сегодня» opens on the next job and its
 // one button, like the measurer's day; overdue jobs are said so; the map folds.
 const INSTALLER_OPEN_STATUSES = ['installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done'];
+function installerVisibleOrders(userId) {
+  return db.orders.filter(o => (o.installerIds || []).includes(userId) && !orderIsHistoricalDraft(o));
+}
 function renderInstallerDashboard() {
   const u = currentUser();
-  const mine = db.orders.filter(o => (o.installerIds||[]).includes(u.id));
+  const mine = installerVisibleOrders(u.id);
   const myTasks = mine.filter(o => !['completed','review_received'].includes(o.status));
   const open = myTasks.filter(o => INSTALLER_OPEN_STATUSES.includes(o.status)).sort((a,b) => (a.installationAt||'9999').localeCompare(b.installationAt||'9999'));
   const todayKey = localDateKey();
@@ -25045,7 +25051,7 @@ async function renderInstallerMap(containerId, tasks) {
 async function buildInstallerRoute() {
   const u = currentUser();
   const today = new Date(); today.setHours(0,0,0,0);
-  const todayTasks = db.orders.filter(o => (o.installerIds||[]).includes(u.id) &&
+  const todayTasks = installerVisibleOrders(u.id).filter(o =>
     o.installationAt && new Date(o.installationAt).toDateString() === today.toDateString())
     .sort((a,b) => a.installationAt.localeCompare(b.installationAt));
   if (!todayTasks.length) { alert('На сегодня нет назначенных монтажей'); return; }
@@ -25071,7 +25077,7 @@ function renderInstallerPayHistory() {
   const u = currentUser();
   const payConfig = u.payConfig || {};
   const categoryRates = payConfig.ratesByCategory || {};
-  const myOrders = db.orders.filter(o => (o.installerIds||[]).includes(u.id))
+  const myOrders = installerVisibleOrders(u.id)
     .sort((a,b) => (b.installationDoneAt || b.installationAt || b.createdAt).localeCompare(a.installationDoneAt || a.installationAt || a.createdAt));
   const completed = myOrders.filter(o => o.installationDoneAt);
   const pending = myOrders.filter(o => !o.installationDoneAt && !['completed','review_received'].includes(o.status));
@@ -25244,7 +25250,7 @@ function renderInstallerAnalytics() {
     const date = new Date(row.date);
     return (!from || date >= from) && (!to || date < to);
   };
-  const mine = db.orders.filter(o => (o.installerIds || []).includes(u.id));
+  const mine = installerVisibleOrders(u.id);
   const rows = mine.map(o => installerObjectAnalytics(o, u.id))
     .filter(row => row.done && inPeriod(row))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -25319,15 +25325,15 @@ function renderInstallerAnalytics() {
 
 function renderInstallerTasks() {
   const u = currentUser();
-  const tasks = db.orders.filter(o => (o.installerIds||[]).includes(u.id))
+  const tasks = installerVisibleOrders(u.id)
                 .sort((a,b) => (b.createdAt).localeCompare(a.createdAt));
   return buildDayRouteBar(u) + renderInstallerList(tasks);
 }
 // ---------- DAY ROUTE (маршрут дня в Google Maps по сегодняшним монтажам) ----------
 function buildDayRouteBar(u) {
   const today = new Date().toISOString().slice(0,10);
-  const todays = db.orders
-    .filter(o => (o.installerIds||[]).includes(u.id) && o.installationAt && o.installationAt.slice(0,10) === today
+  const todays = installerVisibleOrders(u.id)
+    .filter(o => o.installationAt && o.installationAt.slice(0,10) === today
       && !['completed','review_received','installation_done'].includes(o.status))
     .sort((a,b) => a.installationAt.localeCompare(b.installationAt));
   const addrs = todays.map(o => orderAddress(o, getClient(o.clientId))).filter(Boolean);
@@ -27514,7 +27520,7 @@ function projectLines(o) {
     let installerPay = 0;
     if (kind === 'quick') {
       const catalog = getCatalogItem(line.catalogId);
-      if (line.unit === 'sqft' && line.catalogId) materialCost = qty * (1 + (Number(catalog?.wastePct) || 0) / 100) * warehouseCatalogCostPerSqft(line.catalogId);
+      if (line.unit === 'sqft' && line.catalogId) materialCost = qty * (1 + (Number(catalog?.wastePct) || 0) / 100) * warehouseCatalogCostPerSqft(line.catalogId, o?.quickEntry === true);
       if (line.unit === 'sqft') installerPay = qty * installerRateForQuickLine(null, line) * (typeof installerComplexityFactor === 'function' ? installerComplexityFactor(o) : 1);
     } else {
       // The same rates as orderAdditionalWorkPayoutForUser: a directory service
@@ -28591,7 +28597,7 @@ function orderQuickLineMaterialCost(o) {
   return projectQuickLines(o).filter(line => line.unit === 'sqft' && line.catalogId).reduce((sum, line) => {
     const catalog = getCatalogItem(line.catalogId);
     const sqftWithWaste = (Number(line.qty) || 0) * (1 + (Number(catalog?.wastePct) || 0) / 100);
-    return sum + sqftWithWaste * warehouseCatalogCostPerSqft(line.catalogId);
+    return sum + sqftWithWaste * warehouseCatalogCostPerSqft(line.catalogId, o?.quickEntry === true);
   }, 0);
 }
 
@@ -29355,7 +29361,7 @@ function projectQuickCompletionIssues(o) {
   if (quickLines.some(line => projectQuickDateValue(line.startDate) > projectQuickDateValue(line.endDate))) {
     issues.push('окончание услуги не может быть раньше начала');
   }
-  if (quickLines.some(line => line.catalogId && warehouseCatalogCostPerSqft(line.catalogId) <= 0)) {
+  if (quickLines.some(line => line.catalogId && warehouseCatalogCostPerSqft(line.catalogId, o?.quickEntry === true) <= 0)) {
     issues.push('у выбранной плёнки нет закупочной стоимости');
   }
   if (quickLines.some(line => !line.catalogId && projectQuickManualFilmName(line))) {

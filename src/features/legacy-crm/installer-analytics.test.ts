@@ -18,6 +18,7 @@ function loadAnalytics(orders: unknown[], userId = "u_1") {
     state: {} as Record<string, unknown>,
     db: { orders },
     currentUser: () => ({ id: userId }),
+    installerVisibleOrders: (id: string) => (orders as any[]).filter(order => (order.installerIds || []).includes(id) && !(order.quickEntryDraft === true && order.quickProjectImportedCompleted !== true)),
     measureAllWindows: (o: { windows?: unknown[] }) => (o.windows || []).map((win) => ({ win })),
     windowCatalog: (win: { catalogId?: string }) => (win.catalogId ? catalog[win.catalogId] : null),
     filmCategory: (name: string) => (name.toLowerCase().includes("solar") ? "solar" : "other"),

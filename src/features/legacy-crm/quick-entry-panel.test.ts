@@ -129,6 +129,20 @@ test('unfinished historical imports stay out of every financial rollup until own
   assert.match(fn(html, 'buildMarketingRoi'), /financialOrders\(\)\.forEach/);
 });
 
+test('unfinished historical imports stay out of installer work and pay views', () => {
+  const draft = { id: 'draft', installerIds: ['installer'], quickEntryDraft: true, quickProjectImportedCompleted: false };
+  const closed = { id: 'closed', installerIds: ['installer'], quickEntryDraft: false, quickProjectImportedCompleted: true };
+  const context: any = vm.createContext({
+    db: { orders: [draft, closed] },
+    orderIsHistoricalDraft: (order: any) => order.quickEntryDraft === true && order.quickProjectImportedCompleted !== true,
+  });
+  vm.runInContext(`${fn(html, 'installerVisibleOrders')}; result = installerVisibleOrders('installer').map(order => order.id);`, context);
+  assert.deepEqual(Array.from(context.result), ['closed']);
+  for (const name of ['renderInstallerDashboard', 'buildInstallerRoute', 'renderInstallerPayHistory', 'renderInstallerAnalytics', 'renderInstallerTasks', 'buildDayRouteBar']) {
+    assert.match(fn(html, name), /installerVisibleOrders\(u\.id\)/, name);
+  }
+});
+
 test('unfinished historical imports cannot leak into the live project funnel', () => {
   assert.match(fn(html, 'renderOrders'), /visibleOrdersForUser\(u\)[\s\S]*\.filter\(order => !orderIsHistoricalDraft\(order\)\)/);
   assert.match(fn(html, 'kanbanMoveOrder'), /if \(orderIsHistoricalDraft\(o\)\)[\s\S]*openQuickProjectEntry\(o\.id\)[\s\S]*return false/);
