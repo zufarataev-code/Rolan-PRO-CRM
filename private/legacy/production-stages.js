@@ -3606,6 +3606,13 @@ function quickEntrySetLine(i, field, value) {
     const range = offering ? projectServicePriceRange(offering) : null;
     const unit = Number(offering?.pricePerSqft) || Number(range?.min) || 0;
     if (unit && Number(line.qty) > 0 && !(Number(line.price) > 0)) line.price = String(Math.round(unit * Number(line.qty)));
+    // Расходники по норме услуги (Owner, 2026-11-05): для услуги по замеру — строками
+    // со склада под объём; у услуги без размеров норма сидит в её себестоимости.
+    if (offering && serviceOfferingNeedsSizes(offering)) {
+      line.supplies = serviceOfferingSupplyItemsFor(offering, line.qty, line.supplies).map(item => ({ key: item.id, supplyId: item.supplyId, qty: String(item.qty), auto: !!item.auto }));
+    } else if (field === 'offering') {
+      line.supplies = (line.supplies || []).filter(item => !item.auto);
+    }
   }
   preservePositionForNextRender();
   render();
@@ -3819,7 +3826,7 @@ function quickEntryCreateDraft() {
 /** Строка проекта из карточки услуги в форме: по замеру → quickProjectLine с плёнкой, без размеров → строка услуги из справочника. */
 function quickEntryBuildLine(p) {
   const { line: src, date, offering, qty, price, installers, hired } = p;
-  const supplyItems = (src.supplies || []).filter(item => item.supplyId && Number(item.qty) > 0).map(item => ({ id: 'qsi_' + uid(), supplyId: item.supplyId, qty: Number(item.qty) }));
+  const supplyItems = (src.supplies || []).filter(item => item.supplyId && Number(item.qty) > 0).map(item => ({ id: 'qsi_' + uid(), supplyId: item.supplyId, qty: Number(item.qty), ...(item.auto ? { auto: true } : {}) }));
   let line;
   if (serviceOfferingNeedsSizes(offering)) {
     const film = src.film && src.film !== '__manual' ? getCatalogItem(src.film) : null;
@@ -3977,7 +3984,7 @@ function renderQuickEntry() {
     if ((line.installers || []).length) calcParts.push(`З/п монтаж: <b>${fmtMoney(calc.payout)}</b> <span>(${fmtMoney(calc.rate)}/sq ft × ${calc.qty} ${calc.n > 1 ? `÷ ${calc.n}` : ''})</span>`);
     if (hiredOn) calcParts.push(`Наёмный: <b>${fmtMoney(calc.hired)}</b>`);
     if (calc.film > 0) calcParts.push(`Плёнка: <b>${fmtMoney(calc.film)}</b> <span>(с отходом, по закупке)</span>`);
-    if (calc.supplies > 0) calcParts.push(`Расходники: <b>${fmtMoney(calc.supplies)}</b>`);
+    if (calc.supplies > 0) calcParts.push(`Расходники: <b>${fmtMoney(calc.supplies)}</b>${!sized && offering && serviceOfferingHasSupplies(offering) ? ` <span>(по норме услуги: ${academyEsc(serviceOfferingSupplies(offering).filter(x => x.supply).map(x => `${x.supply.name} ${x.qtyPerUnit} ${supplyUnitLabel(x.supply.unit)}/${serviceOfferingUnitShort(offering)}`).join(', '))})</span>` : ''}`);
     if (calc.price > 0) calcParts.push(`Маржа строки: <b class="${calc.marginPct >= 0.2 ? 'qe-ok' : 'qe-warn'}">${fmtMoney(calc.margin)} · ${(calc.marginPct * 100).toFixed(0)} %</b>`);
     return `<div class="qe-svc" style="--qe-color:${academyEsc(tone.color)};--qe-tint:${academyEsc(tone.tint)}">
       <div class="qe-svc-head"><span class="qe-num">${i + 1}</span>
@@ -3996,7 +4003,7 @@ function renderQuickEntry() {
         <div class="qe-field"><span>Исполнители</span><div class="qe-checks">${installers.map(u => `<label class="qe-check ${(line.installers || []).includes(u.id) ? 'on' : ''}"><input type="checkbox" data-qe-installer="${u.id}" data-qe-line="${i}" ${(line.installers || []).includes(u.id) ? 'checked' : ''} onchange="quickEntryReadForm(); this.parentElement.classList.toggle('on', this.checked)">${academyEsc(u.name)}${!u.payConfig?.type ? ' <small>нет схемы оплаты</small>' : ''}</label>`).join('') || '<span class="qe-muted">Нет монтажников в команде</span>'}
           <span class="qe-hired ${hiredOn ? 'on' : ''}"><input id="qe-l${i}-hiredName" value="${academyEsc(line.hiredName)}" placeholder="наёмный (электрик…)" title="Кто делал со стороны"><input id="qe-l${i}-hired" type="number" min="0" step="1" value="${academyEsc(line.hired)}" placeholder="$ фикс" title="Сколько заплатили наёмному" onchange="quickEntrySetLine(${i}, 'hired', this.value)"></span>
         </div></div>
-        <div class="qe-field"><span>Расходники · со склада</span><div class="qe-supplies">${(line.supplies || []).map((item, j) => { const sp = supplies.find(x => x.id === item.supplyId); return `<span class="qe-supply"><select id="qe-l${i}-s${j}-supplyId">${opt('', 'Выберите', item.supplyId)}${supplies.map(x => opt(x.id, `${x.name} · ${fmtMoney(Number(x.costPerUnit) || 0)}/${supplyUnitLabel(x.unit)}`, item.supplyId)).join('')}</select><input id="qe-l${i}-s${j}-qty" type="number" min="0" step="0.01" value="${academyEsc(item.qty)}" title="Количество">${sp ? `<em>${fmtMoney((Number(item.qty) || 0) * (Number(sp.costPerUnit) || 0))}</em>` : ''}<button type="button" class="qe-x" title="Убрать" onclick="quickEntryRemoveSupply(${i}, ${j})">×</button></span>`; }).join('')}<button type="button" class="qe-link" onclick="quickEntryAddSupply(${i})">${supplies.length ? '+ расходник' : '+ расходник (склад пуст — заведите в «Склад»)'}</button></div></div>
+        <div class="qe-field"><span>Расходники · со склада</span><div class="qe-supplies">${(line.supplies || []).map((item, j) => { const sp = supplies.find(x => x.id === item.supplyId); return `<span class="qe-supply ${item.auto ? 'qe-supply-auto' : ''}" title="${item.auto ? 'по норме услуги' : ''}">${item.auto ? '<em>норма</em>' : ''}<select id="qe-l${i}-s${j}-supplyId">${opt('', 'Выберите', item.supplyId)}${supplies.map(x => opt(x.id, `${x.name} · ${fmtMoney(Number(x.costPerUnit) || 0)}/${supplyUnitLabel(x.unit)}`, item.supplyId)).join('')}</select><input id="qe-l${i}-s${j}-qty" type="number" min="0" step="0.01" value="${academyEsc(item.qty)}" title="Количество">${sp ? `<em>${fmtMoney((Number(item.qty) || 0) * (Number(sp.costPerUnit) || 0))}</em>` : ''}<button type="button" class="qe-x" title="Убрать" onclick="quickEntryRemoveSupply(${i}, ${j})">×</button></span>`; }).join('')}<button type="button" class="qe-link" onclick="quickEntryAddSupply(${i})">${supplies.length ? '+ расходник' : '+ расходник (склад пуст — заведите в «Склад»)'}</button></div></div>
       </div>
       ${calcParts.length ? `<div class="qe-calc">${calcParts.join('<i></i>')}</div>` : ''}
     </div>`;
