@@ -48,8 +48,10 @@ after(async () => {
   await db.lead.deleteMany({ where: { lead_id: { in: ids } } });
   if (originalWorkspace) await db.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload: originalWorkspace as Prisma.InputJsonValue, revision: { increment: 1 } } });
   else await db.legacyWorkspace.deleteMany({ where: { workspace_id: "primary" } });
-  if (originalSettings) await db.googleAdsIntegrationSetting.update({ where: { setting_key: "default" }, data: originalSettings });
-  else await db.googleAdsIntegrationSetting.deleteMany({ where: { setting_key: "default" } });
+  if (originalSettings) {
+    const { setting_key: _key, created_at: _created, updated_at: _updated, qualification_rules, audience_rules, ...settings } = originalSettings;
+    await db.googleAdsIntegrationSetting.update({ where: { setting_key: "default" }, data: { ...settings, qualification_rules: qualification_rules ?? Prisma.DbNull, audience_rules: audience_rules ?? Prisma.DbNull } });
+  } else await db.googleAdsIntegrationSetting.deleteMany({ where: { setting_key: "default" } });
   await db.$disconnect();
   await runtimeDb.$disconnect();
 });
