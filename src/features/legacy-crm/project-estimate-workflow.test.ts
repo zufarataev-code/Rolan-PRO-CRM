@@ -177,7 +177,7 @@ test("historical project entry derives sqft price and records completed producti
   const schedule = source.match(/function confirmScheduleInstallation\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(updater, /\['qty','unitPrice','price'\]\.includes\(field\)/);
   assert.match(source, /if \(changedField === 'price'\) line\.pricingMode = 'total'/);
-  assert.match(renderer, /Цена за sqft рассчитается автоматически/);
+  assert.match(renderer, /Цена за единицу появится автоматически/);
   assert.match(renderer, /projectEstimateUpdateQuickLine\('[^']+','[^']+','price',this\.value\)/);
   assert.doesNotMatch(renderer, /data-label="Исполнители"/);
   assert.doesNotMatch(renderer, /\+ Новый сотрудник/);
@@ -224,6 +224,8 @@ test("quick service can create warehouse film with category, name and model", ()
 test("quick service adds stock supplies and includes their purchase cost", () => {
   const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const consumables = source.match(/function orderConsumablesExpense\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const newSupplyForm = source.match(/function openQuickProjectSupplyForm\(oid, lineId\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const newSupplySave = source.match(/function saveQuickProjectSupply\(oid, lineId\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(source, /function projectQuickAddSupply\(oid, lineId\)/);
   assert.match(source, /function openQuickProjectSupplyForm\(oid, lineId\)/);
   assert.match(source, /function saveQuickProjectSupply\(oid, lineId\)/);
@@ -233,6 +235,9 @@ test("quick service adds stock supplies and includes their purchase cost", () =>
   assert.match(source, /costPerUnit/);
   assert.match(completionIssues, /есть незаполненный расходник услуги/);
   assert.match(completionIssues, /на складе недостаточно расходников/);
+  assert.match(newSupplyForm, /projectHistoricalEntryLines\(o\)/, 'a quantity or fixed historical service can create a supply');
+  assert.match(newSupplySave, /projectHistoricalEntryLines\(o\)/, 'the new supply is saved to a quantity or fixed historical service');
+  assert.match(consumables, /projectHistoricalEntryLines\(o\)/, 'supplies of quantity and fixed historical services enter their cost');
   assert.match(consumables, /projectQuickSupplyCost\(o\)/);
 });
 
@@ -328,7 +333,7 @@ test("quick project lines use warehouse film and never accept manual material or
   assert.match(source, /catalogCanBeSelected\(item, selectedCatalogId\)/);
   assert.match(source, /offering \? projectOfferingAllowsFilm\(offering, item, selectedCatalogId\) : serviceDirectionAllowsFilm\(category, item\)/);
   assert.match(source, /warehouseCatalogStockStats\(item\.id\)\.availableSqft > 0/);
-  assert.match(renderer, /Плёнка со склада/);
+  assert.match(renderer, /Выберите плёнку со склада/);
   assert.match(renderer, /Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников/);
   assert.match(sync, /delete line\.unitCost/);
   assert.match(sync, /delete line\.cost/);

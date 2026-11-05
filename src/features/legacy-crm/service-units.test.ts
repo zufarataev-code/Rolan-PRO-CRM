@@ -219,6 +219,22 @@ test('the server accepts Privacy services only with Privacy materials', () => {
   assert.match(prepareServiceSolutions(base, badCost, true)!, /материала/);
 });
 
+test('an unfinished historical draft cannot preload client payments before owner closure', () => {
+  const current: Row = structuredClone(base);
+  Object.assign(current.orders[0], {
+    status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false,
+    paid: 0, payments: [], depositReceived: false,
+  });
+  const submitted: Row = structuredClone(current);
+  Object.assign(submitted.orders[0], {
+    paid: 900, payments: [{ id: 'forged', amount: 900 }], depositReceived: true,
+  });
+  assert.equal(prepareServiceSolutions(current, submitted, false), null);
+  assert.equal(submitted.orders[0].paid, 0);
+  assert.deepEqual(submitted.orders[0].payments, []);
+  assert.equal(submitted.orders[0].depositReceived, false);
+});
+
 test('an unchanged Decorative-to-Privacy link from the temporary four-direction period stays writable but cannot grow', () => {
   const legacy: Row = structuredClone(base);
   legacy.settings.catalog.push({ id: 'mirror-two', category: 'privacy' });

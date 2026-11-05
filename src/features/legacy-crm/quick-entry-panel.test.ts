@@ -81,7 +81,12 @@ test('canonical editor supports many services with their own dates, crew, suppli
   assert.match(renderer, /canReassignHistoricalManager = quickRole === 'owner'/, 'only the owner can reassign the project manager');
   assert.match(renderer, /Number\.isFinite\(Number\(o\.paid\)\) \? Math\.max\(0, Number\(o\.paid\)\) : 0/, 'an unpaid import must remain at zero instead of looking fully paid');
   assert.match(fn(html, 'projectQuickCompletionIssues'), /quickLines\.some\(line => !line\.offeringId\)/, 'every imported row must choose a concrete service');
-  assert.match(renderer, /projectQuickLineFilms\(line, \{ allowOutOfStock: o\.quickEntryDraft \}\)/, 'a historical material remains selectable even when current stock is zero');
+  assert.match(renderer, /line\.unit === 'sqft' \? projectQuickLineFilms\(line, \{ allowOutOfStock: o\.quickEntryDraft \}\)/, 'a historical film remains selectable even when current stock is zero');
+  assert.match(renderer, /projectHistoricalEntryLines\(o\)/, 'film and size-free services share the historical editor');
+  const updater = fn(html, 'projectEstimateUpdateQuickLine');
+  assert.match(updater, /!serviceOfferingNeedsSizes\(offering\)/);
+  assert.match(updater, /projectOfferingLine\(offering/);
+  assert.match(fn(html, 'projectQuickCompletionIssues'), /line\.unit === 'sqft' && !line\.catalogId/, 'only a film service requires warehouse film');
   assert.doesNotMatch(renderer, /openProjectEstimateWorkspace/, 'a historical import cannot enter the client proposal flow');
   assert.doesNotMatch(renderer, /сформировать КП/, 'the import UI must not advertise a retroactive proposal');
   const close = fn(html, 'closeQuickProjectAsCompleted');
@@ -149,6 +154,7 @@ test('a manager cannot reassign a historical project and lose access to it', () 
 test('historical services are the only source of their directions and a closed import is immutable', () => {
   const sync = fn(html, 'projectEstimateSyncQuickServices');
   assert.match(sync, /const leadService = o\.quickEntry \? '' : orderLeadIntentServiceId\(o\)/);
+  assert.match(sync, /o\.quickEntry \? projectHistoricalEntryLines\(o\) : projectQuickLines\(o\)/);
   assert.match(sync, /\[leadService, \.\.\.measuredServices, \.\.\.quickServices\]/);
   assert.match(fn(html, 'quickProjectUpdateHeader'), /o\.quickProjectImportedCompleted/);
 });

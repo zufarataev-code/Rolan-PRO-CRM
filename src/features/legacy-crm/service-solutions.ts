@@ -297,13 +297,21 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       if (liveFunnelFields.some(field => stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
         return 'Сначала завершите перенос исторического проекта. Черновик не участвует в рабочей воронке.';
       }
+      // The owner confirms the real payment only in the dedicated close action.
+      // Managers may fill services and production facts, but a crafted
+      // workspace save must never preload money into the unfinished import.
+      for (const field of ['paid', 'payments', 'depositReceived']) {
+        if (Object.prototype.hasOwnProperty.call(oldOrder, field)) order[field] = oldOrder[field];
+        else delete order[field];
+      }
     }
-    if (historicalImportClosing && rows(order.extraServices).some(line => line.quickProjectLine === true && !line.offeringId)) {
+    const historicalServiceRows = rows(order.extraServices).filter(line => !line.includedBy && (line.quickProjectLine === true || line.type === 'offering'));
+    if (historicalImportClosing && historicalServiceRows.some(line => !line.offeringId)) {
       return 'Выберите конкретную услугу для каждой позиции исторического проекта.';
     }
     if (historicalImportClosing) {
       const extras = rows(order.extraServices);
-      for (const parent of extras.filter(line => line.quickProjectLine === true && typeof line.offeringId === 'string')) {
+      for (const parent of historicalServiceRows.filter(line => typeof line.offeringId === 'string')) {
         const offering = offerings.find(item => item.id === parent.offeringId);
         for (const childId of Array.isArray(offering?.includes) ? offering.includes : []) {
           if (!extras.some(line => line.offeringId === childId && line.includedBy === parent.offeringId)) {

@@ -144,7 +144,8 @@ function orderInstallerPayoutForUser(o, userId) {
  */
 function historicalProjectInstallerAccruals(o, user) {
   const pc = user?.payConfig || {};
-  if (!o?.quickProjectImportedCompleted || !projectQuickLines(o).length || user?.role === 'measurer' || !['per_sqft', 'fixed_per_job'].includes(pc.type)) return [];
+  const historicalLines = typeof projectHistoricalEntryLines === 'function' ? projectHistoricalEntryLines(o) : projectQuickLines(o);
+  if (!o?.quickProjectImportedCompleted || !historicalLines.length || user?.role === 'measurer' || !['per_sqft', 'fixed_per_job'].includes(pc.type)) return [];
   const lines = projectLines(o).filter(line => (line.installerIds || []).includes(user.id));
   const completedLines = lines.map(line => {
     const sourceDates = (line.sources || []).map(source => projectQuickDateValue(source?.endDate)).filter(Boolean).sort();
