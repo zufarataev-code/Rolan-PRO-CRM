@@ -66,6 +66,7 @@ test('privacy is a full fifth direction with its own materials and measurement s
   assert.equal(canonicalFilmCategory('privacy_film'), 'privacy');
   assert.equal(canonicalFilmCategory('Приватная'), 'privacy');
   assert.equal(canonicalServiceDirection('privacy_film'), 'privacy');
+  assert.match(html, /privacy_film: 'Privacy Window Film'/, 'client proposal uses the specific English Privacy direction title');
   assert.equal(canonicalFilmCategory('solar_film'), 'solar');
 });
 

@@ -3524,7 +3524,7 @@ function quickEntryDefaultForm(keep = {}) {
   const managers = quickEntryManagers();
   const currentOfficeUser = managers.find(user => user.id === currentUser()?.id);
   return {
-    date: keep.date || localDateKey(), manager: keep.manager || currentOfficeUser?.id || managers[0]?.id || '', method: keep.method || 'zelle',
+    date: keep.date || localDateKey(), measurementDate: keep.measurementDate || keep.date || localDateKey(), manager: keep.manager || currentOfficeUser?.id || managers[0]?.id || '', method: keep.method || 'zelle',
     client: '', phone: '', street: '', city: '', source: 'google', site: 'RESIDENTIAL',
     measurer: keep.measurer || '', notes: '',
   };
@@ -3551,7 +3551,7 @@ function quickEntryReadForm() {
   const s = quickEntryState();
   const v = id => document.getElementById(id)?.value;
   const f = s.form;
-  const keys = ['date','manager','method','client','phone','street','city','source','site','measurer','notes'];
+  const keys = ['date','measurementDate','manager','method','client','phone','street','city','source','site','measurer','notes'];
   keys.forEach(k => { const val = v('qe-' + k); if (val != null) f[k] = val; });
   return f;
 }
@@ -3655,11 +3655,13 @@ function quickEntryCreateDraft() {
   const actor = currentUser();
   const managerId = actor?.role === 'owner' ? f.manager : actor?.id;
   const date = projectQuickDateValue(f.date);
+  const measurementDate = projectQuickDateValue(f.measurementDate);
   const problems = [];
   if (!date) problems.push('дата проекта');
   if (!String(f.client || '').trim()) problems.push('имя клиента');
   if (!String(f.phone || '').trim() && !String(f.street || '').trim()) problems.push('телефон или адрес');
   if (!managerId) problems.push('менеджер');
+  if (f.measurer && !measurementDate) problems.push('фактическая дата замера');
   if (problems.length) { alert('Заполните: ' + problems.join(', ') + '.'); return; }
   const found = quickEntryFindOrCreateClient(f);
   if (!found) return;
@@ -3668,7 +3670,7 @@ function quickEntryCreateDraft() {
   const at = `${date}T12:00:00.000Z`;
   const num = 'R-' + date.slice(2).replace(/-/g, '') + '-' + String(projectNumberSequence()).padStart(3, '0');
   const o = {
-    id: 'o' + uid(), number: num, clientId: client.id, status: 'new', managerId, measurerId: f.measurer || null, installerIds: [],
+    id: 'o' + uid(), number: num, clientId: client.id, status: 'new', managerId, measurerId: f.measurer || null, historicalMeasurementDate: measurementDate || null, installerIds: [],
     createdAt: at, pricePerM2: db.settings.pricePerM2, complexity: 'standard', distanceKm: 0, marketing: 0, paid: 0,
     paymentTerms: 'deposit_before_work', paymentTermsConfirmedAt: at, paymentTermsConfirmedBy: state.currentUserId,
     measurements: { rooms: [] }, siteType: normalizeOrderSiteType(f.site) || 'RESIDENTIAL',
@@ -3685,7 +3687,7 @@ function quickEntryCreateDraft() {
   db.orders.push(o);
   save();
   const s = quickEntryState();
-  s.form = quickEntryDefaultForm({ date: f.date, manager: managerId, measurer: f.measurer, method: f.method });
+  s.form = quickEntryDefaultForm({ date: f.date, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
   s.notice = `${o.number} · ${client.name} — черновик создан`;
   openQuickProjectEntry(o.id);
 }
@@ -3708,6 +3710,7 @@ function renderQuickEntry() {
     <div class="qe-form-head"><span class="qe-kicker">Новый исторический проект</span><span class="qe-muted">Сначала клиент и объект. Услуги, даты, материалы, монтажники, расходы и оплата — на следующем экране.</span></div>
     <div class="qe-grid qe-grid-a">
       <label>Дата проекта<input id="qe-date" type="date" value="${academyEsc(f.date)}"></label>
+      <label>Фактическая дата замера<input id="qe-measurementDate" type="date" value="${academyEsc(f.measurementDate || '')}"><small>Для начисления замерщику. Если замера не было — оставьте замерщика пустым.</small></label>
       <label>Клиент<input id="qe-client" value="${academyEsc(f.client)}" placeholder="Имя или компания" autocomplete="off"></label>
       <label>Телефон<input id="qe-phone" value="${academyEsc(f.phone)}" placeholder="+1 310 …" inputmode="tel"></label>
       <label>Адрес объекта<input id="qe-street" value="${academyEsc(f.street)}" placeholder="улица, дом"></label>

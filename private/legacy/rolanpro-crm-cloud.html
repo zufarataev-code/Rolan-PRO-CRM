@@ -21094,7 +21094,7 @@ function renderOwnerPanel() {
 function renderManagerDashboardLegacy() {
   const u = currentUser();
   const ownerPanel = u.role === 'owner' ? renderOwnerPanel() : '';
-  const orders = visibleOrdersForUser(u);
+  const orders = visibleOrdersForUser(u).filter(o => !orderIsHistoricalDraft(o));
   const clients = visibleClientsForUser(u);
   const visibleOrderIds = new Set(orders.map(o => o.id));
   const reviews = (db.reviews || []).filter(review => visibleOrderIds.has(review.orderId));
@@ -21250,7 +21250,7 @@ function precisionManagerAction(o) {
 
 function renderPrecisionManagerDashboard() {
   const user = currentUser();
-  const orders = visibleOrdersForUser(user);
+  const orders = visibleOrdersForUser(user).filter(o => !orderIsHistoricalDraft(o));
   const active = orders.filter(o => !['completed','review_received'].includes(o.status));
   const actions = active
     .map(order => ({ order, action: precisionManagerAction(order) }))
@@ -29358,6 +29358,9 @@ function projectQuickCompletionIssues(o) {
   if (quickLines.some(line => !Array.isArray(line.installerIds) || !line.installerIds.length)) {
     issues.push('у каждой услуги нужен исполнитель');
   }
+  if (o.measurerId && !projectQuickDateValue(o.historicalMeasurementDate)) {
+    issues.push('нужна фактическая дата замера');
+  }
   if (quickLines.some(line => !projectQuickDateValue(line.startDate) || !projectQuickDateValue(line.endDate))) {
     issues.push('у каждой услуги нужны даты начала и окончания');
   }
@@ -29405,9 +29408,11 @@ function closeQuickProjectAsCompleted(oid) {
   const full = o.paid >= revenue - 0.5;
   o.depositReceived = o.paid > 0;
   o.depositReceivedAt = o.paid > 0 ? (o.depositReceivedAt || paidAt) : null;
-  // A completed historical project also confirms that its survey was completed.
-  // Payroll uses this fact and its date for a surveyor paid a fixed amount per job.
-  o.measurementDoneAt = o.measurementDoneAt || startAt;
+  // Historical survey payroll must use the actual survey date, not the first
+  // installation date: the two jobs can belong to different pay periods.
+  const measurementDate = projectQuickDateValue(o.historicalMeasurementDate);
+  const measurementAt = measurementDate ? `${measurementDate}T12:00:00.000Z` : null;
+  o.measurementDoneAt = o.measurerId ? (o.measurementDoneAt || measurementAt) : null;
   o.installationAt = o.installationAt || startAt;
   o.installationDoneAt = o.installationDoneAt || endAt;
   o.actSignedAt = o.actSignedAt || endAt;
@@ -29446,6 +29451,10 @@ function quickProjectUpdateHeader(oid, field, value) {
       if (!user || user.active === false || !['measurer', 'owner'].includes(user.role)) return;
       o.measurerId = user.id;
     }
+  } else if (field === 'historicalMeasurementDate') {
+    const date = projectQuickDateValue(value);
+    if (value && !date) return;
+    o.historicalMeasurementDate = date || null;
   } else if (field === 'notes') {
     o.notes = String(value || '').trim();
   } else return;
@@ -29525,6 +29534,7 @@ function renderQuickProjectEntry(o) {
         <div class="project-estimate-quick-card"><span>Клиент и объект</span><strong>${academyEsc(client?.name || 'Без клиента')}</strong><div class="text-xs text-gray-500">${academyEsc(orderAddress(o, client) || 'Адрес не указан')}</div></div>
         <div><label>Менеджер</label><select ${canReassignHistoricalManager?'':'disabled title="Назначение менеджера меняет только владелец"'} onchange="quickProjectUpdateHeader('${o.id}','managerId',this.value)">${availableManagers.map(user => `<option value="${user.id}" ${o.managerId===user.id?'selected':''}>${academyEsc(user.name)}</option>`).join('')}</select></div>
         <div><label>Замерщик</label><select onchange="quickProjectUpdateHeader('${o.id}','measurerId',this.value)"><option value="">Не указан</option>${availableMeasurers.map(user => `<option value="${user.id}" ${o.measurerId===user.id?'selected':''}>${academyEsc(user.name)}${user.role==='owner'?' · владелец':''}</option>`).join('')}</select></div>
+        <div><label>Фактическая дата замера</label><input type="date" value="${academyEsc(o.historicalMeasurementDate || '')}" onchange="quickProjectUpdateHeader('${o.id}','historicalMeasurementDate',this.value)"><div class="text-xs text-gray-500">Дата начисления замерщику; не подменяется датой монтажа.</div></div>
         <div><label>Заметка</label><input value="${academyEsc(o.notes || '')}" onchange="quickProjectUpdateHeader('${o.id}','notes',this.value)" placeholder="Что важно по этому проекту"></div>
       </div>
     </section>
@@ -37556,6 +37566,7 @@ function projectProposalDirectionTitle(direction) {
     smart_film: 'Smart Film',
     protective_film: 'Safety and Security Film',
     decorative_film: 'Decorative Window Film',
+    privacy_film: 'Privacy Window Film',
   })[direction] || 'Window Film Service';
 }
 function projectProposalLineTitle(line) {
@@ -39852,7 +39863,7 @@ function agentInsights() {
   if (!user) return [];
   const now = new Date();
   const today = localDateKey(now);
-  const orders = visibleOrdersForUser(user);
+  const orders = visibleOrdersForUser(user).filter(order => !orderIsHistoricalDraft(order));
   const tasks = (db.tasks || []).filter(task => agentTaskVisibleTo(user, task));
   const insights = [];
   const overdue = tasks.filter(task => task.dueAt && taskDueDateKey(task.dueAt, task) < today);
@@ -41263,7 +41274,7 @@ function renderDispatchMap(anchor, mode = 'week') {
 }
 
 function openCalendarSchedulePicker() {
-  const orders = visibleOrdersForUser(currentUser()).filter(order => !['completed','review_received'].includes(order.status));
+  const orders = visibleOrdersForUser(currentUser()).filter(order => !orderIsHistoricalDraft(order) && !['completed','review_received'].includes(order.status));
   if (!orders.length) return alert('Нет активных проектов для назначения.');
   state.modal = `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal-content workspace-modal p-5" style="max-width:34rem" onclick="event.stopPropagation()"><div class="flex items-center justify-between gap-3"><h3 class="text-xl font-black">Назначить работу</h3><button class="btn-ghost" onclick="closeModal()">Закрыть</button></div><div class="grid grid-cols-1 gap-3 mt-4"><label>Проект<select id="calendar-schedule-order">${orders.map(order => { const client = getClient(order.clientId); return `<option value="${order.id}">${academyEsc(order.number)} · ${academyEsc(client?.name || 'Без клиента')} · ${academyEsc(orderAddress(order, client) || 'без адреса')}</option>`; }).join('')}</select></label><label>Работа<select id="calendar-schedule-kind"><option value="consultation">Консультация</option><option value="measure">Замер</option><option value="install">Монтаж</option></select></label></div><div class="flex justify-end mt-4"><button class="btn-primary" onclick="confirmCalendarSchedulePicker()">Выбрать время →</button></div></div></div>`;
   render();

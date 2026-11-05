@@ -22,6 +22,7 @@ test('historical entry first creates one draft project, then opens the canonical
   assert.doesNotMatch(create, /problems\.push\('замерщик'\)/, 'an unknown historical surveyor is allowed');
   assert.match(create, /extraServices: \[\], extraExpenses: \[\]/, 'the header does not invent a first service');
   assert.match(create, /measurerId: f\.measurer \|\| null/);
+  assert.match(create, /historicalMeasurementDate: measurementDate \|\| null/, 'the actual survey date is stored independently from installation dates');
   assert.match(create, /actor\?\.role === 'owner' \? f\.manager : actor\?\.id/, 'a manager cannot create an inaccessible draft for another manager');
   assert.match(create, /managerId,/);
   assert.match(create, /quickEntryDraft: true/);
@@ -40,12 +41,13 @@ test('rates come only from the directories: the panel reads orderPSS and calcUse
 
 test('the project header reads all facts before creating the draft', () => {
   const read = fn(stages, 'quickEntryReadForm');
-  for (const field of ['date', 'manager', 'client', 'phone', 'street', 'city', 'source', 'site', 'measurer', 'notes']) assert.ok(read.includes(`'${field}'`), field);
+  for (const field of ['date', 'measurementDate', 'manager', 'client', 'phone', 'street', 'city', 'source', 'site', 'measurer', 'notes']) assert.ok(read.includes(`'${field}'`), field);
 });
 
 test('owner can be the surveyor without duplicating the employee card', () => {
   assert.match(fn(stages, 'quickEntryMeasurers'), /\['measurer', 'owner'\]\.includes/);
   assert.match(stages, /Замерщик<select id="qe-measurer"/);
+  assert.match(stages, /Фактическая дата замера<input id="qe-measurementDate"/);
 });
 
 test('a new historical draft defaults to the current office user instead of the first manager', () => {
@@ -94,7 +96,9 @@ test('canonical editor supports many services with their own dates, crew, suppli
   assert.doesNotMatch(renderer, /сформировать КП/, 'the import UI must not advertise a retroactive proposal');
   const close = fn(html, 'closeQuickProjectAsCompleted');
   assert.match(close, /o\.status = full \? 'completed' : 'act_signed'/, 'partial payment leaves debt visible');
-  assert.match(close, /o\.measurementDoneAt = o\.measurementDoneAt \|\| startAt/, 'a completed import accrues fixed-per-job surveyor payroll');
+  assert.match(close, /const measurementDate = projectQuickDateValue\(o\.historicalMeasurementDate\)/);
+  assert.match(close, /o\.measurementDoneAt = o\.measurerId \? \(o\.measurementDoneAt \|\| measurementAt\) : null/, 'fixed-per-job surveyor payroll uses the actual survey date, not installation');
+  assert.match(renderer, /Фактическая дата замера/);
   assert.match(close, /projectEstimateApprovalSnapshot\(o, recordedAt, true\)/);
 });
 
@@ -163,6 +167,9 @@ test('unfinished historical imports cannot leak into the live project funnel', (
   assert.match(fn(html, 'changeStatus'), /if \(o\?\.quickEntryDraft === true && o\?\.quickProjectImportedCompleted !== true\)[\s\S]*openQuickProjectEntry\(o\.id\)[\s\S]*return false/);
   assert.match(fn(html, 'openOrder'), /if \(orderIsHistoricalDraft\(order\)\)[\s\S]*openQuickProjectEntry\(id\)[\s\S]*return/);
   assert.match(fn(html, 'renderOrderDetails'), /Черновик переноса[\s\S]*Продолжить перенос/);
+  for (const name of ['renderManagerDashboardLegacy', 'renderPrecisionManagerDashboard', 'agentInsights', 'openCalendarSchedulePicker']) {
+    assert.match(fn(html, name), /orderIsHistoricalDraft/, name);
+  }
 });
 
 test('a manager cannot reassign a historical project and lose access to it', () => {
@@ -217,4 +224,19 @@ test('the historical-project surveyor can be cleared', () => {
   });
   vm.runInContext(`${fn(html, 'quickProjectUpdateHeader')}; quickProjectUpdateHeader('o', 'measurerId', '');`, context);
   assert.equal(order.measurerId, null);
+});
+
+test('the historical-project actual survey date can be corrected independently', () => {
+  const order: any = { id: 'o', quickProjectImportedCompleted: false, historicalMeasurementDate: '2026-10-01' };
+  const context: any = vm.createContext({
+    getOrder: () => order,
+    orderUserCanSeeMoney: () => true,
+    currentUser: () => ({ role: 'owner' }),
+    projectQuickDateValue: (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? value : '',
+    projectEstimateMarkChanged: () => undefined,
+    save: () => undefined,
+    refreshQuickProjectEntry: () => undefined,
+  });
+  vm.runInContext(`${fn(html, 'quickProjectUpdateHeader')}; quickProjectUpdateHeader('o', 'historicalMeasurementDate', '2026-09-15');`, context);
+  assert.equal(order.historicalMeasurementDate, '2026-09-15');
 });
