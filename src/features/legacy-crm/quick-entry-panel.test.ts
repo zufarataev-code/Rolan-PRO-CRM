@@ -80,8 +80,10 @@ test('canonical editor supports many services with their own dates, crew, suppli
   assert.match(renderer, /canCloseHistoricalProject = quickRole === 'owner'/, 'only the owner confirms money and closes the import');
   assert.match(renderer, /canReassignHistoricalManager = quickRole === 'owner'/, 'only the owner can reassign the project manager');
   assert.match(renderer, /Number\.isFinite\(Number\(o\.paid\)\) \? Math\.max\(0, Number\(o\.paid\)\) : 0/, 'an unpaid import must remain at zero instead of looking fully paid');
-  assert.match(fn(html, 'closeQuickProjectAsCompleted'), /o\.status = full \? 'completed' : 'act_signed'/, 'partial payment leaves debt visible');
-  assert.match(fn(html, 'closeQuickProjectAsCompleted'), /projectEstimateApprovalSnapshot\(o, recordedAt, true\)/);
+  const close = fn(html, 'closeQuickProjectAsCompleted');
+  assert.match(close, /o\.status = full \? 'completed' : 'act_signed'/, 'partial payment leaves debt visible');
+  assert.match(close, /o\.measurementDoneAt = o\.measurementDoneAt \|\| startAt/, 'a completed import accrues fixed-per-job surveyor payroll');
+  assert.match(close, /projectEstimateApprovalSnapshot\(o, recordedAt, true\)/);
 });
 
 test('unfinished historical imports stay out of every financial rollup until owner closure', () => {

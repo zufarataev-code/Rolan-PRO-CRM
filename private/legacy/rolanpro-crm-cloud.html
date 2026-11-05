@@ -29256,6 +29256,9 @@ function closeQuickProjectAsCompleted(oid) {
   const full = o.paid >= revenue - 0.5;
   o.depositReceived = o.paid > 0;
   o.depositReceivedAt = o.paid > 0 ? (o.depositReceivedAt || paidAt) : null;
+  // A completed historical project also confirms that its survey was completed.
+  // Payroll uses this fact and its date for a surveyor paid a fixed amount per job.
+  o.measurementDoneAt = o.measurementDoneAt || startAt;
   o.installationAt = o.installationAt || startAt;
   o.installationDoneAt = o.installationDoneAt || endAt;
   o.actSignedAt = o.actSignedAt || endAt;
