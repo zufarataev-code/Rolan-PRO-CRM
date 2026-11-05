@@ -21,6 +21,7 @@ const clientIds: string[] = [];
 let cookie = "";
 let originalWorkspace: Prisma.JsonValue | null = null;
 let originalSettings: any = null;
+let snapshotReady = false;
 function fixture(id: string, phone = "+12025550123") {
   return { id: `${tag}-${id}`, company_id: company, direction: "inbound", start_time: new Date().toISOString(), duration: 75, answered: true, customer_phone_number: phone, customer_name: "Offline CallRail fixture", source_name: "Google Ads", gclid: `offline-${tag}` };
 }
@@ -35,8 +36,11 @@ before(async () => {
   await db.user.updateMany({ where: { email: "owner@rolanpro.local" }, data: { must_change_password: false } });
   originalWorkspace = (await db.legacyWorkspace.findUnique({ where: { workspace_id: "primary" } }))?.payload ?? null;
   originalSettings = await db.googleAdsIntegrationSetting.findUnique({ where: { setting_key: "default" } });
+  snapshotReady = true;
 });
 after(async () => {
+  try {
+  if (!snapshotReady) return;
   await db.conversionUploadOutbox.deleteMany({ where: { conversion_event: { lead_id: { in: ids } } } });
   await db.conversionEvent.deleteMany({ where: { lead_id: { in: ids } } });
   await db.activityLog.deleteMany({ where: { entity_id: { in: [...ids, ...dealIds] } } });
@@ -52,8 +56,10 @@ after(async () => {
     const { setting_key: _key, created_at: _created, updated_at: _updated, qualification_rules, audience_rules, ...settings } = originalSettings;
     await db.googleAdsIntegrationSetting.update({ where: { setting_key: "default" }, data: { ...settings, qualification_rules: qualification_rules ?? Prisma.DbNull, audience_rules: audience_rules ?? Prisma.DbNull } });
   } else await db.googleAdsIntegrationSetting.deleteMany({ where: { setting_key: "default" } });
-  await db.$disconnect();
-  await runtimeDb.$disconnect();
+  } finally {
+    await db.$disconnect();
+    await runtimeDb.$disconnect();
+  }
 });
 test("signed calls deduplicate concurrently, preserve original source, and create no qualification", async () => {
   const login = await fetch(base + "/api/v1/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" }) });

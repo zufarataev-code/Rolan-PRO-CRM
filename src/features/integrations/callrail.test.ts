@@ -73,3 +73,24 @@ test("recent calls remain in the office inbox after an enquiry is handled or dis
   assert.match(context.callrailRecentCallsHtml(), /missed · Google Ads/);
   assert.match(context.callrailRecentCallsHtml(), /&lt;caller&gt;/);
 });
+
+test("CallRail E2E cleanup cannot write when its database guard or snapshots failed", async () => {
+  const { transpileModule, ScriptTarget } = await import("typescript");
+  const source = readFileSync("e2e/callrail.e2e.ts", "utf8");
+  const start = source.indexOf("after(async () => {");
+  const hook = source.slice(start, source.indexOf("\ntest(", start));
+  let cleanup: () => Promise<void> = async () => { throw new Error("cleanup hook not registered"); };
+  let disconnected = 0;
+  const writes: string[] = [];
+  const db = new Proxy({ $disconnect: async () => { disconnected++; } }, {
+    get(target, entity: string) {
+      if (entity === "$disconnect") return target.$disconnect;
+      return { deleteMany: async () => { writes.push(entity); throw new Error("unguarded write"); } };
+    },
+  });
+  vm.runInNewContext(transpileModule(hook, { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText,
+    { snapshotReady: false, after: (fn: typeof cleanup) => { cleanup = fn; }, db, runtimeDb: db });
+  await cleanup();
+  assert.deepEqual(writes, []);
+  assert.equal(disconnected, 2);
+});
