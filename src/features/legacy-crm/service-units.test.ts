@@ -101,7 +101,8 @@ test('the service editor preserves an old explicit Privacy material link without
   assert.equal(c.serviceOfferingAllowsFilm(unlinkedLegacy, db.settings.catalog[0]), false);
   assert.equal(c.projectOfferingAllowsFilm(unlinkedLegacy, db.settings.catalog[0], 'mirror'), true, 'the material already saved on a project remains visible');
   assert.equal(c.projectOfferingAllowsFilm(unlinkedLegacy, db.settings.catalog[1], 'mirror'), false, 'another cross-direction material remains unavailable');
-  assert.equal(c.serviceOfferingDefaultFilmId(offering), 'mirror');
+  assert.equal(c.projectOfferingAllowsFilm(offering, db.settings.catalog[0], ''), false, 'a directory compatibility link cannot be selected in a new project');
+  assert.equal(c.serviceOfferingDefaultFilmId(offering), '', 'a cross-direction compatibility link is never the default for a new project');
   const editor = html.slice(html.indexOf('function serviceOfferingEditorHtml('), html.indexOf('function updateServiceOffering(', html.indexOf('function serviceOfferingEditorHtml(')));
   assert.match(editor, /serviceOfferingAllowsFilm\(offering, item\)/);
   assert.match(html, /projectOfferingAllowsFilm\(offering, item, selectedCatalogId\)/);

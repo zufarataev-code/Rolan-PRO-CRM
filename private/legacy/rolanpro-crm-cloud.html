@@ -8539,6 +8539,9 @@ async function runFollowUpScheduler() {
 
   for (const rule of rules) {
     for (const o of db.orders) {
+      // Historical imports describe work that already happened. They must
+      // never start customer reminders when an old trigger date is entered.
+      if (o.quickEntry === true || o.quickEntryDraft === true || o.quickProjectImportedCompleted === true) continue;
       // Правило может действовать только для заказов в определённом статусе
       // (разогрев лида останавливается, как только заказ двинулся по воронке)
       if (rule.onlyStatus && o.status !== rule.onlyStatus) continue;
@@ -25986,7 +25989,10 @@ function serviceOfferingAllowsFilm(offering, film) {
  * another cross-direction material selectable.
  */
 function projectOfferingAllowsFilm(offering, film, selectedCatalogId = '') {
-  return !!offering && !!film && (serviceOfferingAllowsFilm(offering, film) || (!!selectedCatalogId && film.id === selectedCatalogId));
+  return !!offering && !!film && (
+    serviceDirectionAllowsFilm(offering.direction, film)
+    || (!!selectedCatalogId && film.id === selectedCatalogId)
+  );
 }
 /** Units a service of a direction may use: «Общее по объекту» has no windows, so nothing per sq ft or per linear ft. */
 function serviceOfferingUnitsFor(direction) { return direction === 'general' ? SERVICE_OFFERING_UNITS.filter(unit => !['sqft', 'lft'].includes(unit.id)) : SERVICE_OFFERING_UNITS; }
@@ -26060,7 +26066,7 @@ function serviceOfferingDefaultFilmId(offering) {
   if (!offering) return '';
   const linked = serviceOfferingFilmIds(offering).filter(id => {
     const film = getCatalogItem(id);
-    return film && !film.archived && serviceOfferingAllowsFilm(offering, film);
+    return film && !film.archived && serviceDirectionAllowsFilm(offering.direction, film);
   });
   if (linked.includes(offering.defaultFilmId)) return offering.defaultFilmId;
   return linked.length === 1 ? linked[0] : '';
@@ -26071,9 +26077,13 @@ function serviceOfferingDefaultFilmId(offering) {
  * manager picks it). Same rule on the server (Owner, 2026-10-24).
  */
 function serviceOfferingAllowedFilmIds(offering) {
-  const linked = serviceOfferingFilmIds(offering);
-  if (linked.length || !offering) return linked;
+  if (!offering) return [];
   const direction = canonicalServiceDirection(offering.direction);
+  const linked = serviceOfferingFilmIds(offering).filter(id => {
+    const film = getCatalogItem(id);
+    return film && !film.archived && serviceDirectionAllowsFilm(direction, film);
+  });
+  if (linked.length) return linked;
   return (db.settings?.catalog || []).filter(film => !film.archived && serviceDirectionAllowsFilm(direction, film)).map(film => film.id);
 }
 

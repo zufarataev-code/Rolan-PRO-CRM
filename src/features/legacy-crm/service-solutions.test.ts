@@ -29,8 +29,8 @@ test('solution price/name is copied into measured scope without changing old est
   const o:any={id:'o',measurements:{rooms:[{id:'r',windows:[win]}]}}; db.orders.push(o);
   c.projectSetWindowSolution('o','r','w','offeringId','svc_id1');
   assert.equal(win.pricePerSqft,12); assert.equal(win.catalogId,'');
-  db.settings.serviceOfferings[0].filmIds.push('other'); // A persisted cross-direction link from the temporary four-direction period remains usable.
-  c.projectSetWindowSolution('o','r','w','catalogId','other'); assert.equal(win.catalogId,'other');
+  db.settings.serviceOfferings[0].filmIds.push('other'); // Directory compatibility keeps the old link editable, not selectable in a new project.
+  c.projectSetWindowSolution('o','r','w','catalogId','other'); assert.equal(win.catalogId,'');
   c.projectSetWindowSolution('o','r','w','catalogId','film'); assert.equal(win.catalogId,'film');
   c.updateServiceOffering('svc_id1','name','Renamed'); c.updateServiceOffering('svc_id1','pricePerSqft',30);
   assert.equal(win.offeringName,'Solution A'); assert.equal(win.pricePerSqft,12);

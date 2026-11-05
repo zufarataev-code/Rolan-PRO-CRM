@@ -172,6 +172,11 @@ test('unfinished historical imports cannot leak into the live project funnel', (
   }
 });
 
+test('historical imports never trigger automatic customer follow-ups', () => {
+  const scheduler = fn(html, 'runFollowUpScheduler');
+  assert.match(scheduler, /o\.quickEntry === true \|\| o\.quickEntryDraft === true \|\| o\.quickProjectImportedCompleted === true\) continue/);
+});
+
 test('a manager cannot reassign a historical project and lose access to it', () => {
   const order = { id: 'o', quickProjectImportedCompleted: false, managerId: 'manager-a' };
   let saved = false;

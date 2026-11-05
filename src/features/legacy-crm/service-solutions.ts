@@ -223,6 +223,18 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const linked = Array.isArray(offering.filmIds) ? offering.filmIds : [];
     return linked.length ? linked.includes(filmId) : true;
   };
+  // Directory compatibility may keep an old Decorative → Privacy link so the
+  // owner can remove it. New project choices must still obey the real
+  // direction; only an unchanged saved project selection is grandfathered.
+  const filmAllowedForProject = (offering: Row, filmId: unknown) => {
+    const film = films.find(value => value.id === filmId);
+    if (!film || !filmBelongsToServiceDirection(film, offering.direction)) return false;
+    const linked = (Array.isArray(offering.filmIds) ? offering.filmIds : []).filter(id => {
+      const linkedFilm = films.find(value => value.id === id);
+      return linkedFilm && filmBelongsToServiceDirection(linkedFilm, offering.direction);
+    });
+    return linked.length ? linked.includes(filmId) : true;
+  };
   for (const offering of offerings) {
     if (typeof offering.id !== 'string' || !/^[\w-]{1,120}$/.test(offering.id) || ids.has(offering.id)) return 'Некорректный или повторный ID услуги.';
     ids.add(offering.id);
@@ -354,7 +366,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       // combined direction. Keep that exact saved project choice writable,
       // but do not allow replacing it with another cross-direction material.
       const unchangedLegacySelection = object(oldOrder.offeringCatalogIds)[offeringId] === filmId;
-      if (!selectedOfferingIds.has(offeringId) || !offering || !film || (!filmAllowed(offering, filmId) && !unchangedLegacySelection)) {
+      if (!selectedOfferingIds.has(offeringId) || !offering || !film || (!filmAllowedForProject(offering, filmId) && !unchangedLegacySelection)) {
         return 'Материал проекта должен быть привязан к выбранной услуге.';
       }
     }
@@ -488,7 +500,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         const direction = DIRECTION_BY_SERVICE_TYPE[item.measureScope || item.serviceType || order.serviceType];
         const offeredIn = offering ? [offering.direction, ...(Array.isArray(offering.directions) && offering.unit && offering.unit !== 'sqft' ? offering.directions : [])].map(canonicalServiceDirection) : [];
         if (!offering || offering.active === false || !offeredIn.includes(canonicalServiceDirection(direction))) return 'Услуга не соответствует направлению проекта.';
-        if (item.catalogId && !filmAllowed(offering, item.catalogId)) return 'Плёнка не подходит выбранной услуге: выберите плёнку её направления.';
+        if (item.catalogId && !filmAllowedForProject(offering, item.catalogId)) return 'Плёнка не подходит выбранной услуге: выберите плёнку её направления.';
       }
     }
     // The unit each chosen service had when the project chose it: a new entry

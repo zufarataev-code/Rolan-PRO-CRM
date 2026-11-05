@@ -56,6 +56,16 @@ test('an unchanged legacy project-level Privacy film remains writable but cannot
   assert.match(prepareServiceSolutions(legacy,unchanged,false)!,/Материал проекта/);
 });
 
+test('a legacy directory film link cannot be used on a new cross-direction project',()=>{
+  const legacy:any=structuredClone(current);
+  legacy.settings.catalog.push({id:'privacy-film',category:'privacy'});
+  legacy.settings.serviceOfferings[0].filmIds=['privacy-film'];
+  const submitted:any=serviceSolutionsForViewer(legacy,false);
+  submitted.orders[0].offeringIds=['solution'];
+  submitted.orders[0].offeringCatalogIds={solution:'privacy-film'};
+  assert.match(prepareServiceSolutions(legacy,submitted,false)!,/Материал проекта/);
+});
+
 test('installer receives the saved rate only for their own assigned service',()=>{
   const payload:any=structuredClone(current);
   payload.orders[0].installerIds=['installer','other'];
