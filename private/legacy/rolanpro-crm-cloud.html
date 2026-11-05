@@ -25238,6 +25238,42 @@ function installerObjectAnalytics(o, userId) {
   };
 }
 
+/**
+ * A historical import is one project card but its services may belong to
+ * different payroll months. Split only its analytics rows by the same saved
+ * service/accrual dates that payroll uses; ordinary projects stay one row.
+ */
+function installerHistoricalAnalyticsRows(o, userId) {
+  if (o?.quickProjectImportedCompleted !== true || typeof historicalProjectInstallerAccruals !== 'function') return [];
+  const user = getUser(userId);
+  const accruals = historicalProjectInstallerAccruals(o, user);
+  if (!accruals.length) return [];
+  const byDate = new Map();
+  const rowFor = value => {
+    const date = String(value || o.installationDoneAt || o.installationAt || o.createdAt || '');
+    const key = date.slice(0, 10) || date;
+    if (!byDate.has(key)) byDate.set(key, { order: o, date, done: true, sqft: 0, mySqft: 0, team: 1, byCategory: {}, earned: 0 });
+    return byDate.get(key);
+  };
+  projectLines(o).filter(line => (line.installerIds || []).includes(userId)).forEach(line => {
+    const completed = (line.sources || []).map(source => projectQuickDateValue(source?.endDate)).filter(Boolean).sort().at(-1);
+    const row = rowFor(completed ? `${completed}T12:00:00.000Z` : line.installationAt);
+    const crew = Math.max(1, new Set((line.installerIds || []).filter(Boolean)).size);
+    row.team = Math.max(row.team, crew);
+    if (line.unit !== 'sqft') return;
+    const qty = Math.max(0, Number(line.qty) || 0);
+    const windowCategory = (line.windows || []).map(win => windowCatalog(win)?.category).find(Boolean);
+    const sourceCategory = (line.sources || []).map(source => getCatalogItem(source?.catalogId)?.category).find(Boolean);
+    const category = windowCategory || sourceCategory || primaryServiceInfo(line.direction)?.catalogCategory || 'other';
+    const key = INSTALLER_CATEGORY_LABELS[category] ? category : 'other';
+    row.sqft += qty;
+    row.mySqft += qty / crew;
+    row.byCategory[key] = (row.byCategory[key] || 0) + qty / crew;
+  });
+  accruals.forEach(accrual => { rowFor(accrual.date).earned += Math.max(0, Number(accrual.amount) || 0); });
+  return [...byDate.values()];
+}
+
 function installerAnalyticsRange(period) {
   const now = new Date();
   const monthStart = offset => new Date(now.getFullYear(), now.getMonth() + offset, 1);
@@ -25257,12 +25293,16 @@ function renderInstallerAnalytics() {
     return (!from || date >= from) && (!to || date < to);
   };
   const mine = installerVisibleOrders(u.id);
-  const rows = mine.map(o => installerObjectAnalytics(o, u.id))
+  const rows = mine.flatMap(o => {
+    const historical = installerHistoricalAnalyticsRows(o, u.id);
+    return historical.length ? historical : [installerObjectAnalytics(o, u.id)];
+  })
     .filter(row => row.done && inPeriod(row))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const pending = mine.filter(o => !o.installationDoneAt && !['installation_done', 'completed', 'review_received'].includes(o.status));
   const earned = rows.reduce((sum, row) => sum + row.earned, 0);
   const mySqft = rows.reduce((sum, row) => sum + row.mySqft, 0);
+  const completedObjects = new Set(rows.map(row => row.order.id)).size;
   const pendingEarned = pending.reduce((sum, o) => sum + orderInstallerPayoutPerPerson(o, u.id), 0);
   const categories = {};
   rows.forEach(row => Object.entries(row.byCategory).forEach(([key, sqft]) => {
@@ -25283,9 +25323,9 @@ function renderInstallerAnalytics() {
   </div>
 
   <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-    ${tile('Объектов сдано', rows.length)}
+    ${tile('Объектов сдано', completedObjects)}
     ${tile('Установлено мной', fmtSqft(mySqft))}
-    ${tile('Заработано', fmtMoney(earned), rows.length ? `в среднем ${fmtMoney(earned / rows.length)} за объект` : '')}
+    ${tile('Заработано', fmtMoney(earned), completedObjects ? `в среднем ${fmtMoney(earned / completedObjects)} за объект` : '')}
     ${tile('Ожидает сдачи', fmtMoney(pendingEarned), `${pending.length} в работе`)}
   </div>
 

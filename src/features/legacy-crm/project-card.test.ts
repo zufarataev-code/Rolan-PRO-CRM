@@ -533,6 +533,12 @@ test('server: an owner can close only a persisted historical draft with a concre
     serviceSchedules: [{ id: 'line:line', installerIds: ['i1'], installationAt: '2026-09-01T12:00:00.000Z' }],
   });
   assert.equal(prepareServiceSolutions(current, next, true), null, 'the owner-authorized historical transition does not need global import mode');
+  const forgedInventoryClose = structuredClone(next);
+  Object.assign(forgedInventoryClose.orders[0], { _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [] });
+  assert.equal(
+    prepareServiceSolutions(current, forgedInventoryClose, true),
+    'Складскую себестоимость исторического проекта рассчитывает только система.',
+  );
 
   const missingCurrent: Row = { settings, users, orders: [order('')] };
   const missingNext = structuredClone(missingCurrent);
@@ -629,29 +635,6 @@ test('server: managers own only their historical drafts and completed imports ar
     'Складскую себестоимость исторического проекта рассчитывает только система.',
   );
 });
-
-test('server: the owner close action cannot submit a forged warehouse-cost snapshot', () => {
-  const settings = { serviceOfferings: [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }] };
-  const users = [{ id: 'i1', role: 'installer' }];
-  const draft: Row = {
-    id: 'historical', managerId: 'manager-a', status: 'new', quickEntry: true, quickEntryDraft: true,
-    quickProjectImportedCompleted: false, serviceType: 'protective_film', offeringIds: ['a1'],
-    offeringUnits: { a1: 'sqft' }, measurements: { rooms: [] },
-    extraServices: [{ id: 'line', quickProjectLine: true, offeringId: 'a1', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film', installerIds: ['i1'], startDate: '2026-09-01' }],
-  };
-  const current: Row = { settings, users, orders: [draft] };
-  const closing = structuredClone(current);
-  Object.assign(closing.orders[0], {
-    status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true,
-    serviceSchedules: [{ id: 'line:line', installerIds: ['i1'], installationAt: '2026-09-01T12:00:00.000Z' }],
-    _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [],
-  });
-  assert.equal(
-    prepareServiceSolutions(current, closing, true),
-    'Складскую себестоимость исторического проекта рассчитывает только система.',
-  );
-});
-
 
 test('server: the same plan with its fields in another order is not a change (jsonb reorders keys)', () => {
   const users = [{ id: 'i1', role: 'installer' }];
