@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-05 — Расходники услуги: норма со склада на единицу (Claude, PR pending)
+
+- Owner: «плёнка к услуге привязана — правильно; силикон к услуге „Силикон“ привязать нельзя; у каждой услуги должны быть свои расходники». A service now carries `supplies: [{ id, supplyId, qtyPerUnit }]` (warehouse supply + norm per service unit).
+- Done on `claude/service-supply-norms` in `private/legacy/rolanpro-crm-cloud.html`: helpers `serviceOfferingSupplies / HasSupplies / SupplyCostPerUnit / SupplyItemsFor`, owner actions `add/update/removeServiceOfferingSupply`, editor block «Расходники со склада · норма на <unit>» inside «Состав услуги» (sized and size-free services alike). When norms exist they replace the hand-typed `materialCostPerUnit`: `serviceOfferingMaterialCost` (no snapshot → norm), `projectOfferingLine` snapshot, `serviceOfferingPricingMetrics`, and the price book shows the computed figure. Film-service lines get auto supply rows (`auto: true`) on offering/qty change in `projectEstimateUpdateQuickLine` and in the one-screen quick entry (`quickEntrySetLine`, `quickEntryBuildLine` keeps the flag); manual rows are never touched. Size-free services keep their cost through `serviceOfferingMaterialCost` so nothing is counted twice.
+- Verification: `node --check` both files (HTML inline scripts extracted); new `service-supply-norms.test.ts` 4/4; quick-entry, project-estimate-workflow, service-units green; full `npm test` 896 pass / 35 env failures as on main.
+- Next: owner sets norms in «Услуги и цены» (e.g. Силикон → туба/lft); add «Удаление старой плёнки» and «Мойка» services with prices; the warehouse «+ Добавить модель» form and multi-category films remain open.
+
 ## 2026-11-05 — Быстрый ввод в одно окно поверх исторической модели PR #458 (Claude, PR pending)
 
 - Context: PR #458 (Codex, merged 2026-11-05 05:23Z) replaced the one-screen panel from PR #460 with «header → draft → project editor». The owner asked for the one-window flow back («одно окно»): services with «+ услуга», each with its own date, crew or hired specialist, and warehouse supplies.

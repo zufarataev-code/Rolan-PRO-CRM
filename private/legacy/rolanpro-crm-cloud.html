@@ -2123,7 +2123,7 @@
   .qe-svc-body { display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start; } .qe-svc-body .qe-field { flex:1 1 320px; }
   .qe-hired { display:inline-flex;gap:4px;align-items:center;border:1.5px dashed #C9A24A;border-radius:999px;background:#FFF9EA;padding:3px 6px; } .qe-hired input { height:26px;border:0;background:transparent;font-size:12px;padding:0 6px;min-width:0; } .qe-hired input:first-child { width:150px; } .qe-hired input[type=number] { width:80px; } .qe-hired.on { border-style:solid;border-color:#B45309;background:#FFF4E0; }
   .qe-supplies { display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:36px; }
-  .qe-supply { display:inline-flex;gap:4px;align-items:center;border:1px solid #D9DEE6;border-radius:999px;background:#fff;padding:2px 4px 2px 8px; } .qe-supply select { height:28px;border:0;background:transparent;font-size:12px;max-width:230px; } .qe-supply input { width:70px;height:28px;border:0;border-left:1px solid #EEF1F5;background:transparent;font-size:12px;padding:0 6px; } .qe-supply em { font-style:normal;font-size:11px;color:#5A6577;padding:0 4px;white-space:nowrap; }
+  .qe-supply { display:inline-flex;gap:4px;align-items:center;border:1px solid #D9DEE6;border-radius:999px;background:#fff;padding:2px 4px 2px 8px; } .qe-supply select { height:28px;border:0;background:transparent;font-size:12px;max-width:230px; } .qe-supply input { width:70px;height:28px;border:0;border-left:1px solid #EEF1F5;background:transparent;font-size:12px;padding:0 6px; } .qe-supply em { font-style:normal;font-size:11px;color:#5A6577;padding:0 4px;white-space:nowrap; } .qe-supply-auto { border-style:dashed;border-color:#7C3AED;background:#F8F4FF; } .qe-supply-auto > em:first-child { color:#6D28D9;font-weight:700;padding-right:6px;border-right:1px solid #E3D5FF; }
   .qe-calc { display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#5A6577;padding-top:8px;border-top:1px dashed #E3E7EE; } .qe-calc b { color:#141A26;font-weight:700; } .qe-calc span { color:#8A97AA; } .qe-calc i { display:none; }
   .qe-add { height:40px;border-radius:8px;border:1.5px dashed var(--qe-color,#7C3AED);background:#F8F4FF;color:#6D28D9;font:700 13px inherit;font-family:inherit;cursor:pointer;padding:0 16px;width:100%; } .qe-add:hover { background:#F1E8FF; }
   .qe-bill { display:flex;gap:26px;align-items:center;flex-wrap:wrap;background:#141A26;color:#fff;border-radius:8px;padding:12px 18px; } .qe-bill > div { display:flex;flex-direction:column;gap:2px; } .qe-bill small { font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#9AA3B2; } .qe-bill b { font-size:16px; } .qe-bill-big { font-size:22px !important; } .qe-bill .qe-ok { color:#4ADE80; } .qe-bill .qe-warn { color:#FCA5A5; } .qe-bill-note { margin-left:auto;font-size:11px;color:#9AA3B2;max-width:300px;line-height:14px; }
@@ -26179,7 +26179,11 @@ function serviceOfferingUnitShort(offeringOrLine) {
 
 /** Material cost per unit of a service without sizes (its films are the material of a per-sq-ft service). */
 function serviceOfferingMaterialCost(line) {
-  const cost = Number(line?.offeringMaterialCost ?? serviceOffering(line?.offeringId)?.materialCostPerUnit);
+  // Owner, 2026-11-05: расходники, привязанные к услуге, считаются по складу
+  // и заменяют ручную цифру «материал за единицу».
+  const offering = serviceOffering(line?.offeringId);
+  if (offering && serviceOfferingHasSupplies(offering) && line?.offeringMaterialCost == null) return serviceOfferingSupplyCostPerUnit(offering);
+  const cost = Number(line?.offeringMaterialCost ?? offering?.materialCostPerUnit);
   return cost > 0 ? cost : 0;
 }
 
@@ -26208,7 +26212,7 @@ function projectOfferingLine(offering, qty = 1, serviceType = '') {
   // The server snapshots these for managers; the owner's own save carries them.
   if (currentUser()?.role === 'owner') {
     line.offeringInstallerRate = Number(offering.installerRatePerSqft) || 0;
-    line.offeringMaterialCost = Number(offering.materialCostPerUnit) || 0;
+    line.offeringMaterialCost = serviceOfferingHasSupplies(offering) ? serviceOfferingSupplyCostPerUnit(offering) : Number(offering.materialCostPerUnit) || 0;
   }
   return line;
 }
@@ -26372,6 +26376,79 @@ function windowPerimeterLinearFt(win) {
 }
 
 /** Valid, size-free services included in a directory service. */
+// ---------- РАСХОДНИКИ УСЛУГИ (Owner, 2026-11-05) ----------
+// Плёнка прикреплена к услуге по замеру; у любой услуги могут быть и расходники со
+// склада с нормой на единицу (силикон → туба на погонный фут, смарт → провод на
+// окно). Норма даёт себестоимость услуги и строки расходников в проекте.
+function serviceOfferingSupplies(offering) {
+  const list = Array.isArray(offering?.supplies) ? offering.supplies : [];
+  return list.map(item => ({ id: item.id, supplyId: item.supplyId || '', qtyPerUnit: Math.max(0, Number(item.qtyPerUnit) || 0), supply: ensureSupplies().find(candidate => candidate.id === item.supplyId) || null }));
+}
+function serviceOfferingHasSupplies(offering) {
+  return serviceOfferingSupplies(offering).some(item => item.supply && item.qtyPerUnit > 0);
+}
+/** Себестоимость расходников на одну единицу услуги — по текущей закупке склада. */
+function serviceOfferingSupplyCostPerUnit(offering) {
+  return serviceOfferingSupplies(offering).reduce((sum, item) => sum + item.qtyPerUnit * (Number(item.supply?.costPerUnit) || 0), 0);
+}
+/** Строки расходников услуги под объём: норма × количество (auto); ручные строки остаются. */
+function serviceOfferingSupplyItemsFor(offering, qty, existing = []) {
+  const manual = (existing || []).filter(item => !item.auto);
+  const amount = Math.max(0, Number(qty) || 0);
+  const auto = serviceOfferingSupplies(offering).filter(item => item.supply && item.qtyPerUnit > 0)
+    .map(item => ({ id: 'qsi_' + uid(), supplyId: item.supplyId, qty: Math.round(item.qtyPerUnit * amount * 100) / 100, auto: true }));
+  return [...auto, ...manual];
+}
+function addServiceOfferingSupply(id) {
+  if (!serviceOfferingCanEdit()) return;
+  const offering = serviceOffering(id);
+  if (!offering) return;
+  const supply = ensureSupplies()[0];
+  if (!supply) return alert('На складе нет расходников — заведите их в «Склад → Расходники».');
+  offering.supplies = Array.isArray(offering.supplies) ? offering.supplies : [];
+  offering.supplies.push({ id: 'oss_' + uid(), supplyId: supply.id, qtyPerUnit: 1 });
+  offering.updatedAt = new Date().toISOString();
+  save();
+  renderServiceOfferingDirectory();
+}
+function updateServiceOfferingSupply(id, itemId, field, value) {
+  if (!serviceOfferingCanEdit()) return;
+  const offering = serviceOffering(id);
+  const item = (offering?.supplies || []).find(entry => entry.id === itemId);
+  if (!item) return;
+  if (field === 'supplyId') item.supplyId = ensureSupplies().some(s => s.id === value) ? value : item.supplyId;
+  if (field === 'qtyPerUnit') item.qtyPerUnit = Math.max(0, Number(value) || 0);
+  offering.updatedAt = new Date().toISOString();
+  save();
+  renderServiceOfferingDirectory();
+}
+function removeServiceOfferingSupply(id, itemId) {
+  if (!serviceOfferingCanEdit()) return;
+  const offering = serviceOffering(id);
+  if (!offering) return;
+  offering.supplies = (offering.supplies || []).filter(entry => entry.id !== itemId);
+  offering.updatedAt = new Date().toISOString();
+  save();
+  renderServiceOfferingDirectory();
+}
+function serviceOfferingSuppliesEditorHtml(offering) {
+  const per = serviceOfferingUnitShort(offering);
+  const supplies = ensureSupplies();
+  const rows = serviceOfferingSupplies(offering);
+  const total = serviceOfferingSupplyCostPerUnit(offering);
+  return `<div class="mt-3" data-service-offering-supplies="${offering.id}">
+    <div class="text-xs font-bold text-slate-600">Расходники со склада · норма на ${academyEsc(per)}</div>
+    ${rows.length ? `<div class="grid gap-2 mt-1">${rows.map(item => `<div class="flex items-center gap-2 flex-wrap">
+      <select style="flex:1 1 220px;min-width:0" onchange="updateServiceOfferingSupply('${offering.id}','${item.id}','supplyId',this.value)">${supplies.map(s => `<option value="${academyEsc(s.id)}" ${s.id === item.supplyId ? 'selected' : ''}>${academyEsc(s.name)} · ${fmtMoney(Number(s.costPerUnit) || 0)}/${academyEsc(supplyUnitLabel(s.unit))}</option>`).join('')}${item.supply ? '' : '<option value="" selected>— расходник удалён со склада —</option>'}</select>
+      <input type="number" min="0" step="0.01" style="width:110px" value="${academyEsc(String(item.qtyPerUnit))}" title="Норма на ${academyEsc(per)}" onchange="updateServiceOfferingSupply('${offering.id}','${item.id}','qtyPerUnit',this.value)">
+      <span class="text-xs text-gray-500" style="white-space:nowrap">${academyEsc(item.supply ? supplyUnitLabel(item.supply.unit) : '')} / ${academyEsc(per)} · ${fmtMoney(item.qtyPerUnit * (Number(item.supply?.costPerUnit) || 0))}</span>
+      <button type="button" class="btn-ghost text-xs" onclick="removeServiceOfferingSupply('${offering.id}','${item.id}')">×</button>
+    </div>`).join('')}</div>
+    <div class="text-xs mt-1 text-emerald-700">Итого расходников: <b>${fmtMoney(total)}</b> на ${academyEsc(per)} — входит в себестоимость услуги и подставляется в проект по объёму.</div>` : '<div class="text-xs text-gray-500 mt-1">Пока не привязаны. Для силикона это туба на погонный фут, для смарта — провод и блок на окно.</div>'}
+    <button type="button" class="btn-ghost text-xs mt-1" onclick="addServiceOfferingSupply('${offering.id}')">+ расходник</button>
+  </div>`;
+}
+
 function serviceOfferingIncludes(offering) {
   const ids = Array.isArray(offering?.includes) ? offering.includes : [];
   return [...new Set(ids)].map(id => serviceOffering(id)).filter(item => item && item.id !== offering.id && !serviceOfferingNeedsSizes(item));
@@ -26961,7 +27038,7 @@ function serviceOfferingPricingMetrics(offering) {
   const completeDirectCost = !serviceOfferingNeedsSizes(offering);
   // Per-sq-ft film cost is picked from a warehouse lot in the project. A
   // stale directory materialCostPerUnit must not pretend to be that cost.
-  const materialCost = completeDirectCost ? Math.max(0, Number(offering?.materialCostPerUnit) || 0) : 0;
+  const materialCost = serviceOfferingHasSupplies(offering) ? serviceOfferingSupplyCostPerUnit(offering) : completeDirectCost ? Math.max(0, Number(offering?.materialCostPerUnit) || 0) : 0;
   const directCost = Math.round((installerCost + materialCost) * 100) / 100;
   const listProfit = Math.round((listPrice - directCost) * 100) / 100;
   const minProfit = minPrice > 0 ? Math.round((minPrice - directCost) * 100) / 100 : null;
@@ -27328,7 +27405,9 @@ function serviceOfferingPricingEditorHtml(offering, per, sized) {
       <div class="service-pricing-corridor">
         ${sized
           ? `<div class="service-pricing-stock-cost"><label>Материал</label><div class="service-pricing-readonly">Со склада · по факту проекта</div><div class="service-pricing-field-help">Стоимость плёнки считается по выбранному рулону и расходу.</div></div>`
-          : `<div><label>Материал / оборудование, $ / ${academyEsc(per)}</label>${input('materialCostPerUnit', offering.materialCostPerUnit, '0')}<div class="service-pricing-field-help">Закупочная стоимость одной единицы.</div></div>`}
+          : serviceOfferingHasSupplies(offering)
+            ? `<div class="service-pricing-stock-cost"><label>Материал</label><div class="service-pricing-readonly">${fmtMoney(serviceOfferingSupplyCostPerUnit(offering))} / ${academyEsc(per)} · из расходников</div><div class="service-pricing-field-help">Считается по норме расходников со склада (ниже, «Состав услуги»).</div></div>`
+            : `<div><label>Материал / оборудование, $ / ${academyEsc(per)}</label>${input('materialCostPerUnit', offering.materialCostPerUnit, '0')}<div class="service-pricing-field-help">Закупочная стоимость одной единицы. Или привяжите расходники со склада в «Составе услуги».</div></div>`}
         <div><label>Оплата монтажнику, $ / ${academyEsc(per)}</label>${input('installerRatePerSqft', offering.installerRatePerSqft, '0', '0.25')}<div class="service-pricing-field-help">Начисляется исполнителю за единицу.</div>${offering.installerRateNeedsReview ? '<div class="text-xs mt-1" style="color:#92400e">Перенесено из старых настроек — проверьте.</div>' : !(Number(offering.installerRatePerSqft) > 0) && !serviceOfferingIsDraft(offering) ? '<div class="text-xs mt-1 text-red-700">Не заполнено — монтажнику начислится $0.</div>' : ''}</div>
       </div>
     </div>
@@ -27382,6 +27461,7 @@ function serviceOfferingEditorHtml(offering, owner) {
     <section class="service-editor-section">
       <div class="service-editor-section-title">Состав услуги</div>
       ${sized ? filmList : '<div class="text-sm text-gray-500">Стоимость материала или оборудования задаётся выше, во внутренней себестоимости.</div>'}
+      ${serviceOfferingSuppliesEditorHtml(offering)}
       ${serviceOfferingIncludesEditorHtml(offering)}
       ${serviceOfferingDirectionsEditorHtml(offering)}
     </section>
@@ -28789,6 +28869,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
       line.unitPrice = Number(offering?.pricePerSqft) || 0;
       line.pricingMode = 'unit';
       line.label = projectQuickLineLabel(line, getCatalogItem(line.catalogId));
+      if (offering) line.supplyItems = serviceOfferingSupplyItemsFor(offering, line.qty, line.supplyItems);
     }
   } else if (field === 'manualFilmName') {
     const manualName = String(value || '').trim();
@@ -28801,6 +28882,8 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     }
   } else if (['qty','unitPrice','price'].includes(field)) {
     line[field] = Math.max(0, Number(value) || 0);
+    // Норма расходников услуги следует за объёмом (только строки «по норме», ручные не трогаем).
+    if (field === 'qty' && line.quickProjectLine && (line.supplyItems || []).some(item => item.auto)) line.supplyItems = serviceOfferingSupplyItemsFor(serviceOffering(line.offeringId), line.qty, line.supplyItems);
   } else if (['startDate','endDate'].includes(field)) {
     const normalized = projectQuickDateValue(value);
     const nextStart = field === 'startDate' ? normalized : projectQuickDateValue(line.startDate);
