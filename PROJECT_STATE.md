@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-04 — Completed CallRail calls with unknown answer status (in progress)
+
+- Task owner: Codex, branch `codex/callrail-null-answer-20261104`, based on verified `origin/main` and active production release `ad81373` (merged PR #459).
+- A read-only inspection of CallRail's genuine missed-call record found `state: completed`, integer duration, and `answered: null`. The receiver rejected this shape. Accept explicit null while preserving it as unknown; missing/malformed answer status and incomplete duration remain rejected. No caller data is committed.
+- Adds a failing-before-fix normalization regression and changes the existing signed disposable E2E intake fixture to cover nullable answer status, stored metadata, deduplication, manager triage, enrichment without qualification, and later real proposal/sale gates. All 1,020 unit tests, TypeScript and production build pass; independent Claude CLI review reports no blocking findings. Published-head disposable CI, release and genuine delivery remain pending.
+- Live CRM remains configured for proposal-sent qualification, uploads enabled and automatic ten-minute delivery; its queue is empty. Post-Call only uses the dedicated Worker hostname. No genuine call receipt or Google matching is claimed. CallRail does not retry failed callbacks; do not assume earlier failed calls will reappear without a provider-supported completed-call update or reconciliation.
+
 ## 2026-11-04 — Dedicated CallRail ingress hostname (in progress)
 
 - Task owner: Codex, PR #459, branch `codex/callrail-dedicated-ingress-20261104`, based on verified main `c01029e` (merged PR #456). That release is active; the deployment workflow's final curl timed out, but read-only diagnose run 41943209710 independently confirmed the active release and local app, and public login returned 200. Do not blindly rerun deployments after that workflow symptom.
