@@ -115,9 +115,14 @@ function projectStagesHtml(o,key) {
 
 function orderInstallerPayoutForUser(o, userId) {
   if (projectStages(o).length && getUser(userId)?.payConfig?.type === 'per_sqft') return projectStages(o).reduce((sum,s) => sum + projectStageEmployeeAmount(o,s,userId),0) * installerSeniorFactor(getUser(userId)) + orderInstallerPayoutForUser(projectStageUnstagedOrder(o),userId);
+  const historicalUser = getUser(userId);
+  if (o?.quickProjectImportedCompleted === true && typeof historicalProjectInstallerAccruals === 'function') {
+    const historical = historicalProjectInstallerAccruals(o, historicalUser);
+    if (historical.length) return historical.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  }
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.includes(userId)) return 0;
-  const user = getUser(userId);
+  const user = historicalUser;
   const pc = user?.payConfig || {};
   if (pc.type === 'fixed_per_job') return Math.max(0, Number(pc.fixedPerJob) || 0);
   if (pc.type === 'commission') return orderRevenue(o) * Math.max(0, Number(pc.commissionPct) || 0) / 100 / installerIds.length;
@@ -146,15 +151,30 @@ function historicalProjectInstallerAccruals(o, user) {
   const pc = user?.payConfig || {};
   const historicalLines = typeof projectHistoricalEntryLines === 'function' ? projectHistoricalEntryLines(o) : projectQuickLines(o);
   if (!o?.quickProjectImportedCompleted || !historicalLines.length || user?.role === 'measurer' || !['per_sqft', 'fixed_per_job'].includes(pc.type)) return [];
-  const lines = projectLines(o).filter(line => (line.installerIds || []).includes(user.id));
+  const lines = projectLines(o).filter(line => (line.installerIds || []).length);
   const completedLines = lines.map(line => {
     const sourceDates = (line.sources || []).map(source => projectQuickDateValue(source?.endDate)).filter(Boolean).sort();
     const completedOn = sourceDates[sourceDates.length - 1] || '';
     const date = completedOn ? `${completedOn}T12:00:00.000Z` : line.installationAt || o.installationDoneAt || '';
-    return { line, date };
+    const visitDates = new Set();
+    (line.sources || []).forEach(source => {
+      const startValue = projectQuickDateValue(source?.startDate) || projectQuickDateValue(source?.endDate);
+      const endValue = projectQuickDateValue(source?.endDate) || startValue;
+      const start = startValue ? new Date(`${startValue}T12:00:00.000Z`) : null;
+      const end = endValue ? new Date(`${endValue}T12:00:00.000Z`) : start;
+      if (!start || Number.isNaN(start.getTime()) || !end || Number.isNaN(end.getTime())) return;
+      const cursor = new Date(start);
+      for (let day = 0; day < 14 && cursor <= end; day += 1) {
+        visitDates.add(cursor.toISOString().slice(0, 10));
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    });
+    if (!visitDates.size && date) visitDates.add(String(date).slice(0, 10));
+    return { line, date, visitDates: [...visitDates] };
   }).filter(item => item.date);
+  const userLines = completedLines.filter(item => (item.line.installerIds || []).includes(user.id));
   if (pc.type === 'fixed_per_job') {
-    const latest = completedLines.sort((a, b) => String(a.date).localeCompare(String(b.date))).at(-1);
+    const latest = userLines.sort((a, b) => String(a.date).localeCompare(String(b.date))).at(-1);
     const amount = Math.max(0, Number(pc.fixedPerJob) || 0);
     if (!latest || amount <= 0) return [];
     return [{
@@ -167,9 +187,10 @@ function historicalProjectInstallerAccruals(o, user) {
       date: latest.date,
     }];
   }
-  const accruals = completedLines.map(({ line, date }) => {
+  const seniorFactor = installerSeniorFactor(user);
+  const accruals = userLines.map(({ line, date }) => {
     const crewCount = Math.max(1, new Set(line.installerIds || []).size);
-    const amount = Math.max(0, Number(line.installerPay) || 0) / crewCount * installerSeniorFactor(user);
+    const amount = Math.max(0, Number(line.installerPay) || 0) / crewCount * seniorFactor;
     return {
       kind: pc.type,
       orderId: o.id,
@@ -180,17 +201,39 @@ function historicalProjectInstallerAccruals(o, user) {
       date,
     };
   }).filter(item => item.amount > 0);
-  if (accruals.length) {
-    // Preserve the existing project total: the visit minimum and travel are
-    // paid once and belong to the last completed service of the project.
-    const currentTotal = orderInstallerPayoutForUser(o, user.id);
-    const lineTotal = accruals.reduce((sum, item) => sum + item.amount, 0);
-    const remainder = currentTotal - lineTotal;
-    if (Math.abs(remainder) > 0.001) {
-      accruals.sort((a, b) => String(a.date).localeCompare(String(b.date)));
-      accruals[accruals.length - 1].amount = Math.max(0, accruals[accruals.length - 1].amount + remainder);
-    }
-  }
+
+  // A historical project may contain services from different weeks or months.
+  // The minimum and road belong to each real visit, not to the latest service.
+  // Split every line's labor budget across its visit days only for calculating
+  // the brigade floor; the line accrual itself still follows completion date.
+  const visits = new Map();
+  completedLines.forEach(item => {
+    const dates = item.visitDates.length ? item.visitDates : [String(item.date).slice(0, 10)];
+    dates.forEach(date => {
+      if (!visits.has(date)) visits.set(date, { date, crew: new Set(), brigadeBase: 0 });
+      const visit = visits.get(date);
+      (item.line.installerIds || []).forEach(id => visit.crew.add(id));
+      visit.brigadeBase += Math.max(0, Number(item.line.installerPay) || 0) / Math.max(1, dates.length);
+    });
+  });
+  const rules = typeof installerPayRules === 'function' ? installerPayRules() : { minimumPerVisit: 0, travelPerHour: 0 };
+  const travel = typeof installerTravel === 'function' ? installerTravel(o) : { paid: false, hours: 0 };
+  const travelPerVisit = travel.paid ? Math.max(0, Number(travel.hours) || 0) * Math.max(0, Number(rules.travelPerHour) || 0) : 0;
+  visits.forEach(visit => {
+    if (!visit.crew.has(user.id)) return;
+    const topUp = Math.max(0, Math.max(0, Number(rules.minimumPerVisit) || 0) - visit.brigadeBase);
+    const amount = topUp / Math.max(1, visit.crew.size) * seniorFactor + travelPerVisit;
+    if (amount <= 0) return;
+    accruals.push({
+      kind: pc.type,
+      orderId: o.id,
+      orderNumber: o.number,
+      accrualId: `historical-visit:${visit.date}:${user.id}`,
+      label: `Выезд · ${visit.date}`,
+      amount,
+      date: `${visit.date}T12:00:00.000Z`,
+    });
+  });
   return accruals;
 }
 

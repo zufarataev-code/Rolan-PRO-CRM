@@ -555,6 +555,11 @@ test('server: an owner can close only a persisted historical draft with a concre
   assert.equal(prepareServiceSolutions(current, payoutBypass, false), null);
   assert.equal(Object.prototype.hasOwnProperty.call(payoutBypass.orders[0], 'payouts'), false);
 
+  const forgedNewDraft: Row = { settings, users, orders: [order()] };
+  forgedNewDraft.orders[0].payouts = [{ id: 'forged-new', userId: 'i1', amount: 750, paid: true }];
+  assert.equal(prepareServiceSolutions({ settings, users, orders: [] }, forgedNewDraft, false), null);
+  assert.deepEqual(forgedNewDraft.orders[0].payouts, [], 'a new historical draft cannot preload payroll cash');
+
   const managerFlagBypass = structuredClone(current);
   Object.assign(managerFlagBypass.orders[0], { quickEntryDraft: false, quickProjectImportedCompleted: true });
   assert.equal(prepareServiceSolutions(current, managerFlagBypass, false), 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.');

@@ -171,6 +171,33 @@ test('historical services accrue and settle in each service completion period',(
   assert.deepEqual(payload.payrollPayments.map((payment:Row)=>payment.amount),[100,200]);
   assert.deepEqual(order.payouts.map((payment:Row)=>payment.accrualId),['line:jan','line:feb']);
 });
+test('each historical visit receives its minimum in the month when it happened',()=>{
+  const user:Row={id:'i1',role:'installer',name:'Installer',payConfig:{type:'per_sqft'}};
+  const payload:Row={settings:{},users:[user],orders:[]};
+  const order:Row={id:'old',number:'R-OLD',quickProjectImportedCompleted:true,installerIds:['i1'],installationDoneAt:'2026-02-20T12:00:00.000Z',payouts:[]};
+  payload.orders.push(order);
+  const lines=[
+    {key:'line:jan',name:'January service',qty:10,unitShort:'sq ft',installerPay:50,installerIds:['i1'],sources:[{startDate:'2026-01-12',endDate:'2026-01-12'}]},
+    {key:'line:feb',name:'February service',qty:10,unitShort:'sq ft',installerPay:50,installerIds:['i1'],sources:[{startDate:'2026-02-20',endDate:'2026-02-20'}]},
+  ];
+  const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));
+  const source=(name:string)=>{const start=html.indexOf(`function ${name}(`);return html.slice(start,html.indexOf('\n}',start)+2);};
+  const c=vm.createContext({db:payload,state:{currentUserId:'owner'},getUser:()=>user,projectStages:()=>[],
+    projectQuickLines:()=>[{id:'jan'},{id:'feb'}],projectLines:()=>lines,projectQuickDateValue:(value:string)=>value,
+    projectLineQtyText:(line:Row)=>`${line.qty} ${line.unitShort}`,installerSeniorFactor:()=>1,
+    installerPayRules:()=>({minimumPerVisit:200,travelPerHour:20}),installerTravel:()=>({paid:false,hours:0}),
+  });
+  vm.runInContext(['historicalProjectInstallerAccruals','calcUserPayoutForPeriod'].map(source).join('\n'),c);
+  const accruals=JSON.parse(JSON.stringify(c.historicalProjectInstallerAccruals(order,user)));
+  assert.deepEqual(accruals.map((item:Row)=>[item.accrualId,item.amount,item.date]),[
+    ['line:jan',50,'2026-01-12T12:00:00.000Z'],
+    ['line:feb',50,'2026-02-20T12:00:00.000Z'],
+    ['historical-visit:2026-01-12:i1',150,'2026-01-12T12:00:00.000Z'],
+    ['historical-visit:2026-02-20:i1',150,'2026-02-20T12:00:00.000Z'],
+  ]);
+  assert.equal(c.calcUserPayoutForPeriod('i1',new Date('2026-01-01T00:00:00Z'),new Date('2026-01-31T23:59:59Z')).total,200);
+  assert.equal(c.calcUserPayoutForPeriod('i1',new Date('2026-02-01T00:00:00Z'),new Date('2026-02-28T23:59:59Z')).total,200);
+});
 test('fixed-per-job installer receives one historical accrual on the last service date',()=>{
   const payload:Row={settings:{},users:[{id:'i1',role:'installer',name:'Installer',payConfig:{type:'fixed_per_job',fixedPerJob:450}}],payrollPayments:[],orders:[]};
   const order:Row={id:'old',number:'R-OLD',quickProjectImportedCompleted:true,installerIds:['i1'],installationDoneAt:'2026-02-20T12:00:00.000Z',payouts:[]};

@@ -292,6 +292,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       order.paid = 0;
       order.payments = [];
       order.depositReceived = false;
+      order.payouts = [];
     }
     // The dedicated historical-entry screen is an explicit owner-authorized
     // transition. It may close only a persisted historical draft; it does not
