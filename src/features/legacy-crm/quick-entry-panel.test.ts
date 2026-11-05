@@ -107,7 +107,7 @@ test('unfinished historical imports stay out of every financial rollup until own
     orderPaidTotal: (order: any) => Number(order.paid) || 0,
     orderRevenue: () => 100,
   });
-  vm.runInContext(`${fn(html, 'orderIncludedInFinancialReports')}; ${fn(html, 'financialOrders')}; ${fn(html, 'orderDebt')}; result = { ids: financialOrders().map(o => o.id), draftDebt: orderDebt(db.orders[0]), closedDebt: orderDebt(db.orders[1]) };`, context);
+  vm.runInContext(`${fn(html, 'orderIsHistoricalDraft')}; ${fn(html, 'orderIncludedInFinancialReports')}; ${fn(html, 'financialOrders')}; ${fn(html, 'orderDebt')}; result = { ids: financialOrders().map(o => o.id), draftDebt: orderDebt(db.orders[0]), closedDebt: orderDebt(db.orders[1]) };`, context);
   assert.deepEqual(Array.from(context.result.ids), ['closed']);
   assert.equal(context.result.draftDebt, 0);
   assert.equal(context.result.closedDebt, 75);
@@ -119,6 +119,14 @@ test('unfinished historical imports stay out of every financial rollup until own
   assert.match(fn(html, 'buildCashDashboard'), /const reportingOrders = financialOrders\(\)/);
   assert.match(fn(html, 'buildProductPnL'), /financialOrders\(\)\.forEach/);
   assert.match(fn(html, 'buildMarketingRoi'), /financialOrders\(\)\.forEach/);
+});
+
+test('unfinished historical imports cannot leak into the live project funnel', () => {
+  assert.match(fn(html, 'renderOrders'), /visibleOrdersForUser\(u\)[\s\S]*\.filter\(order => !orderIsHistoricalDraft\(order\)\)/);
+  assert.match(fn(html, 'kanbanMoveOrder'), /if \(orderIsHistoricalDraft\(o\)\)[\s\S]*openQuickProjectEntry\(o\.id\)[\s\S]*return false/);
+  assert.match(fn(html, 'changeStatus'), /if \(o\?\.quickEntryDraft === true && o\?\.quickProjectImportedCompleted !== true\)[\s\S]*openQuickProjectEntry\(o\.id\)[\s\S]*return false/);
+  assert.match(fn(html, 'openOrder'), /if \(orderIsHistoricalDraft\(order\)\)[\s\S]*openQuickProjectEntry\(id\)[\s\S]*return/);
+  assert.match(fn(html, 'renderOrderDetails'), /Черновик переноса[\s\S]*Продолжить перенос/);
 });
 
 test('a manager cannot reassign a historical project and lose access to it', () => {

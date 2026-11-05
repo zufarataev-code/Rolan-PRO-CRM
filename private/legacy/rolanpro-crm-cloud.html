@@ -14692,6 +14692,7 @@ function sketchSave() {
 // ---------- PROFESSIONAL PROPOSAL (КП) with window drawings per room ----------
 function openProfessionalKP(oid) {
   const o = getOrder(oid);
+  if (orderIsHistoricalDraft(o)) { alert('Для черновика переноса КП не формируется. Сначала завершите перенос проекта.'); openQuickProjectEntry(oid); return; }
   if (!orderUserCanViewProposal(o)) { alert('КП доступно только владельцу и назначенному менеджеру'); return; }
   if (!projectEstimateIsApproved(o)) {
     alert('Перед КП проверьте итог проекта. CRM сейчас покажет, что уже заполнено и чего действительно не хватает.');
@@ -17302,9 +17303,13 @@ function orderExtraServicesCost(o) {
 function orderRevenue(o) {
   return orderFilmRevenue(o) + orderExtraServicesRevenue(o);
 }
+/** A saved historical import that has not yet been confirmed by the owner. */
+function orderIsHistoricalDraft(o) {
+  return o?.quickEntryDraft === true && o?.quickProjectImportedCompleted !== true;
+}
 /** Historical imports become company money only after the owner closes them. */
 function orderIncludedInFinancialReports(o) {
-  return !o?.quickEntryDraft || o?.quickProjectImportedCompleted === true;
+  return !orderIsHistoricalDraft(o);
 }
 function financialOrders(orders = db.orders || []) {
   return (orders || []).filter(orderIncludedInFinancialReports);
@@ -18293,6 +18298,11 @@ function ensureOrderWorkflowTransition(o, newStatus, openWorkspace = true) {
 function changeStatus(orderId, newStatus, by, opts = {}) {
   const o = getOrder(orderId);
   if (!o) return false;
+  if (o?.quickEntryDraft === true && o?.quickProjectImportedCompleted !== true) {
+    alert('Это черновик переноса старого проекта. Сначала завершите его в разделе «Выполненные проекты».');
+    openQuickProjectEntry(o.id);
+    return false;
+  }
   // Owner, 2026-10-27: «режим внедрения» — old projects are entered without step checks or client messages.
   const importing = typeof crmImportMode === 'function' && crmImportMode();
   if (importing) opts = { ...opts, skipWorkflowGuard: true, skipPaymentGuard: true, skipScheduleGuard: true, skipClientAuto: true, importing: true };
@@ -21576,6 +21586,11 @@ function kanbanMoveOrder(orderId, targetStatus) {
   const o = getOrder(orderId);
   const viewer = currentUser();
   if (!o || !targetStatus) return false;
+  if (orderIsHistoricalDraft(o)) {
+    alert('Черновик переноса нельзя перемещать по рабочей воронке. Завершите перенос проекта.');
+    openQuickProjectEntry(o.id);
+    return false;
+  }
   if (!orderUserOwns(o, viewer)) {
     alert('Нет доступа к изменению этого заказа');
     return false;
@@ -22013,6 +22028,7 @@ function openProjectArchive() {
 function renderOrders() {
   const u = currentUser();
   const filtered = visibleOrdersForUser(u)
+    .filter(order => !orderIsHistoricalDraft(order))
     .filter(o => {
       if (state.statusFilter && o.status !== state.statusFilter) return false;
       if (u?.role === 'owner' && state.managerFilter && o.managerId !== state.managerFilter) return false;
@@ -25394,6 +25410,11 @@ function updateProjectSiteInfo(oid, field, value) {
 
 // ---------- ORDER DETAILS (shared by manager/measurer/installer) ----------
 function openOrder(id) {
+  const order = getOrder(id);
+  if (orderIsHistoricalDraft(order)) {
+    openQuickProjectEntry(id);
+    return;
+  }
   state.ordersKanbanFullscreen = false;
   state.orderClassicMode = false;
   state.view = 'orderDetails';
@@ -29876,6 +29897,14 @@ function renderOrderDetails(id) {
       ? `<div class="card"><div class="text-lg font-bold mb-1">Проект ${academyEsc(archived.number || '')} в архиве</div><div class="text-sm text-gray-500 mb-3">${archived.archive?.reason ? academyEsc(archived.archive.reason) : 'Удалён владельцем'}</div><button class="btn-primary" onclick="restoreProject('${archived.id}')">Восстановить</button></div>`
       : `<div class="card">${T('empty')}</div>`;
   }
+  if (orderIsHistoricalDraft(o)) {
+    return `<div class="card max-w-2xl">
+      <div class="text-xs font-bold uppercase tracking-wide text-blue-700 mb-1">Черновик переноса</div>
+      <div class="text-xl font-bold mb-2">${academyEsc(o.number || 'Старый проект')}</div>
+      <div class="text-sm text-gray-600 mb-4">Этот проект ещё не участвует в рабочей воронке, КП, финансах и текущих задачах. Продолжите перенос и закройте его после проверки фактов.</div>
+      <button class="btn-primary" onclick="openQuickProjectEntry('${o.id}')">Продолжить перенос</button>
+    </div>`;
+  }
   const c = getClient(o.clientId);
   const projectAddress = orderAddress(o, c);
   const u = currentUser();
@@ -31525,6 +31554,8 @@ function openManagerMeasureModal(oid) {
   // One measurement window for every role (Owner, 2026-10-24, the mock-up «Одно
   // окно замера»): the measurer gets the same window without prices and may
   // leave the film to the manager (completeManagerMeasurement).
+  const o = getOrder(oid);
+  if (orderIsHistoricalDraft(o)) { alert('Замер не назначается из черновика переноса. Продолжите перенос старого проекта.'); openQuickProjectEntry(oid); return; }
   state.modal = renderManagerMeasureModal(oid);
   render();
 }

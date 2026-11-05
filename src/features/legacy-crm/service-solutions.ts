@@ -281,6 +281,18 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       && oldOrder.quickEntry === true && oldOrder.quickEntryDraft === true && oldOrder.quickProjectImportedCompleted !== true
       && order.quickEntry === true && order.quickEntryDraft === false && order.quickProjectImportedCompleted === true
       && CLOSED_PROJECT_STATUSES.includes(String(order.status));
+    const historicalImportDraft = oldOrder.id !== undefined
+      && oldOrder.quickEntry === true && oldOrder.quickEntryDraft === true && oldOrder.quickProjectImportedCompleted !== true;
+    if (historicalImportDraft && !historicalImportClosing) {
+      const liveFunnelFields = [
+        'status', 'consultationAt', 'measurementAt', 'measurementAcceptedAt', 'measurementDoneAt',
+        'projectEstimateApprovedAt', 'proposalSentAt', 'proposalAcceptedAt', 'productionReadyAt',
+        'installationAt', 'installationDoneAt', 'actSignedAt', 'depositReceivedAt', 'paidAt',
+      ];
+      if (liveFunnelFields.some(field => stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
+        return 'Сначала завершите перенос исторического проекта. Черновик не участвует в рабочей воронке.';
+      }
+    }
     if (historicalImportClosing && rows(order.extraServices).some(line => line.quickProjectLine === true && !line.offeringId)) {
       return 'Выберите конкретную услугу для каждой позиции исторического проекта.';
     }

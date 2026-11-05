@@ -541,6 +541,14 @@ test('server: an owner can close only a persisted historical draft with a concre
     serviceSchedules: [{ id: 'line:line', installerIds: ['i1'], installationAt: '2026-09-01T12:00:00.000Z' }],
   });
   assert.equal(prepareServiceSolutions(missingCurrent, missingNext, true), 'Выберите конкретную услугу для каждой позиции исторического проекта.');
+
+  const liveTransition = structuredClone(current);
+  Object.assign(liveTransition.orders[0], { status: 'measurement_scheduled', measurementAt: '2026-11-05T18:00:00.000Z' });
+  assert.equal(prepareServiceSolutions(current, liveTransition, true), 'Сначала завершите перенос исторического проекта. Черновик не участвует в рабочей воронке.');
+
+  const proposalBypass = structuredClone(current);
+  proposalBypass.orders[0].proposalSentAt = '2026-11-05T18:00:00.000Z';
+  assert.equal(prepareServiceSolutions(current, proposalBypass, true), 'Сначала завершите перенос исторического проекта. Черновик не участвует в рабочей воронке.');
 });
 
 
