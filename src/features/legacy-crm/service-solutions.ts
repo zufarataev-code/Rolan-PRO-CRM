@@ -11,11 +11,101 @@ const stableJson = (value: unknown): string => JSON.stringify(value, (_key, item
     : item);
 const rows = (x: unknown): Row[] => Array.isArray(x) ? x.map(object) : [];
 const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))];
+const HISTORICAL_INVENTORY_FIELDS = ['_inventoryDeducted', '_inventoryMaterialCost', '_inventoryLog', '_historicalMaterialCost', '_historicalSupplyCost'] as const;
 
-// Four customer-facing directions plus the internal bucket for object-wide
-// work. `privacy` remains accepted below as a historical alias of Decorative.
-export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'general'] as const;
-const LEGACY_SERVICE_DIRECTIONS = ['privacy'] as const;
+/**
+ * Historical projects do not consume today's stock, but their P&L still needs
+ * the purchase cost known when the owner confirms the import. Calculate it on
+ * the server so a browser cannot forge the snapshot, then keep it immutable.
+ */
+function historicalMaterialCostSnapshot(order: Row, payload: Row): number {
+  const inventory = rows(payload.inventory);
+  const catalog = rows(object(payload.settings).catalog);
+  const mm2ToSqft = (value: number) => value / 92903.04;
+  const costPerSqft = (catalogId: string): number => {
+    const rolls = inventory.filter(roll => roll.catalogId === catalogId);
+    let remainingSqft = 0;
+    let remainingValue = 0;
+    for (const roll of rolls) {
+      const originalM = Math.max(0, Number(roll.originalLengthM) || 0);
+      const remainingM = Math.max(0, Number(roll.remainingLengthM) || 0);
+      const widthMm = Math.max(0, Number(roll.widthMm) || 0);
+      const lotCost = Math.max(0, Number(roll.costTotal) || 0);
+      if (originalM > 0 && remainingM > 0 && widthMm > 0 && lotCost > 0) {
+        remainingSqft += mm2ToSqft(widthMm * remainingM * 1000);
+        remainingValue += lotCost * remainingM / originalM;
+      }
+    }
+    if (remainingSqft > 0) return remainingValue / remainingSqft;
+    let historicalSqft = 0;
+    let historicalValue = 0;
+    for (const roll of rolls) {
+      const originalM = Math.max(0, Number(roll.originalLengthM) || 0);
+      const widthMm = Math.max(0, Number(roll.widthMm) || 0);
+      const lotCost = Math.max(0, Number(roll.costTotal) || 0);
+      if (originalM > 0 && widthMm > 0 && lotCost > 0) {
+        historicalSqft += mm2ToSqft(widthMm * originalM * 1000);
+        historicalValue += lotCost;
+      }
+    }
+    if (historicalSqft > 0) return historicalValue / historicalSqft;
+    return Math.max(0, Number(catalog.find(item => item.id === catalogId)?.costPerSqft) || 0);
+  };
+  const total = rows(order.extraServices)
+    .filter(line => line.quickProjectLine === true && line.unit === 'sqft' && typeof line.catalogId === 'string' && line.catalogId)
+    .reduce((sum, line) => {
+      const film = catalog.find(item => item.id === line.catalogId);
+      const sqft = Math.max(0, Number(line.qty) || 0) * (1 + Math.max(0, Number(film?.wastePct) || 0) / 100);
+      return sum + sqft * costPerSqft(line.catalogId);
+    }, 0);
+  return Number(total.toFixed(4));
+}
+
+/** Supply prices are mutable warehouse averages, so historical usage is frozen too. */
+function historicalSupplyCostSnapshot(order: Row, payload: Row): number {
+  const supplies = rows(payload.supplies);
+  const total = rows(order.extraServices)
+    .filter(line => !line.includedBy && (line.quickProjectLine === true || line.type === 'offering'))
+    .reduce((lineTotal, line) => lineTotal + rows(line.supplyItems).reduce((itemTotal, item) => {
+      const supply = supplies.find(candidate => candidate.id === item.supplyId);
+      return itemTotal + Math.max(0, Number(item.qty) || 0) * Math.max(0, Number(supply?.costPerUnit) || 0);
+    }, 0), 0);
+  return Number(total.toFixed(4));
+}
+
+/** Only these service facts can change a frozen material or supply snapshot. */
+function historicalCostFacts(order: Row): Row[] {
+  return rows(order.extraServices).map(line => ({
+    id: line.id,
+    quickProjectLine: line.quickProjectLine === true,
+    type: line.type,
+    includedBy: line.includedBy,
+    catalogId: line.catalogId,
+    unit: line.unit,
+    qty: line.qty,
+    supplyItems: rows(line.supplyItems).map(item => ({ supplyId: item.supplyId, qty: item.qty })),
+  }));
+}
+
+/**
+ * Facts entered through the historical-project workspace. They determine
+ * revenue, direct cost, payroll and production history, so another manager
+ * cannot edit them and a completed import is owner-corrected only.
+ */
+const historicalProjectFacts = (order: Row) => Object.fromEntries([
+  'managerId', 'clientId', 'measurerId', 'historicalMeasurementDate', 'status', 'createdAt',
+  'serviceType', 'offeringId', 'offeringIds', 'offeringCatalogIds', 'offeringUnits',
+  'measurements', 'extraServices', 'extraExpenses', 'serviceSchedules', 'serviceProgress',
+  'installerIds', 'installationAt', 'installationDoneAt', 'measurementDoneAt', 'actSignedAt',
+  'complexity', 'distanceKm', 'paid', 'paidAt', 'payments', 'depositReceived',
+  'depositReceivedAt', 'payouts', 'projectEstimateApprovedAt', 'projectEstimateApprovedBy',
+  'projectEstimateUpdatedAt', 'projectEstimateSnapshot', 'timeline', 'quickEntry', 'quickEntryDraft',
+  'quickProjectImportedCompleted', 'quickProjectImportedCompletedAt', 'quickProjectImportedCompletedBy',
+  ...HISTORICAL_INVENTORY_FIELDS,
+].filter(field => Object.prototype.hasOwnProperty.call(order, field)).map(field => [field, order[field]]));
+
+// Five customer-facing directions plus the internal bucket for object-wide work.
+export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'privacy', 'general'] as const;
 export const SERVICE_UNITS = ['sqft', 'lft', 'piece', 'zone', 'fixed', 'custom'] as const;
 // Project statuses for planning its services (Owner, 2026-10-09).
 const SCHEDULED_PROJECT_STATUSES = ['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'];
@@ -65,6 +155,7 @@ function projectPlans(order: Row): Row[] {
       id,
       installerIds: Array.isArray(line?.installerIds) && line.installerIds.length ? line.installerIds : crew,
       installationAt: typeof line?.startDate === 'string' && line.startDate ? `${line.startDate}T09:00:00` : at,
+      endsAt: typeof line?.endDate === 'string' && line.endDate ? `${line.endDate}T17:00:00` : '',
     };
   });
 }
@@ -142,18 +233,17 @@ export function canonicalFilmCategory(value: unknown): string {
   return aliases[normalized] || normalized;
 }
 
-/** Business direction; Privacy is a Decorative material/solution subtype. */
+/** Business direction uses the same canonical key as its film category. */
 export function canonicalServiceDirection(value: unknown): string {
-  const category = canonicalFilmCategory(value);
-  return category === 'privacy' ? 'decorative' : category;
+  return canonicalFilmCategory(value);
 }
 
-/** Decorative services may use decorative and privacy catalog materials. */
+/** A service may use materials from its own direction only. */
 function filmBelongsToServiceDirection(film: Row, direction: unknown): boolean {
   return canonicalServiceDirection(film.category) === canonicalServiceDirection(direction);
 }
 
-const DIRECTION_BY_SERVICE_TYPE: Row = { solar_film: 'solar', smart_film: 'smart', protective_film: 'protective', decorative_film: 'decorative', privacy_film: 'decorative', general_works: 'general' };
+const DIRECTION_BY_SERVICE_TYPE: Row = { solar_film: 'solar', smart_film: 'smart', protective_film: 'protective', decorative_film: 'decorative', privacy_film: 'privacy', general_works: 'general' };
 
 /** Managers receive customer prices; the owner alone maintains solution definitions. */
 export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInstallerIds: readonly string[] = []): Row {
@@ -179,7 +269,7 @@ export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInsta
   return copy;
 }
 
-export function prepareServiceSolutions(current: Row, next: Row, owner: boolean): string | null {
+export function prepareServiceSolutions(current: Row, next: Row, owner: boolean, managerIds: readonly string[] = []): string | null {
   const currentOfferings = rows(object(current.settings).serviceOfferings);
   const settings = object(next.settings);
   // Owner, 2026-10-27: «режим внедрения» — old projects are entered backdated,
@@ -208,20 +298,40 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
   const offerings = rows(settings.serviceOfferings);
   const ids = new Set<string>();
   const films = rows(settings.catalog);
+  const filmMatchesDirection = (offering: Row, film: Row) => {
+    if (filmBelongsToServiceDirection(film, offering.direction)) return true;
+    // Workspaces created while Privacy was temporarily grouped into Decorative
+    // remain writable, but a new cross-direction material cannot be added.
+    const saved = currentOfferings.find(item => item.id === offering.id);
+    if (!saved || saved.direction !== offering.direction) return false;
+    return Array.isArray(saved.filmIds) && saved.filmIds.includes(film.id);
+  };
   // A service with linked films allows only those; a service without links
   // allows every film of its direction — the manager picks direction →
   // category → film (Owner, 2026-10-24: KP was impossible because services
   // had no linked films and saves were refused).
   const filmAllowed = (offering: Row, filmId: unknown) => {
     const film = films.find(value => value.id === filmId);
-    if (!film || !filmBelongsToServiceDirection(film, offering.direction)) return false;
+    if (!film || !filmMatchesDirection(offering, film)) return false;
     const linked = Array.isArray(offering.filmIds) ? offering.filmIds : [];
+    return linked.length ? linked.includes(filmId) : true;
+  };
+  // Directory compatibility may keep an old Decorative → Privacy link so the
+  // owner can remove it. New project choices must still obey the real
+  // direction; only an unchanged saved project selection is grandfathered.
+  const filmAllowedForProject = (offering: Row, filmId: unknown) => {
+    const film = films.find(value => value.id === filmId);
+    if (!film || !filmBelongsToServiceDirection(film, offering.direction)) return false;
+    const linked = (Array.isArray(offering.filmIds) ? offering.filmIds : []).filter(id => {
+      const linkedFilm = films.find(value => value.id === id);
+      return linkedFilm && filmBelongsToServiceDirection(linkedFilm, offering.direction);
+    });
     return linked.length ? linked.includes(filmId) : true;
   };
   for (const offering of offerings) {
     if (typeof offering.id !== 'string' || !/^[\w-]{1,120}$/.test(offering.id) || ids.has(offering.id)) return 'Некорректный или повторный ID услуги.';
     ids.add(offering.id);
-    if (![...SERVICE_DIRECTIONS, ...LEGACY_SERVICE_DIRECTIONS].includes(offering.direction) || typeof offering.name !== 'string' || !offering.name.trim() || offering.name.length > 120) return 'Укажите направление и название услуги.';
+    if (!SERVICE_DIRECTIONS.includes(offering.direction) || typeof offering.name !== 'string' || !offering.name.trim() || offering.name.length > 120) return 'Укажите направление и название услуги.';
     for (const field of ['pricePerSqft','installerRatePerSqft','installerDayMinimum','minPricePerUnit','maxPricePerUnit']) {
       if (offering[field] !== undefined && (typeof offering[field] !== 'number' || !Number.isFinite(offering[field]) || offering[field] < 0)) return 'Цена, диапазон и ставка услуги должны быть неотрицательными числами.';
     }
@@ -250,14 +360,19 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     if (offering.includes !== undefined && (!Array.isArray(offering.includes) || offering.includes.length > 20 || offering.includes.some((id: unknown) => typeof id !== 'string'))) return 'Некорректный состав услуги.';
     // Owner, 2026-10-22: a size-free service may also be offered in other directions.
     if (offering.directions !== undefined) {
-      if (!Array.isArray(offering.directions) || offering.directions.some((key: unknown) => ![...SERVICE_DIRECTIONS, ...LEGACY_SERVICE_DIRECTIONS].includes(key as never))) return 'Некорректный список направлений услуги.';
+      if (!Array.isArray(offering.directions) || offering.directions.some((key: unknown) => !SERVICE_DIRECTIONS.includes(key as never))) return 'Некорректный список направлений услуги.';
       if (offering.directions.length && (offering.unit === undefined || offering.unit === 'sqft')) return 'Услуга по замеру предлагается только в своём направлении.';
     }
-    // Privacy film is a catalog subtype inside the Decorative direction.
-    if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id && filmBelongsToServiceDirection(film, offering.direction))))) return 'Материалы должны принадлежать направлению услуги.';
+    if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id && filmMatchesDirection(offering, film))))) return 'Материалы должны принадлежать направлению услуги.';
     if (offering.defaultFilmId !== undefined && offering.defaultFilmId !== '') {
       if (typeof offering.defaultFilmId !== 'string' || !Array.isArray(offering.filmIds) || !offering.filmIds.includes(offering.defaultFilmId)) return 'Основной материал должен быть закреплён за услугой.';
-      if (!films.some(film => film.id === offering.defaultFilmId && filmBelongsToServiceDirection(film, offering.direction))) return 'Основной материал должен принадлежать направлению услуги.';
+      if (!films.some(film => film.id === offering.defaultFilmId && filmBelongsToServiceDirection(film, offering.direction))) {
+        // An invalid default saved before Privacy became a separate direction
+        // is harmlessly cleared on its next round-trip. It may not be selected
+        // again merely because the old cross-direction link remains removable.
+        if (currentOffering?.defaultFilmId === offering.defaultFilmId) offering.defaultFilmId = '';
+        else return 'Основной материал должен принадлежать направлению услуги.';
+      }
     }
   }
   for (const offering of offerings) {
@@ -270,12 +385,118 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
   }
   for (const order of rows(next.orders)) {
     const oldOrder = rows(current.orders).find(item=>item.id===order.id) || {};
+    const liveFunnelFields = [
+      'status', 'consultationAt', 'measurementAt', 'measurementAcceptedAt', 'measurementDoneAt',
+      'projectEstimateApprovedAt', 'proposalSentAt', 'proposalAcceptedAt', 'productionReadyAt',
+      'installationAt', 'installationDoneAt', 'actSignedAt', 'depositReceivedAt', 'paidAt',
+    ];
+    const newHistoricalImport = oldOrder.id === undefined
+      && (order.quickEntry === true || order.quickEntryDraft === true || order.quickProjectImportedCompleted === true);
+    if (newHistoricalImport) {
+      if (!owner && !managerIds.includes(String(order.managerId))) {
+        return 'Менеджер создаёт исторический проект только на себя.';
+      }
+      if (order.quickEntry !== true || order.quickEntryDraft !== true
+        || order.quickProjectImportedCompleted === true || order.status !== 'new') {
+        return 'Новый исторический проект сначала создаётся черновиком; завершить перенос может только владелец.';
+      }
+      if (liveFunnelFields.slice(1).some(field => order[field] !== undefined && order[field] !== null && order[field] !== false && order[field] !== '')) {
+        return 'Новый исторический черновик не может содержать этапы рабочей воронки.';
+      }
+      if (HISTORICAL_INVENTORY_FIELDS.some(field => Object.prototype.hasOwnProperty.call(order, field))) {
+        return 'Складскую себестоимость исторического проекта рассчитывает только система.';
+      }
+      order.paid = 0;
+      order.payments = [];
+      order.depositReceived = false;
+      order.payouts = [];
+    }
+    // The dedicated historical-entry screen is an explicit owner-authorized
+    // transition. It may close only a persisted historical draft; it does not
+    // turn on the broad global import mode or weaken ordinary project stages.
+    const historicalImportClosing = owner
+      && oldOrder.quickEntry === true && oldOrder.quickEntryDraft === true && oldOrder.quickProjectImportedCompleted !== true
+      && order.quickEntry === true && order.quickEntryDraft === false && order.quickProjectImportedCompleted === true
+      && CLOSED_PROJECT_STATUSES.includes(String(order.status));
+    const historicalImportDraft = oldOrder.id !== undefined
+      && oldOrder.quickEntry === true && oldOrder.quickEntryDraft === true && oldOrder.quickProjectImportedCompleted !== true;
+    const historicalImportExisting = oldOrder.id !== undefined
+      && (oldOrder.quickEntry === true || oldOrder.quickEntryDraft === true || oldOrder.quickProjectImportedCompleted === true);
+    if (historicalImportExisting && HISTORICAL_INVENTORY_FIELDS.some(field =>
+      !(historicalImportClosing && ['_historicalMaterialCost', '_historicalSupplyCost'].includes(field))
+      && stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
+      return 'Складскую себестоимость исторического проекта рассчитывает только система.';
+    }
+    const historicalCostCorrection = owner
+      && oldOrder.quickProjectImportedCompleted === true && order.quickProjectImportedCompleted === true
+      && stableJson(historicalCostFacts(order)) !== stableJson(historicalCostFacts(oldOrder));
+    const historicalMarkersChanged = oldOrder.id !== undefined && (
+      order.quickEntry !== oldOrder.quickEntry
+      || order.quickEntryDraft !== oldOrder.quickEntryDraft
+      || order.quickProjectImportedCompleted !== oldOrder.quickProjectImportedCompleted
+    );
+    // Once an order exists, only the dedicated owner close transition may
+    // change its historical-import markers. Otherwise a crafted workspace
+    // save could turn a closed import back into an unfinished draft (or turn
+    // an ordinary project into an import) and hide it from operational views.
+    if (historicalMarkersChanged && !historicalImportClosing) {
+      return 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.';
+    }
+    if (historicalImportDraft && !historicalImportClosing) {
+      if (liveFunnelFields.some(field => stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
+        return 'Сначала завершите перенос исторического проекта. Черновик не участвует в рабочей воронке.';
+      }
+      // The owner confirms the real payment only in the dedicated close action.
+      // Managers may fill services and production facts, but a crafted
+      // workspace save must never preload money into the unfinished import.
+      for (const field of ['paid', 'payments', 'depositReceived', 'payouts']) {
+        if (Object.prototype.hasOwnProperty.call(oldOrder, field)) order[field] = oldOrder[field];
+        else delete order[field];
+      }
+    }
+    const historicalServiceRows = rows(order.extraServices).filter(line => !line.includedBy && (line.quickProjectLine === true || line.type === 'offering'));
+    if (historicalImportClosing && historicalServiceRows.some(line => !line.offeringId)) {
+      return 'Выберите конкретную услугу для каждой позиции исторического проекта.';
+    }
+    if (historicalImportClosing) {
+      const extras = rows(order.extraServices);
+      for (const parent of historicalServiceRows.filter(line => typeof line.offeringId === 'string')) {
+        const offering = offerings.find(item => item.id === parent.offeringId);
+        for (const childId of Array.isArray(offering?.includes) ? offering.includes : []) {
+          const component = extras.find(line => line.offeringId === childId && line.includedBy === parent.offeringId && line.quickIncludedByLineId === parent.id);
+          if (!component) {
+            return 'Пакетная услуга исторического проекта должна содержать все включённые работы.';
+          }
+          if (!(Number(component.qty) > 0)) return 'Укажите фактическое количество каждой включённой работы исторического проекта.';
+        }
+      }
+      for (const plan of rows(order.serviceSchedules)) {
+        const lineId = typeof plan.id === 'string' && plan.id.startsWith('line:') ? plan.id.slice(5) : '';
+        const line = rows(order.extraServices).find(item => item.id === lineId);
+        if (line && typeof line.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(line.endDate)) {
+          plan.endsAt = `${line.endDate}T17:00:00`;
+        }
+      }
+      order._historicalMaterialCost = historicalMaterialCostSnapshot(order, next);
+      order._historicalSupplyCost = historicalSupplyCostSnapshot(order, next);
+    }
+    if (historicalCostCorrection) {
+      // The browser may only submit the previous snapshots. The server replaces
+      // them after an owner changes a cost-bearing fact on a completed import.
+      order._historicalMaterialCost = historicalMaterialCostSnapshot(order, next);
+      order._historicalSupplyCost = historicalSupplyCostSnapshot(order, next);
+    }
     const selectedMaterials = object(order.offeringCatalogIds);
     const selectedOfferingIds = new Set([order.offeringId, ...(Array.isArray(order.offeringIds) ? order.offeringIds : [])].filter((id): id is string => typeof id === 'string' && !!id));
     for (const [offeringId, filmId] of Object.entries(selectedMaterials)) {
       const offering = offerings.find(value => value.id === offeringId);
       const film = films.find(value => value.id === filmId);
-      if (!selectedOfferingIds.has(offeringId) || !offering || !film || !filmAllowed(offering, filmId)) {
+      // Some projects were saved while Privacy films temporarily lived under
+      // Decorative and a service without filmIds accepted every film in that
+      // combined direction. Keep that exact saved project choice writable,
+      // but do not allow replacing it with another cross-direction material.
+      const unchangedLegacySelection = object(oldOrder.offeringCatalogIds)[offeringId] === filmId;
+      if (!selectedOfferingIds.has(offeringId) || !offering || !film || (!filmAllowedForProject(offering, filmId) && !unchangedLegacySelection)) {
         return 'Материал проекта должен быть привязан к выбранной услуге.';
       }
     }
@@ -284,12 +505,17 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const extras = rows(extraValues);
     const parentIds = new Set([
       ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows)).map(win => win.offeringId),
-      ...extras.filter(line => line.offeringId && !line.includedBy && line.quickProjectLine !== true).map(line => line.offeringId),
+      ...extras.filter(line => line.offeringId && !line.includedBy).map(line => line.offeringId),
     ].filter((id): id is string => typeof id === 'string' && !!id));
+    const parentLinesById = new Map(extras.filter(line => line.offeringId && !line.includedBy && typeof line.id === 'string').map(line => [line.id, line]));
     // An included component cannot be removed or repointed independently while
     // its parent service remains in the project. Restore it from the saved
     // record; removing the parent still removes the component normally.
-    for (const oldLine of rows(oldOrder.extraServices).filter(line => typeof line.includedBy === 'string' && parentIds.has(line.includedBy))) {
+    for (const oldLine of rows(oldOrder.extraServices).filter(line => {
+      if (typeof line.includedBy !== 'string') return false;
+      if (typeof line.quickIncludedByLineId !== 'string') return parentIds.has(line.includedBy);
+      return parentLinesById.get(line.quickIncludedByLineId)?.offeringId === line.includedBy;
+    })) {
       let submitted = extras.find(line => line.id === oldLine.id);
       if (!submitted) {
         submitted = structuredClone(oldLine);
@@ -301,6 +527,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       submitted.type = oldLine.type;
       submitted.unit = oldLine.unit;
       submitted.unitLabel = oldLine.unitLabel;
+      if (typeof oldLine.quickIncludedByLineId === 'string') submitted.quickIncludedByLineId = oldLine.quickIncludedByLineId;
       submitted.unitPrice = 0;
       submitted.price = 0;
     }
@@ -312,7 +539,10 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
       if (extras.includes(item) && item.includedBy !== undefined) {
         const parent = offerings.find(value => value.id === item.includedBy);
         const wasIncluded = !!old && old.includedBy === item.includedBy && old.offeringId === item.offeringId;
-        included = typeof item.includedBy === 'string' && parentIds.has(item.includedBy) && !!item.offeringId
+        const includedParentExists = typeof item.quickIncludedByLineId === 'string'
+          ? parentLinesById.get(item.quickIncludedByLineId)?.offeringId === item.includedBy
+          : parentIds.has(item.includedBy);
+        included = typeof item.includedBy === 'string' && includedParentExists && !!item.offeringId
           && (wasIncluded || (Array.isArray(parent?.includes) && parent.includes.includes(item.offeringId)));
         if (!included) delete item.includedBy;
       }
@@ -400,7 +630,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
         const direction = DIRECTION_BY_SERVICE_TYPE[item.measureScope || item.serviceType || order.serviceType];
         const offeredIn = offering ? [offering.direction, ...(Array.isArray(offering.directions) && offering.unit && offering.unit !== 'sqft' ? offering.directions : [])].map(canonicalServiceDirection) : [];
         if (!offering || offering.active === false || !offeredIn.includes(canonicalServiceDirection(direction))) return 'Услуга не соответствует направлению проекта.';
-        if (item.catalogId && !filmAllowed(offering, item.catalogId)) return 'Плёнка не подходит выбранной услуге: выберите плёнку её направления.';
+        if (item.catalogId && !filmAllowedForProject(offering, item.catalogId)) return 'Плёнка не подходит выбранной услуге: выберите плёнку её направления.';
       }
     }
     // The unit each chosen service had when the project chose it: a new entry
@@ -441,7 +671,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const schedulesChanged = stableJson(order.serviceSchedules) !== stableJson(oldOrder.serviceSchedules);
     // Production assignments are operational decisions after client approval,
     // even when the browser submits only a partial draft and keeps the status.
-    if (!importing && schedulesChanged && rows(order.serviceSchedules).length && oldOrder.id !== undefined
+    if (!importing && !historicalImportClosing && schedulesChanged && rows(order.serviceSchedules).length && oldOrder.id !== undefined
       && !['proposal_accepted', ...SCHEDULED_PROJECT_STATUSES, ...CLOSED_PROJECT_STATUSES].includes(String(oldOrder.status))) {
       return 'Исполнителей и даты назначают после принятия КП.';
     }
@@ -568,6 +798,18 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     if (Array.isArray(order.serviceSchedules) && order.serviceSchedules.length && SCHEDULED_PROJECT_STATUSES.includes(String(order.status))) {
       order.installerIds = [...new Set(rows(order.serviceSchedules).flatMap(plan => Array.isArray(plan.installerIds) ? plan.installerIds : []))];
       order.installationAt = rows(order.serviceSchedules).map(plan => plan.installationAt).filter(value => typeof value === 'string' && value !== '').sort()[0];
+    }
+    if (!owner && historicalImportExisting
+      && stableJson(historicalProjectFacts(order)) !== stableJson(historicalProjectFacts(oldOrder))) {
+      if (!managerIds.includes(String(oldOrder.managerId))) {
+        return 'Исторический проект может менять только назначенный менеджер.';
+      }
+      if (order.managerId !== oldOrder.managerId) {
+        return 'Ответственного менеджера исторического проекта меняет только владелец.';
+      }
+      if (oldOrder.quickProjectImportedCompleted === true) {
+        return 'Завершённый исторический проект может исправлять только владелец.';
+      }
     }
   }
   return null;

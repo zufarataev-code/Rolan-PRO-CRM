@@ -217,7 +217,7 @@ test("quantity-service materials count once and their source costs invalidate re
 });
 
 test("unused directions exclude quoted components and film requirements but retain sunk costs", () => {
-  const project: any = { ...order(), _inventoryDeducted: false, _inventoryMaterialCost: 0, productionStages: [], payouts: [{ userId: "worker", amount: 50, paid: true }], extraExpenses: [{ amount: 30, actual: true }], excludedProjectDirections: ["smart_film", "decorative_film", "general_works"],
+  const project: any = { ...order(), _inventoryDeducted: false, _inventoryMaterialCost: 0, productionStages: [], payouts: [{ userId: "worker", amount: 50, paid: true }], extraExpenses: [{ amount: 30, actual: true }], excludedProjectDirections: ["smart_film", "decorative_film", "privacy_film", "general_works"],
     measurements: { rooms: [{ windows: [{ measureScope: "privacy_film" }] }] },
     extraServices: [
       { id: "controllers", offeringId: "controller", serviceType: "solar_film", unit: "piece", qty: 2, offeringMaterialCost: 75 },
@@ -229,7 +229,7 @@ test("unused directions exclude quoted components and film requirements but reta
   assert.equal(money.directCost.toFixed(2), "200.00", "only included components 20 plus recorded labor 50, actual expense 30 and purchase 100");
   assert.deepEqual(money.issues, [], "unused film needs no fictitious warehouse issue");
   project.googleAdsCostsReview = { fingerprint: money.fingerprint };
-  project.excludedProjectDirections = ["decorative_film", "general_works"];
+  project.excludedProjectDirections = ["decorative_film", "privacy_film", "general_works"];
   assert.equal(googleAdsProjectMoney(project, workspace).directCost.toFixed(2), "350.00");
   assert.equal(googleAdsProjectMoney(project, workspace).costsConfirmed, false);
 });

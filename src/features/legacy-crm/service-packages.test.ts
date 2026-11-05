@@ -31,6 +31,7 @@ function load(role = 'owner') {
     projectQuickLines: (order: Row) => (order.extraServices || []).filter((line: Row) => line.quickProjectLine),
     orderUserCanSeeMoney: () => true,
     projectEstimateMarkChanged: () => undefined,
+    projectQuickDateValue: (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? value : '',
     refreshProjectEstimateWorkspace: () => undefined,
     invalidateProjectEstimate: () => undefined,
     fmtMoney: (value: number) => `$${value}`,
@@ -87,6 +88,79 @@ test('a package adds its included service as a separate free operational line an
   assert.equal(order.extraServices.length, 0);
   assert.deepEqual(order.serviceSchedules, []);
   assert.doesNotMatch(JSON.stringify(order.offeringIds), new RegExp(silicone.id));
+});
+
+test('a historical quick service materializes its packaged work with the same actual date and crew', () => {
+  const { context, db, add } = load();
+  const silicone = add({ name: 'Силикон', unit: 'lft', pricePerSqft: 3.5, installerRatePerSqft: 1, materialCostPerUnit: 0.4 });
+  const a1 = add({ name: 'A1 8 mil', unit: 'sqft', pricePerSqft: 14, includes: [silicone.id] });
+  const parent: Row = { id: 'quick-a1', quickProjectLine: true, serviceType: 'protective_film', offeringId: a1.id, qty: 200, unit: 'sqft', startDate: '2026-01-10', endDate: '2026-01-12', installerIds: ['i1'] };
+  const order: Row = { id: 'o', serviceType: 'protective_film', serviceTypes: ['protective_film'], extraServices: [parent], measurements: { rooms: [] } };
+  db.orders.push(order);
+
+  assert.equal(context.syncProjectIncludedServices(order), true);
+  const component = order.extraServices.find((line: Row) => line.includedBy === a1.id);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify([component.offeringId, component.qty, component.price, component.quickIncludedByLineId, component.startDate, component.endDate, component.installerIds])),
+    [silicone.id, 0, 0, parent.id, '2026-01-10', '2026-01-12', ['i1']],
+  );
+  component.qty = 45;
+  component.qtyManual = true;
+  parent.qty = 240;
+  parent.endDate = '2026-01-15';
+  parent.installerIds = ['i2'];
+  context.syncProjectIncludedServices(order);
+  assert.deepEqual(JSON.parse(JSON.stringify([component.qty, component.endDate, component.installerIds])), [45, '2026-01-15', ['i2']]);
+});
+
+test('repeated historical package services keep separate components, dates and crews', () => {
+  const { context, db, add } = load();
+  const silicone = add({ name: 'Силикон', unit: 'lft', pricePerSqft: 3.5, installerRatePerSqft: 1, materialCostPerUnit: 0.4 });
+  const a1 = add({ name: 'A1 8 mil', unit: 'sqft', pricePerSqft: 14, includes: [silicone.id] });
+  const first: Row = { id: 'quick-a1-first', quickProjectLine: true, serviceType: 'protective_film', offeringId: a1.id, qty: 120, unit: 'sqft', startDate: '2026-01-10', endDate: '2026-01-12', installerIds: ['i1'] };
+  const second: Row = { id: 'quick-a1-second', quickProjectLine: true, serviceType: 'protective_film', offeringId: a1.id, qty: 80, unit: 'sqft', startDate: '2026-02-05', endDate: '2026-02-06', installerIds: ['i2'] };
+  const order: Row = { id: 'o', quickEntry: true, serviceType: 'protective_film', serviceTypes: ['protective_film'], extraServices: [first, second], measurements: { rooms: [] } };
+  db.orders.push(order);
+
+  assert.equal(context.syncProjectIncludedServices(order), true);
+  const components = order.extraServices.filter((line: Row) => line.includedBy === a1.id).sort((a: Row, b: Row) => a.quickIncludedByLineId.localeCompare(b.quickIncludedByLineId));
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(components.map((line: Row) => [line.quickIncludedByLineId, line.qty, line.endDate, line.installerIds]))),
+    [[first.id, 0, '2026-01-12', ['i1']], [second.id, 0, '2026-02-06', ['i2']]],
+  );
+
+  components[0].qty = 35;
+  components[0].qtyManual = true;
+  components[1].qty = 22;
+  components[1].qtyManual = true;
+  second.endDate = '2026-02-08';
+  second.installerIds = ['i3'];
+  context.syncProjectIncludedServices(order);
+  assert.deepEqual(JSON.parse(JSON.stringify([components[0].qty, components[1].qty, components[1].endDate, components[1].installerIds])), [35, 22, '2026-02-08', ['i3']]);
+
+  order.extraServices = order.extraServices.filter((line: Row) => line.id !== first.id);
+  context.syncProjectIncludedServices(order);
+  const remaining = order.extraServices.filter((line: Row) => line.includedBy === a1.id);
+  assert.deepEqual(JSON.parse(JSON.stringify(remaining.map((line: Row) => line.quickIncludedByLineId))), [second.id]);
+});
+
+test('changing a historical parent service removes the previous package component', () => {
+  const { context, db, add } = load();
+  const silicone = add({ name: 'Силикон', unit: 'lft' });
+  const controller = add({ name: 'Контроллер', unit: 'piece' });
+  const a1 = add({ name: 'A1 8 mil', unit: 'sqft', includes: [silicone.id] });
+  const a2 = add({ name: 'A2 14 mil', unit: 'sqft', includes: [controller.id] });
+  const parent: Row = { id: 'quick-parent', quickProjectLine: true, serviceType: 'protective_film', offeringId: a1.id, qty: 100, unit: 'sqft', startDate: '2026-01-10', installerIds: ['i1'] };
+  const order: Row = { id: 'o', quickEntry: true, serviceType: 'protective_film', serviceTypes: ['protective_film'], extraServices: [parent], measurements: { rooms: [] } };
+  db.orders.push(order);
+
+  context.syncProjectIncludedServices(order);
+  assert.deepEqual(order.extraServices.filter((line: Row) => line.includedBy).map((line: Row) => line.offeringId), [silicone.id]);
+
+  parent.offeringId = a2.id;
+  context.syncProjectIncludedServices(order);
+  const components = order.extraServices.filter((line: Row) => line.includedBy);
+  assert.deepEqual(JSON.parse(JSON.stringify(components.map((line: Row) => [line.offeringId, line.includedBy, line.quickIncludedByLineId]))), [[controller.id, a2.id, parent.id]]);
 });
 
 test('linear-foot work sold alone follows all windows and an included line cannot be deleted in the UI', () => {
@@ -166,6 +240,41 @@ test('server keeps included work free only while its valid parent remains', () =
   assert.deepEqual([ordinary.orders[0].extraServices[0].unitPrice, ordinary.orders[0].extraServices[0].price], [3.5, 196]);
 });
 
+test('server requires package components when a historical quick project is closed', () => {
+  const current = base();
+  Object.assign(current.orders[0], { status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false, measurements: { rooms: [] } });
+  const parent = { id: 'quick-a1', quickProjectLine: true, offeringId: 'a1', serviceType: 'protective_film', unit: 'sqft', qty: 200 };
+  current.orders[0].extraServices = [parent];
+  const missing = structuredClone(current);
+  Object.assign(missing.orders[0], { status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true });
+  assert.equal(prepareServiceSolutions(current, missing, true), 'Пакетная услуга исторического проекта должна содержать все включённые работы.');
+
+  const complete = structuredClone(missing);
+  complete.orders[0].extraServices.push(includedLine({ quickIncludedByLineId: parent.id, startDate: '2026-01-10', endDate: '2026-01-12', installerIds: ['i1'] }));
+  complete.users.push({ id: 'i1', role: 'installer' });
+  complete.orders[0].serviceSchedules = [
+    { id: `line:${parent.id}`, installationAt: '2026-01-10T12:00:00.000Z', installerIds: ['i1'] },
+    { id: 'line:l', installationAt: '2026-01-10T12:00:00.000Z', installerIds: ['i1'] },
+  ];
+  assert.equal(prepareServiceSolutions(current, complete, true), null);
+
+  const zeroQuantity = structuredClone(complete);
+  zeroQuantity.orders[0].extraServices.find((line: Row) => line.includedBy).qty = 0;
+  assert.equal(prepareServiceSolutions(current, zeroQuantity, true), 'Укажите фактическое количество каждой включённой работы исторического проекта.');
+});
+
+test('server requires one package component for every repeated historical parent row', () => {
+  const current = base();
+  Object.assign(current.orders[0], { status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false, measurements: { rooms: [] } });
+  const first = { id: 'quick-a1-first', quickProjectLine: true, offeringId: 'a1', serviceType: 'protective_film', unit: 'sqft', qty: 120 };
+  const second = { id: 'quick-a1-second', quickProjectLine: true, offeringId: 'a1', serviceType: 'protective_film', unit: 'sqft', qty: 80 };
+  current.orders[0].extraServices = [first, second];
+  const closing = structuredClone(current);
+  Object.assign(closing.orders[0], { status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true });
+  closing.orders[0].extraServices.push(includedLine({ id: 'silicone-first', quickIncludedByLineId: first.id }));
+  assert.equal(prepareServiceSolutions(current, closing, true), 'Пакетная услуга исторического проекта должна содержать все включённые работы.');
+});
+
 test('server restores an included line deleted or repointed without removing its parent', () => {
   const saved = base();
   saved.orders[0].extraServices = [includedLine()];
@@ -187,6 +296,21 @@ test('server restores an included line deleted or repointed without removing its
   parentRemoved.orders[0].extraServices = [];
   assert.equal(prepareServiceSolutions(saved, parentRemoved, false), null);
   assert.deepEqual(parentRemoved.orders[0].extraServices, []);
+});
+
+test('server does not restore the component of one removed repeated historical parent', () => {
+  const saved = base();
+  Object.assign(saved.orders[0], { managerId: 'manager-a', status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false, measurements: { rooms: [] } });
+  const first = { id: 'quick-a1-first', quickProjectLine: true, offeringId: 'a1', serviceType: 'protective_film', unit: 'sqft', qty: 120 };
+  const second = { id: 'quick-a1-second', quickProjectLine: true, offeringId: 'a1', serviceType: 'protective_film', unit: 'sqft', qty: 80 };
+  const firstChild = includedLine({ id: 'silicone-first', quickIncludedByLineId: first.id });
+  const secondChild = includedLine({ id: 'silicone-second', quickIncludedByLineId: second.id });
+  saved.orders[0].extraServices = [first, second, firstChild, secondChild];
+  const next = structuredClone(saved);
+  next.orders[0].extraServices = next.orders[0].extraServices.filter((line: Row) => ![first.id, firstChild.id].includes(line.id));
+
+  assert.equal(prepareServiceSolutions(saved, next, false, ['manager-a']), null);
+  assert.deepEqual(next.orders[0].extraServices.map((line: Row) => line.id).sort(), [second.id, secondChild.id].sort());
 });
 
 test('readiness exempts included lines and proposals show them without billing twice', () => {

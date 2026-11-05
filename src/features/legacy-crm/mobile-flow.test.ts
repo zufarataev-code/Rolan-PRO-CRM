@@ -49,13 +49,13 @@ test('the chosen client is one line; card details fold; one «Адрес объ�
   assert.match(html, /«\+ Услуга» → направление → линейка → плёнка и допы рядом \(можно «уточнить на замере»\)/);
 });
 
-test('«Услуги и цены»: the first screen is only the four service directions', () => {
+test('«Услуги и цены»: the first screen is only the five service directions', () => {
   const page = slice('function renderCanonicalServicePricing()', 'async function loadCanonicalInstallerOperations(');
   const directory = slice('function renderServiceOfferingsSection()', 'function updateRemovalPrice(');
   assert.match(page, /return renderServiceOfferingsSection\(\);/);
   assert.match(directory, /filmDirections\(\)\.map\(info =>/);
   assert.match(directory, /data-service-direction-card=/);
-  assert.match(directory, /4 направления/);
+  assert.match(directory, /5 направлений/);
   assert.match(directory, /openServiceDirectionDirectory/);
   assert.doesNotMatch(page, /План продаж|Прайс быстрого калькулятора|Допработы калькулятора/);
 });

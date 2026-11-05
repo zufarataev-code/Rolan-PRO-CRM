@@ -18,11 +18,16 @@ function loadAnalytics(orders: unknown[], userId = "u_1") {
     state: {} as Record<string, unknown>,
     db: { orders },
     currentUser: () => ({ id: userId }),
+    installerVisibleOrders: (id: string) => (orders as any[]).filter(order => (order.installerIds || []).includes(id) && !(order.quickEntryDraft === true && order.quickProjectImportedCompleted !== true)),
     measureAllWindows: (o: { windows?: unknown[] }) => (o.windows || []).map((win) => ({ win })),
     windowCatalog: (win: { catalogId?: string }) => (win.catalogId ? catalog[win.catalogId] : null),
     filmCategory: (name: string) => (name.toLowerCase().includes("solar") ? "solar" : "other"),
     windowActualAreaSqft: (win: { sqft: number }) => win.sqft,
     projectQuickLines: (o: { quick?: unknown[] }) => o.quick || [],
+    projectLines: (o: { lines?: unknown[] }) => o.lines || [],
+    projectQuickDateValue: (value: string) => value || "",
+    historicalProjectInstallerAccruals: (o: { historicalAccruals?: unknown[] }) => o.historicalAccruals || [],
+    getUser: (id: string) => ({ id, role: "installer", payConfig: { type: "per_sqft" } }),
     getCatalogItem: (id: string) => catalog[id],
     primaryServiceInfo: () => null,
     orderInstallerPayoutPerPerson: (o: { pay?: number }) => o.pay || 0,
@@ -133,6 +138,33 @@ test("the analytics screen lists only finished objects of the chosen period, wit
   const all = analytics.renderInstallerAnalytics();
   assert.match(all, /R-101/);
   assert.match(all, /R-090/);
+});
+
+test("historical services stay in the month in which each service was completed", () => {
+  const now = new Date();
+  const current = new Date(now.getFullYear(), now.getMonth(), 10, 12);
+  const previous = new Date(now.getFullYear(), now.getMonth() - 1, 10, 12);
+  const day = (value: Date) => value.toISOString().slice(0, 10);
+  const analytics = loadAnalytics([{
+    id: "old", number: "R-OLD", installerIds: ["u_1"], quickProjectImportedCompleted: true,
+    installationDoneAt: current.toISOString(),
+    lines: [
+      { key: "line:previous", unit: "sqft", qty: 10, installerIds: ["u_1"], sources: [{ catalogId: "cat_smart", endDate: day(previous) }] },
+      { key: "line:current", unit: "sqft", qty: 20, installerIds: ["u_1"], sources: [{ catalogId: "cat_smart", endDate: day(current) }] },
+    ],
+    historicalAccruals: [
+      { accrualId: "line:previous", amount: 100, date: `${day(previous)}T12:00:00.000Z` },
+      { accrualId: "line:current", amount: 200, date: `${day(current)}T12:00:00.000Z` },
+    ],
+  }]);
+
+  const currentMonth = analytics.renderInstallerAnalytics();
+  assert.match(currentMonth, /\$200\.00/);
+  assert.doesNotMatch(currentMonth, /\$300\.00/);
+  analytics.state.installerAnalyticsPeriod = "prev";
+  const previousMonth = analytics.renderInstallerAnalytics();
+  assert.match(previousMonth, /\$100\.00/);
+  assert.doesNotMatch(previousMonth, /\$300\.00/);
 });
 
 test("the installer reaches analytics from the menu and from «Сегодня»", () => {

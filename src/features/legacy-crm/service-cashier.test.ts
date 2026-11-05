@@ -21,6 +21,7 @@ function load(role = 'owner') {
     { id: 'protective_film', catalogCategory: 'protective', title: 'Защитная', short: 'Защита', icon: '🛡' },
     { id: 'solar_film', catalogCategory: 'solar', title: 'Солнцезащитная', short: 'Солнце', icon: '☀' },
     { id: 'decorative_film', catalogCategory: 'decorative', title: 'Декоративная', short: 'Декор', icon: '🎨' },
+    { id: 'privacy_film', catalogCategory: 'privacy', title: 'Приватная плёнка', short: 'Приватная', icon: '◐' },
     { id: 'general_works', catalogCategory: 'general', title: 'Общее по объекту', short: 'Общее', icon: '🧰', general: true },
   ];
   const context: any = vm.createContext({
@@ -66,6 +67,7 @@ function load(role = 'owner') {
     refreshProjectEstimateWorkspace: () => calls.push(vm.runInContext('projectCardEditing', context) ? 'refresh:card' : 'refresh'),
     invalidateProjectEstimate: () => undefined,
     orderServiceCardStyle: (id: string) => `--svc-color:${id};`,
+    projectPlural: (count: number, one: string, few: string, many: string) => count === 1 ? one : count >= 2 && count <= 4 ? few : many,
     isGeneralDirection: (id: string) => id === 'general_works',
     filmDirections: () => services.filter(item => !item.general),
     fmtMoney: (value: number) => `$${value}`,
@@ -118,6 +120,7 @@ test('the picker is the cashier button; it opens on the first step only for peop
   assert.match(state.modal, /serviceCashierPick\('direction','solar_film'\)/);
   assert.match(state.modal, /serviceCashierPick\('direction','smart_film'\)/);
   assert.match(state.modal, /serviceCashierPick\('direction','decorative_film'\)/);
+  assert.match(state.modal, /serviceCashierPick\('direction','privacy_film'\)/);
   assert.doesNotMatch(state.modal, /Добавить в проект/, 'nothing to commit before a service is chosen');
 
   const installer = fixture('installer');
@@ -125,17 +128,29 @@ test('the picker is the cashier button; it opens on the first step only for peop
   assert.equal(installer.context.serviceCashierState(), null, 'field roles cannot open the cashier even by hand');
 });
 
-test('all four film directions stay visible and an empty direction explains what is missing', () => {
+test('all five film directions stay visible and an empty direction explains what is missing', () => {
   const { context, state } = fixture();
   context.openServiceCashier('o', 'card');
   assert.deepEqual(
     Array.from(context.serviceCashierDirections(), ({ direction, offerings }: Row) => [direction.id, offerings.length]),
-    [['smart_film', 0], ['protective_film', 1], ['solar_film', 1], ['decorative_film', 0]],
+    [['smart_film', 0], ['protective_film', 1], ['solar_film', 1], ['decorative_film', 0], ['privacy_film', 0]],
   );
-  context.serviceCashierPick('direction', 'decorative_film');
+  context.serviceCashierPick('direction', 'privacy_film');
   assert.equal(context.serviceCashierState().step, 'offering');
   assert.match(state.modal, /В направлении пока нет активных услуг/);
   assert.match(state.modal, /Услуги и цены/);
+});
+
+test('the Services and prices home renders five cards and Privacy opens as its own empty workspace', () => {
+  const { context, state } = fixture();
+  const screen = context.renderServiceOfferingsSection();
+  assert.equal((screen.match(/data-service-direction-card=/g) || []).length, 5);
+  assert.match(screen, /data-service-direction-card="privacy"/);
+  assert.match(screen, /Приватная плёнка/);
+  context.openServiceDirectionDirectory('privacy');
+  assert.equal(state.servicePricingDirection, 'privacy');
+  assert.match(state.modal, /Услуги направления Приватная плёнка/);
+  assert.match(state.modal, /Услуг пока нет/);
 });
 
 test('direction → film line → film and add-ons in one grid, with inactive and archived items left out', () => {

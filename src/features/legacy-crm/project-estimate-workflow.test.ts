@@ -169,7 +169,7 @@ test("accepted proposal can be planned before production; publishing still check
   assert.match(source, /'Производство','stepInstallation'/);
 });
 
-test("quick project entry derives sqft price and defers installers to Montage", () => {
+test("historical project entry derives sqft price and records completed production", () => {
   const updater = source.match(/function projectEstimateUpdateQuickLine\(oid, lineId, field, value\) \{[\s\S]*?\n\}/)?.[0] || "";
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
@@ -177,11 +177,11 @@ test("quick project entry derives sqft price and defers installers to Montage", 
   const schedule = source.match(/function confirmScheduleInstallation\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(updater, /\['qty','unitPrice','price'\]\.includes\(field\)/);
   assert.match(source, /if \(changedField === 'price'\) line\.pricingMode = 'total'/);
-  assert.match(renderer, /Цена за sqft рассчитается автоматически/);
+  assert.match(renderer, /Цена за единицу появится автоматически/);
   assert.match(renderer, /projectEstimateUpdateQuickLine\('[^']+','[^']+','price',this\.value\)/);
   assert.doesNotMatch(renderer, /data-label="Исполнители"/);
   assert.doesNotMatch(renderer, /\+ Новый сотрудник/);
-  assert.match(renderer, /Монтаж позже/);
+  assert.match(renderer, /Это перенос факта/);
   assert.match(renderer, /Только для переноса уже завершённого проекта из старой CRM/);
   assert.match(schedule, /line\.installerIds = \[\.\.\.assignment\.installerIds\]/);
   assert.match(schedule, /line\.startDate = projectQuickDateValue\(datetimeLocalValue\(assignment\.installationAt\)/);
@@ -224,6 +224,8 @@ test("quick service can create warehouse film with category, name and model", ()
 test("quick service adds stock supplies and includes their purchase cost", () => {
   const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const consumables = source.match(/function orderConsumablesExpense\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const newSupplyForm = source.match(/function openQuickProjectSupplyForm\(oid, lineId\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const newSupplySave = source.match(/function saveQuickProjectSupply\(oid, lineId\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(source, /function projectQuickAddSupply\(oid, lineId\)/);
   assert.match(source, /function openQuickProjectSupplyForm\(oid, lineId\)/);
   assert.match(source, /function saveQuickProjectSupply\(oid, lineId\)/);
@@ -233,25 +235,29 @@ test("quick service adds stock supplies and includes their purchase cost", () =>
   assert.match(source, /costPerUnit/);
   assert.match(completionIssues, /есть незаполненный расходник услуги/);
   assert.match(completionIssues, /на складе недостаточно расходников/);
+  assert.match(newSupplyForm, /projectHistoricalEntryLines\(o\)/, 'a quantity or fixed historical service can create a supply');
+  assert.match(newSupplySave, /projectHistoricalEntryLines\(o\)/, 'the new supply is saved to a quantity or fixed historical service');
+  assert.match(consumables, /projectHistoricalEntryLines\(o\)/, 'supplies of quantity and fixed historical services enter their cost');
   assert.match(consumables, /projectQuickSupplyCost\(o\)/);
 });
 
-test("owner can close a completed legacy project directly from quick entry", () => {
+test("owner can close a completed legacy project with its actual payment", () => {
   const closer = source.match(/function closeQuickProjectAsCompleted\(oid\) \{[\s\S]*?\n\}/)?.[0] || "";
   const completionIssues = source.match(/function projectQuickCompletionIssues\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
   const renderer = source.slice(rendererStart, rendererEnd);
-  assert.match(renderer, /Закрытие проекта из старой CRM/);
-  assert.match(renderer, /Дата полной оплаты/);
+  assert.match(renderer, /Проверка и закрытие/);
+  assert.match(renderer, /Оплачено клиентом/);
+  assert.match(renderer, /Дата оплаты/);
   assert.match(renderer, /Способ оплаты/);
-  assert.match(renderer, /Закрыть как выполненный и оплаченный/);
+  assert.match(renderer, /Закрыть выполненный проект/);
   assert.match(completionIssues, /ignoredHistoricalStockIssues/);
-  assert.match(completionIssues, /warehouseCatalogCostPerSqft\(line\.catalogId\) <= 0/);
+  assert.match(completionIssues, /warehouseCatalogCostPerSqft\(line\.catalogId, o\?\.quickEntry === true\) <= 0/);
   assert.match(closer, /currentUser\(\)\?\.role !== 'owner'/);
-  assert.match(closer, /o\.status = 'completed'/);
+  assert.match(closer, /o\.status = full \? 'completed' : 'act_signed'/);
   assert.match(closer, /o\.installationDoneAt = o\.installationDoneAt \|\| endAt/);
-  assert.match(closer, /o\.paidAt = paidAt/);
+  assert.match(closer, /o\.paidAt = full \? paidAt : null/);
   assert.match(closer, /payments\.push\(/);
   assert.match(closer, /o\.projectEstimateSnapshot =/);
   assert.match(closer, /quickProjectImportedCompleted = true/);
@@ -323,11 +329,11 @@ test("quick project lines use warehouse film and never accept manual material or
   const rendererStart = source.indexOf("function renderQuickProjectEntry");
   const rendererEnd = source.indexOf("function openQuickProjectEntry", rendererStart);
   const renderer = source.slice(rendererStart, rendererEnd);
-  assert.match(source, /function projectQuickLineCatalog\(serviceType, selectedCatalogId = ''\)/);
+  assert.match(source, /function projectQuickLineCatalog\(serviceType, selectedCatalogId = '', offeringId = '', allowOutOfStock = false\)/);
   assert.match(source, /catalogCanBeSelected\(item, selectedCatalogId\)/);
-  assert.match(source, /serviceDirectionAllowsFilm\(category, item\)/);
+  assert.match(source, /offering \? projectOfferingAllowsFilm\(offering, item, selectedCatalogId\) : serviceDirectionAllowsFilm\(category, item\)/);
   assert.match(source, /warehouseCatalogStockStats\(item\.id\)\.availableSqft > 0/);
-  assert.match(renderer, /Плёнка со склада/);
+  assert.match(renderer, /Выберите плёнку со склада/);
   assert.match(renderer, /Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников/);
   assert.match(sync, /delete line\.unitCost/);
   assert.match(sync, /delete line\.cost/);
@@ -420,8 +426,7 @@ test("proposal readiness does not require installation scheduling", () => {
   assert.doesNotMatch(readiness, /installerIds|startDate|endDate/);
   assert.match(completionIssues, /installerIds/);
   assert.match(completionIssues, /startDate/);
-  assert.match(source, /Монтаж позже[\s\S]*?Бригада и дата монтажа назначаются после принятия КП/);
-  assert.match(source, /Для КП данных достаточно[\s\S]*?Можно переходить к проверке расчёта/);
+  assert.match(source, /Подтвердить расчёт и сформировать КП/);
 });
 
 test("proposal readiness reports exact missing commercial fields", () => {

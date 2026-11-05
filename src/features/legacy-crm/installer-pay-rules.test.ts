@@ -85,6 +85,15 @@ test('silicone over two days pays the day minimum twice', () => {
   assert.equal(pay('jr'), 400, 'max(100 × 1.5, 200 × 2 days)');
 });
 
+test('a historical service longer than fourteen days pays every day minimum', () => {
+  const pay = load({
+    installerIds: ['jr'], windows: [], travel: {},
+    extraServices: [{ id: 's', offeringId: 'silicone', qty: 100 }],
+    plans: { 'line:s': { installationAt: '2026-11-02T09:00', endsAt: '2026-11-21T17:00' } },
+  });
+  assert.equal(pay('jr'), 4000, '20 service days × $200, without the former 14-day cap');
+});
+
 test('settings live in «Ставки и расходы»; the road shows in the install window', () => {
   assert.match(fn(stages, 'renderRatesCosts'), /\$\{ratesPayRulesHtml\(\)\}/);
   assert.match(fn(stages, 'renderRatesCosts'), /ratesUpdateOffering\('\$\{item\.id\}','installerDayMinimum'/);

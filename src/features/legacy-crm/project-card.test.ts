@@ -511,12 +511,162 @@ test('every way into installation refreshes the film purchase deadline; a histor
   const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('\n}\n', html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {')) + 2);
   assert.match(status, /o\.status = newStatus;\n  if \(entersInstallation\) refreshManualFilmNeededBy\(o\);/);
   const close = html.slice(html.indexOf('function closeQuickProjectAsCompleted('), html.indexOf('function closeQuickProjectAsCompleted(') + 4000);
-  assert.match(close, /if \(!o\.serviceSchedules\?\.length\) o\.serviceSchedules = projectPlannedSchedules\(o\);\n  o\.status = 'completed';/);
+  assert.match(close, /if \(!o\.serviceSchedules\?\.length\) o\.serviceSchedules = projectPlannedSchedules\(o\);\n  o\.status = full \? 'completed' : 'act_signed';/);
   const { c } = load();
   const draft: Row = { id: 'd', status: 'proposal_accepted', serviceType: 'protective_film', offeringIds: ['a1'], offeringUnits: { a1: 'sqft' }, measurements: { rooms: [] }, extraServices: [{ id: 'k', quickProjectLine: true, offeringId: 'a1', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film' }] };
   assert.deepEqual(plain(c.projectPendingSizedServices(draft)), [], 'before measurement a quick line carries its service');
 });
 
+test('server: an owner can close only a persisted historical draft with a concrete service', () => {
+  const settings = {
+    serviceOfferings: [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }],
+    catalog: [{ id: 'film', category: 'protective', costPerSqft: 5, wastePct: 10 }],
+  };
+  const users = [{ id: 'i1', role: 'installer' }];
+  const order = (offeringId = 'a1'): Row => ({
+    id: 'historical', managerId: 'manager-a', status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false,
+    serviceType: 'protective_film', offeringIds: offeringId ? [offeringId] : [], offeringUnits: offeringId ? { [offeringId]: 'sqft' } : {},
+    measurements: { rooms: [] },
+    extraServices: [{ id: 'line', quickProjectLine: true, offeringId, catalogId: 'film', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film', installerIds: ['i1'], startDate: '2026-09-01', endDate: '2026-09-03', supplyItems: [{ supplyId: 'solution', qty: 2 }] }],
+  });
+  const current: Row = { settings, users, supplies: [{ id: 'solution', costPerUnit: 3 }], orders: [order()] };
+  const next = structuredClone(current);
+  Object.assign(next.orders[0], {
+    status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true,
+    serviceSchedules: [{ id: 'line:line', installerIds: ['i1'], installationAt: '2026-09-01T12:00:00.000Z' }],
+  });
+  assert.equal(prepareServiceSolutions(current, next, true), null, 'the owner-authorized historical transition does not need global import mode');
+  assert.equal(next.orders[0]._historicalMaterialCost, 55, 'server freezes 10 sq ft + 10% waste at the current $5 purchase cost');
+  assert.equal(next.orders[0]._historicalSupplyCost, 6, 'server freezes two supply units at the current $3 warehouse average');
+  assert.equal(next.orders[0].serviceSchedules[0].endsAt, '2026-09-03T17:00:00', 'the historical service keeps its full multi-day range');
+  const forgedInventoryClose = structuredClone(next);
+  Object.assign(forgedInventoryClose.orders[0], { _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [] });
+  assert.equal(
+    prepareServiceSolutions(current, forgedInventoryClose, true),
+    'Складскую себестоимость исторического проекта рассчитывает только система.',
+  );
+
+  const missingCurrent: Row = { settings, users, orders: [order('')] };
+  const missingNext = structuredClone(missingCurrent);
+  Object.assign(missingNext.orders[0], {
+    status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true,
+    serviceSchedules: [{ id: 'line:line', installerIds: ['i1'], installationAt: '2026-09-01T12:00:00.000Z' }],
+  });
+  assert.equal(prepareServiceSolutions(missingCurrent, missingNext, true), 'Выберите конкретную услугу для каждой позиции исторического проекта.');
+
+  const liveTransition = structuredClone(current);
+  Object.assign(liveTransition.orders[0], { status: 'measurement_scheduled', measurementAt: '2026-11-05T18:00:00.000Z' });
+  assert.equal(prepareServiceSolutions(current, liveTransition, true), 'Сначала завершите перенос исторического проекта. Черновик не участвует в рабочей воронке.');
+
+  const proposalBypass = structuredClone(current);
+  proposalBypass.orders[0].proposalSentAt = '2026-11-05T18:00:00.000Z';
+  assert.equal(prepareServiceSolutions(current, proposalBypass, true), 'Сначала завершите перенос исторического проекта. Черновик не участвует в рабочей воронке.');
+
+  const payoutBypass = structuredClone(current);
+  payoutBypass.orders[0].payouts = [{ id: 'forged', userId: 'i1', amount: 500, paid: true }];
+  assert.equal(prepareServiceSolutions(current, payoutBypass, false, ['manager-a']), null);
+  assert.equal(Object.prototype.hasOwnProperty.call(payoutBypass.orders[0], 'payouts'), false);
+
+  const forgedNewDraft: Row = { settings, users, orders: [order()] };
+  forgedNewDraft.orders[0].payouts = [{ id: 'forged-new', userId: 'i1', amount: 750, paid: true }];
+  assert.equal(prepareServiceSolutions({ settings, users, orders: [] }, forgedNewDraft, false, ['manager-a']), null);
+  assert.deepEqual(forgedNewDraft.orders[0].payouts, [], 'a new historical draft cannot preload payroll cash');
+
+  const forgedInventoryDraft: Row = { settings, users, orders: [order()] };
+  Object.assign(forgedInventoryDraft.orders[0], { _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [] });
+  assert.equal(
+    prepareServiceSolutions({ settings, users, orders: [] }, forgedInventoryDraft, false, ['manager-a']),
+    'Складскую себестоимость исторического проекта рассчитывает только система.',
+  );
+
+  const managerFlagBypass = structuredClone(current);
+  Object.assign(managerFlagBypass.orders[0], { quickEntryDraft: false, quickProjectImportedCompleted: true });
+  assert.equal(prepareServiceSolutions(current, managerFlagBypass, false), 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.');
+
+  const closedCurrent = structuredClone(next);
+  const reopenClosed = structuredClone(closedCurrent);
+  Object.assign(reopenClosed.orders[0], { status: 'new', quickEntryDraft: true, quickProjectImportedCompleted: false });
+  assert.equal(prepareServiceSolutions(closedCurrent, reopenClosed, false), 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.');
+
+  const ordinaryCurrent: Row = { settings, users, orders: [{ id: 'ordinary', status: 'new', measurements: { rooms: [] }, extraServices: [] }] };
+  const forgeImport = structuredClone(ordinaryCurrent);
+  Object.assign(forgeImport.orders[0], { quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false });
+  assert.equal(prepareServiceSolutions(ordinaryCurrent, forgeImport, false), 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.');
+});
+
+test('server: managers own only their historical drafts and completed imports are owner-corrected', () => {
+  const settings = { serviceOfferings: [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }] };
+  const users = [{ id: 'i1', role: 'installer' }];
+  const draft: Row = {
+    id: 'historical', managerId: 'manager-a', status: 'new', quickEntry: true, quickEntryDraft: true,
+    quickProjectImportedCompleted: false, serviceType: 'protective_film', offeringIds: ['a1'],
+    offeringUnits: { a1: 'sqft' }, measurements: { rooms: [] },
+    extraServices: [{ id: 'line', quickProjectLine: true, offeringId: 'a1', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film' }],
+  };
+  const current: Row = { settings, users, orders: [draft] };
+
+  const newForColleague: Row = { settings, users, orders: [{ ...structuredClone(draft), id: 'new', managerId: 'manager-b' }] };
+  assert.equal(
+    prepareServiceSolutions({ settings, users, orders: [] }, newForColleague, false, ['manager-a']),
+    'Менеджер создаёт исторический проект только на себя.',
+  );
+
+  assert.equal(prepareServiceSolutions(current, structuredClone(current), false, ['manager-b']), null, 'unchanged rows owned by colleagues round-trip');
+  const colleagueEdit = structuredClone(current);
+  colleagueEdit.orders[0].extraServices[0].qty = 20;
+  assert.equal(prepareServiceSolutions(current, colleagueEdit, false, ['manager-b']), 'Исторический проект может менять только назначенный менеджер.');
+
+  const ownEdit = structuredClone(current);
+  ownEdit.orders[0].extraServices[0].qty = 20;
+  assert.equal(prepareServiceSolutions(current, ownEdit, false, ['manager-a']), null, 'the assigned manager may prepare their unfinished import');
+
+  const forgedDraftInventory = structuredClone(current);
+  Object.assign(forgedDraftInventory.orders[0], { _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [] });
+  assert.equal(
+    prepareServiceSolutions(current, forgedDraftInventory, false, ['manager-a']),
+    'Складскую себестоимость исторического проекта рассчитывает только система.',
+  );
+
+  const completedCurrent = structuredClone(current);
+  completedCurrent.settings.catalog = [{ id: 'film', category: 'protective', costPerSqft: 4, wastePct: 25 }];
+  completedCurrent.supplies = [{ id: 'solution', costPerUnit: 3 }];
+  Object.assign(completedCurrent.orders[0], {
+    status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true,
+    _historicalMaterialCost: 50, _historicalSupplyCost: 3,
+  });
+  Object.assign(completedCurrent.orders[0].extraServices[0], {
+    catalogId: 'film', supplyItems: [{ supplyId: 'solution', qty: 1 }],
+  });
+  const managerCorrection = structuredClone(completedCurrent);
+  managerCorrection.orders[0].extraServices[0].qty = 25;
+  managerCorrection.orders[0].extraServices[0].supplyItems[0].qty = 2;
+  assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, false, ['manager-a']), 'Завершённый исторический проект может исправлять только владелец.');
+  assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, true), null, 'the owner keeps an explicit correction path');
+  assert.equal(managerCorrection.orders[0]._historicalMaterialCost, 125, 'an owner correction refreshes the frozen film cost on the server');
+  assert.equal(managerCorrection.orders[0]._historicalSupplyCost, 6, 'an owner correction refreshes the frozen supply cost on the server');
+
+  const forgedCorrection = structuredClone(completedCurrent);
+  forgedCorrection.orders[0].extraServices[0].qty = 25;
+  forgedCorrection.orders[0]._historicalMaterialCost = 1;
+  assert.equal(
+    prepareServiceSolutions(completedCurrent, forgedCorrection, true),
+    'Складскую себестоимость исторического проекта рассчитывает только система.',
+    'even an owner cannot submit their own snapshot during a correction',
+  );
+
+  const noCostCorrection = structuredClone(completedCurrent);
+  noCostCorrection.orders[0].managerId = 'manager-b';
+  assert.equal(prepareServiceSolutions(completedCurrent, noCostCorrection, true), null);
+  assert.equal(noCostCorrection.orders[0]._historicalMaterialCost, 50, 'an unrelated correction keeps the original film snapshot');
+  assert.equal(noCostCorrection.orders[0]._historicalSupplyCost, 3, 'an unrelated correction keeps the original supply snapshot');
+
+  const forgedCompletedInventory = structuredClone(completedCurrent);
+  Object.assign(forgedCompletedInventory.orders[0], { _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [] });
+  assert.equal(
+    prepareServiceSolutions(completedCurrent, forgedCompletedInventory, false, ['manager-a']),
+    'Складскую себестоимость исторического проекта рассчитывает только система.',
+  );
+});
 
 test('server: the same plan with its fields in another order is not a change (jsonb reorders keys)', () => {
   const users = [{ id: 'i1', role: 'installer' }];
