@@ -2,6 +2,14 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-04 — Safe CallRail rejection diagnosis (in progress)
+
+- Task owner: Codex, branch `codex/callrail-rejection-diagnostics-20261104`, based on verified `origin/main` and active production release `68826e5` (merged PR #461).
+- The provider-supported update of the original genuine completed call reached the dedicated Cloudflare Worker at 02:03 UTC and received 400. Security Events showed no callback block; Worker analytics showed forwarding. CRM receipt remains unconfirmed. The timeline API exposed `answered: null`, while the saved legacy update returned `answered: false`, so PR #461 is not proven to explain the remaining rejection.
+- Add only a signed-request rejection reason and fixed field types to protected application logs; malformed JSON records byte count. No caller values, body, URL/query, headers or signature are logged. Authentication and all intake/qualification rules remain unchanged. All 1,021 unit tests, TypeScript and production build pass; independent Claude CLI review reports NO_FINDINGS. Published-head CI, release and genuine recovery remain pending.
+- Redesign MR !50 merged at `cf00230` after exact-head CI 2536 passed, then the two marketing files were deployed from that merged ref with a guarded baseline and backup `/home/runcloud/backups/rolan-pro/20261105T015510Z-callrail-cf00230`. Origin and public edge verify noindex, no external tracking loader, and no generated Critical CSS.
+- PR #461 passed published CI 41951264405 and merged-main CI 41951791127. Release workflow 41952155580 failed only its final external health curl (exit 28); pinned SSH independently verified the active release, matching normalizer source hash and login 200, and non-record-creating signed probes reached CRM with 400 through both direct and dedicated endpoints. Do not rerun deployment blindly.
+
 ## 2026-11-04 — Completed CallRail calls with unknown answer status (in progress)
 
 - Task owner: Codex, branch `codex/callrail-null-answer-20261104`, based on verified `origin/main` and active production release `ad81373` (merged PR #459).

@@ -15,6 +15,10 @@ function id(value: unknown) {
   const result = typeof value === "number" && Number.isSafeInteger(value) ? String(value) : text(value, 191);
   return /^[A-Za-z0-9_-]{1,191}$/.test(result) ? result : "";
 }
+export function callrailPayloadTypes(input: unknown) {
+  const body = record(input);
+  return Object.fromEntries(["id", "start_time", "duration", "answered"].map(key => [key, body[key] === null ? "null" : typeof body[key]]));
+}
 export function verifyCallrailSignature(raw: string | Uint8Array, signature: string | null, key: string) {
   if (!key || !signature || !/^[A-Za-z0-9+/]{27}=$/.test(signature)) return false;
   const expected = createHmac("sha1", key).update(raw).digest();

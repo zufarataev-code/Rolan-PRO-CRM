@@ -3,9 +3,17 @@ import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
-import { CallrailError, normalizeCallrailCall, verifyCallrailSignature } from "./callrail-core";
+import { CallrailError, callrailPayloadTypes, normalizeCallrailCall, verifyCallrailSignature } from "./callrail-core";
 
 const call = { id: 123, company_id: 456, direction: "inbound", start_time: "2026-11-01T10:00:00-08:00", duration: "63", answered: true, customer_phone_number: "(202) 555-0123", source_name: "Google Ads" };
+test("CallRail rejection diagnostics expose only fixed field types, never caller values", () => {
+  assert.deepEqual(callrailPayloadTypes({ ...call, answered: null, note: "private note", signature: "private key" }), {
+    id: "number", start_time: "string", duration: "string", answered: "null",
+  });
+  for (const input of [null, "private body", [call]]) assert.deepEqual(callrailPayloadTypes(input), {
+    id: "undefined", start_time: "undefined", duration: "undefined", answered: "undefined",
+  });
+});
 test("CallRail verifies the exact raw body and rejects missing, malformed or altered signatures", () => {
   const raw = JSON.stringify(call), key = "offline-fixture-key";
   const signature = createHmac("sha1", key).update(raw).digest("base64");
