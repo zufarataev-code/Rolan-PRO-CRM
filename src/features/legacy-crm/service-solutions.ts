@@ -73,6 +73,20 @@ function historicalSupplyCostSnapshot(order: Row, payload: Row): number {
   return Number(total.toFixed(4));
 }
 
+/** Only these service facts can change a frozen material or supply snapshot. */
+function historicalCostFacts(order: Row): Row[] {
+  return rows(order.extraServices).map(line => ({
+    id: line.id,
+    quickProjectLine: line.quickProjectLine === true,
+    type: line.type,
+    includedBy: line.includedBy,
+    catalogId: line.catalogId,
+    unit: line.unit,
+    qty: line.qty,
+    supplyItems: rows(line.supplyItems).map(item => ({ supplyId: item.supplyId, qty: item.qty })),
+  }));
+}
+
 /**
  * Facts entered through the historical-project workspace. They determine
  * revenue, direct cost, payroll and production history, so another manager
@@ -413,6 +427,9 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
       && stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
       return 'Складскую себестоимость исторического проекта рассчитывает только система.';
     }
+    const historicalCostCorrection = owner
+      && oldOrder.quickProjectImportedCompleted === true && order.quickProjectImportedCompleted === true
+      && stableJson(historicalCostFacts(order)) !== stableJson(historicalCostFacts(oldOrder));
     const historicalMarkersChanged = oldOrder.id !== undefined && (
       order.quickEntry !== oldOrder.quickEntry
       || order.quickEntryDraft !== oldOrder.quickEntryDraft
@@ -460,6 +477,12 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
           plan.endsAt = `${line.endDate}T17:00:00`;
         }
       }
+      order._historicalMaterialCost = historicalMaterialCostSnapshot(order, next);
+      order._historicalSupplyCost = historicalSupplyCostSnapshot(order, next);
+    }
+    if (historicalCostCorrection) {
+      // The browser may only submit the previous snapshots. The server replaces
+      // them after an owner changes a cost-bearing fact on a completed import.
       order._historicalMaterialCost = historicalMaterialCostSnapshot(order, next);
       order._historicalSupplyCost = historicalSupplyCostSnapshot(order, next);
     }

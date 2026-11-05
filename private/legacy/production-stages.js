@@ -3353,10 +3353,10 @@ function installPlanDayKeys(plan) {
   const key = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
   const keys = [key(start)];
   const cursor = new Date(start);
-  while (keys.length < 14) {
+  while (true) {
     cursor.setDate(cursor.getDate() + 1);
     cursor.setHours(0, 0, 0, 0);
-    if (cursor >= end) break;
+    if (Number.isNaN(cursor.getTime()) || cursor >= end) break;
     keys.push(key(cursor));
   }
   return keys;

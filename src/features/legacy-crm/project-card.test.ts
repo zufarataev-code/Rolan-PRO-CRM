@@ -628,11 +628,37 @@ test('server: managers own only their historical drafts and completed imports ar
   );
 
   const completedCurrent = structuredClone(current);
-  Object.assign(completedCurrent.orders[0], { status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true });
+  completedCurrent.settings.catalog = [{ id: 'film', category: 'protective', costPerSqft: 4, wastePct: 25 }];
+  completedCurrent.supplies = [{ id: 'solution', costPerUnit: 3 }];
+  Object.assign(completedCurrent.orders[0], {
+    status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true,
+    _historicalMaterialCost: 50, _historicalSupplyCost: 3,
+  });
+  Object.assign(completedCurrent.orders[0].extraServices[0], {
+    catalogId: 'film', supplyItems: [{ supplyId: 'solution', qty: 1 }],
+  });
   const managerCorrection = structuredClone(completedCurrent);
   managerCorrection.orders[0].extraServices[0].qty = 25;
+  managerCorrection.orders[0].extraServices[0].supplyItems[0].qty = 2;
   assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, false, ['manager-a']), 'Завершённый исторический проект может исправлять только владелец.');
   assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, true), null, 'the owner keeps an explicit correction path');
+  assert.equal(managerCorrection.orders[0]._historicalMaterialCost, 125, 'an owner correction refreshes the frozen film cost on the server');
+  assert.equal(managerCorrection.orders[0]._historicalSupplyCost, 6, 'an owner correction refreshes the frozen supply cost on the server');
+
+  const forgedCorrection = structuredClone(completedCurrent);
+  forgedCorrection.orders[0].extraServices[0].qty = 25;
+  forgedCorrection.orders[0]._historicalMaterialCost = 1;
+  assert.equal(
+    prepareServiceSolutions(completedCurrent, forgedCorrection, true),
+    'Складскую себестоимость исторического проекта рассчитывает только система.',
+    'even an owner cannot submit their own snapshot during a correction',
+  );
+
+  const noCostCorrection = structuredClone(completedCurrent);
+  noCostCorrection.orders[0].managerId = 'manager-b';
+  assert.equal(prepareServiceSolutions(completedCurrent, noCostCorrection, true), null);
+  assert.equal(noCostCorrection.orders[0]._historicalMaterialCost, 50, 'an unrelated correction keeps the original film snapshot');
+  assert.equal(noCostCorrection.orders[0]._historicalSupplyCost, 3, 'an unrelated correction keeps the original supply snapshot');
 
   const forgedCompletedInventory = structuredClone(completedCurrent);
   Object.assign(forgedCompletedInventory.orders[0], { _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [] });
