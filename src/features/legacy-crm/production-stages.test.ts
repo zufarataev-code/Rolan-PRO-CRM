@@ -171,6 +171,29 @@ test('historical services accrue and settle in each service completion period',(
   assert.deepEqual(payload.payrollPayments.map((payment:Row)=>payment.amount),[100,200]);
   assert.deepEqual(order.payouts.map((payment:Row)=>payment.accrualId),['line:jan','line:feb']);
 });
+test('fixed-per-job installer receives one historical accrual on the last service date',()=>{
+  const payload:Row={settings:{},users:[{id:'i1',role:'installer',name:'Installer',payConfig:{type:'fixed_per_job',fixedPerJob:450}}],payrollPayments:[],orders:[]};
+  const order:Row={id:'old',number:'R-OLD',quickProjectImportedCompleted:true,installerIds:['i1'],installationDoneAt:'2026-02-20T12:00:00.000Z',payouts:[]};
+  payload.orders.push(order);
+  const lines=[
+    {key:'line:jan',name:'January service',installerIds:['i1'],sources:[{endDate:'2026-01-12'}]},
+    {key:'line:feb',name:'February service',installerIds:['i1'],sources:[{endDate:'2026-02-20'}]},
+  ];
+  const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));
+  const source=(name:string)=>{const start=html.indexOf(`function ${name}(`);return html.slice(start,html.indexOf('\n}',start)+2);};
+  const c=vm.createContext({db:payload,state:{currentUserId:'owner'},getOrder:()=>order,getUser:(id:string)=>payload.users.find((u:Row)=>u.id===id),
+    projectQuickLines:()=>[{id:'jan'},{id:'feb'}],projectLines:()=>lines,projectQuickDateValue:(value:string)=>value,
+    installerSeniorFactor:()=>1,financeDate:(value:string)=>new Date(value),fmtMoney:String,uid:()=>String(payload.payrollPayments.length+order.payouts.length),save:()=>{},render:()=>{},confirm:()=>true,alert:()=>{},
+  });
+  vm.runInContext(['historicalProjectInstallerAccruals','calcUserPayoutForPeriod','payrollPeriodAllocatedAmount','payrollPaidForPeriod','markPayoutPaid'].map(source).join('\n'),c);
+  const january=[new Date('2026-01-01T00:00:00Z'),new Date('2026-01-31T23:59:59Z')];
+  const february=[new Date('2026-02-01T00:00:00Z'),new Date('2026-02-28T23:59:59Z')];
+  assert.equal(c.calcUserPayoutForPeriod('i1',...january).total,0);
+  assert.deepEqual(JSON.parse(JSON.stringify(c.calcUserPayoutForPeriod('i1',...february))),{total:450,breakdown:[{kind:'fixed_per_job',orderId:'old',orderNumber:'R-OLD',accrualId:'historical-fixed:i1',label:'Фикс за проект · $450',amount:450,date:'2026-02-20T12:00:00.000Z',paid:false}]});
+  c.markPayoutPaid('i1',february[0].toISOString(),february[1].toISOString());
+  assert.equal(payload.payrollPayments[0].amount,450);
+  assert.deepEqual(order.payouts.map((payment:Row)=>payment.accrualId),['historical-fixed:i1']);
+});
 test('an unassigned internal stage retains a labor reserve; an external stage uses its invoice instead',()=>{
   const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));const start=html.indexOf('function projectStageReferenceAmount(');
   const c=vm.createContext({db:{settings:{complexityCoefs:{standard:1}}},projectLines:()=>[{key:'service',unit:'sqft',installerPay:300}]});

@@ -146,25 +146,40 @@ function historicalProjectInstallerAccruals(o, user) {
   const pc = user?.payConfig || {};
   if (!o?.quickProjectImportedCompleted || !projectQuickLines(o).length || user?.role === 'measurer' || !['per_sqft', 'fixed_per_job'].includes(pc.type)) return [];
   const lines = projectLines(o).filter(line => (line.installerIds || []).includes(user.id));
-  const accruals = lines.map(line => {
+  const completedLines = lines.map(line => {
     const sourceDates = (line.sources || []).map(source => projectQuickDateValue(source?.endDate)).filter(Boolean).sort();
     const completedOn = sourceDates[sourceDates.length - 1] || '';
     const date = completedOn ? `${completedOn}T12:00:00.000Z` : line.installationAt || o.installationDoneAt || '';
+    return { line, date };
+  }).filter(item => item.date);
+  if (pc.type === 'fixed_per_job') {
+    const latest = completedLines.sort((a, b) => String(a.date).localeCompare(String(b.date))).at(-1);
+    const amount = Math.max(0, Number(pc.fixedPerJob) || 0);
+    if (!latest || amount <= 0) return [];
+    return [{
+      kind: pc.type,
+      orderId: o.id,
+      orderNumber: o.number,
+      accrualId: `historical-fixed:${user.id}`,
+      label: `Фикс за проект · $${Number(pc.fixedPerJob) || 0}`,
+      amount,
+      date: latest.date,
+    }];
+  }
+  const accruals = completedLines.map(({ line, date }) => {
     const crewCount = Math.max(1, new Set(line.installerIds || []).size);
-    const amount = pc.type === 'fixed_per_job'
-      ? Math.max(0, Number(pc.fixedPerJob) || 0)
-      : Math.max(0, Number(line.installerPay) || 0) / crewCount * installerSeniorFactor(user);
+    const amount = Math.max(0, Number(line.installerPay) || 0) / crewCount * installerSeniorFactor(user);
     return {
       kind: pc.type,
       orderId: o.id,
       orderNumber: o.number,
       accrualId: line.key,
-      label: pc.type === 'fixed_per_job' ? `${line.name} · фикс $${Number(pc.fixedPerJob) || 0}` : `${line.name} · ${projectLineQtyText(line)}`,
+      label: `${line.name} · ${projectLineQtyText(line)}`,
       amount,
       date,
     };
-  }).filter(item => item.date && item.amount > 0);
-  if (pc.type === 'per_sqft' && accruals.length) {
+  }).filter(item => item.amount > 0);
+  if (accruals.length) {
     // Preserve the existing project total: the visit minimum and travel are
     // paid once and belong to the last completed service of the project.
     const currentTotal = orderInstallerPayoutForUser(o, user.id);
