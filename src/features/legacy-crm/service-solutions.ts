@@ -274,6 +274,16 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
   }
   for (const order of rows(next.orders)) {
     const oldOrder = rows(current.orders).find(item=>item.id===order.id) || {};
+    // The dedicated historical-entry screen is an explicit owner-authorized
+    // transition. It may close only a persisted historical draft; it does not
+    // turn on the broad global import mode or weaken ordinary project stages.
+    const historicalImportClosing = owner
+      && oldOrder.quickEntry === true && oldOrder.quickEntryDraft === true && oldOrder.quickProjectImportedCompleted !== true
+      && order.quickEntry === true && order.quickEntryDraft === false && order.quickProjectImportedCompleted === true
+      && CLOSED_PROJECT_STATUSES.includes(String(order.status));
+    if (historicalImportClosing && rows(order.extraServices).some(line => line.quickProjectLine === true && !line.offeringId)) {
+      return 'Выберите конкретную услугу для каждой позиции исторического проекта.';
+    }
     const selectedMaterials = object(order.offeringCatalogIds);
     const selectedOfferingIds = new Set([order.offeringId, ...(Array.isArray(order.offeringIds) ? order.offeringIds : [])].filter((id): id is string => typeof id === 'string' && !!id));
     for (const [offeringId, filmId] of Object.entries(selectedMaterials)) {
@@ -450,7 +460,7 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     const schedulesChanged = stableJson(order.serviceSchedules) !== stableJson(oldOrder.serviceSchedules);
     // Production assignments are operational decisions after client approval,
     // even when the browser submits only a partial draft and keeps the status.
-    if (!importing && schedulesChanged && rows(order.serviceSchedules).length && oldOrder.id !== undefined
+    if (!importing && !historicalImportClosing && schedulesChanged && rows(order.serviceSchedules).length && oldOrder.id !== undefined
       && !['proposal_accepted', ...SCHEDULED_PROJECT_STATUSES, ...CLOSED_PROJECT_STATUSES].includes(String(oldOrder.status))) {
       return 'Исполнителей и даты назначают после принятия КП.';
     }

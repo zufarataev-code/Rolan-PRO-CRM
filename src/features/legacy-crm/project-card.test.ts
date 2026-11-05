@@ -517,6 +517,32 @@ test('every way into installation refreshes the film purchase deadline; a histor
   assert.deepEqual(plain(c.projectPendingSizedServices(draft)), [], 'before measurement a quick line carries its service');
 });
 
+test('server: an owner can close only a persisted historical draft with a concrete service', () => {
+  const settings = { serviceOfferings: [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }] };
+  const users = [{ id: 'i1', role: 'installer' }];
+  const order = (offeringId = 'a1'): Row => ({
+    id: 'historical', status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false,
+    serviceType: 'protective_film', offeringIds: offeringId ? [offeringId] : [], offeringUnits: offeringId ? { [offeringId]: 'sqft' } : {},
+    measurements: { rooms: [] },
+    extraServices: [{ id: 'line', quickProjectLine: true, offeringId, unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film', installerIds: ['i1'], startDate: '2026-09-01' }],
+  });
+  const current: Row = { settings, users, orders: [order()] };
+  const next = structuredClone(current);
+  Object.assign(next.orders[0], {
+    status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true,
+    serviceSchedules: [{ id: 'line:line', installerIds: ['i1'], installationAt: '2026-09-01T12:00:00.000Z' }],
+  });
+  assert.equal(prepareServiceSolutions(current, next, true), null, 'the owner-authorized historical transition does not need global import mode');
+
+  const missingCurrent: Row = { settings, users, orders: [order('')] };
+  const missingNext = structuredClone(missingCurrent);
+  Object.assign(missingNext.orders[0], {
+    status: 'completed', quickEntryDraft: false, quickProjectImportedCompleted: true,
+    serviceSchedules: [{ id: 'line:line', installerIds: ['i1'], installationAt: '2026-09-01T12:00:00.000Z' }],
+  });
+  assert.equal(prepareServiceSolutions(missingCurrent, missingNext, true), 'Выберите конкретную услугу для каждой позиции исторического проекта.');
+});
+
 
 test('server: the same plan with its fields in another order is not a change (jsonb reorders keys)', () => {
   const users = [{ id: 'i1', role: 'installer' }];

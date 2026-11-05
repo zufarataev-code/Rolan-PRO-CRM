@@ -29196,7 +29196,8 @@ function projectQuickCompletionIssues(o) {
   const quickSupplyDemand = projectQuickRequiredSupplies(o, quickLines);
   const issues = [];
   if (!quickLines.length) issues.push('нет позиций проекта');
-  if (quickLines.some(line => !line.serviceType)) issues.push('не выбрана услуга');
+  if (quickLines.some(line => !line.serviceType)) issues.push('не выбрано направление');
+  if (quickLines.some(line => !line.offeringId)) issues.push('не выбрана конкретная услуга');
   if (quickLines.some(line => !line.catalogId && !projectQuickManualFilmName(line))) issues.push('не выбрана плёнка');
   if (quickLines.some(line => !String(line.label || '').trim())) issues.push('не указано название позиции');
   if (quickLines.some(line => Number(line.qty) <= 0)) issues.push('не указан метраж');
