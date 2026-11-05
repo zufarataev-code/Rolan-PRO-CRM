@@ -150,7 +150,7 @@ function orderInstallerPayoutForUser(o, userId) {
 function historicalProjectInstallerAccruals(o, user) {
   const pc = user?.payConfig || {};
   const historicalLines = typeof projectHistoricalEntryLines === 'function' ? projectHistoricalEntryLines(o) : projectQuickLines(o);
-  if (!o?.quickProjectImportedCompleted || !historicalLines.length || user?.role === 'measurer' || !['per_sqft', 'fixed_per_job'].includes(pc.type)) return [];
+  if (!o?.quickProjectImportedCompleted || !historicalLines.length || (pc.type === 'fixed_per_job' && o.measurerId === user?.id) || !['per_sqft', 'fixed_per_job'].includes(pc.type)) return [];
   const lines = projectLines(o).filter(line => (line.installerIds || []).length);
   const completedLines = lines.map(line => {
     const sourceDates = (line.sources || []).map(source => projectQuickDateValue(source?.endDate)).filter(Boolean).sort();
@@ -274,8 +274,9 @@ function calcUserPayoutForPeriod(userId, startDate, endDate, orders = db.orders)
     if (pc.type === 'commission') { trigger = (u.id === o.managerId); dateField = o.paidAt; }
     else if (pc.type === 'per_sqft') { trigger = (o.installerIds||[]).includes(u.id); dateField = o.installationDoneAt; }
     else if (pc.type === 'fixed_per_job') {
-      // measurer: when measurement done; otherwise installer-fixed
-      if (u.role === 'measurer') { trigger = (u.id === o.measurerId); dateField = o.measurementDoneAt; }
+      // Assignment is the source of truth: the owner may also perform a survey
+      // without creating a duplicate employee card with the measurer role.
+      if (u.id === o.measurerId) { trigger = true; dateField = o.measurementDoneAt; }
       else { trigger = (o.installerIds||[]).includes(u.id); dateField = o.installationDoneAt; }
     } else return;
     if (!trigger || !dateField) return;
@@ -782,6 +783,7 @@ function orderExtraServicesCost(o) {
 }
 function orderFilmCost(o) {
   o=projectIncludedDirectionOrder(o);
+  if (o?.quickProjectImportedCompleted === true && Number.isFinite(o._historicalMaterialCost)) return Math.max(0, Number(o._historicalMaterialCost));
   if (o._inventoryDeducted && Number.isFinite(o._inventoryMaterialCost)) return o._inventoryMaterialCost;
   const cutCost = orderFilmCutMaterialCost(o);
   if (cutCost != null) return cutCost;

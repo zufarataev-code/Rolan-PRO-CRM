@@ -67,7 +67,8 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   cookie = login.headers.get("set-cookie")!.split(";")[0];
   const settings = { conversion_owner_customer_id: "900000002", qualified_lead_action_id: "100", converted_lead_action_id: "101", qualification_rules: { pipeline_status_code: "PROPOSAL_SENT" }, upload_enabled: false, validate_only: true };
   await db.googleAdsIntegrationSetting.upsert({ where: { setting_key: "default" }, create: { setting_key: "default", ...settings }, update: settings });
-  const call = { ...fixture("first"), answered: false, duration: 0, spam: true };
+  const firstCall = fixture("first");
+  const call = { ...firstCall, id: undefined, call_id: firstCall.id, answered: null, duration: 64, call_type: "missed", spam: true };
   assert.equal((await send(call, "invalid")).status, 401);
   assert.equal((await send({ ...call, company_id: "another" })).status, 403);
   assert.equal((await send({ ...call, direction: "outbound" })).body.ignored, true);
@@ -75,9 +76,14 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   for (const result of results) assert.equal(result.status, 200);
   const leadId = results[0].body.lead_id;
   ids.push(leadId);
+  const aliasRepeat = await send({ ...call, call_id: undefined, resource_id: firstCall.id });
+  assert.equal(aliasRepeat.body.lead_id, leadId);
+  assert.equal(aliasRepeat.body.duplicate, true);
   const missed = await db.lead.findUniqueOrThrow({ where: { lead_id: leadId }, include: { pipeline_status: true } });
   assert.equal(missed.pipeline_status.status_code, "NEW_LEAD");
   assert.match(missed.notes!, /CallRail пометил как спам/);
+  const receipt = await db.activityLog.findFirstOrThrow({ where: { entity_id: leadId, action_key: "integration.callrail.call" } });
+  assert.equal((receipt.metadata as Record<string, unknown>).answered, null);
   const enriched = await fetch(base + "/api/v1/leads/" + leadId, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ name: "Enriched offline caller", email: "caller@example.invalid" }) });
   assert.equal(enriched.status, 200);
   assert.equal(await db.conversionEvent.count({ where: { lead_id: leadId } }), 0, "contact enrichment alone is not qualification");

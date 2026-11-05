@@ -518,13 +518,16 @@ test('every way into installation refreshes the film purchase deadline; a histor
 });
 
 test('server: an owner can close only a persisted historical draft with a concrete service', () => {
-  const settings = { serviceOfferings: [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }] };
+  const settings = {
+    serviceOfferings: [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }],
+    catalog: [{ id: 'film', category: 'protective', costPerSqft: 5, wastePct: 10 }],
+  };
   const users = [{ id: 'i1', role: 'installer' }];
   const order = (offeringId = 'a1'): Row => ({
     id: 'historical', managerId: 'manager-a', status: 'new', quickEntry: true, quickEntryDraft: true, quickProjectImportedCompleted: false,
     serviceType: 'protective_film', offeringIds: offeringId ? [offeringId] : [], offeringUnits: offeringId ? { [offeringId]: 'sqft' } : {},
     measurements: { rooms: [] },
-    extraServices: [{ id: 'line', quickProjectLine: true, offeringId, unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film', installerIds: ['i1'], startDate: '2026-09-01' }],
+    extraServices: [{ id: 'line', quickProjectLine: true, offeringId, catalogId: 'film', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film', installerIds: ['i1'], startDate: '2026-09-01', endDate: '2026-09-03' }],
   });
   const current: Row = { settings, users, orders: [order()] };
   const next = structuredClone(current);
@@ -533,6 +536,8 @@ test('server: an owner can close only a persisted historical draft with a concre
     serviceSchedules: [{ id: 'line:line', installerIds: ['i1'], installationAt: '2026-09-01T12:00:00.000Z' }],
   });
   assert.equal(prepareServiceSolutions(current, next, true), null, 'the owner-authorized historical transition does not need global import mode');
+  assert.equal(next.orders[0]._historicalMaterialCost, 55, 'server freezes 10 sq ft + 10% waste at the current $5 purchase cost');
+  assert.equal(next.orders[0].serviceSchedules[0].endsAt, '2026-09-03T17:00:00', 'the historical service keeps its full multi-day range');
   const forgedInventoryClose = structuredClone(next);
   Object.assign(forgedInventoryClose.orders[0], { _inventoryDeducted: true, _inventoryMaterialCost: 1, _inventoryLog: [] });
   assert.equal(

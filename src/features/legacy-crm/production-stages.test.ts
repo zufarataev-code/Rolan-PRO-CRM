@@ -239,6 +239,18 @@ test('fixed-per-job installer receives one historical accrual on the last servic
   assert.equal(payload.payrollPayments[0].amount,450);
   assert.deepEqual(order.payouts.map((payment:Row)=>payment.accrualId),['historical-fixed:i1']);
 });
+test('owner assigned as historical surveyor receives fixed survey pay',()=>{
+  const owner:Row={id:'owner',role:'owner',name:'Owner',payConfig:{type:'fixed_per_job',fixedPerJob:175}};
+  const order:Row={id:'old',number:'R-OLD',quickProjectImportedCompleted:true,measurerId:'owner',measurementDoneAt:'2026-01-10T12:00:00.000Z',installerIds:[],payouts:[]};
+  const payload:Row={settings:{},users:[owner],orders:[order]};
+  const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));
+  const source=(name:string)=>{const start=html.indexOf(`function ${name}(`);return html.slice(start,html.indexOf('\n}',start)+2);};
+  const c=vm.createContext({db:payload,getUser:()=>owner,projectStages:()=>[],projectHistoricalEntryLines:()=>[{id:'service'}],projectQuickLines:()=>[{id:'service'}]});
+  vm.runInContext(['historicalProjectInstallerAccruals','calcUserPayoutForPeriod'].map(source).join('\n'),c);
+  const result=JSON.parse(JSON.stringify(c.calcUserPayoutForPeriod('owner',new Date('2026-01-01T00:00:00Z'),new Date('2026-01-31T23:59:59Z'))));
+  assert.equal(result.total,175);
+  assert.equal(result.breakdown[0].date,'2026-01-10T12:00:00.000Z');
+});
 test('an unassigned internal stage retains a labor reserve; an external stage uses its invoice instead',()=>{
   const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));const start=html.indexOf('function projectStageReferenceAmount(');
   const c=vm.createContext({db:{settings:{complexityCoefs:{standard:1}}},projectLines:()=>[{key:'service',unit:'sqft',installerPay:300}]});

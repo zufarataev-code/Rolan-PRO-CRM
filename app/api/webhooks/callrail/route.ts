@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { CallrailError, normalizeCallrailCall, verifyCallrailSignature } from "@/features/integrations/callrail-core";
+import { CallrailError, callrailPayloadTypes, normalizeCallrailCall, verifyCallrailSignature } from "@/features/integrations/callrail-core";
 import { importCallrailCall } from "@/features/integrations/callrail";
 
 export const runtime = "nodejs";
@@ -22,13 +22,19 @@ export async function POST(request: Request) {
   const raw = Buffer.concat(chunks);
   if (!verifyCallrailSignature(raw, request.headers.get("signature"), key)) return NextResponse.json({ ok: false, error: "invalid_signature" }, { status: 401 });
   let input: unknown;
-  try { input = JSON.parse(raw.toString("utf8")); } catch { return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+  try { input = JSON.parse(raw.toString("utf8")); } catch {
+    console.warn("callrail_rejected", "invalid_json", { bytes: raw.length });
+    return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
+  }
   try {
     const call = normalizeCallrailCall(input, companyId);
     if (!call) return NextResponse.json({ ok: true, ignored: true });
     return NextResponse.json({ ok: true, ...await importCallrailCall(call) });
   } catch (cause) {
-    if (cause instanceof CallrailError) return NextResponse.json({ ok: false, error: cause.code }, { status: cause.status });
+    if (cause instanceof CallrailError) {
+      console.warn("callrail_rejected", cause.code, callrailPayloadTypes(input));
+      return NextResponse.json({ ok: false, error: cause.code }, { status: cause.status });
+    }
     console.error("callrail_ingest_failed");
     return NextResponse.json({ ok: false, error: "call_ingest_failed" }, { status: 500 });
   }

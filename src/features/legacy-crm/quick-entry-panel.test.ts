@@ -30,6 +30,22 @@ test('historical entry first creates one draft project, then opens the canonical
   assert.doesNotMatch(create, /quickEntryComplete\(/, 'creating the header must not close the project automatically');
 });
 
+test('completed historical material cost is frozen instead of following later warehouse prices', () => {
+  const cost = fn(html, 'orderFilmCost');
+  const productionCost = fn(stages, 'orderFilmCost');
+  assert.match(cost, /quickProjectImportedCompleted === true && Number\.isFinite\(o\._historicalMaterialCost\)/);
+  assert.match(productionCost, /quickProjectImportedCompleted === true && Number\.isFinite\(o\._historicalMaterialCost\)/);
+  assert.ok(cost.indexOf('_historicalMaterialCost') < cost.indexOf('_inventoryMaterialCost'));
+  assert.ok(productionCost.indexOf('_historicalMaterialCost') < productionCost.indexOf('_inventoryMaterialCost'));
+});
+
+test('historical service plans preserve both the start and end dates', () => {
+  const assignment = fn(html, 'projectServiceAssignment');
+  const plans = fn(html, 'projectPlannedSchedules');
+  assert.match(assignment, /endsAt: line\?\.endDate \? `\$\{line\.endDate\}T17:00:00` : ''/);
+  assert.match(plans, /endsAt: assignment\.endsAt \|\| ''/);
+});
+
 test('rates come only from the directories: the panel reads orderPSS and calcUserPayoutForPeriod', () => {
   const econ = fn(stages, 'quickEntryEconomics');
   assert.match(econ, /const pss = orderPSS\(o\);/);

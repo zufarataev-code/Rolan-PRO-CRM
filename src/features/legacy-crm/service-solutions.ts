@@ -11,7 +11,55 @@ const stableJson = (value: unknown): string => JSON.stringify(value, (_key, item
     : item);
 const rows = (x: unknown): Row[] => Array.isArray(x) ? x.map(object) : [];
 const scope = (order: Row) => [...rows(order.extraServices), ...rows(object(order.measurements).rooms).flatMap(room => rows(room.windows))];
-const HISTORICAL_INVENTORY_FIELDS = ['_inventoryDeducted', '_inventoryMaterialCost', '_inventoryLog'] as const;
+const HISTORICAL_INVENTORY_FIELDS = ['_inventoryDeducted', '_inventoryMaterialCost', '_inventoryLog', '_historicalMaterialCost'] as const;
+
+/**
+ * Historical projects do not consume today's stock, but their P&L still needs
+ * the purchase cost known when the owner confirms the import. Calculate it on
+ * the server so a browser cannot forge the snapshot, then keep it immutable.
+ */
+function historicalMaterialCostSnapshot(order: Row, payload: Row): number {
+  const inventory = rows(payload.inventory);
+  const catalog = rows(object(payload.settings).catalog);
+  const mm2ToSqft = (value: number) => value / 92903.04;
+  const costPerSqft = (catalogId: string): number => {
+    const rolls = inventory.filter(roll => roll.catalogId === catalogId);
+    let remainingSqft = 0;
+    let remainingValue = 0;
+    for (const roll of rolls) {
+      const originalM = Math.max(0, Number(roll.originalLengthM) || 0);
+      const remainingM = Math.max(0, Number(roll.remainingLengthM) || 0);
+      const widthMm = Math.max(0, Number(roll.widthMm) || 0);
+      const lotCost = Math.max(0, Number(roll.costTotal) || 0);
+      if (originalM > 0 && remainingM > 0 && widthMm > 0 && lotCost > 0) {
+        remainingSqft += mm2ToSqft(widthMm * remainingM * 1000);
+        remainingValue += lotCost * remainingM / originalM;
+      }
+    }
+    if (remainingSqft > 0) return remainingValue / remainingSqft;
+    let historicalSqft = 0;
+    let historicalValue = 0;
+    for (const roll of rolls) {
+      const originalM = Math.max(0, Number(roll.originalLengthM) || 0);
+      const widthMm = Math.max(0, Number(roll.widthMm) || 0);
+      const lotCost = Math.max(0, Number(roll.costTotal) || 0);
+      if (originalM > 0 && widthMm > 0 && lotCost > 0) {
+        historicalSqft += mm2ToSqft(widthMm * originalM * 1000);
+        historicalValue += lotCost;
+      }
+    }
+    if (historicalSqft > 0) return historicalValue / historicalSqft;
+    return Math.max(0, Number(catalog.find(item => item.id === catalogId)?.costPerSqft) || 0);
+  };
+  const total = rows(order.extraServices)
+    .filter(line => line.quickProjectLine === true && line.unit === 'sqft' && typeof line.catalogId === 'string' && line.catalogId)
+    .reduce((sum, line) => {
+      const film = catalog.find(item => item.id === line.catalogId);
+      const sqft = Math.max(0, Number(line.qty) || 0) * (1 + Math.max(0, Number(film?.wastePct) || 0) / 100);
+      return sum + sqft * costPerSqft(line.catalogId);
+    }, 0);
+  return Number(total.toFixed(4));
+}
 
 /**
  * Facts entered through the historical-project workspace. They determine
@@ -81,6 +129,7 @@ function projectPlans(order: Row): Row[] {
       id,
       installerIds: Array.isArray(line?.installerIds) && line.installerIds.length ? line.installerIds : crew,
       installationAt: typeof line?.startDate === 'string' && line.startDate ? `${line.startDate}T09:00:00` : at,
+      endsAt: typeof line?.endDate === 'string' && line.endDate ? `${line.endDate}T17:00:00` : '',
     };
   });
 }
@@ -348,7 +397,8 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
     const historicalImportExisting = oldOrder.id !== undefined
       && (oldOrder.quickEntry === true || oldOrder.quickEntryDraft === true || oldOrder.quickProjectImportedCompleted === true);
     if (historicalImportExisting && HISTORICAL_INVENTORY_FIELDS.some(field =>
-      stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
+      !(historicalImportClosing && field === '_historicalMaterialCost')
+      && stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
       return 'Складскую себестоимость исторического проекта рассчитывает только система.';
     }
     const historicalMarkersChanged = oldOrder.id !== undefined && (
@@ -391,6 +441,14 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
           if (!(Number(component.qty) > 0)) return 'Укажите фактическое количество каждой включённой работы исторического проекта.';
         }
       }
+      for (const plan of rows(order.serviceSchedules)) {
+        const lineId = typeof plan.id === 'string' && plan.id.startsWith('line:') ? plan.id.slice(5) : '';
+        const line = rows(order.extraServices).find(item => item.id === lineId);
+        if (line && typeof line.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(line.endDate)) {
+          plan.endsAt = `${line.endDate}T17:00:00`;
+        }
+      }
+      order._historicalMaterialCost = historicalMaterialCostSnapshot(order, next);
     }
     const selectedMaterials = object(order.offeringCatalogIds);
     const selectedOfferingIds = new Set([order.offeringId, ...(Array.isArray(order.offeringIds) ? order.offeringIds : [])].filter((id): id is string => typeof id === 'string' && !!id));

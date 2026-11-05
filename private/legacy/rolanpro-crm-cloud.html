@@ -2114,6 +2114,23 @@
   .qe-check { display:inline-flex;align-items:center;gap:6px;border:1px solid #D9DEE6;border-radius:999px;padding:6px 10px;background:#fff;font-size:12px;font-weight:600;color:#141A26;cursor:pointer;min-height:32px; } .qe-check input { width:16px;height:16px;margin:0; } .qe-check.on { background:var(--qe-tint,#eff6ff);border-color:var(--qe-color,#2563eb);color:var(--qe-color,#2563eb); } .qe-check small { color:#B91C1C;font-weight:600; }
   .qe-commit { height:36px;white-space:nowrap;background:var(--qe-color,#0F2440) !important;border-color:var(--qe-color,#0F2440) !important; }
   .qe-notice { font-size:13px;color:#15803D;font-weight:600; }
+  /* Услуги проекта в быстром вводе (Owner, 2026-11-04): карточка на услугу, «+ услуга» */
+  .qe-svc { background:#fff;border:1px solid #E3E7EE;border-left:5px solid var(--qe-color,#2563eb);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px; }
+  .qe-svc-head { display:flex;align-items:flex-end;gap:10px; } .qe-svc-head .qe-grid { flex:1;min-width:0; }
+  .qe-grid-line { grid-template-columns:130px 150px 1.6fr 1.6fr 100px 140px; }
+  .qe-num { width:24px;height:24px;border-radius:999px;background:#141A26;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;margin-bottom:8px; }
+  .qe-x { border:0;background:none;color:#9AA3B2;font-size:18px;line-height:1;cursor:pointer;padding:0 4px;flex:none;font-family:inherit; } .qe-svc-head .qe-x { margin-bottom:10px; } .qe-x:hover { color:#B91C1C; }
+  .qe-svc-body { display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start; } .qe-svc-body .qe-field { flex:1 1 320px; }
+  .qe-hired { display:inline-flex;gap:4px;align-items:center;border:1.5px dashed #C9A24A;border-radius:999px;background:#FFF9EA;padding:3px 6px; } .qe-hired input { height:26px;border:0;background:transparent;font-size:12px;padding:0 6px;min-width:0; } .qe-hired input:first-child { width:150px; } .qe-hired input[type=number] { width:80px; } .qe-hired.on { border-style:solid;border-color:#B45309;background:#FFF4E0; }
+  .qe-supplies { display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:36px; }
+  .qe-supply { display:inline-flex;gap:4px;align-items:center;border:1px solid #D9DEE6;border-radius:999px;background:#fff;padding:2px 4px 2px 8px; } .qe-supply select { height:28px;border:0;background:transparent;font-size:12px;max-width:230px; } .qe-supply input { width:70px;height:28px;border:0;border-left:1px solid #EEF1F5;background:transparent;font-size:12px;padding:0 6px; } .qe-supply em { font-style:normal;font-size:11px;color:#5A6577;padding:0 4px;white-space:nowrap; }
+  .qe-calc { display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#5A6577;padding-top:8px;border-top:1px dashed #E3E7EE; } .qe-calc b { color:#141A26;font-weight:700; } .qe-calc span { color:#8A97AA; } .qe-calc i { display:none; }
+  .qe-add { height:40px;border-radius:8px;border:1.5px dashed var(--qe-color,#7C3AED);background:#F8F4FF;color:#6D28D9;font:700 13px inherit;font-family:inherit;cursor:pointer;padding:0 16px;width:100%; } .qe-add:hover { background:#F1E8FF; }
+  .qe-bill { display:flex;gap:26px;align-items:center;flex-wrap:wrap;background:#141A26;color:#fff;border-radius:8px;padding:12px 18px; } .qe-bill > div { display:flex;flex-direction:column;gap:2px; } .qe-bill small { font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#9AA3B2; } .qe-bill b { font-size:16px; } .qe-bill-big { font-size:22px !important; } .qe-bill .qe-ok { color:#4ADE80; } .qe-bill .qe-warn { color:#FCA5A5; } .qe-bill-note { margin-left:auto;font-size:11px;color:#9AA3B2;max-width:300px;line-height:14px; }
+  .qe-table tr.qe-open td { background:#F8F4FF; } .qe-table tr.qe-line td { color:#5A6577;background:#FCFCFD; } .qe-caret { font-size:14px;color:#141A26; }
+  .qe-checks-card { background:#FFF9EA;border-color:#C9A24A; } .qe-checks-card .qe-kicker { color:#8A6D1E; }
+  @media (max-width: 900px) { .qe-grid-line { grid-template-columns:1fr 1fr; } .qe-svc-head { flex-wrap:wrap; } .qe-bill-note { margin-left:0;max-width:none; } }
+  @media (max-width: 560px) { .qe-grid-line { grid-template-columns:1fr; } }
   .qe-table-card { padding:0;gap:0; } .qe-table-head, .qe-table-foot { display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;flex-wrap:wrap; } .qe-table-wrap { overflow-x:auto; }
   .qe-table { width:100%;min-width:900px;border-collapse:collapse;font-size:12px; } .qe-table th { text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;color:#5A6577;padding:6px 10px;border-top:1px solid #EEF1F5;border-bottom:1px solid #D9DEE6;white-space:nowrap; } .qe-table td { padding:7px 10px;border-bottom:1px solid #EEF1F5;white-space:nowrap;vertical-align:top; } .qe-table .r { text-align:right; }
   .qe-table tr.qe-bad td { background:#FEF2F2; } .qe-table tr.qe-flags td { white-space:normal;background:#FFF7ED;color:#92400E;font-size:12px; }
@@ -17343,6 +17360,7 @@ function orderInstallerPayoutPerPerson(o, userId = '') {
   return orderInstallerPayout(o) / n;
 }
 function orderFilmCost(o) {
+  if (o?.quickProjectImportedCompleted === true && Number.isFinite(o._historicalMaterialCost)) return Math.max(0, Number(o._historicalMaterialCost));
   if (o._inventoryDeducted && Number.isFinite(o._inventoryMaterialCost)) return o._inventoryMaterialCost;
   const cutCost = orderFilmCutMaterialCost(o);
   if (cutCost != null) return cutCost;
@@ -27512,7 +27530,12 @@ function projectServiceAssignment(o, group) {
   const line = group.lines[0];
   // Once independent scheduling exists, new services remain unassigned.
   if (o.serviceSchedules?.length) return { id: group.id, installerIds: [], installationAt: '' };
-  return { id: group.id, installerIds: line?.installerIds?.length ? line.installerIds : (o.installerIds || []), installationAt: line?.startDate ? `${line.startDate}T09:00:00` : o.installationAt || '' };
+  return {
+    id: group.id,
+    installerIds: line?.installerIds?.length ? line.installerIds : (o.installerIds || []),
+    installationAt: line?.startDate ? `${line.startDate}T09:00:00` : o.installationAt || '',
+    endsAt: line?.endDate ? `${line.endDate}T17:00:00` : '',
+  };
 }
 function projectServiceCrew(o, item) {
   const group = projectServiceGroups(o).find(group => group.windows.includes(item) || group.lines.includes(item));
@@ -27908,7 +27931,7 @@ function projectPlannedSchedules(o) {
   if (o.serviceSchedules?.length) return o.serviceSchedules;
   return projectServiceGroups(o).map(group => {
     const assignment = projectServiceAssignment(o, group);
-    return { id: group.id, installationAt: assignment.installationAt || '', installerIds: [...(assignment.installerIds || [])] };
+    return { id: group.id, installationAt: assignment.installationAt || '', endsAt: assignment.endsAt || '', installerIds: [...(assignment.installerIds || [])] };
   });
 }
 function projectCardSchedule(o, key) {
@@ -27942,6 +27965,7 @@ function projectCardPublishCrew(o) {
     if (!assignment) return;
     line.installerIds = [...(assignment.installerIds || [])];
     line.startDate = assignment.installationAt ? projectQuickDateValue(datetimeLocalValue(assignment.installationAt).slice(0, 10)) : '';
+    line.endDate = assignment.endsAt ? projectQuickDateValue(datetimeLocalValue(assignment.endsAt).slice(0, 10)) : line.startDate;
   });
 }
 function projectCardCanPlan(o) {
