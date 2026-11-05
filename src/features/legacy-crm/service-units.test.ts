@@ -96,9 +96,14 @@ test('the service editor preserves an old explicit Privacy material link without
 
   assert.equal(c.serviceOfferingAllowsFilm(offering, db.settings.catalog[0]), true);
   assert.equal(c.serviceOfferingAllowsFilm(offering, db.settings.catalog[1]), false);
+  const unlinkedLegacy = { ...offering, id: 'unlinked-legacy', filmIds: [], defaultFilmId: '' };
+  assert.equal(c.serviceOfferingAllowsFilm(unlinkedLegacy, db.settings.catalog[0]), false);
+  assert.equal(c.projectOfferingAllowsFilm(unlinkedLegacy, db.settings.catalog[0], 'mirror'), true, 'the material already saved on a project remains visible');
+  assert.equal(c.projectOfferingAllowsFilm(unlinkedLegacy, db.settings.catalog[1], 'mirror'), false, 'another cross-direction material remains unavailable');
   assert.equal(c.serviceOfferingDefaultFilmId(offering), 'mirror');
   const editor = html.slice(html.indexOf('function serviceOfferingEditorHtml('), html.indexOf('function updateServiceOffering(', html.indexOf('function serviceOfferingEditorHtml(')));
   assert.match(editor, /serviceOfferingAllowsFilm\(offering, item\)/);
+  assert.match(html, /projectOfferingAllowsFilm\(offering, item, selectedCatalogId\)/);
 
   c.toggleServiceOfferingFilm(offering.id, 'mirror', false);
   assert.deepEqual(Array.from(offering.filmIds), []);

@@ -46,12 +46,15 @@ test('owner can be the surveyor without duplicating the employee card', () => {
 });
 
 test('canonical editor supports many services with their own dates, crew, supplies and direct expenses', () => {
-  assert.match(fn(html, 'renderQuickProjectEntry'), /Можно добавить несколько услуг/);
-  assert.match(fn(html, 'renderQuickProjectEntry'), /projectEstimateAddQuickLine/);
-  assert.match(fn(html, 'renderQuickProjectEntry'), /Начало работ/);
-  assert.match(fn(html, 'renderQuickProjectEntry'), /projectQuickToggleInstaller/);
-  assert.match(fn(html, 'renderQuickProjectEntry'), /projectQuickAddSupply/);
-  assert.match(fn(html, 'renderQuickProjectEntry'), /projectQuickAddExpense/);
+  const renderer = fn(html, 'renderQuickProjectEntry');
+  assert.match(renderer, /Можно добавить несколько услуг/);
+  assert.match(renderer, /projectEstimateAddQuickLine/);
+  assert.match(renderer, /Начало работ/);
+  assert.match(renderer, /projectQuickToggleInstaller/);
+  assert.match(renderer, /projectQuickAddSupply/);
+  assert.match(renderer, /projectQuickAddExpense/);
+  assert.match(renderer, /\['owner', 'manager'\]\.includes\(quickRole\)/, 'owner and manager can fill dates, crew and supplies');
+  assert.match(renderer, /canCloseHistoricalProject = quickRole === 'owner'/, 'only the owner confirms money and closes the import');
   assert.match(fn(html, 'closeQuickProjectAsCompleted'), /o\.status = full \? 'completed' : 'act_signed'/, 'partial payment leaves debt visible');
   assert.match(fn(html, 'closeQuickProjectAsCompleted'), /projectEstimateApprovalSnapshot\(o, recordedAt, true\)/);
 });

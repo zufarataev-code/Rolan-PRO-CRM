@@ -12378,7 +12378,8 @@ function measureStudioCatalogOptions(selectedId, scopeKey = '') {
   const order = measureStudioOrder();
   const offering = order ? measureStudioOffering(order, scopeKey) : null;
   if (offering) {
-    const allowed = serviceOfferingAllowedFilmIds(offering).map(getCatalogItem).filter(film => film && !film.archived);
+    const allowedIds = new Set(serviceOfferingAllowedFilmIds(offering));
+    const allowed = (db.settings.catalog || []).filter(film => film && !film.archived && (allowedIds.has(film.id) || projectOfferingAllowsFilm(offering, film, selectedId)));
     const chosen = allowed.some(film => film.id === selectedId) ? selectedId : (selectedId ? '' : projectOfferingCatalogId(order, offering.id));
     return `<option value="">— уточнит менеджер —</option>${allowed.map(film => `<option value="${film.id}" ${chosen === film.id ? 'selected' : ''}>${academyEsc(film.brand)} — ${academyEsc(film.model)}</option>`).join('')}`;
   }
@@ -13428,7 +13429,7 @@ function measureStudioSaveWindow(orderId) {
   if (offering) {
     const film = targetWin.catalogId;
     applyWindowOffering(targetWin, offering);
-    const keep = film && serviceOfferingAllowedFilmIds(offering).includes(film) ? film : '';
+    const keep = film && projectOfferingAllowsFilm(offering, getCatalogItem(film), film) ? film : '';
     if (keep) { targetWin.catalogId = keep; targetWin.filmType = catalogLabel(getCatalogItem(keep)); }
   }
   if (!targetWin.name) targetWin.name = `${winTypeInfo(targetWin.winType).label} ${(targetRoom.windows || []).length + 1}`;
@@ -25918,6 +25919,14 @@ function serviceOfferingAllowsFilm(offering, film) {
   if (!offering || !film) return false;
   return serviceDirectionAllowsFilm(offering.direction, film) || serviceOfferingFilmIds(offering).includes(film.id);
 }
+/**
+ * An already saved project selection remains visible after a direction split,
+ * even when the old service had no explicit material links. It does not make
+ * another cross-direction material selectable.
+ */
+function projectOfferingAllowsFilm(offering, film, selectedCatalogId = '') {
+  return !!offering && !!film && (serviceOfferingAllowsFilm(offering, film) || (!!selectedCatalogId && film.id === selectedCatalogId));
+}
 /** Units a service of a direction may use: «Общее по объекту» has no windows, so nothing per sq ft or per linear ft. */
 function serviceOfferingUnitsFor(direction) { return direction === 'general' ? SERVICE_OFFERING_UNITS.filter(unit => !['sqft', 'lft'].includes(unit.id)) : SERVICE_OFFERING_UNITS; }
 // The owner creates the real solutions; no invented starter products or prices.
@@ -27264,7 +27273,8 @@ function projectWindowSolutionHtml(o, room, win, inMeasurement = false) {
   const selectedOfferings = projectSelectedSizedOfferings(o, win.measureScope || o.serviceType);
   const selectedIds = new Set(selectedOfferings.map(item => item.id));
   const offerings = serviceOfferingsFor(direction, { includeId: win.offeringId }).filter(item => ((!selectedIds.size || selectedIds.has(item.id)) && serviceOfferingNeedsSizes(item)) || item.id === win.offeringId);
-  const films = (db.settings.catalog || []).filter(film => !film.archived && serviceOfferingAllowedFilmIds(serviceOffering(win.offeringId)).includes(film.id));
+  const windowOffering = serviceOffering(win.offeringId);
+  const films = (db.settings.catalog || []).filter(film => !film.archived && (serviceOfferingAllowedFilmIds(windowOffering).includes(film.id) || projectOfferingAllowsFilm(windowOffering, film, win.catalogId)));
   // A service without linked films used to leave an empty list and a measurement
   // that could not be finished (Owner's user test, 2026-10-23). The owner picks
   // a film of the direction right here; it is linked to the service at once.
@@ -27272,11 +27282,14 @@ function projectWindowSolutionHtml(o, room, win, inMeasurement = false) {
   return `<div class="grid gap-2" style="min-width:0"><label>Услуга / решение<select aria-label="Услуга окна" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','offeringId',this.value,${inMeasurement})"><option value="">Выберите услугу</option>${offerings.map(item => `<option value="${academyEsc(item.id)}" ${win.offeringId === item.id ? 'selected' : ''}>${academyEsc(item.name)}</option>`).join('')}</select></label>${win.offeringId ? `<label>Материал услуги<select aria-label="Материал услуги" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','catalogId',this.value,${inMeasurement})"><option value="">${films.length || linkable.length ? 'Выберите плёнку' : 'К услуге не привязана плёнка'}</option>${(() => { const opt = film => `<option value="${academyEsc(film.id)}" ${win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogLabel(film))}${warehouseCatalogStockStats(film.id).availableSqft > 0 ? ` · ${warehouseCatalogStockStats(film.id).availableSqft.toFixed(0)} sq ft` : ''}</option>`; const stock = films.filter(film => warehouseCatalogStockStats(film.id).availableSqft > 0); const order = films.filter(film => !(warehouseCatalogStockStats(film.id).availableSqft > 0)); return `${stock.length ? `<optgroup label="На складе">${stock.map(opt).join('')}</optgroup>` : ''}${order.length ? `<optgroup label="Нет на складе — под заказ">${order.map(opt).join('')}</optgroup>` : ''}`; })()}${linkable.length ? `<optgroup label="Другие плёнки направления — привяжутся к услуге">${linkable.map(film => `<option value="${academyEsc(film.id)}">${academyEsc(catalogLabel(film))}</option>`).join('')}</optgroup>` : ''}${orderUserCanManage(currentUser()) ? `<option value="__manual">➕ Нет в списке — добавить плёнку и заказать…</option>` : ''}</select></label>${win.catalogId && getCatalogItem(win.catalogId)?.pendingPurchase && warehouseCatalogStockStats(win.catalogId).availableSqft <= 0 ? `<div class="text-xs" style="color:#92400e">Плёнки нет на складе — ${activeProjectFilmPurchaseRequest(o.id, win.catalogId) ? `заявка на закупку ${academyEsc(activeProjectFilmPurchaseRequest(o.id, win.catalogId).number || '')}` : 'нужна закупка'}</div>` : ''}` : ''}</div>`;
 }
 function applyWindowOffering(win, offering) {
+    const previousOfferingId = win.offeringId || '';
+    const previousCatalogId = win.catalogId || '';
     win.offeringId = offering?.id || '';
     win.offeringName = offering?.name || '';
     if (currentUser()?.role === 'owner') win.offeringInstallerRate = Number(offering?.installerRatePerSqft) || 0;
     win.pricePerSqft = offering ? Number(offering.pricePerSqft) || 0 : null;
-    if (offering && !serviceOfferingAllowedFilmIds(offering).includes(win.catalogId)) {
+    const preserveLegacySelection = offering && previousOfferingId === offering.id && projectOfferingAllowsFilm(offering, getCatalogItem(previousCatalogId), previousCatalogId);
+    if (offering && !serviceOfferingAllowedFilmIds(offering).includes(win.catalogId) && !preserveLegacySelection) {
       win.catalogId = ''; win.filmType = '';
     }
   return win;
@@ -27307,8 +27320,8 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
   } else if (field === 'catalogId') {
     const film = getCatalogItem(value);
     const offering = serviceOffering(win.offeringId);
-    if (!film || film.archived || !offering || !serviceOfferingAllowsFilm(offering, film)) return;
-    if (!serviceOfferingAllowedFilmIds(offering).includes(film.id)) {
+    if (!film || film.archived || !offering || !projectOfferingAllowsFilm(offering, film, win.catalogId)) return;
+    if (!serviceOfferingAllowedFilmIds(offering).includes(film.id) && film.id !== win.catalogId) {
       // Only the owner edits «Услуги и цены»; the film joins the service for every project.
       if (currentUser()?.role !== 'owner') return;
       if (!confirm(`Привязать «${catalogLabel(film)}» к услуге «${offering.name}»? Плёнка станет доступна для этой услуги во всех проектах.`)) { if (inMeasurement) refreshManagerMeasureModal(oid); else refreshProjectEstimateWorkspace(oid); return; }
@@ -27609,7 +27622,7 @@ function projectOfferingCatalogId(o, offeringId) {
   const catalogId = o?.offeringCatalogIds?.[offeringId] || o?.orderBuilder?.offeringCatalogIds?.[offeringId] || '';
   const offering = serviceOffering(offeringId);
   const film = getCatalogItem(catalogId);
-  return film && !film.archived && serviceOfferingAllowedFilmIds(offering).includes(film.id) ? film.id : '';
+  return film && !film.archived && projectOfferingAllowsFilm(offering, film, catalogId) ? film.id : '';
 }
 function projectSelectedSizedOfferings(o, scopeKey = '') {
   const ids = [...new Set([o?.offeringId, ...(o?.offeringIds || [])].filter(Boolean))];
@@ -28472,7 +28485,7 @@ function readProjectServiceSchedule(o) {
 function projectQuickLineCatalog(serviceType, selectedCatalogId = '', offeringId = '') {
   const category = primaryServiceInfo(serviceType)?.catalogCategory;
   const offering = serviceOffering(offeringId);
-  return (db.settings.catalog || []).filter(item => catalogCanBeSelected(item, selectedCatalogId) && (offering ? serviceOfferingAllowsFilm(offering, item) : serviceDirectionAllowsFilm(category, item)) && (
+  return (db.settings.catalog || []).filter(item => catalogCanBeSelected(item, selectedCatalogId) && (offering ? projectOfferingAllowsFilm(offering, item, selectedCatalogId) : serviceDirectionAllowsFilm(category, item)) && (
     item.id === selectedCatalogId || warehouseCatalogStockStats(item.id).availableSqft > 0
   ));
 }
@@ -28554,9 +28567,9 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     const catalog = getCatalogItem(value);
     const requiredCategory = primaryServiceInfo(line.serviceType)?.catalogCategory;
     const offering = serviceOffering(line.offeringId);
-    const directionAllows = catalog && (offering ? serviceOfferingAllowsFilm(offering, catalog) : serviceDirectionAllowsFilm(requiredCategory, catalog));
+    const directionAllows = catalog && (offering ? projectOfferingAllowsFilm(offering, catalog, line.catalogId) : serviceDirectionAllowsFilm(requiredCategory, catalog));
     if (catalog && (!catalogCanBeSelected(catalog, line.catalogId) || !directionAllows || (warehouseCatalogStockStats(catalog.id).availableSqft <= 0 && !catalog.pendingPurchase))) return;
-    if (catalog && line.offeringId && !serviceOfferingAllowedFilmIds(serviceOffering(line.offeringId)).includes(catalog.id)) return alert('Эта плёнка не подходит выбранной услуге.');
+    if (catalog && line.offeringId && !serviceOfferingAllowedFilmIds(serviceOffering(line.offeringId)).includes(catalog.id) && catalog.id !== line.catalogId) return alert('Эта плёнка не подходит выбранной услуге.');
     line.catalogId = catalog?.id || '';
     if (catalog) {
       line.manualFilmName = '';
@@ -28564,12 +28577,13 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
       if (Number(line.price) <= 0) line.unitPrice = Number(serviceOffering(line.offeringId)?.pricePerSqft || catalog.retailPerSqft || 0);
     }
   } else if (field === 'offeringId') {
+    const previousOfferingId = line.offeringId || '';
     const offering = serviceOffering(value);
     if (value && (!offering || offering.active === false || canonicalServiceDirection(offering.direction) !== serviceOfferingDirection(line.serviceType))) return;
     line.offeringId = offering?.id || '';
     line.offeringName = offering?.name || '';
     if (currentUser()?.role === 'owner') line.offeringInstallerRate = Number(offering?.installerRatePerSqft) || 0;
-    if (offering && !serviceOfferingAllowedFilmIds(offering).includes(line.catalogId)) line.catalogId = '';
+    if (offering && !serviceOfferingAllowedFilmIds(offering).includes(line.catalogId) && previousOfferingId !== offering.id) line.catalogId = '';
     line.manualFilmName = '';
     line.unitPrice = Number(offering?.pricePerSqft) || 0;
     line.pricingMode = 'unit';
@@ -29281,6 +29295,9 @@ function renderQuickProjectEntry(o) {
   const quickLines = projectQuickLines(o);
   const availableInstallers = usersByRole('installer');
   const availableSupplies = ensureSupplies();
+  const quickRole = currentUser()?.role || '';
+  const canEditHistoricalProduction = ['owner', 'manager'].includes(quickRole);
+  const canCloseHistoricalProject = quickRole === 'owner';
   const availableManagers = db.users.filter(user => user.active !== false && ['manager', 'owner'].includes(user.role));
   const availableMeasurers = db.users.filter(user => user.active !== false && ['measurer', 'owner'].includes(user.role));
   const client = getClient(o.clientId);
@@ -29303,7 +29320,7 @@ function renderQuickProjectEntry(o) {
       <div><label>Окончание работ</label><input type="date" min="${projectQuickDateValue(line.startDate)}" value="${projectQuickDateValue(line.endDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','endDate',this.value)"></div>
     </div>
     <div class="mt-2"><label>Исполнители старого проекта</label><div class="project-estimate-assignees">${availableInstallers.map(user => `<label class="project-estimate-assignee"><input type="checkbox" ${(line.installerIds || []).includes(user.id) ? 'checked' : ''} onchange="projectQuickToggleInstaller('${o.id}','${line.id}','${user.id}',this.checked)">${teamAvatarHtml(user,24)}<span>${academyEsc(user.name)}</span></label>`).join('') || '<span class="text-xs text-gray-500">Нет специалистов по установке</span>'}</div></div>
-    <div class="mt-2"><label>Расходники</label><div class="space-y-1">${(line.supplyItems || []).map(item => { const supply = availableSupplies.find(candidate => candidate.id === item.supplyId); return `<div class="flex gap-1 items-center"><select onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','supplyId',this.value)"><option value="">Выберите</option>${availableSupplies.map(option => `<option value="${option.id}" ${item.supplyId===option.id?'selected':''}>${academyEsc(option.name)} · ${Number(option.qty||0)} ${supplyUnitLabel(option.unit)}</option>`).join('')}</select><input aria-label="Количество расходника" type="number" min="0" step="0.01" value="${Number(item.qty||0)}" onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','qty',this.value)" style="width:76px"><button class="btn-ghost text-red-600" onclick="projectQuickDeleteSupply('${o.id}','${line.id}','${item.id}')">×</button>${supply ? `<span class="text-xs text-gray-500">${fmtMoney((Number(item.qty)||0)*(Number(supply.costPerUnit)||0))}</span>` : ''}</div>`; }).join('')}</div><div class="flex gap-1 mt-1"><button class="btn-ghost text-xs" onclick="projectQuickAddSupply('${o.id}','${line.id}')">+ Со склада</button><button class="btn-ghost text-xs" onclick="openQuickProjectSupplyForm('${o.id}','${line.id}')">+ Новый расходник</button></div></div>
+    <div class="mt-2"><label>Расходники</label><div class="space-y-1">${(line.supplyItems || []).map(item => { const supply = availableSupplies.find(candidate => candidate.id === item.supplyId); return `<div class="flex gap-1 items-center"><select onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','supplyId',this.value)"><option value="">Выберите</option>${availableSupplies.map(option => `<option value="${option.id}" ${item.supplyId===option.id?'selected':''}>${academyEsc(option.name)} · ${Number(option.qty||0)} ${supplyUnitLabel(option.unit)}</option>`).join('')}</select><input aria-label="Количество расходника" type="number" min="0" step="0.01" value="${Number(item.qty||0)}" onchange="projectQuickUpdateSupply('${o.id}','${line.id}','${item.id}','qty',this.value)" style="width:76px"><button class="btn-ghost text-red-600" onclick="projectQuickDeleteSupply('${o.id}','${line.id}','${item.id}')">×</button>${supply && canCloseHistoricalProject ? `<span class="text-xs text-gray-500">${fmtMoney((Number(item.qty)||0)*(Number(supply.costPerUnit)||0))}</span>` : ''}</div>`; }).join('')}</div><div class="flex gap-1 mt-1"><button class="btn-ghost text-xs" onclick="projectQuickAddSupply('${o.id}','${line.id}')">+ Со склада</button><button class="btn-ghost text-xs" onclick="openQuickProjectSupplyForm('${o.id}','${line.id}')">+ Новый расходник</button></div></div>
   </div>`).join('');
   const totalSqft = projectQuickSqft(o);
   const total = quickLines.reduce((sum, line) => sum + Number(line.price || 0), 0);
@@ -29317,6 +29334,24 @@ function renderQuickProjectEntry(o) {
     <td data-label="Сумма"><input type="number" min="0" step="0.01" value="${Number(expense.amount || 0)}" onchange="projectQuickUpdateExpense('${o.id}','${expense.id}','amount',this.value)"></td>
     <td class="project-estimate-action"><button class="btn-ghost text-red-600" onclick="projectQuickDeleteExpense('${o.id}','${expense.id}')">Удалить</button></td>
   </tr>`).join('');
+  const historicalClosePanel = canCloseHistoricalProject ? `<section class="project-estimate-section">
+    <div class="project-estimate-section-head"><div><h4>Проверка и закрытие</h4><div class="text-xs text-gray-500">Фиксирует выполнение, фактическую оплату, зарплату, себестоимость и прибыль. Если оплачено не всё, проект останется в ожидании оплаты.</div></div>${o.quickProjectImportedCompleted ? '<span class="status-badge bg-emerald-100 text-emerald-800">Перенесён</span>' : ''}</div>
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3">
+      <div><label>Оплачено клиентом, $</label><input id="quick-close-paid-amount" type="number" min="0" max="${Number(total || 0)}" step="0.01" value="${Number(o.paid || total || 0)}"></div>
+      <div><label>Дата оплаты</label><input id="quick-close-paid-date" type="date" value="${projectQuickDateValue(o.paidAt?.slice?.(0,10)) || quickRange.endDate || new Date().toISOString().slice(0,10)}"></div>
+      <div><label>Способ оплаты</label><select id="quick-close-payment-method">${PAYMENT_METHODS.map(item => `<option value="${item.id}">${item.label}</option>`).join('')}</select></div>
+      <div class="flex items-end"><button class="btn-primary w-full" onclick="closeQuickProjectAsCompleted('${o.id}')" ${completionIssues.length || o.quickProjectImportedCompleted ? 'disabled' : ''}>✓ Закрыть выполненный проект</button></div>
+    </div>
+    ${!availableInstallers.length ? '<div class="text-xs text-amber-700 mt-2">Сначала добавьте Рината и Нурика в «Сотрудники» с ролью «Монтажник» и схемой оплаты — после этого они появятся у каждой услуги.</div>' : ''}
+    ${completionIssues.length && !o.quickProjectImportedCompleted ? `<div class="text-xs text-amber-700 mt-2">Нужно заполнить: ${academyEsc(completionIssues.join(', '))}.</div>` : ''}
+  </section>` : '<div class="order-clean-note" style="border-color:#bfdbfe;background:#eff6ff;color:#1e40af"><b>Данные производства сохранит менеджер.</b> Фактическую оплату, внутренние расходы и окончательное закрытие подтверждает владелец.</div>';
+  const historicalProductionPanel = canEditHistoricalProduction ? `<details class="quick-production-details" ${o.quickEntry ? 'open' : ''}>
+    <summary>Только для переноса уже завершённого проекта из старой CRM</summary>
+    <div class="quick-production-details-body">
+      <div class="grid gap-2">${productionRows}</div>
+      ${historicalClosePanel}
+    </div>
+  </details>` : '';
   return `
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>Проект и ответственные</h4><div class="text-xs text-gray-500">Один проект хранит все услуги. Монтажники и даты назначаются отдельно для каждой услуги ниже.</div></div><span class="tag bg-blue-50 text-blue-700">${academyEsc(o.number)}</span></div>
@@ -29342,23 +29377,7 @@ function renderQuickProjectEntry(o) {
       <div class="project-estimate-section-head"><div><h4>Прямые расходы проекта</h4><div class="text-xs text-gray-500">Доставка, разовая закупка, помощник, субподрядчик и другие фактические расходы.</div></div><button class="btn-ghost text-sm" onclick="projectQuickAddExpense('${o.id}')">+ Добавить расход</button></div>
       <div class="overflow-x-auto project-estimate-table-wrap"><table class="project-estimate-table"><thead><tr><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead><tbody>${quickExpenseRows || '<tr><td colspan="4" class="text-gray-500">Прямых расходов нет.</td></tr>'}</tbody></table></div>
     </section>` : ''}
-    ${currentUser()?.role === 'owner' ? `<details class="quick-production-details" ${o.quickEntry ? 'open' : ''}>
-      <summary>Только для переноса уже завершённого проекта из старой CRM</summary>
-      <div class="quick-production-details-body">
-        <div class="grid gap-2">${productionRows}</div>
-        <section class="project-estimate-section">
-          <div class="project-estimate-section-head"><div><h4>Проверка и закрытие</h4><div class="text-xs text-gray-500">Фиксирует выполнение, фактическую оплату, зарплату, себестоимость и прибыль. Если оплачено не всё, проект останется в ожидании оплаты.</div></div>${o.quickProjectImportedCompleted ? '<span class="status-badge bg-emerald-100 text-emerald-800">Перенесён</span>' : ''}</div>
-          <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3">
-            <div><label>Оплачено клиентом, $</label><input id="quick-close-paid-amount" type="number" min="0" max="${Number(total || 0)}" step="0.01" value="${Number(o.paid || total || 0)}"></div>
-            <div><label>Дата оплаты</label><input id="quick-close-paid-date" type="date" value="${projectQuickDateValue(o.paidAt?.slice?.(0,10)) || quickRange.endDate || new Date().toISOString().slice(0,10)}"></div>
-            <div><label>Способ оплаты</label><select id="quick-close-payment-method">${PAYMENT_METHODS.map(item => `<option value="${item.id}">${item.label}</option>`).join('')}</select></div>
-            <div class="flex items-end"><button class="btn-primary w-full" onclick="closeQuickProjectAsCompleted('${o.id}')" ${completionIssues.length || o.quickProjectImportedCompleted ? 'disabled' : ''}>✓ Закрыть выполненный проект</button></div>
-          </div>
-          ${!availableInstallers.length ? '<div class="text-xs text-amber-700 mt-2">Сначала добавьте Рината и Нурика в «Сотрудники» с ролью «Монтажник» и схемой оплаты — после этого они появятся у каждой услуги.</div>' : ''}
-          ${completionIssues.length && !o.quickProjectImportedCompleted ? `<div class="text-xs text-amber-700 mt-2">Нужно заполнить: ${academyEsc(completionIssues.join(', '))}.</div>` : ''}
-        </section>
-      </div>
-    </details>` : ''}
+    ${historicalProductionPanel}
     <div class="project-estimate-footer">
       <div class="text-xs text-gray-500">Закупочная цена берётся из склада, оплата работ — из настроек зарплаты сотрудников.</div>
       <div class="flex gap-2 flex-wrap"><button class="btn-ghost" onclick="closeModal()">Сохранить и закрыть</button><button class="btn-primary" onclick="openProjectEstimateWorkspace('${o.id}')">Проверить расчёт и сформировать КП →</button></div>
