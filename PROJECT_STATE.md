@@ -12,13 +12,13 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - Website cache operation: after checking the site/zone, `SPC\Modules\Cache_Controller::purge_all(true, false, true, $error)` immediately purged disk/edge content; the ordinary 5.3.9 CLI command had only queued it. Saved opt-outs/GPC remain honored.
 - No fabricated Google click, enquiry, consent, qualification or sale. Temporary Call Modified recovery was removed while preparing this change. Next: final checks/review, bind the dedicated hostname from merged code, verify TLS/401/400, change Post-Call only, and verify a genuine signed call in CRM before any completion claim.
 
-## 2026-11-04 handoff — Privacy direction + reliable Services entry (local)
+## 2026-11-04 handoff — Privacy direction + reliable Services entry (PR #458)
 
-- Branch `codex/historical-project-entry-20261103` was rebased onto current `origin/main` `ada1a7c`; the already-merged quick-entry/direction work was dropped during the rebase, while the historical-project intake and Privacy work were replayed cleanly.
+- Task owner: Codex, PR [#458](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/458), branch `codex/historical-project-entry-20261103`, rebased onto current `origin/main` `ada1a7c`. The already-merged quick-entry/direction work was dropped during the rebase, while the historical-project intake and Privacy work were replayed cleanly.
 - `privacy_film` is a first-class fifth direction across the service directory, project cashier, measurement, proposal, warehouse/category mapping and calculations. It remains visible even with zero configured services; opening it shows its own empty workspace instead of folding it into Decorative.
 - `selectAppView('servicePricing')` now opens «Услуги и цены» immediately, clears any stale modal/direction editor and renders even when `file://` or a repeated `#/service-pricing` hash emits no `hashchange` event.
 - Runtime regressions cover the direct menu entry, five direction cards and opening an empty Privacy workspace. Verification: focused 28/28; full `pnpm test` 1018/1018; `pnpm build` (134 routes); `pnpm typecheck`; `git diff --check`.
-- Local only. Production is unchanged; deployment requires the Owner's explicit confirmation.
+- Branch is pushed and PR is open. Production is unchanged; merge and deployment require the Owner's explicit confirmation «публикуй» after required checks are green.
 
 ## 2026-11-04 — CallRail genuine-call delivery repair (in progress)
 
