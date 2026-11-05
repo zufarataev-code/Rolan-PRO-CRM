@@ -3458,13 +3458,11 @@ function quickEntryOrders(month = quickEntryState().month) {
     return at >= start && at <= end;
   }).sort((a, b) => new Date(b.installationDoneAt || b.installationAt || b.createdAt) - new Date(a.installationDoneAt || a.installationAt || a.createdAt));
 }
-function quickEntryDraftOrders(month = quickEntryState().month) {
-  const { start, end } = quickEntryMonthRange(month);
-  return (db.orders || []).filter(o => {
-    if (!o.quickEntryDraft || o.quickProjectImportedCompleted) return false;
-    const at = new Date(o.createdAt);
-    return at >= start && at <= end;
-  }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+function quickEntryDraftOrders() {
+  // A historical draft may be older than the twelve-month analytics picker.
+  // Keep every unfinished import reachable until the manager completes it.
+  return (db.orders || []).filter(o => o.quickEntryDraft && !o.quickProjectImportedCompleted)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 /** Что CRM насчитала по заказу и что в этом подозрительно. */
 function quickEntryEconomics(o) {

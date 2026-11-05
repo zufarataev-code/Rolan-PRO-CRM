@@ -17,8 +17,8 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - Task owner: Codex, PR [#458](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/458), branch `codex/historical-project-entry-20261103`, rebased onto current `origin/main` `c01029e`. The already-merged quick-entry/direction work was dropped during the rebase, while the historical-project intake and Privacy work were replayed cleanly.
 - `privacy_film` is a first-class fifth direction across the service directory, project cashier, measurement, proposal, warehouse/category mapping and calculations. It remains visible even with zero configured services; opening it shows its own empty workspace instead of folding it into Decorative.
 - `selectAppView('servicePricing')` now opens «Услуги и цены» immediately, clears any stale modal/direction editor and renders even when `file://` or a repeated `#/service-pricing` hash emits no `hashchange` event.
-- Runtime regressions cover the direct menu entry, five direction cards and opening an empty Privacy workspace. Verification: focused 28/28; full `pnpm test` 1018/1018; `pnpm build` (134 routes); `pnpm typecheck`; `git diff --check`.
-- Branch is pushed and PR is open. Production is unchanged; merge and deployment require the Owner's explicit confirmation «публикуй» after required checks are green.
+- Runtime regressions cover the direct menu entry, five direction cards and opening an empty Privacy workspace. Review follow-up preserves explicit Privacy material links saved during the temporary four-direction period without permitting new cross-direction links, keeps every unfinished historical draft reachable regardless of age, and lets the manager clear the surveyor selector.
+- Latest local verification: full `pnpm test` **1027/1027**, `pnpm build` (134 routes), `pnpm typecheck`, and `git diff --check`. The Owner explicitly confirmed «публикуй» on 2026-11-04; PR-head CI/re-review, merge and production verification are the remaining release gates.
 
 ## 2026-11-04 — CallRail genuine-call delivery repair (in progress)
 

@@ -25908,6 +25908,16 @@ function canonicalServiceDirection(value) {
 function serviceDirectionAllowsFilm(direction, film) {
   return !!film && canonicalServiceDirection(film.category) === canonicalServiceDirection(direction);
 }
+/**
+ * New links stay inside the service direction. Explicit links saved before
+ * Privacy became its own direction remain readable and removable, matching
+ * the server compatibility rule without permitting another cross-direction
+ * material to be added.
+ */
+function serviceOfferingAllowsFilm(offering, film) {
+  if (!offering || !film) return false;
+  return serviceDirectionAllowsFilm(offering.direction, film) || serviceOfferingFilmIds(offering).includes(film.id);
+}
 /** Units a service of a direction may use: «Общее по объекту» has no windows, so nothing per sq ft or per linear ft. */
 function serviceOfferingUnitsFor(direction) { return direction === 'general' ? SERVICE_OFFERING_UNITS.filter(unit => !['sqft', 'lft'].includes(unit.id)) : SERVICE_OFFERING_UNITS; }
 // The owner creates the real solutions; no invented starter products or prices.
@@ -25980,7 +25990,7 @@ function serviceOfferingDefaultFilmId(offering) {
   if (!offering) return '';
   const linked = serviceOfferingFilmIds(offering).filter(id => {
     const film = getCatalogItem(id);
-    return film && !film.archived && serviceDirectionAllowsFilm(offering.direction, film);
+    return film && !film.archived && serviceOfferingAllowsFilm(offering, film);
   });
   if (linked.includes(offering.defaultFilmId)) return offering.defaultFilmId;
   return linked.length === 1 ? linked[0] : '';
@@ -26688,7 +26698,7 @@ function serviceCashierHtml(c) {
 }
 
 function projectQuickLineFilms(line) {
-  const films = projectQuickLineCatalog(line.serviceType, line.catalogId);
+  const films = projectQuickLineCatalog(line.serviceType, line.catalogId, line.offeringId);
   if (!line.offeringId) return films;
   const allowed = serviceOfferingAllowedFilmIds(serviceOffering(line.offeringId));
   return films.filter(item => allowed.includes(item.id) || item.id === line.catalogId);
@@ -27017,13 +27027,13 @@ function toggleServiceOfferingFilm(id, filmId, checked) {
   const offering = serviceOffering(id);
   const film = getCatalogItem(filmId);
   if (!offering || !film) return;
-  if (!serviceDirectionAllowsFilm(offering.direction, film)) return;
+  if (!serviceOfferingAllowsFilm(offering, film)) return;
   const ids = new Set(serviceOfferingFilmIds(offering));
   if (checked) ids.add(filmId); else ids.delete(filmId);
   offering.filmIds = [...ids];
   const available = offering.filmIds.filter(value => {
     const item = getCatalogItem(value);
-    return item && !item.archived && serviceDirectionAllowsFilm(offering.direction, item);
+    return item && !item.archived && serviceOfferingAllowsFilm(offering, item);
   });
   if (checked && !serviceOfferingDefaultFilmId(offering)) offering.defaultFilmId = filmId;
   if (!available.includes(offering.defaultFilmId)) offering.defaultFilmId = available.length === 1 ? available[0] : '';
@@ -27038,7 +27048,7 @@ function setServiceOfferingDefaultFilm(id, filmId) {
   const offering = serviceOffering(id);
   if (!offering || !serviceOfferingFilmIds(offering).includes(filmId)) return;
   const film = getCatalogItem(filmId);
-  if (!film || film.archived || !serviceDirectionAllowsFilm(offering.direction, film)) return;
+  if (!film || film.archived || !serviceOfferingAllowsFilm(offering, film)) return;
   offering.defaultFilmId = filmId;
   offering.updatedAt = new Date().toISOString();
   persistServiceOfferingFilms(id);
@@ -27152,7 +27162,7 @@ function serviceOfferingPricingEditorHtml(offering, per, sized) {
 function serviceOfferingEditorHtml(offering, owner) {
   if (!offering) return '';
   const direction = canonicalServiceDirection(offering.direction);
-  const films = (db.settings.catalog || []).filter(item => !item.archived && serviceDirectionAllowsFilm(direction, item));
+  const films = (db.settings.catalog || []).filter(item => !item.archived && serviceOfferingAllowsFilm(offering, item));
   const linked = films.filter(item => serviceOfferingFilmIds(offering).includes(item.id));
   const defaultFilmId = serviceOfferingDefaultFilmId(offering);
   const unit = serviceOfferingUnit(offering);
@@ -27297,7 +27307,7 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
   } else if (field === 'catalogId') {
     const film = getCatalogItem(value);
     const offering = serviceOffering(win.offeringId);
-    if (!film || film.archived || !offering || !serviceDirectionAllowsFilm(serviceOfferingDirection(win.measureScope || o.serviceType), film)) return;
+    if (!film || film.archived || !offering || !serviceOfferingAllowsFilm(offering, film)) return;
     if (!serviceOfferingAllowedFilmIds(offering).includes(film.id)) {
       // Only the owner edits «Услуги и цены»; the film joins the service for every project.
       if (currentUser()?.role !== 'owner') return;
@@ -28459,9 +28469,10 @@ function readProjectServiceSchedule(o) {
   });
 }
 
-function projectQuickLineCatalog(serviceType, selectedCatalogId = '') {
+function projectQuickLineCatalog(serviceType, selectedCatalogId = '', offeringId = '') {
   const category = primaryServiceInfo(serviceType)?.catalogCategory;
-  return (db.settings.catalog || []).filter(item => catalogCanBeSelected(item, selectedCatalogId) && serviceDirectionAllowsFilm(category, item) && (
+  const offering = serviceOffering(offeringId);
+  return (db.settings.catalog || []).filter(item => catalogCanBeSelected(item, selectedCatalogId) && (offering ? serviceOfferingAllowsFilm(offering, item) : serviceDirectionAllowsFilm(category, item)) && (
     item.id === selectedCatalogId || warehouseCatalogStockStats(item.id).availableSqft > 0
   ));
 }
@@ -28542,7 +28553,9 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   } else if (field === 'catalogId') {
     const catalog = getCatalogItem(value);
     const requiredCategory = primaryServiceInfo(line.serviceType)?.catalogCategory;
-    if (catalog && (!catalogCanBeSelected(catalog, line.catalogId) || !serviceDirectionAllowsFilm(requiredCategory, catalog) || (warehouseCatalogStockStats(catalog.id).availableSqft <= 0 && !catalog.pendingPurchase))) return;
+    const offering = serviceOffering(line.offeringId);
+    const directionAllows = catalog && (offering ? serviceOfferingAllowsFilm(offering, catalog) : serviceDirectionAllowsFilm(requiredCategory, catalog));
+    if (catalog && (!catalogCanBeSelected(catalog, line.catalogId) || !directionAllows || (warehouseCatalogStockStats(catalog.id).availableSqft <= 0 && !catalog.pendingPurchase))) return;
     if (catalog && line.offeringId && !serviceOfferingAllowedFilmIds(serviceOffering(line.offeringId)).includes(catalog.id)) return alert('Эта плёнка не подходит выбранной услуге.');
     line.catalogId = catalog?.id || '';
     if (catalog) {
@@ -29250,9 +29263,13 @@ function quickProjectUpdateHeader(oid, field, value) {
     if (!user || user.active === false || !['manager', 'owner'].includes(user.role)) return;
     o.managerId = user.id;
   } else if (field === 'measurerId') {
-    const user = getUser(value);
-    if (!user || user.active === false || !['measurer', 'owner'].includes(user.role)) return;
-    o.measurerId = user.id;
+    if (!value) {
+      o.measurerId = null;
+    } else {
+      const user = getUser(value);
+      if (!user || user.active === false || !['measurer', 'owner'].includes(user.role)) return;
+      o.measurerId = user.id;
+    }
   } else if (field === 'notes') {
     o.notes = String(value || '').trim();
   } else return;
@@ -30645,9 +30662,11 @@ function managerRoomAddChooserHtml(oid, room, scopeKey) {
 function defaultCatalogIdForOrder(o) {
   const activeScope = managerActiveMeasureScope(o);
   const scope = measureScopeInfo(activeScope);
+  const offering = managerActiveOffering(o);
+  const allows = catalog => offering ? serviceOfferingAllowsFilm(offering, catalog) : serviceDirectionAllowsFilm(scope.catalogCategory, catalog);
   const scoped = o?.materialsByService?.[activeScope] || o?.orderBuilder?.materialsByService?.[activeScope];
-  if (scoped?.catalogId && db.settings.catalog.some(c => c.id === scoped.catalogId && serviceDirectionAllowsFilm(scope.catalogCategory, c))) return scoped.catalogId;
-  if (o?.materialCatalogId && db.settings.catalog.some(c => c.id === o.materialCatalogId && serviceDirectionAllowsFilm(scope.catalogCategory, c))) return o.materialCatalogId;
+  if (scoped?.catalogId && db.settings.catalog.some(c => c.id === scoped.catalogId && allows(c))) return scoped.catalogId;
+  if (o?.materialCatalogId && db.settings.catalog.some(c => c.id === o.materialCatalogId && allows(c))) return o.materialCatalogId;
   return '';
 }
 function managerRoomCatalogId(room, scopeKey = '') {
@@ -30898,7 +30917,7 @@ function managerWindowDefaults(o, room, opts = {}) {
   const activeOffering = managerActiveOffering(o);
   const catalogId = opts.catalogId || projectOfferingCatalogId(o, activeOffering?.id) || room?.defaultCatalogByScope?.[requestedScope] || managerRoomCatalogId(room, requestedScope) || '';
   const candidate = getCatalogItem(catalogId);
-  const cat = candidate && serviceDirectionAllowsFilm(primaryServiceInfo(requestedScope)?.catalogCategory, candidate) ? candidate : null;
+  const cat = candidate && (activeOffering ? serviceOfferingAllowsFilm(activeOffering, candidate) : serviceDirectionAllowsFilm(primaryServiceInfo(requestedScope)?.catalogCategory, candidate)) ? candidate : null;
   const scopeKey = requestedScope;
   const objectKind = opts.objectKind || managerRoomAddKindValue(room?.id || '') || 'window';
   const winType = opts.winType || managerRoomAddTypeValue(room?.id || '', objectKind, scopeKey);

@@ -209,6 +209,7 @@ test('a service without linked films takes any film of its direction; linked fil
     canonicalCatalogCategory: (value: string) => value,
     canonicalServiceDirection: (value: string) => value,
     serviceDirectionAllowsFilm: (direction: string, film: Row) => film.category === direction,
+    serviceOfferingAllowsFilm: (item: Row, film: Row) => film.category === item.direction || (item.filmIds || []).includes(film.id),
     serviceOfferingDirection: () => 'solar',
     catalogLabel: (film: Row) => film.model,
     orderUserCanSeeMoney: () => true,

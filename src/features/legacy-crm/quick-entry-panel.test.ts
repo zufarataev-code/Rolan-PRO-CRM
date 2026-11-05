@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import vm from 'node:vm';
 
 // Owner, 2026-11-03: «панель для быстрого ввода — чтобы менеджер мог внести
 // заказ за прошлый месяц: услуга, плёнка, исполнитель, адрес, контакт, откуда
@@ -60,4 +61,32 @@ test('historical services are the only source of their directions and a closed i
   assert.match(sync, /const leadService = o\.quickEntry \? '' : orderLeadIntentServiceId\(o\)/);
   assert.match(sync, /\[leadService, \.\.\.measuredServices, \.\.\.quickServices\]/);
   assert.match(fn(html, 'quickProjectUpdateHeader'), /o\.quickProjectImportedCompleted/);
+});
+
+test('unfinished historical drafts stay reachable regardless of age', () => {
+  const db = {
+    orders: [
+      { id: 'old', quickEntryDraft: true, createdAt: '2020-01-01T00:00:00.000Z' },
+      { id: 'new', quickEntryDraft: true, createdAt: '2026-11-01T00:00:00.000Z' },
+      { id: 'done', quickEntryDraft: false, quickProjectImportedCompleted: true, createdAt: '2026-11-02T00:00:00.000Z' },
+    ],
+  };
+  const context: any = vm.createContext({ db });
+  vm.runInContext(`${fn(stages, 'quickEntryDraftOrders')}; result = quickEntryDraftOrders();`, context);
+  assert.deepEqual(Array.from(context.result, (order: any) => order.id), ['new', 'old']);
+});
+
+test('the historical-project surveyor can be cleared', () => {
+  const order = { id: 'o', quickProjectImportedCompleted: false, measurerId: 'measurer' };
+  const context: any = vm.createContext({
+    getOrder: () => order,
+    orderUserCanSeeMoney: () => true,
+    currentUser: () => ({ role: 'owner' }),
+    getUser: () => null,
+    projectEstimateMarkChanged: () => undefined,
+    save: () => undefined,
+    refreshQuickProjectEntry: () => undefined,
+  });
+  vm.runInContext(`${fn(html, 'quickProjectUpdateHeader')}; quickProjectUpdateHeader('o', 'measurerId', '');`, context);
+  assert.equal(order.measurerId, null);
 });

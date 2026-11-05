@@ -28,6 +28,7 @@ function loadServices(role = 'owner') {
     uid: () => `id${++n}`,
     alert: () => undefined, save: () => undefined, render: () => undefined,
     getOrder: (id: string) => db.orders.find((order: Row) => order.id === id),
+    getCatalogItem: (id: string) => db.settings.catalog.find((item: Row) => item.id === id),
     measureAllWindows: (o: Row) => (o.measurements?.rooms || []).flatMap((room: Row) => (room.windows || []).map((win: Row) => ({ room, win }))),
     projectQuickLines: (o: Row) => (o.extraServices || []).filter((line: Row) => line.quickProjectLine),
     orderUserCanSeeMoney: () => true,
@@ -78,6 +79,31 @@ test('the Privacy workspace contains privacy services and only privacy materials
   const created = db.settings.serviceOfferings.find((item: Row) => item.id !== 'legacy-privacy');
   assert.equal(created.direction, 'privacy');
   assert.deepEqual(Array.from(c.serviceOfferingAllowedFilmIds(created)).sort(), ['mirror']);
+});
+
+test('the service editor preserves an old explicit Privacy material link without allowing a new cross-direction link', () => {
+  const { c, db } = loadServices();
+  db.settings.catalog.push(
+    { id: 'mirror', name: 'Legacy privacy', category: 'privacy' },
+    { id: 'mirror-two', name: 'Another privacy', category: 'privacy' },
+    { id: 'frost', name: 'Decorative frost', category: 'decorative' },
+  );
+  const offering = {
+    id: 'legacy-decorative', direction: 'decorative', name: 'Legacy service', unit: 'sqft', active: true,
+    filmIds: ['mirror'], defaultFilmId: 'mirror',
+  };
+  db.settings.serviceOfferings.push(offering);
+
+  assert.equal(c.serviceOfferingAllowsFilm(offering, db.settings.catalog[0]), true);
+  assert.equal(c.serviceOfferingAllowsFilm(offering, db.settings.catalog[1]), false);
+  assert.equal(c.serviceOfferingDefaultFilmId(offering), 'mirror');
+  const editor = html.slice(html.indexOf('function serviceOfferingEditorHtml('), html.indexOf('function updateServiceOffering(', html.indexOf('function serviceOfferingEditorHtml(')));
+  assert.match(editor, /serviceOfferingAllowsFilm\(offering, item\)/);
+
+  c.toggleServiceOfferingFilm(offering.id, 'mirror', false);
+  assert.deepEqual(Array.from(offering.filmIds), []);
+  c.toggleServiceOfferingFilm(offering.id, 'mirror-two', true);
+  assert.deepEqual(Array.from(offering.filmIds), [], 'a new cross-direction link is still refused');
 });
 
 test('a service is priced per sq ft (sizes needed) or per piece, zone, fixed sum or own unit (no sizes)', () => {
