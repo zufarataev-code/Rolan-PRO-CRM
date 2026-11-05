@@ -30,7 +30,7 @@ export async function importCallrailCall(call: CallrailCall) {
     let lead: { lead_id: string; phone: string | null } | null = reviews.length === 1 ? reviews[0] : eligible.length === 1 ? eligible[0] : null;
     const ambiguous = !lead && eligible.length > 1;
     const created = !lead;
-    const message = `CallRail: ${call.source} · ${call.call_type} · ${call.duration}s · ${call.started_at}${call.campaign ? ` · ${call.campaign}` : ""}`;
+    const message = `CallRail: ${call.source} · ${call.call_type} · ${call.duration}s · ${call.started_at}${call.campaign ? ` · ${call.campaign}` : ""}${call.spam ? " · CallRail пометил как спам — проверьте вручную" : ""}`;
     if (!lead) {
       const status = await tx.pipelineStatus.findUnique({ where: { status_code: "NEW_LEAD" }, select: { pipeline_status_id: true } });
       if (!status) throw new CallrailError("missing_pipeline_status", "NEW_LEAD is not configured.", 503);

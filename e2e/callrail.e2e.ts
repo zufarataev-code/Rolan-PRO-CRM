@@ -21,6 +21,7 @@ const clientIds: string[] = [];
 let cookie = "";
 let originalWorkspace: Prisma.JsonValue | null = null;
 let originalSettings: any = null;
+let snapshotReady = false;
 function fixture(id: string, phone = "+12025550123") {
   return { id: `${tag}-${id}`, company_id: company, direction: "inbound", start_time: new Date().toISOString(), duration: 75, answered: true, customer_phone_number: phone, customer_name: "Offline CallRail fixture", source_name: "Google Ads", gclid: `offline-${tag}` };
 }
@@ -35,8 +36,11 @@ before(async () => {
   await db.user.updateMany({ where: { email: "owner@rolanpro.local" }, data: { must_change_password: false } });
   originalWorkspace = (await db.legacyWorkspace.findUnique({ where: { workspace_id: "primary" } }))?.payload ?? null;
   originalSettings = await db.googleAdsIntegrationSetting.findUnique({ where: { setting_key: "default" } });
+  snapshotReady = true;
 });
 after(async () => {
+  try {
+  if (!snapshotReady) return;
   await db.conversionUploadOutbox.deleteMany({ where: { conversion_event: { lead_id: { in: ids } } } });
   await db.conversionEvent.deleteMany({ where: { lead_id: { in: ids } } });
   await db.activityLog.deleteMany({ where: { entity_id: { in: [...ids, ...dealIds] } } });
@@ -48,21 +52,35 @@ after(async () => {
   await db.lead.deleteMany({ where: { lead_id: { in: ids } } });
   if (originalWorkspace) await db.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload: originalWorkspace as Prisma.InputJsonValue, revision: { increment: 1 } } });
   else await db.legacyWorkspace.deleteMany({ where: { workspace_id: "primary" } });
-  if (originalSettings) await db.googleAdsIntegrationSetting.update({ where: { setting_key: "default" }, data: originalSettings });
-  else await db.googleAdsIntegrationSetting.deleteMany({ where: { setting_key: "default" } });
-  await db.$disconnect();
-  await runtimeDb.$disconnect();
+  if (originalSettings) {
+    const { setting_key: _key, created_at: _created, updated_at: _updated, qualification_rules, audience_rules, ...settings } = originalSettings;
+    await db.googleAdsIntegrationSetting.update({ where: { setting_key: "default" }, data: { ...settings, qualification_rules: qualification_rules ?? Prisma.DbNull, audience_rules: audience_rules ?? Prisma.DbNull } });
+  } else await db.googleAdsIntegrationSetting.deleteMany({ where: { setting_key: "default" } });
+  } finally {
+    await db.$disconnect();
+    await runtimeDb.$disconnect();
+  }
 });
 test("signed calls deduplicate concurrently, preserve original source, and create no qualification", async () => {
-  const call = fixture("first");
+  const login = await fetch(base + "/api/v1/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" }) });
+  assert.equal(login.status, 200);
+  cookie = login.headers.get("set-cookie")!.split(";")[0];
+  const settings = { conversion_owner_customer_id: "900000002", qualified_lead_action_id: "100", converted_lead_action_id: "101", qualification_rules: { pipeline_status_code: "PROPOSAL_SENT" }, upload_enabled: false, validate_only: true };
+  await db.googleAdsIntegrationSetting.upsert({ where: { setting_key: "default" }, create: { setting_key: "default", ...settings }, update: settings });
+  const call = { ...fixture("first"), answered: false, duration: 0, spam: true };
   assert.equal((await send(call, "invalid")).status, 401);
   assert.equal((await send({ ...call, company_id: "another" })).status, 403);
   assert.equal((await send({ ...call, direction: "outbound" })).body.ignored, true);
-  assert.equal((await send({ ...call, spam: true })).body.ignored, true);
   const results = await Promise.all([send(call), send(call)]);
   for (const result of results) assert.equal(result.status, 200);
   const leadId = results[0].body.lead_id;
   ids.push(leadId);
+  const missed = await db.lead.findUniqueOrThrow({ where: { lead_id: leadId }, include: { pipeline_status: true } });
+  assert.equal(missed.pipeline_status.status_code, "NEW_LEAD");
+  assert.match(missed.notes!, /CallRail пометил как спам/);
+  const enriched = await fetch(base + "/api/v1/leads/" + leadId, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ name: "Enriched offline caller", email: "caller@example.invalid" }) });
+  assert.equal(enriched.status, 200);
+  assert.equal(await db.conversionEvent.count({ where: { lead_id: leadId } }), 0, "contact enrichment alone is not qualification");
   assert.equal(results[1].body.lead_id, leadId);
   assert.equal(results.filter(item => item.body.duplicate).length, 1);
   const second = await send(fixture("repeat"));
@@ -75,6 +93,8 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   const contacted = await db.pipelineStatus.findUniqueOrThrow({ where: { status_code: "CONTACTED" } });
   const initialProject = { id: `callrail-${tag}`, canonicalLeadId: leadId };
   await db.legacyWorkspace.upsert({ where: { workspace_id: "primary" }, create: { workspace_id: "primary", payload: { orders: [initialProject] }, revision: 1 }, update: { payload: { orders: [initialProject] }, revision: { increment: 1 } } });
+  assert.equal((await reconcileLegacyGoogleAdsOutcomes()).failed, 0);
+  assert.equal(await db.conversionEvent.count({ where: { lead_id: leadId } }), 0, "an enriched linked project without a sent proposal remains unqualified");
   await db.lead.update({ where: { lead_id: leadId }, data: { pipeline_status_id: contacted.pipeline_status_id } });
   assert.equal((await send(fixture("handled-repeat"))).body.lead_id, leadId, "handled callers retain their original project and attribution");
   const status = await db.pipelineStatus.findUniqueOrThrow({ where: { status_code: "NEW_LEAD" } });
@@ -101,20 +121,18 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   const nextReview = await send(fixture("resolved-review", "+12025550199"));
   ids.push(nextReview.body.lead_id);
   assert.notEqual(nextReview.body.lead_id, review.body.lead_id, "dismissed review does not swallow future calls");
-  const dismissed = await db.lead.create({ data: { name: "Dismissed fixture", phone: "+12025550188", source: "website", pipeline_status_id: lost.pipeline_status_id } });
+  const dismissed = await db.lead.create({ data: { name: "Dismissed fixture", phone: "+12025550188", source: "website", pipeline_status_id: status.pipeline_status_id } });
   ids.push(dismissed.lead_id);
+  const dismissedResponse = await fetch(base + "/api/v1/leads/" + dismissed.lead_id, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ pipeline_status_code: "CLOSED_LOST", expected_status_codes: ["NEW_LEAD"] }) });
+  assert.equal(dismissedResponse.status, 200);
+  assert.equal((await db.lead.findUniqueOrThrow({ where: { lead_id: dismissed.lead_id }, include: { pipeline_status: true } })).pipeline_status.status_code, "CLOSED_LOST");
   const renewed = await send(fixture("renewed-enquiry", "+12025550188"));
   ids.push(renewed.body.lead_id);
   assert.notEqual(renewed.body.lead_id, dismissed.lead_id, "a dismissed enquiry without a project leaves a fresh call visible");
-  const login = await fetch(base + "/api/v1/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" }) });
-  assert.equal(login.status, 200);
-  cookie = login.headers.get("set-cookie")!.split(";")[0];
   const list = await fetch(base + "/api/v1/leads", { headers: { cookie } });
   const items = (await list.json()).data.items;
   assert.equal(items.find((lead: any) => lead.lead_id === leadId).callrail_calls.length, 3);
   assert.equal(items.find((lead: any) => lead.lead_id === leadId).source, "callrail");
-  const settings = { conversion_owner_customer_id: "900000002", qualified_lead_action_id: "100", converted_lead_action_id: "101", qualification_rules: { pipeline_status_code: "PROPOSAL_SENT" }, upload_enabled: false, validate_only: true };
-  await db.googleAdsIntegrationSetting.upsert({ where: { setting_key: "default" }, create: { setting_key: "default", ...settings }, update: settings });
   const at = new Date().toISOString();
   const order = { id: `callrail-${tag}`, canonicalLeadId: leadId, timeline: [{ key: "proposal_sent", at }], depositReceived: false, paid: 0, projectEstimateSnapshot: { revenue: 1000 } };
   await db.legacyWorkspace.upsert({ where: { workspace_id: "primary" }, create: { workspace_id: "primary", payload: { orders: [order] }, revision: 1 }, update: { payload: { orders: [order] }, revision: { increment: 1 } } });

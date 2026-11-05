@@ -14,9 +14,8 @@ test("CallRail verifies the exact raw body and rejects missing, malformed or alt
   assert.equal(verifyCallrailSignature(raw + " ", signature, key), false);
   assert.equal(verifyCallrailSignature(raw, signature, "other-key"), false);
 });
-test("only the configured company's inbound, nonspam completed calls are enquiries", () => {
+test("only the configured company's inbound completed calls are enquiries", () => {
   assert.equal(normalizeCallrailCall({ ...call, direction: "outbound" }, "456"), null);
-  assert.equal(normalizeCallrailCall({ ...call, spam: true }, "456"), null);
   assert.throws(() => normalizeCallrailCall(call, "other"), CallrailError);
   for (const change of [{ id: "" }, { duration: -1 }, { duration: null }, { duration: "" }, { answered: undefined }, { start_time: "tomorrow" }, { start_time: "2099-01-01T00:00:00Z" }]) {
     assert.throws(() => normalizeCallrailCall({ ...call, ...change }, "456"), CallrailError);
@@ -25,6 +24,16 @@ test("only the configured company's inbound, nonspam completed calls are enquiri
   assert.equal(result.phone, "+12025550123");
   assert.equal(result.attribution.consent?.adUserData, "UNKNOWN");
   assert.equal(normalizeCallrailCall({ ...call, customer_phone_number: "anonymous" }, "456")?.phone, null);
+});
+test("missed and provider-spam calls remain enquiries for manager review without granting consent", () => {
+  for (const spam of [true, "true", false]) {
+    const result = normalizeCallrailCall({ ...call, answered: false, duration: 0, spam }, "456")!;
+    assert.ok(result);
+    assert.equal(result.answered, false);
+    assert.equal(result.duration, 0);
+    assert.equal(result.spam, spam !== false);
+    assert.equal(result.attribution.consent?.adUserData, "UNKNOWN");
+  }
 });
 test("campaign attribution is joined to the actual click, never an unrelated first touch", () => {
   const first = { landing: "https://rolan-pro.com/?gclid=first&campaign_id=11&utm_source=google", event_date: "2026-10-20T10:00:00Z" };
@@ -63,4 +72,25 @@ test("recent calls remain in the office inbox after an enquiry is handled or dis
   assert.match(context.callrailRecentCallsHtml(), /data-callrail-recent/);
   assert.match(context.callrailRecentCallsHtml(), /missed · Google Ads/);
   assert.match(context.callrailRecentCallsHtml(), /&lt;caller&gt;/);
+});
+
+test("CallRail E2E cleanup cannot write when its database guard or snapshots failed", async () => {
+  const { transpileModule, ScriptTarget } = await import("typescript");
+  const source = readFileSync("e2e/callrail.e2e.ts", "utf8");
+  const start = source.indexOf("after(async () => {");
+  const hook = source.slice(start, source.indexOf("\ntest(", start));
+  let cleanup: () => Promise<void> = async () => { throw new Error("cleanup hook not registered"); };
+  let disconnected = 0;
+  const writes: string[] = [];
+  const db = new Proxy({ $disconnect: async () => { disconnected++; } }, {
+    get(target, entity: string) {
+      if (entity === "$disconnect") return target.$disconnect;
+      return { deleteMany: async () => { writes.push(entity); throw new Error("unguarded write"); } };
+    },
+  });
+  vm.runInNewContext(transpileModule(hook, { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText,
+    { snapshotReady: false, after: (fn: typeof cleanup) => { cleanup = fn; }, db, runtimeDb: db });
+  await cleanup();
+  assert.deepEqual(writes, []);
+  assert.equal(disconnected, 2);
 });
