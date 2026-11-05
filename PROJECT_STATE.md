@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-04 — Быстрый ввод: проект из нескольких услуг (Claude, PR #460)
+
+- Task owner: Claude, branch `claude/quick-entry-multi-service`, PR #460, rebased on `origin/main` `2c39c72`. Owner request (2026-11-04): the existing `⚡ Быстрый ввод` section (PR #450) must take one project with any number of services via «+ Добавить услугу»; each service carries its own work date, its own installers (or a hired specialist with a fixed amount), its own supplies from the warehouse; the project total, payroll and margin are assembled from the lines. Visual approved on the Design canvas «Карточка проекта RolanPRO — варианты», artboard QUICK-2.
+- Implemented only in `private/legacy/production-stages.js` (quickEntry* functions) and `.qe-*` CSS in `private/legacy/rolanpro-crm-cloud.html`. Form state is `form.lines[]` (`quickEntryNewLine`, `quickEntryAddLine/RemoveLine/SetLine`, `quickEntryAddSupply/RemoveSupply`); `quickEntryCommit` writes one project with one `quickProjectLine` per service (`startDate/endDate/installerIds/supplyItems` — the fields the project card and payroll already read), package parts once per service, a hired specialist as a `subcontractor` direct expense, `serviceTypes` = all directions, `createdAt` = first date, close date = last date. `quickEntryLineCalc` previews a line through `installerRateForQuickLine`, `installerSeniorFactor`, `warehouseCatalogCostPerSqft` and supply `costPerUnit`; the committed figures still come only from `orderPSS` / `calcUserPayoutForPeriod`. Month table groups by project and expands to lines; right column adds «Как считает CRM» and «Проверка формул» (counts from `quickEntryEconomics` flags). Site complexity stays one per project (that is what rent/retail coefficients read).
+- Verification: `quick-entry-panel.test.ts` rewritten for the multi-line model (6 tests pass); `node --check` on production-stages.js; full `npm test` 847 pass / 35 fail — the same 35 environment-dependent failures as on untouched main (no database/Prisma in this sandbox). Browser check of the live section is still pending after merge.
+- Next: owner merges, deploy from main, open `/legacy-crm#/quickEntry`, enter one multi-service project and compare the table/payroll with expectations; then review the flagged formulas.
+
 ## 2026-11-04 — CallRail webhook call identifier compatibility (in progress)
 
 - Task owner: Codex, branch `codex/callrail-webhook-identifiers-20261104`, based on verified `origin/main` and active production release `76312df` (merged PR #462).
