@@ -2,6 +2,14 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-04 — Dedicated CallRail ingress hostname (in progress)
+
+- Task owner: Codex, branch `codex/callrail-dedicated-ingress-20261104`, based on verified main `c01029e` (merged PR #456). That release is active; the deployment workflow's final curl timed out, but read-only diagnose run 41943209710 independently confirmed the active release and local app, and public login returned 200. Do not blindly rerun deployments after that workflow symptom.
+- Missed/provider-spam inbound calls are retained for manager review, with existing CLOSED_LOST dismissal, no qualification from contact enrichment, and actual proposal-sent qualification with PHONE source. PR #456 passed 1,019 unit tests, TypeScript/build, disposable DB/API/browser CI 41941543412, merged-main CI 41942214311, final Claude CLI review and current automatic Codex review without unresolved findings.
+- Production website MR !49 is deployed. Source hashes, one loader, three swapped tel links, original-number fallback, and fresh reviewed JS/default-on configuration at origin and edge were verified. The installed page-cache CLI queued its purge; the reviewed immediate plugin API cleared the disk cache. Redesign MR !50 still awaits remaining exact-head CI; staging remains noindex, tracking off and Critical CSS off.
+- Genuine CallRail delivery is **not confirmed**. The original missed call is genuine and its callback was confirmed by the owner. CallRail's signing key matches receiver authentication; valid non-record-creating probes get 400 and unsigned probes 401. A concrete Cloudflare BIC 1010 block and query-route gap were fixed, but genuine provider POSTs still reached WordPress 404s. This branch permits one dedicated Worker custom domain to remove that origin fallback; no credential, data-model, acquisition or campaign change.
+- No fabricated Google click, enquiry, consent, qualification or sale. Temporary Call Modified recovery was removed while preparing this change. Next: final checks/review, bind the dedicated hostname from merged code, verify TLS/401/400, change Post-Call only, and verify a genuine signed call in CRM before any completion claim.
+
 ## 2026-11-04 — CallRail genuine-call delivery repair (in progress)
 
 - Task owner: Codex, PR #456, branch `codex/callrail-provider-id-20261104`, includes current `origin/main` `ada1a7c`; preserves independently merged Meta intake and inbox actions.

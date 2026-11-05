@@ -1,7 +1,7 @@
 # CallRail ingress relay
 
 The dedicated Cloudflare Worker `rolanpro-callrail-ingress` handles only
-`https://rolan-pro.com/integrations/callrail` and forwards POST bytes and the
+`https://callrail.rolan-pro.com/integrations/callrail` and forwards POST bytes and the
 CallRail Signature to the existing CRM receiver. CRM still verifies HMAC and
 company scope; no caller data, cookies, credentials or payload logs are stored
 by this Worker. The fixed destination cannot be supplied by a request.
@@ -15,9 +15,17 @@ transpile `worker.ts` to an ES2022 module (no dependencies), then upload that
 module through Cloudflare with `main_module: worker.js`, compatibility date
 `2026-11-04`, observability disabled and no bindings. The RolanPro account is
 `9cadf1ac8359ba55913a64258f50e923`, zone
-`34a7aa17a8f41522edbff0a3a696c64c`. Add only the exact route
-`https://rolan-pro.com/integrations/callrail`; do not modify the Messenger Worker,
-site routes, WAF, DNS or account permissions.
+`34a7aa17a8f41522edbff0a3a696c64c`. Use
+`rolan-pro.com/integrations/callrail*` only as a compatibility route. The Worker
+rejects all other paths and HTTP; query strings never cross to CRM. Bind the
+Worker's **Custom Domain** `callrail.rolan-pro.com` directly to this service and
+use that hostname in CallRail. It must not fall through to WordPress. Preserve
+the Messenger Worker, unrelated site routes and account permissions.
+
+Non-browser POSTs can be blocked by Browser Integrity Check (1010). Keep the
+configuration exception limited to `POST /integrations/callrail` on these two
+hostnames, with `action: set_config`, `action_parameters: { bic: false }`. CRM
+HMAC/company authentication remains required; do not disable zone security.
 
 Before changing the provider URL, verify unsigned POST is 401 and a correctly
 signed incomplete payload containing the configured `company_id` and
@@ -26,6 +34,22 @@ signed incomplete payload containing the configured `company_id` and
 configure only Post-Call and verify a genuine call appears in CRM. A failed
 upstream request returns 502; CRM errors retain their status for provider retry.
 
-Rollback: restore CallRail's prior direct Post-Call URL and remove this exact
-Worker route. No CRM data/schema/key change is required. Do not replay a
+Rollback: restore CallRail's prior direct Post-Call URL, unbind only the
+dedicated Worker custom domain, and remove only this compatibility route and
+its scoped BIC exception. No CRM data/schema/key change is required. Do not replay a
 constructed caller payload; use a provider-supported resend of a genuine call.
+
+
+Verified rollout observations (2026-11-04): signed probes reached the apex
+Worker, but genuine CallRail POSTs received WordPress 404s without CRM ingress.
+A query-string routing gap and a BIC block were reproduced separately and fixed;
+neither alone proved genuine delivery. The dedicated hostname removes the
+WordPress fallback. Confirm a genuine call before claiming delivery.
+
+The production website runs the reviewed MR !49 files. Super Page Cache 5.3.9's
+`wp cfcache purge_cache` queues work; its success does not prove disk HTML was
+removed. After verifying the site and configured zone, the installed plugin's
+`SPC\Modules\Cache_Controller::purge_all(true, false, true, $error)` performs an
+immediate purge. Both direct origin and Cloudflare edge then served reviewed JS
+and `requiresOptIn: false`. Preserve saved visitor opt-outs/GPC and staging's
+tracking/noindex/Critical CSS isolation.

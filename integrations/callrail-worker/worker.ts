@@ -4,7 +4,7 @@ const MAX_BODY = 128 * 1024;
 export default {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    if (url.protocol !== "https:" || url.hostname !== "rolan-pro.com" || url.pathname !== "/integrations/callrail") return new Response(null, { status: 404 });
+    if (url.protocol !== "https:" || !["rolan-pro.com", "callrail.rolan-pro.com"].includes(url.hostname) || url.pathname !== "/integrations/callrail") return new Response(null, { status: 404 });
     if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } });
     const signature = request.headers.get("signature") || "";
     if (!/^[A-Za-z0-9+/]{27}=$/.test(signature)) return new Response(null, { status: 401 });
