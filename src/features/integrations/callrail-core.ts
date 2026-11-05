@@ -17,7 +17,7 @@ function id(value: unknown) {
 }
 export function callrailPayloadTypes(input: unknown) {
   const body = record(input);
-  return Object.fromEntries(["id", "start_time", "duration", "answered"].map(key => [key, body[key] === null ? "null" : typeof body[key]]));
+  return Object.fromEntries(["id", "call_id", "resource_id", "start_time", "duration", "answered"].map(key => [key, body[key] === null ? "null" : typeof body[key]]));
 }
 export function verifyCallrailSignature(raw: string | Uint8Array, signature: string | null, key: string) {
   if (!key || !signature || !/^[A-Za-z0-9+/]{27}=$/.test(signature)) return false;
@@ -31,7 +31,7 @@ export function normalizeCallrailCall(input: unknown, companyId: string, now = n
   const body = record(input);
   if (!companyId || id(body.company_id) !== companyId) throw new CallrailError("wrong_company", "Unexpected CallRail company.", 403);
   if (body.direction !== "inbound") return null;
-  const callId = id(body.id);
+  const callId = id(body.id ?? body.call_id ?? body.resource_id);
   const start = text(body.start_time, 64);
   const duration = typeof body.duration === "number" || (typeof body.duration === "string" && /^\d+$/.test(body.duration)) ? Number(body.duration) : NaN;
   if (!callId || !/^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(start) || !Number.isFinite(Date.parse(start)) || Date.parse(start) > now.getTime() + 300_000 || !Number.isInteger(duration) || duration < 0 || duration > 604800 || (body.answered !== null && typeof body.answered !== "boolean")) {
