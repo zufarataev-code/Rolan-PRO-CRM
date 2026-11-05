@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-05 — Быстрый ввод в одно окно поверх исторической модели PR #458 (Claude, PR pending)
+
+- Context: PR #458 (Codex, merged 2026-11-05 05:23Z) replaced the one-screen panel from PR #460 with «header → draft → project editor». The owner asked for the one-window flow back («одно окно»): services with «+ услуга», each with its own date, crew or hired specialist, and warehouse supplies.
+- Done on `claude/quick-entry-one-screen`: `renderQuickEntry` is the one-screen form again (header incl. surveyor + actual survey date, service cards, project bill, month table grouped by project and expandable to services, right column with «Как считает CRM» and «Проверка формул»). `quickEntryCommit` builds the order with the shared `quickEntryNewOrder` skeleton (extracted from `quickEntryCreateDraft`, which stays as the «только черновик без услуг» path), one line per service via `quickEntryBuildLine` (film services → `quickProjectLine` with catalog film; size-free → `projectOfferingLine`), hired specialist → `subcontractor` direct expense with `lineId`, then runs `projectQuickCompletionIssues` and closes through `closeQuickProjectAsCompletedWith` — the closing body extracted from `closeQuickProjectAsCompleted` (the button handler now reads the form, confirms and calls it). A manager saves a draft; only the owner closes. `projectQuickCompletionIssues` accepts a line whose only executor is a hired specialist (`subcontractor` expense with that `lineId`).
+- Verification: `node --check` production-stages.js and the extracted inline scripts of the HTML; `quick-entry-panel.test.ts` 23/23 (new one-screen test added, draft/editor tests kept); `project-estimate-workflow.test.ts` 48/48 (closer test reads both halves); full `npm test` 892 pass / 35 fail — the same 35 environment failures as untouched main.
+- Next: merge, deploy, enter a real multi-service project on production; then «расходники к услуге» (service supply norms in «Услуги и цены»).
+
 ## 2026-11-04 — Быстрый ввод: проект из нескольких услуг (Claude, PR #460)
 
 - Task owner: Claude, branch `claude/quick-entry-multi-service`, PR #460, rebased on `origin/main` `2c39c72`. Owner request (2026-11-04): the existing `⚡ Быстрый ввод` section (PR #450) must take one project with any number of services via «+ Добавить услугу»; each service carries its own work date, its own installers (or a hired specialist with a fixed amount), its own supplies from the warehouse; the project total, payroll and margin are assembled from the lines. Visual approved on the Design canvas «Карточка проекта RolanPRO — варианты», artboard QUICK-2.
