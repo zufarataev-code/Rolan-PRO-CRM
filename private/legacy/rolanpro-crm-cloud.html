@@ -27164,9 +27164,11 @@ function refreshServiceOfferingFilmControls(id) {
     if (label.getAttribute('data-service-default-film-choice') !== id) return;
     const input = label.querySelector('input[data-film-id]');
     const selected = linked.has(input?.getAttribute('data-film-id'));
+    const film = getCatalogItem(input?.getAttribute('data-film-id'));
+    const mayBeDefault = selected && serviceDirectionAllowsFilm(offering.direction, film);
     label.style.display = selected ? 'inline-flex' : 'none';
     if (input) {
-      input.disabled = !selected || currentUser()?.role !== 'owner';
+      input.disabled = !mayBeDefault || currentUser()?.role !== 'owner';
       input.checked = selected && input.getAttribute('data-film-id') === defaultFilmId;
     }
   });
@@ -27197,9 +27199,9 @@ function toggleServiceOfferingFilm(id, filmId, checked) {
   offering.filmIds = [...ids];
   const available = offering.filmIds.filter(value => {
     const item = getCatalogItem(value);
-    return item && !item.archived && serviceOfferingAllowsFilm(offering, item);
+    return item && !item.archived && serviceDirectionAllowsFilm(offering.direction, item);
   });
-  if (checked && !serviceOfferingDefaultFilmId(offering)) offering.defaultFilmId = filmId;
+  if (checked && serviceDirectionAllowsFilm(offering.direction, film) && !serviceOfferingDefaultFilmId(offering)) offering.defaultFilmId = filmId;
   if (!available.includes(offering.defaultFilmId)) offering.defaultFilmId = available.length === 1 ? available[0] : '';
   offering.updatedAt = new Date().toISOString();
   persistServiceOfferingFilms(id);
@@ -27212,7 +27214,7 @@ function setServiceOfferingDefaultFilm(id, filmId) {
   const offering = serviceOffering(id);
   if (!offering || !serviceOfferingFilmIds(offering).includes(filmId)) return;
   const film = getCatalogItem(filmId);
-  if (!film || film.archived || !serviceOfferingAllowsFilm(offering, film)) return;
+  if (!film || film.archived || !serviceDirectionAllowsFilm(offering.direction, film)) return;
   offering.defaultFilmId = filmId;
   offering.updatedAt = new Date().toISOString();
   persistServiceOfferingFilms(id);
@@ -27333,7 +27335,7 @@ function serviceOfferingEditorHtml(offering, owner) {
   const per = serviceOfferingUnitShort(offering);
   const sized = serviceOfferingNeedsSizes(offering);
   const filmList = films.length
-    ? `<details open><summary class="cursor-pointer text-sm font-bold">Материалы услуги · <span data-service-offering-film-summary="${offering.id}">${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'не выбраны'}</span></summary><div class="mt-2 grid gap-1">${films.map(item => { const selected = serviceOfferingFilmIds(offering).includes(item.id); return `<div class="flex flex-wrap items-center justify-between gap-2"><label class="text-sm"><input type="checkbox" style="width:auto" ${selected ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(также: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label><label class="text-xs" data-service-default-film-choice="${offering.id}" style="display:${selected ? 'inline-flex' : 'none'};align-items:center;gap:5px"><input type="radio" name="service-default-film-${offering.id}" data-film-id="${item.id}" style="width:auto" ${defaultFilmId === item.id ? 'checked' : ''} ${owner && selected ? '' : 'disabled'} onchange="setServiceOfferingDefaultFilm('${offering.id}','${item.id}')"> по умолчанию</label></div>`; }).join('')}</div><div class="flex flex-wrap items-center justify-between gap-2 mt-2"><span class="text-xs text-gray-500" data-service-offering-film-save-status="${offering.id}">${defaultFilmId ? `В новый проект подставится: ${academyEsc(catalogLabel(getCatalogItem(defaultFilmId)))}` : linked.length > 1 ? 'Выберите основной материал — он будет подставляться в проект автоматически.' : 'Выберите материал услуги.'}</span>${owner ? `<button type="button" class="btn-ghost text-xs" onclick="persistServiceOfferingFilms('${offering.id}')">Сохранить материалы</button>` : ''}</div></details>`
+    ? `<details open><summary class="cursor-pointer text-sm font-bold">Материалы услуги · <span data-service-offering-film-summary="${offering.id}">${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'не выбраны'}</span></summary><div class="mt-2 grid gap-1">${films.map(item => { const selected = serviceOfferingFilmIds(offering).includes(item.id); const mayBeDefault = serviceDirectionAllowsFilm(offering.direction, item); return `<div class="flex flex-wrap items-center justify-between gap-2"><label class="text-sm"><input type="checkbox" style="width:auto" ${selected ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(также: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label><label class="text-xs" data-service-default-film-choice="${offering.id}" style="display:${selected ? 'inline-flex' : 'none'};align-items:center;gap:5px"><input type="radio" name="service-default-film-${offering.id}" data-film-id="${item.id}" style="width:auto" ${defaultFilmId === item.id ? 'checked' : ''} ${owner && selected && mayBeDefault ? '' : 'disabled'} onchange="setServiceOfferingDefaultFilm('${offering.id}','${item.id}')"> по умолчанию</label></div>`; }).join('')}</div><div class="flex flex-wrap items-center justify-between gap-2 mt-2"><span class="text-xs text-gray-500" data-service-offering-film-save-status="${offering.id}">${defaultFilmId ? `В новый проект подставится: ${academyEsc(catalogLabel(getCatalogItem(defaultFilmId)))}` : linked.length > 1 ? 'Выберите основной материал — он будет подставляться в проект автоматически.' : 'Выберите материал услуги.'}</span>${owner ? `<button type="button" class="btn-ghost text-xs" onclick="persistServiceOfferingFilms('${offering.id}')">Сохранить материалы</button>` : ''}</div></details>`
     : '<div class="text-sm text-gray-500">На складе пока нет плёнок этого направления. Услугу можно сохранить и добавить материал позже.</div>';
 
   if (!owner) return `<div class="service-editor-panel"><div class="flex justify-between gap-3"><div><h4 class="font-black text-lg">${academyEsc(offering.name)}</h4><div class="text-sm text-gray-500 mt-1">${academyEsc(SERVICE_OFFERING_UNITS.find(item => item.id === unit)?.label || per)}</div></div><b>${Number(offering.pricePerSqft) > 0 ? `${fmtMoney(Number(offering.pricePerSqft))} / ${academyEsc(per)}` : 'Цена не задана'}</b></div>${sized ? `<div class="service-editor-section">${filmList}</div>` : ''}</div>`;

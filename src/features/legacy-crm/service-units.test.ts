@@ -103,6 +103,9 @@ test('the service editor preserves an old explicit Privacy material link without
   assert.equal(c.projectOfferingAllowsFilm(unlinkedLegacy, db.settings.catalog[1], 'mirror'), false, 'another cross-direction material remains unavailable');
   assert.equal(c.projectOfferingAllowsFilm(offering, db.settings.catalog[0], ''), false, 'a directory compatibility link cannot be selected in a new project');
   assert.equal(c.serviceOfferingDefaultFilmId(offering), '', 'a cross-direction compatibility link is never the default for a new project');
+  offering.defaultFilmId = '';
+  c.setServiceOfferingDefaultFilm(offering.id, 'mirror');
+  assert.equal(offering.defaultFilmId, '', 'a legacy cross-direction link cannot be selected as a new default');
   const editor = html.slice(html.indexOf('function serviceOfferingEditorHtml('), html.indexOf('function updateServiceOffering(', html.indexOf('function serviceOfferingEditorHtml(')));
   assert.match(editor, /serviceOfferingAllowsFilm\(offering, item\)/);
   assert.match(html, /projectOfferingAllowsFilm\(offering, item, selectedCatalogId\)/);
@@ -288,6 +291,12 @@ test('the server persists only a default material that is linked to the same ser
   wrongDirection.settings.serviceOfferings[0].filmIds.push('solar');
   wrongDirection.settings.serviceOfferings[0].defaultFilmId = 'solar';
   assert.match(prepareServiceSolutions(base, wrongDirection, true)!, /Материалы должны принадлежать направлению/);
+
+  const legacyCurrent: Row = structuredClone(base);
+  legacyCurrent.settings.serviceOfferings[0] = { ...legacyCurrent.settings.serviceOfferings[0], direction: 'decorative', filmIds: ['mirror'], defaultFilmId: '' };
+  const legacyDefault: Row = structuredClone(legacyCurrent);
+  legacyDefault.settings.serviceOfferings[0].defaultFilmId = 'mirror';
+  assert.match(prepareServiceSolutions(legacyCurrent, legacyDefault, true)!, /Основной материал должен принадлежать направлению/);
 });
 
 test('the service price editor separates customer price from owner costs and previews margin', () => {

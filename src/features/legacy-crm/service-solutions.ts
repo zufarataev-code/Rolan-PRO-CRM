@@ -291,7 +291,13 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
     if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id && filmMatchesDirection(offering, film))))) return 'Материалы должны принадлежать направлению услуги.';
     if (offering.defaultFilmId !== undefined && offering.defaultFilmId !== '') {
       if (typeof offering.defaultFilmId !== 'string' || !Array.isArray(offering.filmIds) || !offering.filmIds.includes(offering.defaultFilmId)) return 'Основной материал должен быть закреплён за услугой.';
-      if (!films.some(film => film.id === offering.defaultFilmId && filmMatchesDirection(offering, film))) return 'Основной материал должен принадлежать направлению услуги.';
+      if (!films.some(film => film.id === offering.defaultFilmId && filmBelongsToServiceDirection(film, offering.direction))) {
+        // An invalid default saved before Privacy became a separate direction
+        // is harmlessly cleared on its next round-trip. It may not be selected
+        // again merely because the old cross-direction link remains removable.
+        if (currentOffering?.defaultFilmId === offering.defaultFilmId) offering.defaultFilmId = '';
+        else return 'Основной материал должен принадлежать направлению услуги.';
+      }
     }
   }
   for (const offering of offerings) {
