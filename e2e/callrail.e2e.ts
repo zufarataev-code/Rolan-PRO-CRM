@@ -54,6 +54,11 @@ after(async () => {
   await runtimeDb.$disconnect();
 });
 test("signed calls deduplicate concurrently, preserve original source, and create no qualification", async () => {
+  const login = await fetch(base + "/api/v1/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" }) });
+  assert.equal(login.status, 200);
+  cookie = login.headers.get("set-cookie")!.split(";")[0];
+  const settings = { conversion_owner_customer_id: "900000002", qualified_lead_action_id: "100", converted_lead_action_id: "101", qualification_rules: { pipeline_status_code: "PROPOSAL_SENT" }, upload_enabled: false, validate_only: true };
+  await db.googleAdsIntegrationSetting.upsert({ where: { setting_key: "default" }, create: { setting_key: "default", ...settings }, update: settings });
   const call = { ...fixture("first"), answered: false, duration: 0, spam: true };
   assert.equal((await send(call, "invalid")).status, 401);
   assert.equal((await send({ ...call, company_id: "another" })).status, 403);
@@ -65,7 +70,8 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   const missed = await db.lead.findUniqueOrThrow({ where: { lead_id: leadId }, include: { pipeline_status: true } });
   assert.equal(missed.pipeline_status.status_code, "NEW_LEAD");
   assert.match(missed.notes!, /CallRail пометил как спам/);
-  await db.lead.update({ where: { lead_id: leadId }, data: { name: "Enriched offline caller", email: "caller@example.invalid" } });
+  const enriched = await fetch(base + "/api/v1/leads/" + leadId, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ name: "Enriched offline caller", email: "caller@example.invalid" }) });
+  assert.equal(enriched.status, 200);
   assert.equal(await db.conversionEvent.count({ where: { lead_id: leadId } }), 0, "contact enrichment alone is not qualification");
   assert.equal(results[1].body.lead_id, leadId);
   assert.equal(results.filter(item => item.body.duplicate).length, 1);
@@ -79,6 +85,8 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   const contacted = await db.pipelineStatus.findUniqueOrThrow({ where: { status_code: "CONTACTED" } });
   const initialProject = { id: `callrail-${tag}`, canonicalLeadId: leadId };
   await db.legacyWorkspace.upsert({ where: { workspace_id: "primary" }, create: { workspace_id: "primary", payload: { orders: [initialProject] }, revision: 1 }, update: { payload: { orders: [initialProject] }, revision: { increment: 1 } } });
+  assert.equal((await reconcileLegacyGoogleAdsOutcomes()).failed, 0);
+  assert.equal(await db.conversionEvent.count({ where: { lead_id: leadId } }), 0, "an enriched linked project without a sent proposal remains unqualified");
   await db.lead.update({ where: { lead_id: leadId }, data: { pipeline_status_id: contacted.pipeline_status_id } });
   assert.equal((await send(fixture("handled-repeat"))).body.lead_id, leadId, "handled callers retain their original project and attribution");
   const status = await db.pipelineStatus.findUniqueOrThrow({ where: { status_code: "NEW_LEAD" } });
@@ -105,20 +113,18 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   const nextReview = await send(fixture("resolved-review", "+12025550199"));
   ids.push(nextReview.body.lead_id);
   assert.notEqual(nextReview.body.lead_id, review.body.lead_id, "dismissed review does not swallow future calls");
-  const dismissed = await db.lead.create({ data: { name: "Dismissed fixture", phone: "+12025550188", source: "website", pipeline_status_id: lost.pipeline_status_id } });
+  const dismissed = await db.lead.create({ data: { name: "Dismissed fixture", phone: "+12025550188", source: "website", pipeline_status_id: status.pipeline_status_id } });
   ids.push(dismissed.lead_id);
+  const dismissedResponse = await fetch(base + "/api/v1/leads/" + dismissed.lead_id, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ pipeline_status_code: "CLOSED_LOST", expected_status_codes: ["NEW_LEAD"] }) });
+  assert.equal(dismissedResponse.status, 200);
+  assert.equal((await db.lead.findUniqueOrThrow({ where: { lead_id: dismissed.lead_id }, include: { pipeline_status: true } })).pipeline_status.status_code, "CLOSED_LOST");
   const renewed = await send(fixture("renewed-enquiry", "+12025550188"));
   ids.push(renewed.body.lead_id);
   assert.notEqual(renewed.body.lead_id, dismissed.lead_id, "a dismissed enquiry without a project leaves a fresh call visible");
-  const login = await fetch(base + "/api/v1/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "owner@rolanpro.local", password: process.env.E2E_SEED_PASSWORD || "ChangeMe123!" }) });
-  assert.equal(login.status, 200);
-  cookie = login.headers.get("set-cookie")!.split(";")[0];
   const list = await fetch(base + "/api/v1/leads", { headers: { cookie } });
   const items = (await list.json()).data.items;
   assert.equal(items.find((lead: any) => lead.lead_id === leadId).callrail_calls.length, 3);
   assert.equal(items.find((lead: any) => lead.lead_id === leadId).source, "callrail");
-  const settings = { conversion_owner_customer_id: "900000002", qualified_lead_action_id: "100", converted_lead_action_id: "101", qualification_rules: { pipeline_status_code: "PROPOSAL_SENT" }, upload_enabled: false, validate_only: true };
-  await db.googleAdsIntegrationSetting.upsert({ where: { setting_key: "default" }, create: { setting_key: "default", ...settings }, update: settings });
   const at = new Date().toISOString();
   const order = { id: `callrail-${tag}`, canonicalLeadId: leadId, timeline: [{ key: "proposal_sent", at }], depositReceived: false, paid: 0, projectEstimateSnapshot: { revenue: 1000 } };
   await db.legacyWorkspace.upsert({ where: { workspace_id: "primary" }, create: { workspace_id: "primary", payload: { orders: [order] }, revision: 1 }, update: { payload: { orders: [order] }, revision: { increment: 1 } } });
