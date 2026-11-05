@@ -3547,7 +3547,6 @@ function quickEntryCreateDraft() {
   if (!String(f.client || '').trim()) problems.push('имя клиента');
   if (!String(f.phone || '').trim() && !String(f.street || '').trim()) problems.push('телефон или адрес');
   if (!f.manager) problems.push('менеджер');
-  if (!f.measurer) problems.push('замерщик');
   if (problems.length) { alert('Заполните: ' + problems.join(', ') + '.'); return; }
   const found = quickEntryFindOrCreateClient(f);
   if (!found) return;
@@ -3556,7 +3555,7 @@ function quickEntryCreateDraft() {
   const at = `${date}T12:00:00.000Z`;
   const num = 'R-' + date.slice(2).replace(/-/g, '') + '-' + String(projectNumberSequence()).padStart(3, '0');
   const o = {
-    id: 'o' + uid(), number: num, clientId: client.id, status: 'new', managerId: f.manager, measurerId: f.measurer, installerIds: [],
+    id: 'o' + uid(), number: num, clientId: client.id, status: 'new', managerId: f.manager, measurerId: f.measurer || null, installerIds: [],
     createdAt: at, pricePerM2: db.settings.pricePerM2, complexity: 'standard', distanceKm: 0, marketing: 0, paid: 0,
     paymentTerms: 'deposit_before_work', paymentTermsConfirmedAt: at, paymentTermsConfirmedBy: state.currentUserId,
     measurements: { rooms: [] }, siteType: normalizeOrderSiteType(f.site) || 'RESIDENTIAL',

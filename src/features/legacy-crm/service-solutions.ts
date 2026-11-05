@@ -279,7 +279,12 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean)
     for (const [offeringId, filmId] of Object.entries(selectedMaterials)) {
       const offering = offerings.find(value => value.id === offeringId);
       const film = films.find(value => value.id === filmId);
-      if (!selectedOfferingIds.has(offeringId) || !offering || !film || !filmAllowed(offering, filmId)) {
+      // Some projects were saved while Privacy films temporarily lived under
+      // Decorative and a service without filmIds accepted every film in that
+      // combined direction. Keep that exact saved project choice writable,
+      // but do not allow replacing it with another cross-direction material.
+      const unchangedLegacySelection = object(oldOrder.offeringCatalogIds)[offeringId] === filmId;
+      if (!selectedOfferingIds.has(offeringId) || !offering || !film || (!filmAllowed(offering, filmId) && !unchangedLegacySelection)) {
         return 'Материал проекта должен быть привязан к выбранной услуге.';
       }
     }

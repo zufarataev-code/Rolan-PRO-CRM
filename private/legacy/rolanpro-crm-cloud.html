@@ -29273,6 +29273,7 @@ function quickProjectUpdateHeader(oid, field, value) {
   const o = getOrder(oid);
   if (!o || o.quickProjectImportedCompleted || !orderUserCanSeeMoney(o, currentUser())) return;
   if (field === 'managerId') {
+    if (currentUser()?.role !== 'owner') return;
     const user = getUser(value);
     if (!user || user.active === false || !['manager', 'owner'].includes(user.role)) return;
     o.managerId = user.id;
@@ -29298,6 +29299,7 @@ function renderQuickProjectEntry(o) {
   const quickRole = currentUser()?.role || '';
   const canEditHistoricalProduction = ['owner', 'manager'].includes(quickRole);
   const canCloseHistoricalProject = quickRole === 'owner';
+  const canReassignHistoricalManager = quickRole === 'owner';
   const availableManagers = db.users.filter(user => user.active !== false && ['manager', 'owner'].includes(user.role));
   const availableMeasurers = db.users.filter(user => user.active !== false && ['measurer', 'owner'].includes(user.role));
   const client = getClient(o.clientId);
@@ -29357,7 +29359,7 @@ function renderQuickProjectEntry(o) {
       <div class="project-estimate-section-head"><div><h4>Проект и ответственные</h4><div class="text-xs text-gray-500">Один проект хранит все услуги. Монтажники и даты назначаются отдельно для каждой услуги ниже.</div></div><span class="tag bg-blue-50 text-blue-700">${academyEsc(o.number)}</span></div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
         <div class="project-estimate-quick-card"><span>Клиент и объект</span><strong>${academyEsc(client?.name || 'Без клиента')}</strong><div class="text-xs text-gray-500">${academyEsc(orderAddress(o, client) || 'Адрес не указан')}</div></div>
-        <div><label>Менеджер</label><select onchange="quickProjectUpdateHeader('${o.id}','managerId',this.value)">${availableManagers.map(user => `<option value="${user.id}" ${o.managerId===user.id?'selected':''}>${academyEsc(user.name)}</option>`).join('')}</select></div>
+        <div><label>Менеджер</label><select ${canReassignHistoricalManager?'':'disabled title="Назначение менеджера меняет только владелец"'} onchange="quickProjectUpdateHeader('${o.id}','managerId',this.value)">${availableManagers.map(user => `<option value="${user.id}" ${o.managerId===user.id?'selected':''}>${academyEsc(user.name)}</option>`).join('')}</select></div>
         <div><label>Замерщик</label><select onchange="quickProjectUpdateHeader('${o.id}','measurerId',this.value)"><option value="">Не указан</option>${availableMeasurers.map(user => `<option value="${user.id}" ${o.measurerId===user.id?'selected':''}>${academyEsc(user.name)}${user.role==='owner'?' · владелец':''}</option>`).join('')}</select></div>
         <div><label>Заметка</label><input value="${academyEsc(o.notes || '')}" onchange="quickProjectUpdateHeader('${o.id}','notes',this.value)" placeholder="Что важно по этому проекту"></div>
       </div>

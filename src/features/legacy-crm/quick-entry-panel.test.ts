@@ -18,9 +18,10 @@ test('the panel is a view of its own for owner and manager', () => {
 
 test('historical entry first creates one draft project, then opens the canonical multi-service editor', () => {
   const create = fn(stages, 'quickEntryCreateDraft');
-  for (const required of ['дата проекта', 'имя клиента', 'менеджер', 'замерщик']) assert.ok(create.includes(required), required);
+  for (const required of ['дата проекта', 'имя клиента', 'менеджер']) assert.ok(create.includes(required), required);
+  assert.doesNotMatch(create, /problems\.push\('замерщик'\)/, 'an unknown historical surveyor is allowed');
   assert.match(create, /extraServices: \[\], extraExpenses: \[\]/, 'the header does not invent a first service');
-  assert.match(create, /measurerId: f\.measurer/);
+  assert.match(create, /measurerId: f\.measurer \|\| null/);
   assert.match(create, /quickEntryDraft: true/);
   assert.match(create, /openQuickProjectEntry\(o\.id\)/, 'the existing project editor owns services, expenses and closing');
   assert.doesNotMatch(create, /quickEntryComplete\(/, 'creating the header must not close the project automatically');
@@ -69,8 +70,26 @@ test('canonical editor supports many services with their own dates, crew, suppli
   assert.match(renderer, /projectQuickAddExpense/);
   assert.match(renderer, /\['owner', 'manager'\]\.includes\(quickRole\)/, 'owner and manager can fill dates, crew and supplies');
   assert.match(renderer, /canCloseHistoricalProject = quickRole === 'owner'/, 'only the owner confirms money and closes the import');
+  assert.match(renderer, /canReassignHistoricalManager = quickRole === 'owner'/, 'only the owner can reassign the project manager');
   assert.match(fn(html, 'closeQuickProjectAsCompleted'), /o\.status = full \? 'completed' : 'act_signed'/, 'partial payment leaves debt visible');
   assert.match(fn(html, 'closeQuickProjectAsCompleted'), /projectEstimateApprovalSnapshot\(o, recordedAt, true\)/);
+});
+
+test('a manager cannot reassign a historical project and lose access to it', () => {
+  const order = { id: 'o', quickProjectImportedCompleted: false, managerId: 'manager-a' };
+  let saved = false;
+  const context: any = vm.createContext({
+    getOrder: () => order,
+    orderUserCanSeeMoney: () => true,
+    currentUser: () => ({ id: 'manager-a', role: 'manager' }),
+    getUser: () => ({ id: 'manager-b', role: 'manager', active: true }),
+    projectEstimateMarkChanged: () => undefined,
+    save: () => { saved = true; },
+    refreshQuickProjectEntry: () => undefined,
+  });
+  vm.runInContext(`${fn(html, 'quickProjectUpdateHeader')}; quickProjectUpdateHeader('o', 'managerId', 'manager-b');`, context);
+  assert.equal(order.managerId, 'manager-a');
+  assert.equal(saved, false);
 });
 
 test('historical services are the only source of their directions and a closed import is immutable', () => {

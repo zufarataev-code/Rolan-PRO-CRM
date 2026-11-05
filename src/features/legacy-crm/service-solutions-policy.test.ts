@@ -43,6 +43,19 @@ test('project intake material must belong to the exact selected service',()=>{
   assert.match(prepareServiceSolutions(current,next,false)!,/Материал проекта/);
 });
 
+test('an unchanged legacy project-level Privacy film remains writable but cannot be replaced cross-direction',()=>{
+  const legacy:any=structuredClone(current);
+  legacy.settings.catalog.push({id:'privacy-film',category:'privacy'});
+  legacy.orders[0].offeringIds=['solution'];
+  legacy.orders[0].offeringCatalogIds={solution:'privacy-film'};
+  const unchanged:any=serviceSolutionsForViewer(legacy,false);
+  assert.equal(prepareServiceSolutions(legacy,unchanged,false),null);
+
+  unchanged.settings.catalog.push({id:'other-privacy-film',category:'privacy'});
+  unchanged.orders[0].offeringCatalogIds.solution='other-privacy-film';
+  assert.match(prepareServiceSolutions(legacy,unchanged,false)!,/Материал проекта/);
+});
+
 test('installer receives the saved rate only for their own assigned service',()=>{
   const payload:any=structuredClone(current);
   payload.orders[0].installerIds=['installer','other'];
