@@ -20,7 +20,9 @@ module through Cloudflare with `main_module: worker.js`, compatibility date
 site routes, WAF, DNS or account permissions.
 
 Before changing the provider URL, verify unsigned POST is 401 and a correctly
-signed incomplete `{}` is CRM 400 `invalid_call`, with no created record. Then
+signed incomplete payload containing the configured `company_id` and
+`direction: "inbound"` is CRM 400 `invalid_call`, with no created record. A signed
+`{}` instead returns 403 `wrong_company`, because company scope is checked first. Then
 configure only Post-Call and verify a genuine call appears in CRM. A failed
 upstream request returns 502; CRM errors retain their status for provider retry.
 
