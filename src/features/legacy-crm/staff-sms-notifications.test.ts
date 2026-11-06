@@ -5,6 +5,7 @@ import test from 'node:test';
 // Owner, 2026-11-06: «у каждого сотрудника должна быть форма — телефонный номер
 // в карточке, на него он будет получать уведомления; сейчас этого нет».
 const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
+const stagesSrc = readFileSync('private/legacy/production-stages.js', 'utf8');
 const fn = (name: string) => { const a = html.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return html.slice(a, html.indexOf('\n}\n', a) + 3); };
 
 test('the team card has the phone and an SMS-notifications switch that is saved', () => {
@@ -23,8 +24,15 @@ test('status notifications also go by SMS to every recipient with a phone, witho
   assert.ok(notify.indexOf('options.skipSms') < notify.indexOf('if (!deliveries.length) return'), 'the SMS pass does not depend on Telegram being configured');
 });
 
-test('an installer card carries the «Старший монтажник» switch that the owner saves', () => {
-  // Owner, 2026-11-06: the senior role lived only in «Ставки и расходы» and was invisible in «Команда».
-  assert.match(html, /\$\{isOwner && u\.role === 'installer' \? `[\s\S]*?<input type="checkbox" id="tm-edit-senior" style="width:auto" \$\{u\.installerLevel === 'senior' \? 'checked' : ''\}> Старший монтажник/);
-  assert.match(html, /if \(seniorBox && isOwner\) \{ if \(seniorBox\.checked\) u\.installerLevel = 'senior'; else delete u\.installerLevel; \}/);
+test('«Старший монтажник» is a visible role: in the role select, the new-member form, the team list and crew pickers', () => {
+  // Owner, 2026-11-06: «у нас нет роли старшего монтажника — как система поймёт, кто есть кто».
+  assert.match(html, /function teamIsSeniorInstaller\(u\) \{ return !!u && u\.role === 'installer' && u\.installerLevel === 'senior'; \}/);
+  assert.match(html, /<option value="installer_senior" \$\{teamIsSeniorInstaller\(u\) \? 'selected' : ''\}>Старший монтажник/);
+  assert.match(html, /const requestedSenior = requestedRoleValue === 'installer_senior';\n\s*const requestedRole = requestedSenior \? 'installer' : requestedRoleValue;/);
+  assert.match(html, /if \(isOwner\) \{ if \(requestedSenior\) u\.installerLevel = 'senior'; else delete u\.installerLevel; \}/);
+  assert.match(html, /value="INSTALLER_SENIOR"/);
+  assert.match(html, /code === 'INSTALLER_SENIOR' \? 'INSTALLER' : code/, 'the server still sees an installer');
+  assert.match(html, /\$\{teamIsSeniorInstaller\(u\) \? '⭐ ' : ''\}\$\{u\.name\}/);
+  assert.match(html, /installerPickLabel\(m\) : m\.name/);
+  assert.match(stagesSrc, /installerPickLabel\(u\) : u\.name/);
 });

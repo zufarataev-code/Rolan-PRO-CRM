@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-06 — «Старший монтажник» как видимая роль (Claude, PR pending)
+
+- Owner: «у нас нет роли старшего монтажника — как система поймёт, кто есть кто». The senior flag existed but nothing showed it.
+- Done on `claude/senior-installer-role`: `teamIsSeniorInstaller`, `teamRoleName`, `installerPickLabel`; the team card role select has «Старший монтажник · +N % к доле» (`installer_senior` → role `installer` + `installerLevel: 'senior'`, server still gets INSTALLER); the new-member form has an «INSTALLER_SENIOR» checkbox mapped the same way (`collectTeamRoles` / `collectTeamSenior`); the team list shows «⭐ Имя» and the role name under it; crew pickers (quick entry, project crew, service schedule, assign modal) show ⭐ before the senior's name. Replaces the separate checkbox from PR #476. Pay formula unchanged: equal share + pct of it (owner confirmed 500 → 250/275).
+- Verification: `staff-sms-notifications.test.ts`, `quick-entry-panel.test.ts` 26/26; `node --check` both legacy files.
+
 ## 2026-11-06 — «Старший монтажник» в карточке сотрудника (Claude, PR pending)
 
 - Owner: «у нас нет роли старшего монтажника, которому 10 % начисляют от монтажного фонда». The role exists (`installerLevel: 'senior'`, `seniorInstallerBonusPct` 10 in «Ставки и расходы», `installerSeniorFactor` = own equal share + pct of it, 1000 → 500/550 per the owner's 2026-10-24 decision) but was invisible in «Команда»; nobody is marked senior on production.

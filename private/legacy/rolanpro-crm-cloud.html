@@ -22420,8 +22420,8 @@ function renderTeam() {
               <div class="flex items-center gap-3">
                 ${teamAvatarHtml(u, 56)}
                 <div class="flex-1 min-w-0">
-                  <div class="font-medium truncate">${u.name}</div>
-                  <div class="text-xs text-gray-500">${u.phone||'—'}</div>
+                  <div class="font-medium truncate">${teamIsSeniorInstaller(u) ? '⭐ ' : ''}${u.name}</div>
+                  <div class="text-xs text-gray-500">${academyEsc(teamRoleName(u))} · ${u.phone||'—'}</div>
                 </div>
               </div>
               <!-- Подписи словами: три значка подряд (✏️ 💰 🔑) не читались,
@@ -22483,6 +22483,13 @@ const TEAM_ROLE_OPTIONS = [
   { code: 'OWNER', legacyRole: 'owner', name: 'Владелец', label: 'Владелец — полный доступ, включая деньги' },
 ];
 
+/** Owner, 2026-11-06: «старший монтажник» — видимая роль, чтобы система понимала, кто есть кто. */
+function teamIsSeniorInstaller(u) { return !!u && u.role === 'installer' && u.installerLevel === 'senior'; }
+function installerPickLabel(u) { return `${teamIsSeniorInstaller(u) ? '⭐ ' : ''}${u?.name || ''}`; }
+function teamRoleName(u) {
+  if (teamIsSeniorInstaller(u)) return 'Старший монтажник';
+  return teamRoleOptionByLegacy(u?.role)?.name || T(u?.role) || u?.role || '—';
+}
 function teamRoleOptionByLegacy(legacyRole) {
   return TEAM_ROLE_OPTIONS.find(option => option.legacyRole === legacyRole) || null;
 }
@@ -22505,11 +22512,17 @@ function suggestTeamPassword() {
 }
 
 function teamRoleCheckboxes(selected) {
-  return TEAM_ROLE_OPTIONS.map(r => `
+  const rows = TEAM_ROLE_OPTIONS.map(r => `
     <label class="flex items-start gap-2 p-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
       <input type="checkbox" class="tm-role mt-1" value="${r.code}" ${selected.includes(r.code) ? 'checked' : ''}>
       <span class="text-sm">${academyEsc(r.label)}</span>
-    </label>`).join('');
+    </label>`);
+  rows.splice(3, 0, `
+    <label class="flex items-start gap-2 p-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
+      <input type="checkbox" class="tm-role mt-1" value="INSTALLER_SENIOR" ${selected.includes('INSTALLER_SENIOR') ? 'checked' : ''}>
+      <span class="text-sm">Старший монтажник — ведёт бригаду, приём и сдача объекта, +${Number(db.settings?.seniorInstallerBonusPct ?? 10)} % к своей доле</span>
+    </label>`);
+  return rows.join('');
 }
 
 /**
@@ -22695,7 +22708,7 @@ function openTeamMemberEdit(userId) {
       <label class="mt-3">Роль</label>
       ${isOwner && u.id !== viewer?.id
         ? `<select id="tm-edit-role">
-            ${TEAM_ROLE_OPTIONS.map(option => `<option value="${option.legacyRole}" ${u.role === option.legacyRole ? 'selected' : ''}>${academyEsc(option.name)}</option>`).join('')}
+            ${TEAM_ROLE_OPTIONS.map(option => `<option value="${option.legacyRole}" ${u.role === option.legacyRole && !teamIsSeniorInstaller(u) ? 'selected' : ''}>${academyEsc(option.name)}</option>${option.legacyRole === 'installer' ? `<option value="installer_senior" ${teamIsSeniorInstaller(u) ? 'selected' : ''}>Старший монтажник · +${Number(db.settings?.seniorInstallerBonusPct ?? 10)} % к доле</option>` : ''}`).join('')}
           </select>
           <div class="text-xs text-gray-400 mt-1">Роль определяет разделы и данные, которые сотрудник увидит после сохранения.</div>`
         : `<input id="tm-edit-role" value="${academyEsc(T(u.role) || u.role || '—')}" disabled
@@ -22703,10 +22716,6 @@ function openTeamMemberEdit(userId) {
            <div class="text-xs text-gray-400 mt-1">${isOwner
              ? 'Свою роль владельца менять нельзя, чтобы не потерять доступ к CRM.'
              : 'Роль сотрудника может изменить только владелец.'}</div>`}
-
-      ${isOwner && u.role === 'installer' ? `<!-- Owner, 2026-11-06: старший монтажник виден и ставится в карточке, не только в «Ставках». -->
-      <label class="text-sm mt-3" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="tm-edit-senior" style="width:auto" ${u.installerLevel === 'senior' ? 'checked' : ''}> Старший монтажник · +${Number(db.settings?.seniorInstallerBonusPct ?? 10)} % к его доле</label>
-      <div class="text-xs text-gray-400 mt-1">Отвечает за приём объекта и сдачу. Процент надбавки — в «Ставки и расходы».</div>` : ''}
 
       ${isOwner ? `<button class="btn-ghost text-sm w-full mt-2" onclick="openTeamMemberAccess('${u.id}')">🔑 Изменить пароль и доступ</button>` : ''}
 
@@ -22821,9 +22830,12 @@ async function submitTeamMemberEdit(userId) {
   const phone = (document.getElementById('tm-edit-phone')?.value || '').trim();
   const currentEmail = String(u.email || '').trim().toLowerCase();
   const enteredEmail = (document.getElementById('tm-edit-email')?.value || '').trim().toLowerCase();
-  const requestedRole = isOwner
+  const requestedRoleValue = isOwner
     ? (document.getElementById('tm-edit-role')?.value || u.role)
     : u.role;
+  // Owner, 2026-11-06: «Старший монтажник» — роль в списке; для сервера это монтажник, старшинство — в карточке.
+  const requestedSenior = requestedRoleValue === 'installer_senior';
+  const requestedRole = requestedSenior ? 'installer' : requestedRoleValue;
   const photo = document.getElementById('tm-photo-data')?.value || '';
   const err = document.getElementById('tm-edit-error');
 
@@ -22892,8 +22904,7 @@ async function submitTeamMemberEdit(userId) {
   u.name = name;
   u.phone = phone;
   u.notifySms = document.getElementById('tm-edit-sms')?.checked !== false;
-  const seniorBox = document.getElementById('tm-edit-senior');
-  if (seniorBox && isOwner) { if (seniorBox.checked) u.installerLevel = 'senior'; else delete u.installerLevel; }
+  if (isOwner) { if (requestedSenior) u.installerLevel = 'senior'; else delete u.installerLevel; }
   if (photo) u.photo = photo;
   else delete u.photo;
 
@@ -22941,7 +22952,12 @@ function openTeamMemberForm(quickOrderId = '', quickLineId = '') {
 }
 
 function collectTeamRoles() {
-  return Array.from(document.querySelectorAll('.tm-role:checked')).map(el => el.value);
+  // «Старший монтажник» для сервера — тот же INSTALLER; старшинство живёт в карточке (installerLevel).
+  const codes = Array.from(document.querySelectorAll('.tm-role:checked')).map(el => el.value);
+  return [...new Set(codes.map(code => code === 'INSTALLER_SENIOR' ? 'INSTALLER' : code))];
+}
+function collectTeamSenior() {
+  return Array.from(document.querySelectorAll('.tm-role:checked')).some(el => el.value === 'INSTALLER_SENIOR');
 }
 
 function showTeamError(message) {
@@ -22994,7 +23010,7 @@ async function submitTeamMember(quickOrderId = '', quickLineId = '') {
     }
 
     const legacyRole = teamLegacyRoleFromServer(roles) || 'installer';
-    db.users.push({ id: legacyUserId, name: fullName, email: email.toLowerCase(), phone: '', role: legacyRole, active: true, payConfig: legacyRole === 'installer' ? { type: 'per_sqft', ratePerSqft: 0, ratesByCategory: {}, ratesByWorkType: {} } : {} });
+    db.users.push({ id: legacyUserId, name: fullName, email: email.toLowerCase(), phone: '', role: legacyRole, active: true, ...(legacyRole === 'installer' && collectTeamSenior() ? { installerLevel: 'senior' } : {}), payConfig: legacyRole === 'installer' ? { type: 'per_sqft', ratePerSqft: 0, ratesByCategory: {}, ratesByWorkType: {} } : {} });
     if (quickOrderId && quickLineId && legacyRole === 'installer') {
       const order = getOrder(quickOrderId);
       const line = projectQuickLines(order).find(item => item.id === quickLineId);
@@ -28321,7 +28337,7 @@ function projectCardConfirmInstallation(oid) {
 function projectCardCrewPicker(o, line) {
   const installers = usersByRole('installer');
   const names = line.installerIds.map(id => getUser(id)?.name).filter(Boolean);
-  return `<details class="project-card-crew"><summary class="${names.length ? '' : 'project-card-missing'}">${academyEsc(names.join(', ') || 'не назначен')} ▾</summary><div class="project-card-crew-list">${installers.map(user => `<label><input type="checkbox" style="width:auto" ${line.installerIds.includes(user.id) ? 'checked' : ''} onchange="projectCardToggleCrew('${o.id}','${jsQuote(line.key)}','${jsQuote(user.id)}',this.checked)"> ${academyEsc(user.name)}</label>`).join('') || '<span class="text-xs text-gray-500">Добавьте специалиста в разделе «Сотрудники».</span>'}</div></details>`;
+  return `<details class="project-card-crew"><summary class="${names.length ? '' : 'project-card-missing'}">${academyEsc(names.join(', ') || 'не назначен')} ▾</summary><div class="project-card-crew-list">${installers.map(user => `<label><input type="checkbox" style="width:auto" ${line.installerIds.includes(user.id) ? 'checked' : ''} onchange="projectCardToggleCrew('${o.id}','${jsQuote(line.key)}','${jsQuote(user.id)}',this.checked)"> ${academyEsc(typeof installerPickLabel === 'function' ? installerPickLabel(user) : user.name)}</label>`).join('') || '<span class="text-xs text-gray-500">Добавьте специалиста в разделе «Сотрудники».</span>'}</div></details>`;
 }
 
 /**
@@ -28857,7 +28873,7 @@ function projectServiceScheduleHtml(o) {
   const installers = usersByRole('installer');
   return projectServiceGroups(o).map((group, index) => {
     const assignment = projectServiceAssignment(o, group);
-    return `<section class="card mt-3" data-service-schedule="${academyEsc(group.id)}"><h4 class="font-bold">${academyEsc(group.name)}</h4><label class="mt-2">Дата и время услуги<input style="min-height:44px" type="datetime-local" id="service-date-${index}" value="${datetimeLocalValue(assignment.installationAt)}"></label><div class="work-people mt-2">${installers.map(user => `<label class="work-person"><input type="checkbox" class="service-installer-${index}" value="${academyEsc(user.id)}" ${(assignment.installerIds || []).includes(user.id) ? 'checked' : ''}><span>${academyEsc(user.name)}</span></label>`).join('') || '<p>Добавьте специалиста в разделе «Сотрудники».</p>'}</div>${index === 0 && projectServiceGroups(o).length > 1 ? `<button type="button" class="btn-ghost text-sm mt-2" onclick="projectScheduleCopyFirstToAll()">Та же дата и бригада для всех услуг ↓</button>` : ''}</section>`;
+    return `<section class="card mt-3" data-service-schedule="${academyEsc(group.id)}"><h4 class="font-bold">${academyEsc(group.name)}</h4><label class="mt-2">Дата и время услуги<input style="min-height:44px" type="datetime-local" id="service-date-${index}" value="${datetimeLocalValue(assignment.installationAt)}"></label><div class="work-people mt-2">${installers.map(user => `<label class="work-person"><input type="checkbox" class="service-installer-${index}" value="${academyEsc(user.id)}" ${(assignment.installerIds || []).includes(user.id) ? 'checked' : ''}><span>${academyEsc(typeof installerPickLabel === 'function' ? installerPickLabel(user) : user.name)}</span></label>`).join('') || '<p>Добавьте специалиста в разделе «Сотрудники».</p>'}</div>${index === 0 && projectServiceGroups(o).length > 1 ? `<button type="button" class="btn-ghost text-sm mt-2" onclick="projectScheduleCopyFirstToAll()">Та же дата и бригада для всех услуг ↓</button>` : ''}</section>`;
   }).join('');
 }
 /** Silicone and film usually go in one visit: copy the first service's date and crew to the rest (Owner, 2026-10-23). */
@@ -32987,7 +33003,7 @@ function openAssignTeam(oid) {
       <select id="a-meas">${measurers.map(m=>`<option value="${m.id}" ${o.measurerId===m.id?'selected':''}>${m.name}</option>`).join('')}</select>
       <label class="mt-3">${T('installers')}</label>
       <select id="a-inst" multiple size="${installers.length}">
-        ${installers.map(m=>`<option value="${m.id}" ${(o.installerIds||[]).includes(m.id)?'selected':''}>${m.name}</option>`).join('')}
+        ${installers.map(m=>`<option value="${m.id}" ${(o.installerIds||[]).includes(m.id)?'selected':''}>${academyEsc(typeof installerPickLabel === 'function' ? installerPickLabel(m) : m.name)}</option>`).join('')}
       </select>
       <div class="flex gap-2 mt-4 justify-end">
         <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>
