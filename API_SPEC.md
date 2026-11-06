@@ -1072,7 +1072,10 @@ available only while the comment is `publish_uncertain` after an ambiguous Graph
 API outcome. The in-flight `publishing` state cannot be reconciled or retried.
 The manager first checks the public Facebook thread, then either closes
 the task as replied or returns it to the review queue. `reopen` restores an
-accidentally dismissed item and its manager task.
+accidentally dismissed item and its manager task, including a comment that had
+been classified as spam. A `publishing` claim older than two minutes is treated
+as abandoned and safely converted to `publish_uncertain` when the workbench is
+loaded.
 
 ### `POST /api/v1/integrations/facebook-comments/{commentId}/reply`
 

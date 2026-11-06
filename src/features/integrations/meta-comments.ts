@@ -18,6 +18,7 @@ import {
   classifyFacebookComment,
   facebookCommentDueAt,
   facebookCommentPayloadHash,
+  facebookCommentPublishLeaseCutoff,
   facebookCommentStatusesForQuery,
   facebookCommentTaskTitle,
   fallbackFacebookCommentDraft,
@@ -186,6 +187,14 @@ export async function listFacebookComments(input: {
   status?: string | null;
   limit?: number;
 }) {
+  await prisma.facebookComment.updateMany({
+    where: {
+      ...(input.managerId ? { assigned_to: input.managerId } : {}),
+      status: "publishing",
+      updated_at: { lt: facebookCommentPublishLeaseCutoff(new Date()) },
+    },
+    data: { status: "publish_uncertain" },
+  });
   const statuses = facebookCommentStatusesForQuery(input.status);
   const items = await prisma.facebookComment.findMany({
     where: {
@@ -372,7 +381,9 @@ export async function updateFacebookComment(input: {
     ? "dismissed"
     : input.action === "confirm_published"
       ? "replied"
-      : commentStatus(current.intent as FacebookCommentIntent);
+      : input.action === "reopen"
+        ? "pending_review"
+        : commentStatus(current.intent as FacebookCommentIntent);
   const now = new Date();
   const dueAt = input.action === "reopen" || input.action === "return_to_review"
     ? facebookCommentDueAt(current.intent as FacebookCommentIntent, now)

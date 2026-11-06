@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  FACEBOOK_COMMENT_PUBLISH_LEASE_MS,
   MetaCommentError,
   classifyFacebookComment,
   facebookCommentDueAt,
+  facebookCommentPublishLeaseCutoff,
   facebookCommentStatusesForQuery,
   facebookCommentTaskTitle,
   fallbackFacebookCommentDraft,
@@ -139,6 +141,12 @@ test("only explicit Graph client failures release a claimed public reply", () =>
   assert.equal(metaGraphFailureIsDefinite(503), false);
 });
 
+test("abandoned publishing claims become reconcilable only after the lease", () => {
+  const now = new Date("2026-11-06T17:00:00.000Z");
+  assert.equal(FACEBOOK_COMMENT_PUBLISH_LEASE_MS, 120_000);
+  assert.equal(facebookCommentPublishLeaseCutoff(now).toISOString(), "2026-11-06T16:58:00.000Z");
+});
+
 test("legacy inbox keeps public replies behind explicit manager confirmation", () => {
   const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
   assert.match(source, /Комментарии Facebook/);
@@ -167,4 +175,6 @@ test("draft and publish paths use status compare-and-set before external side ef
   assert.match(service, /Manager confirmed that the uncertain Facebook reply was published/);
   assert.match(service, /status: "publishing"[\s\S]*?status: "publish_uncertain"/);
   assert.match(service, /current\.status !== "publish_uncertain" && reconciliation/);
+  assert.match(service, /status: "publishing",\s*updated_at: \{ lt: facebookCommentPublishLeaseCutoff\(new Date\(\)\) \}/);
+  assert.match(service, /input\.action === "reopen"\s*\? "pending_review"/);
 });

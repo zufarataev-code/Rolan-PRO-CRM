@@ -78,12 +78,16 @@ then publish one reviewed reply and verify it on Facebook.
   manager cannot create a duplicate reply. While the Graph request is in flight,
   `publishing` is locked and has no manual actions. Only after an ambiguous
   network outcome does it move to `publish_uncertain` for manual Facebook
-  reconciliation instead of being retried. The
+  reconciliation instead of being retried. If the server exits after claiming
+  but before recording the outcome, a two-minute lease converts that abandoned
+  claim to `publish_uncertain`; a genuinely in-flight 10-second request remains
+  locked. The
   workbench then requires the manager to open Facebook and choose either
   **Reply published** or **No reply — return to review**.
 - A replied comment cannot be published twice. A dismissed comment must be
   reopened before replying; dismissed items remain visible in the workbench and
-  reopening also restores or creates their manager task.
+  reopening always returns them to active review (including former spam) and
+  restores or creates their manager task.
 - Public sending is an explicit manager action, never a background AI action.
 
 ## Release check

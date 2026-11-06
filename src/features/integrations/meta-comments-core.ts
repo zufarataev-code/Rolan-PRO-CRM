@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 export const FACEBOOK_COMMENT_SOURCE = "facebook_comment";
 export const FACEBOOK_COMMENT_ACTION = "integration.facebook_comment.received";
+export const FACEBOOK_COMMENT_PUBLISH_LEASE_MS = 2 * 60 * 1_000;
 export const FACEBOOK_COMMENT_STATUSES = [
   "pending_review",
   "escalated",
@@ -44,6 +45,10 @@ export function facebookCommentTaskTitle(intent: FacebookCommentIntent, authorNa
 
 export function metaGraphFailureIsDefinite(status: number) {
   return status >= 400 && status < 500 && ![408, 425, 429].includes(status);
+}
+
+export function facebookCommentPublishLeaseCutoff(now: Date) {
+  return new Date(now.getTime() - FACEBOOK_COMMENT_PUBLISH_LEASE_MS);
 }
 
 export class MetaCommentError extends Error {
