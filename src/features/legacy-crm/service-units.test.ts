@@ -82,7 +82,10 @@ test('the Privacy workspace contains privacy services and only privacy materials
   assert.deepEqual(Array.from(c.serviceOfferingAllowedFilmIds(created)).sort(), ['mirror']);
 });
 
-test('the service editor preserves an old explicit Privacy material link without allowing a new cross-direction link', () => {
+// Owner, 2026-11-05: a service may link a film of any catalog category (frost is
+// Decorative and sold in Privacy). Linked films are the project's choice; a
+// service without links offers the films of its own direction.
+test('the service editor links films of any category; linked films are selectable in a project', () => {
   const { c, db } = loadServices();
   db.settings.catalog.push(
     { id: 'mirror', name: 'Legacy privacy', category: 'privacy' },
@@ -90,30 +93,30 @@ test('the service editor preserves an old explicit Privacy material link without
     { id: 'frost', name: 'Decorative frost', category: 'decorative' },
   );
   const offering = {
-    id: 'legacy-decorative', direction: 'decorative', name: 'Legacy service', unit: 'sqft', active: true,
+    id: 'decorative-service', direction: 'decorative', name: 'Decorative service', unit: 'sqft', active: true,
     filmIds: ['mirror'], defaultFilmId: 'mirror',
   };
   db.settings.serviceOfferings.push(offering);
 
   assert.equal(c.serviceOfferingAllowsFilm(offering, db.settings.catalog[0]), true);
-  assert.equal(c.serviceOfferingAllowsFilm(offering, db.settings.catalog[1]), false);
-  const unlinkedLegacy = { ...offering, id: 'unlinked-legacy', filmIds: [], defaultFilmId: '' };
-  assert.equal(c.serviceOfferingAllowsFilm(unlinkedLegacy, db.settings.catalog[0]), false);
-  assert.equal(c.projectOfferingAllowsFilm(unlinkedLegacy, db.settings.catalog[0], 'mirror'), true, 'the material already saved on a project remains visible');
-  assert.equal(c.projectOfferingAllowsFilm(unlinkedLegacy, db.settings.catalog[1], 'mirror'), false, 'another cross-direction material remains unavailable');
-  assert.equal(c.projectOfferingAllowsFilm(offering, db.settings.catalog[0], ''), false, 'a directory compatibility link cannot be selected in a new project');
-  assert.equal(c.serviceOfferingDefaultFilmId(offering), '', 'a cross-direction compatibility link is never the default for a new project');
-  offering.defaultFilmId = '';
+  const unlinked = { ...offering, id: 'unlinked', filmIds: [], defaultFilmId: '' };
+  assert.equal(c.projectOfferingAllowsFilm(unlinked, db.settings.catalog[2], ''), true, 'no links → films of the own direction');
+  assert.equal(c.projectOfferingAllowsFilm(unlinked, db.settings.catalog[1], ''), false, 'no links → another category is not offered');
+  assert.equal(c.projectOfferingAllowsFilm(unlinked, db.settings.catalog[0], 'mirror'), true, 'the material already saved on a project remains visible');
+  assert.equal(c.projectOfferingAllowsFilm(offering, db.settings.catalog[0], ''), true, 'a linked film of another category is selectable');
+  assert.equal(c.projectOfferingAllowsFilm(offering, db.settings.catalog[2], ''), false, 'with links, only the linked films are offered');
+  assert.equal(c.serviceOfferingDefaultFilmId(offering), 'mirror', 'a linked film of another category can be the default');
   c.setServiceOfferingDefaultFilm(offering.id, 'mirror');
-  assert.equal(offering.defaultFilmId, '', 'a legacy cross-direction link cannot be selected as a new default');
+  assert.equal(offering.defaultFilmId, 'mirror');
   const editor = html.slice(html.indexOf('function serviceOfferingEditorHtml('), html.indexOf('function updateServiceOffering(', html.indexOf('function serviceOfferingEditorHtml(')));
-  assert.match(editor, /serviceOfferingAllowsFilm\(offering, item\)/);
+  assert.match(editor, /Из других категорий/, 'films of other categories are listed under a collapsible block');
   assert.match(html, /projectOfferingAllowsFilm\(offering, item, selectedCatalogId\)/);
 
   c.toggleServiceOfferingFilm(offering.id, 'mirror', false);
   assert.deepEqual(Array.from(offering.filmIds), []);
   c.toggleServiceOfferingFilm(offering.id, 'mirror-two', true);
-  assert.deepEqual(Array.from(offering.filmIds), [], 'a new cross-direction link is still refused');
+  assert.deepEqual(Array.from(offering.filmIds), ['mirror-two'], 'a cross-category link is accepted');
+  assert.equal(offering.defaultFilmId, 'mirror-two', 'the only linked film becomes the default');
 });
 
 test('a service is priced per sq ft (sizes needed) or per piece, zone, fixed sum or own unit (no sizes)', () => {
@@ -211,14 +214,17 @@ const base: Row = {
   orders: [{ id: 'o', serviceType: 'smart_film', extraServices: [] }],
 };
 
-test('the server accepts Privacy services only with Privacy materials', () => {
+test('the server accepts a Privacy service with materials of any catalog category, but only real ones', () => {
   assert.equal(prepareServiceSolutions(base, structuredClone(base), true), null);
   const wrongUnit: Row = structuredClone(base);
   wrongUnit.settings.serviceOfferings[1].unit = 'yard';
   assert.match(prepareServiceSolutions(base, wrongUnit, true)!, /единица/);
-  const wrongFilm: Row = structuredClone(base);
-  wrongFilm.settings.serviceOfferings[0].filmIds = ['solar'];
-  assert.match(prepareServiceSolutions(base, wrongFilm, true)!, /Материалы/);
+  const otherCategory: Row = structuredClone(base);
+  otherCategory.settings.serviceOfferings[0].filmIds = ['solar'];
+  assert.equal(prepareServiceSolutions(base, otherCategory, true), null, 'Owner, 2026-11-05: a film of another category may be linked');
+  const unknownFilm: Row = structuredClone(base);
+  unknownFilm.settings.serviceOfferings[0].filmIds = ['no-such-film'];
+  assert.match(prepareServiceSolutions(base, unknownFilm, true)!, /Материалы/);
   const badCost: Row = structuredClone(base);
   badCost.settings.serviceOfferings[1].materialCostPerUnit = -1;
   assert.match(prepareServiceSolutions(base, badCost, true)!, /материала/);
@@ -268,14 +274,14 @@ test('a new workspace row cannot forge an already completed historical import', 
   );
 });
 
-test('an unchanged Decorative-to-Privacy link from the temporary four-direction period stays writable but cannot grow', () => {
+test('a Decorative service may link Privacy films and grow the list', () => {
   const legacy: Row = structuredClone(base);
   legacy.settings.catalog.push({ id: 'mirror-two', category: 'privacy' });
   legacy.settings.serviceOfferings[0] = { ...legacy.settings.serviceOfferings[0], direction: 'decorative', filmIds: ['mirror'] };
   assert.equal(prepareServiceSolutions(legacy, structuredClone(legacy), true), null);
   const expanded: Row = structuredClone(legacy);
   expanded.settings.serviceOfferings[0].filmIds.push('mirror-two');
-  assert.match(prepareServiceSolutions(legacy, expanded, true)!, /Материалы/);
+  assert.equal(prepareServiceSolutions(legacy, expanded, true), null);
 });
 
 test('the server persists only a default material that is linked to the same service', () => {
@@ -287,16 +293,10 @@ test('the server persists only a default material that is linked to the same ser
   unlinked.settings.serviceOfferings[0].defaultFilmId = 'frost';
   assert.match(prepareServiceSolutions(base, unlinked, true)!, /Основной материал должен быть закреплён/);
 
-  const wrongDirection: Row = structuredClone(base);
-  wrongDirection.settings.serviceOfferings[0].filmIds.push('solar');
-  wrongDirection.settings.serviceOfferings[0].defaultFilmId = 'solar';
-  assert.match(prepareServiceSolutions(base, wrongDirection, true)!, /Материалы должны принадлежать направлению/);
-
-  const legacyCurrent: Row = structuredClone(base);
-  legacyCurrent.settings.serviceOfferings[0] = { ...legacyCurrent.settings.serviceOfferings[0], direction: 'decorative', filmIds: ['mirror'], defaultFilmId: '' };
-  const legacyDefault: Row = structuredClone(legacyCurrent);
-  legacyDefault.settings.serviceOfferings[0].defaultFilmId = 'mirror';
-  assert.match(prepareServiceSolutions(legacyCurrent, legacyDefault, true)!, /Основной материал должен принадлежать направлению/);
+  const otherCategoryDefault: Row = structuredClone(base);
+  otherCategoryDefault.settings.serviceOfferings[0].filmIds.push('solar');
+  otherCategoryDefault.settings.serviceOfferings[0].defaultFilmId = 'solar';
+  assert.equal(prepareServiceSolutions(base, otherCategoryDefault, true), null, 'a linked film of another category can be the default');
 });
 
 test('the service price editor separates customer price from owner costs and previews margin', () => {

@@ -26034,25 +26034,20 @@ function serviceDirectionAllowsFilm(direction, film) {
   return !!film && canonicalServiceDirection(film.category) === canonicalServiceDirection(direction);
 }
 /**
- * New links stay inside the service direction. Explicit links saved before
- * Privacy became its own direction remain readable and removable, matching
- * the server compatibility rule without permitting another cross-direction
- * material to be added.
+ * Owner, 2026-11-05: a service may link a film from ANY catalog category —
+ * frost lives in Decorative and is sold in Privacy too. A service without
+ * explicit links still offers the films of its own direction.
  */
 function serviceOfferingAllowsFilm(offering, film) {
   if (!offering || !film) return false;
   return serviceDirectionAllowsFilm(offering.direction, film) || serviceOfferingFilmIds(offering).includes(film.id);
 }
-/**
- * An already saved project selection remains visible after a direction split,
- * even when the old service had no explicit material links. It does not make
- * another cross-direction material selectable.
- */
+/** In a project a film is selectable when the service links it (any category), when the service has no links and the film is of its direction, or when it is the saved selection. */
 function projectOfferingAllowsFilm(offering, film, selectedCatalogId = '') {
-  return !!offering && !!film && (
-    serviceDirectionAllowsFilm(offering.direction, film)
-    || (!!selectedCatalogId && film.id === selectedCatalogId)
-  );
+  if (!offering || !film) return false;
+  const linked = serviceOfferingFilmIds(offering);
+  return (linked.length ? linked.includes(film.id) : serviceDirectionAllowsFilm(offering.direction, film))
+    || (!!selectedCatalogId && film.id === selectedCatalogId);
 }
 /** Units a service of a direction may use: «Общее по объекту» has no windows, so nothing per sq ft or per linear ft. */
 function serviceOfferingUnitsFor(direction) { return direction === 'general' ? SERVICE_OFFERING_UNITS.filter(unit => !['sqft', 'lft'].includes(unit.id)) : SERVICE_OFFERING_UNITS; }
@@ -26124,9 +26119,11 @@ function serviceOfferingFilmIds(offering) {
  */
 function serviceOfferingDefaultFilmId(offering) {
   if (!offering) return '';
+  // Owner, 2026-11-05: материал услуги может быть из любой категории каталога
+  // (матовая живёт в декоративной, но продаётся и в приватной).
   const linked = serviceOfferingFilmIds(offering).filter(id => {
     const film = getCatalogItem(id);
-    return film && !film.archived && serviceDirectionAllowsFilm(offering.direction, film);
+    return film && !film.archived;
   });
   if (linked.includes(offering.defaultFilmId)) return offering.defaultFilmId;
   return linked.length === 1 ? linked[0] : '';
@@ -26141,7 +26138,7 @@ function serviceOfferingAllowedFilmIds(offering) {
   const direction = canonicalServiceDirection(offering.direction);
   const linked = serviceOfferingFilmIds(offering).filter(id => {
     const film = getCatalogItem(id);
-    return film && !film.archived && serviceDirectionAllowsFilm(direction, film);
+    return film && !film.archived;
   });
   if (linked.length) return linked;
   return (db.settings?.catalog || []).filter(film => !film.archived && serviceDirectionAllowsFilm(direction, film)).map(film => film.id);
@@ -27289,16 +27286,15 @@ function toggleServiceOfferingFilm(id, filmId, checked) {
   if (!serviceOfferingCanEdit()) return;
   const offering = serviceOffering(id);
   const film = getCatalogItem(filmId);
-  if (!offering || !film) return;
-  if (!serviceOfferingAllowsFilm(offering, film)) return;
+  if (!offering || !film || film.archived) return;
   const ids = new Set(serviceOfferingFilmIds(offering));
   if (checked) ids.add(filmId); else ids.delete(filmId);
   offering.filmIds = [...ids];
   const available = offering.filmIds.filter(value => {
     const item = getCatalogItem(value);
-    return item && !item.archived && serviceDirectionAllowsFilm(offering.direction, item);
+    return item && !item.archived;
   });
-  if (checked && serviceDirectionAllowsFilm(offering.direction, film) && !serviceOfferingDefaultFilmId(offering)) offering.defaultFilmId = filmId;
+  if (checked && !serviceOfferingDefaultFilmId(offering)) offering.defaultFilmId = filmId;
   if (!available.includes(offering.defaultFilmId)) offering.defaultFilmId = available.length === 1 ? available[0] : '';
   offering.updatedAt = new Date().toISOString();
   persistServiceOfferingFilms(id);
@@ -27311,7 +27307,7 @@ function setServiceOfferingDefaultFilm(id, filmId) {
   const offering = serviceOffering(id);
   if (!offering || !serviceOfferingFilmIds(offering).includes(filmId)) return;
   const film = getCatalogItem(filmId);
-  if (!film || film.archived || !serviceDirectionAllowsFilm(offering.direction, film)) return;
+  if (!film || film.archived) return;
   offering.defaultFilmId = filmId;
   offering.updatedAt = new Date().toISOString();
   persistServiceOfferingFilms(id);
@@ -27427,14 +27423,18 @@ function serviceOfferingPricingEditorHtml(offering, per, sized) {
 function serviceOfferingEditorHtml(offering, owner) {
   if (!offering) return '';
   const direction = canonicalServiceDirection(offering.direction);
-  const films = (db.settings.catalog || []).filter(item => !item.archived && serviceOfferingAllowsFilm(offering, item));
+  // Owner, 2026-11-05: материалы из любой категории — своя категория сверху, остальные под спойлером.
+  const allFilms = (db.settings.catalog || []).filter(item => !item.archived);
+  const ownFilms = allFilms.filter(item => serviceDirectionAllowsFilm(offering.direction, item));
+  const otherFilms = allFilms.filter(item => !serviceDirectionAllowsFilm(offering.direction, item));
+  const films = [...ownFilms, ...otherFilms];
   const linked = films.filter(item => serviceOfferingFilmIds(offering).includes(item.id));
   const defaultFilmId = serviceOfferingDefaultFilmId(offering);
   const unit = serviceOfferingUnit(offering);
   const per = serviceOfferingUnitShort(offering);
   const sized = serviceOfferingNeedsSizes(offering);
   const filmList = films.length
-    ? `<details open><summary class="cursor-pointer text-sm font-bold">Материалы услуги · <span data-service-offering-film-summary="${offering.id}">${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'не выбраны'}</span></summary><div class="mt-2 grid gap-1">${films.map(item => { const selected = serviceOfferingFilmIds(offering).includes(item.id); const mayBeDefault = serviceDirectionAllowsFilm(offering.direction, item); return `<div class="flex flex-wrap items-center justify-between gap-2"><label class="text-sm"><input type="checkbox" style="width:auto" ${selected ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(также: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label><label class="text-xs" data-service-default-film-choice="${offering.id}" style="display:${selected ? 'inline-flex' : 'none'};align-items:center;gap:5px"><input type="radio" name="service-default-film-${offering.id}" data-film-id="${item.id}" style="width:auto" ${defaultFilmId === item.id ? 'checked' : ''} ${owner && selected && mayBeDefault ? '' : 'disabled'} onchange="setServiceOfferingDefaultFilm('${offering.id}','${item.id}')"> по умолчанию</label></div>`; }).join('')}</div><div class="flex flex-wrap items-center justify-between gap-2 mt-2"><span class="text-xs text-gray-500" data-service-offering-film-save-status="${offering.id}">${defaultFilmId ? `В новый проект подставится: ${academyEsc(catalogLabel(getCatalogItem(defaultFilmId)))}` : linked.length > 1 ? 'Выберите основной материал — он будет подставляться в проект автоматически.' : 'Выберите материал услуги.'}</span>${owner ? `<button type="button" class="btn-ghost text-xs" onclick="persistServiceOfferingFilms('${offering.id}')">Сохранить материалы</button>` : ''}</div></details>`
+    ? `<details open><summary class="cursor-pointer text-sm font-bold">Материалы услуги · <span data-service-offering-film-summary="${offering.id}">${linked.length ? linked.map(item => academyEsc(catalogLabel(item))).join(', ') : 'не выбраны'}</span></summary><div class="mt-2 grid gap-1">${(() => { const row = item => { const selected = serviceOfferingFilmIds(offering).includes(item.id); const mayBeDefault = true; return `<div class="flex flex-wrap items-center justify-between gap-2"><label class="text-sm"><input type="checkbox" style="width:auto" ${selected ? 'checked' : ''} ${owner ? '' : 'disabled'} onchange="toggleServiceOfferingFilm('${offering.id}','${item.id}',this.checked)"> ${academyEsc(catalogLabel(item))}${item.serviceOfferingId && item.serviceOfferingId !== offering.id ? ` <span class="text-xs text-gray-500">(также: ${academyEsc(serviceOffering(item.serviceOfferingId)?.name || '')})</span>` : ''}</label><label class="text-xs" data-service-default-film-choice="${offering.id}" style="display:${selected ? 'inline-flex' : 'none'};align-items:center;gap:5px"><input type="radio" name="service-default-film-${offering.id}" data-film-id="${item.id}" style="width:auto" ${defaultFilmId === item.id ? 'checked' : ''} ${owner && selected && mayBeDefault ? '' : 'disabled'} onchange="setServiceOfferingDefaultFilm('${offering.id}','${item.id}')"> по умолчанию</label></div>`; }; const otherLinked = otherFilms.filter(item => serviceOfferingFilmIds(offering).includes(item.id)).length; return ownFilms.map(row).join('') + (otherFilms.length ? `<details ${otherLinked ? 'open' : ''} class="mt-1"><summary class="cursor-pointer text-xs font-bold text-slate-600">Из других категорий · ${otherFilms.length}${otherLinked ? ` · выбрано ${otherLinked}` : ''}</summary><div class="mt-1 grid gap-1">${otherFilms.map(row).join('')}</div></details>` : ''); })()}</div><div class="flex flex-wrap items-center justify-between gap-2 mt-2"><span class="text-xs text-gray-500" data-service-offering-film-save-status="${offering.id}">${defaultFilmId ? `В новый проект подставится: ${academyEsc(catalogLabel(getCatalogItem(defaultFilmId)))}` : linked.length > 1 ? 'Выберите основной материал — он будет подставляться в проект автоматически.' : 'Выберите материал услуги.'}</span>${owner ? `<button type="button" class="btn-ghost text-xs" onclick="persistServiceOfferingFilms('${offering.id}')">Сохранить материалы</button>` : ''}</div></details>`
     : '<div class="text-sm text-gray-500">На складе пока нет плёнок этого направления. Услугу можно сохранить и добавить материал позже.</div>';
 
   if (!owner) return `<div class="service-editor-panel"><div class="flex justify-between gap-3"><div><h4 class="font-black text-lg">${academyEsc(offering.name)}</h4><div class="text-sm text-gray-500 mt-1">${academyEsc(SERVICE_OFFERING_UNITS.find(item => item.id === unit)?.label || per)}</div></div><b>${Number(offering.pricePerSqft) > 0 ? `${fmtMoney(Number(offering.pricePerSqft))} / ${academyEsc(per)}` : 'Цена не задана'}</b></div>${sized ? `<div class="service-editor-section">${filmList}</div>` : ''}</div>`;

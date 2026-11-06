@@ -56,14 +56,22 @@ test('an unchanged legacy project-level Privacy film remains writable but cannot
   assert.match(prepareServiceSolutions(legacy,unchanged,false)!,/Материал проекта/);
 });
 
-test('a legacy directory film link cannot be used on a new cross-direction project',()=>{
+// Owner, 2026-11-05: a film the owner linked to a service is selectable in a project
+// whatever its catalog category; an unlinked film of another category still is not.
+test('a directory film link of another category is usable on a project',()=>{
   const legacy:any=structuredClone(current);
   legacy.settings.catalog.push({id:'privacy-film',category:'privacy'});
   legacy.settings.serviceOfferings[0].filmIds=['privacy-film'];
   const submitted:any=serviceSolutionsForViewer(legacy,false);
   submitted.orders[0].offeringIds=['solution'];
   submitted.orders[0].offeringCatalogIds={solution:'privacy-film'};
-  assert.match(prepareServiceSolutions(legacy,submitted,false)!,/Материал проекта/);
+  assert.equal(prepareServiceSolutions(legacy,submitted,false),null);
+  const unlinked:any=structuredClone(current);
+  unlinked.settings.catalog.push({id:'privacy-film',category:'privacy'});
+  const attempt:any=serviceSolutionsForViewer(unlinked,false);
+  attempt.orders[0].offeringIds=['solution'];
+  attempt.orders[0].offeringCatalogIds={solution:'privacy-film'};
+  assert.match(prepareServiceSolutions(unlinked,attempt,false)!,/Материал проекта/);
 });
 
 test('installer receives the saved rate only for their own assigned service',()=>{

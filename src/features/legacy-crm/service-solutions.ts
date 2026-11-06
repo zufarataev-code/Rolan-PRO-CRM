@@ -238,7 +238,7 @@ export function canonicalServiceDirection(value: unknown): string {
   return canonicalFilmCategory(value);
 }
 
-/** A service may use materials from its own direction only. */
+/** A film of the service's own direction (the default pool of a service without explicit links). */
 function filmBelongsToServiceDirection(film: Row, direction: unknown): boolean {
   return canonicalServiceDirection(film.category) === canonicalServiceDirection(direction);
 }
@@ -298,13 +298,12 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
   const offerings = rows(settings.serviceOfferings);
   const ids = new Set<string>();
   const films = rows(settings.catalog);
+  // Owner, 2026-11-05: a service may link a film from ANY catalog category
+  // (frost lives in Decorative and is sold in Privacy too). The direction only
+  // defines the default pool of a service that has no explicit links.
   const filmMatchesDirection = (offering: Row, film: Row) => {
-    if (filmBelongsToServiceDirection(film, offering.direction)) return true;
-    // Workspaces created while Privacy was temporarily grouped into Decorative
-    // remain writable, but a new cross-direction material cannot be added.
-    const saved = currentOfferings.find(item => item.id === offering.id);
-    if (!saved || saved.direction !== offering.direction) return false;
-    return Array.isArray(saved.filmIds) && saved.filmIds.includes(film.id);
+    const linked = Array.isArray(offering.filmIds) ? offering.filmIds : [];
+    return linked.includes(film.id) || filmBelongsToServiceDirection(film, offering.direction);
   };
   // A service with linked films allows only those; a service without links
   // allows every film of its direction — the manager picks direction →
@@ -316,17 +315,13 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
     const linked = Array.isArray(offering.filmIds) ? offering.filmIds : [];
     return linked.length ? linked.includes(filmId) : true;
   };
-  // Directory compatibility may keep an old Decorative → Privacy link so the
-  // owner can remove it. New project choices must still obey the real
-  // direction; only an unchanged saved project selection is grandfathered.
+  // In a project: a linked film of any category, or any film of the direction
+  // when the service has no links.
   const filmAllowedForProject = (offering: Row, filmId: unknown) => {
     const film = films.find(value => value.id === filmId);
-    if (!film || !filmBelongsToServiceDirection(film, offering.direction)) return false;
-    const linked = (Array.isArray(offering.filmIds) ? offering.filmIds : []).filter(id => {
-      const linkedFilm = films.find(value => value.id === id);
-      return linkedFilm && filmBelongsToServiceDirection(linkedFilm, offering.direction);
-    });
-    return linked.length ? linked.includes(filmId) : true;
+    if (!film) return false;
+    const linked = Array.isArray(offering.filmIds) ? offering.filmIds : [];
+    return linked.length ? linked.includes(filmId) : filmBelongsToServiceDirection(film, offering.direction);
   };
   for (const offering of offerings) {
     if (typeof offering.id !== 'string' || !/^[\w-]{1,120}$/.test(offering.id) || ids.has(offering.id)) return 'Некорректный или повторный ID услуги.';
@@ -363,16 +358,10 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
       if (!Array.isArray(offering.directions) || offering.directions.some((key: unknown) => !SERVICE_DIRECTIONS.includes(key as never))) return 'Некорректный список направлений услуги.';
       if (offering.directions.length && (offering.unit === undefined || offering.unit === 'sqft')) return 'Услуга по замеру предлагается только в своём направлении.';
     }
-    if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id && filmMatchesDirection(offering, film))))) return 'Материалы должны принадлежать направлению услуги.';
+    // Owner, 2026-11-05: a linked material may come from any catalog category; it only has to exist.
+    if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id)))) return 'Материалы услуги должны быть из каталога плёнок.';
     if (offering.defaultFilmId !== undefined && offering.defaultFilmId !== '') {
       if (typeof offering.defaultFilmId !== 'string' || !Array.isArray(offering.filmIds) || !offering.filmIds.includes(offering.defaultFilmId)) return 'Основной материал должен быть закреплён за услугой.';
-      if (!films.some(film => film.id === offering.defaultFilmId && filmBelongsToServiceDirection(film, offering.direction))) {
-        // An invalid default saved before Privacy became a separate direction
-        // is harmlessly cleared on its next round-trip. It may not be selected
-        // again merely because the old cross-direction link remains removable.
-        if (currentOffering?.defaultFilmId === offering.defaultFilmId) offering.defaultFilmId = '';
-        else return 'Основной материал должен принадлежать направлению услуги.';
-      }
     }
   }
   for (const offering of offerings) {
