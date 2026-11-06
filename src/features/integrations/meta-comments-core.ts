@@ -279,6 +279,17 @@ export function facebookCommentDueAt(intent: FacebookCommentIntent, from = new D
   return new Date(from.getTime() + minutes * 60 * 1_000);
 }
 
+export function facebookCommentDraftDueAt(input: {
+  previousIntent: FacebookCommentIntent;
+  nextIntent: FacebookCommentIntent;
+  currentDueAt: Date | null;
+  now?: Date;
+}) {
+  if (input.nextIntent === "spam") return null;
+  if (input.previousIntent === input.nextIntent && input.currentDueAt) return input.currentDueAt;
+  return facebookCommentDueAt(input.nextIntent, input.now ?? new Date());
+}
+
 export function parseFacebookCommentAiResponse(text: string) {
   const clean = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
   let value: unknown;

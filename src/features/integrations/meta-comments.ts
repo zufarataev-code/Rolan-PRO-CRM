@@ -16,6 +16,7 @@ import {
   FACEBOOK_COMMENT_SOURCE,
   MetaCommentError,
   classifyFacebookComment,
+  facebookCommentDraftDueAt,
   facebookCommentDueAt,
   facebookCommentPayloadHash,
   facebookCommentPublishLeaseCutoff,
@@ -288,7 +289,12 @@ export async function generateFacebookCommentDraft(input: {
 
   const status = commentStatus(intent);
   const now = new Date();
-  const dueAt = intent === "spam" ? null : facebookCommentDueAt(intent, comment.commented_at);
+  const dueAt = facebookCommentDraftDueAt({
+    previousIntent: comment.intent as FacebookCommentIntent,
+    nextIntent: intent,
+    currentDueAt: comment.due_at,
+    now,
+  });
   const updated = await prisma.$transaction(async (tx) => {
     const claimed = await tx.facebookComment.updateMany({
       where: {

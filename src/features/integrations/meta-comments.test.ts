@@ -6,6 +6,7 @@ import {
   FACEBOOK_COMMENT_PUBLISH_LEASE_MS,
   MetaCommentError,
   classifyFacebookComment,
+  facebookCommentDraftDueAt,
   facebookCommentDueAt,
   facebookCommentPublishLeaseCutoff,
   facebookCommentStatusesForQuery,
@@ -127,6 +128,23 @@ test("complaints receive a shorter SLA than sales and general comments", () => {
   assert.equal(facebookCommentDueAt("complaint", start).toISOString(), "2026-11-06T12:15:00.000Z");
   assert.equal(facebookCommentDueAt("sales", start).toISOString(), "2026-11-06T13:00:00.000Z");
   assert.equal(facebookCommentDueAt("other", start).toISOString(), "2026-11-06T16:00:00.000Z");
+});
+
+test("draft regeneration preserves a renewed SLA unless classification changes", () => {
+  const now = new Date("2026-11-06T12:00:00.000Z");
+  const renewed = new Date("2026-11-06T14:00:00.000Z");
+  assert.equal(
+    facebookCommentDraftDueAt({ previousIntent: "question", nextIntent: "question", currentDueAt: renewed, now }),
+    renewed,
+  );
+  assert.equal(
+    facebookCommentDraftDueAt({ previousIntent: "question", nextIntent: "complaint", currentDueAt: renewed, now })?.toISOString(),
+    "2026-11-06T12:15:00.000Z",
+  );
+  assert.equal(
+    facebookCommentDraftDueAt({ previousIntent: "spam", nextIntent: "spam", currentDueAt: renewed, now }),
+    null,
+  );
 });
 
 test("comment list filters keep active defaults and expose closed history for all", () => {
