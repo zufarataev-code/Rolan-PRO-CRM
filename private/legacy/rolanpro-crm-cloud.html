@@ -1664,9 +1664,16 @@
   .rp-kpwin-option input { width:20px; height:20px; }
   .rp-kpwin-option .rp-kpwin-dot { background:var(--dir-color); }
   .project-feed { display:flex; flex-direction:column; gap:12px; margin-top:12px; }
-  .project-feed-next { background:#fff; border:2px solid #C9A24A; border-radius:14px; padding:12px; }
-  .project-feed-next-kicker { font-size:11px; font-weight:800; letter-spacing:.08em; color:#8A6D1E; text-transform:uppercase; margin-bottom:6px; }
-  .project-feed-next .order-action-card { width:100%; }
+  /* Owner, 2026-11-06: «Следующий шаг» — не полоса на весь экран, а компактная строка; «До монтажа» рядом. */
+  .project-feed-top { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:stretch; }
+  .project-feed-top > .project-feed-gate { max-width:260px; display:flex; flex-direction:column; justify-content:center; }
+  .project-feed-top > .project-feed-gate[open] { grid-column:1 / -1; max-width:none; }
+  .project-feed-next { background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:8px 10px; display:flex; align-items:center; gap:12px; min-width:0; }
+  .project-feed-next-kicker { font-size:11px; font-weight:800; letter-spacing:.08em; color:#8A6D1E; text-transform:uppercase; flex:none; }
+  .project-feed-next .order-action-card { width:auto; flex:1; min-height:44px; padding:.45rem .75rem; grid-template-columns:26px minmax(0,1fr); align-items:center; gap:.5rem; }
+  .project-feed-next .order-action-card .order-action-title { font-size:14px; }
+  .project-feed-next .order-action-card .order-action-sub { font-size:11.5px; opacity:.9; }
+  @media (max-width:720px) { .project-feed-top { grid-template-columns:1fr; } .project-feed-top > .project-feed-gate { max-width:none; } .project-feed-next { flex-wrap:wrap; } }
   /* Чек-лист «до монтажа» + разблокировка владельцу (Owner, 2026-10-26) */
   .project-feed-gate { background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:12px 14px; } details.project-feed-gate > summary { cursor:pointer; list-style:none; } details.project-feed-gate > summary::-webkit-details-marker { display:none; } details.project-feed-gate[open] > summary { margin-bottom:8px; } details.project-feed-gate .project-feed-gate-list { margin-top:4px; }
   .project-feed-gate-head { display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:800; color:#10213b; }
@@ -1692,7 +1699,15 @@
   .project-feed-context-actions { display:flex; gap:6px; flex:0 0 auto; }
   .project-feed-context-actions .project-feed-btn { min-height:40px; min-width:auto; flex:0 0 auto; }
   .project-feed-section, .project-feed-services { background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
-  .project-feed-services { padding:12px 0 0; }
+  .project-feed-services { padding:10px 0 0; gap:6px; }
+  .project-feed-services .project-cashier-map { padding:.5rem .9rem .6rem; }
+  .project-feed-services .project-cashier-directions.four.count-1 .project-cashier-direction { min-height:40px; padding:6px 12px; }
+  .project-feed-services .project-cashier-add-toggle, .project-feed-services .project-cashier-add-row { margin-top:4px; }
+  .project-feed-services .project-service-list { padding:.5rem .75rem .6rem; gap:.5rem; }
+  .project-feed-services .project-direction-tile { min-height:50px; padding:.55rem .8rem; }
+  .project-feed-services .project-direction-tile-text b { font-size:.92rem; }
+  .project-feed-services .project-direction-line { padding:.42rem .8rem .42rem 1.1rem; font-size:.82rem; }
+  .project-feed-services .project-service-footer { padding:.5rem .9rem; }
   .project-feed-services > .project-feed-head { padding:0 14px; }
   .project-feed-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .project-feed-head h3 { margin:0; font-size:15px; font-weight:800; color:#10213b; display:flex; align-items:center; gap:8px; }
@@ -1837,21 +1852,22 @@
   }
   /* Owner, 2026-11-05: этапы — кнопки со своим цветом; нажатие открывает окно шага */
   .order-clean-progress--buttons { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: .35rem; }
-  .order-clean-stage-btn { min-width:0; display:flex; flex-direction:column; align-items:stretch; gap:.3rem; padding:.45rem .5rem .4rem; border:1px solid #e3eaf2; border-radius:.6rem; background:#fff; cursor:pointer; text-align:left; font:inherit; color:#64748b; transition: transform .12s, box-shadow .12s; }
+  /* Owner, 2026-11-06: кнопки этапов были бледные — теперь каждый этап в своём цвете:
+     будущий — светлая заливка, пройденный — плотная, текущий — полностью залит. */
+  .order-clean-stage-btn { min-width:0; display:flex; flex-direction:column; align-items:stretch; gap:.3rem; padding:.45rem .5rem .4rem; border:1px solid color-mix(in srgb, var(--stage) 38%, #fff); border-radius:.6rem; background: color-mix(in srgb, var(--stage) 10%, #fff); cursor:pointer; text-align:left; font:inherit; color:#141A26; transition: transform .12s, box-shadow .12s; }
   .order-clean-stage-btn:not([disabled]):hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(20,26,38,.08); border-color: var(--stage); }
-  .order-clean-stage-btn[disabled] { cursor: default; opacity: .75; }
-  .order-clean-stage-btn-line { display:block; height:.46rem; border-radius:999px; background:#e2e8f0; }
-  .order-clean-stage-btn-label { font-size:.72rem; font-weight:700; line-height:1.1; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .order-clean-stage-btn-hint { font-size:.62rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:#94a3b8; }
+  .order-clean-stage-btn[disabled] { cursor: default; }
+  .order-clean-stage-btn-line { display:block; height:.46rem; border-radius:999px; background: color-mix(in srgb, var(--stage) 40%, #fff); }
+  .order-clean-stage-btn-label { font-size:.72rem; font-weight:800; line-height:1.1; color:#141A26; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .order-clean-stage-btn-hint { font-size:.62rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color: var(--stage); }
+  .order-clean-stage-btn.done { background: color-mix(in srgb, var(--stage) 22%, #fff); border-color: color-mix(in srgb, var(--stage) 60%, #fff); }
   .order-clean-stage-btn.done .order-clean-stage-btn-line { background: var(--stage); }
-  .order-clean-stage-btn.done .order-clean-stage-btn-label { color:#141A26; }
-  .order-clean-stage-btn.done .order-clean-stage-btn-hint { color: var(--stage); }
-  .order-clean-stage-btn.current { border-color: var(--stage); box-shadow: 0 0 0 3px color-mix(in srgb, var(--stage) 18%, transparent); background: color-mix(in srgb, var(--stage) 7%, #fff); }
-  .order-clean-stage-btn.current .order-clean-stage-btn-line { background: var(--stage); }
-  .order-clean-stage-btn.current .order-clean-stage-btn-label, .order-clean-stage-btn.current .order-clean-stage-btn-hint { color: var(--stage); }
-  .order-clean-stage-btn.next .order-clean-stage-btn-line { background: color-mix(in srgb, var(--stage) 22%, #e2e8f0); }
+  .order-clean-stage-btn.current { background: var(--stage); border-color: var(--stage); box-shadow: 0 6px 18px color-mix(in srgb, var(--stage) 38%, transparent); }
+  .order-clean-stage-btn.current .order-clean-stage-btn-line { background: rgba(255,255,255,.6); }
+  .order-clean-stage-btn.current .order-clean-stage-btn-label, .order-clean-stage-btn.current .order-clean-stage-btn-hint { color:#fff; }
+  .order-clean-stage-btn.skipped { background:#f1f5f9; border-color:#e2e8f0; }
   .order-clean-stage-btn.skipped .order-clean-stage-btn-line { background: repeating-linear-gradient(90deg, #cbd5e1 0 6px, transparent 6px 10px); }
-  .order-clean-stage-btn.skipped .order-clean-stage-btn-label { color:#94a3b8; }
+  .order-clean-stage-btn.skipped .order-clean-stage-btn-label, .order-clean-stage-btn.skipped .order-clean-stage-btn-hint { color:#94a3b8; }
   @media (max-width: 900px) { .order-clean-progress--buttons { grid-template-columns: repeat(3, minmax(0, 1fr)); } .order-clean-stage-btn-label { white-space: normal; } }
   .order-clean-progress-label {
     margin-top: .32rem;

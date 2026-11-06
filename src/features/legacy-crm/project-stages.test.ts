@@ -148,3 +148,9 @@ test('a measurer keeps the measurement actions; a booked visit is not skipped', 
   assert.equal(c.projectKanbanNextStatus(past), 'proposal_sent', 'a visit that already happened does not hold the project');
 });
 
+
+test('stage buttons carry saturated colours: current is filled, done is dense, next is tinted', () => {
+  assert.match(html, /\.order-clean-stage-btn\.current \{ background: var\(--stage\); border-color: var\(--stage\);/);
+  assert.match(html, /\.order-clean-stage-btn\.done \{ background: color-mix\(in srgb, var\(--stage\) 22%, #fff\);/);
+  assert.match(html, /\.order-clean-stage-btn \{[^}]*background: color-mix\(in srgb, var\(--stage\) 10%, #fff\);/);
+});

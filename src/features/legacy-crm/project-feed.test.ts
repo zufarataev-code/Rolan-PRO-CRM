@@ -13,6 +13,8 @@ test('the project card is one compact feed without duplicate stages', () => {
   let last = -1;
   for (const name of order) { const at = feed.indexOf(name); assert.ok(at > last, `${name} after the previous section`); last = at; }
   assert.match(feed, /<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг<\/div>/);
+  // Owner, 2026-11-06: «Следующий шаг» и «До монтажа» — одна компактная строка, не полоса на весь экран.
+  assert.match(feed, /<div class="project-feed-top">\$\{primary \? `<div class="project-feed-next">[\s\S]*?projectCardGateChecklist\(o, \{ canManage, owner: u\?\.role === 'owner' \}\) : ''\}<\/div>/);
   assert.match(feed, /projectFeedBtn\('Invoice', `openProjectInvoice\('\$\{o\.id\}'\)`\)/);
   assert.match(feed, /projectFeedBtn\('Склад и закупка', 'openProjectPurchaseRequests\(\)'\)/);
   assert.doesNotMatch(feed, /'Визиты'|Назначить визит|next\(\)|project-feed-num/);
