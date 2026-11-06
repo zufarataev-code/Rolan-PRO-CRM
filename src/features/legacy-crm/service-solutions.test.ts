@@ -12,12 +12,14 @@ function load() {
   vm.runInContext(html.slice(start,html.indexOf('function projectQuickLineCatalog(',start)),c);
   return {c,db,setRole:(value:string)=>{role=value;}};
 }
-test('owner creates real solutions, a film can serve multiple solutions, cross-direction films rejected',()=>{
+// Owner, 2026-11-05: a service may link a film from any catalog category (frost is
+// Decorative and sold in Privacy too); the direction only fills the default pool.
+test('owner creates real solutions, a film can serve multiple solutions, cross-category films are allowed',()=>{
   const {c,db,setRole}=load(); assert.equal(c.serviceOfferingsAll().length,0);
   c.addServiceOffering('solar'); c.addServiceOffering('solar');
   c.toggleServiceOfferingFilm('svc_id1','film',true); c.toggleServiceOfferingFilm('svc_id2','film',true);
   c.toggleServiceOfferingFilm('svc_id1','other',true);
-  assert.deepEqual(Array.from(db.settings.serviceOfferings[0].filmIds),['film']);
+  assert.deepEqual(Array.from(db.settings.serviceOfferings[0].filmIds),['film','other']);
   assert.deepEqual(Array.from(db.settings.serviceOfferings[1].filmIds),['film']);
   assert.equal(db.settings.serviceOfferings[0].defaultFilmId, 'film');
   assert.equal(db.settings.serviceOfferings[1].defaultFilmId, 'film');
@@ -29,8 +31,9 @@ test('solution price/name is copied into measured scope without changing old est
   const o:any={id:'o',measurements:{rooms:[{id:'r',windows:[win]}]}}; db.orders.push(o);
   c.projectSetWindowSolution('o','r','w','offeringId','svc_id1');
   assert.equal(win.pricePerSqft,12); assert.equal(win.catalogId,'');
-  db.settings.serviceOfferings[0].filmIds.push('other'); // Directory compatibility keeps the old link editable, not selectable in a new project.
-  c.projectSetWindowSolution('o','r','w','catalogId','other'); assert.equal(win.catalogId,'');
+  c.projectSetWindowSolution('o','r','w','catalogId','other'); assert.equal(win.catalogId,'', 'an unlinked film of another category is not selectable');
+  db.settings.serviceOfferings[0].filmIds.push('other'); // Linked explicitly by the owner → selectable in a project, whatever its category.
+  c.projectSetWindowSolution('o','r','w','catalogId','other'); assert.equal(win.catalogId,'other');
   c.projectSetWindowSolution('o','r','w','catalogId','film'); assert.equal(win.catalogId,'film');
   c.updateServiceOffering('svc_id1','name','Renamed'); c.updateServiceOffering('svc_id1','pricePerSqft',30);
   assert.equal(win.offeringName,'Solution A'); assert.equal(win.pricePerSqft,12);

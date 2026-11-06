@@ -2,6 +2,18 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-05 — A service may link films of any catalog category
+
+Owner decision (Zufar, 2026-11-05): the materials of a service are chosen from
+the whole film catalog, not only from the service's own direction — frosted
+film lives in the Decorative category and is sold under Privacy too. This
+replaces the "same direction only" rule of 2026-10-26 for directory links on
+both the legacy page and the server (`service-solutions.ts`). The direction
+still defines the default pool: a service WITHOUT explicit links offers the
+films of its own direction; a service WITH links offers exactly those, whatever
+their category, and any linked film may be the default. The directory editor
+lists the own category first and the rest under «Из других категорий».
+
 ## 2026-11-04 — Dedicated signed CallRail ingress
 
 Use a dedicated Cloudflare Worker custom domain for CallRail callbacks so a

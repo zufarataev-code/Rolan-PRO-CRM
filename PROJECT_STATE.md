@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-05 — Материалы услуги из любой категории каталога (Claude, PR pending)
+
+- Owner: in «Услуги и цены» the material list of a service showed only films of its own category; frost (Decorative) must be linkable to a Privacy service. Decision recorded in DECISIONS.md (2026-11-05).
+- Done on `claude/service-cross-category-films`: legacy page — `serviceOfferingDefaultFilmId`, `serviceOfferingAllowedFilmIds`, `toggleServiceOfferingFilm`, `setServiceOfferingDefaultFilm` accept any non-archived film; `projectOfferingAllowsFilm` = linked films (any category) or, without links, the own direction; the editor lists own-category films first and others under a collapsible «Из других категорий · N». Server `service-solutions.ts` — `filmMatchesDirection` accepts linked films, `filmAllowedForProject` = linked or own direction, default material only has to be linked. Tests rewritten to the new rule (service-solutions, service-solutions-policy, service-units).
+- Verification: `node --check` HTML scripts; the three suites 44/44; full `npm test` 896 pass / 35 env failures as on main.
+
 ## 2026-11-05 — Расходники услуги: норма со склада на единицу (Claude, PR pending)
 
 - Owner: «плёнка к услуге привязана — правильно; силикон к услуге „Силикон“ привязать нельзя; у каждой услуги должны быть свои расходники». A service now carries `supplies: [{ id, supplyId, qtyPerUnit }]` (warehouse supply + norm per service unit).
