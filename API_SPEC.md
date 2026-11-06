@@ -1030,6 +1030,62 @@ Purpose:
 
 - Load projects linked to the selected client.
 
+## Facebook Page Comments
+
+These endpoints are available only to authenticated Owner/Manager users. Public
+reply publication remains in manager-approval mode.
+
+### `GET /api/v1/integrations/facebook-comments`
+
+Purpose:
+
+- Load pending/escalated Facebook Page comments, safe reply drafts, optional
+  linked Lead and non-secret integration status.
+
+Query params:
+
+- `status`: `pending_review`, `escalated`, `replied`, `dismissed`, or `all`
+- `limit`: 1-100, default 50
+
+### `POST /api/v1/integrations/facebook-comments/{commentId}/draft`
+
+Purpose:
+
+- Regenerate a manager-editable safe draft. An AI outage falls back to a
+  deterministic multilingual draft and never blocks review.
+
+### `POST /api/v1/integrations/facebook-comments/{commentId}/lead`
+
+Purpose:
+
+- Explicitly create or reuse one canonical Lead for the comment and link the
+  existing manager task. The comment is never silently converted into a Lead.
+
+### `PATCH /api/v1/integrations/facebook-comments/{commentId}`
+
+Write fields:
+
+- `action`: `dismiss` or `reopen`
+
+### `POST /api/v1/integrations/facebook-comments/{commentId}/reply`
+
+Write fields:
+
+- `message`: reviewed public reply, 1-2,000 characters
+
+Purpose:
+
+- Publish the manager-confirmed reply through the protected Page token, close
+  the task and append an activity record.
+
+### `GET|POST /api/webhooks/meta-lead-ads`
+
+Purpose:
+
+- Existing signed Meta Page callback. In addition to `leadgen`, it accepts only
+  new `feed` comments for the configured Page. It ignores Page-authored replies,
+  edits, removals and unrelated fields.
+
 ## Settings
 
 ### `GET /api/v1/settings/bootstrap`

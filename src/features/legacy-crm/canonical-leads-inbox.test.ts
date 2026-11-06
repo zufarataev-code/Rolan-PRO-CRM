@@ -9,7 +9,7 @@ test("active CRM inbox reads canonical Messenger leads without copying them into
   assert.match(source, /let canonicalLeads = \[\]/);
   assert.match(source, /fetch\('\/api\/v1\/leads', \{ cache: 'no-store' \}\)/);
   // Messenger and website leads both live in PostgreSQL and are read, never copied.
-  assert.match(source, /\['facebook_messenger', 'website', 'callrail', 'meta_lead_ads'\]\.includes\(lead\?\.source\)/);
+  assert.match(source, /\['facebook_messenger', 'facebook_comment', 'website', 'callrail', 'meta_lead_ads'\]\.includes\(lead\?\.source\)/);
   assert.match(source, /CONSULTATION_SCHEDULED/);
   assert.match(source, /new Date\(right\.scheduled_start_at\).*new Date\(left\.scheduled_start_at\)/);
   assert.match(source, /!\['cancelled', 'canceled', 'deleted'\]\.includes\(item\?\.status\)/);
@@ -30,15 +30,15 @@ test("incoming Meta forms expose project and dismiss actions while Messenger kee
   const render = source.slice(start, source.indexOf("\n}\n", start) + 2);
   function html(leadSource: string, consultation: object | null = null) {
     const context: any = vm.createContext({
-      db: { settings: {} }, state: {}, canonicalLeadsRefreshedAt: Date.now(),
+      db: { settings: {} }, state: {}, canonicalLeadsRefreshedAt: Date.now(), facebookCommentsRefreshedAt: Date.now(),
       canonicalMessengerLeadRows: () => [{ id: "fixture", source: leadSource, canonical: true, name: "Test enquiry", phone: "+12025550123", consultation }],
-      fetchCanonicalLeads: () => {}, callrailRecentCallsHtml: () => "", LEAD_SOURCES: {},
+      fetchCanonicalLeads: () => {}, fetchFacebookComments: () => {}, facebookCommentsInboxHtml: () => "", callrailRecentCallsHtml: () => "", LEAD_SOURCES: {},
       existingClientByContact: () => null, academyEsc: String, jsQuote: String, fmtDateTime: () => "fixture date",
     });
     vm.runInContext(render, context);
     return context.renderLeadsView() as string;
   }
-  for (const source of ["meta_lead_ads", "website", "callrail"]) {
+  for (const source of ["meta_lead_ads", "facebook_comment", "website", "callrail"]) {
     assert.match(html(source), /convertLead\('fixture'\)/, source + " must be processable");
     assert.match(html(source), /dismissLead\('fixture'\)/, source + " must be dismissible");
   }

@@ -872,3 +872,23 @@ This decision supersedes the 2026-10-26 four-direction grouping. Rolan PRO has f
 - Existing records created during the temporary period when Privacy was grouped under Decorative remain readable and writable. The server accepts an unchanged saved cross-category link, but it cannot be extended with another incompatible material.
 - «Общее по объекту» remains an internal size-free service bucket and does not count as a film direction.
 - No Project, warehouse, payroll or Proposal history is deleted or silently rewritten.
+
+## 2026-11-06 — Facebook public replies require manager approval (Owner)
+
+Rolan PRO's CRM bot may prepare responses to Facebook Page comments, but it must
+not autonomously speak publicly for the company.
+
+- New Page comments enter the existing «Новые лиды» workspace with a safe,
+  editable draft, manager task and SLA. Complaints are escalated; spam is closed
+  without a reply draft.
+- AI may classify and draft, but it cannot invent a price, discount, warranty,
+  availability, technical fact or appointment. A service outage falls back to a
+  deterministic multilingual draft.
+- A public reply is sent only after an authenticated Owner/Manager explicitly
+  confirms the exact text. The provider reply ID and published text enter the
+  audit history.
+- Creating a canonical Lead from a comment is a separate explicit action. A
+  public comment alone is not marketing consent and does not silently enter the
+  sales pipeline.
+- The existing Meta Page webhook and protected server token are reused where
+  possible. Secrets never enter browser code or legacy workspace JSON.

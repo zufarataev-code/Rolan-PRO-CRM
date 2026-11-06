@@ -46,6 +46,7 @@ model User {
   updated_legacy_workspaces LegacyWorkspace[] @relation("legacy_workspace_updated_by")
   gmail_connections       GmailConnection[] @relation("gmail_connection_connected_by")
   twilio_messages         TwilioMessage[]  @relation("twilio_message_actor")
+  assigned_facebook_comments FacebookComment[] @relation("facebook_comment_assignee")
 
   @@map("users")
 }
@@ -389,12 +390,49 @@ model Lead {
   acquisition_touchpoints      AcquisitionTouchpoint[]
   consent_snapshots            ConsentSnapshot[]
   conversion_events            ConversionEvent[]
+  facebook_comments            FacebookComment[]
 
   @@index([assigned_manager_id])
   @@index([city_id])
   @@index([pipeline_status_id])
   @@unique([external_source, external_submission_id])
   @@map("leads")
+}
+
+/// A Facebook Page comment received through the Meta Page webhook.
+/// Public replies are always reviewed by an Owner or Manager before publishing.
+model FacebookComment {
+  facebook_comment_id      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  page_id                  String    @db.VarChar(64)
+  external_comment_id      String    @db.VarChar(191)
+  post_id                  String    @db.VarChar(191)
+  parent_comment_id        String?   @db.VarChar(191)
+  author_id                String    @db.VarChar(191)
+  author_name              String    @db.VarChar(160)
+  message                  String    @db.Text
+  intent                   String    @default("other") @db.VarChar(40)
+  status                   String    @default("pending_review") @db.VarChar(40)
+  draft_reply              String?   @db.Text
+  published_reply_id       String?   @db.VarChar(191)
+  published_reply_text     String?   @db.Text
+  permalink_url            String?   @db.Text
+  assigned_to              String?   @db.Uuid
+  lead_id                  String?   @db.Uuid
+  due_at                   DateTime? @db.Timestamptz(6)
+  commented_at             DateTime  @db.Timestamptz(6)
+  replied_at               DateTime? @db.Timestamptz(6)
+  dismissed_at             DateTime? @db.Timestamptz(6)
+  metadata                 Json?
+  created_at               DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime  @updatedAt @db.Timestamptz(6)
+  assignee                  User?     @relation("facebook_comment_assignee", fields: [assigned_to], references: [user_id], onDelete: SetNull)
+  lead                      Lead?     @relation(fields: [lead_id], references: [lead_id], onDelete: SetNull)
+
+  @@unique([page_id, external_comment_id])
+  @@index([status, due_at])
+  @@index([assigned_to, status])
+  @@index([lead_id])
+  @@map("facebook_comments")
 }
 
 model Client {
