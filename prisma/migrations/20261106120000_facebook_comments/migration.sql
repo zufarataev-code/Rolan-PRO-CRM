@@ -21,7 +21,7 @@ CREATE TABLE "facebook_comments" (
     "dismissed_at" TIMESTAMPTZ(6),
     "metadata" JSONB,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL,
 
     CONSTRAINT "facebook_comments_pkey" PRIMARY KEY ("facebook_comment_id")
 );
