@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-06 — Услуга по площади без плёнки: силикон, мойка, удаление (Claude, PR pending)
+
+- Owner: «сделать 5 проектов с реальными данными и посмотреть, как сработают формулы». Dry run on production data in an in-memory sandbox (save disabled): five historical projects through the real `quickEntryNewOrder` → `quickEntryBuildLine` → `closeQuickProjectAsCompletedWith` → `orderPSS` → `projectProfitability` path. Film ×(1+waste), per-sq-ft installer pay from the service rate, 5 % manager commission, hired specialist as a direct expense, trims/delivery as manual expenses, fixed pool share by revenue and the tax reserve all came out as expected by hand.
+- Found: a per-sq-ft service that is not a film («Силикон» $3/sq ft with a hired siliconist at $2/sq ft) could not be closed — `projectQuickCompletionIssues` demanded a film for every `unit === 'sqft'` line («не выбрана плёнка» / «ручную плёнку нужно привязать к складу»), and such a service was locked to one direction.
+- Done on `claude/no-film-area-services`: offering flag `noFilm` (editor checkbox «Без плёнки — работа по площади (силикон, мойка, удаление плёнки)» under «Как считается»); `serviceOfferingNoFilm`, `projectLineUsesFilm`; quick-entry form shows «без плёнки · работа по площади» instead of the film select, commit and completion checks skip the film for such lines, the line carries `noFilm: true`; the project card material cell, cashier material card and measurement window check skip the film too; `serviceOfferingDirections` / «Также предлагать в направлениях» allow a no-film area service in any direction; `serviceOfferingPricingMetrics` treats its direct cost as complete (supplies + installer). Server: `noFilm` must be boolean, only with `unit: 'sqft'`, no `filmIds`; directions allowed for it.
+- Verification: `no-film-area-service.test.ts` 3/3; `node --check` both legacy files; full `npm test` 902 pass / 36 env failures (baseline on main 900 / 38, DB/network suites).
+
 ## 2026-11-05 — Живое обновление CRM на телефонах + аудит экономики (Claude, PR pending)
 
 - Owner: «когда мы вносим изменения, у сотрудников всё должно обновляться автоматически, без перебоев и зависов»; «проверь всю логику: цена → себестоимость (монтаж, материал, прямые расходы) → прибыль → минус налоги и постоянные → чистая прибыль месяца, чтобы не было кассового разрыва».
