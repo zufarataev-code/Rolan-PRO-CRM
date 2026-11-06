@@ -394,6 +394,9 @@ export async function updateFacebookComment(input: {
   if (current.status !== "publish_uncertain" && reconciliation) {
     throw new MetaCommentError("reply_not_uncertain", 409, "Only an uncertain Facebook reply can be reconciled.");
   }
+  if (input.action === "reopen" && current.status !== "dismissed") {
+    throw new MetaCommentError("comment_not_dismissed", 409, "Only a dismissed Facebook comment can be reopened.");
+  }
   const status = input.action === "dismiss"
     ? "dismissed"
     : input.action === "confirm_published"

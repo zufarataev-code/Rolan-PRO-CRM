@@ -219,6 +219,7 @@ test("draft and publish paths use status compare-and-set before external side ef
   assert.match(service, /Manager confirmed that the uncertain Facebook reply was published/);
   assert.match(service, /status: "publishing"[\s\S]*?status: "publish_uncertain"/);
   assert.match(service, /current\.status !== "publish_uncertain" && reconciliation/);
+  assert.match(service, /input\.action === "reopen" && current\.status !== "dismissed"/);
   assert.match(service, /status: "publishing",\s*updated_at: \{ lt: facebookCommentPublishLeaseCutoff\(new Date\(\)\) \}/);
   assert.match(service, /title: facebookCommentTaskTitle\(intent, comment\.author_name\)/);
   assert.match(service, /function commentReviewStatus\(intent: FacebookCommentIntent\)/);
