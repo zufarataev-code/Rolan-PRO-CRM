@@ -13,6 +13,7 @@ import { PULSE_THEME_HTML } from "@/features/legacy-crm/pulse-theme";
 import { DESIGN_THEME_HTML } from "@/features/legacy-crm/design-theme";
 import { ENTITY_TOKENS_HTML } from "@/features/legacy-crm/entity-tokens";
 import { composeProductionHtml } from "@/features/legacy-crm/production-ui";
+import { currentReleaseId } from "@/features/legacy-crm/release";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,7 @@ export async function GET(request: NextRequest) {
   const googleMapsBootstrapPatch = `
     <script>
       window.__ROLANPRO_GOOGLE_MAPS_API_KEY__ = ${JSON.stringify(env.googleMapsApiKey)};
+      window.__ROLANPRO_RELEASE__ = ${JSON.stringify(currentReleaseId())};
     </script>
   `;
 

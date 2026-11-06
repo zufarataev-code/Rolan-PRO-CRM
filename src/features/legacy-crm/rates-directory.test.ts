@@ -73,7 +73,8 @@ test('each direction service owns installer pay; personal and duplicate rate fie
   const block = slice('function companyRatesBlockHtml(owner)', 'function renderCanonicalServicePricing()');
   assert.match(block, /Аванс, % от проекта/);
   assert.match(block, /Аванс не больше, \$/);
-  assert.match(block, /Налог с прибыли проекта, %/);
+  assert.match(block, /Налог California с прибыли, %/);
+  assert.match(block, /Федеральный налог с прибыли, %/);
   assert.match(block, /Комиссия: \$\{academyEsc\(u\.name\)\}, %/);
   assert.match(block, /u\.commissionPct = u\.payConfig\.commissionPct;/, 'one commission number');
   const editor = slice('function serviceOfferingPricingEditorHtml(offering, per, sized)', 'function renderServiceDirectionWorkspace(direction)');

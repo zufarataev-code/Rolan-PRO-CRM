@@ -9727,6 +9727,7 @@ function migrateSchema() {
     s.projectProfitTax = {
       entityType: 'C_CORP',
       ratePct: 8.84,
+      federalRatePct: 21,
       annualMinimum: 800,
       jurisdiction: 'California',
     };
@@ -9983,8 +9984,11 @@ function totalMonthlyBurn() {
   return (db.opex || []).reduce((s, e) => s + opexMonthly(e), 0);
 }
 function companyFixedMonthlyBurn() {
+  // Owner, 2026-11-05 (аудит экономики): реклама уже входит в себестоимость
+  // каждого проекта как доля бюджета месяца (marketingPct от выручки), поэтому
+  // план «Реклама» в постоянных расходах считался бы второй раз.
   return (db.opex || [])
-    .filter(item => item.active !== false && item.scope !== 'personal' && item.costBehavior !== 'variable' && item.category !== 'tax')
+    .filter(item => item.active !== false && item.scope !== 'personal' && item.costBehavior !== 'variable' && !['tax', 'marketing'].includes(item.category))
     .reduce((sum, item) => sum + opexMonthly(item), 0);
 }
 /** «Сколько тратить на рекламу»: budget of this month and the one the current revenue gives for next month. */
@@ -17523,6 +17527,9 @@ function projectProfitTaxProfile() {
   const profile = db.settings.projectProfitTax = db.settings.projectProfitTax || {};
   if (!profile.entityType) profile.entityType = 'C_CORP';
   if (!(Number(profile.ratePct) >= 0)) profile.ratePct = profile.entityType === 'S_CORP' ? 1.5 : 8.84;
+  // Owner, 2026-11-05 (аудит): C-Corp платит и федеральный налог на прибыль
+  // (21 %); S-Corp — сквозная, федеральный у корпорации 0.
+  if (!(Number(profile.federalRatePct) >= 0)) profile.federalRatePct = profile.entityType === 'C_CORP' ? 21 : 0;
   if (!(Number(profile.annualMinimum) >= 0)) profile.annualMinimum = 800;
   if (!profile.jurisdiction) profile.jurisdiction = 'California';
   return profile;
@@ -17561,7 +17568,7 @@ function projectProfitability(o) {
   const monthGrossProfit = monthOrders.reduce((sum, order) => sum + orderMargin(order), 0);
   const monthProfitBeforeTax = monthGrossProfit - fixedPool;
   const profile = projectProfitTaxProfile();
-  const rate = Math.max(0, Number(profile.ratePct) || 0) / 100;
+  const rate = (Math.max(0, Number(profile.ratePct) || 0) + Math.max(0, Number(profile.federalRatePct) || 0)) / 100;
   const minimumMonthlyReserve = Math.max(0, Number(profile.annualMinimum) || 0) / 12;
   const monthTaxReserve = monthOrders.length ? Math.max(Math.max(0, monthProfitBeforeTax) * rate, minimumMonthlyReserve) : 0;
   const monthRevenue = monthOrders.reduce((sum, order) => sum + orderRevenue(order), 0);
@@ -20678,7 +20685,8 @@ function companyRatesBlockHtml(owner) {
     <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-2">
       ${field('Аванс, % от проекта', num(s.advancePct ?? 10, "db.settings.advancePct=Math.max(0, Number(this.value)||0); save(); render();"))}
       ${field('Аванс не больше, $', num(s.depositCapUsd ?? 1000, "db.settings.depositCapUsd=Math.max(0, Number(this.value)||0)||null; save(); render();", 50))}
-      ${field('Налог с прибыли проекта, %', num(Number.isFinite(tax) ? tax : '', "db.settings.projectProfitTax=Object.assign({}, db.settings.projectProfitTax||{}, {ratePct: Math.max(0, Number(this.value)||0)}); save(); render();", 0.1))}
+      ${field('Налог California с прибыли, %', num(Number.isFinite(tax) ? tax : '', "db.settings.projectProfitTax=Object.assign({}, db.settings.projectProfitTax||{}, {ratePct: Math.max(0, Number(this.value)||0)}); save(); render();", 0.1), 'C-Corp 8,84 %, минимум $800 в год')}
+      ${field('Федеральный налог с прибыли, %', num(Number(s.projectProfitTax?.federalRatePct ?? (s.projectProfitTax?.entityType === 'S_CORP' ? 0 : 21)), "db.settings.projectProfitTax=Object.assign({}, db.settings.projectProfitTax||{}, {federalRatePct: Math.max(0, Number(this.value)||0)}); save(); render();", 0.1), 'C-Corp 21 %; резерв = прибыль до налога × (CA + федеральный)')}
       ${managers.map(u => field(`Комиссия: ${academyEsc(u.name)}, %`, num(Number(u.payConfig?.commissionPct) || 0, `companyRatesSetCommission('${u.id}', this.value)`, 0.5), 'от валовой выручки оплаченного проекта')).join('')}
       ${field('Надбавка старшему в бригаде, %', num(s.seniorInstallerBonusPct ?? 10, "db.settings.seniorInstallerBonusPct=Math.max(0, Number(this.value)||0); save(); render();", 1), 'к его равной доле: 1000 на двоих → 500 и 550')}
     </div>
@@ -25978,9 +25986,9 @@ function projectEstimateUpdateTaxProfile(oid, field, value) {
   const profile = projectProfitTaxProfile();
   if (field === 'entityType') {
     profile.entityType = value;
-    if (value === 'C_CORP') profile.ratePct = 8.84;
-    if (value === 'S_CORP') profile.ratePct = 1.5;
-  } else if (['ratePct','annualMinimum'].includes(field)) {
+    if (value === 'C_CORP') { profile.ratePct = 8.84; profile.federalRatePct = 21; }
+    if (value === 'S_CORP') { profile.ratePct = 1.5; profile.federalRatePct = 0; }
+  } else if (['ratePct','federalRatePct','annualMinimum'].includes(field)) {
     profile[field] = Math.max(0, Number(value) || 0);
   }
   save(); refreshProjectEstimateWorkspace(oid);
@@ -29956,7 +29964,7 @@ function renderProjectEstimateWorkspace(o) {
         <div class="project-profit-card"><span>Валовая прибыль</span><strong class="${profitability.grossProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(profitability.grossProfit)}</strong></div>
         <div class="project-profit-card"><span>Доля постоянных расходов</span><strong class="text-red-600">− ${fmtMoney(profitability.fixedAllocation)}</strong></div>
         <div class="project-profit-card"><span>Прибыль до налога</span><strong class="${profitability.profitBeforeTax >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(profitability.profitBeforeTax)}</strong></div>
-        <div class="project-profit-card"><span>Резерв налога California</span><strong class="text-red-600">− ${fmtMoney(profitability.taxAllocation)}</strong></div>
+        <div class="project-profit-card"><span>Резерв налогов (CA + федеральный)</span><strong class="text-red-600">− ${fmtMoney(profitability.taxAllocation)}</strong></div>
         <div class="project-profit-card" style="border-color:${profitability.netProfit >= 0 ? '#86efac' : '#fca5a5'};background:${profitability.netProfit >= 0 ? '#f0fdf4' : '#fef2f2'}"><span>Расчётная чистая прибыль</span><strong class="${profitability.netProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(profitability.netProfit)}</strong></div>
         <div class="project-profit-card"><span>Постоянные расходы месяца</span><strong>${fmtMoney(profitability.fixedPool)}</strong></div>
         <div class="project-profit-card"><span>Бюджет рекламы месяца</span><strong>${fmtMoney(profitability.adBudget.budget)}</strong></div>
@@ -29964,7 +29972,8 @@ function renderProjectEstimateWorkspace(o) {
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3">
         <div><label>Налоговый профиль</label><select onchange="projectEstimateUpdateTaxProfile('${o.id}','entityType',this.value)"><option value="C_CORP" ${profitability.profile.entityType==='C_CORP'?'selected':''}>California C corporation</option><option value="S_CORP" ${profitability.profile.entityType==='S_CORP'?'selected':''}>California S corporation</option><option value="CUSTOM" ${profitability.profile.entityType==='CUSTOM'?'selected':''}>Другая ставка</option></select></div>
-        <div><label>Расчётная ставка, %</label><input type="number" min="0" step="0.01" value="${Number(profitability.profile.ratePct || 0)}" onchange="projectEstimateUpdateTaxProfile('${o.id}','ratePct',this.value)"></div>
+        <div><label>Ставка California, %</label><input type="number" min="0" step="0.01" value="${Number(profitability.profile.ratePct || 0)}" onchange="projectEstimateUpdateTaxProfile('${o.id}','ratePct',this.value)"></div>
+        <div><label>Федеральная ставка, %</label><input type="number" min="0" step="0.01" value="${Number(profitability.profile.federalRatePct || 0)}" onchange="projectEstimateUpdateTaxProfile('${o.id}','federalRatePct',this.value)"></div>
         <div><label>Годовой минимум, $</label><input type="number" min="0" step="1" value="${Number(profitability.profile.annualMinimum || 0)}" onchange="projectEstimateUpdateTaxProfile('${o.id}','annualMinimum',this.value)"></div>
       </div>
       <div class="order-clean-note mt-3">Это управленческий резерв, а не налоговая декларация. Фактические федеральные и California налоги подтверждает бухгалтер; оплаченные суммы учитываются отдельно в финансах.</div>
@@ -44025,6 +44034,79 @@ if (ROLANPRO_CLOUD && 'serviceWorker' in navigator) {
 setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) syncTwilioMessages(); }, 15000);
 setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) syncZadarmaCalls(); }, 15000);
 setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) refreshEmailChannelStatus(true); }, 300000);
+
+// ---------- ЖИВОЕ ОБНОВЛЕНИЕ (Owner, 2026-11-05) ----------
+// «Когда мы вносим изменения, у сотрудников на телефонах всё должно обновляться
+// само, без перебоев и зависов». Раньше чужие правки приходили только при
+// перезагрузке страницы или при конфликте собственного сохранения, а новая
+// версия кода — только после перезагрузки. Теперь открытая CRM раз в 30 секунд
+// (и при возврате на вкладку) спрашивает сервер одним лёгким запросом:
+//  • ревизия общих данных выше нашей — подтягиваем и объединяем с тем, что
+//    человек правит сейчас (тот же 3-way merge, что при конфликте), без reload;
+//  • на сервере новый релиз — перезагружаем страницу в тихий момент: нет
+//    несохранённых правок, нет открытого окна, человек не печатает.
+const cloudLiveUpdate = { timer: null, inFlight: false, release: window.__ROLANPRO_RELEASE__ || '', newRelease: '', lastInputAt: 0, reloadTimer: null };
+function cloudHasPendingChanges() {
+  return !!cloudSaveTimer || cloudSaveInFlight || cloudSaveQueued;
+}
+function cloudUserIsBusy() {
+  const active = document.activeElement;
+  const typing = active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) && Date.now() - cloudLiveUpdate.lastInputAt < 20000;
+  return !!state.modal || typing || cloudHasPendingChanges();
+}
+async function cloudPullRemoteChanges() {
+  const response = await fetch('/api/v1/legacy-crm/state', { cache: 'no-store' });
+  if (response.status === 401) { location.assign('/login'); return false; }
+  const result = await response.json();
+  if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'workspace refresh failed');
+  if (!(result.data.revision > cloudRevision)) return false;
+  const remotePayload = result.data.payload;
+  projectYieldTakenFollowUps(remotePayload);
+  const merged = mergeCloudWorkspaceSnapshots(cloudBaseSnapshot, JSON.parse(JSON.stringify(db)), remotePayload);
+  db = cloneCloudWorkspaceValue(merged);
+  cloudRevision = result.data.revision;
+  cloudBaseSnapshot = cloneCloudWorkspaceValue(remotePayload);
+  migrateSchema();
+  projectSettleChangedServices(false);
+  localStorage.setItem('rolanpro_crm', JSON.stringify(db));
+  preservePositionForNextRender();
+  render();
+  cloudStatus('Обновлено с сервера', 'green');
+  return true;
+}
+function cloudApplyNewRelease() {
+  if (!cloudLiveUpdate.newRelease) return;
+  if (cloudUserIsBusy()) { clearTimeout(cloudLiveUpdate.reloadTimer); cloudLiveUpdate.reloadTimer = setTimeout(cloudApplyNewRelease, 15000); return; }
+  cloudStatus('Новая версия CRM — обновляем…', 'blue');
+  setTimeout(() => location.reload(), 800);
+}
+async function cloudCheckForUpdates() {
+  if (!ROLANPRO_CLOUD || !cloudReady || cloudLiveUpdate.inFlight || document.visibilityState === 'hidden') return;
+  cloudLiveUpdate.inFlight = true;
+  try {
+    const response = await fetch('/api/v1/legacy-crm/version', { cache: 'no-store' });
+    if (response.status === 401) { location.assign('/login'); return; }
+    if (!response.ok) return;
+    const result = await response.json();
+    const data = result?.data || {};
+    if (data.release && cloudLiveUpdate.release && data.release !== cloudLiveUpdate.release && !cloudLiveUpdate.newRelease) {
+      cloudLiveUpdate.newRelease = data.release;
+      cloudApplyNewRelease();
+    }
+    if (Number(data.revision) > cloudRevision && !cloudHasPendingChanges() && !state.modal) await cloudPullRemoteChanges();
+  } catch (error) {
+    // Offline or a brief server restart: the next tick tries again; nothing is lost.
+  } finally {
+    cloudLiveUpdate.inFlight = false;
+  }
+}
+if (ROLANPRO_CLOUD) {
+  document.addEventListener('input', () => { cloudLiveUpdate.lastInputAt = Date.now(); }, true);
+  cloudLiveUpdate.timer = setInterval(cloudCheckForUpdates, 30000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') cloudCheckForUpdates(); });
+  window.addEventListener('focus', () => cloudCheckForUpdates());
+  window.addEventListener('online', () => cloudCheckForUpdates());
+}
 </script>
 
 
