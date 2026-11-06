@@ -19,6 +19,7 @@ import {
   facebookCommentDueAt,
   facebookCommentPayloadHash,
   facebookCommentStatusesForQuery,
+  facebookCommentTaskTitle,
   fallbackFacebookCommentDraft,
   metaObjectId,
   parseFacebookCommentAiResponse,
@@ -67,12 +68,6 @@ function taskPriority(intent: FacebookCommentIntent) {
   if (intent === "complaint") return "urgent";
   if (intent === "sales") return "high";
   return "normal";
-}
-
-function taskTitle(intent: FacebookCommentIntent, authorName: string) {
-  if (intent === "complaint") return `Срочно: жалоба в Facebook · ${authorName}`;
-  if (intent === "sales") return `Ответить на запрос в Facebook · ${authorName}`;
-  return `Проверить комментарий Facebook · ${authorName}`;
 }
 
 export async function ingestMetaComment(notification: MetaCommentNotification) {
@@ -152,7 +147,7 @@ export async function ingestMetaComment(notification: MetaCommentNotification) {
         data: {
           entity_type: "facebook_comment",
           entity_id: comment.facebook_comment_id,
-          title: taskTitle(intent, notification.author_name),
+          title: facebookCommentTaskTitle(intent, notification.author_name),
           description: notification.message || "Комментарий без текста — проверьте вложение в Facebook.",
           status: "open",
           priority: taskPriority(intent),
@@ -395,7 +390,7 @@ export async function updateFacebookComment(input: {
         data: {
           entity_type: "facebook_comment",
           entity_id: current.facebook_comment_id,
-          title: taskTitle(current.intent as FacebookCommentIntent, current.author_name),
+            title: facebookCommentTaskTitle(current.intent as FacebookCommentIntent, current.author_name),
           description: current.message || "Комментарий без текста — проверьте вложение в Facebook.",
           status: "open",
           priority: taskPriority(current.intent as FacebookCommentIntent),

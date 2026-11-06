@@ -29,6 +29,15 @@ export function facebookCommentStatusesForQuery(value: string | null | undefined
   return ["pending_review", "escalated", "publishing"] satisfies FacebookCommentStatus[];
 }
 
+export function facebookCommentTaskTitle(intent: FacebookCommentIntent, authorName: string) {
+  const prefix = intent === "complaint"
+    ? "Срочно: жалоба в Facebook · "
+    : intent === "sales"
+      ? "Ответить на запрос в Facebook · "
+      : "Проверить комментарий Facebook · ";
+  return Array.from(`${prefix}${authorName}`).slice(0, 180).join("");
+}
+
 export class MetaCommentError extends Error {
   constructor(
     public readonly code: string,
