@@ -1665,6 +1665,12 @@
   .rp-kpwin-option .rp-kpwin-dot { background:var(--dir-color); }
   .project-feed { display:flex; flex-direction:column; gap:12px; margin-top:12px; }
   /* Owner, 2026-11-06: «Следующий шаг» — не полоса на весь экран, а компактная строка; «До монтажа» рядом. */
+  .measure-paths { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:6px 0 12px; }
+  .measure-path { display:flex; flex-direction:column; gap:3px; padding:10px 12px; border:1px solid #D9DEE6; border-radius:12px; background:#fff; text-align:left; font:inherit; color:#10213b; cursor:pointer; }
+  .measure-path b { font-size:13.5px; } .measure-path span { font-size:11.5px; color:#5A6577; line-height:1.3; }
+  .measure-path.on { border-color:#0891b2; background:color-mix(in srgb,#0891b2 8%,#fff); cursor:default; }
+  .measure-path:not(.on):hover { border-color:#0891b2; }
+  @media (max-width:520px) { .measure-paths { grid-template-columns:1fr; } }
   .project-feed-top { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:stretch; }
   .project-feed-top > .project-feed-gate { max-width:260px; display:flex; flex-direction:column; justify-content:center; }
   .project-feed-top > .project-feed-gate[open] { grid-column:1 / -1; max-width:none; }
@@ -1723,6 +1729,7 @@
   .project-feed-actions { display:flex; gap:8px; flex-wrap:wrap; }
   .project-feed-btn { flex:1 1 140px; min-height:44px; justify-content:center; }
   .project-feed-chips { display:flex; gap:8px; flex-wrap:wrap; }
+  .project-feed-docs { padding:2px 2px 0; }
   .project-feed-doc { border:1px solid #D9DEE6; background:#fff; border-radius:999px; padding:8px 12px; font-size:13px; font-weight:600; min-height:40px; }
   .project-feed-doc.muted { border-style:dashed; color:#8A94A6; font-weight:500; }
   /* Касса проекта (Owner, 2026-10-26): four direction tiles, room tiles, bottom receipt */
@@ -1859,7 +1866,7 @@
   .order-clean-stage-btn[disabled] { cursor: default; }
   .order-clean-stage-btn-line { display:block; height:.46rem; border-radius:999px; background: color-mix(in srgb, var(--stage) 40%, #fff); }
   .order-clean-stage-btn-label { font-size:.72rem; font-weight:800; line-height:1.1; color:#141A26; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .order-clean-stage-btn-hint { font-size:.62rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color: var(--stage); }
+  .order-clean-stage-btn-hint { font-size:.64rem; font-weight:700; color: var(--stage); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .order-clean-stage-btn.done { background: color-mix(in srgb, var(--stage) 22%, #fff); border-color: color-mix(in srgb, var(--stage) 60%, #fff); }
   .order-clean-stage-btn.done .order-clean-stage-btn-line { background: var(--stage); }
   .order-clean-stage-btn.current { background: var(--stage); border-color: var(--stage); box-shadow: 0 6px 18px color-mix(in srgb, var(--stage) 38%, transparent); }
@@ -18936,7 +18943,7 @@ function projectServicesNextAction(o) {
     // a finished one is completed in the measurement editor, not booked again.
     if (o.status === 'measurement_scheduled') return null;
     if (o.status === 'measurement_done') return { icon: '📏', title: 'Дополнить замер', sub: `Замер не закончен: ${orderMeasurementCompletionIssues(o).slice(0, 3).join(', ')}.`, variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
-    return { icon: '📐', title: 'Назначить замер', sub: 'Услугам за sq ft нужны размеры окон. Выберите замерщика и время выезда — или внесите размеры сами в «Замер».', variant: 'primary', onclick: `scheduleMeasurementPrompt('${o.id}')` };
+    return { icon: '📐', title: 'Замер: выезд замерщика или размеры сейчас', sub: 'Услугам за sq ft нужны размеры окон — один шаг, два пути.', variant: 'primary', onclick: `scheduleMeasurementPrompt('${o.id}')` };
   }
   if (typeof projectPaidWithoutProposal === 'function' && projectPaidWithoutProposal(o)) return projectPaidWithoutProposalAction(o);
   if (!projectEstimateIsApproved(o)) return { icon: '✅', title: 'Расчёт готов → КП', sub: orderNeedsMeasurements(o) ? 'Размеры внесены. Проверьте количество и цены в «Услугах проекта» — и сформируйте КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цены — и сформируйте КП.', variant: 'primary', onclick: `openProposalWizard('${o.id}')` };
@@ -25806,10 +25813,28 @@ function renderOrderCleanProgress(o) {
   const canManage = ['owner', 'manager'].includes(role);
   const canMeasure = ['owner', 'manager', 'measurer'].includes(role);
   const ws = key => `projectCardOpenWorkspace('${key}')`;
+  // Owner, 2026-11-06: нижние секции «Замер / КП / Монтаж / Оплата» убраны — их
+  // суть живёт второй строкой в кнопке этапа (окна и sq ft, статус КП, дата монтажа, оплата).
+  const windowsCount = typeof measureAllWindows === 'function' ? measureAllWindows(o).length : 0;
+  const money = typeof orderUserCanSeeMoney === 'function' ? orderUserCanSeeMoney(o, u) : canManage;
+  const proposal = typeof getPremiumProposalByOrder === 'function' ? getPremiumProposalByOrder(o.id) : null;
+  const proposalMeta = !proposal ? '' : ['Accepted', 'Deposit Paid', 'Paid in Full'].includes(proposal.status) ? 'подписано' : proposal.status === 'Viewed' ? 'клиент смотрел' : proposal.status === 'Sent' ? 'отправлено' : 'черновик';
+  const paidTotal = typeof orderPaidTotal === 'function' ? Math.max(orderPaidTotal(o), Number(o.paid) || 0) : Number(o.paid) || 0;
+  const metas = [
+    '',
+    o.consultationAt ? fmtDateTime(o.consultationAt) : '',
+    windowsCount ? `${windowsCount} ${typeof projectWindowsWord === 'function' ? projectWindowsWord(windowsCount) : 'окон'} · ${orderActualAreaSqft(o).toFixed(0)} sq ft` : o.measurementAt ? fmtDateTime(o.measurementAt) : '',
+    proposalMeta,
+    '',
+    o.installationAt ? fmtDateTime(o.installationAt) : '',
+    o.actSignature ? 'подписан' : '',
+    money && orderRevenue(o) > 0 ? `${fmtMoney(paidTotal)} из ${fmtMoney(orderRevenue(o))}` : '',
+    '',
+  ];
   const stages = [
     { color: '#64748b', onclick: canManage ? ws('client') : '' },
     { color: '#f59e0b', onclick: canManage ? `scheduleConsultationPrompt('${o.id}')` : '' },
-    { color: '#0891b2', onclick: canManage ? `openManagerMeasureModal('${o.id}')` : canMeasure ? `openMeasurerV25ForOrder('${o.id}')` : `openWorkOrder('${o.id}')` },
+    { color: '#0891b2', onclick: canManage ? (windowsCount || o.status === 'measurement_scheduled' || !PROJECT_PRE_PROPOSAL_STATUSES.includes(o.status) ? `openManagerMeasureModal('${o.id}')` : `scheduleMeasurementPrompt('${o.id}')`) : canMeasure ? `openMeasurerV25ForOrder('${o.id}')` : `openWorkOrder('${o.id}')` },
     { color: '#d97706', onclick: canManage ? `openProposalWizard('${o.id}')` : '' },
     { color: '#7c3aed', onclick: canManage ? `openProjectProductionWorkspace('${o.id}')` : '' },
     { color: '#10b981', onclick: canManage ? `if(!projectCardOpenWorkspace('schedule')) scheduleInstallationPrompt('${o.id}')` : `openWorkOrder('${o.id}')` },
@@ -25824,7 +25849,7 @@ function renderOrderCleanProgress(o) {
         const st = stages[i];
         const state = skipped ? 'skipped' : i < activeStep ? 'done' : i === activeStep ? 'current' : 'next';
         const title = `${lbl === 'Производство' ? lbl : T(lbl)}${skipped ? ' · не нужен' : ''}`;
-        const hint = state === 'current' ? 'сейчас' : state === 'done' ? '✓' : state === 'skipped' ? '—' : '';
+        const hint = metas[i] ? academyEsc(metas[i]) : state === 'current' ? 'сейчас' : state === 'done' ? '✓' : state === 'skipped' ? '—' : '';
         return `<button type="button" class="order-clean-stage-btn ${state}" style="--stage:${st.color}" ${st.onclick ? `onclick="${st.onclick}"` : 'disabled'} title="${academyEsc(title)}${st.onclick ? ' — открыть' : ''}">
           <span class="order-clean-stage-btn-line"></span>
           <span class="order-clean-stage-btn-label">${academyEsc(title)}</span>
@@ -32568,7 +32593,13 @@ function scheduleMeasurementPrompt(oid) {
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6">
-      <h3 class="font-semibold text-lg mb-3">${T('scheduleMeasurement')}</h3>
+      <h3 class="font-semibold text-lg mb-1">Замер</h3>
+      <!-- Owner, 2026-11-06: «назначить замер» сверху и «внести размеры» внизу путали —
+           теперь один вход и два пути: выезд замерщика или размеры прямо сейчас. -->
+      <div class="measure-paths">
+        <div class="measure-path on"><b>📐 Выезд замерщика</b><span>Выберите, кто и когда поедет — замерщик увидит задачу у себя.</span></div>
+        <button type="button" class="measure-path" onclick="closeModal(); openManagerMeasureModal('${oid}')"><b>📏 Внести размеры сейчас</b><span>Размеры уже есть — с рулетки или от клиента. Выезд не нужен.</span></button>
+      </div>
       <label>${T('measurer')}</label>
       <select id="msch-measurer">${opts}</select>
       ${scheduleDateTimeHtml('msch', o?.measurementAt, 'Когда замер')}
