@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-05 — Склад: форма «Новая модель», полки, пустые записи; карточка проекта: этапы-кнопки (Claude, PR pending)
+
+- Owner: «+ Добавить модель» silently created a blank catalog row (a dozen nameless «Приватная» rows on production); frost must sit on the Decorative and Privacy shelves; the project card header must be compact — the stage bar as a row of coloured buttons, each opening its own step window.
+- Done on `claude/warehouse-model-form`: `addCatalogItem` → `openNewCatalogItemModal` (category, brand with datalist, name*, code, vendor, retail/cost/installer rate/waste, «также показывать в категориях» → `extraCategories`), `createCatalogItemFromModal` (duplicate warning). `catalogExtraCategories / catalogItemInCategory`: `catalogByCategory`, the warehouse category screen and «Принять рулон» suggestions (own category first, then the rest of the catalog) honour extra shelves. `blankCatalogItems / removeBlankCatalogItems`: owner button «Удалить пустые · N» on a category screen — only rows with no name, no rolls and no links from services/projects. Project card: `renderOrderCleanProgress` renders 9 stage buttons (`.order-clean-stage-btn`, states done/current/next/skipped, `--stage` colour), click opens the step (client, consultation prompt, measurement, proposal wizard, production workspace, schedule/installation prompt, act signature, payment, history) per role; `projectCardGateChecklist` is a collapsed `<details>` «До монтажа осталось · N шагов».
+- Verification: `node --check` both files; project-stages, client-identity-fields, roll-receipt, reference-directory-stability green (ids renamed to `ncat-*` to keep the client-form guard); full `npm test` 896 pass / 35 env failures as on main.
+
 ## 2026-11-05 — Материалы услуги из любой категории каталога (Claude, PR pending)
 
 - Owner: in «Услуги и цены» the material list of a service showed only films of its own category; frost (Decorative) must be linkable to a Privacy service. Decision recorded in DECISIONS.md (2026-11-05).

@@ -1668,7 +1668,7 @@
   .project-feed-next-kicker { font-size:11px; font-weight:800; letter-spacing:.08em; color:#8A6D1E; text-transform:uppercase; margin-bottom:6px; }
   .project-feed-next .order-action-card { width:100%; }
   /* Чек-лист «до монтажа» + разблокировка владельцу (Owner, 2026-10-26) */
-  .project-feed-gate { background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:12px 14px; }
+  .project-feed-gate { background:#fff; border:1px solid #D9DEE6; border-radius:14px; padding:12px 14px; } details.project-feed-gate > summary { cursor:pointer; list-style:none; } details.project-feed-gate > summary::-webkit-details-marker { display:none; } details.project-feed-gate[open] > summary { margin-bottom:8px; } details.project-feed-gate .project-feed-gate-list { margin-top:4px; }
   .project-feed-gate-head { display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:800; color:#10213b; }
   .project-feed-gate-cnt { font-size:11px; font-weight:700; color:#5A6577; }
   .project-feed-gate-list { display:flex; flex-direction:column; gap:7px; margin:10px 0 2px; }
@@ -1835,6 +1835,24 @@
   .order-clean-progress-step.current .order-clean-progress-line {
     background: #2563eb;
   }
+  /* Owner, 2026-11-05: этапы — кнопки со своим цветом; нажатие открывает окно шага */
+  .order-clean-progress--buttons { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: .35rem; }
+  .order-clean-stage-btn { min-width:0; display:flex; flex-direction:column; align-items:stretch; gap:.3rem; padding:.45rem .5rem .4rem; border:1px solid #e3eaf2; border-radius:.6rem; background:#fff; cursor:pointer; text-align:left; font:inherit; color:#64748b; transition: transform .12s, box-shadow .12s; }
+  .order-clean-stage-btn:not([disabled]):hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(20,26,38,.08); border-color: var(--stage); }
+  .order-clean-stage-btn[disabled] { cursor: default; opacity: .75; }
+  .order-clean-stage-btn-line { display:block; height:.46rem; border-radius:999px; background:#e2e8f0; }
+  .order-clean-stage-btn-label { font-size:.72rem; font-weight:700; line-height:1.1; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .order-clean-stage-btn-hint { font-size:.62rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:#94a3b8; }
+  .order-clean-stage-btn.done .order-clean-stage-btn-line { background: var(--stage); }
+  .order-clean-stage-btn.done .order-clean-stage-btn-label { color:#141A26; }
+  .order-clean-stage-btn.done .order-clean-stage-btn-hint { color: var(--stage); }
+  .order-clean-stage-btn.current { border-color: var(--stage); box-shadow: 0 0 0 3px color-mix(in srgb, var(--stage) 18%, transparent); background: color-mix(in srgb, var(--stage) 7%, #fff); }
+  .order-clean-stage-btn.current .order-clean-stage-btn-line { background: var(--stage); }
+  .order-clean-stage-btn.current .order-clean-stage-btn-label, .order-clean-stage-btn.current .order-clean-stage-btn-hint { color: var(--stage); }
+  .order-clean-stage-btn.next .order-clean-stage-btn-line { background: color-mix(in srgb, var(--stage) 22%, #e2e8f0); }
+  .order-clean-stage-btn.skipped .order-clean-stage-btn-line { background: repeating-linear-gradient(90deg, #cbd5e1 0 6px, transparent 6px 10px); }
+  .order-clean-stage-btn.skipped .order-clean-stage-btn-label { color:#94a3b8; }
+  @media (max-width: 900px) { .order-clean-progress--buttons { grid-template-columns: repeat(3, minmax(0, 1fr)); } .order-clean-stage-btn-label { white-space: normal; } }
   .order-clean-progress-label {
     margin-top: .32rem;
     color: #94a3b8;
@@ -16960,6 +16978,8 @@ function catalogByCategory() {
     if (c.archived) return;
     if (!groups[c.category]) groups[c.category] = [];
     groups[c.category].push(c);
+    // Owner, 2026-11-05: плёнка может лежать и на других полках склада.
+    catalogExtraCategories(c).forEach(k => { if (!groups[k]) groups[k] = []; if (!groups[k].includes(c)) groups[k].push(c); });
   });
   return groups;
 }
@@ -25755,15 +25775,37 @@ function renderOrderCleanProgress(o) {
   if (settled && !projectHasScheduledVisit(o)) activeStep = Math.max(activeStep, 3);
   // A visit that was booked stays on the bar: only an unbooked step is «не нужен».
   const skippedStep = i => measurementSkipped && ((i === 1 && !o.consultationAt) || (i === 2 && !o.measurementAt));
+  // Owner, 2026-11-05: шкала — ряд кнопок, у каждого этапа свой цвет, нажатие
+  // открывает окно этого шага (замер, КП, производство, монтаж, акт, оплата…).
+  const u = currentUser();
+  const role = u?.role || '';
+  const canManage = ['owner', 'manager'].includes(role);
+  const canMeasure = ['owner', 'manager', 'measurer'].includes(role);
+  const ws = key => `projectCardOpenWorkspace('${key}')`;
+  const stages = [
+    { color: '#64748b', onclick: canManage ? ws('client') : '' },
+    { color: '#f59e0b', onclick: canManage ? `scheduleConsultationPrompt('${o.id}')` : '' },
+    { color: '#0891b2', onclick: canManage ? `openManagerMeasureModal('${o.id}')` : canMeasure ? `openMeasurerV25ForOrder('${o.id}')` : `openWorkOrder('${o.id}')` },
+    { color: '#d97706', onclick: canManage ? `openProposalWizard('${o.id}')` : '' },
+    { color: '#7c3aed', onclick: canManage ? `openProjectProductionWorkspace('${o.id}')` : '' },
+    { color: '#10b981', onclick: canManage ? `if(!projectCardOpenWorkspace('schedule')) scheduleInstallationPrompt('${o.id}')` : `openWorkOrder('${o.id}')` },
+    { color: '#2563eb', onclick: role === 'installer' || canManage ? `openActSignature('${o.id}')` : '' },
+    { color: '#059669', onclick: canManage ? ws('payment') : '' },
+    { color: '#141A26', onclick: ws('history') },
+  ];
   return `
-    <div class="order-clean-progress">
+    <div class="order-clean-progress order-clean-progress--buttons">
       ${labels.map((lbl, i) => {
         const skipped = skippedStep(i);
-        return `
-        <div class="order-clean-progress-step ${skipped ? 'skipped' : i < activeStep ? 'done' : i === activeStep ? 'current' : ''}">
-          <div class="order-clean-progress-line"></div>
-          <div class="order-clean-progress-label">${lbl === 'Производство' ? lbl : T(lbl)}${skipped ? ' · не нужен' : ''}</div>
-        </div>`;
+        const st = stages[i];
+        const state = skipped ? 'skipped' : i < activeStep ? 'done' : i === activeStep ? 'current' : 'next';
+        const title = `${lbl === 'Производство' ? lbl : T(lbl)}${skipped ? ' · не нужен' : ''}`;
+        const hint = state === 'current' ? 'сейчас' : state === 'done' ? '✓' : state === 'skipped' ? '—' : '';
+        return `<button type="button" class="order-clean-stage-btn ${state}" style="--stage:${st.color}" ${st.onclick ? `onclick="${st.onclick}"` : 'disabled'} title="${academyEsc(title)}${st.onclick ? ' — открыть' : ''}">
+          <span class="order-clean-stage-btn-line"></span>
+          <span class="order-clean-stage-btn-label">${academyEsc(title)}</span>
+          ${hint ? `<span class="order-clean-stage-btn-hint">${hint}</span>` : ''}
+        </button>`;
       }).join('')}
     </div>`;
 }
@@ -34427,18 +34469,18 @@ function openClientModal() {
       <div class="space-y-3">
         ${clientIdentityFieldsHtml('nc')}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <input id="nc-phone" placeholder="${T('phone')}" autocomplete="tel">
-          <input id="nc-email" type="email" placeholder="${T('email')}" autocomplete="email">
+          <input id="ncat-phone" placeholder="${T('phone')}" autocomplete="tel">
+          <input id="ncat-email" type="email" placeholder="${T('email')}" autocomplete="email">
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <input id="nc-whatsapp" type="tel" placeholder="WhatsApp (если отличается от телефона)">
-          <input id="nc-telegram" placeholder="Telegram @username">
-          <input id="nc-instagram" placeholder="Instagram @username">
-          <input id="nc-facebook" placeholder="Facebook: ссылка или username">
+          <input id="ncat-whatsapp" type="tel" placeholder="WhatsApp (если отличается от телефона)">
+          <input id="ncat-telegram" placeholder="Telegram @username">
+          <input id="ncat-instagram" placeholder="Instagram @username">
+          <input id="ncat-facebook" placeholder="Facebook: ссылка или username">
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
           <select id="nc-preferred-channel"><option value="phone">Предпочитает: телефон</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option><option value="telegram">Telegram</option></select>
-          <select id="nc-language"><option value="en">Язык клиента: English</option><option value="ru">Русский</option></select>
+          <select id="ncat-language"><option value="en">Язык клиента: English</option><option value="ru">Русский</option></select>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
           <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="nc-consent-sms" type="checkbox" style="width:18px;height:18px">Согласие на SMS</label>
@@ -34446,7 +34488,7 @@ function openClientModal() {
           <label class="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id="nc-consent-whatsapp" type="checkbox" style="width:18px;height:18px">Согласие WhatsApp</label>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-          <select id="nc-source">
+          <select id="ncat-source">
             <option value="direct">${T('sourceDirect')}</option>
             <option value="google">${T('sourceGoogle')}</option>
             <option value="facebook">${T('sourceFacebook')}</option>
@@ -34461,13 +34503,13 @@ function openClientModal() {
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
           <input id="nc-address-label" placeholder="Название адреса: дом / офис / объект">
-          <input id="nc-street" placeholder="Улица и номер дома">
+          <input id="ncat-street" placeholder="Улица и номер дома">
         </div>
-        <input id="nc-unit" placeholder="Unit / Apt / Suite (если есть)">
+        <input id="ncat-unit" placeholder="Unit / Apt / Suite (если есть)">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-          <input id="nc-city" placeholder="Город">
-          <input id="nc-state" placeholder="Штат">
-          <input id="nc-zip" placeholder="ZIP code">
+          <input id="ncat-city" placeholder="Город">
+          <input id="ncat-state" placeholder="Штат">
+          <input id="ncat-zip" placeholder="ZIP code">
         </div>
       </div>
       <div class="flex gap-2 mt-4 justify-end">
@@ -34740,13 +34782,93 @@ function updateCatalogItem(id, field, val, control = null) {
     control.style.color = palette.text;
   }
 }
+// Owner, 2026-11-05: «+ Добавить модель» раньше молча создавал пустую запись —
+// теперь открывает форму. Плёнка может показываться и в других категориях
+// склада (матовая: дом — декоративная, также — приватная).
 function addCatalogItem(presetVendorId, presetCategory = 'solar') {
-  db.settings.catalog.push({
-    id: uid(), brand: 'Rolan PRO', model: '', category: presetCategory || 'solar', vendorId: presetVendorId || null,
-    filmCategory: '', fullName: '', shortName: '', productName: '', modelCode: '',
-    retailPerSqft: 10, costPerSqft: 2.5, installerRatePerSqft: 0.27, wastePct: 12,
+  openNewCatalogItemModal(presetVendorId, presetCategory);
+}
+function catalogExtraCategories(c) {
+  return Array.isArray(c?.extraCategories) ? c.extraCategories.map(canonicalCatalogCategory).filter(k => k && k !== canonicalCatalogCategory(c.category)) : [];
+}
+function catalogItemInCategory(c, category) {
+  return canonicalCatalogCategory(c?.category) === canonicalCatalogCategory(category) || catalogExtraCategories(c).includes(canonicalCatalogCategory(category));
+}
+/** Пустые записи каталога: без названия, без рулонов и ни к чему не привязанные. */
+function blankCatalogItems() {
+  const usedByOffering = new Set(serviceOfferingsAll().flatMap(o => [...(o.filmIds || []), o.defaultFilmId].filter(Boolean)));
+  const usedByRoll = new Set((db.inventory || []).map(r => r.catalogId).filter(Boolean));
+  const usedByOrder = new Set();
+  (db.orders || []).forEach(o => {
+    (o.measurements?.rooms || []).forEach(r => (r.windows || []).forEach(w => { if (w.catalogId) usedByOrder.add(w.catalogId); }));
+    (o.extraServices || []).forEach(l => { if (l.catalogId) usedByOrder.add(l.catalogId); });
+    Object.values(o.offeringCatalogIds || {}).forEach(id => { if (id) usedByOrder.add(id); });
   });
+  return (db.settings.catalog || []).filter(c => !String(c.model || c.fullName || c.productName || c.shortName || '').trim() && !usedByOffering.has(c.id) && !usedByRoll.has(c.id) && !usedByOrder.has(c.id));
+}
+function removeBlankCatalogItems() {
+  if (currentUser()?.role !== 'owner') return;
+  const blank = blankCatalogItems();
+  if (!blank.length) return alert('Пустых записей нет.');
+  if (!confirm(`Удалить ${blank.length} пустых записей каталога (без названия, без рулонов, ни к чему не привязаны)?`)) return;
+  const ids = new Set(blank.map(c => c.id));
+  db.settings.catalog = db.settings.catalog.filter(c => !ids.has(c.id));
   save(); render();
+}
+function openNewCatalogItemModal(presetVendorId, presetCategory = 'solar') {
+  const categories = [...new Set([...ROLL_CATEGORY_KEYS, ...Object.keys(catalogByCategory()).map(canonicalCatalogCategory)].filter(Boolean))];
+  const category = canonicalCatalogCategory(presetCategory) || 'solar';
+  const brands = [...new Set((db.settings.catalog || []).map(c => String(c.brand || '').trim()).filter(Boolean))].sort();
+  const vendors = db.vendors || [];
+  state.modal = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal p-6" style="max-width:36rem;">
+      <h3 class="font-semibold text-lg mb-1">Новая модель плёнки</h3>
+      <p class="text-xs text-gray-500 mb-4">Карточка в каталоге склада. Рулоны принимаются отдельно — «Принять рулон».</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs">Категория (дом)</label><select id="ncat-category">${categories.map(k => `<option value="${k}" ${k === category ? 'selected' : ''}>${academyEsc(catLabel(k))}</option>`).join('')}</select></div>
+        <div><label class="text-xs">Бренд</label><input id="ncat-brand" list="ncat-brand-list" value="Rolan PRO" placeholder="Rolan PRO, 3M, LLumar…"><datalist id="nc-brand-list">${brands.map(b => `<option value="${academyEsc(b)}"></option>`).join('')}</datalist></div>
+        <div class="col-span-2"><label class="text-xs">Название плёнки *</label><input id="ncat-name" placeholder="например, Privacy Prime Frost"></div>
+        <div><label class="text-xs">Код / короткое имя</label><input id="ncat-code" placeholder="RP-PRV-FRS"></div>
+        <div><label class="text-xs">Поставщик</label><select id="ncat-vendor"><option value="">не назначен</option>${vendors.map(v => `<option value="${academyEsc(v.id)}" ${v.id === presetVendorId ? 'selected' : ''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
+        <div><label class="text-xs">Цена клиенту, $ / sq ft</label><input id="ncat-retail" type="number" min="0" step="0.01" value="10"></div>
+        <div><label class="text-xs">Закупка, $ / sq ft</label><input id="ncat-cost" type="number" min="0" step="0.01" value="2.5"></div>
+        <div><label class="text-xs">Ставка монтажнику, $ / sq ft</label><input id="ncat-rate" type="number" min="0" step="0.01" value="0.27"></div>
+        <div><label class="text-xs">Отход, %</label><input id="ncat-waste" type="number" min="0" step="1" value="12"></div>
+        <div class="col-span-2"><label class="text-xs">Также показывать в категориях</label><div class="flex flex-wrap gap-2 mt-1">${categories.map(k => `<label class="text-sm" style="display:inline-flex;align-items:center;gap:5px"><input type="checkbox" data-ncat-extra="${k}" style="width:auto" ${k === category ? 'disabled' : ''}> ${academyEsc(catLabel(k))}</label>`).join('')}</div><div class="text-xs text-gray-500 mt-1">Матовая живёт в декоративной, но продаётся и как приватная — отметьте обе.</div></div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button class="btn-primary flex-1" onclick="createCatalogItemFromModal()">Добавить в каталог</button>
+        <button class="btn-ghost" onclick="closeModal()">Отмена</button>
+      </div>
+    </div>
+  </div>`;
+  render();
+  setTimeout(() => document.getElementById('ncat-name')?.focus(), 0);
+}
+function createCatalogItemFromModal() {
+  const v = id => (document.getElementById(id)?.value || '').trim();
+  const num = (id, fallback) => { const n = parseFloat(v(id)); return Number.isFinite(n) && n >= 0 ? n : fallback; };
+  const name = v('ncat-name');
+  if (!name) { alert('Укажите название плёнки.'); document.getElementById('ncat-name')?.focus(); return; }
+  const category = canonicalCatalogCategory(v('ncat-category')) || 'solar';
+  const extraCategories = [...document.querySelectorAll('input[data-ncat-extra]:checked')].map(el => el.getAttribute('data-ncat-extra')).filter(k => k && k !== category);
+  const brand = v('ncat-brand') || 'Rolan PRO';
+  const code = v('ncat-code');
+  if ((db.settings.catalog || []).some(c => !c.archived && String(c.brand || '').trim().toLowerCase() === brand.toLowerCase() && String(c.fullName || c.model || '').trim().toLowerCase() === name.toLowerCase())) {
+    if (!confirm(`«${brand} — ${name}» уже есть в каталоге. Добавить ещё одну запись?`)) return;
+  }
+  const item = {
+    id: uid(), brand, model: name, category, vendorId: v('ncat-vendor') || null,
+    filmCategory: '', fullName: name, shortName: code, productName: name, modelCode: code, sku: code,
+    retailPerSqft: num('ncat-retail', 10), costPerSqft: num('ncat-cost', 2.5), installerRatePerSqft: num('ncat-rate', 0.27), wastePct: num('ncat-waste', 12),
+    extraCategories, addedManuallyBy: currentUser()?.id || null, addedManuallyAt: new Date().toISOString(),
+  };
+  db.settings.catalog.push(item);
+  save();
+  closeModal();
+  state.inventoryFilmCategory = category; state.inventoryFilmModel = null;
+  render();
 }
 function loadStandardCatalog() {
   if (!confirm('Загрузить эталонный архитектурный каталог (Madico, LLumar, Johnson, Solar Gard, 3M, SunTek)?\n\nСуществующие позиции каталога сохранятся. Дубликаты не создаются.')) return;
@@ -42407,14 +42529,15 @@ function renderFilmCategoryDirectory() {
   </div>`;
 }
 function renderFilmCategoryModels(category) {
-  const all = (db.settings.catalog || []).filter(item => item.category === category);
+  const all = (db.settings.catalog || []).filter(item => catalogItemInCategory(item, category));
+  const blank = currentUser()?.role === 'owner' ? blankCatalogItems().filter(item => catalogItemInCategory(item, category)) : [];
   const query = String(state.inventoryFilmQuery || '').trim().toLowerCase();
   const items = all.filter(item => !query || `${item.brand} ${item.model}`.toLowerCase().includes(query));
   const colors = catColor(category);
   return `<div class="card mb-4">
     <div class="flex items-center justify-between gap-3 flex-wrap">
       <div><button class="btn-ghost text-sm mb-3" onclick="state.inventoryFilmCategory=null;state.inventoryFilmModel=null;state.inventoryFilmQuery='';render();">← Категории плёнки</button><h3 class="font-black text-xl">${filmWarehouseCategoryIcon(category)} ${academyEsc(catLabel(category))}</h3><p class="text-sm text-gray-500">Выберите модель, чтобы увидеть её рулоны, партии, приход и списание.</p></div>
-      <button class="btn-primary text-sm" onclick="addCatalogItem(null,'${category}')">+ Добавить модель</button>
+      <div class="flex gap-2 flex-wrap">${blank.length ? `<button class="btn-ghost text-sm" onclick="removeBlankCatalogItems()">Удалить пустые · ${blank.length}</button>` : ''}<button class="btn-primary text-sm" onclick="addCatalogItem(null,'${category}')">+ Добавить модель</button></div>
     </div>
     <div class="mt-4"><input value="${academyEsc(state.inventoryFilmQuery || '')}" placeholder="🔎 Найти бренд или модель в этой категории" oninput="state.inventoryFilmQuery=this.value;render();"></div>
   </div>
@@ -43208,7 +43331,9 @@ function sameRollCategory(a, b) {
 }
 
 function rollReceiptSuggestions(category) {
-  const items = (db.settings.catalog || []).filter(item => sameRollCategory(item.category, category) && !item.archived);
+  // Owner, 2026-11-05: общий список — своя категория первой, затем остальные плёнки каталога.
+  const live = (db.settings.catalog || []).filter(item => !item.archived);
+  const items = [...live.filter(item => catalogItemInCategory(item, category)), ...live.filter(item => !catalogItemInCategory(item, category))];
   const brands = [...new Set(items.map(item => String(item.brand || '').trim()).filter(Boolean))];
   const models = [...new Set(items.map(item => String(item.model || item.productName || '').trim()).filter(Boolean))];
   return { brands, models };

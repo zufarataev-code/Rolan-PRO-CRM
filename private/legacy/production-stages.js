@@ -2022,7 +2022,8 @@ function projectCardGateChecklist(o, { canManage = false, owner = false } = {}) 
     : owner
       ? `<div class="gate-owner"><button type="button" class="project-feed-btn gate-force" onclick="projectForceInstallation('${o.id}')">Начать монтаж всё равно →</button><div class="gate-owner-note">Доступно владельцу. Система предупредит, но не остановит.</div></div>`
       : '';
-  return `<div class="project-feed-gate" data-project-feed="gate"><div class="project-feed-gate-head"><span>До монтажа осталось</span><span class="project-feed-gate-cnt">${steps.length - left} из ${steps.length}</span></div><div class="project-feed-gate-list">${rows}</div>${forced}</div>`;
+  // Owner, 2026-11-05: компактно — свёрнутая строка «До монтажа N из M», список по клику.
+  return `<details class="project-feed-gate" data-project-feed="gate"><summary class="project-feed-gate-head"><span>До монтажа осталось · <b>${left}</b> ${projectPlural(left, 'шаг', 'шага', 'шагов')}</span><span class="project-feed-gate-cnt">${steps.length - left} из ${steps.length} · показать</span></summary><div class="project-feed-gate-list">${rows}</div>${forced}</details>`;
 }
 function projectForceInstallation(oid) {
   const o = getOrder(oid);

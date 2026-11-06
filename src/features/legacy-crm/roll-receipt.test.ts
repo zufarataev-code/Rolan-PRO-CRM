@@ -44,6 +44,7 @@ function load(fields: Record<string, string>, { cloud = false, fetch }: { cloud?
     mm2_to_sqft: (mm2: number) => (mm2 / 1_000_000) * 10.7639,
     canonicalCatalogCategory: (value: string) => { const key = String(value || "").trim().toLowerCase(); return CATEGORY_ALIASES[key] || key; },
     catalogByCategory: () => ({ solar_film: [], solar: [] }),
+    catalogItemInCategory: (item: { category?: string; extraCategories?: string[] }, category: string) => { const canon = (value: string) => { const key = String(value || "").trim().toLowerCase(); return CATEGORY_ALIASES[key] || key; }; return canon(item.category || "") === canon(category) || (item.extraCategories || []).map(canon).includes(canon(category)); },
     projectQuickLines: (o: { extraServices?: Array<{ quickProjectLine?: boolean }> }) => (o?.extraServices || []).filter((line) => line.quickProjectLine === true),
     catLabel: (key: string) => key,
     getCatalogItem: (id: string) => db.settings.catalog.find((item) => item.id === id),
