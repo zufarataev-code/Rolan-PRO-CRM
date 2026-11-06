@@ -1957,6 +1957,7 @@ function projectFeedHtml(o, c, u, ctx) {
   const docs = `<div class="project-feed-chips">
       <button type="button" class="project-feed-doc" onclick="projectCardOpenWorkspace('documents')">${money ? 'КП и документы' : 'Документы'}</button>
       ${money ? `<button type="button" class="project-feed-doc" onclick="openProjectInvoice('${o.id}')">Invoice</button>` : ''}
+      ${money && proposal?.canonicalProposalId && proposal.status !== 'Draft' ? projectFeedBtn('Забрать выбор клиента', `premiumApplyClientOptions('${o.id}')`) : ''}
       <button type="button" class="project-feed-doc" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button>
       <button type="button" class="project-feed-doc" onclick="printTechnicalSheet('${o.id}')">ТЗ-лист</button>
       ${o.actSignature ? `<button type="button" class="project-feed-doc" onclick="openSignedActDocument('${o.id}')">Акт ✓</button>` : '<span class="project-feed-doc muted">Акт — после монтажа</span>'}
