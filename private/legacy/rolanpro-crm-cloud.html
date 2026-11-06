@@ -28337,7 +28337,7 @@ function projectCardConfirmInstallation(oid) {
 function projectCardCrewPicker(o, line) {
   const installers = usersByRole('installer');
   const names = line.installerIds.map(id => getUser(id)?.name).filter(Boolean);
-  return `<details class="project-card-crew"><summary class="${names.length ? '' : 'project-card-missing'}">${academyEsc(names.join(', ') || 'не назначен')} ▾</summary><div class="project-card-crew-list">${installers.map(user => `<label><input type="checkbox" style="width:auto" ${line.installerIds.includes(user.id) ? 'checked' : ''} onchange="projectCardToggleCrew('${o.id}','${jsQuote(line.key)}','${jsQuote(user.id)}',this.checked)"> ${academyEsc(installerPickLabel(user))}</label>`).join('') || '<span class="text-xs text-gray-500">Добавьте специалиста в разделе «Сотрудники».</span>'}</div></details>`;
+  return `<details class="project-card-crew"><summary class="${names.length ? '' : 'project-card-missing'}">${academyEsc(names.join(', ') || 'не назначен')} ▾</summary><div class="project-card-crew-list">${installers.map(user => `<label><input type="checkbox" style="width:auto" ${line.installerIds.includes(user.id) ? 'checked' : ''} onchange="projectCardToggleCrew('${o.id}','${jsQuote(line.key)}','${jsQuote(user.id)}',this.checked)"> ${academyEsc(typeof installerPickLabel === 'function' ? installerPickLabel(user) : user.name)}</label>`).join('') || '<span class="text-xs text-gray-500">Добавьте специалиста в разделе «Сотрудники».</span>'}</div></details>`;
 }
 
 /**
@@ -28873,7 +28873,7 @@ function projectServiceScheduleHtml(o) {
   const installers = usersByRole('installer');
   return projectServiceGroups(o).map((group, index) => {
     const assignment = projectServiceAssignment(o, group);
-    return `<section class="card mt-3" data-service-schedule="${academyEsc(group.id)}"><h4 class="font-bold">${academyEsc(group.name)}</h4><label class="mt-2">Дата и время услуги<input style="min-height:44px" type="datetime-local" id="service-date-${index}" value="${datetimeLocalValue(assignment.installationAt)}"></label><div class="work-people mt-2">${installers.map(user => `<label class="work-person"><input type="checkbox" class="service-installer-${index}" value="${academyEsc(user.id)}" ${(assignment.installerIds || []).includes(user.id) ? 'checked' : ''}><span>${academyEsc(installerPickLabel(user))}</span></label>`).join('') || '<p>Добавьте специалиста в разделе «Сотрудники».</p>'}</div>${index === 0 && projectServiceGroups(o).length > 1 ? `<button type="button" class="btn-ghost text-sm mt-2" onclick="projectScheduleCopyFirstToAll()">Та же дата и бригада для всех услуг ↓</button>` : ''}</section>`;
+    return `<section class="card mt-3" data-service-schedule="${academyEsc(group.id)}"><h4 class="font-bold">${academyEsc(group.name)}</h4><label class="mt-2">Дата и время услуги<input style="min-height:44px" type="datetime-local" id="service-date-${index}" value="${datetimeLocalValue(assignment.installationAt)}"></label><div class="work-people mt-2">${installers.map(user => `<label class="work-person"><input type="checkbox" class="service-installer-${index}" value="${academyEsc(user.id)}" ${(assignment.installerIds || []).includes(user.id) ? 'checked' : ''}><span>${academyEsc(typeof installerPickLabel === 'function' ? installerPickLabel(user) : user.name)}</span></label>`).join('') || '<p>Добавьте специалиста в разделе «Сотрудники».</p>'}</div>${index === 0 && projectServiceGroups(o).length > 1 ? `<button type="button" class="btn-ghost text-sm mt-2" onclick="projectScheduleCopyFirstToAll()">Та же дата и бригада для всех услуг ↓</button>` : ''}</section>`;
   }).join('');
 }
 /** Silicone and film usually go in one visit: copy the first service's date and crew to the rest (Owner, 2026-10-23). */
@@ -33003,7 +33003,7 @@ function openAssignTeam(oid) {
       <select id="a-meas">${measurers.map(m=>`<option value="${m.id}" ${o.measurerId===m.id?'selected':''}>${m.name}</option>`).join('')}</select>
       <label class="mt-3">${T('installers')}</label>
       <select id="a-inst" multiple size="${installers.length}">
-        ${installers.map(m=>`<option value="${m.id}" ${(o.installerIds||[]).includes(m.id)?'selected':''}>${academyEsc(installerPickLabel(m))}</option>`).join('')}
+        ${installers.map(m=>`<option value="${m.id}" ${(o.installerIds||[]).includes(m.id)?'selected':''}>${academyEsc(typeof installerPickLabel === 'function' ? installerPickLabel(m) : m.name)}</option>`).join('')}
       </select>
       <div class="flex gap-2 mt-4 justify-end">
         <button class="btn-ghost" onclick="closeModal()">${T('cancel')}</button>

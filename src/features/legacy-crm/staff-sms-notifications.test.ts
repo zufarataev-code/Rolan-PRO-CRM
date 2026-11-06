@@ -33,6 +33,6 @@ test('«Старший монтажник» is a visible role: in the role selec
   assert.match(html, /value="INSTALLER_SENIOR"/);
   assert.match(html, /code === 'INSTALLER_SENIOR' \? 'INSTALLER' : code/, 'the server still sees an installer');
   assert.match(html, /\$\{teamIsSeniorInstaller\(u\) \? '⭐ ' : ''\}\$\{u\.name\}/);
-  assert.match(html, /academyEsc\(installerPickLabel\(m\)\)/);
+  assert.match(html, /installerPickLabel\(m\) : m\.name/);
   assert.match(stagesSrc, /installerPickLabel\(u\) : u\.name/);
 });
