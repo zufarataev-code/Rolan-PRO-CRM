@@ -66,6 +66,11 @@ function commentStatus(intent: FacebookCommentIntent) {
   return "pending_review" as const;
 }
 
+function commentReviewStatus(intent: FacebookCommentIntent) {
+  if (intent === "complaint") return "escalated" as const;
+  return "pending_review" as const;
+}
+
 function taskPriority(intent: FacebookCommentIntent) {
   if (intent === "complaint") return "urgent";
   if (intent === "sales") return "high";
@@ -381,9 +386,7 @@ export async function updateFacebookComment(input: {
     ? "dismissed"
     : input.action === "confirm_published"
       ? "replied"
-      : input.action === "reopen"
-        ? "pending_review"
-        : commentStatus(current.intent as FacebookCommentIntent);
+      : commentReviewStatus(current.intent as FacebookCommentIntent);
   const now = new Date();
   const dueAt = input.action === "reopen" || input.action === "return_to_review"
     ? facebookCommentDueAt(current.intent as FacebookCommentIntent, now)
