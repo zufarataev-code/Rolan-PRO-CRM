@@ -120,3 +120,10 @@ test("legacy inbox keeps public replies behind explicit manager confirmation", (
   assert.match(source, /Создать лид и задачу менеджеру из этого комментария\?/);
   assert.match(source, /facebook_comment: \{ label: 'Комментарий Facebook'/);
 });
+
+test("draft and publish paths use status compare-and-set before external side effects", () => {
+  const service = readFileSync("src/features/integrations/meta-comments.ts", "utf8");
+  assert.match(service, /status: "publishing"/);
+  assert.match(service, /facebookComment\.updateMany\(\{[\s\S]*?status: comment\.status,[\s\S]*?draft was being generated/);
+  assert.match(service, /A timeout\/network failure is ambiguous:[\s\S]*?Keep the durable `publishing` claim/);
+});

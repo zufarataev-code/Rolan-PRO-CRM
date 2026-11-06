@@ -238,6 +238,12 @@ export async function generateFacebookCommentDraft(input: {
   if (comment.status === "replied" || comment.status === "dismissed") {
     throw new MetaCommentError("comment_closed", 409, "This Facebook comment is already closed.");
   }
+  if (comment.status === "publishing") {
+    throw new MetaCommentError("reply_in_progress", 409, "A Facebook reply is already being published.");
+  }
+  if (comment.status !== "pending_review" && comment.status !== "escalated") {
+    throw new MetaCommentError("comment_changed", 409, "This Facebook comment changed. Refresh it before generating a draft.");
+  }
 
   let intent = classifyFacebookComment(comment.message);
   let reply: string | null = fallbackFacebookCommentDraft(comment.message, intent);
@@ -276,8 +282,11 @@ export async function generateFacebookCommentDraft(input: {
   const now = new Date();
   const dueAt = intent === "spam" ? null : facebookCommentDueAt(intent, comment.commented_at);
   const updated = await prisma.$transaction(async (tx) => {
-    const saved = await tx.facebookComment.update({
-      where: { facebook_comment_id: comment.facebook_comment_id },
+    const claimed = await tx.facebookComment.updateMany({
+      where: {
+        facebook_comment_id: comment.facebook_comment_id,
+        status: comment.status,
+      },
       data: {
         intent,
         status,
@@ -285,6 +294,12 @@ export async function generateFacebookCommentDraft(input: {
         due_at: dueAt,
         dismissed_at: status === "dismissed" ? now : null,
       },
+    });
+    if (claimed.count !== 1) {
+      throw new MetaCommentError("comment_changed", 409, "This Facebook comment changed while the draft was being generated.");
+    }
+    const saved = await tx.facebookComment.findUniqueOrThrow({
+      where: { facebook_comment_id: comment.facebook_comment_id },
       select: { facebook_comment_id: true, intent: true, status: true, draft_reply: true },
     });
     await tx.task.updateMany({
@@ -523,7 +538,10 @@ export async function publishFacebookCommentReply(input: {
     if (latest?.status === "replied") {
       return { facebook_comment_id: comment.facebook_comment_id, status: "replied", duplicate: true };
     }
-    throw new MetaCommentError("reply_in_progress", 409, "A Facebook reply is already being published.");
+    if (latest?.status === "publishing") {
+      throw new MetaCommentError("reply_in_progress", 409, "A Facebook reply is already being published.");
+    }
+    throw new MetaCommentError("comment_changed", 409, "This Facebook comment changed. Refresh it before publishing.");
   }
   const url = new URL(`https://graph.facebook.com/${config.graphVersion}/${comment.external_comment_id}/comments`);
   url.searchParams.set("appsecret_proof", createHmac("sha256", config.appSecret).update(config.pageAccessToken).digest("hex"));
