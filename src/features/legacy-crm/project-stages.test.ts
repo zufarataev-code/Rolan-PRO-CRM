@@ -80,9 +80,10 @@ test('the stage bar marks a measurement the services do not need as skipped', ()
   const sizeFree = { id: 'o', status: 'new', offeringIds: ['zone'], lines: [{ kind: 'quantity' }] };
   const { c } = load(sizeFree);
   const bar = c.renderOrderCleanProgress(sizeFree);
-  assert.match(bar, /order-clean-progress-step skipped">[\s\S]*?stepConsultation · не нужен/);
-  assert.match(bar, /order-clean-progress-step skipped">[\s\S]*?stepMeasurement · не нужен/);
-  assert.match(bar, /order-clean-progress-step current">[\s\S]*?stepProposal/);
+  // Owner, 2026-11-05: the bar is a row of stage buttons; states live on the button class.
+  assert.match(bar, /order-clean-stage-btn skipped"[\s\S]*?stepConsultation · не нужен/);
+  assert.match(bar, /order-clean-stage-btn skipped"[\s\S]*?stepMeasurement · не нужен/);
+  assert.match(bar, /order-clean-stage-btn current"[\s\S]*?stepProposal/);
   const sized = { id: 'o', status: 'new', offeringIds: ['a1'], pending: [{ id: 'a1' }], needsSizes: true, issues: ['добавьте окна'] };
   assert.doesNotMatch(c.renderOrderCleanProgress(sized), /не нужен/);
 });
@@ -140,8 +141,8 @@ test('a measurer keeps the measurement actions; a booked visit is not skipped', 
   assert.equal(c.projectKanbanNextStatus(booked), 'measurement_scheduled', 'a booked consultation is not skipped');
   const bar = c.renderOrderCleanProgress(booked);
   assert.doesNotMatch(bar, /stepConsultation · не нужен/, 'a booked consultation is not «не нужен»');
-  assert.match(bar, /order-clean-progress-step current">[\s\S]*?stepConsultation</, 'the booked consultation stays the current step');
-  assert.match(bar, /order-clean-progress-step ">\s*<div class="order-clean-progress-line"><\/div>\s*<div class="order-clean-progress-label">stepProposal/, 'the proposal is not current yet');
+  assert.match(bar, /order-clean-stage-btn current"[\s\S]*?stepConsultation</, 'the booked consultation stays the current step');
+  assert.match(bar, /order-clean-stage-btn next"[\s\S]*?stepProposal/, 'the proposal is not current yet');
   assert.match(bar, /stepMeasurement · не нужен/);
   const past = { ...booked, consultationAt: new Date(Date.now() - 86400000).toISOString() };
   assert.equal(c.projectKanbanNextStatus(past), 'proposal_sent', 'a visit that already happened does not hold the project');
