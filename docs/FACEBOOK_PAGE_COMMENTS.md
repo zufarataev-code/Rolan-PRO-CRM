@@ -15,7 +15,8 @@ answer. A manager always reviews and confirms the final text.
 4. Non-spam comments create a manager task and notification. Complaints use a
    15-minute SLA and are visibly escalated.
 5. In **New Leads -> Facebook comments**, a manager may edit/regenerate the
-   draft, explicitly create a Lead, close the comment, or confirm a public reply.
+   draft, explicitly create a Lead, close or reopen the comment, or confirm a
+   public reply.
 6. Only the confirmation action calls the Graph API. The published text and
    provider reply ID are saved to the activity history.
 
@@ -75,9 +76,12 @@ then publish one reviewed reply and verify it on Facebook.
   10-second timeout.
 - Publishing first atomically claims the comment. A double-click or a second
   manager cannot create a duplicate reply. Ambiguous network outcomes remain in
-  `publishing` for manual Facebook reconciliation instead of being retried.
+  `publishing` for manual Facebook reconciliation instead of being retried. The
+  workbench then requires the manager to open Facebook and choose either
+  **Reply published** or **No reply — return to review**.
 - A replied comment cannot be published twice. A dismissed comment must be
-  reopened before replying; reopening also restores or creates its manager task.
+  reopened before replying; dismissed items remain visible in the workbench and
+  reopening also restores or creates their manager task.
 - Public sending is an explicit manager action, never a background AI action.
 
 ## Release check

@@ -340,7 +340,7 @@ export async function updateFacebookComment(input: {
   commentId: string;
   managerId?: string;
   actorUserId: string;
-  action: "dismiss" | "reopen";
+  action: "dismiss" | "reopen" | "confirm_published" | "return_to_review";
 }) {
   const current = await prisma.facebookComment.findFirst({
     where: facebookCommentAccessWhere(input.commentId, input.managerId),
@@ -350,15 +350,28 @@ export async function updateFacebookComment(input: {
       intent: true,
       author_name: true,
       message: true,
+      draft_reply: true,
       assigned_to: true,
     },
   });
   if (!current) throw new MetaCommentError("not_found", 404, "Facebook comment was not found.");
-  if (current.status === "replied") throw new MetaCommentError("comment_closed", 409, "A replied comment cannot be reopened or dismissed.");
-  if (current.status === "publishing") throw new MetaCommentError("reply_in_progress", 409, "A Facebook reply is already being published.");
-  const status = input.action === "dismiss" ? "dismissed" : "pending_review";
+  if (current.status === "replied") {
+    throw new MetaCommentError("comment_closed", 409, "A replied comment cannot be changed.");
+  }
+  const reconciliation = input.action === "confirm_published" || input.action === "return_to_review";
+  if (current.status === "publishing" && !reconciliation) {
+    throw new MetaCommentError("reply_in_progress", 409, "Reconcile the Facebook reply before changing this comment.");
+  }
+  if (current.status !== "publishing" && reconciliation) {
+    throw new MetaCommentError("reply_not_uncertain", 409, "Only an uncertain Facebook reply can be reconciled.");
+  }
+  const status = input.action === "dismiss"
+    ? "dismissed"
+    : input.action === "confirm_published"
+      ? "replied"
+      : commentStatus(current.intent as FacebookCommentIntent);
   const now = new Date();
-  const dueAt = input.action === "reopen"
+  const dueAt = input.action === "reopen" || input.action === "return_to_review"
     ? facebookCommentDueAt(current.intent as FacebookCommentIntent, now)
     : null;
   await prisma.$transaction(async (tx) => {
@@ -371,6 +384,9 @@ export async function updateFacebookComment(input: {
         status,
         due_at: dueAt,
         dismissed_at: status === "dismissed" ? now : null,
+        ...(input.action === "confirm_published"
+          ? { published_reply_text: current.draft_reply, replied_at: now }
+          : {}),
       },
     });
     if (claimed.count !== 1) {
@@ -382,16 +398,16 @@ export async function updateFacebookComment(input: {
         entity_id: current.facebook_comment_id,
         status: { in: ["open", "in_progress", "done"] },
       },
-      data: status === "dismissed"
+      data: status === "dismissed" || status === "replied"
         ? { status: "done", completed_at: now }
         : { status: "open", priority: taskPriority(current.intent as FacebookCommentIntent), due_at: dueAt, completed_at: null },
     });
-    if (input.action === "reopen" && tasks.count === 0) {
+    if ((input.action === "reopen" || input.action === "return_to_review") && tasks.count === 0) {
       await tx.task.create({
         data: {
           entity_type: "facebook_comment",
           entity_id: current.facebook_comment_id,
-            title: facebookCommentTaskTitle(current.intent as FacebookCommentIntent, current.author_name),
+          title: facebookCommentTaskTitle(current.intent as FacebookCommentIntent, current.author_name),
           description: current.message || "Комментарий без текста — проверьте вложение в Facebook.",
           status: "open",
           priority: taskPriority(current.intent as FacebookCommentIntent),
@@ -407,7 +423,13 @@ export async function updateFacebookComment(input: {
         entity_type: "facebook_comment",
         entity_id: current.facebook_comment_id,
         action_key: `integration.facebook_comment.${input.action}`,
-        message: `Facebook comment ${input.action === "dismiss" ? "dismissed" : "reopened"}.`,
+        message: input.action === "dismiss"
+          ? "Facebook comment dismissed."
+          : input.action === "confirm_published"
+            ? "Manager confirmed that the uncertain Facebook reply was published."
+            : input.action === "return_to_review"
+              ? "Manager confirmed that the uncertain Facebook reply was not published; comment returned to review."
+              : "Facebook comment reopened.",
       },
     });
   });
@@ -529,7 +551,7 @@ export async function publishFacebookCommentReply(input: {
       ...facebookCommentAccessWhere(input.commentId, input.managerId),
       status: comment.status,
     },
-    data: { status: "publishing" },
+    data: { status: "publishing", draft_reply: message },
   });
   if (claim.count !== 1) {
     const latest = await prisma.facebookComment.findFirst({

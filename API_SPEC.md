@@ -1044,7 +1044,7 @@ Purpose:
 
 Query params:
 
-- `status`: `pending_review`, `escalated`, `publishing`, `replied`, `dismissed`, or `all`
+- `status`: `pending_review`, `escalated`, `publishing`, `replied`, `dismissed`, `workbench` (active queue plus dismissed items that can be reopened), or `all`
 - `limit`: 1-100, default 50
 
 ### `POST /api/v1/integrations/facebook-comments/{commentId}/draft`
@@ -1065,7 +1065,13 @@ Purpose:
 
 Write fields:
 
-- `action`: `dismiss` or `reopen`
+- `action`: `dismiss`, `reopen`, `confirm_published`, or `return_to_review`
+
+`confirm_published` and `return_to_review` are manual reconciliation actions
+available only while the comment is `publishing` after an ambiguous Graph API
+outcome. The manager first checks the public Facebook thread, then either closes
+the task as replied or returns it to the review queue. `reopen` restores an
+accidentally dismissed item and its manager task.
 
 ### `POST /api/v1/integrations/facebook-comments/{commentId}/reply`
 

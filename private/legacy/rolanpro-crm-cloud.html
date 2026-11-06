@@ -23624,7 +23624,7 @@ function facebookCommentStatusLabel(status) {
 }
 async function fetchFacebookComments(options = {}) {
   try {
-    const response = await fetch('/api/v1/integrations/facebook-comments', { cache: 'no-store' });
+    const response = await fetch('/api/v1/integrations/facebook-comments?status=workbench', { cache: 'no-store' });
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const result = await response.json();
     facebookComments = Array.isArray(result?.data?.items) ? result.data.items : [];
@@ -23655,14 +23655,17 @@ function facebookCommentsInboxHtml() {
       ? 'Подключено · ответы публикуются только после подтверждения менеджера'
       : 'Нужна настройка Meta Page webhook и серверного Page token';
   const statusClass = setup?.webhook_configured && setup?.publishing_configured ? 'text-emerald-700' : 'text-amber-700';
+  const awaitingCount = facebookComments.filter(item => item.status !== 'dismissed').length;
   return `<section class="card mb-4" data-facebook-comments>
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div><h3 class="font-semibold">📘 Комментарии Facebook</h3><div class="text-xs ${statusClass} mt-1">${academyEsc(statusText)}</div></div>
-      <div class="text-sm text-gray-500">Ждут проверки: <b>${facebookComments.length}</b></div>
+      <div class="text-sm text-gray-500">Ждут проверки: <b>${awaitingCount}</b>${facebookComments.some(item => item.status === 'dismissed') ? ` · Закрыты: <b>${facebookComments.filter(item => item.status === 'dismissed').length}</b>` : ''}</div>
     </div>
     ${facebookComments.length ? `<div class="space-y-3 mt-3">${facebookComments.map(item => {
       const urgent = item.status === 'escalated';
-      return `<article class="rounded-xl border p-3 ${urgent ? 'border-red-300 bg-red-50' : 'border-blue-100 bg-blue-50/40'}">
+      const closed = item.status === 'dismissed';
+      const uncertain = item.status === 'publishing';
+      return `<article class="rounded-xl border p-3 ${urgent ? 'border-red-300 bg-red-50' : closed ? 'border-gray-200 bg-gray-50' : uncertain ? 'border-amber-300 bg-amber-50' : 'border-blue-100 bg-blue-50/40'}">
         <div class="flex flex-wrap items-center gap-2 text-xs">
           <b class="text-sm">${academyEsc(item.author_name)}</b>
           <span class="tag ${urgent ? 'bg-red-100 text-red-800' : 'bg-white text-blue-700'}">${academyEsc(facebookCommentIntentLabel(item.intent))}</span>
@@ -23672,12 +23675,18 @@ function facebookCommentsInboxHtml() {
         </div>
         <div class="text-sm mt-2 whitespace-pre-wrap">${academyEsc(item.message || 'Комментарий без текста — проверьте вложение в Facebook.')}</div>
         <label class="text-xs font-semibold mt-3 block" for="fb-comment-draft-${academyEsc(item.facebook_comment_id)}">Черновик публичного ответа</label>
-        <textarea id="fb-comment-draft-${academyEsc(item.facebook_comment_id)}" rows="3" class="mt-1" maxlength="2000" oninput="facebookCommentRememberDraft('${academyEsc(jsQuote(item.facebook_comment_id))}', this.value)">${academyEsc(facebookCommentDraftValue(item))}</textarea>
+        <textarea id="fb-comment-draft-${academyEsc(item.facebook_comment_id)}" rows="3" class="mt-1" maxlength="2000" ${closed || uncertain ? 'disabled' : ''} oninput="facebookCommentRememberDraft('${academyEsc(jsQuote(item.facebook_comment_id))}', this.value)">${academyEsc(facebookCommentDraftValue(item))}</textarea>
         <div class="flex flex-wrap gap-2 mt-2">
-          <button class="btn-ghost text-sm" onclick="facebookCommentGenerateDraft('${academyEsc(jsQuote(item.facebook_comment_id))}')">✨ Обновить черновик</button>
-          ${item.lead ? `<span class="tag bg-emerald-50 text-emerald-700">Лид создан · ${academyEsc(item.lead.lead_code || item.lead.name)}</span>` : `<button class="btn-ghost text-sm" onclick="facebookCommentCreateLead('${academyEsc(jsQuote(item.facebook_comment_id))}')">➕ Создать лид</button>`}
-          <button class="btn-ghost text-sm text-gray-500" onclick="facebookCommentDismiss('${academyEsc(jsQuote(item.facebook_comment_id))}')">Закрыть без ответа</button>
-          <button class="btn-primary text-sm" ${item.status === 'publishing' ? 'disabled' : ''} onclick="facebookCommentPublish('${academyEsc(jsQuote(item.facebook_comment_id))}')">${item.status === 'publishing' ? 'Публикуется…' : 'Проверил · опубликовать'}</button>
+          ${closed
+            ? `<button class="btn-primary text-sm" onclick="facebookCommentReopen('${academyEsc(jsQuote(item.facebook_comment_id))}')">↩ Вернуть на проверку</button>`
+            : uncertain
+              ? `${item.permalink_url ? `<a class="btn-ghost text-sm" href="${academyEsc(item.permalink_url)}" target="_blank" rel="noopener">Проверить в Facebook ↗</a>` : ''}
+                 <button class="btn-primary text-sm" onclick="facebookCommentConfirmPublished('${academyEsc(jsQuote(item.facebook_comment_id))}')">Ответ опубликован</button>
+                 <button class="btn-ghost text-sm" onclick="facebookCommentReturnToReview('${academyEsc(jsQuote(item.facebook_comment_id))}')">Ответа нет · вернуть</button>`
+              : `<button class="btn-ghost text-sm" onclick="facebookCommentGenerateDraft('${academyEsc(jsQuote(item.facebook_comment_id))}')">✨ Обновить черновик</button>
+                 ${item.lead ? `<span class="tag bg-emerald-50 text-emerald-700">Лид создан · ${academyEsc(item.lead.lead_code || item.lead.name)}</span>` : `<button class="btn-ghost text-sm" onclick="facebookCommentCreateLead('${academyEsc(jsQuote(item.facebook_comment_id))}')">➕ Создать лид</button>`}
+                 <button class="btn-ghost text-sm text-gray-500" onclick="facebookCommentDismiss('${academyEsc(jsQuote(item.facebook_comment_id))}')">Закрыть без ответа</button>
+                 <button class="btn-primary text-sm" onclick="facebookCommentPublish('${academyEsc(jsQuote(item.facebook_comment_id))}')">Проверил · опубликовать</button>`}
         </div>
       </article>`;
     }).join('')}</div>` : `<div class="text-sm text-gray-500 mt-3">Новых комментариев для проверки нет.</div>`}
@@ -23706,6 +23715,21 @@ async function facebookCommentDismiss(id) {
   if (!confirm('Закрыть комментарий без публичного ответа?')) return;
   try { await facebookCommentAction(`/api/v1/integrations/facebook-comments/${encodeURIComponent(id)}`, { method:'PATCH', headers:{'content-type':'application/json'}, body:JSON.stringify({action:'dismiss'}) }); }
   catch (error) { alert('Не удалось закрыть комментарий: ' + error.message); }
+}
+async function facebookCommentReopen(id) {
+  if (!confirm('Вернуть комментарий на проверку менеджеру?')) return;
+  try { await facebookCommentAction(`/api/v1/integrations/facebook-comments/${encodeURIComponent(id)}`, { method:'PATCH', headers:{'content-type':'application/json'}, body:JSON.stringify({action:'reopen'}) }); }
+  catch (error) { alert('Не удалось вернуть комментарий: ' + error.message); }
+}
+async function facebookCommentConfirmPublished(id) {
+  if (!confirm('Вы проверили Facebook и видите опубликованный ответ?')) return;
+  try { await facebookCommentAction(`/api/v1/integrations/facebook-comments/${encodeURIComponent(id)}`, { method:'PATCH', headers:{'content-type':'application/json'}, body:JSON.stringify({action:'confirm_published'}) }); }
+  catch (error) { alert('Не удалось подтвердить публикацию: ' + error.message); }
+}
+async function facebookCommentReturnToReview(id) {
+  if (!confirm('Вы проверили Facebook: ответа нет. Вернуть комментарий на проверку?')) return;
+  try { await facebookCommentAction(`/api/v1/integrations/facebook-comments/${encodeURIComponent(id)}`, { method:'PATCH', headers:{'content-type':'application/json'}, body:JSON.stringify({action:'return_to_review'}) }); }
+  catch (error) { alert('Не удалось вернуть комментарий на проверку: ' + error.message); }
 }
 async function facebookCommentPublish(id) {
   const field = document.getElementById(`fb-comment-draft-${id}`);

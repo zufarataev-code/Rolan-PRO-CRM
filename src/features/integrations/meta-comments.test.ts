@@ -116,6 +116,7 @@ test("complaints receive a shorter SLA than sales and general comments", () => {
 
 test("comment list filters keep active defaults and expose closed history for all", () => {
   assert.deepEqual(facebookCommentStatusesForQuery(undefined), ["pending_review", "escalated", "publishing"]);
+  assert.deepEqual(facebookCommentStatusesForQuery("workbench"), ["pending_review", "escalated", "publishing", "dismissed"]);
   assert.deepEqual(facebookCommentStatusesForQuery("replied"), ["replied"]);
   assert.equal(facebookCommentStatusesForQuery("all"), null);
   assert.deepEqual(facebookCommentStatusesForQuery("unknown"), ["pending_review", "escalated", "publishing"]);
@@ -149,6 +150,10 @@ test("legacy inbox keeps public replies behind explicit manager confirmation", (
   assert.match(source, /catch \(error\) \{\s*facebookCommentsRefreshedAt = Date\.now\(\);\s*console\.warn\('\[Cloud CRM\] Facebook comments unavailable'/);
   assert.match(source, /facebookCommentDrafts\.set\(id, value\)/);
   assert.match(source, /facebookCommentDrafts\.has\(item\.facebook_comment_id\)/);
+  assert.match(source, /facebook-comments\?status=workbench/);
+  assert.match(source, /action:'confirm_published'/);
+  assert.match(source, /action:'return_to_review'/);
+  assert.match(source, /action:'reopen'/);
 });
 
 test("draft and publish paths use status compare-and-set before external side effects", () => {
@@ -157,4 +162,7 @@ test("draft and publish paths use status compare-and-set before external side ef
   assert.match(service, /facebookComment\.updateMany\(\{[\s\S]*?status: comment\.status,[\s\S]*?draft was being generated/);
   assert.match(service, /A timeout\/network failure is ambiguous:[\s\S]*?Keep the durable `publishing` claim/);
   assert.match(service, /if \(!metaGraphFailureIsDefinite\(response\.status\)\)[\s\S]*?Facebook reply status is uncertain/);
+  assert.match(service, /action: "dismiss" \| "reopen" \| "confirm_published" \| "return_to_review"/);
+  assert.match(service, /data: \{ status: "publishing", draft_reply: message \}/);
+  assert.match(service, /Manager confirmed that the uncertain Facebook reply was published/);
 });
