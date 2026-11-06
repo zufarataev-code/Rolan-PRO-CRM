@@ -324,7 +324,13 @@ export async function generateFacebookCommentDraft(input: {
       },
       data: status === "dismissed"
         ? { status: "done", completed_at: now }
-        : { priority: taskPriority(intent), due_at: dueAt, status: "open", completed_at: null },
+        : {
+            title: facebookCommentTaskTitle(intent, comment.author_name),
+            priority: taskPriority(intent),
+            due_at: dueAt,
+            status: "open",
+            completed_at: null,
+          },
     });
     if (intent === "complaint" && comment.intent !== "complaint" && comment.assigned_to) {
       await tx.notification.create({
