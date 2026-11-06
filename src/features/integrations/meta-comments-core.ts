@@ -38,6 +38,10 @@ export function facebookCommentTaskTitle(intent: FacebookCommentIntent, authorNa
   return Array.from(`${prefix}${authorName}`).slice(0, 180).join("");
 }
 
+export function metaGraphFailureIsDefinite(status: number) {
+  return status >= 400 && status < 500 && ![408, 425, 429].includes(status);
+}
+
 export class MetaCommentError extends Error {
   constructor(
     public readonly code: string,

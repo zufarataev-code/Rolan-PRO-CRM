@@ -10,6 +10,7 @@ import {
   facebookCommentTaskTitle,
   fallbackFacebookCommentDraft,
   metaCommentNotifications,
+  metaGraphFailureIsDefinite,
   metaObjectId,
   parseFacebookCommentAiResponse,
 } from "./meta-comments-core";
@@ -126,6 +127,17 @@ test("Facebook task titles fit the database limit even for long Unicode names", 
   assert.match(title, /^Срочно: жалоба в Facebook/);
 });
 
+test("only explicit Graph client failures release a claimed public reply", () => {
+  assert.equal(metaGraphFailureIsDefinite(400), true);
+  assert.equal(metaGraphFailureIsDefinite(401), true);
+  assert.equal(metaGraphFailureIsDefinite(404), true);
+  assert.equal(metaGraphFailureIsDefinite(408), false);
+  assert.equal(metaGraphFailureIsDefinite(425), false);
+  assert.equal(metaGraphFailureIsDefinite(429), false);
+  assert.equal(metaGraphFailureIsDefinite(500), false);
+  assert.equal(metaGraphFailureIsDefinite(503), false);
+});
+
 test("legacy inbox keeps public replies behind explicit manager confirmation", () => {
   const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
   assert.match(source, /Комментарии Facebook/);
@@ -144,4 +156,5 @@ test("draft and publish paths use status compare-and-set before external side ef
   assert.match(service, /status: "publishing"/);
   assert.match(service, /facebookComment\.updateMany\(\{[\s\S]*?status: comment\.status,[\s\S]*?draft was being generated/);
   assert.match(service, /A timeout\/network failure is ambiguous:[\s\S]*?Keep the durable `publishing` claim/);
+  assert.match(service, /if \(!metaGraphFailureIsDefinite\(response\.status\)\)[\s\S]*?Facebook reply status is uncertain/);
 });

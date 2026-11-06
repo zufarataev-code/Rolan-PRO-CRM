@@ -22,6 +22,7 @@ import {
   facebookCommentTaskTitle,
   fallbackFacebookCommentDraft,
   metaObjectId,
+  metaGraphFailureIsDefinite,
   parseFacebookCommentAiResponse,
   type FacebookCommentIntent,
   type MetaCommentNotification,
@@ -564,7 +565,13 @@ export async function publishFacebookCommentReply(input: {
   }
   const result = await response.json().catch(() => null) as { id?: unknown } | null;
   if (!response.ok) {
-    // A definite Graph API rejection is safe to retry after restoring the queue.
+    if (!metaGraphFailureIsDefinite(response.status)) {
+      // A server, timeout or throttling response is ambiguous: Facebook may
+      // already have applied the write before the error reached us.
+      throw new MetaCommentError("facebook_publish_uncertain", 502, "Facebook reply status is uncertain and needs reconciliation.");
+    }
+    // An explicit client-side Graph rejection is safe to retry after restoring
+    // the review state.
     await prisma.facebookComment.updateMany({
       where: { facebook_comment_id: comment.facebook_comment_id, status: "publishing" },
       data: { status: comment.status },
