@@ -45,7 +45,7 @@ test("project direct expense list covers delivery, purchases and hired specialis
 test("tax profile supports California corporation types without hiding configurability", () => {
   assert.match(source, /entityType: 'C_CORP'/);
   assert.match(source, /ratePct: 8\.84/);
-  assert.match(source, /value === 'S_CORP'\) profile\.ratePct = 1\.5/);
+  assert.match(source, /value === 'S_CORP'\) \{ profile\.ratePct = 1\.5; profile\.federalRatePct = 0; \}/);
   assert.match(source, /annualMinimum: 800/);
   assert.match(source, /value="CUSTOM"/);
 });

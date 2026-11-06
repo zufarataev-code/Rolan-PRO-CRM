@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-05 — Живое обновление CRM на телефонах + аудит экономики (Claude, PR pending)
+
+- Owner: «когда мы вносим изменения, у сотрудников всё должно обновляться автоматически, без перебоев и зависов»; «проверь всю логику: цена → себестоимость (монтаж, материал, прямые расходы) → прибыль → минус налоги и постоянные → чистая прибыль месяца, чтобы не было кассового разрыва».
+- Found: (1) the shared workspace was loaded once at boot — another employee's change reached an open tab only on reload or when the tab's own save hit a 409; a new code release reached a standalone PWA only on reload. (2) The default «Реклама» opex plan (category `marketing`) sat in `companyFixedMonthlyBurn` while every project already carries `orderAdAllocation` (marketingPct of last month's revenue) — advertising counted twice in net profit. (3) The tax reserve used only California 8.84 % / $800 — no federal corporate tax.
+- Done on `claude/live-updates`: `src/features/legacy-crm/release.ts` (`currentReleaseId`: release dir sha on production, start stamp in dev); `GET /api/v1/legacy-crm/version` → `{ release, revision }` with no payload read; the served page carries `window.__ROLANPRO_RELEASE__`; the page polls every 30 s and on visibility/focus/online — a higher revision is merged with `mergeCloudWorkspaceSnapshots` and re-rendered in place (only when no unsaved local changes and no modal), a new release reloads the page only when the user is quiet (no modal, not typing 20 s, nothing unsaved; retried every 15 s). `companyFixedMonthlyBurn` excludes category `marketing`; `projectProfitTaxProfile` gets `federalRatePct` (21 for C_CORP, 0 for S_CORP), the reserve = profit before tax × (CA + federal) not below the annual minimum; fields in the project estimate and in «Общие ставки компании».
+- Verification: `live-updates.test.ts` 4/4; project-profitability, overhead-by-revenue, service-rates green; HTML scripts `node --check`; full `npm test` 900 pass / 35 env failures as on main.
+
 ## 2026-11-05 — Склад: форма «Новая модель», полки, пустые записи; карточка проекта: этапы-кнопки (Claude, PR pending)
 
 - Owner: «+ Добавить модель» silently created a blank catalog row (a dozen nameless «Приватная» rows on production); frost must sit on the Decorative and Privacy shelves; the project card header must be compact — the stage bar as a row of coloured buttons, each opening its own step window.
