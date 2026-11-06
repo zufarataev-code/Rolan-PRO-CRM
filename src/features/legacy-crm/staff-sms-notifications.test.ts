@@ -22,3 +22,9 @@ test('status notifications also go by SMS to every recipient with a phone, witho
   assert.match(notify, /key: failed\.length && !sent\.length \? 'sms_staff_failed' : 'sms_staff_sent'/);
   assert.ok(notify.indexOf('options.skipSms') < notify.indexOf('if (!deliveries.length) return'), 'the SMS pass does not depend on Telegram being configured');
 });
+
+test('an installer card carries the «Старший монтажник» switch that the owner saves', () => {
+  // Owner, 2026-11-06: the senior role lived only in «Ставки и расходы» and was invisible in «Команда».
+  assert.match(html, /\$\{isOwner && u\.role === 'installer' \? `[\s\S]*?<input type="checkbox" id="tm-edit-senior" style="width:auto" \$\{u\.installerLevel === 'senior' \? 'checked' : ''\}> Старший монтажник/);
+  assert.match(html, /if \(seniorBox && isOwner\) \{ if \(seniorBox\.checked\) u\.installerLevel = 'senior'; else delete u\.installerLevel; \}/);
+});
