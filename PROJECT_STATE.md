@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-06 — Живое обновление замирало после первого сохранения (Claude, PR pending)
+
+- Found while changing the tax profile on production: `cloudScheduleSave` never cleared `cloudSaveTimer` after the debounce fired, so `cloudHasPendingChanges()` stayed true for the rest of the session and `cloudCheckForUpdates` (#469) treated the tab as busy forever — no remote pulls, no release reload after the first save.
+- Done on `claude/live-update-timer-fix`: the timer callback nulls the handle before `cloudPersist()`; `cloudPersistConfirmed` nulls it after `clearTimeout`. Test added to `live-updates.test.ts`.
+- Verification: `live-updates.test.ts` 5/5; HTML scripts `node --check`.
+
 ## 2026-11-06 — Услуга по площади без плёнки: силикон, мойка, удаление (Claude, PR pending)
 
 - Owner: «сделать 5 проектов с реальными данными и посмотреть, как сработают формулы». Dry run on production data in an in-memory sandbox (save disabled): five historical projects through the real `quickEntryNewOrder` → `quickEntryBuildLine` → `closeQuickProjectAsCompletedWith` → `orderPSS` → `projectProfitability` path. Film ×(1+waste), per-sq-ft installer pay from the service rate, 5 % manager commission, hired specialist as a direct expense, trims/delivery as manual expenses, fixed pool share by revenue and the tax reserve all came out as expected by hand.

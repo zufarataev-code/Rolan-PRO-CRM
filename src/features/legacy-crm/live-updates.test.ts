@@ -48,3 +48,9 @@ test('advertising is counted once (in projects) and the tax reserve covers Calif
   const profitability = fn('projectProfitability');
   assert.match(profitability, /Number\(profile\.ratePct\) \|\| 0\) \+ Math\.max\(0, Number\(profile\.federalRatePct\) \|\| 0\)\) \/ 100/, 'reserve = profit before tax × (CA + federal), not below the annual minimum');
 });
+
+test('the debounced save clears its timer handle, otherwise pending-changes stays true for the whole session', () => {
+  const schedule = fn('cloudScheduleSave');
+  assert.match(schedule, /cloudSaveTimer = setTimeout\(\(\) => \{ cloudSaveTimer = null; cloudPersist\(\); \}, 700\)/);
+  assert.match(fn('cloudPersistConfirmed'), /clearTimeout\(cloudSaveTimer\);\n\s*cloudSaveTimer = null;/);
+});
