@@ -23630,6 +23630,7 @@ async function fetchFacebookComments(options = {}) {
     facebookCommentsIntegration = result?.data?.integration || null;
     facebookCommentsRefreshedAt = Date.now();
   } catch (error) {
+    facebookCommentsRefreshedAt = Date.now();
     console.warn('[Cloud CRM] Facebook comments unavailable', error);
   }
   if (options.renderIfVisible && state.view === 'leads') render();

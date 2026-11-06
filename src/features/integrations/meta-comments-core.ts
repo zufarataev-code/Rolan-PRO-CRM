@@ -21,6 +21,14 @@ export const FACEBOOK_COMMENT_INTENTS = [
 export type FacebookCommentStatus = (typeof FACEBOOK_COMMENT_STATUSES)[number];
 export type FacebookCommentIntent = (typeof FACEBOOK_COMMENT_INTENTS)[number];
 
+export function facebookCommentStatusesForQuery(value: string | null | undefined) {
+  if (value === "all") return null;
+  if (FACEBOOK_COMMENT_STATUSES.includes(value as FacebookCommentStatus)) {
+    return [value as FacebookCommentStatus];
+  }
+  return ["pending_review", "escalated", "publishing"] satisfies FacebookCommentStatus[];
+}
+
 export class MetaCommentError extends Error {
   constructor(
     public readonly code: string,

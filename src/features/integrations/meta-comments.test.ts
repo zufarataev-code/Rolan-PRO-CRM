@@ -6,6 +6,7 @@ import {
   MetaCommentError,
   classifyFacebookComment,
   facebookCommentDueAt,
+  facebookCommentStatusesForQuery,
   fallbackFacebookCommentDraft,
   metaCommentNotifications,
   metaObjectId,
@@ -111,6 +112,13 @@ test("complaints receive a shorter SLA than sales and general comments", () => {
   assert.equal(facebookCommentDueAt("other", start).toISOString(), "2026-11-06T16:00:00.000Z");
 });
 
+test("comment list filters keep active defaults and expose closed history for all", () => {
+  assert.deepEqual(facebookCommentStatusesForQuery(undefined), ["pending_review", "escalated", "publishing"]);
+  assert.deepEqual(facebookCommentStatusesForQuery("replied"), ["replied"]);
+  assert.equal(facebookCommentStatusesForQuery("all"), null);
+  assert.deepEqual(facebookCommentStatusesForQuery("unknown"), ["pending_review", "escalated", "publishing"]);
+});
+
 test("legacy inbox keeps public replies behind explicit manager confirmation", () => {
   const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
   assert.match(source, /Комментарии Facebook/);
@@ -119,6 +127,7 @@ test("legacy inbox keeps public replies behind explicit manager confirmation", (
   assert.match(source, /\/api\/v1\/integrations\/facebook-comments\/\$\{encodeURIComponent\(id\)\}\/reply/);
   assert.match(source, /Создать лид и задачу менеджеру из этого комментария\?/);
   assert.match(source, /facebook_comment: \{ label: 'Комментарий Facebook'/);
+  assert.match(source, /catch \(error\) \{\s*facebookCommentsRefreshedAt = Date\.now\(\);\s*console\.warn\('\[Cloud CRM\] Facebook comments unavailable'/);
 });
 
 test("draft and publish paths use status compare-and-set before external side effects", () => {

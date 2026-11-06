@@ -18,6 +18,7 @@ import {
   classifyFacebookComment,
   facebookCommentDueAt,
   facebookCommentPayloadHash,
+  facebookCommentStatusesForQuery,
   fallbackFacebookCommentDraft,
   metaObjectId,
   parseFacebookCommentAiResponse,
@@ -189,14 +190,11 @@ export async function listFacebookComments(input: {
   status?: string | null;
   limit?: number;
 }) {
-  const allowedStatuses = new Set(["pending_review", "escalated", "publishing", "replied", "dismissed", "all"]);
-  const status = allowedStatuses.has(input.status || "") ? input.status : null;
+  const statuses = facebookCommentStatusesForQuery(input.status);
   const items = await prisma.facebookComment.findMany({
     where: {
       ...(input.managerId ? { assigned_to: input.managerId } : {}),
-      ...(status && status !== "all"
-        ? { status }
-        : { status: { in: ["pending_review", "escalated", "publishing"] } }),
+      ...(statuses ? { status: { in: statuses } } : {}),
     },
     include: {
       assignee: { select: { user_id: true, full_name: true } },
@@ -368,14 +366,20 @@ export async function updateFacebookComment(input: {
     ? facebookCommentDueAt(current.intent as FacebookCommentIntent, now)
     : null;
   await prisma.$transaction(async (tx) => {
-    await tx.facebookComment.update({
-      where: { facebook_comment_id: current.facebook_comment_id },
+    const claimed = await tx.facebookComment.updateMany({
+      where: {
+        facebook_comment_id: current.facebook_comment_id,
+        status: current.status,
+      },
       data: {
         status,
         due_at: dueAt,
         dismissed_at: status === "dismissed" ? now : null,
       },
     });
+    if (claimed.count !== 1) {
+      throw new MetaCommentError("comment_changed", 409, "This Facebook comment changed. Refresh it before updating.");
+    }
     const tasks = await tx.task.updateMany({
       where: {
         entity_type: "facebook_comment",
@@ -420,6 +424,7 @@ export async function createLeadFromFacebookComment(input: {
   actorUserId: string;
 }) {
   return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('meta-facebook-comment-lead'), hashtext(${input.commentId}))`;
     const comment = await tx.facebookComment.findFirst({
       where: facebookCommentAccessWhere(input.commentId, input.managerId),
     });
