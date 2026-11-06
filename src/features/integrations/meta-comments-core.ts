@@ -323,14 +323,19 @@ export function parseFacebookCommentAiResponse(text: string) {
     /(?:блокиру|задержива|фильтру|сертифицир|микрон|светопропуск|ультрафиолет|инфракрасн|пулестойк|огнестойк)/i,
     /\b(?:bloquea|rechaza|filtra|certificad[oa]|micrones?|ultravioleta|infrarrojo|bal[ií]stic[oa]|antibalas|ign[ií]fug[oa])\b/i,
   ].some((pattern) => pattern.test(reply));
+  const containsPublicContactDetail = [
+    /\b(?:phone|telephone|mobile|cell(?:phone)?|e-?mail|street address|home address|mailing address|contact details?|contact information|your number)\b/i,
+    /(?:телефон|мобильн|номер телефона|ваш номер|свой номер|электронн(?:ая|ую) почт|e-?mail|адрес|контактн(?:ые|ую) данн)/i,
+    /\b(?:tel[eé]fono|m[oó]vil|celular|correo electr[oó]nico|e-?mail|direcci[oó]n|datos de contacto|informaci[oó]n de contacto|tu n[uú]mero|su n[uú]mero)\b/i,
+  ].some((pattern) => pattern.test(reply));
   if (
     containsUnverifiedClaim ||
+    containsPublicContactDetail ||
     /\b(?:definitely|always|never|we promise)\b/i.test(reply) ||
     /(?:точно|всегда|никогда|обещаем)/i.test(reply) ||
     /\b(?:definitivamente|siempre|nunca|prometemos)\b/i.test(reply) ||
     /https?:\/\//i.test(reply) ||
-    /\b(?:comment|post|share|write)\s+(?:your\s+)?(?:phone|email|address)\b/i.test(reply) ||
-    /(?:напишите|оставьте|укажите)\s+(?:здесь\s+)?(?:телефон|почту|адрес)/i.test(reply)
+    /\b(?:comment|post|share|write|reply with|leave)\s+(?:your\s+)?(?:phone|email|address)\b/i.test(reply)
   ) {
     throw new MetaCommentError("unsafe_ai_response", 502, "AI reply contains unsafe or unapproved public content.");
   }

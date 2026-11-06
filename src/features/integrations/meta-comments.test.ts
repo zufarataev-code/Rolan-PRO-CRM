@@ -116,6 +116,19 @@ test("AI drafts reject invented prices and promises before public review", () =>
     () => parseFacebookCommentAiResponse('{"intent":"sales","reply":"Comment your phone number here."}'),
     /unsafe or unapproved/i,
   );
+  for (const unsafeContactReply of [
+    "Reply with your phone number here.",
+    "Leave your email below.",
+    "Send your number in a reply.",
+    "Напишите здесь номер телефона.",
+    "Responde aquí con tu número de teléfono.",
+    "Deja tu correo electrónico abajo.",
+  ]) {
+    assert.throws(
+      () => parseFacebookCommentAiResponse(JSON.stringify({ intent: "sales", reply: unsafeContactReply })),
+      /unsafe or unapproved/i,
+    );
+  }
   assert.throws(
     () => parseFacebookCommentAiResponse('{"intent":"sales","reply":"Visit https://example.test now."}'),
     /unsafe or unapproved/i,
