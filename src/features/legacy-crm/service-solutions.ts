@@ -356,7 +356,13 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
     // Owner, 2026-10-22: a size-free service may also be offered in other directions.
     if (offering.directions !== undefined) {
       if (!Array.isArray(offering.directions) || offering.directions.some((key: unknown) => !SERVICE_DIRECTIONS.includes(key as never))) return 'Некорректный список направлений услуги.';
-      if (offering.directions.length && (offering.unit === undefined || offering.unit === 'sqft')) return 'Услуга по замеру предлагается только в своём направлении.';
+      if (offering.directions.length && (offering.unit === undefined || offering.unit === 'sqft') && offering.noFilm !== true) return 'Услуга по замеру предлагается только в своём направлении.';
+    }
+    // Owner, 2026-11-06: силикон, мойка, удаление — работа по площади без плёнки.
+    if (offering.noFilm !== undefined) {
+      if (typeof offering.noFilm !== 'boolean') return 'Признак «без плёнки» должен быть да/нет.';
+      if (offering.noFilm && offering.unit !== undefined && offering.unit !== 'sqft') return 'Признак «без плёнки» только для услуги за кв. фут.';
+      if (offering.noFilm && Array.isArray(offering.filmIds) && offering.filmIds.length) return 'У услуги без плёнки не может быть привязанных плёнок.';
     }
     // Owner, 2026-11-05: a linked material may come from any catalog category; it only has to exist.
     if (offering.filmIds !== undefined && (!Array.isArray(offering.filmIds) || offering.filmIds.some((id: unknown) => !films.some(film => film.id === id)))) return 'Материалы услуги должны быть из каталога плёнок.';
