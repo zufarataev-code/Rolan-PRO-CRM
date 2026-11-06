@@ -292,8 +292,31 @@ export function parseFacebookCommentAiResponse(text: string) {
     throw new MetaCommentError("invalid_ai_response", 502, "AI returned an invalid intent.");
   }
   const reply = cleanText(body.reply, 1_200, "reply");
+  const containsUnverifiedClaim = [
+    // A public draft must not introduce any numeric commercial or technical fact.
+    /[\d%$€£]/,
+    // Discounts, promotions and free offers.
+    /\b(?:discount|sale|special offer|promotion|promo|coupon|free|percent off|save)\b/i,
+    /(?:скидк|акци|спецпредлож|промокод|купон|бесплатн|экономи)/i,
+    /\b(?:descuento|oferta|promoci[oó]n|cup[oó]n|gratis|ahorra)\b/i,
+    // Warranty, guarantee and coverage claims.
+    /\b(?:warrant(?:y|ies|ied)|guarantee(?:d)?|lifetime|coverage)\b/i,
+    /(?:гарант|пожизненн|гаранти|покрыва(?:ем|ет))/i,
+    /\b(?:garant[ií]a|garantizad[oa]|de por vida|cobertura)\b/i,
+    // Availability, delivery and appointment promises.
+    /\b(?:available|availability|in stock|today|tomorrow|next week|same[- ]day|appointment|booked|scheduled|we (?:can|will) install)\b/i,
+    /(?:в наличии|доступн|сегодня|завтра|следующ(?:ей|ую) недел|записан|назначен|подтвержд[её]н|установим)/i,
+    /\b(?:disponible|disponibilidad|en stock|hoy|ma[nñ]ana|pr[oó]xima semana|cita|reservad[oa]|programad[oa]|instalaremos)\b/i,
+    // Technical performance, certification and construction claims.
+    /\b(?:blocks?|rejects?|filters?|rated|certified|mil|microns?|vlt|uv|infrared|heat rejection|ballistic|shatterproof|bulletproof|fire[- ]?rated)\b/i,
+    /(?:блокиру|задержива|фильтру|сертифицир|микрон|светопропуск|ультрафиолет|инфракрасн|пулестойк|огнестойк)/i,
+    /\b(?:bloquea|rechaza|filtra|certificad[oa]|micrones?|ultravioleta|infrarrojo|bal[ií]stic[oa]|antibalas|ign[ií]fug[oa])\b/i,
+  ].some((pattern) => pattern.test(reply));
   if (
-    /\$\s*\d|\b(?:guaranteed?|definitely booked|appointment confirmed)\b/i.test(reply) ||
+    containsUnverifiedClaim ||
+    /\b(?:definitely|always|never|we promise)\b/i.test(reply) ||
+    /(?:точно|всегда|никогда|обещаем)/i.test(reply) ||
+    /\b(?:definitivamente|siempre|nunca|prometemos)\b/i.test(reply) ||
     /https?:\/\//i.test(reply) ||
     /\b(?:comment|post|share|write)\s+(?:your\s+)?(?:phone|email|address)\b/i.test(reply) ||
     /(?:напишите|оставьте|укажите)\s+(?:здесь\s+)?(?:телефон|почту|адрес)/i.test(reply)

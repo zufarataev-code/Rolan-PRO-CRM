@@ -98,6 +98,19 @@ test("AI drafts reject invented prices and promises before public review", () =>
     () => parseFacebookCommentAiResponse('{"intent":"sales","reply":"Your appointment is definitely booked."}'),
     /unsafe or unapproved/i,
   );
+  for (const unsafeReply of [
+    "We offer a lifetime warranty.",
+    "Get a 20% discount.",
+    "Installation is available tomorrow.",
+    "This film blocks UV and is certified.",
+    "Даем пожизненную гарантию и скидку.",
+    "La instalación está disponible mañana.",
+  ]) {
+    assert.throws(
+      () => parseFacebookCommentAiResponse(JSON.stringify({ intent: "sales", reply: unsafeReply })),
+      /unsafe or unapproved/i,
+    );
+  }
   assert.throws(
     () => parseFacebookCommentAiResponse('{"intent":"sales","reply":"Comment your phone number here."}'),
     /unsafe or unapproved/i,
