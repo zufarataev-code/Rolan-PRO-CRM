@@ -301,10 +301,10 @@ test('the one-screen form takes direct project expenses — rent, delivery, gas,
   // Owner, 2026-11-06: «расходы в рамках проекта: аренда, доставка и ещё что-нибудь — списываем прямо в этот проект».
   const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
   assert.match(fn(stages, 'quickEntryDefaultForm'), /expenses: \[\],/);
-  assert.match(stages, /const QUICK_ENTRY_EXPENSE_TYPES = \[\['rent', 'Аренда'\], \['delivery', 'Доставка'\], \['gas', 'Бензин'\], \['equipment', 'Оборудование'\], \['other', 'Другое'\]\];/);
+  assert.match(stages, /function quickEntryExpenseTypes\(\) \{ return \[\['rent', 'Аренда'\], \['delivery', 'Доставка'\], \['gas', 'Бензин'\], \['equipment', 'Оборудование'\], \['other', 'Другое'\]\]; \}/);
   assert.match(fn(stages, 'quickEntryReadForm'), /quickEntryExpenses\(\)\.forEach\(\(e, j\) => \{\n\s*\['type', 'label', 'amount'\]\.forEach\(k => \{ const val = v\(`qe-x\$\{j\}-\$\{k\}`\)/);
   assert.match(fn(stages, 'renderQuickEntry'), /const previewMargin = total - material - labor - managerPay - projectExpenses;/);
   assert.match(fn(stages, 'renderQuickEntry'), /<div class="qe-expenses">/);
-  assert.match(fn(stages, 'quickEntryCommit'), /o\.extraExpenses\.push\(\{ id: uid\(\), type: QUICK_ENTRY_EXPENSE_TYPES\.some\(\(\[value\]\) => value === e\.type\) \? e\.type : 'other', label: String\(e\.label \|\| ''\)\.trim\(\) \|\| typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now \}\)/);
+  assert.match(fn(stages, 'quickEntryCommit'), /o\.extraExpenses\.push\(\{ id: uid\(\), type: quickEntryExpenseTypes\(\)\.some\(\(\[value\]\) => value === e\.type\) \? e\.type : 'other', label: String\(e\.label \|\| ''\)\.trim\(\) \|\| typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now \}\)/);
   assert.match(fn(stages, 'renderQuickEntry'), /⭐ старшему \+/, 'the crew line says when the senior bonus is in the payout');
 });

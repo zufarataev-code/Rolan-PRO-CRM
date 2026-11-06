@@ -3540,7 +3540,7 @@ function quickEntryDefaultForm(keep = {}) {
   };
 }
 function quickEntryExpenses() { const f = quickEntryState().form; if (!Array.isArray(f.expenses)) f.expenses = []; return f.expenses; }
-const QUICK_ENTRY_EXPENSE_TYPES = [['rent', 'Аренда'], ['delivery', 'Доставка'], ['gas', 'Бензин'], ['equipment', 'Оборудование'], ['other', 'Другое']];
+function quickEntryExpenseTypes() { return [['rent', 'Аренда'], ['delivery', 'Доставка'], ['gas', 'Бензин'], ['equipment', 'Оборудование'], ['other', 'Другое']]; }
 function quickEntryAddExpense(type = 'other') {
   quickEntryReadForm();
   quickEntryExpenses().push({ key: uid(), type, label: '', amount: '' });
@@ -3924,8 +3924,8 @@ function quickEntryCommit() {
   (Array.isArray(f.expenses) ? f.expenses : []).forEach(e => {
     const amount = Math.max(0, Number(e.amount) || 0);
     if (!amount) return;
-    const typeLabel = (QUICK_ENTRY_EXPENSE_TYPES.find(([value]) => value === e.type) || ['other', 'Другое'])[1];
-    o.extraExpenses.push({ id: uid(), type: QUICK_ENTRY_EXPENSE_TYPES.some(([value]) => value === e.type) ? e.type : 'other', label: String(e.label || '').trim() || typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now });
+    const typeLabel = (quickEntryExpenseTypes().find(([value]) => value === e.type) || ['other', 'Другое'])[1];
+    o.extraExpenses.push({ id: uid(), type: quickEntryExpenseTypes().some(([value]) => value === e.type) ? e.type : 'other', label: String(e.label || '').trim() || typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now });
   });
   syncProjectIncludedServices(o);
   projectEstimateSyncQuickServices(o);
@@ -4068,12 +4068,12 @@ function renderQuickEntry() {
     <div class="qe-expenses">
       <div class="qe-expenses-head"><span>Расходы проекта</span><small>аренда туры, доставка, бензин — списываются в этот проект и уменьшают маржу</small></div>
       ${quickEntryExpenses().map((e, j) => `<div class="qe-expense">
-        <select id="qe-x${j}-type">${QUICK_ENTRY_EXPENSE_TYPES.map(([value, label]) => opt(value, label, e.type)).join('')}</select>
+        <select id="qe-x${j}-type">${quickEntryExpenseTypes().map(([value, label]) => opt(value, label, e.type)).join('')}</select>
         <input id="qe-x${j}-label" value="${academyEsc(e.label || '')}" placeholder="что именно · например, тура 2 дня">
         <input id="qe-x${j}-amount" type="number" min="0" step="1" value="${academyEsc(e.amount)}" placeholder="$" onchange="quickEntryReadForm(); preservePositionForNextRender(); render();">
         <button type="button" class="qe-x" onclick="quickEntryRemoveExpense(${j})" title="Убрать">×</button>
       </div>`).join('')}
-      <div class="qe-expense-add">${QUICK_ENTRY_EXPENSE_TYPES.map(([value, label]) => `<button type="button" class="qe-link" onclick="quickEntryAddExpense('${value}')">+ ${label.toLowerCase()}</button>`).join('')}</div>
+      <div class="qe-expense-add">${quickEntryExpenseTypes().map(([value, label]) => `<button type="button" class="qe-link" onclick="quickEntryAddExpense('${value}')">+ ${label.toLowerCase()}</button>`).join('')}</div>
     </div>
     <div class="qe-grid qe-grid-c">
       <label>Менеджер<select id="qe-manager" ${owner ? '' : 'disabled title="Менеджер создаёт исторический проект только на себя"'} onchange="quickEntrySet('manager', this.value)">${managerChoices.map(u => opt(u.id, `${u.name}${u.payConfig?.type === 'commission' ? ` · ${u.payConfig.commissionPct || 0} %` : u.payConfig?.type === 'salary' ? ' · оклад' : ''}`, f.manager)).join('')}</select></label>
