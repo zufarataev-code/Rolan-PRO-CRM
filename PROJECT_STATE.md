@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-06 — SMS-уведомления сотрудникам на телефон из карточки (Claude, PR pending)
+
+- Owner: «у каждого сотрудника должна быть форма — телефонный номер в карточке, на него он будет получать уведомления; сейчас этого нет». The phone field already existed in the team card; notifications went only in-app and to Telegram (chat ID, which most staff lack).
+- Done on `claude/staff-sms-notifications`: team card — «SMS-уведомления на этот номер» switch (`u.notifySms`, default on); `notifyStatusChange` — after in-app/Telegram, an SMS pass through the existing `sendSmsViaTwilio` (`POST /api/v1/integrations/twilio/messages`) to every recipient (manager, measurer, installers, owners) with a phone and the switch on, excluding the actor; `Promise.allSettled` in the background, result as timeline `sms_staff_sent` / `sms_staff_failed`; `options.skipSms` for callers that must not send.
+- Requires Twilio env on the server (`TWILIO_ACCOUNT_SID`, token or API key, `TWILIO_FROM_NUMBER` or messaging service) — the route already exists for client SMS; without it the SMS pass records «не ушло» and nothing else changes.
+- Verification: `staff-sms-notifications.test.ts` 2/2, `legacy-sms-ui.test.ts`, project-card/erp-integrity/estimate-workflow/service-progress 110/110; HTML scripts `node --check`.
+
 ## 2026-11-06 — Карточка проекта: один вход в замер, нижние секции убраны (Claude, PR pending)
 
 - Owner: «сверху логика воронки кнопками сделана — зачем снизу дублировать, уберём»; and «Назначить замер» on top vs «Внести размеры» below confused the measurement step.

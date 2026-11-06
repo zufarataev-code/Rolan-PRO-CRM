@@ -18721,6 +18721,23 @@ async function notifyStatusChange(order, options = {}) {
       note: 'Telegram не отправлен: ' + skipReasons.slice(0,3).join('; ')
     });
   }
+  // Owner, 2026-11-06: сотрудник получает уведомление на телефон из своей
+  // карточки (SMS через Twilio), не только в приложении и Telegram. Отправка
+  // идёт в фоне и не блокирует смену статуса; результат виден в истории проекта.
+  if (options.skipSms !== true) {
+    const smsRecipients = [...recipientIds].map(getUser).filter(u => u && u.phone && u.notifySms !== false && u.id !== currentUser()?.id);
+    if (smsRecipients.length) {
+      const smsBody = `RolanPRO · ${order.number} — ${T(order.status)}. ${clientName}${client?.address ? ', ' + String(client.address).slice(0, 60) : ''}. Откройте CRM: ${location.origin}/legacy-crm#/order/${order.id}`;
+      Promise.allSettled(smsRecipients.map(u => sendSmsViaTwilio(u.phone, smsBody, { orderId: order.id, clientId: order.clientId || null }).then(() => ({ ok: true, name: u.name }), error => ({ ok: false, name: u.name, error })))).then(settled => {
+        const sent = settled.filter(r => r.value?.ok).map(r => r.value.name);
+        const failed = settled.filter(r => !r.value?.ok).map(r => r.value?.name).filter(Boolean);
+        if (!sent.length && !failed.length) return;
+        order.timeline = order.timeline || [];
+        order.timeline.push({ at: new Date().toISOString(), key: failed.length && !sent.length ? 'sms_staff_failed' : 'sms_staff_sent', by: null, note: `${sent.length ? 'SMS сотрудникам: ' + sent.join(', ') : ''}${failed.length ? (sent.length ? '; ' : '') + 'не ушло: ' + failed.join(', ') : ''}` });
+        save();
+      });
+    }
+  }
   if (!deliveries.length) return { ok: true, deliveredTelegramIds: [], inAppDone: !skipInApp };
   const results = await Promise.all(deliveries);
   return {
@@ -22665,6 +22682,9 @@ function openTeamMemberEdit(userId) {
 
       <label class="mt-3">Телефон</label>
       <input id="tm-edit-phone" value="${academyEsc(u.phone || '')}" placeholder="+1 818...">
+      <!-- Owner, 2026-11-06: у каждого сотрудника телефон в карточке, и на него приходят уведомления CRM. -->
+      <label class="text-sm mt-2" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="tm-edit-sms" style="width:auto" ${u.notifySms === false ? '' : 'checked'}> SMS-уведомления на этот номер</label>
+      <div class="text-xs text-gray-400 mt-1">Новый проект, замер, монтаж, оплата — коротким SMS, как и в приложении${db.settings?.telegramBotToken ? ' и в Telegram' : ''}.</div>
 
       <label class="mt-3">Почта для входа</label>
       <input id="tm-edit-email" type="email" value="${academyEsc(u.email || '')}" oninput="this.dataset.touched = '1'"
@@ -22867,6 +22887,7 @@ async function submitTeamMemberEdit(userId) {
 
   u.name = name;
   u.phone = phone;
+  u.notifySms = document.getElementById('tm-edit-sms')?.checked !== false;
   if (photo) u.photo = photo;
   else delete u.photo;
 
