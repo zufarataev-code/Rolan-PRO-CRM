@@ -1956,6 +1956,7 @@ function projectFeedHtml(o, c, u, ctx) {
     : '<div class="project-feed-empty">Сначала добавьте услуги</div>';
   const docs = `<div class="project-feed-chips">
       <button type="button" class="project-feed-doc" onclick="projectCardOpenWorkspace('documents')">${money ? 'КП и документы' : 'Документы'}</button>
+      ${money ? `<button type="button" class="project-feed-doc" onclick="openProjectInvoice('${o.id}')">Invoice</button>` : ''}
       <button type="button" class="project-feed-doc" onclick="openWorkOrder('${o.id}')">Заказ-наряд</button>
       <button type="button" class="project-feed-doc" onclick="printTechnicalSheet('${o.id}')">ТЗ-лист</button>
       ${o.actSignature ? `<button type="button" class="project-feed-doc" onclick="openSignedActDocument('${o.id}')">Акт ✓</button>` : '<span class="project-feed-doc muted">Акт — после монтажа</span>'}
@@ -1966,11 +1967,8 @@ function projectFeedHtml(o, c, u, ctx) {
     ${o.canonicalLeadId ? `<div data-project-website-updates="${academyEsc(o.canonicalLeadId)}">${websiteLeadUpdatesHtml(o.canonicalLeadId)}</div>` : ''}
     ${primary || money ? `<div class="project-feed-top">${primary ? `<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг</div>${renderOrderActionCard(primary)}</div>` : ''}${money ? projectCardGateChecklist(o, { canManage, owner: u?.role === 'owner' }) : ''}</div>` : ''}
     ${lines.length || projectPendingSizedServices(o).length || canManage ? `<div class="project-feed-services" data-project-feed="services"><div class="project-feed-head"><h3>Состав проекта</h3>${money ? `<b>${fmtMoney(orderRevenue(o))}</b>` : ''}</div>${renderProjectCardServices(o, { money, economics: ctx.canSeeInternalEconomics, manage: canManage })}</div>` : ''}
-    ${projectFeedSection('Замер', measureBody, { id: 'measure', chip: measureChip, button: projectFeedBtn(windows.length ? 'Проверить размеры' : 'Внести размеры', measureAction, windows.length ? 'ghost' : 'primary') })}
-    ${money && filmRows.length ? projectFeedSection('Материалы', filmRows.join(''), { id: 'film', button: projectFeedBtn('Склад и закупка', 'openProjectPurchaseRequests()') }) : ''}
-    ${money ? projectFeedSection('КП и оплата', payBody, { id: 'commercial', chip: proposalChip, button: `${projectFeedBtn(proposal ? 'Открыть КП' : 'Собрать КП', `openProposalWizard('${o.id}')`, proposal ? 'ghost' : 'primary')}${proposal?.canonicalProposalId && proposal.status !== 'Draft' ? projectFeedBtn('Забрать выбор клиента', `premiumApplyClientOptions('${o.id}')`) : ''}${projectFeedBtn('Invoice', `openProjectInvoice('${o.id}')`)}${orderDebt(o) > 0.01 ? projectFeedBtn('Отметить оплату', `openPaymentModal('${o.id}',{kind:'final'})`) : ''}` }) : ''}
-    ${projectFeedSection('Монтаж', installBody, { id: 'install', button: canManage ? projectFeedBtn('Назначить монтаж', "projectCardOpenWorkspace('schedule')") : '' })}
-    ${projectFeedSection('Документы и история', `${docs}<div class="project-feed-divider"></div>${history}`, { id: 'docs-history', button: projectFeedBtn('Все фото и события', "projectCardOpenWorkspace('history')") })}
+    <!-- Owner, 2026-11-06: секции «Замер / Материалы / КП и оплата / Монтаж / Документы» убраны — кнопки этапов сверху открывают каждый шаг и несут его сводку. -->
+    <div class="project-feed-docs">${docs}</div>
     ${money && (lines.length || projectPendingSizedServices(o).length) ? projectFeedCheckHtml(o, lines, proposal) : ''}
   </div>`;
 }

@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-06 — Карточка проекта: один вход в замер, нижние секции убраны (Claude, PR pending)
+
+- Owner: «сверху логика воронки кнопками сделана — зачем снизу дублировать, уберём»; and «Назначить замер» on top vs «Внести размеры» below confused the measurement step.
+- Done on `claude/measure-one-entry`: `scheduleMeasurementPrompt` is the one measurement entry with two paths — «📐 Выезд замерщика» (the form) and «📏 Внести размеры сейчас» (→ `openManagerMeasureModal`); the next-step card says «Замер: выезд замерщика или размеры сейчас»; the stage button «Замер» opens the prompt until there are windows or a booked visit, then the measurement window. `projectFeedHtml` no longer renders the «Замер / Материалы / КП и оплата / Монтаж / Документы и история» sections; the feed is stage buttons → «Следующий шаг» + «До монтажа» → «Состав проекта» → document chips (incl. Invoice for money roles) → mobile receipt. `renderOrderCleanProgress` puts each step's summary on the button's second line (`metas`: consultation date; windows · sq ft or visit date; KP status; installation date; act signed; paid of total).
+- Verification: `project-stages.test.ts`, `project-feed.test.ts` 11/11; `node --check` both legacy files; full `npm test` 905 pass / 36 env failures.
+
 ## 2026-11-06 — Карточка проекта: яркие этапы, компактный «Следующий шаг» и «Состав» (Claude, PR pending)
 
 - Owner (screenshot): stage buttons looked pale/translucent; below them the old layout stayed — a full-width blue «Назначить замер» band, then «До монтажа», then a loose «Состав проекта».

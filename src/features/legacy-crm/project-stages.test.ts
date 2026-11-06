@@ -35,6 +35,7 @@ function load(project: Row, role = 'manager') {
     orderMeasureScope: (o: Row) => o.primaryScope || 'solar_film',
     measureScopeCardDesc: () => '',
     academyEsc: (value: unknown) => String(value ?? ''),
+    orderRevenue: (o: Row) => o.revenue || 0, orderPaidTotal: () => 0, fmtMoney: (v: number) => `$${v}`, fmtDateTime: (v: string) => String(v), orderActualAreaSqft: () => 0, projectWindowsWord: () => 'окон',
     db: { proposals: [] },
     MEASURE_SCOPES: ['solar_film', 'smart_film', 'protective_film', 'decorative_film', 'privacy_film'].map(key => ({ key, short: key, icon: '', accent: '#000' })),
     customerMeasureScopes: () => ['solar_film', 'smart_film', 'protective_film', 'decorative_film', 'privacy_film'].map(key => ({ key, short: key, icon: '', accent: '#000' })),
@@ -61,7 +62,7 @@ test('the next step follows the services: add them, measure what needs sizes, th
   assert.equal(c.projectServicesNextAction({ ...sizeFree, status: 'measurement_done' }).title, 'Расчёт готов → КП', 'after the measurement too');
   // A per-sq-ft service without sizes goes straight to a measurement (no consultation detour)…
   const unmeasured = { id: 'o', status: 'new', offeringIds: ['a1'], pending: [{ id: 'a1' }], needsSizes: true, issues: ['добавьте окна'] };
-  assert.equal(c.projectServicesNextAction(unmeasured).title, 'Назначить замер');
+  assert.equal(c.projectServicesNextAction(unmeasured).title, 'Замер: выезд замерщика или размеры сейчас');
   assert.equal(c.projectServicesNextAction(unmeasured).onclick, "scheduleMeasurementPrompt('o')");
   // …and a measurement already booked keeps its own step.
   assert.equal(c.projectServicesNextAction({ ...unmeasured, status: 'measurement_scheduled' }), null);
@@ -153,4 +154,16 @@ test('stage buttons carry saturated colours: current is filled, done is dense, n
   assert.match(html, /\.order-clean-stage-btn\.current \{ background: var\(--stage\); border-color: var\(--stage\);/);
   assert.match(html, /\.order-clean-stage-btn\.done \{ background: color-mix\(in srgb, var\(--stage\) 22%, #fff\);/);
   assert.match(html, /\.order-clean-stage-btn \{[^}]*background: color-mix\(in srgb, var\(--stage\) 10%, #fff\);/);
+});
+
+test('measurement has one entry with two paths: a measurer visit or sizes right now', () => {
+  const prompt = html.slice(html.indexOf('function scheduleMeasurementPrompt('), html.indexOf('\n}\n', html.indexOf('function scheduleMeasurementPrompt(')));
+  assert.match(prompt, /measure-path on"><b>📐 Выезд замерщика<\/b>/);
+  assert.match(prompt, /onclick="closeModal\(\); openManagerMeasureModal\('\$\{oid\}'\)"><b>📏 Внести размеры сейчас<\/b>/);
+  const stagesSrc = readFileSync('private/legacy/production-stages.js', 'utf8');
+  const feed = stagesSrc.slice(stagesSrc.indexOf('function projectFeedHtml('));
+  // Owner, 2026-11-06: the lower «Замер / КП и оплата / Монтаж / Документы» sections are gone —
+  // the stage buttons open each step and carry its summary on their second line.
+  assert.doesNotMatch(feed, /projectFeedSection\('Замер'|projectFeedSection\('КП и оплата'|projectFeedSection\('Монтаж'|projectFeedSection\('Документы и история'/);
+  assert.match(html, /const hint = metas\[i\] \? academyEsc\(metas\[i\]\) :/);
 });
